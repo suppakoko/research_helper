@@ -2,13 +2,13 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-09-10 · **101 tasks: 1 `DONE`, 100 `TODO`.**
+> **Last updated:** 2026-09-10 · **101 tasks: 2 `DONE`, 99 `TODO`.**
 
 ---
 
 ## 1. Status
 
-Implementation has started. `P0-T01` is `DONE` (2026-09-10, commit `df15816`);
+Implementation has started. `P0-T01` and `P0-T29` are `DONE` (2026-09-10, commits `df15816` and `010ede3`);
 every other task is `TODO`. Only a human sets a task to `DONE`
 (`README.md` §4), so this file will not drift on its own.
 
@@ -127,7 +127,7 @@ column means the card cannot complete without a human — read
 | `P0-T25` | Gemini TTS Korean quality spike | `P0-T15` | 1.0 d | 🔒 |
 | `P0-T26` | Binary/audio response handling and attachment | `P0-T25` | 0.5 d |  |
 | `P0-T27` | `update.json` delivery dry run | `P0-T09`, `P0-T14` | 0.5 d | 🔒 |
-| `P0-T29` | Pin line endings with `.gitattributes` | `P0-T01` | 0.25 d |  |
+| ✅ `P0-T29` | Pin line endings with `.gitattributes` | `P0-T01` | 0.25 d |  |
 | `P0-T28` | Write and commit the Phase 0 spike report | `P0-T14`, `P0-T15`, `P0-T16`, `P0-T17`, `P0-T18`, `P0-T19`, `P0-T20`, `P0-T21`, `P0-T22`, `P0-T23`, `P0-T24`, `P0-T25`, `P0-T26`, `P0-T27` | 0.5 d | 🔒 |
 
 **Nine of Phase 0's 28 cards carry a gate**, not fourteen: `P0-T08`, `P0-T09`,

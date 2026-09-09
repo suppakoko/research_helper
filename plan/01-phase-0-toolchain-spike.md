@@ -2554,7 +2554,7 @@ outcomes the reason Phases 4–7 are deliberately not decomposed yet. Phase 1 de
 | Field | Value |
 |---|---|
 | **ID** | `P0-T29` |
-| **State** | `TODO` |
+| **State** | `DONE` — completed 2026-09-10, commit `010ede3`; all four criteria verified, including a fresh clone showing zero CR bytes |
 | **Depends on** | `P0-T01` |
 | **Blocks** | `P0-T02` |
 | **Retires** | none |
