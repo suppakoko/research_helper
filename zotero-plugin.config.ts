@@ -10,19 +10,40 @@ import pkg from "./package.json" with { type: "json" };
 //   VirtualizedTableHelper, FilePickerHelper, ClipboardHelper, KeyboardManager
 //   and unregisterAll(). docs/01 §4.3 verified that the toolkit ships no
 //   wrapper for items, collections, search or attachments at all.
+//
+// P0-T03 (docs/00 §3 D9): the plugin ID is a PERMANENT constant, not a
+//   build-varying value, so it is written here as a literal and again as a
+//   literal in `addon/manifest.json`. It must stay byte-identical in both, in
+//   `package.json`'s `config.addonID`, in `Zotero.PreferencePanes.register({
+//   pluginID })`, in `Zotero.MenuManager` registrations and in `update.json`.
+//   Never change it.
+//
+// P0-T03 finding, read from the installed zotero-plugin-scaffold 0.9.2
+//   (`dist/shared/scaffold-src-*.mjs`, `buildManifest`): the build merges as
+//   `toMerged(userData, template)` where `template.applications.zotero` is
+//   `{ id, update_url: updateURL }` taken from THIS file. Only `name` and
+//   `version` are guarded with `userData.x || x`. So for `id` and
+//   `update_url` THIS FILE WINS over `addon/manifest.json` — `docs/01` §4.5's
+//   "existing values win" note is accurate for `name`/`version` only. A
+//   divergence between the two files would therefore be silent: the manifest
+//   in the XPI would carry the value from here. Keep them identical.
 
 export default defineConfig({
   source: ["src", "addon"],
   dist: ".scaffold/build",
 
   name: pkg.config.addonName,
-  id: pkg.config.addonID,
+  // Literal, not `pkg.config.addonID`: permanent identity, D9. See above.
+  id: "research-helper@suppakoko.github.io",
   namespace: "researchHelper",
   xpiName: "research-helper",
 
   xpiDownloadLink:
     "https://github.com/suppakoko/research_helper/releases/download/v{{version}}/research-helper.xpi",
-  // Fix 7: the repository's permanent `release` tag, per docs/01 §11.3 / §4.5.
+  // Fix 7: the repository's permanent `release` tag, per docs/01 §11.3 / §4.5,
+  // with the exact URL taken from docs/13 §1.4. P0-T03: this string is
+  // duplicated verbatim as `applications.zotero.update_url` in
+  // `addon/manifest.json` and must stay HTTPS (docs/01 §11.2).
   updateURL:
     "https://raw.githubusercontent.com/suppakoko/research_helper/release/update.json",
 

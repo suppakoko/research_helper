@@ -11,8 +11,8 @@
   },
   "applications": {
     "zotero": {
-      "id": "__addonID__",
-      "update_url": "__updateURL__",
+      "id": "research-helper@suppakoko.github.io",
+      "update_url": "https://raw.githubusercontent.com/suppakoko/research_helper/release/update.json",
       "strict_min_version": "10.0",
       "strict_max_version": "10.0.*"
     }

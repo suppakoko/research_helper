@@ -1,0 +1,21 @@
+# Prettier formats the source and configuration this project writes. It does
+# not format prose.
+#
+# Markdown. The design corpus (docs/, 00-13), the execution plan (plan/) and
+# README.md are hand-authored living documents whose formatting is deliberate:
+# hairline table separators, `*emphasis*`, and lines wrapped by meaning rather
+# than by column. Prettier's Markdown printer rewrites all three. They are also
+# outside the build by construction - docs/13 §1.2 draws the build-visible tree
+# and deliberately omits docs/ and plan/, and nothing in CI reads them.
+*.md
+
+# Recorded API responses replayed byte-for-byte by the contract tests
+# (docs/13 §2.2, §3.2). Reformatting a fixture would silently change what the
+# parser is being tested against.
+test/fixtures/
+
+# Generated or vendored.
+package-lock.json
+.scaffold/
+coverage/
+typings/prefs.d.ts

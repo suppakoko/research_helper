@@ -23,20 +23,22 @@ async function onStartup() {
     Zotero.uiReadyPromise,
   ]);
 
-  await Promise.all(Zotero.getMainWindows().map((win) => onMainWindowLoad(win)));
+  await Promise.all(
+    Zotero.getMainWindows().map((win) => onMainWindowLoad(win)),
+  );
 
   // Read by zotero-plugin.config.ts's `test.waitForPlugin`, and by anything
   // outside the plugin that needs to know loading finished.
   addon.data.initialized = true;
 }
 
-async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
+async function onMainWindowLoad(_win: _ZoteroTypes.MainWindow): Promise<void> {
   // A ztoolkit instance per window: helpers hold window-scoped state, and a
   // window that closes must not leave a dead wrapper behind (docs/01 §3.3).
   addon.data.ztoolkit = createZToolkit();
 }
 
-async function onMainWindowUnload(win: Window): Promise<void> {
+async function onMainWindowUnload(_win: Window): Promise<void> {
   ztoolkit.unregisterAll();
 }
 

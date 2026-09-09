@@ -128,7 +128,7 @@ invented facts.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T02` |
-| **State** | `TODO` |
+| **State** | `DONE` — completed 2026-09-10, commits `437b366`, `f9e97d9`, `ffae1eb`; all six criteria verified after a clean install AND a build |
 | **Depends on** | `P0-T01`, `P0-T29` |
 | **Blocks** | `P0-T03`, `P0-T04` |
 | **Retires** | part of `V-1`, part of `R-11` |
