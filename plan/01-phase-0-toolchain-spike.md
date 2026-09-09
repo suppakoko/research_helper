@@ -251,6 +251,82 @@ stale; treat every example module as pseudocode until read against `docs/01` §�
 0.9.x's RDP client has been validated against Zotero 10); step 12 collects evidence, `P0-T08`
 and `P0-T13` close them.
 
+
+**Findings, 2026-09-10** (for `P0-T28`'s spike report; `docs/spikes/phase-0.md`).
+
+*Installed versions, verbatim from `npm ls --depth=0` after a lockfile-free install*
+— criterion 6:
+
+```
+typescript@5.9.3
+zotero-plugin-scaffold@0.9.2
+zotero-plugin-toolkit@5.2.0
+zotero-types@4.1.3
+```
+
+*The template is exactly as `docs/01` §4.2 described.* `main` HEAD is still
+`306d4e2a0959a7b2f5e44bb38169fb25f841dbaf`, 2025-12-16 — unmoved in nine months.
+Its lockfile pins `zotero-plugin-toolkit@5.1.0-beta.13`, so `npm ci` compiles and a
+lockfile-free `npm install` resolves to 5.2.0 and does not. The break is exactly two
+sites: the root `ZoteroToolkit` import and four `ztoolkit.Menu` calls.
+
+*Fix 2 is confirmed against the published package, not the docs.* toolkit 5.2.0's
+`exports` map is `{ ".": "./dist/index.js", "./ztoolkit": "./dist/ztoolkit.js",
+"./package.json": "./package.json" }`, and `ZoteroToolkit` is absent from the root
+entry's exports. **New constraint the docs do not record:** that map carries no
+`types` condition on any subpath, so TypeScript resolves `/ztoolkit`'s types only
+through the `.js` → `.d.ts` sibling fallback. `moduleResolution` must be `"bundler"`
+or `"node16"`; legacy `"node"` silently loses the types.
+
+*Three of the eight day-one fixes were already done upstream.* `docs/01` §4.6 lists six
+removed toolkit APIs to strip. Only the menu API is still called in the template
+(`src/modules/examples.ts:143, 154, 176, 180`). `PreferencePane`, `ItemTree` and
+`ItemBox` already go through `Zotero.PreferencePanes` / `Zotero.ItemTreeManager` /
+`Zotero.ItemPaneManager`, `Shortcut` is already `ztoolkit.Keyboard`, and
+`ReaderInstance` never appears. `docs/01` §4.6 should be corrected. Also already
+satisfied: the template's `addon/bootstrap.js` carries no Zotero 6 shim.
+
+*Step 12 — the four `test.*` keys `docs/13` §1.4 flagged `> **Unverified:**` are
+resolved, and the types win over the published docs.* From scaffold 0.9.2's own
+`TestConfig`: `abortOnFail` (not `abort`), `startupDelay` (not `startDelay`),
+`timeout` **under `mocha`** (not top level), and `esbuildOptions` is an array
+(`BuildOptions[]`). `zotero-plugin.config.ts` is written to the type names.
+`docs/13` §1.4's example block uses the documented names and would fail; V-5 /
+`P0-T13` should close the marker in the doc's favour of the types.
+
+*`docs/01` §4.6's Node floor is too low.* It says ≥ 22.8, which is scaffold's own
+`engines`. But vitest 5 requires `^22.12` and eslint 10 requires `^22.13`, so the
+effective floor on the 22 line is **≥ 22.13**. `package.json` declares that. Installed
+locally: Node v22.23.0.
+
+*TypeScript stayed at 5.9 by owner decision (2026-09-10).* `docs/01` §4.6 pins 5.9 and
+the template uses `^5.9.3`, but 5.9.3 shipped 2025-09-30 and the current release is
+7.0.2 — scaffold 0.9.2 is itself built with `typescript ^6.0.3`. Holding at 5.9 keeps
+Phase 0 to one variable; re-evaluate once the toolchain is proven.
+
+*Deviations from the template, deliberate.*
+1. **`BasicTool` is not used.** The template's `src/index.ts` pulls `Zotero` into the
+   sandbox via `basicTool.getGlobal()`. Fix 8's keep-list does not include
+   `BasicTool`, and criterion 3 forbids any bare root import, so `addon/bootstrap.js`
+   forwards `Zotero`, `Services`, `Components` and `ChromeUtils` onto the sandbox
+   context instead. **Not yet proven at runtime** — `P0-T09` and `P0-T11` are the
+   first tests of it. If the plugin fails to start, this is the first thing to suspect.
+2. **No `.npmrc`.** The card scopes it to pnpm; this project uses npm. The template
+   ships none either.
+3. **`addon/prefs.js` keys are bare.** No `__prefsPrefix__` placeholder — verified that
+   the template does the same and scaffold injects `build.prefs.prefix` at build time.
+   Confirmed in the output: `pref("extensions.zotero.research-helper.enable", true)`.
+
+*Evidence beyond the card's criteria.* `npm run build` succeeds in 0.134 s and emits
+`research-helper.xpi` (30,269 bytes), `update.json` and `update-beta.json`. Every
+manifest placeholder substituted correctly, including `strict_max_version: "10.0.*"`
+and the `release`-branch `update_url`. This is the first real evidence for `V-1`; what
+remains for `V-1` is installing the XPI in Zotero 10 (`P0-T09`).
+
+*Still open.* The esbuild `target: "firefox140"` compiles, but compiling is not running
+— `docs/13` §1.5 calls it a candidate, and only the `P0-T09` smoke test can confirm it.
+The built manifest references `content/icons/favicon.png`, which does not exist yet;
+`P0-T04` creates `addon/content/icons/`.
 ---
 
 ### P0-T03 — Write the Zotero 10 manifest and pin the plugin identity
