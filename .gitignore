@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Machine-local paths and credentials.
+# .env holds absolute paths into the developer's Zotero profile and, once
+# GITHUB_TOKEN is added for local release publishing (docs/01 §4.5), a
+# credential. Copy .env.example to .env; never commit the result.
+.env
+.env.local
+
+# zotero-plugin-scaffold output: the built XPI and the captured Zotero
+# stdout/stderr (docs/13 §1.2 — dist defaults to .scaffold/build,
+# server.debugOutputFile writes to .scaffold/logs).
+.scaffold/
+
+# Test and coverage output
+coverage/
+*.lcov
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
