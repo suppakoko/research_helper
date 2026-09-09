@@ -2,22 +2,23 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-09-09 · **100 tasks, all `TODO`, 0 `DONE`.**
+> **Last updated:** 2026-09-10 · **101 tasks: 1 `DONE`, 100 `TODO`.**
 
 ---
 
 ## 1. Status
 
-Nothing has been built. Every task is `TODO`. Only a human sets a task to `DONE`
+Implementation has started. `P0-T01` is `DONE` (2026-09-10, commit `df15816`);
+every other task is `TODO`. Only a human sets a task to `DONE`
 (`README.md` §4), so this file will not drift on its own.
 
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
 |---|---|---|---|---|
-| 0 — Toolchain spike | 28 | 15.50 d | 15.5–22 d | 6–9 d (+72%) |
+| 0 — Toolchain spike | 29 | 15.75 d | 15.75–22 d | 6–9 d (+75%) |
 | 1 — PubMed slice | 23 | 18.75 d | 18.75–26 d | 9–12 d (+56%) |
 | 2 — Multi-source + dedup | 18 | 24.25 d | 24.25–34 d | 12–16 d (+52%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **100** | **82.00 d** | **82–115 d** | 39–52 d (+58% over the top of the band) |
+| **Phases 0–3** | **101** | **82.25 d** | **82.25–115 d** | 39–52 d (+58% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -30,7 +31,7 @@ families is, in that card's own words, "the single most expensive card in the ph
 produces no shipped code". The owner decided to re-estimate rather than to accept them, because
 leaving them optimistic would contradict the same-day roadmap correction and `docs/11`'s risk
 **R-23**. Each card's `Notes` now carries the derivation. Phase 3's sum is **23.50 d**, the
-Phases 0–3 subtotal is **82.00 d**, and `docs/11` §1's Phase 3 band, its effort summary, its
+Phases 0–3 subtotal is **82.25 d**, and `docs/11` §1's Phase 3 band, its effort summary, its
 total and months figure, and §2's dependency graph and critical path were all re-derived from
 those numbers. **No other card's estimate was changed**, and `P3-T20`'s figure counts developer
 work only — the human's PDF sourcing and ground-truth adjudication is gate **G-12** in
@@ -91,12 +92,16 @@ on it. Phase 2 is done when `P2-T16` and `P2-T15` are both `DONE`.
 
 ## 4. The tasks
 
+**✅** on a task ID means the card's `State` is `DONE`. **🔒** in the Gate
+column means the card cannot complete without a human — read
+[`06-human-gates.md`](06-human-gates.md) before starting it, not on reaching it.
+
 ### Phase 0
 
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
-| `P0-T01` | Initialise the repository, licence and ignore rules | — | 0.25 d |  |
-| `P0-T02` | Scaffold from the template and re-baseline it | `P0-T01` | 1.0 d |  |
+| ✅ `P0-T01` | Initialise the repository, licence and ignore rules | — | 0.25 d |  |
+| `P0-T02` | Scaffold from the template and re-baseline it | `P0-T01`, `P0-T29` | 1.0 d |  |
 | `P0-T03` | Write the Zotero 10 manifest and pin the plugin identity | `P0-T02` | 0.25 d |  |
 | `P0-T04` | Lay out the directory skeleton and dependency rule | `P0-T02` | 0.5 d |  |
 | `P0-T05` | TypeScript config, npm scripts and a green typecheck | `P0-T04` | 0.25 d |  |
@@ -122,6 +127,7 @@ on it. Phase 2 is done when `P2-T16` and `P2-T15` are both `DONE`.
 | `P0-T25` | Gemini TTS Korean quality spike | `P0-T15` | 1.0 d | 🔒 |
 | `P0-T26` | Binary/audio response handling and attachment | `P0-T25` | 0.5 d |  |
 | `P0-T27` | `update.json` delivery dry run | `P0-T09`, `P0-T14` | 0.5 d | 🔒 |
+| `P0-T29` | Pin line endings with `.gitattributes` | `P0-T01` | 0.25 d |  |
 | `P0-T28` | Write and commit the Phase 0 spike report | `P0-T14`, `P0-T15`, `P0-T16`, `P0-T17`, `P0-T18`, `P0-T19`, `P0-T20`, `P0-T21`, `P0-T22`, `P0-T23`, `P0-T24`, `P0-T25`, `P0-T26`, `P0-T27` | 0.5 d | 🔒 |
 
 **Nine of Phase 0's 28 cards carry a gate**, not fourteen: `P0-T08`, `P0-T09`,

@@ -55,9 +55,9 @@ design doc, say which document is now the defect.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T01` |
-| **State** | `TODO` |
+| **State** | `DONE` — completed 2026-09-10, commit `df15816`; approved by the project owner |
 | **Depends on** | none |
-| **Blocks** | `P0-T02` |
+| **Blocks** | `P0-T02`, `P0-T29` |
 | **Retires** | none |
 | **Implements** | none (D8) |
 | **Estimate** | 0.25 d |
@@ -129,7 +129,7 @@ invented facts.
 |---|---|
 | **ID** | `P0-T02` |
 | **State** | `TODO` |
-| **Depends on** | `P0-T01` |
+| **Depends on** | `P0-T01`, `P0-T29` |
 | **Blocks** | `P0-T03`, `P0-T04` |
 | **Retires** | part of `V-1`, part of `R-11` |
 | **Implements** | none |
@@ -2546,6 +2546,80 @@ mitigation for single-developer bus-factor risk, and `plan/README.md` §2 makes 
 outcomes the reason Phases 4–7 are deliberately not decomposed yet. Phase 1 decomposition
 (`plan/02-phase-1-pubmed.md`) should be written immediately after this card lands, not before.
 
+
+---
+
+### P0-T29 — Pin line endings with `.gitattributes`
+
+| Field | Value |
+|---|---|
+| **ID** | `P0-T29` |
+| **State** | `TODO` |
+| **Depends on** | `P0-T01` |
+| **Blocks** | `P0-T02` |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** Every clone of the repository checks the corpus out with LF line endings, on every
+platform, without depending on a machine-local git setting.
+
+**Read first.**
+- `plan/README.md` §5 rule 2 — why this card exists at all: `P0-T01` hit the problem, fixed it
+  locally with `core.autocrlf=false`, and stopped rather than adding a file its `Files` list did
+  not name.
+- `docs/07-architecture-and-data-model.md` §2.2 — the directory tree, so the attributes file
+  covers the generated and binary paths (`test/fixtures/`, `addon/content/icons/`) as well as
+  source.
+- `docs/08-ui-ux-spec.md` §4.5 and §7.4 — the ASCII wireframes measured character-by-character.
+  These are why line endings are not cosmetic here: a CRLF rewrite changes byte offsets and
+  breaks the width checks the review rounds ran.
+- `docs/13-testing-build-and-release.md` §1.6 — the `fixtures:record` script writes recorded API
+  responses; those are data and must not be re-encoded.
+
+**Files.**
+- create `.gitattributes`
+
+**Do.**
+1. Set the default: `* text=auto eol=lf`, so text files are stored LF in the object database and
+   checked out LF everywhere.
+2. Mark the recorded-fixture directory as text with LF explicitly, so a fixture recorded on
+   Windows and one recorded on Linux compare equal — the record/replay layer in
+   `docs/13` §3 depends on byte equality.
+3. Mark genuinely binary paths `binary` so git never re-encodes them: PDFs (the IMRaD corpus,
+   `P3-T20`), images under `addon/content/icons/`, and any `.xpi`.
+4. Leave `core.autocrlf` alone. `.gitattributes` overrides it, and `P0-T01` already set it
+   `false` for this working copy; the point of this card is that a fresh clone needs no such
+   setting.
+
+**Do NOT.**
+- Do **not** add `* text eol=crlf` for any path. The corpus was normalised to LF during the
+  design review and `docs/08`'s wireframe measurements assume it.
+- Do **not** mark `.md` binary to "protect" it. That disables diffs on the design corpus, which
+  is the repository's main content.
+- Do **not** rewrite existing history to normalise it. The working tree is already LF and the
+  first two commits stored it that way; `git add --renormalize .` is unnecessary and would
+  produce a confusing empty-diff commit.
+
+**Done when.**
+- [ ] `.gitattributes` exists and its first non-comment line is `* text=auto eol=lf`.
+- [ ] `git check-attr -a README.md` reports `text: auto` and `eol: lf`.
+- [ ] `git ls-files --eol` reports `i/lf` and `w/lf` for every `.md` file in `docs/` and `plan/`.
+- [ ] A fresh `git clone` into a temporary directory produces `.md` files containing no CR byte.
+
+**Verify with.**
+```bash
+git check-attr -a README.md \
+  && git ls-files --eol -- 'docs/*.md' 'plan/*.md' | grep -v 'i/lf.*w/lf' && echo "NON-LF FOUND" && exit 1 \
+  || echo "all LF"
+```
+
+**Notes.** Discovered during `P0-T01`, not planned: git warned that `core.autocrlf` would
+rewrite the corpus to CRLF on checkout. `P0-T01` set the flag `false` for its own working copy,
+which fixes this machine and nobody else's — hence a separate, durable card. Numbered `P0-T29`
+because `plan/README.md` §3 forbids renumbering and this is the next free number in the phase,
+even though it runs second in dependency order.
 ---
 
 ## Phase 0 spike report template
