@@ -167,6 +167,14 @@ API License Agreement and the attribution obligation).
 likelihood and states that "key issuance can take weeks". Approval time, not
 code, is what gates Phase 5.
 
+**Status, 2026-09-10.** **Not yet submitted.** `P0-T22`'s measurement half is done and
+strengthens the case for submitting now: a second measurement 24 hours after `docs/02` §6.4's
+returned **HTTP 429 on 12 of 12 requests over 72 seconds, with zero successes**. Unauthenticated
+access is not "throttled", it is unusable, so the degraded Crossref + Europe PMC + lexical path
+R-3 designs as a fallback is in fact the **default** path for every keyless user and must be
+built and tested as such. Record the submission date here when the owner submits; the entry
+below is what `P0-T28`'s spike report cites.
+
 **What changed on 2026-09-09, and what did not.** `docs/11` §1's re-estimate
 *cut* R-3's exposure: R-3 now records that on the corrected figures Phase 5
 cannot start before ≈ 58.5–82 developer-days in — Phase 0 plus Phase 1 plus the

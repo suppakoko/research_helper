@@ -1201,6 +1201,27 @@ x-amzn-ErrorType: TooManyRequestsException
 Subsequent calls succeeded intermittently. **The shared anonymous pool is saturated during business
 hours.** Any feature built on unkeyed Semantic Scholar access will be unreliable.
 
+**Second measurement (2026-09-09 21:46 UTC, task `P0-T22`).** Re-measured 24 hours later with
+12 requests over 72 seconds, spaced 1.2 s / 8 s / 20 s / 30 s: **HTTP 429 on all twelve, zero
+successes**, at an average rate of roughly one request per 6 s — far below the 0.9 req/s budget
+§2.4 sets for this host. The body was byte-identical to the block above on every response
+(`content-length: 174`), as was `x-amzn-ErrorType`. Everything above reproduces exactly.
+
+Three details the first measurement did not capture, all of which Phase 2's error mapping needs:
+
+- **There is no `Retry-After` header.** §2.4's universal policy reads "honour `Retry-After` if
+  present, else back off with jitter" — for Semantic Scholar the else-branch is the only branch
+  that ever runs.
+- **`code` is the JSON *string* `"429"`, not the number**, and the 429 body carries `message`,
+  not the `error` key that §6.10 documents for 400/404. One S2 decoder has to accept both shapes.
+- **`statusText` is empty** (HTTP/2 carries no reason phrase). Nothing may match on it.
+
+The "succeeded intermittently" clause above was **not** reproduced — 0 of 12 in a 72-second
+window. That window is too small to disprove "intermittently", so the clause stands, but read it
+as a single-session observation rather than an expectation. Note also that 21:46 UTC is 14:46
+US-Pacific, inside US business hours; nothing here says anything about off-peak behaviour, and
+no feature should be designed on the hope that off-peak is better.
+
 **Design decisions this forces:**
 
 1. Ship an in-app prompt asking the user to obtain a free S2 key, with a deep link to the form,

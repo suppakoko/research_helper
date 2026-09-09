@@ -2201,9 +2201,9 @@ multi-week approval lead time runs in parallel with Phases 1–4 rather than blo
    recovery pattern. Compare against the 2026-09-08 evidence in `docs/02` §6.4 to see whether
    the shared anonymous pool behaves the same today.
 3. Record the observed error shape verbatim — Phase 2's typed error mapping needs it.
-4. Record the submission date and the expected wait in `plan/06-human-gates.md`'s terms (that
-   file does not exist yet; record it in the spike report and flag it for the human-gates
-   register).
+4. Record the submission date and the expected wait against gate **`G-03`** in
+   `plan/06-human-gates.md`, which already registers this application as a Phase 0 week-1
+   action blocking Phase 5.
 
 **Do NOT.**
 - Do not fill in the application form yourself. It carries the human's identity and contact
@@ -2226,14 +2226,50 @@ multi-week approval lead time runs in parallel with Phases 1–4 rather than blo
 
 **Verify with.**
 ```bash
-npx tsx scripts/spike-s2-throttle.ts
+npm exec -- tsx scripts/spike-s2-throttle.ts
 ```
-plus the human's confirmation of the submission date.
+plus the human's confirmation of the submission date. (`tsx` is a declared devDependency; a
+bare `npx tsx` resolved only from a stale npx cache on the machine where this first ran.)
 
 **Notes.** This is the one card in Phase 0 with a dependency of `none` **by design**: `docs/11`
 R-3 makes it a week-1 action and the whole point is that its external wait overlaps the rest of
 the plan. It needs no plugin and no Zotero — plain HTTP is sufficient, which is how `docs/02`
 §6.4's own evidence was gathered.
+
+**Findings, 2026-09-10 — measurement half only; the submission half is still open.**
+
+`V-14`'s answer: **unauthenticated Semantic Scholar access does nothing at all.** 12
+`/paper/search` requests over 72 s, spaced 1.2 s / 8 s / 20 s / 30 s, returned **HTTP 429 every
+time — zero successes, zero transport errors**, at an average of roughly one request per 6 s,
+far under the 0.9 req/s budget `docs/02` §2.4 already sets for this host. The throttle is on the
+shared anonymous pool, so our own pacing changes nothing. That is not "unreliable", it is
+unusable, and it means the degraded Crossref + Europe PMC + lexical path `docs/11` R-3 designs
+as a *fallback* is the **default** path for every keyless user. Build and test it as such, not
+as an exception branch.
+
+`docs/02` §6.4's 2026-09-08 evidence reproduces **exactly** — same status, same
+`x-amzn-ErrorType`, byte-identical 174-byte body — so §6.4 needed no correction. It gained a
+second-measurement block recording three details the first pass did not capture, all of which
+Phase 2's typed error mapping needs: there is **no `Retry-After` header** (so §2.4's
+"else back off with jitter" branch is the only one that ever runs for this host), `code` is the
+JSON *string* `"429"` while §6.10's 400/404 shape uses `error` instead of `message` (one decoder
+must accept both), and `statusText` is empty under HTTP/2 so nothing may match on it.
+
+The one clause that did **not** reproduce is §6.4's "Subsequent calls succeeded intermittently"
+— 0 of 12. A 72-second window is too small to disprove it, and the card forbids enlarging the
+sample by hammering a shared pool, so the clause stands but is now marked as a single-session
+observation. 21:46 UTC is 14:46 US-Pacific, inside US business hours; this run says nothing
+about off-peak behaviour.
+
+**Two boxes remain open and neither is a failure.** The key application is a web form carrying
+the owner's identity, so an agent must not submit it, and the submission date cannot be recorded
+until it exists. Gate `G-03` in `plan/06-human-gates.md` now carries a dated **Status** line
+saying so.
+
+**`npx tsx` is not reproducible on a clean checkout.** The card's `Verify with` ran here only
+because `tsx@4.23.13` happened to be sitting in this machine's npx cache; `tsx` is invoked by
+`package.json`'s `fixtures:record` and by `docs/13` §5's CI workflow but was declared nowhere.
+Added to `devDependencies`, and this card's `Verify with` now names the script directly.
 
 ---
 
