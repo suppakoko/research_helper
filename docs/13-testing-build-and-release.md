@@ -330,7 +330,7 @@ Do not invent additional flags. `--debugger` as such is **not** documented for Z
     "lint:check": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
     "test:unit": "vitest run --dir test/unit",
-    "test:contract": "vitest run --dir test/contract",
+    "test:contract": "vitest run --dir test/contract --passWithNoTests",
     "test:integration": "zotero-plugin test",
     "test": "npm run test:unit && npm run test:contract",
     "fixtures:record": "tsx scripts/record-fixtures.ts",
@@ -338,6 +338,12 @@ Do not invent additional flags. `--debugger` as such is **not** documented for Z
   }
 }
 ```
+
+`test:contract` carries `--passWithNoTests` because `test/contract/` stays empty until
+Phase 1, and Vitest exits **1** on an empty directory — verified 2026-09-10 under
+`vitest@5.0.0` (task `P0-T12`), where it made `npm test` fail on a green tree. Remove the flag
+once the directory has specs, so a contract suite that silently stops being collected fails
+loudly again.
 
 ---
 
@@ -393,8 +399,13 @@ import { vi } from "vitest";
 
 class FakeItem {
   private _fields = new Map<string, string>();
-  public id = FakeItem.nextId++;
+  // `nextId` is declared before `id` on purpose. Statics initialise at
+  // class-definition time and instance fields at construction, so the reverse
+  // order works at runtime — but TypeScript rejects it textually with
+  // "TS2729: Property 'nextId' is used before its initialization"
+  // (observed 2026-09-10 under this project's tsconfig, task P0-T12).
   static nextId = 1;
+  public id = FakeItem.nextId++;
   constructor(public itemType: string) {}
   setField(f: string, v: string) { this._fields.set(f, v); }
   getField(f: string) { return this._fields.get(f) ?? ""; }

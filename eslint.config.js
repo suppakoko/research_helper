@@ -18,8 +18,13 @@ import zotero from "@zotero-plugin/eslint-config";
  *    reference `Zotero.*`", and the compatibility-isolation argument for risk
  *    R-1 (docs/11 §3) rests on that being true, not merely documented.
  *
- * Both are expressed against the *import specifier* / *global name*, so they
- * fire on relative imports at any depth (`../ui/x`, `../../ui/x`).
+ * 3. FR-56 (P0-T31): the four platform registration APIs may only be called
+ *    from `src/zotero/registrations.ts`, which pairs each one with the
+ *    teardown that undoes it. Rule 2 is not enough on its own — it permits
+ *    every file in `src/zotero/**`, and P0-T10 is about to add three more.
+ *
+ * The first two are expressed against the *import specifier* / *global name*,
+ * so they fire on relative imports at any depth (`../ui/x`, `../../ui/x`).
  */
 
 /** Gitignore-style patterns matching a `src/` layer at any relative depth. */
@@ -43,6 +48,61 @@ function forbidLayers(layers, message) {
 }
 
 const RULE = "docs/07 §2.3 dependency rule:";
+
+/**
+ * The four platform registration APIs of `docs/01` §2.4, each with the
+ * `src/zotero/registrations.ts` factory that replaces it.
+ *
+ * `Zotero.ItemPaneManager.registerSection` is deliberately absent: it leaks
+ * the same way, but no card registers one yet and `docs/08` has not settled
+ * where the section lives. Phase 2 adds it (`P0-T31`).
+ */
+const REGISTRATION_APIS = [
+  { manager: "MenuManager", method: "registerMenu", via: "menuRegistration" },
+  {
+    manager: "Notifier",
+    method: "registerObserver",
+    via: "notifierRegistration",
+  },
+  {
+    manager: "PreferencePanes",
+    method: "register",
+    via: "preferencePaneRegistration",
+  },
+  {
+    manager: "Prefs",
+    method: "registerObserver",
+    via: "prefObserverRegistration",
+  },
+];
+
+/**
+ * A `no-restricted-syntax` entry banning one unscoped registration call.
+ *
+ * `no-restricted-properties` cannot express this. It compares
+ * `node.object.name`, which is `undefined` for the outer member expression of
+ * `Zotero.MenuManager.registerMenu` — its `object` is itself a
+ * `MemberExpression` — so `{ object: "MenuManager", property: "registerMenu" }`
+ * never fires (measured, P0-T31). Matching on `property` alone does fire, but
+ * `register` is far too generic to ban by name.
+ *
+ * The selector matches the member expression in *any* position, not just as a
+ * callee, so `const f = Zotero.MenuManager.registerMenu` is caught too. The
+ * one position excluded is an assignment target: `Zotero.X.y = fn` *defines* a
+ * property rather than calling one, which is what a test double does
+ * (`test/setup/zotero-global.ts`) and is not a registration.
+ */
+function forbidUnscopedRegistration({ manager, method, via }) {
+  return {
+    selector:
+      `MemberExpression[object.object.name='Zotero']` +
+      `[object.property.name='${manager}'][property.name='${method}']` +
+      `:not(AssignmentExpression > MemberExpression.left)`,
+    message:
+      `FR-56: use ${via}() from src/zotero/registrations.ts; a bare ` +
+      `Zotero.${manager}.${method} is a registration nothing will undo.`,
+  };
+}
 
 export default zotero({
   overrides: [
@@ -151,6 +211,33 @@ export default zotero({
             message:
               "docs/07 §2.3 / docs/13 §2.1: src/zotero/ is the only directory permitted to reference Zotero.*. Go through the src/zotero/ facade, or take a port (PrefStore, Clock, HttpClient) from the container.",
           },
+        ],
+      },
+    },
+    {
+      // FR-56 / P0-T31. A registration handle that is never paired with its
+      // teardown leaves a live closure referencing a dead plugin
+      // (docs/01 §12 gotcha 10), and only one of the four APIs —
+      // PreferencePanes, via `pluginPanes` — can be audited at runtime, so
+      // MenuManager, Notifier and Prefs have no check at all short of
+      // P0-T11's manual disable/enable cycling. This rule is the check.
+      //
+      // The exemption is two named files, not a directory. `src/zotero/**` is
+      // already the exemption for the Zotero global and P0-T10 adds three more
+      // files to it; exempting it wholesale would leave the rule guarding
+      // nothing exactly where it matters most.
+      //
+      // `scripts/probe-types.ts` is the second: P0-T06's type-only probe is
+      // never executed and never bundled, its entire job is to make the
+      // compiler resolve these declarations, and it already carries a
+      // file-level `eslint-disable no-restricted-globals` for the same reason.
+      name: "research-helper/scoped-registration",
+      files: ["**/*.{js,mjs,cjs,ts,mts,cts}"],
+      ignores: ["src/zotero/registrations.ts", "scripts/probe-types.ts"],
+      rules: {
+        "no-restricted-syntax": [
+          "error",
+          ...REGISTRATION_APIS.map(forbidUnscopedRegistration),
         ],
       },
     },

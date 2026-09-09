@@ -40,6 +40,17 @@
   // and would otherwise ship untypechecked. Adding it also makes `P0-T06`'s
   // second acceptance criterion — "typecheck exits 0 with the probe file
   // included" — literally true rather than true only under a throwaway config.
-  "include": ["src", "test", "typings", "scripts", "zotero-plugin.config.ts"],
+  // "vitest.config.ts" is listed for the same reason as
+  // "zotero-plugin.config.ts": it is real code at the repository root, outside
+  // every directory entry above, and would otherwise ship untypechecked
+  // (P0-T12).
+  "include": [
+    "src",
+    "test",
+    "typings",
+    "scripts",
+    "zotero-plugin.config.ts",
+    "vitest.config.ts"
+  ],
   "exclude": ["node_modules", ".scaffold", "addon"]
 }

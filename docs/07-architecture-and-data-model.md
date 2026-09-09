@@ -298,7 +298,9 @@ research_helper/
 │   │   │                             #   SourceId, per §11.1 step 5 — no abbreviations
 │   │   ├── pubmed/ europepmc/ crossref/ semanticscholar/ arxiv/ biorxiv/ medrxiv/
 │   │   └── llm/
-│   └── helpers/                      # fake clock, fake HTTP, in-memory Cache/JobStore
+│   ├── helpers/                      # fake clock, fake HTTP, in-memory Cache/JobStore
+│   └── setup/                        # Vitest setupFiles — the minimal Zotero fake,
+│                                     #   13-testing-build-and-release.md §2.1
 │
 ├── docs/                             # the design corpus, 00–13 — living documents,
 │   │                                 #   edited in place; this file is docs/07
