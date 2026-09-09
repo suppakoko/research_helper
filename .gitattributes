@@ -1,0 +1,52 @@
+# Line endings are not cosmetic in this repository.
+#
+# The design corpus under docs/ contains ASCII wireframes and layered-architecture
+# diagrams whose alignment was measured character-by-character during review
+# (docs/08 §4.5, §7.4; docs/07 §3.2). A CRLF rewrite on checkout shifts byte
+# offsets and silently breaks those checks. P0-T01 hit this — git warned that
+# core.autocrlf would rewrite the corpus — and could only fix it for one working
+# copy. This file fixes it for every clone, on every platform, with no local
+# git configuration required.
+#
+# Last matching pattern wins, so the binary rules at the bottom override the
+# text rules above them.
+
+# Default: store LF in the object database, check LF out everywhere.
+* text=auto eol=lf
+
+# Recorded API responses (docs/07 §2.2, docs/13 §3). The record/replay layer
+# compares these byte-for-byte, so a fixture recorded on Windows and one
+# recorded on Linux must be identical. Never let git re-encode them.
+test/fixtures/** text eol=lf
+
+# Explicit only where auto-detection is genuinely uncertain. Common text types
+# (.md, .ts, .js, .json, .xhtml, .css, .yml) are left to `text=auto` above: git
+# never mis-detects them, and an explicit rule here would report `text: set`
+# where this card's acceptance criterion expects `text: auto`.
+#
+# Fluent localization files carry an uncommon extension and a UTF-8 BOM-less
+# convention; state it rather than rely on detection.
+*.ftl   text eol=lf
+
+# Binary — git must never re-encode or diff these.
+# Plugin icons (addon/content/icons/, docs/13 §1.3's manifest entries):
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.svg   text eol=lf
+
+# The IMRaD fixture corpus (P3-T20) and any packaged build output:
+*.pdf   binary
+*.xpi   binary
+*.zip   binary
+
+# Generated or recorded audio (docs/04):
+*.wav   binary
+*.mp3   binary
+
+# Fonts, if any are ever vendored:
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
