@@ -1,9 +1,15 @@
 /**
- * Bootstrapped plugin entry point (docs/01 §3).
+ * Bootstrapped plugin entry point (docs/01 §2.3, §2.5).
  *
  * Adapted from the Zotero team's Make It Red example and the Zotero 7
  * developer documentation, by way of windingwind/zotero-plugin-template
  * (main @ 306d4e2, 2025-12-16).
+ *
+ * All six hooks are plain top-level functions, not exports — the plugin
+ * sandbox looks them up by name (docs/01 §2.3). This file stays tiny and does
+ * nothing but register the chrome namespace, load the bundle, and dispatch
+ * into `src/hooks.ts`; every decision about *what* to register and *when*
+ * lives there and in `src/bootstrap/registerUI.ts`.
  *
  * Deliberately Zotero 10 only. There is no Zotero 6 compatibility shim: the
  * `Services.prefs.getDefaultBranch` loop some tutorials still show is a
@@ -18,6 +24,11 @@
 
 var chromeHandle;
 
+/**
+ * Deliberately empty. Zotero 7+ loads `addon/prefs.js` defaults on install by
+ * itself (docs/01 §7.2), and the plugin creates no storage until something
+ * asks it to, so there is nothing to do on first install.
+ */
 function install(data, reason) {}
 
 async function startup({ id, version, resourceURI, rootURI }, reason) {
@@ -45,6 +56,11 @@ async function startup({ id, version, resourceURI, rootURI }, reason) {
    * FilePickerHelper, ClipboardHelper, KeyboardManager and unregisterAll() —
    * `BasicTool` is not on that list, and reaching for it here would make the
    * composition root depend on the toolkit merely to see `Zotero`.
+   *
+   * > **Unverified:** this substitution is a compile-time claim until a
+   * > Zotero runtime loads the bundle. P0-T09 and P0-T11 are the first tests.
+   * > If a bare `Zotero` inside src/ turns out to be undefined, the fix is
+   * > here — widen `ctx` — not in src/, and not by reintroducing `BasicTool`.
    */
   const ctx = { rootURI, Zotero, Services, Components, ChromeUtils };
   ctx._globalThis = ctx;
@@ -56,6 +72,12 @@ async function startup({ id, version, resourceURI, rootURI }, reason) {
   await Zotero.__addonInstance__.hooks.onStartup();
 }
 
+/**
+ * Window-scoped setup. Fires for every main window, including ones opened
+ * after startup, and again when a closed window is reopened (docs/01 §2.4).
+ * `?.` because a window can load before `startup()` has finished installing
+ * the plugin object.
+ */
 async function onMainWindowLoad({ window }, reason) {
   await Zotero.__addonInstance__?.hooks.onMainWindowLoad(window);
 }
@@ -65,16 +87,33 @@ async function onMainWindowUnload({ window }, reason) {
 }
 
 async function shutdown({ id, version, resourceURI, rootURI }, reason) {
+  // Zotero is closing anyway; every window is going away and every observer
+  // dies with the process, so unwinding is wasted work that can throw against
+  // already-torn-down windows (docs/01 §2.3). This is the ONLY reason that
+  // skips teardown: ADDON_DISABLE, ADDON_UNINSTALL and ADDON_UPGRADE all
+  // leave Zotero running and must clean up fully (docs/01 §12 gotcha 11).
   if (reason === APP_SHUTDOWN) {
     return;
   }
 
-  await Zotero.__addonInstance__?.hooks.onShutdown();
-
-  if (chromeHandle) {
-    chromeHandle.destruct();
-    chromeHandle = null;
+  try {
+    await Zotero.__addonInstance__?.hooks.onShutdown();
+  } catch (error) {
+    // Logged rather than propagated, so a failure inside the plugin's own
+    // teardown cannot also strand the chrome registration below. The message
+    // lands in Debug Output, which is where P0-T11 looks for it.
+    Zotero.debug(`[__addonRef__] shutdown hook threw: ${error}`);
+  } finally {
+    if (chromeHandle) {
+      chromeHandle.destruct();
+      chromeHandle = null;
+    }
   }
 }
 
+/**
+ * Deliberately empty, and that is FR-56's second acceptance criterion: items,
+ * collections and notes the plugin created are ordinary Zotero data and must
+ * survive uninstall untouched. Preferences are removed by Zotero itself.
+ */
 async function uninstall(data, reason) {}

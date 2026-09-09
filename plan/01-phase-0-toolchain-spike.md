@@ -728,6 +728,49 @@ earlier draft — was corrected on 2026-09-09 and now spells out that a file und
 never be typechecked and the augmentation would silently have no effect." Nothing to record as a
 corpus defect any more.
 
+**Findings, 2026-09-10.** Probed `zotero-types@4.1.3` (`entries/sandbox`) with
+`scripts/probe-types.ts`. Baseline against the unaugmented package: 15 errors. After
+`typings/zotero-augment.d.ts`: 0.
+
+`V-6`'s answer: **`zotero-types@4.1.3` is broadly accurate for Zotero 10, but lags in six
+places, four of which this plugin will hit.** Items, collections, `Notifier`, `PreferencePanes`,
+`MenuManager`, `ItemPaneManager`, `Prefs`, `DB`, `ProgressWindow` and the core of `HTTP.request`
+are all present and correctly typed.
+
+*Augmented — five blocks, each proven necessary by the baseline run:*
+`DataObject.SaveOptions.undoAction`/`undoActionArgs`; `HTTP.request`'s `anon` /
+`noRetryOnThrottle` / `userContextId` plus the five `HTTP` exception classes; `OSKeyStore`
+(absent entirely); `Retractions.isRetracted` (absent entirely); the four Zotero 10 plural
+selection getters.
+
+*Compile-time holes a later card will hit — recorded, not invented:*
+
+| Hole | Symbol | Why it cannot be augmented | Lands on |
+|---|---|---|---|
+| (a) | `Zotero.PDFWorker.getFullText` | upstream `let PDFWorker: any` → duplicate identifier | Phase 3 `src/zotero/fulltext.ts` |
+| (b) | `item.libraryID = n` | declared `readonly`; declaration merging cannot relax it | `P0-T10` / Phase 1 `itemMapper.ts` |
+| (c) | `Services.logins.removeLoginAsync` | existence on Firefox 140 ESR unestablished | `P0-T23` |
+| (f) | `Fulltext.getPages().indexedPages` | upstream overload with identical parameters resolves first | `src/zotero/fulltext.ts` |
+
+*Wrong rather than missing — no augmentation can help:* `_ZoteroTypes.ZoteroPane` carries
+`[attr: string]: any`, so the singular getters that **throw** on Zotero 10 still compile;
+`Search.addCondition` keeps the pre-10 `required` parameter and `Conditions` keeps the removed
+`fulltextWord`; `DB.executeTransaction`'s options members are all required and misspell
+`disableForeignKeys`.
+
+Criterion [2] as written — "`npm run typecheck` exits 0 with the probe file included" — **does
+not hold**: `tsconfig.json`'s `include` is `["src", "test", "typings",
+"zotero-plugin.config.ts"]`, so `scripts/` is outside the program. An equivalent config that
+does include it exits 0. Reported rather than papered over, per `plan/README.md` §5 rule 6.
+
+**Findings, 2026-09-10 (build).** `zotero-plugin-scaffold`'s `replaceDefine()` globs
+`.scaffold/build/addon/**/*` with no extension filter and reads every match as UTF-8, but it
+writes back **only when a replacement actually changed the string**
+(`if (contents !== newContents) await writeFile(path, newContents)`). A binary under `addon/`
+therefore survives intact unless it happens to contain a literal `__KEY__` byte sequence, in
+which case the whole file is re-encoded as UTF-8 and corrupted. Both icons round-trip
+byte-identically today (SHA-256 verified through the XPI); a future binary fixture is the risk.
+
 ---
 
 ### P0-T07 — `bootstrap.js` lifecycle and a central teardown registry
@@ -767,9 +810,9 @@ remembered.
 
 **Files.**
 - modify `addon/bootstrap.js`
-- create `src/index.ts`
-- create `src/addon.ts`
-- create `src/hooks.ts`
+- modify `src/index.ts`
+- modify `src/addon.ts`
+- modify `src/hooks.ts`
 - create `src/bootstrap/container.ts`
 - create `src/bootstrap/registerUI.ts`
 
@@ -834,6 +877,32 @@ npm run typecheck && npm run lint:check
 (automated). This card only makes teardown *structurally possible*. `docs/01` §2.4 notes
 `Zotero.MenuManager` self-cleans on shutdown in Zotero 10, but native registrations you made
 yourself are still your responsibility (`docs/01` §12 gotcha 10) — register them anyway.
+
+**Findings, 2026-09-10.** `FR-56` is enforced structurally, in four layers, not by discipline:
+(1) `Registration<THandle>.unregister` is a **required** property, so a registration that does
+not describe its own removal is a compile error at the point of definition; (2) `Scope.use()`
+performs the platform call and records the teardown in one step — there is no separate
+`record()` to forget; (3) `container.ts` and `registerUI.ts` may not even name `Zotero`, because
+`P0-T04`'s existing `no-restricted-globals` rule confines it to `src/zotero/**`, so bypassing the
+registry is already a lint error and no new exemption was added; (4) two runtime tripwires — a
+duplicate-description guard inside a scope (the "two menu items after re-enable" failure) and
+`reportSurvivors()` on shutdown.
+
+**The audit is one-sided, and deliberately so.** `Zotero.PreferencePanes.pluginPanes` lets
+`reportSurvivors()` catch a pane registered *outside* the scope. `Zotero.MenuManager` and
+`Zotero.Notifier` expose no equivalent enumeration in `zotero-types@4.1.3`, so no such audit
+exists for them and none was invented; `P0-T11`'s manual cycling remains the only check.
+Closing that gap needs an ESLint `no-restricted-properties` rule banning direct
+`MenuManager.registerMenu` / `Notifier.registerObserver` / `PreferencePanes.register` /
+`Prefs.registerObserver` outside a scope-aware wrapper — `eslint.config.js` is outside this
+card's `Files`, so it is left for a card of its own.
+
+**Open risk carried into `P0-T09` / `P0-T11`.** `addon/bootstrap.js` forwards exactly five
+globals onto the sandbox context — `rootURI`, `Zotero`, `Services`, `Components`,
+`ChromeUtils`. A bare `setTimeout`, `fetch`, `TextDecoder`, `URL` or `AbortController` inside
+`src/` therefore resolves against the sandbox's own globals, and which of those exist is
+unverified. Timer registration in particular assumes `setTimeout`. If it is absent, the fix is
+to widen `ctx` in `bootstrap.js` — **not** to reintroduce `BasicTool`.
 
 ---
 
@@ -2838,6 +2907,19 @@ forbids renumbering.
 decision the project owner has not made, and `P0-T09` only needs an icon that renders. Replacing
 it before v1.0 belongs with the release checklist (`docs/13` §8, gate `G-35`); this card's
 README.md is where that hand-off is recorded so it is not forgotten between here and Phase 7.
+
+**Findings, 2026-09-10.** Both PNGs are generated by a dependency-free Node script embedded in
+`addon/content/icons/README.md` as its only fenced `js` block (raw deflate stored blocks + a hand-rolled
+CRC-32/Adler-32, so it needs no `zlib` bindings beyond Node's own). Regeneration was proven, not
+asserted: both files were deleted and rebuilt, and the SHA-256s matched byte for byte
+(`48e9ad94…` for `favicon.png`, `aad6e9a1…` for `favicon@0.5x.png`). Those same two hashes come
+back out of the packed XPI, so the build does not touch them.
+
+**The XPI ships this README.** `build.assets` is `addon/**/*.*`, so
+`content/icons/README.md` (11.9 KB) is delivered to every user alongside the icons. Harmless
+against `NFR-18`'s 3 MB budget, but it is developer documentation inside a user artifact, and
+the same rule will ship every future `.md` under `addon/`. Worth an asset-glob narrowing before
+`P0-T14`.
 
 ## Phase 0 spike report template
 
