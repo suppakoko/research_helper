@@ -1,4 +1,3 @@
-/* eslint-disable no-undef */
 // Default preference values.
 //
 // Zotero 7+ loads this file automatically from the plugin root — it is not

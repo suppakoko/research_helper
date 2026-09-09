@@ -644,7 +644,7 @@ The file is `P0-T02`'s and is not in this card's `Files` list.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T06` |
-| **State** | `TODO` |
+| **State** | `DONE` — completed 2026-09-10; criterion [2] closed by adding `scripts` to `tsconfig.json` `include` |
 | **Depends on** | `P0-T05` |
 | **Blocks** | `P0-T07` |
 | **Retires** | `V-6` |
@@ -778,9 +778,9 @@ byte-identically today (SHA-256 verified through the XPI); a future binary fixtu
 | Field | Value |
 |---|---|
 | **ID** | `P0-T07` |
-| **State** | `TODO` |
+| **State** | `DONE` — completed 2026-09-10; mechanism only, runtime proof is `P0-T11` |
 | **Depends on** | `P0-T05`, `P0-T06` |
-| **Blocks** | `P0-T08`, `P0-T09` |
+| **Blocks** | `P0-T08`, `P0-T09`, `P0-T31` |
 | **Retires** | part of `V-4`, part of `R-12` |
 | **Implements** | `FR-56` |
 | **Estimate** | 0.5 d |
@@ -1084,7 +1084,7 @@ with Git for Windows; the size check has a PowerShell equivalent
 |---|---|
 | **ID** | `P0-T10` |
 | **State** | `TODO` |
-| **Depends on** | `P0-T08` |
+| **Depends on** | `P0-T08`, `P0-T31` |
 | **Blocks** | `P0-T11`, `P0-T20`, `P0-T24` |
 | **Retires** | part of `V-1` |
 | **Implements** | part of `FR-6` |
@@ -2829,7 +2829,7 @@ even though it runs second in dependency order.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T30` |
-| **State** | `TODO` |
+| **State** | `DONE` — completed 2026-09-10; placeholder mark, final artwork is gate `G-35` |
 | **Depends on** | `P0-T04` |
 | **Blocks** | `P0-T09` |
 | **Retires** | none |
@@ -2920,6 +2920,104 @@ back out of the packed XPI, so the build does not touch them.
 against `NFR-18`'s 3 MB budget, but it is developer documentation inside a user artifact, and
 the same rule will ship every future `.md` under `addon/`. Worth an asset-glob narrowing before
 `P0-T14`.
+
+---
+
+### P0-T31 — Make unscoped platform registration a lint error
+
+| Field | Value |
+|---|---|
+| **ID** | `P0-T31` |
+| **State** | `TODO` |
+| **Depends on** | `P0-T07` |
+| **Blocks** | `P0-T10` |
+| **Retires** | none |
+| **Implements** | `FR-56` (enforcement only — `P0-T07` implements the mechanism) |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** Calling one of Zotero's four registration APIs outside a scope-aware wrapper is a
+lint error, so a registration that nothing will ever undo cannot reach a commit.
+
+**Read first.**
+- `src/bootstrap/container.ts` and `src/bootstrap/registerUI.ts` (`P0-T07`) — the `Scope` /
+  `Registration` contract this rule protects, and why `registerUI.ts` lists registrations
+  rather than performing them.
+- `plan/01-phase-0-toolchain-spike.md` `P0-T07` **Findings** — the gap this card closes.
+  `reportSurvivors()` can independently audit preference panes because
+  `Zotero.PreferencePanes.pluginPanes` enumerates them; `Zotero.MenuManager` and
+  `Zotero.Notifier` expose nothing equivalent, so for those two there is no runtime audit at
+  all and a compile-time rule is the only guard short of `P0-T11`'s manual cycling.
+- `eslint.config.js` (`P0-T04`) — the existing `no-restricted-imports` /
+  `no-restricted-globals` blocks that encode `docs/07` §2.3's layering. This rule is a fourth
+  member of that family and must read like one.
+- `docs/01-zotero-plugin-platform.md` §2.4 and §12 gotcha 10 — that `Zotero.MenuManager`
+  self-cleans on shutdown but a plugin's own registrations remain the plugin's responsibility.
+
+**Files.**
+- modify `eslint.config.js`
+- create `src/zotero/registrations.ts`
+
+**Do.**
+1. Write `src/zotero/registrations.ts`: the single module allowed to call the four APIs. It
+   exports one factory per API — menu, notifier observer, preference pane, pref observer —
+   each returning a `ScopedRegistration` built with `registration({ description, register,
+   unregister })` so the pairing is made once, in one place, and cannot be half-written.
+2. Add the rule to `eslint.config.js` banning `Zotero.MenuManager.registerMenu`,
+   `Zotero.Notifier.registerObserver`, `Zotero.PreferencePanes.register` and
+   `Zotero.Prefs.registerObserver` everywhere **except** `src/zotero/registrations.ts`.
+3. Write the message the way the existing blocks do: name the replacement, not just the
+   prohibition — "use `menuRegistration()` from `src/zotero/registrations.ts`; a bare
+   `registerMenu` is a registration nothing will undo (`FR-56`)."
+4. Prove the rule fires. Add a call in a scratch file, confirm `npm run lint:check` fails on
+   it, delete the scratch file. A rule that has never failed has not been tested.
+5. Confirm `src/zotero/registrations.ts` itself still lints, and that
+   `npm run lint:check` and `npm run typecheck` both exit 0 afterwards.
+
+**Do NOT.**
+- Do not reach for `no-restricted-properties` without checking it matches. It compares
+  `node.object.name`, which is `undefined` for the outer member expression of
+  `Zotero.MenuManager.registerMenu` (its object is itself a `MemberExpression`), so an
+  `{ object: "MenuManager", property: "registerMenu" }` entry silently never fires. Matching on
+  `property` alone does work for `registerMenu` and `registerObserver`, but `register` is far
+  too generic to ban by name. A `no-restricted-syntax` selector —
+  `MemberExpression[object.object.name='Zotero'][object.property.name='PreferencePanes'][property.name='register']`
+  — matches all four precisely; prefer it unless the mixed approach is demonstrably clearer.
+- Do not exempt `src/zotero/**` wholesale. That directory is already the exemption for the
+  `Zotero` global, and `P0-T10` creates three more files in it; a directory-wide exemption
+  would leave the rule guarding nothing where it matters most.
+- Do not add `Zotero.ItemPaneManager.registerSection` to the ban in this card. It is real and
+  it leaks the same way, but no card registers one yet and `docs/08` has not settled where the
+  section lives; add it when Phase 2 does.
+- Do not weaken `P0-T07`'s duplicate-description tripwire to make a wrapper convenient. The
+  two guards are independent on purpose.
+
+**Done when.**
+- [ ] `src/zotero/registrations.ts` exists and is the only file in the tree that names the four
+      APIs.
+- [ ] The rule was observed to fail on a deliberate violation, and the observed message is
+      recorded in the card's Findings.
+- [ ] `npm run lint:check` and `npm run typecheck` both exit 0 on the clean tree.
+- [ ] `npm run build` exits 0.
+
+**Verify with.**
+```bash
+npm run lint:check && npm run typecheck \
+  && grep -rln --include='*.ts' -E 'registerMenu|registerObserver|PreferencePanes\.register' src/ \
+  | grep -v '^src/zotero/registrations\.ts$' | grep . && echo "LEAK" || echo "ok"
+```
+
+**Notes.** Recommended by the `P0-T07` agent and added on 2026-09-10, numbered `P0-T31` because
+`plan/README.md` §3 forbids renumbering. It is sequenced **before** `P0-T10` deliberately:
+`P0-T10` writes the plugin's first real menu registration, and a guard that arrives after the
+habit it is meant to prevent is worth much less than one that arrives before it.
+
+This card does not close the audit gap, it fences it. `Zotero.MenuManager` and
+`Zotero.Notifier` still cannot be enumerated at runtime, so `reportSurvivors()` remains
+one-sided and `P0-T11` remains the only end-to-end proof. What the rule buys is that the
+one-sidedness stops mattering, because the unaudited path can no longer be taken by accident.
+
+---
 
 ## Phase 0 spike report template
 
