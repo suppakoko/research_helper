@@ -1,8 +1,40 @@
 {
+  // P0-T05 step 2 resolves the corpus divergence between docs/01 §4.6 and
+  // docs/13 §1.5 in favour of the `entries/` form, and then layers §1.5's
+  // strict-family flags on top. Reasoning is in the card's Notes; the short
+  // version is that `entries/sandbox` is not merely a types package, it is a
+  // real tsconfig that already supplies target ES2022, module ESNext,
+  // moduleResolution bundler, resolveJsonModule, strict and skipLibCheck via
+  // `entries/base`, and it deliberately omits DOM because the bootstrapped
+  // plugin sandbox has none.
   "extends": "zotero-types/entries/sandbox/",
-  "include": ["src", "typings"],
-  "exclude": ["build", "addon", ".scaffold", "node_modules"],
   "compilerOptions": {
-    "resolveJsonModule": true
-  }
+    // `entries/base` sets `composite: true`, which implies emitting. tsc is a
+    // checker here and esbuild owns emission (docs/13 §1.5), so both are
+    // turned off explicitly.
+    "composite": false,
+    "noEmit": true,
+
+    // `types` REPLACES the inherited array rather than merging with it, so the
+    // sandbox entry has to be repeated. "node" is required by
+    // zotero-plugin.config.ts, which reads `process.env.NODE_ENV`, and will be
+    // required by test/ once vitest lands (P0-T12).
+    "types": ["zotero-types/entries/sandbox", "node"],
+
+    // docs/13 §1.5's strict family, beyond the `strict: true` base already
+    // provides. Do not relax these to make a skeleton pass.
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+
+    "esModuleInterop": true,
+    "isolatedModules": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src", "test", "typings", "zotero-plugin.config.ts"],
+  "exclude": ["node_modules", ".scaffold", "addon"]
 }

@@ -2,23 +2,23 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-09-10 · **101 tasks: 2 `DONE`, 99 `TODO`.**
+> **Last updated:** 2026-09-10 · **102 tasks: 6 `DONE`, 96 `TODO`.**
 
 ---
 
 ## 1. Status
 
-Implementation has started. `P0-T01` and `P0-T29` are `DONE` (2026-09-10, commits `df15816` and `010ede3`);
+Implementation has started. Five tasks are `DONE` as of 2026-09-10 —`P0-T01`, `P0-T29`, `P0-T02`, `P0-T03` and `P0-T04` (commits `df15816`,`010ede3`, `437b366`, `500cf7b`);
 every other task is `TODO`. Only a human sets a task to `DONE`
 (`README.md` §4), so this file will not drift on its own.
 
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
 |---|---|---|---|---|
-| 0 — Toolchain spike | 29 | 15.75 d | 15.75–22 d | 6–9 d (+75%) |
+| 0 — Toolchain spike | 30 | 16.00 d | 16–22 d | 6–9 d (+78%) |
 | 1 — PubMed slice | 23 | 18.75 d | 18.75–26 d | 9–12 d (+56%) |
 | 2 — Multi-source + dedup | 18 | 24.25 d | 24.25–34 d | 12–16 d (+52%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **101** | **82.25 d** | **82.25–115 d** | 39–52 d (+58% over the top of the band) |
+| **Phases 0–3** | **102** | **82.50 d** | **82.5–115 d** | 39–52 d (+59% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -31,7 +31,7 @@ families is, in that card's own words, "the single most expensive card in the ph
 produces no shipped code". The owner decided to re-estimate rather than to accept them, because
 leaving them optimistic would contradict the same-day roadmap correction and `docs/11`'s risk
 **R-23**. Each card's `Notes` now carries the derivation. Phase 3's sum is **23.50 d**, the
-Phases 0–3 subtotal is **82.25 d**, and `docs/11` §1's Phase 3 band, its effort summary, its
+Phases 0–3 subtotal is **82.50 d**, and `docs/11` §1's Phase 3 band, its effort summary, its
 total and months figure, and §2's dependency graph and critical path were all re-derived from
 those numbers. **No other card's estimate was changed**, and `P3-T20`'s figure counts developer
 work only — the human's PDF sourcing and ground-truth adjudication is gate **G-12** in
@@ -101,14 +101,14 @@ column means the card cannot complete without a human — read
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
 | ✅ `P0-T01` | Initialise the repository, licence and ignore rules | — | 0.25 d |  |
-| `P0-T02` | Scaffold from the template and re-baseline it | `P0-T01`, `P0-T29` | 1.0 d |  |
-| `P0-T03` | Write the Zotero 10 manifest and pin the plugin identity | `P0-T02` | 0.25 d |  |
-| `P0-T04` | Lay out the directory skeleton and dependency rule | `P0-T02` | 0.5 d |  |
-| `P0-T05` | TypeScript config, npm scripts and a green typecheck | `P0-T04` | 0.25 d |  |
+| ✅ `P0-T02` | Scaffold from the template and re-baseline it | `P0-T01`, `P0-T29` | 1.0 d |  |
+| ✅ `P0-T03` | Write the Zotero 10 manifest and pin the plugin identity | `P0-T02` | 0.25 d |  |
+| ✅ `P0-T04` | Lay out the directory skeleton and dependency rule | `P0-T02` | 0.5 d |  |
+| ✅ `P0-T05` | TypeScript config, npm scripts and a green typecheck | `P0-T04` | 0.25 d |  |
 | `P0-T06` | Verify `zotero-types` against the Zotero 10 API surface | `P0-T05` | 0.5 d |  |
 | `P0-T07` | `bootstrap.js` lifecycle and a central teardown registry | `P0-T05`, `P0-T06` | 0.5 d |  |
 | `P0-T08` | Dev profile, `.env`, hot reload and debugger attach | `P0-T07` | 0.75 d | 🔒 |
-| `P0-T09` | Build the first XPI and install it on Zotero 10.0.1 | `P0-T03`, `P0-T07` | 0.25 d | 🔒 |
+| `P0-T09` | Build the first XPI and install it on Zotero 10.0.1 | `P0-T03`, `P0-T07`, `P0-T30` | 0.25 d | 🔒 |
 | `P0-T10` | Tools-menu item that creates a `journalArticle` | `P0-T08` | 0.75 d |  |
 | `P0-T11` | Prove clean teardown across five disable/enable cycles | `P0-T10` | 0.5 d | 🔒 |
 | `P0-T12` | First Node unit test under Vitest | `P0-T05` | 0.5 d |  |
@@ -128,6 +128,7 @@ column means the card cannot complete without a human — read
 | `P0-T26` | Binary/audio response handling and attachment | `P0-T25` | 0.5 d |  |
 | `P0-T27` | `update.json` delivery dry run | `P0-T09`, `P0-T14` | 0.5 d | 🔒 |
 | ✅ `P0-T29` | Pin line endings with `.gitattributes` | `P0-T01` | 0.25 d |  |
+| `P0-T30` | Create the plugin icon assets | `P0-T04` | 0.25 d |  |
 | `P0-T28` | Write and commit the Phase 0 spike report | `P0-T14`, `P0-T15`, `P0-T16`, `P0-T17`, `P0-T18`, `P0-T19`, `P0-T20`, `P0-T21`, `P0-T22`, `P0-T23`, `P0-T24`, `P0-T25`, `P0-T26`, `P0-T27` | 0.5 d | 🔒 |
 
 **Nine of Phase 0's 28 cards carry a gate**, not fourteen: `P0-T08`, `P0-T09`,

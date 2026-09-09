@@ -345,7 +345,7 @@ Worth reporting upstream.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T03` |
-| **State** | `TODO` |
+| **State** | `DONE` — completed 2026-09-10, commit `500cf7b`; all three criteria verified |
 | **Depends on** | `P0-T02` |
 | **Blocks** | `P0-T09` |
 | **Retires** | part of `V-1` |
@@ -432,9 +432,9 @@ proved by an actual install; if Zotero rejects it, `docs/07` §1.2's marker reso
 | Field | Value |
 |---|---|
 | **ID** | `P0-T04` |
-| **State** | `TODO` |
+| **State** | `DONE` — completed 2026-09-10, commit `500cf7b`; all four criteria verified, lint rules proved to fire with six probe files |
 | **Depends on** | `P0-T02` |
-| **Blocks** | `P0-T05` |
+| **Blocks** | `P0-T05`, `P0-T30` |
 | **Retires** | part of `R-1` |
 | **Implements** | none |
 | **Estimate** | 0.5 d |
@@ -528,7 +528,7 @@ do not "correct" either back out against §2.2.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T05` |
-| **State** | `TODO` |
+| **State** | `DONE` — completed 2026-09-10; all three criteria verified, strict flags proved to fire |
 | **Depends on** | `P0-T04` |
 | **Blocks** | `P0-T06`, `P0-T07`, `P0-T12` |
 | **Retires** | none |
@@ -594,6 +594,49 @@ npm run typecheck && npm run lint:check
 `docs/13` §1.5 is a real divergence in the corpus, not a mistake in this card — whichever form
 works becomes the answer and the other document is the defect.
 
+
+**Findings, 2026-09-10.** Step 2's divergence is resolved **in favour of `docs/01` §4.6's
+`entries/` form**, and `docs/13` §1.5's `types: ["zotero-types", "node"]` block is the defect —
+but only partly, because §1.5's strict-family flags are still right and are layered on top.
+
+`zotero-types@4.1.3` ships seven entries (`base`, `sandbox`, `xhtml`, `mainWindow`, `html`,
+`shared`, `webworker`). `entries/sandbox` is not a types package but a real tsconfig:
+
+```jsonc
+{ "extends": "../base/tsconfig.json",
+  "compilerOptions": { "lib": ["ESNext"], "types": ["zotero-types/entries/sandbox"] } }
+```
+
+and `entries/base` already supplies `target: ES2022`, `module: ESNext`,
+`moduleResolution: bundler`, `resolveJsonModule`, `strict` and `skipLibCheck` — six of the
+fifteen options §1.5 lists. Three things had to be overridden:
+
+1. **`composite: true`** comes from `entries/base` and implies emitting. Set `composite: false`
+   alongside `noEmit: true`; esbuild owns emission (§1.5).
+2. **`types` replaces rather than merges.** Extending the sandbox entry and then adding `"node"`
+   means re-stating the sandbox entry: `["zotero-types/entries/sandbox", "node"]`. Node types
+   are not optional — `zotero-plugin.config.ts` reads `process.env.NODE_ENV`, and `test/` will
+   need them for vitest (`P0-T12`).
+3. **`lib` is `["ESNext"]`, with no DOM**, which contradicts §1.5's
+   `["ES2022", "DOM", "DOM.Iterable"]`. **The sandbox entry is right and §1.5 is wrong for
+   `src/`**: a bootstrapped plugin's sandbox has no DOM, which is exactly the distinction
+   `docs/01` §4.6's entry table draws. Nothing in `src/` references `document`, `window` or an
+   HTML element type today. **This will need revisiting when UI code lands** — the prefs pane
+   and dialog scripts run in the `xhtml` context, which does have a DOM, and `docs/01` §4.6
+   says to pick the entry per execution context. Those files are plain `.js` under
+   `addon/content/` today, so one tsconfig still suffices; the moment a `.ts` module needs the
+   DOM, this becomes a second tsconfig (a project reference or a `test/tsconfig.json`-style
+   sibling), not a widened `lib` here.
+
+*The strict flags were proved to fire, not merely to be set.* A probe with an unchecked index
+access and an `exactOptionalPropertyTypes` violation produced `TS18048` and `TS2375`; removed
+afterwards. `tsc --listFiles` confirms `zotero-plugin.config.ts` is genuinely in the program —
+an `include` entry that silently misses is the failure mode worth checking for.
+
+*Left alone deliberately.* `addon/prefs.js` carries `/* eslint-disable no-undef */`, which the
+shared ESLint config's own `specialCases` block has since made redundant, so every `lint:check`
+run reports one `Unused eslint-disable directive` warning. It does not affect the exit code.
+The file is `P0-T02`'s and is not in this card's `Files` list.
 ---
 
 ### P0-T06 — Verify `zotero-types` against the Zotero 10 API surface
@@ -893,7 +936,7 @@ written.
 |---|---|
 | **ID** | `P0-T09` |
 | **State** | `TODO` |
-| **Depends on** | `P0-T03`, `P0-T07` |
+| **Depends on** | `P0-T03`, `P0-T07`, `P0-T30` |
 | **Blocks** | `P0-T27` |
 | **Retires** | `V-1`, part of `R-11` |
 | **Implements** | `NFR-17`, `NFR-18` |
@@ -2708,6 +2751,93 @@ which fixes this machine and nobody else's — hence a separate, durable card. N
 because `plan/README.md` §3 forbids renumbering and this is the next free number in the phase,
 even though it runs second in dependency order.
 ---
+
+
+---
+
+### P0-T30 — Create the plugin icon assets
+
+| Field | Value |
+|---|---|
+| **ID** | `P0-T30` |
+| **State** | `TODO` |
+| **Depends on** | `P0-T04` |
+| **Blocks** | `P0-T09` |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** The two icon files `addon/manifest.json` already points at exist, so the plugin
+renders with an icon in Zotero's Plugins window instead of a broken image.
+
+**Read first.**
+- `docs/13-testing-build-and-release.md` §1.3 — the manifest's `icons` block, which fixes both
+  the sizes (`48`, `96`) and the paths (`content/icons/favicon@0.5x.png`,
+  `content/icons/favicon.png`). Those paths are already committed; this card supplies the files,
+  it does not get to rename them.
+- `docs/08-ui-ux-spec.md` §9 — the accessibility rules. An icon carries no information the UI
+  does not also state in text, so it needs no alternative text of its own, but it must stay
+  legible at 48 px against both light and dark Zotero themes.
+- `plan/06-human-gates.md` `G-35` — final artwork is a release concern, not a Phase 0 one. This
+  card ships a functional placeholder; see `Notes`.
+
+**Files.**
+- create `addon/content/icons/favicon.png` (96×96)
+- create `addon/content/icons/favicon@0.5x.png` (48×48)
+- create `addon/content/icons/README.md`
+
+**Do.**
+1. Produce a 96×96 and a 48×48 PNG. Generate them deterministically from a committed source
+   (a small script, or an SVG committed alongside) rather than pasting binary blobs nobody can
+   regenerate — `docs/07` §2.2.1's rule that a record must be reproducible applies here too.
+2. Keep the mark legible at 48 px: one shape, high contrast, no fine detail and no text. It is
+   rendered at icon size in a list, not viewed full-size.
+3. Check it against both Zotero themes. A mark that relies on a light background disappears in
+   dark mode; give it either its own background or a colour that works on both.
+4. Write `addon/content/icons/README.md` recording what the source is, how to regenerate the
+   PNGs, and that the current mark is a placeholder pending the owner's decision.
+5. Rebuild and confirm the icons are packaged into the XPI at `content/icons/`.
+
+**Do NOT.**
+- Do not rename the files or change the manifest's `icons` block. `P0-T03` pinned those paths
+  and `addon/manifest.json` is that card's file, not this one's.
+- Do not commit a PNG with no reproducible source. A binary nobody can regenerate is a
+  maintenance dead end, and `.gitattributes` (`P0-T29`) marks `*.png` binary precisely so git
+  will not diff it for you.
+- Do not copy an icon from another project, from Zotero itself, or from an icon set whose
+  licence has not been checked. The repository is MIT (D8) and its assets have to be
+  redistributable under it.
+- Do not add an icon size the manifest does not declare. Zotero reads `48` and `96`; a stray
+  `128` is dead weight in the XPI, which `NFR-18` budgets at 3 MB.
+
+**Done when.**
+- [ ] Both files exist at the exact paths `addon/manifest.json` names.
+- [ ] `file addon/content/icons/favicon.png` reports a PNG, and its dimensions are 96×96;
+      `favicon@0.5x.png` is 48×48.
+- [ ] `npm run build` succeeds and both files appear under
+      `.scaffold/build/addon/content/icons/`.
+- [ ] The XPI contains both, at `content/icons/`.
+- [ ] `addon/content/icons/README.md` states the source and the regeneration command, and
+      whoever follows it reproduces byte-identical PNGs.
+
+**Verify with.**
+```bash
+npm run build \
+  && test -f .scaffold/build/addon/content/icons/favicon.png \
+  && test -f .scaffold/build/addon/content/icons/favicon@0.5x.png \
+  && unzip -l .scaffold/build/research-helper.xpi | grep -c "content/icons/favicon"
+```
+
+**Notes.** Discovered during `P0-T03`, not planned: `addon/manifest.json` declares both icon
+entries and `P0-T04` created `addon/content/icons/`, but no card supplied the files, so the XPI
+currently ships a manifest pointing at nothing. Numbered `P0-T30` because `plan/README.md` §3
+forbids renumbering.
+
+**The mark this card ships is a placeholder, and that is deliberate.** Final artwork is a design
+decision the project owner has not made, and `P0-T09` only needs an icon that renders. Replacing
+it before v1.0 belongs with the release checklist (`docs/13` §8, gate `G-35`); this card's
+README.md is where that hand-off is recorded so it is not forgotten between here and Phase 7.
 
 ## Phase 0 spike report template
 

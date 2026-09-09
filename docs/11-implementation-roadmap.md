@@ -12,7 +12,7 @@
 
   **The factor has been recomputed twice and held at 1.50 both times.** It was first derived as 80.5 ÷ 52 = 1.548. The two cards Phase 2 gained on 2026-09-09 took the subtotal to 80.5 d without changing that arithmetic, and the `P3-T04` / `P3-T20` re-estimate later the same day takes it to 82.0 d, so the factor recomputes as **82.0 ÷ 52 = 1.577**. It is **held at 1.50**, and the four Phase 4–7 bands are unchanged, for the reason already applied to the Phase 2 change: moving an inferred figure on the strength of a 1.5-day change to a measured one is false precision. The arithmetic makes the point — the factor moves by 1.9%, which on Phase 4's 11-day base is 0.32 d, an order of magnitude below the rounding these bands are already stated at. Holding at 1.50 also keeps the factor *conservative in the stated direction*: 1.50 is below both 1.548 and 1.577, so the scaled figures understate rather than overstate what the measured phases actually found, which is the safer error for a number R-23 already flags as inference. `plan/05-phases-4-7-outline.md` quotes these four bands and the ×1.50 label; both documents derive the factor the same way and neither is to be changed without the other.
 
-The whole plan now sums to roughly **155.75–217 developer-days** (the per-phase table in §1 is the authoritative sum) — at **21 working days per month** (≈252 working days a year ÷ 12), ≈ **7–10 months of full-time work**, or roughly twice that at 50% allocation. This supersedes the previous "74–101 developer-days ≈ 4–5 months"; §1's "Why these figures changed" records why, and why nobody should correct them back.
+The whole plan now sums to roughly **156–217 developer-days** (the per-phase table in §1 is the authoritative sum) — at **21 working days per month** (≈252 working days a year ÷ 12), ≈ **7–10 months of full-time work**, or roughly twice that at 50% allocation. This supersedes the previous "74–101 developer-days ≈ 4–5 months"; §1's "Why these figures changed" records why, and why nobody should correct them back.
 
 ---
 
@@ -54,7 +54,7 @@ The whole plan now sums to roughly **155.75–217 developer-days** (the per-phas
 - CI is green on a clean clone.
 - The spike report is committed and every item in §4 is marked verified / worked-around / blocked.
 
-**Effort.** **15.75–22 developer-days** — *measured*: the 29 task cards in `plan/01-phase-0-toolchain-spike.md` sum to 15.75 d; the upper bound is that × 1.4. (Was 6–9 d.) Toolchain friction on Windows, profile setup and the first encounter with Zotero's item API still dominate, but the decomposition found that the spikes in §4 only partly collapse into each other and that ~4.75 d of the phase is work listed above as a deliverable and never priced: repository bootstrap, the `docs/07` §2.2 directory skeleton and its dependency rule, the TypeScript/lint configuration, the Tools-menu item, the CI workflow and the spike report itself. See that file's "Estimate reconciliation" for the derivation.
+**Effort.** **16–22 developer-days** — *measured*: the 30 task cards in `plan/01-phase-0-toolchain-spike.md` sum to 16.0 d; the upper bound is that × 1.4. (Was 6–9 d.) Toolchain friction on Windows, profile setup and the first encounter with Zotero's item API still dominate, but the decomposition found that the spikes in §4 only partly collapse into each other and that ~4.75 d of the phase is work listed above as a deliverable and never priced: repository bootstrap, the `docs/07` §2.2 directory skeleton and its dependency rule, the TypeScript/lint configuration, the Tools-menu item, the CI workflow and the spike report itself. See that file's "Estimate reconciliation" for the derivation.
 
 **Risks retired.** R-1 (partly), R-8 (Korean TTS spike, V-10), R-11, R-12, R-13, R-14, R-15 (dry run, V-18), R-19b (feasibility spike, V-8b).
 
@@ -287,21 +287,21 @@ Revised 2026-09-09. Construction of the bands is stated once in the preamble ("H
 
 | Phase | Focus | Effort (dev-days, 1 experienced dev) | Basis | Previous figure |
 | --- | --- | --- | --- | --- |
-| 0 | Toolchain spike | 15.75–22 | measured — 29 cards | 6–9 |
+| 0 | Toolchain spike | 16–22 | measured — 30 cards | 6–9 |
 | 1 | PubMed search & import | 18.75–26 | measured — 23 cards | 9–12 |
 | 2 | Multi-source + dedup | 24.25–34 | measured — 18 cards | 12–16 |
 | 3 | LLM layer + summaries | 23.5–33 | measured — 31 cards | 12–15 |
-| | **Phases 0–3 subtotal** | **82.25–115** | **measured — 101 cards** | 39–52 |
+| | **Phases 0–3 subtotal** | **82.5–115** | **measured — 102 cards** | 39–52 |
 | 4 | Trend report | 16.5–23 | ⚠ **scaled ×1.50, not decomposed** | 8–11 |
 | 5 | Related + recommendations | 21–29 | ⚠ **scaled ×1.50, not decomposed** | 10–14 |
 | 6 | TTS audio report | 15–21 | ⚠ **scaled ×1.50, not decomposed** | 7–10 |
 | 7 | Polish, i18n, release | 21–29 | ⚠ **scaled ×1.50, not decomposed** | 10–14 |
 | | **Phases 4–7 subtotal** | **73.5–102** | ⚠ **scaled** | 35–49 |
-| **Total** | | **155.75–217** | half measured, half scaled | 74–101 |
+| **Total** | | **156–217** | half measured, half scaled | 74–101 |
 
-Totals are the sums of the rows above them; the low ends are exact card sums, so they keep the cards' fractions rather than rounding them away. The Phases 0–3 subtotal is 15.75 + 18.75 + 24.25 + 23.5 = **82.25** low and 22 + 26 + 34 + 33 = **115** high; adding the 73.5–102 scaled subtotal gives the **155.75–217** total.
+Totals are the sums of the rows above them; the low ends are exact card sums, so they keep the cards' fractions rather than rounding them away. The Phases 0–3 subtotal is 16 + 18.75 + 24.25 + 23.5 = **82.5** low and 22 + 26 + 34 + 33 = **115** high; adding the 73.5–102 scaled subtotal gives the **156–217** total.
 
-At **21 working days per month** that is ≈ **7–10 months** of full-time work (155.75 ÷ 21 ≈ 7.4; 217 ÷ 21 ≈ 10.3), against the ≈ 4–5 months this document previously claimed. The months figure has now survived two corrections without moving: the two cards Phase 2 gained on 2026-09-09 added 2.75 days, and the `P3-T04` / `P3-T20` re-estimate later the same day added 1.5 more, and ≈ 7–10 months still holds at both ends. Add ~15% — ≈ **23–32 developer-days**, on top of the figures above — for unplanned Zotero-version compatibility work over that 7–10-month calendar span, which at a 6–10-week Zotero release cadence spans roughly **3–7 major versions** rather than the 2–3 a 4–5-month span implied ([Zotero blog](https://www.zotero.org/blog/a-faster-release-cycle-for-zotero/)).
+At **21 working days per month** that is ≈ **7–10 months** of full-time work (156 ÷ 21 ≈ 7.4; 217 ÷ 21 ≈ 10.3), against the ≈ 4–5 months this document previously claimed. The months figure has now survived two corrections without moving: the two cards Phase 2 gained on 2026-09-09 added 2.75 days, and the `P3-T04` / `P3-T20` re-estimate later the same day added 1.5 more, and ≈ 7–10 months still holds at both ends. Add ~15% — ≈ **23–32 developer-days**, on top of the figures above — for unplanned Zotero-version compatibility work over that 7–10-month calendar span, which at a 6–10-week Zotero release cadence spans roughly **3–7 major versions** rather than the 2–3 a 4–5-month span implied ([Zotero blog](https://www.zotero.org/blog/a-faster-release-cycle-for-zotero/)).
 
 ### Why these figures changed — 2026-09-09
 
@@ -325,7 +325,7 @@ At **21 working days per month** that is ≈ **7–10 months** of full-time work
 
 ```mermaid
 graph TD
-    P0["Phase 0<br/>Toolchain spike<br/>15.75-22 d (measured)"]
+    P0["Phase 0<br/>Toolchain spike<br/>16-22 d (measured)"]
     P1["Phase 1<br/>PubMed search and import<br/>18.75-26 d (measured)"]
     P2["Phase 2<br/>Multi-source and dedup<br/>24.25-34 d (measured)"]
     P3["Phase 3<br/>LLM layer and summaries<br/>23.5-33 d (measured)"]
@@ -367,11 +367,11 @@ graph TD
 - Phase 6 needs Phase 4's report and Phase 3's provider layer.
 - Phase 7 gates the release on everything.
 
-**Critical path (recomputed 2026-09-09 from §1's revised figures, third pass):** P0 → P1 → **P2** → P4 → P6 → P7 ≈ **111.25–155 developer-days**.
+**Critical path (recomputed 2026-09-09 from §1's revised figures, third pass):** P0 → P1 → **P2** → P4 → P6 → P7 ≈ **111.5–155 developer-days**.
 
-- Low end: 15.75 + 18.75 + 24.25 + 16.5 + 15 + 21 = **111.25**. High end: 22 + 26 + 34 + 23 + 21 + 29 = **155**. **Unchanged by the `P3-T04` / `P3-T20` re-estimate**, because that re-estimate raised Phase 3 and the path runs through Phase 2. Previously 109–152 d via Phase 3, and 52–72 d before the phases were decomposed at all.
+- Low end: 16 + 18.75 + 24.25 + 16.5 + 15 + 21 = **111.5**. High end: 22 + 26 + 34 + 23 + 21 + 29 = **155**. **Unchanged by the `P3-T04` / `P3-T20` re-estimate**, because that re-estimate raised Phase 3 and the path runs through Phase 2. Previously 109–152 d via Phase 3, and 52–72 d before the phases were decomposed at all.
 - **The path has moved twice and has now stayed put once, and every move is inside the noise.** Under the pre-decomposition figures it ran through Phase 2 (12–16 vs Phase 3's 12–15). The first measured pass moved it to Phase 3 (22–31 vs Phase 2's 21.5–30). Adding `P2-T17` and `P2-T18` moved it back to Phase 2 (24.25–34 vs Phase 3's 22–31) — by 2.25 d at the low end and 3 d at the high end. Raising `P3-T04` and `P3-T20` brings Phase 3 to 23.5–33 against Phase 2's 24.25–34, which **leaves the path where it is but cuts the margin to 0.75 d at the low end and 1 d at the high end** — the two routes are now closer than any previous pass has made them, and both remain far below the precision of either estimate. Do not read any of these swaps as a finding about Phase 2. Treat **P2 and P3 as jointly critical**: the P0 → P1 → P3 → P4 → P6 → P7 route is now ≈ 110.25–154 d against the critical 111–155, and slipping either phase slips the release. On a margin of 0.75 d, "jointly critical" is the only defensible reading; it would take a single further card of 1 d anywhere in Phase 3 to make P3 the longer route outright.
-- Phase 5's float is now ≈ **10.5–15 d**, and it shrank with this change. P5 depends on **both** P2 and P3, so its earliest start is gated by the longer of the two, which is P2: the binding route is P0 → P1 → **P2** → P5 → P7 = 15.75 + 18.75 + 24.25 + 21 + 21 = **100.75** low and 22 + 26 + 34 + 29 + 29 = **140** high, against the critical 111.25–155 — so 111.25 − 100.75 = 10.5 d of float at the low end and 155 − 140 = 15 d at the high end. (The P3-gated route quoted by earlier revisions of this bullet, P0 → P1 → P3 → P5 → P7, is now ≈ 99.75–139 d for a float of ≈ 11.25–16 d; it is the shorter of the two routes into P5 and therefore not the binding one. Both are quoted here because the earlier figure of ≈ 13–18 d was computed on that route.) Phase 5 remains the only phase with real slack, and that float exists only if a second developer takes P5 in parallel. **Single-developer serial execution makes the whole 155.5–217-day plan the critical path**, which is the realistic assumption here (R-21).
+- Phase 5's float is now ≈ **10.5–15 d**, and it shrank with this change. P5 depends on **both** P2 and P3, so its earliest start is gated by the longer of the two, which is P2: the binding route is P0 → P1 → **P2** → P5 → P7 = 16 + 18.75 + 24.25 + 21 + 21 = **101** low and 22 + 26 + 34 + 29 + 29 = **140** high, against the critical 111.5–155 — so 111.5 − 101 = 10.5 d of float at the low end and 155 − 140 = 15 d at the high end. (The P3-gated route quoted by earlier revisions of this bullet, P0 → P1 → P3 → P5 → P7, is now ≈ 99.75–139 d for a float of ≈ 11.25–16 d; it is the shorter of the two routes into P5 and therefore not the binding one. Both are quoted here because the earlier figure of ≈ 13–18 d was computed on that route.) Phase 5 remains the only phase with real slack, and that float exists only if a second developer takes P5 in parallel. **Single-developer serial execution makes the whole 155.5–217-day plan the critical path**, which is the realistic assumption here (R-21).
 - Three of the six nodes on this path — P4, P6, P7 — carry *scaled* figures. At the low end the path is ≈ 58.5 d measured (P0 + P1 + P2) plus ≈ 52.5 d inferred. Re-derive it as each phase is decomposed.
 
 ---
