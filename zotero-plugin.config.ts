@@ -55,6 +55,19 @@ export default defineConfig({
     fluent: {
       prefixLocaleFiles: true,
       prefixFluentMessages: true,
+      // Off until the first .ftl file lands (P0-T24 owns localization).
+      //
+      // scaffold 0.9.2 bug, found 2026-09-10: with zero .ftl files it still
+      // writes typings/i10n.d.ts, and the file it writes is
+      //     export type FluentMessageId =
+      //     ;
+      // an empty union, which is TS1110 "Type expected". The generated header
+      // carries `// @ts-nocheck`, but that suppresses semantic errors only —
+      // a parse error still fails `tsc --noEmit`. So a fresh clone that runs
+      // `npm run build` before `npm run typecheck` breaks its own typecheck.
+      // Turn this back on in P0-T24, when there are messages to put in the
+      // union, and file the bug upstream.
+      dts: false,
     },
     prefs: {
       prefixPrefKeys: true,

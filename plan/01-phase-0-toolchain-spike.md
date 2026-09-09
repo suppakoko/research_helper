@@ -327,6 +327,17 @@ remains for `V-1` is installing the XPI in Zotero 10 (`P0-T09`).
 — `docs/13` §1.5 calls it a candidate, and only the `P0-T09` smoke test can confirm it.
 The built manifest references `content/icons/favicon.png`, which does not exist yet;
 `P0-T04` creates `addon/content/icons/`.
+
+*scaffold 0.9.2 bug, found while verifying this card.* With zero `.ftl` files the
+build still writes `typings/i10n.d.ts`, and writes it as an empty union —
+`export type FluentMessageId =` followed by `;` — which is **TS1110 "Type
+expected"**. The generated header carries `// @ts-nocheck`, but that suppresses
+semantic errors only; a parse error still fails `tsc --noEmit`. So on a fresh
+clone, `npm run build` followed by `npm run typecheck` fails, while `typecheck`
+alone passes. This card's own verification missed it on the first pass for
+exactly that reason — the criteria were run before the first build.
+`build.fluent.dts` is set to `false` until `P0-T24` adds the first locale file.
+Worth reporting upstream.
 ---
 
 ### P0-T03 — Write the Zotero 10 manifest and pin the plugin identity
