@@ -133,9 +133,12 @@ research_helper/
 │   │   │                             #   drafts called this file reportViewer.xhtml,
 │   │   │                             #   which gave one surface two names.
 │   │   └── style/*.css
-│   └── locale/                       # per-surface FTL files under a plugin subfolder;
-│       ├── en-US/research-helper/    #   the layout is 01-… §9.1's and the per-surface
-│       └── ko-KR/research-helper/    #   file list is 08-… §10.1's — same names in both
+│   └── locale/                       # per-surface FTL files, FLAT — Zotero 10 drops any
+│       ├── en-US/                    #   subdirectory under locale/<locale>/ (01-… §9.1,
+│       └── ko-KR/                    #   measured 2026-09-10). Filenames are a namespace
+│                                     #   shared with every other plugin, so each is prefixed
+│                                     #   `research-helper-`. Per-surface file list is
+│                                     #   08-… §10.1's — same names in both locales.
 │
 ├── src/
 │   ├── index.ts                      # entry: builds Addon, wires container, exports hooks

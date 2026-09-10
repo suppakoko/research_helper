@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-09-10 · **103 tasks: 11 `DONE`, 92 `TODO`.**
+> **Last updated:** 2026-09-10 · **104 tasks: 11 `DONE`, 93 `TODO`.**
 
 ---
 
@@ -16,11 +16,11 @@ Implementation has started. Eleven tasks are `DONE` as of 2026-09-10 — `P0-T01
 
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
 |---|---|---|---|---|
-| 0 — Toolchain spike | 31 | 16.25 d | 16–22 d | 6–9 d (+78%) |
+| 0 — Toolchain spike | 32 | 16.75 d | 16–22 d | 6–9 d (+78%) |
 | 1 — PubMed slice | 23 | 18.75 d | 18.75–26 d | 9–12 d (+56%) |
 | 2 — Multi-source + dedup | 18 | 24.25 d | 24.25–34 d | 12–16 d (+52%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **103** | **82.75 d** | **82.5–115 d** | 39–52 d (+59% over the top of the band) |
+| **Phases 0–3** | **104** | **83.25 d** | **82.5–115 d** | 39–52 d (+59% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -33,7 +33,7 @@ families is, in that card's own words, "the single most expensive card in the ph
 produces no shipped code". The owner decided to re-estimate rather than to accept them, because
 leaving them optimistic would contradict the same-day roadmap correction and `docs/11`'s risk
 **R-23**. Each card's `Notes` now carries the derivation. Phase 3's sum is **23.50 d**, the
-Phases 0–3 subtotal is **82.50 d** (**82.75 d** since `P0-T31` was added on 2026-09-10), and `docs/11` §1's Phase 3 band, its effort summary, its
+Phases 0–3 subtotal is **82.50 d** (**83.25 d** since `P0-T31` and `P0-T32` were added on 2026-09-10), and `docs/11` §1's Phase 3 band, its effort summary, its
 total and months figure, and §2's dependency graph and critical path were all re-derived from
 those numbers. **No other card's estimate was changed**, and `P3-T20`'s figure counts developer
 work only — the human's PDF sourcing and ground-truth adjudication is gate **G-12** in
@@ -112,7 +112,7 @@ column means the card cannot complete without a human — read
 | `P0-T08` | Dev profile, `.env`, hot reload and debugger attach | `P0-T07` | 0.75 d | 🔒 |
 | `P0-T09` | Build the first XPI and install it on Zotero 10.0.1 | `P0-T03`, `P0-T07`, `P0-T30` | 0.25 d | 🔒 |
 | `P0-T10` | Tools-menu item that creates a `journalArticle` | `P0-T08`, `P0-T31` | 0.75 d |  |
-| `P0-T11` | Prove clean teardown across five disable/enable cycles | `P0-T10` | 0.5 d | 🔒 |
+| `P0-T11` | Prove clean teardown across five disable/enable cycles | `P0-T10`, `P0-T32` | 0.5 d | 🔒 |
 | ✅ `P0-T12` | First Node unit test under Vitest | `P0-T05` | 0.5 d |  |
 | `P0-T13` | First in-Zotero Mocha test via the scaffold runner | `P0-T08`, `P0-T11` | 1.0 d |  |
 | `P0-T14` | CI workflow: lint, typecheck, unit test, build XPI | `P0-T12`, `P0-T13` | 0.75 d |  |
@@ -125,16 +125,17 @@ column means the card cannot complete without a human — read
 | `P0-T21` | Measure abstract availability across the seven sources | `P0-T08` | 0.5 d |  |
 | `P0-T22` | Measure S2 throttling and submit the key application | — | 0.25 d + external wait | 🔒 |
 | `P0-T23` | OS keystore and preference round-trip | `P0-T08` | 0.5 d |  |
-| `P0-T24` | Fluent localization with an `en-US` and `ko-KR` bundle | `P0-T08`, `P0-T10` | 0.5 d |  |
+| `P0-T24` | Fluent localization with an `en-US` and `ko-KR` bundle | `P0-T08`, `P0-T10`, `P0-T32` | 0.5 d |  |
 | `P0-T25` | Gemini TTS Korean quality spike | `P0-T15` | 1.0 d | 🔒 |
 | `P0-T26` | Binary/audio response handling and attachment | `P0-T25` | 0.5 d |  |
 | `P0-T27` | `update.json` delivery dry run | `P0-T09`, `P0-T14` | 0.5 d | 🔒 |
 | ✅ `P0-T29` | Pin line endings with `.gitattributes` | `P0-T01` | 0.25 d |  |
 | ✅ `P0-T30` | Create the plugin icon assets | `P0-T04` | 0.25 d |  |
 | ✅ `P0-T31` | Make unscoped platform registration a lint error | `P0-T07` | 0.25 d |  |
+| `P0-T32` | Make the plugin's Fluent messages actually resolve | `P0-T10` | 0.5 d |  |
 | `P0-T28` | Write and commit the Phase 0 spike report | `P0-T14`, `P0-T15`, `P0-T16`, `P0-T17`, `P0-T18`, `P0-T19`, `P0-T20`, `P0-T21`, `P0-T22`, `P0-T23`, `P0-T24`, `P0-T25`, `P0-T26`, `P0-T27` | 0.5 d | 🔒 |
 
-**Nine of Phase 0's 31 cards carry a gate**, not fourteen: `P0-T08`, `P0-T09`,
+**Nine of Phase 0's 32 cards carry a gate**, not fourteen: `P0-T08`, `P0-T09`,
 `P0-T11`, `P0-T15`, `P0-T18`, `P0-T22`, `P0-T25`, `P0-T27`, `P0-T28`. An earlier
 generation of this table also marked `P0-T16`, `P0-T19`, `P0-T21`, `P0-T23` and
 `P0-T26`; all five cards write **`Human gate` = none** and the marks are removed.

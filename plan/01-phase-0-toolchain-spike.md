@@ -1193,7 +1193,7 @@ with Git for Windows; the size check has a PowerShell equivalent
 | **ID** | `P0-T10` |
 | **State** | `TODO` |
 | **Depends on** | `P0-T08`, `P0-T31` |
-| **Blocks** | `P0-T11`, `P0-T20`, `P0-T24` |
+| **Blocks** | `P0-T11`, `P0-T20`, `P0-T24`, `P0-T32` |
 | **Retires** | part of `V-1` |
 | **Implements** | part of `FR-6` |
 | **Estimate** | 0.75 d |
@@ -1294,6 +1294,70 @@ Tools menu is not stated in `docs/01` §3.2's example (which uses `main/library/
 verbatim, and the Tools-menu value is **`"main/menubar/tools"`**. Use that; if Zotero 10.0.1
 rejects it, that is a spike finding, not a licence to invent a different string.
 
+**Findings, 2026-09-10 — four of five criteria pass, proven in SQL; the fifth is a real defect,
+now `P0-T32`.**
+
+The command was not called directly. It ran through Zotero's own dispatch — the debug log's
+stack is `menuCommandListener` → `pluginAPIBase` → `onCommand` → `createSpikeArticle` →
+`executeTransaction` — and the result was then read out of `D:\ZoteroDev\data\zotero.sqlite`
+with Zotero closed: a `journalArticle` with `title`, `DOI` and `abstractNote` populated, one
+`author` creator, membership in a collection named `Research Helper spike (P0-T10)`, and
+`itemTags.type = 1` (automatic) for `research_helper`.
+
+Repeat invocation is deliberate and recorded: **the collection is reused, a new item is created
+every time.** No de-duplication — `docs/07` §6 and Phase 2 own that. Overlapping commands were
+observed **serialising on the DB** (`Waiting for DB transaction … to finish`) rather than
+deadlocking, which is the `saveTx`-inside-`executeTransaction` failure mode of `docs/01` §12
+gotcha 12 *not* happening.
+
+Four questions the card said to settle rather than guess:
+
+- **`collection.addItems()` exists on Zotero 10** (10.0.1, schema 44). Reading `collection.js`
+  out of the shipped `omni.ja`: it calls `Zotero.DB.requireTransaction()`, needs no separate
+  save on the collection, and internally *is* §5.4's "documented-safe item-side pattern".
+  `docs/01` §5.4's marker is retired. **It is still not used here**, deliberately: it re-saves
+  an already-saved item, so at creation time `item.setCollections([id])` before the item's
+  single `save()` is one write instead of two. `addItems()` is the right call for Phase 1's
+  add-*existing*-items path.
+- **`undoAction` omitted, because `'undo-action-add-item'` does not exist.** `zotero.ftl` in
+  `omni.ja` carries 30 `undo-action-*` keys and none of them is an add; confirmed at runtime
+  resolving to `null`, while `undo-action-add-to-collection` and `undo-action-edit-metadata`
+  resolve. Nothing was invented. Note `save()` inside a transaction takes no undo option at
+  all — `undoAction` is a `saveTx()` concern and lands in Phase 1.
+- **Transaction shape:** one `executeTransaction`, the collection created *inside* it, `save()`
+  for both. Atomic, so a failed item save leaves no orphan collection, and `collection.save()`
+  assigns the id in time for `setCollections()` on the next line.
+- **`typings/zotero-augment.d.ts` hole (b) is wrong and has been rewritten.** `zotero-types`
+  re-declares `libraryID` as *mutable* on `Zotero.Item`, shadowing `Zotero.DataObject`'s
+  `readonly`. Measured with a throwaway file: assigning on an `Item` compiles; on a
+  `Collection` it is TS2540. So items assign exactly as `docs/01` §5.2 writes it, and
+  collections use the constructor. Nothing needs augmenting.
+
+**The menu registers, builds its elements, and renders blank.** Driving
+`Zotero.MenuManager.updateMenuPopup()` — the public API Zotero itself calls on `popupshowing` —
+put a `<menu>` into `#menu_ToolsPopup` and a `<menuitem>` into its submenu, both with
+`label=""`. **Three independent causes, each measured:** Zotero 10.0.1's `registerLocales()`
+drops any subdirectory under `locale/<locale>/`; `prefixFluentMessages` prepends `namespace`
+(`researchHelper`) on top of the corpus-required `research-helper-` prefix, shipping
+`researchHelper-research-helper-menu-root`; and `menuManager.js`'s `l10nFiles` option is
+commented out in 10.0.1, so nothing attaches a plugin bundle to the main window at all. Fixing
+any two of the three still yields an empty label. Split into **`P0-T32`** rather than widening
+this card. `docs/01` §9.1 and `docs/07` §2.2 both described the subfolder layout and are
+corrected.
+
+**A reusable test hook for `P0-T13`, found here:** `Zotero.MenuManager.updateMenuPopup()` builds
+a plugin menu into a real popup with no human, and `menuitem.doCommand()` drives the real
+`onCommand`. Caveat learned the hard way — fire `popuphidden` between rounds or the
+`popupshowing` listeners accumulate; that is why three spike items exist for two synthetic
+dispatches.
+
+**`docs/07` §2.3's `ui/ ↛ zotero/` rule bit immediately, and the result is good.**
+`src/ui/menus/toolsMenu.ts` cannot import `menuRegistration`, so `src/bootstrap/registerUI.ts`
+became the one place where the menu's *shape* and the platform *call* meet. `src/ui/` never
+learns what a Zotero menu registration is and `src/zotero/` never learns what this plugin's
+menus look like. Worth stating in the corpus that `registerUI.ts` is the only file permitted to
+import from `src/ui/` and `src/zotero/` at once.
+
 ---
 
 ### P0-T11 — Prove clean teardown across five disable/enable cycles
@@ -1302,7 +1366,7 @@ rejects it, that is a spike finding, not a licence to invent a different string.
 |---|---|
 | **ID** | `P0-T11` |
 | **State** | `TODO` |
-| **Depends on** | `P0-T10` |
+| **Depends on** | `P0-T10`, `P0-T32` |
 | **Blocks** | `P0-T13` |
 | **Retires** | `V-4`, `R-12` |
 | **Implements** | `FR-56` |
@@ -2485,7 +2549,7 @@ never a real key.
 |---|---|
 | **ID** | `P0-T24` |
 | **State** | `TODO` |
-| **Depends on** | `P0-T08`, `P0-T10` |
+| **Depends on** | `P0-T08`, `P0-T10`, `P0-T32` |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-17`, part of `R-22` |
 | **Implements** | `FR-55`, `NFR-11` |
@@ -3249,6 +3313,113 @@ Three things recorded rather than fixed:
 `menuRegistration()` throws rather than returning a handle-shaped lie, because a silent `false`
 produces a menu that never appears and a scope that believes it registered one. `P0-T10` is the
 first caller that will feel this.
+
+---
+
+---
+
+### P0-T32 — Make the plugin's Fluent messages actually resolve
+
+| Field | Value |
+|---|---|
+| **ID** | `P0-T32` |
+| **State** | `TODO` |
+| **Depends on** | `P0-T10` |
+| **Blocks** | `P0-T11`, `P0-T24` |
+| **Retires** | none |
+| **Implements** | part of `FR-55` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** Tools > Research Helper renders its label instead of an empty string, and the
+mechanism that makes it do so has a teardown story `FR-56` can live with.
+
+**Read first.**
+- `P0-T10`'s **Findings** in this file — the three independent causes, each measured rather
+  than reasoned, with the runtime evidence.
+- `docs/01-zotero-plugin-platform.md` §9.1 as corrected on 2026-09-10 — why the layout is flat
+  and why filenames are a namespace shared with every other installed plugin.
+- `docs/08-ui-ux-spec.md` §10.1 — the authority for which surface each string lives in. This
+  card moves files; it does not get to re-assign surfaces.
+- `src/bootstrap/registerUI.ts` and `src/bootstrap/container.ts` — the FTL insert is
+  **window-scoped**, so it belongs in `WINDOW_REGISTRATIONS`, which is still empty and whose
+  first entry this will be.
+
+**Files.**
+- rename `addon/locale/en-US/research-helper/mainWindow.ftl` to
+  `addon/locale/en-US/research-helper-mainWindow.ftl`
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl` (identifier prefixes)
+- modify `zotero-plugin.config.ts`
+- modify `src/zotero/registrations.ts`
+- modify `src/bootstrap/registerUI.ts`
+
+**Do.**
+1. **Flatten the bundle.** Zotero 10.0.1 drops any directory under `locale/<locale>/`
+   (`plugins.js`, `registerLocales()`: `if (!file.endsWith('.ftl')) continue;`). Move the file
+   up one level and give it a plugin-unique name, because the registered href is
+   `zotero-plugins:{locale}/<filename>` and that namespace is shared with every other plugin.
+2. **Stop the double prefix.** `build.fluent.prefixFluentMessages` prepends `namespace`, which
+   is `researchHelper`, so a corpus-correct `research-helper-menu-root` is shipped as
+   `researchHelper-research-helper-menu-root`. Pick one and only one source of the prefix:
+   either turn `prefixFluentMessages` off and keep the hand-written `research-helper-` IDs, or
+   leave it on and drop the prefix from the source file. **Prefer turning it off** — `docs/01`
+   §9.3 and §12 gotcha 16 make the prefix a correctness requirement, and a requirement should
+   be visible in the file a human edits, not applied invisibly at build time.
+3. **Do not change `namespace`** as the fix. It is `researchHelper` deliberately (`P0-T02`
+   fix 6) and scaffold uses it for more than Fluent; changing it to satisfy this is a wide
+   blast radius for a narrow problem. If you conclude otherwise, say why and stop.
+4. Check `prefixLocaleFiles` after the move. With a flat layout and an already-unique filename
+   it may be redundant or may double the prefix the same way; whichever it does, the built
+   artifact under `.scaffold/build/addon/locale/` is the evidence, not the option's name.
+5. **Attach the bundle to the window.** `menuManager.js`'s `l10nFiles` option is commented out
+   in 10.0.1, and nothing in Zotero inserts a plugin FTL into the main window. Add
+   `win.MozXULElement.insertFTLIfNeeded("<filename>.ftl")` as a **window-scoped**
+   `ScopedRegistration` in `WINDOW_REGISTRATIONS`.
+6. **Give it a real `unregister`.** `insertFTLIfNeeded` has no documented counterpart, but it
+   inserts a `<link rel="localization">` into the document — find that element and remove it,
+   and confirm by re-reading the document after teardown. If it genuinely cannot be undone,
+   say so explicitly and record it as a known `FR-56` exception with the reason; do **not**
+   write an empty `unregister` and move on.
+
+**Do NOT.**
+- Do not verify by looking at the source. `P0-T10` established that this whole area fails
+  silently: a wrong path, a wrong prefix and a missing insert all produce an empty label and no
+  error anywhere. Resolve the identifier at runtime and paste the value.
+- Do not add the `ko-KR` bundle. `P0-T24` owns it, and this card exists so that `P0-T24` starts
+  from a mechanism that works.
+- Do not hand-write the built filename into `src/`. Whatever the build produces is what
+  `insertFTLIfNeeded` must be given; derive it or assert it, do not guess it.
+- Do not reach for `Zotero.getString` or a hand-rolled string table as a workaround. Fluent is
+  the only supported mechanism (`docs/01` §9.1).
+
+**Done when.**
+- [ ] `.scaffold/build/addon/locale/en-US/` contains exactly one flat `.ftl` whose identifiers
+      carry the `research-helper-` prefix exactly once.
+- [ ] The identifier resolves at runtime in the running dev Zotero, and the resolved value is
+      pasted in the card's Findings.
+- [ ] The Tools menu's `menu` element and its `menuitem` carry a non-empty `label`, measured
+      through `Zotero.MenuManager.updateMenuPopup()` as `P0-T10` did.
+- [ ] The FTL insert is registered through a `Scope` and its `unregister` either removes the
+      `link` element — verified by re-reading the document — or the card records why it
+      cannot, in `FR-56`'s terms.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm test` and `npm run build` all exit 0.
+
+**Verify with.**
+```bash
+npm run build && find .scaffold/build/addon/locale -type f -name '*.ftl' \
+  && grep -c 'research-helper-' .scaffold/build/addon/locale/en-US/*.ftl
+```
+plus the runtime resolution and the label measurement, which no command asserts.
+
+**Notes.** Split out of `P0-T10` on 2026-09-10 rather than widening it, and numbered `P0-T32`
+because `plan/README.md` §3 forbids renumbering. `P0-T10` produced a menu that registers
+correctly, builds its elements into the Tools popup correctly, and runs its command
+correctly — and renders blank. That is one defect class, localization, and it is worth its own
+card because **three independent things are wrong at once** and fixing any two of them still
+yields an empty label.
+
+Sequenced before `P0-T11` deliberately: `P0-T11` cycles disable/enable looking for a duplicated
+or orphaned menu item, and an item with no visible label is a poor thing to look for.
 
 ---
 

@@ -285,13 +285,18 @@ declare namespace _ZoteroTypes {
 //     `ItemFields`, `QuickCopy`, `Schema`, `SearchConditions`, `Styles`,
 //     `Sync`, `Translate`, `Translators`.
 //
-// (b) `Zotero.DataObject.libraryID` is declared `readonly` upstream, but
-//     docs/01 §5.2's item-creation shape assigns it
-//     (`item.libraryID = libraryID`). Relaxing a `readonly` is not something
-//     declaration merging can do, so `src/zotero/itemMapper.ts` will hit
-//     TS2540 in Phase 1, and `fromJSON()`'s declared signature takes no
-//     library argument either. This needs a decision in `P0-T10` / `P1-*`,
-//     not a cast bolted on here.
+// (b) `libraryID` is `readonly` on `Zotero.Collection`, MUTABLE on
+//     `Zotero.Item`. This entry originally claimed both were readonly and
+//     predicted a TS2540 in `itemMapper.ts`; `P0-T10` measured it on
+//     2026-09-10 and that prediction was wrong. `zotero-types@4.1.3`
+//     re-declares `libraryID: number` on `Zotero.Item`, shadowing
+//     `Zotero.DataObject`'s `readonly`, so `item.libraryID = libraryID` —
+//     exactly the shape docs/01 §5.2 writes — compiles with no cast and no
+//     augmentation. On `Zotero.Collection` it is TS2540, so a collection
+//     takes its library through the constructor:
+//     `new Zotero.Collection({ name, libraryID })`. Nothing to augment;
+//     kept here so nobody re-derives the wrong conclusion from
+//     `DataObject`'s declaration alone.
 //
 // (c) `Services.logins.removeLoginAsync()` — docs/09 §1.7's tier-1 code path
 //     awaits it, but `nsILoginManager` in zotero-types' generated Gecko

@@ -2118,16 +2118,33 @@ locale/fr-FR/make-it-red.ftl
 locale/zh-CN/make-it-red.ftl
 ```
 
-or with subfolders:
+The Zotero 7 docs also showed a subfolder form:
 
 ```
 locale/en-US/make-it-red/main.ftl
 locale/en-US/make-it-red/preferences.ftl
 ```
 
-> "Any .ftl files you place in the locale subfolders will be automatically registered in Zotero's localization system."
+> **The subfolder form does not work on Zotero 10.0.1.** Read verbatim from the shipped
+> `chrome/content/zotero/xpcom/plugins.js` in `app/omni.ja` on 2026-09-10 (task `P0-T10`),
+> `registerLocales()` does `readDirectory(rootURI, 'locale/' + pluginLocale)` and then
+> `if (!file.endsWith('.ftl')) continue;` — a **directory** entry fails that test and is
+> silently dropped. Registered hrefs are flat, `zotero-plugins:{locale}/<filename>`, and the
+> function's own doc comment now shows only `[plugin root]/locale/en-US/make-it-red.ftl`.
+> This is the "Plugin localization consolidated with proper per-locale fallback" rewrite noted
+> in §3.4(f).
+>
+> **Consequence: the layout is flat, and filenames are a global namespace shared with every
+> other plugin.** Put every bundle at `locale/<locale>/<filename>.ftl` and make the filename
+> plugin-unique — `research-helper-mainWindow.ftl`, not `mainWindow.ftl`.
 
-**There is no manual registration call.** Just ship the directory.
+**There is no manual registration call for the *source*.** Shipping the directory registers the
+bundle. But a plugin FTL is **not** automatically attached to a window Zotero owns: every
+`insertFTLIfNeeded` call in `chrome/content/zotero/` is for Zotero's own bundles, and
+`menuManager.js`'s `l10nFiles` option is commented out in 10.0.1 with a `TODO` about unload
+management. A plugin that puts a label in Zotero's main window must call
+`win.MozXULElement.insertFTLIfNeeded("<filename>.ftl")` itself in `onMainWindowLoad` — and that
+call has no removal counterpart, which is an open `FR-56` question (`P0-T32`).
 
 For `research_helper` — **the *layout* below is this section's; the *file list* is `08-ui-ux-spec.md` §10.1's**, which owns the set of UI surfaces and each surface's localization home. Reproduced here only so the directory shape is concrete; if the two ever differ, §10.1 wins and this listing is the defect:
 
