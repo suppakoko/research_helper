@@ -1131,6 +1131,55 @@ npm run build && xpi="$(find .scaffold/build -name '*.xpi' -print -quit)" \
 
 **Notes.** `docs/07` §1.2 flags the exact `strict_max_version` string as unverified while
 `docs/13` §1.3 and `docs/11` Phase 0 both assert `10.0.*`. This card is where reality decides.
+
+**Findings, 2026-09-10 — `V-1` is answered: the XPI installs and enables on Zotero 10.0.1.**
+
+The four build criteria pass. One `.xpi`, 41,284 bytes (**0.04 MiB against `NFR-18`'s 3 MB
+ceiling**, so the budget is not a constraint yet); `manifest.json` **and** `bootstrap.js` at the
+archive root, nothing nested; and the version range survived scaffold's manifest deep-merge
+intact — the packed `manifest.json` carries `strict_min_version: "10.0"` and
+`strict_max_version: "10.0.*"`.
+
+**The install was verified directly, not by asking someone to look at a dialog.** The packaged
+XPI was copied into `D:\ZoteroDev\profile\extensions\` — the dev profile, as this card's
+`Do NOT` requires — and Zotero 10.0.1 was launched against it. Evidence, from the profile's own
+`extensions.json` after the run:
+
+```
+active: true       userDisabled: false      appDisabled: false      softDisabled: false
+signedState: 0     location: "app-profile"
+targetApplication: {"id":"zotero@zotero.org","minVersion":"10.0","maxVersion":"10.0.*"}
+```
+
+`appDisabled: false` is the field that matters: it is what Zotero sets when it refuses a version
+range, and it is false. `startup` was then called with reason `APP_STARTUP`, so the plugin was
+**enabled**, not merely present. No compatibility, blocklist or signature message appears
+anywhere in the 65 KB debug log, and `signedState: 0` confirms `docs/01` §11.5's claim that
+Zotero does not require signing. **`docs/07` §1.2's `> **Unverified:**` marker on the exact
+`strict_max_version` string is retired** and replaced with this measurement.
+
+Two latent defects surfaced because the run put a real `rootURI` in front of us, and both are
+now fixed:
+
+1. **`addon/bootstrap.js` carried two conventions.** Lines 38 and 40 concatenate
+   `rootURI + "manifest.json"` and `rootURI + "content/"`, but the `loadSubScript` call used
+   `${rootURI}/content/scripts/…`. The measured value is
+   `jar:file:///…/research-helper@suppakoko.github.io.xpi!/` — it **already ends with a slash**,
+   so that line produced `!//content/…`. It worked, because Gecko's `jar:` resolver tolerates
+   the doubled separator, but a file should not carry two conventions for the same thing. Fixed,
+   rebuilt, reinstalled and re-launched: `startup` is still called and no error appears.
+   `docs/01` §2.5 and §4.4 disagreed on this; §2.5 was right and §4.4 is corrected.
+2. **`addon/bootstrap.js`'s `ctx` substitution is no longer a compile-time claim.** The
+   `> **Unverified:**` block written in `P0-T02` is retired: the bundle loads, a bare `Zotero`
+   inside `src/` resolves, and `Zotero.debug()` called from `src/hooks.ts` reaches Debug Output.
+   `BasicTool` is not needed. The comment now also carries the measured sandbox global set, so
+   the next person to wonder whether to widen `ctx` has the answer in front of them.
+
+**What this card did *not* do.** `docs/11` Phase 0's definition of done also asks for an install
+into the **real** profile. That was deliberately not attempted: this card's `Do NOT` says to use
+the dev profile "unless the human explicitly wants the real-profile check", and no such request
+was made. The test XPI was removed from the dev profile afterwards, so `P0-T10`'s `serve` run
+starts from a clean profile with no second copy of the plugin to duplicate registrations.
 On Windows without a POSIX shell, the `Verify with` command runs under the Git Bash that ships
 with Git for Windows; the size check has a PowerShell equivalent
 (`(Get-Item $xpi).Length`) if needed.

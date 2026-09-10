@@ -701,7 +701,11 @@ async function startup({ id, version, resourceURI, rootURI }, reason) {
   ctx._globalThis = ctx;
 
   Services.scriptloader.loadSubScript(
-    `${rootURI}/content/scripts/__addonRef__.js`,
+    // No slash: `rootURI` already ends with one — measured 2026-09-10
+    // (P0-T09) as `jar:file:///…/<id>.xpi!/`. §2.5 above had this right and
+    // this line had it wrong; the doubled form happened to work because
+    // Gecko's jar: resolver tolerates `!//`.
+    `${rootURI}content/scripts/__addonRef__.js`,
     ctx,
   );
   await Zotero.__addonInstance__.hooks.onStartup();

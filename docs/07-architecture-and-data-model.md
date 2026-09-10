@@ -43,7 +43,7 @@ Zotero uses the application version as the plugin compatibility boundary: a plug
 
 > **Unverified:** Search results referenced "new sandboxed APIs" intended to stay stable across major versions. We could not confirm the exact shape, names, or availability of such a stable/sandboxed plugin API surface in Zotero 10.0.1. Treat it as a possible future migration target, not something to build on now.
 
-> **Unverified:** the exact `strict_max_version` string Zotero 10 expects. The Zotero 8 docs use `8.*` and the Zotero 9 docs use `9.0.*`; the Zotero 10 developer page did not state it in what we retrieved. Check the current template's `manifest.json` before release.
+**Resolved 2026-09-10 by measurement (`P0-T09`): `"10.0.*"` is accepted.** A packaged XPI declaring `strict_min_version: "10.0"` / `strict_max_version: "10.0.*"` was installed into a Zotero 10.0.1 profile from `<profile>/extensions/`. The profile's `extensions.json` then recorded `active: true`, `userDisabled: false`, **`appDisabled: false`** — the field Zotero sets when it rejects a version range — and `targetApplication: {"id":"zotero@zotero.org","minVersion":"10.0","maxVersion":"10.0.*"}`. `startup` was then called with reason `APP_STARTUP`, so the plugin was enabled and not merely present. `signedState: 0` in the same record confirms §11.5's claim that Zotero does not require signing. Re-check the string when Zotero 11 ships; the earlier note that the Zotero 8 docs use `8.*` and the Zotero 9 docs `9.0.*` is why this could not be inferred.
 
 ### 1.2.1 The Gecko baseline and the Zotero 8 break
 

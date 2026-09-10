@@ -57,16 +57,34 @@ async function startup({ id, version, resourceURI, rootURI }, reason) {
    * `BasicTool` is not on that list, and reaching for it here would make the
    * composition root depend on the toolkit merely to see `Zotero`.
    *
-   * > **Unverified:** this substitution is a compile-time claim until a
-   * > Zotero runtime loads the bundle. P0-T09 and P0-T11 are the first tests.
-   * > If a bare `Zotero` inside src/ turns out to be undefined, the fix is
-   * > here — widen `ctx` — not in src/, and not by reintroducing `BasicTool`.
+   * **Verified 2026-09-10** (`P0-T08` and `P0-T09`): the bundle loads, a bare
+   * `Zotero` inside src/ resolves, and `Zotero.debug()` called from
+   * `src/hooks.ts` reaches Debug Output. `BasicTool` is not needed.
+   *
+   * The five names here are not the whole story, because `loadSubScript` gives
+   * the bundle `ctx` as its global *and* leaves the sandbox's own globals
+   * reachable. Measured on Zotero 10.0.1: `setTimeout`, `clearTimeout`,
+   * `setInterval`, `clearInterval`, `fetch`, `TextDecoder`, `TextEncoder`,
+   * `URL`, `URLSearchParams`, `btoa`, `crypto`, `Blob`, `FileReader`,
+   * `XMLHttpRequest`, `DOMParser`, `IOUtils`, `PathUtils` and `dump` all
+   * exist; `AbortController`, `structuredClone`, `queueMicrotask`, `console`
+   * and `performance` **do not**. Full table and consequences in docs/01 §2.3.
+   * Widen `ctx` here if src/ ever needs something the sandbox lacks — do not
+   * reintroduce `BasicTool`.
    */
   const ctx = { rootURI, Zotero, Services, Components, ChromeUtils };
   ctx._globalThis = ctx;
 
   Services.scriptloader.loadSubScript(
-    `${rootURI}/content/scripts/__addonRef__.js`,
+    // No slash between the two: `rootURI` already ends with one. Measured
+    // 2026-09-10 (P0-T09) from the dev profile's extensions.json, where an
+    // installed XPI gives
+    //   rootURI = "jar:file:///.../research-helper@suppakoko.github.io.xpi!/"
+    // The doubled form worked, because Gecko's jar: resolver tolerates `!//`,
+    // but lines 38 and 40 above already concatenate without a slash and the
+    // file should not carry two conventions. docs/01 §2.5 and §4.4 disagreed
+    // on this; §2.5 (no slash) is the one that matches reality.
+    `${rootURI}content/scripts/__addonRef__.js`,
     ctx,
   );
   await Zotero.__addonInstance__.hooks.onStartup();
