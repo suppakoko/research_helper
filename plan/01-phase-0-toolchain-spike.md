@@ -997,6 +997,65 @@ single highest-leverage finding in Phase 0: on `docs/11` §1's corrected figures
 development velocity across ~154–215 developer-days, not the ~80 assumed when `V-2` was
 written.
 
+**Findings, 2026-09-10 — three of four criteria met; the breakpoint is still the human's.**
+
+`V-2` is answered, and answered **well**: hot reload works. Five reload cycles were observed,
+each triggered by saving `src/hooks.ts` and each confirmed *twice* — once by `serve` printing
+`src\hooks.ts changed → Reloading… → Last extension reload: <time>`, and once by a unique marker
+string reaching Zotero's own debug log from inside the reloaded `onStartup`. No restart, no
+proxy-file fallback, `server.asProxy` never touched. `docs/11` R-11 did not materialise, and
+`docs/11` §1's "editing a source file reloads without a manual restart" stands as written.
+
+Each cycle exercised **all six bootstrap hooks** — `shutdown` (ADDON_UPGRADE), `uninstall`,
+`install`, `startup` (ADDON_INSTALL) — with **no exception from plugin code anywhere in the
+572 KB log**. The only JavaScript errors present are Zotero's own devtools
+(`inspector-command.js`, `remote-settings.sys.mjs`).
+
+Two questions belonging to other cards were answered for free, because a live Zotero was in
+front of us and will not be again cheaply:
+
+**1. The sandbox's global set (`P0-T07`'s open risk).** Probed two independent ways —
+property lookup on `globalThis`, and bare-identifier `typeof`, which resolves through the scope
+chain instead. **Both agree exactly.** Full table now in `docs/01` §2.3. The headline:
+`setTimeout` **exists**, so `P0-T07`'s worry about timer registration is closed and `ctx` does
+not need widening. But **`AbortController`, `structuredClone`, `queueMicrotask`, `console` and
+`performance` do not exist.** `AbortController`'s absence is the sharp one — `P0-T17` must
+cancel through `Zotero.HTTP.request`'s `cancellerReceiver`, there is no DOM route. `performance`
+absent means every `NFR-*` timing uses `Date.now()`, which `P0-T20` hits first. `console` absent
+means a stray `console.log` **throws** rather than being ignored.
+
+**2. `Zotero.PreferencePanes.pluginPanes` is readable on 10.0.1.** `reportSurvivors()` ran on
+every one of the five shutdowns and its `catch` branch never fired. `src/hooks.ts`'s
+`> **Unverified:**` marker is retired and replaced with a narrower one: nothing registers a pane
+yet, so this proves the property exists and enumerates, not that it is populated for us.
+
+**The profile-manager step in this card and in `docs/13` §1.6 was not actually necessary.**
+Read from scaffold 0.9.2: `startZoteroInstance()` passes `-profile <resolved path>` and
+`--dataDir <resolved path>`, and `createProfile()` is literally `ensureDir(path)`. So
+`ZOTERO_PLUGIN_PROFILE_PATH` is a **directory path, not a name from `profiles.ini`** — any empty
+directory works and Zotero initialises a fresh profile in it. This run used
+`D:\ZoteroDev\profile` (created by scaffold) and `D:\ZoteroDev\data` (created by Zotero);
+`profiles.ini` was never touched and still lists only `default`. A profile made this way cannot
+be picked as the startup default by accident, which is strictly safer than the GUI route.
+`docs/13` §1.6 now documents both routes.
+
+**Scaffold bug, and it affects this card's own safety advice.** `startZoteroInstance()` builds
+`let args = ["--purgecaches", "no-remote"]` — **`no-remote` has no leading dash**, so Gecko
+treats it as a positional argument and the isolation `-no-remote` would provide is not in
+effect. `docs/01` §4.5 asserted `--purgecaches --no-remote` and has been corrected. Practical
+consequence: **close Zotero before `npm start`**, or `serve` may attach to the running
+production instance instead of starting its own.
+
+Incidental, and it is `P0-T09`'s question rather than this card's: Zotero 10.0.1 installed the
+plugin from source with **no version refusal**, so `strict_max_version: "10.0.*"` is accepted in
+practice. `P0-T09` still owns the packaged-XPI install.
+
+**Criterion 3 — the breakpoint — is BLOCKED-ON-HUMAN and is why this card stays `TODO`.**
+`--jsdebugger` did open the Browser Toolbox (`Starting Browser Toolbox … chrome://devtools/…`,
+`DevTools Server for Browser Toolbox listening on port: 59691`), so `V-3`'s machinery is
+demonstrably running; what is missing is a person to set a breakpoint in the plugin bundle,
+trigger it, and confirm it is hit.
+
 ---
 
 ### P0-T09 — Build the first XPI and install it on Zotero 10.0.1

@@ -172,6 +172,30 @@ Recommended manifest for `research_helper`:
 
 `bootstrap.js` is loaded into a **plugin sandbox**, not a window. The globals available include `Zotero`, `Services`, `Components`, `ChromeUtils`, and the reason constants. It must define plain top-level functions (not exports):
 
+> **Measured 2026-09-10 on Zotero 10.0.1 (Gecko 140), task `P0-T08`.** The sandbox's global set
+> was probed two independent ways from inside a loaded plugin — property lookup on `globalThis`,
+> and bare-identifier `typeof`, which resolves through the scope chain rather than through a
+> property. **Both agree exactly**, so the list below is not an artefact of how it was measured.
+>
+> **Present:** `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, `fetch`,
+> `TextDecoder`, `TextEncoder`, `URL`, `URLSearchParams`, `btoa`, `crypto`, `Blob`,
+> `FileReader`, `XMLHttpRequest`, `DOMParser`, `IOUtils`, `PathUtils`, `dump`.
+>
+> **ABSENT — referencing any of these throws:** `AbortController`, `structuredClone`,
+> `queueMicrotask`, `console`, `performance`.
+>
+> Three of those absences have design consequences, not merely stylistic ones:
+>
+> - **`AbortController` does not exist.** Nothing may be cancelled the DOM way. Cancellation
+>   goes through `Zotero.HTTP.request`'s `cancellerReceiver` option (§8.1), which is the only
+>   mechanism available. `P0-T17` is the card that proves it end to end.
+> - **`performance` does not exist.** Every duration measured against an `NFR-*` budget must use
+>   `Date.now()`. `P0-T20` measures a 100-item transaction against `NFR-1` and is the first card
+>   this bites.
+> - **`console` does not exist.** A stray `console.log` is not merely ignored, it throws. Use
+>   `Zotero.debug()`; `dump()` also exists and reaches stdout when Zotero is started with
+>   `-ZoteroDebugText`.
+
 ```javascript
 function install(data, reason) { }
 async function startup({ id, version, rootURI }, reason) { }
@@ -838,7 +862,13 @@ Two consequences worth internalising:
 
 #### Hot reload uses RDP, not proxy files
 
-`zotero-plugin serve` always passes `--purgecaches --no-remote`, adds `--jsdebugger` when `server.devtools` (default true), and captures Zotero's debug output to `.scaffold/logs/zotero-<starttime>.log` when `server.debugOutputFile` (default true), pruning logs older than 7 days.
+`zotero-plugin serve` passes `--purgecaches` and then the string `no-remote` — **without a
+leading dash**, verified 2026-09-10 by reading scaffold 0.9.2's `startZoteroInstance()`
+(`let args = ["--purgecaches", "no-remote"]`). A bare `no-remote` is not a flag; Gecko treats it
+as a positional argument, so the isolation `-no-remote` would give is **not** in effect and a
+`serve` launched while another Zotero is running may attach to that instance instead of starting
+its own. Close Zotero before `npm start`. This is a scaffold bug worth reporting upstream; the
+rest of this sentence is accurate: adds `--jsdebugger` when `server.devtools` (default true), and captures Zotero's debug output to `.scaffold/logs/zotero-<starttime>.log` when `server.debugOutputFile` (default true), pruning logs older than 7 days.
 
 The reload itself goes over the **Firefox Remote Debugging Protocol** — the same mechanism Mozilla's `web-ext` uses — so the plugin is installed and reloaded inside the running Zotero with no restart. The extension-proxy-file approach (§11.6) is legacy and opt-in via `server.asProxy: true`; proxy files cannot hot-reload.
 

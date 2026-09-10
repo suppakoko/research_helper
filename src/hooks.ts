@@ -122,11 +122,16 @@ async function onShutdown(): Promise<void> {
  *    equivalent audit for those and `P0-T11`'s manual cycling remains the
  *    check for them.
  *
- * > **Unverified:** that `Zotero.PreferencePanes.pluginPanes` is populated and
- * > readable on Zotero 10.0.1. It is declared by `zotero-types@4.1.3`
- * > (`types/xpcom/preferencePanes.d.ts`) but is not in `docs/01` §7.3's
- * > verified option list, so the read is wrapped: an audit that throws must
- * > not be the error `FR-56` says the log should not contain.
+ * `Zotero.PreferencePanes.pluginPanes` is **readable on Zotero 10.0.1** — verified
+ * 2026-09-10 (`P0-T08`) across five hot-reload cycles, each of which ran this
+ * function: the audit never threw, so the `catch` branch below never logged.
+ * The read stays wrapped anyway. It is cheap, and an audit that throws must not
+ * become the error `FR-56` says the log should not contain.
+ *
+ * > **Still unverified:** that it is *populated* for this plugin. Nothing here
+ * > registers a preference pane yet, so a passing audit currently proves only
+ * > that the property exists and enumerates. `P0-T09` registers the first pane
+ * > and is where the audit starts having something to find.
  */
 function reportSurvivors(): void {
   const survivors = addon.scope.liveHandles();

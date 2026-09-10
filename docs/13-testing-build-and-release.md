@@ -296,8 +296,10 @@ Per the scaffold's Dev Serve docs: `ZOTERO_PLUGIN_ZOTERO_BIN_PATH` is required (
 
 **Creating a dedicated development profile.** Never develop against the production profile: a plugin bug can damage a 10,000-item library.
 
-1. Launch the profile manager: `zotero.exe -P` (Windows) / `/Applications/Zotero.app/Contents/MacOS/zotero -P` (macOS).
-2. Create a profile named e.g. `dev`, and point it at a *separate data directory* (`ZOTERO_PLUGIN_DATA_DIR`), so the dev library is independent of the real one.
+**The profile manager is optional.** Verified 2026-09-10 against `zotero-plugin-scaffold` 0.9.2 (task `P0-T08`): `startZoteroInstance()` passes `-profile <resolved path>` and `--dataDir <resolved path>`, and `createProfile()` is literally `ensureDir(path)`. So `ZOTERO_PLUGIN_PROFILE_PATH` is a **directory path, not a profile name from `profiles.ini`** — point it at any empty directory and Zotero initialises a fresh profile there on first launch, creating the data directory too. Such a profile deliberately never appears in the profile manager, which also means it can never be selected as the startup default by accident. Both routes work:
+
+1. *Recommended — no GUI.* Put an unused absolute path in `ZOTERO_PLUGIN_PROFILE_PATH` (e.g. `D:ZoteroDevprofile`) and a separate one in `ZOTERO_PLUGIN_DATA_DIR`, then run `npm start`.
+2. *GUI.* Launch the profile manager with `zotero.exe -P` (Windows) / `/Applications/Zotero.app/Contents/MacOS/zotero -P` (macOS), create a profile named e.g. `dev` pointed at a separate data directory, and put **the profile's directory path** — not its name — in `ZOTERO_PLUGIN_PROFILE_PATH`. Note that `-P` silently does nothing if Zotero is already running; close it first.
 3. In the dev profile, enable `Advanced → Config Editor` and consider setting the debug logging preferences.
 
 **Useful launch flags** (from Zotero's plugin-development page):
