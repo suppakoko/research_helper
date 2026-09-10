@@ -18,22 +18,36 @@
  * a window-scoped entry is a function *of* the window, so it cannot be
  * written without one and cannot be dropped into the app-scoped list.
  *
- * **Both lists are empty on purpose.** `P0-T07` builds the mechanism;
- * `P0-T10` adds the first real entry (the Tools-menu item) and `P0-T09` the
- * preference pane. The shape a later card must produce is fixed here: a
- * `ScopedRegistration` built by `registration({ description, register,
- * unregister })`, which does not compile without its `unregister`.
+ * `P0-T07` built the mechanism with both lists empty; `P0-T10` adds the first
+ * real entry — the Tools-menu item — and `P0-T09` will add the preference
+ * pane. The shape is fixed here: a `ScopedRegistration` built by
+ * `registration({ description, register, unregister })`, which does not
+ * compile without its `unregister`.
  *
  * Note what this file does *not* contain: any `Zotero.*` call.
  * `eslint.config.js` forbids the `Zotero` global outside `src/zotero/**` and
  * the three lifecycle entry files, so the `register`/`unregister` bodies are
- * built in `src/zotero/` (`P0-T10` creates `src/zotero/zoteroApi.ts`) and
- * merely *listed* here. That is the point: composition is separate from the
- * platform call, and the only way to get a platform call executed at startup
- * is to put a fully-specified `Registration` in one of these two arrays.
+ * built in `src/zotero/` and merely *listed* here. That is the point:
+ * composition is separate from the platform call, and the only way to get a
+ * platform call executed at startup is to put a fully-specified
+ * `Registration` in one of these two arrays.
+ *
+ * **This file is the composition root's only three-way junction.** It is the
+ * one place allowed to import from `src/ui/` *and* `src/zotero/` at once:
+ * `docs/07` §2.3 forbids `src/ui/**` from importing `src/zotero/**`, so the
+ * menu's shape (`src/ui/menus/toolsMenu.ts`) and the platform call that
+ * installs it (`src/zotero/registrations.ts`) can only meet here. `src/ui/`
+ * therefore never learns what a Zotero menu registration is, and
+ * `src/zotero/` never learns what this plugin's menus look like.
  */
 
 import type { ScopedRegistration, Scope } from "./container";
+import {
+  TOOLS_MENU_DESCRIPTION,
+  toolsMenuOptions,
+} from "../ui/menus/toolsMenu";
+import { menuRegistration } from "../zotero/registrations";
+import { createSpikeArticle, reportError } from "../zotero/zoteroApi";
 
 /**
  * A window-scoped registration, which cannot be built without the window it
@@ -43,8 +57,25 @@ export type WindowRegistration = (
   win: _ZoteroTypes.MainWindow,
 ) => ScopedRegistration;
 
-/** Registered in `startup`, torn down in `shutdown`. */
-const APP_REGISTRATIONS: readonly ScopedRegistration[] = [];
+/**
+ * Registered in `startup`, torn down in `shutdown`.
+ *
+ * The Tools-menu item is application-scoped, not window-scoped: `docs/01`
+ * §2.4 and `docs/08` §2.4 both say to register menus once in `startup`, and
+ * Zotero 10's `MenuManager` propagates a registration to every open window and
+ * removes the elements again on unregister.
+ *
+ * `menuRegistration()` and `toolsMenuOptions()` both run at module-evaluation
+ * time and neither touches the platform: the first returns a closure, the
+ * second a plain object. Nothing reaches `Zotero.MenuManager` until
+ * `registerUI()` feeds this array to a live `Scope`.
+ */
+const APP_REGISTRATIONS: readonly ScopedRegistration[] = [
+  menuRegistration(
+    TOOLS_MENU_DESCRIPTION,
+    toolsMenuOptions({ createSpikeArticle, onError: reportError }),
+  ),
+];
 
 /** Registered per main window, torn down when that window closes. */
 const WINDOW_REGISTRATIONS: readonly WindowRegistration[] = [];
