@@ -52,8 +52,8 @@ async function startup({ id, version, resourceURI, rootURI }, reason) {
    *
    * The upstream template instead pulled `Zotero` in through the toolkit's
    * `BasicTool.getGlobal()`. We do not, because P0-T02 fix 8 (docs/01 §4.6
-   * item 8) keeps the toolkit to DialogHelper, VirtualizedTableHelper,
-   * FilePickerHelper, ClipboardHelper, KeyboardManager and unregisterAll() —
+   * item 8) keeps the toolkit to individually imported DialogHelper,
+   * VirtualizedTableHelper, FilePickerHelper and ClipboardHelper —
    * `BasicTool` is not on that list, and reaching for it here would make the
    * composition root depend on the toolkit merely to see `Zotero`.
    *

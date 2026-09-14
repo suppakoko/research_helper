@@ -1366,7 +1366,7 @@ import from `src/ui/` and `src/zotero/` at once.
 |---|---|
 | **ID** | `P0-T11` |
 | **State** | `TODO` |
-| **Depends on** | `P0-T10`, `P0-T32` |
+| **Depends on** | `P0-T10`, `P0-T32`, `P0-T33` |
 | **Blocks** | `P0-T13` |
 | **Retires** | `V-4`, `R-12` |
 | **Implements** | `FR-56` |
@@ -1437,6 +1437,54 @@ Manual (no command exists for this in Phase 0):
 the Plugins window leaves no menu item, no observer, and no error in the debug log (FR-56)".
 Whatever this card finds becomes the lifecycle integration spec in `P0-T13`, so the regression
 is permanent rather than a one-off observation.
+
+**Findings, 2026-09-14 — all five boxes pass, and the card's Goal still fails.** `V-4`:
+**failed, pending `P0-T33`.**
+
+Run objectively rather than by watching the Plugins window, which is only a front-end to
+`AddonManager`. A throwaway driver plugin (never committed, removed afterwards) imported
+`AddonManager.sys.mjs` — `ChromeUtils.importESModule` works on Gecko 140 — and drove real
+`ADDON_DISABLE` / `ADDON_ENABLE` / `ADDON_UNINSTALL` against the **built XPI** installed in the
+dev profile, not a `serve` temporary add-on, so no hot-reload `ADDON_UPGRADE` could slip in.
+Reason codes came from `Zotero.Plugins.addObserver`. The whole sequence ran twice from a clean
+profile with identical results.
+
+- **Menu:** after every disable, 0 menus in every window; after every enable, exactly 1 menu
+  (`"Research Helper"`) with 1 item — counted by firing the Tools popup's real `popupshowing`
+  handler and via `updateMenuPopup()`, `popuphidden` between rounds.
+- **No plugin exception** in either log (2,785 and 2,771 lines); the driver's error listener
+  caught 0.
+- **Window close/reopen:** `Zotero.openMainWindow()` opens a *second* main window, so the
+  original could be closed without quitting Zotero. Scope size tracked it exactly (3, 5, 3, 5),
+  and cycles 3 to 5 ran with two windows, both correct.
+- **FR-56's second criterion:** after uninstall, SQL read with Zotero closed shows the spike
+  collection and items 1 to 3 intact, identical to the pre-run snapshot.
+- **Registry:** after every disable and after uninstall the torn-down instance reported
+  `{"alive":false,"size":0,"liveHandles":[]}`, `Zotero.ResearchHelper` was gone, MenuManager held
+  0 options for the plugin, and Zotero's `unregistered due to shutdown` never appeared — our own
+  `unregisterMenu` did the work, not Zotero's self-cleaning.
+
+**The defect none of the five boxes can see.** Every `ZoteroToolkit` instance — one built in
+`src/addon.ts`'s constructor, one more per window in `src/hooks.ts` — leaves behind,
+permanently: **one `Zotero.Plugins` observer** (added through the toolkit's listener manager,
+never removed: 15 added, 0 removed over the run); **one `Zotero.Reader` `renderToolbar`
+listener** (from `KeyboardManager`'s constructor, which reads `pluginID` *before*
+`initZToolkit()` sets it, so it is filed under the toolkit's own default id and Zotero's
+per-plugin cleanup never matches it: 2 grew to 17); and **three wrappers on
+`Zotero.Item.prototype`** (`getField`, `setField`, `isFieldOfBase`, from `FieldHookManager` —
+disabled at teardown but, by the toolkit's own comment, left in place still referencing the dead
+instance; 17 installs of each per session). The registry cannot see any of it because the toolkit
+registers internally. Confirmed by reading toolkit 5.2.0's `dist/src-DEKAOAwd.js`.
+
+**The plugin uses none of the toolkit.** `src/` calls nothing on `ztoolkit` except
+`unregisterAll()`, whose only job is to clean up the toolkit itself. Fixed in `P0-T33` by not
+constructing it; this card's step 8 re-run is blocked until then.
+
+Two further observations, both Zotero's behaviour rather than ours: after `unregisterMenu` one
+labelled `<menu>` stays in each window's Tools popup until the menu next opens — **not
+user-visible**, since `onToolsMenuOpen` removes it first, and it never accumulates; and
+`onMainWindowUnload` is called with reason `MAIN_WINDOW_LOAD` (`plugins.js` line 120), which our
+code ignores. `src/` and `addon/` schedule no timers.
 
 ---
 
@@ -3325,7 +3373,7 @@ first caller that will feel this.
 | **ID** | `P0-T32` |
 | **State** | `DONE` — approved 2026-09-14; all five criteria verified at runtime |
 | **Depends on** | `P0-T10` |
-| **Blocks** | `P0-T11`, `P0-T24` |
+| **Blocks** | `P0-T11`, `P0-T24`, `P0-T33` |
 | **Retires** | none |
 | **Implements** | part of `FR-55` |
 | **Estimate** | 0.5 d |
@@ -3473,6 +3521,98 @@ Corpus corrected on the same day: `docs/01` §9.1's tree and its FR-56 sentence,
 `Localization` form and `document.l10n` work), §9.3's placement rule, and every
 `research-helper/<name>.ftl` path in `docs/08` §10. The two `research-helper/.gitkeep`
 subfolder placeholders are removed; `P0-T24` ships `ko-KR/research-helper-mainWindow.ftl` flat.
+
+---
+
+---
+
+### P0-T33 — Stop constructing `ZoteroToolkit`, which leaks on every cycle
+
+| Field | Value |
+|---|---|
+| **ID** | `P0-T33` |
+| **State** | `TODO` |
+| **Depends on** | `P0-T32` |
+| **Blocks** | `P0-T11` |
+| **Retires** | none |
+| **Implements** | part of `FR-56` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** Five disable/enable cycles leave Zotero's global state exactly as they found it: no
+`Zotero.Plugins` observer, no `Zotero.Reader` listener and no `Zotero.Item.prototype` wrapper
+survives the plugin.
+
+**Read first.**
+- `P0-T11`'s **Findings** — the three leaks, their measured growth, and why the scope registry
+  cannot see them.
+- `src/utils/ztoolkit.ts`, `src/addon.ts`, `src/hooks.ts`, `src/index.ts`,
+  `typings/global.d.ts` — every place a toolkit instance is built, stored or exposed.
+- `node_modules/zotero-plugin-toolkit/dist/ztoolkit.js` — `ZoteroToolkit`'s constructor builds
+  `UITool`, `ReaderTool`, `ExtraFieldTool`, `FieldHookManager`, `KeyboardManager` and
+  `PromptManager` unconditionally. That, not any call we make, is where the leaks come from.
+- `docs/01-zotero-plugin-platform.md` §4.6 item 8 (`P0-T02` fix 8) — the helper allow-list.
+  **It lists `KeyboardManager`, which is one of the leak sources.**
+
+**Files.**
+- delete `src/utils/ztoolkit.ts`
+- modify `src/addon.ts`
+- modify `src/hooks.ts`
+- modify `src/index.ts`
+- modify `typings/global.d.ts`
+
+**Do.**
+1. Remove every `ZoteroToolkit` construction — the app-level one in `src/addon.ts` and the
+   per-window one in `src/hooks.ts` — together with the `ztoolkit` data field, the `ztoolkit`
+   global getter in `src/index.ts`, its declaration in `typings/global.d.ts`, and the
+   `ztoolkit.unregisterAll()` call and window-scope `defer` whose only purpose was to clean the
+   toolkit up. Nothing in `src/` uses a toolkit feature; confirm that with a grep before
+   deleting, and stop if the grep disagrees.
+2. Build, and confirm the bundle no longer contains the toolkit: no `FieldHookManager`, no
+   `KeyboardManager`, no `Initializing ToolkitGlobal modules` string. Record the bundle size
+   before and after.
+3. Re-run `P0-T11`'s driver sequence — five disable/enable cycles, a window close/reopen, and an
+   uninstall, against the built XPI in the dev profile — with its leak counters:
+   `Zotero.Plugins` observers added vs removed, `Zotero.Reader._registeredListeners` by plugin
+   id, and `patching getField` lines in the log.
+4. Keep `zotero-plugin-toolkit` as a dependency. Later cards may still want `DialogHelper`,
+   `VirtualizedTableHelper`, `FilePickerHelper` or `ClipboardHelper`; this card only stops
+   paying for the whole toolkit when nothing uses it.
+
+**Do NOT.**
+- Do not fix the leak by setting `basicOptions.api.pluginID` earlier, or by calling more
+  `unregister` methods on the instance. That treats three leaks found by measurement as the
+  complete list, and leaves six managers constructed that the plugin never uses.
+- Do not remove `zotero-plugin-toolkit` from `package.json`. That is a dependency decision for
+  the card that proves no helper will ever be needed; this is not that card.
+- Do not reintroduce a toolkit instance in a later card without re-running this card's leak
+  counters against it. A single helper may pull in `ToolkitGlobal`, which stores itself on the
+  shared `Zotero` object as `Zotero._toolkitGlobal`; whether that is residue has not been
+  measured.
+
+**Done when.**
+- [ ] No file under `src/` or `typings/` constructs, stores or declares a `ZoteroToolkit`.
+- [ ] The built bundle contains no `FieldHookManager`, `KeyboardManager` or
+      `Initializing ToolkitGlobal modules`, and its size before and after is recorded.
+- [ ] Across five cycles, window close/reopen and uninstall: `Zotero.Plugins` observers added by
+      the plugin equal those removed, `Zotero.Reader` listeners do not grow, and no
+      `patching getField` line appears.
+- [ ] `P0-T11`'s five boxes still pass on the same run.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm test` and `npm run build` all exit 0.
+
+**Verify with.**
+```bash
+npm run build && ! grep -qE 'FieldHookManager|KeyboardManager|Initializing ToolkitGlobal' \
+  .scaffold/build/addon/content/scripts/research-helper.js && echo "toolkit gone"
+```
+plus the driver run, which no command asserts.
+
+**Notes.** Split out of `P0-T11` on 2026-09-14 and numbered `P0-T33` because
+`plan/README.md` §3 forbids renumbering. `P0-T11` proved our own registrations tear down
+perfectly and then found that the *template's* toolkit wiring does not: the whole-toolkit
+instance came in with `P0-T02`'s scaffold and was never used for anything. The coordinator
+corrects `docs/01` §4.6 item 8 to drop `KeyboardManager` from the allow-list and to require the
+leak counters for any helper a later card adopts.
 
 ---
 

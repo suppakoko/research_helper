@@ -7,9 +7,10 @@ import pkg from "./package.json" with { type: "json" };
 //
 // P0-T02 step 9 / docs/01 §4.6 item 8: prefer the native `Zotero.*Manager`
 //   APIs over toolkit wrappers. The toolkit is kept only for DialogHelper,
-//   VirtualizedTableHelper, FilePickerHelper, ClipboardHelper, KeyboardManager
-//   and unregisterAll(). docs/01 §4.3 verified that the toolkit ships no
-//   wrapper for items, collections, search or attachments at all.
+//   VirtualizedTableHelper, FilePickerHelper and ClipboardHelper, imported
+//   individually — never a whole `ZoteroToolkit`, which leaks on every
+//   disable/enable cycle (P0-T11, P0-T33). docs/01 §4.3 verified that the
+//   toolkit ships no wrapper for items, collections, search or attachments.
 //
 // P0-T03 (docs/00 §3 D9): the plugin ID is a PERMANENT constant, not a
 //   build-varying value, so it is written here as a literal and again as a
