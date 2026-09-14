@@ -1063,7 +1063,7 @@ trigger it, and confirm it is hit.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T09` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-14; install verified from the dev profile's `extensions.json`, not by a human at the dialog |
 | **Depends on** | `P0-T03`, `P0-T07`, `P0-T30` |
 | **Blocks** | `P0-T27` |
 | **Retires** | `V-1`, part of `R-11` |
@@ -1191,7 +1191,7 @@ with Git for Windows; the size check has a PowerShell equivalent
 | Field | Value |
 |---|---|
 | **ID** | `P0-T10` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-14 with criterion 1 open: the menu renders `label=""`, carried by `P0-T32` |
 | **Depends on** | `P0-T08`, `P0-T31` |
 | **Blocks** | `P0-T11`, `P0-T20`, `P0-T24`, `P0-T32` |
 | **Retires** | part of `V-1` |
