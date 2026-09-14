@@ -3421,6 +3421,59 @@ yields an empty label.
 Sequenced before `P0-T11` deliberately: `P0-T11` cycles disable/enable looking for a duplicated
 or orphaned menu item, and an item with no visible label is a poor thing to look for.
 
+**Findings, 2026-09-14 — all five criteria pass.** Tools > Research Helper renders its labels
+in the running dev Zotero.
+
+- **Built artifact:** exactly one flat bundle, `locale/en-US/research-helper-mainWindow.ftl`,
+  with `research-helper-menu-root` and `research-helper-menu-spike-create-item` — the prefix
+  once, and zero occurrences of `researchHelper` in the file.
+- **Runtime resolution**, same on every reload:
+  `Localization(["research-helper-mainWindow.ftl"], true).formatMessagesSync` returned
+  `label = "Research Helper"` and `label = "Create spike item (P0-T10)"`, and the window's own
+  `document.l10n.formatMessages` agreed. The old subfolder path, as a control, returned `[null]`.
+- **Measured labels**, through `updateMenuPopup()` on a freshly built element:
+  `menu label="Research Helper"`, `menuitem label="Create spike item (P0-T10)"`.
+- **Teardown is real.** Across one cold start and four hot reloads the `<link>` count went
+  0 → 1 at registration and back to 0 at `unregisterAll()` every time, never growing. After
+  teardown `document.l10n.formatMessages(root)` returned `[null]` — the window's resolver
+  dropped the file, not merely the DOM node — and that happened before Zotero's own
+  `unregisterLocales` ran. **No `FR-56` exception is needed.**
+
+**What the scaffold options actually do** (read from 0.9.2's `buildLocale()`, confirmed against
+built files): `prefixLocaleFiles` renames every file to `${namespace}-${basename}` with no
+already-prefixed check, and `prefixFluentMessages` prepends `${namespace}-` to any message not
+already starting with `researchHelper`, also rewriting `data-l10n-id` in built `.xhtml`. With
+both on after the flatten, the build shipped `researchHelper-research-helper-mainWindow.ftl`.
+**Both are now `false`; `namespace` is unchanged.** `fluent.dts` stays `false`, untested.
+
+**Undoing `insertFTLIfNeeded`.** Gecko 140's `customElements.js` shows it only appends
+`<html:link rel="localization" href=…>` to `document.head` or `<linkset>`, and is a no-op if
+that `href` exists. `fluentResourceRegistration()` in `src/zotero/registrations.ts` inserts,
+finds the link by `href`, returns the element as the handle, then **resolves a probe message
+and throws — after removing the link — if it comes back empty.** That last step turns this
+card's whole defect class into a loud error: a negative control passing the old double-prefixed
+name threw `Fluent resource "researchHelper-research-helper-mainWindow.ftl" is attached but
+message "research-helper-menu-root" does not resolve`, leaving zero links and an empty scope.
+`registerUI.ts` derives the filename as `${config.addonRef}-mainWindow.ftl` rather than
+hard-coding it. `zotero-types@4.1.3` has no `MozXULElement`; the one method is typed locally.
+
+**Two observations handed to `P0-T11`:**
+
+- After `unregisterMenu` on reload, the old `<menu>` element — still labelled — **stayed in
+  `#menu_ToolsPopup`** until the next popup update removed it. MenuManager appears to clean up
+  lazily. A duplicate-item check that inspects the DOM without opening the popup will see a
+  false duplicate.
+- A sandbox `setTimeout` scheduled by a torn-down instance **still fired after that instance's
+  shutdown** and hit the dead scope (`scope "research-helper" has already been torn down`).
+  That timer was the probe's, not plugin code, but it proves timers are not cancelled for us:
+  every timer the plugin schedules must be cleared in teardown, through the scope.
+
+Corpus corrected on the same day: `docs/01` §9.1's tree and its FR-56 sentence, §9.2's
+`> **Unverified:**` marker (retired — the resource id is the bare filename and both the sync
+`Localization` form and `document.l10n` work), §9.3's placement rule, and every
+`research-helper/<name>.ftl` path in `docs/08` §10. The two `research-helper/.gitkeep`
+subfolder placeholders are removed; `P0-T24` ships `ko-KR/research-helper-mainWindow.ftl` flat.
+
 ---
 
 ## Phase 0 spike report template

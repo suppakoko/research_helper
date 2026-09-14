@@ -41,12 +41,17 @@
  * `src/zotero/` never learns what this plugin's menus look like.
  */
 
+import { config } from "../../package.json";
 import type { ScopedRegistration, Scope } from "./container";
 import {
+  L10N_MENU_ROOT,
   TOOLS_MENU_DESCRIPTION,
   toolsMenuOptions,
 } from "../ui/menus/toolsMenu";
-import { menuRegistration } from "../zotero/registrations";
+import {
+  fluentResourceRegistration,
+  menuRegistration,
+} from "../zotero/registrations";
 import { createSpikeArticle, reportError } from "../zotero/zoteroApi";
 
 /**
@@ -77,8 +82,35 @@ const APP_REGISTRATIONS: readonly ScopedRegistration[] = [
   ),
 ];
 
-/** Registered per main window, torn down when that window closes. */
-const WINDOW_REGISTRATIONS: readonly WindowRegistration[] = [];
+/**
+ * The main-window Fluent resource id (`docs/08` §10.1's `mainWindow` surface).
+ *
+ * Flat and plugin-prefixed, because Zotero 10.0.1's `registerLocales()` drops
+ * subdirectories under `locale/<locale>/` and registers every plugin's bundle
+ * in one shared `zotero-plugins:{locale}/<filename>` namespace (`docs/01`
+ * §9.1). The prefix is `config.addonRef` rather than a second literal, and
+ * `zotero-plugin.config.ts` turns scaffold's `prefixLocaleFiles` off, so the
+ * built file keeps its source name, `addon/locale/<locale>/` +
+ * `${addonRef}-mainWindow.ftl`. `fluentResourceRegistration` then asserts the
+ * name at runtime by resolving a real message out of it: a mismatch throws
+ * instead of rendering blank labels.
+ */
+const MAIN_WINDOW_FTL = `${config.addonRef}-mainWindow.ftl`;
+
+/**
+ * Registered per main window, torn down when that window closes.
+ *
+ * The Fluent bundle is first: `docs/08` §10.1 wants it in the window before
+ * any plugin DOM is, and teardown runs last-in-first-out, so it is also the
+ * last thing removed.
+ */
+const WINDOW_REGISTRATIONS: readonly WindowRegistration[] = [
+  (win) =>
+    fluentResourceRegistration("main-window Fluent bundle", win, {
+      resourceId: MAIN_WINDOW_FTL,
+      probeMessageId: L10N_MENU_ROOT,
+    }),
+];
 
 /**
  * Run the application-scoped registrations into the root scope.

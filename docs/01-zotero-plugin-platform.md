@@ -2144,22 +2144,27 @@ bundle. But a plugin FTL is **not** automatically attached to a window Zotero ow
 `menuManager.js`'s `l10nFiles` option is commented out in 10.0.1 with a `TODO` about unload
 management. A plugin that puts a label in Zotero's main window must call
 `win.MozXULElement.insertFTLIfNeeded("<filename>.ftl")` itself in `onMainWindowLoad` — and that
-call has no removal counterpart, which is an open `FR-56` question (`P0-T32`).
+call has no *documented* counterpart. It is nonetheless undoable — verified 2026-09-14 (`P0-T32`)
+from Gecko 140's `customElements.js`: it only appends `<html:link rel="localization" href=…>`
+to `document.head` or `<linkset>`, and is a no-op if that `href` is already present. Removing
+that element with `link.remove()` makes the window's own `document.l10n` stop resolving the
+file's messages, measured across four hot reloads with the link count never growing. No
+`FR-56` exception is needed.
 
 For `research_helper` — **the *layout* below is this section's; the *file list* is `08-ui-ux-spec.md` §10.1's**, which owns the set of UI surfaces and each surface's localization home. Reproduced here only so the directory shape is concrete; if the two ever differ, §10.1 wins and this listing is the defect:
 
 ```
 locale/
-├── en-US/research-helper/
-│   ├── mainWindow.ftl
-│   ├── preferences.ftl
-│   ├── searchDialog.ftl
-│   └── reportWindow.ftl
-└── ko-KR/research-helper/
-    ├── mainWindow.ftl
-    ├── preferences.ftl
-    ├── searchDialog.ftl
-    └── reportWindow.ftl
+├── en-US/
+│   ├── research-helper-mainWindow.ftl
+│   ├── research-helper-preferences.ftl
+│   ├── research-helper-searchDialog.ftl
+│   └── research-helper-reportWindow.ftl
+└── ko-KR/
+    ├── research-helper-mainWindow.ftl
+    ├── research-helper-preferences.ftl
+    ├── research-helper-searchDialog.ftl
+    └── research-helper-reportWindow.ftl
 ```
 
 Korean is a supported Zotero UI locale — `chrome/locale/ko-KR/` exists in the [zotero/zotero repo](https://github.com/zotero/zotero/blob/main/chrome/locale/ko-KR/zotero/zotero.properties).
@@ -2169,15 +2174,15 @@ Korean is a supported Zotero UI locale — `chrome/locale/ko-KR/` exists in the 
 In a document:
 
 ```html
-<link rel="localization" href="research-helper/preferences.ftl"/>
+<link rel="localization" href="research-helper-preferences.ftl"/>
 <!-- in a XUL-namespaced document: -->
-<html:link rel="localization" href="research-helper/preferences.ftl"/>
+<html:link rel="localization" href="research-helper-preferences.ftl"/>
 ```
 
 Injected into an existing window at runtime:
 
 ```javascript
-window.MozXULElement.insertFTLIfNeeded("research-helper/mainWindow.ftl");
+window.MozXULElement.insertFTLIfNeeded("research-helper-mainWindow.ftl");
 ```
 
 On elements:
@@ -2205,7 +2210,7 @@ From JS, to get a string imperatively, the template provides a `getString()` hel
 
 The `Localization` constructor **is** available in the plugin sandbox — `plugins.js#_loadScope()` assigns it into the sandbox globals (verified 2026-09-08, §5.6).
 
-> **Unverified:** which argument form to use for a plugin's own files (`new Localization(["research-helper/preferences.ftl"], true)` vs `document.l10n.formatValue(id, args)` from a window), and whether the sync flag is safe here. The template's `src/utils/locale.ts` implements it — read that file rather than guessing.
+**Verified 2026-09-14 (`P0-T32`):** for a plugin's own files the resource id is the **bare filename**, and both forms work — `new Localization(["research-helper-mainWindow.ftl"], true).formatMessagesSync(…)` from the plugin sandbox, and `document.l10n.formatMessages(…)` from a window the bundle has been inserted into. The sync flag works; Mozilla still discourages the sync form outside of probes and tests.
 
 ### 9.3 The two namespace rules (both are footguns)
 
@@ -2215,7 +2220,7 @@ From the official docs, emphasis theirs:
 
 > "**Fluent filenames also share a global namespace.**"
 
-So: every ID starts with `research-helper-`, and every file lives under `locale/<lang>/research-helper/`. No exceptions. A collision does not error — it silently shadows, which is far worse.
+So: every ID starts with `research-helper-`, and every **filename** starts with `research-helper-` too, flat under `locale/<lang>/` — on Zotero 10 the filename is itself a namespace shared with every installed plugin (§9.1). No exceptions. A collision does not error — it silently shadows, which is far worse.
 
 ### 9.4 Language handling for `research_helper` specifically
 

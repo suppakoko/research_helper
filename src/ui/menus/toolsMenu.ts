@@ -56,7 +56,7 @@ export const TOOLS_MENU_DESCRIPTION = "Tools menu item";
  * Prefixed `research-helper-` because Fluent identifiers share one global
  * namespace per document and an unprefixed ID silently shadows Zotero's own
  * (`docs/01` §9.3, §12 gotcha 16). The messages live in
- * `addon/locale/en-US/research-helper/mainWindow.ftl`; the ko-KR bundle
+ * `addon/locale/en-US/research-helper-mainWindow.ftl`; the ko-KR bundle
  * arrives in `P0-T24`.
  *
  * `MenuData` has no plain `label` property — `l10nID` is the only labelling

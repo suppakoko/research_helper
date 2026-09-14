@@ -884,7 +884,7 @@ The top-level `<dialog>` root was replaced by `<window><dialog>`. This is Zotero
     <script src="chrome://zotero/content/include.js"/>
     <script src="chrome://researchhelper/content/searchDialog.js"/>
     <linkset>
-      <html:link rel="localization" href="research-helper/searchDialog.ftl"/>
+      <html:link rel="localization" href="research-helper-searchDialog.ftl"/>
     </linkset>
     <!-- content -->
   </dialog>
@@ -1540,7 +1540,7 @@ Fluent goes in a XUL `<linkset>`, and each `<groupbox>` should carry `aria-label
     xmlns:html="http://www.w3.org/1999/xhtml">
 
   <linkset>
-    <html:link rel="localization" href="research-helper/preferences.ftl"/>
+    <html:link rel="localization" href="research-helper-preferences.ftl"/>
   </linkset>
 
   <!-- ============ LLM providers ============ -->
@@ -2180,18 +2180,18 @@ How each surface gets its strings:
 | Prefs pane fragment | `<linkset><html:link rel="localization" href="…"/></linkset>` |
 | Our own dialog windows (`searchDialog`, `reportWindow`) | `<linkset>` inside `<dialog>`, or `<html:link rel="localization">` — one per window, naming that window's own FTL file |
 | Dialogs raised from the main window (cost confirmation, egress disclosure, summarize) | **Nothing to insert.** They resolve against the already-inserted `mainWindow.ftl`; see the main-window rule above |
-| Main window (injected DOM) | `window.MozXULElement.insertFTLIfNeeded("research-helper/mainWindow.ftl")`, removed on unload |
+| Main window (injected DOM) | `window.MozXULElement.insertFTLIfNeeded("research-helper-mainWindow.ftl")`, removed on unload |
 | From JS, in a window | `document.l10n.setAttributes(el, id, args)`, `await document.l10n.formatValue(id, args)` |
-| From JS, no window | `new Localization(["research-helper/mainWindow.ftl"])` |
-| Zotero 10 undo labels | `Zotero.ftl.addResourceIds(['research-helper/mainWindow.ftl'])`, removed on shutdown — **unverified, see §8.2.1** |
+| From JS, no window | `new Localization(["research-helper-mainWindow.ftl"])` |
+| Zotero 10 undo labels | `Zotero.ftl.addResourceIds(['research-helper-mainWindow.ftl'])`, removed on shutdown — **unverified, see §8.2.1** |
 
-The Zotero 7 docs are explicit that you must insert the FTL **before** touching the DOM: "Please ensure that you have inserted the FTL into the window before making any changes to the DOM." And remove it on unload: `doc.querySelector('[href="research-helper/mainWindow.ftl"]').remove();`
+The Zotero 7 docs are explicit that you must insert the FTL **before** touching the DOM: "Please ensure that you have inserted the FTL into the window before making any changes to the DOM." And remove it on unload: `doc.querySelector('[href="research-helper-mainWindow.ftl"]').remove();`
 
 `formatValueSync()` exists but is, in Mozilla's words, strongly discouraged. Use the async form.
 
 ### 10.2 Sample strings
 
-`locale/en-US/research-helper/mainWindow.ftl`:
+`locale/en-US/research-helper-mainWindow.ftl`:
 
 ```properties
 research-helper-menu-root =
@@ -2234,7 +2234,7 @@ research-helper-itempane-btn-save-note =
     .tooltiptext = Save summary as a child note
 ```
 
-`locale/ko-KR/research-helper/mainWindow.ftl`:
+`locale/ko-KR/research-helper-mainWindow.ftl`:
 
 ```properties
 research-helper-menu-root =
@@ -2370,7 +2370,7 @@ A11y & i18n
   [ ] getRowString + label on the result table
   [ ] Menu icons 16x16 SVG with fill="context-fill"; darkIcon where needed
   [ ] disableFontSizeScaling left false
-  [ ] All IDs/classes prefixed research-helper-; files under locale/<lang>/research-helper/
+  [ ] All IDs/classes prefixed research-helper-; files flat under locale/<lang>/, named research-helper-*.ftl
   [ ] en-US AND ko-KR both shipped (en-US is the fallback for everyone else)
   [ ] No string concatenation; Intl.* for numbers and dates
 ```

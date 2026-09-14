@@ -156,6 +156,124 @@ export function preferencePaneRegistration(
   });
 }
 
+/**
+ * The one member of Gecko's `MozXULElement` this module calls.
+ *
+ * `zotero-types@4.1.3` declares no `MozXULElement` at all, so the shape is
+ * written here, narrowly, from the source of truth: Gecko 140's
+ * `chrome/toolkit/content/global/customElements.js` (Zotero 10.0.1's
+ * `omni.ja`, read 2026-09-14), `static insertFTLIfNeeded(path)`, which returns
+ * nothing.
+ */
+interface FluentLinkInserter {
+  insertFTLIfNeeded(path: string): void;
+}
+
+/** Find the `<link rel="localization">` naming `resourceId`, if any. */
+function findLocalizationLink(
+  doc: Document,
+  resourceId: string,
+): Element | undefined {
+  // Compared with getAttribute rather than an attribute selector, exactly as
+  // `insertFTLIfNeeded` does itself, so a resource id can never be misread as
+  // selector syntax.
+  for (const link of doc.querySelectorAll('link[rel="localization"]')) {
+    if (link.getAttribute("href") === resourceId) {
+      return link;
+    }
+  }
+  return undefined;
+}
+
+/** What `fluentResourceRegistration` inserts and how it proves it worked. */
+export interface FluentResourceOptions {
+  /**
+   * The Fluent resource id — on Zotero 10.0.1 the bare filename under
+   * `locale/<locale>/`, because `registerLocales()` in `plugins.js` registers
+   * every plugin bundle flat as `zotero-plugins:{locale}/<filename>` and drops
+   * subdirectories (`docs/01` §9.1).
+   */
+  readonly resourceId: string;
+  /**
+   * A message that must exist in that resource. Checked once, right after
+   * the insert, because every way of getting the resource id wrong — a
+   * subdirectory, a build-time filename prefix, a typo — otherwise fails
+   * silently as an empty label (`P0-T10`, `P0-T32`).
+   */
+  readonly probeMessageId: string;
+}
+
+/**
+ * Attach a plugin Fluent bundle to one main window for the lifetime of that
+ * window's scope (`P0-T32`).
+ *
+ * Nothing in Zotero 10.0.1 does this for a plugin: `menuManager.js`'s
+ * `l10nFiles` option is commented out, and every `insertFTLIfNeeded` call in
+ * `chrome/content/zotero/` names Zotero's own bundles. So a `MenuManager`
+ * menu's `l10nID` resolves only if the plugin has inserted its bundle into the
+ * window itself.
+ *
+ * `insertFTLIfNeeded` has no removal counterpart, but all it does is append a
+ * `<link rel="localization" href="…">` to the document's `<head>` or
+ * `<linkset>` (and do nothing if one with that `href` already exists). Removing
+ * that element is the undo: Gecko's document localization drops the resource
+ * when the link leaves the document. The handle is the element itself, found
+ * by `href` after the insert — which also means a link left behind by an
+ * earlier, torn-down instance is adopted and removed rather than duplicated.
+ *
+ * Window-scoped by construction: it cannot be built without the window, and it
+ * belongs in `src/bootstrap/registerUI.ts`'s `WINDOW_REGISTRATIONS`.
+ */
+export function fluentResourceRegistration(
+  description: string,
+  win: _ZoteroTypes.MainWindow,
+  options: FluentResourceOptions,
+): ScopedRegistration {
+  return registration<Element>({
+    description,
+    async register() {
+      const inserter = (win as { MozXULElement?: FluentLinkInserter })
+        .MozXULElement;
+      if (typeof inserter?.insertFTLIfNeeded !== "function") {
+        throw new Error(
+          `[research-helper] MozXULElement.insertFTLIfNeeded is not available ` +
+            `in this window; cannot attach "${options.resourceId}".`,
+        );
+      }
+      inserter.insertFTLIfNeeded(options.resourceId);
+
+      const link = findLocalizationLink(win.document, options.resourceId);
+      if (!link) {
+        throw new Error(
+          `[research-helper] insertFTLIfNeeded("${options.resourceId}") ` +
+            `added no <link rel="localization"> to the document.`,
+        );
+      }
+
+      const l10n = win.document.l10n;
+      const [message] = l10n
+        ? await l10n.formatMessages([{ id: options.probeMessageId }])
+        : [];
+      if (!message) {
+        // Undo before throwing: `Scope.use()` records nothing for a
+        // registration whose `register()` threw.
+        link.remove();
+        throw new Error(
+          `[research-helper] Fluent resource "${options.resourceId}" is ` +
+            `attached but message "${options.probeMessageId}" does not ` +
+            `resolve. Check that the built file under locale/<locale>/ has ` +
+            `exactly this name and identifier (no subdirectory, no build-time ` +
+            `prefix).`,
+        );
+      }
+      return link;
+    },
+    unregister(link) {
+      link.remove();
+    },
+  });
+}
+
 /** The arguments `Zotero.Prefs.registerObserver` takes positionally. */
 export interface PrefObserverOptions {
   /**

@@ -74,8 +74,28 @@ export default defineConfig({
       },
     ],
     fluent: {
-      prefixLocaleFiles: true,
-      prefixFluentMessages: true,
+      // P0-T32: both prefixers OFF. The `research-helper-` prefix on Fluent
+      // filenames and identifiers is a correctness requirement (docs/01 §9.1,
+      // §9.3, §12 gotcha 16), so it is written by hand in the file a human
+      // edits rather than applied invisibly here. Read from scaffold 0.9.2's
+      // `buildLocale()` and measured on the built artifact, 2026-09-14:
+      //
+      // - `prefixLocaleFiles` renames every `.ftl` to `${namespace}-${name}`
+      //   UNCONDITIONALLY (no already-prefixed check), so the flat
+      //   `research-helper-mainWindow.ftl` shipped as
+      //   `researchHelper-research-helper-mainWindow.ftl`.
+      // - `prefixFluentMessages` prepends `${namespace}-` to every message
+      //   not already starting with `namespace`, so
+      //   `research-helper-menu-root` shipped as
+      //   `researchHelper-research-helper-menu-root`, and it rewrites
+      //   `data-l10n-id` in built .xhtml the same way.
+      //
+      // `namespace` stays `researchHelper` (P0-T02 fix 6); it is not the fix.
+      // With both off, the built filename and identifiers are byte-identical
+      // to `addon/locale/<locale>/`, which is what `insertFTLIfNeeded` and
+      // every `l10nID` in `src/` name.
+      prefixLocaleFiles: false,
+      prefixFluentMessages: false,
       // Off until the first .ftl file lands (P0-T24 owns localization).
       //
       // scaffold 0.9.2 bug, found 2026-09-10: with zero .ftl files it still
