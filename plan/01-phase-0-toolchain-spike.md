@@ -3323,7 +3323,7 @@ first caller that will feel this.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T32` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-14; all five criteria verified at runtime |
 | **Depends on** | `P0-T10` |
 | **Blocks** | `P0-T11`, `P0-T24` |
 | **Retires** | none |
