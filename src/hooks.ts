@@ -1,5 +1,4 @@
 import { registerUI, registerWindowUI } from "./bootstrap/registerUI";
-import { createZToolkit } from "./utils/ztoolkit";
 
 /**
  * Lifecycle dispatcher (`P0-T07`). Hooks only dispatch — real work lives in
@@ -64,16 +63,13 @@ async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
   // registration.
   const scope = await addon.scope.child(win, "main window");
 
-  // A ztoolkit instance per window: helpers hold window-scoped state, and a
-  // window that closes must not leave a dead wrapper behind (docs/01 §3.3).
-  // The instance is captured rather than read back off `addon.data`, because
-  // by teardown time `addon.data.ztoolkit` may belong to a different window.
-  const windowToolkit = createZToolkit();
-  addon.data.ztoolkit = windowToolkit;
-  scope.defer("window-scoped toolkit helpers", () => {
-    windowToolkit.unregisterAll();
-  });
-
+  // No whole-toolkit instance here, per window or otherwise (P0-T33).
+  // `new ZoteroToolkit()` builds every manager unconditionally, and three of
+  // them register into Zotero's global state in ways its own teardown does
+  // not undo — P0-T11 measured one surviving Zotero.Plugins observer, one
+  // Zotero.Reader listener and three Zotero.Item.prototype wrappers per
+  // instance. A later card that needs a single helper imports that helper
+  // alone and re-runs P0-T33's leak counters against it.
   await registerWindowUI(scope, win);
 }
 
@@ -91,11 +87,6 @@ async function onShutdown(): Promise<void> {
   // The single teardown call site (P0-T07). Children — the per-window scopes
   // — go first, then application-scoped registrations in reverse order.
   await addon.scope.unregisterAll();
-
-  // Belt and braces for anything the toolkit registered outside a scope. The
-  // per-window instances have already been torn down by their own scopes;
-  // unregisterAll() is idempotent, so the double call is harmless.
-  ztoolkit.unregisterAll();
 
   reportSurvivors();
 

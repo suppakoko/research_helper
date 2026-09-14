@@ -1486,6 +1486,12 @@ user-visible**, since `onToolsMenuOpen` removes it first, and it never accumulat
 `onMainWindowUnload` is called with reason `MAIN_WINDOW_LOAD` (`plugins.js` line 120), which our
 code ignores. `src/` and `addon/` schedule no timers.
 
+**Re-run, 2026-09-14, on the `P0-T33` build — Goal PASS.** Same driver, twice, identical: all
+five boxes pass again, and the residue the first run found is gone — `Zotero.Reader` listeners
+0 throughout, no `Item.prototype` wrapper, no `patching getField`, no `Zotero._toolkitGlobal`,
+and the only global the plugin adds while enabled is `Zotero.ResearchHelper`, removed on every
+disable. `V-4`: **verified.** Full counters in `P0-T33`'s Findings.
+
 ---
 
 ### P0-T12 — First Node unit test under Vitest
@@ -3613,6 +3619,42 @@ perfectly and then found that the *template's* toolkit wiring does not: the whol
 instance came in with `P0-T02`'s scaffold and was never used for anything. The coordinator
 corrects `docs/01` §4.6 item 8 to drop `KeyboardManager` from the allow-list and to require the
 leak counters for any helper a later card adopts.
+
+**Findings, 2026-09-14 — all five criteria pass; `P0-T11`'s Goal now passes too.**
+
+A grep before deleting confirmed the only toolkit use was `ztoolkit.unregisterAll()`. Removed:
+`src/utils/ztoolkit.ts` (and the now-empty directory), the import and `data.ztoolkit` in
+`src/addon.ts`, the per-window instance, its `defer` and the `unregisterAll()` call in
+`src/hooks.ts`, the global getter in `src/index.ts`, and the `ztoolkit` declaration in
+`typings/global.d.ts`. The window child scope and `registerWindowUI()` are untouched.
+
+| | Before | After |
+|---|---|---|
+| `research-helper.js` | 130,482 B | **14,718 B** |
+| `research-helper.xpi` | 45,022 B | **17,738 B** |
+
+The bundle no longer contains `FieldHookManager`, `KeyboardManager`,
+`Initializing ToolkitGlobal`, `_toolkitGlobal` or `zotero-plugin-toolkit`. **Nine-tenths of the
+shipped JavaScript was a library the plugin never called.**
+
+Re-ran `P0-T11`'s driver — started *before* the plugin this time, so it also saw `APP_STARTUP` —
+twice from a clean profile, identical results. Across startup, five disable/enable cycles, a
+second window, closing the original, reopening, and uninstall: `Zotero.Reader` listeners **0**
+at every step (was 2 → 17); `patching getField` **0** lines (was 17); `Zotero.Item.prototype`'s
+`getField`/`setField`/`isFieldOfBase` **identical** to the functions captured before the plugin
+started; `Zotero._toolkitGlobal` absent throughout; no keydown/keyup listeners attached to
+windows at all (was 2–3 per window). Scope size is now 2 for one window and 3 for two.
+
+**The one `Zotero.Plugins` observer the counter still shows is Zotero's, not ours.** Its stack is
+`_addPluginShutdownObserver`, called once per session behind an `_observerAdded` flag the first
+time *any* plugin calls `registerMenu`. A call-stack attribution blamed the plugin because plugin
+code was on the stack; attributed by where the observer's code lives, the plugin's count is 0.
+`P0-T13`'s leak assertions must attribute the same way, or they will fail on Zotero's own
+bookkeeping.
+
+The previous driver's `Debugger`-based prototype check had never worked ("debugger and debuggee
+must be in different compartments" — plugin sandboxes share one); it was replaced with a
+comparison against functions captured before the plugin loaded.
 
 ---
 

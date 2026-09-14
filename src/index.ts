@@ -12,15 +12,6 @@ import { config } from "../package.json";
 if (!Zotero[config.addonInstance]) {
   _globalThis.addon = new Addon();
 
-  // `ztoolkit` is a live getter, not a snapshot: hooks.onMainWindowLoad
-  // replaces addon.data.ztoolkit per window, and every reader of the global
-  // must see the current one.
-  Object.defineProperty(_globalThis, "ztoolkit", {
-    get() {
-      return _globalThis.addon.data.ztoolkit;
-    },
-  });
-
   // @ts-expect-error - the plugin instance is not part of the Zotero types
   Zotero[config.addonInstance] = addon;
 }

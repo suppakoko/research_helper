@@ -1,7 +1,6 @@
 import { config } from "../package.json";
 import hooks from "./hooks";
 import { createScope, type Scope } from "./bootstrap/container";
-import { createZToolkit } from "./utils/ztoolkit";
 
 /**
  * The plugin instance, reachable at `Zotero.ResearchHelper`.
@@ -21,7 +20,6 @@ class Addon {
     config: typeof config;
     env: "development" | "production";
     initialized?: boolean;
-    ztoolkit: ZToolkit;
     locale?: {
       current: any;
     };
@@ -44,7 +42,6 @@ class Addon {
       config,
       env: __env__,
       initialized: false,
-      ztoolkit: createZToolkit(),
     };
 
     this.scope = createScope({
