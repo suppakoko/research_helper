@@ -2415,7 +2415,7 @@ already put the human in the loop. If fresh PDFs are needed, escalate to `P0-T18
 | Field | Value |
 |---|---|
 | **ID** | `P0-T20` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-15; 100 items in ~0.3 s, longest stall 77 ms, re-measure at 10k items in Phase 1 |
 | **Depends on** | `P0-T10` |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-12`, part of `R-16` |
