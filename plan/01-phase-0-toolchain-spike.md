@@ -1983,6 +1983,42 @@ failure stops the plan. `docs/01` §8.3 also carries a `> **Unverified:**` marke
 applied to plugin XHTML loaded via `chrome://` — this card sidesteps it by construction (all
 I/O in the sandbox) and should say so in the spike report rather than claim it resolved.
 
+**Findings, 2026-09-15 — agent half, scoped to OpenRouter plus PubMed; awaiting the owner's run.**
+
+- `src/core/http/client.ts` takes the transport by **injection** — `createHttpClient({ transport,
+  userAgent })` — so `core/` never names `Zotero` and no lint exemption was added. `docs/07` §2.2
+  and §7.4 show `client.ts` calling `Zotero.HTTP.request` directly, which §2.3's layering and the
+  lint rule forbid; injection is the resolution, and handing `Zotero.HTTP` to it from the
+  composition root is a later card's wiring.
+- `scripts/spike-network.ts` emits a ~21 KB paste-ready block for **Tools → Developer → Run
+  JavaScript** (`npx tsx scripts/spike-network.ts | clip`). The key is asked for at run time in a
+  **password dialog** (Gecko 140 `Prompter.sys.mjs` `promptPassword`, four arguments), never typed
+  into the code; output redacts it and reports `Authorization` only as present. Zotero 10.0.2's
+  `runJS.js` persists nothing between sessions, so the dialog protects the screen and the
+  clipboard rather than a saved file.
+- Requests: OpenRouter's keyless model catalogue (prices ranked live, not hard-coded), one minimal
+  completion per `docs/03` §5.3 with `provider.data_collection: "deny"` and `max_tokens: 32`
+  (moving to the next model only on an unbilled 404, at most three), and one PubMed esearch per
+  `docs/02` §3.3(a). Expected spend under $0.001.
+
+Four things the implementation contradicts or adds:
+
+1. **With `successCodes: false` a failed connection resolves with status 0 instead of throwing**,
+   so `docs/01` §8.2's `SecurityException` / `UnexpectedStatusException` mapping cannot occur
+   under `docs/07` §7.4's options. The client maps status 0 to `NETWORK`.
+2. **Zotero logs request bodies without `debug: true`.** `http.js` writes the first 1024
+   characters of every string body to `Zotero.debug`. That puts prompts — and potentially keys
+   sent in a body — into Debug Output. The client passes `logBodyLength: 0`, which §7.4 does not
+   list; `docs/09` §2.1 should say so.
+3. `docs/03` §5.3 and §14.2 send different `provider` settings (`require_parameters` / `sort`); the
+   probe follows §5.3 as the card says.
+4. **Run JavaScript is not the plugin sandbox** — it evaluates in the main window's global — so
+   this probe tests `Zotero.HTTP`, not the sandbox's global set measured in `docs/01` §2.3.
+
+**Card defect:** criterion 3's grep for `sk-[A-Za-z0-9]` matches ordinary words ("task-",
+"disk-") and always reports a leak. A pattern anchored on real key prefixes
+(`sk-or-v1-[0-9a-f]{20,}` and the like) finds nothing in the repository.
+
 ---
 
 ### P0-T16 — Streaming (SSE) consumption from inside Zotero
