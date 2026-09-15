@@ -128,16 +128,31 @@ export default defineConfig({
   },
 
   test: {
+    // P0-T13 (V-5), 2026-09-15: these names are the installed
+    // zotero-plugin-scaffold 0.9.2's `TestConfig`, and the runner ran green
+    // with them. docs/13 §1.4's `timeout`, `abort`, `exit`, `startDelay` and
+    // `reporter` are each a TS2353/TS2561 excess-property error against
+    // `defineConfig` — so `npm run typecheck`, which includes this file, is
+    // what catches a wrong key; at runtime an unknown key is silently ignored.
+    // The full key list is `entries`, `prefs`, `mocha.timeout`, `abortOnFail`,
+    // `watch`, `headless`, `startupDelay`, `waitForPlugin`, `hooks`. There is
+    // no `exit` key (`--exit-on-finish` / `--no-watch` set `watch: false`) and
+    // no `reporter` key (the runner's HTTP reporter is hard-coded).
+    //
+    // Test runs also inherit `server.devtools` (so the Browser Toolbox opens)
+    // and `server.startArgs`, but NOT `server.debugOutputFile`: an integration
+    // run writes no `.scaffold/logs/` file.
     entries: ["test/integration"],
-    // P0-T02 step 12 finding, verified 2026-09-10 against the installed
-    // zotero-plugin-scaffold 0.9.2 type definitions: the published scaffold
-    // docs and docs/13 §1.4 both name these `timeout`, `startDelay` and
-    // `abort`. The shipped `TestConfig` names them `mocha.timeout`,
-    // `startupDelay` and `abortOnFail`. The types win. V-5 / P0-T13 confirm.
     mocha: {
       timeout: 30000,
     },
+    // Scaffold's default is 1000, not docs/13's 10000.
     startupDelay: 10000,
+    // Not a function *body*: the runner does `eval(waitForPlugin)()`, so this
+    // must be a function *expression*. It polls every 100 ms and gives up after
+    // a hard-coded 10 s (after `startupDelay`), failing the run with
+    // "Internal: Plugin awaiting timeout". `data.initialized` is set last in
+    // `hooks.onStartup` (P0-T07).
     waitForPlugin: `() => Zotero.${pkg.config.addonInstance}?.data?.initialized`,
   },
 

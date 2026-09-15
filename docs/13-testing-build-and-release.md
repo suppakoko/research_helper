@@ -167,7 +167,7 @@ Under `build`: `assets`, `define`, `esbuildOptions`, `makeManifest.enable` (true
 
 Under `server`: `startArgs`, `devtools`, `debugOutputFile`, `debugOutputWindow`, `asProxy`.
 
-Under `test`: `entries` (default `["test"]`), `mocha`, `timeout` (default 10000), `abort`, `exit`, `headless`, `startDelay` (default 10000), `waitForPlugin`, `reporter`.
+Under `test` — **corrected 2026-09-15 against the installed scaffold 0.9.2's types (`P0-T13`)**: `entries` (default `["test"]`), `prefs`, `mocha.timeout`, `abortOnFail`, `watch`, `headless`, `startupDelay` (default **1000**), `waitForPlugin`, `hooks`. The names this section previously gave — `timeout`, `abort`, `exit`, `reporter`, `startDelay` — are all type errors and are silently ignored at runtime, so `npm run typecheck` is what catches a wrong key. There is no `exit` key (`--exit-on-finish` / `--no-watch` set `watch: false`) and no `reporter` key. `waitForPlugin` must be a function *expression* string: the runner `eval`s it and calls the result, and gives up after a fixed 10 s.
 
 Under `release`: `bumpp`, `changelog`, `github`.
 
@@ -226,8 +226,8 @@ export default defineConfig({
 
   test: {
     entries: ["test/integration"],
-    timeout: 30000,
-    startDelay: 10000,
+    mocha: { timeout: 30000 },
+    startupDelay: 10000,
     waitForPlugin: `() => Zotero.ResearchHelper?.data?.initialized`,
   },
 
@@ -536,7 +536,7 @@ This makes the interesting behaviours testable deterministically: retry-then-suc
 - Tests **execute inside a live Zotero instance via a proxy plugin**, not in Node, with a temporary profile and data directory, giving *"full access to Zotero's APIs during testing"* and avoiding the extensive mocking that would otherwise be necessary.
 - Test files live in `test/` (configurable via `test.entries`) with extensions `.spec.js`, `.spec.ts`, `.test.js`, `.test.ts`.
 - **Mocha and Chai globals** (`describe`, `it`, `expect`, `assert`) are available.
-- Config keys: `entries`, `mocha`, `timeout` (default 10000), `abort`, `exit`, `headless`, `startDelay` (default 10000), `waitForPlugin` (a function-body string returning true when the plugin is ready), `reporter`.
+- Config keys (scaffold 0.9.2, verified 2026-09-15): `entries`, `prefs`, `mocha.timeout`, `abortOnFail`, `watch`, `headless`, `startupDelay` (default 1000), `waitForPlugin` (a function-*expression* string, e.g. `` `() => Zotero.ResearchHelper?.data?.initialized` ``), `hooks`. See §1.4.
 - CLI overrides: `--abort-on-fail`, `--exit-on-finish`, `--no-watch` (equivalent to exit-on-finish), and `-h`/`--help`. **That is the whole list** — `zotero-plugin test` has no `--headless` flag; headless is a config key (`test.headless`) only, and an unknown option makes the CLI exit with an error.
 - Headless mode activates automatically on CI services; the **built-in headless implementation supports Ubuntu 22.04 and 24.04 only** — on other systems, disable built-in headless and use `xvfb-run`.
 

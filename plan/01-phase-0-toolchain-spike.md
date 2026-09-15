@@ -1732,6 +1732,59 @@ in-Zotero testing becomes manual-release-QA-only on all platforms. `docs/13` §5
 prescribes the interim posture — mark the CI `integration` job `continue-on-error: true` until
 this is settled — which `P0-T14` implements.
 
+**Findings, 2026-09-15 — all four criteria pass. Zotero on this machine is now 10.0.2.**
+
+`npm run test:integration -- --exit-on-finish --abort-on-fail` exits **0** in 19.5 s with three
+specs green inside a real Zotero: exactly one Tools-menu item after startup; teardown on disable
+and exactly one item again on enable; and the spike command creating one `journalArticle` with
+its four fields in the named collection. **The lifecycle spec was proven to catch a regression:**
+with `unregisterAll()` removed from `src/hooks.ts` it failed with the registry still holding
+`["main window / main-window Fluent bundle", "Tools menu item"]` and exit code 1, then the file
+was restored byte-identical. Counting menus alone would not have caught it — Zotero removes a
+plugin's menus itself on shutdown — so the spec also asserts an empty registry and an absent
+Fluent `<link>`.
+
+**The "two items from one click" mystery is solved.** The first run failed `expected 2 to equal
+1`. Zotero's menu code removes the previous `command` handler only once the window goes idle, so
+a menu re-opened before that fires one click twice. Both specs now wait for idle after closing the
+menu; a control run without the waits failed the same way, confirming the cause. That is also why
+`P0-T10` got three items from two synthetic dispatches.
+
+**Config key names (criterion 2).** `zotero-plugin.config.ts` already used the names the installed
+scaffold 0.9.2 accepts (`mocha.timeout`, `startupDelay`, `abortOnFail`); only its comment changed.
+The real `test` keys are `entries`, `prefs`, `mocha.timeout`, `abortOnFail`, `watch`, `headless`,
+`startupDelay`, `waitForPlugin`, `hooks`. **All five names `docs/13` §1.4 used are type errors**
+(`timeout`, `abort`, `exit`, `reporter`: TS2353; `startDelay`: TS2561) and are silently ignored at
+runtime, so `npm run typecheck` is the only thing that catches a wrong key. There is no `exit`
+key (`--exit-on-finish`/`--no-watch` set `watch: false`) and no `reporter`; `startupDelay`
+defaults to 1000, not 10000; and `waitForPlugin` must be a function *expression* — the runner
+`eval`s it and calls the result, giving up after a fixed 10 s. `docs/13` §1.4 corrected.
+
+**`V-5`, locally (criterion 4).** The runner downloads Zotero only when it believes it is on CI
+(or `headless` is set) *and* `ZOTERO_PLUGIN_ZOTERO_BIN_PATH` is unset — then it `sudo apt`s Xvfb,
+`wget`s the latest **beta** Zotero tarball and starts Xvfb itself. Everywhere else it requires the
+env var or fails with "No Zotero Found." A Windows CI runner would likely crash on its
+`cat /etc/os-release` unless `ZOTERO_SETUP_COMPLETE` is set. Headless on GitHub Actions is
+`P0-T14`'s to prove; the advice for it is to pin a Zotero and set the env var so CI does not drift
+onto the beta channel.
+
+**Why `P0-T08`'s logs were empty: Zotero was updating itself.** Zotero's update log shows a staged
+10.0.2 update trying to install at 11:57:45, asking for administrator approval, and the UAC prompt
+being cancelled at 11:59:47 — Zotero was then relaunched by the updater, not by scaffold, and the
+stdout pipe was lost. On this card's first run (13:18:13) the prompt appeared again and was
+approved within 2 seconds by whoever was at the machine, and **10.0.2 installed**
+(`BuildID=20260909185038`). That run printed its results and then hung over five minutes because
+scaffold missed Zotero's exit; no later run hung. The update is staged install-wide, so a
+profile's "no updates" pref does not prevent it. **Everything verified before 2026-09-15 was on
+10.0.1 and has not been re-checked on 10.0.2**; `strict_max_version: "10.0.*"` still admits it.
+
+Also: Mocha 12.0.1 and chai are fetched by the runner from jsDelivr and chaijs.com on first run,
+unpinned — CI will need network access for them; integration runs build in `test` mode, so the
+dev-only strict checks in the scope are off during them; each spec carries a file-level
+`eslint-disable no-restricted-globals` and types Mocha/Chai globals locally, and a `test/`
+exemption plus shared typings would be cleaner. The tester's data directory is
+`.scaffold/test/data`; `D:\ZoteroDev\data` was not touched.
+
 ---
 
 ### P0-T14 — CI workflow: lint, typecheck, unit test, build XPI
