@@ -302,6 +302,8 @@ Per the scaffold's Dev Serve docs: `ZOTERO_PLUGIN_ZOTERO_BIN_PATH` is required (
 2. *GUI.* Launch the profile manager with `zotero.exe -P` (Windows) / `/Applications/Zotero.app/Contents/MacOS/zotero -P` (macOS), create a profile named e.g. `dev` pointed at a separate data directory, and put **the profile's directory path** — not its name — in `ZOTERO_PLUGIN_PROFILE_PATH`. Note that `-P` silently does nothing if Zotero is already running; close it first.
 3. In the dev profile, enable `Advanced → Config Editor` and consider setting the debug logging preferences.
 
+**Debugging the plugin.** Verified 2026-09-15 (`P0-T08`). With `server.devtools: true`, `npm start` opens the Browser Toolbox as a separate window already attached to the **parent (chrome) process**, which is where the plugin sandbox runs. In its Debugger tab press `Ctrl+P`, type `research-helper.js`, and set breakpoints in the bundle (`.scaffold/build/addon/content/scripts/research-helper.js`). **Only the bundle is debuggable** — no source map is emitted, so `src/*.ts` does not appear; the bundle is unminified and carries `// src/…` comments. Two cautions: a paused thread freezes the main window's timers and events for everything, and the Toolbox is attached from startup, so **a `debugger;` statement anywhere in plugin code pauses Zotero** until someone resumes it in the Toolbox — never leave one in. Automation uses scaffold's separate `-start-debugger-server <port>` (the port is on the running `zotero.exe` command line); a line breakpoint by `sourceUrl` binds, and `why.actors` is `[null]` on Gecko 140, so match a pause by `frame.where`.
+
 **Useful launch flags** (from Zotero's plugin-development page):
 
 | Flag | Effect |

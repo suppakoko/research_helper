@@ -1056,6 +1056,41 @@ practice. `P0-T09` still owns the packaged-XPI install.
 demonstrably running; what is missing is a person to set a breakpoint in the plugin bundle,
 trigger it, and confirm it is hit.
 
+**Findings, 2026-09-15 — criterion 3 passes; all four criteria are now met.** Verified with no
+human, over the Remote Debugging Protocol the Browser Toolbox itself speaks, by a Node probe kept
+outside the repository. It connected to scaffold's `-start-debugger-server` port (read from the
+running `zotero.exe` command line), attached the **parent-process** thread
+(`root.getProcess {id:0}` → `getTarget`), and found the bundle among 414 sources at
+`file:///D:/KIST/projects/research_helper/.scaffold/build/addon/content/scripts/research-helper.js`.
+A line breakpoint set by `sourceUrl` on the first line of `createSpikeArticle` bound; the menu
+command was triggered by evaluation; and 0.12 s later the thread sent
+`{"type":"paused","frame":{"displayName":"createSpikeArticle","where":{"line":294}},"why":{"type":"breakpoint"}}`
+with the stack `createSpikeArticle` ← `run` ← `onCommand` ← Zotero's `menuCommandListener`.
+Resumed, then an evaluation returned — Zotero responsive. Repeated on a fresh launch against a
+read-only function, with the same result. Dropping the socket while paused also resumes the
+thread, so a crashed client cannot leave Zotero frozen.
+
+What a developer needs to know, now in `docs/13` §1.6:
+
+- **Only the bundle is debuggable, not `src/*.ts`.** Neither esbuild's options nor scaffold 0.9.2
+  emit a source map (`sourceMapURL` is null). The bundle is unminified and carries `// src/…`
+  section comments, so it is readable.
+- **There are two debugger servers.** Scaffold's `-start-debugger-server` (used by hot reload and
+  by automation) and a second one started by `--jsdebugger` for the Toolbox window. Breakpoints are
+  per connection, but a pause on either freezes the main window's timers for everyone.
+- **The Toolbox is attached from startup and pauses on any `debugger;` statement.** The probe hit
+  this: a `debugger;` froze Zotero's timers until the Toolbox's thread was resumed. Never put a
+  `debugger;` statement in code that runs under `server.devtools: true` without someone at the
+  Toolbox.
+- On Gecko 140 `why.actors` is `[null]`, so automation must match a pause by `frame.where`, not by
+  breakpoint actor. That, and the actor path above, is what `P0-T13` should reuse.
+
+**Criterion 4 regressed quietly.** Both of today's `.scaffold/logs/zotero-20260915-*.log` files
+were created but stayed at **0 bytes**: the Zotero actually running started about two minutes
+after scaffold spawned it and was not scaffold's child, so Zotero appears to relaunch itself and
+lose the pipe. The 2026-09-10 logs had full content, so the criterion was met then; it is not
+reliably re-checkable now. Worth a look before `P0-T13` depends on those logs.
+
 ---
 
 ### P0-T09 — Build the first XPI and install it on Zotero 10.0.1
