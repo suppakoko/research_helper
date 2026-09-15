@@ -2331,6 +2331,47 @@ this is not an optional extra", names D7 as the cause, and records that an earli
 agree: this is a **required** Phase 0 spike. There is no longer a corpus disagreement to flag
 here — what the spike report records is the decoded object shape and the yes/no verdict.
 
+**Findings, 2026-09-15 — the geometry question is answered; criterion 2 fails for lack of a real
+two-column PDF.** Zotero 10.0.2, dev library only. The owner delegated step 1: the coordinator
+downloaded five openly licensed PDFs to `D:\ZoteroDev\pdfs\` (never committed), and they were
+attached as stored files in collection `P0-T18 PDF corpus` (parents 5–9, attachments 11–15; IDs,
+keys and SHA-256s are in `test/fixtures/pdf/README.md`). `importFromFile` indexes on import, so
+all five were `INDEX_STATE_INDEXED` immediately.
+
+**Verdict: geometry YES, font size/weight/name NO — and something better than either.** The
+decoded structure (full contract now in `docs/06` §3.3.5) gives every block a page box and every
+text run a box with per-character widths, plus `bold`/`italic` flags; it has no font size, weight
+or name, and run height does not separate headings from body text in the Genome Biology or bioRxiv
+files. But the document worker already **classifies heading blocks** and builds a **section
+outline** — from native PDF bookmarks where present (Genome Biology and arXiv gave clean
+Abstract/Background/Results/Discussion/Methods outlines), otherwise from a bundled layout model.
+IMRaD detection is therefore **feasible**; its accuracy is not established, since mislabels
+appeared on three of four articles. R-19b's 40-PDF accuracy gate still applies and `auto` should
+stay on whole-document chunking until it passes. Under this card's rule the owner decision does
+**not** need escalating.
+
+| File | Pages | Geometry | Font data | Column order | Notes |
+|---|---|---|---|---|---|
+| PLOS ONE 2023 | 10/10 | yes | bold/italic only | not testable — single-column | outline inferred; sidebar label mis-nested |
+| Genome Biology 2025 | 16/16 | yes | same | **not testable — single-column** | clean bookmark outline |
+| arXiv 2609.11877 | 51/51 | yes | same | not testable — single-column | clean bookmark outline; title line wrongly `excluded` |
+| bioRxiv 2026.02.06 | 63/63 | yes | same | not testable — single-column | inferred outline with errors |
+| BMJ 1955 scan | 1/1 | yes | runs all `monospace` | **yes** — 0/110 right-before-left pairs | a hidden OCR text layer exists (7,659 chars, OCR errors) |
+
+**Why criterion 2 fails, and whose error it was.** The coordinator substituted the Genome Biology
+file for a Nucleic Acids Research article after Europe PMC and PMC both served bot-verification
+pages instead of the PDF (not bypassed), assuming BMC's layout is two-column. It is not — body text
+spans x 118–478 on a 595-wide page on every page. The only column-order evidence is one 1955 OCR
+page, which is not the born-digital two-column case the card asks about. **A real two-column
+publisher PDF is still needed.**
+
+Also recorded: the scanned file is not "nothing usable" as `docs/11` R-19 expected — it carries an
+OCR text layer; `Zotero.Fulltext.getPages()` returns a DB-row object that `JSON.stringify` cannot
+serialise; the document worker lives at `resource://zotero/document-worker/worker.js`; and
+`Zotero.SDT` writes a `.zotero-sdt-cache` into the attachment's storage folder while a direct
+`PDFWorker` call writes nothing. `docs/06` §4.3 should consider `catalog.outline` and heading blocks
+instead of regex over flat text — a Phase 3 design change, not made here.
+
 ---
 
 ### P0-T19 — Read Zotero's existing full-text index from a plugin
