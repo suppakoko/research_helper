@@ -1,0 +1,224 @@
+# CI for research_helper — P0-T14, following docs/13 §5.1.
+#
+# Deliberate deviations from the docs/13 §5.1 listing, each with its source:
+#
+# - `on.push` runs on every branch, not only `main`. The P0-T14 card's goal is
+#   "runs on push and PR" and its first acceptance criterion is "a push to a
+#   branch produces a green lint, unit and build run"; a `main`-only filter
+#   would produce no run at all for a `phase-N/<task-id>` branch. `branches`
+#   (rather than no filter) keeps tag pushes out, which belong to release.yml.
+# - NODE_VERSION is the range "^22.13.0", not "22": the card says Node 22 and
+#   package.json's `engines.node` says ">=22.13"; the range is exactly the
+#   intersection of the two.
+# - The contract-test step and the localization-completeness step are
+#   commented placeholders (card steps 3 and 6): their inputs do not exist in
+#   Phase 0.
+# - The `integration` job is `continue-on-error: true` (docs/13 §5.1's own
+#   instruction until V-5 is settled), provisions a pinned Zotero release and
+#   sets ZOTERO_PLUGIN_ZOTERO_BIN_PATH (card step 5, P0-T13 findings), runs on
+#   ubuntu-24.04 rather than ubuntu-latest, and carries a timeout. Reasons are
+#   next to each of those lines.
+#
+# No credential of any kind is referenced in this file, and none may be (card
+# P0-T14, "Do NOT"): CI stays credential-free in Phase 0.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Card: "Node 22". package.json: engines.node ">=22.13". Both hold for any
+  # version this range resolves to.
+  NODE_VERSION: "^22.13.0"
+
+jobs:
+  lint:
+    name: Lint and typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint and Prettier
+        run: npm run lint:check
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      # Placeholder, not yet a step (P0-T14 step 6). scripts/check-l10n.mjs
+      # does not exist, and docs/11 R-22 keeps the localization gate warn-only
+      # until Phase 7. The en-US / ko-KR Fluent bundles it compares come from
+      # P0-T24. Restore as:
+      #
+      # - name: Verify Korean localization completeness
+      #   run: node scripts/check-l10n.mjs --base en-US --target ko-KR
+
+  unit:
+    name: Unit and contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests with coverage
+        run: npx vitest run --dir test/unit --coverage
+
+      # Placeholder, not yet a step (P0-T14 step 3). test/contract/ is empty
+      # until Phase 1, and `vitest run` exits 1 on an empty directory
+      # (docs/13 §1.6). Restore when the first contract spec lands:
+      #
+      # - name: Run contract tests (replay mode, no network)
+      #   env:
+      #     FIXTURE_MODE: replay
+      #   run: npx vitest run --dir test/contract
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
+  build:
+    name: Build XPI
+    runs-on: ubuntu-latest
+    needs: [lint, unit]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Assert XPI was produced
+        run: |
+          set -euo pipefail
+          xpi="$(find .scaffold/build -name '*.xpi' -print -quit)"
+          if [ -z "$xpi" ]; then
+            echo "::error::No XPI produced by the build"
+            exit 1
+          fi
+          echo "Built: $xpi ($(du -h "$xpi" | cut -f1))"
+          # NFR-18: bundle size ceiling of 3 MB
+          size_bytes="$(stat -c%s "$xpi")"
+          if [ "$size_bytes" -gt 3145728 ]; then
+            echo "::error::XPI exceeds the 3 MB budget (NFR-18): ${size_bytes} bytes"
+            exit 1
+          fi
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-helper-xpi
+          path: .scaffold/build/*.xpi
+          retention-days: 14
+
+  integration:
+    name: In-Zotero integration tests
+    # docs/13 §2.3 and the P0-T14 card: the scaffold's headless support covers
+    # Ubuntu 22.04/24.04 only, and scaffold 0.9.2 installs Zotero's extra
+    # runtime libraries only when /etc/os-release's VERSION_ID contains "24".
+    # Pinned so that a future ubuntu-latest image cannot silently skip them.
+    runs-on: ubuntu-24.04
+    needs: [build]
+    # docs/13 §5.1: must not block PRs until V-5 is settled.
+    continue-on-error: true
+    # P0-T13 saw the scaffold miss Zotero's exit and hang for over five
+    # minutes; without a limit a hang would hold the runner for six hours.
+    timeout-minutes: 20
+    env:
+      # Pinned to the Zotero release the developer machine runs (P0-T13:
+      # 10.0.2). Left unset, scaffold 0.9.2 downloads the latest *beta* build
+      # on every run instead.
+      ZOTERO_VERSION: "10.0.2"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # P0-T13 finding: on CI the scaffold's test runner provisions Zotero
+      # itself only when ZOTERO_PLUGIN_ZOTERO_BIN_PATH is unset, and then it
+      # fetches the latest beta. Setting the variable skips only that download;
+      # the runner still apt-installs Xvfb and starts it, because
+      # ZOTERO_SETUP_COMPLETE is deliberately left unset.
+      - name: Provision Zotero ${{ env.ZOTERO_VERSION }} (Linux x86_64)
+        run: |
+          set -euo pipefail
+          url="https://download.zotero.org/client/release/${ZOTERO_VERSION}/Zotero-${ZOTERO_VERSION}_linux-x86_64.tar.xz"
+          dir="${RUNNER_TEMP}/zotero"
+          mkdir -p "$dir"
+          curl --fail --silent --show-error --location --retry 3 "$url" -o "${RUNNER_TEMP}/zotero.tar.xz"
+          tar -xJf "${RUNNER_TEMP}/zotero.tar.xz" -C "$dir"
+          bin="$(find "$dir" -maxdepth 2 -type f -name zotero -perm -u+x -print -quit)"
+          if [ -z "$bin" ]; then
+            echo "::error::No zotero executable found in the ${ZOTERO_VERSION} tarball"
+            exit 1
+          fi
+          echo "Zotero binary: $bin"
+          echo "ZOTERO_PLUGIN_ZOTERO_BIN_PATH=$bin" >> "$GITHUB_ENV"
+
+      # Needs network: the runner fetches mocha.js from cdn.jsdelivr.net and
+      # chai.js from www.chaijs.com, unpinned, at run time (P0-T13).
+      - name: Run in-Zotero tests (headless)
+        env:
+          FIXTURE_MODE: replay
+        run: npm run test:integration -- --exit-on-finish --abort-on-fail
+
+      # Kept as docs/13 §5.1 lists it. Note (P0-T13): a test run inherits
+      # server.devtools but not server.debugOutputFile, so this path may be
+      # empty and the upload then only warns.
+      - name: Upload Zotero debug logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zotero-logs
+          path: .scaffold/logs/
+          retention-days: 7
