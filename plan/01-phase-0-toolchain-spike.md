@@ -1867,6 +1867,41 @@ gh workflow run ci.yml && gh run watch
 contract-test step and `check-l10n.mjs` — because their inputs do not exist in Phase 0. Both
 are commented placeholders, not silent omissions, so `docs/13` §5.1 stays the target shape.
 
+**Findings, 2026-09-15 — criteria 1, 2 and 4 pass on GitHub Actions; criterion 3 needs a PR.**
+
+The repository was created public at `github.com/suppakoko/research_helper` by the owner (a
+pre-publish scan of the full history found no key-shaped string, no `.env`, no credential file and
+no local username), `main` pushed, and `ci.yml` pushed on branch `phase-0/P0-T14`
+(`22112a0`).
+
+- **Criterion 1 — PASS.** Run
+  [34932113883](https://github.com/suppakoko/research_helper/actions/runs/34932113883): `lint`
+  30 s, `unit` 23 s, `build` 20 s, all green, on a clean `npm ci` on `ubuntu-latest`.
+- **Criterion 2 — PASS, on CI rather than only locally.** The build uploaded
+  `research-helper-xpi` (16,919 B) and `coverage`. A temporary commit lowering the ceiling to
+  1,000 B produced run 34932456341 with `build` **failing at "Assert XPI was produced"** and the
+  dependent `integration` job skipped; the revert (`c8abc6d`, byte-identical to `22112a0`'s
+  `ci.yml`) produced run 34932735131, all green again.
+- **Criterion 4 — PASS.** The workflow references no secret; `permissions: contents: read`.
+- **Criterion 3 — pending.** Needs a pull request from `phase-0/P0-T14` so the `pull_request`
+  trigger is exercised.
+
+**`V-5` is answered, and better than expected:** the in-Zotero integration job **passed on
+GitHub Actions** — step "Run in-Zotero tests (headless)" concluded `success` in 28 s on
+`ubuntu-24.04`, twice. A step that fails reports `failure` even under job-level
+`continue-on-error`, so this is a real pass, not a masked one; the step log itself needs
+authentication to read and the spec count was not inspected. The pinned Zotero 10.0.2 tarball
+provisioned in 5 s, so scaffold did not fall back to the beta channel. `docs/13` §5.1's
+`> **Unverified:**` on Zotero acquisition in CI is answered: provision a pinned build and set
+`ZOTERO_PLUGIN_ZOTERO_BIN_PATH`. `continue-on-error: true` can come off once a few more runs stay
+green.
+
+A coordination slip, recorded because it touched the remote: the first attempt to revert the
+temporary commit ran `git revert` with an invalid `-q` flag, did nothing, and the following
+`--amend` rewrote the temporary commit's message instead. The push was **rejected as
+non-fast-forward**, so nothing reached GitHub; the local branch was reset to the remote and the
+revert redone and verified before pushing.
+
 ---
 
 ### P0-T15 — Cross-origin POST with custom headers from inside Zotero
