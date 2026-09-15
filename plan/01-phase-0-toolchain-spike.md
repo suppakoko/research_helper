@@ -1883,8 +1883,13 @@ no local username), `main` pushed, and `ci.yml` pushed on branch `phase-0/P0-T14
   dependent `integration` job skipped; the revert (`c8abc6d`, byte-identical to `22112a0`'s
   `ci.yml`) produced run 34932735131, all green again.
 - **Criterion 4 — PASS.** The workflow references no secret; `permissions: contents: read`.
-- **Criterion 3 — pending.** Needs a pull request from `phase-0/P0-T14` so the `pull_request`
-  trigger is exercised.
+- **Criterion 3 — PASS, with one qualification.** PR
+  [#1](https://github.com/suppakoko/research_helper/pull/1) triggered `pull_request` run
+  34937528845: all four jobs green, the integration job ran ("Run in-Zotero tests (headless)":
+  `success`), and the PR reports `mergeable_state: clean`. The qualification: the job *passed*, so
+  "does not block while `continue-on-error: true`" is established by the configuration, not by
+  watching a failing integration job leave the PR mergeable. No branch protection is set, so no
+  check is required for merging yet.
 
 **`V-5` is answered, and better than expected:** the in-Zotero integration job **passed on
 GitHub Actions** — step "Run in-Zotero tests (headless)" concluded `success` in 28 s on
