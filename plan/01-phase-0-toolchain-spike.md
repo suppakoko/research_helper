@@ -1792,7 +1792,7 @@ exemption plus shared typings would be cleaner. The tester's data directory is
 | Field | Value |
 |---|---|
 | **ID** | `P0-T14` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-15; CI green on GitHub Actions incl. headless Zotero, PR #1 |
 | **Depends on** | `P0-T12`, `P0-T13` |
 | **Blocks** | `P0-T27`, `P0-T28` |
 | **Retires** | part of `V-5`, part of `R-11` |
@@ -2781,7 +2781,7 @@ enhancer, and `G-26` in Phase 5 is where it is entered or the degraded path is a
 | Field | Value |
 |---|---|
 | **ID** | `P0-T23` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-15; tier-1 keystore works on Windows, no `removeLoginAsync` on 10.x |
 | **Depends on** | `P0-T08` |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-16`, part of `R-9` |
@@ -2920,7 +2920,7 @@ Still open: whether Zotero syncs plugin preferences (`docs/01` §7.2's marker st
 | Field | Value |
 |---|---|
 | **ID** | `P0-T24` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-15; ko-KR resolves, two-layer fallback measured |
 | **Depends on** | `P0-T08`, `P0-T10`, `P0-T32` |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-17`, part of `R-22` |
