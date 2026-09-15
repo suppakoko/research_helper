@@ -315,8 +315,8 @@ source — returning inline abstracts in one round trip, with cursor pagination 
 - modify `src/core/rateLimit/hostLimiter.ts`
 - modify `src/bootstrap/registerSources.ts`
 - modify `src/model/merge.ts`
-- modify `addon/locale/en-US/research-helper/searchDialog.ftl`
-- modify `addon/locale/ko-KR/research-helper/searchDialog.ftl`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl`
+- modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `test/unit/sources/europepmc.test.ts`
 - create `test/fixtures/europepmc/` (the `docs/13` §3.1 set)
 
@@ -442,8 +442,8 @@ in the polite pool, with its Boolean lossiness handled explicitly rather than si
 - modify `src/core/http/userAgent.ts`
 - modify `src/bootstrap/registerSources.ts`
 - modify `src/model/merge.ts`
-- modify `addon/locale/en-US/research-helper/searchDialog.ftl`
-- modify `addon/locale/ko-KR/research-helper/searchDialog.ftl`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl`
+- modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `test/unit/sources/crossref.test.ts`
 - create `test/fixtures/crossref/` (the `docs/13` §3.1 set)
 
@@ -581,8 +581,8 @@ are thin.
 - modify `src/bootstrap/registerSources.ts`
 - modify `src/model/merge.ts`
 - modify `src/prefs/schema.ts` (the `semanticscholar.keyPresent` row only)
-- modify `addon/locale/en-US/research-helper/searchDialog.ftl`
-- modify `addon/locale/ko-KR/research-helper/searchDialog.ftl`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl`
+- modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `test/unit/sources/semanticscholar.test.ts`
 - create `test/fixtures/semanticscholar/` (the `docs/13` §3.1 set, plus an unauthenticated-429 scenario)
 
@@ -709,8 +709,8 @@ hard one-request-per-three-seconds Terms of Use obligation.
 - modify `src/core/rateLimit/hostLimiter.ts`
 - modify `src/bootstrap/registerSources.ts`
 - modify `src/model/merge.ts`
-- modify `addon/locale/en-US/research-helper/searchDialog.ftl`
-- modify `addon/locale/ko-KR/research-helper/searchDialog.ftl`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl`
+- modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `test/unit/sources/arxiv.test.ts`
 - create `test/fixtures/arxiv/` (the `docs/13` §3.1 set, plus an arXiv error-feed scenario)
 
@@ -829,8 +829,8 @@ through Europe PMC instead.
 - modify `src/core/rateLimit/hostLimiter.ts`
 - modify `src/bootstrap/registerSources.ts`
 - modify `src/model/merge.ts`
-- modify `addon/locale/en-US/research-helper/searchDialog.ftl`
-- modify `addon/locale/ko-KR/research-helper/searchDialog.ftl`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl`
+- modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `test/unit/sources/biorxiv.test.ts`
 - create `test/fixtures/biorxiv/` and `test/fixtures/medrxiv/` (the `docs/13` §3.1 set for each)
 
@@ -1294,8 +1294,8 @@ silently merged into one record.
 - modify `src/model/merge.ts`
 - modify `src/zotero/itemMapper.ts`
 - modify `src/zotero/extraField.ts`
-- modify `addon/locale/en-US/research-helper/searchDialog.ftl`
-- modify `addon/locale/ko-KR/research-helper/searchDialog.ftl`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl`
+- modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `test/unit/sources/versionLinking.test.ts`
 
 **Do.**
@@ -1592,8 +1592,8 @@ without merging them, and reports per-source progress and failure as separate li
 - modify `addon/content/style/searchDialog.css`
 - modify `addon/content/searchDialog.js` (the in-window controller `P1-T20`/`P1-T22` created)
 - modify `src/ui/viewModels/searchImportViewModel.ts` (the view model `P1-T22` created)
-- modify `addon/locale/en-US/research-helper/searchDialog.ftl`
-- modify `addon/locale/ko-KR/research-helper/searchDialog.ftl`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl`
+- modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `test/unit/ui/searchImportViewModel.test.ts`
 
 **Do.**
@@ -1666,8 +1666,8 @@ without merging them, and reports per-source progress and failure as separate li
 **Verify with.**
 ```bash
 npm run typecheck && npm run test:unit -- searchImportViewModel && \
-diff <(grep -oE '^[a-z0-9-]+' addon/locale/en-US/research-helper/searchDialog.ftl | sort) \
-     <(grep -oE '^[a-z0-9-]+' addon/locale/ko-KR/research-helper/searchDialog.ftl | sort)
+diff <(grep -oE '^[a-z0-9-]+' addon/locale/en-US/research-helper-searchDialog.ftl | sort) \
+     <(grep -oE '^[a-z0-9-]+' addon/locale/ko-KR/research-helper-searchDialog.ftl | sort)
 ```
 
 **Notes.** The `sources` default is no longer an open question: `docs/07` §8.5 ships
@@ -1786,11 +1786,11 @@ import reports "already present: N" instead of duplicating what is already there
 - modify `src/ui/dialogs/searchDialog.ts`
 - modify `src/ui/viewModels/searchImportViewModel.ts`
 - modify `src/pipeline/searchImport/stages.ts`
-- modify `addon/locale/en-US/research-helper/mainWindow.ftl` (the menu entry's label)
-- modify `addon/locale/ko-KR/research-helper/mainWindow.ftl`
-- modify `addon/locale/en-US/research-helper/searchDialog.ftl` (the re-run banner and the
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl` (the menu entry's label)
+- modify `addon/locale/ko-KR/research-helper-mainWindow.ftl`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl` (the re-run banner and the
   "already present: N" string)
-- modify `addon/locale/ko-KR/research-helper/searchDialog.ftl`
+- modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `test/unit/core/provenanceRerun.test.ts`
 - create `test/integration/zotero/provenanceStore.spec.ts`
 
@@ -1912,8 +1912,8 @@ import reports "already present: N" instead of duplicating what is already there
 ```bash
 npm run typecheck && npm run test:unit -- provenanceRerun && \
 for f in mainWindow searchDialog; do \
-  diff <(grep -oE '^[a-z0-9-]+' addon/locale/en-US/research-helper/$f.ftl | sort) \
-       <(grep -oE '^[a-z0-9-]+' addon/locale/ko-KR/research-helper/$f.ftl | sort) || exit 1; \
+  diff <(grep -oE '^[a-z0-9-]+' addon/locale/en-US/research-helper-$f.ftl | sort) \
+       <(grep -oE '^[a-z0-9-]+' addon/locale/ko-KR/research-helper-$f.ftl | sort) || exit 1; \
 done && npm run test:integration -- --exit-on-finish --abort-on-fail
 ```
 
@@ -2007,12 +2007,12 @@ with hand-mapping as the per-record fallback — and everyone else keeps the fas
 - modify `src/pipeline/searchImport/stages.ts`
 - modify `src/prefs/schema.ts`
 - modify `addon/prefs.js`
-- create `addon/locale/en-US/research-helper/preferences.ftl` (the preference's label and its
+- create `addon/locale/en-US/research-helper-preferences.ftl` (the preference's label and its
   slower-path caveat; the file is first created here and `P3-T04`'s pane binds it)
-- create `addon/locale/ko-KR/research-helper/preferences.ftl`
-- modify `addon/locale/en-US/research-helper/searchDialog.ftl` (the per-run Strategy A/B counts
+- create `addon/locale/ko-KR/research-helper-preferences.ftl`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl` (the per-run Strategy A/B counts
   in the import summary)
-- modify `addon/locale/ko-KR/research-helper/searchDialog.ftl`
+- modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `test/unit/pipeline/importStrategy.test.ts`
 - create `test/integration/zotero/translatorImport.spec.ts`
 
@@ -2114,8 +2114,8 @@ with hand-mapping as the per-record fallback — and everyone else keeps the fas
 ```bash
 npm run typecheck && npm run test:unit -- importStrategy && \
 for f in preferences searchDialog; do \
-  diff <(grep -oE '^[a-z0-9-]+' addon/locale/en-US/research-helper/$f.ftl | sort) \
-       <(grep -oE '^[a-z0-9-]+' addon/locale/ko-KR/research-helper/$f.ftl | sort) || exit 1; \
+  diff <(grep -oE '^[a-z0-9-]+' addon/locale/en-US/research-helper-$f.ftl | sort) \
+       <(grep -oE '^[a-z0-9-]+' addon/locale/ko-KR/research-helper-$f.ftl | sort) || exit 1; \
 done && npm run test:integration -- --exit-on-finish --abort-on-fail
 ```
 

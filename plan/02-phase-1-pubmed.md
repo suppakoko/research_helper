@@ -1981,10 +1981,10 @@ rather than showing an identifier.
   `messageKey`; those keys must exist in both bundles or errors render as IDs.
 
 **Files.**
-- create `addon/locale/en-US/research-helper/mainWindow.ftl`
-- create `addon/locale/en-US/research-helper/searchDialog.ftl`
-- create `addon/locale/ko-KR/research-helper/mainWindow.ftl`
-- create `addon/locale/ko-KR/research-helper/searchDialog.ftl`
+- create `addon/locale/en-US/research-helper-mainWindow.ftl`
+- create `addon/locale/en-US/research-helper-searchDialog.ftl`
+- create `addon/locale/ko-KR/research-helper-mainWindow.ftl`
+- create `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `src/i18n/ftl.ts`
 - create `src/i18n/keys.ts`
 - create `test/integration/l10n.spec.ts`
@@ -2006,7 +2006,7 @@ rather than showing an identifier.
 
 **Do NOT.**
 - Do **not** ship an ID without the `research-helper-` prefix, and do not put a
-  file anywhere but `locale/<lang>/research-helper/`. `docs/01` §9.3: "A
+  file anywhere but flat under `locale/<lang>/`, named `research-helper-<surface>.ftl` (Zotero 10 drops subdirectories there — `docs/01` §9.1, `P0-T32`). `docs/01` §9.3: "A
   collision does not error — it silently shadows, which is far worse."
 - Do **not** omit `en-US`. `docs/08` §10.1: on the pre-Zotero-10 fallback path a
   plugin shipping only `ko-KR` shows Korean strings to *every* user.
@@ -2025,7 +2025,7 @@ rather than showing an identifier.
 - [ ] Every `data-l10n-id` used in Phase 1 markup resolves in `en-US`, asserted
       by a test that scrapes the XHTML and diffs against the FTL keys.
 - [ ] Both bundles have identical key sets, asserted.
-- [ ] With `Zotero.locale = "ko-KR"`, a known key resolves to Korean; a key
+- [ ] With `Services.locale.requestedLocales = ["ko-KR"]` (the switch `P0-T24` found actually works; restore it afterwards), a known key resolves to Korean; a key
       deliberately removed from `ko-KR` falls back to English, not to an
       identifier (integration spec; spike `V-17`).
 - [ ] `grep -c "^[a-z]" ` on each FTL shows no ID lacking the
@@ -2038,7 +2038,7 @@ npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fai
 ```
 
 **Notes.** Conflict C3 is closed on this half too: `docs/07` §2.2's tree now
-shows `addon/locale/en-US/research-helper/` and `ko-KR/research-helper/` and
+shows flat `addon/locale/en-US/` and `ko-KR/` holding `research-helper-<surface>.ftl` files (corrected 2026-09-14) and
 defers the per-surface file list to `docs/08` §10.1, which is the layout this
 card builds — one `.ftl` per surface, same names in both locales. `docs/08`
 §10.1 lists four surfaces (`mainWindow`, `searchDialog`, `reportWindow`,

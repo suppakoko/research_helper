@@ -14,7 +14,12 @@
 # one flat filename namespace across all plugins (docs/01 §9.1, P0-T32). The
 # prefixes are written here by hand; zotero-plugin.config.ts adds none.
 #
-# The ko-KR bundle with the same identifiers arrives in P0-T24.
+# locale/ko-KR/research-helper-mainWindow.ftl carries the same identifiers
+# (P0-T24), except that `research-helper-menu-spike-create-item` is missing
+# there on purpose: it is the key test/integration/l10n.spec.ts uses to prove
+# a Korean UI falls back to this file's English rather than to the identifier
+# (FR-55). This file is the fallback for every locale, so it must stay the
+# complete one.
 
 ## Tools ▸ Research Helper (P0-T10)
 

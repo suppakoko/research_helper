@@ -2950,9 +2950,9 @@ including a `ko-KR` bundle, with English fallback for a missing key?
   report, TTS) that must not be conflated.
 
 **Files.**
-- modify `addon/locale/en-US/research-helper/mainWindow.ftl` (created by `P0-T10` for the
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl` (created by `P0-T10`, moved flat by `P0-T32`, for the
   Tools-menu label)
-- create `addon/locale/ko-KR/research-helper/mainWindow.ftl`
+- create `addon/locale/ko-KR/research-helper-mainWindow.ftl`
 - create `src/i18n/ftl.ts`
 - create `test/integration/l10n.spec.ts`
 
@@ -2960,7 +2960,7 @@ including a `ko-KR` bundle, with English fallback for a missing key?
 1. Create both locale directories with a `mainWindow.ftl` containing the same two keys, one of
    which is deliberately **absent** from `ko-KR` so fallback can be observed.
 2. Prefix every identifier with `research-helper-` and keep every file under
-   `locale/<lang>/research-helper/`.
+   `locale/<lang>/` (flat, files named `research-helper-<surface>.ftl` — corrected 2026-09-15 after `P0-T32`).
 3. Bind the `P0-T10` Tools-menu label to a `data-l10n-id` (or `l10nID` in the
    `Zotero.MenuManager.registerMenu` menu descriptor) and confirm it renders.
 4. Switch the dev profile's Zotero UI locale to Korean and confirm the localized key renders in
@@ -2987,7 +2987,7 @@ including a `ko-KR` bundle, with English fallback for a missing key?
   Phase 7.
 
 **Done when.**
-- [ ] Both `en-US` and `ko-KR` bundles exist under `locale/<lang>/research-helper/` with
+- [ ] Both `en-US` and `ko-KR` bundles exist under `locale/<lang>/` (flat, files named `research-helper-<surface>.ftl` — corrected 2026-09-15 after `P0-T32`) with
       `research-helper-`-prefixed IDs.
 - [ ] The Tools-menu label renders from Fluent in `en-US`.
 - [ ] With the UI locale set to Korean, the localized key renders in Korean.
@@ -3003,6 +3003,51 @@ plus the manual locale switch in the dev profile.
 **Notes.** `docs/01` §9.2's `> **Unverified:**` marker (which `Localization` argument form, and
 whether the sync flag is safe) is closed by step 5. `docs/11` §4.3's note about Zotero 10's
 consolidated FTL registration is the reason this is a spike at all rather than assumed working.
+
+**Findings, 2026-09-15 — all five criteria pass; criterion 1's wording was corrected first.**
+
+This card still named the `locale/<lang>/research-helper/` subfolder layout that `P0-T32` had
+already measured Zotero 10 dropping, and `P0-T32`'s Findings directed this card to ship flat. The
+agent shipped flat and reported criterion 1 as failing *as written*. The card's `Files`, step 2
+and criterion 1 now say flat `locale/<lang>/research-helper-<surface>.ftl` — a wording fix driven
+by a verified finding, disclosed here rather than made silently. The same stale path was corrected
+across every TODO card in `plan/02`–`plan/04`, `docs/08` §10.1 and `docs/13` §1.2; `DONE` cards
+keep their historical text.
+
+- **Built:** `locale/en-US/research-helper-mainWindow.ftl` and
+  `locale/ko-KR/research-helper-mainWindow.ftl`, both flat, prefixed once, zero `researchHelper`,
+  byte-identical in the XPI.
+- **en-US:** Tools menu resolves `"Research Helper"` / `"Create spike item (P0-T10)"`, identically
+  through `document.l10n` and a plain `Localization`.
+- **ko-KR:** with `Services.locale.requestedLocales = ["ko-KR"]` in the runner's own profile
+  (restored afterwards; nothing written to `prefs.js`) the root resolves **`"리서치 헬퍼"`**, the
+  string from `docs/08` §10.2. No Korean string was authored beyond what `docs/08` fixes.
+- **Fallback, two layers, both measured:** Zotero chooses a *whole file* per locale and never
+  merges files — pinned to `["ko-KR"]` alone the missing key is `null`; Gecko then fills a missing
+  *message* from the next locale in the chain — pinned to `["ko-KR","en-US"]` it is
+  `"Create spike item (P0-T10)"`. The raw identifier never renders.
+- `l10n.spec.ts` adds five specs; the full integration run is **13 passed**, `lifecycle.spec.ts`
+  included after the locale switch.
+
+**Two facts that change how later cards must be written.**
+
+1. **This machine's default UI locale is Korean.** Windows is `ko-KR` and neither profile sets
+   `intl.locale.requested`, so the runner starts with app locales `["ko-KR","en-US"]` — the plugin's
+   Tools menu now reads 리서치 헬퍼 by default here, where `P0-T32` saw English. Any spec asserting
+   an English label must pin the locale.
+2. **Fallback exists only because the app chain ends in `en-US`.** A `Localization` built with an
+   explicit locale list that omits `en-US` gets no fallback at all. Code that formats in a chosen
+   language — a Korean report on an English UI, say — must append `en-US` to its list. Recorded in
+   `docs/01` §9.1.
+
+`V-17` is answered **yes** on Zotero 10.0.2, and R-22's "a missing key degrades, never breaks" holds,
+so a key-parity check belongs as a warning. Hand-offs: the `ko-KR` gap on
+`research-helper-menu-spike-create-item` is deliberate and permanent while the spike command exists,
+so `plan/03`'s blocking `diff` key-parity verify commands will fail until that key is retired or
+allowlisted; `src/i18n/ftl.ts` returns `undefined` for a missing key and throws on an unprefixed id,
+and the template's `getString` must not be copied because it re-adds the prefix and returns the raw
+identifier, which FR-55 forbids; and the `check-l10n.mjs` step in `ci.yml` stays commented until a
+card writes that script, then runs `continue-on-error: true` until Phase 7.
 
 ---
 

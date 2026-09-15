@@ -51,9 +51,9 @@ research_helper/
 │  │  ├─ preferences.xhtml
 │  │  ├─ searchDialog.xhtml     # + reportWindow.xhtml (07-… §2.2)
 │  │  └─ icons/
-│  └─ locale/                   # per-surface FTL under a plugin subfolder (01-… §9.1)
-│     ├─ en-US/research-helper/
-│     └─ ko-KR/research-helper/
+│  └─ locale/                   # per-surface FTL, flat: research-helper-<surface>.ftl (01-… §9.1)
+│     ├─ en-US/
+│     └─ ko-KR/
 ├─ src/                         # TypeScript, bundled by esbuild
 │  ├─ index.ts                  # entry; exposes the plugin object on Zotero
 │  ├─ addon.ts                  # Addon class: DI container + lifecycle state

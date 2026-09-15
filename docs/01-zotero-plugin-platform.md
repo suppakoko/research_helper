@@ -2151,6 +2151,15 @@ that element with `link.remove()` makes the window's own `document.l10n` stop re
 file's messages, measured across four hot reloads with the link count never growing. No
 `FR-56` exception is needed.
 
+**Fallback has two layers, and the second is conditional** (measured 2026-09-15, `P0-T24`). Zotero
+chooses a *whole file* per locale (exact → same language → `en-US` → first available) and never
+merges files, so a key missing from the chosen `ko-KR` file is simply absent there. Gecko's
+`Localization` then fills a missing *message* from the next locale in its chain — which rescues it
+only because the app locale chain ends in `en-US`. **A `Localization` constructed with an explicit
+locale list that omits `en-US` gets no fallback at all**, so any code formatting in a chosen
+language (a Korean report on an English UI, for instance) must append `en-US` to its list. Switching
+locale in a test means `Services.locale.requestedLocales`, not assigning `Zotero.locale`.
+
 For `research_helper` — **the *layout* below is this section's; the *file list* is `08-ui-ux-spec.md` §10.1's**, which owns the set of UI surfaces and each surface's localization home. Reproduced here only so the directory shape is concrete; if the two ever differ, §10.1 wins and this listing is the defect:
 
 ```

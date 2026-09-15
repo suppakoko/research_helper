@@ -41,7 +41,7 @@ Most API schemas below were read directly from the Zotero 10 source tree, becaus
 Plugin ID          research-helper@suppakoko.github.io
 Pref branch        extensions.zotero.research-helper.*
 Fluent prefix      research-helper-*
-Fluent files       locale/<locale>/research-helper/*.ftl
+Fluent files       locale/<locale>/research-helper-*.ftl   (flat — 01-… §9.1)
 chrome namespace   chrome://researchhelper/content/*
 DOM element IDs    rh-<surface>-<element>       e.g. rh-search-keyword
 Menu IDs           rh-menu-<target>             e.g. rh-menu-library-item
@@ -2150,7 +2150,7 @@ locale/
 
 **This section owns the surface set and its names.** `07-architecture-and-data-model.md` §2.2 owns the *tree* — where the files sit in the repository — and defers to this list for what the surfaces are called; where the two disagree, this list wins and the tree is the defect. The mapping is one-to-one except at the two ends, and both exceptions are deliberate:
 
-| Surface | XHTML in `addon/content/` | FTL in `locale/<locale>/research-helper/` |
+| Surface | XHTML in `addon/content/` | FTL in `locale/<locale>/` (flat, `research-helper-` prefixed) |
 |---|---|---|
 | Main window | **none** — it is Zotero's own window; the plugin injects menus and an item-pane section into it | `mainWindow.ftl` |
 | Search & Import | `searchDialog.xhtml` | `searchDialog.ftl` |

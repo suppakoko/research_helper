@@ -357,8 +357,8 @@ in plaintext.
 - modify `src/core/jobQueue/jobRecord.ts`
 - create `src/ui/dialogs/secretBackendDialog.ts`
 - create `test/unit/zotero/keychainLadder.spec.ts`
-- modify `addon/locale/en-US/research-helper/preferences.ftl`
-- modify `addon/locale/ko-KR/research-helper/preferences.ftl`
+- modify `addon/locale/en-US/research-helper-preferences.ftl`
+- modify `addon/locale/ko-KR/research-helper-preferences.ftl`
 
 **Do.**
 1. Implement the tier-2 backend: a module-scoped map cleared on `shutdown()`, with
@@ -464,8 +464,8 @@ tier is in effect, and read the residual-risk statement without clicking anythin
 - modify `addon/content/preferences.xhtml`
 - create `src/ui/prefs/prefsController.ts`
 - create `src/ui/prefs/keyFieldController.ts`
-- modify `addon/locale/en-US/research-helper/preferences.ftl`
-- modify `addon/locale/ko-KR/research-helper/preferences.ftl`
+- modify `addon/locale/en-US/research-helper-preferences.ftl`
+- modify `addon/locale/ko-KR/research-helper-preferences.ftl`
 - modify `addon/prefs.js`
 - modify `src/prefs/schema.ts`
 - modify `src/prefs/keys.ts`
@@ -1838,8 +1838,8 @@ cannot be turned off.
 - modify `src/prefs/schema.ts`
 - modify `src/prefs/keys.ts`
 - modify `src/zotero/db.ts`
-- modify `addon/locale/en-US/research-helper/mainWindow.ftl`
-- modify `addon/locale/ko-KR/research-helper/mainWindow.ftl`
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl`
+- modify `addon/locale/ko-KR/research-helper-mainWindow.ftl`
 - create `test/unit/pipeline/privacyPolicy.spec.ts`
 
 **Do.**
@@ -2006,8 +2006,8 @@ and two hard ceilings that stop rather than warn.
 - create `src/pipeline/shared/estimate.ts`
 - create `src/ui/dialogs/costConfirmDialog.ts`
 - create `addon/content/costConfirm.xhtml`
-- modify `addon/locale/en-US/research-helper/mainWindow.ftl`
-- modify `addon/locale/ko-KR/research-helper/mainWindow.ftl`
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl`
+- modify `addon/locale/ko-KR/research-helper-mainWindow.ftl`
 - modify `src/ui/prefs/prefsController.ts`
 - create `test/unit/pipeline/budget.spec.ts`
 - create `test/unit/pipeline/estimate.spec.ts`
@@ -3337,8 +3337,8 @@ Generate button that costs nothing until pressed.
 **Files.**
 - create `src/ui/panes/summarySection.ts`
 - modify `src/bootstrap/registerUI.ts`
-- modify `addon/locale/en-US/research-helper/mainWindow.ftl`
-- modify `addon/locale/ko-KR/research-helper/mainWindow.ftl`
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl`
+- modify `addon/locale/ko-KR/research-helper-mainWindow.ftl`
 - create `test/integration/zotero/summarySection.spec.ts`
 
 **Do.**
@@ -3439,8 +3439,8 @@ cancellation and resume — and everything it writes is labelled and removable i
 - create `src/ui/dialogs/summarizeDialog.ts`
 - modify `src/bootstrap/registerPipelines.ts`
 - modify `src/bootstrap/registerUI.ts`
-- modify `addon/locale/en-US/research-helper/mainWindow.ftl`
-- modify `addon/locale/ko-KR/research-helper/mainWindow.ftl`
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl`
+- modify `addon/locale/ko-KR/research-helper-mainWindow.ftl`
 - create `test/unit/pipeline/summarizePipeline.spec.ts`
 - create `test/integration/zotero/removeGeneratedNotes.spec.ts`
 
