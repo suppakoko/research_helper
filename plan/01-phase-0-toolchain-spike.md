@@ -1365,7 +1365,7 @@ import from `src/ui/` and `src/zotero/` at once.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T11` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-15; Goal passed on the `P0-T33` re-run, `V-4` verified |
 | **Depends on** | `P0-T10`, `P0-T32`, `P0-T33` |
 | **Blocks** | `P0-T13` |
 | **Retires** | `V-4`, `R-12` |
@@ -2497,6 +2497,13 @@ because `tsx@4.23.13` happened to be sitting in this machine's npx cache; `tsx` 
 `package.json`'s `fixtures:record` and by `docs/13` §5's CI workflow but was declared nowhere.
 Added to `devDependencies`, and this card's `Verify with` now names the script directly.
 
+**Update, 2026-09-15 — the submission half is done.** The owner reported that the Semantic
+Scholar API key application has been submitted and is awaiting a reply (exact day not given;
+recorded as on or before 2026-09-15). Gate `G-03` carries the dated status. All four boxes are
+now satisfied: box 1 by that report, box 4 by `G-03`'s entry, boxes 2 and 3 by the 2026-09-10
+measurement above. The key's arrival is not part of this card — `docs/11` R-3 treats it as an
+enhancer, and `G-26` in Phase 5 is where it is entered or the degraded path is accepted.
+
 ---
 
 ### P0-T23 — OS keystore and preference round-trip
@@ -3537,7 +3544,7 @@ subfolder placeholders are removed; `P0-T24` ships `ko-KR/research-helper-mainWi
 | Field | Value |
 |---|---|
 | **ID** | `P0-T33` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-15; bundle 130 KB to 15 KB, no residue across five cycles |
 | **Depends on** | `P0-T32` |
 | **Blocks** | `P0-T11` |
 | **Retires** | none |

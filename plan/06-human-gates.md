@@ -175,6 +175,12 @@ R-3 designs as a fallback is in fact the **default** path for every keyless user
 built and tested as such. Record the submission date here when the owner submits; the entry
 below is what `P0-T28`'s spike report cites.
 
+**Status, 2026-09-15.** **Submitted.** The owner reported on 2026-09-15 that the application has
+been submitted and is awaiting a reply; the exact submission day was not given, so it is recorded
+as *on or before 2026-09-15*. The multi-week approval clock is running. When the key arrives it
+goes to `SecretId` `source.semanticscholar` in the OS keystore (D5), never to a preference, and
+this gate closes by recording the arrival date here.
+
 **What changed on 2026-09-09, and what did not.** `docs/11` §1's re-estimate
 *cut* R-3's exposure: R-3 now records that on the corrected figures Phase 5
 cannot start before ≈ 58.5–82 developer-days in — Phase 0 plus Phase 1 plus the
