@@ -1648,7 +1648,7 @@ form instead.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T13` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-15; three in-Zotero specs green on 10.0.2, regression proven to fail |
 | **Depends on** | `P0-T08`, `P0-T11` |
 | **Blocks** | `P0-T14` |
 | **Retires** | `V-5` |
