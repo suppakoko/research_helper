@@ -108,7 +108,7 @@ var loginInfo = new nsLoginInfo(
 await Services.logins.addLoginAsync(loginInfo);
 ```
 
-with `Services.logins.removeLoginAsync(...)` used to clear.
+with `Services.logins.removeLoginAsync(...)` used to clear — **on Zotero's `main` branch only; see the correction below.**
 
 Three conclusions follow:
 
@@ -137,6 +137,19 @@ Three conclusions follow:
    > call in this plugin is `await`ed and uses the `Async` name.** Note the corollary for
    > `uninstall()` (§2.5) — clearing secrets is asynchronous, so it must not be written as
    > a fire-and-forget synchronous loop.
+
+   > **Correction, measured 2026-09-15 (`P0-T23`): the quote above describes Zotero's `main`
+   > branch, not the shipping release.** `main` is already Zotero 11 on Firefox 153 ESR
+   > (`docs/01` §12 gotcha 32). On **Zotero 10.0.2 / Gecko 140.15.0**, read at runtime from the
+   > plugin sandbox: `removeLoginAsync` and `modifyLoginAsync` are **`undefined`**; the only
+   > `…Async` members are `addLoginAsync` and `searchLoginsAsync`; and the synchronous
+   > `removeLogin`, `modifyLogin`, `findLogins` (working, not a throwing stub), `countLogins`,
+   > `searchLogins` and `addLogin` all still exist. The shipped `omni.ja`'s own `syncLocal.js`
+   > calls `findLogins` / `removeLogin` / `modifyLogin` / `removeAllLogins`. **As written,
+   > `setTier1` would throw a `TypeError` on 10.x the second time a key is saved for the same
+   > id.** The rule is therefore not "use the `Async` name" but **feature-detect**: prefer the
+   > `…Async` member when it exists (Gecko 153+) and fall back to the synchronous one, awaiting
+   > either. `src/zotero/keychain.ts` does exactly that and reports which it chose.
 
 2. **It is reachable from plugin code**, which runs in the same privileged context as the Run JavaScript console.
 
@@ -256,7 +269,14 @@ async function setTier1(id: SecretId, value: string): Promise<void> {
     origin: LOGIN_ORIGIN, httpRealm: LOGIN_REALM,
   });
   for (const login of existing) {
-    if (login.username === id) await Services.logins.removeLoginAsync(login);
+    // removeLoginAsync exists only on Gecko 153+; Zotero 10.x (Gecko 140) has only the
+    // synchronous removeLogin (measured, P0-T23). Feature-detect, await either.
+    if (login.username !== id) continue;
+    if (typeof Services.logins.removeLoginAsync === "function") {
+      await Services.logins.removeLoginAsync(login);
+    } else {
+      Services.logins.removeLogin(login);
+    }
   }
   await Services.logins.addLoginAsync(
     new nsLoginInfo(LOGIN_ORIGIN, null, LOGIN_REALM, id, encrypted, "", ""));

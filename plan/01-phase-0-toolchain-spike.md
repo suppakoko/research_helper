@@ -2872,6 +2872,47 @@ here; if not, leave it marked.
 This card carries no gate: the keystore round-trip uses a synthetic API-key-shaped string,
 never a real key.
 
+**Findings, 2026-09-15 — all five criteria pass on Zotero 10.0.2 / Gecko 140.15.0; `V-16` tier 1
+works on Windows.** Verified twice through the integration runner (8 specs green) and once from
+the **plugin sandbox** itself (a reverted `onStartup` probe, confirmed sandboxed by
+`typeof console === "undefined"`), with only fake values.
+
+- **Round trip:** a 64-character key-shaped value encrypted to a 130-character `oskv1:` string,
+  stored under origin `chrome://research-helper`, found by `searchLoginsAsync`, decrypted equal.
+  First save 360–460 ms (login-store initialisation), later reads 2–3 ms.
+- **`has()` without decrypting:** `true` with **0** `OSKeyStore.decrypt()` calls, counted by a
+  wrapper.
+- **Startup probe:** a real encrypt/decrypt round trip returning `{"backend":"os-keychain"}` in
+  13–24 ms. An unavailable keystore could not be produced on this machine; only a simulated
+  throwing `encrypt()` was exercised, so the Linux-without-libsecret branch stays unmeasured.
+- **Preferences:** a non-secret pref and a `*.keyPresent` boolean round-trip; a read costs about
+  **0.5 µs**, so hot-loop reads are not a concern. Restored afterwards.
+- **No secret in any pref or log (rule 5, D5):** while stored, 0 of 5,548 prefs and not
+  `prefs.js` held the value or its ciphertext; `logins.json` held no plaintext. With
+  `signon.debug` and `toolkit.osKeyStore.loglevel=All` at maximum, the value appeared in neither
+  Debug Output nor the console services. Every test login was removed and shown gone.
+
+**Hole (c) settled, and it breaks `docs/09`'s tier-1 code.** On 10.0.2 `removeLoginAsync` and
+`modifyLoginAsync` are `undefined`; only `addLoginAsync` and `searchLoginsAsync` are async, and
+the synchronous `removeLogin`, `modifyLogin`, working `findLogins` and a sync `addLogin` all exist.
+`docs/09` §1.2 had described Zotero's `main` branch (already Zotero 11 on Firefox 153 ESR) as if it
+were the release, and its `setTier1` would have thrown a `TypeError` the second time a key was
+saved. Corrected in `docs/09` §1.2 and §1.7 to **feature-detect**; `src/zotero/keychain.ts` does,
+and `typings/zotero-augment.d.ts` note (c) now records the answer instead of declaring anything.
+
+**`OSKeyStore` facts:** no prompt appeared on Windows; `available` is `true` but only means
+Mozilla's module imported, which is why the probe does a real round trip; and `decrypt()` returns
+an unprefixed value unchanged (legacy plaintext support), so `getSecret()` refuses any stored value
+without the `oskv1:` prefix.
+
+**One persistent side effect, left in place deliberately.** The first run created the Windows
+credential **"Zotero Encrypted Storage"** — Mozilla's OSKeyStore keeps one key per Windows user,
+shared by Zotero itself for sync and WebDAV credentials. It protects nothing today (every test
+login is gone), would be recreated by any later spec run or by Zotero, and deleting it is
+irreversible, so it was not removed.
+
+Still open: whether Zotero syncs plugin preferences (`docs/01` §7.2's marker stays).
+
 ---
 
 ### P0-T24 — Fluent localization with an `en-US` and `ko-KR` bundle

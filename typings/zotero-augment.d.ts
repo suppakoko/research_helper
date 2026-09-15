@@ -298,13 +298,13 @@ declare namespace _ZoteroTypes {
 //     kept here so nobody re-derives the wrong conclusion from
 //     `DataObject`'s declaration alone.
 //
-// (c) `Services.logins.removeLoginAsync()` — docs/09 §1.7's tier-1 code path
-//     awaits it, but `nsILoginManager` in zotero-types' generated Gecko
-//     bindings declares only the synchronous `removeLogin()`. Whether the
-//     async form exists on Firefox 140 ESR could not be determined from the
-//     corpus or from the installed `.d.ts`, so nothing is declared. `P0-T23`
-//     ("OS keystore and preference round-trip") is where this gets settled at
-//     runtime.
+// (c) SETTLED 2026-09-15 (`P0-T23`): `Services.logins.removeLoginAsync()` does
+//     NOT exist on Zotero 10.0.2 / Gecko 140.15.0 — `typeof` is `undefined` in
+//     the plugin sandbox, as is `modifyLoginAsync`. zotero-types' generated
+//     binding, which declares only the synchronous `removeLogin()`, is
+//     therefore correct for 140 and nothing is added here. The async form is
+//     expected on Gecko 153+ (Zotero 11); `src/zotero/keychain.ts`
+//     feature-detects it at runtime rather than relying on a declaration.
 //
 // (d) `Zotero.Search.addCondition()` is still modelled with the pre-10
 //     `required` fourth parameter, which docs/01 §3.4(b) says **throws** on
