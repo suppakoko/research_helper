@@ -911,7 +911,7 @@ to widen `ctx` in `bootstrap.js` — **not** to reintroduce `BasicTool`.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T08` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-15; breakpoint verified over RDP, log capture since regressed (see Findings) |
 | **Depends on** | `P0-T07` |
 | **Blocks** | `P0-T10`, `P0-T13`, `P0-T15`, `P0-T18`, `P0-T21`, `P0-T23`, `P0-T24` |
 | **Retires** | `V-2`, `V-3`, part of `R-11` |
@@ -2424,7 +2424,7 @@ small query (Semantic Scholar's throttling is `P0-T22`'s subject).
 | Field | Value |
 |---|---|
 | **ID** | `P0-T22` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-15; key application submitted, approval pending under gate `G-03` |
 | **Depends on** | none |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-14`, starts the clock on `R-3` |
