@@ -730,6 +730,8 @@ https://www.ebi.ac.uk/europepmc/webservices/rest/search
   &pageSize=1
 ```
 
+> **Measured 2026-09-15 (`P0-T21`), query `CRISPR base editing`, top 100:** 93 % carried `abstractText` — MED 86/89, PPR 7/7, but **PMC 0/4** despite `resultType=core`. **33 of 93 abstracts contained inline HTML** (`<i>Wx</i>`), so Europe PMC abstracts need tag stripping too, not only Crossref's JATS. One HTTP **504** on a 25-DOI OR query was seen (not reproduced); §4.9 documents errors only as `errCode` inside HTTP 200, so the adapter must also handle a gateway 5xx and split failing DOI batches.
+
 **`resultType` matters enormously:**
 
 | Value | Contains |
@@ -1074,6 +1076,8 @@ Note `title` and `container-title` are **arrays**, and `issued.date-parts` is an
 Crossref exposes abstracts in an `abstract` field as **raw JATS XML**, not plain text, and **only
 when the publisher deposited one**.
 
+> **Measured 2026-09-15 (`P0-T21`):** the 51 % whole-set figure reproduces as 22,004 / 44,152 = **49.8 %**, but the **top 100** for `CRISPR base editing` carried only **41 %**. All 41 were JATS; 3 still contained `&amp;` after JSON decoding, and abstracts can open with `<jats:title>ABSTRACT</jats:title>` — a real XML parse is required, not regex stripping.
+
 Real response with `filter=has-abstract:true`:
 
 ```json
@@ -1404,6 +1408,8 @@ https://export.arxiv.org/api/query
 | Response format | Atom 1.0 XML only (no JSON) |
 | CORS | **No `Access-Control-Allow-Origin` header** (verified) |
 
+> **Measured 2026-09-15 (`P0-T21`): arXiv can answer HTTP 429, which this section did not document.** Every one of 7 requests over ~14 minutes, spaced at least 30 s apart and the first of the session, returned `HTTP/1.1 429 Unknown Error` from `server: Google Frontend` with `content-type: text/html`, a 14-byte body `Rate exceeded.`, and **no `Retry-After`**; some took up to 46 s to fail. The 3-second rule was obeyed. Whether the limit keyed on this network's shared address or is global could not be determined. The adapter needs a path for an HTML 429 with no `Retry-After` — distinct from the HTTP-200 error feeds described below — and the measurement should be repeated from another network before Phase 2 depends on arXiv volume.
+
 The Terms of Use are explicit: make "no more than one request every three seconds, and limit
 requests to a single connection at a time," and this applies to "all of the machines under your
 control as a whole." ([arXiv API ToU](https://info.arxiv.org/help/api/tou.html))
@@ -1651,6 +1657,8 @@ Per-record `license` (`cc_by`, `cc_by_nc_nd`, `cc0`, `cc_by_nd`, or absent) shou
 the Zotero `rights` field. There is no published API ToU; bioRxiv/medRxiv content is generally
 available for text mining. **Unverified:** whether any rate limit is enforced — none was observed
 during testing, but absence of enforcement is not permission.
+
+> **Measured 2026-09-15 (`P0-T21`): a third error shape, and `/details` broken.** Every `/details` request — including §8.3's own documented URL `…/details/biorxiv/2026-08-01/2026-08-02/0/json` and a DOI lookup `…/details/biorxiv/10.64898/2026.07.31.741992/na/json` — returned **HTTP 200 with an empty body** (`content-length: 0`), while `/pubs/` worked with the same `User-Agent`. An adapter must treat an empty 200 body as a failure, not as "no results". `/pubs/`'s not-found message is free text (`"no articles found for published version of "`, with the DOI missing), not `status: "error"`. §8.2's `/pubs/{server}/{interval}/{cursor}` template omits the `/{format}` segment that §8.3's working example carries. Abstract text from `/pubs/` contains flattening tokens (`O_SCPCAP…C_SCPCAP`, `C_LIO_LI`, sometimes glued to a letter as in `AO_SCPCAPBSTRACT`) and section headings run into the prose ("BackgroundAs…"); the normalizer must strip both. Re-probe `/details` on another day before the v1 ID-lookup role relies on it.
 
 ---
 
@@ -2150,6 +2158,8 @@ constant in `src/model/merge.ts` (doc 07 §5.1) so it is tunable and unit-testab
 **OpenAlex appears in four of the orderings below and is inert in v1** — no adapter ships (§9.3), so
 no record ever carries that source and the remaining sources keep their relative order; the entries
 are left in place because they are the ordering a v1.1 adoption would need.
+
+> **Measured 2026-09-15 (`P0-T21`) — incidental overlap is near zero; backfill must be targeted.** Of 287 DOIs across the PubMed, Europe PMC and Crossref top-100 lists for one query, only **9** appeared in two sources, so merging overlapping results recovers almost nothing. A targeted Europe PMC DOI lookup (step 1 below) lifted Crossref-sourced records from **41 % to 62 %**; PubMed and Europe PMC could not backfill each other at all (0 in both directions — they share MEDLINE). Step 2 (Semantic Scholar) was unmeasurable without a key, so **~62 % is the realistic keyless ceiling** for Crossref-sourced abstracts on that query.
 
 When the same work is seen by several sources (§11), build the canonical record field-by-field with
 explicit precedence rather than "first source wins":

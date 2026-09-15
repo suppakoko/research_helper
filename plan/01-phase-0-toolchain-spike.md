@@ -2470,6 +2470,40 @@ can act on.
 This card carries no gate: all seven sources in scope here are free and keyless for a single
 small query (Semantic Scholar's throttling is `P0-T22`'s subject).
 
+**Findings, 2026-09-15 — three of seven sources measured; criterion 1 is only partly met.**
+Query `CRISPR base editing`, window 2024-01-01 … 2026-12-31, rendered per source per `docs/02`
+§12.2; 29 requests, all passing the D10 identification audit (Crossref confirmed the polite pool
+with `x-api-pool=polite-array`).
+
+| Source | Hits | Fetched | With abstract | Shape |
+|---|---|---|---|---|
+| PubMed | 8,125 | 100 | **92 %** (96 / 94 / 92 over three runs — treat ±4 as noise) | XML `AbstractText`, some structured with `Label=` |
+| Europe PMC | 22,354 | 100 | **93 %** | JSON string; **33 of 93 contain inline HTML** |
+| Crossref | 44,152 | 100 | **41 %** (49.8 % over the whole set) | JATS, a real XML parse needed |
+| Semantic Scholar | — | 0 | **unmeasurable** — HTTP 429 on all attempts, now off-peak too | — |
+| arXiv | — | 0 | **unmeasurable** — HTTP 429 `Rate exceeded.` on all 7 requests over 14 min | — |
+| bioRxiv / medRxiv | — | — | **not applicable** — no keyword search (`docs/02` §8.4); `/pubs/` window samples were 100 % but are not the query | plain text with `O_SCPCAP`/`C_LIO_LI` tokens |
+
+**Backfill (criterion 3) is quantified, and it reframes `docs/11` R-17.** Of 287 DOIs across the
+three measured top-100 lists, only **9** appeared in two sources — incidental overlap recovers
+almost nothing, so backfill has to be a targeted DOI lookup. A targeted Europe PMC lookup lifted
+Crossref-sourced records from **41 % to 62 %**; PubMed and Europe PMC backfilled each other by
+exactly 0. With the Semantic Scholar step unavailable, **~62 % is the keyless ceiling** for
+Crossref-sourced abstracts on this query. R-17's High likelihood is confirmed for Crossref.
+
+`docs/02` contradicted and corrected on the same day, each as a dated measurement note: arXiv's
+HTML 429 with no `Retry-After` (§7.1); bioRxiv `/details` returning **HTTP 200 with an empty body**
+on every request including §8.3's own documented URL, `/pubs/`'s free-text not-found message, and
+the `/{format}` segment missing from §8.2's template (§8.5); Europe PMC's `PMC` records carrying no
+abstract despite `resultType=core`, inline HTML in a third of abstracts, and a gateway 504 that
+§4.9 does not describe (§4.4); Crossref's top-100 rate and its escaped entities (§5.4); and the
+near-zero overlap (§10.4).
+
+**Why the card stays open.** Four of seven sources yielded no query-derived records, for three
+different reasons, only one of which is by design. Re-run when the Semantic Scholar key arrives
+(`G-03`), and re-probe arXiv and bioRxiv `/details` from another day or network before Phase 2
+depends on either. The script is `scripts/spike-abstract-coverage.ts`; re-running it is safe.
+
 ---
 
 ### P0-T22 — Measure S2 throttling and submit the key application
