@@ -2019,6 +2019,30 @@ Four things the implementation contradicts or adds:
 "disk-") and always reports a leak. A pattern anchored on real key prefixes
 (`sk-or-v1-[0-9a-f]{20,}` and the like) finds nothing in the repository.
 
+**Owner run, 2026-09-15 04:59 UTC, Zotero 10.0.2, normal profile — OpenRouter PASS, PubMed PASS.**
+
+- **OpenRouter** `POST /api/v1/chat/completions`, model `anthropic/claude-haiku-4.5` (served
+  upstream by Azure): HTTP 200 in 1,850 ms, `finish_reason: stop`, content `"pong"`, 15 prompt
+  and 5 completion tokens, **OpenRouter-reported cost $0.00004**. The key was entered in the
+  password dialog (73 characters, never displayed). Read back from Gecko's channel, the request
+  carried the D10 `User-Agent`, `HTTP-Referer`, `X-Title`, `X-OpenRouter-Title`,
+  `X-OpenRouter-Metadata` and `Authorization`, and **no `Cookie`** — so `anon: true` holds and
+  Zotero's `HTTP.request` does not override a custom `User-Agent`. **Custom headers demonstrably
+  reach the provider:** `openrouter_metadata` came back in the response only because
+  `X-OpenRouter-Metadata: enabled` arrived. The body carried `provider.data_collection: "deny"`
+  (D6). Whether `HTTP-Referer`/`X-Title` register as the app name on openrouter.ai/activity was
+  not checked.
+- The live catalogue (445 models) showed two of `docs/03`'s cheap candidates,
+  `google/gemini-3.5-flash-lite` and `google/gemini-3.8-flash`, with **mandatory reasoning** —
+  unusable under a small `max_tokens` because reasoning tokens consume it. `docs/03`'s model
+  guidance should say which defaults reason by default.
+- **PubMed** `esearch` (keyless, `tool`/`email` per `docs/02` §3): HTTP 200 in 507 ms, count 8,857,
+  `X-RateLimit-Limit: 3`, no `Cookie` sent.
+
+Remaining for this card: OpenAI, Gemini and Anthropic direct (deferred by the owner), and the
+spike-report entry. Of `docs/11` §4's stop-and-re-plan condition, the OpenRouter path — the D6
+default provider — is now cleared.
+
 ---
 
 ### P0-T16 — Streaming (SSE) consumption from inside Zotero
