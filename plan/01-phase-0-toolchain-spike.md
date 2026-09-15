@@ -2447,6 +2447,54 @@ npm run test:integration -- --exit-on-finish --abort-on-fail
 `Zotero.DB.executeTransaction` and `Zotero.Item` construction shapes — reconcile the Vitest
 fake against what is observed here, because "a fake that lies is worse than no fake".
 
+**Findings, 2026-09-15 — all criteria pass; chunking was not needed.**
+
+One `Zotero.DB.executeTransaction` around 100 `save()` calls, measured nine times (three writes per
+runner run, three runs): **293–425 ms total, median 324 ms, 2.9–4.3 ms per item** — about 25×
+under NFR-1's 10 s ceiling and 14× under its 6 s target. A `Zotero.DB` begin callback counted
+**exactly one transaction** per write, and every item was read back with its type, title, DOI,
+abstract, creator and tag. `batchImport.spec.ts` passes under the runner (4 specs green, exit 0).
+
+**Main-thread stalls (NFR-3), measured without a human:** a 10 ms `setInterval` ran in the main
+window through each write and for 1 s after, recording every gap between ticks. **Longest stall
+77 ms** (a cold first write); warm writes 34–62 ms; **no gap over 100 ms in any of the nine.** The
+transaction yields between saves rather than blocking for its whole duration.
+
+| | Total ms | Longest stall ms |
+|---|---|---|
+| Cold first write (3 runs) | 425, 342, 345 | 77, 44, 75 |
+| Warm writes (6) | 293–372 | 34–62 |
+
+Machine context, needed to read those numbers: Zotero 10.0.2, Windows 11, i7-14700K, 32 GB, the
+test data directory on a **spinning hard disk**, the Browser Toolbox attached on every run, and a
+near-empty library (0 → 200 items). The CPU is far faster than `docs/10`'s 2023 mid-range laptop
+baseline while the disk and the Toolbox cut the other way — encouraging, not a baseline result.
+
+What this means for Phase 1 and `docs/11` R-16:
+
+- **No alternative write strategy is needed.** Chunks of 25 are not required for throughput; keep
+  them only if Phase 1 wants a progress indicator.
+- **Collection-tree updates are already deferred for free.** Zotero queues change notifications
+  for the whole transaction and delivers them once after commit — the collection's child list goes
+  0 → 100 in one step — which is R-16's "defer collection-tree updates". Delivering them costs
+  60–100 ms after the commit, inside NFR-1's timing.
+- **NFR-3 is the thin margin**, about 23 ms on a cold write, and Windows' ~16 ms timer resolution
+  both hides shorter blocks and slightly overstates each gap. The post-commit UI refresh is the part
+  most likely to grow with library size, so Phase 1 must re-measure stalls against a ~10,000-item
+  library. Building the 100 records is a single 14–21 ms block here and grows linearly, so Phase 1's
+  mapper must yield.
+
+The spec asserts the plain 10 s ceiling locally and **3× (30 s) when `CI` is set**; `docs/13` §2.3
+says "a generous multiplier in CI" without a number, so 3 is this card's choice and is recorded for
+confirmation. `collectionOps.ts` gains `saveNewItemsToCollection()`, which refuses already-saved
+items (those belong to `collection.addItems()`, per `P0-T10`).
+
+Two observations for other owners: `docs/13` §2.1's Vitest `Zotero` fake diverges from real
+behaviour — a real `new Zotero.Item()` has `id === null` until `save()`, is built with no type
+argument plus `fromJSON`, and `executeTransaction` runs begin/commit callbacks and queues behind
+other transactions, none of which the fake models; and scaffold's test bundler does not define
+`__env__`, so specs exercising `itemMapper` must set it themselves.
+
 ---
 
 ### P0-T21 — Measure abstract availability across the seven sources

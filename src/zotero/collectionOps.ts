@@ -47,6 +47,9 @@
  * single `save()` is one write instead of two, and is what `docs/01` §5.2
  * recommends "at creation time". `addItems()` is the right call when adding
  * *existing* items to a collection, which is Phase 1's import path.
+ *
+ * `P0-T20` adds the second operation, {@link saveNewItemsToCollection}: the
+ * batch write `V-12` times against `NFR-1`.
  */
 
 /** A collection, and whether this call is what created it. */
@@ -99,4 +102,80 @@ export async function findOrCreateCollection(
   // save(), not saveTx(): the caller's transaction is already open.
   await collection.save();
   return { collection, created: true };
+}
+
+/** What {@link saveNewItemsToCollection} wrote. */
+export interface BatchSaveResult {
+  readonly collection: Zotero.Collection;
+  /** False when an existing same-named collection was reused. */
+  readonly collectionCreated: boolean;
+  /** The saved items' IDs, in input order. */
+  readonly itemIDs: readonly number[];
+}
+
+/**
+ * Save a batch of **new, unsaved** items into the named collection, in one
+ * `Zotero.DB.executeTransaction` (`docs/01` §5.8, `P0-T20`).
+ *
+ * The shape `P0-T10` established for one item, applied to many: the
+ * collection is found or created *inside* the transaction, so a failure on
+ * item 57 rolls back the collection and items 1–56 with it instead of leaving
+ * a half-filled collection behind; each item gets
+ * `setCollections([collection.id])` before its single `save()`; `saveTx()` is
+ * never called (`docs/01` §12 gotcha 12). `docs/01` §5.8: "one
+ * `executeTransaction` around 50 `save()` calls is one" transaction, not 50.
+ *
+ * **The caller must have finished every network fetch first.** Nothing here
+ * awaits anything but the DB, and nothing may: holding Zotero's single-writer
+ * transaction across an HTTP round-trip stalls the whole application
+ * (`docs/01` §12 gotcha 13).
+ *
+ * **No per-item UI refresh.** Zotero queues each save's notifier events and
+ * delivers them once, after the commit, which is the "defer collection-tree
+ * updates until the batch completes" `docs/11` R-16 asks for. The collection's
+ * in-memory child list is likewise updated only on commit, so it goes from 0
+ * to all-of-them in one step.
+ *
+ * **Only for new items.** `setCollections()` *replaces* an item's membership
+ * (`docs/01` §5.2), so calling this with an already-saved item would silently
+ * pull it out of every other collection. That is refused up front, before the
+ * transaction opens. Existing items take `collection.addItems()` instead (see
+ * the file header).
+ *
+ * @param items - unsaved items, e.g. from `buildJournalArticle()`
+ * @param collectionName - matched exactly among top-level collections
+ * @param libraryID - the library both the collection and the items live in
+ */
+export async function saveNewItemsToCollection(
+  items: readonly Zotero.Item[],
+  collectionName: string,
+  libraryID: number,
+): Promise<BatchSaveResult> {
+  const saved = items.findIndex((item) => Boolean(item.id));
+  if (saved !== -1) {
+    throw new Error(
+      `saveNewItemsToCollection: item at index ${saved} is already saved ` +
+        `(id ${String(items[saved]?.id)}); setCollections() would replace ` +
+        `its existing collection membership`,
+    );
+  }
+
+  return Zotero.DB.executeTransaction(async (): Promise<BatchSaveResult> => {
+    const { collection, created } = await findOrCreateCollection(
+      collectionName,
+      libraryID,
+    );
+
+    const itemIDs: number[] = [];
+    for (const item of items) {
+      item.setCollections([collection.id]);
+      // save(), not saveTx(): docs/01 §5.8 / §12 gotcha 12. Sequential on
+      // purpose — the DB is single-writer, so Promise.all would buy nothing
+      // but interleaved statements.
+      await item.save();
+      itemIDs.push(item.id);
+    }
+
+    return { collection, collectionCreated: created, itemIDs };
+  });
 }
