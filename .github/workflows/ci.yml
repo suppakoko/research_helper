@@ -141,7 +141,7 @@ jobs:
           echo "Built: $xpi ($(du -h "$xpi" | cut -f1))"
           # NFR-18: bundle size ceiling of 3 MB
           size_bytes="$(stat -c%s "$xpi")"
-          if [ "$size_bytes" -gt 1000 ]; then
+          if [ "$size_bytes" -gt 3145728 ]; then
             echo "::error::XPI exceeds the 3 MB budget (NFR-18): ${size_bytes} bytes"
             exit 1
           fi
