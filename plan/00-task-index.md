@@ -2,19 +2,19 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-09-15 · **105 tasks: 23 `DONE`, 82 `TODO`.**
+> **Last updated:** 2026-09-15 · **105 tasks: 24 `DONE`, 81 `TODO`.**
 
 ---
 
 ## 1. Status
 
-Implementation has started. Twenty-three tasks are `DONE` as of 2026-09-15 — `P0-T01`,
+Implementation has started. Twenty-four tasks are `DONE` as of 2026-09-16 — `P0-T01`,
 `P0-T29`, `P0-T02`, `P0-T03`, `P0-T04`, `P0-T05`, `P0-T06`, `P0-T07` and
 `P0-T30` (commits `df15816`, `010ede3`, `437b366`, `500cf7b`, `82926d3`,
 `0675412`, `73a71d6`), plus `P0-T12` and `P0-T31`, and on 2026-09-14 `P0-T09`, `P0-T10` and
 `P0-T32` (`f2cad58`, `3a664f1`, `694e977`), and on 2026-09-15 `P0-T11`, `P0-T33`, `P0-T08` and
 `P0-T22` (`a50930a`, `5132b33`, `c286ae9`), then `P0-T13` (`8ddaa5d`) and `P0-T20` (`99e41e2`), and `P0-T14`, `P0-T23`, `P0-T24`
-(`6a3a17f`, `1cbec7e`, `88cdfe1`); every other task is `TODO`. Only a human sets a task to `DONE`
+(`6a3a17f`, `1cbec7e`, `88cdfe1`), and `P0-T18` on 2026-09-16 (`c7b49d8`, `bf2a225`); every other task is `TODO`. Only a human sets a task to `DONE`
 (`README.md` §4), so this file will not drift on its own.
 
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
@@ -122,7 +122,7 @@ column means the card cannot complete without a human — read
 | `P0-T15` | Cross-origin POST with custom headers from inside Zotero | `P0-T08` | 1.0 d | 🔒 |
 | `P0-T16` | Streaming (SSE) consumption from inside Zotero | `P0-T15` | 0.5 d |  |
 | `P0-T17` | Request abortion | `P0-T15` | 0.25 d |  |
-| `P0-T18` | `getStructuredDocumentText` and IMRaD feasibility | `P0-T08` | 0.5 d | 🔒 |
+| ✅ `P0-T18` | `getStructuredDocumentText` and IMRaD feasibility | `P0-T08` | 0.5 d | 🔒 |
 | `P0-T19` | Read Zotero's existing full-text index from a plugin | `P0-T18` | 0.75 d |  |
 | ✅ `P0-T20` | Create 100 Zotero items in one transaction within NFR-1 | `P0-T10` | 0.5 d |  |
 | `P0-T21` | Measure abstract availability across the seven sources | `P0-T08` | 0.5 d |  |

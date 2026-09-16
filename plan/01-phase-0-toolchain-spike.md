@@ -2239,7 +2239,7 @@ than builds".
 | Field | Value |
 |---|---|
 | **ID** | `P0-T18` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-16; geometry yes, font size no, two-column reading order recoverable |
 | **Depends on** | `P0-T08` |
 | **Blocks** | `P0-T19`, `P0-T28` |
 | **Retires** | `V-8b`, `R-19b` (feasibility half) |
