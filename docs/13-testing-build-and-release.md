@@ -1154,7 +1154,7 @@ Field notes:
 - `addons` is keyed by the **exact** `applications.zotero.id` from `manifest.json`. A mismatch silently disables updates.
 - Each entry in `updates` is a candidate version. Zotero picks the highest version whose `applications.zotero` constraints are satisfied by the running client — which is precisely why keeping older entries in the array is useful: a user on an older Zotero series still gets the newest version *compatible with them*.
 - `update_link` must be a stable, direct HTTPS download of the XPI. GitHub Release asset URLs are stable.
-- `update_hash` is `sha256:<hex>`; strongly recommended, and generated automatically by the scaffold when `build.makeUpdateJson.hash` is set.
+- `update_hash` is **`sha512:<hex>`** when the scaffold generates it (corrected 2026-09-16, `P0-T27`: scaffold 0.9.2 hard-codes SHA-512 and exposes no algorithm option; Zotero accepts it and installs). Strongly recommended, and generated automatically when `build.makeUpdateJson.hash` is set — never hand-written (R-15).
 - `update_info_url` (optional) points at release notes.
 - Some plugins additionally declare a `gecko` application block (e.g. `"gecko": { "strict_min_version": "60.0" }`), which is a Firefox-lineage carryover. It is harmless but unnecessary for a Zotero-only plugin.
 - Prereleases go in a **separate** `update-beta.json` so stable users are never offered a beta. The scaffold generates both.

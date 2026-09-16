@@ -2426,7 +2426,7 @@ For `research_helper`:
         {
           "version": "0.1.0",
           "update_link": "https://github.com/suppakoko/research_helper/releases/download/v0.1.0/research-helper-0.1.0.xpi",
-          "update_hash": "sha256:<sha256 of the xpi>",
+          "update_hash": "sha512:<sha512 of the xpi — what the scaffold emits; see below>",
           "applications": {
             "zotero": {
               "strict_min_version": "10.0",
@@ -2442,7 +2442,7 @@ For `research_helper`:
 
 Notes:
 
-* `update_hash` is `sha256:` + hex digest. Generate with `shasum -a 256 research-helper-0.1.0.xpi` (or `Get-FileHash -Algorithm SHA256` on Windows).
+* `update_hash` is **`sha512:` + hex digest when the scaffold generates it** — corrected 2026-09-16 (`P0-T27`), measured against a real published release. `zotero-plugin-scaffold` 0.9.2 hard-codes `generateHash(xpi, "sha512")` in `src/core/builder/update-json.ts`; `build.makeUpdateJson.hash` is a boolean that chooses *whether* to emit a hash, never which algorithm, and there is no config key for it. Zotero accepts it — the dry run reported `providesUpdatesSecurely: true` and installed the update — so this is stronger, not broken. A hand-written manifest may still use `sha256:` (`shasum -a 256 research-helper-0.1.0.xpi`, or `Get-FileHash -Algorithm SHA256` on Windows), but R-15 says not to hand-write one.
 * The `updates` array holds **every** offered version; Zotero picks the newest one compatible with the running app. This is how you can keep an old build available for users on an older Zotero.
 * `update_url` **must be HTTPS**.
 * `update.rdf` is the Zotero-6-era / legacy Firefox format. **Do not use it.** Zotero 7+ uses `update.json`. (Older Zotero 6 dual-compat examples used an `applications.gecko` block alongside `applications.zotero`; irrelevant for us.)

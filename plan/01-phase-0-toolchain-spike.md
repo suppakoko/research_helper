@@ -3468,6 +3468,74 @@ as much of it as this dry run exercises. The gate at step 2 is **G-40** in
 [`06-human-gates.md`](06-human-gates.md) — a Phase 0 gate distinct from `G-35`, which covers the
 v1.0 release and everything after it.
 
+**Findings, 2026-09-16 — `V-18` is YES and `R-15` is retired.** Update delivery works end to end on
+the real toolchain, published by GitHub Actions with the workflow's own token (no personal token was
+used, requested or stored).
+
+- **Releases:** [v0.0.1](https://github.com/suppakoko/research_helper/releases/tag/v0.0.1) and
+  [v0.0.2](https://github.com/suppakoko/research_helper/releases/tag/v0.0.2), each with
+  `research-helper.xpi` (18,714 B), `SHA256SUMS.txt`, `update.json`, `update-beta.json`.
+- **Manifest:** reachable at the `update_url` read **out of the installed XPI**,
+  `https://raw.githubusercontent.com/suppakoko/research_helper/release/update.json`, offering
+  `0.0.2` with the v0.0.2 asset URL as `update_link`.
+- **The measurement that matters:** a Zotero 10.0.2 running the *released* v0.0.1 (installed via
+  `AddonManager.getInstallForURL` from the release asset, not from a local build) was offered and
+  installed v0.0.2. `onUpdateAvailable` reported installed `0.0.1` → offered `0.0.2` with
+  `sourceURI` = the v0.0.2 asset URL; `onUpdateFinished` `error: "0"`; `onInstallEnded` at `0.0.2`;
+  and afterwards `isActive: true`, `pendingOperations: 0` — **a live upgrade with no restart**. A
+  control run while only v0.0.1 existed returned `onNoUpdateAvailable`, so the positive result is
+  not an artefact.
+
+**Criterion 4 fails as written, and the defect is in our docs, not the toolchain.** The published
+`update_hash` is **`sha512:`**, not `sha256:` — and it verifies exactly against the attached asset's
+SHA-512. `zotero-plugin-scaffold` 0.9.2 hard-codes `generateHash(xpi, "sha512")`;
+`build.makeUpdateJson.hash` chooses *whether* to emit a hash, never which algorithm, and exposes no
+key for it. Zotero accepted it (`providesUpdatesSecurely: true`) and installed. The criterion's
+intent — the published hash is a correct digest of the asset actually attached — passes.
+`docs/01` §11.2 and `docs/13` §6.3 are corrected.
+
+**The manifest is served from a `release` branch, not a `release` tag.** The owner's approval said
+tag; a branch is what the shipped `update_url` requires. `raw.githubusercontent.com/.../release/...`
+resolves a **git ref and serves a file from the tree**, while `zotero-plugin release`'s own model
+attaches `update.json` as an *asset* on a release tagged `release` — a different URL that would 404
+here — and re-pointing a real tag each release means force-updating a ref, which the instructions
+forbade. `docs/13` §6.3 already says "a branch or tag both work; a branch is easier to update from
+CI". Same content, same URL, different ref type.
+
+Five operational facts for the release runbook, all measured:
+
+1. **`raw.githubusercontent.com` caches the manifest for 300 s.** The first check after publishing
+   v0.0.2 returned `onNoUpdateAvailable` from the cached v0.0.1 body; waiting out the TTL and
+   repeating the identical call produced the offer. Nothing was cleared or forced. Harmless for real
+   users (background checks are hours apart), but it will mislead anyone testing by hand.
+2. **CI never runs on the `release` branch** — GitHub suppresses workflow runs for pushes made with
+   the default `GITHUB_TOKEN`. Good (no recursion), but it means the manifest ref is unvalidated,
+   which matters because `docs/13` §6.3's compatibility-bump lever asks people to hand-edit it.
+3. **`AddonManager.UPDATE_WHEN_USER_REQUESTED === 1`** on Zotero 10.0.2; code hard-coding `2` checks
+   for the wrong reason.
+4. **`onCompatibilityUpdateAvailable` fires even when nothing is available** — only
+   `onUpdateAvailable` means a new version exists.
+5. **`docs/01` §11.4's "minimal workflow" snippet is wrong for this project**: `npx zotero-plugin
+   release` publishes the manifest as a release asset, which is incompatible with our
+   `raw.githubusercontent.com` `update_url`.
+
+`release.yml` deviates from `docs/13` §5.2 in four documented ways, each in a comment at the top of
+the file: Node `^22.13.0` to match `ci.yml` and `engines`; `git add update.json update-beta.json`
+instead of `./*.json`, which would also stage `package.json`, `package-lock.json` and
+`tsconfig.json` onto the manifest branch — **a latent bug in §5.2 worth fixing there**; the dead
+`GITHUB_TOKEN:` env line dropped; and `update-beta.json` committed alongside, which §5.2 already
+copies. It also refuses to publish when the tag and `package.json` version disagree.
+
+**Not retired by this card:** `docs/13` §6.3's `> **Unverified:**` on widening `strict_max_version`
+in the manifest alone — testing it means publishing a range this project is forbidden to claim
+(`docs/01` §11.3). A separate card should exercise it with something like `10.1.*`, not `11.x`.
+
+**State left behind, for the owner to decide:** `package.json` on `main` is at **0.0.2**, matching
+the newest tag, which is the correct post-release invariant and what `release.yml`'s version guard
+asserts. The two throwaway releases still exist; deleting `v0.0.2` would leave the published
+`update_link` pointing at a 404, so delete the manifest or re-publish in the same pass. The
+`release` branch is permanent infrastructure — the shipped `update_url` depends on it existing.
+
 ---
 
 ### P0-T28 — Write and commit the Phase 0 spike report
