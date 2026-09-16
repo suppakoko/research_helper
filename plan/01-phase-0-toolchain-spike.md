@@ -2425,7 +2425,7 @@ files. And `preprint` is the right Zotero item type for an arXiv paper (`reposit
 | Field | Value |
 |---|---|
 | **ID** | `P0-T19` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-16; V-15 yes, no PDF parser bundled; two docs/06 cleaning rules corrected |
 | **Depends on** | `P0-T18` |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-15`, part of `R-19` |
