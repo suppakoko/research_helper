@@ -1,7 +1,15 @@
 /**
- * P0-T18 (spike V-8b) — throwaway probe of `Zotero.PDFWorker`'s structured
- * document text, run from Zotero's Tools → Developer → Run JavaScript window
- * against the dev library.
+ * P0-T18 (spike V-8b) and P0-T19 (spike V-15) — throwaway probes of
+ * `Zotero.PDFWorker` and of Zotero's own full-text index, run from Zotero's
+ * Tools → Developer → Run JavaScript window against the dev library.
+ *
+ * Two entry points, one corpus and one emitter:
+ *
+ * - `main()` — P0-T18's structured-document-text probe (geometry, block
+ *   classification, outline, two-column reading order);
+ * - `mainFullText()` — P0-T19's full-text probe (`attachmentText` vs
+ *   `getFullText`, the D-06-4 delimiters, and R-19's quality gate), emitted by
+ *   `--t19` and documented at its own section below.
  *
  * `docs/11` §4.2 V-8b asks one binary question — does
  * `getStructuredDocumentText` expose font/layout geometry? — and one practical
@@ -17,7 +25,12 @@
  * ```sh
  * npx tsx scripts/spike-structured-text.ts | Set-Clipboard   # PowerShell
  * npx tsx scripts/spike-structured-text.ts > probe.js        # to inspect
+ * npx tsx scripts/spike-structured-text.ts --t19 --out DIR > probe.js
  * ```
+ *
+ * `--t19` emits the P0-T19 probe instead; `--out DIR` gives it a directory to
+ * write the report and the extracted text into, and is omitted from the
+ * committed script on purpose so that no machine-specific path lives here.
  *
  * As in `scripts/spike-network.ts`, the Node half (below the
  * `NODE-ONLY BELOW THIS LINE` marker) bundles the half above it with esbuild
@@ -133,6 +146,13 @@ export interface ProbeItem {
   readonly key: string;
   readonly itemType: string;
   readonly attachmentFilename?: string;
+  /**
+   * `docs/06` §3.3.2's decision D-06-2 accessor, read by `P0-T19` only. It is
+   * a getter returning a promise, and `item.js:4158` resolves it to
+   * `undefined` for a non-attachment and `null` for an unsaved one, so it is
+   * typed wider here than `zotero-types`' `Promise<string>`.
+   */
+  readonly attachmentText: Promise<unknown>;
   isRegularItem(): boolean;
   isPDFAttachment(): boolean;
   getAttachments(): number[];
@@ -160,7 +180,16 @@ export interface ProbeEnv {
       ): readonly { readonly name: string; getChildItems(): ProbeItem[] }[];
     };
     readonly Items: { get(id: number): ProbeItem | false };
-    readonly Fulltext: { getIndexedState(item: ProbeItem): Promise<number> };
+    readonly Fulltext: {
+      getIndexedState(item: ProbeItem): Promise<number>;
+      /**
+       * Typed `unknown` on purpose (`P0-T19`): upstream declares
+       * `Promise<false | { total: number }>` (typings hole (f)), the real
+       * value is a DB row carrying `indexedPages` too, and `JSON.stringify`
+       * on it throws `DB column 'toJSON' not found`.
+       */
+      getPages(itemID: number): Promise<unknown>;
+    };
     /** Typed `any` upstream (typings/zotero-augment.d.ts hole (a)). */
     readonly PDFWorker: {
       getStructuredDocumentText(
@@ -235,7 +264,7 @@ export async function main(env: ProbeEnv): Promise<string> {
   return lines.join("\n");
 }
 
-function findCorpus(env: ProbeEnv): ProbeItem[] {
+function findCorpus(env: { readonly zotero: ProbeEnv["zotero"] }): ProbeItem[] {
   const z = env.zotero;
   const collection = z.Collections.getByLibrary(z.Libraries.userLibraryID).find(
     (c) => c.name === COLLECTION_NAME,
@@ -699,6 +728,425 @@ function round(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+// ---------------------------------------------------------------------------
+// P0-T19 (spike V-15) — Zotero's own full text, and whether it is good enough
+//
+// A second, independent probe over the same corpus, emitted by
+// `--t19`. `docs/11` §4.3 V-15 asks whether a plugin can read Zotero's
+// existing full text for an item with a PDF attachment and whether its quality
+// is adequate; a yes means no PDF parser is bundled (NFR-18, NFR-19).
+//
+// It measures, per attachment:
+//
+//   - `await attachment.attachmentText` — `docs/06` §3.3.2's decision D-06-2
+//     API, which walks the cache / sync-cache / on-demand ladder itself;
+//   - `Zotero.Fulltext.getIndexedState()` and `getPages()`, read as
+//     `indexedPages` / `total` (`docs/06` §3.3.4, D-06-3; the row is a DB row
+//     and `JSON.stringify` on it throws);
+//   - `Zotero.PDFWorker.getFullText(id, null)` on the same attachment, and how
+//     the two strings differ;
+//   - the `\f` / `\n` delimiters D-06-4 guarantees, and whether paragraphs
+//     arrive flowing or hard-wrapped;
+//   - the three R-19 quality-gate measures — character count, alphabetic
+//     ratio, language — with {@link QUALITY_GATE}'s thresholds.
+//
+// It is as read-only as the P0-T18 probe above: no `indexItems`, no
+// `clearItemWords`, no pref writes, no OCR, and nothing written to the library
+// or to any attachment's storage directory. The one thing it writes is the
+// report, and the extracted text, into a scratch directory the caller names
+// with `--out`.
+// ---------------------------------------------------------------------------
+
+/**
+ * R-19's gate, with the provenance of every number.
+ *
+ * `docs/11` §3 R-19 names the three measures — "minimum character count,
+ * alphabetic-character ratio, and detected-language check" — and fixes none of
+ * them. Two of the four thresholds below are therefore **proposals** made by
+ * `P0-T19` and marked as such; the other two are quoted from `docs/06`, which
+ * does fix them.
+ */
+const QUALITY_GATE = {
+  /**
+   * PROPOSAL (`P0-T19`). No document fixes a minimum for Tier-2 text:
+   * `docs/06` §3.1 fixes `MIN_ABSTRACT_CHARS` = 250 for **Tier 1**, and
+   * `docs/10` FR-22 says only "a configured minimum number of characters".
+   * 1,500 chars is ~250 words — shorter than a structured abstract, so no
+   * document that clears it is worse than the fallback. It only has to catch a
+   * degenerate extraction: DR-1 condition 3 (`docs/06` §5.4,
+   * `estTokens(fullText) >= 3x estTokens(abstract)`) already rejects full text
+   * that merely fails to beat the abstract.
+   */
+  minChars: 1500,
+
+  /**
+   * PROPOSAL (`P0-T19`). R-19's "alphabetic-character ratio" is not the same
+   * measure as `docs/06` §4.1 step 8's, and has no number anywhere. Measured
+   * over this corpus, letters/total runs 0.72-0.78 on born-digital articles
+   * and 0.75 on the scanned page, so 0.60 sits well below every real document
+   * while still failing a page of pure figure coordinates.
+   */
+  minAlphaOfTotal: 0.6,
+
+  /**
+   * `docs/06` §4.1 step 8, verbatim: "Compute the ratio of
+   * alphanumeric-plus-common-punctuation characters to total. Below 0.80 ->
+   * push `'ocr_suspected'` into `warnings`". Normative, not a proposal.
+   *
+   * Two caveats this probe records rather than resolves. (1) §4.1 does not say
+   * whether **whitespace** counts in the numerator; it is neither alphanumeric
+   * nor punctuation, and a clean article is ~15% whitespace, so the reading
+   * that excludes it puts every document within a few points of the threshold.
+   * Both readings are measured. (2) §4.1 runs this probe *after* the cleaning
+   * pass; this probe runs it on raw text, which is the earliest and most
+   * pessimistic point.
+   */
+  minAlnumPunctOfTotal: 0.8,
+
+  /**
+   * `docs/06` §4.2, verbatim: "If Hangul, CJK Unified Ideographs, Cyrillic or
+   * Arabic exceeds 15% of letters, mark `language_non_english`". Normative.
+   * §4.2 calls for no library, so none is used.
+   */
+  maxNonLatinLetterShare: 0.15,
+} as const;
+
+/**
+ * Common punctuation for `docs/06` §4.1 step 8.
+ *
+ * §4.1 says "common punctuation" and enumerates nothing, so this set is a
+ * PROPOSAL: Unicode punctuation and the arithmetic/currency symbols that occur
+ * in scientific prose. The measurement is reported alongside the set that
+ * produced it so a different set can be re-derived from the same run.
+ */
+const COMMON_PUNCTUATION = /[\p{P}\p{S}]/u;
+
+/** Lines in this length band, without terminal punctuation, look hard-wrapped. */
+const HARD_WRAP_BAND: readonly [number, number] = [30, 100];
+
+/** Per-string measurements. Nothing here interprets; {@link gradeText} does. */
+interface TextStats {
+  readonly chars: number;
+  readonly formFeeds: number;
+  readonly lineFeeds: number;
+  readonly blankLineRuns: number;
+  readonly carriageReturns: number;
+  readonly segments: number;
+  readonly medianSegment: number;
+  readonly meanSegment: number;
+  readonly maxSegment: number;
+  readonly longSegmentShare: number;
+  readonly hardWrapShare: number;
+  readonly letters: number;
+  readonly digits: number;
+  readonly whitespace: number;
+  readonly punctuation: number;
+  readonly other: number;
+  readonly alphaOfTotal: number;
+  readonly alphaOfNonSpace: number;
+  readonly alnumPunctOfTotal: number;
+  readonly alnumPunctWsOfTotal: number;
+  readonly nonLatinLetters: number;
+  readonly nonLatinShare: number;
+  readonly hyphenSpaceJoins: number;
+  readonly ligatures: number;
+  readonly replacementChars: number;
+}
+
+function measureText(text: string): TextStats {
+  const chars = text.length;
+  let letters = 0;
+  let digits = 0;
+  let whitespace = 0;
+  let punctuation = 0;
+  let other = 0;
+  let nonLatinLetters = 0;
+  let ligatures = 0;
+  let replacementChars = 0;
+  for (const ch of text) {
+    if (/\s/u.test(ch)) whitespace++;
+    else if (/\p{L}/u.test(ch)) {
+      letters++;
+      if (/[가-힣ᄀ-ᇿ一-鿿Ѐ-ӿ؀-ۿ]/u.test(ch)) {
+        nonLatinLetters++;
+      }
+    } else if (/\p{N}/u.test(ch)) digits++;
+    else if (COMMON_PUNCTUATION.test(ch)) punctuation++;
+    else other++;
+    if (/[ﬀ-ﬆ]/u.test(ch)) ligatures++;
+    if (ch === "�") replacementChars++;
+  }
+
+  // D-06-4: `\n` is a paragraph boundary, so a segment is a paragraph. A
+  // hard-wrapped extraction would instead produce many segments the width of a
+  // printed line and ending mid-sentence.
+  const segments = text
+    .replace(/\f/g, "\n")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const lengths = segments.map((s) => s.length).sort((a, b) => a - b);
+  const hardWrapped = segments.filter(
+    (s) =>
+      s.length >= HARD_WRAP_BAND[0] &&
+      s.length <= HARD_WRAP_BAND[1] &&
+      !/[.!?:;"')\]]$/u.test(s),
+  ).length;
+  const nonSpace = chars - whitespace;
+  return {
+    chars,
+    formFeeds: count(text, "\f"),
+    lineFeeds: count(text, "\n"),
+    blankLineRuns: (text.match(/\n[ \t]*\n/g) ?? []).length,
+    carriageReturns: count(text, "\r"),
+    segments: segments.length,
+    medianSegment:
+      lengths.length === 0 ? 0 : (lengths[lengths.length >> 1] ?? 0),
+    meanSegment:
+      segments.length === 0
+        ? 0
+        : round(lengths.reduce((a, b) => a + b, 0) / segments.length),
+    maxSegment: lengths.length === 0 ? 0 : (lengths[lengths.length - 1] ?? 0),
+    longSegmentShare: share(
+      segments.filter((s) => s.length >= 200).length,
+      segments.length,
+    ),
+    hardWrapShare: share(hardWrapped, segments.length),
+    letters,
+    digits,
+    whitespace,
+    punctuation,
+    other,
+    alphaOfTotal: share(letters, chars),
+    alphaOfNonSpace: share(letters, nonSpace),
+    alnumPunctOfTotal: share(letters + digits + punctuation, chars),
+    alnumPunctWsOfTotal: share(
+      letters + digits + punctuation + whitespace,
+      chars,
+    ),
+    nonLatinLetters,
+    nonLatinShare: share(nonLatinLetters, letters),
+    hyphenSpaceJoins: (text.match(/\p{L}-[ \t]\p{L}/gu) ?? []).length,
+    ligatures,
+    replacementChars,
+  };
+}
+
+/** R-19's three checks against {@link QUALITY_GATE}. */
+function gradeText(s: TextStats): string[] {
+  const verdict = (name: string, ok: boolean, detail: string): string =>
+    `${ok ? "PASS" : "FAIL"} ${name}: ${detail}`;
+  return [
+    verdict(
+      "minChars",
+      s.chars >= QUALITY_GATE.minChars,
+      `${s.chars} >= ${QUALITY_GATE.minChars} (PROPOSAL)`,
+    ),
+    verdict(
+      "alphaRatio",
+      s.alphaOfTotal >= QUALITY_GATE.minAlphaOfTotal,
+      `letters/total ${s.alphaOfTotal} >= ${QUALITY_GATE.minAlphaOfTotal} ` +
+        `(PROPOSAL); letters/non-space ${s.alphaOfNonSpace}`,
+    ),
+    verdict(
+      "ocrProbe",
+      s.alnumPunctOfTotal >= QUALITY_GATE.minAlnumPunctOfTotal,
+      `(alnum+punct)/total ${s.alnumPunctOfTotal} >= ` +
+        `${QUALITY_GATE.minAlnumPunctOfTotal} (docs/06 4.1 step 8); ` +
+        `with whitespace ${s.alnumPunctWsOfTotal}`,
+    ),
+    verdict(
+      "language",
+      s.nonLatinShare <= QUALITY_GATE.maxNonLatinLetterShare,
+      `non-Latin letters ${s.nonLatinShare} <= ` +
+        `${QUALITY_GATE.maxNonLatinLetterShare} (docs/06 4.2)`,
+    ),
+  ];
+}
+
+/** How two strings differ, without printing either of them whole. */
+function compareText(a: string, b: string): string[] {
+  if (a === b) return ["identical (===), byte for byte"];
+  const out = [`DIFFER: ${a.length} vs ${b.length} chars`];
+  let prefix = 0;
+  while (prefix < a.length && prefix < b.length && a[prefix] === b[prefix]) {
+    prefix++;
+  }
+  let suffix = 0;
+  while (
+    suffix < a.length - prefix &&
+    suffix < b.length - prefix &&
+    a[a.length - 1 - suffix] === b[b.length - 1 - suffix]
+  ) {
+    suffix++;
+  }
+  out.push(`common prefix ${prefix} chars, common suffix ${suffix} chars`);
+  out.push(`A middle: ${JSON.stringify(a.slice(prefix, prefix + 80))}`);
+  out.push(`B middle: ${JSON.stringify(b.slice(prefix, prefix + 80))}`);
+  out.push(
+    `trimmed equal: ${String(a.trim() === b.trim())}; ` +
+      `NFC-equal: ${String(a.normalize("NFC") === b.normalize("NFC"))}`,
+  );
+  return out;
+}
+
+/** The environment `--t19`'s trailer hands in. */
+export interface FullTextEnv {
+  readonly zotero: ProbeEnv["zotero"];
+  /** Optional sink for the report and the extracted text (`--out`). */
+  writeFile?(name: string, contents: string): Promise<void>;
+}
+
+export async function mainFullText(env: FullTextEnv): Promise<string> {
+  const lines: string[] = [];
+  const say = (line = ""): void => {
+    lines.push(line);
+    try {
+      env.zotero.debug(`[research_helper P0-T19] ${line}`);
+    } catch {
+      /* the report still comes back as the result */
+    }
+  };
+
+  try {
+    say("research_helper P0-T19 full-text probe (V-15)");
+    say(`run at  ${new Date().toISOString()}`);
+    say(`zotero  ${env.zotero.version}`);
+    const attachments = findCorpus(env);
+    say(`corpus  collection "${COLLECTION_NAME}": ${attachments.length} PDFs`);
+    for (const [i, att] of attachments.entries()) {
+      say();
+      await probeFullText(env, att, `${i + 1}/${attachments.length}`, say);
+    }
+  } catch (e) {
+    say(`PROBE ABORTED: ${describeError(e)}`);
+  }
+  const report = lines.join("\n");
+  if (env.writeFile !== undefined) {
+    try {
+      await env.writeFile("t19-report.txt", report);
+    } catch {
+      /* the report still comes back as the result */
+    }
+  }
+  return report;
+}
+
+async function probeFullText(
+  env: FullTextEnv,
+  att: ProbeItem,
+  ordinal: string,
+  say: (line?: string) => void,
+): Promise<void> {
+  const name = att.attachmentFilename ?? "?";
+  say(`== [${ordinal}] attachment ${att.id} (${att.key}) ${name}`);
+
+  const state = await env.zotero.Fulltext.getIndexedState(att);
+  say(`   getIndexedState: ${state} (${INDEX_STATES[state] ?? "?"})`);
+
+  // typings hole (f): `getPages()` resolves to a DB row whose `indexedPages`
+  // is not declared and which `JSON.stringify` cannot serialise, so the two
+  // properties are read one at a time (docs/06 3.3.4, D-06-3).
+  const row = await env.zotero.Fulltext.getPages(att.id);
+  say(
+    `   getPages: ${
+      row === false || row === null || row === undefined
+        ? "false (no fulltextItems row)"
+        : `indexedPages ${String(at(row, "indexedPages"))}, total ${String(
+            at(row, "total"),
+          )}`
+    }`,
+  );
+
+  // --- attachmentText (docs/06 3.3.2, D-06-2) -------------------------------
+  let cached: string | null = null;
+  let t0 = Date.now();
+  try {
+    const value: unknown = await att.attachmentText;
+    const ms = Date.now() - t0;
+    if (typeof value !== "string") {
+      say(`   attachmentText: ${ms} ms, NOT A STRING: ${String(value)}`);
+    } else {
+      cached = value;
+      say(`   attachmentText: ${ms} ms, ${value.length} chars`);
+      reportStats(measureText(value), say);
+      say(`     starts: ${JSON.stringify(value.slice(0, 100))}`);
+      say(`     ends:   ${JSON.stringify(value.slice(-100))}`);
+      for (const verdict of gradeText(measureText(value))) {
+        say(`     R-19 ${verdict}`);
+      }
+      await write(env, `t19-at${att.id}.txt`, value);
+    }
+  } catch (e) {
+    say(
+      `   attachmentText THREW after ${Date.now() - t0} ms: ${describeError(e)}`,
+    );
+  }
+
+  // --- PDFWorker.getFullText(id, null) --------------------------------------
+  t0 = Date.now();
+  try {
+    const ft = await env.zotero.PDFWorker.getFullText(att.id, null);
+    const text = str(at(ft, "text")) ?? "";
+    say(
+      `   getFullText(id, null): ${Date.now() - t0} ms, extractedPages ` +
+        `${String(at(ft, "extractedPages"))}, totalPages ` +
+        `${String(at(ft, "totalPages"))}, ${text.length} chars`,
+    );
+    if (cached !== null) {
+      for (const line of compareText(cached, text)) {
+        say(`   COMPARE attachmentText vs getFullText: ${line}`);
+      }
+    }
+  } catch (e) {
+    say(
+      `   getFullText THREW after ${Date.now() - t0} ms: ${describeError(e)}`,
+    );
+  }
+}
+
+function reportStats(s: TextStats, say: (line?: string) => void): void {
+  say(
+    `     delimiters: ${s.formFeeds} form feeds, ${s.lineFeeds} line feeds, ` +
+      `${s.blankLineRuns} blank-line runs, ${s.carriageReturns} CRs`,
+  );
+  say(
+    `     paragraphs: ${s.segments} segments, median ${s.medianSegment}, ` +
+      `mean ${s.meanSegment}, max ${s.maxSegment} chars; ` +
+      `>=200 chars ${s.longSegmentShare}; hard-wrap-shaped ${s.hardWrapShare}`,
+  );
+  say(
+    `     characters: letters ${s.letters}, digits ${s.digits}, ` +
+      `whitespace ${s.whitespace}, punctuation ${s.punctuation}, ` +
+      `other ${s.other}`,
+  );
+  say(
+    `     artefacts: ${s.hyphenSpaceJoins} "word- break" joins, ` +
+      `${s.ligatures} ligature chars, ${s.replacementChars} U+FFFD`,
+  );
+}
+
+async function write(
+  env: FullTextEnv,
+  name: string,
+  contents: string,
+): Promise<void> {
+  if (env.writeFile === undefined) return;
+  try {
+    await env.writeFile(name, contents);
+  } catch {
+    /* the report still comes back as the result */
+  }
+}
+
+function count(text: string, ch: string): number {
+  return text.split(ch).length - 1;
+}
+
+function share(part: number, whole: number): number {
+  return whole === 0 ? 0 : Math.round((part / whole) * 1000) / 1000;
+}
+
 // --- Helpers -----------------------------------------------------------------
 
 function countBy(xs: readonly unknown[], key: string): Record<string, number> {
@@ -764,7 +1212,60 @@ function arr(v: unknown): readonly unknown[] {
 
 const NODE_ONLY_MARKER = "// NODE-ONLY BELOW THIS LINE";
 
-async function emitPasteBlock(scriptPath: string): Promise<void> {
+/** Which probe the emitted block runs, and what its entry point needs. */
+interface Emission {
+  readonly card: string;
+  readonly spike: string;
+  readonly trailer: readonly string[];
+}
+
+/**
+ * The trailer for `P0-T18`: the two module handles the structure probe needs.
+ */
+function structuredTextEmission(): Emission {
+  return {
+    card: "P0-T18",
+    spike: "V-8b",
+    trailer: [
+      "return await RHSpikeStructuredText.main({",
+      "  zotero: Zotero,",
+      '  sdt: require("resource://zotero/document-worker/structured-document-text.js"),',
+      '  inflateRaw: (bytes) => require("pako").inflateRaw(bytes),',
+      "});",
+    ],
+  };
+}
+
+/**
+ * The trailer for `P0-T19`. `outDir`, when given, is where `IOUtils` writes
+ * the report and the extracted text; it is supplied on the command line so no
+ * machine-specific path is ever committed to this script.
+ */
+function fullTextEmission(outDir: string | undefined): Emission {
+  const sink =
+    outDir === undefined
+      ? []
+      : [
+          `  writeFile: (name, contents) => IOUtils.writeUTF8(${JSON.stringify(
+            outDir.replace(/[/\\]*$/, "") + "\\",
+          )} + name, contents),`,
+        ];
+  return {
+    card: "P0-T19",
+    spike: "V-15",
+    trailer: [
+      "return await RHSpikeStructuredText.mainFullText({",
+      "  zotero: Zotero,",
+      ...sink,
+      "});",
+    ],
+  };
+}
+
+async function emitPasteBlock(
+  scriptPath: string,
+  emission: Emission,
+): Promise<void> {
   const { build } = await import("esbuild");
   const { readFileSync } = await import("node:fs");
   const { basename, dirname, join } = await import("node:path");
@@ -800,19 +1301,21 @@ async function emitPasteBlock(scriptPath: string): Promise<void> {
 
   process.stdout.write(
     [
-      "// research_helper P0-T18 structured-text probe (V-8b). Read-only.",
+      `// research_helper ${emission.card} probe (${emission.spike}). Read-only.`,
       `// Generated ${new Date().toISOString()} from scripts/spike-structured-text.ts.`,
       "// Tools > Developer > Run JavaScript: paste, keep 'Run as async function'",
       "// checked, press Run. Run it against the DEV profile only.",
       ascii.trimEnd(),
-      "return await RHSpikeStructuredText.main({",
-      "  zotero: Zotero,",
-      '  sdt: require("resource://zotero/document-worker/structured-document-text.js"),',
-      '  inflateRaw: (bytes) => require("pako").inflateRaw(bytes),',
-      "});",
+      ...emission.trailer,
       "",
     ].join("\n"),
   );
+}
+
+function chooseEmission(argv: readonly string[]): Emission {
+  if (!argv.includes("--t19")) return structuredTextEmission();
+  const flag = argv.indexOf("--out");
+  return fullTextEmission(flag < 0 ? undefined : argv[flag + 1]);
 }
 
 const nodeScriptPath = process.argv[1];
@@ -822,8 +1325,10 @@ if (nodeScriptPath === undefined) {
   );
   process.exitCode = 1;
 } else {
-  emitPasteBlock(nodeScriptPath).catch((e: unknown) => {
-    process.stderr.write(`spike-structured-text: ${String(e)}\n`);
-    process.exitCode = 1;
-  });
+  emitPasteBlock(nodeScriptPath, chooseEmission(process.argv.slice(2))).catch(
+    (e: unknown) => {
+      process.stderr.write(`spike-structured-text: ${String(e)}\n`);
+      process.exitCode = 1;
+    },
+  );
 }

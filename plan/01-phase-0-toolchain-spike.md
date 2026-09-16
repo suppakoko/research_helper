@@ -2500,6 +2500,77 @@ contradict the Vitest fake, fix the fake (`P0-T12`) rather than the observation.
 This card carries no gate of its own: it reuses the PDFs supplied for `P0-T18`, whose gate
 already put the human in the loop. If fresh PDFs are needed, escalate to `P0-T18`'s gate.
 
+**Findings, 2026-09-16 — `V-15` is YES: no PDF parser is bundled.** Measured on all **seven**
+corpus attachments, not the five the card names (it predates entries 6 and 7, and the two-column
+pair is where the question bites). Zotero 10.0.2, dev library only.
+
+`item.attachmentText` returned usable text for every file in **1–3 ms** (cache read) against
+24–1,060 ms for a fresh `getFullText`, and — the result the verdict rests on — the two were
+**byte-identical on all seven**. The cache is not a lossy copy; re-parsing buys nothing, so
+NFR-18's 3 MB ceiling and NFR-19 are protected.
+
+| # | att | File | chars | page marks | paragraphs | letters/total | indexed |
+|---|---|---|---|---|---|---|---|
+| 1 | 11 | PLOS ONE | 30,707 | 9 | flow (0.84) | 0.720 | 10/10 |
+| 2 | 12 | Genome Biology | 55,063 | 15 | **hard-wrapped (0.39)** | 0.748 | 16/16 |
+| 3 | 13 | arXiv 2609.11877 | 149,536 | 50 | flow (0.80) | 0.740 | 51/51 |
+| 4 | 14 | bioRxiv | 103,828 | 62 | flow (0.64) | 0.775 | 63/63 |
+| 5 | 15 | BMJ 1955 scan | 7,659 | **0** | **hard-wrapped (0.00)** | 0.782 | 1/1 |
+| 6 | 17 | arXiv 1512.03385 | 58,950 | 11 | flow (0.85) | 0.710 | 12/12 |
+| 7 | 19 | PNAS 2024 | 61,165 | 10 | mixed (0.66) | 0.744 | 11/11 |
+
+**Where the verdict is thin:** every file is at most 63 pages, under the 100-page `pdfMaxPages`
+default, so `INDEX_STATE_PARTIAL` and D-06-3's bypass never arose — and that is the one regime where
+the two APIs *must* differ. No non-English file, so the language check is untested; no encrypted or
+corrupt PDF, so the demotion path is untested.
+
+**On-demand extraction persists nothing — ESTABLISHED, and the race was avoided by reading the
+source first.** `importFromFile` awaits `indexItems` internally, so a fresh import is already indexed
+when it resolves; `fulltext.js:623` returns early when `pdfMaxPages == 0`, before writing a cache
+file or a `fulltextItems` row, and the idle queue drain skips PDFs under the same condition. With
+that pref at 0 a throwaway copy imported **UNINDEXED**; `await attachmentText` took 127 ms and
+returned the same 30,707 characters; afterwards the state, `getPages()` and the storage directory
+were **unchanged** — no cache file, nothing written. A second read cost 86 ms and took the same
+rung, so `attachmentText` is a getter that re-runs the whole ladder on every access: Phase 3 must
+read it once and keep the string. The pref was restored and `prefHasUserValue` is false again. One
+asymmetry worth knowing, not stated in §3.3.2 or §3.3.4: the on-demand rung calls `getFullText(id)`
+with **no** `maxPages`, so an unindexed attachment yields every page while an indexed one is capped.
+
+**The R-19 quality gate passes all seven — and that is the problem.** Two of its four thresholds are
+not fixed anywhere in the corpus, so they are marked `PROPOSAL` in code (minimum 1,500 characters;
+letters/total at least 0.60); the OCR ratio (at least 0.80) and the language check are `docs/06`
+§4.1/§4.2 verbatim. Across real documents the OCR measure spans **0.834–0.852** against a 0.80
+threshold, and the scanned page is *not* the minimum — so the gate separates almost nothing, and
+most of the distance from 1.00 is just whitespace being excluded from the numerator. Under §4.1's
+other possible reading (whitespace counted) every file scores 0.999–1.000 and the check is inert. It
+also misses the corpus's one real defect: file 12 passes everything while being hard-wrapped with 47
+words split in half. **§4.1 step 8 needs a definition and probably a different measure**, and
+R-19's "scanned means demote" instinct is wrong — the BMJ scan's OCR layer is good prose, and
+demoting it would throw away usable text.
+
+**Two corrections to `docs/06`, both made today, one of which would have corrupted output.**
+
+1. **§4.1 step 4's de-hyphenation rule was backwards.** A hyphenated line break arrives with the
+   hyphen deleted and a newline in its place, never as `hyphen- ation`. The prescribed regex matched
+   18 strings in the corpus and **all 18 were suspended hyphens** (`"N- and C-terminal"`,
+   `"a- and b-wave"`): it would corrupt every match and repair none of the 66 real splits. The step
+   now says so and leaves the replacement as a decision Phase 3 must make, because a lowercase-
+   newline-lowercase rule is ambiguous with a real paragraph break.
+2. **D-06-4 overstated the paragraph guarantee.** The page mark held perfectly (`totalPages - 1`
+   every time, so a one-page document has none). The newline is per-document: 0.85 down to 0.39 and
+   0.00 of characters in 200-plus-character segments. The chunker must measure, not assume.
+
+Minor, recorded: `getPages()` resolves to literal `false` with no `fulltextItems` row (upstream's
+union is right about that, wrong only about `indexedPages`); and file 13 lost two glyphs — `NF-κB`
+and `TGF-β` arrived as `NF- B` and `TGF- ` — a per-font mapping loss, not systematic.
+`src/zotero/fulltext.ts` narrows the untyped `PDFWorker` global in exactly one runtime-checked
+function rather than casting it away.
+
+**Two throwaway items (parent 20 / attachment 21) were left in the dev library**, outside collection
+2 and named as throwaway, rather than deleted — deletion is irreversible and the corpus enumeration
+ignores them. Card defect noted: the `Files` list names no test file and `Notes` gives no reason,
+which `plan/README.md` §6 requires.
+
 ---
 
 ### P0-T20 — Create 100 Zotero items in one transaction within NFR-1
