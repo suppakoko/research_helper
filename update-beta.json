@@ -1,0 +1,19 @@
+{
+  "addons": {
+    "research-helper@suppakoko.github.io": {
+      "updates": [
+        {
+          "version": "0.0.1",
+          "update_link": "https://github.com/suppakoko/research_helper/releases/download/v0.0.1/research-helper.xpi",
+          "update_hash": "sha512:f44f90321fb32ec20067bd0dd1067c7b2e7862b4d5cc7989915a5cd188ff43bb04c5f5c704039a4ce4effe32eea41f65e7875b58a9cbbd70df0ab5e4423e4337",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "10.0",
+              "strict_max_version": "10.0.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
