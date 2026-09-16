@@ -3387,7 +3387,7 @@ gate already put the human in the loop. If fresh audio must be generated, escala
 | Field | Value |
 |---|---|
 | **ID** | `P0-T27` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-16; live update v0.0.1 → v0.0.2 verified; hash is sha512 |
 | **Depends on** | `P0-T09`, `P0-T14` |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-18`, `R-15` |
