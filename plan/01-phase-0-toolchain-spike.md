@@ -2372,6 +2372,52 @@ serialise; the document worker lives at `resource://zotero/document-worker/worke
 `PDFWorker` call writes nothing. `docs/06` §4.3 should consider `catalog.outline` and heading blocks
 instead of regex over flat text — a Phase 3 design change, not made here.
 
+**Update, 2026-09-16 — criterion 2 now passes: reading order is recoverable on a real two-column
+article, from both APIs.** The owner downloaded the publisher PDF that bot-protection had blocked
+(PNAS 2024, *In vivo photoreceptor base editing…*, DOI 10.1073/pnas.2416827121, CC BY, InDesign
+19.3, attachment 19), and a born-digital two-column control was added alongside it (arXiv:1512.03385,
+CVPR format, attachment 17 — **arXiv non-exclusive licence, not CC**, so local-testing only). Both
+were confirmed two-column from block boxes *before* any order number was computed: PNAS left
+x 36–283.6 / right x 301.4–550.4 on a 584.8 pt page; arXiv left x 50.1–286.4 / right x 308.9–545.1
+on 612 pt, with zero full-measure body rectangles.
+
+| File | Two-column pages | Structure API, band-wise | Flat `getFullText`, band-wise |
+|---|---|---|---|
+| PNAS (publisher) | 5 / 11 | **0 / 306** | **0 / 300** |
+| arXiv (control) | 11 / 12 | **0 / 481** | **0 / 455** |
+| BMJ 1955 scan | 1 / 1 | 0 / 52 | 0 / 52 |
+
+**Phase 3 needs no column-reordering pass, on either API.** What this does *not* establish: one
+article from one publisher family — nothing here measures Elsevier, Wiley, Springer, Nature-family
+or Cell layouts, non-English text, or table-heavy pages; and column order is not section accuracy,
+so R-19b's 40-PDF gate is untouched and `auto` stays on whole-document chunking.
+
+Four things a future harness must get right, all measured:
+
+1. **Measure per vertical band, not per page.** The page-wide metric reports 111/1563 on the PNAS
+   file and every one is correct layout: three right-column front-matter blocks against the 37
+   left-column rectangles of the reference list, which the worker emits as **one** `list` block
+   spanning both columns. Flat text confirms the true order independently. A harness using the
+   page-wide rule fails good files.
+2. **`style.bold` is not portable.** Zero bold and zero italic runs across 2,754 runs on the arXiv
+   file, although it embeds bold and italic Type-1 faces — the detector keys on font *name*, and
+   TeX/URW names carry none. The same worker found 70 bold and 258 italic runs on the PNAS file.
+   `docs/06` §4.3 must not rest on it.
+3. **A native outline is not better than an inferred one.** PNAS: `source: "native"`, 23 entries,
+   **only 4 anchored to a block**; every subsection entry has `ref: null`. arXiv: inferred, 22/22
+   anchored. `catalog.outline` alone cannot slice text at those boundaries — it needs a fallback
+   that locates an unanchored title in the block stream.
+4. **Run-in headings are invisible.** PNAS's subsection headings are bold sentence-leads inside
+   paragraphs, and the worker emits no heading block for them, so IMRaD sub-structure below
+   Results/Methods is unavailable from block types on that layout. PNAS also prints no Introduction
+   heading at all, and its front matter (licence sentence, author list, affiliations, keywords)
+   leaks into the body flow as ordinary paragraphs with no `flowClass`.
+
+Also recorded: the paper title is a `heading` and a top-level outline entry on the arXiv file but was
+wrongly `flowClass: excluded` on file 3 — the same element mishandled two different ways on two
+files. And `preprint` is the right Zotero item type for an arXiv paper (`repository`, `archiveID`,
+`genre`); `conferencePaper` has none of those fields.
+
 ---
 
 ### P0-T19 — Read Zotero's existing full-text index from a plugin

@@ -47,6 +47,24 @@
  * - `getFullText(itemID, maxPages, isPriority, password)` is unchanged from
  *   `docs/06` §3.3.5 and resolves to `{ text, extractedPages, totalPages }`.
  *
+ * ## The column-order measure
+ *
+ * A page counts as two-column when at least two body rectangles sit wholly in
+ * each half of it and full-measure rectangles are rare. Reading order is then
+ * checked **within a vertical band**, not across the whole page: a page can
+ * stack independent flows — a publisher's two-column front matter above a
+ * two-column reference list — and pairing every right-hand rectangle with
+ * every left-hand one calls that correct layout an error (measured: 111 such
+ * pseudo-violations on the PNAS file's last page, 0 once banded). A band is a
+ * maximal vertical interval covered by the page's body rectangles; inside one,
+ * every left-column rectangle must come before every right-column one.
+ *
+ * Both APIs are measured on the same pairs, because Phase 3 may use either
+ * (`docs/06` §3.3.5): `content[]` index order for the structure, and character
+ * offset within the page's slice of the `\f`-delimited `getFullText` string
+ * for the flat text. The page-wide count the 2026-09-15 run reported is kept
+ * alongside the banded one so the two runs stay comparable.
+ *
  * ## What it does not do
  *
  * It never calls `Zotero.Fulltext.indexItems`, `getItemContent`,
@@ -78,6 +96,23 @@ const EXAMPLES_PER_PATH = 2;
  * (a full-measure body line on a single-column page is ~60–85 %).
  */
 const COLUMN_MAX_WIDTH = 0.48;
+
+/** Top-level block types that carry body text; figures and tables do not. */
+const BODY_TYPES: readonly string[] = [
+  "paragraph",
+  "heading",
+  "list",
+  "listitem",
+];
+
+/**
+ * Probe lengths, longest first, for locating a block in the flat `getFullText`
+ * page. A block whose text is shorter than the last of them is counted as
+ * *too short* rather than as missing: on a two-column page a short heading
+ * ("MS COCO" on the arXiv file's page 10) occurs twice, so a shorter probe
+ * would measure the wrong occurrence rather than nothing.
+ */
+const FLAT_PROBE_LENGTHS = [60, 40, 25, 15] as const;
 
 /** `docs/06` §3.3.4, verified names for `getIndexedState` results. */
 const INDEX_STATES = [
@@ -243,6 +278,7 @@ async function probeOne(
   // --- getStructuredDocumentText ------------------------------------------
   let t0 = Date.now(); // docs/01 §2.3: no `performance` in the sandbox
   let raw: unknown;
+  let doc: unknown;
   try {
     raw = await env.zotero.PDFWorker.getStructuredDocumentText(att.id, {});
   } catch (e) {
@@ -265,7 +301,7 @@ async function probeOne(
         new Uint8Array(buf),
         { inflate: (b) => env.inflateRaw(b) },
       );
-      const doc = await reader.materialize();
+      doc = await reader.materialize();
       say(
         `   SDTPack v${reader.header.packVersion}, schema ` +
           `${reader.header.schemaVersion}, ${reader.getTopLevelBlockCount()} ` +
@@ -276,10 +312,12 @@ async function probeOne(
   }
 
   // --- getFullText ----------------------------------------------------------
+  let fullText: string | null = null;
   t0 = Date.now();
   try {
     const ft = await env.zotero.PDFWorker.getFullText(att.id, null);
     const text = str(at(ft, "text")) ?? "";
+    fullText = text;
     const extracted = String(at(ft, "extractedPages"));
     const total = String(at(ft, "totalPages"));
     row.pages = `${extracted}/${total}`;
@@ -296,6 +334,9 @@ async function probeOne(
     );
     row.pages = "threw";
   }
+
+  // --- columns, which need the structure and the flat text together --------
+  if (doc !== undefined) describeColumns(doc, fullText, row, say);
   return row;
 }
 
@@ -391,19 +432,6 @@ function describeDocument(
   row.notes =
     `${JSON.stringify(countBy(blocks, "type"))} blocks; outline ` +
     `${outline.length} top-level, source ${JSON.stringify(countBy(outline, "source"))}`;
-
-  // 4. Columns.
-  const col = columnOrder(doc);
-  say(
-    `   COLUMNS pages detected as two-column: ${col.twoColumnPages}/` +
-      `${col.pages}; right-column rect emitted before a left-column rect of ` +
-      `the same page: ${col.violations}/${col.pairs} pairs`,
-  );
-  row.columns =
-    col.twoColumnPages === 0
-      ? `no two-column page (0/${col.pages}); not testable on this file`
-      : `${col.twoColumnPages}/${col.pages} two-column pages; ` +
-        `${col.violations}/${col.pairs} out-of-order pairs`;
 }
 
 function walk(
@@ -446,60 +474,229 @@ function forEachTextNode(v: unknown, visit: (node: unknown) => void): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Columns — the practical half of V-8b
+// ---------------------------------------------------------------------------
+
+/** One body-text rectangle on one page, tagged with its `content[]` index. */
+interface BodyRect {
+  readonly block: number;
+  readonly node: unknown;
+  readonly x1: number;
+  readonly y1: number;
+  readonly x2: number;
+  readonly y2: number;
+}
+
 /**
- * A page is two-column when at least two body rects sit wholly in each half
- * and full-measure rects are rare. Reading order is correct when no rect of
- * the right column belongs to a block emitted before a left-column block.
+ * Per-page body x-ranges and the page width first — a file is only reported as
+ * two-column because its boxes say so — then, on the pages that qualify, the
+ * band-wise order metric for the structure and for the flat text. See the
+ * file header, "The column-order measure", for why the band matters.
  */
-function columnOrder(doc: unknown): {
-  pages: number;
-  twoColumnPages: number;
-  pairs: number;
-  violations: number;
-} {
+function describeColumns(
+  doc: unknown,
+  fullText: string | null,
+  row: Row,
+  say: (line?: string) => void,
+): void {
   const pages = arr(at(doc, "catalog", "pages"));
-  const blocks = arr(at(doc, "content"));
-  const result = {
-    pages: pages.length,
-    twoColumnPages: 0,
-    pairs: 0,
-    violations: 0,
-  };
+  const flatPages =
+    fullText === null ? null : fullText.split("\f").map(normalizeSpace);
+  let twoColumnPages = 0;
+  let bands = 0;
+  let pagePairs = 0;
+  let pageViolations = 0;
+  let bandPairs = 0;
+  let bandViolations = 0;
+  let flatPairs = 0;
+  let flatViolations = 0;
+  let located = 0;
+  let tooShort = 0;
+  let notFound = 0;
+
+  say("   COLUMNS per page: width, body x-range, column bands, order");
   pages.forEach((page, pageIndex) => {
     const view = arr(at(page, "viewRect")).map(Number);
     const width = (view[2] ?? 0) - (view[0] ?? 0);
-    if (!(width > 0)) return;
-    const rects: { block: number; x1: number; x2: number }[] = [];
-    blocks.forEach((b, block) => {
-      if (at(b, "flowClass") !== undefined) return; // furniture, figures
-      if (
-        !["paragraph", "heading", "list"].includes(str(at(b, "type")) ?? "")
-      ) {
-        return;
-      }
-      for (const r of arr(at(b, "anchor", "pageRects"))) {
-        const [p, x1, , x2] = arr(r).map(Number);
-        if (p === pageIndex && x1 !== undefined && x2 !== undefined) {
-          rects.push({ block, x1, x2 });
-        }
-      }
-    });
+    const rects = pageBodyRects(doc, pageIndex);
+    const head = `     p${pageIndex} width ${round(width)}`;
+    if (!(width > 0) || rects.length === 0) {
+      say(`${head}: no body rectangle (figure-only or empty page)`);
+      return;
+    }
     const narrow = rects.filter((r) => r.x2 - r.x1 < width * COLUMN_MAX_WIDTH);
     const left = narrow.filter((r) => r.x2 < width * 0.55);
     const right = narrow.filter((r) => r.x1 > width * 0.45);
     const wide = rects.length - narrow.length;
+    const extent =
+      `body x ${round(Math.min(...rects.map((r) => r.x1)))}–` +
+      `${round(Math.max(...rects.map((r) => r.x2)))} (${rects.length} rects, ` +
+      `${wide} of them wider than ${COLUMN_MAX_WIDTH * 100}% of the page)`;
     if (left.length < 2 || right.length < 2 || wide > rects.length * 0.25) {
+      say(
+        `${head} ${extent}: NOT two-column ` +
+          `(left ${left.length}, right ${right.length})`,
+      );
       return;
     }
-    result.twoColumnPages++;
+    twoColumnPages++;
     for (const l of left) {
       for (const r of right) {
-        result.pairs++;
-        if (r.block < l.block) result.violations++;
+        pagePairs++;
+        if (r.block < l.block) pageViolations++;
       }
     }
+    const flat = flatPages === null ? null : (flatPages[pageIndex] ?? "");
+    let onPageBands = 0;
+    let bp = 0;
+    let bv = 0;
+    let fp = 0;
+    let fv = 0;
+    for (const [lo, hi] of verticalBands(rects)) {
+      const inBand = (r: BodyRect): boolean => r.y1 >= lo && r.y2 <= hi;
+      const bandLeft = left.filter(inBand);
+      const bandRight = right.filter(inBand);
+      if (bandLeft.length === 0 || bandRight.length === 0) continue;
+      onPageBands++;
+      bands++;
+      for (const l of bandLeft) {
+        for (const r of bandRight) {
+          bp++;
+          if (r.block < l.block) bv++;
+        }
+      }
+      if (flat === null) continue;
+      const offsets = (rs: readonly BodyRect[]): number[] =>
+        rs.map((r) => {
+          const o = flatOffset(r.node, flat);
+          if (o >= 0) located++;
+          else if (o === TOO_SHORT) tooShort++;
+          else notFound++;
+          return o;
+        });
+      const leftOffsets = offsets(bandLeft);
+      const rightOffsets = offsets(bandRight);
+      for (const l of leftOffsets) {
+        for (const r of rightOffsets) {
+          if (l < 0 || r < 0) continue;
+          fp++;
+          if (r < l) fv++;
+        }
+      }
+    }
+    bandPairs += bp;
+    bandViolations += bv;
+    flatPairs += fp;
+    flatViolations += fv;
+    say(
+      `${head} ${extent}: TWO-COLUMN left x ` +
+        `${round(Math.min(...left.map((r) => r.x1)))}–` +
+        `${round(Math.max(...left.map((r) => r.x2)))}, right x ` +
+        `${round(Math.min(...right.map((r) => r.x1)))}–` +
+        `${round(Math.max(...right.map((r) => r.x2)))}; ${onPageBands} bands; ` +
+        `structure ${bv}/${bp}, flat ${flat === null ? "n/a" : `${fv}/${fp}`}`,
+    );
   });
-  return result;
+
+  const flatSummary =
+    flatPages === null
+      ? "flat getFullText unavailable (it threw)"
+      : `flat getFullText, band-wise: ${flatViolations}/${flatPairs} ` +
+        `(blocks located ${located}, too short to locate ${tooShort}, ` +
+        `not found ${notFound})`;
+  say(
+    `   COLUMNS two-column pages ${twoColumnPages}/${pages.length}, ` +
+      `${bands} column bands`,
+  );
+  say(
+    `     structure (content[] order), band-wise: ` +
+      `${bandViolations}/${bandPairs} right-before-left pairs`,
+  );
+  say(
+    `     structure, page-wide (the 2026-09-15 measure): ` +
+      `${pageViolations}/${pagePairs}`,
+  );
+  say(`     ${flatSummary}`);
+  row.columns =
+    twoColumnPages === 0
+      ? `no two-column page (0/${pages.length}); not testable on this file`
+      : `${twoColumnPages}/${pages.length} two-column pages, ${bands} bands; ` +
+        `structure ${bandViolations}/${bandPairs} band-wise ` +
+        `(${pageViolations}/${pagePairs} page-wide); ` +
+        (flatPages === null
+          ? "flat n/a"
+          : `flat ${flatViolations}/${flatPairs}`);
+}
+
+/** Body rects on one page. Furniture, figures, captions and tables are out. */
+function pageBodyRects(doc: unknown, pageIndex: number): BodyRect[] {
+  const out: BodyRect[] = [];
+  arr(at(doc, "content")).forEach((b, block) => {
+    if (at(b, "flowClass") !== undefined) return; // running heads, footnotes
+    if (!BODY_TYPES.includes(str(at(b, "type")) ?? "")) return;
+    for (const r of arr(at(b, "anchor", "pageRects"))) {
+      const [p, x1, y1, x2, y2] = arr(r).map(Number);
+      if (p !== pageIndex) continue;
+      if (x1 === undefined || y1 === undefined) continue;
+      if (x2 === undefined || y2 === undefined) continue;
+      out.push({ block, node: b, x1, y1, x2, y2 });
+    }
+  });
+  return out;
+}
+
+/**
+ * The maximal vertical intervals the page's body rects cover, bottom-up. Two
+ * flows separated by a gutterless horizontal gap — front matter above a
+ * reference list — fall into different intervals and are ordered separately.
+ */
+function verticalBands(rects: readonly BodyRect[]): [number, number][] {
+  const spans = rects
+    .map((r): [number, number] => [r.y1, r.y2])
+    .sort((a, b) => a[0] - b[0]);
+  const bands: [number, number][] = [];
+  for (const [lo, hi] of spans) {
+    const last = bands[bands.length - 1];
+    if (last !== undefined && lo <= last[1]) last[1] = Math.max(last[1], hi);
+    else bands.push([lo, hi]);
+  }
+  return bands;
+}
+
+/** `flatOffset` result for a block too short to be located unambiguously. */
+const TOO_SHORT = -2;
+
+/**
+ * Where a block's text starts within one page of flat `getFullText` output,
+ * or a negative marker. Both strings are whitespace-normalized first: the flat
+ * extractor rewraps lines (`docs/06` §3.3.5), so only the run of characters
+ * matches, never the line breaks.
+ */
+function flatOffset(node: unknown, page: string): number {
+  const text = normalizeSpace(blockText(node));
+  const shortest = FLAT_PROBE_LENGTHS[FLAT_PROBE_LENGTHS.length - 1] ?? 15;
+  if (text.length < shortest) return TOO_SHORT;
+  for (const length of FLAT_PROBE_LENGTHS) {
+    const found = page.indexOf(text.slice(0, length));
+    if (found >= 0) return found;
+  }
+  return -1;
+}
+
+/** A block's text, concatenated depth-first over its nested runs. */
+function blockText(node: unknown): string {
+  const text = str(at(node, "text"));
+  if (text !== null) return text;
+  return arr(at(node, "content")).map(blockText).join("");
+}
+
+function normalizeSpace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function round(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
 // --- Helpers -----------------------------------------------------------------
