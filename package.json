@@ -1,7 +1,7 @@
 {
   "name": "research-helper",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Search the literature, build Zotero collections, summarize them, and speak the report.",
   "config": {
     "addonName": "Research Helper",
