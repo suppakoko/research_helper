@@ -1,0 +1,152 @@
+# Release for research_helper — P0-T27, following docs/13 §5.2.
+#
+# What this does, in order: on a `v*.*.*` tag push it checks the tag out,
+# refuses to continue if the tag and package.json disagree, lints, typechecks,
+# tests, builds the XPI and the scaffold-generated update manifests, creates
+# the GitHub Release for that tag with the XPI attached, and then commits the
+# generated `update.json` to the long-lived `release` branch — which is the ref
+# `applications.zotero.update_url` in `addon/manifest.json` points at
+# (`https://raw.githubusercontent.com/suppakoko/research_helper/release/update.json`,
+# docs/13 §6.3, docs/01 §11.3).
+#
+# Deliberate deviations from the docs/13 §5.2 listing, each with its source:
+#
+# - NODE_VERSION is the range "^22.13.0", not "22", matching ci.yml (P0-T14)
+#   and package.json's `engines.node` ">=22.13".
+# - The `Publish update manifest` step stages the two manifest files by name
+#   instead of `git add ./*.json`. The repository root also holds
+#   package.json, package-lock.json and tsconfig.json; `./*.json` stages those
+#   too, which is harmless only for as long as the release branch happens to
+#   be byte-identical to the tag. Naming the files removes the accident.
+# - That same step drops docs/13's `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}`
+#   env line. The push is authenticated by the credentials actions/checkout
+#   already persisted in .git/config, so the variable was never read; leaving
+#   it out keeps this workflow's only token reference implicit and
+#   job-scoped. Nothing else in this file references a secret.
+# - `update-beta.json` is committed to the release branch alongside
+#   `update.json`. docs/13 §5.2 already copies it when present; this spells out
+#   that a stable release regenerates both (docs/01 §4.5), which is what lets a
+#   beta tester roll forward onto stable.
+#
+# No credential is referenced here beyond the workflow's own automatic
+# GITHUB_TOKEN, and none may be: the repository is public and Phase 0 CI is
+# credential-free (P0-T14).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re-)release, e.g. v1.0.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "^22.13.0"
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint and typecheck
+        run: |
+          npm run lint:check
+          npm run typecheck
+
+      - name: Run tests
+        env:
+          FIXTURE_MODE: replay
+        run: npm test
+
+      - name: Resolve version from tag
+        id: version
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.ref_name }}"
+          version="${tag#v}"
+          pkg_version="$(node -p "require('./package.json').version")"
+          if [ "$version" != "$pkg_version" ]; then
+            echo "::error::Tag $tag does not match package.json version $pkg_version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "update_manifest=update-beta.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "update_manifest=update.json" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build XPI and update manifest
+        run: npm run build
+
+      - name: Collect release assets
+        id: assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp .scaffold/build/*.xpi dist/
+          cp .scaffold/build/update*.json dist/ 2>/dev/null || true
+          ls -la dist/
+          ( cd dist && sha256sum *.xpi > SHA256SUMS.txt )
+          cat dist/SHA256SUMS.txt
+
+      - name: Create GitHub Release and attach assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: research_helper ${{ steps.version.outputs.version }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.xpi
+            dist/update*.json
+            dist/SHA256SUMS.txt
+
+      - name: Publish update manifest to the release branch
+        if: steps.version.outputs.prerelease == 'false'
+        run: |
+          set -euo pipefail
+          manifest="${{ steps.version.outputs.update_manifest }}"
+          tmp="$(mktemp -d)"
+          cp "dist/${manifest}" "$tmp/"
+          # A stable release regenerates update-beta.json too (docs/01 §4.5),
+          # so beta testers roll forward onto stable.
+          [ -f "dist/update-beta.json" ] && cp dist/update-beta.json "$tmp/" || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin release:release || git branch release
+          git checkout release
+          cp "$tmp/"*.json .
+          git add update.json update-beta.json
+          if git diff --cached --quiet; then
+            echo "Update manifest unchanged; nothing to publish."
+          else
+            git commit -m "chore(release): update manifest for v${{ steps.version.outputs.version }}"
+            git push origin release
+          fi
