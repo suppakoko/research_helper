@@ -6,11 +6,18 @@
  * explicit timeout, docs/07 §7.4's three overrides of Zotero's retry and
  * status machinery, and mapping of Zotero's exception classes to one typed
  * error. `plan/README.md` §4 lists this path among the sixteen a later card
- * `create`s again as the shipped module. Not here yet, on purpose: the
- * per-host rate limiter (`src/core/rateLimit/`), retry (`retry.ts`),
- * `CancellationToken` wiring through `cancellerReceiver` (`P0-T17` proves it),
- * redacted structured logging (`src/core/logger.ts`) and docs/07 §10.1's error
- * hierarchy (`src/core/errors.ts`).
+ * `create`s again as the shipped module. `P0-T17` then added the raw
+ * `cancellerReceiver` passthrough — the primitive only.
+ *
+ * Not here yet, on purpose: the per-host rate limiter (`src/core/rateLimit/`),
+ * retry (`retry.ts`), the `CancellationToken` that docs/07 §7.4 will drive
+ * {@link HttpRequestOptions.onCanceller} from, redacted structured logging
+ * (`src/core/logger.ts`) and docs/07 §10.1's error hierarchy
+ * (`src/core/errors.ts`). Streaming is not here either: `docs/03` §6.5 and
+ * `docs/01` §8.4.1 need `requestObserver` plus an `onprogress` reader over a
+ * *cumulative* `responseText`, which is a different response contract from
+ * this facade's one-shot {@link HttpResponse}. `P0-T16` measures it from the
+ * probe instead, and its `Files` list deliberately does not include this file.
  *
  * ## Why the transport is injected
  *
@@ -76,6 +83,24 @@ export interface HttpRequestOptions {
   readonly body?: string;
   /** Milliseconds; default {@link DEFAULT_TIMEOUT_MS}. Must be > 0. */
   readonly timeoutMs?: number;
+  /**
+   * Receives a function that aborts this request. `P0-T17` scope: the raw
+   * `cancellerReceiver` primitive of `docs/01` §8.1, passed through and
+   * nothing more.
+   *
+   * **This is not the cancellation abstraction.** `docs/07` §7.4 owns that —
+   * a `CancellationToken` whose `onCancelled` subscription this option will
+   * eventually be driven from, with the `isCancellationRequested` pre-check
+   * and the `finally`-time unsubscribe that §7.4's excerpt shows. `P0-T17`'s
+   * **Do NOT** is explicit that the spike proves the primitive and does not
+   * build the abstraction, so the token is deliberately absent here.
+   *
+   * Zotero calls the receiver once, synchronously, before the request is
+   * sent. Calling the function afterwards aborts the underlying channel; the
+   * function handed out is wrapped so the client knows a cancel was asked
+   * for (see {@link createHttpClient}).
+   */
+  readonly onCanceller?: (cancel: () => void) => void;
 }
 
 /** A completed HTTP exchange, whatever its status. */
@@ -122,6 +147,8 @@ export interface HttpTransportOptions {
   noRetryOnThrottle?: boolean;
   anon?: boolean;
   logBodyLength?: number;
+  /** docs/01 §8.1; docs/07 §7.4 makes it the cancellation mechanism. */
+  cancellerReceiver?: (cancel: () => void) => void;
 }
 
 /** The members of the resolved `XMLHttpRequest` this client reads. */
@@ -269,6 +296,17 @@ export function createHttpClient(deps: {
       }
       headers["User-Agent"] = userAgent;
 
+      // Set by the wrapper below when the caller actually asks to abort. It
+      // exists because a cancelled request may not surface as
+      // `CancelledException` at all — `successCodes: false` makes a request
+      // with no HTTP response *resolve* with status 0 (see the file header,
+      // platform fact 1), and an abort is precisely such a request. Without
+      // this flag a cancelled request would be classified `NETWORK`, which is
+      // the mistake `P0-T17`'s **Do NOT** and docs/07 §10.1 both forbid:
+      // cancellation is a distinct outcome, not a transport failure.
+      let cancelRequested = false;
+      const { onCanceller } = options;
+
       const transportOptions: HttpTransportOptions = {
         headers,
         responseType: "text",
@@ -279,6 +317,14 @@ export function createHttpClient(deps: {
         anon: true,
         logBodyLength: 0,
         ...(options.body !== undefined && { body: options.body }),
+        ...(onCanceller !== undefined && {
+          cancellerReceiver: (cancel: () => void) => {
+            onCanceller(() => {
+              cancelRequested = true;
+              cancel();
+            });
+          },
+        }),
       };
 
       let xhr: HttpTransportXhr;
@@ -304,7 +350,7 @@ export function createHttpClient(deps: {
 
       if (xhr.status === 0) {
         throw new HttpError({
-          code: "NETWORK",
+          code: cancelRequested ? "CANCELLED" : "NETWORK",
           source: "status-0",
           method,
           url,
