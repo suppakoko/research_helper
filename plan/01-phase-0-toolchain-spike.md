@@ -3299,6 +3299,37 @@ failure means "stop and re-plan before Phase 1". The FR-43 fallback (save the sp
 text) ships regardless of the outcome, so a negative verdict degrades Feature 5 rather than
 deleting it.
 
+**Findings (agent half), 2026-09-21 — probe ready; the verdict needs the owner's ears.**
+`scripts/spike-tts-korean.ts` emits a paste block for Run JavaScript; `src/tts/types.ts` holds the
+shapes, types only. The key is asked for in a password dialog at run time, cancelling returns
+**before any HTTP call**, and every emitted line passes a redactor. Dry-run covered the happy path,
+an already-RIFF payload, HTTP 400, a 200 with no audio, a model-list 403 falling back, and cancel —
+all in Node with a fake transport; Zotero was never started.
+
+The model is **derived, not hard-coded**: the live model list is filtered for TTS entries and
+ordered cheapest-first, with a last-resort id only if that fetch fails. Audio is written to
+`D:\ZoteroDev\tts\` as three files — the playable `.wav`, the raw `.pcm` kept so `P0-T26` need not
+pay for synthesis again, and a `.txt` carrying the exact text sent, every measurement, and the
+Korean listening checklist.
+
+Expected spend **≈ $0.04**, worst case $0.085, computed from `docs/04` §4.2's dated table because
+Gemini's model list does not expose pricing (`docs/03` §9.3). After the call the probe recomputes
+cost from the real `usageMetadata` and prints tokens-per-second — the calibration §4.2's own
+`> **Unverified:**` callout asks for.
+
+**The script deliberately violates `docs/04` §9.1/§9.2**, which say the shipping path must
+transliterate English terms and spell numbers out before synthesis: it sends six Latin-script terms
+and eleven raw numeric forms, because `V-10` asks what happens when you don't and a pre-mitigated
+script answers a different question. Flagged in the source as "nothing here may be copied into
+`src/`". Five further corpus contradictions are recorded there too, the sharpest being that
+`docs/04` §3.3 decodes with `atob` while `docs/01` §2.3's measured sandbox globals do not list it
+and §5.6 says it is supplied — the probe carries its own decoder and reports `typeof atob` so one
+run settles it.
+
+Boxes 1, 2 and 4 are answered by the run; box 3 needs a native speaker; box 5 depends on box 3.
+Card defects logged: no test file without the reason `plan/README.md` §6 requires, and step 2 cites
+a live-list filter that `docs/03` §9.3 and `docs/04` §2.2 use for opposite purposes.
+
 ---
 
 ### P0-T26 — Binary/audio response handling and attachment
@@ -3379,6 +3410,54 @@ Zotero data.
 This card carries no gate of its own: it reuses the audio bytes captured in `P0-T25`, whose
 gate already put the human in the loop. If fresh audio must be generated, escalate to
 `P0-T25`'s gate.
+
+**Findings (agent half), 2026-09-29 — built and verified offline; Zotero was deliberately not
+started, because the owner was running probes in their own Zotero and scaffold's missing
+`-no-remote` makes a second launch able to attach to it.**
+
+`src/tts/audioStore.ts` takes **ports** (`AudioFileSystem`, `AttachmentApi`, `dataDirectory`)
+rather than naming the `Zotero` global, which is what `docs/07` §2.3 and the existing lint rule
+require and what let the whole module be exercised in plain Node. It transcribes `docs/04` §3.3's
+44-byte RIFF writer including both traps (`ChunkSize = 36 + dataSize`, every field little-endian),
+derives `<dataDir>/research-helper/audio` through the port (never the profile directory), and
+sanitises filenames against `docs/01` §12 gotchas 18 and 19 — separators, control characters,
+zero-width and bidi characters, leading dots, trailing dot/space, Windows device names, a 60
+code-point cap that does not split a surrogate pair, with Hangul preserved.
+
+**Gotcha 20 confirmed against the shipped client, not just the doc:** `attachments.js` extracted
+from the installed `omni.ja` has `importFromFile` (l. 63), `linkFromFile` (l. 187) and
+`importEmbeddedImage` (l. 400); **`importEmbeddedItems` appears nowhere in the file.**
+
+Offline evidence: the generated WAV re-reads off disk with every header field matching an
+independent construction, and **Windows' own `System.Media.SoundPlayer.Load()` accepts it**. Both
+spec blocks run green under a fake-Zotero harness with the `after()` hook leaving nothing behind.
+The spec prefers a real `P0-T25` `.pcm` and otherwise generates a 0.5 s 440 Hz tone — a sine, not
+silence, so a bug that writes zeroes is distinguishable.
+
+Two findings that matter beyond this card:
+
+1. **`V-11`'s `arraybuffer` clause is not on the Gemini TTS path at all.** Gemini's legacy TTS
+   returns base64 **inside a JSON body** (`docs/04` §3.1); the binary-response question matters for
+   OpenAI TTS (§7.2) and PDF fetches. Separately, `http.js` on the installed client assigns
+   `responseType` straight onto the XHR with **no whitelist** (ll. 367–369) and resolves the raw
+   XHR, so `docs/01` §8.4.1's claim checks out against source — but a live assertion is still owed,
+   and `docs/13` §2.3 forbids external calls from integration specs, so it belongs in a probe.
+2. **`src/core/http/client.ts` cannot carry a binary response today** — `responseType` is typed
+   `"text"` and `body` is a `string`. Widening that contract is owed before any shipped code
+   fetches audio bytes through the facade.
+
+**`docs/04` §10.2 contradicts itself** and the implementation follows the sketch, not the table: the
+table says WAV → `linkFromFile` always, the sketch three paragraphs later tests
+`bytes > 10 MiB`, and §10.4 argues *for* imported because sync carries imported attachments to the
+mobile apps. Implemented as the size test — short clips imported, a ~29 MB ten-minute WAV linked —
+and flagged for the owner rather than silently chosen. Consequence recorded: in imported mode the
+data-directory file remains **in addition to** Zotero's storage copy, so a short clip is stored
+twice; whether the source is deleted after import is Phase 6's decision, not this card's.
+
+Remaining: every box needs a Zotero run
+(`npm run test:integration -- --exit-on-finish --abort-on-fail`), and "plays" needs a human to
+double-click the attachment — noting the spec's `after()` erases its items, so hearing it means
+listening during the run or suspending cleanup once.
 
 ---
 
