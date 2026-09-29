@@ -3330,6 +3330,24 @@ Boxes 1, 2 and 4 are answered by the run; box 3 needs a native speaker; box 5 de
 Card defects logged: no test file without the reason `plan/README.md` §6 requires, and step 2 cites
 a live-list filter that `docs/03` §9.3 and `docs/04` §2.2 use for opposite purposes.
 
+**Owner run, 2026-09-29 09:19 UTC — the machine half passes; the verdict still needs ears.**
+Model `gemini-2.5-flash-preview-tts`, chosen from the live model list as the cheapest TTS entry,
+voice `Charon`. `mimeType: audio/L16;codec=pcm;rate=24000` — **matches `docs/04` §3.1 exactly**.
+108.37 s of audio, 5,201,806 PCM bytes wrapped to a 5,201,850-byte WAV, written with its raw `.pcm`
+and a `.txt` to `D:\ZoteroDev\tts\`.
+
+**The cost model's one unverified constant is now measured.** `usageMetadata` reported 504 prompt
+and 2,709 output tokens for 108.37 s: **24.998 output tokens per second**, matching to three
+significant figures the third-party figure `docs/04` §4.2 had been carrying with an explicit
+warning that "the whole TTS cost model inherits this uncertainty". Real cost **$0.0273** against a
+$0.042 pre-estimate. §4.2's `> **Unverified:**` callout is retired for this model, and §9.2's and
+§4.2's derived tables now rest on a measurement.
+
+Boxes 1, 2 and 4 pass. **Box 3 — a native speaker's verdict — and box 5 remain open**: the nine-item
+checklist is in the `.txt` beside the audio, and the script deliberately ships unmitigated English
+terms and raw numerals so `V-10` measures what happens without `docs/04` §9.1/§9.2's
+transliteration pass.
+
 ---
 
 ### P0-T26 — Binary/audio response handling and attachment
@@ -3458,6 +3476,33 @@ Remaining: every box needs a Zotero run
 (`npm run test:integration -- --exit-on-finish --abort-on-fail`), and "plays" needs a human to
 double-click the attachment — noting the spec's `after()` erases its items, so hearing it means
 listening during the run or suspending cleanup once.
+
+**Run, 2026-09-29 — every machine-checkable box passes, against the real Korean audio.**
+`npm run test:integration -- --exit-on-finish --abort-on-fail` exited 0 with **15 specs green**,
+including this card's two. The spec found and preferred `P0-T25`'s actual output rather than its
+synthetic fallback:
+
+```
+[P0-T26] audio source: P0-T25 probe — rh-p0t25-korean-20260929-091951.pcm (5201806 bytes)
+[P0-T26] WAV: rh-p0t26-probe-….wav, 5201850 bytes, 24000 Hz / 1 ch / 16-bit, ChunkSize 5201842
+[P0-T26] attachment 2 registered as imported (docs/04 §10.2), parent 1
+[P0-T26] attachment file: ….\storage\3N8LR6UY\rh-p0t26-probe-….wav
+[P0-T26] hostile-name attachment stored as "rh-p0t26-hostile….wav"
+```
+
+`ChunkSize` is `5201842 = 36 + 5201806`, so §3.3's first trap is satisfied on a real 5 MB payload,
+not just a synthetic tone; the WAV re-read off disk parses as RIFF/WAVE at 24 kHz mono 16-bit; the
+attachment is `imported` (5 MB is under the 10 MiB threshold), Zotero copied it into its own storage
+directory, and a hostile LLM-shaped filename survived sanitising and was accepted by Zotero.
+
+**Only "opens and plays" is left, and only a human can close it.** The spec's cleanup erases its own
+items, so hearing it means either playing `D:\ZoteroDev\tts\rh-p0t25-korean-*.wav` directly — the
+same bytes — or suspending the cleanup for one run.
+
+Operational note for `P0-T14` and anyone running the suite by hand: the runner **hung after
+reporting its results** on the first attempt here, exactly as `P0-T13`'s Findings describe, and its
+output was lost to the same broken pipe. Re-running with output redirected to a file and a hard
+timeout worked. Nothing about the tests was wrong; the harness around them is what misbehaves.
 
 ---
 
