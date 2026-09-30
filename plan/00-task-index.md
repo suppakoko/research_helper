@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-09-30 · **107 tasks: 31 `DONE`, 76 `TODO`.**
+> **Last updated:** 2026-09-30 · **107 tasks: 34 `DONE`, 73 `TODO`.** Phase 0 is **33 of 35**; the two open cards are `P0-T34` and `P0-T35`, created on the last day of the phase out of `P0-T28`'s own escalations. Phase 1 has begun: `P1-T01` is `DONE`.
 
 ---
 

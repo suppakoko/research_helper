@@ -78,7 +78,7 @@ Query **`CRISPR base editing`**, 2024-01-01 … 2026-12-31. Re-run 2026-09-30 un
 | Crossref | 44,938 | 100 | **42 %** (49.9 % over the whole set) | JATS — a real XML parse is needed | unchanged |
 | bioRxiv — DOI lookup | — | 5 | **100 %** | plain text with `O_SCPCAP`/`C_LIO_LI` tokens | **was unmeasurable** |
 | bioRxiv / medRxiv — window sample | 183,179 / 51,045 | 100 each | 100 % (not the query — a window sample; no keyword search exists, `docs/02` §8.4) | as above | **was unmeasurable** |
-| **Semantic Scholar** | — | — | ⬛ **PENDING — `P0-T21` is `TODO`. The key arrived 2026-09-30 (`G-03` closed, `ffcaf7a`) and the owner is running this leg. REPLACE THIS CELL WITH THE MEASURED PERCENTAGE.** | — | HTTP 429 on all 3 attempts, unchanged from 09-15 |
+| **Semantic Scholar** | — | — | 🚫 **NOT MEASURED — blocked by TLS interception on the institutional network, not by the key or the code.** The key arrived 2026-09-30 (`G-03` closed, `ffcaf7a`) and two keyed runs both failed with `SELF_SIGNED_CERT_IN_CHAIN`. Cause diagnosed, not assumed: `openssl s_client` shows `api.semanticscholar.org` served with a certificate issued by `C=KR, O=SOOSAN INT, CN=ePrism SSL` — a TLS-inspection appliance — while `export.arxiv.org` keeps its genuine issuer and returned HTTP 200. Node trusts its own CA list, not the Windows store, so the split is exactly the set of intercepted hosts. Fix for Node tooling: `NODE_USE_SYSTEM_CA=1`. **The plugin is unaffected** — Gecko honours the OS trust store and every in-Zotero probe succeeded on this network. | — | HTTP 429 on all 3 keyless attempts (09-15, unchanged); keyed attempts never reached the host |
 | arXiv | — | 0 | **blocked — HTTP 429, then HTTP 503 after a 30 s wait** | — | was 429 only |
 
 **arXiv is blocked at their end, not by our pacing.** Seven requests over 14 minutes on 2026-09-15
@@ -436,3 +436,41 @@ that re-adds it, because the sum is not stable while a phase is being measured.
 **What this addendum does not change.** No verdict, no measurement, no evidence citation, and none
 of §7's other rows. `P0-T21` is still `TODO` and `V-13`'s Semantic Scholar cell is still the one
 placeholder in this file. `G-10` is still the live red escalation.
+
+---
+
+## Addendum B — 2026-09-30: `P0-T21` closed at `partial`, and `V-13` will not be completed here
+
+**`P0-T21` is now `DONE`, and the verdict above is unchanged: `partial`.** The owner closed the card
+rather than leaving it open, having accepted that both missing sources are blocked by the
+environment and not by the work. §2.1's Semantic Scholar cell now carries that blocked result
+instead of the placeholder. **The report is not being made to look complete: five of seven sources
+were measured, and it says five.**
+
+**Semantic Scholar — blocked by TLS interception, diagnosed rather than guessed.** Two keyed runs
+failed with `SELF_SIGNED_CERT_IN_CHAIN`. Reading the certificate issuers directly settled it:
+`api.semanticscholar.org`, `eutils.ncbi.nlm.nih.gov`, `api.crossref.org`, `www.ebi.ac.uk` and
+`api.biorxiv.org` are served with certificates issued by `C=KR, O=SOOSAN INT, CN=ePrism SSL`, while
+`export.arxiv.org` retains its real issuer and returned HTTP 200 with 10/10 abstracts. Node trusts
+its bundled CA list rather than the Windows store, so the set that failed is exactly the set that is
+intercepted — **the asymmetry is the evidence.** `NODE_USE_SYSTEM_CA=1` is the fix for Node tooling
+(`docs/13` §1.6); `NODE_TLS_REJECT_UNAUTHORIZED=0` is not, and is not to be recommended.
+
+**arXiv — blocked at their end.** 429 with no `Retry-After`, then 503 after a 30 s wait. Escalation
+row 11 still stands: a re-probe from another day or network before Phase 2 depends on it.
+
+**Why closing at `partial` costs the design nothing.** Phase 1's only source is PubMed, which
+measured **100 %**. The 63 % Crossref figure is the **keyless** ceiling, so a keyed Semantic Scholar
+can only raise it. And the finding that actually reframes R-17 — 291 unique DOIs with **only 7 seen
+by two sources**, so backfill must be a targeted DOI lookup rather than a union of searches — does
+not depend on either missing source.
+
+**The deployment finding worth more than the missing percentage.** The interception affects Node
+tooling only: every in-Zotero probe on the same machine and network succeeded, because Gecko honours
+the OS trust store. But the appliance terminates TLS, so it can read request headers and bodies in
+plaintext — **API keys and paper text included**. That is now in `docs/09`'s threat model, because
+"the key never leaves the OS keystore in plaintext" is a claim about storage and not about
+transmission, and no Gecko plugin can pin certificates.
+
+**Phase 0's card states at close:** 35 cards, **33 `DONE`**. The two open cards are `P0-T34` and
+`P0-T35`, both created by this report's own escalations and both still `TODO`.

@@ -2755,13 +2755,59 @@ other transactions, none of which the fake models; and scaffold's test bundler d
 | Field | Value |
 |---|---|
 | **ID** | `P0-T21` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; **verdict stays `partial`**: 5 of 7 sources measured, Semantic Scholar blocked by institutional TLS inspection and arXiv blocked at their end. The owner accepted both as environmental and closed the card rather than leaving it open. See Findings. |
 | **Depends on** | `P0-T08` |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-13`, part of `R-17` |
 | **Implements** | none |
 | **Estimate** | 0.5 d |
 | **Human gate** | none |
+
+**Findings, 2026-09-30 — closed at `partial`. Two of the seven sources were never measured, and
+neither blocker is the plugin's.**
+
+**What was measured, and it is the part Phase 2 actually needs.** Query `CRISPR base editing`,
+window 2024-01-01 … 2026-12-31, 26 requests, every one passing the D10 identification audit
+(Crossref confirmed the polite pool with `x-api-pool=polite-array`). **PubMed 100 %**, Europe PMC
+**91.8 %**, Crossref **42 %**, lifted to **63 %** by a targeted Europe PMC backfill (57 DOIs sent,
+30 found, 20 carrying an abstract); corpus-wide coverage **79.0 % → 85.9 %**.
+
+**The finding that reframes R-17 is independent of the two missing sources.** Of **291 unique DOIs,
+only 7 were seen by two sources.** Merging result sets therefore recovers almost nothing, and
+backfill must be a **targeted DOI lookup** rather than a union of searches. PubMed and Europe PMC
+backfill each other by exactly **0**. R-17's **High** likelihood is **confirmed for Crossref and
+refuted for PubMed**.
+
+**Why Semantic Scholar was never measured, diagnosed rather than assumed.** The keyed run failed
+twice with `SELF_SIGNED_CERT_IN_CHAIN`. The cause is not the key, the code or the rate limit: the
+certificate issuers were read directly with `openssl s_client`, and `api.semanticscholar.org`,
+`eutils.ncbi.nlm.nih.gov`, `api.crossref.org`, `www.ebi.ac.uk` and `api.biorxiv.org` are all served
+with certificates issued by **`C=KR, O=SOOSAN INT, CN=ePrism SSL`** — a TLS-inspection appliance on
+the institutional network — while **`export.arxiv.org` retains its genuine issuer**. Node trusts its
+own bundled CA list rather than the Windows store, so every intercepted host failed and the one
+un-intercepted host returned HTTP 200 and measured 10/10 abstracts. That asymmetry *is* the proof.
+
+**Two consequences, and the second matters more than this card.** First, the fix for any Node script
+here is `NODE_USE_SYSTEM_CA=1` (Node 22.15+, verified on v22.23.0), which trusts what Windows already
+trusts — **not** `NODE_TLS_REJECT_UNAUTHORIZED=0`, which would disable verification entirely.
+Recorded in `docs/13` §1.6. Second, **the plugin itself is unaffected**: requests from inside Zotero
+go through Gecko, which honours the OS trust store, and every in-Zotero probe on this same machine
+and network succeeded. But the appliance terminates TLS, so it can read request headers and bodies
+in plaintext — **API keys and paper text included**. That is now in `docs/09`'s threat model, because
+"the key never leaves the OS keystore in plaintext" is a claim about storage, not transmission.
+
+**Why arXiv was not measured either.** 429 with no `Retry-After`, then 503 after a 30 s wait. Not a
+pacing defect at this end; it needs a re-probe from another day or network (`P0-T28` escalation row
+11).
+
+**Closed rather than left open, by the owner's decision (2026-09-30).** Both blockers are
+environmental and neither gates Phase 1, whose only source is PubMed and which measured 100 %. The
+63 % figure is the **keyless** ceiling, so a keyed Semantic Scholar can only raise it; nothing in the
+design rests on the exact number. `V-13`'s verdict in `docs/spikes/phase-0.md` stays **partial**, and
+the placeholder cell now carries this blocked result rather than a percentage — the report is not
+made to look complete when it is not (`plan/README.md` §5 rule 6).
+
+---
 
 **Goal.** `V-13`'s answer: for one realistic biomedical query, what fraction of records from
 each source carries an abstract? This drives Phase 2's source-priority and backfill design and
@@ -3789,7 +3835,7 @@ asserts. The two throwaway releases still exist; deleting `v0.0.2` would leave t
 | Field | Value |
 |---|---|
 | **ID** | `P0-T28` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; report committed, 19 verdicts, six of seven criteria pass and criterion 3 was stale as written (reported, not re-scoped). Addendum A records the two cards the report itself spawned. |
 | **Depends on** | `P0-T14`, `P0-T15`, `P0-T16`, `P0-T17`, `P0-T18`, `P0-T19`, `P0-T20`, `P0-T21`, `P0-T22`, `P0-T23`, `P0-T24`, `P0-T25`, `P0-T26`, `P0-T27` |
 | **Blocks** | none |
 | **Retires** | closes out every `V-*`; `R-21` (partly) |

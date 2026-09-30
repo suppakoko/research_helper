@@ -144,7 +144,7 @@ mutually consistent; this diagram is a reading aid.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T01` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; 111 unit tests green, field names diffed against `docs/07` §5.1 with 0 mismatches, three corpus defects fixed including §6.6's missing `s2:` work-key arm. |
 | **Depends on** | none |
 | **Blocks** | `P1-T02`, `P1-T07`, `P1-T10`, `P1-T12`, `P1-T13`, `P2-T09` |
 | **Retires** | none |
