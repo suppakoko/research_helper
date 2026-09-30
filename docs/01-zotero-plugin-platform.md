@@ -2077,9 +2077,9 @@ async function* streamChatCompletion({ url, apiKey, body, signal }) {
 }
 ```
 
-Cancellation uses a standard `AbortController`.
+Cancellation **must not** use `AbortController` — it does not exist in the plugin sandbox (§2.3, measured `P0-T08`). Use `Zotero.HTTP.request`'s `cancellerReceiver` (§8.1–§8.2). **Measured 2026-09-30 (`P0-T17`):** calling the canceller rejected the request with `Zotero.HTTP.CancelledException` **0 ms** after the call, with no further progress events in a 2.5 s quiet period. The `fetch` + `AbortController` path in this section works only in a window global, where the probe confirmed it aborts (`AbortError`), so treat this whole reader as window-only code.
 
-> **Unverified — test this early, it is on the critical path.** The *availability* of `fetch` is verified from the sandbox's `wantGlobalProperties`. Still confirm in Tools → Developer → Run JavaScript that (a) `res.body` is a live `ReadableStream` rather than `null`, (b) `TextDecoderStream` exists in the sandbox, and (c) `AbortController`/`signal` actually aborts the underlying channel.
+> **Tested 2026-09-30 (`P0-T16`/`P0-T17`), in the Run JavaScript *window* global:** (a) `res.body` is a live `ReadableStream` — **yes**, 43 chunks, first at t+628 ms, 2,955 ms before completion; (b) `TextDecoderStream` exists — **yes**; (c) `AbortController` aborts the channel — **yes**, `AbortError` 0 ms after `abort()`. **None of this transfers to the plugin sandbox**, where §2.3 measured `AbortController` absent. The sandbox-viable streaming path is the XHR one below, which was measured on the same run: 30 progress ticks over 4,096 ms with the first text delta 3,897 ms before the response completed.
 
 #### 8.4.1 The fallback, and why it is better-trodden than the primary path
 

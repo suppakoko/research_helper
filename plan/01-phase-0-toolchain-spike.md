@@ -2083,6 +2083,54 @@ Remaining for this card: OpenAI, Gemini and Anthropic direct (deferred by the ow
 spike-report entry. Of `docs/11` §4's stop-and-re-plan condition, the OpenRouter path — the D6
 default provider — is now cleared.
 
+**Owner run, 2026-09-30 02:37 UTC, Zotero 10.0.3 — `V-7`, `V-8` and `V-9` all pass.** Two keys were
+entered (OpenRouter, Gemini) and two dialogs cancelled, so the OpenAI and Anthropic legs skipped
+cleanly, which is itself the designed behaviour working.
+
+**`P0-T15` (`V-7`).** OpenRouter `POST /chat/completions` → HTTP 200 in 1,788 ms,
+`finish_reason: stop`, content `"pong"`, **cost $0.00004**. Read back from Gecko's channel: the D10
+`User-Agent`, `HTTP-Referer`, `X-Title`, `X-OpenRouter-Title`, `X-OpenRouter-Metadata` and
+`Authorization` all sent, **no `Cookie`** — and `openrouter_metadata` came back in the response,
+which only happens if the custom header arrived. Gemini **direct** via the Interactions API
+(`docs/03` §4.3) → HTTP 200 in 3,024 ms, `status: completed`, text `"pong"`, with `x-goog-api-key`
+as a header and no key in the URL. PubMed keyless → HTTP 200, 8,915 hits. **OpenAI and Anthropic
+remain unmeasured.**
+
+Model choice was derived, not hard-coded: 464 OpenRouter models with 438 usable live prices, and
+two Gemini models were **skipped because reasoning is mandatory** on them — they would spend the
+token cap on hidden tokens. The Gemini leg picked `gemma-4-26b-a4b-it` at $0.08/$0.26 per 1M off
+the live list.
+
+**`P0-T16` (`V-8`) — streaming is incremental, and the sandbox-viable path is the XHR one.** The
+parser self-check passed 6/6 against `docs/03` §6's recorded frames offline. Live, through
+`Zotero.HTTP.request({responseType:"text", requestObserver})` + `onprogress`: **30 progress ticks
+over 4,096 ms, first text delta at t+876 ms — 3,897 ms before the response completed**, 111 SSE
+events, end sentinel seen. The `fetch` + `ReadableStream` path also worked (43 chunks, first at
+t+628 ms) **but only in the Run JavaScript window global**; `docs/01` §2.3 measured the plugin
+sandbox as having no `AbortController`, and the probe printed that caveat next to its own `typeof`
+table so the window's capabilities cannot be mistaken for the sandbox's.
+
+**`P0-T17` (`V-9`) — cancellation works, through `cancellerReceiver`.** Calling the canceller at
+t+607 ms rejected the request **0 ms later** with `Zotero.HTTP.CancelledException` (checked against
+all five exception classes — only that one matched), with **0 progress ticks in a 2,500 ms quiet
+period afterwards**. `src/core/http/client.ts` mapped it to `HttpError code=CANCELLED`,
+`retryable=false`, which is the mapping `docs/07` §10.1 requires and the one the facade would
+otherwise have got wrong as `NETWORK`.
+
+**One thing the run did *not* establish, stated plainly:** the abort fired at t+607 ms, before the
+first byte (t+677 ms on the comparable leg), so the partial body was **0 chars**. Cancellation
+mid-stream — data already delivered, then aborted — is therefore untested, and with it the question
+of whether a partially streamed body stays readable. Worth a line in `P0-T28` and a cheap re-run
+with a later abort point.
+
+Corrected on the strength of this run: `docs/01` §8.4's "Cancellation uses a standard
+`AbortController`" (it must not, and now carries the measured `cancellerReceiver` result) and its
+`> **Unverified:**` streaming callout (now the measured three-way answer, with the window-vs-sandbox
+boundary spelled out); and `docs/07` §7.4's checkpoint 3, which said cancellation is "passed as
+`AbortSignal` into the HTTP layer" while its own excerpt used `cancellerReceiver`.
+
+Also recorded: **Zotero updated itself again, 10.0.2 → 10.0.3**, between `P0-T26` and this run.
+
 ---
 
 ### P0-T16 — Streaming (SSE) consumption from inside Zotero
@@ -2167,6 +2215,9 @@ report preview, so record the answer in a form that section can be updated again
 This card carries no gate of its own: it reuses the session key entered for `P0-T15`. If a
 fresh key entry is needed, escalate to `P0-T15`'s gate.
 
+
+**See `P0-T15`'s Findings for the 2026-09-30 owner run** — one probe answered all three cards, and the numbers for this card live there with the rest of the run.
+
 ---
 
 ### P0-T17 — Request abortion
@@ -2231,6 +2282,9 @@ Manual, from Tools → Developer → Run JavaScript: start the request, call the
 **Notes.** `docs/11` §4.2 gives this a 0.25 d timebox — it is a confirmation, not a build.
 `docs/11` §4's closing note lists `V-9` among the spikes that "are quick confirmations rather
 than builds".
+
+
+**See `P0-T15`'s Findings for the 2026-09-30 owner run** — one probe answered all three cards, and the numbers for this card live there with the rest of the run.
 
 ---
 

@@ -2134,7 +2134,7 @@ Cancellation is cooperative and checked at four places:
 
 1. Before each unit of work in every `for` loop (`ctx.token.throwIfCancelled()`).
 2. Inside `RateLimiter.acquire` — a job waiting on a token bucket must not block cancellation.
-3. Passed as `AbortSignal` into the HTTP layer, so in-flight requests are actually aborted rather than merely ignored.
+3. Passed into the HTTP layer as `Zotero.HTTP.request`'s **`cancellerReceiver`** — *not* an `AbortSignal`, which does not exist in the plugin sandbox (`docs/01` §2.3) — so in-flight requests are actually aborted rather than merely ignored. Measured 2026-09-30 (`P0-T17`): the request rejects with `Zotero.HTTP.CancelledException`, which `src/core/http/client.ts` maps to `HttpError` code `CANCELLED`.
 4. Between pipeline stages.
 
 **Cancellation is genuinely supported by the HTTP layer.** `Zotero.HTTP.request(method, url, options)` accepts a **`cancellerReceiver`** callback that is handed a cancel function, alongside `requestObserver` (which receives the `XMLHttpRequest` after `open()`). `HttpClient` wires both:
