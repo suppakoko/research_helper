@@ -2534,8 +2534,23 @@ term=(("base editing"[All Fields] OR "prime editing"[All Fields])
       NOT mouse[All Fields])
       AND ("2024/01/01"[EDAT] : "2026/12/31"[EDAT])
 ```
-Field tags: `[Title]`, `[Title/Abstract]`, `[Author]`, `[Journal]`, `[MeSH Terms]`, `[All Fields]`.
+Field tags: `[Title]`, `[Title/Abstract]`, `[Author]`, `[Journal]`, `[MeSH Terms]`, `[Affiliation]`,
+`[All Fields]`. **`[Affiliation]` added 2026-09-30 (`P1-T08`):** `docs/07` §4.2's `QueryField` has
+**eight** members and this list had **six**, so `affiliation` — a real Entrez tag — had no mapping
+anywhere in the corpus, §12.3's summary table included. The fallback would have been `[All Fields]`,
+which **silently widens an affiliation restriction to the whole record**, so the gap was not
+harmless. **`abstract` and `titleOrAbstract` necessarily collide here:** there is no abstract-only
+Entrez tag and §12.3 maps the abstract concept to `[Title/Abstract]`, so an `abstract:` term is
+rendered *wider* than asked and a title hit satisfies it. That is a property of PubMed, not a defect,
+and it matters to anyone comparing PubMed and Europe PMC result counts.
 Booleans **must be uppercase**. Date via `[EDAT]`/`[PDAT]` range or the `mindate`/`maxdate` params.
+
+**The *user's* Booleans are uppercase-only too (pinned 2026-09-30, `P1-T08`; §12.1 did not say).**
+Three reasons, and the last is the one that matters: it is PubMed's own rule, so the input and the
+output agree; §12.1's bare-words-default-to-AND rule makes a lowercase `and` cost only a stopword
+that PubMed's own translation drops anyway; and **accepting a lowercase `not` would turn "patients
+not receiving therapy" into a negation.** A user typing prose must not have it silently reinterpreted
+as an operator.
 
 #### Europe PMC
 ```

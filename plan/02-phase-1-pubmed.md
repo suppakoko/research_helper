@@ -1135,6 +1135,16 @@ ever showing a syntax error.
    is deterministic and fixture-hashable (`docs/13` §2.2 keys fixtures on the
    URL).
 
+**Clarification added 2026-09-30, without changing a criterion (`plan/README.md`
+§5 rule 6).** Criterion 1 and step 3 ask for different things and both are right:
+`docs/02` §12.2's example block carries the date **in the term**, `("2024/01/01"[EDAT] :
+"2026/12/31"[EDAT])` — §3.3 mechanism **(c)** — while step 3 mandates mechanism
+**(b)**, `mindate`/`maxdate`. **The full §12.2 string is therefore not producible as a
+`term=` value under step 3, and it should not be.** Criterion 1 is about step 4's
+`explainQuery` rendering, which is where the in-term form belongs; the Boolean tree
+alone is what `term=` carries on the wire. §3.3 calls the three mechanisms
+"interchangeable", so the preview does not misdescribe the filter.
+
 **Do NOT.**
 - Do **not** lowercase the Boolean operators. `docs/02` §12.2: "Booleans **must
   be uppercase**" — PubMed silently treats a lowercase `and` as a search term.
@@ -1176,6 +1186,81 @@ npm run typecheck && npm run test:unit -- query
 `translationset` — free MeSH expansion the plugin gets for nothing. `P1-T09`
 captures both into provenance; this card only has to not interfere with them.
 
+
+**Findings, 2026-09-30 — all six criteria pass.** `src/sources/shared/queryParse.ts`,
+`src/sources/pubmed/query.ts` and two test files; **46 tests**. No network call was made, and none
+was needed. `typecheck`, `eslint` and the unit suite all exit 0; the only `prettier` complaint at the
+time belonged to a concurrently-running card.
+
+**Two criteria were met in ways worth recording, because a weaker reading would have passed too.**
+Criterion 2 asks for balanced parentheses over 100 generated inputs: the property test builds them
+from a 22-piece pool with a **seeded** `mulberry32` PRNG, so a failure is reproducible rather than
+flaky, and asserts `expect(offenders).toEqual([])` so the message prints the offending input *and* its
+rendering. Making it true of **all** input rather than well-formed input required stripping
+`" ( ) [ ]` out of term values, because §12.1's raw-string fallback puts arbitrary user text inside a
+term. Criterion 3's URL round-trip is asserted twice, and **the second assertion is the one that
+matters**: reading `term` back through `URLSearchParams.get()` would fail if spaces had been encoded
+as `+`, since `URLSearchParams` decodes `+` to a space.
+
+**The card asks for two different date mechanisms, and both are right.** `docs/02` §12.2's example
+block carries the date **in the term** — `("2024/01/01"[EDAT] : "2026/12/31"[EDAT])`, §3.3 mechanism
+(c) — while `Do` step 3 mandates mechanism (b), `mindate`/`maxdate`. **The full §12.2 string is
+therefore not producible as a `term=` value under step 3.** Resolved without bending either:
+`renderPubmedTerm()` renders the Boolean tree, which is what `term=` carries on the wire, and
+`explainPubmedQuery()` — step 4's preview and provenance rendering — appends the in-term clause and so
+reproduces §12.2 verbatim. §3.3 calls the three mechanisms "interchangeable", so the preview does not
+misdescribe the filter. A clarification was added to the `Do` list; **no criterion was edited**
+(`plan/README.md` §5 rule 6).
+
+**A plan contradiction about who owns the parameter set, now fixed.** This card's step 5 says "build
+the **full** `esearch` parameter set as an ordered, URL-encoded string"; `P1-T09` step 2 said "build
+the `esearch` URL from `P1-T08`, **append** `db=pubmed`, `retmode=json`, `retmax`, `retstart`, `tool`,
+`email`, and `api_key`". Both cannot be true of one string, and appending would have destroyed the
+deterministic parameter order `docs/13` §2.2 keys fixtures on **and** put D10's `tool`/`email` in two
+places. `P1-T09` step 2 now reads "by **passing** … in as options".
+
+**Two corpus gaps in the PubMed field-tag mapping, both fixed in `docs/02` §12.2.** `docs/07` §4.2's
+`QueryField` has **eight** members and §12.2's tag list had **six**: **`affiliation` had no mapping
+anywhere in the corpus**, §12.3's summary table included. That is not harmless — the fallback would
+have been `[All Fields]`, which **silently widens an affiliation restriction to the whole record**. It
+renders as `[Affiliation]`, a real Entrez tag. Separately, **`abstract` and `titleOrAbstract`
+necessarily collide on PubMed**: there is no abstract-only Entrez tag and §12.3 maps the abstract
+concept to `[Title/Abstract]`, so an `abstract:` term is rendered *wider* than asked and a title hit
+satisfies it. A property of PubMed rather than a defect, and now recorded where anyone comparing
+PubMed and Europe PMC result counts will find it.
+
+**§12.1 never stated whether the user's Booleans are case-sensitive; they are uppercase-only, and the
+third reason is the real one.** It is PubMed's own rule so input and output agree; the
+bare-words-default-to-AND rule makes a lowercase `and` cost only a stopword PubMed's translation drops
+anyway; and **accepting a lowercase `not` would turn "patients not receiving therapy" into a
+negation.** Prose must not be silently reinterpreted as an operator. Pinned in §12.2.
+
+**`docs/07` §4.2's `not` is unary; Entrez's `NOT` is binary, and nothing says what a left-operandless
+`NOT` should do.** `renderPubmedTerm` emits a bare `NOT mouse[All Fields]`, which PubMed rejects —
+deliberately loud. The rejected alternative was synthesising an implicit left operand, which turns
+"not mouse" into a multi-million-record query the user never asked for. **If the owner wants the UI to
+block this earlier, that is a product decision and a card.** Note also that the parser handles `NOT`
+in two positions because it *is* two things: Entrez's binary `A NOT B` becomes `and([A, not(B)])` to
+fit §4.2's unary node.
+
+**A mechanical consequence of reusing `redactUrl`, worth knowing before someone keys a fixture on the
+wrong field.** `redactUrl` rebuilds the URL through `URL`/`URLSearchParams` **whenever it actually
+removes a parameter**, so with an `api_key` present the recorded `transmittedUrl` comes back in
+`URLSearchParams` encoding (space → `+`, `(` → `%28`) rather than byte-identical to what was sent.
+Same request, different bytes. **`docs/13` §2.2's fixture key must be computed from the live `url`,
+redacted at hash time as §2.2's own `fixtureKey` does — never from the stored `transmittedUrl`.**
+
+**Defensive choices recorded so they are not mistaken for accidents.** A 32-level paren-depth limit
+turns a pasted `((((((…` into the §12.1 raw-string fallback instead of a stack overflow **inside the
+job queue**. A half-open date window throws `RangeError` rather than inventing the missing bound,
+because §3.3 requires `mindate` and `maxdate` together. `reldate` is never emitted and a test pins
+that negative, since C10 settled the window as calendar years rather than a rolling 1095 days.
+
+**Needs a new card (rule 2, reported and not absorbed).** `docs/07` §4.2 declares `languages`,
+`openAccessOnly` and `raw` on `SourceQuery`, and PubMed can express the first two (`[Language]`,
+`free full text[sb]`). **Neither this card's `Do` nor `P1-T09`'s mentions any of them**, so a caller
+that sets them today has them silently dropped. The module header states they are unrendered, so the
+gap is visible at the call site rather than at the result count.
 ---
 
 ### P1-T09 — PubMed adapter: `esearch` → `efetch`
@@ -1225,9 +1310,15 @@ paging, and a loud failure on the errors PubMed hides inside HTTP 200.
    true — the key is optional) and `capabilities` with
    `maxTotalResults: 9999` from `docs/02` §3.3's ceiling and
    `abstractsInSearch: false` (abstracts require the `efetch` round trip).
-2. `search()`: build the `esearch` URL from `P1-T08`, append `db=pubmed`,
-   `retmode=json`, `retmax`, `retstart`, `tool`, `email`, and `api_key` when
-   `P1-T06` returns one; issue it through `P1-T05`.
+2. `search()`: build the `esearch` URL from `P1-T08` by **passing** `db=pubmed`,
+   `retmode=json`, `retmax`, `retstart`, `tool`, `email`, and `api_key` (when
+   `P1-T06` returns one) **in as options**; issue it through `P1-T05`.
+   **Reworded 2026-09-30 (`P1-T08`): this step said "append", which contradicted
+   `P1-T08` step 5's "build the **full** `esearch` parameter set as an ordered,
+   URL-encoded string".** Both cannot be true of one string, and appending would
+   destroy the deterministic parameter order `docs/13` §2.2 keys fixtures on **and**
+   put D10's `tool`/`email` in two places. `buildEsearchRequest()` owns the whole
+   ordered string; this card supplies the values.
 3. **Check `esearchresult.ERROR` before anything else** and throw `SourceError`
    with the upstream text; a 200 with an error body must never look like zero
    results.
