@@ -199,6 +199,23 @@ const ABORT_AFTER_MS = 600;
 /** ms to keep listening after the abort, to prove no further data arrives. */
 const ABORT_QUIET_PERIOD_MS = 2500;
 
+// P0-T35: the abort point P0-T17 could not reach. Its leg fired at t+607 ms
+// while the first byte arrived at t+677 ms, so the partial body was 0 chars and
+// mid-stream cancellation went unmeasured. These legs trigger on a *progress
+// event* instead of a clock, so bytes are guaranteed to have arrived first.
+//
+// Keyless by design (the card's `Do NOT`): the three open questions — does the
+// cancel take effect, is the partial body readable, do further events fire —
+// are transport questions, not SSE or provider ones. Europe PMC's
+// `resultType=core` carries full abstracts, so 200 records is hundreds of
+// kilobytes and arrives in several events.
+const MIDSTREAM_URL =
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search" +
+  "?query=crispr%20base%20editing&format=json&resultType=core&pageSize=200";
+const MIDSTREAM_ABORT_AFTER_TICKS = 3;
+/** Margin past the measured first-tick time for the facade leg. */
+const MIDSTREAM_FACADE_MARGIN_MS = 150;
+
 /** docs/02 §3.3 example (a), verbatim parameters. */
 const PUBMED_ESEARCH =
   "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
@@ -283,7 +300,7 @@ export async function main(env: ProbeEnv): Promise<string> {
   try {
     const userAgent = buildUserAgent(env.version);
     say(
-      "research_helper network probe - P0-T15 (V-7), P0-T16 (V-8), P0-T17 (V-9)",
+      "research_helper network probe - P0-T15 (V-7), P0-T16 (V-8), P0-T17 (V-9), P0-T35",
     );
     say(`run at      ${new Date().toISOString()}`);
     say(`zotero      ${env.zotero.version}`);
@@ -418,6 +435,20 @@ export async function main(env: ProbeEnv): Promise<string> {
       streamTarget === null
         ? "SKIPPED - no provider key entered"
         : await fetchAbortLeg(env, streamTarget, say),
+    );
+
+    // ---- P0-T35 -----------------------------------------------------------
+    say();
+    say("=== P0-T35: cancellation after the first byte (keyless) ===");
+
+    say();
+    const midStream = await midStreamAbortLeg(env, say);
+    record("P0-T35 mid-stream cancellerReceiver abort", midStream.verdict);
+
+    say();
+    record(
+      "P0-T35 HttpClient.onCanceller mapping mid-stream",
+      await midStreamClientAbortLeg(client, midStream.firstTickAt, say),
     );
 
     say();
@@ -2356,6 +2387,248 @@ async function fetchAbortLeg(
   );
 }
 
+// ---------------------------------------------------------------------------
+// P0-T35: cancellation AFTER the first byte (what P0-T17 could not reach)
+// ---------------------------------------------------------------------------
+
+interface MidStreamResult {
+  readonly verdict: string;
+  /** When the first progress event fired, so leg [15] can abort after it. */
+  readonly firstTickAt: number | null;
+}
+
+/**
+ * `P0-T17` verified the cancellation primitive and said plainly what it did not
+ * establish. This leg fixes the one thing that was wrong with it: the abort is
+ * triggered by the Nth **progress event**, not by a timer, so data has
+ * demonstrably arrived before the cancel.
+ *
+ * It reports **three independent answers**, because any of them can be false on
+ * its own and Phase 3's job engine needs to know which:
+ *   (a) does the cancel take effect once bytes are in flight,
+ *   (b) is the partial body still readable afterwards,
+ *   (c) do further progress events arrive during a quiet period.
+ */
+async function midStreamAbortLeg(
+  env: ProbeEnv,
+  say: (line?: string) => void,
+): Promise<MidStreamResult> {
+  say(
+    `[14] P0-T35: abort on progress event #${MIDSTREAM_ABORT_AFTER_TICKS} - ` +
+      `cancellation AFTER data has arrived (keyless)`,
+  );
+  say(`    GET ${MIDSTREAM_URL}`);
+
+  const t0 = Date.now(); // docs/01 §2.3: no `performance` in the sandbox
+  const ticks: { at: number; total: number; afterAbort: boolean }[] = [];
+  let cancel: (() => void) | null = null;
+  let cancelledAt: number | undefined;
+  let bodyAtCancel: number | null = null;
+  // A ref rather than a `let`: TypeScript does not track assignments made inside a
+  // callback, so a `let` initialised to null narrows to `null` and reading
+  // `.response` off it fails to compile.
+  const observed: { current: XMLHttpRequest | null } = { current: null };
+
+  const onTick = (xhr: XMLHttpRequest): void => {
+    const total = typeof xhr.response === "string" ? xhr.response.length : 0;
+    ticks.push({
+      at: Date.now() - t0,
+      total,
+      afterAbort: cancelledAt !== undefined,
+    });
+    if (
+      cancelledAt === undefined &&
+      ticks.length >= MIDSTREAM_ABORT_AFTER_TICKS &&
+      total > 0
+    ) {
+      cancelledAt = Date.now() - t0;
+      bodyAtCancel = total;
+      say(
+        `    -> ${ticks.length} progress event(s), ${total} chars buffered; ` +
+          `calling the canceller at t+${cancelledAt} ms`,
+      );
+      try {
+        cancel?.();
+      } catch (e) {
+        say(`    canceller threw: ${describeError(e)}`);
+      }
+    }
+  };
+
+  const promise = env.zotero.HTTP.request("GET", MIDSTREAM_URL, {
+    headers: {
+      "User-Agent": buildUserAgent(env.version),
+      Accept: "application/json",
+    },
+    // mechanic 1 from P0-T16: `responseType: "text"` is MANDATORY. With
+    // "json" a partial response cannot be observed at all, which is the
+    // whole measurement here.
+    responseType: "text",
+    successCodes: false,
+    timeout: 180_000,
+    noRetryOnThrottle: true,
+    errorDelayMax: 0,
+    anon: true,
+    logBodyLength: 0,
+    requestObserver: (xhr: XMLHttpRequest) => {
+      observed.current = xhr;
+      // addEventListener, not xhr.onprogress: the property has one slot and
+      // http.js may assign to it after requestObserver returns (P0-T16).
+      xhr.addEventListener("progress", () => {
+        onTick(xhr);
+      });
+    },
+    cancellerReceiver: (c: () => void) => {
+      cancel = c;
+    },
+  });
+
+  let error: unknown;
+  let status: number | null = null;
+  try {
+    const xhr = await promise;
+    onTick(xhr); // the last bytes may not produce a progress event
+    status = xhr.status;
+  } catch (e) {
+    error = e;
+  }
+  const settledMs = Date.now() - t0;
+
+  // (b) is the partial body still readable through the SAME xhr afterwards?
+  let readableAfter: number | null = null;
+  try {
+    const o = observed.current;
+    const r: unknown = o === null ? null : o.response;
+    readableAfter = typeof r === "string" ? r.length : null;
+  } catch (e) {
+    say(`    reading xhr.response after the abort threw: ${describeError(e)}`);
+  }
+
+  // (c) does anything more arrive once we stay subscribed?
+  const beforeQuiet = ticks.length;
+  await sleep(ABORT_QUIET_PERIOD_MS);
+  const duringQuiet = ticks.length - beforeQuiet;
+
+  const first = ticks[0];
+  const firstTickAt = first?.at ?? null;
+  say(
+    `    progress events: ${ticks.length} total, first at t+${firstTickAt ?? "never"} ms`,
+  );
+  say(`    canceller called at t+${cancelledAt ?? "never"} ms`);
+  say(
+    `    settled at t+${settledMs} ms` +
+      (cancelledAt === undefined
+        ? ""
+        : ` (${settledMs - cancelledAt} ms after the abort)`),
+  );
+  say(
+    `    (a) buffered at the moment of cancellation: ${bodyAtCancel ?? 0} chars`,
+  );
+  say(
+    `    (b) partial body readable afterwards: ` +
+      (readableAfter === null
+        ? "NO (xhr.response unreadable)"
+        : `YES, ${readableAfter} chars`),
+  );
+  say(
+    `    (c) further progress events in ${ABORT_QUIET_PERIOD_MS} ms quiet period: ${duringQuiet}`,
+  );
+  if (error !== undefined) say(`    threw: ${describeError(error)}`);
+
+  // Honest failure modes first (plan/README.md §5 rule 6): if the body arrived
+  // in fewer events than the trigger needs, nothing mid-stream was exercised
+  // and saying so is the result.
+  if (cancelledAt === undefined) {
+    return {
+      firstTickAt,
+      verdict:
+        `INCONCLUSIVE - the canceller never fired: only ${ticks.length} progress ` +
+        `event(s) with content, fewer than the ${MIDSTREAM_ABORT_AFTER_TICKS} the trigger ` +
+        `needs. The body arrived too fast or in one piece; a larger response is required.`,
+    };
+  }
+  if (error === undefined) {
+    return {
+      firstTickAt,
+      verdict:
+        `INCONCLUSIVE - the request RESOLVED with HTTP ${status ?? "?"} despite a cancel at ` +
+        `t+${cancelledAt} ms with ${bodyAtCancel ?? 0} chars buffered: the abort did not take effect`,
+    };
+  }
+  const cancelledException =
+    error instanceof Error && error.name === "CancelledException";
+  const answers =
+    `(a) stopped ${settledMs - cancelledAt} ms after the abort with ${bodyAtCancel ?? 0} chars in hand; ` +
+    `(b) partial body ${readableAfter === null ? "NOT readable" : `readable, ${readableAfter} chars`}; ` +
+    `(c) ${duringQuiet} further event(s) in ${ABORT_QUIET_PERIOD_MS} ms`;
+  return {
+    firstTickAt,
+    verdict:
+      (duringQuiet === 0 ? "PASS" : "PARTIAL") +
+      ` - ${cancelledException ? "CancelledException" : describeError(error)}; ` +
+      answers,
+  };
+}
+
+/**
+ * The same mid-stream abort through `src/core/http/client.ts`, to confirm that
+ * the status-0 resolve still maps to `CANCELLED` rather than `NETWORK` **when
+ * bytes have already arrived** — the case the `cancelRequested` flag was written
+ * for and which `P0-T17` could only test before the first byte.
+ *
+ * The facade exposes no progress hook, so the abort is scheduled from leg [14]'s
+ * **measured** first-tick time rather than from a guess. That is weaker evidence
+ * than an event trigger and is reported as such.
+ */
+async function midStreamClientAbortLeg(
+  client: HttpClient,
+  firstTickAt: number | null,
+  say: (line?: string) => void,
+): Promise<string> {
+  say(
+    "[15] P0-T35: the same mid-stream abort through HttpClient (onCanceller)",
+  );
+  if (firstTickAt === null) {
+    return "SKIPPED - leg [14] saw no progress event, so there is no measured abort point";
+  }
+  const abortAt = firstTickAt + MIDSTREAM_FACADE_MARGIN_MS;
+  say(
+    `    aborting at t+${abortAt} ms - leg [14] measured the first byte at ` +
+      `t+${firstTickAt} ms, plus a ${MIDSTREAM_FACADE_MARGIN_MS} ms margin`,
+  );
+  let cancel: (() => void) | null = null;
+  const t0 = Date.now();
+  const timer = setTimeout(() => {
+    say(`    -> calling the canceller at t+${Date.now() - t0} ms`);
+    cancel?.();
+  }, abortAt);
+  const x = await timed(() =>
+    client.request("GET", MIDSTREAM_URL, {
+      headers: { Accept: "application/json" },
+      timeoutMs: 180_000,
+      onCanceller: (c) => {
+        cancel = c;
+      },
+    }),
+  );
+  clearTimeout(timer);
+  if (x.response) {
+    say(`    the promise RESOLVED: HTTP ${x.response.status} after ${x.ms} ms`);
+    return (
+      `INCONCLUSIVE - resolved with HTTP ${x.response.status} after ${x.ms} ms; ` +
+      `the whole body arrived before t+${abortAt} ms, so nothing was aborted mid-stream`
+    );
+  }
+  say(`    ${describeError(x.error)}`);
+  const e = x.error;
+  if (e instanceof HttpError) {
+    return e.code === "CANCELLED"
+      ? `PASS - HttpError code CANCELLED (source ${e.source}), retryable ${String(e.retryable)}, after ${x.ms} ms; the mapping holds with bytes already delivered`
+      : `FAIL - HttpError code ${e.code} (source ${e.source}): docs/07 §10.1 wants CANCELLED, and a mid-stream cancel is exactly what cancelRequested exists to disambiguate from NETWORK`;
+  }
+  return `PARTIAL - the facade rethrew an unmapped error: ${describeError(e)}`;
+}
+
 // --- Instrumentation ----------------------------------------------------------
 
 interface Instrumented {
@@ -2650,7 +2923,9 @@ async function emitPasteBlock(scriptPath: string): Promise<void> {
 
   process.stdout.write(
     [
-      "// research_helper network probe: P0-T15 (V-7), P0-T16 (V-8), P0-T17 (V-9).",
+      "// research_helper network probe: P0-T15 (V-7), P0-T16 (V-8), P0-T17 (V-9),",
+      "// P0-T35 (V-9 mid-stream). Legs [14] and [15] are KEYLESS: cancel every",
+      "// password dialog and they still run.",
       `// Generated ${new Date().toISOString()} from scripts/spike-network.ts, version ${version}.`,
       "// Tools > Developer > Run JavaScript: paste, make sure 'Run as async function'",
       "// is checked, press Run. Four password dialogs ask for the four provider keys,",
