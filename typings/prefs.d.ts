@@ -7,7 +7,18 @@
 declare namespace _ZoteroTypes {
   interface Prefs {
     PluginPrefsMap: {
-      "enable": boolean;
+      "sources": string;
+      "searchYears": number;
+      "maxResults": number;
+      "useTranslators": boolean;
+      "hideExisting": boolean;
+      "contactEmail": string;
+      "timeoutSeconds": number;
+      "prefsSchemaVersion": number;
+      "logLevel": string;
+      "logRequestBodies": boolean;
+      "ncbi.keyPresent": boolean;
+      "secretBackend": string;
     };
   }
 }

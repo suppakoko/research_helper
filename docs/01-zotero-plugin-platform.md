@@ -1256,6 +1256,38 @@ var items = await Zotero.Items.getAsync(itemIDs);
 
 **Every item field is automatically available as a search condition.** Zotero's `searchConditions.js` builds condition aliases from `SELECT fieldName FROM fieldsCombined`, excluding `accessDate`, `pages`, `section`, `seriesNumber` and `issue` (which are handled by other condition groups). So `addCondition('DOI', …)` and `addCondition('PMID', …)` work without any registration.
 
+> **CORRECTED 2026-09-30 (`P1-T13`) — the snippets below were wrong in two ways, and the first one
+> silently returns the wrong answer.**
+> 
+> **1. `addCondition('DOI', 'is', doi)` is CASE-SENSITIVE on Zotero 10.** Read out of 10.0.3's own
+> `chrome/content/zotero/xpcom/data/search.js`:
+> 
+> ```js
+> var useNormalized = condition.normalizedField &&
+>   typeof condition.value == 'string' &&
+>   ['contains', 'doesNotContain', 'beginsWith'].includes(condition.operator);
+> ```
+> 
+> `is` is **not** in that list, so it compares against the raw `itemData.value` column with an
+> un-normalized term. Only `contains` / `doesNotContain` / `beginsWith` use the Zotero 10 normalized
+> shadow column with a `normalizeForSearch()`-ed term and SQLite `LIKE` (ASCII case-insensitive).
+> **So `'is'` misses a library item a translator stored as `10.18653/V1/…` when you search for
+> `10.18653/v1/…`** — which is exactly what `P1-T13`'s own third criterion requires to work.
+> 
+> The working shape is `contains` **plus exact in-memory verification**, because `contains` is a
+> substring match and `10.1/abc` would otherwise match `10.1/abcd`. Better still, and what `P1-T13`
+> ships: build one index with a single condition-poor search and normalize both sides in memory.
+> 
+> **2. `s.libraryID = libraryID` does not compile.** `Zotero.DataObject#libraryID` is `readonly` in
+> `zotero-types@4.1.3` (`dataObject.d.ts` line 65) → `TS2540`. Use the constructor form,
+> `new Zotero.Search({ libraryID })`, which reaches the same setter (10.0.3's `Zotero.Search` calls
+> `assignProps(this, params, ['name','libraryID'])`). Every `Zotero.Search` sample in this section
+> needs it.
+> 
+> **3. Two normalizers for one field.** This snippet uses `Zotero.Utilities.cleanDOI()` while
+> `docs/02` §11.1 and `P1-T01`'s `src/model/ids.ts` make `normalizeDoi()` the plugin's only DOI
+> normalizer. Plugin code must use `normalizeDoi()`, or an index key and a search term can disagree.
+
 ```javascript
 async function findByDOI(libraryID, doi) {
   doi = Zotero.Utilities.cleanDOI(doi);

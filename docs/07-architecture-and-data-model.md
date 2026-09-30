@@ -630,6 +630,11 @@ export interface ProgressReporter {
   /** Convenience: completed += n. */
   increment(n?: number): void;
   /**
+   * **NOTE (2026-09-30, `P1-T15`): this comment promises weights the signature does not carry.**
+   * The parameters are `fromFraction`/`toFraction`; the actual weight carrier is §4.5's
+   * `StageDescriptor.weight`, so something must convert a weight list into cumulative fractions.
+   * `P1-T16` step 2 is the natural owner and **no card's `Files` list names a home for that helper.**
+   *
    * Create a sub-reporter occupying [fromFraction, toFraction] of this
    * reporter's range. Weights let stages of unequal cost divide the bar fairly.
    */
@@ -2308,6 +2313,19 @@ Zotero.hideZoteroPaneOverlays()
 
 ```ts
 // src/zotero/progressWindow.ts
+// CORRECTED 2026-09-30 (`P1-T15`) — this sketch has three defects and was not implemented as
+// written. (a) **It does not compile:** it declares `implements ProgressReporter` but defines only
+// `setProgress`; `setMessage` and `done` exist solely as trailing `//` comments below, and
+// `increment`, `child` and `warn` are absent entirely. It also calls an undeclared
+// `getString(headlineKey)`. (b) **It contradicts `P1-T15` step 1's architecture**, which puts
+// exactly one reporter in `core/` fanning out to sinks; implementing this literally would mean a
+// second copy of `child()`'s arithmetic and the ETA inside `src/zotero/`. It ships as
+// `ZoteroProgressWindowSink implements ProgressSink` instead. (c) **`new ItemProgress(/* iconURI */
+// "", "")` passes the wrong kind of first argument** — `docs/08` §8.2, read from
+// `progressWindow.js`, says it is an **item type string** and that passing a path is "a live Zotero
+// bug. Do not copy it." And `getString()` throws on an unknown key when the locale is `en-US`
+// (§8.2.1), because a plugin's `.ftl` lives in `L10nRegistry`, not in that synchronous bundle — so
+// the headline must arrive already localized.
 export class ZoteroProgressWindowReporter implements ProgressReporter {
   private readonly pw: any;              // Zotero.ProgressWindow instance
   private readonly line: any;            // ItemProgress line
@@ -2844,7 +2862,7 @@ Per decision **D5** (`00-overview.md` §3) and `09-security-privacy-and-api-keys
 | `semanticscholar.keyPresent` | boolean | `false` | — | as above | Doc 08 §7.3 renders an S2 key field with a backend badge and doc 09 §1.7 assigns the `source.semanticscholar` `SecretId`, so the flag is required; `01-zotero-plugin-platform.md` §7.2's `prefs.js` ships the `pref()` line for it. |
 | `<provider>.lastValidatedAt` | string | `""` | ISO 8601 timestamp, or empty | `09-security-privacy-and-api-keys.md` §2.3 | Prefs pane status row ("last validated …"). One key per provider ID, same set as `keyPresent`. |
 | `<provider>.lastValidationResult` | string | `""` | `ok` \| `rejected` \| `forbidden` \| `inconclusive` \| `""` (never validated) | `09-security-privacy-and-api-keys.md` §2.4 | Prefs pane key-status row — the per-credential `role="status"` hint element beside the key field in doc 08 §7.3's markup (`rh-or-status` in the OpenRouter block, one per key-holding block) supplies its colour and wording. **One key per credential-holding ID — exactly the same six as `keyPresent` and `lastValidatedAt` above**: `openrouter`, `openai`, `gemini`, `anthropic`, `ncbi`, `semanticscholar`. Doc 09 §2.3 defines a validation test call for all six. It was scoped to the four LLM providers in an earlier draft; **the owner extended it to all six on 2026-09-09**, because the two source credentials fail *silently*: a wrong or expired NCBI key does not error, it simply drops the user from 10 req/s back to the unkeyed 3 req/s (`02-literature-database-apis.md` §3.1), and a wrong Semantic Scholar key drops features F2 and F6 onto the saturated anonymous pool that `02-literature-database-apis.md` §6.4 measured returning HTTP 429 on three consecutive attempts. Without a stored validation status neither failure has any surface at all. Written together with `<provider>.lastValidatedAt` by the validation flow and by doc 09 §2.4 step 3; reset to `""` on key rotation (doc 09 §2.5). It is a **status**, not an input, so doc 08 §7.3 gives it no `preference=` binding — the status element is driven imperatively by `preferences.js`, like the key field itself. |
-| ⚠ `secretBackend` | string | `""` | `oskeystore` \| `session` \| `passphrase` \| `""` (unprobed) | `09-security-privacy-and-api-keys.md` §1.7 | Prefs pane storage-backend badge. `09-security-privacy-and-api-keys.md` §1.7 says "the selected backend" goes in prefs but names no key. |
+| ⚠ `secretBackend` | string | `""` | `oskeystore` \| `session` \| `passphrase` \| `""` (unprobed). **CONFLICT, recorded 2026-09-30 (`P1-T03`): `docs/09` §1.7's `SecretBackend` type spells these `"os-keychain" \| "session-only" \| "passphrase"` — two of the three differ and it has no unprobed member.** §8.5 is the sole authority for a preference's allowed values, so these spellings ship; one of the two documents must be corrected, and `P3-T02`'s startup probe is where the mismatch bites. Note the 2026-09-30 `G-09` measurement added a **fifth** live case neither set has a member for — Gecko's `NSSKeyStore` fallback, decided as a degraded tier — so the answer may be five values, not four. | `09-security-privacy-and-api-keys.md` §1.7 | Prefs pane storage-backend badge. `09-security-privacy-and-api-keys.md` §1.7 says "the selected backend" goes in prefs but names no key. |
 
 There is **no** `*.apiKey`, `apiKey.*`, or similarly-named preference, and there must never be one. `src/prefs/schema.ts` carries a `secret: true` flag per entry, and a unit test asserts that no `secret: true` entry has a `Zotero.Prefs` writer (`09-security-privacy-and-api-keys.md` §1.7). The debug bundle's `settings.json` uses the same flag to replace secret-flagged values with `"[present]"` / `"[absent]"` (§10.4).
 
@@ -2922,6 +2940,27 @@ export function observePref(name: PrefName, handler: (value: unknown) => void): 
   return Zotero.Prefs.registerObserver(BRANCH + PREFS[name].key, handler);
 }
 ```
+
+> **CORRECTED 2026-09-30 (`P1-T03`) — this section's code block cannot be built as printed, twice.**
+> 
+> **1. It calls `Zotero.Prefs` from `src/prefs/index.ts`** and calls that "the only module that
+> touches Zotero.Prefs for non-secret settings" — while §2.3 of this same document says "`zotero/` is
+> the only directory permitted to reference `Zotero.*`", and `eslint.config.js`'s
+> `research-helper/zotero-global` override enforces it. §2.3 wins: the `PrefStore` **port** is
+> declared in `src/core/config.ts`, implemented over `Zotero.Prefs` in `src/zotero/prefStore.ts`, and
+> `src/prefs/index.ts` is the typed half sitting on the port. Re-read this block against that shape.
+> 
+> **2. `PrefValue<K> = (typeof PREFS)[K]["default"]` does not compile usefully** beside a `PREFS`
+> declared `as const`: `PrefValue<"searchYears">` is then the **literal type `3`**, so
+> `setPref("searchYears", 5)` is a compile error and `getPref` can be typed as returning nothing but
+> `3`. `as const` is load-bearing for `PrefName` and for the key strings, so the repair is a `Widen<T>`
+> helper rather than dropping it.
+> 
+> **3. `observePref(...): symbol` is not reachable.** `Zotero.Prefs.registerObserver` is confined to
+> `src/zotero/registrations.ts` by `FR-56` and the `scoped-registration` lint rule, whose factory
+> returns bootstrap's `ScopedRegistration` — a function, not a `Symbol` — and `core/` may not name
+> bootstrap's types (§2.3). The port declares an opaque `PrefObserverHandle` instead; giving it a
+> properly typed handle at the composition root is still owed.
 
 `coerce()` exists because of a real foot-gun: the pane's `preference=` binding applies `String(value)` on the way out, so `concurrency` and `maxResults` come back as **strings** after a user touches the control (doc 08 §7.2). Every integer and number pref must go through `Number()`; string arithmetic on `maxResults` is a classic and very confusing bug. `core/config.ts` consumes this module through a `PrefStore` port so that `core/` keeps its no-Zotero-globals rule (§2.3).
 
