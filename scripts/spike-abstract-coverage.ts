@@ -308,6 +308,22 @@ const RUN_STARTED_AT = Date.now();
 const requestLog: RequestLogEntry[] = [];
 const lastFinishedAt = new Map<string, number>();
 
+/** Network failure, with Node's `cause.code` surfaced. See its call site. */
+function describeTransportError(error: unknown): string {
+  if (!(error instanceof Error)) return "?";
+  const cause: unknown = (error as { cause?: unknown }).cause;
+  const code =
+    typeof cause === "object" && cause !== null && "code" in cause
+      ? String((cause as { code: unknown }).code)
+      : null;
+  const causeMessage =
+    cause instanceof Error && cause.message !== "" ? cause.message : null;
+  const detail = [code, causeMessage].filter((x) => x !== null).join(" — ");
+  return detail === ""
+    ? `${error.name}: ${error.message}`
+    : `${error.name}: ${error.message} [${detail}]`;
+}
+
 async function politeGet(
   label: string,
   url: string,
@@ -355,7 +371,12 @@ async function politeGet(
         status: null,
         body: "",
         headers: null,
-        error: error instanceof Error ? `${error.name}: ${error.message}` : "?",
+        // Node wraps every network failure as the same "TypeError: fetch
+        // failed"; the actionable detail is in `cause.code` (ENOTFOUND vs
+        // ECONNRESET vs UND_ERR_CONNECT_TIMEOUT vs a TLS error). A 2026-09-30
+        // run lost six of seven sources to a transient local outage and the
+        // bare message said nothing about why, so surface the cause here.
+        error: describeTransportError(error),
       };
     }
     lastFinishedAt.set(host, Date.now());

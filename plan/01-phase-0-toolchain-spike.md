@@ -2895,6 +2895,26 @@ an availability problem at their end, not a rate-limit our pacing can fix; `docs
 carries both observations. Neither blocks Phase 1: PubMed is Phase 1's only source, and it measured
 100 %.
 
+**arXiv measured at last, 2026-09-30 04:36 — 10 of 10 records carry an abstract (100 %), median
+1,517 characters, all plain text.** After HTTP 429 on 2026-09-15 and 429-then-503 earlier the same
+day, one request finally succeeded. `V-13` therefore has a number for arXiv, and `docs/02` §7's
+availability problem is confirmed as **intermittent rather than a block**: three sessions, two
+refused, one served. Note the sample is small — the query returned only 10 hits — and 1 of 10
+entries carried a published-version DOI, the rest keyed by a constructed `10.48550/arXiv.<id>`.
+
+**That same run lost six of seven sources to a local network outage, not to the APIs.** Every other
+host failed with `TypeError: fetch failed` within 32–1,030 ms, the whole run finishing in 6
+seconds, while the Semantic Scholar leg correctly reported itself as *authenticated* — the key was
+read from the environment and sent. Verified afterwards from the same machine: `curl` and Node
+`fetch` both reached all six hosts normally. So **Semantic Scholar remains unmeasured for a third
+reason** — not a 429, not a missing key, but a transient local failure.
+
+Two things were fixed rather than just noted. `scripts/spike-abstract-coverage.ts` now surfaces
+Node's `cause.code` (`ENOTFOUND`, `ECONNRESET`, `UND_ERR_CONNECT_TIMEOUT`, TLS errors) beside the
+useless generic "fetch failed", so the next such run says *why* in its own output; and the
+Semantic Scholar leg reads `SEMANTIC_SCHOLAR_API_KEY` from the process environment only, printing
+whether a key was sent and never its value (D5).
+
 ---
 
 ### P0-T22 — Measure S2 throttling and submit the key application
