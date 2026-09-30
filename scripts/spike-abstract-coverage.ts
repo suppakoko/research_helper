@@ -100,7 +100,9 @@ const HOST_SPACING_MS: Readonly<Record<string, number>> = {
   "eutils.ncbi.nlm.nih.gov": 1_000, // §3.1: 3 req/s without a key; §2.4: 2.5/s
   "www.ebi.ac.uk": 1_000, // §4.1 / §2.4: 5 req/s shipped budget
   "api.crossref.org": 1_000, // §5.1: polite pool, 3 req/s for list queries
-  "api.semanticscholar.org": 1_200, // §2.4: 0.9 req/s in both modes
+  // §2.4: 0.9 req/s keyless; §6.4: the authenticated tier is 1 req/s, so a
+  // keyed run keeps the same conservative spacing rather than going faster.
+  "api.semanticscholar.org": 1_200,
   "export.arxiv.org": 3_500, // §7.1: 1 request per 3 s, hard ToU obligation
   "api.biorxiv.org": 1_000, // §8.1: treat conservatively as 1 req/s
 };
@@ -311,12 +313,14 @@ async function politeGet(
   url: string,
   accept: string,
   retryWaitsMs: readonly number[],
+  extraHeaders: Readonly<Record<string, string>> = {},
 ): Promise<HttpResult> {
   const host = new URL(url).host;
   const spacing = HOST_SPACING_MS[host] ?? 3_000;
   const headersSent: Readonly<Record<string, string>> = {
     "User-Agent": USER_AGENT,
     Accept: accept,
+    ...extraHeaders,
   };
 
   let result: HttpResult = {
@@ -777,6 +781,19 @@ async function measureCrossref(): Promise<SourceMeasurement> {
 // Semantic Scholar — docs/02 §6.4 limits, §6.5 /paper/search, §12.2
 // ---------------------------------------------------------------------------
 
+/**
+ * Semantic Scholar API key, read from the environment and never printed.
+ *
+ * Decision D5 keeps credentials out of files and preferences, so this probe
+ * takes the key only from `SEMANTIC_SCHOLAR_API_KEY` in the process
+ * environment — set it in your own shell for one run and close that shell.
+ * Nothing here logs the value: the request log prints header *names* only
+ * (see the identification audit), and the rendering line below says whether a
+ * key was sent, not what it was.
+ */
+const S2_API_KEY: string | undefined =
+  process.env["SEMANTIC_SCHOLAR_API_KEY"]?.trim() || undefined;
+
 async function measureSemanticScholar(): Promise<SourceMeasurement> {
   const params: Readonly<Record<string, string>> = {
     query: QUERY_TEXT,
@@ -790,15 +807,24 @@ async function measureSemanticScholar(): Promise<SourceMeasurement> {
     source: "Semantic Scholar" as const,
     rendering: `/paper/search ${Object.entries(params)
       .map(([k, v]) => `${k}=${v}`)
-      .join(" ")} (no x-api-key)`,
+      .join(
+        " ",
+      )} (${S2_API_KEY === undefined ? "no x-api-key" : "with x-api-key from SEMANTIC_SCHOLAR_API_KEY"})`,
     queryDerived: true,
   };
-  report("Semantic Scholar (docs/02 §6.5 /paper/search; ≤3 attempts per §6.4)");
+  report(
+    `Semantic Scholar (docs/02 §6.5 /paper/search; ≤3 attempts per §6.4; ${
+      S2_API_KEY === undefined
+        ? "keyless — the shared anonymous pool"
+        : "authenticated — §6.4's 1 req/s tier"
+    })`,
+  );
   const res = await politeGet(
     "Semantic Scholar /paper/search §6.5",
     withParams("https://api.semanticscholar.org/graph/v1/paper/search", params),
     "application/json",
     S2_RETRY,
+    S2_API_KEY === undefined ? {} : { "x-api-key": S2_API_KEY },
   );
   if (res.status === 429) {
     return {

@@ -181,6 +181,18 @@ as *on or before 2026-09-15*. The multi-week approval clock is running. When the
 goes to `SecretId` `source.semanticscholar` in the OS keystore (D5), never to a preference, and
 this gate closes by recording the arrival date here.
 
+**Closed 2026-09-30.** The key arrived and the owner has it. Gate `G-03` is therefore satisfied:
+the application was submitted on or before 2026-09-15 and answered within roughly two weeks — far
+faster than `docs/11` R-3's "can take weeks", which is good news for Phase 5 but is one data point,
+not a reason to weaken R-3's week-1 rule for anyone repeating this project.
+
+The key itself is **not** in this repository, in `.env`, or in any preference (decision D5). For the
+one remaining measurement that needs it — `P0-T21`'s Semantic Scholar leg —
+`scripts/spike-abstract-coverage.ts` reads `SEMANTIC_SCHOLAR_API_KEY` from the **process
+environment** only, and the run prints whether a key was sent, never its value. When the plugin
+itself needs it, `G-26` in Phase 5 is where it goes into the OS keystore as `SecretId`
+`source.semanticscholar`.
+
 **What changed on 2026-09-09, and what did not.** `docs/11` §1's re-estimate
 *cut* R-3's exposure: R-3 now records that on the corrected figures Phase 5
 cannot start before ≈ 58.5–82 developer-days in — Phase 0 plus Phase 1 plus the
