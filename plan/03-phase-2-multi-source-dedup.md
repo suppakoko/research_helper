@@ -314,7 +314,7 @@ source — returning inline abstracts in one round trip, with cursor pagination 
 - create `src/sources/europepmc/query.ts`
 - modify `src/core/rateLimit/hostLimiter.ts`
 - modify `src/bootstrap/registerSources.ts`
-- modify `src/model/merge.ts`
+- create `src/model/merge.ts` (was `modify`; corrected 2026-09-30 — `P1-T01` found this path `modify`ed by six Phase 2 cards and `create`d by none, against `plan/README.md` §4)
 - modify `addon/locale/en-US/research-helper-searchDialog.ftl`
 - modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
 - create `test/unit/sources/europepmc.test.ts`

@@ -186,7 +186,7 @@ research_helper/
 │   │   └── clock.ts                  # injectable clock (testability)
 │   │
 │   ├── model/                        # canonical data model — pure types + guards
-│   │   ├── canonicalWork.ts          # CanonicalWork, Author, ExternalIds
+│   │   ├── canonicalWork.ts          # CanonicalWork, Author, WorkType
 │   │   ├── sourceRecord.ts           # SourceRecord, provenance
 │   │   ├── summary.ts                # StoredSummary (record); PaperSummary payload is 06-… §6.3
 │   │   ├── trend.ts                  # ThemeCluster, TrendReport
@@ -194,7 +194,7 @@ research_helper/
 │   │   ├── recommendation.ts         # Recommendation
 │   │   ├── job.ts                    # JobRecord (re-export from core for convenience)
 │   │   ├── ids.ts                    # DOI/PMID/arXiv normalization + branded ID types,
-│   │   │                             #   plus the SourceId / ProviderId unions
+│   │   │                             #   plus ExternalIds and the SourceId / ProviderId unions
 │   │   ├── usage.ts                  # Usage (token/cost accounting)
 │   │   └── merge.ts                  # deterministic multi-source merge rules
 │   │
@@ -1408,6 +1408,13 @@ export interface CanonicalWork {
    * Stable internal key: the first available of
    * `doi:<doi>` | `pmid:<pmid>` | `arxiv:<id>` | `s2:<corpusId>` | `hash:<sha1(title|year|firstAuthor)>`.
    * Used as the primary key in the plugin database and as a cache key component.
+   *
+   * The hash arm is **literal, and deliberately so** (pinned 2026-09-30, `P1-T01`): the three
+   * components are joined verbatim with `|`, an absent year or first author contributes the empty
+   * string, and the title receives **no** case-folding, whitespace collapse or punctuation
+   * stripping. This was under-specified until `P1-T01` implemented it, and it matters because
+   * `P2-T09` keys deduplication on this value: any normalization added here silently re-partitions
+   * every already-stored work, so it is a schema change and not a tidy-up.
    */
   readonly workKey: string;
   readonly ids: ExternalIds;
@@ -2041,7 +2048,7 @@ A summary is stored as a **child note** on the item, not in `extra`:
 export function fromZoteroItem(item: Zotero.Item): CanonicalWork;
 ```
 
-Inverse mapping is lossy-tolerant: unknown item types map to `type: "other"`; missing dates yield `publishedDate: undefined` (which excludes the item from recency-sensitive analysis with a warning rather than an error). `rh-work-key` in `extra` is trusted when present; otherwise a key is derived from DOI → PMID → arXiv → title hash, and written back on next write.
+Inverse mapping is lossy-tolerant: unknown item types map to `type: "other"`; missing dates yield `publishedDate: undefined` (which excludes the item from recency-sensitive analysis with a warning rather than an error). `rh-work-key` in `extra` is trusted when present; otherwise a key is derived by §5.1's **five-arm** precedence — DOI → PMID → arXiv → **Semantic Scholar corpus id** → title hash — and written back on next write. **Corrected 2026-09-30 (`P1-T01`):** this sentence listed four arms and omitted `s2:`, so for a record carrying only an S2 corpus id the write path produced `s2:<corpusId>` while this read-back path would have derived `hash:<sha1(…)>` — two different join keys for one work, which is the precise failure this section exists to prevent. §5.1 is the authority and the implementation follows it.
 
 ---
 

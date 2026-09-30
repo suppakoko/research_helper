@@ -773,7 +773,7 @@ scripted mock that lets every later card be tested without a network call or a c
 - create `src/llm/shared/baseUrl.ts`
 - modify `src/bootstrap/registerProviders.ts`
 - modify `src/model/ids.ts`
-- modify `src/model/usage.ts`
+- create `src/model/usage.ts` (was `modify`; corrected 2026-09-30 — `docs/07` §5.1's second code block declares `Usage`, and `src/tts/types.ts` already carries `AudioArtifact.usage` as a documented absence waiting on it)
 - create `test/helpers/mockLLM.ts`
 - create `test/unit/llm/router.spec.ts`
 
@@ -2228,7 +2228,7 @@ without mutating the user's library.
 - create `src/zotero/fulltext.ts`
 - create `src/pipeline/summarize/acquire.ts`
 - create `src/pipeline/summarize/normalizeAbstract.ts`
-- modify `src/model/summary.ts`
+- create `src/model/summary.ts` (was `modify`; corrected 2026-09-30 — first touch of a path no card created)
 - create `test/unit/pipeline/normalizeAbstract.spec.ts`
 - create `test/integration/zotero/acquireFullText.spec.ts`
 

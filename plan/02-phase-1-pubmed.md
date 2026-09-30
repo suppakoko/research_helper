@@ -233,6 +233,102 @@ dependency-free implementation or from `crypto.subtle` behind an injected port �
 `docs/07` §2.3 forbids `model/` reaching for a platform global, so if a hash
 needs a platform API, take it as an argument rather than importing one.
 
+**Findings, 2026-09-30 — all five criteria pass; six corpus defects found, one
+of which needs a new card.**
+
+**Verification, real output.** `Verify with` (`npm run typecheck && npm run
+test:unit -- model`) exits **0**: 3 test files, **111 tests** passed.
+`npm run lint:check` (`eslint . && prettier --check .`) exits **0** with zero
+warnings; `npx eslint .` alone exits **0**. `npm run test` (unit + contract)
+exits **0**. Exit codes were read with `echo $?` on the command itself, never
+through a pipe — the `… | tail -5; echo $?` trap `P0-T12` hit reads `tail`'s
+status.
+
+**Coverage**, from `coverage/coverage-final.json` (the terminal table hides
+fully-covered files; Vitest 5 turns on `coverage.skipFull` in an agent
+environment, per `P0-T12`): `src/model` **99.17% statements / 100% functions**
+overall — `ids.ts` 106/106 statements and 9/9 functions, `canonicalWork.ts`
+15/15 and 5/5, `sourceRecord.ts` types only so 0/0. The only uncovered branches
+are the `?? 0` index fallbacks inside `sha1Hex`'s block loop (lines 369–372,
+377, 403), which `noUncheckedIndexedAccess` forces and which are unreachable by
+construction — the array is padded to a multiple of 64 before the loop runs.
+
+**Criterion 4 was measured, not eyeballed.** A throwaway script extracted
+§5.1's four fenced `ts` blocks from `docs/07`, tokenised every
+`export interface` / `export type` name, every `readonly <field>: <type>` and
+every string-literal union arm, unwrapped Prettier's line wrapping, and diffed
+the sequences against the three source files: **16 tokens for `ids.ts`, 56 for
+`canonicalWork.ts`, 9 for `sourceRecord.ts`, 0 mismatches**, including the
+`SourceId`, `ProviderId` and `WorkType` arm lists. The script lives in the
+session scratchpad, not the repository — nothing in `Files` covers it.
+
+**`sha1` resolution.** The injected-port option this card's Notes offers is not
+open: §5.1 fixes `buildWorkKey`'s four parameters, and `crypto.subtle.digest`
+is async, so a port would make a pure key-builder `await`. `src/model/ids.ts`
+therefore carries a dependency-free FIPS 180-4 SHA-1 plus a hand-written UTF-8
+encoder (`TextEncoder` is itself a platform global). It is asserted against the
+three published RFC 3174 vectors *and* cross-checked against `node:crypto` on
+ASCII, 2-byte, 3-byte (Korean) and 4-byte (emoji, surrogate-pair) input and on
+every block-boundary length in 55/56/64/119/120/1000 bytes.
+
+**Six corpus defects.**
+
+1. **`docs/07` §5.1 has four code blocks, not three.** `Do` step 1 says
+   "transcribe §5.1's three blocks into the three files"; the second block is
+   `src/model/usage.ts` (`Usage`), which this card's `Files` list does not
+   name. Nothing here references `Usage`, so nothing broke — but see defect 2.
+2. **Three `src/model/` paths are `modify`ed by a card and `create`d by
+   none**, against `plan/README.md` §4's rule that within a phase a path is
+   created by exactly one card: `src/model/merge.ts` (first touched by
+   `P2-T03`, `modify`), `src/model/usage.ts` (`P3-T06`, `modify`) and
+   `src/model/summary.ts` (`P3-T18`, `modify`). **This is the one that needs a
+   new card** — `usage.ts` is also the `AudioArtifact.usage` field
+   `src/tts/types.ts` is already carrying as a documented absence.
+3. **§2.2's directory comment and §5.1's code block disagree on where
+   `ExternalIds` lives.** §2.2 line 189 attributes it to `canonicalWork.ts`;
+   §5.1's first block declares it in `ids.ts`. §5.1 is the declaration and this
+   card names it the sole authority, so `ids.ts` has it and
+   `canonicalWork.ts` imports it. §2.2's comment should be corrected.
+4. **§5.1 and §6.6 give the work key different derivations.** §5.1's `workKey`
+   comment has five arms (`doi:` | `pmid:` | `arxiv:` | `s2:` | `hash:`); §6.6
+   says "a key is derived from DOI → PMID → arXiv → title hash" — four arms,
+   no `s2:`. §5.1's five are implemented. If §6.6's reader ever derives a key
+   for an S2-only record it will produce a different string from the one that
+   was written, which is precisely the failure §6.6 exists to avoid.
+5. **§5.1 under-specifies the hash arm.** `sha1(title|year|firstAuthor)` does
+   not say whether the title is case-folded, whitespace-collapsed or
+   punctuation-stripped, nor what an absent year or author contributes. The
+   literal reading was implemented and documented in the function's doc
+   comment: `|`-joined verbatim, absent components empty, no other
+   normalization. `P2-T09` keys deduplication on this, so it should be pinned
+   down upstream rather than re-decided there.
+6. **The card's test path collides with a Phase 0 file.** `Files` says create
+   `test/unit/model/ids.test.ts`, but `P0-T12` already shipped
+   `test/unit/model/ids.spec.ts` for the same module, and
+   `plan/README.md` §4's sixteen-path relaxation list covers
+   `src/model/ids.ts` and not its test. Both files now exist and both pass
+   (the spike's `normalizeDoi` cases still hold against the shipped module,
+   and it is the only proof that `vitest.config.ts`'s `setupFiles` ran). The
+   overlap is left for a human: deleting a Phase 0 file is outside this card's
+   `Files`.
+
+**One `P0-T12` open question is now decided, as specified.** That card's
+Findings asked `P1-T01` to rule on `docs/02` §11.1's trailing-punctuation strip
+`[.,;)\]]+$` having no leading counterpart, so that a DOI lifted from
+parenthesized prose normalizes to `null`. Decision: **implement as specified,
+do not widen the regex** — it is a reference implementation three other cards
+read. The behaviour is now asserted rather than latent
+(`normalizeDoi("(10.1056/nejmoa2300709);") === null`).
+
+**Three values were added that §5.1 does not declare**, all in support of
+`Do` step 5's guards and each tied to its union at compile time by
+`satisfies Record<Union, true>`, so neither can drift: `SOURCE_IDS` /
+`isSourceId` in `ids.ts`, `WORK_TYPES` / `isWorkType` in `canonicalWork.ts`,
+and `sha1Hex` exported from `ids.ts` so the hash arm is assertable against an
+external vector. They are not second declarations of `SourceId` or `WorkType`
+— adding a member to either union without updating its key set fails to
+compile, which is the behaviour `docs/07` §11.1 step 3 asks for.
+
 ---
 
 ### P1-T02 — Core primitives: cancellation, clock, errors, logger
