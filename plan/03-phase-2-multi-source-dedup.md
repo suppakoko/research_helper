@@ -526,7 +526,7 @@ added to `docs/09` §1.7 first.
 |---|---|
 | **ID** | `P2-T05` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01` |
+| **Depends on** | `P1-T27`, `P2-T01` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | `R-3` (fallback proven — full retirement is Phase 5 per `docs/11` §3.1) |
 | **Implements** | `FR-2`, `FR-4`, `FR-11`, open question 8 in `docs/10` §5 |
@@ -1029,7 +1029,7 @@ prefixes) is the mitigation; implement it as the secondary key in `P2-T09`.
 | **ID** | `P2-T09` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T01`, `P1-T13` |
-| **Blocks** | `P2-T10`, `P2-T11`, `P2-T13`, `P2-T14`, `P2-T16` |
+| **Blocks** | `P2-T10`, `P2-T11`, `P2-T13`, `P2-T14`, `P2-T16`, `P2-T19` |
 | **Retires** | `R-18` (with `P2-T10`, `P2-T11`, `P2-T13`) |
 | **Implements** | `FR-50`, `FR-51` |
 | **Estimate** | 2.0 d |
@@ -2359,6 +2359,160 @@ a new `P2-T17`+ card per `README.md` §3, not a silent fix inside this one.
 
 ---
 
+### P2-T19 — Work-key detection for records with no DOI and no PMID, and `fromZoteroItem`
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T19` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T13`, `P2-T09` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.75 d |
+| **Human gate** | none |
+**Goal.** A record whose only identifier is an arXiv id or a Semantic Scholar corpus id can still be
+matched against the library, and `docs/07` §6.6's `fromZoteroItem` exists.
+
+**Why this is a card, and why Phase 2 needs it.** Measured 2026-09-30 (`P1-T13`): the library index's
+`matchedOn` is exactly `"doi" | "pmid"`, and adding a third arm would have widened that card's own
+declared type. But `P1-T12` writes `rh-work-key` into `extra` on **every** import, `readWorkKey`
+already reads it back, and **§6.6's five-arm derivation exists precisely so a record whose only
+identifier is an arXiv id or an S2 corpus id still has a stable join key** — and neither can be
+matched by the current index. Phase 2's arXiv, bioRxiv and medRxiv adapters import exactly those
+records. `§11.6`'s own sketch declares a `byArxiv` map that no card owns. And **`fromZoteroItem` is
+declared in §6.6 and implemented nowhere**, which is the other half of the round trip §6.6 exists to
+guarantee.
+
+**Read first.**
+- `src/zotero/libraryIndex.ts` (`P1-T13`) — `byDoi`, `byPmid`, `doisOf`, `pmidsOf`, `findExisting`,
+  and the reason it is **synchronous**: that is the compile-time proof the hot path cannot reach the
+  DB. A third arm must not break it.
+- `src/model/ids.ts`'s `buildWorkKey` — **call it; never reimplement the precedence.** §6.6 was
+  corrected on 2026-09-30 from four arms to five: it had omitted `s2:`, so an S2-only record produced
+  `s2:<corpusId>` on write and would have derived `hash:<sha1>` on read-back — two join keys for one
+  work, the exact failure §6.6 exists to prevent.
+- **§5.1's hash arm is pinned as literal**: components joined verbatim with `|`, absent year or
+  author contributing the empty string, and **no** case-folding, whitespace collapse or punctuation
+  stripping. `P2-T09` keys deduplication on this value, so adding normalization silently
+  re-partitions every stored work — it is a schema change, not a tidy-up.
+- `src/zotero/extraField.ts` (`P1-T12`) — `parseExtra`, `readWorkKey`, `RH_WORK_KEY`. **Do not write
+  a second `extra` parser**, and note the CRLF trap it guards: `\r` is a JavaScript line terminator,
+  so a regex using `.*` parses every line of a CRLF `extra` as key-less. Asserted against a real
+  field by `P1-T13`.
+- `docs/02` §11.6 — the `byArxiv` sketch, and its `archiveID` prose. **Its trashed-item advice ("add
+  it to a persistent dismissed list") is feature-6 advice and must NOT be wired into the importer:**
+  for `FR-51` a trashed item simply must not block an import. Same mechanism, two features, one piece
+  of advice that applies to only one.
+
+**Files.**
+- modify `src/zotero/libraryIndex.ts`
+- modify `src/zotero/itemMapper.ts`
+- modify `test/integration/zotero/libraryIndex.spec.ts`
+
+**Do.**
+1. Add `byArxiv` and a `byWorkKey` map, populated from the native field, the `extra` lines **and**
+   `rh-work-key` — `P1-T13` measured that `setField` performs no Extra→field migration and `P1-T12`
+   measured that strict-mode `fromJSON` does not either, so **an identifier genuinely cannot be
+   assumed to live in one place.** Read both, always.
+2. Widen `matchedOn` to include `"arxiv"` and `"workKey"`, and fix the precedence: DOI, PMID, arXiv,
+   then the work key. Say in the code why the work key is **last** — it is the weakest evidence,
+   since the hash arm can collide on title alone.
+3. Implement `fromZoteroItem` per §6.6 and assert the round trip: `toZoteroMapping` → a real item →
+   `fromZoteroItem` → the same `workKey`, for a record on **each** of the five arms.
+4. Keep `findExisting` synchronous and keep the one-search build. Re-measure the index build and
+   report it against `P1-T13`'s 69–72 ms; **if a third and fourth map cost materially more, report
+   the number rather than dropping a map.**
+
+**Do NOT.**
+- Do not add title or fuzzy matching. That is `P2-T09`'s cascade and it is a different question with
+  a different error profile.
+- Do not make `findExisting` async or issue a search per candidate. `P1-T13` measured the alternative
+  at ≥400 searches for one run.
+- Do not normalize the title inside the hash arm. See `Read first`.
+
+**Criteria.**
+- [ ] A record whose only identifier is an arXiv id is found; so is one whose only identifier is an
+      S2 corpus id, matched through `rh-work-key`.
+- [ ] The round trip holds on all five `buildWorkKey` arms, asserted against a real Zotero item.
+- [ ] The index still builds with exactly one search, asserted from a patched
+      `Zotero.Search.prototype.search` rather than the module's self-report.
+- [ ] A trashed item is still not returned on any of the four arms.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fail`
+— and **check the test count, not just the exit code.**
+
+**Notes.** `P1-T13` also reported that its card names no unit-test file and its `Notes` give no reason,
+against `plan/README.md` §6, so the pure parts (`doisOf`/`pmidsOf` composition, the precedence) have
+no plain-Node coverage. This card should add `test/unit/zotero/libraryIndex.test.ts` if it touches
+them — and if that is judged out of scope, say so rather than leaving the gap unrecorded twice.
+
+---
+### P2-T20 — Render `languages`, `openAccessOnly` and `raw` across the sources
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T20` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T08` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+**Goal.** Three `SourceQuery` members stop being silently dropped.
+
+**Why this is a card.** Measured 2026-09-30 (`P1-T08`): `docs/07` §4.2 declares `languages`,
+`openAccessOnly` and `raw` on `SourceQuery`, and **neither `P1-T08`'s nor `P1-T09`'s `Do` steps
+mention any of them** — so a caller that sets one today has it silently ignored. PubMed can express
+the first two (`[Language]`, `free full text[sb]`). Silently is the operative word: the symptom is a
+result count that is quietly wrong, not an error, which is why `P1-T08` put the omission in the
+module header so it is visible at the call site rather than at the result.
+
+**Read first.**
+- `docs/07` §4.2's `SourceQuery`, and `src/sources/types.ts` as shipped.
+- `src/sources/pubmed/query.ts` and `src/sources/shared/queryParse.ts` (`P1-T08`) — the renderer and
+  the parser, and the module header listing these three as unrendered.
+- `docs/02` §12.2's field-tag list, **corrected 2026-09-30** to add `[Affiliation]` after `P1-T08`
+  found `QueryField` had eight members against six tags. Check whether the language and
+  open-access forms are documented per source, and **report it rather than inventing a tag** if they
+  are not — a wrong tag widens a query instead of narrowing it, which is the failure `[All Fields]`
+  would have caused for `affiliation`.
+- §4.3 and §12.3 for Europe PMC's and the other sources' equivalents.
+
+**Files.**
+- modify `src/sources/pubmed/query.ts`
+- modify `src/sources/types.ts`
+- modify `test/unit/sources/pubmed-query.test.ts`
+
+**Do.**
+1. Render `languages` and `openAccessOnly` for each source that can express them, from the documented
+   tag for that source.
+2. Decide what `raw` means and where it is allowed. **It is an escape hatch that bypasses the parser,**
+   so say in the code whether it replaces the rendered term or is appended, and what happens when both
+   `raw` and a parsed query are present. Assert whichever is chosen.
+3. For a source that cannot express a member, make the drop **visible**: a capability flag the caller
+   can read, in the shape `resolveDateFilterMode` already uses for dates — `P1-T07` built that as the
+   positive form of §11.1 step 2's "do not fake it", and this is the same problem.
+4. Assert that an unexpressible member is reported and not silently swallowed.
+
+**Do NOT.**
+- Do not invent a field tag. If the corpus does not document one, report it.
+- Do not let `raw` reach the URL unescaped, and do not let it bypass the D10 identification
+  parameters.
+
+**Criteria.**
+- [ ] `languages: ["eng"]` renders to the documented tag for each source that supports it.
+- [ ] `openAccessOnly: true` renders to the documented form, and to a reported capability gap where
+      there is none.
+- [ ] `raw`'s interaction with a parsed query is asserted in both directions.
+- [ ] A member a source cannot express is surfaced to the caller, asserted.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:unit -- query`
+
+---
 ## Estimate roll-up
 
 | Task | Title | Estimate (d) |
@@ -2381,7 +2535,9 @@ a new `P2-T17`+ card per `README.md` §3, not a silent fix inside this one.
 | `P2-T16` | Phase 2 end-to-end verification | 1.0 |
 | `P2-T17` | Re-run a search from its provenance record | 1.5 |
 | `P2-T18` | Translator import path behind `useTranslators` | 1.25 |
-| **Total** | **18 tasks** | **24.25 d** |
+| `P2-T19` | Work-key detection for records with no DOI or PMID; `fromZoteroItem` | 0.75 |
+| `P2-T20` | Render `languages`, `openAccessOnly` and `raw` | 0.50 |
+| **Total** | **20 tasks** | **25.50 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather

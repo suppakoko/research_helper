@@ -618,7 +618,7 @@ migration entry, only document updates.
 | **ID** | `P1-T04` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T02`, `P1-T03` |
-| **Blocks** | `P1-T05`, `P2-T02` |
+| **Blocks** | `P1-T05`, `P1-T25`, `P1-T26`, `P1-T27`, `P2-T02` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-11`, `NFR-6` |
 | **Estimate** | 1.0 d |
@@ -718,7 +718,7 @@ fan-out will want it.
 | **ID** | `P1-T05` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T02`, `P1-T03`, `P1-T04` |
-| **Blocks** | `P1-T09`, `P1-T11` |
+| **Blocks** | `P1-T09`, `P1-T11`, `P1-T25`, `P1-T26`, `P1-T27`, `P1-T28` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-11`, `FR-9`, part of `FR-10`, `NFR-9`, part of `NFR-16` |
 | **Estimate** | 1.0 d |
@@ -1084,7 +1084,7 @@ against `"2024-01-01"`. `P1-T08` and the Phase 2 adapters should not re-derive t
 | **ID** | `P1-T08` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T07` |
-| **Blocks** | `P1-T09`, `P2-T01` |
+| **Blocks** | `P1-T09`, `P2-T01`, `P2-T20` |
 | **Retires** | none |
 | **Implements** | `FR-4`, part of `FR-3` |
 | **Estimate** | 0.75 d |
@@ -1794,7 +1794,7 @@ the reason recorded; **retiring it together with its two specs needs its own car
 | **ID** | `P1-T13` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T01`, `P1-T12` |
-| **Blocks** | `P1-T14`, `P2-T09`, `P2-T17` |
+| **Blocks** | `P1-T14`, `P2-T09`, `P2-T17`, `P2-T19` |
 | **Retires** | none |
 | **Implements** | `FR-51` |
 | **Estimate** | 0.5 d |
@@ -1995,7 +1995,7 @@ precursor.
 | **ID** | `P1-T15` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T02` |
-| **Blocks** | `P1-T16` |
+| **Blocks** | `P1-T16`, `P1-T25`, `P1-T29` |
 | **Retires** | none |
 | **Implements** | `FR-53`, part of `NFR-3` |
 | **Estimate** | 0.5 d |
@@ -2087,7 +2087,7 @@ this card ships — the `ProgressWindow` toast and the in-window status bar of
 |---|---|
 | **ID** | `P1-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T09`, `P1-T10`, `P1-T14`, `P1-T15`, `P1-T07` |
+| **Depends on** | `P1-T07`, `P1-T09`, `P1-T10`, `P1-T14`, `P1-T15`, `P1-T25` |
 | **Blocks** | `P1-T22`, `P2-T02` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-9`, `FR-10`, `FR-53`, part of `FR-3` |
@@ -2336,7 +2336,7 @@ the user"; `SourceProvenance.sourceExtras` is where §5.3 puts it, and `docs/02`
 | **ID** | `P1-T18` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T02` |
-| **Blocks** | `P1-T19` |
+| **Blocks** | `P1-T19`, `P1-T30` |
 | **Retires** | none |
 | **Implements** | part of `FR-55`, `NFR-11` |
 | **Estimate** | 0.5 d |
@@ -2885,7 +2885,7 @@ errors; for a literature source substitute the source display name from its
 |---|---|
 | **ID** | `P1-T23` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T11`, `P1-T22` |
+| **Depends on** | `P1-T11`, `P1-T22`, `P1-T28` |
 | **Blocks** | none |
 | **Retires** | `R-16`, `R-17`, part of `R-2` |
 | **Implements** | `NFR-1`, `NFR-3`, `NFR-9`, `NFR-10` |
@@ -3052,6 +3052,420 @@ to the two spike-only names, and the change recorded in `Findings` rather than m
 
 ---
 
+### P1-T25 — Composition root: construct the HTTP client, limiters and progress reporter
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T25` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T04`, `P1-T05`, `P1-T15` |
+| **Blocks** | `P1-T16` |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 1.0 d |
+| **Human gate** | none |
+
+**Goal.** Something constructs the machinery Phase 1 has built. `httpRequest()` reaches a real
+transport, a request to NCBI is paced by a real bucket, a job's progress reaches a real window, and
+every one of those is torn down when the plugin is disabled.
+
+**Why this is a card.** Four cards shipped a seam and none of them owns the other side of it,
+measured 2026-09-30: `P1-T05` reports "nothing yet calls `setHttpClient`"; `P1-T04` reports that
+`reconfigure()` is in place and "the caller is missing"; `P1-T15` reports "nobody constructs the
+sink" and that **neither `P1-T16`'s nor `P1-T20`'s `Files` list contains `src/zotero/progressWindow.ts`
+or any `src/zotero/*` path**. `P1-T15`'s `dispose()` exists and is tested; what is missing is the
+scope that calls it. `src/bootstrap/container.ts` is on `plan/README.md` §4's sixteen-path list and
+currently ships only `P0-T07`'s teardown registry — its own header says the service-locator half is
+unwritten.
+
+**Read first.**
+- `src/bootstrap/container.ts` (`P0-T07`) and `src/zotero/registrations.ts` (`P0-T31`, `P0-T32`) — the
+  `Scope` / `Registration` contract, and the **only** file allowed to call Zotero's four registration
+  APIs. `P0-T11` proved the teardown across five disable/enable cycles and `P0-T33` found that
+  constructing the toolkit leaked a listener on every cycle; a registration with no matching removal
+  is the failure mode both exist to prevent.
+- `src/core/http/client.ts`'s `createHttpClient` / `setHttpClient` and its `HttpClientDeps` — note
+  `timeoutMs` is a **getter**, because `core/` may not import `src/prefs/`.
+- `src/core/rateLimit/hostLimiter.ts` — `createHostLimiterRegistry`, `installHostLimiters`, and the
+  `PrefStore`-driven `ncbi.keyPresent` observer.
+- `src/core/jobQueue/progress.ts`'s `CompositeProgressReporter` and `createObservableProgressSink`,
+  and `src/zotero/progressWindow.ts`'s `ZoteroProgressWindowSink` with its `openOn` option.
+- `docs/07` §2.3 — what may name what. The composition root is the one place allowed to know all of
+  it.
+
+**Files.**
+- modify `src/bootstrap/container.ts`
+- modify `src/bootstrap/registerUI.ts`
+- create `test/unit/bootstrap/container.test.ts`
+
+**Do.**
+1. Build the object graph once, at startup, in dependency order: `PrefStore` → limiter registry →
+   `HttpClient` (transport, user agent, timeout getter, `limiterFor`, clock, logger) → progress
+   reporter and its sinks. Call `setHttpClient()` with it.
+2. Register every disposable with the existing scope so `shutdown()` undoes all of it, and assert
+   that in the test rather than by inspection.
+3. Supply `observePref`'s handle at this level. `docs/07` §8.5.1 sketches a `Symbol` return, which
+   `P1-T03` measured as unreachable — `Zotero.Prefs.registerObserver` is confined to
+   `registrations.ts` by `FR-56`, whose factory returns a `ScopedRegistration`, and `core/` may not
+   name bootstrap's types. The port carries an opaque handle; **this card is where it becomes a real
+   one.**
+4. Prove the cycle: construct, dispose, construct again, and assert no listener, observer or window
+   survives — the `P0-T11` discipline, at the composition root rather than per registration.
+
+**Do NOT.**
+- Do not call a registration API from anywhere but `src/zotero/registrations.ts`; `P0-T31` made that
+  a lint error precisely so this card cannot take a shortcut.
+- Do not construct a second `HttpClient`, limiter registry or reporter anywhere else. If a caller
+  needs one, it takes it as a parameter. Two graphs means two rate limiters and a paced host that
+  is not actually paced.
+- Do not read a pref from `src/core/`. Pass a getter.
+
+**Criteria.**
+- [ ] `httpRequest()` issues through the real transport after startup, asserted with a fake transport
+      installed at the root rather than by patching the module.
+- [ ] A second request to the same host is paced by the registry's bucket, asserted on the clock.
+- [ ] Construct → dispose → construct leaves zero surviving registrations, observers or windows.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:unit -- container`
+
+**Notes.** `P1-T05` left the exact call shape in its report; start from it rather than re-deriving.
+The `openOn` option decides §7.7-vs-§4.4 behaviour per pipeline — `searchImport` passes
+`"completion"`. If this card finds it needs a path no `Files` list names, that is the same class of
+defect `P1-T15` reported, and it should be reported rather than absorbed.
+
+---
+
+### P1-T26 — Collapse the duplicate `Retry-After` parser and drive `reconfigure()` from live headers
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T26` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T04`, `P1-T05` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** One `Retry-After` parser in the codebase, and the rate limiter reconfigured from the
+headers the servers actually send rather than from a table.
+
+**Why this is a card.** Two measured defects, both found 2026-09-30 and both left in place under
+rule 2. **First, the duplicate:** `P1-T05` step 4 and `P1-T04` step 6 both require a `Retry-After`
+parser and both shipped one — `parseRetryAfterMs` in `src/core/http/retry.ts` and `parseRetryAfter`
+in `src/core/rateLimit/backoff.ts`. Verified present, with each file's header acknowledging the
+other; they independently landed on the same two-argument shape. **Second, the missing caller:** this
+card's `Read first` in `P1-T04` says the governor "should read rather than assume" NCBI's live
+`X-RateLimit-Limit` / `X-RateLimit-Remaining`, and `docs/07` §7.3 says `reconfigure()` "is called
+from those headers on every response" for Crossref. Reading a response header needs a response,
+which lives in `src/core/http/` — a path `P1-T04` may not touch — and `P1-T05`'s `Do` steps do not
+mention it. **The seam is in place and nothing calls it.**
+
+**Read first.**
+- `src/core/rateLimit/backoff.ts`'s `parseRetryAfter` and its header comment. **Read the `Date.parse`
+  warning there and in `docs/07` §7.3 before touching the parser:** `Date.parse("120")` returns year
+  0119 with `isNaN` false, so the usual guard sends a **valid** delta-seconds header down the date
+  branch and produces "retry immediately" against a host that just asked us to stop — `docs/02`
+  §3.1's route to an IP block. The three malformed strings are asserted; keep those assertions.
+- `src/core/http/retry.ts`'s `parseRetryAfterMs` — the copy being removed.
+- `docs/02` §3.1 (NCBI's live headers, verified) and `docs/07` §7.3 (Crossref's
+  `x-rate-limit-limit` / `x-rate-limit-interval`).
+- `P0-T21`'s `Findings` — 26 identified requests across five hosts with no throttling, so the
+  headers are observable in practice.
+
+**Files.**
+- modify `src/core/http/client.ts`
+- modify `src/core/http/retry.ts`
+- modify `src/core/rateLimit/hostLimiter.ts`
+- modify `test/unit/core/http-client.test.ts`
+
+**Do.**
+1. Delete `parseRetryAfterMs` and point `client.ts` at `backoff.ts`'s `parseRetryAfter`. `backoff.ts`
+   is the better home: it already owns the jitter and the budget.
+2. On every response, read the host's rate-limit headers when present and call `reconfigure()` with
+   them. **Only when present** — an absent header is not a signal to guess.
+3. Assert the reconfiguration end to end: a response carrying a lower limit slows the next acquire,
+   driven by the manual clock.
+
+**Do NOT.**
+- Do not reintroduce a bare `Date.parse` guard, and do not accept `asctime` — it carries no timezone
+  and would be read in the local zone.
+- Do not invent a rate when a header is absent or malformed. `limiterFor()` returning `undefined` for
+  an unknown host is deliberate (`P1-T04`, rule 4).
+- Do not widen this into the per-host default-policy question; that is a separate open item.
+
+**Criteria.**
+- [ ] `grep -rn 'parseRetryAfterMs' src test` returns nothing.
+- [ ] A 429 carrying `Retry-After: 120` still penalizes by exactly 120 000 ms, and the three
+      malformed strings still return `undefined` — the existing assertions survive the move.
+- [ ] A response whose rate-limit headers tighten the limit demonstrably slows the next acquire.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:unit -- http tokenBucket backoff`
+
+---
+
+### P1-T27 — Give the concurrency cap an owner, or remove it from the interface
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T27` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T04`, `P1-T05` |
+| **Blocks** | `P2-T05` |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** `maxConcurrent` either works or is gone. A config member that cannot be enforced is worse
+than no member, because every later reader assumes it is doing something.
+
+**Why this is a card, and why it blocks Phase 2.** Measured 2026-09-30 (`P1-T04`) and confirmed
+against §4.1: `RateLimiter` declares `key`, `acquire`, `tryAcquire`, `penalize`, `reconfigure` and
+`stats`. **`acquire` resolves `void`, there is no release handle and no `run()`** — so nothing ever
+signals that a request finished, an `inFlight` counter could never be decremented, and gating
+`acquire` on one would **deadlock the bucket permanently** after `maxConcurrent` calls. §7.3's own
+skeleton declares `private inFlight = 0` and stops there. `TokenBucket` therefore paces by rate only
+and reports `inFlight: 0`, asserted so the gap is visible in the suite, with the cap carried as
+policy data. **Phase 2's arXiv row is `maxConcurrent: 1`** — and §7.3 says that limit is
+"aggregated across all of the machines under your control as a whole", so it is not decoration.
+
+**Read first.**
+- `docs/07` §4.1 (`RateLimiter`, `RateLimiterConfig.maxConcurrent`, `RateLimiterStats.inFlight`) and
+  §7.3's skeleton.
+- `src/core/rateLimit/tokenBucket.ts` — the `inFlight: 0` assertion, which is the thing that must
+  stop being true.
+- `src/core/concurrency.ts`'s `Semaphore` — **it already models exactly this**, including the
+  recorded invariant that `unsubscribe()` runs before `resolve()` or a permit leaks to a promise
+  nobody awaits, and `run()` releasing in a `finally`. Reuse it; do not write a second one.
+- `docs/02` §5 for arXiv's published limit.
+
+**Files.**
+- modify `docs/07-architecture-and-data-model.md`
+- modify `src/core/rateLimit/tokenBucket.ts`
+- modify `src/core/http/client.ts`
+- modify `test/unit/core/tokenBucket.test.ts`
+
+**Do.**
+1. Decide where the in-flight count lives and record the reasoning in §4.1. Two honest shapes: give
+   `RateLimiter` a `run<T>(fn, cost?, token?)` that holds a `Semaphore` permit for the call's
+   lifetime, or leave the limiter rate-only and count in-flight in the HTTP client, which is the one
+   place that knows when a request ends. **The first keeps the cap where the config declares it; the
+   second keeps the limiter synchronous-ish and testable. Pick one and say why.**
+2. Implement it, and make `stats.inFlight` report a real number.
+3. Assert the cap with a gated fake transport: `maxConcurrent: 1` must serialise two overlapping
+   requests, and the second must start only after the first settles — **including when the first
+   rejects**, which is the case a missing `finally` breaks.
+4. Assert that a cancelled request releases its slot.
+
+**Do NOT.**
+- Do not gate `acquire` on a counter nothing decrements. That is the deadlock this card exists to
+  prevent, and it would pass a naive test that only issues `maxConcurrent` requests.
+- Do not invent a `maxConcurrent` value for a host §7.3 does not give one.
+
+**Criteria.**
+- [ ] With `maxConcurrent: 1`, two overlapping requests are serialised, asserted on start order.
+- [ ] A rejecting request still releases its slot; a cancelled one does too.
+- [ ] `stats.inFlight` is non-zero while a request is in flight and returns to 0 after.
+- [ ] §4.1 records which shape was chosen and why.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:unit -- tokenBucket http`
+
+---
+
+### P1-T28 — Settle §7.3's retry numbers, and wire them
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T28` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T05` |
+| **Blocks** | `P1-T23` |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | **Yes** — the owner supplies the three numbers; an agent may not invent them (`plan/README.md` §5 rule 4). |
+
+**Goal.** The retry policy has numbers, they live in one place, and `P1-T05`'s injected budget is
+actually populated.
+
+**Why this is a card.** Measured 2026-09-30 (`P1-T04`, `P1-T05`): `docs/02` §2.4 and `docs/05` §9.4
+both name `docs/07` §7.3 as the owner of "the shipped backoff shape **and attempt cap**" — and
+§7.3's policy table has columns for rate, burst and max-concurrent **only**. There is no `base`, no
+`cap` and no attempt-cap number anywhere, and `docs/07` §8.5 has no retry rows either. `docs/03`
+§11.6's `maxAttempts = 5 / baseMs = 1000 / capMs = 60_000` are the **LLM** defaults for a
+**differently shaped** backoff and must not be borrowed. So `RetryBudget` shipped with no defaults
+and **`P1-T05` step 4's "using `P1-T04`'s jitter and cap" has no numbers to use** — absent a policy,
+the client makes exactly one attempt. Both agents refused to invent them, correctly.
+
+**Read first.**
+- `docs/07` §7.3's policy table — the columns that exist, and the sentence that claims ownership.
+- `src/core/rateLimit/backoff.ts`'s `RetryBudget` / `createBackoff`, and §7.3's decorrelated-jitter
+  shape `min(cap, random(base, prev*3))`. **`docs/05` §9.4 explicitly forbids a second shape.**
+- `src/core/http/retry.ts`'s `RetryPolicy`, the injection point.
+- `P0-T21`'s `Findings` for what real hosts did under load, and `P0-T22`'s — Semantic Scholar
+  returned **429 on 12 of 12** unauthenticated requests over 72 s, which is the shape of evidence an
+  attempt cap should be argued from.
+
+**Files.**
+- modify `docs/07-architecture-and-data-model.md`
+- modify `src/core/rateLimit/hostLimiter.ts`
+- modify `test/unit/core/backoff.test.ts`
+
+**Do.**
+1. **Stop and ask the owner for `base`, `cap` and the per-host attempt cap.** Report the evidence
+   above; do not propose a number as if it were measured.
+2. Add the three columns to §7.3's table, per host, with the source of each value named.
+3. Put the values on the policy rows in `hostLimiter.ts` and assert them against §7.3 by reading the
+   shipped row rather than restating it — the pattern `P1-T04`'s pacing test already uses, so a
+   change to §7.3 fails loudly.
+
+**Do NOT.**
+- Do not copy `docs/03` §11.6's numbers. Different shape, different subsystem, and §9.4 forbids a
+  second shape.
+- Do not hardcode a limit outside the policy table (`plan/README.md` §5 rule 4).
+
+**Criteria.**
+- [ ] §7.3's table has `base`, `cap` and attempt-cap columns, each value's source named.
+- [ ] The shipped policy rows carry them and a test reads §7.3's values from the row.
+- [ ] A 503 retried under the real policy stops at the cap, asserted on the transport call count.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:unit -- backoff http`
+
+**Notes.** There is a second, pre-existing conflict this card should flag but **not** resolve:
+`P3-T05` step 7 instructs **full** jitter over `min(cap, base * 2**attempt)` from `docs/03` §11.6,
+while §7.3 and `docs/05` §9.4 specify **decorrelated** jitter — and `P3-T05`'s `Files` list modifies
+`backoff.ts`. Two differently-shaped backoffs will otherwise end up in one file. Report it; the
+decision is the owner's.
+
+---
+
+### P1-T29 — Verify the `ProgressWindow` / `ItemProgress` signatures against a running Zotero
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T29` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T15` |
+| **Blocks** | none |
+| **Retires** | `docs/07` §7.7's `> **Unverified:**` marker |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** The one wrapper that names Zotero's progress-window API is confirmed against the running
+application, and `docs/01` records the result — which is what §7.7's `Unverified` marker asks for by
+name.
+
+**Why this is a card.** Three sources disagree about the arguments, measured 2026-09-30 (`P1-T15`).
+`docs/07` §7.7's sketch passes an **icon URI** as `ItemProgress`'s first argument. `docs/08` §8.2,
+read from `progressWindow.js`, says it is an **item type string** and that passing a path is "a live
+Zotero bug. Do not copy it." And **`zotero-types@4.1.3` declares `setIcon(iconSrc: string)` and no
+`setItemTypeAndIcon` at all**, contradicting §8.2 outright. The shipped sink follows §8.2 and calls
+neither icon setter. Nothing has been run against a real window.
+
+**Read first.**
+- `src/zotero/progressWindow.ts` — `openZoteroProgressWindow()` is the **only** place the platform
+  class is named, so a correction is one function.
+- `docs/08` §8.2 and §8.2.1, `docs/07` §7.7's marker and `node_modules/zotero-types/types/xpcom/progressWindow.d.ts`.
+- `docs/13` §2.3 — what an integration spec may do.
+
+**Files.**
+- create `test/integration/zotero/progressWindow.spec.ts`
+- modify `src/zotero/progressWindow.ts`
+- modify `docs/01-zotero-plugin-platform.md`
+
+**Do.**
+1. Open a real popup, add a line, set 45 %, set an error, close it. Assert no throw.
+2. **Report which of `setIcon` and `setItemTypeAndIcon` actually exists**, and what `ItemProgress`
+   does with each kind of first argument. That is the measurement.
+3. Record it in `docs/01` §10.x as the marker instructs, and retire the marker only if the answer is
+   complete.
+4. Correct the wrapper if the measurement disagrees with §8.2.
+
+**Do NOT.**
+- Do not pass an icon path to see what happens in a way that leaves a broken popup behind; close
+  what you open.
+- Do not widen the wrapper's surface. It is narrow on purpose.
+
+**Criteria.**
+- [ ] The spec runs against a real Zotero and reports which icon setter exists.
+- [ ] `docs/01` §10.x carries the measured signatures, dated.
+- [ ] §7.7's `Unverified` marker is retired or narrowed to exactly what is still open.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fail`
+— and **check the test count, not just the exit code**: this runner has been seen to exit 0 after
+running nothing.
+
+---
+
+### P1-T30 — Turn on `fluent.dts` and make one source of truth for message ids
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T30` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T18` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** The `FluentMessageId` union is generated from the bundles, and `src/i18n/keys.ts` derives
+from it rather than restating it.
+
+**Why this is a card.** `zotero-plugin.config.ts`'s comment reads "Off until the first `.ftl` file
+lands (`P0-T24` owns localization) … Turn this back on in `P0-T24`, when there are messages to put in
+the union, and file the bug upstream." `P0-T24` did not turn it on, and **`P1-T18` shipped 84
+messages**, so the scaffold's generated union would no longer be the empty-union parse error the
+switch was disabled around. Until it is on, `keys.ts`'s hand-written union and the generated one are
+**two sources of truth for the same vocabulary**, and a bundle edit that forgets `keys.ts` is an
+invisible blank label rather than a compile error.
+
+**Read first.**
+- `zotero-plugin.config.ts`'s `fluent` block and its comment.
+- `src/i18n/keys.ts` — the hand-written `FluentMessageId`, `FluentMessageArgsMap`, `ERROR_MESSAGE_IDS`
+  and the `KO_*` lists. The **argument type map** is the part the generator does not produce, so it
+  stays hand-written whatever happens to the id union.
+- `test/integration/l10n.spec.ts`'s vocabulary self-consistency tests — they are what will catch a
+  bad reconciliation.
+
+**Files.**
+- modify `zotero-plugin.config.ts`
+- modify `src/i18n/keys.ts`
+- modify `test/integration/l10n.spec.ts`
+
+**Do.**
+1. Turn `fluent.dts` on and check what it generates for 84 messages across two surfaces.
+2. Make **one** of the two authoritative and derive the other. The generated union is the honest
+   direction — it cannot drift from the bundles — so `keys.ts` should narrow or re-export it.
+3. Keep the per-message argument map hand-written, and keep the test that asserts every id in it
+   exists in a bundle.
+4. If the scaffold's empty-union bug is still reproducible, **file it upstream** and link the issue in
+   the config comment, which is what the comment asks for.
+
+**Do NOT.**
+- Do not delete `keys.ts`'s `KO_PENDING_REVIEW` / `KO_DELIBERATELY_ABSENT` / `DEFERRED_ERROR_MESSAGE_IDS`.
+  Those encode decisions, not vocabulary, and the spec asserts them.
+- Do not turn the switch on and leave two unions in place. That is the current state.
+
+**Criteria.**
+- [ ] `typings/` carries a generated id union covering all 84 messages.
+- [ ] `keys.ts` derives from it; a bundle id removed without touching `keys.ts` is a **compile**
+      error, asserted by trying it.
+- [ ] The `KO_*` and deferred-error lists still hold and their tests still pass.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fail`
+
+---
 ## 7. Estimate roll-up
 
 | Task | Title | Est. (d) | Human gate |
@@ -3080,14 +3494,20 @@ to the two spike-only names, and the change recorded in `Findings` rather than m
 | `P1-T22` | Wire search, import, progress, cancellation, states | 0.75 | — |
 | `P1-T23` | Phase 1 definition-of-done run | 1.00 | **Yes** |
 | `P1-T24` | Retire the `P0-T10` spike surface from `itemMapper.ts` | 0.25 | — |
-| | **Total** | **19.00 d** | **3 gates** |
+| `P1-T25` | Composition root: HTTP client, limiters, progress reporter | 1.00 | — |
+| `P1-T26` | Collapse the duplicate `Retry-After` parser; `reconfigure()` from headers | 0.50 | — |
+| `P1-T27` | Give the concurrency cap an owner | 0.50 | — |
+| `P1-T28` | Settle §7.3's retry numbers | 0.25 | **Yes** |
+| `P1-T29` | Verify the `ProgressWindow` signatures against a running Zotero | 0.25 | — |
+| `P1-T30` | Turn on `fluent.dts`; one source of truth for message ids | 0.25 | — |
+| | **Total** | **21.75 d** | **4 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 
 | | Days |
 |---|---|
-| `docs/11` §1, Phase 1 estimate, **current** | **19.00–27** |
-| Task sum here | **19.00** |
+| `docs/11` §1, Phase 1 estimate, **current** | **21.75–30** |
+| Task sum here | **21.75** |
 | Divergence against the bottom of the band | **0 %** |
 | (`docs/11`'s *previous* figure, for the record) | 9–12 |
 
