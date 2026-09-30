@@ -7,7 +7,7 @@
  * rest of the plugin needs from the platform arrives through a function
  * declared here or in one of `src/zotero/`'s siblings.
  *
- * `P0-T10` gives it three jobs:
+ * `P0-T10` gives it three jobs and `P1-T05` adds a fourth:
  *
  * 1. `debug()` / `reportError()` — the log sink. `docs/01` §2.3 (measured by
  *    `P0-T08` on Zotero 10.0.1) records that the plugin sandbox has **no
@@ -16,6 +16,20 @@
  * 2. `schemaReady()` — the gate `docs/01` §12 gotcha 29 requires before any
  *    `Zotero.ItemTypes` / `Zotero.ItemFields` lookup.
  * 3. `createSpikeArticle()` — the `P0-T10` spike command itself.
+ * 4. {@link createZoteroHttpTransport} — the one place `Zotero.HTTP.request` is
+ *    named. `P1-T05` step 1: `src/core/http/client.ts` owns every option, the
+ *    header policy, the classification and the retry, and takes this as a port
+ *    because `docs/07` §2.3 forbids `core/` from naming the global.
+ *
+ * **This file is `create`d by `P1-T05` per `plan/README.md` §4's sixteen-path
+ * list, but its `P0-T10` exports are retained rather than replaced.** `debug`,
+ * `reportError`, `schemaReady`, `userLibraryID`, `SPIKE_COLLECTION_NAME` and
+ * `createSpikeArticle` have live importers outside this card's `Files` list —
+ * `src/bootstrap/registerUI.ts` and `test/integration/zotero/itemCreation.spec.ts`
+ * — and `registerUI.ts` is being rewritten concurrently by `P1-T19`. Deleting
+ * them here would break a file this card may not touch (`plan/README.md` §5
+ * rule 2), so the spike command retires with whichever card retires its menu
+ * entry.
  *
  * **`createSpikeArticle()` is deliberately in the wrong layer, and only for
  * this card.** Orchestration belongs in `src/pipeline/` (`docs/07` §2.2), but
@@ -28,6 +42,8 @@
  * this file being rewritten then.
  */
 
+import type { HttpTransport } from "../core/http/client";
+
 import { findOrCreateCollection } from "./collectionOps";
 import {
   RESEARCH_HELPER_TAG,
@@ -37,6 +53,40 @@ import {
 
 /** The `[Research Helper]` prefix every line of ours carries in Debug Output. */
 const LOG_PREFIX = "[research-helper]";
+
+// ---------------------------------------------------------------------------
+// The HTTP transport port — `P1-T05`
+// ---------------------------------------------------------------------------
+
+/**
+ * `Zotero.HTTP` as `src/core/http/client.ts`'s transport port.
+ *
+ * This is the whole platform half of the HTTP layer. Every option, the
+ * `User-Agent`, the status classification, the `Retry-After` handling, the retry
+ * loop and the redacted logging live in `core/`; this function only crosses the
+ * `docs/07` §2.3 boundary the `research-helper/zotero-global` ESLint rule draws.
+ *
+ * **`Zotero.HTTP` is assignable to `HttpTransport` without a cast** — that is
+ * what `typings/zotero-augment.d.ts` §2 exists to make true, and
+ * `scripts/spike-network.ts`'s `zoteroHttpIsPort()` is the compile-time proof.
+ * The object is nonetheless built explicitly rather than returned as
+ * `Zotero.HTTP`, for two reasons: the five exception classes are read **once,
+ * eagerly**, so a call site cannot be handed a half-initialised namespace, and
+ * `request` is wrapped in an arrow so the port never depends on `this`.
+ *
+ * @returns the transport `createHttpClient({ transport })` takes
+ */
+export function createZoteroHttpTransport(): HttpTransport {
+  const http = Zotero.HTTP;
+  return {
+    request: (method, url, options) => http.request(method, url, options),
+    UnexpectedStatusException: http.UnexpectedStatusException,
+    TimeoutException: http.TimeoutException,
+    BrowserOfflineException: http.BrowserOfflineException,
+    SecurityException: http.SecurityException,
+    CancelledException: http.CancelledException,
+  };
+}
 
 /**
  * Write one line to Help → Debug Output Logging.
