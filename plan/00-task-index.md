@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-09-30 · **116 tasks: 34 `DONE`, 82 `TODO`.** Phase 0 is **33 of 35**; its two open cards, `P0-T34` and `P0-T35`, came out of `P0-T28`'s own escalations. Phase 1 has **10 of 30 implemented and awaiting approval**, and gained **six** cards (`P1-T25`–`P1-T30`) from those ten reports; Phase 2 gained two (`P2-T19`, `P2-T20`). **Eighteen of the plan's 116 cards now exist because running the code found work no reading of the corpus had.**
+> **Last updated:** 2026-09-30 · **116 tasks: 44 `DONE`, 72 `TODO`.** Phase 0 is **33 of 35**; its two open cards, `P0-T34` and `P0-T35`, came out of `P0-T28`'s own escalations. Phase 1 is **11 of 30 `DONE`**, and gained **six** cards (`P1-T25`–`P1-T30`) from those ten reports; Phase 2 gained two (`P2-T19`, `P2-T20`). **Eighteen of the plan's 116 cards now exist because running the code found work no reading of the corpus had.**
 
 ---
 

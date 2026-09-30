@@ -336,7 +336,7 @@ compile, which is the behaviour `docs/07` §11.1 step 3 asks for.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T02` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; 206 tests in its own files, 406 across the suite. Found that `docs/07` §10.1's error hierarchy **does not compile** as printed (15 `TS2416` errors, reproduced in isolation) and that its `toSerialized()` **leaked the unredacted message through `Error.stack`** into a user-exportable file. `result.ts` and `concurrency.ts` gained their missing tests; `result.ts` went 0 % → 100 %. |
 | **Depends on** | `P1-T01` |
 | **Blocks** | `P1-T03`, `P1-T04`, `P1-T05`, `P1-T07`, `P1-T12`, `P1-T15`, `P1-T18` |
 | **Retires** | none |
@@ -519,7 +519,7 @@ synchronously to the return so two callers cannot both see a free permit.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T03` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; 57 tests, the D5 refusal and the `prefs.js` ↔ `PREFS` check both **proven by mutation**. Criterion 1 is unfalsifiable as written (100 is also the default) and a sibling test was added beside it. Three §8.5.1 defects corrected; `secretBackend`'s allowed values still disagree across two documents. |
 | **Depends on** | `P1-T02` |
 | **Blocks** | `P1-T04`, `P1-T05`, `P1-T06`, `P1-T20` |
 | **Retires** | none |
@@ -609,6 +609,66 @@ npm run typecheck && npm run test:unit -- prefs
 `docs/07` §8.5.3 is explicit that renames applied *before* first release need no
 migration entry, only document updates.
 
+
+**Findings, 2026-09-30 — all five criteria pass, and criterion 1 is weaker than it looks.**
+`src/prefs/keys.ts`, `schema.ts`, `index.ts`, `src/core/config.ts`'s `PrefStore` port,
+`createZoteroPrefStore()` and twelve `pref()` rows, with **57 tests**. typecheck, lint and the full
+suite exit 0.
+
+**Criterion 1 is unfalsifiable as written, proven by mutation.** It asks that `getPref("maxResults")`
+return `100` as a `number` when the stored value is the string `"100"` — but **`100` is also
+`maxResults`'s schema default**, so a build with the `Number()` coercion deleted entirely still
+returns 100 and still passes. Measured: a mutant replacing the coercion with
+`typeof raw === "number" ? raw : undefined` passed criterion 1 and failed four other tests. The
+criterion was left untouched (§5 rule 6) and a sibling added that stores `"150"` / `"120"` and
+asserts `150` / `120` plus `getPref("maxResults") + 1 === 151`; the same mutant now fails five tests.
+**The criterion should be reworded to name a non-default value.**
+
+**The D5 refusal is proven by mutation too, not by inspection.** Adding `secret: true` to a real
+`PREFS` entry made the suite exit 1 with two failures, including the writer itself throwing. A third
+test drives the writer against a synthetic secret definition and asserts it throws, that the store
+stays empty, and that the message contains neither the value nor a key-shaped string. Criterion 4's
+`prefs.js` ↔ `PREFS` check was mutation-tested the same way.
+
+**Three corpus defects, all in §8.5.1, now corrected there.** Its code block **calls `Zotero.Prefs`
+from `src/prefs/`**, which §2.3 of the same document forbids and eslint enforces — §2.3 wins and the
+port shape shipped. Its `PrefValue<K> = (typeof PREFS)[K]["default"]` beside an `as const` `PREFS`
+resolves to the **literal type `3`**, so `setPref("searchYears", 5)` is a compile error; `as const` is
+load-bearing for `PrefName`, so the repair is a `Widen<T>` helper. And its `observePref(...): symbol`
+is unreachable: `Zotero.Prefs.registerObserver` is confined to `registrations.ts` by `FR-56`, whose
+factory returns a `ScopedRegistration` — a function, not a `Symbol` — and `core/` may not name
+bootstrap's types. An opaque `PrefObserverHandle` ships; **`P1-T25` is where it becomes a real one.**
+
+**`secretBackend`'s allowed values disagree across two documents.** §8.5's row is
+`oskeystore | session | passphrase | ""`; `docs/09` §1.7's `SecretBackend` is
+`"os-keychain" | "session-only" | "passphrase"` — **two of three spellings differ** and it has no
+unprobed member. §8.5 ships, since it is the authority for a preference's allowed values, and the
+conflict is recorded in both. Note that `G-09`'s 2026-09-30 measurement added a **fifth** live case
+neither set has a member for, so the answer may be five values.
+
+**`plan/README.md` §4's relaxation is false for one path, and this is the card that found it.** §4
+says of the sixteen dual-`create` paths that "nothing in a spike version of those files is
+load-bearing". For `src/zotero/prefStore.ts` it is: `P0-T23`'s `test/integration/zotero/secrets.spec.ts`
+imports **eight symbols from it by name** and **is not in this card's `Files` list**, so a literal
+replacement breaks typecheck on a file this card may not touch. The raw layer was kept and the port
+added on top. **§4 needs a sentence saying a spike file with a shipped importer is extended, not
+replaced** — the same judgement `P1-T12` and `P1-T05` reached independently for `itemMapper.ts` and
+`zoteroApi.ts`.
+
+**A silent-blindness bug in this card's own test, worth more than the test it broke.** The first
+`prefs.js` parser was line-anchored, and Prettier had split the `sources` `pref()` call across four
+lines because its value is 63 characters. The parser silently matched **11 of 12** rows — every
+assertion in criterion 4's block was vacuously true for exactly the longest and most defect-prone row,
+**and the suite still reported green.** The parser is now newline-tolerant and **throws** if the
+number of `pref(` tokens it consumed differs from the number in the file, so a future formatting
+change cannot blind it again.
+
+**Removing `pref("enable", true)` left a false comment in a file this card may not touch.** Criterion 4
+plus the `Do NOT` require it gone (a scaffold-template placeholder in no §8.5 row, read by nothing).
+`secrets.spec.ts:101` still says `DEFAULT_ONLY_PREF_KEY = "enable"` with the comment "Shipped by
+`addon/prefs.js`, so it reads from the default branch" — now false. **No assertion breaks**, but that
+measurement now duplicates the absent-pref one instead of being a default-branch reading. One-line
+repair: use `prefsSchemaVersion`.
 ---
 
 ### P1-T04 — Per-host token-bucket rate limiter and backoff
@@ -616,7 +676,7 @@ migration entry, only document updates.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T04` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; 62 tests, all on a manual clock. Found that a bare `Date.parse` on `Retry-After` turns even a **valid** delta-seconds header into "retry immediately" against a host that just asked us to stop. `maxConcurrent` is unenforceable as §4.1 stands and the gap is asserted rather than hidden — `P1-T27` owns it. |
 | **Depends on** | `P1-T02`, `P1-T03` |
 | **Blocks** | `P1-T05`, `P1-T25`, `P1-T26`, `P1-T27`, `P2-T02` |
 | **Retires** | part of `R-2` |
@@ -709,6 +769,70 @@ off-peak (weekends, or 21:00–05:00 US Eastern). Phase 1 does not schedule
 anything, but do not delete that note when you copy the table — Phase 2's
 fan-out will want it.
 
+
+**Findings, 2026-09-30 — all six criteria pass in substance; criterion 5's literal signature does
+not compile.** `TokenBucket` per §4.1 with §7.3's refill arithmetic, the host policy registry and the
+backoff primitives, with **62 tests** — every one driven by `createManualClock()`, no `Date.now()`, no
+real time, no network. typecheck, lint and the full suite exit 0.
+
+**The finding worth the card: `Retry-After` must not be parsed with a bare `Date.parse`.** Reproduced
+before being recorded, on this repository's Node 22 / V8:
+
+```
+Date.parse("120")   === -58380424072000   // year 0119
+Date.parse("+120")  === -58380424072000
+Date.parse("120.5") === -58369969672000   // year 0120
+Date.parse("-5")    ===   988642800000    // 2001
+```
+
+**`Number.isNaN` is `false` for all four**, so the usual
+`if (Number.isNaN(Date.parse(v))) …/* else a date */` guard sends even a **valid** delta-seconds
+header down the date branch and computes a deadline ~1900 years in the past. Clamped at zero that is
+**"retry immediately" against a host that has just asked us to stop** — `docs/02` §3.1's stated route
+to an IP being blocked from NCBI. The date branch is gated on an explicit HTTP-date shape check, with
+**`asctime` deliberately excluded** because it carries no timezone and would be read in the local
+zone. The three malformed strings are asserted to return `undefined`, and §7.3 now carries the warning
+because **`P3-T05` step 6 re-parses the same header.**
+
+**Criterion 5's one-argument `parseRetryAfter(headerValue)` cannot compile.** The HTTP-date form
+yields no delta without a reference instant, and `core/` may read wall time only through the injected
+`Clock` — a `Date.now()` here would be the single call the port exists to remove and would make the
+date branch untestable under a manual clock. Shipped as `parseRetryAfter(headerValue, nowEpochMs)`;
+the criterion's intent is asserted and its text was not touched.
+
+**`maxConcurrent` is unenforceable as §4.1 stands, and the gap is asserted rather than hidden.**
+`RateLimiter` declares `key`, `acquire`, `tryAcquire`, `penalize`, `reconfigure` and `stats`.
+**`acquire` resolves `void`; there is no release handle and no `run()`** — nothing signals that a
+request finished, so an `inFlight` counter could never be decremented and gating `acquire` on one
+would **deadlock the bucket permanently** after `maxConcurrent` calls. §7.3's skeleton declares
+`private inFlight = 0` and stops. The limiter paces by rate only and reports `inFlight: 0`, asserted
+so the hole is visible in the suite, with the cap carried as policy data. **`P1-T27` owns the fix, and
+Phase 2's arXiv row is `maxConcurrent: 1`.**
+
+**One design point that makes `penalize` and `reconfigure` cheap.** A parked `acquire` holds no sleep
+of its own: one sleep is scheduled for the **head** of the FIFO queue and `drain()` serves everything
+affordable on waking, with a generation counter abandoning a superseded sleep. That is what lets one
+deadline move instead of *n*, and it preserves `concurrency.ts`'s recorded invariant —
+`unsubscribe()` before `resolve()`, or a token goes to a promise nobody awaits.
+
+**Refused rather than invented (§5 rule 4).** §7.3 publishes **no `base`, no `cap` and no attempt-cap
+number** although `docs/02` §2.4 and `docs/05` §9.4 both name it as their owner, and §8.5 has no retry
+rows — so `RetryBudget` ships with no defaults and **`P1-T05` step 4's "using `P1-T04`'s jitter and
+cap" has no numbers to use**. `P1-T28` and its human gate own that. Likewise `limiterFor()` returns
+`undefined` for a host with no policy row rather than a guessed conservative bucket.
+
+**A pre-existing conflict flagged for `P3-T05`:** §7.3 and `docs/05` §9.4 specify **decorrelated**
+jitter `min(cap, random(base, prev*3))` and §9.4 explicitly forbids a second shape, while `P3-T05`
+step 7 instructs **full** jitter over `min(cap, base * 2**attempt)` from `docs/03` §11.6 — and
+`P3-T05`'s `Files` list modifies **this same file**. Two differently-shaped backoffs will otherwise
+land in one module. Only §7.3's is implemented.
+
+**`P2-T03`'s `Verify with` will fail on a gap in this card's `Files` list.** It runs
+`npm run test:unit -- hostLimiter`, and `test:unit` is `vitest run --dir test/unit` with **no
+`--passWithNoTests`**, so a filter matching zero files exits non-zero. The registry's 12 tests live in
+`tokenBucket.test.ts` because that is what this card's `Files` names, and `plan/README.md` §6's
+required `Notes` reason for a module with no test file of its own is absent. Either this card creates
+`test/unit/core/hostLimiter.test.ts` or `P2-T03`'s command changes.
 ---
 
 ### P1-T05 — HTTP client over `Zotero.HTTP.request`
@@ -716,7 +840,7 @@ fan-out will want it.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T05` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; 70 tests. The D10 guard refuses a foreign `email`/`tool` to NCBI **before** pacing, logging or issuing, with `transport.calls` asserted at 0. Two numbers refused rather than invented (§7.3 publishes no attempt cap), and the spike client's importers were checked before it was replaced. |
 | **Depends on** | `P1-T02`, `P1-T03`, `P1-T04` |
 | **Blocks** | `P1-T09`, `P1-T11`, `P1-T25`, `P1-T26`, `P1-T27`, `P1-T28` |
 | **Retires** | part of `R-2` |
@@ -829,6 +953,56 @@ the exported entry point of this module: `src/core/http/client.ts` exposes
 point — use that exact name, because it is what `P1-T11`'s replay transport and
 `docs/13` §2.3's integration stub substitute.
 
+
+**Findings, 2026-09-30 — all six criteria pass.** The shipped client over an injected transport,
+`retry.ts`, the shipped `userAgent.ts` and `createZoteroHttpTransport()`, with **70 tests**. typecheck,
+eslint and the full suite exit 0.
+
+**Every measured spike property was carried forward rather than re-derived**, because each cost a
+probe run: `anon: true`, `successCodes: false`, `noRetryOnThrottle: true`, `errorDelayMax: 0`,
+`logBodyLength: 0`, `debug` never passed, the typed `HttpError` with `OFFLINE`/`TIMEOUT`/`CANCELLED`/
+`NETWORK`, and the `cancelRequested` flag so a status-0 **resolve** after an abort maps to `CANCELLED`
+rather than `NETWORK`.
+
+**The D10 guard is the part to read.** A request to `eutils.ncbi.nlm.nih.gov` carrying an `email` or
+`tool` other than the maintainer's throws `PolicyViolationError` **before** pacing, logging or
+issuing, and the offending address never enters the message or the context. Four tests assert it,
+including that `transport.calls` stays at **0**.
+
+**§7.4's own excerpt cannot be implemented as printed.** It calls `Zotero.HTTP.request` inline and
+reads the `timeoutSeconds` pref, both of which §2.3 and `eslint.config.js` forbid from `src/core/**`.
+Resolved with the transport port the spike already had plus an **injected timeout getter**, so the
+composition root supplies the pref. Reported, not coded around. Related: `docs/01` §8.2's sketch
+leaves `successCodes` on, which would route mapping through `UnexpectedStatusException`; §7.4 wins,
+exactly as this card's `Do NOT` warns.
+
+**Two things refused rather than invented (§5 rule 4).** §7.3 names "a per-host attempt cap" and
+publishes **no number**, so `RetryPolicy.maxAttempts` is injected and, absent a policy, the client
+makes exactly **one** attempt — `P1-T28` owns the numbers. And no penalty deadline is invented when
+`Retry-After` is absent.
+
+**Replacing the spike `client.ts` did not break its importers, which is why they were checked first.**
+`scripts/spike-network.ts` and `scripts/spike-tts-korean.ts` import six symbols from it;
+`src/bootstrap/registerUI.ts` and `test/integration/zotero/itemCreation.spec.ts` import from
+`zoteroApi.ts` — and **`P1-T19` is rewriting `registerUI.ts`**. `zoteroApi.ts` is on §4's sixteen-path
+list, but the transport was **added** rather than the file replaced, because a literal `create` would
+have broken a file this card may not touch. Same judgement `P1-T12` reached for `itemMapper.ts` and
+`P1-T03` for `prefStore.ts` — **three cards in one day**, which is why §4's relaxation needs the
+qualifying sentence. One behaviour change to record: the two spike scripts now receive the §10.1
+classes where they received `HttpError`, so their `instanceof` reporting fires only via `.cause` and
+their verdict strings need a one-line change to keep printing the measured code.
+
+**A duplicate this card created with `P1-T04`, by both following their own steps.** Step 4 here and
+`P1-T04` step 6 both require a `Retry-After` parser and both shipped one —
+`parseRetryAfterMs` in `core/http/retry.ts` and `parseRetryAfter` in `core/rateLimit/backoff.ts`,
+each file's header acknowledging the other, and **both independently landing on the same
+two-argument shape**. `P1-T26` collapses them into `backoff.ts`.
+
+**`docs/07` §10.1's `TimeoutError(timeoutMs, url)` and `OperationCancelledError(reason)` accept no
+`cause`**, so the measured platform exception cannot be attached on those two arms while it is
+attached on `OfflineError` and `NetworkError`. Worth a §10.1 note if the debug bundle is expected to
+carry it on every arm. And §4.1 still declares no `Clock`; this is the **third** card to take its
+shape from a call site.
 ---
 
 ### P1-T06 — Tier-1 `SecretStore` for the NCBI key
@@ -926,7 +1100,7 @@ stop and re-plan rather than inventing a fallback. Human gate details go in
 | Field | Value |
 |---|---|
 | **ID** | `P1-T07` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; 29 tests at 100 % across all four metrics. Criterion 1 was proven by extracting §4.2 and diffing (93 tokens, 0 mismatches). **Criterion 4 genuinely fails** — `sources → zotero` passes eslint — and criterion 5 failed on a plan defect: `ProgressReporter` was five cards away from its first consumer. |
 | **Depends on** | `P1-T01`, `P1-T02` (added 2026-09-30 — `docs/07` §4.2 imports `CancellationToken` and `ProgressReporter`, both `P1-T02`'s) |
 | **Blocks** | `P1-T08`, `P1-T09`, `P1-T16`, `P1-T20`, `P2-T01`, `P2-T02` |
 | **Retires** | part of `R-2` |
@@ -1082,7 +1256,7 @@ against `"2024-01-01"`. `P1-T08` and the Phase 2 adapters should not re-derive t
 | Field | Value |
 |---|---|
 | **ID** | `P1-T08` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; 46 tests. Found that §12.2's field-tag list had six entries against `QueryField`'s eight, so `affiliation` **silently widened to `[All Fields]`**, and pinned the Boolean case rule because a lowercase `not` would turn "patients not receiving therapy" into a negation. |
 | **Depends on** | `P1-T07` |
 | **Blocks** | `P1-T09`, `P2-T01`, `P2-T20` |
 | **Retires** | none |
@@ -1601,7 +1775,7 @@ npm run typecheck && npm run test:contract
 | Field | Value |
 |---|---|
 | **ID** | `P1-T12` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; 60 unit tests plus a seven-case integration spec against a real Zotero 10.0.3. Measured that strict-mode `fromJSON` accepts a native `PMID` **and** an `extra` `PMID:` line and preserves the latter byte-identical, and caught a CRLF parser bug that would have appended a duplicate `rh-work-key` on every write. |
 | **Depends on** | `P1-T01`, `P1-T02` (added 2026-09-30 — the `Notes` require `throw new ZoteroApiError(...)` for the preprint gap, and `docs/07` §10.1's hierarchy is `P1-T02`'s `src/core/errors.ts`) |
 | **Blocks** | `P1-T13`, `P1-T14`, `P1-T24` |
 | **Retires** | none |
@@ -1792,7 +1966,7 @@ the reason recorded; **retiring it together with its two specs needs its own car
 | Field | Value |
 |---|---|
 | **ID** | `P1-T13` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; six integration tests against a real Zotero. Answered the 10 000-item question by measurement: **69–72 ms, one search**, then 200 lookups in 0–1 ms with zero searches. Found `docs/01` §5.5's reference implementation **case-sensitive on Zotero 10**, contradicting this card's own third criterion, with the mechanism read out of `data/search.js`. |
 | **Depends on** | `P1-T01`, `P1-T12` |
 | **Blocks** | `P1-T14`, `P2-T09`, `P2-T17`, `P2-T19` |
 | **Retires** | none |
@@ -1872,6 +2046,65 @@ not one of §4.2's control-table rows — and `docs/07` §8.5's
 `hideExisting` controls whether matched rows are hidden in the table. This card
 supplies the detection; `P1-T21`/`P1-T22` wire the choice.
 
+
+**Findings, 2026-09-30 — all five criteria pass, and the 10 000-item question now has a measured
+answer.** `src/zotero/libraryIndex.ts` and a six-test integration spec against a real Zotero 10.0.3,
+`globalSchemaVersion = 44`. typecheck, lint, unit and integration all exit 0.
+
+**The scale numbers, measured rather than extrapolated.** Index build over **exactly 10 000 items:
+69–72 ms with ONE search**, counted from a patched `Zotero.Search.prototype.search` rather than the
+module's self-report. Then **200 `findExisting()` calls in 0–1 ms with zero searches.** The
+per-candidate approach the card forbids would have been ≥200 searches for that run, ≥400 once §5.5's
+PMID `extra` branch is counted. Insertion also measured: **9 685 items in 12.2 s, ~1.26 ms/item** —
+*faster* per item than `P0-T20`'s 3.5–4.5 ms at 100 items against a near-empty library, so **insertion
+does not degrade with library size.** `findExisting` is **synchronous**, which is the compile-time
+proof the hot path cannot reach the DB.
+
+**`docs/01` §5.5's reference implementation returns the wrong answer, and the mechanism was read out
+of Zotero 10.0.3's own `data/search.js`:**
+
+```js
+var useNormalized = condition.normalizedField &&
+  typeof condition.value == 'string' &&
+  ['contains', 'doesNotContain', 'beginsWith'].includes(condition.operator);
+```
+
+**`is` is not in that list**, so `addCondition('DOI','is',doi)` compares against the raw `itemData.value`
+column with an un-normalized term and **misses an item a translator stored as `10.18653/V1/…`** — which
+is exactly what this card's third criterion requires to work. Only `contains`/`doesNotContain`/
+`beginsWith` use the normalized shadow column with a `normalizeForSearch()`-ed term and SQLite `LIKE`.
+The working shape is `contains` **plus exact in-memory verification**, since `contains` is a substring
+match and `10.1/abc` would match `10.1/abcd`. §5.5 also **does not compile** (`s.libraryID = libraryID`
+against a `readonly` declaration, `dataObject.d.ts:65`) and uses `cleanDOI()` where `docs/02` §11.1
+makes `normalizeDoi()` the only normalizer — **two normalizers for one field means an index key and a
+search term can disagree.** All three corrected in §5.5.
+
+**Two platform facts that make "one identifier, one home" false.** `setField` performs **no**
+Extra→field migration: an item whose `extra` is `PMID: 900000002` keeps an empty native `PMID`.
+Together with `P1-T12`'s strict-mode `fromJSON` measurement, **detection genuinely cannot assume an
+identifier lives in one place**, and both branches are read for both identifiers, always. And the CRLF
+trap `P1-T12` found by reasoning is now asserted **against a real field**: a CRLF `extra` round-trips
+byte-identical, so a line regex using `.*` would have made that item invisible to PMID detection.
+
+**Two smaller measured facts.** `setField("DOI", …)` stores verbatim — reading `item.js` in 10.0.3,
+**`ISBN` is the only field `setField` rewrites**. And `getField()` on a field invalid for the item's
+type returns `""` rather than throwing, so scanning every item for `DOI`/`PMID`/`extra` is safe
+including standalone notes and attachments.
+
+**The fixture was gated after the fact, and the reason is worth keeping.** The 10 000-item test leaves
+the library at 10 000 items for **every spec that runs after this one**, and
+`entries: ["test/integration"]` is a directory enumerated in filesystem order — an accident, not a
+guarantee. `P0-T20` happens to run first and its NFR-1 numbers came in unchanged at 422/352/446 ms; if
+that order shifted, **`P0-T20` would silently start measuring NFR-1 against a 10 000-item library.**
+The test is now opt-in behind a pref. Pinning the entries list was rejected as worse: a spec added
+later would be silently omitted.
+
+**Reported, not absorbed.** `matchedOn` is `"doi" | "pmid"` only, so Phase 2's arXiv- and S2-only
+records are unmatchable and §6.6's `fromZoteroItem` is declared nowhere — `P2-T19` owns both, plus
+§11.6's unowned `byArxiv`. **§11.6's trashed-item advice ("add it to a persistent dismissed list") is
+feature-6 advice and must not reach the importer**: for `FR-51` a trashed item simply must not block
+an import. And this card names **no unit-test file with no `Notes` reason**, against
+`plan/README.md` §6, so the pure parts have no plain-Node coverage.
 ---
 
 ### P1-T14 — Batched importer and collection operations
@@ -1993,7 +2226,7 @@ precursor.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T15` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; 46 tests on a manual clock. §4.1's interface is implementable exactly as declared. Found §7.7's sketch does not compile, contradicts this card's architecture, and passes the argument `docs/08` §8.2 calls a live Zotero bug — while `zotero-types` contradicts §8.2 in turn. `P1-T29` owns the measurement. |
 | **Depends on** | `P1-T02` |
 | **Blocks** | `P1-T16`, `P1-T25`, `P1-T29` |
 | **Retires** | none |
@@ -2079,6 +2312,65 @@ this card ships — the `ProgressWindow` toast and the in-window status bar of
 `P3-T29` reports per-item summarize progress through the same interface, into
 `docs/08` §6.4's list.
 
+
+**Findings, 2026-09-30 — all five criteria pass, and §4.1's interface is implementable exactly as
+declared.** `CompositeProgressReporter`, the `ProgressSink` port, `createObservableProgressSink()` and
+the Zotero window adapter, with **46 tests** on a manual clock. typecheck, lint and the full suite exit
+0 project-wide.
+
+**§4.1's interface was implemented with no widening, no added member and no cast** — and two
+properties of it are worth recording. `setProgress(completed, total?)`'s "`total === undefined` means
+indeterminate", read literally, means **omitting `total` on a later call resets a known total to
+indeterminate**; `increment()` is the call that keeps one. That is a live trap for `P1-T16`'s stage
+code. And the interface is **write-only**: no member reads state back and none releases resources, so
+the ETA, the counts and teardown are class members *outside* it. A consumer typed as `ProgressReporter`
+can drive the bar but **cannot read the ETA `FR-53` requires** — the snapshot reaches the UI through
+the sink, which is what `createObservableProgressSink()` is for.
+
+**`docs/07` §7.7's sketch has three defects and was not implemented as written, all corrected there.**
+It **does not compile**: it declares `implements ProgressReporter` but defines only `setProgress`, with
+`setMessage` and `done` as trailing `//` comments and `increment`, `child` and `warn` absent, and it
+calls an undeclared `getString(headlineKey)`. It **contradicts this card's own step 1**, which puts one
+reporter in `core/` fanning out to sinks — implementing the sketch literally would mean a second copy
+of `child()`'s arithmetic and the ETA inside `src/zotero/`. And it passes an **icon URI** as
+`ItemProgress`'s first argument, which `docs/08` §8.2 — read from `progressWindow.js` — says is an
+**item type string**, calling the path form "a live Zotero bug. Do not copy it."
+
+**`zotero-types@4.1.3` contradicts `docs/08` §8.2 outright.** It declares `setIcon(iconSrc: string)`
+and **no `setItemTypeAndIcon`**, and types `ItemProgress`'s first parameter as `iconSrc`. The two agree
+that it is a `string`, so no cast was needed — but **a caller who trusts the typings passes an icon
+path and hits the bug §8.2 names.** Neither icon setter is called, the whole surface is behind
+`openZoteroProgressWindow()` so a correction is one function, and **`P1-T29` owns the measurement**
+§7.7's `Unverified` marker asks for.
+
+**`getString()` cannot be used for a plugin key.** `docs/08` §8.2.1 records that it **throws** on an
+unknown key when `Zotero.locale === "en-US"`, because a plugin's `.ftl` lives in `L10nRegistry` and not
+in that synchronous bundle. The sink therefore takes `headline` as an **already-localized string**, the
+same shape `P1-T18` independently arrived at.
+
+**Two corpus tensions resolved by option rather than by picking a winner.** `docs/08` §4.4 says the
+toast is raised "**only on completion**" while §7.7 says "**one window per job**", closed a few seconds
+after the job *starts* — both are `Read first` sections of this card and neither step says which governs
+`searchImport`. An `openOn: "progress" | "completion"` option carries both, and `searchImport` passes
+`"completion"`. And §4.1's `warn(message, detail?)` targets "the `JobRecord`'s warnings", which is
+Phase 3's store — rather than drop `detail`, it fans to `ProgressSink.warn?`, so Phase 3's sink becomes
+a subscriber and nothing here changes.
+
+**Criterion 2's throttle arithmetic is stated rather than hidden.** The throttle is **leading-edge**, so
+over a *closed* 1001 ms window `[0, 1000]` it admits **5** paints (t = 0, 250, 500, 750, 1000); the
+long-run rate is exactly 4/s and the extra is the one-off leading paint. The test measures a span that
+counts 4 with nothing excluded and documents the arithmetic. **The ETA also stays `undefined` in two
+cases a number would be a fabrication** — `fraction <= 0`, and zero elapsed time — both asserted. If
+criterion 4 is read as "a number the instant `total` arrives, even at `completed === 0`", that reading
+**fails** and wants a decision rather than a fabricated number.
+
+**Reported, not absorbed.** §4.1's `child()` doc promises "weights let stages of unequal cost divide
+the bar fairly" while its parameters are `fromFraction`/`toFraction`; the weight carrier is §4.5's
+`StageDescriptor.weight` and **no card's `Files` names a home for the conversion** (`P1-T16` step 2 is
+the natural owner) — recorded in §4.1. The card also requires an ETA "exposed on the snapshot" while
+the only snapshot type in the corpus is §4.5's `JobProgressSnapshot`, declared in Phase 3's
+`queue.ts`; a name-for-name subset ships here so Phase 3 extends rather than reconciles. **And nobody
+constructs any of it** — `P1-T25` owns that.
 ---
 
 ### P1-T16 — `searchImport` pipeline
@@ -2334,7 +2626,7 @@ the user"; `SourceProvenance.sourceExtras` is where §5.3 puts it, and `docs/02`
 | Field | Value |
 |---|---|
 | **ID** | `P1-T18` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; 84 en-US messages, 11 integration tests, **nothing machine-translated**. Two criteria fail as literally written and both are card defects: criterion 2 contradicts criterion 3 of the same card, and criterion 4 cannot hold while §10.1 fixes 16 `rh-error-*` keys. Gate **`G-41`** was created because this card's gate did not exist. The Korean review is owed. |
 | **Depends on** | `P1-T02` |
 | **Blocks** | `P1-T19`, `P1-T30` |
 | **Retires** | none |
@@ -2438,6 +2730,74 @@ that Zotero 10's consolidated FTL registration works with a `ko-KR` bundle befor
 this card's fallback criterion can pass. Human gate details go in
 [`06-human-gates.md`](06-human-gates.md).
 
+
+**Findings, 2026-09-30 — three of five criteria pass; two fail as literally written and both were
+reported, not adjusted.** **84 en-US messages** across two flat bundles, `src/i18n/keys.ts`, the shipped
+`ftl.ts`, and **11 integration tests** (33 in the suite). typecheck, lint, unit (772) and integration
+all exit 0.
+
+**Nothing was machine-translated.** The `ko-KR` bundles carry only the 4 strings the owner already
+wrote or that must not be translated (`PubMed`, `DOI`); the other **79** appear as commented stubs
+carrying their English source, in the order a reviewer meets them, so the workflow is "uncomment and
+translate in place". **The gap is not silent:** `KO_PENDING_REVIEW` / `KO_DELIBERATELY_ABSENT` are
+machine-readable and the spec asserts the present and absent sets as exact sorted deep-equals, so a new
+`en-US` string cannot land without either a Korean entry or an explicit admission. Gate **`G-41`** now
+exists for the review — **it did not**: `plan/00` counts this card among the 21 gated cards and the
+`Notes` say details go in `06-human-gates.md`, but `grep T18` there returned **nothing**, and the
+nearest gate `G-31` is for *prompt* review with "Blocks: the release".
+
+**Criterion 2 ("both bundles have identical key sets") is unsatisfiable, and contradicts criterion 3 of
+this same card.** Criterion 3 requires a key **deliberately removed** from `ko-KR` so the fallback can
+be proven, and `P0-T24` created that fixture and the spec is built on it. Identical key sets would
+delete it. The sibling assertion added instead is exact and falsifiable. **Suggested rewrite:** "the
+`ko-KR` key sets differ from `en-US`'s by exactly the documented review list plus the one deliberate
+fallback fixture, asserted."
+
+**Criterion 4 ("no ID lacking the `research-helper-` prefix") fails for 16 ids.** `docs/01` §9.3 says
+"every ID starts with `research-helper-` … **No exceptions**", while §10.1 fixes the error
+`messageKey`s as `rh-error-*`, `src/core/errors.ts` ships 23 of them and `P1-T02` asserts all 23 by
+name — **the two documents could not both hold.** §9.3 now sanctions `rh-` as the one second prefix and
+says what the alternative costs, rather than leaving a contradiction a later reader resolves by
+guessing. Note the criterion as printed (`grep -c "^[a-z]"`, a bare count with nothing to compare
+against) **can never fail**; the spec's prefix test replaces it.
+
+**This card contradicted itself.** `Do` step 1 said to create the files **under a `research-helper/`
+subfolder** while its own `Do NOT` four lines below forbids anything but **flat** — which is what
+`P0-T32` measured (Zotero 10 silently drops subdirectories there). Step 1 was never updated when that
+measurement landed; corrected.
+
+**`docs/08`'s chrome namespace was wrong in two places.** It writes `chrome://researchhelper/content/`
+while `package.json`'s `addonRef` is `research-helper` and `bootstrap.js` registers that. **`P1-T19`
+step 5 and `P1-T20` would both have copied it.** And a measured trap came with the fix: fetching the
+hyphenated URL for a **missing** file returns an **empty response**, not an unknown-package error — so
+absence must be detected on the content, not on a throw.
+
+**One id had to be invented to unblock `P1-T19`:** `research-helper-menu-collection-search-import`,
+because `docs/08` §2.4/§2.5 list **no collection-context entry for Phase 1** although `P1-T19`'s Goal
+requires one. Listed in `G-41` as an owner wording decision.
+
+**Criterion 1's markup scrape is written, runs, and is vacuously satisfied — and says so in its own
+log.** Phase 1's only document is `P1-T20`'s. Asserting it exists would have left the integration suite
+**red for every card in between, including `P1-T19` which depends on this one** — measured: the first
+run failed exactly there.
+
+**Three placement rules downstream cards must follow**, none of which the corpus made: a string a
+*document* resolves lives in that document's surface file, while one **JavaScript** formats and hands
+to more than one surface lives in `mainWindow.ftl` — **so the search window must not resolve an
+`rh-error-*` id**, the view model formats it and passes a localized string, exactly as `P1-T15`'s sink
+does. The attribute each `searchDialog` entry sets is tabulated at the top of that bundle and
+**`P1-T20` must match it or the labels come back blank.** And 7 `rh-error-*` strings are deliberately
+deferred to Phase 3, asserted via `DEFERRED_ERROR_MESSAGE_IDS` so wiring one into Phase 1 fails the
+suite instead of rendering a blank.
+
+**Four more corpus defects recorded for later cards.** `docs/08` §10.1's directory listing is the stale
+subfolder layout **and** its own table names the files unprefixed — the one place the authoritative list
+is wrong in both respects. §8.3 and §10.2 give `OFFLINE` two different en-US strings ("Zotero is
+offline." vs "No internet connection."; §8.3 followed). §8.3 supplies **no wording for five keys** §10.1
+declares. And the import summary line has **four spellings** across §4.4, §4.6, `P1-T22` step 3 and
+`FR-51`; `P1-T22`'s was followed because it is the only one that both separates linked-from-created
+(`FR-51`) and keeps the duplicate count. **`P1-T30`** owns turning on `fluent.dts` so `keys.ts` stops
+being a second source of truth for the vocabulary.
 ---
 
 ### P1-T19 — Menu entry points and the window opener
