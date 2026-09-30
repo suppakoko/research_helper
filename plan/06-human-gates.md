@@ -395,6 +395,28 @@ release, since it requires all three OSes.
 or checklist item is blocked, and that a Windows-only V-16 result cannot close
 `docs/09` §8 items 1 and 2.
 
+**Status, 2026-09-30 — now the binding constraint, and the measurement that lifts it is small.**
+Phase 0 ended without this gate being satisfied: every Phase 0 measurement is Windows. `V-16`'s
+degraded branch was exercised only against a deliberately throwing `encrypt()`, which proves the
+code path handles a throw but says nothing about whether a real Linux Zotero throws at all. The
+owner decided on 2026-09-30 to **measure before deciding `G-10`**, which makes this gate a
+prerequisite of `P3-T03` rather than a Phase 0 leftover.
+
+**The measurement is deliberately narrow, so it cannot become a hardware project.** One Linux VM is
+enough, and the probe already exists — `P0-T23`'s keystore round-trip. What is needed:
+
+1. A minimal Debian or Ubuntu install with **no `gnome-keyring` and no `libsecret`**: run the probe
+   and record whether `Zotero.OSKeyStore.encrypt()` throws, and the exact error if it does.
+2. The **same probe on a stock GNOME or KDE desktop**, where libsecret is present by default. This
+   is the half that actually bounds the decision: if it succeeds there, the affected population is
+   minimal and headless installs, not Linux users, and `G-10` is a much smaller trade than
+   `docs/09` §8 item 1's sentence implies.
+3. macOS remains owed for Phase 7's three-OS QA (`docs/13` §8) but is **not** on `G-10`'s path:
+   macOS has a Keychain, so the degraded tier is not reachable there either.
+
+Steps 1 and 2 are a VM and an existing probe. They are not gated on acquiring real hardware, which
+is the reason this gate sat open for three weeks.
+
 ---
 
 ### G-10 — Decide the Linux-without-libsecret fallback tier
@@ -427,6 +449,29 @@ D5 anticipates.
 libsecret-less box, the two options with the consequence sentence from
 `docs/09` §8 item 1, and that the answer must be written into `docs/09` §1.7 and
 the open note under D5 in `docs/00` §3.
+
+**Status, 2026-09-30 — deferred to before `P3-T03`, by the owner's decision, and correctly so.**
+The owner chose to **measure first** rather than pick a tier now. That is what this gate's own
+"Lead time" line already prescribed — "informed by `V-16`'s measurement (`G-09`)" — and Phase 0
+ended with that measurement never taken, so a decision made now would rest on nothing. `G-09`
+above now carries the narrow version of the measurement.
+
+**Two corrections to how this gate has been characterised, including by me.** First, the decision is
+**not** whether to build tier 3. `P3-T03` ("Tier ladder — session-only and passphrase, no tier 4",
+0.75 d) already builds **both** tiers 2 and 3 and already shows `secretBackendDialog` offering both
+on a failed probe. Tier 3 is budgeted. What this gate actually settles is narrower: **which tier the
+dialog offers first**, and `docs/09` §8 item 2 — whether the passphrase tier ships in v1 at all.
+Dropping tier 3 would *reduce* committed scope, not avoid new work. Second, the cost sentence in
+`docs/09` §8 item 1 — that "some Linux users cannot run unattended background jobs" — is
+**unquantified**. Step 2 of `G-09`'s measurement is what turns it into a number.
+
+**What ships regardless, and needs no decision.** Tier 1 is measured and is the default. Tier 4,
+plaintext preferences, stays not implemented; D5 and `docs/09` §1.7 both refuse it, and this
+deferral does not reopen it. Nothing in Phase 1 or Phase 2 depends on this gate.
+
+**No new task card was created for the deferral.** The implementation is `P3-T03`'s and the
+measurement is this gate pair's; adding a card for a decision would have moved the plan's effort
+figures for a third time on one day without adding any work that was not already carded.
 
 ---
 
