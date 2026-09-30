@@ -14,13 +14,13 @@ plugin can be built, hot-reloaded, debugged, and can create a Zotero item — on
 developer machine, with the actual Zotero 10.0.1 the user runs. Answer every question in
 `docs/11` §4 before any architecture is committed.
 
-**Effort estimate in `docs/11`.** **17.25–24 developer-days** (`docs/11` §1, Phase 0, re-derived
-2026-09-30). That figure is *measured*, not guessed: its low end is the sum of the 33 task
+**Effort estimate in `docs/11`.** **17.75–25 developer-days** (`docs/11` §1, Phase 0, re-derived
+2026-09-30). That figure is *measured*, not guessed: its low end is the sum of the 35 task
 cards below and its high end is that × 1.4. It replaced an earlier **6–9 d** estimate, which
 `docs/11` R-23 records as one of four systematically low phase figures. `docs/11` §4 separately
-sums the listed spike timeboxes to **≈ 10.75 d**; the remaining **6.5 d** is Phase 0 work
-`docs/11` §1 lists as a deliverable but never priced (≈ 4.75 d) plus the **1.75 d** of five cards
-`P0-T29`–`P0-T33` that measurement itself discovered mid-phase. See "Estimate reconciliation" at
+sums the listed spike timeboxes to **≈ 10.75 d**; the remaining **7.0 d** is Phase 0 work
+`docs/11` §1 lists as a deliverable but never priced (≈ 4.75 d) plus the **2.25 d** of seven cards
+`P0-T29`–`P0-T35` that measurement itself discovered mid-phase. See "Estimate reconciliation" at
 the end of this file for the derivation.
 
 **Risks this phase retires** (`docs/11` §3.1): **R-1** (partly), **R-8** (Korean TTS spike,
@@ -2228,7 +2228,7 @@ fresh key entry is needed, escalate to `P0-T15`'s gate.
 | **ID** | `P0-T17` |
 | **State** | `DONE` — approved 2026-09-30; cancellerReceiver aborts in 0 ms; mid-stream abort still unmeasured |
 | **Depends on** | `P0-T15` |
-| **Blocks** | `P0-T28` |
+| **Blocks** | `P0-T28`, `P0-T35` |
 | **Retires** | `V-9` |
 | **Implements** | part of `FR-10`, part of `FR-23`, part of `FR-42` |
 | **Estimate** | 0.25 d |
@@ -3915,7 +3915,8 @@ file's 15.5 d card sum". **Neither number existed any more.** Writing the report
 quoting three different Phase 0 figures, none of them the card sum; a card-by-card re-addition of
 the 33 `**Estimate**` fields gives **17.25 d**, and every derived figure was recomputed
 independently before being published. The criterion was satisfied against the corrected figures,
-**17.25–24 and 17.25**, and the full drift record — including why two dated change-log paragraphs
+**17.25–24 and 17.25** — which two cards later the same day, `P0-T34` and `P0-T35`, moved again to
+**17.75–25 and 17.75**, and the full drift record — including why two dated change-log paragraphs
 were given superseded-notes instead of being rewritten — is in "Estimate reconciliation" at the
 end of this file. Files changed: `docs/11` §1 (intro total, the ×1.50 factor recital, the Phase 0
 entry, the table row, the subtotal, the total and the subtotal arithmetic), §2 (Mermaid label,
@@ -3929,8 +3930,9 @@ developer-day count to divide, and **the correction factor is still inference, n
 the end of Phase 0**. The report refuses to publish a ratio of agent wall-clock to developer-days,
 which would convert a missing measurement into a false one, and instead names the three things that
 would settle it. What Phase 0 *does* support is a finding about **card sets rather than day rates**:
-five cards, 1.75 d, **10 % of the final sum**, were discovered mid-phase by running code, each via
-§5 rule 2 — R-23's mechanism in miniature, and the reason the 17.25 exists at all.
+seven cards, 2.25 d, **13 % of the final sum**, were discovered mid-phase by running code, each via
+§5 rule 2 — R-23's mechanism in miniature, and the reason the 17.75 exists at all. The last two are
+the sharpest illustration: `P0-T34` and `P0-T35` came out of this very card's escalation rows.
 
 **Escalations the report raises, unresolved and addressed to the owner.** `G-10` (with `G-09`) is
 **live and red**: `V-16`'s degraded-keystore tier has **no measurement behind it** — only a
@@ -4038,7 +4040,7 @@ even though it runs second in dependency order.
 | **ID** | `P0-T30` |
 | **State** | `DONE` — completed 2026-09-10; placeholder mark, final artwork is gate `G-35` |
 | **Depends on** | `P0-T04` |
-| **Blocks** | `P0-T09` |
+| **Blocks** | `P0-T09`, `P0-T34` |
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 0.25 d |
@@ -4566,6 +4568,161 @@ comparison against functions captured before the plugin loaded.
 
 ---
 
+### P0-T34 — Narrow `build.assets` so the XPI ships only what a user needs
+
+| Field | Value |
+|---|---|
+| **ID** | `P0-T34` |
+| **State** | `TODO` |
+| **Depends on** | `P0-T30` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** The packed XPI contains no developer documentation, and the rule that put it there is
+narrowed so every future `.md` file under `addon/` stays out of the user's copy without anyone
+having to remember.
+
+**Why this is a card and not a one-line fix folded into another one.** `P0-T30` measured it:
+`build.assets` is `addon/**/*.*`, so `content/icons/README.md` — 11.9 KB of notes about how the
+placeholder icons were generated — is delivered to every user alongside the icons. It is harmless
+against `NFR-18`'s 3 MB budget today, which is exactly why it would never be noticed again. The
+defect is in the **rule**, not in the one file: the same glob ships anything else added later.
+`plan/README.md` §5 rule 2 is the reason this is its own card rather than a quiet edit inside
+`P0-T30`.
+
+**Read first.**
+- `zotero-plugin.config.ts`, the `assets` entry.
+- `plan/01-phase-0-toolchain-spike.md` `P0-T30` **Findings** — the measurement, and the two
+  SHA-256s that prove the build does not rewrite the icon files. Those hashes must still match
+  after this change; narrowing the glob must not stop the icons shipping.
+- `docs/13-testing-build-and-release.md` §1.4 — the scaffold `build` config keys, where the types
+  win over the published documentation (`P0-T02`, `P0-T13`).
+- `docs/10-requirements-and-user-stories.md` `NFR-18` — the XPI size budget to measure against, so
+  the report says something checkable rather than "smaller".
+
+**Files.**
+- modify `zotero-plugin.config.ts`
+
+**Do.**
+1. Replace `addon/**/*.*` with an explicit list of the extensions the plugin actually ships.
+   Enumerate them from what is currently under `addon/` rather than from memory, and state the
+   list in the Findings so a later addition of a new asset type is visibly a decision.
+2. Build, then **read the file list out of the packed XPI** — not out of `.scaffold/build/` — and
+   confirm `content/icons/README.md` is absent while every icon is present.
+3. Compare the icons' SHA-256s against the two `P0-T30` recorded. A narrowed glob that silently
+   drops or rewrites an icon is a worse bug than the one being fixed.
+4. Record the XPI's size before and after against `NFR-18`'s budget.
+
+**Do NOT.**
+- Do not delete `addon/content/icons/README.md`. It is correct developer documentation and belongs
+  in the repository; the defect is that it is *shipped*, not that it exists.
+- Do not widen this into the icon-artwork work. Final artwork is gate `G-35` and is not this card.
+
+**Criteria.**
+- [ ] The packed XPI contains no `.md` file, verified by listing the archive's contents.
+- [ ] Every icon that shipped before still ships, with the same SHA-256s `P0-T30` recorded.
+- [ ] `npm run build` exits 0 with no warnings, and the XPI size is recorded against `NFR-18`.
+- [ ] The `assets` entry names extensions explicitly, so adding a new asset type is a visible
+      decision rather than an accident.
+
+**Verify with.**
+```bash
+npm run build && node -e "const fs=require('fs');const b=fs.readFileSync(require('glob').sync('build/*.xpi')[0]);console.log([...b.toString('latin1').matchAll(/[\w./-]+\.md/g)].map(m=>m[0]))"
+```
+
+**Notes.** `unzip` may not be on PATH on this Windows machine; PowerShell's `Expand-Archive`, or a
+few lines of Node reading the archive's central directory, do the same job. What matters is that
+the assertion runs against the **packed artifact**, because the whole point of `P0-T30`'s finding
+was that the staging directory and the XPI can differ.
+
+---
+
+### P0-T35 — Re-probe cancellation with the abort fired after the first byte
+
+| Field | Value |
+|---|---|
+| **ID** | `P0-T35` |
+| **State** | `TODO` |
+| **Depends on** | `P0-T17` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** Two questions `V-9` left open are answered with a measurement: does cancelling a request
+that has **already delivered data** stop it, and is the partial body readable afterwards?
+
+**Why this is a card.** `P0-T17` verified the cancellation primitive and said plainly what it did
+not establish: the abort fired at t+607 ms while the first byte on the comparable leg arrived at
+t+677 ms, so the partial body was **0 chars** and mid-stream cancellation was never exercised.
+`P0-T28` escalated it as row 10. Phase 3's job engine is designed to keep partial output when a
+summary is cancelled, so the assumption must be measured before code depends on it — and it is
+cheaper to measure now, while the probe harness is fresh, than to discover it in Phase 3.
+
+**Read first.**
+- `plan/01-phase-0-toolchain-spike.md` `P0-T17` **Findings** — the timings above, and that only
+  `Zotero.HTTP.CancelledException` matched of the five exception classes checked.
+- `plan/01-phase-0-toolchain-spike.md` `P0-T16` **Findings** — the streaming measurements the abort
+  point must be chosen against: first delta at **t+876 ms**, **3,897 ms** of streaming, **111**
+  events. An abort in the middle of that window is what this card needs.
+- `scripts/spike-network.ts` — the existing probe. Its cancellation leg is the one to copy, not to
+  edit in place; `P0-T17`'s recorded numbers must stay reproducible from the script as it is.
+- `src/core/http/client.ts` — `onCanceller` and the `cancelRequested` flag, and the mapping of a
+  status-0 resolve to `CANCELLED` rather than `NETWORK`. This probe must confirm that mapping still
+  holds when bytes have already arrived, which is the case the flag was written for.
+- `docs/01-zotero-plugin-platform.md` §8.4 and §8.4.1 — the measured `cancellerReceiver` and
+  progress-listener behaviour these legs rest on. The sandbox has no `AbortController`.
+
+**Files.**
+- modify `scripts/spike-network.ts` (add a leg; do not alter the existing cancellation leg)
+
+**Do.**
+1. Add a leg that starts a streaming request, waits for the **first progress event** rather than a
+   fixed delay, lets a few more events arrive, then cancels. Triggering on the event is the point:
+   a fixed timeout is what produced the 0-char result the first time.
+2. Record, for that leg: how many progress events fired before the cancel, the **character length
+   of the accumulated body at the moment of cancellation**, whether that text is still readable
+   after the rejection, and how many further progress events arrive in a quiet period of at least
+   2,500 ms afterwards.
+3. Assert the exception class and the `HttpError` code the client maps it to, exactly as `P0-T17`
+   did, so the two legs compare like for like.
+4. Report the verdict as **three separate answers** — cancellation stops it, the partial body is
+   readable, no further events arrive — not as one pass/fail. Any of the three can be false
+   independently, and Phase 3 needs to know which.
+
+**Do NOT.**
+- Do not enter or use a paid provider key for this. Streaming enough bytes to abort mid-stream
+  needs no LLM: the leg can stream from any endpoint that sends a body incrementally. If a provider
+  leg is genuinely required, report that rather than spending a key.
+- Do not change the existing cancellation leg, and do not adjust `P0-T17`'s recorded numbers.
+- Do not implement anything in `src/` beyond what the probe needs to read. This is a measurement,
+  not the Phase 3 job engine.
+
+**Criteria.**
+- [ ] The abort demonstrably fires **after** at least one progress event, evidenced by the event
+      count and the body length at cancellation both being greater than zero.
+- [ ] Whether the partial body is readable after the rejection is stated as a measured yes or no,
+      with the character count.
+- [ ] The count of progress events in a quiet period of ≥ 2,500 ms after the cancel is recorded.
+- [ ] The exception class and the mapped `HttpError` code are recorded, and compared against
+      `P0-T17`'s pre-first-byte result.
+- [ ] `docs/01` §8.4 and `docs/07` §7.4 are updated if either is wrong about mid-stream behaviour,
+      or left alone with a note saying they were checked and are right.
+
+**Verify with.** Run the probe and read its verdict block. There is no automated assertion here:
+the output is the measurement, and a green exit code would only mean the script ran.
+
+**Notes.** If the partial body turns out **not** to be readable, that is a design input rather than
+a failure — `docs/07` §7.4 and Phase 3's job-engine cards would need to keep their own accumulated
+buffer instead of reading the response object after the fact. Report it that way, and do not adjust
+a criterion to make it look like a pass (`plan/README.md` §5 rule 6).
+
+---
+
 ## Phase 0 spike report template
 
 Copy this into `docs/spikes/phase-0.md` (`P0-T28`) and fill it in. One row per `V-*`
@@ -4663,11 +4820,11 @@ that records it.
 
 | | Value |
 |---|---|
-| `docs/11` §1 Phase 0 estimate (re-derived 2026-09-30) | 17.25–24 developer-days |
-| `plan/01` task-card sum (the source of that low end) | 17.25 developer-days |
-| Superseded `docs/11` §1 estimates, for reference | 16–22, before that 15.5–22, before that 6–9 |
+| `docs/11` §1 Phase 0 estimate (re-derived 2026-09-30) | 17.75–25 developer-days |
+| `plan/01` task-card sum (the source of that low end) | 17.75 developer-days |
+| Superseded `docs/11` §1 estimates, for reference | 17.25–24, 16–22, 15.5–22, and before that 6–9 |
 | Actual elapsed developer-days | **Not measurable from this phase.** 21 calendar days (2026-09-10 → 2026-09-30), 62 commits on 7 distinct days, two of the gaps being owner-gate turnaround. **R-23's instruction to "record actual days against each card from `P0-T01` onward" was followed by nobody**, so not even a day-granularity figure per card survives, and the phase was executed by agents under a coordinator rather than by one developer — so no developer-day count exists to divide. |
-| Actual ÷ 17.25 — the observed correction factor (R-23) | **Not computed, and deliberately not estimated.** Dividing agent wall-clock by a developer-day estimate is a category error; publishing a ratio from it would convert a missing measurement into a false one. R-23's residual therefore stands **unreduced** at the end of Phase 0, which is itself the finding: the factor is still inference. `P1-T01` onward must carry a per-card actual-days column, and agent time and owner time must be recorded in two columns that are never summed. |
+| Actual ÷ 17.75 — the observed correction factor (R-23) | **Not computed, and deliberately not estimated.** Dividing agent wall-clock by a developer-day estimate is a category error; publishing a ratio from it would convert a missing measurement into a false one. R-23's residual therefore stands **unreduced** at the end of Phase 0, which is itself the finding: the factor is still inference. `P1-T01` onward must carry a per-card actual-days column, and agent time and owner time must be recorded in two columns that are never summed. |
 | Does `docs/11` §1's effort summary need re-deriving again? | **Yes, and it was, on 2026-09-30.** Not from actuals but from the card sum: §1's entry, its table row and card count, the Phases 0–3 subtotal, the whole-plan total, §2's Mermaid label and §2's critical path all quoted a Phase 0 figure that no longer matched the 33 cards. See "Estimate reconciliation" below. |
 
 ---
@@ -4676,12 +4833,12 @@ that records it.
 
 | | Developer-days |
 |---|---|
-| Sum of the 33 task cards above | **17.25** |
-| `docs/11-implementation-roadmap.md` §1 Phase 0 estimate, **as it now stands** | **17.25–24** |
+| Sum of the 35 task cards above | **17.75** |
+| `docs/11-implementation-roadmap.md` §1 Phase 0 estimate, **as it now stands** | **17.75–25** |
 | `docs/11` §4's own sum of listed spike timeboxes | 10.75 |
 | Non-spike Phase 0 deliverables `docs/11` §1 lists but never priced | 4.75 |
 | Superseded `docs/11` §1 estimate | 6–9 |
-| Divergence from the top of the superseded band (9 d) | **+92%** |
+| Divergence from the top of the superseded band (9 d) | **+97%** |
 
 **Status: reconciled.** This section originally recorded an unresolved conflict — a 15.5 d card
 sum against a 6–9 d phase figure, i.e. **+72%**, far beyond `plan/README.md` §7's ±30%
@@ -4698,20 +4855,24 @@ card sum**: `docs/11` §1's entry and table row said 16–22 over 30 cards; `doc
 paragraph said 15.5–22 over 28; this file's header and the table above said 15.5 over 28; and
 `plan/00-task-index.md` §1 alone said the correct 17.25 over 33. A card-by-card re-addition of the
 33 `**Estimate**` fields gives **17.25 d**, so `plan/00` was right and the other three were stale.
-The mechanism of the drift is the lesson: **the five cards `P0-T29`–`P0-T33` were each created
+The mechanism of the drift is the lesson: **the cards `P0-T29` onward were each created
 mid-phase by `plan/README.md` §5 rule 2** — stop and write a card rather than widen the one in
 hand — and each time, `plan/00`'s sums were updated while the prose figures elsewhere were not.
-Every downstream figure re-derives from the 17.25: the band becomes **17.25–24** (× 1.4 = 24.15),
-the Phases 0–3 subtotal **83.75–117**, the whole-plan total **157.25–219**, and `docs/11` §2's
-critical path **112.75–157**. Phase 5's float is unchanged at 10.5–15 d, because Phase 0 lies on
+Every downstream figure re-derives from the card sum. **It then re-derived a second time the same
+day:** `P0-T28`'s escalation rows 13 and 10 became `P0-T34` and `P0-T35` (0.25 d each), taking the
+phase to **35 cards and 17.75 d**. The published figures are therefore the band **17.75–25**
+(× 1.4 = 24.85), the Phases 0–3 subtotal **84.25–118**, the whole-plan total **157.75–220**, and
+`docs/11` §2's critical path **113.25–158**. The intermediate 17.25 / 83.75 / 157.25 / 112.75 set
+held for a few hours and is recorded here only so the two commits of 2026-09-30 read in order. Phase 5's float is unchanged at 10.5–15 d, because Phase 0 lies on
 both the critical path and the binding route into P5 and cancels out of the subtraction. The
 ×1.50 scaling factor for Phases 4–7 is **held at 1.50 for the third time** — it recomputes to
-83.75 ÷ 52 = 1.611 — on `docs/11` §1's own false-precision argument, which a 1.75-day change to a
+84.25 ÷ 52 = 1.620 — on `docs/11` §1's own false-precision argument, which a 2.25-day change to a
 measured phase does not overturn. **The `P0-T28` card's own `Verify` step is stale as written**: it
 asks for the actual figure to be stated "against `docs/11` §1's 15.5–22 d and this file's 15.5 d
 card sum", and neither number exists any more. Per `plan/README.md` §5 rule 6 the criterion is
-reported rather than quietly re-scoped: it was satisfied against the **current** figures, 17.25–24
-and 17.25, and the reason for the substitution is this paragraph.
+reported rather than quietly re-scoped: it was satisfied against the figures current when it was
+written, 17.25–24 and 17.25, and against **17.75–25 and 17.75** after the two cards it spawned. The
+reason for the substitution is this paragraph.
 
 The divergence was not a surprise; `docs/11` §4 predicted its mechanism. Its closing paragraph
 records that the listed spike timeboxes alone sum to ≈ 10.75 d and that the old 6–9 figure had

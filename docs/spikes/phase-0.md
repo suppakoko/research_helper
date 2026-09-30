@@ -394,3 +394,45 @@ IDs, keys and SHA-256s are in `test/fixtures/pdf/README.md`; **the PDFs themselv
 committed** (publisher content, `docs/09` §4.4), and the arXiv control is under arXiv's
 non-exclusive licence, so it is local-testing only. Each card's `Findings` block in
 `plan/01-phase-0-toolchain-spike.md` carries the full numbers this report compresses.
+
+---
+
+## Addendum A — 2026-09-30, later the same day: the card count moved to 35
+
+This report is not revised in place (`docs/07` §2.2.1), so the figures above stand as written and
+this addendum records what changed after they were written.
+
+**Two of §7's escalation rows became task cards within hours of this report being committed.** Row
+13, the `build.assets` glob that ships `addon/**/*.md` to every user, became **`P0-T34`**. Row 10,
+the mid-stream cancellation re-probe that `V-9` left owed, became **`P0-T35`**. Both are 0.25 d and
+both are `TODO`. They were created rather than folded into an existing card because
+`plan/README.md` §5 rule 2 requires exactly that, and because a developer-addressed escalation with
+no card behind it is a finding that quietly expires.
+
+**Every figure in §8.3 therefore moved once more, and the current values are:**
+
+| | §8.3 as written | Current |
+|---|---|---|
+| Phase 0 cards | 33 | **35** |
+| Card sum | 17.25 d | **17.75 d** |
+| Published band | 17.25–24 | **17.75–25** (× 1.4 = 24.85) |
+| Phases 0–3 subtotal | 83.75–117 | **84.25–118** |
+| Whole-plan total | 157.25–219 | **157.75–220** |
+| Critical path | 112.75–157 | **113.25–158** |
+| Scaling factor recompute | 83.75 ÷ 52 = 1.611 | **84.25 ÷ 52 = 1.620**, still held at 1.50 |
+| Plan-wide cards | 105 | **107** |
+
+Phase 5's float is **unchanged at 10.5–15 d** for the third time running, because Phase 0 sits on
+both the critical path and the binding route into P5 and cancels out of the subtraction. The
+≈ 7–10-month reading of the total also survives (157.75 ÷ 21 ≈ 7.5; 220 ÷ 21 ≈ 10.5).
+
+**The finding this sharpens.** §8.3 argued that the durable lesson of the effort drift was the
+mechanism, not the 1.75 d: cards keep appearing because running the code finds work that reading the
+corpus does not. Within hours, the report that made that argument produced two more cards out of its
+own escalation rows and moved its own published figures. Seven of the phase's 35 cards — 2.25 d,
+**13% of the final sum** — now exist for that reason. Anything that quotes a card sum needs a check
+that re-adds it, because the sum is not stable while a phase is being measured.
+
+**What this addendum does not change.** No verdict, no measurement, no evidence citation, and none
+of §7's other rows. `P0-T21` is still `TODO` and `V-13`'s Semantic Scholar cell is still the one
+placeholder in this file. `G-10` is still the live red escalation.

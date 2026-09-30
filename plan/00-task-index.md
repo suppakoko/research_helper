@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-09-15 · **105 tasks: 31 `DONE`, 74 `TODO`.**
+> **Last updated:** 2026-09-30 · **107 tasks: 31 `DONE`, 76 `TODO`.**
 
 ---
 
@@ -20,11 +20,11 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
 |---|---|---|---|---|
-| 0 — Toolchain spike | 33 | 17.25 d | 17.25–24 d | 6–9 d (+92%) |
+| 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 23 | 18.75 d | 18.75–26 d | 9–12 d (+56%) |
 | 2 — Multi-source + dedup | 18 | 24.25 d | 24.25–34 d | 12–16 d (+52%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **105** | **83.75 d** | **83.75–117 d** | 39–52 d (+61% over the top of the band) |
+| **Phases 0–3** | **107** | **84.25 d** | **84.25–118 d** | 39–52 d (+62% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -37,7 +37,7 @@ families is, in that card's own words, "the single most expensive card in the ph
 produces no shipped code". The owner decided to re-estimate rather than to accept them, because
 leaving them optimistic would contradict the same-day roadmap correction and `docs/11`'s risk
 **R-23**. Each card's `Notes` now carries the derivation. Phase 3's sum is **23.50 d**, the
-Phases 0–3 subtotal is **82.50 d** (**83.75 d** since `P0-T31`, `P0-T32` and `P0-T33` were added, 2026-09-10 to 2026-09-14), and `docs/11` §1's Phase 3 band, its effort summary, its
+Phases 0–3 subtotal is **82.50 d** (**84.25 d** since `P0-T31`–`P0-T35` were added, 2026-09-10 to 2026-09-30), and `docs/11` §1's Phase 3 band, its effort summary, its
 total and months figure, and §2's dependency graph and critical path were all re-derived from
 those numbers. **No other card's estimate was changed**, and `P3-T20`'s figure counts developer
 work only — the human's PDF sourcing and ground-truth adjudication is gate **G-12** in
@@ -140,7 +140,7 @@ column means the card cannot complete without a human — read
 | ✅ `P0-T33` | Stop constructing `ZoteroToolkit`, which leaks on every cycle | `P0-T32` | 0.5 d |  |
 | `P0-T28` | Write and commit the Phase 0 spike report | `P0-T14`, `P0-T15`, `P0-T16`, `P0-T17`, `P0-T18`, `P0-T19`, `P0-T20`, `P0-T21`, `P0-T22`, `P0-T23`, `P0-T24`, `P0-T25`, `P0-T26`, `P0-T27` | 0.5 d | 🔒 |
 
-**Nine of Phase 0's 33 cards carry a gate**, not fourteen: `P0-T08`, `P0-T09`,
+**Nine of Phase 0's 35 cards carry a gate**, not fourteen: `P0-T08`, `P0-T09`,
 `P0-T11`, `P0-T15`, `P0-T18`, `P0-T22`, `P0-T25`, `P0-T27`, `P0-T28`. An earlier
 generation of this table also marked `P0-T16`, `P0-T19`, `P0-T21`, `P0-T23` and
 `P0-T26`; all five cards write **`Human gate` = none** and the marks are removed.
@@ -437,13 +437,16 @@ jointly critical and are more nearly tied than before, not less.
 2026-09-09 pass rather than rewritten.** Every present-tense figure in it — 100
 cards, the 15.50 Phase 0 sum, the 82.00 subtotal, the 82–115 band, the 155.5–217
 total, the 111–155 critical path — was true when written and is not true now.
-Phase 0 finished with **33 cards summing to 17.25 d**, because five cards
-(`P0-T29`–`P0-T33`, 1.75 d) were created mid-phase by `plan/README.md` §5 rule 2
+Phase 0 finished with **35 cards summing to 17.75 d**, because seven cards
+(`P0-T29`–`P0-T35`, 2.25 d) were created mid-phase by `plan/README.md` §5 rule 2
 when running the code found work no reading of the corpus had. The current
 figures are in §1's table above and were propagated into `docs/11` by `P0-T28` on
-2026-09-30: **105 cards**, Phase 0 **17.25–24**, the Phases 0–3 subtotal
-**83.75–117**, the project total **157.25–219** (≈ 7–10 months still, 157.25 ÷ 21
-≈ 7.5 and 219 ÷ 21 ≈ 10.4), and the critical path **112.75–157**. The P2-versus-P3
+2026-09-30: **107 cards**, Phase 0 **17.75–25**, the Phases 0–3 subtotal
+**84.25–118**, the project total **157.75–220** (≈ 7–10 months still, 157.75 ÷ 21
+≈ 7.5 and 220 ÷ 21 ≈ 10.5), and the critical path **113.25–158**. Two of those
+cards, `P0-T34` and `P0-T35`, were created later the same day out of `P0-T28`'s
+own escalation rows 13 and 10 — the report's findings became cards, which moved
+the figures the report had just corrected. The P2-versus-P3
 margin quoted above is unaffected: Phase 0 is upstream of both. **The drift itself
 is the finding** — §1's table was kept current card-by-card while four prose
 figures in two other documents were not, which is why `P0-T28` had to re-add the
