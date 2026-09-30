@@ -170,6 +170,18 @@ export class Semaphore {
     }
   }
 
+  // INVARIANT, recorded 2026-09-30: `next.unsubscribe()` must run **before**
+  // `next.deferred.resolve(...)` below. The order is load-bearing, not tidiness.
+  //
+  // Reversed, a cancellation arriving after the handover would reject an
+  // already-resolved deferred — a no-op — while the permit had been handed to a
+  // promise nobody awaits: a **silently leaked permit**, whose symptom is a hang
+  // rather than an error. This order is also why `acquire`'s cancellation callback
+  // can never observe `at < 0`: by the time a waiter holds the permit its token
+  // subscription is already gone. That branch is therefore unreachable through the
+  // public API, and it is the one uncovered branch in this file. Do not "cover" it
+  // with a test that reaches past the API — reverse this order and the branch
+  // becomes reachable by way of the bug it is guarding against.
   private makeRelease(): SemaphoreRelease {
     let released = false;
     return () => {

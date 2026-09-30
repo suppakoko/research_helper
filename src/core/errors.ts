@@ -228,13 +228,30 @@ export abstract class ResearchHelperError extends Error {
   /**
    * The redacted, storable form of this error.
    *
-   * `httpStatus` and `stack` are spread in conditionally rather than assigned
-   * `| undefined`. §10.1's transcription writes them as plain properties, which
-   * does not compile against {@link SerializedError}'s optional members under
-   * `tsconfig.json`'s `exactOptionalPropertyTypes: true` (`docs/13` §1.5's
-   * strict family). Present-or-absent is also the shape the provenance JSON
-   * schema wants: an explicit `"stack": null` in an exported artefact is a field
-   * a consumer has to special-case.
+   * Two deviations from §10.1's transcription, both necessary.
+   *
+   * **1. `stack` is redacted too, and §10.1 does not redact it.** §10.1 writes
+   * `detail: redact(this.message)` beside a bare `stack: this.stack`. But V8
+   * builds `Error.stack` as `` `${name}: ${message}\n    at …` ``, so **the
+   * unredacted message is reproduced verbatim inside `stack`** and redacting only
+   * `detail` leaks the very thing it removed. That matters because a
+   * `SerializedError` is not an internal value: §5.3 stores it in
+   * `SourceProvenance.error`, which FR-8's "Export provenance as JSON" writes to
+   * a user-chosen file and `schema/provenance.schema.json` validates, and §5.2
+   * stores it in `JobRecord.error`, which §10.4's debug bundle writes into
+   * `jobs.json` for attaching to a GitHub issue. A credential in an error message
+   * would reach both. NFR-16 and `docs/09` §2.1 forbid exactly that, and
+   * `src/core/logger.ts` already redacts a stack when it walks an `Error` in a
+   * context object — so §10.1's omission also made the two paths disagree about
+   * the same string. Found by `test/unit/core/result.test.ts`, not by inspection.
+   *
+   * **2. `httpStatus` and `stack` are spread in conditionally** rather than
+   * assigned `| undefined`. §10.1 writes them as plain properties, which does not
+   * compile against {@link SerializedError}'s optional members under
+   * `tsconfig.json`'s `exactOptionalPropertyTypes: true` (`docs/13` §1.5's strict
+   * family). Present-or-absent is also the shape the provenance JSON schema
+   * wants: an explicit `"stack": null` in an exported artefact is a field every
+   * consumer has to special-case.
    */
   toSerialized(): SerializedError {
     const { httpStatus } = this as unknown as { httpStatus?: number };
@@ -245,7 +262,7 @@ export abstract class ResearchHelperError extends Error {
       detail: redact(this.message),
       retryable: this.retryable,
       ...(httpStatus !== undefined && { httpStatus }),
-      ...(stack !== undefined && { stack }),
+      ...(stack !== undefined && { stack: redact(stack) }),
     };
   }
 }

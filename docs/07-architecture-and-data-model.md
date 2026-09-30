@@ -3106,7 +3106,21 @@ export abstract class ResearchHelperError extends Error {
       detail: redact(this.message),
       retryable: this.retryable,
       httpStatus: (this as unknown as { httpStatus?: number }).httpStatus,
-      stack: this.stack,
+      // SECURITY, corrected 2026-09-30 (`P1-T02`): this line used to read
+      // `stack: this.stack` beside the `detail: redact(this.message)` above it. V8 builds
+      // `Error.stack` as `` `${name}: ${message}\n    at …` ``, **so the message that had just
+      // been redacted was reproduced verbatim one field over.** Proven at the V8 level before
+      // the fix: a 44-character key in the message appears in `stack`'s first line, and
+      // `JSON.stringify` of the §10.1 shape contained it.
+      //
+      // This is not an internal value. §5.3 puts a `SerializedError` in
+      // `SourceProvenance.error`, which **FR-8's "Export provenance as JSON" writes to a
+      // user-chosen file** and `schema/provenance.schema.json` validates; §5.2 puts one in
+      // `JobRecord.error`, which §10.4's debug bundle writes into `jobs.json` for attaching to
+      // a GitHub issue. A credential in any error message reached both — while this section was
+      // being followed exactly. `src/core/logger.ts` already redacted a stack when it walked an
+      // `Error` in a context object, so the two paths disagreed about the same string.
+      stack: redact(this.stack),
     };
   }
 }
