@@ -338,7 +338,7 @@ compile, which is the behaviour `docs/07` §11.1 step 3 asks for.
 | **ID** | `P1-T02` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T01` |
-| **Blocks** | `P1-T03`, `P1-T04`, `P1-T05`, `P1-T15`, `P1-T18` |
+| **Blocks** | `P1-T03`, `P1-T04`, `P1-T05`, `P1-T07`, `P1-T12`, `P1-T15`, `P1-T18` |
 | **Retires** | none |
 | **Implements** | `FR-10`, part of `FR-54`, `NFR-14`, part of `NFR-16` |
 | **Estimate** | 1.0 d |
@@ -371,6 +371,7 @@ classified error and honour a cancel.
 
 **Files.**
 - create `src/core/jobQueue/cancellation.ts`
+- create `src/core/jobQueue/progress.ts` (**the `docs/07` §4.1 `ProgressReporter` interface only** — added 2026-09-30; `P1-T15` implements it)
 - create `src/core/clock.ts`
 - create `src/core/errors.ts`
 - create `src/core/logger.ts`
@@ -381,8 +382,16 @@ classified error and honour a cancel.
 - create `test/unit/core/logger-redaction.test.ts`
 
 **Do.**
-1. Implement `CancellationTokenSource` / `CancellationToken` per `docs/07` §4.1,
-   backed by an internal `AbortController` so `token.signal` is real.
+1. Implement `CancellationTokenSource` / `CancellationToken` per `docs/07` §4.1.
+   ~~backed by an internal `AbortController` so `token.signal` is real.~~
+   **Corrected 2026-09-30 (`P1-T02` D3): taken literally this step was a module-load throw in the
+   product.** `AbortController` is **absent from the plugin sandbox** — measured 2026-09-10 on
+   Zotero 10.0.1 by `P0-T08` with two agreeing probes (`docs/01` §2.3) — and `docs/07` §7.4 says so
+   itself ("*not* an `AbortSignal`, which does not exist in the plugin sandbox"). Use a real
+   `AbortController` when `typeof AbortController === "function"` (Node and vitest, so criterion 2
+   is asserted against the genuine platform type) and a documented same-shape stand-in otherwise.
+   This card's `Notes` already anticipated that `signal` "becomes decoration"; the step's wording
+   did not.
 2. `throwIfCancelled()` throws `OperationCancelledError` carrying the
    `CancellationReason` — same object, not a copy.
 3. Implement `Clock` as `{ now(): number; sleep(ms, token?): Promise<void> }`
@@ -436,6 +445,68 @@ before building on it. The full `docs/07` §10.1 hierarchy is transcribed now
 rather than grown incrementally, because Phase 3's `LLMError` subtree is already
 in it and a partial copy diverges.
 
+
+**Findings, 2026-09-30 — four of five criteria pass; criterion 5 failed on another card's file.**
+`src/core/jobQueue/cancellation.ts`, `clock.ts`, `errors.ts`, `logger.ts`, `result.ts`,
+`concurrency.ts` and three test files. **206 tests in this card's three files, 406 across the unit
+suite, all green; `npm run lint:check` exits 0 project-wide.** Coverage of the card's modules clears
+`docs/13` §2's 85 % line bar everywhere except `result.ts` — see the defect list.
+
+**Criterion 5 (`npm run typecheck` exits 0) failed as written, and the cause was not this card.**
+Exit 2, one error: `src/sources/types.ts(51,39)` importing `../core/jobQueue/progress`. A scoped
+`tsc` over `src/core` + `src/model` + `test/unit/core` with the project's own `compilerOptions` exits
+**0**, so no file this card owns produced a diagnostic. Reported rather than adjusted
+(`plan/README.md` §5 rule 6). **The plan, not the code, was at fault** — see the `Files` note above:
+`src/core/jobQueue/progress.ts` was `P1-T15`'s `create` while five cards that precede `P1-T15`
+already need it, so typecheck could not have reached 0 for five cards. Fixed by moving the §4.1
+interface here and making `P1-T15`'s entry a `modify`.
+
+**Two corpus defects that stop `docs/07` §10.1 from compiling at all, both reproduced before being
+fixed.** **D1:** `readonly code = "NETWORK"` gives the property the *literal* type `"NETWORK"`, so
+`OfflineError`'s `override readonly code = "OFFLINE"` is `TS2416` — **15 errors** across the five
+subclass-of-a-concrete-class pairs §10.1 declares. Not a strict-flag artefact; ordinary subtype
+checking under plain `strict`. I reproduced it in isolation on TypeScript 5.9.3 before believing the
+report: `Type '"OFFLINE"' is not assignable to type '"NETWORK"'`. The repair is `: string` /
+`: boolean` annotations on the concrete members, which **changes no runtime value** — all 23 code
+strings are asserted by test. **D2:** §10.1's `toSerialized()` assigns `httpStatus` and `stack` as
+plain properties, but §5.2 declares them optional and `tsconfig.json` sets
+`exactOptionalPropertyTypes`, so the assignment is rejected; a conditional spread omits the keys
+instead of writing `undefined`, which is also the right shape for `schema/provenance.schema.json`.
+Both are corrected in `docs/07`.
+
+**D3 — this card's own step 1 was a trap, and the card contradicted itself.** Step 1 said to back the
+token with "an internal `AbortController` so `token.signal` is real". `AbortController` is **absent
+from the plugin sandbox** (measured 2026-09-10, `P0-T08`, two agreeing probes, `docs/01` §2.3) and
+`docs/07` §7.4 says so in terms. Taken literally, step 1 is a module-load throw in the product —
+while this card's own `Notes` already anticipated that `signal` "becomes decoration". The
+implementation feature-detects and falls back to a same-shape stand-in, with seven dedicated tests
+for the sandbox branch rather than trusting it by inspection. Step 1's wording is corrected above.
+
+**Three more under-specifications recorded rather than invented around.** **D4:** §10.3 said the
+redaction patterns come "from one place" without naming it, and the only corpus candidate carrying a
+path header, `src/prefs/secrets.ts`, is unreachable from `core/` under §2.3's rule — now pinned to
+`src/core/errors.ts` in §10.3. **D9:** §4.1 declares `CancellationToken`, `ProgressReporter`,
+`RateLimiter` and `Cache` but **not `Clock`**, so two cards in one day inferred its shape from
+§7.3's call site; `P1-T07` typed its parameter structurally as `{ now(): number }` specifically to
+avoid declaring a second one. Recorded as a gap in §4.1. **D8:** `docs/06` §13.1 attributes a
+30 %-failure-rate abort to `mapWithConcurrency`, but §13's own callback never throws, so the
+threshold is a policy over recorded outcomes rather than a property of the mapper; the primitive
+ships plain fail-on-first-rejection and **Phase 3 must settle where the threshold lives.**
+
+**Two gaps this card cannot close itself, reported under rule 2 and not absorbed.** **D5:**
+`src/core/result.ts` is a `Files` entry that **no `Do` step mentions**, and the whole corpus says one
+thing about it — §2.2's tree comment. A conservative surface shipped with the gap documented in the
+file header; a specific shape needs a doc section. **D6:** `plan/README.md` §6 requires a card whose
+`Files` list has no test file to give a reason in `Notes`, and this card's `Notes` give none for
+`result.ts` or `concurrency.ts`. Measured consequence: **`result.ts` is at 0 % coverage.** The
+cancellation-facing `Semaphore` and `mapWithConcurrency` assertions went into `cancellation.test.ts`
+(lifting `concurrency.ts` to 93.75 % lines), but `result.ts` is untested and that is an open item.
+
+**One real bug found and fixed in its own code, recorded because it would be expensive to
+rediscover.** `Semaphore.acquire` threw **synchronously** for an already-cancelled token while
+declaring `Promise<…>`; a method that sometimes throws before returning its promise and sometimes
+rejects it cannot be handled in one place. Made `async`, with the fast path still running
+synchronously to the return so two callers cannot both see a free permit.
 ---
 
 ### P1-T03 — Typed preference schema, `PrefStore` port, `prefs.js` rows
@@ -851,7 +922,7 @@ stop and re-plan rather than inventing a fallback. Human gate details go in
 |---|---|
 | **ID** | `P1-T07` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T01` |
+| **Depends on** | `P1-T01`, `P1-T02` (added 2026-09-30 — `docs/07` §4.2 imports `CancellationToken` and `ProgressReporter`, both `P1-T02`'s) |
 | **Blocks** | `P1-T08`, `P1-T09`, `P1-T16`, `P1-T20`, `P2-T01`, `P2-T02` |
 | **Retires** | part of `R-2` |
 | **Implements** | part of `FR-2`, part of `FR-4` |
@@ -888,6 +959,7 @@ member.
 - create `src/bootstrap/registerSources.ts`
 - create `test/unit/sources/registry.test.ts`
 - create `test/unit/sources/recency.test.ts`
+- modify `eslint.config.js` (added 2026-09-30 — criterion 4 requires a lint rule and this card's `Notes` already scope the work, but `Files` omitted the file it lives in)
 
 **Do.**
 1. Transcribe `docs/07` §4.2 into `src/sources/types.ts`, re-exporting `SourceId`
@@ -941,6 +1013,63 @@ rewritten to require it and defers the computation to §4.2, and `docs/02` §2.0
 declares the same window corpus-wide. Keep the span the function returns and the
 span the label shows the same value — that is the whole point of §4.2's rule.
 
+
+**Findings, 2026-09-30 — three of five criteria pass, and the two failures are both plan defects
+rather than code defects.** `src/sources/types.ts`, `registry.ts`, `shared/recency.ts`,
+`src/bootstrap/registerSources.ts` and two test files. **29 tests, 100 % of statements, branches,
+functions and lines across the three implementation files.** Scoped to this card's six files,
+`eslint` and `prettier --check` both exit 0.
+
+**Criterion 1 was measured twice rather than eyeballed.** A script extracted §4.2's fenced block,
+tokenised declared type names, member names with their optionality and every string-literal union
+arm in order, and diffed: **93 doc tokens, 93 file tokens, 0 mismatches.** A stricter whole-text
+comparison with comments stripped and Prettier's wrapping normalised reports **2309 vs 2309
+characters, identical.** `findRelated` / `lookup` / `fetchAbstract` are declared and implemented by
+nobody, as the card requires.
+
+**Criterion 4 (ESLint fails `sources/` importing `zotero/`) FAILED, and I confirmed it myself.**
+A throwaway probe under `src/sources/` importing each layer in turn: `sources → pipeline` eslint
+exit 1, `sources → ui` exit 1, **`sources → zotero` exit 0 — no error at all.** Two separate causes.
+*Mechanical:* `P0-T04`'s `layering/adapters` override groups `src/sources/**`, `src/llm/**`,
+`src/tts/**` **and `src/zotero/**`** under one rule forbidding `pipeline` and `ui`; `zotero` cannot
+be added to that group's forbidden list without forbidding `src/zotero/` from importing its own
+siblings, so the fix is a *separate* override for the three non-`zotero` adapter directories.
+*Corpus:* `docs/07` §2.3's bullet said the adapters must not import "`pipeline/` or `ui/`" — **two**
+— while §4.2's `LiteratureSource` comment says **three**, adding `zotero/`. §4.2 is the more specific
+statement; §2.3 is corrected, and the two-directory reading is exactly why `P0-T04` enforced two
+arms. **The card's `Files` list omitted `eslint.config.js` while its own `Notes` scope the work**
+("the ESLint dependency-rule config is … cheapest to add now"), so the file is now listed.
+
+**Criterion 5 (`typecheck` exits 0) FAILED, on the plan's dependency edges.** `docs/07` §4.2 imports
+`ProgressReporter` from `src/core/jobQueue/progress.ts`, which `plan/02` gave to **`P1-T15`** as a
+`create` — while `P1-T07`, `P1-T08`, `P1-T09`, `P1-T10` and `P1-T11` all precede `P1-T15`. **As the
+plan was written, typecheck could not reach exit 0 for five consecutive cards.** Not worked around:
+declaring `ProgressReporter` locally would build a parallel copy of a `core/` type inside `sources/`,
+and dropping `SourceCallContext.progress` would break criterion 1. Fixed by moving the §4.1
+interface into `P1-T02` and making `P1-T15`'s entry a `modify`; `P1-T02` is now in this card's
+`Depends on`, which it should always have been — §4.2 also imports `CancellationToken` from
+`P1-T02`'s file, and that import resolved during this run only because the `P1-T02` agent happened
+to be writing it concurrently.
+
+**A corpus defect in §4.2's own import block: it does not resolve.** It read
+`import type { CanonicalWork, ExternalIds } from "../model/canonicalWork"`, but §5.1 — the
+declaration, and therefore the authority — puts `ExternalIds` in `model/ids.ts`, and
+`canonicalWork.ts` imports it without re-exporting. Same defect class as the §2.2 directory-comment
+mis-attribution `P1-T01` found. Corrected in §4.2.
+
+**A product gap recorded rather than decided silently: FR-3 says nothing about a record with no
+parsed publication date.** Its third acceptance criterion says the plugin "filters client-side using
+the parsed publication date"; neither FR-3, §4.2 nor §5.3 covers the absent-date case. Such records
+are **kept** and counted as `ClientRecencyFilterResult.keptWithoutDate`, reasoning that a record with
+no date cannot be *shown* to be outside the window and dropping it would lose results a server-side
+filter would have returned. **Reversible in one line plus a test if the owner wants them dropped.**
+
+**A trap for every later date-handling card.** §5.1's `PartialDate.iso` is variable-precision
+(`"2024"`, `"2024-03"`, `"2024-03-07"`), so comparing it directly against `fromDate` would drop
+**every year-only record in the first year of the window** — and year-only is the common case
+precisely for the sources that have no server-side date filter. The implementation compares each
+record's possible day span against the window for overlap, with a regression test pinning `"2024"`
+against `"2024-01-01"`. `P1-T08` and the Phase 2 adapters should not re-derive this.
 ---
 
 ### P1-T08 — PubMed query builder
@@ -1377,7 +1506,7 @@ npm run typecheck && npm run test:contract
 |---|---|
 | **ID** | `P1-T12` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T01` |
+| **Depends on** | `P1-T01`, `P1-T02` (added 2026-09-30 — the `Notes` require `throw new ZoteroApiError(...)` for the preprint gap, and `docs/07` §10.1's hierarchy is `P1-T02`'s `src/core/errors.ts`) |
 | **Blocks** | `P1-T13`, `P1-T14` |
 | **Retires** | none |
 | **Implements** | `FR-6`, `FR-7` |
@@ -1495,6 +1624,71 @@ unimplemented with an explicit `throw new ZoteroApiError(...)` rather than a
 half-mapping, because Phase 2 owns preprints and a silent wrong mapping is worse
 than a loud gap.
 
+
+**Findings, 2026-09-30 — six of seven criteria pass; criterion 7 failed on another card's file.**
+`src/zotero/extraField.ts` and the shipped `src/zotero/itemMapper.ts`, with 60 unit tests and a
+**seven-case integration spec run against a real Zotero 10.0.3**. `npm run lint:check` exits 0
+project-wide; the whole integration suite is green at 22 passed.
+
+**The integration spec is the evidence, not the unit tests.** All six substantive criteria were
+asserted through `fromJSON(json, { strict: true })` in a live Zotero: strict mode accepted the
+mapping and round-tripped its fields; `PMID` and `PMCID` landed in the **native** fields with nothing
+matching `/(^|\n)\s*PMID\s*:/i` in `extra`; an existing
+`"Citation Key: smith2024\nPMID: 999"` survived **byte-identical and in order**; every MeSH tag came
+back `type === 1` with `MeSH*:` for major topics; a `literal`-only author produced `fieldMode === 1`;
+and a > 500-character `extra` reduced to `rh-work-key` alone with the remainder in a child note.
+
+**Criterion 7 (`typecheck` exits 0) failed as written, with zero diagnostics in this card's five
+files.** The single error was `src/sources/types.ts` — `P1-T07`'s file — importing a
+`src/core/jobQueue/progress` that no card had yet created. Reported, not adjusted; the plan defect
+behind it is recorded under `P1-T02` and `P1-T07`.
+
+**Two measured facts worth more than the criteria they served.** First, **`fromJSON` in strict mode
+accepts a JSON carrying both a native `PMID` field and an `extra` line `PMID: 999`** — it neither
+threw, nor migrated the line into the field, nor deduplicated, and the foreign line stayed
+byte-identical in place. §6.3's whole preservation rule depends on that, and it is now asserted
+rather than assumed; `docs/01` §5.2.1 documents the Extra→field migration only for *non*-strict mode,
+so this closes the open question for strict. Second, **Zotero 10.0.3 reports
+`globalSchemaVersion = 44`** while §6.1 and `docs/02` §10.3 verify their field lists against **42** —
+two versions stale, nothing broken, now recorded in §6.1.
+
+**A bug found and fixed in its own code, worth reading before anyone writes another `extra` parser.**
+The line regex first used `.*` for the value group. **`\r` is a JavaScript line terminator, so `.`
+does not match it** — on a **CRLF** `extra` field every line parsed as key-less, which would have made
+the plugin append a **duplicate `rh-work-key` on every write**. Fixed to `[\s\S]*`, and the CRLF unit
+test that caught it now guards it.
+
+**A contradiction between the plan and `docs/07`, resolved toward the plan and flagged.** §6.2's
+`type` row maps `conference-paper` → `conferencePaper`, but `plan/02` §2 and this card's `Do` step 1
+route **every** non-`journal-article` type to `journalArticle`. Implementing the `conferencePaper` arm
+would mean inventing a field mapping the authority does not supply: §6.1 verifies field lists for
+`journalArticle` and `preprint` only, §6.2's table has no `conferencePaper` column, and
+`conferencePaper` has `proceedingsTitle` rather than `publicationTitle` and no `PMID`/`PMCID`. So a
+non-`journal-article` type becomes a `journalArticle` carrying `rh-work-type: <type>` — recoverable,
+and §6.2 now records that Phase 1 ships neither arm. **Shipping `conferencePaper` needs a field
+mapping in §6.2 first, and a card.**
+
+**Four under-specifications pinned rather than guessed.** Two new `extra` keys §6.3 never named are
+now in its contract: **`rh-issn`** for §6.2's "additional ISSNs" (a bare second `ISSN:` line is
+*forbidden* by §6.3, since `journalArticle` has a native `ISSN` holding `issn[0]`) and
+**`rh-work-type`** for the "note in `extra`". `libraryCatalog` takes a source **label**, not §4.2's
+`displayNameKey` — that field is typed as a Fluent message id, so writing it would put
+`rh-source-pubmed` into a user's library; `docs/02` §10.3's label form is what ships, behind an
+override. "The winning source" is `provenance.seenIn[0]`, since nothing on `CanonicalWork` names one
+and §10.4's precedence is Phase 2's. The overflow note's body is `<!-- rh:extra v=1 workKey=… -->`
+plus one escaped `<p>Key: value</p>` per deferred line, in §6.4's marker idiom so it is re-writable
+rather than duplicated — **worth pinning in §6.3 before `P1-T14` writes one.**
+
+**Two items this card could not close, reported under rule 2.** The `Notes` require
+`throw new ZoteroApiError(...)` for the preprint gap, but §10.1's hierarchy is `P1-T02`'s
+`src/core/errors.ts` and this card declared no dependency on it — the edge is now added, and the
+throw is a plain `Error` carrying the work key and doc citation with a `TODO(P1-T02)` naming the
+swap. And **`create src/zotero/itemMapper.ts` cannot literally replace the `P0-T10` spike**:
+`src/zotero/zoteroApi.ts`, `test/integration/zotero/itemCreation.spec.ts` and
+`test/integration/zotero/batchImport.spec.ts` all import `buildJournalArticle` /
+`JournalArticleRecord` / `RESEARCH_HELPER_TAG` / `AUTOMATIC_TAG_TYPE` from it and **none of the three
+is in this card's `Files`** — verified. The spike surface is kept verbatim in a fenced section with
+the reason recorded; **retiring it together with its two specs needs its own card.**
 ---
 
 ### P1-T13 — Existing-item detection by DOI and PMID
@@ -1733,7 +1927,7 @@ Zotero progress surface, with current/total counts, an ETA and a working Cancel.
   estimated remaining time, and cancellable.
 
 **Files.**
-- create `src/core/jobQueue/progress.ts`
+- modify `src/core/jobQueue/progress.ts` (was `create`; corrected 2026-09-30 — `P1-T02` now declares the §4.1 interface, this card adds `CompositeProgressReporter`, `child()` and the ETA)
 - create `src/zotero/progressWindow.ts`
 - create `test/unit/core/progress.test.ts`
 

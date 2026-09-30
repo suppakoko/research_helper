@@ -382,7 +382,7 @@ ui/  →  pipeline/  →  { sources/, llm/, tts/, zotero/ }  →  core/  →  mo
   `SourceRecord`, `StoredSummary` and `TrendReport` all reference them (§5), so declaring them
   in an adapter would invert the rule and make `model/ ↔ sources/` circular.
 - `core/` imports `model/` only. **No Zotero globals.** Where `core/` needs a platform capability (prefs, files, HTTP, clock) it declares a *port* interface and receives an implementation via the container.
-- `sources/`, `llm/`, `tts/` import `core/` and `model/`. They must not import `pipeline/` or `ui/`.
+- `sources/`, `llm/`, `tts/` import `core/` and `model/`. They must not import `pipeline/`, `ui/` **or `zotero/`**. (Corrected 2026-09-30, `P1-T07`: this bullet said two directories while §4.2's `LiteratureSource` comment says three — "MUST NOT import anything from `pipeline/`, `ui/` or `zotero/`". §4.2 is the more specific statement and is what `P1-T07`'s criterion 4 requires, so three is correct. The two-directory reading is why `P0-T04`'s ESLint override grouped `zotero/` *with* the adapters and enforced only two arms. **`zotero/` itself keeps importing its own siblings** — the fix is a separate override for the three non-`zotero` adapter directories, not adding `zotero/` to the existing group's forbidden list.)
 - `zotero/` is the only directory permitted to reference `Zotero.*`.
 - `pipeline/` composes adapters and `zotero/`. It never touches DOM.
 - `ui/` never calls an adapter directly — only pipelines and the job queue.
@@ -601,6 +601,15 @@ export interface CancellationTokenSource {
 }
 ```
 
+> **Gap recorded 2026-09-30 (`P1-T02` D9, `P1-T07` finding 4): this section declares
+> `CancellationToken`, `ProgressReporter`, `RateLimiter` and `Cache` but **not `Clock`**, even
+> though §2.3 lists the clock among the ports `core/` must take and §7.3 and §7.7 both consume one.
+> Its shape is currently inferred from §7.3's `TokenBucket` constructor call plus `P1-T02` step 3,
+> and it ships in `src/core/clock.ts` as `{ now(): number; sleep(ms, token?): Promise<void> }` with
+> `createSystemClock()` and `createManualClock()`. Two cards have now had to infer it from a call
+> site — `P1-T07` typed its parameter structurally as `{ now(): number }` specifically to avoid
+> declaring a second `Clock`. A `Clock` block belongs here so the next card does not invent a third.**
+
 ```ts
 // src/core/jobQueue/progress.ts
 
@@ -758,8 +767,12 @@ export interface CacheStats {
 
 ```ts
 // src/sources/types.ts
-import type { CanonicalWork, ExternalIds } from "../model/canonicalWork";
-import type { SourceId } from "../model/ids";
+// Corrected 2026-09-30 (`P1-T07`): `ExternalIds` is declared in §5.1 in `model/ids.ts`,
+// not in `canonicalWork.ts`. `canonicalWork.ts` imports the type without re-exporting it, so
+// the previous specifier — `{ CanonicalWork, ExternalIds } from "../model/canonicalWork"` —
+// did not resolve. Same defect class as the §2.2 directory-comment mis-attribution.
+import type { CanonicalWork } from "../model/canonicalWork";
+import type { ExternalIds, SourceId } from "../model/ids";
 import type { SourceRecord } from "../model/sourceRecord";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
 import type { ProgressReporter } from "../core/jobQueue/progress";
@@ -1994,7 +2007,12 @@ export function toZoteroItemJSON(work: CanonicalWork): ZoteroItemJSON {
 
 | `CanonicalWork` | `journalArticle` | `preprint` | Notes |
 |---|---|---|---|
-| `type` | `itemType = "journalArticle"` | `itemType = "preprint"` | `conference-paper` → `conferencePaper`; everything else → `journalArticle` with a note in `extra`. |
+> **Schema version, measured 2026-09-30 (`P1-T12`): Zotero 10.0.3 reports
+> `Zotero.Schema.globalSchemaVersion = 44`.** This section's field lists were verified against **42**
+> and are two versions stale; nothing broke, and `fromJSON(json, { strict: true })` accepted the
+> mapper's output on 44. `PMID` and `PMCID` were feature-detected as valid for `journalArticle`.
+
+| `type` | `itemType = "journalArticle"` | `itemType = "preprint"` | `conference-paper` → `conferencePaper`; everything else → `journalArticle` with a note in `extra`. **Phase 1 ships neither arm (recorded 2026-09-30, `P1-T12`):** `plan/02` §2 and `P1-T12`'s own `Do` step 1 route **every** non-`journal-article` type to `journalArticle` carrying `rh-work-type: <type>`, because this table supplies no `conferencePaper` column and §6.1 verifies field lists for `journalArticle` and `preprint` only — `conferencePaper` has `proceedingsTitle` rather than `publicationTitle` and no `PMID`/`PMCID`, so the mapping would have to be invented. The `rh-work-type` line makes it recoverable. **Implementing the `conference-paper` arm needs a field mapping here first, and a card.** |
 | `title` | `title` | `title` | HTML/MathML stripped to plain text; sub/superscripts flattened. |
 | `abstract` | `abstractNote` | `abstractNote` | Structured PubMed abstracts flattened as `LABEL: text` paragraphs. |
 | `authors[]` | `creators[]` `{creatorType:"author", firstName, lastName}` | same | Use `{creatorType:"author", name}` (single-field mode) when only `literal` is known. ORCID → `extra` line `ORCID: <orcid>` only for the first author (Zotero has no creator-level ORCID field). |
@@ -2014,6 +2032,8 @@ export function toZoteroItemJSON(work: CanonicalWork): ZoteroItemJSON {
 | `subjects[]`, `keywords[]` | `tags[]` | `tags[]` | Written as **automatic** tags (`{tag, type: 1}`) so they are visually distinct from user tags and can be bulk-removed. Prefix scheme where ambiguous, e.g. `MeSH: Neoplasms`. |
 | `citationCount` | `extra: Citations: <n> (source, YYYY-MM-DD)` | same | Never overwrite a user-authored `extra` line. |
 | `workKey` | `extra: rh-work-key: <key>` | same | The join key between Zotero items and plugin tables. |
+| `issn[1..]` | `extra: rh-issn: <issn>` | same | **Added 2026-09-30 (`P1-T12`).** §6.2 requires "additional ISSNs → `extra`" but named no key. A bare second `ISSN:` line is forbidden by §6.3, which permits a non-namespaced line only where there is no native field, and `journalArticle` has a native `ISSN` holding `issn[0]`. |
+| `type` (when not mapped) | `extra: rh-work-type: <WorkType>` | same | **Added 2026-09-30 (`P1-T12`).** The "note in `extra`" §6.2's `type` row requires for every non-`journalArticle` type, named so §6.6's read-back and `P2-T09` can find it. |
 | `provenance.seenIn` | `extra: rh-sources: pubmed,crossref` | same | Debug aid; togglable. |
 | — | `accessDate` | `accessDate` | Set to import time. |
 | — | `libraryCatalog` | `libraryCatalog` | Set to the winning source's display name, matching Zotero translator convention. |
@@ -3093,28 +3113,40 @@ export abstract class ResearchHelperError extends Error {
 
 /* ---- Configuration ---- */
 export class ConfigurationError extends ResearchHelperError {
-  readonly code = "CONFIGURATION";
+  // Measured 2026-09-30 (`P1-T02`), TypeScript 5.9.3 under this repository's `tsconfig.json`:
+  // **as originally printed this block did not compile.** `readonly code = "NETWORK"` gives the
+  // property the *literal* type `"NETWORK"`, so `OfflineError`'s `override readonly code =
+  // "OFFLINE"` is `TS2416: Type '"OFFLINE"' is not assignable to type '"NETWORK"'` — 15 errors
+  // across the five subclass-of-a-concrete-class pairs declared below (`MissingCredentialError`,
+  // `OfflineError`, `TimeoutError`, `ParseError`, and all three `LLMError` arms). Not a strict-flag
+  // artefact: it is ordinary subtype checking and fails under plain `strict`. Reproduced in
+  // isolation before the fix was applied.
+  //
+  // The repair is the explicit `: string` / `: boolean` annotations now on every concrete member,
+  // which restore the base's declared property type. **No runtime value changed** — every string
+  // below is the one this section always specified, and `P1-T02`'s tests assert all 23 of them.
+  readonly code: string = "CONFIGURATION";
   readonly messageKey = "rh-error-configuration";
   readonly retryable = false;
 }
 export class MissingCredentialError extends ConfigurationError {
-  override readonly code = "MISSING_CREDENTIAL";
+  override readonly code: string = "MISSING_CREDENTIAL";
   override readonly messageKey = "rh-error-missing-credential";
   constructor(readonly providerId: string) { super(`No API key configured for ${providerId}`, { providerId }); }
 }
 
 /* ---- Network / transport ---- */
 export class NetworkError extends ResearchHelperError {
-  readonly code = "NETWORK";
+  readonly code: string = "NETWORK";
   readonly messageKey = "rh-error-network";
   readonly retryable = true;
 }
 export class OfflineError extends NetworkError {
-  override readonly code = "OFFLINE";
+  override readonly code: string = "OFFLINE";
   override readonly messageKey = "rh-error-offline";
 }
 export class TimeoutError extends NetworkError {
-  override readonly code = "TIMEOUT";
+  override readonly code: string = "TIMEOUT";
   override readonly messageKey = "rh-error-timeout";
   constructor(readonly timeoutMs: number, url: string) { super(`Request timed out after ${timeoutMs}ms`, { url: redactUrl(url), timeoutMs }); }
 }
@@ -3271,7 +3303,7 @@ Users view and submit output via **Help → Debug Output Logging → View Output
 - Any value whose key matches `KEYISH_FIELD` → `"[redacted:<len>]"`.
 - Any string matching known key shapes (`sk-…`, `sk-ant-…`, `sk-or-v1-…`, `sk-proj-…`, `AIza…`, `Bearer …`, long opaque runs) → `"[redacted:<len>]"`.
 
-The exact patterns are normative in `09-security-privacy-and-api-keys.md` §2.1 (`KEYISH_FIELD`, `KEY_PATTERNS`) and must not be duplicated with drift; `src/core/logger.ts` imports them from one place.
+The exact patterns are normative in `09-security-privacy-and-api-keys.md` §2.1 (`KEYISH_FIELD`, `KEY_PATTERNS`) and must not be duplicated with drift; `src/core/logger.ts` imports them from one place — **which is `src/core/errors.ts` (pinned 2026-09-30, `P1-T02` D4).** The corpus previously named no file: `docs/09` §2.1's block carries no path header, and the only candidate that does, `src/prefs/secrets.ts`, is unreachable from `core/` under §2.3's dependency rule, which `eslint.config.js` enforces. `errors.ts` is where §10.1's own code already calls `redact()` and `redactUrl()`.
 - `Authorization` and `x-api-key` headers are never logged, at any level.
 - URLs are passed through `redactUrl()`, which strips `key`, `api_key`, `apikey`, `token`, and `access_token` query parameters.
 
