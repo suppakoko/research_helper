@@ -2864,6 +2864,37 @@ different reasons, only one of which is by design. Re-run when the Semantic Scho
 (`G-03`), and re-probe arXiv and bioRxiv `/details` from another day or network before Phase 2
 depends on either. The script is `scripts/spike-abstract-coverage.ts`; re-running it is safe.
 
+**Re-run, 2026-09-30 — five of seven sources now have query-derived numbers, and one 2026-09-15
+finding was wrong.**
+
+| Source | Hits | Fetched | With abstract | vs 09-15 |
+|---|---|---|---|---|
+| PubMed | 8,284 | 100 | **100 %** | was 92 % |
+| Europe PMC | 22,823 | 98 | **91.8 %** | was 93 % |
+| Crossref | 44,938 | 100 | **42 %** (49.9 % whole set) | unchanged |
+| bioRxiv — DOI lookup | — | 5 | **100 %** | **was unmeasurable** |
+| bioRxiv / medRxiv — window sample | 183,179 / 51,045 | 100 each | 100 % | **was unmeasurable** |
+| Semantic Scholar | — | 0 | HTTP 429 on all 3 attempts | unchanged |
+| arXiv | — | 0 | HTTP 429, then **HTTP 503** after a 30 s wait | was 429 only |
+
+**`docs/02` §8.5's "`/details` is broken" was an outage, not a design fault.** The same endpoint
+that returned an empty HTTP 200 body on every request on 2026-09-15 — including the doc's own
+example URL — answered normally fifteen days later. The correction is now in §8.5, and the
+operational rule is unchanged either way: **treat an empty 200 body as a failure and retry, never
+as "no results".** This is a good argument for re-running cheap probes before trusting a negative.
+
+**Backfill, re-confirmed on a fresh sample.** 291 unique DOIs, **only 7 seen by two sources** —
+incidental overlap remains near zero, so merging result sets recovers nothing. A targeted Europe PMC
+DOI lookup again lifts Crossref-sourced records from **42 % to 63 %** (57 DOIs sent, 30 found, 20
+with an abstract), and corpus-wide coverage from 79.0 % to 85.9 %. PubMed's 100 % and Europe PMC's
+91.8 % leave nothing for the other to backfill. All 26 requests passed the D10 identification audit.
+
+**Still unmeasurable, for two different reasons.** Semantic Scholar needs the key that gate `G-03`
+is waiting on. arXiv failed differently this time — 429, then 503 after a 30-second wait — so it is
+an availability problem at their end, not a rate-limit our pacing can fix; `docs/02` §7.1 now
+carries both observations. Neither blocks Phase 1: PubMed is Phase 1's only source, and it measured
+100 %.
+
 ---
 
 ### P0-T22 — Measure S2 throttling and submit the key application
