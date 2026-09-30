@@ -257,6 +257,51 @@ const LOGIN_ORIGIN = "chrome://research-helper";
 const LOGIN_REALM  = "research_helper API Keys (encrypted)";
 ```
 
+**Measured 2026-09-30 (`G-09`, read from primary sources — not yet run on a Linux box): the
+premise of this ladder's Linux case is wrong, and tier 1 does not fail there.** Gecko does not
+abort when libsecret is missing; it silently substitutes a different backend. From
+`security/manager/ssl/OSKeyStore.cpp` on **mozilla-esr140**, which is Zotero 10's Gecko (140.15.0,
+measured `P0-T23`):
+
+```cpp
+#elif defined(MOZ_WIDGET_GTK)
+if (NS_SUCCEEDED(MaybeLoadLibSecret())) {
+  mKs.reset(new LibSecret());
+} else {
+  mKs.reset(new NSSKeyStore());
+}
+```
+
+`NSSKeyStore` "puts the keys into the NSS DB" — its own comment — importing them into the internal
+key slot (`PK11_GetInternalKeySlot()`) as persistent `CKM_AES_GCM` token keys. It applies **no
+password of its own**; protection is whatever NSS is configured for, which without a primary
+password is close to none.
+
+**Three consequences, and the second is a correction to text this document requires to be shown
+verbatim.**
+
+1. **The unavailable-keystore branch is close to unreachable through libsecret's absence.**
+   `encrypt()` returns successfully, so a startup probe that only catches a throw will report tier 1
+   and never offer the dialog. Gate `G-10` was written to choose between tiers 2 and 3 on that
+   throw; the throw does not come. `G-10`'s real question is therefore **not** which fallback to
+   offer but **whether NSS-backed storage is acceptable as tier 1 at all**, and how the pane tells
+   the truth about which backend is live.
+2. **§1.8's residual-risk text is false in this case.** It claims protection "from being read out of
+   a file backup … and from anyone who obtains a copy of your Zotero folder". The NSS DB **is inside
+   the profile**, so in the fallback case the key travels with exactly the copy the sentence
+   promises safety from. §1.8 is corrected below, and §1.9 item 8's empty-key explanation with it.
+3. **`canReauth()` is `false` on Linux**, measured directly in the shipped
+   `modules/OSKeyStore.sys.mjs` extracted from this machine's `omni.ja` — the in-source comment is
+   "We have no support on linux (bug 1527745)". It gates only the string-valued `reauth` path, and
+   `encrypt()` passes the boolean `false`, so encryption is unaffected; but **no OS
+   re-authentication can ever gate a reveal or a use of a key on Linux**, which §1.9 item 1's
+   deliberate-reveal requirement should not assume it can.
+
+**What still needs a Linux machine**, now a much smaller check than `G-09` originally asked for:
+confirm that `MaybeLoadLibSecret()` actually fails on a minimal install, and find out what the live
+backend **reports**, so the badge in §1.9 item 3 can name it instead of guessing. Nothing above was
+observed running; it is read from the ESR 140 source and from the shipped JS module.
+
 **Tier 1 — OS keychain (default, and the only tier that ships enabled).**
 Mirror Zotero's own pattern exactly: `Zotero.OSKeyStore.encrypt(value)` → store the `oskv1:`-prefixed string as the `password` of an `nsILoginInfo` under origin `chrome://research-helper`, realm `research_helper API Keys (encrypted)`, with the `SecretId` as the username so one login entry exists per provider.
 
@@ -297,11 +342,22 @@ At startup the plugin probes the backend by round-tripping a throwaway value thr
 ### 1.8 Residual risk statement
 
 > **Residual risk (to be reproduced verbatim in the preferences pane, not paraphrased):**
-> Your API keys are encrypted using your operating system's credential store (Windows Data Protection API, macOS Keychain, or your Linux keyring) and stored in Zotero's login manager. This protects them from being read out of a file backup, from another user account on this computer, and from anyone who obtains a copy of your Zotero folder.
+> Your API keys are encrypted using your operating system's credential store and stored in Zotero's login manager. The preferences pane names the store actually in use next to the key fields.
+>
+> **When that store is Windows Credential Manager, the macOS Keychain, or your Linux system keyring**, the key is held outside your Zotero folder: copying that folder, or restoring it from a backup, does not carry the key with it, and another user account on this computer cannot read it.
+>
+> **When the pane says the key is stored in Zotero's own database instead**, that protection does not apply: the key is inside your Zotero profile, so it travels with a copy or a backup of it, and it is protected only by Zotero's primary password if you have set one. Set one, or do not store keys on that machine.
 >
 > **It does not protect them from software running under your own user account.** Any program you run — including any other Zotero plugin — can decrypt them, because your operating system will decrypt them for anything running as you. Zotero does not isolate plugins from each other.
 >
 > Treat these keys as you would a password saved in your browser. Set spending limits with your provider, and rotate any key you think may have been exposed.
+
+**Corrected 2026-09-30 (`G-09`).** The first paragraph previously asserted backup and folder-copy
+protection unconditionally. That is true of the three OS stores and **false of Gecko's
+`NSSKeyStore` fallback**, which keeps the key in the profile's NSS database — see §1.7's measured
+block. A residual-risk statement that overstates protection is worse than none, so the claim is now
+tied to the backend the pane names. This makes §1.9 item 3's badge **load-bearing rather than
+informational**: the text is only true if the badge is accurate.
 
 ### 1.9 How the UI communicates this
 
@@ -309,12 +365,12 @@ Requirements for `08-ui-ux-spec.md`:
 
 1. **The key field is never a plain text input.** Masked, with a deliberate reveal (hold-to-show, not a sticky toggle), and the value is never selected-on-focus in a way that invites accidental copy into a screenshot.
 2. **Once stored, the key is never re-displayed** — the field shows `sk-…••••••••1a2b` (first 3 and last 4 characters only), matching how the providers' own dashboards do it. `SecretStore.get()` is never called to populate a UI field.
-3. **A storage-backend badge** sits next to the key fields: *"Protected by Windows Credential Manager"* / *"macOS Keychain"* / *"System keyring"* — or, in degraded tiers, a warning-coloured *"Not saved between sessions"* / *"Protected by your passphrase"*.
+3. **A storage-backend badge** sits next to the key fields: *"Protected by Windows Credential Manager"* / *"macOS Keychain"* / *"System keyring"* — or, in degraded tiers, a warning-coloured *"Not saved between sessions"* / *"Protected by your passphrase"*. **A fourth, warning-coloured state is required (added 2026-09-30, `G-09`): *"Stored in Zotero's database — protected only by your primary password"*.** Gecko falls back to `NSSKeyStore` when libsecret is absent and `encrypt()` still succeeds, so without this state the pane would display *"System keyring"* over a key that is sitting in the profile. §1.8's verbatim text is only true if this badge is accurate, which makes it load-bearing.
 4. **The residual-risk text of §1.8 is visible, not behind a "Learn more" link.** A collapsed disclosure is acceptable for the second paragraph only if the first is always shown.
 5. **A per-provider status row**: key present / absent, last validated when and with what result, and a "Test" button (§2.3). **One for each of the six credentials**, not only the LLM providers — the NCBI and Semantic Scholar fields get the same status element, backend badge and "Test" button, because §2.3 explains that those two are precisely the keys whose failure is otherwise invisible.
 6. **A "Remove all stored keys" button** that clears every `SecretId` and reports how many were removed.
 7. **No key is ever placed on the clipboard by the plugin**, and no "copy key" affordance exists.
-8. **On a fresh install where a data-directory restore has brought the library but not the keys**, the empty-key state explains *why*: "API keys are stored in this computer's credential store and do not travel with your Zotero data folder."
+8. **On a fresh install where a data-directory restore has brought the library but not the keys**, the empty-key state explains *why*: "API keys are stored in this computer's credential store and do not travel with your Zotero data folder." **This string is only correct for the three OS stores (2026-09-30, `G-09`):** under the `NSSKeyStore` fallback the key *does* travel with the profile, so a restored profile arrives with the key present and this state never appears. Condition the string on the live backend rather than on the keys being absent.
 
 ---
 

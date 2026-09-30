@@ -417,6 +417,27 @@ enough, and the probe already exists — `P0-T23`'s keystore round-trip. What is
 Steps 1 and 2 are a VM and an existing probe. They are not gated on acquiring real hardware, which
 is the reason this gate sat open for three weeks.
 
+**Update, 2026-09-30 — most of what this gate was for has been answered from primary sources, and
+the answer is not the one the plan assumed.** No Linux machine was used; Zotero 10's own
+`modules/OSKeyStore.sys.mjs` was extracted from this machine's `omni.ja`, and
+`security/manager/ssl/OSKeyStore.cpp` was read on **mozilla-esr140**, the Gecko branch Zotero 10
+ships (140.15.0, measured `P0-T23`). Two findings:
+
+1. **Gecko does not fail when libsecret is missing — it substitutes `NSSKeyStore`**, which keeps the
+   key in the profile's NSS database as a persistent `CKM_AES_GCM` token key with no password of its
+   own. `encrypt()` therefore **succeeds** on a libsecret-less Linux, so the throw `G-10` was
+   written to branch on never arrives. Recorded with the quoted source in `docs/09` §1.7.
+2. **`canReauth()` returns `false` on Linux** ("We have no support on linux (bug 1527745)", in the
+   shipped module). It gates only the string-valued `reauth` path and `encrypt()` passes boolean
+   `false`, so encryption is unaffected — but no OS re-authentication can gate a key reveal on
+   Linux, which `docs/09` §1.9 item 1 should not assume.
+
+**What remains for this gate is now small and specific**, and it is confirmation rather than
+discovery: run the `P0-T23` probe on a minimal Linux install to confirm `MaybeLoadLibSecret()` does
+fail there, and find out what the live backend **reports**, so §1.9 item 3's badge can name it
+instead of guessing. **Nothing above was observed running** — it is read from source, and the gate
+stays open until it is run.
+
 ---
 
 ### G-10 — Decide the Linux-without-libsecret fallback tier
@@ -472,6 +493,27 @@ deferral does not reopen it. Nothing in Phase 1 or Phase 2 depends on this gate.
 **No new task card was created for the deferral.** The implementation is `P3-T03`'s and the
 measurement is this gate pair's; adding a card for a decision would have moved the plan's effort
 figures for a third time on one day without adding any work that was not already carded.
+
+**The question changed on 2026-09-30, before anyone answered the old one.** `G-09`'s update above
+establishes from the ESR 140 source that **`encrypt()` does not throw on a libsecret-less Linux**:
+Gecko falls back to `NSSKeyStore` and stores the key in the profile's NSS database. So the branch
+this gate was created to choose a fallback for is close to unreachable, and a startup probe that
+only catches a throw will report tier 1 and never show the dialog `P3-T03` builds.
+
+**What the owner now has to decide is a different and sharper thing: is NSS-backed storage
+acceptable as tier 1?** In that mode the key sits inside the Zotero profile, protected only by a
+primary password if one is set — so it **travels with a profile copy or backup**, which is precisely
+what `docs/09` §1.8's verbatim residual-risk text promised it would not do. That text has been
+corrected to be conditional on the live backend, §1.9 item 3 has gained a fourth, warning-coloured
+badge state, and §1.9 item 8's empty-key explanation is now conditional too. **The badge is
+therefore load-bearing rather than informational: §1.8's statement is only true if the badge is
+accurate.** The three options in front of the owner are to accept NSS-backed tier 1 with that badge
+and that text, to treat NSS-backed storage as a degraded tier and route it into `P3-T03`'s dialog
+alongside tiers 2 and 3, or to refuse it and require a real keyring on Linux.
+
+**This does not block Phase 1 or Phase 2, and the deferral stands.** It does mean `P3-T02`'s
+startup probe cannot be written as "catch the throw" — it has to interrogate which backend is live,
+which is a design input Phase 3 now has in writing rather than discovering at implementation time.
 
 ---
 
