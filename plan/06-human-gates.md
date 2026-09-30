@@ -433,10 +433,21 @@ ships (140.15.0, measured `P0-T23`). Two findings:
    Linux, which `docs/09` §1.9 item 1 should not assume.
 
 **What remains for this gate is now small and specific**, and it is confirmation rather than
-discovery: run the `P0-T23` probe on a minimal Linux install to confirm `MaybeLoadLibSecret()` does
-fail there, and find out what the live backend **reports**, so §1.9 item 3's badge can name it
-instead of guessing. **Nothing above was observed running** — it is read from source, and the gate
-stays open until it is run.
+discovery. Three things, in order of how much rests on them:
+
+1. **Can a plugin tell which backend is live?** This is the one that matters, because the `G-10`
+   decision of 2026-09-30 — route NSS-backed storage into the degraded dialog — is **unimplementable
+   without it**. `nsIOSKeyStore` exposes no backend name and `encrypt()` succeeds either way, so the
+   candidate is `js-ctypes`: attempt to `dlopen` libsecret from the plugin and infer the backend the
+   same way `MaybeLoadLibSecret()` does. Answer this before `P3-T02` is started.
+2. **Does `MaybeLoadLibSecret()` actually fail on a minimal install?** Run the `P0-T23` probe on a
+   Debian or Ubuntu install with no `gnome-keyring` and no `libsecret`, and again on a stock
+   GNOME/KDE desktop. The second run bounds the affected population.
+3. **What does the live backend report**, if anything, so §1.9 item 3's badge can name it rather
+   than guessing.
+
+**Nothing established so far was observed running** — it is read from the ESR 140 source and from
+the shipped JS module, and the gate stays open until it is run.
 
 ---
 
@@ -511,9 +522,32 @@ accurate.** The three options in front of the owner are to accept NSS-backed tie
 and that text, to treat NSS-backed storage as a degraded tier and route it into `P3-T03`'s dialog
 alongside tiers 2 and 3, or to refuse it and require a real keyring on Linux.
 
-**This does not block Phase 1 or Phase 2, and the deferral stands.** It does mean `P3-T02`'s
-startup probe cannot be written as "catch the throw" — it has to interrogate which backend is live,
-which is a design input Phase 3 now has in writing rather than discovering at implementation time.
+**This does not block Phase 1 or Phase 2.** It does mean `P3-T02`'s startup probe cannot be written
+as "catch the throw" — it has to interrogate which backend is live, which is a design input Phase 3
+now has in writing rather than discovering at implementation time.
+
+**DECIDED 2026-09-30 by the product owner: NSS-backed storage is a degraded tier, not tier 1.**
+When the key is in the profile's NSS database it is routed into `P3-T03`'s degradation dialog
+alongside session-only and passphrase storage, and it is **not** presented as protected by a system
+keyring. The reasoning is this document's own: `docs/09` §1.7 refuses tier 4 because "implementing it
+as a fallback guarantees it becomes the common case", and a key sitting in the profile — travelling
+with any copy or backup of the Zotero folder, protected only by a primary password if one is set —
+is nearer tier 4's problem than tier 1's guarantee.
+
+**This decision has a feasibility precondition, and it is not yet met.** Routing NSS-backed storage
+into the degraded dialog requires knowing *which* backend is live, and **nothing in the JS API
+reports it**: `nsIOSKeyStore` exposes no backend name, and `encrypt()` succeeds either way. So the
+decision is conditional on a detection mechanism existing. The candidate is `js-ctypes` — attempt to
+`dlopen` libsecret from the plugin and infer the backend from whether that succeeds, mirroring what
+`MaybeLoadLibSecret()` does in Gecko. **`G-09`'s remaining scope is extended to answer exactly
+this** rather than a new card being created, because `G-09` already owed "find out what the live
+backend reports" and this is that same question sharpened.
+
+**If detection proves infeasible, this decision must be revisited, and that is recorded now rather
+than discovered in Phase 3.** Without detection the only implementable choices are the two the owner
+did not pick: accept NSS-backed storage as tier 1 with a badge that can only say "system keyring or
+Zotero's database", or refuse Linux without a keyring outright. `P3-T02` must not be started on the
+assumption that detection works.
 
 ---
 

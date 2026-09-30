@@ -297,6 +297,16 @@ verbatim.**
    re-authentication can ever gate a reveal or a use of a key on Linux**, which §1.9 item 1's
    deliberate-reveal requirement should not assume it can.
 
+**Decided 2026-09-30 by the product owner: the NSS-backed case is a degraded tier, not tier 1.**
+When the live backend is `NSSKeyStore`, the plugin routes into the tier-2/tier-3 dialog below and
+**must not** display a system-keyring badge. The reasoning is this section's own tier-4 argument: a
+key in the profile, travelling with any copy or backup of the Zotero folder and protected only by a
+primary password if one is set, is nearer tier 4's problem than tier 1's guarantee. **The decision
+is conditional on detection being possible** — `nsIOSKeyStore` reports no backend name and
+`encrypt()` succeeds either way, so `G-09` now owes a `js-ctypes` libsecret-presence check as its
+first question. `P3-T02`'s startup probe therefore cannot be "catch the throw", and must not be
+written on the assumption that detection works until `G-09` says it does.
+
 **What still needs a Linux machine**, now a much smaller check than `G-09` originally asked for:
 confirm that `MaybeLoadLibSecret()` actually fails on a minimal install, and find out what the live
 backend **reports**, so the badge in §1.9 item 3 can name it instead of guessing. Nothing above was

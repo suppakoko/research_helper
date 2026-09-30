@@ -433,6 +433,18 @@ in the same pass: the critical path stays **P0 → P1 → P2 → P4 → P6 → P
 margin has narrowed from 2.25 d / 3 d to **0.75 d / 1 d**, so P2 and P3 remain
 jointly critical and are more nearly tied than before, not less.
 
+**Decision, 2026-09-30 — two test files for `src/model/ids.ts`, and both stay.**
+`test/unit/model/ids.spec.ts` (`P0-T12`, the spike) and `test/unit/model/ids.test.ts`
+(`P1-T01`, the shipped module) test the same module with overlapping `normalizeDoi`
+cases. `README.md` §4's sixteen-path relaxation covers `src/model/ids.ts` itself but
+**not** its test, so this is a real duplication rather than a sanctioned one. The owner
+chose to keep both: they pass, they are cheap, and the spike file is the only thing that
+proves `vitest.config.ts`'s `setupFiles` ran. **Recorded rather than left implicit**, so
+the next reader does not delete one as dead weight or file it as a defect. If the
+duplication ever costs something — a `normalizeDoi` change needing edits in two places —
+fold the spike's unique cases into `ids.test.ts` and move the `setupFiles` assertion to a
+test of its own first.
+
 **Superseded on 2026-09-30, and this paragraph is left as the dated record of the
 2026-09-09 pass rather than rewritten.** Every present-tense figure in it — 100
 cards, the 15.50 Phase 0 sum, the 82.00 subtotal, the 82–115 band, the 155.5–217
