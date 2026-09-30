@@ -1,45 +1,120 @@
 /* eslint-disable no-restricted-globals -- an integration spec runs inside a live Zotero (docs/13 §2.3) and asserts on the platform's own state; there is no src/zotero/ facade to go through from outside the plugin bundle. */
 /**
- * `V-17` / `P0-T24`: Fluent localization of plugin strings on Zotero 10, with a
- * `ko-KR` bundle and English fallback for a missing key (`FR-55`, `docs/13`
- * §2.3's L10n row).
+ * Localization of plugin strings on Zotero 10 (`FR-55`, `NFR-11`, spike `V-17`,
+ * `docs/13` §2.3's L10n row).
  *
- * The plugin under test is the real, built one; its bundles are
- * `locale/en-US/research-helper-mainWindow.ftl` (complete) and
- * `locale/ko-KR/research-helper-mainWindow.ftl`, which lacks
- * `research-helper-menu-spike-create-item` on purpose.
+ * `P0-T24` wrote the first three layers of this file against the one bundle the
+ * spike shipped. `P1-T18` keeps them and adds the four that turn a spike into a
+ * shipped vocabulary: the two Phase 1 bundles are diffed against
+ * `src/i18n/keys.ts`, the `ko-KR` review gap is asserted to be *exactly* the
+ * documented one, every `messageKey` in `src/core/errors.ts` is checked to have
+ * a message, and any Phase 1 markup that exists is scraped for `data-l10n-id`s
+ * that no bundle declares.
  *
- * Three layers are asserted separately, because they fail independently:
+ * The plugin under test is the real, built one. Its bundles are
+ * `locale/{en-US,ko-KR}/research-helper-{mainWindow,searchDialog}.ftl`.
  *
- * 1. **Registration, per file per locale.** Zotero's `registerLocales()`
+ * ## The layers, and why they are separate `it` blocks
+ *
+ * They fail independently, and a combined assertion would hide which one broke.
+ *
+ * 1. **The vocabulary.** `src/i18n/keys.ts` against itself and against the two
+ *    prefixes `docs/01` §9.3 and `docs/07` §10.1 disagree about (§"prefix
+ *    conflict" below). No platform involved.
+ * 2. **Registration, per file per locale.** Zotero's `registerLocales()`
  *    (`plugins.js`) contributes one file per Zotero locale to the shared
  *    `zotero-plugins` source, picking exact → same language → `en-US` → first
- *    available. A `Localization` pinned to `["ko-KR"]` alone therefore sees
- *    the Korean file and nothing else: the root key is Korean and the missing
- *    key is `null`. That is the proof the key really is absent at runtime, and
- *    that Zotero's file-level pick does not merge files.
- * 2. **Fallback, per message.** Pinned to `["ko-KR", "en-US"]`, Gecko's
- *    `Localization` walks the chain message by message, so the missing key
- *    resolves from the English file.
- * 3. **The real UI locale.** `Services.locale.requestedLocales` is switched to
+ *    available. Read here through `L10nRegistry.generateBundles([locale], …)`
+ *    and `FluentBundle.hasMessage()`, which answers "is this id *in this
+ *    locale's file*" without the per-message fallback of layer 3 muddying it —
+ *    the only way to state the `ko-KR` gap precisely.
+ * 3. **Fallback, per message.** Pinned to `["ko-KR", "en-US"]`, Gecko's
+ *    `Localization` walks the chain message by message, so a message missing
+ *    from the Korean file resolves from the English one. This is what the
+ *    `ko-KR` bundles currently depend on for 79 of their 84 strings.
+ * 4. **The error contract.** Every `ResearchHelperError` subclass's
+ *    `messageKey` either has a message in `en-US` or is on
+ *    `DEFERRED_ERROR_MESSAGE_IDS`. A `messageKey` with no message is a blank
+ *    label at runtime, not a compile error.
+ * 5. **The real UI locale.** `Services.locale.requestedLocales` is switched to
  *    `en-US` and then to `ko-KR` in the runner's own profile
  *    (`.scaffold/test/profile`, never the dev profile or the user's Zotero),
  *    and the Tools menu, the main window's `document.l10n` and an unpinned
  *    `new Localization([...])` — the form the plugin sandbox uses — are read
  *    under each. The pref is restored in `after`, whatever failed.
+ * 6. **Phase 1 markup.** `P1-T18`'s first criterion: scrape the XHTML and diff
+ *    its `data-l10n-id`s against the declared ids. Phase 1's only markup
+ *    surface is `searchDialog.xhtml`, which `P1-T20` creates; until then the
+ *    scrape reports that it found no document and asserts nothing about one.
+ *    See that test's own comment — it is the one criterion this card cannot
+ *    fully discharge, and it is written so that it starts biting the moment
+ *    the markup lands rather than being added later.
+ *
+ * ## The prefix conflict, stated once
+ *
+ * `docs/01` §9.3 requires every Fluent id to start with `research-helper-`,
+ * "No exceptions". `docs/07` §10.1 fixes sixteen Phase 1 ids as `rh-error-*`
+ * in `src/core/errors.ts`, asserted there by `P1-T02`. Both cannot hold.
+ * `P1-T18` transcribed the code's keys (a mismatch there is an invisible blank
+ * label) and reported the conflict; the test below states the split in numbers
+ * rather than asserting the card's fourth criterion as written, because that
+ * criterion cannot pass while the conflict stands.
  *
  * Every measured value is written to the runner's terminal, prefixed
- * `[P0-T24]`, before it is asserted. Sandbox caveats (`docs/01` §2.3): no
+ * `[P1-T18]`, before it is asserted. Sandbox caveats (`docs/01` §2.3): no
  * `console`, no `performance`.
  */
 
 import { config } from "../../package.json";
 import {
+  ConfigurationError,
+  MissingCredentialError,
+  NetworkError,
+  OfflineError,
+  TimeoutError,
+  AuthenticationError,
+  AuthorizationError,
+  RateLimitError,
+  QuotaExceededError,
+  UpstreamServerError,
+  BadRequestError,
+  SourceError,
+  ParseError,
+  LLMError,
+  ContextLengthExceededError,
+  ContentFilterError,
+  StructuredOutputError,
+  TTSError,
+  ZoteroApiError,
+  StorageError,
+  OperationCancelledError,
+  BudgetExceededError,
+  PolicyViolationError,
+  type ResearchHelperError,
+} from "../../src/core/errors";
+import {
   FLUENT_PREFIX,
+  MESSAGE_ID_PREFIXES,
+  MESSAGE_PREFIX_MATCHES_ADDON_REF,
   fluentResourceId,
   formatAttribute,
+  isPluginMessageId,
   type FluentFormatter,
 } from "../../src/i18n/ftl";
+import {
+  DEFERRED_ERROR_MESSAGE_IDS,
+  ERROR_MESSAGE_IDS,
+  ERROR_MESSAGE_PREFIX,
+  KO_DELIBERATELY_ABSENT,
+  KO_PENDING_REVIEW,
+  KO_PRESENT,
+  MAIN_WINDOW_MESSAGE_IDS,
+  MESSAGE_IDS_BY_SURFACE,
+  MESSAGE_PREFIX,
+  SEARCH_DIALOG_MESSAGE_IDS,
+  SHIPPED_SURFACES,
+  type ShippedSurface,
+} from "../../src/i18n/keys";
 import {
   L10N_MENU_ROOT,
   L10N_MENU_SPIKE_CREATE_ITEM,
@@ -56,21 +131,32 @@ declare const assert: {
   notStrictEqual<T>(actual: T, expected: T, message?: string): void;
   deepEqual<T>(actual: T, expected: T, message?: string): void;
   isTrue(value: unknown, message?: string): void;
+  isAtLeast(value: number, floor: number, message?: string): void;
   include(haystack: readonly string[], needle: string, message?: string): void;
   fail(message: string): never;
 };
 /** The scaffold runner's `window.debug`: POSTs one line to the terminal. */
 declare function debug(line: string): void;
 
-const LOG_PREFIX = "[P0-T24]";
-const MAIN_WINDOW_FTL = fluentResourceId("mainWindow");
+const LOG_PREFIX = "[P1-T18]";
 const PLUGIN_L10N_SOURCE = "zotero-plugins";
 const LOCALE_PREF = "intl.locale.requested";
 const TOOLS_POPUP_ID = "menu_ToolsPopup";
 const TOOLS_TARGET = "main/menubar/tools";
 const STEP_TIMEOUT_MS = 20_000;
 
-/** The expected values, copied from the two `.ftl` files by hand. */
+/**
+ * Phase 1's markup surfaces, by the chrome URL `addon/bootstrap.js` registers
+ * (`["content", "<addonRef>", rootURI + "content/"]`). Only `searchDialog` is
+ * Phase 1's, and `P1-T20` creates it; a URL that does not resolve is reported,
+ * not failed. `locale/` is *not* under the chrome mapping, which is why the
+ * bundles themselves are read through `L10nRegistry` instead.
+ */
+const MARKUP_URLS = [
+  `chrome://${config.addonRef}/content/searchDialog.xhtml`,
+] as const;
+
+/** The expected menu labels, copied from the two `.ftl` files by hand. */
 const EN = {
   root: "Research Helper",
   spike: "Create spike item (P0-T10)",
@@ -84,6 +170,10 @@ interface MenuLabels {
 
 function log(line: string): void {
   debug(`${LOG_PREFIX} ${line}`);
+}
+
+function sorted(ids: Iterable<string>): string[] {
+  return [...ids].sort();
 }
 
 function delay(ms: number): Promise<void> {
@@ -113,14 +203,79 @@ function pluginInitialized(): boolean {
   return instance?.data?.initialized === true;
 }
 
-/** A `Localization` over the main-window bundle, pinned to `locales`. */
-function pinnedLocalization(locales: string[]): Localization {
+/** A `Localization` over one surface's bundle, pinned to `locales`. */
+function pinnedLocalization(
+  surface: ShippedSurface,
+  locales: string[],
+): Localization {
   return new Localization(
-    [MAIN_WINDOW_FTL],
+    [fluentResourceId(surface)],
     false,
     L10nRegistry.getInstance(),
     locales,
   );
+}
+
+/**
+ * The `FluentBundle` Zotero's plugin source yields for one surface in one
+ * locale, or `undefined` if it yields none.
+ *
+ * This is the file-level read layer 2 needs: `hasMessage()` is true only for a
+ * message in *this locale's chosen file*, with no per-message fallback.
+ */
+async function bundleFor(
+  surface: ShippedSurface,
+  locale: string,
+): Promise<FluentBundle | undefined> {
+  const iterator = L10nRegistry.getInstance().generateBundles(
+    [locale],
+    [fluentResourceId(surface)],
+  );
+  const first = await iterator.next();
+  return first.done ? undefined : (first.value ?? undefined);
+}
+
+/** The declared ids of `surface` that are present in `locale`'s own file. */
+async function declaredIdsPresentIn(
+  surface: ShippedSurface,
+  locale: string,
+): Promise<{ present: string[]; absent: string[] }> {
+  const bundle = await bundleFor(surface, locale);
+  if (!bundle) {
+    assert.fail(
+      `L10nRegistry yielded no bundle for ${fluentResourceId(surface)} in ` +
+        `${locale} — the file is not registered at all`,
+    );
+  }
+  const present: string[] = [];
+  const absent: string[] = [];
+  for (const id of MESSAGE_IDS_BY_SURFACE[surface]) {
+    (bundle.hasMessage(id) ? present : absent).push(id);
+  }
+  return { present, absent };
+}
+
+/**
+ * Which of `ids` a `Localization` resolves to a message at all.
+ *
+ * Deliberately untyped in `ids`: `formatMessage()` in `src/i18n/ftl.ts` is
+ * generic over one id so that its argument object is checked, and spreading a
+ * union of argument tuples across a loop is not expressible. Presence — a
+ * non-`null` `L10nMessage` — is what this layer tests, and a message whose
+ * arguments were not supplied is still present, so the bulk read goes straight
+ * to the platform method both helpers wrap.
+ */
+async function resolvable(
+  l10n: Localization,
+  ids: readonly string[],
+): Promise<{ resolved: string[]; unresolved: string[] }> {
+  const messages = await l10n.formatMessages(ids.map((id) => ({ id })));
+  const resolved: string[] = [];
+  const unresolved: string[] = [];
+  ids.forEach((id, i) => {
+    (messages[i] ? resolved : unresolved).push(id);
+  });
+  return { resolved, unresolved };
 }
 
 /** Both menu labels through `formatter`, via `src/i18n/ftl.ts`. */
@@ -227,7 +382,9 @@ async function readUnderCurrentLocale(): Promise<{
   }
   const result = {
     // What the plugin sandbox writes: no registry, no locale list.
-    unpinned: await labelsFrom(new Localization([MAIN_WINDOW_FTL])),
+    unpinned: await labelsFrom(
+      new Localization([fluentResourceId("mainWindow")]),
+    ),
     document: await labelsFrom(docL10n),
     menu: await toolsMenuLabels(win),
   };
@@ -238,7 +395,43 @@ async function readUnderCurrentLocale(): Promise<{
   return result;
 }
 
-describe("localization (FR-55, V-17)", function () {
+/**
+ * One instance of every concrete `ResearchHelperError` in `docs/07` §10.1, so
+ * the spec reads each `messageKey` off the class rather than restating it.
+ *
+ * The constructor arguments are the ones each class declares; nothing here is
+ * thrown, logged or serialized, so the messages are placeholders. `docs/09`
+ * §2.1's redaction rules are `P1-T02`'s unit-test territory, not this file's.
+ */
+function everyErrorInstance(): ResearchHelperError[] {
+  return [
+    new ConfigurationError("x"),
+    new MissingCredentialError("openai"),
+    new NetworkError("x"),
+    new OfflineError("x"),
+    new TimeoutError(1, "https://example.invalid/"),
+    new AuthenticationError(401, "x"),
+    new AuthorizationError(403, "x"),
+    new RateLimitError(429, 1_000, "eutils.ncbi.nlm.nih.gov"),
+    new QuotaExceededError(402, "x"),
+    new UpstreamServerError(503, "x"),
+    new BadRequestError(400, "x"),
+    new SourceError("pubmed", "x"),
+    new ParseError("pubmed", "x"),
+    new LLMError("openai", "gpt-4o-mini", "x"),
+    new ContextLengthExceededError("openai", "gpt-4o-mini", "x"),
+    new ContentFilterError("openai", "gpt-4o-mini", "x"),
+    new StructuredOutputError("openai", "gpt-4o-mini", "x"),
+    new TTSError("x"),
+    new ZoteroApiError("x"),
+    new StorageError("x"),
+    new OperationCancelledError({ kind: "user" }),
+    new BudgetExceededError("x"),
+    new PolicyViolationError("x"),
+  ];
+}
+
+describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
   const original = {
     hadUserValue: false,
     requested: "",
@@ -282,9 +475,87 @@ describe("localization (FR-55, V-17)", function () {
     );
   });
 
-  it("registers the plugin's bundles in Zotero's shared source for ko-KR", async function () {
-    assert.strictEqual(MAIN_WINDOW_FTL, `${FLUENT_PREFIX}mainWindow.ftl`);
-    assert.strictEqual(MAIN_WINDOW_FTL, "research-helper-mainWindow.ftl");
+  /* ---------------------------------------------- layer 1: the vocabulary */
+
+  it("declares one id set, with no duplicate across the two surfaces", async function () {
+    const all = [...MAIN_WINDOW_MESSAGE_IDS, ...SEARCH_DIALOG_MESSAGE_IDS];
+    log(
+      `declared ids: mainWindow ${MAIN_WINDOW_MESSAGE_IDS.length}, ` +
+        `searchDialog ${SEARCH_DIALOG_MESSAGE_IDS.length}, total ${all.length}`,
+    );
+    assert.strictEqual(
+      new Set(all).size,
+      all.length,
+      "an id declared in two surfaces would be declared in two files, and " +
+        "Fluent ids share one namespace per document (docs/01 §9.3)",
+    );
+    assert.deepEqual(sorted(SHIPPED_SURFACES), ["mainWindow", "searchDialog"]);
+    assert.strictEqual(FLUENT_PREFIX, "research-helper-");
+    assert.strictEqual(MESSAGE_PREFIX, FLUENT_PREFIX);
+    assert.isTrue(
+      MESSAGE_PREFIX_MATCHES_ADDON_REF,
+      "package.json's addonRef and keys.ts's MESSAGE_PREFIX agree",
+    );
+    assert.strictEqual(
+      fluentResourceId("mainWindow"),
+      "research-helper-mainWindow.ftl",
+    );
+    assert.strictEqual(
+      fluentResourceId("searchDialog"),
+      "research-helper-searchDialog.ftl",
+    );
+    // The two constants src/ui/menus/toolsMenu.ts declares for itself must be
+    // the same strings keys.ts declares; that file predates keys.ts and is not
+    // in P1-T18's Files list, so this is the only thing holding them together.
+    assert.strictEqual(L10N_MENU_ROOT, "research-helper-menu-root");
+    assert.strictEqual(
+      L10N_MENU_SPIKE_CREATE_ITEM,
+      "research-helper-menu-spike-create-item",
+    );
+    assert.include(MAIN_WINDOW_MESSAGE_IDS, L10N_MENU_ROOT);
+    assert.include(MAIN_WINDOW_MESSAGE_IDS, L10N_MENU_SPIKE_CREATE_ITEM);
+  });
+
+  it("splits every id across exactly the two prefixes the corpus disagrees about", async function () {
+    // P1-T18's fourth criterion asks that no id lack the `research-helper-`
+    // prefix. Sixteen do, because docs/07 §10.1 fixes them in
+    // src/core/errors.ts as `rh-error-*` and P1-T02 asserts them there. The
+    // criterion cannot pass while that conflict stands; this test states the
+    // split exactly, so the day the conflict is resolved one side of it goes
+    // to zero and this assertion is what fails.
+    const all = [...MAIN_WINDOW_MESSAGE_IDS, ...SEARCH_DIALOG_MESSAGE_IDS];
+    const pluginPrefixed = all.filter((id) => id.startsWith(MESSAGE_PREFIX));
+    const errorPrefixed = all.filter((id) =>
+      id.startsWith(ERROR_MESSAGE_PREFIX),
+    );
+    log(
+      `prefixes: "${MESSAGE_PREFIX}" ${pluginPrefixed.length}, ` +
+        `"${ERROR_MESSAGE_PREFIX}" ${errorPrefixed.length} ` +
+        `(docs/01 §9.3 wants the second to be 0; docs/07 §10.1 fixes it at ` +
+        `${ERROR_MESSAGE_IDS.length})`,
+    );
+    assert.strictEqual(
+      pluginPrefixed.length + errorPrefixed.length,
+      all.length,
+      "every declared id carries one of the two known prefixes",
+    );
+    assert.deepEqual(
+      sorted(errorPrefixed),
+      sorted(ERROR_MESSAGE_IDS),
+      "the only ids outside the plugin prefix are docs/07 §10.1's messageKeys",
+    );
+    for (const id of all) {
+      assert.isTrue(isPluginMessageId(id), `${id} is a plugin message id`);
+    }
+    assert.deepEqual(sorted(MESSAGE_ID_PREFIXES), [
+      "research-helper-",
+      "rh-error-",
+    ]);
+  });
+
+  /* -------------------------------- layer 2: registration, per file per locale */
+
+  it("registers both bundles in Zotero's shared plugin source, for en-US and ko-KR", async function () {
     assert.include(
       Services.locale.availableLocales,
       "ko-KR",
@@ -294,28 +565,200 @@ describe("localization (FR-55, V-17)", function () {
       L10nRegistry.getInstance().hasSource(PLUGIN_L10N_SOURCE),
       `L10nRegistry has the "${PLUGIN_L10N_SOURCE}" source`,
     );
+    for (const surface of SHIPPED_SURFACES) {
+      for (const locale of ["en-US", "ko-KR"]) {
+        const bundle = await bundleFor(surface, locale);
+        log(
+          `${fluentResourceId(surface)} in ${locale}: ` +
+            `${bundle ? `bundle locales ${JSON.stringify(bundle.locales)}` : "NO BUNDLE"}`,
+        );
+        assert.isTrue(
+          bundle !== undefined,
+          `${fluentResourceId(surface)} is registered for ${locale}`,
+        );
+      }
+    }
   });
 
-  it("resolves en-US completely and ko-KR without the deliberately missing key", async function () {
-    const en = await labelsFrom(pinnedLocalization(["en-US"]));
-    const koOnly = await labelsFrom(pinnedLocalization(["ko-KR"]));
-    log(`pinned ["en-US"] ${show(en)}`);
-    log(`pinned ["ko-KR"] ${show(koOnly)}`);
+  it("declares every id in the en-US file of its own surface, and nowhere else", async function () {
+    for (const surface of SHIPPED_SURFACES) {
+      const { present, absent } = await declaredIdsPresentIn(surface, "en-US");
+      log(
+        `en-US ${fluentResourceId(surface)}: ${present.length} present, ` +
+          `${absent.length} absent ${JSON.stringify(absent)}`,
+      );
+      assert.deepEqual(
+        absent,
+        [],
+        `every id keys.ts assigns to ${surface} is in its en-US bundle`,
+      );
+    }
+    // And no id leaks across: an id declared for one surface must not also be
+    // in the other file, or the two would collide in any document that
+    // inserts both.
+    for (const surface of SHIPPED_SURFACES) {
+      const other: ShippedSurface =
+        surface === "mainWindow" ? "searchDialog" : "mainWindow";
+      const bundle = await bundleFor(other, "en-US");
+      if (!bundle) {
+        assert.fail(`no en-US bundle for ${other}`);
+      }
+      const leaked = MESSAGE_IDS_BY_SURFACE[surface].filter((id) =>
+        bundle.hasMessage(id),
+      );
+      log(
+        `ids of ${surface} also present in ${other}: ${JSON.stringify(leaked)}`,
+      );
+      assert.deepEqual(leaked, [], `${surface}'s ids are not also in ${other}`);
+    }
+  });
 
-    assert.deepEqual(en, { root: EN.root, spike: EN.spike }, "en-US bundle");
+  it("resolves every declared id from a Localization pinned to en-US", async function () {
+    for (const surface of SHIPPED_SURFACES) {
+      const { resolved, unresolved } = await resolvable(
+        pinnedLocalization(surface, ["en-US"]),
+        MESSAGE_IDS_BY_SURFACE[surface],
+      );
+      log(
+        `pinned ["en-US"] ${fluentResourceId(surface)}: ${resolved.length} ` +
+          `resolved, ${unresolved.length} unresolved ${JSON.stringify(unresolved)}`,
+      );
+      assert.deepEqual(unresolved, [], `every ${surface} id resolves in en-US`);
+    }
+  });
+
+  it("carries exactly the reviewed Korean strings, and exactly the documented gap", async function () {
+    // The human gate, as an assertion. KO_PRESENT is what an owner supplied
+    // (docs/08 §10.2) plus what docs/08 §10.3 forbids translating;
+    // KO_PENDING_REVIEW is what a native speaker still has to write;
+    // KO_DELIBERATELY_ABSENT is the one key that must stay missing so FR-55's
+    // fallback stays observable.
+    const presentActual: string[] = [];
+    const absentActual: string[] = [];
+    for (const surface of SHIPPED_SURFACES) {
+      const { present, absent } = await declaredIdsPresentIn(surface, "ko-KR");
+      log(
+        `ko-KR ${fluentResourceId(surface)}: ${present.length} translated ` +
+          `${JSON.stringify(present)}, ${absent.length} awaiting review`,
+      );
+      presentActual.push(...present);
+      absentActual.push(...absent);
+    }
+    log(
+      `ko-KR totals: ${presentActual.length} present, ` +
+        `${absentActual.length} absent; expected ${KO_PRESENT.length} / ` +
+        `${KO_PENDING_REVIEW.length + KO_DELIBERATELY_ABSENT.length}`,
+    );
+    assert.deepEqual(
+      sorted(presentActual),
+      sorted(KO_PRESENT),
+      "the ko-KR bundles carry exactly the strings that are reviewed or exempt",
+    );
+    assert.deepEqual(
+      sorted(absentActual),
+      sorted([...KO_PENDING_REVIEW, ...KO_DELIBERATELY_ABSENT]),
+      "the ko-KR gap is exactly KO_PENDING_REVIEW plus the one deliberate hole",
+    );
+    // The two lists must not overlap: a key cannot both await translation and
+    // be required to stay missing.
+    const pending = new Set<string>(KO_PENDING_REVIEW);
+    for (const id of KO_DELIBERATELY_ABSENT) {
+      assert.isTrue(
+        !pending.has(id),
+        `${id} is deliberately absent and must not also be on the review list`,
+      );
+    }
+    assert.include(
+      KO_DELIBERATELY_ABSENT,
+      L10N_MENU_SPIKE_CREATE_ITEM,
+      "P0-T24's fallback fixture is still the deliberately absent key",
+    );
+    // P0-T24's measured value, still measured rather than assumed.
+    const koOnly = await labelsFrom(
+      pinnedLocalization("mainWindow", ["ko-KR"]),
+    );
+    log(`pinned ["ko-KR"] menu labels ${show(koOnly)}`);
     assert.deepEqual(
       koOnly,
       { root: KO.root, spike: undefined },
-      "ko-KR bundle alone: Korean root, and the spike key really is absent",
+      "ko-KR alone: Korean root, and the spike key really is absent",
     );
   });
 
+  /* ------------------------------------------- layer 3: per-message fallback */
+
   it("falls back to English per message along a ko-KR, en-US chain", async function () {
-    const chain = await labelsFrom(pinnedLocalization(["ko-KR", "en-US"]));
-    log(`pinned ["ko-KR","en-US"] ${show(chain)}`);
+    const chain = await labelsFrom(
+      pinnedLocalization("mainWindow", ["ko-KR", "en-US"]),
+    );
+    log(`pinned ["ko-KR","en-US"] menu labels ${show(chain)}`);
     assert.deepEqual(chain, { root: KO.root, spike: EN.spike });
     assert.notStrictEqual(chain.spike, L10N_MENU_SPIKE_CREATE_ITEM);
+
+    // The whole ko-KR review gap rests on this layer, so assert it for every
+    // untranslated id, not just the one fixture key.
+    for (const surface of SHIPPED_SURFACES) {
+      const { unresolved } = await resolvable(
+        pinnedLocalization(surface, ["ko-KR", "en-US"]),
+        MESSAGE_IDS_BY_SURFACE[surface],
+      );
+      log(
+        `pinned ["ko-KR","en-US"] ${fluentResourceId(surface)}: ` +
+          `${unresolved.length} unresolved ${JSON.stringify(unresolved)}`,
+      );
+      assert.deepEqual(
+        unresolved,
+        [],
+        `every ${surface} id resolves along a ko-KR → en-US chain`,
+      );
+    }
   });
+
+  /* ------------------------------------------- layer 4: the error contract */
+
+  it("gives every messageKey src/core/errors.ts can throw a message, or defers it explicitly", async function () {
+    const instances = everyErrorInstance();
+    const keys = instances.map((e) => e.messageKey);
+    log(`error classes instantiated: ${instances.length}; keys ${keys.length}`);
+    assert.strictEqual(
+      new Set(keys).size,
+      keys.length,
+      "docs/07 §10.1 gives every class its own messageKey",
+    );
+    assert.deepEqual(
+      sorted(keys),
+      sorted([...ERROR_MESSAGE_IDS, ...DEFERRED_ERROR_MESSAGE_IDS]),
+      "every messageKey is either shipped by Phase 1 or on the deferred list",
+    );
+    for (const key of keys) {
+      assert.isTrue(
+        key.startsWith(ERROR_MESSAGE_PREFIX),
+        `${key} matches docs/07 §10.1's rh-error- shape`,
+      );
+    }
+    // The shipped sixteen must actually resolve; the deferred seven must not
+    // be in the bundle, or the deferral is a lie.
+    const bundle = await bundleFor("mainWindow", "en-US");
+    if (!bundle) {
+      assert.fail("no en-US mainWindow bundle");
+    }
+    const missing = ERROR_MESSAGE_IDS.filter((id) => !bundle.hasMessage(id));
+    const unexpected = DEFERRED_ERROR_MESSAGE_IDS.filter((id) =>
+      bundle.hasMessage(id),
+    );
+    log(
+      `error messages: ${ERROR_MESSAGE_IDS.length} shipped, missing ` +
+        `${JSON.stringify(missing)}; deferred present ${JSON.stringify(unexpected)}`,
+    );
+    assert.deepEqual(missing, [], "every Phase 1 messageKey has a message");
+    assert.deepEqual(
+      unexpected,
+      [],
+      "a deferred messageKey has no message yet, by design",
+    );
+  });
+
+  /* ---------------------------------------------- layer 5: the real UI locale */
 
   it("renders the Tools menu from Fluent with the UI locale set to en-US", async function () {
     await requestUILocale(["en-US"]);
@@ -346,5 +789,90 @@ describe("localization (FR-55, V-17)", function () {
         "not a raw identifier",
       );
     }
+    // NFR-11 / FR-55: under a Korean UI nothing in either bundle renders as an
+    // identifier, whether it is translated or falling back.
+    for (const surface of SHIPPED_SURFACES) {
+      const l10n = new Localization([fluentResourceId(surface)]);
+      const { unresolved } = await resolvable(
+        l10n,
+        MESSAGE_IDS_BY_SURFACE[surface],
+      );
+      log(
+        `ko-KR UI, unpinned ${fluentResourceId(surface)}: ` +
+          `${unresolved.length} unresolved ${JSON.stringify(unresolved)}`,
+      );
+      assert.deepEqual(
+        unresolved,
+        [],
+        `under a Korean UI every ${surface} id still resolves to a message`,
+      );
+    }
+  });
+
+  /* ------------------------------------------- layer 6: Phase 1 markup scrape */
+
+  it("uses no data-l10n-id in Phase 1 markup that no bundle declares", async function () {
+    // P1-T18's first criterion: "every `data-l10n-id` used in Phase 1 markup
+    // resolves in en-US, asserted by a test that scrapes the XHTML and diffs
+    // against the FTL keys". Phase 1's only markup surface is
+    // `searchDialog.xhtml`, and `P1-T20` creates it — this card ships the
+    // strings it will name. So the criterion is **vacuous today**, and the log
+    // line at the end says so rather than letting an empty diff read as a pass.
+    //
+    // What is deliberately *not* asserted here is that the document exists and
+    // carries at least one `data-l10n-id`. That is `P1-T20`'s criterion ("no
+    // literal survives a grep of the XHTML"), and asserting it from `P1-T18`
+    // would both widen this card's scope (`plan/README.md` §5 rule 2) and leave
+    // the integration suite red for every card between the two — including
+    // `P1-T19`, which depends on this one. Measured here: a `chrome://` URL for
+    // a file that does not exist does **not** reject through
+    // `Zotero.File.getContentsFromURLAsync` — it comes back as the empty
+    // string — so absence is detected on the content, not on a throw.
+    const declared = new Set<string>([
+      ...MAIN_WINDOW_MESSAGE_IDS,
+      ...SEARCH_DIALOG_MESSAGE_IDS,
+    ]);
+    let documentsFound = 0;
+    for (const url of MARKUP_URLS) {
+      let source: string;
+      try {
+        source = await Zotero.File.getContentsFromURLAsync(url);
+      } catch (e) {
+        log(`markup ${url}: not present yet (threw: ${String(e)})`);
+        continue;
+      }
+      if (source.trim() === "") {
+        log(`markup ${url}: not present yet (empty response)`);
+        continue;
+      }
+      documentsFound += 1;
+      const used = [...source.matchAll(/data-l10n-id\s*=\s*["']([^"']+)["']/g)]
+        .map((m) => m[1])
+        .filter((id): id is string => id !== undefined);
+      const unique = sorted(new Set(used));
+      const undeclared = unique.filter((id) => !declared.has(id));
+      log(
+        `markup ${url}: ${unique.length} distinct data-l10n-id, ` +
+          `${undeclared.length} undeclared ${JSON.stringify(undeclared)}`,
+      );
+      assert.deepEqual(
+        undeclared,
+        [],
+        `every data-l10n-id in ${url} is declared in src/i18n/keys.ts`,
+      );
+      if (unique.length === 0) {
+        // Not a failure of this card, but it is P1-T20's criterion failing, so
+        // it is said out loud rather than passed over.
+        log(
+          `markup ${url}: WARNING — the document exists and localizes nothing. ` +
+            `P1-T20 requires every visible string to be a data-l10n-id.`,
+        );
+      }
+    }
+    log(
+      `markup scrape: ${documentsFound} of ${MARKUP_URLS.length} Phase 1 ` +
+        `documents present. 0 means P1-T20 has not run yet and P1-T18's first ` +
+        `criterion is satisfied only vacuously — reported, not papered over.`,
+    );
   });
 });

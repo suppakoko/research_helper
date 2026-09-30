@@ -2261,7 +2261,7 @@ From the official docs, emphasis theirs:
 
 > "**Fluent filenames also share a global namespace.**"
 
-So: every ID starts with `research-helper-`, and every **filename** starts with `research-helper-` too, flat under `locale/<lang>/` — on Zotero 10 the filename is itself a namespace shared with every installed plugin (§9.1). No exceptions. A collision does not error — it silently shadows, which is far worse.
+So: every ID starts with `research-helper-`, and every **filename** starts with `research-helper-` too, flat under `locale/<lang>/` — on Zotero 10 the filename is itself a namespace shared with every installed plugin (§9.1). No exceptions **except one, which is now sanctioned rather than left as a contradiction (2026-09-30, `P1-T18`)**: `docs/07` §10.1 fixes 23 error `messageKey`s as **`rh-error-*`**, `src/core/errors.ts` ships them and `P1-T02`'s unit tests assert all 23 by name, so "no exceptions" and §10.1 could not both hold. `rh-` is still plugin-unique in practice, so the shadowing risk is low but **not nil** — the id namespace is shared with every installed plugin. The alternative is renaming the keys to `research-helper-error-*`, which touches `src/core/errors.ts`, its unit test and §10.1 and therefore needs a card. Until then **`rh-` is the only sanctioned second prefix**, and `src/i18n/keys.ts` isolates both spellings in `MESSAGE_ID_PREFIXES` / `ERROR_MESSAGE_PREFIX` so one grep finds every line that depends on the choice. A collision does not error — it silently shadows, which is far worse.
 
 ### 9.4 Language handling for `research_helper` specifically
 

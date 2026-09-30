@@ -2376,7 +2376,11 @@ rather than showing an identifier.
 - create `test/integration/l10n.spec.ts`
 
 **Do.**
-1. Create the four `.ftl` files under the `research-helper/` subfolder in both
+1. Create the four `.ftl` files **flat under `locale/<lang>/`** in both
+   ~~under the `research-helper/` subfolder~~ **(corrected 2026-09-30, `P1-T18`: this step
+   contradicted this card's own `Do NOT` four lines below, which says "do not put a file anywhere
+   but flat under `locale/<lang>/`". `P0-T32` measured Zotero 10 silently dropping subdirectories
+   there, and `docs/01` §9.1 carries the measurement; the step was not updated when it landed.)**
    locales, per `docs/01` §9.1 and `docs/08` §10.1.
 2. Enumerate every Phase 1 string: the two menu entries, every control label and
    tooltip in the search window, the five list states (`docs/08` §8.4), the

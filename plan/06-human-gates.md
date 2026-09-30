@@ -45,6 +45,7 @@ in this plan.
 | Phase 0, week 1 | G-09 | Provide macOS and Linux machines, one without libsecret | V-16, V-5, Phase 7 QA | Days to weeks if hardware must be arranged |
 | Phase 0, week 1 | G-11 | Line up a native Korean speaker | V-10, and again in Phases 6 and 7 | Scheduling a person; days |
 | Phase 0, week 1 | G-31 | Line up a Korean-speaking researcher for prompt review | Phase 7 | Scheduling; days to weeks |
+| **Phase 1** | **G-41** | **Review the Phase 1 `ko-KR` UI bundle — 79 strings** | **`P1-T18`, and the Korean half of `P1-T20`/`P1-T22`** | **Hours of a native speaker's time** |
 | Phase 0, week 1 | G-12 | Assemble the 40-PDF IMRaD fixture set | Phase 3 ship, Phase 4 | Days of the human's own time |
 | Phase 0, early | G-06 | Acknowledge the Gemini free-tier data-training terms | Any Gemini call, incl. V-10 | Minutes, but must precede the first call |
 | Phase 0, early | G-07 | Approve the first paid API call and the spike spend | V-7, V-10 | Minutes |
@@ -645,6 +646,50 @@ this approval.
 ---
 
 ## 3. Phase 1 gates
+
+### G-41 — Review the Phase 1 `ko-KR` UI bundle (79 strings)
+
+**Blocks:** `P1-T18`'s human gate, and the Korean half of every Phase 1 UI card
+(`P1-T20`, `P1-T21`, `P1-T22`).
+
+**Created 2026-09-30, because it did not exist.** `P1-T18`'s `Notes` say "human gate details go in
+`06-human-gates.md`" and `plan/00-task-index.md` counts `P1-T18` among the 21 gated cards — but
+`grep T18 plan/06-human-gates.md` returned **nothing**. The nearest gate, `G-31`, is for **prompt**
+review and its `Blocks:` line is *the release*, so as the plan stood a Phase 1 card was either
+blocked on a Phase 7 gate or had no gate at all.
+
+**What the human must do.** Translate 79 strings, listed machine-readably as `KO_PENDING_REVIEW` in
+`src/i18n/keys.ts` and written into each `ko-KR` file as a commented stub carrying its English
+source, in the order a reviewer meets them — so the workflow is "uncomment and translate in place".
+21 are in `mainWindow.ftl` (1 menu, 3 import-outcome, 1 note title, 16 `rh-error-*`); **58 are the
+entire Search & Import window**, including 23 state and status strings.
+
+**Three of the 79 are owner *decisions*, not translations, and a translator cannot answer them.**
+(1) `research-helper-provenance-note-title` — `FR-8` fixes the title literally as
+`Research Helper — search provenance <ISO timestamp>`. Should a Korean UI write a Korean note title
+at all, or keep the English so notes in one library stay greppable? **If a test ever asserts the
+literal English title, a Korean UI breaks it.** (2) `research-helper-import-toast-header` — the
+product name; `docs/08` §10.2 renders it `리서치 헬퍼` in menus, so it probably follows, but it is the
+same decision. (3) `research-helper-menu-collection-search-import` — both the id and the English
+wording were created by `P1-T18` because `docs/08` §2.4/§2.5 have no collection-context entry for
+Phase 1; rule on the wording before translating it.
+
+**Why an agent cannot do it.** Machine translation is forbidden for shipped UI strings: a
+plausible-looking wrong translation is worse than a visible gap, and the gap is already harmless —
+the measured per-message `ko-KR → en-US` fallback renders English for anything untranslated, with
+all 84 ids resolving under a live Korean UI.
+
+**Lead time.** Hours of a native speaker's time. **`G-11` (line up a Korean speaker, Phase 0 week 1)
+is the scheduling prerequisite and is still open.**
+
+**If it is not done.** Phase 1 ships with an English-only search window for Korean users. Not a
+blocker for `P1-T23`'s definition-of-done run, which is functional; it is a blocker for the release.
+`G-31` should be narrowed to the prompts plus a re-review at release, so the two do not overlap.
+
+**Agent behaviour on reaching it.** Stop. Report the pending count and the three decisions above.
+Never fill a Korean string to make a count look complete.
+
+---
 
 ### G-13 — Confirm the 3-year window is soft
 

@@ -42,7 +42,7 @@ Plugin ID          research-helper@suppakoko.github.io
 Pref branch        extensions.zotero.research-helper.*
 Fluent prefix      research-helper-*
 Fluent files       locale/<locale>/research-helper-*.ftl   (flat — 01-… §9.1)
-chrome namespace   chrome://researchhelper/content/*
+chrome namespace   chrome://research-helper/content/*   <- HYPHENATED (corrected 2026-09-30, P1-T18)
 DOM element IDs    rh-<surface>-<element>       e.g. rh-search-keyword
 Menu IDs           rh-menu-<target>             e.g. rh-menu-library-item
 Pane IDs           rh-itempane-summary
@@ -282,7 +282,13 @@ Two consequences for `research_helper`:
 import { config } from "../../package.json";
 
 const PLUGIN_ID = "research-helper@suppakoko.github.io";
-const ICON = `chrome://researchhelper/content/icons/menu-16.svg`;     // fill="context-fill"
+const ICON = `chrome://research-helper/content/icons/menu-16.svg`;    // fill="context-fill"
+// ^ HYPHENATED, corrected 2026-09-30 (`P1-T18`). `addon/bootstrap.js` registers
+// ["content", "__addonRef__", rootURI + "content/"] and `package.json`'s `config.addonRef` is
+// `research-helper`, so the live package name carries the hyphen. Measured: a fetch of
+// `chrome://research-helper/content/searchDialog.xhtml` returns an **empty response** rather than
+// an unknown-package error, i.e. the hyphenated package is registered and only the file is
+// missing. `P1-T19` step 5 and `P1-T20` will both trip on this if they copy the old spelling.
 
 export const registeredMenuIDs: string[] = [];
 
