@@ -20,11 +20,11 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
 |---|---|---|---|---|
-| 0 — Toolchain spike | 33 | 17.25 d | 16–22 d | 6–9 d (+78%) |
+| 0 — Toolchain spike | 33 | 17.25 d | 17.25–24 d | 6–9 d (+92%) |
 | 1 — PubMed slice | 23 | 18.75 d | 18.75–26 d | 9–12 d (+56%) |
 | 2 — Multi-source + dedup | 18 | 24.25 d | 24.25–34 d | 12–16 d (+52%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **105** | **83.75 d** | **82.5–115 d** | 39–52 d (+59% over the top of the band) |
+| **Phases 0–3** | **105** | **83.75 d** | **83.75–117 d** | 39–52 d (+61% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -432,3 +432,20 @@ in the same pass: the critical path stays **P0 → P1 → P2 → P4 → P6 → P
 111–155 d** because Phase 2 (24.25–34) still exceeds Phase 3 (23.5–33), but the
 margin has narrowed from 2.25 d / 3 d to **0.75 d / 1 d**, so P2 and P3 remain
 jointly critical and are more nearly tied than before, not less.
+
+**Superseded on 2026-09-30, and this paragraph is left as the dated record of the
+2026-09-09 pass rather than rewritten.** Every present-tense figure in it — 100
+cards, the 15.50 Phase 0 sum, the 82.00 subtotal, the 82–115 band, the 155.5–217
+total, the 111–155 critical path — was true when written and is not true now.
+Phase 0 finished with **33 cards summing to 17.25 d**, because five cards
+(`P0-T29`–`P0-T33`, 1.75 d) were created mid-phase by `plan/README.md` §5 rule 2
+when running the code found work no reading of the corpus had. The current
+figures are in §1's table above and were propagated into `docs/11` by `P0-T28` on
+2026-09-30: **105 cards**, Phase 0 **17.25–24**, the Phases 0–3 subtotal
+**83.75–117**, the project total **157.25–219** (≈ 7–10 months still, 157.25 ÷ 21
+≈ 7.5 and 219 ÷ 21 ≈ 10.4), and the critical path **112.75–157**. The P2-versus-P3
+margin quoted above is unaffected: Phase 0 is upstream of both. **The drift itself
+is the finding** — §1's table was kept current card-by-card while four prose
+figures in two other documents were not, which is why `P0-T28` had to re-add the
+33 `**Estimate**` fields by hand to establish which of three published numbers was
+real. `plan/01`'s "Estimate reconciliation" carries that record.

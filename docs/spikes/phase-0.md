@@ -335,18 +335,32 @@ undecomposed Phases 4–7 hide unpriced work.**
 ### 8.3 What `docs/11` §1 needs, mechanically
 
 Not an effort re-estimate — a **card-sum re-derivation**, which `plan/README.md` §7 already
-prescribes and which the coordinator, not this report, performs:
+prescribes. **Performed 2026-09-30, the same day, after this section identified it; the figures
+below are what the corpus now states, not a request.** The re-addition was done card by card from
+the 33 `**Estimate**` fields and each derived figure was recomputed independently before being
+published:
 
 - Phase 0's card sum is **17.25 d**, not 16.0 d and not 15.5 d. Low end = 17.25;
   high end = 17.25 × 1.4 = 24.15 → **24**. So the row becomes **17.25–24 d**, up from 16–22.
 - That moves the Phases 0–3 subtotal from 82.5 to **83.75** low and from 115 to **117** high, and
   the whole-plan total from 156–217 to **157.25–219**.
 - `docs/11` §1's Phase 0 entry, its effort-summary table row and card count, §2's Mermaid label and
-  §2's critical path (P0 → P1 → P2 → P4 → P6 → P7, currently 111.5–155) all re-derive from it.
-- `docs/11` §1 and §4 currently state **different** Phase 0 figures (16–22 / 30 cards versus
-  15.5–22 / 28 cards) and `plan/01`'s own reconciliation section states a third. All four places
-  must end up quoting 17.25 / 33.
-- **The ×1.50 factor is untouched by this**, and deliberately so: `docs/11` §1 already records that
+  §2's critical path all re-derived from it: the path is now **112.75–157** (was 111.5–155).
+  **Phase 5's float is unchanged at 10.5–15 d** — Phase 0 lies on both the critical path and the
+  binding route into P5, so it cancels out of the subtraction; only the two absolute route figures
+  moved. The ≈ 7–10-month reading of the total also survives (157.25 ÷ 21 ≈ 7.5, 219 ÷ 21 ≈ 10.4).
+- `docs/11` §1 and §4 stated **different** Phase 0 figures (16–22 / 30 cards versus 15.5–22 / 28
+  cards) and `plan/01`'s own reconciliation section stated a third; `plan/00-task-index.md` §1 alone
+  was right. All four now quote **17.25 / 33**. The two dated change-log paragraphs that carried
+  stale present-tense figures (`docs/11` §4's closing paragraph and `plan/00`'s 2026-09-09 entry)
+  were **not rewritten** — each gained a dated superseded-note instead, because a change log that is
+  edited to look correct in hindsight stops being evidence.
+- **The drift mechanism is the durable finding, not the 1.75 d.** `plan/00`'s sums were updated each
+  time rule 2 produced a new card; the prose figures in two other documents were not. Nothing caught
+  it for three weeks because every individual document was internally consistent. A card sum quoted
+  in more than one place needs a check that re-adds it, which is now `P1-T01`'s to carry forward.
+- **The ×1.50 factor is untouched**, and deliberately so — it recomputes to 83.75 ÷ 52 = **1.611**
+  and is **held at 1.50 for the third time**: `docs/11` §1 already records that
   it recomputed to 1.548 and then 1.577 and was **held at 1.50** because moving an inferred figure
   on a 1.5-day change to a measured one is false precision. A 1.75-day change is the same argument.
 

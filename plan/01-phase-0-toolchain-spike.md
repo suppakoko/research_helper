@@ -14,13 +14,14 @@ plugin can be built, hot-reloaded, debugged, and can create a Zotero item — on
 developer machine, with the actual Zotero 10.0.1 the user runs. Answer every question in
 `docs/11` §4 before any architecture is committed.
 
-**Effort estimate in `docs/11`.** **15.5–22 developer-days** (`docs/11` §1, Phase 0, revised
-2026-09-09). That figure is *measured*, not guessed: its low end is the sum of the 28 task
+**Effort estimate in `docs/11`.** **17.25–24 developer-days** (`docs/11` §1, Phase 0, re-derived
+2026-09-30). That figure is *measured*, not guessed: its low end is the sum of the 33 task
 cards below and its high end is that × 1.4. It replaced an earlier **6–9 d** estimate, which
 `docs/11` R-23 records as one of four systematically low phase figures. `docs/11` §4 separately
-sums the listed spike timeboxes to **≈ 10.75 d**; the remaining ≈ 4.75 d is Phase 0 work
-`docs/11` §1 lists as a deliverable but never priced. See "Estimate reconciliation" at the end
-of this file for the derivation.
+sums the listed spike timeboxes to **≈ 10.75 d**; the remaining **6.5 d** is Phase 0 work
+`docs/11` §1 lists as a deliverable but never priced (≈ 4.75 d) plus the **1.75 d** of five cards
+`P0-T29`–`P0-T33` that measurement itself discovered mid-phase. See "Estimate reconciliation" at
+the end of this file for the derivation.
 
 **Risks this phase retires** (`docs/11` §3.1): **R-1** (partly), **R-8** (Korean TTS spike,
 `V-10`), **R-11**, **R-12**, **R-13**, **R-14**, **R-15** (dry run, `V-18`), **R-19b**
@@ -3878,6 +3879,79 @@ mitigation for single-developer bus-factor risk, and `plan/README.md` §2 makes 
 outcomes the reason Phases 4–7 are deliberately not decomposed yet. Phase 1 decomposition
 (`plan/02-phase-1-pubmed.md`) should be written immediately after this card lands, not before.
 
+**Findings, 2026-09-30 — six of seven criteria pass; one is incomplete and one criterion was
+stale as written.** The report is [`docs/spikes/phase-0.md`](../docs/spikes/phase-0.md), 382
+lines, committed on `main`. The `Verify with` block prints `all 19 spikes present`. A
+credential-pattern grep over the file — OpenRouter, Gemini and Semantic Scholar key shapes,
+`x-api-key` values, and every alphanumeric run of 28 characters or more — matches nothing; the
+only long tokens in it are identifiers like `ZOTERO_PLUGIN_ZOTERO_BIN_PATH` and
+`onCompatibilityUpdateAvailable`. Every probe took its key from a runtime password dialog or the
+process environment, so no key was ever in a position to be transcribed into the report (D5,
+`plan/README.md` §5 rule 5).
+
+**What the verdict table says, and what it deliberately does not.** Nineteen `V-*` ids including
+`V-8b`, each with task, verdict, evidence and consequence. **Eleven are clean passes. Eight are
+not, and are stated as what they are** rather than rounded up: `V-6` is a **workaround** (4 of 15
+typing holes unfixable, 3 wrong rather than missing); `V-7` is verified for 3 of 5 targets, with
+**OpenAI and Anthropic direct never called** and the `anthropic-version` header never sent; `V-9`
+is verified for the primitive but **mid-stream cancellation and partial-body readability are
+untested**; `V-11`'s `arraybuffer` clause was read in source, never exercised live; `V-13` is
+**partial**; `V-16`'s unavailable-keystore branch is **blocked** on hardware that does not exist
+here; `V-18`'s criterion 4 **fails as written** (the published hash is `sha512:`, not `sha256:`)
+while its intent passes; and `V-4` records that it **failed first**, and why its checkboxes were
+blind to the listener leak until the bundle was measured. `V-8b` is the most consequential split
+verdict: **column geometry yes, font size/weight/name no**, with block classification wrong on 3
+of 4 articles — so R-19b's 40-PDF accuracy gate stands rather than being retired early.
+
+**The one incomplete criterion.** `V-13`'s Semantic Scholar cell is a marked placeholder because
+`P0-T21` is still `TODO`. The report states explicitly that **nothing else in it depends on that
+number**: the 63 % figure is the *keyless* ceiling, a keyed S2 can only raise it, and Phase 1 is
+unaffected because PubMed is Phase 1's only source and measured 100 %. The block is now a TLS one
+rather than a rate-limit one — see `P0-T21` — and it is one cell to substitute when the run lands.
+
+**The stale criterion, reported and not re-scoped (`plan/README.md` §5 rule 6).** Criterion 3 asks
+for the actual-effort figure to be stated "against `docs/11` §1's 15.5–22 d and against this
+file's 15.5 d card sum". **Neither number existed any more.** Writing the report found four places
+quoting three different Phase 0 figures, none of them the card sum; a card-by-card re-addition of
+the 33 `**Estimate**` fields gives **17.25 d**, and every derived figure was recomputed
+independently before being published. The criterion was satisfied against the corrected figures,
+**17.25–24 and 17.25**, and the full drift record — including why two dated change-log paragraphs
+were given superseded-notes instead of being rewritten — is in "Estimate reconciliation" at the
+end of this file. Files changed: `docs/11` §1 (intro total, the ×1.50 factor recital, the Phase 0
+entry, the table row, the subtotal, the total and the subtotal arithmetic), §2 (Mermaid label,
+critical path, Phase 5 float), §3 (R-21's card count, R-23's per-phase and aggregate percentages),
+§4 (closing paragraph), `plan/00` §1 and its 2026-09-09 change-log entry, and this file.
+
+**The effort criterion's substance is a negative, and the report says so.** R-23's instruction to
+record actual days against each card from `P0-T01` onward **was followed by nobody**, and the phase
+was executed by agents under a coordinator rather than by one developer — so there is no
+developer-day count to divide, and **the correction factor is still inference, not measurement, at
+the end of Phase 0**. The report refuses to publish a ratio of agent wall-clock to developer-days,
+which would convert a missing measurement into a false one, and instead names the three things that
+would settle it. What Phase 0 *does* support is a finding about **card sets rather than day rates**:
+five cards, 1.75 d, **10 % of the final sum**, were discovered mid-phase by running code, each via
+§5 rule 2 — R-23's mechanism in miniature, and the reason the 17.25 exists at all.
+
+**Escalations the report raises, unresolved and addressed to the owner.** `G-10` (with `G-09`) is
+**live and red**: `V-16`'s degraded-keystore tier has **no measurement behind it** — only a
+simulated throwing `encrypt()` on a Windows box — and `docs/11` §5's "Before Phase 0 ends" row is
+still open as the phase ends, which blocks Phase 3's `SecretStore` beyond tier 1. Six further rows:
+`V-7`'s two uncalled providers; `docs/04` §10.2's self-contradiction on imported-versus-linked WAV
+attachments (in imported mode the clip is stored twice); R-19's quality-gate thresholds, where the
+measured OCR ratio spans 0.834–0.852 against a 0.80 threshold **with the scanned page not the
+minimum**, so the gate separates almost nothing and R-19's "scanned means demote" instinct is
+measured wrong; the `V-9` mid-stream re-probe owed before Phase 3's job engine relies on partial
+output; `P0-T27`'s two throwaway public releases, with the trap that deleting v0.0.2 orphans the
+published `update_link`; and `build.assets` shipping `addon/**/*.md` to every user. Recorded as
+**not** firing: R-19b and R-8, because `V-8b` and `V-10` both passed.
+
+**Scope held, and two numbers checked rather than trusted.** The agent that drafted the report
+edited **one file, the new one**, and committed nothing — it escalated the four stale effort
+figures rather than touching the plan, which is why they were corrected here, by the coordinator,
+with the arithmetic re-derived from the cards first. Its own report over-counted the `DONE` cards
+as 32; the file says **31**, verified against the `**State**` fields, and 31 is what the report
+publishes.
+
 
 ---
 
@@ -4589,12 +4663,12 @@ that records it.
 
 | | Value |
 |---|---|
-| `docs/11` §1 Phase 0 estimate (revised 2026-09-09) | 15.5–22 developer-days |
-| `plan/01` task-card sum (the source of that low end) | 15.5 developer-days |
-| Superseded `docs/11` §1 estimate, for reference | 6–9 developer-days |
-| Actual elapsed developer-days | |
-| Actual ÷ 15.5 — the observed correction factor (R-23) | |
-| Does `docs/11` §1's effort summary need re-deriving again? | |
+| `docs/11` §1 Phase 0 estimate (re-derived 2026-09-30) | 17.25–24 developer-days |
+| `plan/01` task-card sum (the source of that low end) | 17.25 developer-days |
+| Superseded `docs/11` §1 estimates, for reference | 16–22, before that 15.5–22, before that 6–9 |
+| Actual elapsed developer-days | **Not measurable from this phase.** 21 calendar days (2026-09-10 → 2026-09-30), 62 commits on 7 distinct days, two of the gaps being owner-gate turnaround. **R-23's instruction to "record actual days against each card from `P0-T01` onward" was followed by nobody**, so not even a day-granularity figure per card survives, and the phase was executed by agents under a coordinator rather than by one developer — so no developer-day count exists to divide. |
+| Actual ÷ 17.25 — the observed correction factor (R-23) | **Not computed, and deliberately not estimated.** Dividing agent wall-clock by a developer-day estimate is a category error; publishing a ratio from it would convert a missing measurement into a false one. R-23's residual therefore stands **unreduced** at the end of Phase 0, which is itself the finding: the factor is still inference. `P1-T01` onward must carry a per-card actual-days column, and agent time and owner time must be recorded in two columns that are never summed. |
+| Does `docs/11` §1's effort summary need re-deriving again? | **Yes, and it was, on 2026-09-30.** Not from actuals but from the card sum: §1's entry, its table row and card count, the Phases 0–3 subtotal, the whole-plan total, §2's Mermaid label and §2's critical path all quoted a Phase 0 figure that no longer matched the 33 cards. See "Estimate reconciliation" below. |
 
 ---
 
@@ -4602,12 +4676,12 @@ that records it.
 
 | | Developer-days |
 |---|---|
-| Sum of the 28 task cards above | **15.5** |
-| `docs/11-implementation-roadmap.md` §1 Phase 0 estimate, **as it now stands** | **15.5–22** |
+| Sum of the 33 task cards above | **17.25** |
+| `docs/11-implementation-roadmap.md` §1 Phase 0 estimate, **as it now stands** | **17.25–24** |
 | `docs/11` §4's own sum of listed spike timeboxes | 10.75 |
 | Non-spike Phase 0 deliverables `docs/11` §1 lists but never priced | 4.75 |
 | Superseded `docs/11` §1 estimate | 6–9 |
-| Divergence from the top of the superseded band (9 d) | **+72%** |
+| Divergence from the top of the superseded band (9 d) | **+92%** |
 
 **Status: reconciled.** This section originally recorded an unresolved conflict — a 15.5 d card
 sum against a 6–9 d phase figure, i.e. **+72%**, far beyond `plan/README.md` §7's ±30%
@@ -4617,6 +4691,27 @@ shrink the tasks, and that is what happened: `docs/11` §1 was re-derived on **2
 "Why these figures changed" and the residual tracked as **R-23**. The two documents now agree,
 and this section is retained as the derivation rather than as an open discrepancy. Do not
 re-open it by shaving cards.
+
+**Re-derived a second time on 2026-09-30 (`P0-T28`), and the drift is worth recording.** Writing
+the spike report found **four places quoting three different Phase 0 figures, none of them the
+card sum**: `docs/11` §1's entry and table row said 16–22 over 30 cards; `docs/11` §4's closing
+paragraph said 15.5–22 over 28; this file's header and the table above said 15.5 over 28; and
+`plan/00-task-index.md` §1 alone said the correct 17.25 over 33. A card-by-card re-addition of the
+33 `**Estimate**` fields gives **17.25 d**, so `plan/00` was right and the other three were stale.
+The mechanism of the drift is the lesson: **the five cards `P0-T29`–`P0-T33` were each created
+mid-phase by `plan/README.md` §5 rule 2** — stop and write a card rather than widen the one in
+hand — and each time, `plan/00`'s sums were updated while the prose figures elsewhere were not.
+Every downstream figure re-derives from the 17.25: the band becomes **17.25–24** (× 1.4 = 24.15),
+the Phases 0–3 subtotal **83.75–117**, the whole-plan total **157.25–219**, and `docs/11` §2's
+critical path **112.75–157**. Phase 5's float is unchanged at 10.5–15 d, because Phase 0 lies on
+both the critical path and the binding route into P5 and cancels out of the subtraction. The
+×1.50 scaling factor for Phases 4–7 is **held at 1.50 for the third time** — it recomputes to
+83.75 ÷ 52 = 1.611 — on `docs/11` §1's own false-precision argument, which a 1.75-day change to a
+measured phase does not overturn. **The `P0-T28` card's own `Verify` step is stale as written**: it
+asks for the actual figure to be stated "against `docs/11` §1's 15.5–22 d and this file's 15.5 d
+card sum", and neither number exists any more. Per `plan/README.md` §5 rule 6 the criterion is
+reported rather than quietly re-scoped: it was satisfied against the **current** figures, 17.25–24
+and 17.25, and the reason for the substitution is this paragraph.
 
 The divergence was not a surprise; `docs/11` §4 predicted its mechanism. Its closing paragraph
 records that the listed spike timeboxes alone sum to ≈ 10.75 d and that the old 6–9 figure had
