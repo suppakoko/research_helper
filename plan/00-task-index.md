@@ -2,13 +2,13 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-09-15 · **105 tasks: 28 `DONE`, 77 `TODO`.**
+> **Last updated:** 2026-09-15 · **105 tasks: 31 `DONE`, 74 `TODO`.**
 
 ---
 
 ## 1. Status
 
-Implementation has started. Twenty-eight tasks are `DONE` as of 2026-09-30 — `P0-T01`,
+Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0-T01`,
 `P0-T29`, `P0-T02`, `P0-T03`, `P0-T04`, `P0-T05`, `P0-T06`, `P0-T07` and
 `P0-T30` (commits `df15816`, `010ede3`, `437b366`, `500cf7b`, `82926d3`,
 `0675412`, `73a71d6`), plus `P0-T12` and `P0-T31`, and on 2026-09-14 `P0-T09`, `P0-T10` and
@@ -120,9 +120,9 @@ column means the card cannot complete without a human — read
 | ✅ `P0-T12` | First Node unit test under Vitest | `P0-T05` | 0.5 d |  |
 | ✅ `P0-T13` | First in-Zotero Mocha test via the scaffold runner | `P0-T08`, `P0-T11` | 1.0 d |  |
 | ✅ `P0-T14` | CI workflow: lint, typecheck, unit test, build XPI | `P0-T12`, `P0-T13` | 0.75 d |  |
-| `P0-T15` | Cross-origin POST with custom headers from inside Zotero | `P0-T08` | 1.0 d | 🔒 |
-| `P0-T16` | Streaming (SSE) consumption from inside Zotero | `P0-T15` | 0.5 d |  |
-| `P0-T17` | Request abortion | `P0-T15` | 0.25 d |  |
+| ✅ `P0-T15` | Cross-origin POST with custom headers from inside Zotero | `P0-T08` | 1.0 d | 🔒 |
+| ✅ `P0-T16` | Streaming (SSE) consumption from inside Zotero | `P0-T15` | 0.5 d |  |
+| ✅ `P0-T17` | Request abortion | `P0-T15` | 0.25 d |  |
 | ✅ `P0-T18` | `getStructuredDocumentText` and IMRaD feasibility | `P0-T08` | 0.5 d | 🔒 |
 | ✅ `P0-T19` | Read Zotero's existing full-text index from a plugin | `P0-T18` | 0.75 d |  |
 | ✅ `P0-T20` | Create 100 Zotero items in one transaction within NFR-1 | `P0-T10` | 0.5 d |  |

@@ -1914,7 +1914,7 @@ revert redone and verified before pushing.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T15` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; V-7 passes on OpenRouter, Gemini and PubMed; OpenAI and Anthropic direct left unmeasured by decision |
 | **Depends on** | `P0-T08` |
 | **Blocks** | `P0-T16`, `P0-T17`, `P0-T25`, `P0-T28` |
 | **Retires** | `V-7`, `R-13` |
@@ -2138,7 +2138,7 @@ Also recorded: **Zotero updated itself again, 10.0.2 → 10.0.3**, between `P0-T
 | Field | Value |
 |---|---|
 | **ID** | `P0-T16` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; incremental delivery 3,897 ms before completion |
 | **Depends on** | `P0-T15` |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-8`, `R-14` |
@@ -2225,7 +2225,7 @@ fresh key entry is needed, escalate to `P0-T15`'s gate.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T17` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; cancellerReceiver aborts in 0 ms; mid-stream abort still unmeasured |
 | **Depends on** | `P0-T15` |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-9` |
