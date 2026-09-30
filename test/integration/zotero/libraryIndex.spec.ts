@@ -41,6 +41,14 @@ import {
 // locally, to exactly what this file uses: no Mocha types are installed.
 interface MochaContext {
   timeout(ms: number): void;
+  /**
+   * Added 2026-09-30 for the opt-in 10 000-item test. Mocha has always had it;
+   * this file (like every other integration spec) declares its own minimal
+   * `MochaContext` because the scaffold injects the globals at run time and ships
+   * no typings for them. Each spec carrying its own copy is a small duplication
+   * worth collapsing into one shared declaration eventually.
+   */
+  skip(): void;
 }
 declare function describe(title: string, body: () => void): void;
 declare function it(
@@ -99,6 +107,37 @@ const LARGE_LIBRARY_ITEMS = 10_000;
 const BULK_DOI_PREFIX = "10.5555/rh-p1t13.bulk.";
 /** Writing 10 000 items is minutes of DB work, well past the 30 s default. */
 const LARGE_LIBRARY_TIMEOUT_MS = 900_000;
+
+/**
+ * The 10 000-item test is **opt-in**, and that is a correctness fix rather than a
+ * convenience (added 2026-09-30, after `P1-T13`'s report flagged it).
+ *
+ * The fixture leaves the library at 10 000 items for **every spec that runs after
+ * this file**. `zotero-plugin.config.ts` sets `entries: ["test/integration"]` — a
+ * directory, enumerated in filesystem order — so the order is an accident, not a
+ * guarantee. Today `P0-T20`'s batch-import spec happens to run first and its NFR-1
+ * numbers came in unchanged at 422/352/446 ms; if that order ever shifted,
+ * **`P0-T20` would silently start measuring NFR-1 against a 10 000-item library**
+ * and the regression would look like a real slowdown.
+ *
+ * Pinning the entries list was the other option and is worse: a new spec added
+ * later would be silently omitted from the run. Gating the one polluting test
+ * fixes the actual problem.
+ *
+ * The measurement itself is **already recorded** in `P1-T13`'s `Findings`: index
+ * build over exactly 10 000 items in **69–72 ms with one search** (counted from a
+ * patched `Zotero.Search.prototype.search`, not the module's self-report), then 200
+ * `findExisting()` calls in 0–1 ms with **zero** searches. Insertion ran at ~1.26
+ * ms/item. Re-take it with:
+ *
+ *     Zotero.Prefs.set(LARGE_LIBRARY_PREF, true, true)
+ *
+ * in Run JavaScript before the run, or by adding it to the scaffold's `test.prefs`.
+ * **Use a throwaway profile**: the items are not cleaned up, deliberately, because
+ * deleting 9 685 items is slower than the measurement it would protect.
+ */
+const LARGE_LIBRARY_PREF =
+  "extensions.zotero.research-helper.test.largeLibrary";
 
 const doiOrThrow = (raw: string): Doi => {
   const doi = normalizeDoi(raw);
@@ -423,6 +462,17 @@ describe("Existing-item detection by DOI and PMID (P1-T13)", function () {
   });
 
   it("builds the index over a 10 000-item library with exactly one search", async function () {
+    // Opt-in: see LARGE_LIBRARY_PREF above. Skipping is the default because this
+    // test's fixture outlives it and would silently change what every later spec
+    // measures.
+    if (Zotero.Prefs.get(LARGE_LIBRARY_PREF, true) !== true) {
+      debug(
+        `[P1-T13] SKIPPED the 10 000-item test; set ${LARGE_LIBRARY_PREF} to run it ` +
+          "(69-72 ms / 1 search when last measured, 2026-09-30)",
+      );
+      this.skip();
+      return;
+    }
     this.timeout(LARGE_LIBRARY_TIMEOUT_MS);
     await Zotero.Schema.schemaUpdatePromise;
 
