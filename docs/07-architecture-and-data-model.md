@@ -673,6 +673,19 @@ export interface RateLimiter {
   readonly stats: RateLimiterStats;
 }
 
+> **`Retry-After` MUST NOT be parsed with a bare `Date.parse` (measured 2026-09-30, `P1-T04`).**
+> On this repository's Node 22 / V8, `Date.parse` accepts the delta-seconds form as a *year*:
+> `Date.parse("120")` and `Date.parse("+120")` both return `-58380424072000` (year **0119**),
+> `Date.parse("120.5")` gives year 0120 and `Date.parse("-5")` gives 2001. **`Number.isNaN` is
+> `false` for every one of them**, so the usual
+> `if (Number.isNaN(Date.parse(v))) …/* else treat as a date */` guard sends even a **valid**
+> delta-seconds header down the date branch, producing a deadline ~1900 years in the past. Clamped
+> at zero that means **retry immediately against a host that has just asked us to stop** — which is
+> `docs/02` §3.1's stated route to having an IP blocked from NCBI. Gate the date branch on an
+> explicit HTTP-date shape check (IMF-fixdate and the obsolete RFC 850 form; **exclude `asctime`**,
+> which carries no timezone and would be read in the local zone), and try the integer form first.
+> `P3-T05` step 6 re-parses this header and will hit the same trap.
+
 export interface RateLimiterConfig {
   /** Sustained rate. */
   readonly ratePerSecond: number;
