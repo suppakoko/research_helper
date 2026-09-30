@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-09-30 · **107 tasks: 34 `DONE`, 73 `TODO`.** Phase 0 is **33 of 35**; the two open cards are `P0-T34` and `P0-T35`, created on the last day of the phase out of `P0-T28`'s own escalations. Phase 1 has begun: `P1-T01` is `DONE`.
+> **Last updated:** 2026-09-30 · **108 tasks: 34 `DONE`, 74 `TODO`.** Phase 0 is **33 of 35**; the two open cards are `P0-T34` and `P0-T35`, created on the last day of the phase out of `P0-T28`'s own escalations. Phase 1 has begun: `P1-T01` is `DONE`.
 
 ---
 
@@ -21,10 +21,10 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
-| 1 — PubMed slice | 23 | 18.75 d | 18.75–26 d | 9–12 d (+56%) |
+| 1 — PubMed slice | 24 | 19.00 d | 19.00–27 d | 9–12 d (+58%) |
 | 2 — Multi-source + dedup | 18 | 24.25 d | 24.25–34 d | 12–16 d (+52%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **107** | **84.25 d** | **84.25–118 d** | 39–52 d (+62% over the top of the band) |
+| **Phases 0–3** | **108** | **84.50 d** | **84.50–119 d** | 39–52 d (+63% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**

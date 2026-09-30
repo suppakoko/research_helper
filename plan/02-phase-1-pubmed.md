@@ -380,6 +380,11 @@ classified error and honour a cancel.
 - create `test/unit/core/cancellation.test.ts`
 - create `test/unit/core/errors.test.ts`
 - create `test/unit/core/logger-redaction.test.ts`
+- create `test/unit/core/result.test.ts` (**added 2026-09-30** — `plan/README.md` §6 requires a test
+  with the task or a reason in `Notes`, and this card's `Notes` gave none; `result.ts` measured at
+  **0 % coverage** without it)
+- create `test/unit/core/concurrency.test.ts` (**added 2026-09-30**, same reason — the
+  cancellation-facing half was covered from `cancellation.test.ts`, the rest was not)
 
 **Do.**
 1. Implement `CancellationTokenSource` / `CancellationToken` per `docs/07` §4.1.
@@ -1507,7 +1512,7 @@ npm run typecheck && npm run test:contract
 | **ID** | `P1-T12` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T01`, `P1-T02` (added 2026-09-30 — the `Notes` require `throw new ZoteroApiError(...)` for the preprint gap, and `docs/07` §10.1's hierarchy is `P1-T02`'s `src/core/errors.ts`) |
-| **Blocks** | `P1-T13`, `P1-T14` |
+| **Blocks** | `P1-T13`, `P1-T14`, `P1-T24` |
 | **Retires** | none |
 | **Implements** | `FR-6`, `FR-7` |
 | **Estimate** | 1.0 d |
@@ -2870,6 +2875,88 @@ back into `docs/07` in the same change. Human gate details go in
 
 ---
 
+### P1-T24 — Retire the `P0-T10` spike surface from `itemMapper.ts`
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T24` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T12` |
+| **Blocks** | none |
+| **Retires** | `P0-T10`'s spike mapper surface |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** `src/zotero/itemMapper.ts` contains one mapper, not two. The `P0-T10` spike exports —
+`buildJournalArticle`, `JournalArticleRecord`, `RESEARCH_HELPER_TAG`, `AUTOMATIC_TAG_TYPE` — are
+gone, and everything that imported them uses the shipped mapper instead.
+
+**Why this is a card and not part of `P1-T12`.** `P1-T12`'s `Files` list says
+`create src/zotero/itemMapper.ts`, which reads as "replace the spike". It cannot: **three files
+import the spike exports and none of them is in `P1-T12`'s `Files`** — verified 2026-09-30 —
+`src/zotero/zoteroApi.ts` (line 36), `test/integration/zotero/itemCreation.spec.ts` (line 33) and
+`test/integration/zotero/batchImport.spec.ts` (line 55). Deleting the surface there would have
+broken code that card does not own, so `P1-T12` kept it verbatim in a fenced section and reported
+the gap under `plan/README.md` §5 rule 2. **The consequence of leaving it is not neutral:** the
+spike mapper ships inside the XPI to every user, and two expressions of the same mapping coexist in
+one file, which is exactly the drift `P0-T33` and `P0-T34` were about.
+
+**Read first.**
+- `src/zotero/itemMapper.ts` — the fenced `P0-T10` section and the shipped `toZoteroMapping` /
+  `toZoteroItemJSON` above it. Read both before assuming they agree.
+- `plan/01-phase-0-toolchain-spike.md` `P0-T10` and `P0-T20` **Findings** — what the two integration
+  specs actually assert. `P0-T20` measured 100 items in **293–425 ms, median 324**, with no
+  main-thread stall over 100 ms; that assertion is the one thing here that must not be weakened, and
+  it is `NFR-1`'s only live measurement.
+- `src/zotero/zoteroApi.ts` — how it consumes `buildJournalArticle`, and whether it needs the shipped
+  mapper's `options` or only its default path.
+- `docs/07` §6.2 and §6.3 — the shipped contract the three call sites must move to.
+
+**Files.**
+- modify `src/zotero/itemMapper.ts`
+- modify `src/zotero/zoteroApi.ts`
+- modify `test/integration/zotero/itemCreation.spec.ts`
+- modify `test/integration/zotero/batchImport.spec.ts`
+
+**Do.**
+1. Move each of the three call sites to `toZoteroItemJSON` / `toZoteroMapping`. `JournalArticleRecord`
+   was a spike shape; the shipped mapper takes a `CanonicalWork`, so each call site needs a minimal
+   fixture rather than a renamed import.
+2. Delete the fenced `P0-T10` section from `itemMapper.ts`.
+3. Re-run **both** integration specs against a real Zotero and record the numbers. `P0-T20`'s timing
+   assertion must still hold; if the shipped mapper is slower, **report the measurement rather than
+   relaxing the threshold** (`plan/README.md` §5 rule 6).
+4. Confirm the built XPI no longer contains the spike identifiers, read out of the **packed**
+   artifact the way `P0-T34` did — not out of `.scaffold/build/`.
+
+**Do NOT.**
+- Do not weaken or delete an assertion to make a spec pass. If the shipped mapper genuinely cannot
+  satisfy one, that is a finding about the mapper.
+- Do not change `toZoteroMapping`'s behaviour to suit the old call sites. The spike is being retired,
+  not preserved behind a shim.
+- Do not touch `src/zotero/collectionOps.ts` or the batch-insert path itself; only the mapping call.
+
+**Criteria.**
+- [ ] `grep -r 'buildJournalArticle\|JournalArticleRecord' src test` returns nothing.
+- [ ] Both integration specs pass against a real Zotero, with their timings recorded and `P0-T20`'s
+      ≤ 10 s / no-stall-over-100 ms assertions still asserted, not relaxed.
+- [ ] The packed XPI contains none of the four spike identifiers.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.**
+```bash
+grep -rn 'buildJournalArticle\|JournalArticleRecord\|RESEARCH_HELPER_TAG\|AUTOMATIC_TAG_TYPE' src test \
+  && echo 'FAIL: spike surface still referenced' || echo 'OK: spike surface gone'
+```
+
+**Notes.** `RESEARCH_HELPER_TAG` and `AUTOMATIC_TAG_TYPE` may deserve to survive as shared constants
+rather than being deleted — the shipped mapper needs both. If so, move them to where the shipped
+code declares them and delete only the spike's copies; the criterion's grep should then be narrowed
+to the two spike-only names, and the change recorded in `Findings` rather than made silently.
+
+---
+
 ## 7. Estimate roll-up
 
 | Task | Title | Est. (d) | Human gate |
@@ -2897,14 +2984,15 @@ back into `docs/07` in the same change. Human gate details go in
 | `P1-T21` | Result table, selection and filtering | 0.75 | — |
 | `P1-T22` | Wire search, import, progress, cancellation, states | 0.75 | — |
 | `P1-T23` | Phase 1 definition-of-done run | 1.00 | **Yes** |
-| | **Total** | **18.75 d** | **3 gates** |
+| `P1-T24` | Retire the `P0-T10` spike surface from `itemMapper.ts` | 0.25 | — |
+| | **Total** | **19.00 d** | **3 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 
 | | Days |
 |---|---|
-| `docs/11` §1, Phase 1 estimate, **current** | **18.75–26** |
-| Task sum here | **18.75** |
+| `docs/11` §1, Phase 1 estimate, **current** | **19.00–27** |
+| Task sum here | **19.00** |
 | Divergence against the bottom of the band | **0 %** |
 | (`docs/11`'s *previous* figure, for the record) | 9–12 |
 
@@ -2915,6 +3003,20 @@ task cards in `plan/02-phase-1-pubmed.md` sum to 18.75 d; the upper bound is tha
 signal to re-estimate the phase in `docs/11`, not to quietly adjust the tasks" —
 was applied in that direction. **No estimate in this file was adjusted to close
 the gap**, then or since.
+
+**Re-derived 2026-09-30: 24 cards, 19.00 d.** `P1-T24` was created after `P1-T12` measured that
+`create src/zotero/itemMapper.ts` cannot literally replace the `P0-T10` spike — three files import
+the spike exports and none is in `P1-T12`'s `Files`, so deleting the surface there would have broken
+code that card does not own. That is `plan/README.md` §5 rule 2 operating as designed for the third
+time in this project: **eight of the plan's 108 cards now exist because running the code found work
+no reading of the corpus had.** `docs/11` §1's Phase 1 row, the Phases 0–3 subtotal, the whole-plan
+total and §2's critical path were all re-derived from this table on the same day.
+
+**`P1-T02`'s estimate was NOT raised** when `test/unit/core/result.test.ts` and
+`test/unit/core/concurrency.test.ts` were added to its `Files` on 2026-09-30. `plan/README.md` §6
+already requires tests to ship with the task, so those two files were always inside the 1.00 d —
+their absence from `Files` was the defect, not their cost. Recorded so the omission is not later
+read as an unpriced addition.
 
 The reason the old figure was low is recorded in `docs/11` §1 itself and is
 visible in the card list: the 9–12 d priced Phase 1 as "one adapter plus a
