@@ -3214,7 +3214,7 @@ card writes that script, then runs `continue-on-error: true` until Phase 7.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T25` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; V-10 passes, owner judged the audio usable as shipped |
 | **Depends on** | `P0-T15` |
 | **Blocks** | `P0-T26`, `P0-T28` |
 | **Retires** | `V-10`, `R-8` |
@@ -3371,7 +3371,7 @@ different TTS model, and the mitigations stay documented as the remedy if a late
 | Field | Value |
 |---|---|
 | **ID** | `P0-T26` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-09-30; V-11 verified on the real 5 MB Korean audio |
 | **Depends on** | `P0-T25` |
 | **Blocks** | `P0-T28` |
 | **Retires** | `V-11` |
