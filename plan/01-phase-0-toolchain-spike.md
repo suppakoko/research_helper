@@ -4684,6 +4684,46 @@ few lines of Node reading the archive's central directory, do the same job. What
 the assertion runs against the **packed artifact**, because the whole point of `P0-T30`'s finding
 was that the staging directory and the XPI can differ.
 
+**Findings, 2026-09-30 — all four criteria pass.** `build.assets` is now
+`addon/**/*.{js,json,ftl,png}`. The extension list was enumerated from what is actually under
+`addon/` rather than from memory: `.js` (`bootstrap.js`, `prefs.js`), `.json` (`manifest.json`),
+`.ftl` (the two locale bundles), `.png` (the two icons).
+
+**Measured against the packed XPI, not the staging directory**, with a Node reader that walks the
+archive's central directory and SHA-256s every entry — `unzip` is not on PATH here, as the Notes
+anticipated. Both builds were listed in full and the two listings diffed.
+
+| | Before | After |
+|---|---|---|
+| XPI size | 18,714 B (18.3 KB) | **13,285 B (13.0 KB)** |
+| Entries with content | 9 | **8** |
+| `content/icons/README.md` | 11,925 B, `51207f91…` | **absent** |
+| `NFR-18` budget (≤ 3 MB) | 0.6 % used | **0.4 % used** |
+
+**The diff between the two entry lists is exactly one line — the README's — and nothing else moved.**
+All eight surviving entries carry byte-identical SHA-256s: `bootstrap.js` `48b21550…`,
+`content/icons/favicon.png` `48e9ad94…`, `content/icons/favicon@0.5x.png` `aad6e9a1…`,
+`content/scripts/research-helper.js` `f031d351…`, the two `.ftl` bundles `a30f60c4…` and
+`a359ba66…`, `manifest.json` `05e15a47…`, `prefs.js` `3bc6a5e7…`. The two icon hashes are the same
+values `P0-T30` recorded, so the narrowed glob neither dropped nor re-encoded an icon — the failure
+mode the `Do` step warned would be worse than the bug being fixed.
+
+**One thing measured that the card assumed rather than knew.** The six `.gitkeep` files were never
+in the XPI under either glob: a dotfile has no extension for `*.*` to match, so the
+empty-directory markers were already excluded and the change does not affect them. Worth recording
+because the card's reasoning implied `*.*` matched everything under `addon/`, and it did not.
+
+**Why an explicit list rather than an exclusion.** Excluding `*.md` would fix today's file and
+leave the rule inverted — the next asset type of any kind ships by default. An allow-list makes
+adding one a visible decision, which is what `P0-T30`'s finding actually asked for. The config
+comment also carries forward `P0-T02`'s binary caveat: scaffold `replaceDefine()` reads every
+matched asset as UTF-8 and writes back only when a substitution changed the string, so a future
+binary fixture survives unless it happens to contain a literal `__KEY__` byte sequence.
+
+`addon/content/icons/README.md` was **not** deleted, per the `Do NOT` step — it is correct developer
+documentation and belongs in the repository. `npm run build`, `npm run typecheck`,
+`npm run lint:check` and `npm run test` all exit 0.
+
 ---
 
 ### P0-T35 — Re-probe cancellation with the abort fired after the first byte

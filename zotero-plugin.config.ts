@@ -49,7 +49,20 @@ export default defineConfig({
     "https://raw.githubusercontent.com/suppakoko/research_helper/release/update.json",
 
   build: {
-    assets: ["addon/**/*.*"],
+    // P0-T34: an EXPLICIT extension list, not `addon/**/*.*`. The wildcard shipped
+    // `content/icons/README.md` (11,925 B) to every user — developer documentation inside a
+    // user artifact — and would ship every future `.md` under `addon/` the same way (measured,
+    // P0-T30). Adding a new asset type is now a visible decision rather than an accident.
+    //
+    // Every extension currently under `addon/`: .js (bootstrap.js, prefs.js), .json
+    // (manifest.json), .ftl (the two locale bundles), .png (the two icons). `.gitkeep` files are
+    // not matched by either glob — dotfiles have no extension to match — so the empty-directory
+    // markers stay out of the XPI as before.
+    //
+    // Keep binaries in mind when extending this list: scaffold `replaceDefine()` reads every
+    // matched asset as UTF-8 and writes back only when a substitution changed the string, so a
+    // binary survives unless it happens to contain a literal `__KEY__` byte sequence (P0-T02).
+    assets: ["addon/**/*.{js,json,ftl,png}"],
     define: {
       ...pkg.config,
       author: pkg.author,
