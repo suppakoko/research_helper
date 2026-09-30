@@ -3348,6 +3348,22 @@ checklist is in the `.txt` beside the audio, and the script deliberately ships u
 terms and raw numerals so `V-10` measures what happens without `docs/04` §9.1/§9.2's
 transliteration pass.
 
+**Owner's verdict, 2026-09-30 — `V-10` passes. "음성 판정 좋음, 그대로 써도 됨."**
+The project owner, a native Korean speaker, listened to the full 108-second briefing and judged it
+**good and usable as shipped**. Boxes 3 and 5 close: no R-8 provider re-evaluation is raised, and
+Gemini TTS stays the audio path.
+
+**The finding that matters is what the script did *not* have.** It deliberately shipped six inline
+Latin-script terms and eleven raw numeric forms, with none of `docs/04` §9.1/§9.2's mitigations —
+precisely the input §9.1 calls "the dominant problem in Korean scientific TTS" and predicts will
+produce mid-sentence accent switches and broken prosody. That did not happen. **So §9.1/§9.2's
+transliteration and number-expansion passes are a quality improvement, not a prerequisite,** and
+Phase 6 must not schedule them as blocking work. §9.1 now carries that measurement.
+
+Scope, stated plainly so nobody over-reads it: one script, one voice (`Charon`), one model, one
+listener, one sitting. It says nothing about other voices, longer reports, denser notation, or a
+different TTS model, and the mitigations stay documented as the remedy if a later script degrades.
+
 ---
 
 ### P0-T26 — Binary/audio response handling and attachment

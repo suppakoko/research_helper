@@ -920,6 +920,21 @@ Korean TTS quality is dominated by three issues, all of which are solved in the 
 
 This is the dominant problem in Korean scientific TTS. Korean research prose is saturated with English terms — `transformer`, `attention`, `fine-tuning`, `CRISPR-Cas9`, `single-cell RNA-seq`.
 
+> **Measured 2026-09-29, and it did not happen (`P0-T25`, `V-10`).** A 108-second Korean briefing was
+> synthesized on `gemini-2.5-flash-preview-tts` (voice `Charon`) with **none** of the mitigations below:
+> six Latin-script terms inline (`lipid nanoparticle`, `CRISPR-Cas9`, `single-cell RNA-seq`,
+> `transformer`, `self-supervised learning`, `fine-tuning`) and eleven raw numeric forms
+> (`12.5 mg/kg`, `p < 0.001`, `n = 1,247명`, `4.8%`, `350달러`, …). The project owner, a native Korean
+> speaker, listened to it in full and judged it **good, usable as shipped**.
+>
+> So the failure modes listed here are **not** what this model does today on this kind of text, and
+> §9.1/§9.2's transliteration and number-expansion passes are **a quality improvement, not a
+> prerequisite** — Phase 6 must not treat them as blocking work. Scope of that evidence, stated
+> plainly: one script, one voice, one model, one listener, one sitting. It does not cover other
+> voices, longer reports, denser notation, or a different TTS model, and it is not a licence to
+> delete these mitigations — keep them as the remedy if a later script does degrade.
+
+
 Failure modes when English is left inline:
 - The model **switches accent mid-sentence**, producing a jarring English-voice interjection.
 - The model reads English with **Korean phonology**, producing something between the two that is worse than either.
