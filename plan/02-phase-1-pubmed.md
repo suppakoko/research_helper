@@ -2812,7 +2812,7 @@ being a second source of truth for the vocabulary.
 |---|---|
 | **ID** | `P1-T19` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T18` |
+| **Depends on** | `P1-T18`, `P1-T25` (added 2026-10-01 — `P1-T25` wired `installServices()` into this card's own file) |
 | **Blocks** | `P1-T20`, `P2-T17` |
 | **Retires** | none |
 | **Implements** | `FR-1`, part of `FR-56` |
@@ -2853,7 +2853,13 @@ every registration is removed cleanly on shutdown.
 **Files.**
 - create `src/ui/menus/registerMenus.ts`
 - create `src/ui/dialogs/searchDialog.ts`
-- create `src/bootstrap/registerUI.ts`
+- modify `src/bootstrap/registerUI.ts` (**was `create`; corrected 2026-10-01.** `P1-T25` has since
+  `modify`ed that file to call `installServices()` — a literal `create` here would delete the whole
+  service-graph construction. Same ordering inversion as the one `P1-T25` found in `P1-T16`'s
+  `container.ts` row: §4's one-`create`-per-phase rule was satisfied on paper while the card that
+  creates ran after the card that modified. Extend `registerUI()`; `installServices()` must still
+  run **before** the menu registrations, because a menu handler can issue a request the moment the
+  item exists, and teardown being LIFO the menu then comes apart first.)
 - modify `src/hooks.ts`
 - create `test/integration/menus.spec.ts`
 
@@ -3425,7 +3431,7 @@ to the two spike-only names, and the change recorded in `Findings` rather than m
 | **ID** | `P1-T25` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T04`, `P1-T05`, `P1-T15` |
-| **Blocks** | `P1-T16`, `P1-T31`, `P1-T32` |
+| **Blocks** | `P1-T16`, `P1-T19`, `P1-T31`, `P1-T32` |
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 1.0 d |
