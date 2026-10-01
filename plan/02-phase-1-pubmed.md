@@ -4102,8 +4102,12 @@ invisible blank label rather than a compile error.
 **Do.**
 1. Turn `fluent.dts` on and check what it generates for 84 messages across two surfaces.
 2. Make **one** of the two authoritative and derive the other. The generated union is the honest
-   direction — it cannot drift from the bundles — so `keys.ts` should narrow or re-export it.
-3. Keep the per-message argument map hand-written, and keep the test that asserts every id in it
+3. Keep the per-message argument map hand-written, and **write** the check that every id in it
+   exists in a bundle. **Corrected 2026-10-01: there was no such test to keep.** `P1-T18` shipped
+   `FluentMessageArgsMap` with **no check of any kind** — verified, the previous `l10n.spec.ts` has
+   zero references to it — and because an `interface` accepts any string key, a renamed message left
+   an entry pointing at nothing. The coordinator's wording assumed a test that does not exist; the
+   work is inside this card's `Files` either way.
    exists in a bundle.
 4. If the scaffold's empty-union bug is still reproducible, **file it upstream** and link the issue in
    the config comment, which is what the comment asks for.
@@ -4121,6 +4125,95 @@ invisible blank label rather than a compile error.
 - [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
 
 **Verify with.** `npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fail`
+
+**Findings, 2026-10-01 — all four criteria pass, and the sharp one was proven in both directions by
+actually breaking it.** `fluent.dts` is on; `typings/i10n.d.ts` carries **exactly 84** `| 'id'`
+members and `src/i18n/keys.ts` **re-exports** it (verified: line 85 imports, line 103 re-exports), so
+the generated union is authoritative and cannot drift from the bundles. `diff` of the generated list
+against the 25 + 59 declared ids is empty, and the generator independently confirms `P1-T18`'s
+**68 `research-helper-` + 16 `rh-error-`** split. typecheck, lint:check and the unit suite (**787**)
+all exit 0.
+
+**Three properties of the generator shaped the design, read from the installed 0.9.2 and then
+measured.** It emits an `export type` in a **module** `.d.ts`, so it is imported by path and
+`// @ts-nocheck` suppresses errors inside it only — consumers stay checked. It is the union **over
+all locales**, so a typo in `ko-KR` *widens* the union rather than being caught, which is why the
+reverse check below exists. And **it carries no surface information at all**, so it cannot express
+"this id belongs to `searchDialog.ftl` and must not also be in `mainWindow.ftl`" — the silent
+collision `docs/01` §9.3 calls worse than an error. That is upstream issue **#125**, and it is why
+the two per-surface arrays could not simply be deleted.
+
+**So the arrays survive as a compiler-checked partition, not a second union** — the only shape that
+works given the lost surface split. Each gained `as const satisfies readonly FluentMessageId[]`
+(declared ⊆ generated), a new `UndeclaredBundleMessageId` asserts the other direction (generated ⊆
+declared), and the pre-existing no-duplicate test makes the halves disjoint. Together those make the
+two sets **provably the same 84 ids with neither side able to move alone.**
+
+**The sharp criterion, proven by doing it and then restored byte-for-byte.** Removing
+`research-helper-search-details-hide` from the `en-US` bundle and rebuilding **without touching
+`keys.ts`** gave `TS2820` / `TS2322` at three sites. Appending a new message gave
+`TS2344 … does not satisfy the constraint 'never'` from the reverse check — **which is what makes it
+one source of truth rather than one checked copy.** Both argument-map checks were exercised the same
+way. Every experimental edit was restored and verified by `cmp` and md5, the union is back at 84,
+and `tsc --noEmit` exits 0.
+
+**An honest sharpness limit on that criterion, and it is CI-visible.** `npm run build` is
+`tsc --noEmit && zotero-plugin build`, so the typecheck that *consumes* the union runs **before** the
+step that *writes* it — the compile error appears on the typecheck after the next build, exactly as
+`typings/prefs.d.ts` already behaves. And `ci.yml` runs lint+typecheck in one job and
+`npm run build` in a different one, so **a PR that edits an `.ftl` and forgets to rebuild passes
+CI's typecheck against the committed union.** Reported, not papered over; the fix is one
+`git diff --exit-code -- typings/` after the build step, and neither `package.json` nor `ci.yml` is
+in this card's `Files`.
+
+**The argument map had no check at all before this card, which is worse than the card assumed.**
+`P1-T18` shipped `FluentMessageArgsMap` with none — verified, zero references to it in the previous
+`l10n.spec.ts` — and an `interface` accepts any string key, so **a renamed message left an entry
+pointing at nothing.** Now `UndeclaredArgumentMessageId` makes a bogus key a compile error, and
+`ARGUMENT_MESSAGE_IDS` (29 ids) mirrors the map in both directions so a spec can walk it.
+Separately verified by parsing the `en-US` bundles that the map's 29 ids **and all of their variable
+names** match the bundles' placeables exactly, 15 in `mainWindow` and 14 in `searchDialog` — so
+`P1-T18`'s map is correct as shipped.
+
+**The three decision lists hold, and the header now records why a generator can never absorb them:**
+it can only report what the bundles contain, never record that an id **must stay missing forever**.
+`ko-KR totals: 4 present, 80 absent; expected 4 / 80`; `KO_DELIBERATELY_ABSENT` still the
+`FR-55`/`V-17` fixture and still absent; `deferred present []`. One consequence stated plainly: with
+the reverse check in place, **adding an `en-US` string now has three obligations, not two** — a
+surface-list entry *and* a `KO_PENDING_REVIEW` / `KO_DELIBERATELY_ABSENT` admission. Intended
+tightening, not a surprise.
+
+**The bundles are still byte-identical through the build** — all four `cmp`-clean against
+`.scaffold/build/addon/locale/**` before, after turning `dts` on, and after the runner's test-mode
+build. `dts` writes only the typings file; `prefixLocaleFiles` / `prefixFluentMessages` remain off
+(`P0-T32`) and the shipped ids are still flat.
+
+**The upstream bug is still fully reproducible, measured end to end rather than inferred.**
+`buildLocale()` calls `generateFluentDts()` whenever `dts` is set with **no guard on the message
+count**; narrowing `build.assets` so the dist got zero `.ftl` produced a five-line file ending
+`export type FluentMessageId =` then `;`, and `tsc` gave `TS1110: Type expected` — **so the
+2026-09-10 finding stands verbatim, including that `@ts-nocheck` does not suppress it.** It was
+**not** filed: there is no `gh` on this machine, and **opening a public issue on someone else's
+repository is not an agent's call** without being asked. A read-only search found no existing
+report. A `TODO(P1-T30)` in the `fluent` block names the title, the artifact, the `TS1110` output,
+the reproduction, the two functions and the one-line fix — **a human needs to post it and replace
+the TODO with the URL.**
+
+**Reported, not absorbed.** The `rh-error-` narrative is now **stale in four files** — `docs/01`
+§9.3 was amended on 2026-09-30 to *sanction* the second prefix, while `keys.ts`'s header still calls
+it "not a sanctioned pattern", `ftl.ts`'s comment says `P1-T18` "reports that conflict rather than
+resolving it", `l10n.spec.ts`'s header says "**Both cannot hold**", and the `en-US` `mainWindow`
+bundle calls it "a corpus defect". Two are in this card's `Files` and two are not, and the prefix
+split is not this card's subject, so none were changed. Also noticed: `ci.yml` carries a
+commented-out `scripts/check-l10n.mjs` step attributed to `P0-T14` with the script still absent —
+the `ko-KR` gap is now asserted by `l10n.spec.ts`, so that placeholder may be dead rather than
+pending.
+
+**On the integration suite:** the "33 passed" baseline in this card's brief was already stale by the
+time it ran — `P1-T29` added 5, `P1-T24` touched two specs and `P1-T14` added `importer.spec.ts`
+concurrently. A full run without `--abort-on-fail` gave **44 passed, 4 failed, and all four failures
+are in `P1-T14`'s in-flight `importer.spec.ts`** (`Zotero.Search` call counts), none
+localization-related. **All 13 tests in `l10n.spec.ts` pass**, including the two this card added.
 
 ---
 ### P1-T31 — Make a progress reporter usable for more than one job
