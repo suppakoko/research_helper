@@ -2112,7 +2112,7 @@ an import. And this card names **no unit-test file with no `Notes` reason**, aga
 | Field | Value |
 |---|---|
 | **ID** | `P1-T14` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-01; 11 integration tests, 100 records in 588 ms. **Closed §7.2's chunk-size marker with a number: ship 50** — 25 costs 47 % more for nothing and above 50 buys ≤ 5 % while costing chunk granularity. Found a limit on `P1-T13`'s search-counting technique (a write window also counts Zotero's own notifier searches) and a `P2-T09` trap: **DOI precedence decides which match wins, not whether there is one.** Criterion 6 was unfalsifiable as written — it made a comment the artefact — and was reported, not adjusted. |
 | **Depends on** | `P1-T12`, `P1-T13` |
 | **Blocks** | `P1-T16`, `P1-T17`, `P2-T18` |
 | **Retires** | `R-16` |
@@ -3449,7 +3449,7 @@ back into `docs/07` in the same change. Human gate details go in
 | Field | Value |
 |---|---|
 | **ID** | `P1-T24` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-01; the spike mapper is gone, `itemMapper.ts` 729 → 636 lines, and **`P0-T20`'s timings did not move** (stall 79 → 78 ms, no gap over 100 ms, NFR constants byte-identical). Found **four errors in this card's own text**, all the coordinator's, including an importer claim written in from `P1-T12`'s report without being checked against the file. |
 | **Depends on** | `P1-T12` |
 | **Blocks** | none |
 | **Retires** | `P0-T10`'s spike mapper surface |
@@ -3637,7 +3637,7 @@ useful log line than it should.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T25` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-01; one construction site, 15 tests, and the integration lifecycle spec confirms the **real `registerObserver`/`unregisterObserver` pair** through the whole graph. An assertion it wrote itself **failed and was reported rather than weakened**: `dispose()` does not latch the reporter tree. Surfaced the consequence `P1-T31` now owns — **one app-scoped reporter can report exactly one job per plugin lifetime** — and the `P1-T16`/`P1-T19` ordering inversions. |
 | **Depends on** | `P1-T04`, `P1-T05`, `P1-T15` |
 | **Blocks** | `P1-T16`, `P1-T19`, `P1-T31`, `P1-T32` |
 | **Retires** | none |
@@ -4028,7 +4028,7 @@ decision is the owner's.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T29` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-01; the three-way disagreement is **settled decisively: `docs/08` §8.2 right on every point, `zotero-types@4.1.3` wrong on every one.** `setItemTypeAndIcon` exists, `setIcon` does not. A path first argument **throws nothing and silently shows the generic icon**, which is why the typings' `iconSrc` naming is dangerous rather than merely inaccurate. §7.7's marker retired, with the one question the source read opened filed separately rather than swept up. |
 | **Depends on** | `P1-T15` |
 | **Blocks** | none |
 | **Retires** | `docs/07` §7.7's `> **Unverified:**` marker |
@@ -4169,7 +4169,7 @@ would settle it.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T30` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-01; the generated union is authoritative and `keys.ts` re-exports it. The sharp criterion was **proven in both directions by actually breaking it** — removing *and* adding a bundle id are both compile errors now. Reported an honest CI-visible limit (the typecheck that consumes the union runs before the step that writes it) and **declined to file the upstream issue**, correctly: no `gh`, and opening a public issue on someone else's repository is not an agent's call. |
 | **Depends on** | `P1-T18` |
 | **Blocks** | none |
 | **Retires** | none |
