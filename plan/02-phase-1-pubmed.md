@@ -4044,9 +4044,10 @@ not include it. `npm run build` was run instead to prove the changed sources sti
 
 **Two errors in this card's text, both the coordinator's, both corrected.** The `Read first` cited
 "`docs/02` §5 for arXiv's published limit"; **§5 is Crossref and arXiv is §7** (verified: §5 at line
-929, §7 at 1395). And `P1-T04`'s `Retry-After` blockquote had been written **inside** §4.1's ```` ```ts ````
-fence, so the fence was not valid TypeScript — this card placed its own decision block *outside* the
-fence rather than copying the pattern, and did not touch the other (rule 2). The blockquote is now
+929, §7 at 1395). And `P1-T04`'s `Retry-After` blockquote had been written **inside** §4.1's
+TypeScript code fence, so the fence was not valid TypeScript — this card placed its own decision
+block *outside* the fence rather than copying the pattern, and did not touch the other (rule 2).
+The blockquote is now
 `//` comments and **no markdown blockquote survives inside any `ts` fence in `docs/07`**, checked
 mechanically.
 
