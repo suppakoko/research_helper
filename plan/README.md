@@ -139,8 +139,26 @@ resolves, and anything the implementer will otherwise rediscover the hard way.
   `src/zotero/itemMapper.ts`, `src/zotero/collectionOps.ts`,
   `src/zotero/prefStore.ts`, `src/zotero/keychain.ts`, `src/zotero/fulltext.ts`,
   `test/integration/l10n.spec.ts` and the two `mainWindow.ftl` bundles. Nothing
-  in a spike version of those files is load-bearing; nothing outside this list
-  may be `create`d twice.
+  outside this list may be `create`d twice.
+
+  **Corrected 2026-09-30: "nothing in a spike version of those files is
+  load-bearing" is false, and three cards hit it independently on one day.** A
+  spike file can have a **shipped importer that the replacing card's `Files` list
+  does not name**, and a literal replacement then breaks typecheck on a file that
+  card may not touch. Measured three times: `src/zotero/prefStore.ts` is imported
+  for eight symbols by `P0-T23`'s `test/integration/zotero/secrets.spec.ts`
+  (`P1-T03`); `src/zotero/itemMapper.ts` by `src/zotero/zoteroApi.ts` and two
+  integration specs (`P1-T12`); `src/zotero/zoteroApi.ts` by
+  `src/bootstrap/registerUI.ts` and another spec (`P1-T05`, while a fourth card
+  was rewriting that very file). All three reached the same judgement
+  independently and **extended rather than replaced**, keeping the spike surface
+  in a fenced section with the reason recorded.
+
+  **So the rule is: before replacing a listed path, grep for its importers. If an
+  importer is outside your `Files` list, extend the file and report it** — the
+  retirement of the spike surface is then its own card, as `P1-T24` is for
+  `itemMapper.ts`. The relaxation still means the later card owns the shipped
+  module; it does not license deleting an export something else still imports.
 - **Do NOT** — never empty for a task that touches an area where the design docs
   record a trap. This field is where 8 rounds of research review earn their keep.
 - **Done when** — mechanically checkable. "Summaries look good" is not a
