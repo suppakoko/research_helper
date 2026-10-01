@@ -2417,7 +2417,10 @@ and survive a source failure without losing the run.
 - create `src/pipeline/searchImport/searchImportPipeline.ts`
 - create `src/pipeline/searchImport/stages.ts`
 - create `src/pipeline/searchImport/types.ts`
-- create `src/bootstrap/container.ts`
+- modify `src/bootstrap/container.ts` (**was `create`; corrected 2026-10-01, `P1-T25`.** This card
+  **depends on** `P1-T25`, which `modify`s that path — so the card that `create`d it ran *after* the
+  card that modified it, and step 7 would have found a 717-line file where it expected to write one.
+  §4's one-`create`-per-phase rule was satisfied on paper while the ordering was inverted.)
 - create `src/bootstrap/registerPipelines.ts`
 - create `test/unit/pipeline/searchImport.test.ts`
 
@@ -2439,7 +2442,10 @@ and survive a source failure without losing the run.
 6. On cancel during `WritingItems`, keep what is written and append the partial
    note to the collection description; on cancel before `CreatingCollection`,
    create nothing.
-7. Build a tiny typed DI container in `src/bootstrap/container.ts` — enough to
+7. **Add the service locator to the object graph `P1-T25` already installed** in
+   `src/bootstrap/container.ts` — `installServices()` is the construction site and `ServiceGraph` is
+   what it returns; extend them rather than starting a container. ~~Build a tiny typed DI container
+   in `src/bootstrap/container.ts`~~ — enough to
    hand the pipeline its `PipelineContext` dependencies.
 
 **Do NOT.**
@@ -3494,6 +3500,104 @@ The `openOn` option decides §7.7-vs-§4.4 behaviour per pipeline — `searchImp
 `"completion"`. If this card finds it needs a path no `Files` list names, that is the same class of
 defect `P1-T15` reported, and it should be reported rather than absorbed.
 
+
+**Findings, 2026-10-01 — all four criteria pass, and two design consequences surfaced that neither
+this card nor `P1-T15` could have found without wiring it up.** `installServices()` in
+`src/bootstrap/container.ts` is the one construction site; `registerUI.ts` chooses the
+implementations; **15 tests**. typecheck, lint:check and the whole suite exit 0 — **787 unit tests**,
+up from 772. Verified independently: the constructors appear in `container.ts` and nowhere else.
+
+**§4's corrected rule applied, and it mattered for the fourth time.** Both paths are on the
+sixteen-path relaxation list. Grepped first: `container.ts` is imported by **`src/addon.ts`** and
+**`src/zotero/registrations.ts`**, and `registerUI.ts` by **`src/hooks.ts`** — **none of the three in
+this card's `Files`.** Both files were extended; every previously exported symbol is still exported
+and all three importers still resolve. The qualifying sentence added to §4 earlier the same day paid
+for itself immediately.
+
+**The double-install guard is the `Do NOT` made mechanical rather than remembered.** A second
+`installServices()` throws `ConfigurationError` **before mutating anything**, so the standing graph
+survives the attempt. That matters because two graphs means two rate limiters and a host paced at
+twice its documented rate — a silent correctness bug whose symptom is someone else's 429, not a
+local error.
+
+**Criterion 2 was asserted on an observation, not an assumption.** Two requests to
+`eutils.ncbi.nlm.nih.gov`: after a microtask flush the fake transport has **one** call, so the second
+caller is parked inside `TokenBucket.acquire` — *before the wire*, which is §7.4's step order. The
+manual clock then advances **one millisecond at a time** until the second call lands, and the
+transport records `clock.now()` itself: `calls[0].atMs === t0`, `calls[1].atMs === t0 + 400`, with 400
+**derived from the shipped §7.3 row** rather than restated, so a change to the policy table fails
+this loudly. A sibling asserts the deliberate opposite — an unregistered host has no limiter and both
+requests go straight through (`P1-T04` rule 4).
+
+**Criterion 3 was run five times, because the leak class it guards against is per-cycle.** Five
+construct/dispose cycles, each actually running a job so the popup is genuinely raised. After each
+`unregisterAll()`: `liveHandles()` empty, the fake store's observers 1 → **0**, the popup's `close()`
+called, `getHttpClient()` / `peekHostLimiters()` / `getPrefStore()` all `undefined` — **which is why
+the next cycle can construct at all**, since `installHostLimiters` refuses a second install — and
+zero teardown failures. A sibling asserts the teardown *order*: progress surfaces out first,
+`PrefStore` last. `P0-T33`'s leak was exactly this shape and invisible to a single cycle.
+
+**`observePref`'s handle became real, and it was not a cast.** Two shapes arrive and they are
+**semantic opposites**, both functions and both satisfying `object`: `createZoteroPrefStore()` returns
+a `ScopedRegistration` whose call **registers** the observer, while `createMemoryPrefStore()` returns
+the unsubscribe thunk, whose call **unregisters** it. So `typeof handle === "function"` cannot tell
+"register me" from "undo me", and **guessing wrong silently removes the observer just installed** —
+`ncbi.keyPresent` would stop raising the NCBI budget with nothing at all to see. They are
+discriminated on **arity**, the only property that separates them, and a non-callable handle throws
+rather than leaking. All three branches are asserted, including the live path end to end:
+`ncbi.keyPresent` → `notify` → `refresh()` → the bucket's rate rises to the with-key row, and stops
+responding after teardown. **The real fix is a discriminated return type on `PrefStore.observe` in
+`src/core/config.ts`, outside this card's `Files`** — §8.5.1's sketched `Symbol` remains unbuildable
+exactly as `P1-T03` measured, and the "refuses a handle it cannot bind" test is that measurement's
+regression guard.
+
+**An assertion this card wrote itself FAILED, and it was reported rather than weakened.**
+`CompositeProgressReporter.dispose()` **does not stop the reporter tree.** Verified in
+`src/core/jobQueue/progress.ts`: a node is inert when `this.finished || this.root.terminal ||
+this.parent?.inert`, and **`disposed` is not one of the three** — `root.terminal` is set only by
+`done()`. So a job that outlives the plugin still fans out. The two shipped sinks then **disagree**:
+`ZoteroProgressWindowSink` carries its own `disposed` guard, which is what criterion 3's "no window
+survives" actually rests on, while `createObservableProgressSink()` has none — its `dispose()` clears
+`latest` but does not **latch**, so the next `update()` repopulates a sink nothing can subscribe to.
+That is what made `expect(latest).toBeUndefined()` fail. The test now asserts the measured asymmetry
+and names it, in the pattern `tokenBucket.ts` used for `inFlight: 0`, so the gap is **visible in the
+suite** rather than rediscovered by `P1-T16`. **Needs a card.**
+
+**The consequence `P1-T16` will hit on its first second job: one app-scoped reporter can report
+exactly one job per plugin lifetime.** §4.1's `done()` is terminal, and this card's step 1 and `Do
+NOT` require one reporter constructed at the root — so `graph.progress` works for the first job and
+**silently ignores every later one**. A per-job tree over the root's sinks does not fix it either,
+because `reporter.dispose()` disposes the **shared** sinks, so the first job to finish would close the
+application's surfaces. The card's one reporter shipped, with both halves recorded on `ServiceGraph`
+rather than a factory invented (rule 2). **Needs a card**, and the same root cause makes `openOn`
+wrong from Phase 4: it is per-pipeline per this card's `Notes` but the reporter is per-application, so
+the `"completion"` default is correct only while `searchImport` is the only pipeline.
+
+**Two platform facades are missing and the log is lossy because of it.** `src/core/logger.ts`'s
+`LogSink.write(line, zoteroLevel)` is documented as passing the level straight to `Zotero.debug`'s
+second argument — and `zoteroApi.debug(message)` **takes no second argument**, so every line lands at
+Zotero's default level and Zotero-side filtering is dead. Worse, **`LogSink.reportError` has no
+implementation at all**, because `Zotero.logError()` has no facade in `src/zotero/` whatsoever, so an
+`error()` line never reaches the Mozilla error console or `Zotero.getErrors()` (`docs/07` §10.3). The
+lossy sink shipped rather than `NULL_LOG_SINK`, because lines at the wrong level beat no lines at all
+in a log users paste into bug reports; both losses are documented at the call site. **Needs a card.**
+Cosmetic, same area: `createLogger` prefixes `[research_helper]` and `zoteroApi.debug` prefixes
+`[research-helper]`, so every product line carries both — **differing by one character**, with only
+the second matching `config.addonRef`.
+
+**No Fluent id exists for the progress-window headline.** The sink requires an **already-localized**
+string (`getString()` throws on a plugin key per `docs/08` §8.2.1, and Fluent is async), and
+`src/i18n/keys.ts` declares no such id — the nearest three are argument-bearing status ids for the
+search dialog, not a popup headline. `config.addonName` ships, which is a brand name rather than a
+translatable sentence. **Needs a card**, and note the hard part is not the id: resolution is async and
+per-window while this graph is built app-scoped at startup.
+
+**Not run, and it matters here: `npm run test:integration`.** `test/integration/lifecycle.spec.ts`
+cycles disable/enable and asserts zero survivors, and that path now runs the whole service graph —
+including a **real** `Zotero.Prefs.registerObserver` and a real `Zotero.HTTP` read. The unit suite
+proves the cycle over fakes five times and proves the global holders are empty afterwards, but **the
+real `registerObserver`/`unregisterObserver` pair is unverified on the platform.** One manual
+disable/enable cycle on a running Zotero is owed before this card is approved.
 ---
 
 ### P1-T26 — Collapse the duplicate `Retry-After` parser and drive `reconfigure()` from live headers
