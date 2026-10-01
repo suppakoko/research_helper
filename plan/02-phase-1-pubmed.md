@@ -2228,7 +2228,7 @@ precursor.
 | **ID** | `P1-T15` |
 | **State** | `DONE` — approved 2026-09-30; 46 tests on a manual clock. §4.1's interface is implementable exactly as declared. Found §7.7's sketch does not compile, contradicts this card's architecture, and passes the argument `docs/08` §8.2 calls a live Zotero bug — while `zotero-types` contradicts §8.2 in turn. `P1-T29` owns the measurement. |
 | **Depends on** | `P1-T02` |
-| **Blocks** | `P1-T16`, `P1-T25`, `P1-T29` |
+| **Blocks** | `P1-T16`, `P1-T25`, `P1-T29`, `P1-T31` |
 | **Retires** | none |
 | **Implements** | `FR-53`, part of `NFR-3` |
 | **Estimate** | 0.5 d |
@@ -2379,7 +2379,7 @@ constructs any of it** — `P1-T25` owns that.
 |---|---|
 | **ID** | `P1-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T07`, `P1-T09`, `P1-T10`, `P1-T14`, `P1-T15`, `P1-T25` |
+| **Depends on** | `P1-T07`, `P1-T09`, `P1-T10`, `P1-T14`, `P1-T15`, `P1-T25`, `P1-T31` |
 | **Blocks** | `P1-T22`, `P2-T02` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-9`, `FR-10`, `FR-53`, part of `FR-3` |
@@ -3425,7 +3425,7 @@ to the two spike-only names, and the change recorded in `Findings` rather than m
 | **ID** | `P1-T25` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T04`, `P1-T05`, `P1-T15` |
-| **Blocks** | `P1-T16` |
+| **Blocks** | `P1-T16`, `P1-T31`, `P1-T32` |
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 1.0 d |
@@ -3930,6 +3930,211 @@ invisible blank label rather than a compile error.
 **Verify with.** `npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fail`
 
 ---
+### P1-T31 — Make a progress reporter usable for more than one job
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T31` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T15`, `P1-T25` |
+| **Blocks** | `P1-T16` |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+**Goal.** A second job reports progress. Today it does not, silently.
+
+**Why this is a card, and why it blocks `P1-T16`.** Two measured facts from 2026-10-01 (`P1-T25`),
+both verified against `src/core/jobQueue/progress.ts`:
+
+1. **One app-scoped reporter can report exactly one job per plugin lifetime.** §4.1's `done()` is
+   terminal — "further calls are ignored" — and `P1-T25` step 1 and its `Do NOT` require **one**
+   reporter constructed at the root. So `ServiceGraph.progress` works for the first job and **silently
+   ignores every later one.** The symptom is a progress bar that never moves on the second search,
+   with no error anywhere.
+2. **`dispose()` does not stop the reporter tree.** A node is inert when
+   `this.finished || this.root.terminal || this.parent?.inert` — and **`disposed` is not one of the
+   three**; `root.terminal` is set only by `done()`. So a job that outlives the plugin still fans out.
+
+And the obvious fix does not work: a per-job tree over the **root's** sinks cannot simply be newed up,
+because `reporter.dispose()` disposes the **shared** sinks — so the first job to finish would close
+the application's progress surfaces out from under every other job.
+
+**A third symptom with the same root cause.** `openOn` is **per-pipeline** (`P1-T25`'s `Notes`:
+`searchImport` passes `"completion"`, §7.7's `related` and `audioReport` want `"progress"`) while the
+reporter and its sinks are **per-application**. The `"completion"` default is correct only while
+`searchImport` is Phase 1's only pipeline, and stops being correct the moment Phase 4 or 6 lands.
+
+**Read first.**
+- `src/core/jobQueue/progress.ts` — `ProgressNode.inert`, `done()`'s `root.terminal = true`,
+  `CompositeProgressReporter.dispose()`, and `createObservableProgressSink()`. **Read why the two
+  shipped sinks disagree:** `ZoteroProgressWindowSink` carries its own `disposed` guard and
+  **`P1-T25`'s criterion 3 ("no window survives") actually rests on that guard**, while the
+  observable sink clears `latest` without latching, so the next `update()` repopulates a sink nothing
+  can subscribe to.
+- `src/bootstrap/container.ts`'s `installServices()` and `ServiceGraph.progress` — the construction
+  site, and the comment recording both halves of this problem.
+- `docs/07` §4.1 (`ProgressReporter`, and that it is **write-only** — no member reads state back and
+  none releases resources) and §4.5 (`JobProgressSnapshot`, `JobHandle.subscribe`).
+- `docs/08` §4.4 and `docs/07` §7.7 — the two popup behaviours `openOn` carries.
+
+**Files.**
+- modify `src/core/jobQueue/progress.ts`
+- modify `src/bootstrap/container.ts`
+- modify `test/unit/core/progress.test.ts`
+- modify `test/unit/bootstrap/container.test.ts`
+
+**Do.**
+1. Decide the shape and record the reasoning in the module header. Two honest options: a **factory**
+   on the graph (`graph.progress.forJob(label, { openOn })`) that builds a fresh tree over sinks it
+   does **not** own, with the application owning the sinks' lifetime; or **per-job sinks** built
+   alongside each tree, with the graph owning only the factory. **The first keeps one popup and one
+   observable stream for the whole plugin; the second lets two jobs report at once. Say which, and
+   why.**
+2. Make `dispose()` latch the tree — add disposal to the inert condition — so a job that outlives the
+   plugin stops fanning out.
+3. Give `createObservableProgressSink()` the latch `ZoteroProgressWindowSink` already has, so the two
+   sinks stop disagreeing. **`P1-T25`'s test asserts the current asymmetry by name; update that
+   assertion rather than deleting it**, so the fix is visibly the fix.
+4. Move `openOn` to the per-job call. Assert that two pipelines with different `openOn` values both
+   behave correctly in one plugin lifetime.
+5. Assert the thing that does not work today: **job 1 runs to `done("succeeded")`, then job 2 reports
+   and is observed.** That single assertion is this card.
+
+**Do NOT.**
+- Do not let a per-job reporter's `dispose()` close the application's shared surfaces. That is the
+  trap that makes the obvious fix wrong, and its symptom is the *first* job's completion killing every
+  later job's progress bar.
+- Do not widen §4.1's `ProgressReporter` interface. `P1-T15` measured it as implementable exactly as
+  declared; the factory and the lifetime belong **outside** it, as `snapshot` and `dispose()` already
+  do.
+- Do not construct a second set of sinks at the root. `P1-T25`'s double-install guard exists because
+  two graphs means two rate limiters.
+
+**Criteria.**
+- [ ] After job 1 reaches `done("succeeded")`, job 2 reports and its progress is observed — the
+      assertion that fails today.
+- [ ] Two concurrent jobs do not corrupt each other's counts or `currentStageKey`.
+- [ ] A disposed reporter's further calls reach **no** sink, and the observable sink's `latest` stays
+      cleared after disposal — the asymmetry `P1-T25` recorded is gone and its test says so.
+- [ ] The first job's completion does not close surfaces a second job is still using.
+- [ ] Two pipelines with different `openOn` values both behave correctly in one lifetime.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:unit -- progress container`
+
+**Notes.** §4.1's `child()` doc promises weights its signature does not carry and no card owns the
+weight-to-fraction conversion (recorded in §4.1 by `P1-T15`). If this card's factory makes that
+conversion's home obvious, say so — but **do not write it**; `P1-T16` step 2 is its natural owner.
+
+---
+### P1-T32 — The three platform seams the composition root could not reach
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T32` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T25` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | part of `NFR-16` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+**Goal.** An `error()` line reaches Zotero's error console, a log line carries its level, the progress
+popup has a localizable headline, and `PrefStore.observe`'s handle says what it is.
+
+**Why these are one card.** All four are the same shape — a seam `P1-T25` had to bind from inside its
+own two files because **no card's `Files` names the other side** — and each is small on its own.
+Measured 2026-10-01.
+
+**1. `LogSink.reportError` has no implementation at all.** `docs/07` §10.3 routes `error()` to
+`Zotero.logError()` so it reaches the Mozilla error console and `Zotero.getErrors()` — and
+**`Zotero.logError` has no facade in `src/zotero/` whatsoever**, so that path is dead. This is the one
+of the four with a user-visible cost: an error the user is asked to paste into a bug report is not
+there.
+
+**2. Every log line lands at Zotero's default level.** §10.3 documents `LogSink.write(line,
+zoteroLevel)` as passing the level "straight through as `Zotero.debug`'s second argument", and the
+only facade available, `zoteroApi.debug(message)`, **takes no second argument** — so Zotero-side level
+filtering is dead and `docs/08` §7.3's log-level control has nothing to act on. `P1-T25` shipped the
+lossy sink deliberately, because lines at the wrong level beat no lines in a pasted log, and
+documented both losses at the call site.
+
+**3. No Fluent id exists for the progress-window headline.** `ZoteroProgressWindowSink` requires an
+**already-localized** string — `Zotero.getString()` **throws** on a plugin key when the locale is
+`en-US` (`docs/08` §8.2.1), because a plugin's `.ftl` lives in `L10nRegistry` and not in that
+synchronous bundle — and `src/i18n/keys.ts` declares no headline id; the nearest three are
+argument-bearing status ids for the search dialog. `config.addonName` ships today, a brand name rather
+than a translatable sentence. **The hard part is not the id**: Fluent resolution is async and
+per-window, while the graph is built app-scoped at startup.
+
+**4. `PrefStore.observe`'s return type cannot be discriminated.** Two implementations return handles
+that are **semantic opposites** — the Zotero store's call **registers** the observer, the memory
+store's **unregisters** it — and both are functions satisfying `object`, so `typeof` cannot tell them
+apart. `P1-T25` discriminates on **arity**, the only property that separates them, because guessing
+wrong **silently removes the observer just installed** and `ncbi.keyPresent` would stop raising the
+NCBI budget with nothing to see. `docs/07` §8.5.1's sketched `Symbol` return remains unbuildable,
+exactly as `P1-T03` measured.
+
+**Read first.**
+- `src/core/logger.ts`'s `LogSink` and `NULL_LOG_SINK`, and `docs/07` §10.3's line shape and level
+  mapping.
+- `src/zotero/zoteroApi.ts`'s `debug` — and **`src/zotero/registrations.ts`**, because adding a facade
+  must not add a registration. `P0-T31` made a bare registration call a **lint error**.
+- `src/bootstrap/container.ts`'s `adoptPrefObserverHandle()` — the arity discrimination and the
+  "refuses a handle it cannot bind" test, which is `P1-T03`'s measurement's regression guard. **Keep
+  that test passing**; it should become redundant, not deleted.
+- `src/core/config.ts`'s `PrefStore` / `PrefObserverHandle`, and `src/i18n/keys.ts`'s surface id
+  tuples and argument map.
+- `docs/08` §10.1's placement rule as `P1-T18` recorded it: a string **JavaScript** formats and hands
+  to more than one surface lives in `mainWindow.ftl`.
+
+**Files.**
+- modify `src/zotero/zoteroApi.ts`
+- modify `src/core/config.ts`
+- modify `src/bootstrap/container.ts`
+- modify `src/i18n/keys.ts`
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl`
+- modify `addon/locale/ko-KR/research-helper-mainWindow.ftl`
+- modify `test/unit/bootstrap/container.test.ts`
+
+**Do.**
+1. Give `zoteroApi.debug` the level argument §10.3 requires, and add a `logError` facade. Then build
+   the real `LogSink` and assert both channels — **including that an `error()` line reaches
+   `reportError`**, which is the half with no implementation today.
+2. Make `PrefStore.observe`'s return a **discriminated** type, so the composition root binds it by
+   tag rather than by arity. Keep `adoptPrefObserverHandle`'s refusal path.
+3. Add one `mainWindow` headline id and its `en-US` string. **Add the `ko-KR` entry to
+   `KO_PENDING_REVIEW` and leave it as a commented stub** — gate `G-41` owns the translation and
+   machine translation is forbidden.
+4. Resolve it where resolution is possible. If an app-scoped startup cannot await Fluent, **say so and
+   pass a resolver rather than a string** — do not fall back to a brand name silently, which is what
+   today's code does with a comment.
+5. Fix the double prefix while in the area: `createLogger` emits `[research_helper]` and
+   `zoteroApi.debug` emits `[research-helper]`, so every product line carries **both, differing by one
+   character**, and only the second matches `config.addonRef`.
+
+**Do NOT.**
+- Do not machine-translate the Korean headline (`G-41`, and `P1-T18`'s discipline: a plausible wrong
+  translation is worse than a visible gap).
+- Do not call a Zotero registration API outside `src/zotero/registrations.ts`.
+- Do not widen `zoteroApi.ts` beyond these two facades. It is on §4's sixteen-path list and
+  `P1-T05`/`P1-T25` both **extended** it rather than replacing it; keep doing that, and grep for
+  importers first (`plan/README.md` §4, corrected 2026-09-30).
+
+**Criteria.**
+- [ ] An `error()` call reaches `Zotero.logError`, asserted through the facade with a fake.
+- [ ] A `debug()` line carries its mapped Zotero level, asserted on the second argument.
+- [ ] `PrefStore.observe`'s handle is discriminated by tag; the composition root no longer inspects
+      arity, and the refusal test still passes.
+- [ ] The headline resolves from Fluent in `en-US`, and `ko-KR` falls back to English with the id on
+      the `G-41` review list.
+- [ ] A product log line carries **one** prefix.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:unit -- container logger`
+
+---
 ## 7. Estimate roll-up
 
 | Task | Title | Est. (d) | Human gate |
@@ -3964,14 +4169,16 @@ invisible blank label rather than a compile error.
 | `P1-T28` | Settle §7.3's retry numbers | 0.25 | **Yes** |
 | `P1-T29` | Verify the `ProgressWindow` signatures against a running Zotero | 0.25 | — |
 | `P1-T30` | Turn on `fluent.dts`; one source of truth for message ids | 0.25 | — |
-| | **Total** | **21.75 d** | **4 gates** |
+| `P1-T31` | Make a progress reporter usable for more than one job | 0.50 | — |
+| `P1-T32` | The three platform seams the composition root could not reach | 0.50 | — |
+| | **Total** | **22.75 d** | **4 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 
 | | Days |
 |---|---|
-| `docs/11` §1, Phase 1 estimate, **current** | **21.75–30** |
-| Task sum here | **21.75** |
+| `docs/11` §1, Phase 1 estimate, **current** | **22.75–32** |
+| Task sum here | **22.75** |
 | Divergence against the bottom of the band | **0 %** |
 | (`docs/11`'s *previous* figure, for the record) | 9–12 |
 
