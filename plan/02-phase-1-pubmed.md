@@ -2219,6 +2219,108 @@ it" against a real 200-item import. Record the measured numbers in the spec so
 `docs/07` can be updated with a verified value; spike `V-12` is the Phase 0
 precursor.
 
+**Findings, 2026-10-01 — all seven criteria pass, and criterion 6 was unfalsifiable as written.**
+`src/zotero/importer.ts` (~760 lines), `collectionOps.ts` **extended**, and 11 integration tests
+against a real Zotero 10.0.3. The suite is at **51 passed, 0 failed**; typecheck, lint:check and the
+unit suite (**787**) all exit 0.
+
+**§4's corrected rule landed for the fourth time in three days, and it was needed.** `collectionOps.ts`
+is on the sixteen-path list and this card's row says `create`. Grepping first found **two importers,
+neither in this card's `Files`**: `src/zotero/zoteroApi.ts` (`findOrCreateCollection`) and
+`test/integration/zotero/batchImport.spec.ts` (`saveNewItemsToCollection`, `BatchSaveResult`). So the
+file was **extended** — every `P0-T10`/`P0-T20` export keeps its name, signature and behaviour,
+verified: `findOrCreateCollection`, `BatchSaveResult` and `saveNewItemsToCollection` are all still
+exported, with `addExistingItemsToCollection` added beside them. `findOrCreateCollection` gained an
+**optional trailing** `parentID?`, so omitting it reproduces the spike's top-level lookup
+byte-for-byte, and `batchImport.spec.ts` still passes with `P0-T20`'s numbers intact.
+
+**§7.2's chunk-size marker is closed with a number: ship 50.** Four sizes over a real 200-item import,
+each with its own stall monitor — 25 costs **47 % more for nothing**; 50, 100 and 200 are within noise
+of each other, so above 50 buys ≤ 5 % and costs **chunk granularity**, the slowest chunk going
+261 → 418 → 892 ms. That granularity is the resolution of cancellation and of any future progress
+tick, not of NFR-3 — **and NFR-3 is not the constraint at any size**, because no gap exceeded 100 ms
+even at 200-in-one-transaction. The table is now in §7.2; its **notifier-suppression half stays open**,
+and suppression was deliberately not implemented: `P0-T20` measured that Zotero already queues a
+transaction's notifier events and delivers them once post-commit at 60–100 ms, **which is `R-16`'s
+mitigation already in force**, so suppression would buy an unverified risk for nothing measurable.
+
+**Slower per item than `P0-T20` and the breakdown says why, so it is not a regression.** 100 items in
+**588 ms** (5.9 ms/item) against the spike's 293–425 ms (2.9–4.3), decomposed as index 4 + mapping 20
++ write 560. The shipped path adds the dedup pass, `toZoteroMapping`'s ~16 fields plus `extra`, tags,
+`accessDate` and `libraryCatalog` against the spike's four, and ran against a **150× larger library**
+(302 items vs 2). The chunkSize-200 sweep — `P0-T20`'s exact shape at twice the scale — lands at
+**4.53 ms/record**, so a richer item costs ~1–1.5 ms/item more than the spike's. Coherent with
+`P1-T13`'s ~1.26 ms/item for `setField`-only bulk inserts, and **insertion still does not degrade with
+library size**: the sweep ran as the library grew past 1,200 items with no upward trend.
+
+**Criterion 6 was unfalsifiable as written and was not adjusted.** It asks that the UI be interactive
+during a 200-item import, "**manual observation noted in the spec comments**" — a comment cannot fail,
+and nobody watches the window during a runner run. **Sibling assertions** now state mechanically what
+interactive means: the main window's event loop ran **≥ 10 times** (observed **107**) and no single gap
+exceeded half the import's duration (longest **35 ms** of 847). The NFR-3 figure itself is **recorded
+per chunk size rather than asserted**, matching `P0-T20`'s equivalent criterion, because the measured
+number also contains Windows' ~16 ms timer resolution and Zotero's own post-commit refresh — which
+`P0-T20` measured alone at 60–100 ms. Every observed figure is well inside budget, so the choice hides
+nothing.
+
+**A limit on `P1-T13`'s search-counting technique, found by this card's own test failing.** Patching
+`Zotero.Search.prototype.search` around a window that **writes** does not count only the plugin's
+searches: **Zotero runs searches of its own while delivering a transaction's notifier events.**
+Measured: 3 commits + 1 index build → **4** calls; 1 commit + 1 index build → **2**; 1 commit and **no**
+index build → also **2**. The surplus is not a clean function of commit count. A first draft asserted
+`searches === 1`, then `searches <= 1 + transactions` — which held three times and failed on the
+fourth. **`libraryIndex.spec.ts` is unaffected**, because it counts around a pure index build with no
+write in the window. The card's actual property is now asserted the way it *is* falsifiable:
+`stats.indexSearchCount` for the plugin's half, plus a test proving the observed total is **identical
+for 2 and for 20 candidates** (2 and 2). Worth recording in `docs/13` §2.1 as a constraint on the
+technique.
+
+**A trap for `P2-T09`, found by this card's own fixture generator being wrong.** It namespaced only
+DOIs and reused one PMID range across batches, so **100 of 200 "fresh" records were linked instead of
+created.** The reasoning that failed was "DOI precedence means a fresh DOI makes the record new" —
+**DOI precedence decides *which* match wins, not *whether* there is one**, so a record whose DOI misses
+falls through to the PMID arm. In production that is a **silent under-import**. Recorded in the spec
+header.
+
+**Fixtures are cleaned up rather than gated, and that is better than `P1-T13`'s pref for this size.**
+Both specs erase every item and collection they wrote in `after()` — ~940 items in ~2 s, verified in
+the log. The fixture does not outlive the spec at all, so **no later spec can be perturbed whatever
+order the runner enumerates `test/integration` in**, and the criteria still run on every ordinary run
+instead of only when a pref is set by hand. `P1-T13` could not do this because 9,685 erases cost more
+than the measurement they would protect. A failed erase is reported through `debug()` and swallowed, so
+cleanup can never turn a green run red.
+
+**Design choices worth keeping.** Everything decidable outside a transaction is: dedup resolution,
+`toZoteroMapping()`, and `new Zotero.Item()` + `fromJSON()`. `buildLibraryIndex()` runs **once per
+run** before any transaction, `findExisting` stays synchronous, and `"import-anyway"` builds no index
+at all because nothing would read it. `DuplicatePolicy` is a **parameter, not a pref**, because
+`docs/07` §8.5 declares no row for it. `strict` is caller-supplied rather than a read of `__env__`,
+which `P0-T20` found the scaffold's test bundler does not define. `failed[]` entries carry §10.1's
+**redacted** `SerializedError`, and a non-`ResearchHelperError` throw is wrapped so `failed[]` has one
+shape and `docs/08` §8.3 has a `messageKey` to map. **No HTTP is reachable from the module at all.**
+
+**The import summary line was not emitted, by design.** The importer returns counters, not a string,
+because `docs/08` §10.3 forbids concatenating translated fragments — and the four counters are
+**name-for-name** the four arguments of `P1-T18`'s shipped
+`research-helper-import-summary`, with `abstractCoverage.percent` filling
+`research-helper-import-abstract-coverage`'s `$percent`. So the one spelling `P1-T18` chose out of the
+corpus's four is followed **by construction rather than by a second string.**
+
+**Reported, not absorbed.** The card's `ImportReport` shape **cannot express `docs/08` §4.4's own
+`skip` policy** — a dropped record would vanish from the report, and `P1-T18`'s message has a
+`$skipped` argument with nothing to fill it; `skipped` was added as a **sibling** field, never removing
+or renaming one of the four, and the shape needs blessing. `FR-53`'s cancel message wants "the count of
+items already imported" and `OperationCancelledError` carries no counts, so the token checkpoint is
+implemented and **the count question left open** rather than a shape invented.
+`toZoteroMapping`'s `overflowNote` is produced and dropped — writing the child note is a second item
+per record that this card's `Files`, counters and criteria do not cover. And only **one** intra-request
+dedup rule shipped (same `workKey` → skip); two *different* work keys sharing a DOI is cross-source
+identity and belongs to `P2-T09`, not to a second rule beside `LibraryIndex`'s.
+
+**`matchedOn` was not widened** — still `"doi" | "pmid"`. `docs/02` §11.6's "persistent dismissed list"
+advice did **not** reach the importer, and a trashed duplicate provably does not block an import.
+`useTranslators` is never read and `Zotero.Translate` is never imported.
+
 ---
 
 ### P1-T15 — `ProgressReporter` and its Zotero surfaces

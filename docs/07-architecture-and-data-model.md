@@ -2115,7 +2115,35 @@ Job-level concurrency is separate: at most **one** `interactive` job and **two**
 
 **Zotero write batching.** Item creation is chunked into transactions of ~50 items. Between chunks the worker yields (`await Zotero.Promise.delay(0)`) so the UI stays responsive, and `Zotero.Notifier` events are allowed to flush. For large imports the plugin wraps the whole operation in a notifier "disable/enable" window where safe, and re-enables in a `finally`.
 
-> **Unverified:** the exact optimal transaction chunk size and whether `Zotero.Notifier` suppression is safe for bulk plugin writes in Zotero 10 should be measured against a real 200-item import before shipping. Start at 50 and instrument it.
+> **Chunk size: MEASURED 2026-10-01 (`P1-T14`), this half of the marker is closed. Ship 50.**
+> Instrumented over a real 200-item import on Zotero 10.0.3, four sizes, each with its own stall
+> monitor:
+>
+> | chunkSize | txns | total ms | ms/item | slowest chunk ms | longest stall ms | gaps > 100 ms |
+> |---|---|---|---|---|---|---|
+> | 25 | 8 | 1244 | 6.22 | 330 | 36 | 0 |
+> | **50** | 4 | 847 | **4.24** | 261 | 35 | 0 |
+> | 100 | 2 | 804 | 4.02 | 418 | 44 | 0 |
+> | 200 | 1 | 906 | 4.53 | 892 | 58 | 0 |
+>
+> 25 costs **47 % more for nothing**. 50, 100 and 200 are within noise of each other, so going above
+> 50 buys ≤ 5 % and costs **chunk granularity**: the slowest *chunk* goes 261 → 418 → 892 ms, which is
+> the resolution of cancellation and of any future progress tick. **NFR-3 is not the constraint at any
+> size** — no gap exceeded 100 ms even at 200-in-one-transaction, because, as `P0-T20` measured, the
+> transaction yields between `save()`s rather than blocking for its duration.
+>
+> **Note that atomicity is therefore per chunk, not per run.** `FR-6` sanctions it — items are created
+> "inside a single Zotero transaction **per batch**" — and chunking is what makes a batch smaller than
+> a run, so a failure in chunk 3 leaves chunks 1–2 committed. `P0-T20`'s all-or-nothing shape is
+> recoverable by passing `chunkSize >= works.length`. The two requirements read as if they agree and
+> only just do.
+>
+> **Unverified:** whether `Zotero.Notifier` suppression is safe for bulk plugin writes in Zotero 10.
+> **This half stays open, and `P1-T14` deliberately did not implement it:** `P0-T20` measured that
+> Zotero **already** queues a transaction's notifier events and delivers them once post-commit — which
+> *is* `R-16`'s "defer collection-tree updates" — at 60–100 ms, **inside** NFR-1's budget. So the
+> mitigation is already in force, and suppression would buy an unverified risk for nothing measurable.
+> Measure it only if a future workload shows the post-commit refresh becoming the bottleneck.
 
 ### 7.3 Per-host token-bucket rate limiters
 

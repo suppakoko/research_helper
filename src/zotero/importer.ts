@@ -265,7 +265,13 @@ export interface ImportStats {
   readonly elapsedMs: number;
   /** Index build time, 0 when an index was supplied or none was needed. */
   readonly indexMs: number;
-  /** `Zotero.Search` calls the index build made. One, or zero. */
+  /**
+   * `Zotero.Search` calls **this call** made while building the index: one, or
+   * zero when an index was supplied or none was needed.
+   *
+   * Deliberately not the supplied index's own `stats.searchCount`, which is a
+   * fact about whoever built it rather than about this import.
+   */
   readonly indexSearchCount: number;
   /** True when {@link ImportRequest.index} was supplied. */
   readonly indexReused: boolean;
@@ -350,6 +356,10 @@ export async function importWorks(
   );
   const strict = request.strict ?? false;
   const yieldToUi = request.yieldToUi ?? defaultYield;
+
+  // An already-cancelled token must not write anything at all — the first of
+  // `docs/07` §7.4's check points is "before starting work".
+  request.token?.throwIfCancelled();
 
   // `docs/01` §5.2.1: `fromJSON()` reads the schema, and §5.3: `getID()` throws
   // `UnloadedDataException` before it is loaded. Awaited **once**, before the
@@ -550,7 +560,8 @@ export async function importWorks(
       transactions,
       elapsedMs: clock.now() - startedAt,
       indexMs,
-      indexSearchCount: index?.stats.searchCount ?? 0,
+      indexSearchCount:
+        request.index !== undefined ? 0 : (index?.stats.searchCount ?? 0),
       indexReused: request.index !== undefined,
       mappingMs,
       writeMs,

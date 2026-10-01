@@ -21,6 +21,28 @@
  * `LibraryIndex.stats.searchCount` — the same technique, and the same reason,
  * as `test/integration/zotero/libraryIndex.spec.ts`.
  *
+ * > **Measured, and it changes how that technique may be used.** Patching the
+ * > prototype around a window that *writes* does not count only the plugin's
+ * > searches: **Zotero runs searches of its own while delivering a
+ * > transaction's notifier events**, and the surplus tracks the number of
+ * > committed transactions, not the number of candidates. Measured: a 6-record
+ * > import at `chunkSize` 2 — one index build, three commits — at **4**
+ * > `search()` calls; a one-chunk import with an index build at **2**; a
+ * > one-chunk import with **no** index build also at **2**. So the surplus is
+ * > not a clean function of the commit count either, and **no formula over it
+ * > is asserted anywhere in this file** — a first draft asserted
+ * > `searches <= 1 + transactions`, which held three times and then failed on
+ * > the fourth case. `libraryIndex.spec.ts` is unaffected, because it counts
+ * > around a pure index build with no write in the window.
+ * >
+ * > The card's real property — "one search for the whole run, not one per
+ * > candidate" — is therefore asserted the way it is actually falsifiable:
+ * > `stats.indexSearchCount` for the plugin's own half, and **the observed
+ * > total does not change when the candidate count changes tenfold** (see
+ * > "costs the same number of searches…" below). Everywhere else the observed
+ * > total is printed and not asserted, because it is a fact about Zotero's item
+ * > tree rather than about this card.
+ *
  * **Fixtures are erased in `after()`, not gated behind a pref.** `P1-T13`'s
  * 10,000-item test had to be made opt-in because its fixture outlived it and
  * would silently change what every later spec measured; it could not simply
@@ -278,12 +300,10 @@ describe("Batched importer (P1-T14, FR-6, FR-7, FR-51)", function () {
       "fromJSON() kept every abstract it was given, so no backfill was needed",
     );
 
-    // The dedup pass is one search for the whole run (`docs/02` §11.6).
-    assert.strictEqual(
-      searches,
-      1,
-      "one Zotero.Search for the whole import, not one per candidate",
-    );
+    // The dedup pass is one search for the whole run (`docs/02` §11.6). Only
+    // the plugin's own half is asserted; `searches` is recorded above, because
+    // the surplus is Zotero's own post-commit work — see the file header, and
+    // the scaling test for the falsifiable form of the property.
     assert.strictEqual(report.stats.indexSearchCount, 1);
     assert.isFalse(report.stats.indexReused);
 
@@ -313,6 +333,62 @@ describe("Batched importer (P1-T14, FR-6, FR-7, FR-51)", function () {
         `item ${String(itemID)} DOI is bare`,
       );
     }
+  });
+
+  it("costs the same number of searches for 2 candidates as for 20 (docs/02 §11.6)", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    await Zotero.Schema.schemaUpdatePromise;
+
+    // The falsifiable form of "one search for the whole run, not one per
+    // candidate". An absolute count cannot express it, because Zotero itself
+    // searches while delivering a commit's notifier events (file header); a
+    // *constant* count across a 10× change in candidates can, and it is also
+    // the shape of the defect the card forbids — the per-candidate alternative
+    // `P1-T13` measured at ≥ 400 searches for one run.
+    //
+    // `chunkSize` is above both counts, so each run commits the same number of
+    // transactions and Zotero's own contribution is held fixed.
+    const small = await countingSearches(async () =>
+      runImport({
+        works: [makeWork("scale-s1"), makeWork("scale-s2")],
+        collectionName: collectionName("scale-2"),
+        chunkSize: 100,
+      }),
+    );
+    const large = await countingSearches(async () =>
+      runImport({
+        works: Array.from({ length: 20 }, (_, i) =>
+          makeWork(`scale-l${String(i)}`),
+        ),
+        collectionName: collectionName("scale-20"),
+        chunkSize: 100,
+      }),
+    );
+
+    debug(
+      `${LOG_PREFIX} search scaling: 2 candidates -> ` +
+        `${String(small.searches)} observed search() calls ` +
+        `(${String(small.value.stats.transactions)} transactions, index ` +
+        `${String(small.value.stats.indexSearchCount)}); 20 candidates -> ` +
+        `${String(large.searches)} observed ` +
+        `(${String(large.value.stats.transactions)} transactions, index ` +
+        `${String(large.value.stats.indexSearchCount)})`,
+    );
+
+    assert.strictEqual(small.value.created, 2);
+    assert.strictEqual(large.value.created, 20);
+    assert.strictEqual(
+      small.value.stats.transactions,
+      large.value.stats.transactions,
+      "both runs commit the same number of transactions",
+    );
+    assert.strictEqual(
+      large.searches,
+      small.searches,
+      "ten times the candidates costs exactly the same number of searches",
+    );
+    assert.strictEqual(small.value.stats.indexSearchCount, 1);
+    assert.strictEqual(large.value.stats.indexSearchCount, 1);
   });
 
   it("counts a record whose mapping throws in failed[] without aborting the batch or the remaining batches", async function () {
@@ -425,9 +501,9 @@ describe("Batched importer (P1-T14, FR-6, FR-7, FR-51)", function () {
       "DOI takes precedence; the PMID-only record matched on pmid",
     );
     assert.strictEqual(
-      searches,
+      second.stats.indexSearchCount,
       1,
-      "one search for the whole run, not one per candidate",
+      "one index build for the whole run, not one search per candidate",
     );
     assert.strictEqual(
       second.collection.getChildItems(true).length,
@@ -581,12 +657,15 @@ describe("Batched importer (P1-T14, FR-6, FR-7, FR-51)", function () {
       1,
       "import-anyway creates a second item",
     );
+    // The plugin issues no search at all here. `searches` is recorded below and
+    // is non-zero regardless, because Zotero searches on its own after a commit
+    // (file header) — which is why only the plugin's own count is asserted.
     assert.strictEqual(
-      searches,
+      anyway.stats.indexSearchCount,
       0,
-      "and consults no index, because nothing would read it",
+      "import-anyway consults no index, because nothing would read it",
     );
-    assert.strictEqual(anyway.stats.indexSearchCount, 0);
+    assert.strictEqual(anyway.stats.indexMs, 0);
 
     // A workKey repeated inside one request is skipped: `docs/07` §5.1 makes it
     // the primary key, so two entries carrying one is the same record twice.
@@ -619,7 +698,11 @@ describe("Batched importer (P1-T14, FR-6, FR-7, FR-51)", function () {
       }),
     );
 
-    assert.strictEqual(searches, 0, "the supplied index is not rebuilt");
+    assert.strictEqual(
+      report.stats.indexSearchCount,
+      0,
+      "the supplied index is not rebuilt",
+    );
     assert.isTrue(report.stats.indexReused);
     assert.strictEqual(report.stats.indexMs, 0);
     assert.strictEqual(report.created, 2);
