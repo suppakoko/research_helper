@@ -3360,10 +3360,17 @@ back into `docs/07` in the same change. Human gate details go in
 gone, and everything that imported them uses the shipped mapper instead.
 
 **Why this is a card and not part of `P1-T12`.** `P1-T12`'s `Files` list says
-`create src/zotero/itemMapper.ts`, which reads as "replace the spike". It cannot: **three files
-import the spike exports and none of them is in `P1-T12`'s `Files`** — verified 2026-09-30 —
-`src/zotero/zoteroApi.ts` (line 36), `test/integration/zotero/itemCreation.spec.ts` (line 33) and
-`test/integration/zotero/batchImport.spec.ts` (line 55). Deleting the surface there would have
+`create src/zotero/itemMapper.ts`, which reads as "replace the spike". It cannot: **two files import
+the spike exports and neither is in `P1-T12`'s `Files`** — `src/zotero/zoteroApi.ts` and
+`test/integration/zotero/batchImport.spec.ts`.
+
+**Corrected 2026-10-01, and the error was the coordinator's.** This block originally said *three*
+importers and named `test/integration/zotero/itemCreation.spec.ts` as the third. That file imports
+`AUTOMATIC_TAG_TYPE` and `RESEARCH_HELPER_TAG` from `itemMapper.ts` — both **shipped** constants
+declared in its §1, not spike exports. The claim came from `P1-T12`'s report and was written into
+this card **without being checked against the file**, which is precisely the thing every card prompt
+asks agents not to do. Two importers is still enough to make the point: `P1-T12` could not do the
+retirement, and the card stands. Deleting the surface there would have
 broken code that card does not own, so `P1-T12` kept it verbatim in a fenced section and reported
 the gap under `plan/README.md` §5 rule 2. **The consequence of leaving it is not neutral:** the
 spike mapper ships inside the XPI to every user, and two expressions of the same mapping coexist in
@@ -3405,7 +3412,13 @@ one file, which is exactly the drift `P0-T33` and `P0-T34` were about.
 - Do not touch `src/zotero/collectionOps.ts` or the batch-insert path itself; only the mapping call.
 
 **Criteria.**
-- [ ] `grep -r 'buildJournalArticle\|JournalArticleRecord' src test` returns nothing.
+- [ ] No **import or identifier reference** to `buildJournalArticle`, `JournalArticleRecord`,
+      `ArticleCreator` or `toSpikeCreatorJSON` survives in `src` or `test`. **Doc-comment prose that
+      records what was retired does not count** — corrected 2026-10-01, because a card whose job is
+      to retire a *named* surface cannot record what it retired without naming it, which made the
+      original wording unsatisfiable by construction. `src/zotero/collectionOps.ts`'s `@param` doc
+      also names `buildJournalArticle()` and that file is **not** in this card's `Files`, so the
+      original criterion was not satisfiable by this card at all.
 - [ ] Both integration specs pass against a real Zotero, with their timings recorded and `P0-T20`'s
       ≤ 10 s / no-stall-over-100 ms assertions still asserted, not relaxed.
 - [ ] The packed XPI contains none of the four spike identifiers.
@@ -3413,15 +3426,108 @@ one file, which is exactly the drift `P0-T33` and `P0-T34` were about.
 
 **Verify with.**
 ```bash
-grep -rn 'buildJournalArticle\|JournalArticleRecord\|RESEARCH_HELPER_TAG\|AUTOMATIC_TAG_TYPE' src test \
-  && echo 'FAIL: spike surface still referenced' || echo 'OK: spike surface gone'
+# Corrected 2026-10-01: the original grepped all four names, two of which (RESEARCH_HELPER_TAG,
+# AUTOMATIC_TAG_TYPE) are SHIPPED constants that must survive — so it could never pass. It also
+# counted doc-comment prose. This greps the four spike-only names and excludes comment lines.
+grep -rn 'buildJournalArticle\|JournalArticleRecord\|ArticleCreator\|toSpikeCreatorJSON' src test \
+  | grep -vE ':[0-9]+: \*|:[0-9]+://' \
+  && echo 'FAIL: spike surface still referenced in code' || echo 'OK: spike surface gone from code'
 ```
 
-**Notes.** `RESEARCH_HELPER_TAG` and `AUTOMATIC_TAG_TYPE` may deserve to survive as shared constants
-rather than being deleted — the shipped mapper needs both. If so, move them to where the shipped
-code declares them and delete only the spike's copies; the criterion's grep should then be narrowed
-to the two spike-only names, and the change recorded in `Findings` rather than made silently.
+**Notes.** `RESEARCH_HELPER_TAG` and `AUTOMATIC_TAG_TYPE` **survive, and there is nothing to move.**
 
+**Corrected 2026-10-01.** This note used to say to "move them to where the shipped code declares them
+and delete only the spike's copies". **There were no spike copies.** Both are declared exactly once,
+in `itemMapper.ts`'s §1 — the shipped half — at lines 103 and 110 of the pre-retirement file, while
+the spike section began at line 630 and *imported* them from there. The shipped `tagsFor()` needs
+both. So: delete nothing, move nothing, rename nothing. They are additionally imported by
+`test/integration/zotero/itemMapper.spec.ts` and `test/unit/zotero/itemMapper.test.ts`, outside this
+card's `Files`, so deletion was never available either.
+
+The criterion's grep is narrowed accordingly — see criterion 1.
+
+
+**Findings, 2026-10-01 — two of four criteria pass as written, two were unsatisfiable because this
+card's own text was wrong, and the errors were mine.** The spike section is deleted;
+`src/zotero/itemMapper.ts` went 729 → 636 lines and now contains one mapper. typecheck, lint:check
+and the whole unit suite exit 0 (**787 tests**), and the integration suite is at **38 passed** — up
+from 33 only because `P1-T29` added five concurrently; **every pass line present before this change is
+still present under the same name, and there is nothing to attribute.**
+
+**The retirement itself.** `SPIKE_RECORD: JournalArticleRecord` became `SPIKE_WORK: CanonicalWork`
+with the same four values in §5.1's shape, the DOI through `normalizeDoi()` so it is a real `Doi`, and
+`provenance.seenIn` **empty on purpose** — that record came from no literature source, so no
+`SourceId` honestly belongs there, which is why no `rh-sources` line and no `libraryCatalog` are
+written. `newItemFromMapping()` now owns the `new Zotero.Item()` / `fromJSON(json, { strict })` block,
+and the separate `addTag()` call is gone: `toZoteroMapping()` already puts `research_helper` at
+`AUTOMATIC_TAG_TYPE` into the JSON, so it is **one write instead of two**.
+
+**`P0-T20`'s timings did not move, and the card's own brief misread one number.** Three runs before
+and three after, on Zotero 10.0.3: totals 458/391/361 before, 400/364/384 after; mapping 17/16/17 →
+19/17/15; longest stall 79 → 78 ms; **gaps over 100 ms: none, in every run**; one DB transaction
+throughout. The after-medians sit inside `P0-T20`'s recorded 293–425 ms band. The mapping step costs
+about **+0.02 ms/item** for doing the whole of §6.2's table instead of four fields — at or below this
+harness's noise floor. `NFR1_CEILING_MS`, `NFR1_TARGET_MS`, `NFR3_TASK_MS`, `CI_MULTIPLIER`,
+`ITEM_COUNT`, `RUNS` and the `isAtMost` loop are **byte-identical** to before.
+
+**The 7,379 ms figure quoted in the card brief is not the insert.** The insert is 336–462 ms; the
+~7.25 s is the spec deliberately spending `3 × (1000 + 1000) = 6 s` sampling the stall monitor idle
+and post-commit, plus three ~0.4 s writes and `Zotero.Items.getAll()` setup. Measured wall was
+**7,311 ms before** this change and **7,254 ms after** — slightly faster. Recorded because the brief
+invited a regression reading and the agent checked the spec instead of accepting it.
+
+**`P0-T20`'s band is from a different Zotero, and the pre-change baseline already exceeded it.** Its
+Findings record 293–425 ms, median 324, stall 77 ms on **10.0.2**. This machine runs **10.0.3**, and
+the *untouched spike mapper* measured 361–458, median 391, stall 79 — **the top of the band and the
+stall maximum were already past before this card touched anything.** Worth knowing so the next card
+does not read these after-numbers as a regression this change introduced.
+
+**Criterion 3 passes as the `Notes` narrow it, and the method matters more than the result.** The
+packed XPI (49,558 B, 16 entries) was read by walking the zip central directory **and inflating each
+entry**, because a raw `latin1` regex over the archive bytes **cannot see a string inside a deflated
+entry** and every code entry here is method 8 — it would have reported "clean" for a file that was
+present. Eight needles were scanned, not four: the two spike-only exports, the two tag constants,
+plus `ArticleCreator`, `toSpikeCreatorJSON` and the spike's own creator literals, which would survive
+a merely renamed export. **Six of eight absent, including all four spike-only ones**; the two hits are
+the shipped constants that must ship. With a positive control on the same inflated bundle proving the
+scanner can see what is there: `createSpikeArticle` true, `toZoteroItemJSON` true,
+`newItemFromMapping` true, `rh-work-key` true, `buildJournalArticle` **false**.
+
+**Four errors in this card's text, all the coordinator's, all now corrected above.** (1) The "Why
+this is a card" block said **three** importers and named `itemCreation.spec.ts` as the third; that
+file imports `AUTOMATIC_TAG_TYPE` and `RESEARCH_HELPER_TAG` — **shipped** constants from §1 — and the
+claim came from `P1-T12`'s report and was written into the card **without being checked against the
+file.** Verified: the two constants sit at lines 103 and 110, the spike section began at 630. (2) The
+`Notes` told the card to "delete only the spike's copies" of those constants; **there were no copies**
+— the spike imported them from §1. (3) Criterion 1 and (4) the `Verify with` both grepped all four
+names, **two of which must ship**, so neither could ever pass; and both counted doc-comment prose,
+which a card whose job is to retire a *named* surface cannot avoid producing. One of the surviving
+prose hits is in `src/zotero/collectionOps.ts`, **outside this card's `Files`**, so the original
+criterion was not satisfiable by this card at all.
+
+**An assertion in `batchImport.spec.ts` was narrowed rather than weakened, and it is flagged against
+the card's own `Do NOT`.** The spec asserted `item.getField("extra") === ""`, true **only** because
+`P0-T10`'s mapper wrote no `extra`. The shipped mapper **cannot** produce an empty `extra` — §6.3
+makes `rh-work-key` mandatory and first. So "each call site needs a minimal fixture rather than a
+renamed import" was not sufficient; one call site needed an assertion change. There are now **two**
+assertions where there was one: `readWorkKey(extra)` equals the item's own `workKey`, **and** `extra`
+equals `"rh-work-key: <workKey>"` exactly. That is strictly stronger against the shipped mapper than
+`=== ""` was: it still fails on any stray line, and it additionally pins each item's `extra` to *its
+own* key rather than merely to emptiness, with a guard so neither can pass on `undefined === undefined`.
+
+**Also found: `P0-T34`'s own `Verify with` was wrong twice and was never the command its Findings
+used.** It globbed `build/*.xpi` — **there is no `build/`** — and used the `latin1` method that cannot
+see into a deflated entry. Corrected in that card, because the next reader would have run it, seen
+"clean", and believed it.
+
+**Reported, not absorbed.** `src/zotero/collectionOps.ts`'s `@param` still documents
+`saveNewItemsToCollection`'s argument as "e.g. from `buildJournalArticle()`", a dangling reference to
+a function that no longer exists — that file is `P1-T14`'s, in flight. `newItemFromMapping()` sits in
+`zoteroApi.ts` only because this card's `Files` allowed nowhere else; **`src/zotero/importer.ts`
+(`P1-T14`) is its long-term home.** And `logFieldSupport()` still feature-detects only the spike's
+three fields while the shipped mapper writes the whole of §6.2's table through the same `fromJSON`;
+purely diagnostic, so left alone, but a schema bump moving `accessDate` would now produce a less
+useful log line than it should.
 ---
 
 ### P1-T25 — Composition root: construct the HTTP client, limiters and progress reporter
@@ -3849,6 +3955,10 @@ neither icon setter. Nothing has been run against a real window.
 - create `test/integration/zotero/progressWindow.spec.ts`
 - modify `src/zotero/progressWindow.ts`
 - modify `docs/01-zotero-plugin-platform.md`
+- modify `docs/07-architecture-and-data-model.md` (**added 2026-10-01.** This card's `Retires` field
+  and criterion 3 both require editing §7.7's `> **Unverified:**` marker, and `Files` named only the
+  three paths above — so the card could not satisfy its own `Retires` field. The coordinator's
+  omission, the fifth of its kind today.)
 
 **Do.**
 1. Open a real popup, add a line, set 45 %, set an error, close it. Assert no throw.
@@ -3873,6 +3983,83 @@ neither icon setter. Nothing has been run against a real window.
 — and **check the test count, not just the exit code**: this runner has been seen to exit 0 after
 running nothing.
 
+
+**Findings, 2026-10-01 — all five criteria pass, and the three-way disagreement is settled
+decisively: `docs/08` §8.2 is right on every disputed point and `zotero-types@4.1.3` is wrong on
+every one.** Five integration tests against Zotero **10.0.3** (BuildID `20260917164924`, Gecko
+140.15.0); the suite went 33 → **38 passed**, 0 failing. typecheck, lint:check and the unit suite
+(**787**) all exit 0. **The wrapper needed no code change** — only its comments were stale.
+
+**Measured twice, two independent ways that agree.** Reflectively inside a running Zotero (own and
+prototype property names, `typeof` per member, live parameter lists), **and** by extracting
+`chrome/content/zotero/xpcom/progressWindow.js` from the installed `omni.ja` and reading it. I
+re-extracted it here to check the headline myself: line 349 is
+`ItemProgress.prototype.setItemTypeAndIcon = _deferUntilWindowLoad(function (itemType, cssIcon =
+'item-type')` — **the first parameter is literally named `itemType`** — and there is no `setIcon`
+anywhere in the file.
+
+**`setIcon` does not exist at all.** Absent from `ItemProgress.prototype`'s own property names,
+`typeof` is `"undefined"`, and calling it would be a `TypeError`. §8.2's "there is **no
+`setIcon()`**" is literally correct, and `zotero-types` declares a method that is not there.
+
+**What a path first argument actually does, which is worse than throwing.** Both shapes take the
+same path: the constructor does `if (itemType) this.setItemTypeAndIcon(itemType)`, which writes the
+argument **verbatim** into `data-item-type` and sets one fixed class. So `'journalArticle'` resolves
+to `…/item-type/16/light/journal-article.svg` while a `chrome://…png` path resolves to the generic
+`…/document.svg` — **nothing throws, nothing is logged, and the popup looks plausible with the wrong
+icon.** That is exactly the live Zotero bug §8.2 names, and it is why the typings' `iconSrc` naming
+is *dangerous* rather than merely inaccurate: it makes the wrong call compile and the resulting
+defect invisible.
+
+**A caveat that will mislead the next probe, now in the record.** Every member except `show`,
+`close` and `startCloseTimer` is wrapped in the file's private `_deferUntilWindowLoad(fn)`, which
+returns `function () { … arguments … }`. So `changeHeadline`, `addLines`, `addDescription`, the
+`ItemProgress` constructor and **all four** prototype methods reflect as **arity 0 with an empty
+parameter list**. **A probe that trusts reflection here measures the wrapper, not the method.**
+
+**`startCloseTimer` before `show()` — confirmed behaviourally and then refined.**
+`startCloseTimer(1500)` before `show()` left the popup open 4,500 ms later; the same call after
+`show()` closed it. The guard is `if (_windowLoaded || _windowLoading)` and **`show()` sets
+`_windowLoading = true` synchronously**, so the real condition is "`show()` has been *called*" — the
+window need not have finished loading. `ZoteroProgressWindowSink.paint()` already orders it that way,
+so **the sink's ordering is now verified rather than assumed.**
+
+**§7.7's `Unverified` marker retired, and one genuinely open question filed separately rather than
+buried in the retirement.** Every member the marker named is measured. But the source read surfaced a
+new question — §7.7's `alwaysontop` caveat may not apply to a popup with a parent window, because in
+10.0.3 `alwaysontop=yes` is on the **windowless** `nsIWindowWatcher.openWindow` branch only while the
+`options.window` branch opens `"chrome,dialog=no,titlebar=no,dependent=yes"`. That is source-read,
+not observed, and the complaint §7.7 cites is macOS — so it is recorded as its own narrow
+`> **Unverified:**` in `docs/01` §10.2.1 with the caveat and its prescription explicitly **still
+standing**. Retiring a marker by moving its unanswered part somewhere visible is the right shape; one
+loose end was not swept up with the rest.
+
+**Three defects filed against `zotero-types@4.1.3`, and which declarations do match.** `iconSrc`
+should be `itemType`; `setIcon` is declared but does not exist; `setItemTypeAndIcon` is missing
+entirely; and `Translation` is declared on `ItemProgress` instead of on the progress-window instance.
+Two extras also recorded: `show()` returns `false` if already shown, and **`close()` before `show()`
+swallows a `TypeError` into `Zotero.logError()`**, so it logs spuriously.
+
+**A latent sharp edge the sink's option surface can reach, reported not guarded.** `setProgress(100)`
+assigns `_image.className = this._iconClassName`, and `_iconClassName` is set **only** by
+`setItemTypeAndIcon` — which the constructor skips on a **falsy** first argument (verified: line 291
+is `if (itemType)`, line 337 assigns `_iconClassName`, line 351 is the only place it is set). So an
+empty-string item type — **exactly what §7.7's sketch passed** — makes a later `setProgress(100)`
+write the literal class `"undefined"`. `ZoteroProgressWindowSinkOptions.itemType` is caller-supplied
+and uses `??`, so `""` passes straight through. Not live today, and guarding it would widen the
+wrapper, so it was left alone. **Worth a one-line card.**
+
+**Nothing broken was left behind**, which matters for a card that opens real windows: teardown logged
+`0 progress window(s) left open` and no `zotero.exe` survived the run.
+
+**Two more things reported rather than absorbed.** The project's recorded Zotero version is a patch
+stale — `.env`'s comment and anything in `docs/` pinning **10.0.1** is behind the installed
+**10.0.3 / 20260917164924**; `docs/13` §1.6 is the natural owner of a sweep. And `Zotero.locale` in
+the dev profile is **`ko-KR`**, so `docs/08` §8.2.1's `getString()`-throws condition
+(`Zotero.locale === 'en-US'`) **is not exercised locally by default** — the adjacent `Unverified`
+about whether `Zotero.ftl.addResourceIds` makes plugin FTL keys reachable from `getString()` is still
+open with no card against it, and `l10n.spec.ts` already has the locale-switching machinery that
+would settle it.
 ---
 
 ### P1-T30 — Turn on `fluent.dts` and make one source of truth for message ids

@@ -110,9 +110,34 @@ export default defineConfig({
       // every `l10nID` in `src/` name.
       prefixLocaleFiles: false,
       prefixFluentMessages: false,
-      // Off until the first .ftl file lands (P0-T24 owns localization).
+      // P1-T30, 2026-10-01: ON. `src/i18n/keys.ts` re-exports the union this
+      // writes, so `typings/i10n.d.ts` is the SOURCE OF TRUTH for the message
+      // vocabulary and the hand-written per-surface lists are a compiler-checked
+      // partition of it. Measured on 84 messages across the two Phase 1 bundles
+      // (25 mainWindow + 59 searchDialog): the generated union has exactly those
+      // 84 members, and turning this on changed nothing about the built .ftl
+      // files — all four stayed byte-identical to `addon/locale/**`, as P0-T32
+      // requires (`dts` only writes the typings file).
       //
-      // scaffold 0.9.2 bug, found 2026-09-10: with zero .ftl files it still
+      // Two properties of the generator that `keys.ts` is written around:
+      //
+      // - It is the union over ALL LOCALES, not over `en-US`. `buildLocale()`
+      //   feeds every locale's messages into one `MessageManager` and
+      //   `getFTLMessages()` flattens them, so a typo in `ko-KR` WIDENS the
+      //   union. `keys.ts`'s `UndeclaredBundleMessageId` is what catches that.
+      // - It carries no surface information at all, for the same reason, so it
+      //   cannot express "this id belongs to searchDialog.ftl and must not also
+      //   be in mainWindow.ftl" — the silent collision docs/01 §9.3 warns about.
+      //   That is upstream issue #125, "Generate i10n key types based on file"
+      //   (open as of 2026-10-01), and it is why the per-surface lists stay.
+      //
+      // The file is COMMITTED, like typings/prefs.d.ts. `npm run build` is
+      // `tsc --noEmit && zotero-plugin build`, so the typecheck that consumes
+      // the union runs before the step that writes it: a bundle edit is caught
+      // by the typecheck AFTER the next build, never during it.
+      //
+      // scaffold 0.9.2 bug, found 2026-09-10 and RE-MEASURED 2026-10-01 against
+      // the installed 0.9.2 — still present: with zero .ftl files it still
       // writes typings/i10n.d.ts, and the file it writes is
       //     export type FluentMessageId =
       //     ;
@@ -120,9 +145,26 @@ export default defineConfig({
       // carries `// @ts-nocheck`, but that suppresses semantic errors only —
       // a parse error still fails `tsc --noEmit`. So a fresh clone that runs
       // `npm run build` before `npm run typecheck` breaks its own typecheck.
-      // Turn this back on in P0-T24, when there are messages to put in the
-      // union, and file the bug upstream.
-      dts: false,
+      // `buildLocale()` calls `generateFluentDts()` whenever `dts` is set, with
+      // no guard on the message count; the one-line fix upstream is to skip the
+      // write, or emit `export type FluentMessageId = never;`, when the set is
+      // empty.
+      //
+      // TODO(P1-T30): file this upstream at
+      // https://github.com/northword/zotero-plugin-scaffold/issues and replace
+      // this TODO with the issue link. P1-T30 could not file it: no `gh` on the
+      // machine, and opening a public issue on someone else's repository is not
+      // an agent's call. A search of that tracker on 2026-10-01 found no
+      // existing report (the Fluent issues open there are #140, #125 and #70).
+      // What to file: title "fluent.dts writes a syntactically invalid
+      // d.ts when there are no .ftl files"; body = the five-line generated file
+      // above, the `tsc --noEmit` output `error TS1110: Type expected`, the note
+      // that `@ts-nocheck` does not suppress a parse error, the reproduction
+      // (any project with `build.fluent.dts` set and no `.ftl` under
+      // `addon/locale/`, e.g. before the first bundle lands), and the
+      // `generateFluentDts()` / `buildLocale()` lines in
+      // `dist/shared/scaffold-src-*.mjs`.
+      dts: "typings/i10n.d.ts",
     },
     prefs: {
       prefixPrefKeys: true,

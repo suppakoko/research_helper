@@ -21,6 +21,17 @@
  * 1. **The vocabulary.** `src/i18n/keys.ts` against itself and against the two
  *    prefixes `docs/01` §9.3 and `docs/07` §10.1 disagree about (§"prefix
  *    conflict" below). No platform involved.
+ *
+ *    **`P1-T30` moved most of this layer into the compiler.** `FluentMessageId`
+ *    is now re-exported from `typings/i10n.d.ts`, which the scaffold generates
+ *    from the built bundles, so "an id in `keys.ts` that no bundle declares"
+ *    and "an id in a bundle that `keys.ts` assigns to no surface" are both
+ *    `tsc` errors rather than things a spec could discover. What is left here
+ *    is what a type cannot say: that the derivation is still in place
+ *    ({@link UnionIsGenerated}, which fails to *compile* if `keys.ts` goes back
+ *    to a hand-written union), that the surface partition is a partition, and
+ *    that the hand-written argument map — the one part of `keys.ts` the
+ *    generator does not produce — names only real messages.
  * 2. **Registration, per file per locale.** Zotero's `registerLocales()`
  *    (`plugins.js`) contributes one file per Zotero locale to the shared
  *    `zotero-plugins` source, picking exact → same language → `en-US` → first
@@ -102,6 +113,7 @@ import {
   type FluentFormatter,
 } from "../../src/i18n/ftl";
 import {
+  ARGUMENT_MESSAGE_IDS,
   DEFERRED_ERROR_MESSAGE_IDS,
   ERROR_MESSAGE_IDS,
   ERROR_MESSAGE_PREFIX,
@@ -113,12 +125,15 @@ import {
   MESSAGE_PREFIX,
   SEARCH_DIALOG_MESSAGE_IDS,
   SHIPPED_SURFACES,
+  surfaceOfMessage,
+  type FluentMessageId,
   type ShippedSurface,
 } from "../../src/i18n/keys";
 import {
   L10N_MENU_ROOT,
   L10N_MENU_SPIKE_CREATE_ITEM,
 } from "../../src/ui/menus/toolsMenu";
+import type { FluentMessageId as GeneratedMessageId } from "../../typings/i10n";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -137,6 +152,32 @@ declare const assert: {
 };
 /** The scaffold runner's `window.debug`: POSTs one line to the terminal. */
 declare function debug(line: string): void;
+
+/* --------------------------------------- P1-T30: the derivation, as a type */
+
+/** `true` only when `A` and `B` are the same type, in both directions. */
+type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+
+/**
+ * `P1-T30`'s single source of truth, asserted where it can be asserted: in the
+ * compiler.
+ *
+ * `src/i18n/keys.ts` must not merely *agree* with `typings/i10n.d.ts`, it must
+ * **be** it. If someone replaces the re-export with a hand-written union again
+ * — which is the two-sources-of-truth state this card removed — this alias
+ * stops being `true` and `npm run typecheck` fails here, in the spec that
+ * covers the vocabulary, naming the reason.
+ *
+ * Mutual assignability rather than identity, because a narrowing of the
+ * generated union would be a legitimate shape for `keys.ts` to take and would
+ * still be a single source of truth — but it would have to be an *equal*
+ * narrowing, since every message the bundles ship is a message some surface
+ * must declare.
+ */
+type UnionIsGenerated = Exact<FluentMessageId, GeneratedMessageId>;
+
+/** The witness that instantiates {@link UnionIsGenerated}. */
+const UNION_IS_GENERATED: UnionIsGenerated = true;
 
 const LOG_PREFIX = "[P1-T18]";
 const PLUGIN_L10N_SOURCE = "zotero-plugins";
@@ -553,6 +594,62 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
     ]);
   });
 
+  it("derives its id union from the generated one, and keeps the argument map inside it", async function () {
+    // P1-T30. The two halves of "one source of truth":
+    //
+    // 1. `keys.ts`'s `FluentMessageId` IS `typings/i10n.d.ts`'s. That is a
+    //    compile-time fact, and `UNION_IS_GENERATED` above is where it is
+    //    stated; reading it here is what keeps the constant from being dead
+    //    code a cleanup would delete, and makes the claim appear in the
+    //    runner's output next to the rest of layer 1.
+    // 2. The hand-written per-surface lists are a *partition* of that union.
+    //    `satisfies readonly FluentMessageId[]` in `keys.ts` gives one
+    //    inclusion, `UndeclaredBundleMessageId` the other, and the
+    //    no-duplicate assertion in the test above makes the two surfaces
+    //    disjoint. All three are compile-time or pure; what this block adds is
+    //    the one thing neither expresses, that `surfaceOfMessage()` — the
+    //    runtime side of the partition — answers for every declared id.
+    assert.isTrue(
+      UNION_IS_GENERATED,
+      "keys.ts's FluentMessageId is typings/i10n.d.ts's generated union " +
+        "(P1-T30); if this file stopped compiling, keys.ts restated the union",
+    );
+    const all: readonly FluentMessageId[] = [
+      ...MAIN_WINDOW_MESSAGE_IDS,
+      ...SEARCH_DIALOG_MESSAGE_IDS,
+    ];
+    const unassigned = all.filter((id) => surfaceOfMessage(id) === undefined);
+    log(`ids with no surface per surfaceOfMessage(): ${unassigned.length}`);
+    assert.deepEqual(
+      unassigned,
+      [],
+      "every declared id is assigned to a surface at runtime too",
+    );
+
+    // The argument map is the one part of keys.ts the generator does not and
+    // cannot produce (it reads ids, never placeables), so it stays hand-written
+    // — and therefore stays checked. Its keys being real message ids is a
+    // compile error now (`UndeclaredArgumentMessageId`); this is the
+    // enumerable half.
+    log(
+      `argument map: ${ARGUMENT_MESSAGE_IDS.length} of ${all.length} messages ` +
+        `take arguments`,
+    );
+    assert.strictEqual(
+      new Set<string>(ARGUMENT_MESSAGE_IDS).size,
+      ARGUMENT_MESSAGE_IDS.length,
+      "no id is listed twice in ARGUMENT_MESSAGE_IDS",
+    );
+    const argsWithoutSurface = ARGUMENT_MESSAGE_IDS.filter(
+      (id) => surfaceOfMessage(id) === undefined,
+    );
+    assert.deepEqual(
+      argsWithoutSurface,
+      [],
+      "every message with arguments is declared by a surface",
+    );
+  });
+
   /* -------------------------------- layer 2: registration, per file per locale */
 
   it("registers both bundles in Zotero's shared plugin source, for en-US and ko-KR", async function () {
@@ -611,6 +708,38 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       );
       assert.deepEqual(leaked, [], `${surface}'s ids are not also in ${other}`);
     }
+  });
+
+  it("gives every message in the argument map a real message in its own surface's en-US bundle", async function () {
+    // P1-T30 step 3: "keep the test that asserts every id in [the argument
+    // map] exists in a bundle". There was none to keep — P1-T18 shipped the
+    // map with no check at all, and an `interface` accepts any string key — so
+    // this is it. The compile-time half is `UndeclaredArgumentMessageId` in
+    // keys.ts; this is the live read, and it is not redundant with the
+    // declared-ids test above: it checks the map against the *bundle of the
+    // surface keys.ts assigns the id to*, which is what a caller's
+    // `formatMessage` will actually resolve against.
+    const missing: string[] = [];
+    for (const surface of SHIPPED_SURFACES) {
+      const bundle = await bundleFor(surface, "en-US");
+      if (!bundle) {
+        assert.fail(`no en-US bundle for ${surface}`);
+      }
+      const mine = ARGUMENT_MESSAGE_IDS.filter(
+        (id) => surfaceOfMessage(id) === surface,
+      );
+      const absent = mine.filter((id) => !bundle.hasMessage(id));
+      log(
+        `argument map ∩ ${fluentResourceId(surface)}: ${mine.length} ids, ` +
+          `${absent.length} absent ${JSON.stringify(absent)}`,
+      );
+      missing.push(...absent);
+    }
+    assert.deepEqual(
+      missing,
+      [],
+      "every id in FluentMessageArgsMap has a message in its surface's en-US bundle",
+    );
   });
 
   it("resolves every declared id from a Localization pinned to en-US", async function () {

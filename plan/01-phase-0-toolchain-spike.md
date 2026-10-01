@@ -4676,7 +4676,16 @@ defect is in the **rule**, not in the one file: the same glob ships anything els
 
 **Verify with.**
 ```bash
-npm run build && node -e "const fs=require('fs');const b=fs.readFileSync(require('glob').sync('build/*.xpi')[0]);console.log([...b.toString('latin1').matchAll(/[\w./-]+\.md/g)].map(m=>m[0]))"
+# Corrected 2026-10-01 (found by `P1-T24`). The original was wrong twice and was never the command
+# this card's Findings actually used. (a) It globbed `build/*.xpi`; **there is no `build/`** — the
+# packed artifact is `.scaffold/build/research-helper.xpi`. (b) A `latin1` regex over the raw
+# archive bytes **cannot see a string inside a deflated entry**, and every code entry in this XPI is
+# stored with method 8, so it would have reported "clean" for a file that was present. The
+# measurement in the Findings below walked the zip central directory and **inflated each entry
+# first**; that is the method, and this command now points at it.
+npm run build && node <scratch>/xpi.cjs .scaffold/build/research-helper.xpi
+# — lists every entry with its size and SHA-256 and ends in
+#   "RESULT: OK — no markdown in XPI" or "RESULT: FAIL — markdown in XPI: <paths>".
 ```
 
 **Notes.** `unzip` may not be on PATH on this Windows machine; PowerShell's `Expand-Archive`, or a

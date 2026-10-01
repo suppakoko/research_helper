@@ -18,28 +18,38 @@
  * and nothing about progress arithmetic. The sketch's body is reproduced
  * faithfully; only its interface changed.
  *
- * ## The signatures are wrapped on purpose
+ * ## The signatures are wrapped on purpose, and are now measured
  *
- * `docs/07` §7.7 marks the `ProgressWindow` / `ItemProgress` signatures
- * **unverified against Zotero 10** and `P1-T15`'s **Do NOT** says to "wrap the
- * calls so a signature change is one edit". {@link ProgressWindowHandle} and
- * {@link ProgressWindowLine} are that wrapper: every platform call this plugin
- * makes to the popup is inside {@link openZoteroProgressWindow}, and the sink
- * above it only ever touches those two interfaces.
+ * `P1-T15`'s **Do NOT** said to "wrap the calls so a signature change is one
+ * edit". {@link ProgressWindowHandle} and {@link ProgressWindowLine} are that
+ * wrapper: every platform call this plugin makes to the popup is inside
+ * {@link openZoteroProgressWindow}, and the sink above it only ever touches
+ * those two interfaces.
  *
- * Wrapping is not theoretical here — **three descriptions of this API disagree,
+ * Wrapping was not theoretical — **three descriptions of this API disagreed,
  * and two of them are in the repository:**
  *
- * | | second ctor arg of `ItemProgress` | icon setter |
+ * | | first ctor arg of `ItemProgress` | icon setter |
  * |---|---|---|
- * | `docs/08` §8.2 (read from `progressWindow.js`) | *first* arg is an **item type** string | `setItemTypeAndIcon`; "there is **no `setIcon()`**" |
- * | `zotero-types@4.1.3` (`types/xpcom/progressWindow.d.ts`) | first arg is `iconSrc` | `setIcon(iconSrc)`, and no `setItemTypeAndIcon` |
+ * | `docs/08` §8.2 (read from `progressWindow.js`) | an **item type** string | `setItemTypeAndIcon`; "there is **no `setIcon()`**" |
+ * | `zotero-types@4.1.3` (`types/xpcom/progressWindow.d.ts`) | `iconSrc` | `setIcon(iconSrc)`, and no `setItemTypeAndIcon` |
  * | `docs/07` §7.7's sketch | an empty string, commented "iconURI" | — |
  *
- * `docs/08` §8.2 is the one that was read from source, so the value passed is an
- * item-type string. Neither icon setter is called at all, which is the cheapest
- * way to be right: the ctor argument already sets the icon, and the disagreement
- * is confined to the one `new` expression below.
+ * **`P1-T29` measured it on 2026-10-01 against a running Zotero 10.0.3 and
+ * `docs/08` §8.2 is right on every point** (`test/integration/zotero/progressWindow.spec.ts`;
+ * the record is `docs/01` §10.2.1, and `docs/07` §7.7's `Unverified` marker is
+ * retired). The first argument is an item type: the constructor's parameter
+ * list is `(itemType, text, parentItemProgress)` and its body forwards it to
+ * `setItemTypeAndIcon(itemType)`, which writes it verbatim into the icon
+ * element's `data-item-type`. `setIcon` **does not exist** — calling it is a
+ * `TypeError` — and `setItemTypeAndIcon(itemType, cssIcon = 'item-type')`
+ * does. A path passed in that position throws nothing and renders the generic
+ * `document` icon instead of the right one, which is why the typings' name is
+ * dangerous rather than merely inaccurate.
+ *
+ * So `addLine()` below passes an item-type string, and neither icon setter is
+ * called at all: the ctor argument already sets the icon. The code did not have
+ * to change when the measurement came in — the wrapper is what made that true.
  *
  * ## Two things this must not do
  *
@@ -86,11 +96,17 @@ export interface ProgressWindowHandle {
   show(): void;
   /** `docs/08` §8.2: the second argument is a **CSS icon key**, not a URL. */
   changeHeadline(text: string, cssIconKey?: string, postText?: string): void;
-  /** One line. `docs/08` §8.2: the first argument is an **item type** string. */
+  /**
+   * One line. The first argument is an **item type** string — measured, not
+   * assumed (`P1-T29`, `docs/01` §10.2.1).
+   */
   addLine(itemType: string, text: string): ProgressWindowLine;
   /**
-   * `docs/08` §8.2: a **no-op if called before `show()`**, so every caller here
-   * shows first. Default in Zotero is 2500 ms.
+   * A **no-op if called before `show()`** — confirmed by `P1-T29` against
+   * Zotero 10.0.3, so every caller here shows first. The guard is
+   * `_windowLoaded || _windowLoading` and `show()` sets `_windowLoading`
+   * synchronously, so *`show()` having been called* is enough; the window does
+   * not have to finish loading. Default in Zotero is 2500 ms.
    */
   startCloseTimer(ms: number): void;
   close(): void;
@@ -127,9 +143,10 @@ export function openZoteroProgressWindow(win?: Window): ProgressWindowHandle {
     },
     addLine(itemType: string, text: string): ProgressWindowLine {
       // `ItemProgress` is constructed off the *instance*, not off `Zotero`
-      // (`docs/08` §8.2). `zotero-types@4.1.3` names this parameter `iconSrc`;
-      // `docs/08` §8.2, read from `progressWindow.js`, says it is an item type.
-      // The types agree on `string`, so the disagreement costs no cast.
+      // (`docs/08` §8.2). `zotero-types@4.1.3` names this parameter `iconSrc`
+      // and is wrong: `P1-T29` measured it as an item type in Zotero 10.0.3
+      // (`docs/01` §10.2.1). The two types agree on `string`, so being right
+      // costs no cast.
       return new pw.ItemProgress(itemType, text);
     },
     startCloseTimer(ms: number): void {

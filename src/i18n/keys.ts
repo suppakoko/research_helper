@@ -1,6 +1,6 @@
 /**
  * Every Fluent message id Phase 1 ships, as types and as enumerable lists
- * (`P1-T18`).
+ * (`P1-T18`, reconciled against the generated union by `P1-T30`).
  *
  * `src/i18n/ftl.ts` is the *lookup*; this file is the *vocabulary*. Splitting
  * them this way is what makes the id set something a test can walk: the four
@@ -9,11 +9,50 @@
  * bundles against a list — which is `test/integration/l10n.spec.ts`, using the
  * arrays below.
  *
+ * ## The bundles are the source of truth, not this file (`P1-T30`)
+ *
+ * {@link FluentMessageId} is **re-exported from `typings/i10n.d.ts`**, which
+ * `zotero-plugin-scaffold` generates from the built `.ftl` files
+ * (`zotero-plugin.config.ts`, `build.fluent.dts`). Until `P1-T30` turned that
+ * switch on, this file's hand-written union and the generated one were two
+ * descriptions of one vocabulary and a bundle edit that forgot this file was an
+ * invisible blank label rather than a compile error.
+ *
+ * What the generator *cannot* produce is kept by hand here, and there are
+ * exactly three such things:
+ *
+ * 1. **Which surface declares an id.** `buildLocale()` unions the messages of
+ *    every `.ftl` of every locale into one flat set, so the generated union
+ *    cannot say that `research-helper-search-close` belongs to
+ *    `searchDialog.ftl` and must *not* also be in `mainWindow.ftl` — a
+ *    collision `docs/01` §9.3 calls worse than an error because it is silent.
+ *    {@link MAIN_WINDOW_MESSAGE_IDS} and {@link SEARCH_DIALOG_MESSAGE_IDS} are
+ *    therefore still written out, but they are now a **partition** of the
+ *    generated union rather than a second union: each `satisfies readonly
+ *    FluentMessageId[]`, so an id dropped from a bundle stops compiling here,
+ *    and {@link UndeclaredBundleMessageId} fails the other way round, so an id
+ *    added to a bundle and not assigned a surface stops compiling too. The two
+ *    together make the sets provably equal.
+ * 2. **The per-message argument map.** {@link FluentMessageArgsMap}. The
+ *    generator reads ids, never placeables.
+ * 3. **The decisions**, which are not vocabulary at all:
+ *    {@link KO_PENDING_REVIEW}, {@link KO_DELIBERATELY_ABSENT},
+ *    {@link KO_PRESENT} and {@link DEFERRED_ERROR_MESSAGE_IDS}. A generator can
+ *    only report what the bundles contain; it cannot record that one id must
+ *    stay missing from `ko-KR` forever.
+ *
+ * The generated file is committed, for the same reason `typings/prefs.d.ts` is:
+ * `npm run build` is `tsc --noEmit && zotero-plugin build`, so the typecheck
+ * that consumes the union runs *before* the step that writes it. A bundle edit
+ * is therefore caught by the typecheck **after** the next build, not during it.
+ *
  * ## Why this file is a leaf
  *
- * It imports nothing, including `./ftl`. `ftl.ts` imports *from here*, so the
- * dependency runs one way and the id lists stay readable from a test, a view
- * model or a source adapter without dragging in the `Localization` shapes.
+ * Its only import is the generated union, which is type-only and erased: no
+ * runtime dependency, and in particular not `./ftl`. `ftl.ts` imports *from
+ * here*, so the dependency runs one way and the id lists stay readable from a
+ * test, a view model or a source adapter without dragging in the
+ * `Localization` shapes.
  *
  * ## Two prefixes, and why
  *
@@ -42,6 +81,33 @@
  * here are for `src/i18n/ftl.ts` and for `data-l10n-id` attributes, nothing
  * else.
  */
+
+import type { FluentMessageId as GeneratedMessageId } from "../../typings/i10n";
+
+/* --------------------------------------------------- the generated union */
+
+/**
+ * Every message id the built bundles actually declare — **generated**, not
+ * written.
+ *
+ * `typings/i10n.d.ts` is `zotero-plugin-scaffold`'s `generateFluentDts()`
+ * output over every `.ftl` under `.scaffold/build/addon/locale/`, re-exported
+ * here under the name the rest of `src/` imports. It is the union of the messages
+ * of *every* locale, not of `en-US` alone — so a typo in `ko-KR` widens it, and
+ * {@link UndeclaredBundleMessageId} is what catches that.
+ *
+ * Re-exported rather than restated so that this file cannot drift from the
+ * bundles: `P1-T30`'s whole point is that there is one union and the compiler
+ * owns it.
+ */
+export type FluentMessageId = GeneratedMessageId;
+
+/**
+ * A type-level assertion that `T` is empty. Instantiating it with anything
+ * else is a `TS2344` naming the offending members, which is how the two
+ * drift checks below report.
+ */
+type AssertNever<T extends never> = T;
 
 /* ------------------------------------------------------------------ prefixes */
 
@@ -85,6 +151,10 @@ export type ShippedSurface = (typeof SHIPPED_SURFACES)[number];
  * surface (`docs/08` §10.1, and that bundle's header for the third case).
  *
  * Order matches the file, so a reviewer can read the two side by side.
+ *
+ * `satisfies readonly FluentMessageId[]` is load-bearing: it is what makes a
+ * message deleted from a bundle, without this list being touched, a **compile
+ * error** rather than a blank label (`P1-T30`).
  */
 export const MAIN_WINDOW_MESSAGE_IDS = [
   // Menus (docs/08 §2.4, §2.5). The FTL entry must set `.label`: MenuData has
@@ -122,7 +192,7 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "rh-error-zotero",
   "rh-error-storage",
   "rh-error-cancelled",
-] as const;
+] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
 
@@ -164,6 +234,9 @@ export const L10N_MENU_COLLECTION_SEARCH_IMPORT =
  * §4.6, §8.4).
  *
  * Order matches the file and the order a user meets the controls.
+ *
+ * `satisfies readonly FluentMessageId[]`, for the reason
+ * {@link MAIN_WINDOW_MESSAGE_IDS} gives.
  */
 export const SEARCH_DIALOG_MESSAGE_IDS = [
   "research-helper-search-window-title",
@@ -255,12 +328,33 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   // NFR-14's details disclosure for raw upstream text.
   "research-helper-search-details-show",
   "research-helper-search-details-hide",
-] as const;
+] as const satisfies readonly FluentMessageId[];
 
 export type SearchDialogMessageId = (typeof SEARCH_DIALOG_MESSAGE_IDS)[number];
 
-/** Every message id Phase 1 ships, in either bundle. */
-export type FluentMessageId = MainWindowMessageId | SearchDialogMessageId;
+/**
+ * Every message id this file assigns to a surface.
+ *
+ * Equal in extent to {@link FluentMessageId} — the two `satisfies` clauses
+ * above give one inclusion and {@link UndeclaredBundleMessageId} the other —
+ * but *not* the same type: this one carries the surface partition, which the
+ * generator cannot express.
+ */
+export type DeclaredMessageId = MainWindowMessageId | SearchDialogMessageId;
+
+/**
+ * The ids the bundles declare that this file assigns to no surface. **Must be
+ * empty**, and a `TS2344` here names the ids that were added to an `.ftl` and
+ * never given a surface.
+ *
+ * This is the second half of `P1-T30`'s single source of truth. Without it the
+ * `satisfies` clauses above would only prove that this file names nothing the
+ * bundles lack; with it, the two sets are provably the same 84 ids and neither
+ * side can move alone.
+ */
+export type UndeclaredBundleMessageId = AssertNever<
+  Exclude<FluentMessageId, DeclaredMessageId>
+>;
 
 /** The shipped surfaces and the ids each one's bundle must contain. */
 export const MESSAGE_IDS_BY_SURFACE: {
@@ -529,6 +623,75 @@ export interface FluentMessageArgsMap {
     succeeded: number;
   };
 }
+
+/**
+ * The keys of {@link FluentMessageArgsMap} that no bundle declares. **Must be
+ * empty.**
+ *
+ * `P1-T30`: before `fluent.dts` was on, nothing at all checked this map's keys
+ * — an interface takes any string, so a renamed message left an entry here
+ * pointing at nothing and the caller went on passing arguments Fluent would
+ * never place. Now a key that no `.ftl` declares is a `TS2344` naming it.
+ */
+export type UndeclaredArgumentMessageId = AssertNever<
+  Exclude<keyof FluentMessageArgsMap, FluentMessageId>
+>;
+
+/**
+ * {@link FluentMessageArgsMap}'s keys as a value, so a test can walk them.
+ *
+ * A mapped type is not enumerable at runtime, and the whole argument of this
+ * module's header is that a list a spec can walk is the only thing that makes
+ * an `.ftl` typo fail something. `test/integration/l10n.spec.ts` checks every
+ * id here against the live `en-US` bundle of its own surface.
+ *
+ * It cannot drift from the map: `satisfies` below rejects an id the map does
+ * not declare, and {@link UnlistedArgumentMessageId} rejects a map key missing
+ * from here.
+ */
+export const ARGUMENT_MESSAGE_IDS = [
+  // mainWindow (15)
+  "research-helper-provenance-note-title",
+  "research-helper-import-summary",
+  "research-helper-import-abstract-coverage",
+  "rh-error-missing-credential",
+  "rh-error-network",
+  "rh-error-timeout",
+  "rh-error-auth",
+  "rh-error-forbidden",
+  "rh-error-rate-limit",
+  "rh-error-quota",
+  "rh-error-upstream",
+  "rh-error-bad-request",
+  "rh-error-source",
+  "rh-error-parse",
+  "rh-error-cancelled",
+
+  // searchDialog (14)
+  "research-helper-search-years-span",
+  "research-helper-search-result-count",
+  "research-helper-search-authors-overflow",
+  "research-helper-search-row-existing",
+  "research-helper-search-selected-count",
+  "research-helper-search-import",
+  "research-helper-search-state-initial",
+  "research-helper-search-source-results",
+  "research-helper-search-source-failed",
+  "research-helper-search-progress-databases",
+  "research-helper-search-status-searching",
+  "research-helper-search-status-importing",
+  "research-helper-search-state-empty",
+  "research-helper-search-state-partial",
+] as const satisfies readonly (keyof FluentMessageArgsMap)[];
+
+/**
+ * The keys of {@link FluentMessageArgsMap} missing from
+ * {@link ARGUMENT_MESSAGE_IDS}. **Must be empty**, so the enumerable list and
+ * the type map are the same set.
+ */
+export type UnlistedArgumentMessageId = AssertNever<
+  Exclude<keyof FluentMessageArgsMap, (typeof ARGUMENT_MESSAGE_IDS)[number]>
+>;
 
 /** The argument object `id` needs, or `undefined` when it needs none. */
 export type FluentMessageArgs<Id extends FluentMessageId> =

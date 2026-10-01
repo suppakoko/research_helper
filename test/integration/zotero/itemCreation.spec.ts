@@ -18,6 +18,18 @@
  * a watch-mode re-run reuses the same Zotero.
  *
  * No network, no LLM (`docs/13` §2.3): the command writes fixed local data.
+ *
+ * **`P1-T24` changed what is under the menu item, not what it must produce.**
+ * `createSpikeArticle()` built its item with `P0-T10`'s `buildJournalArticle()`
+ * until that spike surface was retired; it now maps a `CanonicalWork` through
+ * `docs/07` §6.2's shipped mapper. Every assertion below is unchanged — the
+ * command still has to write one `journalArticle` with those four fields, in
+ * that collection, with that automatic tag. One assertion is **added**, on
+ * `extra`'s `rh-work-key`, because §6.3 makes it mandatory and its presence is
+ * the cheapest proof that the shipped mapper, and not a spike, produced the
+ * item. This spec's imports never referenced the spike surface:
+ * {@link AUTOMATIC_TAG_TYPE} and {@link RESEARCH_HELPER_TAG} are declared in
+ * `itemMapper.ts` §1 and the shipped mapper needs both.
  */
 
 import type Addon from "../../../src/addon";
@@ -27,6 +39,7 @@ import {
   L10N_MENU_SPIKE_CREATE_ITEM,
 } from "../../../src/ui/menus/toolsMenu";
 import { SPIKE_COLLECTION_NAME } from "../../../src/zotero/zoteroApi";
+import { readWorkKey } from "../../../src/zotero/extraField";
 import {
   AUTOMATIC_TAG_TYPE,
   RESEARCH_HELPER_TAG,
@@ -195,6 +208,15 @@ describe("Tools-menu spike command (P0-T10)", function () {
         .map((tag) => tag.type),
       [AUTOMATIC_TAG_TYPE],
       `item carries "${RESEARCH_HELPER_TAG}" once, as an automatic tag`,
+    );
+
+    // P1-T24: the item came through docs/07 §6.2's shipped mapper, so §6.3's
+    // mandatory `rh-work-key` is in `extra` and matches the DOI the command
+    // wrote. A spike-built item would have an empty `extra`.
+    assert.strictEqual(
+      readWorkKey(item.getField("extra")),
+      `doi:${item.getField("DOI")}`,
+      "extra carries the shipped mapper's rh-work-key for this DOI",
     );
   });
 });

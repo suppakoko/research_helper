@@ -20,6 +20,10 @@
  *    named. `P1-T05` step 1: `src/core/http/client.ts` owns every option, the
  *    header policy, the classification and the retry, and takes this as a port
  *    because `docs/07` §2.3 forbids `core/` from naming the global.
+ * 5. {@link newItemFromMapping} — `P1-T24`. `src/zotero/itemMapper.ts` is pure
+ *    by design, so the `new Zotero.Item()` / `fromJSON()` write that turns one
+ *    of its mappings into an item lives here. It is what replaced
+ *    `P0-T10`'s `buildJournalArticle()`.
  *
  * **This file is `create`d by `P1-T05` per `plan/README.md` §4's sixteen-path
  * list, but its `P0-T10` exports are retained rather than replaced.** `debug`,
@@ -43,12 +47,14 @@
  */
 
 import type { HttpTransport } from "../core/http/client";
+import type { CanonicalWork } from "../model/canonicalWork";
+import { normalizeDoi } from "../model/ids";
 
 import { findOrCreateCollection } from "./collectionOps";
 import {
   RESEARCH_HELPER_TAG,
-  buildJournalArticle,
-  type JournalArticleRecord,
+  toZoteroItemJSON,
+  type ZoteroItemJSON,
 } from "./itemMapper";
 
 /** The `[Research Helper]` prefix every line of ours carries in Debug Output. */
@@ -132,20 +138,81 @@ export function userLibraryID(): number {
  */
 export const SPIKE_COLLECTION_NAME = "Research Helper spike (P0-T10)";
 
+/** The spike DOI, through the one normalizer that produces a `Doi` (`docs/02` §11.1). */
+const SPIKE_DOI = normalizeDoi("10.5555/research-helper-p0-t10");
+if (SPIKE_DOI === null) {
+  throw new Error("research_helper: the P0-T10 spike DOI must normalize");
+}
+
 /**
  * The one article the spike creates. Fixed data, not fetched: `docs/01` §5.8
- * and §12 gotcha 13 forbid network I/O inside a transaction, and this card
+ * and §12 gotcha 13 forbid network I/O inside a transaction, and `P0-T10`
  * establishes the pattern even though it has nothing to fetch.
+ *
+ * **A `CanonicalWork`, since `P1-T24`.** `P0-T10` wrote a `JournalArticleRecord`
+ * — a spike shape with four fields — and `P1-T24` retired it, so the spike's
+ * fixed data is now expressed in the one shape the shipped mapper takes
+ * (`docs/07` §5.1) and goes through `docs/07` §6.2's real mapping.
+ *
+ * `provenance.seenIn` is **empty on purpose**: this record came from no
+ * literature source, so there is no `SourceId` that honestly belongs there.
+ * The consequence is visible and intended — {@link toZoteroItemJSON} writes no
+ * `rh-sources` line and no `libraryCatalog`, and `extra` carries exactly
+ * §6.3's mandatory `rh-work-key`.
  */
-const SPIKE_RECORD: JournalArticleRecord = {
+const SPIKE_WORK: CanonicalWork = {
+  workKey: `doi:${SPIKE_DOI}`,
+  ids: { doi: SPIKE_DOI },
+  type: "journal-article",
   title: "Research Helper spike article (P0-T10)",
-  abstractNote:
+  abstract:
     "Created by the research_helper P0-T10 toolchain spike to prove that the " +
     "plugin can write a journalArticle, its creator, its DOI and its " +
     "collection membership into a Zotero library.",
-  DOI: "10.5555/research-helper-p0-t10",
-  creators: [{ kind: "two-field", firstName: "Ada", lastName: "Lovelace" }],
+  authors: [{ family: "Lovelace", given: "Ada" }],
+  provenance: { recordIds: [], fieldOrigin: {}, seenIn: [] },
+  normalizedAtEpochMs: 0,
 };
+
+/**
+ * Turn one of {@link toZoteroItemJSON}'s mappings into an unsaved
+ * `Zotero.Item`.
+ *
+ * This is the platform half of `src/zotero/itemMapper.ts`, and the only half
+ * there is: §§2–5 of that module are pure by design and `docs/07` §2.3 makes
+ * `src/zotero/` the one directory allowed to name `Zotero.*`. It replaces the
+ * `new Zotero.Item()` / `libraryID` / `fromJSON()` / `addTag()` block that
+ * `P0-T10`'s `buildJournalArticle()` owned (retired by `P1-T24`), with two
+ * differences that are consequences of the shipped mapper rather than choices
+ * made here:
+ *
+ * - **No `addTag()` call.** `toZoteroMapping()` puts the tags — including
+ *   `research_helper` at {@link AUTOMATIC_TAG_TYPE} — in the JSON, and
+ *   `fromJSON()` applies them. One write instead of two.
+ * - **`accessDate`, `extra` and the rest of §6.2's table** are now written,
+ *   because the shipped mapper maps the whole table rather than the spike's
+ *   four fields.
+ *
+ * The caller owns the transaction and the `save()` — `docs/01` §5.8's
+ * single-writer rule means the decision of *when* to write belongs with the
+ * code that knows how many items are coming, not with the mapper. And because
+ * `fromJSON()` is a replace and not a merge (`docs/01` §5.2.1 hard rule 1,
+ * §12 gotcha 24), the item handed back here must always be a **new** one.
+ *
+ * @param itemJSON - a mapping from `toZoteroItemJSON()` / `toZoteroMapping()`
+ * @param libraryID - the destination library
+ * @returns the item, unsaved
+ */
+export function newItemFromMapping(
+  itemJSON: ZoteroItemJSON,
+  libraryID: number,
+): Zotero.Item {
+  const item = new Zotero.Item();
+  item.libraryID = libraryID;
+  // Ship non-strict, develop strict (docs/01 §5.2.1).
+  item.fromJSON(itemJSON, { strict: __env__ === "development" });
+  return item;
+}
 
 /** What one run of the spike command produced. */
 export interface SpikeArticleResult {
@@ -202,7 +269,7 @@ export async function createSpikeArticle(): Promise<SpikeArticleResult> {
         libraryID,
       );
 
-      const item = buildJournalArticle(SPIKE_RECORD, libraryID);
+      const item = newItemFromMapping(toZoteroItemJSON(SPIKE_WORK), libraryID);
       item.setCollections([collection.id]);
       // save(), not saveTx(): docs/01 §5.8 / §12 gotcha 12.
       await item.save();

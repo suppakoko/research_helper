@@ -2360,6 +2360,65 @@ pw.startCloseTimer(5000);
 
 The `zotero-plugin-toolkit` wraps this with a chainable API (`new ztoolkit.ProgressWindow(title, {closeOnClick, closeTime}).createLine({text, type, progress}).show()` / `.changeLine({...})`), which is what the template's `hooks.ts` uses. Either is fine; the native one has no dependency.
 
+### 10.2.1 The signatures, measured against a running Zotero
+
+**Measured 2026-10-01 by `P1-T29`** (`test/integration/zotero/progressWindow.spec.ts`, inside **Zotero 10.0.3**, BuildID `20260917164924`, Gecko 140.15.0, Windows), and corroborated by reading `chrome/content/zotero/xpcom/progressWindow.js` out of the installed `app/omni.ja`. This section is the record `07-architecture-and-data-model.md` §7.7's `> **Unverified:**` marker asked for by name.
+
+**The three-way disagreement, settled.** `08-ui-ux-spec.md` §8.2 is right on every disputed point; `zotero-types@4.1.3` is wrong on every one; §7.7's sketch was wrong and is corrected in place.
+
+| Question | Answer |
+|---|---|
+| `ItemProgress`'s first argument | an **item type** string. The constructor's parameter list is `(itemType, text, parentItemProgress)` and its body is `if (itemType) this.setItemTypeAndIcon(itemType)`. |
+| `setIcon` | **does not exist.** `typeof line.setIcon === "undefined"`. |
+| `setItemTypeAndIcon` | **exists**, as `setItemTypeAndIcon(itemType, cssIcon = 'item-type')`. |
+| `startCloseTimer` before `show()` | a **no-op**, confirmed behaviourally. |
+
+**What is actually on the objects.** A `Zotero.ProgressWindow` instance carries its whole API as **own properties** — its prototype holds nothing but `Object.prototype`, so it is a closure-per-instance object and not a class, whatever the typings model:
+
+```text
+own(pw)            = ItemProgress, Translation, addDescription, addLines,
+                     changeHeadline, close, show, startCloseTimer
+prototype(pw)      = (nothing above Object.prototype)
+own(ItemProgress.prototype)
+                   = constructor, setError, setItemTypeAndIcon, setProgress, setText
+own(new pw.ItemProgress(...))      = (none) until the window loads,
+                                     then _hbox, _iconClassName, _image, _itemText
+```
+
+Note `addLines` (plural) and **no `addLine`**; `Translation` is an own property of the **progress-window instance**, not of `ItemProgress`.
+
+⚠️ **You cannot read a deferred member's signature off the live object.** Every member except `show`, `close` and `startCloseTimer` is wrapped in the file's private `_deferUntilWindowLoad(fn)`, which returns `function () { … arguments … }` — so `changeHeadline`, `addLines`, `addDescription`, the `ItemProgress` constructor and all four of its prototype methods report **`arity 0` and an empty parameter list** at run time. `pw.startCloseTimer` is the one undeferred member and does report its real `(ms, requireMouseOver)`. The real parameter lists above come from the source, not from reflection; a future probe that trusts `Function.prototype.toString()` on these objects will measure the wrapper, not the method.
+
+**An item type and a path take the same code path, and a path silently gets the wrong icon.** Both land verbatim in a data attribute, which CSS then resolves:
+
+```text
+new pw.ItemProgress('journalArticle', …)
+  _image.className        = "icon icon-16 icon-css icon-item-type"
+  _image.dataset.itemType = "journalArticle"
+  computed backgroundImage → chrome://zotero/skin/item-type/16/light/journal-article.svg
+
+new pw.ItemProgress('chrome://zotero/skin/treeitem-journalArticle@2x.png', …)
+  _image.className        = "icon icon-16 icon-css icon-item-type"   // identical
+  _image.dataset.itemType = "chrome://zotero/skin/treeitem-journalArticle@2x.png"
+  computed backgroundImage → chrome://zotero/skin/item-type/16/light/document.svg
+```
+
+So passing a path **throws nothing, logs nothing and renders nothing broken** — it falls through the `[data-item-type]` rules to the generic `document` icon. That is the precise shape of the live Zotero bug `08-ui-ux-spec.md` §8.2 names (`zoteroPane.js#_showPageSaveStatus` passing a PNG path to `addLines()`): a silently wrong icon, not a visible failure. It is undetectable without looking, which is why the typings' `iconSrc` name is dangerous rather than merely inaccurate.
+
+**`startCloseTimer()` before `show()`.** Confirmed: with `startCloseTimer(1500)` called before `show()`, the popup was still open 4500 ms later; with the same call after `show()`, it closed itself. The guard is `if (_windowLoaded || _windowLoading)`, and `show()` sets `_windowLoading = true` **synchronously**, so *`show()` having been called* is the condition — the window does not have to finish loading. The default when `ms` is not a number is 2500.
+
+**Three defects in `zotero-types@4.1.3`'s `types/xpcom/progressWindow.d.ts`**, all of which would mislead a caller who trusts the typings:
+
+1. `ItemProgress`'s first parameter is declared `iconSrc`. It is an item type.
+2. `setIcon(iconSrc: string): void` is declared and **does not exist**; calling it is a `TypeError`.
+3. `setItemTypeAndIcon` is **not declared** at all, and `Translation` is declared on `ItemProgress` rather than on the progress-window instance.
+
+`show(): boolean`, `changeHeadline(text, icon?, postText?)`, `addLines(labels, icons)`, `addDescription(text)`, `startCloseTimer(ms, requireMouseOver?)`, `close()` and `setProgress`/`setText`/`setError` all match the running application.
+
+**Two further details worth knowing.** `show()` returns `false` if the window is already loading or loaded, and `true` otherwise. And `close()` before `show()` dereferences a `null` private window: the `TypeError` is swallowed into `Zotero.logError()`, so it is harmless but puts a spurious error in the log — show before you close.
+
+> **Unverified:** whether §7.7's `alwaysontop` caveat still applies when the popup has a parent window. In 10.0.3's `show()`, the `alwaysontop=yes` feature string is on the **windowless** branch only (`nsIWindowWatcher.openWindow`); the branch taken when `options.window` is set opens with `"chrome,dialog=no,titlebar=no,dependent=yes"`. This is read from source and **not** observed on macOS, which is where the complaint §7.7 cites comes from, so the caveat and its aggressive-`startCloseTimer` prescription stand until someone measures it there.
+
 ### 10.3 Cancellation
 
 Zotero's progress window has **no built-in cancel button**. For jobs the user must be able to stop — which for us is all three long jobs — you need your own UI:

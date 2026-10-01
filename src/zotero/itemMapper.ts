@@ -2,12 +2,19 @@
  * `CanonicalWork` → Zotero item JSON (`docs/07-architecture-and-data-model.md`
  * §6.2), and the `extra` rules that go with it (§6.3).
  *
- * **Scope.** `P1-T12`. `plan/README.md` §4 lists this path among the sixteen
- * where a Phase 1 `create` replaces a Phase 0 spike, so §§1–6 below are the
- * shipped mapper. §7 keeps `P0-T10`'s `buildJournalArticle()` **unchanged**,
- * because `src/zotero/zoteroApi.ts` and two integration specs still import it
- * and none of those three files is in this card's `Files` list; deleting it
- * would break code this card does not own. See the report finding on that.
+ * **Scope.** `P1-T12`, with `P0-T10`'s spike surface retired by `P1-T24`.
+ * `plan/README.md` §4 lists this path among the sixteen where a Phase 1
+ * `create` replaces a Phase 0 spike; `P1-T12` could not finish that
+ * replacement, because `src/zotero/zoteroApi.ts` and two integration specs
+ * imported `buildJournalArticle()` / `JournalArticleRecord` and none of the
+ * three was in its `Files` list, so it kept the spike verbatim in a fenced §7
+ * and reported the gap. `P1-T24` owns all three call sites and has moved them
+ * to {@link toZoteroItemJSON}; §7 is gone and **this file now contains one
+ * mapper, not two**.
+ *
+ * {@link AUTOMATIC_TAG_TYPE} and {@link RESEARCH_HELPER_TAG} were *not* spike
+ * exports and are untouched: they are declared in §1 below, {@link tagsFor}
+ * needs both, and four other files import them.
  *
  * Three decisions are load-bearing.
  *
@@ -31,10 +38,12 @@
  * **The mapping itself is pure.** No `Zotero.*` in §§2–5: the field table, the
  * creator shape, the tags and the `extra` algebra are data transforms, and
  * keeping them free of the platform is what lets them be asserted in plain
- * Node. The two things that genuinely need Zotero —
+ * Node. The one thing that genuinely needs Zotero —
  * {@link detectNativeIdentifierFields}, which must await
- * `Zotero.Schema.schemaUpdatePromise` first, and `buildJournalArticle` —
- * are isolated in §6 and §7 and are handed *into* the pure mapper as data.
+ * `Zotero.Schema.schemaUpdatePromise` first — is isolated in §6 and its
+ * result is handed *into* the pure mapper as data. Turning this module's
+ * output into a `Zotero.Item` is a platform write and belongs to the caller
+ * (`newItemFromMapping()` in `src/zotero/zoteroApi.ts`).
  */
 
 import type {
@@ -624,97 +633,4 @@ export async function detectNativeIdentifierFields(): Promise<NativeIdentifierFi
     }
   };
   return { pmid: has("PMID"), pmcid: has("PMCID") };
-}
-
-// ---------------------------------------------------------------------------
-// 7. `P0-T10`'s spike writer, kept verbatim
-//
-// `plan/README.md` §4 says a Phase 1 `create` of this path replaces the spike,
-// and nothing in the spike is load-bearing for the shipped mapper above. It is
-// retained because `src/zotero/zoteroApi.ts`, `test/integration/zotero/
-// itemCreation.spec.ts` and `test/integration/zotero/batchImport.spec.ts`
-// import from it, and this card's `Files` list names none of those three — so
-// removing it would break files this card does not own (`plan/README.md` §5
-// rule 2). Retiring it belongs to whichever card owns `zoteroApi.ts`'s spike
-// command.
-// ---------------------------------------------------------------------------
-
-/**
- * One creator, in the two shapes `docs/01` §5.2 documents.
- *
- * A discriminated union rather than an object with two optional halves,
- * because `exactOptionalPropertyTypes` makes "either both name parts or the
- * single-field one" impossible to state with optionality alone — and because
- * `fieldMode: 1` and `firstName`/`lastName` are mutually exclusive at runtime.
- */
-export type ArticleCreator =
-  | {
-      readonly kind: "two-field";
-      readonly firstName: string;
-      readonly lastName: string;
-    }
-  | {
-      /** An institutional or otherwise unsplittable name. `fieldMode: 1`. */
-      readonly kind: "single-field";
-      readonly name: string;
-    };
-
-/** The subset of `docs/07` §6.2's mapping table `P0-T10` exercises. */
-export interface JournalArticleRecord {
-  readonly title: string;
-  readonly abstractNote: string;
-  /** Bare, never a URL (`docs/07` §6.2). */
-  readonly DOI: string;
-  readonly creators: readonly ArticleCreator[];
-}
-
-/**
- * Build one unsaved `journalArticle` from the spike record.
- *
- * The caller owns the transaction and the `save()` — `docs/01` §5.8's
- * single-writer rule means the decision of *when* to write belongs with the
- * code that knows how many items are coming, not with the mapper.
- *
- * @param record - already-normalised article data
- * @param libraryID - the destination library
- * @returns the item, unsaved, with its tag already attached
- */
-export function buildJournalArticle(
-  record: JournalArticleRecord,
-  libraryID: number,
-): Zotero.Item {
-  const item = new Zotero.Item();
-  item.libraryID = libraryID;
-
-  item.fromJSON(
-    {
-      itemType: "journalArticle",
-      title: record.title,
-      abstractNote: record.abstractNote,
-      DOI: record.DOI,
-      creators: record.creators.map(toSpikeCreatorJSON),
-    },
-    // Ship non-strict, develop strict (docs/01 §5.2.1).
-    { strict: __env__ === "development" },
-  );
-
-  item.addTag(RESEARCH_HELPER_TAG, AUTOMATIC_TAG_TYPE);
-
-  return item;
-}
-
-/** One creator in the JSON shape `fromJSON()` passes to `setCreators()`. */
-function toSpikeCreatorJSON(creator: ArticleCreator): Record<string, unknown> {
-  if (creator.kind === "single-field") {
-    return {
-      creatorType: "author",
-      name: creator.name,
-      fieldMode: 1,
-    };
-  }
-  return {
-    creatorType: "author",
-    firstName: creator.firstName,
-    lastName: creator.lastName,
-  };
 }

@@ -6,8 +6,10 @@
  * **What is timed.** `NFR-1` measures "from user clicks Import to collection
  * contains 100 items" with every network response already in hand. The spec
  * starts the clock with 100 synthetic records in memory (no network), then
- * runs the real write path: `buildJournalArticle()` for each record, then
- * `saveNewItemsToCollection()` — one `Zotero.DB.executeTransaction`, the
+ * runs the real write path: `toZoteroItemJSON()` + `newItemFromMapping()` for
+ * each record — `P0-T10`'s `buildJournalArticle()` until `P1-T24` retired it,
+ * so the mapping inside the timed region is now `docs/07` §6.2's shipped one —
+ * then `saveNewItemsToCollection()`: one `Zotero.DB.executeTransaction`, the
  * collection created inside it, `setCollections()` + `save()` per item. The
  * clock stops when that promise resolves, which is after the commit *and*
  * after Zotero has delivered the batch's notifier events to its observers
@@ -44,15 +46,18 @@
  * `console`, so `Date.now()` is the clock and `debug()` is the log.
  */
 
+import type { CanonicalWork } from "../../../src/model/canonicalWork";
+import { normalizeDoi } from "../../../src/model/ids";
 import {
   saveNewItemsToCollection,
   type BatchSaveResult,
 } from "../../../src/zotero/collectionOps";
+import { readWorkKey } from "../../../src/zotero/extraField";
 import {
   RESEARCH_HELPER_TAG,
-  buildJournalArticle,
-  type JournalArticleRecord,
+  toZoteroItemJSON,
 } from "../../../src/zotero/itemMapper";
+import { newItemFromMapping } from "../../../src/zotero/zoteroApi";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -108,15 +113,35 @@ const ABSTRACT_SENTENCE =
   "realistically sized abstractNote field without touching the network. ";
 const ABSTRACT = ABSTRACT_SENTENCE.repeat(12).trim();
 
-function syntheticRecords(run: number): JournalArticleRecord[] {
-  return Array.from({ length: ITEM_COUNT }, (_, i) => ({
-    title: `Synthetic batch-import article ${run}.${i + 1} (P0-T20)`,
-    abstractNote: ABSTRACT,
-    DOI: `10.5555/research-helper-p0-t20.${run}.${i + 1}`,
-    creators: [
-      { kind: "two-field", firstName: "Grace", lastName: `Hopper${i + 1}` },
-    ],
-  }));
+/**
+ * 100 synthetic works, in the one shape the shipped mapper takes.
+ *
+ * **`CanonicalWork`, since `P1-T24`.** `P0-T20` generated
+ * `JournalArticleRecord`s — `P0-T10`'s four-field spike shape — and
+ * `P1-T24` retired it, so the timed path now runs `docs/07` §6.2's real
+ * mapping. The records still carry exactly what `P0-T20`'s `Do` step 1 asks
+ * for ("title, one author, DOI and abstract"), and `provenance.seenIn` is
+ * empty because synthetic records came from no literature source; the
+ * consequence is that `extra` carries only §6.3's mandatory `rh-work-key`,
+ * which is what this spec asserts per item.
+ */
+function syntheticWorks(run: number): CanonicalWork[] {
+  return Array.from({ length: ITEM_COUNT }, (_, i) => {
+    const doi = normalizeDoi(`10.5555/research-helper-p0-t20.${run}.${i + 1}`);
+    if (doi === null) {
+      assert.fail(`synthetic DOI ${run}.${i + 1} did not normalize`);
+    }
+    return {
+      workKey: `doi:${doi}`,
+      ids: { doi },
+      type: "journal-article",
+      title: `Synthetic batch-import article ${run}.${i + 1} (P0-T20)`,
+      abstract: ABSTRACT,
+      authors: [{ family: `Hopper${i + 1}`, given: "Grace" }],
+      provenance: { recordIds: [], fieldOrigin: {}, seenIn: [] },
+      normalizedAtEpochMs: 0,
+    } satisfies CanonicalWork;
+  });
 }
 
 function delay(ms: number): Promise<void> {
@@ -250,11 +275,13 @@ interface RunMeasurement {
 }
 
 /**
- * `src/zotero/itemMapper.ts` reads the build-time `__env__` constant. The
- * plugin build defines it; the scaffold's *test* bundler (esbuild with no
- * `define`) does not, so in this bundle it is a free identifier. Provide it
- * on the runner window for the duration of the spec, as `"production"`, so
- * the timed path is the non-strict `fromJSON()` Phase 1 ships.
+ * `newItemFromMapping()` in `src/zotero/zoteroApi.ts` reads the build-time
+ * `__env__` constant (it was `src/zotero/itemMapper.ts` before `P1-T24` moved
+ * the `fromJSON()` write out of the pure mapper). The plugin build defines it;
+ * the scaffold's *test* bundler (esbuild with no `define`) does not, so in this
+ * bundle it is a free identifier. Provide it on the runner window for the
+ * duration of the spec, as `"production"`, so the timed path is the non-strict
+ * `fromJSON()` Phase 1 ships.
  */
 function withEnvConstant<T>(body: () => Promise<T>): Promise<T> {
   const global = globalThis as unknown as Record<string, unknown>;
@@ -276,7 +303,10 @@ async function measureOneRun(
 ): Promise<RunMeasurement> {
   const libraryID = Zotero.Libraries.userLibraryID;
   const collectionName = `Research Helper batch import (P0-T20) run ${run} ${Date.now()}`;
-  const records = syntheticRecords(run);
+  const works = syntheticWorks(run);
+  const workKeyByDoi = new Map(
+    works.map((work) => [work.ids.doi as string, work.workKey]),
+  );
 
   await idle(mainWindow);
 
@@ -308,8 +338,8 @@ async function measureOneRun(
 
     // ---- timed region: records in memory -> collection holds 100 items ----
     const t0 = Date.now();
-    const items = records.map((record) =>
-      buildJournalArticle(record, libraryID),
+    const items = works.map((work) =>
+      newItemFromMapping(toZoteroItemJSON(work), libraryID),
     );
     const tBuilt = Date.now();
     const idBeforeSave = items[0]?.id;
@@ -399,7 +429,32 @@ async function measureOneRun(
       assert.isNotEmpty(item.getField("title"), `item ${id} title`);
       assert.isNotEmpty(item.getField("DOI"), `item ${id} DOI`);
       assert.isNotEmpty(item.getField("abstractNote"), `item ${id} abstract`);
-      assert.strictEqual(item.getField("extra"), "", `item ${id} Extra`);
+      // `P0-T20` asserted `extra === ""`, because `P0-T10`'s spike mapper
+      // wrote no `extra` at all. `P1-T24` moved this path to the shipped
+      // mapper, for which an empty `extra` is impossible: `docs/07` §6.3
+      // makes `rh-work-key` mandatory and first. The assertion is therefore
+      // *narrowed to the same claim*, not relaxed — `extra` holds the
+      // plugin's own work key for this item and nothing else, so it still
+      // fails if any stray line (a `PMID:` fallback, an `rh-sources` line,
+      // user text) appears.
+      const expectedWorkKey = workKeyByDoi.get(item.getField("DOI"));
+      if (expectedWorkKey === undefined) {
+        // Guards the two assertions below from passing on undefined ===
+        // undefined if the DOI ever stops round-tripping through Zotero.
+        assert.fail(
+          `item ${id} has an unrecognised DOI ${item.getField("DOI")}`,
+        );
+      }
+      assert.strictEqual(
+        readWorkKey(item.getField("extra")),
+        expectedWorkKey,
+        `item ${id} Extra holds its own rh-work-key`,
+      );
+      assert.strictEqual(
+        item.getField("extra"),
+        `rh-work-key: ${expectedWorkKey}`,
+        `item ${id} Extra holds nothing but rh-work-key`,
+      );
       assert.strictEqual(item.getCreators().length, 1, `item ${id} creators`);
       assert.strictEqual(
         item.getTags().some((tag) => tag.tag === RESEARCH_HELPER_TAG),
