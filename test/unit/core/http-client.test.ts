@@ -44,6 +44,7 @@ import {
   type CancellationReason,
 } from "../../../src/core/jobQueue/cancellation";
 import { createLogger, type LogSink } from "../../../src/core/logger";
+import { TokenBucket } from "../../../src/core/rateLimit/tokenBucket";
 
 /**
  * `P1-T05`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network — the
@@ -136,11 +137,16 @@ interface StubLimiter extends RateLimiterPort {
   readonly penalties: { untilEpochMs: number; reason: string }[];
 }
 
-/** A limiter that only records. Pacing itself is `P1-T04`'s to test. */
+/**
+ * A limiter that only records. Pacing itself is `P1-T04`'s to test, and the
+ * concurrency cap `P1-T27`'s — this stub's `run` enforces nothing, it just calls
+ * `acquire` and then the work, which is what every pre-`P1-T27` assertion in this
+ * file was written against.
+ */
 function createStubLimiter(key = "example.test"): StubLimiter {
   const acquired: (number | undefined)[] = [];
   const penalties: { untilEpochMs: number; reason: string }[] = [];
-  return {
+  const limiter: StubLimiter = {
     key,
     acquired,
     penalties,
@@ -148,10 +154,20 @@ function createStubLimiter(key = "example.test"): StubLimiter {
       acquired.push(cost);
       return Promise.resolve();
     },
+    async run(fn, cost, token) {
+      await limiter.acquire(cost, token);
+      return fn();
+    },
     penalize(untilEpochMs, reason) {
       penalties.push({ untilEpochMs, reason });
     },
   };
+  return limiter;
+}
+
+/** Let every already-queued microtask run. */
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 8; i += 1) await Promise.resolve();
 }
 
 /** A capturing {@link LogSink} plus the lines it received. */
@@ -528,7 +544,10 @@ describe("transport-exception classification", () => {
 // ---------------------------------------------------------------------------
 
 describe("the per-host limiter", () => {
-  it("acquires before the request is issued, with the caller's cost", async () => {
+  it("issues inside run(), which acquires first and holds the slot throughout", async () => {
+    // `P1-T27`: the request is wrapped in `docs/07` §4.1's `run`, so the host's
+    // `maxConcurrent` slot is held for the request's whole lifetime — the span
+    // assertion below, not just the "acquire before request" of `P1-T05`.
     const order: string[] = [];
     const limiter = createStubLimiter();
     const paced: RateLimiterPort = {
@@ -536,6 +555,15 @@ describe("the per-host limiter", () => {
       acquire(cost, token) {
         order.push("acquire");
         return limiter.acquire(cost, token);
+      },
+      async run(fn, cost, token) {
+        order.push("slot:taken");
+        try {
+          await paced.acquire(cost, token);
+          return await fn();
+        } finally {
+          order.push("slot:released");
+        }
       },
       penalize: limiter.penalize.bind(limiter),
     };
@@ -551,8 +579,102 @@ describe("the per-host limiter", () => {
 
     await client.request("GET", URL_OK, { cost: 3 });
 
-    expect(order).toStrictEqual(["acquire", "request"]);
+    expect(order).toStrictEqual([
+      "slot:taken",
+      "acquire",
+      "request",
+      "slot:released",
+    ]);
     expect(limiter.acquired).toStrictEqual([3]);
+  });
+
+  it("serialises two overlapping requests at maxConcurrent: 1", async () => {
+    // The card's criterion, at the HTTP level and over a *real* `TokenBucket`
+    // rather than a stub, with a gated transport: the second request must not
+    // reach the wire until the first has settled.
+    const clock = createManualClock();
+    const limiter = new TokenBucket(
+      "example.test",
+      { ratePerSecond: 1000, burst: 10, maxConcurrent: 1 },
+      clock,
+    );
+    const open: { resolve: (xhr: HttpTransportXhr) => void }[] = [];
+    const transport = createStubTransport(
+      () =>
+        new Promise<HttpTransportXhr>((resolve) => {
+          open.push({ resolve });
+        }),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      limiterFor: () => limiter,
+    });
+
+    const first = client.request("GET", `${URL_OK}?n=1`);
+    const second = client.request("GET", `${URL_OK}?n=2`);
+    await flushMicrotasks();
+
+    expect(transport.calls).toHaveLength(1);
+    expect(limiter.stats.inFlight).toBe(1);
+
+    // The first one *fails*, which is the case a missing `finally` breaks.
+    open[0]!.resolve(stubXhr({ status: 404 }));
+    await expect(first).rejects.toBeInstanceOf(BadRequestError);
+    await flushMicrotasks();
+
+    expect(transport.calls).toHaveLength(2);
+    expect(transport.calls[1]!.url).toBe(`${URL_OK}?n=2`);
+    open[1]!.resolve(stubXhr({ status: 200 }));
+    await expect(second).resolves.toMatchObject({ status: 200 });
+    expect(limiter.stats.inFlight).toBe(0);
+  });
+
+  it("gives the slot back when the request is cancelled", async () => {
+    const clock = createManualClock();
+    const limiter = new TokenBucket(
+      "example.test",
+      { ratePerSecond: 1000, burst: 10, maxConcurrent: 1 },
+      clock,
+    );
+    const transport = createStubTransport(
+      (call, index) =>
+        new Promise<HttpTransportXhr>((resolve, reject) => {
+          if (index > 0) {
+            resolve(stubXhr({ status: 200 }));
+            return;
+          }
+          // Zotero calls the receiver once, synchronously, before sending, and
+          // the request then rejects with CancelledException (`P0-T17`).
+          call.options.cancellerReceiver?.(() => {
+            reject(new StubCancelledException());
+          });
+        }),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      limiterFor: () => limiter,
+    });
+    const source = createCancellationTokenSource();
+
+    const first = client.request("GET", `${URL_OK}?n=1`, {
+      token: source.token,
+    });
+    const second = client.request("GET", `${URL_OK}?n=2`);
+    await flushMicrotasks();
+    expect(transport.calls).toHaveLength(1);
+    expect(limiter.stats.inFlight).toBe(1);
+
+    source.cancel({ kind: "user" });
+    await expect(first).rejects.toBeInstanceOf(OperationCancelledError);
+    await flushMicrotasks();
+
+    expect(transport.calls).toHaveLength(2);
+    await expect(second).resolves.toMatchObject({ status: 200 });
+    expect(limiter.stats.inFlight).toBe(0);
   });
 
   it("looks the limiter up by host", async () => {

@@ -12,8 +12,11 @@
  * — and four things are added:
  *
  * 1. **Pacing.** {@link HttpClientDeps.limiterFor} is asked for the host's
- *    limiter and `acquire()` is awaited *before* the request is issued
- *    (`docs/07` §7.4 step ordering, §7.3's one-bucket-per-host rule).
+ *    limiter and the request is issued *inside* its `run()` — §4.1's scope that
+ *    holds one of the host's `maxConcurrent` slots for the call's lifetime and
+ *    waits for `cost` tokens before it starts (`docs/07` §7.4 step ordering,
+ *    §7.3's one-bucket-per-host rule, `P1-T27`). The retry backoff sits outside
+ *    it, so a sleeping attempt holds no slot.
  * 2. **Classification.** Every status and every transport exception becomes a
  *    `docs/07` §10.1 class: `AuthenticationError` 401, `AuthorizationError` 403,
  *    `RateLimitError` 429, `UpstreamServerError` 5xx, `BadRequestError` other
@@ -285,7 +288,7 @@ export type Transport = HttpTransport;
  * The slice of `docs/07` §4.1's `RateLimiter` this client calls.
  *
  * Declared as a narrow port rather than imported, for the same reason
- * {@link HttpTransport} is: the request path needs three members and nothing
+ * {@link HttpTransport} is: the request path needs a few members and nothing
  * else. `P1-T04`'s `TokenBucket` — which implements §4.1's `RateLimiter` in full,
  * including `tryAcquire`, `reconfigure` and `stats` — is structurally assignable
  * to this, so the composition root needs no adapter and no cast, and `core/http`
@@ -293,12 +296,29 @@ export type Transport = HttpTransport;
  *
  * §4.1 remains the authority for the interface; nothing is *redeclared* here,
  * only the used subset is named.
+ *
+ * **`run` is required, not optional (`P1-T27`, 2026-10-01).** It is what enforces
+ * `RateLimiterConfig.maxConcurrent`: §4.1's `acquire` resolves `void` and so can
+ * never report that a request ended. An optional `run` would mean a limiter could
+ * be injected here that paces rate and silently ignores the concurrency cap —
+ * which is the defect `P1-T27` exists to remove, one layer down. `acquire` stays
+ * on the port because `run` is defined in terms of it and because a 429's
+ * `penalize` needs the same object.
  */
 export interface RateLimiterPort {
   /** Stable identifier, normally the API host. */
   readonly key: string;
   /** Wait until `cost` tokens are available, then consume them. */
   acquire(cost?: number, token?: CancellationToken): Promise<void>;
+  /**
+   * Run `fn` holding one of the host's `maxConcurrent` slots for its lifetime,
+   * having first waited for `cost` tokens. `docs/07` §4.1.
+   */
+  run<T>(
+    fn: () => Promise<T>,
+    cost?: number,
+    token?: CancellationToken,
+  ): Promise<T>;
   /**
    * Apply a server-directed pause. `docs/07` §7.3: "Any 429 or 503 with
    * `Retry-After` calls `limiter.penalize(now + retryAfterMs, …)`, which parks
@@ -469,13 +489,16 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
       const limiter = deps.limiterFor?.(host);
       const policy = deps.retryFor?.(host);
 
-      const attemptOnce = async (): Promise<HttpResponse> => {
-        // §7.4 point 1: a job cancelled while queued must not reach the wire.
-        options.token?.throwIfCancelled();
-        // §7.4 step ordering: acquire first, then issue. `acquire` rejects with
-        // OperationCancelledError if the token fires while queued (§7.4 point 2).
-        await limiter?.acquire(options.cost ?? 1, options.token);
-
+      /**
+       * One attempt, from the moment a slot and a token have been granted.
+       *
+       * Everything inside runs while the host's `maxConcurrent` slot is held —
+       * including `classify`, so a 429's `penalize` lands before the slot is
+       * given up. The retry *backoff*, by contrast, is outside: a request
+       * sleeping between attempts holds no slot, or one host's `Retry-After`
+       * would idle the cap for its whole duration.
+       */
+      const issueAndClassify = async (): Promise<HttpResponse> => {
         const startedMs = clock.now();
         let response: HttpResponse;
         try {
@@ -511,6 +534,22 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
           undefined,
         );
         return classify(response, host, limiter, clock.now(), options.token);
+      };
+
+      const attemptOnce = async (): Promise<HttpResponse> => {
+        // §7.4 point 1: a job cancelled while queued must not reach the wire.
+        options.token?.throwIfCancelled();
+        // §7.4 step ordering: pace first, then issue. `run` takes the host's
+        // concurrency slot, then `cost` tokens, then calls the function — and
+        // releases the slot in a `finally`, so a rejecting or cancelled request
+        // gives it back (`docs/07` §4.1, `P1-T27`). Both waits reject with
+        // OperationCancelledError if the token fires (§7.4 point 2).
+        //
+        // An absent limiter means "this host is unpaced", which `docs/07` §7.3's
+        // registry only answers for a host with no policy row — correct for a
+        // probe, and the one case where no cap exists to enforce.
+        if (limiter === undefined) return issueAndClassify();
+        return limiter.run(issueAndClassify, options.cost ?? 1, options.token);
       };
 
       if (policy === undefined) return attemptOnce();

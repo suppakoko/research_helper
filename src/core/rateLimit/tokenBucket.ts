@@ -47,20 +47,44 @@
  *    waiter, which is the granularity the card's first criterion ("±1 tick") is
  *    written at.
  *
- * ## Two gaps in §4.1 this file cannot close, recorded rather than invented
+ * ## `maxConcurrent` is enforced by {@link TokenBucket.run}, not by `acquire`
  *
- * **`maxConcurrent` is unenforceable through this interface.**
- * {@link RateLimiterConfig.maxConcurrent} is "a hard cap on simultaneous
- * in-flight requests to this host" and {@link RateLimiterStats.inFlight} reports
- * the current count — but §4.1's `RateLimiter` has **no member that signals a
- * request has finished**. `acquire` resolves `void`, so there is no release
- * handle and no `release()` / `run()` method to pair with it. A counter this
- * file incremented could therefore never be decremented, and gating `acquire`
- * on it would deadlock the bucket permanently after `maxConcurrent` calls. So
- * {@link TokenBucket} paces by *rate* and reports `inFlight: 0`, the concurrency
- * cap is carried as data on the policy row
- * ({@link ./hostLimiter.HostRateLimitPolicy}) for whoever owns the in-flight
- * count, and the gap is reported against the card instead of being coded around.
+ * `P1-T27`, 2026-10-01. `P1-T04` left this gap open and asserted it: §4.1's
+ * `acquire` resolves `void`, so **nothing in it signals that a request
+ * finished**, an `inFlight` counter could never be decremented, and gating
+ * `acquire` on one would deadlock the bucket permanently after `maxConcurrent`
+ * calls. The fix is not a counter but a *scope*: §4.1 now declares
+ * {@link RateLimiter.run}, which holds one of the host's `maxConcurrent` slots
+ * for the lifetime of the call it is given and releases it in a `finally`.
+ *
+ * Three consequences, all deliberate:
+ *
+ * 1. **`acquire` is still rate-only and still ungated.** A bare `acquire` neither
+ *    takes a slot nor counts towards {@link RateLimiterStats.inFlight}, because
+ *    it has no end. Gating it is the deadlock above, and §4.1 fixes its contract.
+ *    The concurrency cap therefore binds the callers that can honour it —
+ *    `src/core/http/client.ts`, which `docs/13` §2.2 makes the *single* outbound
+ *    choke point, is all of them today.
+ * 2. **The slot is taken before the token, not after.** `run` parks on the
+ *    semaphore first and only then calls `acquire`, so a token is consumed at the
+ *    moment the work actually starts. The other order would take a token while
+ *    the caller was still queued behind the cap, and
+ *    {@link RateLimiterConfig.minIntervalMs} — "minimum spacing between request
+ *    *starts*" — would then be measured from an instant no request started at.
+ *    That matters for precisely the host §7.3 gives `maxConcurrent: 1`:
+ *    `export.arxiv.org`, which pairs it with `minIntervalMs: 3000`.
+ * 3. **`inFlight` counts slots held, which for a brief window is one more than
+ *    the requests on the wire** — a `run` caller that holds a slot while waiting
+ *    for its token is counted. The cap is what must be exact, and counting this
+ *    way makes it conservative: requests actually in flight are never more than
+ *    `maxConcurrent`, which is what §4.1 promises.
+ *
+ * The slot gate is `src/core/concurrency.ts`'s {@link Semaphore}, not a second
+ * implementation of one: it already models FIFO admission, cancellation while
+ * parked, and the `unsubscribe()`-before-`resolve()` ordering that keeps a permit
+ * from leaking to a promise nobody awaits.
+ *
+ * ## One gap in §4.1 this file cannot close, recorded rather than invented
  *
  * **`total429s` counts penalizations, not 429s.** §7.3 calls `penalize()` for
  * "any 429 **or 503** with `Retry-After`", so the counter §4.1 names `total429s`
@@ -69,7 +93,7 @@
  */
 
 import type { Clock } from "../clock";
-import { createDeferred, type Deferred } from "../concurrency";
+import { createDeferred, Semaphore, type Deferred } from "../concurrency";
 import { OperationCancelledError } from "../errors";
 import type { CancellationToken } from "../jobQueue/cancellation";
 
@@ -90,6 +114,28 @@ export interface RateLimiter {
    * @param cost number of tokens (default 1); some endpoints count heavier.
    */
   acquire(cost?: number, token?: CancellationToken): Promise<void>;
+  /**
+   * Run `fn` holding one of the host's {@link RateLimiterConfig.maxConcurrent}
+   * slots for its whole lifetime, having first waited for `cost` tokens.
+   *
+   * This is the **only** member that enforces the concurrency cap, and the only
+   * one {@link RateLimiterStats.inFlight} counts: a call's end is what releases
+   * the slot, and `acquire` has no end (see the module header).
+   *
+   * The slot is released when `fn`'s promise settles **either way**, and when the
+   * call is abandoned before `fn` is reached — a rejecting `fn`, a cancelled
+   * token and an impossible `cost` all give the slot back.
+   *
+   * @param fn - the work to run while holding a slot
+   * @param cost - tokens to consume; default 1
+   * @param token - optional cancellation, honoured while waiting for either the
+   *   slot or the tokens
+   */
+  run<T>(
+    fn: () => Promise<T>,
+    cost?: number,
+    token?: CancellationToken,
+  ): Promise<T>;
   /** Non-blocking attempt. Returns false if not enough tokens right now. */
   tryAcquire(cost?: number): boolean;
   /**
@@ -107,7 +153,10 @@ export interface RateLimiterConfig {
   readonly ratePerSecond: number;
   /** Bucket depth = max burst. Set to 1 for strict "no burst" APIs. */
   readonly burst: number;
-  /** Hard cap on simultaneous in-flight requests to this host. */
+  /**
+   * Hard cap on simultaneous in-flight requests to this host. Enforced by
+   * {@link RateLimiter.run}; `acquire` is paced by rate alone.
+   */
   readonly maxConcurrent: number;
   /** Optional minimum spacing between request starts, in ms. */
   readonly minIntervalMs?: number;
@@ -115,6 +164,11 @@ export interface RateLimiterConfig {
 
 export interface RateLimiterStats {
   readonly available: number;
+  /**
+   * Slots currently held by a {@link RateLimiter.run} call — never more than
+   * {@link RateLimiterConfig.maxConcurrent}. A bare `acquire` is not counted;
+   * it has no end that could decrement this.
+   */
   readonly inFlight: number;
   readonly queued: number;
   readonly penalizedUntilEpochMs: number | undefined;
@@ -185,13 +239,21 @@ export class TokenBucket implements RateLimiter {
   private lastRefillMs: number;
 
   /**
-   * §7.3's skeleton declares this and §4.1's stats report it, but §4.1's
-   * `RateLimiter` gives no way to signal that a request *finished* — see the
-   * module header. It is `readonly 0` rather than a mutable counter so that the
-   * situation is visible in the type rather than hidden behind a number that
-   * never moves.
+   * The concurrency cap, as `src/core/concurrency.ts`'s {@link Semaphore}.
+   *
+   * Not `readonly`: {@link reconfigure} may bring a different
+   * {@link RateLimiterConfig.maxConcurrent} — §7.3 says Crossref's
+   * `x-concurrency-limit` arrives on every response — and `Semaphore`'s permit
+   * count is fixed at construction. {@link applyWantedConcurrency} swaps the gate
+   * instead, and only while it is idle; see there for why.
    */
-  private readonly inFlight = 0;
+  private gate: Semaphore;
+
+  /**
+   * The cap the config in force asks for, which is {@link gate}'s permit count
+   * except while a pending change waits for the host to go idle.
+   */
+  private wantedConcurrency: number;
 
   private readonly waiters: Waiter[] = [];
 
@@ -238,6 +300,8 @@ export class TokenBucket implements RateLimiter {
     assertConfig(config);
     this.tokens = config.burst;
     this.lastRefillMs = clock.now();
+    this.wantedConcurrency = config.maxConcurrent;
+    this.gate = new Semaphore(config.maxConcurrent);
   }
 
   // -- docs/07 §4.1's members ------------------------------------------------
@@ -291,6 +355,49 @@ export class TokenBucket implements RateLimiter {
     if (unsubscribe !== undefined) entry.unsubscribe = unsubscribe;
     this.schedule();
     return deferred.promise;
+  }
+
+  /**
+   * Run `fn` holding one of `maxConcurrent` slots, after waiting for `cost`
+   * tokens. §4.1's `run`, and the only enforcement of the concurrency cap.
+   *
+   * **The slot is taken first and the tokens second.** Reversed, a token would be
+   * consumed while the caller was still queued behind the cap and
+   * {@link RateLimiterConfig.minIntervalMs} would be measured from an instant at
+   * which nothing started — which is exactly wrong for `export.arxiv.org`, the
+   * one host §7.3 gives both `maxConcurrent: 1` and `minIntervalMs: 3000`. This
+   * order can never deadlock: a slot holder's only wait is for tokens, and tokens
+   * always arrive (`ratePerSecond` is positive and a penalty deadline is finite).
+   *
+   * `async` deliberately, for the reason {@link acquire} and `Semaphore.acquire`
+   * both record: an already-cancelled token must **reject** rather than throw
+   * synchronously.
+   *
+   * The `finally` is the point — a `throw` inside `fn` that leaked a slot would
+   * shrink the cap silently, and after `maxConcurrent` failures the host would be
+   * unreachable.
+   *
+   * @param fn - the work to run while holding a slot
+   * @param cost - tokens to consume; must be in `1..burst`
+   * @param token - optional cancellation
+   * @returns whatever `fn` resolves to
+   */
+  async run<T>(
+    fn: () => Promise<T>,
+    cost = 1,
+    token?: CancellationToken,
+  ): Promise<T> {
+    const release = await this.gate.acquire(token);
+    try {
+      await this.acquire(cost, token);
+      return await fn();
+    } finally {
+      release();
+      // A cap change that could not be applied while the gate was busy may be
+      // applicable now. Cheap; and the alternative is a pending change that
+      // only lands on the next reconfigure.
+      this.applyWantedConcurrency();
+    }
   }
 
   /**
@@ -354,6 +461,10 @@ export class TokenBucket implements RateLimiter {
    * is load-bearing: credit at the *old* rate first, then adopt the new config,
    * then serve whatever the new rate already permits.
    *
+   * **A changed `maxConcurrent` lands when the host next goes idle**, not
+   * immediately — see {@link applyWantedConcurrency}. Rate, burst and spacing all
+   * take effect at once; only the slot gate waits.
+   *
    * @param config - the replacement policy
    */
   reconfigure(config: RateLimiterConfig): void {
@@ -362,6 +473,8 @@ export class TokenBucket implements RateLimiter {
     this.config = config;
     // A smaller burst must not leave more tokens in the bucket than its depth.
     this.tokens = Math.min(this.tokens, config.burst);
+    this.wantedConcurrency = config.maxConcurrent;
+    this.applyWantedConcurrency();
     this.drain();
     this.schedule();
   }
@@ -378,7 +491,7 @@ export class TokenBucket implements RateLimiter {
     const now = this.clock.now();
     return {
       available: this.tokens,
-      inFlight: this.inFlight,
+      inFlight: this.gate.permits - this.gate.available,
       queued: this.waiters.length,
       penalizedUntilEpochMs:
         this.penalizedUntilMs > now ? this.penalizedUntilMs : undefined,
@@ -414,6 +527,25 @@ export class TokenBucket implements RateLimiter {
   /** The policy currently in force. */
   get currentConfig(): RateLimiterConfig {
     return this.config;
+  }
+
+  /**
+   * The concurrency cap **in force**, which lags
+   * {@link RateLimiterConfig.maxConcurrent} while a change waits for the host to
+   * go idle ({@link applyWantedConcurrency}).
+   *
+   * Not on {@link RateLimiter}: §4.1 reports the cap's *use* through
+   * {@link RateLimiterStats.inFlight} and nothing else needs the limit itself.
+   * It is exported so a test can tell "the change landed" from "the change is
+   * pending" without reaching into the gate.
+   */
+  get concurrencyLimit(): number {
+    return this.gate.permits;
+  }
+
+  /** Callers parked waiting for a slot, as opposed to for tokens. */
+  get slotQueued(): number {
+    return this.gate.waiting;
   }
 
   // -- private --------------------------------------------------------------
@@ -528,6 +660,31 @@ export class TokenBucket implements RateLimiter {
       // one (`docs/01` §2.3).
       () => undefined,
     );
+  }
+
+  /**
+   * Adopt {@link wantedConcurrency} if the gate can be replaced safely.
+   *
+   * `Semaphore`'s permit count is fixed at construction, deliberately: its
+   * recorded invariant is about never handing out or revoking a permit behind a
+   * holder's back, and a `resize()` would be exactly that. So the gate is
+   * *replaced* — but only when it is idle, with no slot held and nobody parked.
+   * Replacing a busy gate would orphan its waiters' promises (a hang) and let its
+   * holders release into an object no longer consulted (the cap exceeded).
+   *
+   * The consequence, recorded rather than hidden: **a cap change applies when the
+   * host next goes idle.** Phase 1 never exercises it — §7.3's one shipped row,
+   * NCBI, is `maxConcurrent: 3` in both key modes — but §7.3 says Crossref's
+   * `x-concurrency-limit` "comes back … on every response" and `reconfigure()` is
+   * called from it, so a live cap change is anticipated. Making it immediate needs
+   * a resizable gate, which is a change to `src/core/concurrency.ts` and a card of
+   * its own.
+   */
+  private applyWantedConcurrency(): void {
+    if (this.wantedConcurrency === this.gate.permits) return;
+    if (this.gate.available !== this.gate.permits) return;
+    if (this.gate.waiting > 0) return;
+    this.gate = new Semaphore(this.wantedConcurrency);
   }
 
   /** Reject a cost the bucket could never satisfy. */

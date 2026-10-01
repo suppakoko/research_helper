@@ -661,6 +661,20 @@ export interface RateLimiter {
    * @param cost number of tokens (default 1); some endpoints count heavier.
    */
   acquire(cost?: number, token?: CancellationToken): Promise<void>;
+  /**
+   * Run `fn` holding one of the host's `maxConcurrent` slots for its whole
+   * lifetime, having first waited for `cost` tokens.
+   *
+   * The **only** member that enforces `RateLimiterConfig.maxConcurrent`, and the
+   * only one `RateLimiterStats.inFlight` counts. The slot is released when `fn`
+   * settles either way, and when the call is abandoned before `fn` is reached: a
+   * rejecting `fn`, a cancelled token and an impossible `cost` all give it back.
+   */
+  run<T>(
+    fn: () => Promise<T>,
+    cost?: number,
+    token?: CancellationToken,
+  ): Promise<T>;
   /** Non-blocking attempt. Returns false if not enough tokens right now. */
   tryAcquire(cost?: number): boolean;
   /**
@@ -673,25 +687,28 @@ export interface RateLimiter {
   readonly stats: RateLimiterStats;
 }
 
-> **`Retry-After` MUST NOT be parsed with a bare `Date.parse` (measured 2026-09-30, `P1-T04`).**
-> On this repository's Node 22 / V8, `Date.parse` accepts the delta-seconds form as a *year*:
-> `Date.parse("120")` and `Date.parse("+120")` both return `-58380424072000` (year **0119**),
-> `Date.parse("120.5")` gives year 0120 and `Date.parse("-5")` gives 2001. **`Number.isNaN` is
-> `false` for every one of them**, so the usual
-> `if (Number.isNaN(Date.parse(v))) …/* else treat as a date */` guard sends even a **valid**
-> delta-seconds header down the date branch, producing a deadline ~1900 years in the past. Clamped
-> at zero that means **retry immediately against a host that has just asked us to stop** — which is
-> `docs/02` §3.1's stated route to having an IP blocked from NCBI. Gate the date branch on an
-> explicit HTTP-date shape check (IMF-fixdate and the obsolete RFC 850 form; **exclude `asctime`**,
-> which carries no timezone and would be read in the local zone), and try the integer form first.
-> `P3-T05` step 6 re-parses this header and will hit the same trap.
+// **`Retry-After` MUST NOT be parsed with a bare `Date.parse` (measured 2026-09-30, `P1-T04`).**
+// On this repository's Node 22 / V8, `Date.parse` accepts the delta-seconds form as a *year*:
+// `Date.parse("120")` and `Date.parse("+120")` both return `-58380424072000` (year **0119**),
+// `Date.parse("120.5")` gives year 0120 and `Date.parse("-5")` gives 2001. **`Number.isNaN` is
+// `false` for every one of them**, so the usual
+// `if (Number.isNaN(Date.parse(v))) …/* else treat as a date */` guard sends even a **valid**
+// delta-seconds header down the date branch, producing a deadline ~1900 years in the past. Clamped
+// at zero that means **retry immediately against a host that has just asked us to stop** — which is
+// `docs/02` §3.1's stated route to having an IP blocked from NCBI. Gate the date branch on an
+// explicit HTTP-date shape check (IMF-fixdate and the obsolete RFC 850 form; **exclude `asctime`**,
+// which carries no timezone and would be read in the local zone), and try the integer form first.
+// `P3-T05` step 6 re-parses this header and will hit the same trap.
 
 export interface RateLimiterConfig {
   /** Sustained rate. */
   readonly ratePerSecond: number;
   /** Bucket depth = max burst. Set to 1 for strict "no burst" APIs. */
   readonly burst: number;
-  /** Hard cap on simultaneous in-flight requests to this host. */
+  /**
+   * Hard cap on simultaneous in-flight requests to this host. Enforced by
+   * `RateLimiter.run`; `acquire` is paced by rate alone.
+   */
   readonly maxConcurrent: number;
   /** Optional minimum spacing between request starts, in ms. */
   readonly minIntervalMs?: number;
@@ -699,6 +716,10 @@ export interface RateLimiterConfig {
 
 export interface RateLimiterStats {
   readonly available: number;
+  /**
+   * Slots currently held by a `run` call — never more than `maxConcurrent`. A
+   * bare `acquire` is not counted: it has no end that could decrement this.
+   */
   readonly inFlight: number;
   readonly queued: number;
   readonly penalizedUntilEpochMs: number | undefined;
@@ -706,6 +727,63 @@ export interface RateLimiterStats {
   readonly total429s: number;
 }
 ```
+
+> **Decision recorded 2026-10-01 (`P1-T27`): `maxConcurrent` is enforced by a
+> `run()` scope on the limiter, not by an in-flight counter in the HTTP client.**
+>
+> `P1-T04` measured, and this section confirmed, that the cap was unenforceable as
+> written: `acquire` resolves `void`, so **nothing signalled that a request had
+> finished**, an `inFlight` counter could never be decremented, and gating
+> `acquire` on one would have deadlocked the bucket permanently after
+> `maxConcurrent` calls. §7.3's skeleton declared `private inFlight = 0` and
+> stopped there. `TokenBucket` therefore paced by rate only and *asserted*
+> `inFlight: 0`, so the hole stayed visible in the suite. Phase 2's
+> `export.arxiv.org` row is `maxConcurrent: 1`, aggregated across "all of the
+> machines under your control as a whole", so the cap is not decoration.
+>
+> **Why `run()`.** The missing thing was never a counter, it was a *scope*: an
+> end. `run(fn, cost?, token?)` takes a permit from
+> `src/core/concurrency.ts`'s `Semaphore` — which already models FIFO admission,
+> cancellation while parked, and the `unsubscribe()`-before-`resolve()` ordering
+> that keeps a permit from leaking — holds it for `fn`'s lifetime, and releases it
+> in a `finally`, so a rejecting `fn`, a cancelled token and an impossible `cost`
+> all return the slot. The permit is taken **before** the tokens, so a token is
+> consumed at the instant work actually starts; the other order would measure
+> `minIntervalMs` ("spacing between request *starts*") from an instant at which
+> nothing started, which is wrong for precisely the host that has both —
+> `export.arxiv.org`, `maxConcurrent: 1` with `minIntervalMs: 3000`. `acquire`
+> keeps its contract and stays ungated, which is why the deadlock above cannot
+> reappear.
+>
+> **What the alternative would have cost.** The other honest shape was to leave
+> the limiter rate-only and count in-flight requests in `src/core/http/client.ts`,
+> the one place that knows when a request ends. It was rejected on four measured
+> costs. (1) The cap is **per host**, and §7.3 makes the limiter registry the only
+> thing that is — the client would have had to build a second per-host map of
+> gates beside it, which is §7.3's "one bucket per host" duplicated under another
+> name. (2) The client does not know the number: `RateLimiterPort` named `key`,
+> `acquire` and `penalize` and nothing else, and §4.1's `RateLimiter` exposes no
+> reader for the config in force, so the cap would have had to be injected
+> separately from the policy row that already carries it. (3) The gate would sit *outside* the token queue, so the limiter
+> could hand a token to a caller the client was still holding back — the token
+> consumed at an instant no request starts, breaking `minIntervalMs` and wasting
+> budget. (4) The cap would bind only callers that go through
+> `HttpClient.request`; the streaming path `docs/03` §6.5 owns is a different
+> response contract that paces through the same limiter, and it would have escaped
+> the cap silently. Against that, `run()` costs one new member on an interface with
+> exactly one implementation (`TokenBucket`) — adding a method breaks implementers,
+> not consumers, and `src/core/rateLimit/hostLimiter.ts` and
+> `src/bootstrap/container.ts` only consume it.
+>
+> **One limitation, recorded rather than hidden.** `Semaphore`'s permit count is
+> fixed at construction, deliberately — resizing it from outside is exactly the
+> "hand out or revoke a permit behind a holder's back" its invariant forbids — so
+> `reconfigure()` adopts a changed `maxConcurrent` when the host **next goes
+> idle**, not immediately. Rate, burst and spacing still change at once. §7.3's one
+> shipped row, NCBI, is `maxConcurrent: 3` in both key modes, so Phase 1 never
+> reaches it; §7.3 does anticipate a live change, through Crossref's
+> `x-concurrency-limit`, and making it immediate needs a resizable gate in
+> `src/core/concurrency.ts` and a card of its own.
 
 ```ts
 // src/core/cache/cache.ts
@@ -2154,7 +2232,13 @@ One `TokenBucket` per **host**, shared by every job — not per adapter instance
 export class TokenBucket implements RateLimiter {
   private tokens: number;
   private lastRefillMs: number;
-  private inFlight = 0;
+  /**
+   * The concurrency cap, as `src/core/concurrency.ts`'s `Semaphore`. A plain
+   * `inFlight = 0` counter is what this skeleton used to declare, and §4.1
+   * records why it could never be decremented (`P1-T27`): the cap needs a scope
+   * with an end, which is `run()`, not a number.
+   */
+  private gate: Semaphore;
   private readonly waiters: Waiter[] = [];
   private penalizedUntilMs = 0;
 
@@ -2165,6 +2249,7 @@ export class TokenBucket implements RateLimiter {
   ) {
     this.tokens = config.burst;
     this.lastRefillMs = clock.now();
+    this.gate = new Semaphore(config.maxConcurrent);
   }
 
   private refill(): void {
@@ -2176,6 +2261,27 @@ export class TokenBucket implements RateLimiter {
   }
 
   async acquire(cost = 1, token?: CancellationToken): Promise<void> { /* ... */ }
+
+  /**
+   * §4.1's `run`. The slot comes first and the tokens second, so a token is
+   * consumed at the instant the work starts — which is what makes
+   * `minIntervalMs` ("spacing between request *starts*") true for
+   * `export.arxiv.org`, the row below that has both.
+   */
+  async run<T>(
+    fn: () => Promise<T>,
+    cost = 1,
+    token?: CancellationToken,
+  ): Promise<T> {
+    const release = await this.gate.acquire(token);
+    try {
+      await this.acquire(cost, token);
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
   penalize(untilEpochMs: number, reason: string): void { /* blocks all waiters */ }
   // ...
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
 
 import { createManualClock, type ManualClock } from "../../../src/core/clock";
+import { createDeferred, type Deferred } from "../../../src/core/concurrency";
 import { createMemoryPrefStore } from "../../../src/core/config";
 import { OperationCancelledError } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
@@ -127,6 +128,52 @@ const FAST: RateLimiterConfig = {
   maxConcurrent: 3,
 };
 
+/**
+ * A fake operation whose every call parks until the test settles it by name.
+ *
+ * This is `P1-T27`'s "gated fake transport" as a primitive: the limiter does not
+ * know what it is running, so the gate does not have to be an HTTP transport to
+ * exercise the cap — and `started` records each call as it *begins*, which is
+ * what the card's criterion is stated on ("the second must start only after the
+ * first settles").
+ */
+function gatedWork(clock: ManualClock): {
+  /** Labels in the order their calls started, with the clock reading. */
+  readonly started: { label: string; at: number }[];
+  /** The function to hand to `run`. */
+  work(label: string): () => Promise<string>;
+  /** Settle a started call; `"reject"` is the case a missing `finally` breaks. */
+  settle(label: string, outcome: "resolve" | "reject"): void;
+} {
+  const started: { label: string; at: number }[] = [];
+  const open = new Map<string, Deferred<string>>();
+  return {
+    started,
+    work(label: string): () => Promise<string> {
+      return () => {
+        started.push({ label, at: clock.now() });
+        const deferred = createDeferred<string>();
+        open.set(label, deferred);
+        return deferred.promise;
+      };
+    },
+    settle(label: string, outcome: "resolve" | "reject"): void {
+      const deferred = open.get(label);
+      if (deferred === undefined) {
+        throw new Error(`${label} has not started, so it cannot settle`);
+      }
+      open.delete(label);
+      if (outcome === "resolve") deferred.resolve(label);
+      else deferred.reject(new Error(`${label} failed`));
+    },
+  };
+}
+
+/** The labels of every call that has started, in order. */
+function labels(g: ReturnType<typeof gatedWork>): string[] {
+  return g.started.map((s) => s.label);
+}
+
 // ---------------------------------------------------------------------------
 // 1. Construction
 // ---------------------------------------------------------------------------
@@ -175,12 +222,22 @@ describe("TokenBucket construction", () => {
     ).toThrow(RangeError);
   });
 
-  it("reports inFlight as 0 because docs/07 §4.1 has no completion signal", () => {
-    // Recorded as an assertion so the gap is visible in the suite and not only
-    // in a comment: `RateLimiter.acquire` resolves `void`, so nothing can ever
-    // decrement a concurrency counter. See the module header of tokenBucket.ts.
+  it("starts with the config's concurrency cap in force and no slot held", () => {
+    const { limiter } = bucket(FAST);
+    expect(limiter.concurrencyLimit).toBe(3);
+    expect(limiter.stats.inFlight).toBe(0);
+    expect(limiter.slotQueued).toBe(0);
+  });
+
+  it("does not count a bare acquire towards inFlight", () => {
+    // `P1-T27`'s inverse of `P1-T04`'s `inFlight: 0` assertion, and the thing
+    // that keeps the deadlock from coming back: `acquire` resolves `void`, so it
+    // has no end that could decrement a counter, so it must not increment one
+    // either. Concurrency is counted by `run` and by nothing else.
     const { limiter } = bucket(FAST);
     expect(limiter.tryAcquire()).toBe(true);
+    expect(limiter.stats.inFlight).toBe(0);
+    void limiter.acquire();
     expect(limiter.stats.inFlight).toBe(0);
   });
 });
@@ -609,7 +666,317 @@ describe("TokenBucket ordering", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 10. hostLimiter — the registry and docs/07 §7.3's policy row
+// 10. run / maxConcurrent — `P1-T27`
+// ---------------------------------------------------------------------------
+
+describe("TokenBucket.run enforces maxConcurrent", () => {
+  it("serialises two overlapping calls at maxConcurrent: 1, on start order", async () => {
+    const { clock, limiter } = bucket({
+      ratePerSecond: 1000,
+      burst: 10,
+      maxConcurrent: 1,
+    });
+    const g = gatedWork(clock);
+
+    const a = limiter.run(g.work("a"));
+    const b = limiter.run(g.work("b"));
+    await flush();
+
+    // Tokens are plentiful, so the cap is the only thing that can hold `b`.
+    expect(labels(g)).toEqual(["a"]);
+    expect(limiter.stats.inFlight).toBe(1);
+    expect(limiter.slotQueued).toBe(1);
+    expect(limiter.stats.available).toBeGreaterThan(1);
+
+    g.settle("a", "resolve");
+    await expect(a).resolves.toBe("a");
+    await flush();
+    expect(labels(g)).toEqual(["a", "b"]);
+    expect(limiter.stats.inFlight).toBe(1);
+
+    g.settle("b", "resolve");
+    await expect(b).resolves.toBe("b");
+    expect(limiter.stats.inFlight).toBe(0);
+    expect(limiter.slotQueued).toBe(0);
+  });
+
+  it("admits exactly maxConcurrent at a time over more calls than the cap", async () => {
+    // Deliberately more than `maxConcurrent` calls: a gate that incremented a
+    // counter nothing decrements passes the two-call test and deadlocks here,
+    // which is the trap `P1-T27`'s Do NOT names.
+    const { clock, limiter } = bucket({
+      ratePerSecond: 1000,
+      burst: 10,
+      maxConcurrent: 2,
+    });
+    const g = gatedWork(clock);
+    const pending = ["a", "b", "c", "d", "e"].map((label) =>
+      limiter.run(g.work(label)),
+    );
+    await flush();
+
+    expect(labels(g)).toEqual(["a", "b"]);
+    expect(limiter.stats.inFlight).toBe(2);
+    expect(limiter.slotQueued).toBe(3);
+
+    // One release admits exactly one more, five times over — never two, never
+    // zero.
+    for (const [index, label] of ["a", "b", "c", "d", "e"].entries()) {
+      g.settle(label, "resolve");
+      await flush();
+      const admitted = Math.min(index + 3, 5);
+      expect(labels(g)).toHaveLength(admitted);
+      expect(limiter.stats.inFlight).toBe(Math.min(2, 5 - (index + 1)));
+    }
+
+    await expect(Promise.all(pending)).resolves.toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+    ]);
+    expect(limiter.stats.inFlight).toBe(0);
+  });
+
+  it("releases the slot when the call rejects", async () => {
+    const { clock, limiter } = bucket({
+      ratePerSecond: 1000,
+      burst: 10,
+      maxConcurrent: 1,
+    });
+    const g = gatedWork(clock);
+
+    const a = limiter.run(g.work("a"));
+    const b = limiter.run(g.work("b"));
+    await flush();
+    expect(labels(g)).toEqual(["a"]);
+
+    g.settle("a", "reject");
+    await expect(a).rejects.toThrow("a failed");
+    await flush();
+
+    // The case a missing `finally` breaks: without one, `b` never starts.
+    expect(labels(g)).toEqual(["a", "b"]);
+    expect(limiter.stats.inFlight).toBe(1);
+    g.settle("b", "resolve");
+    await expect(b).resolves.toBe("b");
+    expect(limiter.stats.inFlight).toBe(0);
+  });
+
+  it("releases the slot when the token is cancelled while it waits for tokens", async () => {
+    // The slot is taken first, so this call holds one while parked on the empty
+    // bucket. Cancelling it must give the slot back even though `fn` never ran.
+    const { clock, limiter } = bucket({
+      ratePerSecond: 1,
+      burst: 1,
+      maxConcurrent: 1,
+    });
+    expect(limiter.tryAcquire()).toBe(true); // the bucket is now empty
+    const g = gatedWork(clock);
+    const source = createCancellationTokenSource();
+
+    const a = limiter.run(g.work("a"), 1, source.token);
+    const b = limiter.run(g.work("b"));
+    await flush();
+    expect(labels(g)).toEqual([]);
+    expect(limiter.stats.inFlight).toBe(1);
+    expect(limiter.slotQueued).toBe(1);
+
+    source.cancel({ kind: "user" });
+    await expect(a).rejects.toBeInstanceOf(OperationCancelledError);
+    await flush();
+
+    // `b` now holds the slot `a` gave back, and starts as soon as a token lands.
+    expect(limiter.stats.inFlight).toBe(1);
+    expect(limiter.slotQueued).toBe(0);
+    await runUntil(clock, () => labels(g).length === 1);
+    expect(labels(g)).toEqual(["b"]);
+    g.settle("b", "resolve");
+    await expect(b).resolves.toBe("b");
+    expect(limiter.stats.inFlight).toBe(0);
+  });
+
+  it("releases the slot when the token is cancelled while the call runs", async () => {
+    const { clock, limiter } = bucket({
+      ratePerSecond: 1000,
+      burst: 10,
+      maxConcurrent: 1,
+    });
+    const g = gatedWork(clock);
+    const source = createCancellationTokenSource();
+
+    const a = limiter.run(g.work("a"), 1, source.token);
+    const b = limiter.run(g.work("b"));
+    await flush();
+    expect(labels(g)).toEqual(["a"]);
+
+    // Cancellation is cooperative: the work itself observes the token and
+    // rejects. The slot must come back from that path too.
+    source.cancel({ kind: "shutdown" });
+    g.settle("a", "reject");
+    await expect(a).rejects.toThrow("a failed");
+    await flush();
+    expect(labels(g)).toEqual(["a", "b"]);
+    g.settle("b", "resolve");
+    await expect(b).resolves.toBe("b");
+    expect(limiter.stats.inFlight).toBe(0);
+  });
+
+  it("rejects an already-cancelled token rather than throwing synchronously", async () => {
+    const { clock, limiter } = bucket(FAST);
+    const g = gatedWork(clock);
+    const source = createCancellationTokenSource();
+    source.cancel({ kind: "shutdown" });
+
+    const promise = limiter.run(g.work("a"), 1, source.token);
+    expect(promise).toBeInstanceOf(Promise);
+    await expect(promise).rejects.toBeInstanceOf(OperationCancelledError);
+    expect(labels(g)).toEqual([]);
+    expect(limiter.stats.inFlight).toBe(0);
+  });
+
+  it("releases the slot when the cost can never be satisfied", async () => {
+    const { clock, limiter } = bucket({
+      ratePerSecond: 1000,
+      burst: 2,
+      maxConcurrent: 1,
+    });
+    const g = gatedWork(clock);
+
+    await expect(limiter.run(g.work("a"), 3)).rejects.toBeInstanceOf(
+      RangeError,
+    );
+    expect(labels(g)).toEqual([]);
+    expect(limiter.stats.inFlight).toBe(0);
+
+    // The slot survived the throw, so the host is still reachable.
+    const b = limiter.run(g.work("b"));
+    await flush();
+    expect(labels(g)).toEqual(["b"]);
+    g.settle("b", "resolve");
+    await expect(b).resolves.toBe("b");
+  });
+
+  it("paces run by rate as well as by the cap", async () => {
+    // The tokens are waited for *inside* run, so an uncapped fan-out is still
+    // rate-limited: three calls at 1/s with burst 1 start a second apart.
+    const { clock, limiter, t0 } = bucket({
+      ratePerSecond: 1,
+      burst: 1,
+      maxConcurrent: 3,
+    });
+    const g = gatedWork(clock);
+    for (const label of ["a", "b", "c"]) void limiter.run(g.work(label));
+
+    await runUntil(clock, () => g.started.length === 3);
+    expect(g.started.map((s) => s.at)).toEqual([t0, t0 + 1000, t0 + 2000]);
+  });
+
+  it("takes the slot before the token, so minIntervalMs spaces real starts", async () => {
+    // The ordering decision recorded in docs/07 §4.1, asserted. `a` holds the
+    // one slot for 5 s. Under the chosen order `b` takes its token at the moment
+    // it actually starts (t0+5000), so `c` is spaced 3 s from *that* and starts
+    // at t0+8000. Had the token been taken before the slot, `b`'s token — and so
+    // `lastStartMs` — would have been stamped at t0+3000 and `c` would start at
+    // t0+6000, only 1 s after the request before it: minIntervalMs violated.
+    const { clock, limiter, t0 } = bucket({
+      ratePerSecond: 1000,
+      burst: 10,
+      maxConcurrent: 1,
+      minIntervalMs: 3000,
+    });
+    const starts: number[] = [];
+    const slow = createDeferred<string>();
+    const start = (label: string, hold?: Promise<string>): Promise<string> =>
+      limiter.run(() => {
+        starts.push(clock.now());
+        return hold ?? Promise.resolve(label);
+      });
+
+    const a = start("a", slow.promise);
+    const b = start("b");
+    const c = start("c");
+    await flush();
+    expect(starts).toEqual([t0]);
+
+    // A millisecond at a time, not one 5 s jump: the two orders differ only in
+    // *when* the token is stamped, and a jump would hand the token out at the
+    // instant the slot frees under either order, hiding the difference. Time
+    // alone starts nothing here — `b` is parked on the cap, not on a deadline.
+    await runUntil(clock, () => clock.now() >= t0 + 5000);
+    expect(starts).toEqual([t0]);
+
+    slow.resolve("a");
+    await runUntil(clock, () => starts.length === 3);
+    expect(starts).toEqual([t0, t0 + 5000, t0 + 8000]);
+    await expect(Promise.all([a, b, c])).resolves.toEqual(["a", "b", "c"]);
+  });
+
+  it("adopts a changed cap when the host next goes idle, not mid-flight", async () => {
+    const { clock, limiter } = bucket({
+      ratePerSecond: 1000,
+      burst: 10,
+      maxConcurrent: 2,
+    });
+    const g = gatedWork(clock);
+    const a = limiter.run(g.work("a"));
+    const b = limiter.run(g.work("b"));
+    await flush();
+    expect(limiter.stats.inFlight).toBe(2);
+
+    limiter.reconfigure({ ratePerSecond: 1000, burst: 10, maxConcurrent: 1 });
+    // Rate and burst changed at once; the gate cannot, because two holders are
+    // inside it (docs/07 §4.1's recorded limitation).
+    expect(limiter.currentConfig.maxConcurrent).toBe(1);
+    expect(limiter.concurrencyLimit).toBe(2);
+
+    g.settle("a", "resolve");
+    await expect(a).resolves.toBe("a");
+    await flush();
+    expect(limiter.concurrencyLimit).toBe(2);
+
+    g.settle("b", "resolve");
+    await expect(b).resolves.toBe("b");
+    await flush();
+    expect(limiter.stats.inFlight).toBe(0);
+    expect(limiter.concurrencyLimit).toBe(1);
+
+    // And the new cap is in force from here on.
+    const c = limiter.run(g.work("c"));
+    const d = limiter.run(g.work("d"));
+    await flush();
+    expect(labels(g)).toEqual(["a", "b", "c"]);
+    g.settle("c", "resolve");
+    await flush();
+    expect(labels(g)).toEqual(["a", "b", "c", "d"]);
+    g.settle("d", "resolve");
+    await expect(Promise.all([c, d])).resolves.toEqual(["c", "d"]);
+  });
+
+  it("adopts a changed cap immediately when nothing is in flight", () => {
+    const { limiter } = bucket(FAST);
+    expect(limiter.concurrencyLimit).toBe(3);
+    limiter.reconfigure({ ratePerSecond: 1000, burst: 10, maxConcurrent: 1 });
+    expect(limiter.concurrencyLimit).toBe(1);
+  });
+
+  it("keeps the NCBI row's cap of 3 across the key-presence switch", () => {
+    // docs/07 §7.3 gives NCBI maxConcurrent 3 in both modes, so the deferral
+    // above is unreachable through the shipped Phase 1 policy table.
+    const clock = createManualClock();
+    const registry = createHostLimiterRegistry({ clock });
+    const policy = must(registry.policyFor(NCBI_HOST), "the NCBI policy row");
+    expect(policy.withoutKey.maxConcurrent).toBe(3);
+    expect(must(policy.withKey, "the with-key row").maxConcurrent).toBe(3);
+    const limiter = must(registry.limiterFor(NCBI_HOST), "the NCBI limiter");
+    if (!(limiter instanceof TokenBucket)) throw new Error("not a TokenBucket");
+    expect(limiter.concurrencyLimit).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 11. hostLimiter — the registry and docs/07 §7.3's policy row
 // ---------------------------------------------------------------------------
 
 describe("hostLimiter policy table", () => {

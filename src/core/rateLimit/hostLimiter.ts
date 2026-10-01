@@ -185,7 +185,11 @@ export interface HostLimiterRegistry {
    * by every job".
    */
   limiterFor(host: string): RateLimiter | undefined;
-  /** `host`'s policy row, including the `maxConcurrent` the bucket cannot enforce. */
+  /**
+   * `host`'s policy row — both key modes, and the `maxConcurrent` the bucket
+   * enforces through `RateLimiter.run` (`P1-T27`; it was unenforceable when
+   * `P1-T04` wrote this line).
+   */
   policyFor(host: string): HostRateLimitPolicy | undefined;
   /**
    * Re-read every key-presence flag and `reconfigure()` the buckets whose mode

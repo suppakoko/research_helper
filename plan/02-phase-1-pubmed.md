@@ -3919,7 +3919,11 @@ policy data. **Phase 2's arXiv row is `maxConcurrent: 1`** — and §7.3 says th
 - `src/core/concurrency.ts`'s `Semaphore` — **it already models exactly this**, including the
   recorded invariant that `unsubscribe()` runs before `resolve()` or a permit leaks to a promise
   nobody awaits, and `run()` releasing in a `finally`. Reuse it; do not write a second one.
-- `docs/02` §5 for arXiv's published limit.
+- `docs/02` **§7** for arXiv's published limit — *1 request per 3 seconds, single connection at a
+  time*, and the "all of the machines under your control" quote. **Corrected 2026-10-01: this said
+  §5, which is Crossref.** Note §7.3's Crossref "max concurrent: 3" cell is the **polite-pool**
+  figure only; `docs/02` §5.1's verified table gives the public pool **1**, so that one cell cannot
+  express the row — Phase 2's Crossref card inherits it.
 
 **Files.**
 - modify `docs/07-architecture-and-data-model.md`
@@ -3952,6 +3956,103 @@ policy data. **Phase 2's arXiv row is `maxConcurrent: 1`** — and §7.3 says th
 - [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
 
 **Verify with.** `npm run typecheck && npm run test:unit -- tokenBucket http`
+
+**Findings, 2026-10-01 — all five criteria pass. Shape 1 chosen: `run<T>(fn, cost?, token?)` on
+`RateLimiter`, holding a `Semaphore` permit for the call's lifetime.** `maxConcurrent` now works, and
+it works where the config declares it. typecheck, lint:check and the whole suite exit 0 — **802 unit
+tests, up from 787, in the same 21 files**.
+
+**The insight that decided the shape: the missing thing was never a counter, it was a *scope* — an
+end.** `acquire` resolves `void`, so it has no end; `run` does, and its `finally` is the whole
+enforcement. `gate` is `src/core/concurrency.ts`'s existing `Semaphore`, so no second one was
+written, and `stats.inFlight` is `gate.permits - gate.available` — a real number at last.
+
+**`acquire` and `tryAcquire` stay rate-only and ungated, and that is what makes the deadlock
+unreachable.** A bare `acquire` neither takes a slot nor counts toward `inFlight`, because it has no
+end. §4.1's `acquire` contract is unchanged, so the three cards already built against it are
+untouched.
+
+**One sub-decision is load-bearing and was proven, not argued: the slot is taken *before* the
+token.** The other order takes a token while the caller is still queued behind the cap, so
+`minIntervalMs` — §4.1's "minimum spacing between request **starts**" — would be measured from an
+instant at which nothing started. **Flipping the implementation to token-first failed two tests**, and
+one of them reported `starts = [t0, t0+5000, t0+6000]` against the expected `[t0, t0+5000, t0+8000]`
+— **two consecutive request starts 1,000 ms apart under `minIntervalMs: 3000`.** So the rejected
+ordering is a live `minIntervalMs` violation rather than an aesthetic preference, and it matters for
+exactly the host that has both: `export.arxiv.org`, `maxConcurrent: 1` *and* `minIntervalMs: 3000`.
+
+**That falsification test did not falsify on its first attempt, and the agent caught it.** With a
+single `clock.advance(5000)` jump both orderings coincide, because `take()` stamps `lastStartMs` at
+the jumped-to reading rather than at the deadline. Rewritten to advance a millisecond at a time, with
+the reason recorded in the test. **Worth knowing generally: a `ManualClock` jump can hide a
+`lastStartMs` divergence** — the same class of blind spot as `P1-T03`'s line-anchored `prefs.js`
+parser.
+
+**Shape 2 was rejected on four measured costs, all recorded in §4.1.** It would have needed **a
+second host→gate map** beside the registry, duplicating §7.3's one-bucket-per-host rule under another
+name, because the client holds no per-host state. It would not have known the number: §4.1 exposes
+**no reader for the config in force**, so the cap would have to be injected separately from the
+`policyFor(host)` row that already carries it. Its gate would sit **outside** the token queue, giving
+the limiter a token to a caller the client was still holding back — the same `minIntervalMs` defect,
+relocated. And the cap would bind only `HttpClient.request` callers, so **the streaming path would
+escape it silently.** Against that, shape 1's advertised cost — "changes an interface three cards
+implement against" — **did not materialise, and that was checked before the signature changed**:
+adding a method breaks implementers, not consumers, and there is exactly one implementer.
+
+**A limitation recorded rather than hidden, and it is a real Phase 2 gap.** `Semaphore`'s permit count
+is fixed at construction — deliberately, because resizing from outside is exactly the "hand out or
+revoke a permit behind a holder's back" its recorded invariant forbids. So `reconfigure()` adopts a
+changed `maxConcurrent` only when the host **next goes idle**; rate, burst and spacing still change
+immediately. Phase 1 never reaches it (NCBI is `maxConcurrent: 3` in both key modes, asserted). But
+`docs/02` §5.1 **measures** Crossref at `x-concurrency-limit: 3` polite and **1** public, verified
+live, and §7.3 says `reconfigure()` is called from those headers on every response — so a live 3 → 1
+change is a measured scenario in which **the cap could be exceeded for as long as Crossref traffic is
+continuous.** The fix is a `resize()` on `Semaphore`, outside this card's `Files`. **Needs a card, and
+it should gate or be depended on by whichever Phase 2 card adds the Crossref row.**
+
+**Every new assertion was checked by breaking the implementation, not only by passing.** Reverting the
+client to a bare `acquire` failed all three new HTTP tests, confirming they measure the `run` span and
+not a stub. Criterion 2's "a cancelled one does too" does not say *when* cancelled, so all three
+moments are covered as separate code paths — cancelled while holding a slot and parked on tokens (the
+case the slot-first ordering creates), cancelled while the call runs, and an already-cancelled token
+which **rejects** rather than throwing synchronously. Plus an impossible `cost` rejecting `RangeError`
+**and giving the slot back**, proven by a following `run` that starts.
+
+**Criterion 3 is weaker than it looks, and sibling assertions were added rather than the criterion
+adjusted.** "`stats.inFlight` is non-zero while a request is in flight and returns to 0 after" is
+satisfied by a counter incremented in `run` and decremented in `finally` **with no gating whatsoever**
+— it measures the *reporting*, not the *cap*. And criterion 1 at only two calls with
+`maxConcurrent: 1` is exactly the naive test this card's brief warned about. So: **five** calls at
+`maxConcurrent: 2`, asserting after every single release that the admitted count went up by **exactly
+one** — never two, never zero — and that `inFlight` tracks `min(2, remaining)`. A counter nothing
+decrements deadlocks there; a double-release over-admits there. The two-call test catches neither.
+
+**Two files outside `Files` were extended under §4's corrected rule, and the grep came first.**
+`test/unit/core/http-client.test.ts` had to gain `run` on its stub limiter and its `paced` literal,
+because `RateLimiterPort` gained a **required** member. Making `run` *optional* was considered and
+rejected: an optional `run` means a limiter can be injected that paces rate and **silently ignores the
+cap** — this card's defect one layer down. And `hostLimiter.ts`'s `policyFor` doc read "including the
+`maxConcurrent` the bucket cannot enforce", which this change made actively false **in the module that
+owns the policy table**; corrected in one line. The grep is how the test-file breakage was found
+rather than discovered by a red run, and it confirmed **no importer blocked the signature change**.
+
+**The integration suite was not run, and the reason is sound.** `grep` over `test/integration/`
+returns nothing for `limiterFor`, `RateLimiter`, `TokenBucket`, `installServices`, `httpRequest` or
+`http/client`, so no integration spec imports either changed module, and the card's `Verify with` does
+not include it. `npm run build` was run instead to prove the changed sources still bundle. **So the
+51-test integration baseline is unverified by this card** — stated plainly rather than implied.
+
+**Two errors in this card's text, both the coordinator's, both corrected.** The `Read first` cited
+"`docs/02` §5 for arXiv's published limit"; **§5 is Crossref and arXiv is §7** (verified: §5 at line
+929, §7 at 1395). And `P1-T04`'s `Retry-After` blockquote had been written **inside** §4.1's ```` ```ts ````
+fence, so the fence was not valid TypeScript — this card placed its own decision block *outside* the
+fence rather than copying the pattern, and did not touch the other (rule 2). The blockquote is now
+`//` comments and **no markdown blockquote survives inside any `ts` fence in `docs/07`**, checked
+mechanically.
+
+**One more pre-existing defect flagged and left alone:** `src/core/concurrency.ts`'s header says
+"What consumes them: `docs/07` §7.2's three worker pools", and `Semaphore` now also backs §7.3's
+per-host cap. Not false, just incomplete, and the file is outside this card's `Files`.
 
 ---
 
