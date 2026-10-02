@@ -35,10 +35,20 @@
  * **This file is the composition root's only three-way junction.** It is the
  * one place allowed to import from `src/ui/` *and* `src/zotero/` at once:
  * `docs/07` §2.3 forbids `src/ui/**` from importing `src/zotero/**`, so the
- * menu's shape (`src/ui/menus/toolsMenu.ts`) and the platform call that
- * installs it (`src/zotero/registrations.ts`) can only meet here. `src/ui/`
- * therefore never learns what a Zotero menu registration is, and
- * `src/zotero/` never learns what this plugin's menus look like.
+ * menu's shape (`src/ui/menus/toolsMenu.ts`, `src/ui/menus/registerMenus.ts`)
+ * and the platform call that installs it (`src/zotero/registrations.ts`) can
+ * only meet here. `src/ui/` therefore never learns what a Zotero menu
+ * registration is, and `src/zotero/` never learns what this plugin's menus
+ * look like.
+ *
+ * ## It composes Phase 1's two menu entry points (`P1-T19`)
+ *
+ * The Tools ▸ Research Helper ▸ Search & Import… entry and the collection
+ * context-menu entry are described in `src/ui/menus/registerMenus.ts` and
+ * registered from {@link APP_REGISTRATIONS} below. Their one command —
+ * `openSearchWindow` from `src/ui/dialogs/searchDialog.ts` — is injected here
+ * for the same reason `createSpikeArticle` is: the menu knows there is a
+ * command, not what a command is made of.
  *
  * ## It also chooses the platform halves of the object graph (`P1-T25`)
  *
@@ -69,6 +79,13 @@ import {
   type Scope,
 } from "./container";
 import type { LogSink } from "../core/logger";
+import { openSearchWindow } from "../ui/dialogs/searchDialog";
+import {
+  COLLECTION_MENU_DESCRIPTION,
+  collectionMenuOptions,
+  withSearchImportEntry,
+  type SearchMenuCommands,
+} from "../ui/menus/registerMenus";
 import {
   L10N_MENU_ROOT,
   TOOLS_MENU_DESCRIPTION,
@@ -95,22 +112,57 @@ export type WindowRegistration = (
 ) => ScopedRegistration;
 
 /**
+ * What `src/ui/menus/registerMenus.ts`'s two menus are allowed to do.
+ *
+ * `openSearchWindow` comes from `src/ui/dialogs/searchDialog.ts` and takes the
+ * host window as its first parameter, which the menu handler supplies from the
+ * element that was clicked — `src/ui/**` may name neither `Zotero` nor
+ * `src/zotero/**`, and the clicked window is the right one anyway when two
+ * main windows are open. `reportError` is `src/zotero/zoteroApi.ts`'s
+ * `Zotero.logError` + `Zotero.debug` pair, so a failed command lands in Debug
+ * Output rather than in an unhandled rejection (`FR-56`).
+ */
+const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
+  openSearchWindow,
+  onError: reportError,
+};
+
+/**
  * Registered in `startup`, torn down in `shutdown`.
  *
- * The Tools-menu item is application-scoped, not window-scoped: `docs/01`
- * §2.4 and `docs/08` §2.4 both say to register menus once in `startup`, and
+ * Both menu items are application-scoped, not window-scoped: `docs/01` §2.4
+ * and `docs/08` §2.4 both say to register menus once in `startup`, and
  * Zotero 10's `MenuManager` propagates a registration to every open window and
  * removes the elements again on unregister.
  *
- * `menuRegistration()` and `toolsMenuOptions()` both run at module-evaluation
- * time and neither touches the platform: the first returns a closure, the
- * second a plain object. Nothing reaches `Zotero.MenuManager` until
- * `registerUI()` feeds this array to a live `Scope`.
+ * `menuRegistration()`, `toolsMenuOptions()`, `withSearchImportEntry()` and
+ * `collectionMenuOptions()` all run at module-evaluation time and none touches
+ * the platform: the first returns a closure, the rest plain objects. Nothing
+ * reaches `Zotero.MenuManager` until `registerUI()` feeds this array to a live
+ * `Scope`.
+ *
+ * Two registrations, one per target (`P1-T19`), because `docs/08` §2.3 allows
+ * exactly one top-level item per context and
+ * `Zotero.MenuManager.registerMenu` takes one target per call. The Tools entry
+ * is `./toolsMenu.ts`'s options **extended**
+ * with Phase 1's Search & Import command rather than replaced: `P0-T10`'s
+ * spike item is asserted by `test/integration/lifecycle.spec.ts` and invoked
+ * by `test/integration/zotero/itemCreation.spec.ts`, neither of which is in
+ * `P1-T19`'s `Files` list, and a second Tools registration would be a second
+ * top-level item (`plan/README.md` §4, corrected 2026-09-30: extend rather
+ * than replace when an importer is outside your `Files` list).
  */
 const APP_REGISTRATIONS: readonly ScopedRegistration[] = [
   menuRegistration(
     TOOLS_MENU_DESCRIPTION,
-    toolsMenuOptions({ createSpikeArticle, onError: reportError }),
+    withSearchImportEntry(
+      toolsMenuOptions({ createSpikeArticle, onError: reportError }),
+      SEARCH_MENU_COMMANDS,
+    ),
+  ),
+  menuRegistration(
+    COLLECTION_MENU_DESCRIPTION,
+    collectionMenuOptions(SEARCH_MENU_COMMANDS),
   ),
 ];
 

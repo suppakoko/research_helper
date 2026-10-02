@@ -3029,6 +3029,105 @@ Do not "tidy" either name into agreement with the other.
 The disable/enable criterion is the same one spike `V-4` answers in Phase 0 — if
 that spike found residue, fix it there, not here.
 
+**Findings, 2026-10-02 — two criteria pass, one passes in half, and three are reportably
+unverifiable because the card they need is the card this one blocks.** `P1-T20` creates
+`addon/content/searchDialog.xhtml` and **depends on `P1-T19`**, so criteria 1–4's "the window opens"
+cannot be exercised today. They were **not weakened** (rule 6). Instead each one's mechanism is
+asserted — the derived `chrome://` URL, the window *name*, `docs/08` §4.1's feature string verbatim,
+`args` as `openDialog`'s fourth argument, `focus()` on every invocation, and no network call — and a
+**self-activating** test probes the chrome URL for *content* and runs the real open/singleton
+assertions the moment the document lands. Today it prints `PENDING P1-T20: … yields no response, so
+the real-window criteria … are NOT verified by this spec`, so the shortfall is **in the test output
+rather than in prose nobody re-reads**. Criteria 5 and 6 pass outright.
+
+**Verified independently of the report: 63 integration tests pass (51 baseline + 12), exit 0 under
+`--abort-on-fail`; typecheck 0; `lint:check` 0; 816 unit tests in 21 files, unchanged.** Exactly four
+files, all in `Files`.
+
+**§4.1's printed `openSearchWindow` cannot be written where §4.1 puts it**, and this is the third
+doc-sketch in the corpus that does not compile in its stated location (after §7.7 and §10.1 of
+`docs/07`). It calls `Zotero.getMainWindow()` from `src/ui/dialogs/searchDialog.ts`, which
+`eslint.config.js` rejects **twice**: `research-helper/zotero-global`, and `layering/ui` bars
+`src/ui/**` from importing `src/zotero/**` at all. The host window became a parameter — **which is
+also the better behaviour**: `registerMenus.ts` passes the window that owns the *clicked* item, while
+`getMainWindow()` returns the most recently active one and can raise the dialog over the wrong window.
+
+**`docs/08` §2.2's "Hook timing" is wrong as a description of the mechanism, read from Zotero 10.0.1's
+own `menuManager.js`.** A top-level `onShowing` runs synchronously **only when `updateMenuPopup`
+receives an `event`**; with none it is attached as a `{ once: true }` `popupshowing` listener on the
+parent popup — and `zoteroPane.js` passes **no `event`** for `main/library/collection` or
+`main/library/item` (it does for `addAttachment`/`addNote`; `standalone.js` passes one for all six
+menubar targets). **The user-visible behaviour is still correct**, because
+`onCollectionsContextMenuOpen` awaits `buildCollectionContextMenu()` *before* `openPopupAtScreen()`.
+This cost a failed run before it was found: any test that reproduces the build without the
+`popupshowing` sees the guard unapplied. Both facts are now asserted (`hiddenOnBuild` vs `hidden`, and
+`_initMenu` re-using the element without resetting `hidden`) — the integration log shows
+`hiddenOnBuild:false, hidden:true` on first open and `hiddenOnBuild:true` on the second — **so a
+change in that order fails a test rather than shipping.**
+
+**Eight defects applied at once; 10 of 12 tests failed, each on its intended assertion** — and the
+two that stayed green were correct to (the `P1-T20`-gated one, and one covered by another defect's
+failure). The ones worth naming: moving Search & Import to the end of the Tools submenu failed the
+order test with `Received [spike, "", search-import]`; `length >= 1` in place of `=== 1` failed "two
+selected -> hidden"; dropping `collectionID` from the args failed the pre-selection test; suppressing
+the missing-host `onError` failed "an unhandled rejection in the sandbox is the FR-56 failure";
+removing the collection registration failed **both** the menu test and cycle 1 of the five-cycle test.
+All four files restored from backup and every figure above re-measured on the restored tree.
+
+**`FR-56` is clean on both surfaces, by two independent measures.** Five cycles; after each disable
+`scope.liveHandles()` is `[]` **and** both popups hold 0 of our top-level items; after each enable
+exactly 1 of each. `lifecycle.spec.ts`'s single cycle still passes unchanged.
+
+**The collection entry reuses `P1-T18`'s `research-helper-menu-collection-search-import` rather than
+the Tools id**, which was the right call for a reason the card did not state: `keys.ts` already
+carries that id in `MAIN_WINDOW_MESSAGE_IDS` and admits it in `KO_PENDING_REVIEW`, and
+`l10n.spec.ts` asserts the ko-KR gap equals **exactly** those lists — so reusing the Tools id would
+have left a declared, shipped, **never-rendered** message id. No new id was minted, so none of
+`P1-T30`'s three obligations was incurred.
+
+**`src/hooks.ts` is in `Files` and was correctly left untouched.** Do step 4 asks for a
+`registeredMenuIDs` array; `P0-T07` replaced that with the `Scope` registry and `onShutdown` already
+calls `unregisterAll()` + `reportSurvivors()`. Do step 5's chrome registration was already satisfied
+by `P0-T02`. **Both are now measurements rather than assumptions:**
+`chrome://research-helper/content/icons/favicon.png` → **1723 bytes**;
+`chrome://researchhelper/...` → **`undefined`**, the request rejects. The hyphenated package is the
+real one, and a test says so.
+
+**`zotero-types@4.1.3` types the trap and omits the replacement.** `MenuManager.LibraryMenuContext`
+declares `collectionTreeRow?` — the singular member `docs/08` §2.2 shows **throwing** on a
+multi-row selection and labels "Never read" — and declares **no `collectionTreeRows` at all**;
+`typings/zotero-augment.d.ts` §5 augments `ZoteroPane.getSelectedCollections()` but not this. That is
+the second reason the handlers go through `ZoteroPane`. **It blocks `P2-T17`**, whose rerun entry
+reads `context.collectionTreeRows[0].ref.id` in `docs/08` §2.4's own block. Separately
+`BaseMenuContext.menuElem` is declared **required** while §2.2 and `menuManager.js` (a `WeakRef`
+deref) make it optional, so the context parameter is taken as a local structural type with
+`menuElem?` and the optional reads are honest.
+
+**Four corpus defects found, none absorbed (rule 2).** (a) `docs/08` §2.4's `ICON`
+`chrome://research-helper/content/icons/menu-16.svg` **does not exist** — `addon/content/icons/` holds
+only `favicon.png`, `favicon@0.5x.png` and a README — so setting `icon` would paint a broken image and
+neither menu sets one. (b) `docs/08` §4.1 **still writes the namespace unhyphenated**, in its code
+block *and* its prose at line 865, and **this card's own Do steps 3 and 5 repeat it**; §2.4 was
+corrected on 2026-09-30 and §4.1 was not. (c) This card's Goal and criterion 1 say **"Search
+literature…"** while §2.4/§2.5 and `P1-T18`'s shipped FTL say **"Search & Import…"** — user-visible
+text, so an **owner decision**, and the agent correctly followed the shipped bundle. (d) **An open
+Search & Import window outlives teardown**: nothing closes it on disable, which is `docs/01` §12
+gotcha 10's shape; it is unreachable from a handler (handlers get commands, not the `Scope`) and
+cannot be exercised until the document exists.
+
+**A spec-ordering leak worth knowing before someone asserts an English label.** `l10n.spec.ts`
+restores `intl.locale.requested` but the negotiated chain stays `["ko-KR","en-US"]` for later specs,
+so this card's label test logged `root="리서치 헬퍼" tools="검색 및 가져오기…"` beside an English
+`collection="Search & Import into This Collection…"`. Its assertion is "non-empty label", hence
+locale-agnostic and sound — but **any later spec asserting English text verbatim will be surprised by
+spec order**, and the mixed line above is what that looks like.
+
+**One coordinator error, and it was mine.** This card's brief gave the unit baseline as **802**; the
+tree measured **816 before the agent wrote a line**, because `P1-T31` added 14 tests to the same 21
+files while this card was in flight. The agent reported the discrepancy rather than quietly matching
+it. The number was stale the moment two cards ran in parallel — **a brief's baseline is a reading, not
+a constant, and parallel cards need the reading taken at hand-out.**
+
 ---
 
 ### P1-T20 — Search & Import window: markup and controls
@@ -4425,7 +4524,7 @@ localization-related. **All 13 tests in `l10n.spec.ts` pass**, including the two
 | Field | Value |
 |---|---|
 | **ID** | `P1-T31` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-02; **a reporter per job, not per plugin**. `ServiceGraph.progress` is a `JobProgressFactory` and the root constructs no sinks at all, so `P1-T25`'s trap — one app-scoped reporter silently reporting exactly one job per plugin lifetime — **disappears structurally rather than behind a flag**. 816 unit tests (up from 802). The shape was chosen on three measured counts, and **criterion 5 was unreachable under the alternative without leaving this card's `Files`** — verified by pinning `openOn` at the root again and watching five tests fail. Six mutations, all caught; the pre-card state fails five. Closed the `docs/07` §7.7 ambiguity that **was the defect's entry point** — "one tree per job, not one per plugin". Reported rather than absorbed: nothing in the type system says a reporter must own its sinks, two concurrent jobs now float two `alwaysontop` popups, and `JobProgress` lives in `src/bootstrap/` where Phase 3's `core/jobQueue/queue.ts` will want it. |
 | **Depends on** | `P1-T15`, `P1-T25` |
 | **Blocks** | `P1-T16` |
 | **Retires** | none |
