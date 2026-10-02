@@ -3890,7 +3890,7 @@ mention it. **The seam is in place and nothing calls it.**
 | Field | Value |
 |---|---|
 | **ID** | `P1-T27` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-02; `maxConcurrent` is enforced by a new `run<T>()` holding a `Semaphore` permit for the call's lifetime, because **the missing thing was never a counter, it was a scope — an end.** `acquire` stays rate-only and ungated, which is what makes the deadlock unreachable. The slot-before-token ordering was **proven, not argued**: flipping it produced two consecutive starts 1,000 ms apart under `minIntervalMs: 3000`. Criterion 3 measures the reporting rather than the cap, so sibling assertions were added, not the criterion adjusted. The Crossref 3 → 1 concurrency gap is recorded, not hidden. |
 | **Depends on** | `P1-T04`, `P1-T05` |
 | **Blocks** | `P2-T05` |
 | **Retires** | none |
