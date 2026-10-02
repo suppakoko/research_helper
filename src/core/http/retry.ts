@@ -19,17 +19,27 @@
  *   `docs/07` §10.1's own `retryable` flag rather than a second opinion about
  *   status codes.
  *
- * ## `parseRetryAfterMs` is also declared by `P1-T04` step 6
+ * ## `Retry-After` is parsed in `backoff.ts`, not here (`P1-T26`)
  *
- * `P1-T05` step 4 says "on 429/503 read `Retry-After`, call
- * `limiter.penalize(...)`, throw `RateLimitError`", and `P1-T04` step 6 says
- * `backoff.ts` implements "`parseRetryAfter(headerValue)` handling both the
- * delta-seconds and the HTTP-date forms". Both cards own the same parse. It is
- * implemented here because this card's first acceptance criterion measures it
- * (`Retry-After: 2` → `retryAfterMs === 2000`) and this card's `Files` list has
- * nowhere else to put it. **The duplication is reported against the cards, not
- * resolved silently** — whichever of the two ends up authoritative, the other
- * should import it rather than keep a second copy.
+ * `P1-T05` step 4 ("on 429/503 read `Retry-After`, call `limiter.penalize(...)`,
+ * throw `RateLimitError`") and `P1-T04` step 6 ("`parseRetryAfter(headerValue)`
+ * handling both the delta-seconds and the HTTP-date forms") each required the
+ * same parse, and each shipped one — a `…Ms`-suffixed copy here and
+ * `parseRetryAfter` in `src/core/rateLimit/backoff.ts`. `P1-T26` collapsed them
+ * into the second, which is the better home because it already owns the jitter
+ * and the budget the parsed delay is combined with. `src/core/http/client.ts`
+ * imports it from there; this module parses nothing. The deleted name is spelled
+ * nowhere in `src/` or `test/` on purpose: `P1-T26`'s first criterion is that a
+ * recursive grep for it finds nothing, which is how a future reader can trust
+ * that there is exactly one parser.
+ *
+ * **The removed copy was the unsafe one, and the difference is measured.** It
+ * reached `Date.parse` with no shape check, and `Date.parse("120")` is *not*
+ * `NaN` — V8 reads a bare number as a year, so `"120.5"`, `"-5"` and `"+120"`
+ * became deadlines roughly two thousand years in the past, which clamp to "retry
+ * immediately" against a host that has just asked us to stop. `backoff.ts`'s
+ * `HTTP_DATE` gate is why its version returns `undefined` for all three and
+ * falls back to {@link RetryPolicy.nextDelayMs} instead.
  */
 
 import type { Clock } from "../clock";
@@ -37,47 +47,7 @@ import { RateLimitError, ResearchHelperError } from "../errors";
 import type { CancellationToken } from "../jobQueue/cancellation";
 
 // ---------------------------------------------------------------------------
-// 1. `Retry-After`
-// ---------------------------------------------------------------------------
-
-/**
- * `Retry-After` in milliseconds, in either RFC 9110 form.
- *
- * Two forms exist and both are seen in the wild: `delay-seconds` (a
- * non-negative integer) and `HTTP-date`. A date already in the past, and a
- * negative delta, yield `0` — "retry now" — rather than a negative delay, which
- * would sort before the present in every deadline comparison.
- *
- * @param headerValue - the raw header, or `undefined` when absent
- * @param nowMs - epoch milliseconds, from the injected {@link Clock}; the
- *   HTTP-date form is only meaningful relative to a clock this code controls
- * @returns the delay in milliseconds, or `undefined` when there is no usable
- *   value
- */
-export function parseRetryAfterMs(
-  headerValue: string | undefined,
-  nowMs: number,
-): number | undefined {
-  if (headerValue === undefined) return undefined;
-  const raw = headerValue.trim();
-  if (raw === "") return undefined;
-
-  // delay-seconds first: `Date.parse("120")` is *not* NaN in every engine, so
-  // testing the numeric form second would misread a small integer as a year.
-  if (/^\d+$/.test(raw)) {
-    return Number(raw) * 1000;
-  }
-  if (/^-\d+$/.test(raw)) {
-    return 0;
-  }
-
-  const atMs = Date.parse(raw);
-  if (Number.isNaN(atMs)) return undefined;
-  return Math.max(0, atMs - nowMs);
-}
-
-// ---------------------------------------------------------------------------
-// 2. What may be retried
+// 1. What may be retried
 // ---------------------------------------------------------------------------
 
 /**
@@ -106,7 +76,7 @@ export function isRetryableError(error: unknown): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// 3. The policy
+// 2. The policy
 // ---------------------------------------------------------------------------
 
 /**

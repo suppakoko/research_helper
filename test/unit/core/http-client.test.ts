@@ -31,7 +31,6 @@ import {
 } from "../../../src/core/http/client";
 import {
   isRetryableError,
-  parseRetryAfterMs,
   withRetry,
   type RetryPolicy,
 } from "../../../src/core/http/retry";
@@ -44,7 +43,15 @@ import {
   type CancellationReason,
 } from "../../../src/core/jobQueue/cancellation";
 import { createLogger, type LogSink } from "../../../src/core/logger";
-import { TokenBucket } from "../../../src/core/rateLimit/tokenBucket";
+import { parseRetryAfter } from "../../../src/core/rateLimit/backoff";
+import {
+  adoptAdvertisedLimits,
+  parseAdvertisedLimits,
+} from "../../../src/core/rateLimit/hostLimiter";
+import {
+  TokenBucket,
+  type RateLimiterConfig,
+} from "../../../src/core/rateLimit/tokenBucket";
 
 /**
  * `P1-T05`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network — the
@@ -839,26 +846,448 @@ describe("retry", () => {
   });
 });
 
-describe("parseRetryAfterMs", () => {
+/**
+ * `P1-T26`: the parser `client.ts` uses is now
+ * `src/core/rateLimit/backoff.ts`'s `parseRetryAfter`, and `retry.ts`'s second
+ * copy of it is gone — deleted name included, so that the card's first
+ * criterion (a recursive grep finds nothing) holds. Every assertion that was
+ * written against the
+ * removed copy survives here, retargeted — which is also what proves the two
+ * really did agree on the cases that matter, rather than the move quietly
+ * dropping the harder ones.
+ */
+describe("Retry-After, parsed by core/rateLimit/backoff.ts", () => {
   it("reads the delta-seconds form", () => {
-    expect(parseRetryAfterMs("2", 0)).toBe(2000);
-    expect(parseRetryAfterMs("120", 0)).toBe(120_000);
-    expect(parseRetryAfterMs(" 0 ", 0)).toBe(0);
+    expect(parseRetryAfter("2", 0)).toBe(2000);
+    expect(parseRetryAfter("120", 0)).toBe(120_000);
+    expect(parseRetryAfter(" 0 ", 0)).toBe(0);
   });
 
   it("reads the HTTP-date form, relative to the injected clock", () => {
     const nowMs = Date.parse("Wed, 21 Oct 2015 07:28:00 GMT");
-    expect(parseRetryAfterMs("Wed, 21 Oct 2015 07:28:30 GMT", nowMs)).toBe(
+    expect(parseRetryAfter("Wed, 21 Oct 2015 07:28:30 GMT", nowMs)).toBe(
       30_000,
     );
     // A date already in the past is "retry now", never a negative delay.
-    expect(parseRetryAfterMs("Wed, 21 Oct 2015 07:27:00 GMT", nowMs)).toBe(0);
+    expect(parseRetryAfter("Wed, 21 Oct 2015 07:27:00 GMT", nowMs)).toBe(0);
   });
 
   it("returns undefined for an absent or unusable value", () => {
-    expect(parseRetryAfterMs(undefined, 0)).toBeUndefined();
-    expect(parseRetryAfterMs("", 0)).toBeUndefined();
-    expect(parseRetryAfterMs("soon", 0)).toBeUndefined();
+    expect(parseRetryAfter(undefined, 0)).toBeUndefined();
+    expect(parseRetryAfter("", 0)).toBeUndefined();
+    expect(parseRetryAfter("soon", 0)).toBeUndefined();
+  });
+
+  it("refuses the three values a bare Date.parse would read as years", () => {
+    // The card's load-bearing **Do NOT**, re-asserted at the call site's own
+    // file because this is where the removed copy got it wrong: it reached
+    // `Date.parse` with no shape check, and `Date.parse("120.5")` is the year
+    // 120, not NaN — a deadline two millennia in the past, which clamps to
+    // "retry immediately" against a host that just asked us to stop.
+    for (const value of ["120.5", "-5", "+120"]) {
+      expect(parseRetryAfter(value, 0)).toBeUndefined();
+      expect(Number.isNaN(Date.parse(value))).toBe(false);
+    }
+  });
+});
+
+describe("Retry-After end to end (P1-T26 criterion 2)", () => {
+  it("penalizes by exactly 120 000 ms on a 429 carrying Retry-After: 120", async () => {
+    const clock = createManualClock();
+    const limiter = createStubLimiter();
+    const transport = createStubTransport(() =>
+      Promise.resolve(
+        stubXhr({ status: 429, headers: { "Retry-After": "120" } }),
+      ),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      limiterFor: () => limiter,
+    });
+
+    const error = await client.request("GET", URL_OK).catch((e: unknown) => e);
+
+    expect((error as RateLimitError).retryAfterMs).toBe(120_000);
+    expect(limiter.penalties).toHaveLength(1);
+    expect(limiter.penalties[0]!.untilEpochMs - clock.now()).toBe(120_000);
+  });
+
+  it.each(["120.5", "-5", "+120", "Sun Nov  6 08:49:37 1994"])(
+    "does not penalize at all on a malformed Retry-After (%s)",
+    async (value) => {
+      // The failure mode the shape check exists for: a bare `Date.parse` makes
+      // every one of these a *past* deadline, so the host would be penalized
+      // until an instant already gone — i.e. not at all — while
+      // `RateLimitError.retryAfterMs` reported 0 and the retry loop fired
+      // immediately. `asctime` is in the list because it carries no timezone
+      // and would be read in the local one.
+      const clock = createManualClock();
+      const limiter = createStubLimiter();
+      const transport = createStubTransport(() =>
+        Promise.resolve(
+          stubXhr({ status: 429, headers: { "Retry-After": value } }),
+        ),
+      );
+      const client = createHttpClient({
+        transport,
+        userAgent: UA,
+        clock,
+        limiterFor: () => limiter,
+      });
+
+      const error = await client
+        .request("GET", URL_OK)
+        .catch((e: unknown) => e);
+
+      expect((error as RateLimitError).retryAfterMs).toBeUndefined();
+      expect(limiter.penalties).toHaveLength(0);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 5b. Live rate-limit headers — P1-T26 step 2
+// ---------------------------------------------------------------------------
+
+/** A header lookup with `HttpResponse.header`'s case-insensitivity. */
+function headerLookup(
+  headers: Readonly<Record<string, string>>,
+): (name: string) => string | undefined {
+  const byName = new Map(
+    Object.entries(headers).map(([name, value]) => [name.toLowerCase(), value]),
+  );
+  return (name) => byName.get(name.toLowerCase());
+}
+
+/** A limiter that only records what it was reconfigured to. */
+function recordingLimiter(current: RateLimiterConfig): {
+  readonly applied: RateLimiterConfig[];
+  readonly currentConfig: RateLimiterConfig;
+  reconfigure(config: RateLimiterConfig): void;
+} {
+  const applied: RateLimiterConfig[] = [];
+  let config = current;
+  return {
+    applied,
+    get currentConfig(): RateLimiterConfig {
+      return config;
+    },
+    reconfigure(next) {
+      applied.push(next);
+      config = next;
+    },
+  };
+}
+
+const NCBI_NO_KEY: RateLimiterConfig = {
+  ratePerSecond: 2.5,
+  burst: 1,
+  maxConcurrent: 3,
+};
+
+describe("the limits a host advertises", () => {
+  it("reads both measured spellings, in both cases", () => {
+    // The trap this card was handed: `docs/02` §3.1 shows NCBI sending
+    // `X-Ratelimit-Limit` in mixed case with no hyphen inside "Ratelimit", and
+    // §5.1's measured Crossref response is all lowercase *with* one. Two
+    // different headers, not one header twice — and a case-sensitive lookup
+    // would silently read neither.
+    expect(
+      parseAdvertisedLimits(headerLookup({ "X-Ratelimit-Limit": "3" })),
+    ).toStrictEqual({ ratePerSecond: 3 });
+    expect(
+      parseAdvertisedLimits(
+        headerLookup({
+          "x-rate-limit-limit": "3",
+          "x-rate-limit-interval": "1s",
+          "x-concurrency-limit": "3",
+        }),
+      ),
+    ).toStrictEqual({ ratePerSecond: 3, maxConcurrent: 3 });
+  });
+
+  it("divides by a non-default interval, and voids a malformed one", () => {
+    // §7.3: the interval "is **not** fixed at one second".
+    expect(
+      parseAdvertisedLimits(
+        headerLookup({
+          "x-rate-limit-limit": "6",
+          "x-rate-limit-interval": "3s",
+        }),
+      ),
+    ).toStrictEqual({ ratePerSecond: 2 });
+    // Present but unreadable: the server said the interval is not one second
+    // and we cannot tell what it is, so there is no rate here to adopt.
+    expect(
+      parseAdvertisedLimits(
+        headerLookup({
+          "x-rate-limit-limit": "6",
+          "x-rate-limit-interval": "1 minute",
+        }),
+      ),
+    ).toStrictEqual({});
+  });
+
+  it("reads nothing from a remaining count, a zero or a malformed value", () => {
+    // `X-Ratelimit-Remaining` is a count against an unstated window. Turning it
+    // into a rate would be inventing the window (rule 4), and `TokenBucket`
+    // already models remaining budget as `stats.available`.
+    expect(
+      parseAdvertisedLimits(headerLookup({ "X-Ratelimit-Remaining": "2" })),
+    ).toStrictEqual({});
+    for (const value of ["0", "", "2.5", "-1", "many", "3 "]) {
+      expect(
+        parseAdvertisedLimits(headerLookup({ "x-ratelimit-limit": value }))
+          .ratePerSecond,
+      ).toBe(value === "3 " ? 3 : undefined);
+    }
+  });
+
+  it("adopts a tighter rate and reports what it adopted", () => {
+    const limiter = recordingLimiter(NCBI_NO_KEY);
+
+    const adopted = adoptAdvertisedLimits(
+      limiter,
+      headerLookup({ "X-Ratelimit-Limit": "1" }),
+    );
+
+    expect(adopted).toStrictEqual({
+      ratePerSecond: 1,
+      burst: 1,
+      maxConcurrent: 3,
+    });
+    expect(limiter.applied).toStrictEqual([adopted]);
+  });
+
+  it("does not reconfigure at all when nothing tightened", () => {
+    // Three separate "no" cases, and each one must produce *no call*:
+    // reconfigure() refills, re-queues and re-schedules, so a host advertising
+    // its steady state on every response must not pay for it every time.
+    const limiter = recordingLimiter(NCBI_NO_KEY);
+
+    // (a) no header at all.
+    expect(adoptAdvertisedLimits(limiter, headerLookup({}))).toBeUndefined();
+    // (b) the advertised limit is *higher* than the policy in force. §7.3 puts
+    //     NCBI at 2.5/s against a documented 3/s "for clock-skew headroom", and
+    //     3 is exactly what the live header says — adopting it would spend the
+    //     headroom the table exists to keep.
+    expect(
+      adoptAdvertisedLimits(
+        limiter,
+        headerLookup({ "x-ratelimit-limit": "3" }),
+      ),
+    ).toBeUndefined();
+    // (c) equal to what is in force.
+    expect(
+      adoptAdvertisedLimits(
+        limiter,
+        headerLookup({
+          "x-rate-limit-limit": "5",
+          "x-rate-limit-interval": "2s",
+        }),
+      ),
+    ).toBeUndefined();
+    expect(limiter.applied).toStrictEqual([]);
+  });
+
+  it("is a no-op for a limiter missing either half of the seam", () => {
+    const tightening = headerLookup({ "x-ratelimit-limit": "1" });
+
+    // Neither member — the stub every pre-P1-T26 assertion in this file uses.
+    expect(adoptAdvertisedLimits(createStubLimiter(), tightening)).toBe(
+      undefined,
+    );
+
+    // `reconfigure` but no `currentConfig`. There is no policy to compare the
+    // header against, and inventing one to compare against is what rule 4
+    // forbids — so the call must not happen at all, not merely happen to be a
+    // no-op for this particular header.
+    let calls = 0;
+    expect(
+      adoptAdvertisedLimits(
+        {
+          reconfigure() {
+            calls += 1;
+          },
+        },
+        tightening,
+      ),
+    ).toBeUndefined();
+    expect(calls).toBe(0);
+
+    // `currentConfig` but no `reconfigure`: nothing to call, and it must not
+    // throw trying.
+    expect(
+      adoptAdvertisedLimits({ currentConfig: NCBI_NO_KEY }, tightening),
+    ).toBeUndefined();
+  });
+
+  it("adopts Crossref's measured 3 → 1 concurrency drop, downwards only", () => {
+    // `docs/02` §5.1, verified live: polite pool `x-concurrency-limit: 3`,
+    // public pool `1`. The static row this is applied to is §7.3's Crossref
+    // cell, 2/interval with maxConcurrent 3.
+    const limiter = recordingLimiter({
+      ratePerSecond: 2,
+      burst: 2,
+      maxConcurrent: 3,
+    });
+
+    expect(
+      adoptAdvertisedLimits(
+        limiter,
+        headerLookup({
+          "x-rate-limit-limit": "1",
+          "x-rate-limit-interval": "1s",
+          "x-concurrency-limit": "1",
+          "x-api-pool": "public-array",
+        }),
+      ),
+    ).toStrictEqual({ ratePerSecond: 1, burst: 2, maxConcurrent: 1 });
+    // Back in the polite pool, nothing is raised again: see the "only
+    // downwards" rule and the gap reported against this card.
+    expect(
+      adoptAdvertisedLimits(
+        limiter,
+        headerLookup({
+          "x-rate-limit-limit": "3",
+          "x-rate-limit-interval": "1s",
+          "x-concurrency-limit": "3",
+        }),
+      ),
+    ).toBeUndefined();
+    expect(limiter.applied).toHaveLength(1);
+  });
+});
+
+describe("the client reconfigures the limiter from live headers", () => {
+  it("demonstrably slows the next acquire (P1-T26 criterion 3)", async () => {
+    // Over a *real* `TokenBucket` on a manual clock, so "slows" is measured in
+    // milliseconds rather than asserted on a spy. 10/s with burst 1: after the
+    // first request the bucket is empty, and the next token is 100 ms away at
+    // the configured rate and 1000 ms away at the rate the response advertises.
+    const clock = createManualClock();
+    const limiter = new TokenBucket(
+      "example.test",
+      { ratePerSecond: 10, burst: 1, maxConcurrent: 3 },
+      clock,
+    );
+    const transport = createStubTransport(() =>
+      Promise.resolve(
+        stubXhr({
+          status: 200,
+          headers: {
+            "x-rate-limit-limit": "1",
+            "x-rate-limit-interval": "1s",
+          },
+        }),
+      ),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      limiterFor: () => limiter,
+    });
+
+    await client.request("GET", `${URL_OK}?n=1`);
+    expect(limiter.currentConfig.ratePerSecond).toBe(1);
+
+    const second = client.request("GET", `${URL_OK}?n=2`);
+    await flushMicrotasks();
+    // Not yet: at the original 10/s this request would already be on the wire.
+    clock.advance(100);
+    await flushMicrotasks();
+    expect(transport.calls).toHaveLength(1);
+
+    // Let the clock run on until it does go out, and measure when.
+    const t0 = clock.now() - 100;
+    for (let i = 0; i < 2000 && transport.calls.length < 2; i += 1) {
+      clock.advance(1);
+      await flushMicrotasks();
+    }
+    expect(transport.calls).toHaveLength(2);
+    expect(clock.now() - t0).toBe(1000);
+    await expect(second).resolves.toMatchObject({ status: 200 });
+  });
+
+  it("reads the headers on a 429 too, and still penalizes", async () => {
+    const clock = createManualClock();
+    const limiter = new TokenBucket("example.test", NCBI_NO_KEY, clock);
+    const transport = createStubTransport(() =>
+      Promise.resolve(
+        stubXhr({
+          status: 429,
+          headers: { "X-Ratelimit-Limit": "1", "Retry-After": "120" },
+        }),
+      ),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      limiterFor: () => limiter,
+    });
+
+    await client.request("GET", URL_OK).catch(() => undefined);
+
+    expect(limiter.currentConfig.ratePerSecond).toBe(1);
+    expect(limiter.stats.penalizedUntilEpochMs).toBe(clock.now() + 120_000);
+  });
+
+  it("logs the reconfiguration, and logs nothing extra when there is none", async () => {
+    const clock = createManualClock();
+    const sink = createCapturingSink();
+    const logger = createLogger({ sink, clock, level: "info" });
+    // Rate and burst are generous so that three requests go out without the
+    // manual clock having to be advanced; the point here is the log lines, not
+    // the pacing (which the criterion-3 test above measures).
+    const limiter = new TokenBucket(
+      "example.test",
+      { ratePerSecond: 1000, burst: 10, maxConcurrent: 3 },
+      clock,
+    );
+    const transport = createStubTransport((_call, index) =>
+      Promise.resolve(
+        stubXhr({
+          status: 200,
+          // The first response tightens 1000/s to 100/s; the second advertises
+          // the same 100 again, which must not reconfigure or log a second
+          // time, and the third advertises *more*, which must not either.
+          headers: { "x-ratelimit-limit": index === 2 ? "200" : "100" },
+        }),
+      ),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      logger,
+      limiterFor: () => limiter,
+    });
+
+    await client.request("GET", URL_OK);
+    const afterFirst = sink.lines.length;
+    await client.request("GET", URL_OK);
+    await client.request("GET", URL_OK);
+
+    expect(afterFirst).toBe(2);
+    expect(sink.lines[1]).toContain("rate limit reconfigured");
+    expect(sink.lines[1]).toContain('"ratePerSecond":100');
+    // Two more requests, two more "http request" lines and nothing else.
+    expect(sink.lines).toHaveLength(4);
+    expect(limiter.currentConfig.ratePerSecond).toBe(100);
+  });
+
+  it("leaves an unpaced host alone", async () => {
+    const { client } = clientFor(
+      stubXhr({ status: 200, headers: { "x-ratelimit-limit": "1" } }),
+    );
+
+    await expect(client.request("GET", URL_OK)).resolves.toMatchObject({
+      status: 200,
+    });
   });
 });
 

@@ -3982,6 +3982,139 @@ mention it. **The seam is in place and nothing calls it.**
 
 **Verify with.** `npm run typecheck && npm run test:unit -- http tokenBucket backoff`
 
+**Findings, 2026-10-02 — all four criteria pass. One parser, and the limiter now reads the headers
+the hosts actually send, but only ever *downwards*.** `parseRetryAfterMs` is gone;
+`backoff.ts`'s `parseRetryAfter` is the one parser, which is the better home because it already owns
+the jitter and the budget. A new `adoptLimits()` runs in `issueAndClassify` **after logging and
+before `classify`**, so a 429's headers are read too — the response that says most about a host's
+limits is the one that refused you — and `penalize` is still the last word. Verified independently of
+the report: **833 unit tests in 21 files** (up from 816), typecheck 0, `lint:check` 0, and **63
+integration tests, exit 0**. Exactly the four files in `Files`.
+
+**The load-bearing deviation: advertised limits are adopted only downwards, and the reasoning is
+better than the card's own framing.** `docs/07` §7.3's Crossref cell reads as though a generous header
+should also *raise* the rate from the "start at 2/interval" default. That half was deliberately not
+implemented, because §7.3's NCBI basis says in as many words that 2.5/s and 8/s "sit below both for
+clock-skew headroom" against NCBI's documented 3/s and 10/s — and `docs/02` §3.1's **live header is
+`X-Ratelimit-Limit: 3`, exactly the figure the table deliberately stays under.** Adopting it would
+spend the headroom whose stated purpose is avoiding §3.1's "may result in an IP address being
+blocked". Taking the smaller of two measured numbers invents nothing, so rule 4 is satisfied in both
+directions; raising the rate above §7.3 on the strength of a header would make a response header
+overrule §7.3 as rule 4's authority, which **no card authorises**. The upward half needs its own
+decision and is listed below.
+
+**The header case trap was real but the diagnosis was sharper than the trap.** `HttpResponse.header()`
+is case-insensitive on **both** sides — `client.ts` stores `line.slice(0, colon).trim().toLowerCase()`
+(line 883) and looks up `byName.get(name.toLowerCase())` (line 895), both verified. But the two hosts'
+names differ by **more than case**: NCBI's is `X-Ratelimit-Limit` with **no hyphen inside
+`Ratelimit`**, Crossref's is `x-rate-limit-limit` with one. A single name would have missed one host
+*regardless* of case handling, so `ADVERTISED_RATE_LIMIT_HEADERS` holds both and tries them in order.
+Proven by breaking the **storage** side rather than the lookup: that mutation makes the NCBI path a
+silent no-op and is caught as `expected 2.5 to be 1`.
+
+**`docs/02` spells NCBI's one header three different ways, and that is what makes a case-sensitive
+reader look correct on inspection.** Verified line by line: `X-RateLimit-Limit` (lines 101 and 283),
+`X-Rate-Limit-Limit` (line 227's code comment, borrowing Crossref's hyphenation), and
+`X-Ratelimit-Limit` (line 280 — **the verified raw response**, which is the measurement and should
+win). Harmless in practice given case-insensitive lookup on both sides; dangerous to a reader
+transcribing by eye.
+
+**`X-RateLimit-Remaining` drives nothing, deliberately, and the reasoning is recorded at the
+parser.** It is a remaining count against a window **NCBI never states**; converting it to a rate
+means inventing the window, which rule 4 and the card's `Do NOT` forbid. It is also redundant — a
+remaining budget is exactly what `TokenBucket` models from a rate we are allowed to know, and
+`RateLimiterStats.available` reports it. The one thing it says that a rate does not is `Remaining: 0`,
+and the host answers that case with a 429 and a `Retry-After`, which `penalize()` already honours with
+a deadline the server actually sent. Asserted (`parseAdvertisedLimits` over `X-Ratelimit-Remaining: 2`
+is `{}`) and proven by a mutant.
+
+**A third measurement changed the design, and it is the strongest argument for tighten-only.**
+`docs/02` §9.1's verified OpenAlex response carries `X-RateLimit-Limit: 1000` where the 1000 is a
+**daily** budget. The one assumption in the parser — absent interval ⇒ one second — would read it as
+1000/s, three orders of magnitude too generous. D2 keeps OpenAlex out of v1 so `limiterFor` never
+hands it a response, but every error that assumption can make is in the "too generous" direction, and
+too generous is exactly what tighten-only discards. **One refinement to that argument, measured here
+rather than in the report:** the same response does carry `X-RateLimit-Reset: 58798`, so for OpenAlex
+the window *is* discoverable (≈16 h, consistent with a daily budget) — the window is unstated for
+**NCBI**, not universally. The conclusion stands and is in fact strengthened: a reader that assumed
+one second would be wrong on a host whose real window was sitting in the next header.
+
+**The `resize()` interaction, settled precisely: not reachable in Phase 1, for two independent
+verified reasons.** NCBI's measured response (`docs/02` §3.1, lines ~277–284) carries **no**
+`x-concurrency-limit` at all, so `parseAdvertisedLimits` returns no `maxConcurrent` for the only host
+Phase 1 reaches over the network; and even if it did, NCBI's row is `maxConcurrent: 3` in both key
+modes, so a tighten-only adoption from an advertised 3 is a no-op. **It becomes reachable the moment
+Phase 2 registers `api.crossref.org`**, where `docs/02` §5.1 measures `x-concurrency-limit: 3` polite
+and **1** public against a §7.3 row of 3 — one pool demotion away. `reconfigure` records the new cap
+in `wantedConcurrency` but `applyWantedConcurrency` refuses to swap a busy gate, so under continuous
+traffic the old cap of 3 stays in force until a gap appears. **Two facts bound the severity and
+belong in the card that fixes it:** because adoption is tighten-only the deferral can only leave the
+cap *too high*, never raise a cap behind a permit holder's back — so `Semaphore`'s recorded invariant
+is never at risk, only its promptness — and `run()`'s `finally` already calls
+`applyWantedConcurrency()` on **every** release, so the change lands at the first idle instant rather
+than at the next `reconfigure`.
+
+**Criterion 1 failed first and was fixed rather than reinterpreted.** The first implementation left
+the dead identifier in two *prose* comments, so `grep -rn 'parseRetryAfterMs' src test` returned two
+hits. The criterion says "returns nothing" and it was taken literally: both comments were reworded to
+describe the deleted copy without spelling it, and each now records that the absence is deliberate
+*because* of this criterion. Re-verified here: the grep exits 1 with no output.
+
+**Criterion 3 was made to fail without the call, and then made to carry the criterion alone.**
+Measured over a **real `TokenBucket`** on a manual clock rather than a spy: 10/s burst 1, response
+advertises `x-rate-limit-limit: 1` + `x-rate-limit-interval: 1s`, so the next token is 100 ms away at
+the configured rate and 1000 ms away at the adopted one. The test asserts the second request is **not**
+on the wire at +100 ms, then steps the clock 1 ms at a time and asserts it goes out at exactly
++1000 ms. With `adoptLimits` removed it fails at the +100 ms line, and that was confirmed with the
+`currentConfig` assertion **also** removed — so the timing assertion alone is load-bearing.
+
+**Ten mutants, and the one worth reading is the one that survived.** A "no-op for a limiter that
+publishes no config" test **passed with the guard gone**, because the invented default happened not to
+be tightened by the header in play — a test that proved nothing, found by mutation rather than by
+review. It was rewritten to cover both halves of the seam separately: a limiter with `reconfigure`
+but no `currentConfig` must produce **zero calls**, *counted* rather than inferred from a return
+value, and one with `currentConfig` but no `reconfigure` must return `undefined` without throwing. The
+mutant then fails on the second half. Also caught: reinstating the bare `Date.parse` guard at the call
+site fails all four malformed-`Retry-After` cases with `expected +0 to be undefined` — **"retry
+immediately", the exact defect the card names, reproduced on demand.** `grep -rn MUTANT src test`
+re-verified clean here.
+
+**`RateLimiterPort` gained two *optional* members and the composition root did not change.**
+`currentConfig` and `reconfigure` are optional — unlike `P1-T27`'s required `run` — because §7.3's
+table stays the floor when a host advertises nothing, and a stub that only paces must keep compiling.
+`TokenBucket` already supplies both, so `container.ts`'s existing `limiterFor` wires the feature with
+no edit, which is why **no file outside `Files` was needed**. The header→policy mapping went into
+`hostLimiter.ts`, §7.3's policy module and by its own header "the only place in the product where a
+rate number may appear"; the card's step 1 already spends the `core/http` → `core/rateLimit` boundary,
+and nothing under `core/rateLimit/` imports `core/http/` (grepped), so no cycle and no new module in
+the bundle. One statement this card made false was corrected in place: `client.ts`'s claim that
+"`core/http` does not have to compile against `core/rateLimit` to be tested" — now does, by step 1.
+
+**`docs/07` §7.3's Crossref cell is now confirmed wrong from both sides.** `P1-T27` found that the
+cell cannot express its own row; this card measured the same mismatch from the *headers* — the cell
+says "10 requests/interval, 3 concurrent (public pool is 5/1)" while the verified
+`x-rate-limit-limit` is **3** polite and **1** public, because those are the list-endpoint figures and
+the parenthetical is the single-DOI one. The cell also now **overstates what `reconfigure()` does**:
+"called from those headers on every response" is true as of this card, but beside "start at
+2/interval" it implies the header also raises the rate, which this implementation deliberately does
+not. `docs/07` is outside this card's `Files`, so nothing was changed there and a doc amendment is
+owed.
+
+**No doc code block failed to compile where the doc puts it** — the first card in a while to be able
+to say that. §4.1's `RateLimiter`, §7.3's `TokenBucket` skeleton and §7.4's option set were all read
+and all match the shipped code.
+
+**An operational fact measured during this verification and recorded nowhere in the corpus.** The
+first integration re-run **exited 1 having run no tests at all**:
+`EBUSY: resource busy or locked, unlink '.scaffold\test\profile\cert9.db'`. The cause is that
+`zotero-plugin test --exit-on-finish` **leaves the test-profile Zotero running after the run
+completes** — ten processes were still alive, the parent on
+`-profile .scaffold\test\profile --dataDir .scaffold\test\data no-remote` — so the next run cannot
+clean the profile. Recovery is to terminate that instance, identified **by its command line** and not
+by name, because the user's own Zotero runs the same binary. `docs/13` documents the flag and says
+nothing about this; the failure is silent about its real cause and looks like a test failure.
+**Needs a doc line, and it is a trap for CI and for the next agent.**
+
 ---
 
 ### P1-T27 — Give the concurrency cap an owner, or remove it from the interface

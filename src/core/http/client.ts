@@ -23,9 +23,17 @@
  *    4xx, `TimeoutError`, `OfflineError`, `NetworkError`,
  *    `OperationCancelledError`.
  * 3. **Retry**, through `./retry.ts`, over the retryable classes only, with the
- *    delay coming from `Retry-After` or from the host's injected jitter.
+ *    delay coming from `Retry-After` or from the host's injected jitter. The
+ *    `Retry-After` parse is `src/core/rateLimit/backoff.ts`'s and is the only one
+ *    in the codebase (`P1-T26`).
  * 4. **Logging**, at `info`, of `{ method, host, path, status, ms }` with the URL
  *    put through `src/core/errors.ts`'s `redactUrl` (`P1-T02`).
+ * 5. **Adoption of the host's advertised limits** (`P1-T26`). Every response is
+ *    offered to `src/core/rateLimit/hostLimiter.ts`'s `adoptAdvertisedLimits`,
+ *    which is the caller `docs/07` §7.3 described — "`reconfigure()` is called
+ *    from those headers on every response" — and which nothing called until this
+ *    card, because reading a response header needs a response and `P1-T04` could
+ *    not touch this path.
  *
  * Streaming is still not here: `docs/01` §8.4.1 needs `requestObserver` plus a
  * `progress` listener over a *cumulative* `responseText`, which is a different
@@ -112,8 +120,11 @@ import {
 } from "../errors";
 import type { CancellationToken } from "../jobQueue/cancellation";
 import type { Logger } from "../logger";
+import { parseRetryAfter } from "../rateLimit/backoff";
+import { adoptAdvertisedLimits } from "../rateLimit/hostLimiter";
+import type { RateLimiterConfig } from "../rateLimit/tokenBucket";
 
-import { parseRetryAfterMs, type RetryPolicy, withRetry } from "./retry";
+import { type RetryPolicy, withRetry } from "./retry";
 import { MAINTAINER_EMAIL, NCBI_EUTILS_HOST, TOOL_NAME } from "./userAgent";
 
 /** HTTP methods this client issues. */
@@ -291,8 +302,17 @@ export type Transport = HttpTransport;
  * {@link HttpTransport} is: the request path needs a few members and nothing
  * else. `P1-T04`'s `TokenBucket` — which implements §4.1's `RateLimiter` in full,
  * including `tryAcquire`, `reconfigure` and `stats` — is structurally assignable
- * to this, so the composition root needs no adapter and no cast, and `core/http`
- * does not have to compile against `core/rateLimit` to be tested.
+ * to this, so the composition root needs no adapter and no cast.
+ *
+ * **Corrected 2026-10-02 (`P1-T26`): this said `core/http` "does not have to
+ * compile against `core/rateLimit` to be tested", and it no longer does not.**
+ * That card collapsed the duplicate `Retry-After` parser into
+ * `core/rateLimit/backoff.ts` and put the header → policy mapping in
+ * `core/rateLimit/hostLimiter.ts`, so this module now imports both. The port
+ * still earns its keep — a test injects a four-line object rather than a
+ * `TokenBucket`, and §4.1 is not redeclared — but the *module* boundary is gone,
+ * deliberately and by the card's own step 1. Nothing in `core/rateLimit/` imports
+ * `core/http/`, so there is no cycle.
  *
  * §4.1 remains the authority for the interface; nothing is *redeclared* here,
  * only the used subset is named.
@@ -325,6 +345,20 @@ export interface RateLimiterPort {
    * *every* waiter on that host."
    */
   penalize(untilEpochMs: number, reason: string): void;
+  /**
+   * The policy in force, for {@link adoptAdvertisedLimits} (`P1-T26`).
+   *
+   * **Optional, unlike `run`.** It is not on §4.1's `RateLimiter` at all — it is
+   * `TokenBucket.currentConfig`, which exists beyond the interface so a caller
+   * can tell what is in force — and a limiter that publishes neither this nor
+   * {@link reconfigure} is simply never reconfigured from headers. `run` is
+   * required because a limiter that ignores `maxConcurrent` is a silent defect;
+   * this one is required of nothing, because `docs/07` §7.3's tables remain the
+   * floor when a host advertises nothing.
+   */
+  readonly currentConfig?: RateLimiterConfig;
+  /** §4.1's runtime reconfiguration. Optional for the reason above. */
+  reconfigure?(config: RateLimiterConfig): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -533,6 +567,11 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
           clock.now() - startedMs,
           undefined,
         );
+        // `P1-T26` step 2, and §7.3's "reconfigure() is called from those
+        // headers on every response". Before `classify`, so it happens on a 429
+        // too — the response that says most about the host's limits is the one
+        // that refused us.
+        adoptLimits(limiter, response, host, deps.logger);
         return classify(response, host, limiter, clock.now(), options.token);
       };
 
@@ -707,6 +746,39 @@ function toHierarchy(
 }
 
 /**
+ * Reconfigure the host's limiter from the limits the response advertised.
+ *
+ * `P1-T26`. The reading, the "only when present" rule and the "only downwards"
+ * rule all live in `src/core/rateLimit/hostLimiter.ts` beside §7.3's policy
+ * table, because what a host's headers *mean* is policy; this function is the
+ * caller §7.3 said existed and `P1-T04` could not write, since reading a
+ * response header needs a response and only this layer has one.
+ *
+ * A limiter is never required to support it — see
+ * {@link RateLimiterPort.currentConfig} — and a response that advertised nothing
+ * costs one map lookup per header name.
+ */
+function adoptLimits(
+  limiter: RateLimiterPort | undefined,
+  response: HttpResponse,
+  host: string,
+  logger: Logger | undefined,
+): void {
+  if (limiter === undefined) return;
+  const adopted = adoptAdvertisedLimits(limiter, (name) =>
+    response.header(name),
+  );
+  if (adopted === undefined) return;
+  // A rate that changed itself is not visible in any other line, and "why did
+  // this job slow down" is otherwise unanswerable from a debug bundle.
+  logger?.info("rate limit reconfigured from response headers", {
+    host,
+    ratePerSecond: adopted.ratePerSecond,
+    maxConcurrent: adopted.maxConcurrent,
+  });
+}
+
+/**
  * Turn a status into a §10.1 error, or return the response unchanged.
  *
  * `docs/07` §7.3's `Retry-After` rule is here: a 429 or a 503 carrying the
@@ -714,6 +786,12 @@ function toHierarchy(
  * that host, so one job's throttling slows all of them. `penalize` is **not**
  * called when the header is absent — a deadline would have to be invented, and
  * `plan/README.md` §5 rule 4 forbids inventing one.
+ *
+ * The parse is `src/core/rateLimit/backoff.ts`'s `parseRetryAfter`, the one
+ * parser in the codebase since `P1-T26`. Its `HTTP_DATE` shape check is
+ * load-bearing here: without it `Date.parse` reads `"120.5"` as the year 120 and
+ * this function would hand `penalize` a deadline two millennia in the past,
+ * which clamps to "retry immediately" against a host that just asked us to stop.
  */
 function classify(
   response: HttpResponse,
@@ -732,7 +810,7 @@ function classify(
 
   const retryAfterMs =
     status === 429 || status === 503
-      ? parseRetryAfterMs(response.header("retry-after"), nowMs)
+      ? parseRetryAfter(response.header("retry-after"), nowMs)
       : undefined;
   if (retryAfterMs !== undefined) {
     limiter?.penalize(nowMs + retryAfterMs, `HTTP ${status} Retry-After`);

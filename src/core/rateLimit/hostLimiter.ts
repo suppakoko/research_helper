@@ -126,15 +126,15 @@ export const NCBI_KEY_PRESENT_PREF = "ncbi.keyPresent";
  * where it starts to matter, so the guidance stays recorded beside the row it
  * belongs to.
  *
- * **`X-Ratelimit-Limit` / `X-Ratelimit-Remaining` are live and unread.**
- * `docs/02` §3.1 verified NCBI returning both, and `P1-T04`'s "Read first" says
- * the governor "should read rather than assume" them. Reading a response header
- * requires a response, which lives in `src/core/http/` — a path this card may not
- * touch. {@link HostLimiterRegistry.limiterFor} plus
- * {@link ./tokenBucket.RateLimiter.reconfigure} is the seam that will
- * carry it; the same seam Crossref's `x-rate-limit-limit` /
- * `x-rate-limit-interval` needs, which §7.3 says "`reconfigure()` is called from
- * those headers on every response".
+ * **`X-Ratelimit-Limit` is read, as of `P1-T26`.** `docs/02` §3.1 verified NCBI
+ * returning it and `X-Ratelimit-Remaining`, and `P1-T04`'s "Read first" says the
+ * governor "should read rather than assume" them. Reading a response header
+ * requires a response, which lives in `src/core/http/` — a path `P1-T04` could
+ * not touch. {@link adoptAdvertisedLimits} is now that seam: §3 of this file maps
+ * the headers both measured hosts send onto a {@link RateLimiterConfig} and
+ * `src/core/http/client.ts` calls it on every response. `X-Ratelimit-Remaining`
+ * drives **nothing** — see {@link parseAdvertisedLimits} for why a remaining
+ * *count* cannot become a rate.
  *
  * **The five rows Phase 2 adds**, each from §7.3 verbatim and each with the card
  * that adds it: `www.ebi.ac.uk` (Europe PMC, `P2-T03`), `api.crossref.org`,
@@ -324,7 +324,253 @@ export function createHostLimiterRegistry(
 }
 
 // ---------------------------------------------------------------------------
-// 3. The process-wide holder
+// 3. The limits the hosts advertise — docs/02 §3.1 and §5.1
+// ---------------------------------------------------------------------------
+
+/**
+ * A case-insensitive response-header lookup.
+ *
+ * Exactly `src/core/http/client.ts`'s `HttpResponse.header`, declared
+ * structurally so that nothing in `core/rateLimit/` has to compile against
+ * `core/http/`. **Case-insensitivity is load-bearing and measured:** the two
+ * hosts spell their headers differently — `docs/02` §3.1 shows NCBI sending
+ * `X-Ratelimit-Limit` in mixed case while §5.1's measured Crossref response is
+ * all lowercase — and `toHttpResponse` in `client.ts` lower-cases both the stored
+ * name and the argument, so one set of lowercase names below reaches both. A
+ * case-*sensitive* lookup would make this whole section a silent no-op for NCBI.
+ */
+export type ResponseHeaderLookup = (name: string) => string | undefined;
+
+/**
+ * The two spellings of "requests per interval" that are **measured in the
+ * corpus**, in the order they are tried.
+ *
+ * They are different headers, not one header in two cases: NCBI's has no hyphen
+ * inside `Ratelimit` (`docs/02` §3.1, verified live) and Crossref's does
+ * (`docs/02` §5.1, verified live 2026-09-08). Both are stored lowercase here
+ * because {@link ResponseHeaderLookup} is case-insensitive.
+ *
+ * No other spelling is guessed. `docs/02` §9.1's OpenAlex block shows a third
+ * family (`X-RateLimit-Cost-USD`, `X-RateLimit-Reset`, …) and decision D2 puts
+ * OpenAlex out of v1, so it gets no row here and no header reader.
+ */
+export const ADVERTISED_RATE_LIMIT_HEADERS: readonly string[] = [
+  "x-ratelimit-limit",
+  "x-rate-limit-limit",
+];
+
+/** Crossref's interval for {@link ADVERTISED_RATE_LIMIT_HEADERS}, e.g. `1s`. */
+export const ADVERTISED_RATE_INTERVAL_HEADER = "x-rate-limit-interval";
+
+/** Crossref's concurrency cap, `docs/02` §5.1: `3` polite, `1` public. */
+export const ADVERTISED_CONCURRENCY_HEADER = "x-concurrency-limit";
+
+/** What a response said about the host's own limits. Absent means "not said". */
+export interface AdvertisedLimits {
+  /** `limit / intervalSeconds`, when both could be read. */
+  readonly ratePerSecond?: number;
+  /** `x-concurrency-limit`, when it was a positive integer. */
+  readonly maxConcurrent?: number;
+}
+
+/** A positive integer, nothing else — no sign, no fraction, no exponent. */
+const POSITIVE_INTEGER = /^\d+$/;
+
+/** Crossref's interval form, the only one measured: a count of seconds. */
+const INTERVAL_SECONDS = /^(\d+)s$/;
+
+/**
+ * Read a header whose only legal value is a positive integer.
+ *
+ * `0` is rejected along with everything malformed. A literal `0` is a real
+ * signal — "you have nothing left" — but turning it into `ratePerSecond: 0` or
+ * `maxConcurrent: 0` would park the host forever, and `assertConfig` rejects
+ * both outright. The 429 / `Retry-After` path is what expresses "stop for a
+ * while", with a deadline the server actually sent.
+ */
+function readPositiveInteger(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const value = raw.trim();
+  if (!POSITIVE_INTEGER.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : undefined;
+}
+
+/**
+ * `limit / interval`, in requests per second, or `undefined`.
+ *
+ * **An absent interval header is read as one second, and that is the one
+ * assumption in this file.** It is safe in the only direction that matters,
+ * because {@link adoptAdvertisedLimits} only ever *tightens*: assuming a shorter
+ * interval than the host meant computes too *high* a rate, and too high a rate
+ * is discarded rather than adopted. NCBI sends no interval header at all and its
+ * documented unit is per second — NBK25497's "no more than three URL requests
+ * per second" beside the `X-Ratelimit-Limit: 3` of `docs/02` §3.1 — so the
+ * reading is also the measured one for the only host Phase 1 reaches.
+ *
+ * A *present* but unparseable interval voids the whole observation rather than
+ * falling back to one second: the server said the interval is not one second and
+ * we could not read what it is, so there is no rate here to adopt. That is the
+ * card's "do not invent a rate when a header is … malformed".
+ *
+ * **There is a measured counter-example to the per-second reading, and it is why
+ * the tighten-only rule is not optional.** `docs/02` §9.1's verified OpenAlex
+ * response carries `X-RateLimit-Limit: 1000` with no interval — and that 1000 is
+ * a **daily** budget (`$0.10/day`, "~1,000 list calls shared per IP"), not a
+ * rate. Read per-second it would be 1000/s, three orders of magnitude too
+ * generous. Decision D2 keeps OpenAlex out of v1 so it has no row and
+ * `limiterFor` never hands this function its responses, but the case shows what
+ * the one-second reading can get wrong, and {@link adoptAdvertisedLimits}
+ * discarding everything above the policy in force is what makes being wrong that
+ * way harmless rather than an IP block.
+ */
+function readAdvertisedRate(header: ResponseHeaderLookup): number | undefined {
+  let limit: number | undefined;
+  for (const name of ADVERTISED_RATE_LIMIT_HEADERS) {
+    limit = readPositiveInteger(header(name));
+    if (limit !== undefined) break;
+  }
+  if (limit === undefined) return undefined;
+
+  const rawInterval = header(ADVERTISED_RATE_INTERVAL_HEADER);
+  if (rawInterval === undefined) return limit;
+  const match = INTERVAL_SECONDS.exec(rawInterval.trim());
+  if (match === null) return undefined;
+  const seconds = Number(match[1]);
+  if (!Number.isSafeInteger(seconds) || seconds < 1) return undefined;
+  return limit / seconds;
+}
+
+/**
+ * What a response advertised about its host's limits. Pure; reads nothing else.
+ *
+ * **`X-Ratelimit-Remaining` is deliberately not read, and this is the reason.**
+ * `docs/02` §3.1 shows NCBI returning it beside `X-Ratelimit-Limit`, and
+ * `P1-T04`'s "Read first" names both. But it is a remaining *count* against a
+ * window whose length and start neither NCBI nor the header states — turning it
+ * into a `ratePerSecond` would require inventing the window, which is exactly
+ * what `plan/README.md` §5 rule 4 and `P1-T26`'s **Do NOT** forbid. Nor is it
+ * needed: a remaining-budget count is precisely what {@link TokenBucket} already
+ * models, from a rate we are allowed to know, and
+ * `RateLimiterStats.available` reports it. A `Remaining: 0` is the one case that
+ * says something a rate does not, and the host answers that case with a 429 and a
+ * `Retry-After`, which {@link ./tokenBucket.RateLimiter.penalize} already honours
+ * with a deadline the server sent.
+ *
+ * @param header - case-insensitive lookup over the response's headers
+ * @returns only the fields the response actually carried
+ */
+export function parseAdvertisedLimits(
+  header: ResponseHeaderLookup,
+): AdvertisedLimits {
+  const ratePerSecond = readAdvertisedRate(header);
+  const maxConcurrent = readPositiveInteger(
+    header(ADVERTISED_CONCURRENCY_HEADER),
+  );
+  return {
+    ...(ratePerSecond !== undefined && { ratePerSecond }),
+    ...(maxConcurrent !== undefined && { maxConcurrent }),
+  };
+}
+
+/**
+ * The slice of a limiter {@link adoptAdvertisedLimits} needs.
+ *
+ * Both members are **optional** so that the structural port
+ * `src/core/http/client.ts` declares stays satisfiable by a limiter that only
+ * paces — a probe's stub, or a future adapter — and so that a limiter which
+ * publishes neither is a documented no-op rather than a crash.
+ * {@link TokenBucket} supplies both: `currentConfig` and `reconfigure`.
+ */
+export interface AdvertisedLimitTarget {
+  /** The policy in force, as {@link TokenBucket.currentConfig} reports it. */
+  readonly currentConfig?: RateLimiterConfig;
+  /** §4.1's runtime reconfiguration. */
+  reconfigure?(config: RateLimiterConfig): void;
+}
+
+/**
+ * `reconfigure()` the limiter from what the response advertised, if anything.
+ *
+ * §7.3 on Crossref: the interval "comes back in `x-rate-limit-limit` /
+ * `x-rate-limit-interval`, with `x-concurrency-limit` alongside, and
+ * `reconfigure()` is called from those headers on every response". This is that
+ * call, and `P1-T26` is the card that finally makes it.
+ *
+ * ## Three rules, and why each one is not a guess
+ *
+ * 1. **Only when present.** A header the response did not carry changes nothing.
+ *    An absent header is not a signal to guess (`P1-T26`'s **Do NOT**), and a
+ *    malformed one is treated as absent.
+ * 2. **Only downwards.** An advertised limit *below* the policy in force is
+ *    adopted; one above it is ignored. This is the deliberate deviation from
+ *    §7.3's Crossref cell, which reads as though a generous header should also
+ *    raise the rate, and it is reported against the card rather than taken
+ *    silently. The reason is §7.3's own NCBI basis: 2.5/s and 8/s "sit below
+ *    both for clock-skew headroom" against NCBI's documented 3/s and 10/s — so
+ *    the live `X-Ratelimit-Limit: 3` of `docs/02` §3.1 is *exactly* the figure
+ *    the table deliberately stays under, and adopting it would spend the headroom
+ *    that `docs/02` §3.1's "may result in an IP address being blocked" paragraph
+ *    is the reason for. Taking the smaller of two measured numbers invents
+ *    nothing; raising our rate on the strength of a header would overrule
+ *    §7.3 as the authority `plan/README.md` §5 rule 4 makes it, which no card has
+ *    authorised. Whether the *upward* half should also land is a question for a
+ *    card of its own, alongside Phase 2's Crossref row.
+ * 3. **No call when nothing changed.** `reconfigure()` refills, re-queues and
+ *    re-schedules; a host that advertises its steady-state limit on every one of
+ *    a hundred responses must not pay for that a hundred times, and a caller that
+ *    sees `undefined` knows nothing moved.
+ *
+ * **A tightened `maxConcurrent` lands late, and that is a known gap.**
+ * {@link TokenBucket.reconfigure} adopts a changed cap only when the host next
+ * goes idle, because `Semaphore`'s permit count is fixed at construction — so
+ * under continuous traffic the old, larger cap stays in force until a gap
+ * appears. Phase 1 cannot reach it: NCBI sends no `x-concurrency-limit` at all
+ * (`docs/02` §3.1's verified response carries only the two `X-Ratelimit-*`
+ * headers) and its row is `maxConcurrent: 3` in both key modes. Crossref's
+ * measured 3 → 1 makes it reachable the moment Phase 2 registers that row, and
+ * closing it needs a resizable gate in `src/core/concurrency.ts` — outside this
+ * card's `Files`, and its own card.
+ *
+ * @param limiter - the host's limiter; one that publishes no config is a no-op
+ * @param header - case-insensitive lookup over the response's headers
+ * @returns the config adopted, or `undefined` when nothing was
+ */
+export function adoptAdvertisedLimits(
+  limiter: AdvertisedLimitTarget,
+  header: ResponseHeaderLookup,
+): RateLimiterConfig | undefined {
+  const current = limiter.currentConfig;
+  if (current === undefined || limiter.reconfigure === undefined) {
+    return undefined;
+  }
+
+  const advertised = parseAdvertisedLimits(header);
+  const tighterRate =
+    advertised.ratePerSecond !== undefined &&
+    advertised.ratePerSecond < current.ratePerSecond
+      ? advertised.ratePerSecond
+      : undefined;
+  const tighterConcurrency =
+    advertised.maxConcurrent !== undefined &&
+    advertised.maxConcurrent < current.maxConcurrent
+      ? advertised.maxConcurrent
+      : undefined;
+  if (tighterRate === undefined && tighterConcurrency === undefined) {
+    return undefined;
+  }
+
+  const next: RateLimiterConfig = {
+    ...current,
+    ratePerSecond: tighterRate ?? current.ratePerSecond,
+    maxConcurrent: tighterConcurrency ?? current.maxConcurrent,
+  };
+  limiter.reconfigure(next);
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// 4. The process-wide holder
 // ---------------------------------------------------------------------------
 
 let installed: HostLimiterRegistry | undefined;
