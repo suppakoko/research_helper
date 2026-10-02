@@ -30,6 +30,10 @@ import {
   PROJECT_URL,
   TOOL_NAME,
 } from "../../../src/core/http/userAgent";
+import {
+  PROGRESS_REPAINT_INTERVAL_MS,
+  type ProgressSnapshot,
+} from "../../../src/core/jobQueue/progress";
 import type { LogSink } from "../../../src/core/logger";
 import {
   NCBI_HOST,
@@ -63,6 +67,13 @@ import type { ProgressWindowHandle } from "../../../src/zotero/progressWindow";
  *
  * §5 covers `observePref`'s handle, which is `P1-T25` step 3 and has no
  * criterion of its own.
+ *
+ * **§6 is `P1-T31`'s**, the card that made `ServiceGraph.progress` a per-job
+ * factory. Its five behavioural criteria are measured there; the two latches it
+ * added to `src/core/jobQueue/progress.ts` are measured in
+ * `test/unit/core/progress.test.ts`, and §4's last test — `P1-T25`'s
+ * asymmetry assertion — was **updated rather than deleted**, so the fix is
+ * visible where the defect was recorded.
  */
 
 // ---------------------------------------------------------------------------
@@ -265,7 +276,15 @@ interface Harness {
   readonly clock: ManualClock;
   readonly transport: FakeTransport;
   readonly prefs: ReturnType<typeof createScopedPrefStore>;
-  readonly window: FakeProgressWindow;
+  /**
+   * Every popup the `openProgressWindow` seam has handed out, in order.
+   *
+   * A list rather than one window since `P1-T31`: the popup is per job
+   * (`docs/07` §7.7's "One window per job"), so two jobs must be observable
+   * separately — which is exactly what criterion 4 ("the first job's
+   * completion does not close surfaces a second job is still using") needs.
+   */
+  readonly windows: FakeProgressWindow[];
   readonly sink: ReturnType<typeof createCapturingSink>;
   readonly errors: { message: string; error: unknown }[];
   readonly options: ServiceGraphOptions;
@@ -284,7 +303,7 @@ function harness(
   const clock = createManualClock();
   const transport = createFakeTransport(clock);
   const prefs = createScopedPrefStore(initialPrefs);
-  const window = createFakeProgressWindow();
+  const windows: FakeProgressWindow[] = [];
   const sink = createCapturingSink();
   const errors: { message: string; error: unknown }[] = [];
   const scope = createScope({
@@ -297,7 +316,7 @@ function harness(
     clock,
     transport,
     prefs,
-    window,
+    windows,
     sink,
     errors,
     options: {
@@ -307,7 +326,12 @@ function harness(
       progressHeadline: "Research Helper",
       logSink: sink,
       clock,
-      openProgressWindow: () => window,
+      // A fresh popup per call: the seam is called once per job now.
+      openProgressWindow: () => {
+        const popup = createFakeProgressWindow();
+        windows.push(popup);
+        return popup;
+      },
       ...overrides,
     },
   };
@@ -506,15 +530,21 @@ describe("criterion 3: the disable/enable cycle leaves nothing standing", () => 
       const h = harness();
       const graph = await installServices(h.scope, h.options);
 
-      // A job runs and finishes, so the popup is actually raised: `openOn`
-      // defaults to `"completion"` (`docs/08` §4.4) and a terminal snapshot
-      // always paints.
-      graph.progress.setMessage(`cycle ${cycle}`);
-      graph.progress.setProgress(1, 2);
-      graph.progress.done("succeeded");
-      expect(h.window.events).toContain("show");
-      expect(h.window.closed()).toBe(false);
-      expect(graph.progressEvents.latest?.status).toBe("succeeded");
+      // A job runs and finishes, so the popup is actually raised. The job
+      // asks for `docs/08` §4.4's completion toast, which is what
+      // `searchImport` passes, and **never calls `job.dispose()`** — so this
+      // also measures that `FR-56` does not depend on a pipeline's `finally`.
+      const job = graph.progress.forJob(`cycle ${cycle}`, {
+        openOn: "completion",
+      });
+      job.reporter.setMessage(`cycle ${cycle}`);
+      job.reporter.setProgress(1, 2);
+      job.reporter.done("succeeded");
+      expect(graph.progress.openJobs).toBe(1);
+      const popup = must(h.windows[0], "the job's popup");
+      expect(popup.events).toContain("show");
+      expect(popup.closed()).toBe(false);
+      expect(job.events.latest?.status).toBe("succeeded");
 
       expect(h.prefs.liveObservers()).toBe(1);
       expect(h.scope.size).toBeGreaterThan(0);
@@ -526,8 +556,11 @@ describe("criterion 3: the disable/enable cycle leaves nothing standing", () => 
       expect(h.scope.size).toBe(0);
       // Observers: none.
       expect(h.prefs.liveObservers()).toBe(0);
-      // Windows: none — `dispose()` closed the popup the job opened.
-      expect(h.window.closed()).toBe(true);
+      // Windows: none — the scope disposed the job the pipeline left open, and
+      // that closed the popup. One window per job, so one window here.
+      expect(h.windows).toHaveLength(1);
+      expect(popup.closed()).toBe(true);
+      expect(graph.progress.openJobs).toBe(0);
       // Process-wide holders: empty, which is what lets the next cycle
       // construct at all (`installHostLimiters` refuses a second install).
       expect(getHttpClient()).toBeUndefined();
@@ -546,52 +579,72 @@ describe("criterion 3: the disable/enable cycle leaves nothing standing", () => 
     // `liveHandles()` reports most-recently-registered first, which is also
     // teardown order: surfaces, then client, then observer, then registry,
     // then the PrefStore last.
-    expect(live[0]).toBe("progress reporter and its surfaces");
+    expect(live[0]).toBe("job progress reporters and their surfaces");
     expect(live[live.length - 1]).toBe("PrefStore (src/prefs)");
 
     await h.scope.unregisterAll();
   });
 
   /**
-   * Measured 2026-10-01, and asserted here so the asymmetry is visible in the
-   * suite rather than discovered by `P1-T16`.
+   * **The `P1-T25` asymmetry assertion, updated by `P1-T31` rather than
+   * deleted**, so the fix is visible where the defect was recorded.
    *
-   * `CompositeProgressReporter.dispose()` sets its own `disposed` flag and
-   * disposes its sinks, but the reporter *tree* keeps emitting: `ProgressNode`
-   * goes inert only on `done()` / `root.terminal`, not on the reporter's
-   * disposal. So a job that outlives the plugin still fans out.
+   * What `P1-T25` measured on 2026-10-01:
+   * `CompositeProgressReporter.dispose()` set its own `disposed` flag and
+   * disposed its sinks, but the reporter *tree* kept emitting — `ProgressNode`
+   * went inert only on `done()` / `root.terminal`, never on disposal — so a
+   * job that outlived the plugin still fanned out. The two shipped sinks then
+   * disagreed: `ZoteroProgressWindowSink` opened no window because it carried
+   * its own `disposed` guard, which is what criterion 3's "no window
+   * survives" actually rested on, while `createObservableProgressSink()`
+   * cleared `latest` without latching, so the next `update()` repopulated
+   * `latest` on a sink nothing could subscribe to.
    *
-   * The two shipped sinks then behave differently. `ZoteroProgressWindowSink`
-   * opens no window, because it carries its own `disposed` guard — which is
-   * what criterion 3's "no window survives" actually rests on.
-   * `createObservableProgressSink()` has no such guard: its `dispose()` clears
-   * `latest` and the listener set but does not latch, so the next `update()`
-   * repopulates `latest` on a sink nothing can subscribe to any more.
-   *
-   * Neither `src/core/jobQueue/progress.ts` nor the window adapter is in
-   * `P1-T25`'s `Files` list, so this is reported rather than fixed here
-   * (`plan/README.md` §5 rule 2).
+   * `P1-T31` closed both halves: `dispose()` now sets `root.disposed` and
+   * `inert` reads it, and the dialog sink latches. This test now asserts the
+   * *symmetry* — and it asserts it on a popup that was really opened, which
+   * the `P1-T25` version could not: its `seen` was 0 before teardown and 0
+   * after, so "no window survives" was vacuously true there.
    */
-  it("keeps no window after teardown, but the dialog sink does not latch", async () => {
+  it("latches both sinks after teardown — the P1-T25 asymmetry is gone", async () => {
     const h = harness();
     const graph = await installServices(h.scope, h.options);
+
+    // §7.7's popup behaviour, so a window really is open when teardown comes.
+    const job = graph.progress.forJob("outlives the plugin", {
+      openOn: "progress",
+    });
+    job.reporter.setProgress(1, 2);
+    const popup = must(h.windows[0], "the job's popup");
+    expect(popup.events).toContain("show");
+    expect(job.events.latest?.completed).toBe(1);
+
     await h.scope.unregisterAll();
-    const seen = h.window.events.length;
 
-    graph.progress.setProgress(2, 2);
-    graph.progress.done("succeeded");
+    expect(popup.closed()).toBe(true);
+    const platformCalls = popup.events.length;
 
-    // Correct: no popup is opened into a torn-down plugin. Nothing had opened
-    // one before teardown either, so `seen` is 0 and stays 0.
-    expect(seen).toBe(0);
-    expect(h.window.events).toHaveLength(seen);
-    // The defect: the dialog sink accepted a snapshot after its own dispose().
-    expect(graph.progressEvents.latest?.status).toBe("succeeded");
-    // And it accepted it with no subscribers, so nothing renders it — the
-    // retained snapshot is unreachable state, not a visible repaint.
-    expect(graph.progressEvents.subscribe(() => undefined)).toBeInstanceOf(
-      Function,
-    );
+    // The job did not notice the plugin going away and keeps reporting.
+    h.clock.advance(10_000);
+    job.reporter.setProgress(2, 2);
+    job.reporter.done("succeeded");
+
+    // The window sink: unchanged behaviour, and now for the structural reason
+    // rather than only its own guard — nothing was reopened and nothing was
+    // painted into the closed popup.
+    expect(h.windows).toHaveLength(1);
+    expect(popup.events).toHaveLength(platformCalls);
+    // The dialog sink: this is the line that used to read
+    // `expect(...latest?.status).toBe("succeeded")` — the snapshot it accepted
+    // after its own dispose(). It accepts nothing now.
+    expect(job.events.latest).toBeUndefined();
+    // And a view that attaches during teardown gets a callable no-op rather
+    // than a listener on a dead sink.
+    const replayed: ProgressSnapshot[] = [];
+    const off = job.events.subscribe((snapshot) => replayed.push(snapshot));
+    expect(off).toBeInstanceOf(Function);
+    expect(replayed).toEqual([]);
+    off();
   });
 });
 
@@ -668,5 +721,200 @@ describe("step 3: observePref's opaque handle is bound to the scope", () => {
       adoptPrefObserverHandle(scope, {}, "an unbindable handle"),
     ).rejects.toBeInstanceOf(ConfigurationError);
     expect(scope.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. `P1-T31` — one reporter per job
+// ---------------------------------------------------------------------------
+
+describe("P1-T31: ServiceGraph.progress hands out one reporter per job", () => {
+  it("reports a second job after the first ran to done('succeeded')", async () => {
+    // **The card's decisive criterion: the assertion that fails today.** With
+    // `P1-T25`'s single app-scoped reporter, §4.1's terminal `done()` made
+    // every later job a silent no-op — a progress bar that never moved on the
+    // second search, with no error anywhere.
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+
+    const first = graph.progress.forJob("job 1", { openOn: "completion" });
+    first.reporter.setProgress(1, 1);
+    first.reporter.done("succeeded", "Imported 1");
+    expect(first.events.latest?.status).toBe("succeeded");
+    first.dispose();
+    expect(graph.progress.openJobs).toBe(0);
+
+    const second = graph.progress.forJob("job 2", { openOn: "completion" });
+    const seen: ProgressSnapshot[] = [];
+    second.events.subscribe((snapshot) => seen.push(snapshot));
+
+    second.reporter.setProgress(3, 4);
+
+    // Reported, and *observed* — the sink a status bar subscribes to saw it.
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.completed).toBe(3);
+    expect(second.events.latest?.completed).toBe(3);
+    expect(second.events.latest?.total).toBe(4);
+    expect(second.events.latest?.fraction).toBeCloseTo(0.75, 10);
+    expect(second.events.latest?.status).toBe("running");
+    // And it reaches its own terminal state, so a third job is not special.
+    second.reporter.done("succeeded", "Imported 4");
+    expect(second.events.latest?.status).toBe("succeeded");
+    expect(seen.at(-1)?.message).toBe("Imported 4");
+
+    second.dispose();
+    await h.scope.unregisterAll();
+  });
+
+  it("keeps two concurrent jobs' counts and stage keys apart", async () => {
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+
+    const a = graph.progress.forJob("searchImport", { openOn: "completion" });
+    const b = graph.progress.forJob("related", { openOn: "completion" });
+    expect(graph.progress.openJobs).toBe(2);
+    expect(a.events).not.toBe(b.events);
+
+    a.reporter.child("fetch", 0, 0.5).setProgress(1, 2);
+    b.reporter.child("write", 0.5, 1).setProgress(1, 4);
+
+    expect(a.reporter.snapshot.currentStageKey).toBe("fetch");
+    expect(a.reporter.snapshot.completed).toBe(1);
+    expect(a.reporter.snapshot.total).toBe(2);
+    expect(a.reporter.snapshot.fraction).toBeCloseTo(0.25, 10);
+    expect(b.reporter.snapshot.currentStageKey).toBe("write");
+    expect(b.reporter.snapshot.completed).toBe(1);
+    expect(b.reporter.snapshot.total).toBe(4);
+    expect(b.reporter.snapshot.fraction).toBeCloseTo(0.625, 10);
+
+    // Each job's own stream carries only its own job.
+    expect(a.events.latest?.currentStageKey).toBe("fetch");
+    expect(b.events.latest?.currentStageKey).toBe("write");
+
+    a.dispose();
+    b.dispose();
+    await h.scope.unregisterAll();
+  });
+
+  it("does not close a second job's surfaces when the first one finishes", async () => {
+    // The trap that makes the obvious fix wrong: a per-job tree over the
+    // *root's* sinks would have had the first job's `dispose()` close the
+    // application's popup and clear its stream out from under every other job.
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+
+    const first = graph.progress.forJob("first", { openOn: "progress" });
+    const second = graph.progress.forJob("second", { openOn: "progress" });
+    first.reporter.setProgress(1, 2);
+    second.reporter.setProgress(1, 4);
+
+    // `docs/07` §7.7: one window per job.
+    expect(h.windows).toHaveLength(2);
+    const firstPopup = must(h.windows[0], "the first job's popup");
+    const secondPopup = must(h.windows[1], "the second job's popup");
+
+    first.reporter.done("succeeded", "done 1");
+    first.dispose();
+
+    expect(firstPopup.closed()).toBe(true);
+    expect(secondPopup.closed()).toBe(false);
+    expect(graph.progress.openJobs).toBe(1);
+
+    // The second job still reports, is still observed, and still paints.
+    h.clock.advance(PROGRESS_REPAINT_INTERVAL_MS);
+    second.reporter.increment();
+    expect(second.events.latest?.completed).toBe(2);
+    expect(
+      secondPopup.events.some((event) => event.startsWith("progress:")),
+    ).toBe(true);
+    // Nothing of the first job's leaked into the second's stream.
+    expect(second.events.latest?.message).toBe("");
+
+    second.dispose();
+    await h.scope.unregisterAll();
+  });
+
+  it("honours a different openOn per pipeline in one plugin lifetime", async () => {
+    // `openOn` is per-pipeline (`docs/07` §7.7's "Choice per pipeline") and
+    // used to be set once for the whole application, where `"completion"` was
+    // correct only while `searchImport` was Phase 1's only pipeline.
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+
+    // `docs/08` §4.4: nothing is drawn until completion, because progress
+    // lives in the search window's status bar.
+    const importJob = graph.progress.forJob("searchImport", {
+      openOn: "completion",
+    });
+    importJob.reporter.setProgress(0, 200);
+    for (let item = 0; item < 200; item += 1) {
+      h.clock.advance(5);
+      importJob.reporter.increment();
+    }
+    expect(h.windows).toHaveLength(0);
+    // The status bar's stream saw it all the same.
+    expect(importJob.events.latest?.completed).toBeGreaterThan(0);
+
+    // §7.7: a short pipeline with no window of its own opens on first report.
+    const related = graph.progress.forJob("related", { openOn: "progress" });
+    related.reporter.setProgress(1, 3);
+    expect(h.windows).toHaveLength(1);
+    expect(must(h.windows[0], "related's popup").events).toContain("show");
+
+    // And the import's toast arrives on completion, in its own window.
+    importJob.reporter.done("succeeded", "Imported 200 · 13 failed");
+    expect(h.windows).toHaveLength(2);
+    expect(must(h.windows[1], "the completion toast").events).toContain(
+      "line:Imported 200 · 13 failed",
+    );
+
+    importJob.dispose();
+    related.dispose();
+    await h.scope.unregisterAll();
+  });
+
+  it("falls through to the sink's §7.7 default when a job names no openOn", async () => {
+    // Deliberately **not** `"completion"`: a default at the composition root
+    // is how one pipeline's choice became every pipeline's.
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+
+    const job = graph.progress.forJob("audioReport");
+    job.reporter.setProgress(1, 2);
+
+    expect(h.windows).toHaveLength(1);
+    expect(must(h.windows[0], "the popup").events).toContain("show");
+
+    job.dispose();
+    await h.scope.unregisterAll();
+  });
+
+  it("constructs no sink until a job asks for one", async () => {
+    // `P1-T25`'s **Do NOT** — "do not construct a second set of sinks at the
+    // root" — holds as written, because the root constructs none at all.
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+
+    expect(h.windows).toEqual([]);
+    expect(graph.progress.openJobs).toBe(0);
+
+    await h.scope.unregisterAll();
+    expect(h.windows).toEqual([]);
+  });
+
+  it("disposes a job's surfaces once, however many times it is asked", async () => {
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+
+    const job = graph.progress.forJob("idempotent", { openOn: "progress" });
+    job.reporter.setProgress(1, 2);
+    const popup = must(h.windows[0], "the job's popup");
+
+    job.dispose();
+    job.dispose();
+    await h.scope.unregisterAll();
+
+    expect(popup.events.filter((event) => event === "close")).toHaveLength(1);
+    expect(h.errors).toEqual([]);
   });
 });

@@ -20,6 +20,31 @@
  *    {@link createObservableProgressSink} — the dialog sink that `docs/08`
  *    §4.4's in-window status bar subscribes to. Its Zotero surface is
  *    `src/zotero/progressWindow.ts`.
+ *  - **`P1-T31`** (this pass) made a tree **latch on disposal** and gave
+ *    {@link createObservableProgressSink} the same latch
+ *    `ZoteroProgressWindowSink` already had. Nothing in §4.1's interface
+ *    changed, and no member was added to {@link ProgressReporter}: the two
+ *    edits are one term in {@link ProgressNode}'s `inert` predicate and one
+ *    flag in the dialog sink. The *lifetime* question `P1-T31` answers — who
+ *    builds a tree per job, and over whose sinks — is answered in
+ *    `src/bootstrap/container.ts` §3, because it is a composition decision and
+ *    not a reporter one.
+ *
+ * ## Why `dispose()` has to latch the tree (`P1-T31`)
+ *
+ * Before this pass a node was inert when
+ * `this.finished || this.root.terminal || this.parent?.inert` — and
+ * **`disposed` was not one of the three.** `root.terminal` is set only by
+ * `done()`, so a reporter whose surfaces had already been torn down went on
+ * fanning out into them: `P1-T25` measured exactly that and asserted it in
+ * `test/unit/bootstrap/container.test.ts` as a known defect. `dispose()` now
+ * sets {@link RootState.disposed} and `inert` reads it, so the whole tree —
+ * root, children and children of children, which all share one `RootState` —
+ * stops at the same instant.
+ *
+ * `dispose()` is still **not** `done()`: it does not set a terminal `status`,
+ * does not force a final paint, and leaves `snapshot` readable. It ends the
+ * *surfaces*, which is why it latches rather than completes.
  *
  * **Authority.** The interface below is
  * `docs/07-architecture-and-data-model.md` §4.1's
@@ -233,6 +258,18 @@ interface RootState {
   warnings: string[];
   lastPaintMs: number;
   terminal: boolean;
+  /**
+   * Set by {@link CompositeProgressReporter.dispose}, read by
+   * {@link ProgressNode.inert}.
+   *
+   * Separate from {@link RootState.terminal} because the two mean different
+   * things: `terminal` is the *job* having ended (`done()`), `disposed` is the
+   * *surfaces* having been released. A disposed tree must stop fanning out
+   * without claiming an outcome it was never given — `status` stays
+   * `"running"` if `done()` never came, which is the honest reading of a job
+   * whose plugin was disabled underneath it.
+   */
+  disposed: boolean;
 }
 
 /** Clamp into `0..1`; `NaN` becomes `0` rather than poisoning the bar. */
@@ -380,12 +417,19 @@ class ProgressNode implements ProgressReporter {
   /**
    * §4.1's "further calls are ignored", for this node.
    *
-   * Three ways to become inert: this node finished, the root reached a terminal
-   * state, or an ancestor finished. The third matters because a stage that
-   * failed must not have a live sub-reporter still moving the bar.
+   * Four ways to become inert: this node finished, the root reached a terminal
+   * state, the tree was disposed, or an ancestor finished. The ancestor case
+   * matters because a stage that failed must not have a live sub-reporter still
+   * moving the bar; the disposal case is `P1-T31`'s, and matters because a job
+   * that outlives the plugin must not paint into surfaces that are gone.
    */
   private get inert(): boolean {
-    return this.finished || this.root.terminal || this.parent?.inert === true;
+    return (
+      this.finished ||
+      this.root.terminal ||
+      this.root.disposed ||
+      this.parent?.inert === true
+    );
   }
 
   /** Map this node's local `0..1` onto its global slice. */
@@ -550,7 +594,6 @@ export class CompositeProgressReporter implements ProgressReporter {
   private readonly root: RootState;
   private readonly node: ProgressNode;
   private releaseToken: (() => void) | undefined;
-  private disposed = false;
 
   constructor(options: CompositeProgressReporterOptions) {
     this.root = {
@@ -570,6 +613,7 @@ export class CompositeProgressReporter implements ProgressReporter {
       // paint is spent on the empty state before anything has happened.
       lastPaintMs: Number.NEGATIVE_INFINITY,
       terminal: false,
+      disposed: false,
     };
     this.node = new ProgressNode({
       root: this.root,
@@ -632,16 +676,30 @@ export class CompositeProgressReporter implements ProgressReporter {
   }
 
   /**
-   * Release the token subscription and every sink's resources.
+   * Release the token subscription and every sink's resources, and **latch the
+   * tree** so nothing it still holds can report again.
    *
    * Idempotent, and separate from `done()`: `done()` ends the *job*, `dispose()`
    * ends the *surfaces*. A pipeline calls it in a `finally`; the plugin's
    * teardown path calls it on disable, which is what stops a
    * `Zotero.ProgressWindow` outliving the plugin that opened it.
+   *
+   * **`P1-T31`: the latch is the `root.disposed` line below.** Without it the
+   * node predicate let a disposed tree keep fanning out, because only `done()`
+   * sets `root.terminal`; `ZoteroProgressWindowSink` happened to survive that
+   * on its own `disposed` guard and the dialog sink did not, which is the
+   * asymmetry `P1-T25` recorded. Setting it here latches every node at once,
+   * since the whole tree shares one {@link RootState}.
+   *
+   * **The sinks this disposes are the ones this reporter was given.** With
+   * `src/bootstrap/container.ts`'s per-job factory they are the *job's* sinks,
+   * so this call closes one job's popup and clears one job's observable stream
+   * and touches no other job's. A reporter handed sinks it does not own must
+   * not be disposed — the composition root is what guarantees it never is.
    */
   dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
+    if (this.root.disposed) return;
+    this.root.disposed = true;
     this.dropToken();
     for (const sink of this.root.sinks) {
       try {
@@ -680,12 +738,22 @@ export interface ObservableProgressSink extends ProgressSink {
    * synchronously on subscribe — a status bar that attaches after the job
    * started must not render an empty bar until the next repaint. Returns the
    * unsubscribe function, which the window's teardown must call.
+   *
+   * After {@link dispose} this registers nothing, delivers nothing, and still
+   * returns a callable unsubscribe — a view that attaches during teardown gets
+   * a no-op rather than a listener on a dead sink or a thrown error.
    */
   subscribe(listener: (snapshot: ProgressSnapshot) => void): () => void;
   /**
    * Required here, unlike on {@link ProgressSink}: this sink always holds
    * listeners, so its teardown is never a no-op and a caller must not have to
    * test for it.
+   *
+   * **Latching since `P1-T31`:** it is idempotent, and after it `latest` stays
+   * `undefined` and `update()` is ignored. Before that it cleared `latest`
+   * without latching, so the next `update()` repopulated a sink nothing could
+   * subscribe to — the half of `P1-T25`'s measured asymmetry that
+   * `ZoteroProgressWindowSink`'s own `disposed` guard did not have.
    */
   dispose(): void;
 }
@@ -694,9 +762,14 @@ export interface ObservableProgressSink extends ProgressSink {
 export function createObservableProgressSink(): ObservableProgressSink {
   const listeners = new Set<(snapshot: ProgressSnapshot) => void>();
   let latest: ProgressSnapshot | undefined;
+  let disposed = false;
 
   return {
     update(snapshot: ProgressSnapshot): void {
+      // The latch. A reporter tree latches too (`P1-T31`), so in the shipped
+      // graph this is belt and braces — but a sink driven directly, by a test
+      // or by Phase 3's queue, must not come back to life either.
+      if (disposed) return;
       latest = snapshot;
       // A copy of the set, so a listener that unsubscribes itself during
       // delivery does not disturb the iteration.
@@ -709,6 +782,11 @@ export function createObservableProgressSink(): ObservableProgressSink {
       }
     },
     subscribe(listener: (snapshot: ProgressSnapshot) => void): () => void {
+      if (disposed) {
+        return () => {
+          /* nothing was registered */
+        };
+      }
       listeners.add(listener);
       if (latest !== undefined) {
         try {
@@ -725,6 +803,8 @@ export function createObservableProgressSink(): ObservableProgressSink {
       return latest;
     },
     dispose(): void {
+      if (disposed) return;
+      disposed = true;
       listeners.clear();
       latest = undefined;
     },

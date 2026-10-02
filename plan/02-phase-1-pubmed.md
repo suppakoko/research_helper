@@ -4517,6 +4517,112 @@ reporter and its sinks are **per-application**. The `"completion"` default is co
 weight-to-fraction conversion (recorded in §4.1 by `P1-T15`). If this card's factory makes that
 conversion's home obvious, say so — but **do not write it**; `P1-T16` step 2 is its natural owner.
 
+**Findings, 2026-10-02 — all six criteria pass. Shape chosen: per-job sinks behind a factory on the
+graph.** `ServiceGraph.progress` is now a `JobProgressFactory`; `forJob(label, opts)` builds a fresh
+observable sink, a fresh Zotero window sink and a fresh tree over them, and **the root constructs no
+sinks at all.** `ServiceGraphOptions.openOn` moved to `JobProgressOptions`. **816 unit tests, up from
+802**, in the same 21 files; typecheck exits 0 and the card's four files pass `eslint` and `prettier`
+on their own.
+
+**The trap this card existed to avoid disappears structurally rather than behind a flag.**
+`reporter.dispose()` disposes the sinks it was given, and those sinks are now **the job's** — so no
+`ownsSinks` escape hatch was needed and `dispose()` stays the plain thing it reads as. `P1-T25`'s
+`Do NOT` ("do not construct a second set of sinks at the root") holds as written, and §4.1's
+`ProgressReporter` was **not widened**: no member added, no signature changed.
+
+**Three measured counts decided the shape over a factory sharing the root's sinks**, and the third
+was decisive. `docs/07` §7.7 says "**One window per job**", and shared sinks give one window per
+*plugin* — job 2's toast would repaint job 1's line, and `openOn`, `lastPaintMs`, `closesAtMs` and
+`autoClosed` are all per-instance state, so two jobs would share one close deadline. §4.5 declares
+`subscribe` on `JobHandle`, i.e. **per job**, and one app-scoped observable carries no job identity,
+so a status bar could not tell which snapshot was its own. And **criterion 5 is unreachable under the
+alternative without leaving this card's `Files`**: `openOn` is a *constructor* option of
+`ZoteroProgressWindowSink`, so making it per-job over one shared sink would mean carrying it on every
+`ProgressSink.update()` — widening the port **and** editing `src/zotero/progressWindow.ts`, which the
+`Files` list does not name. Verified, not assumed: pinning `openOn` at the root again failed five
+tests including criterion 5's.
+
+**The cost is stated rather than buried: one popup per concurrent job, and a `JobProgress` whose
+`dispose()` the caller must run.** So the factory keeps a registry of open reporters and
+`installServices` defers `disposeAll()` into the `Scope` — **`FR-56` does not depend on a pipeline
+reaching its `finally`** — and the five-cycle teardown test asserts exactly that by never calling
+`job.dispose()`.
+
+**Both latches are in, and `dispose()` deliberately does not fake an outcome.** `ProgressNode.inert`
+is now `finished || root.terminal || root.disposed || parent?.inert`, with
+`CompositeProgressReporter`'s private `disposed` folded into the shared state so there is one source
+of truth. `createObservableProgressSink()` latches: `update()` ignored after `dispose()`, `latest`
+stays `undefined`, `dispose()` idempotent, and a `subscribe()` arriving after disposal registers
+nothing and returns a callable no-op. A plugin disabled under a running job leaves `status: "running"`
+rather than a synthesised terminal state — **the honest reading, and asserted.**
+
+**`P1-T25`'s asymmetry assertion was updated rather than deleted, and it was also vacuous.** It
+became "latches both sinks after teardown — the `P1-T25` asymmetry is gone", in the same place, with
+the 2026-10-01 measurement kept verbatim in the doc comment and a paragraph naming which two lines
+closed it. The line asserting the accepted-after-dispose snapshot now asserts
+`job.events.latest` is `undefined`, and under the pre-card implementation it fails with
+`expected { status: 'succeeded', … } to be undefined` — **the fix is visibly the fix.** Separately:
+the old version's *window* half was **vacuous**, because `seen` was 0 both before and after teardown —
+nothing had opened a popup. The new one opens a real popup with `openOn: "progress"` first, so "no
+window survives" has something to survive.
+
+**Six mutations, every one caught, every one reverted** (`grep -rn MUTANT src test` → none, with a
+final clean re-run). Dropping `root.disposed` from `inert` failed the "reaches no sink from any member
+after dispose()" test with *expected length 1 but got 3*. Dropping the observable sink's latch failed
+both new sink tests. **Both together — the true pre-card state — failed five**, including the rewritten
+asymmetry test. Making `forJob` return one cached job, i.e. `P1-T25`'s shape, failed criteria 1, 2, 4
+and 5 — with criterion 1 reporting *expected [] to have a length of 1 but got +0*, **the silent no-op
+reproduced**. Making one job's `dispose()` dispose every open job — the trap — failed criterion 4.
+And making `scope.defer` dispose nothing failed the five-cycle `FR-56` test.
+
+**Two honest observations about criterion quality, recorded rather than acted on.** Criterion 3's
+"reaches no sink" is now **over-determined in the shipped graph**, because both shipped sinks latch
+independently — so removing the tree latch alone is caught only by a *non*-latching sink, which is why
+it is asserted at the core level with a plain recording sink. And criterion 2 was already true of two
+independently-constructed reporters before this card; what was impossible was **getting** two, which
+`P1-T25`'s `Do NOT` forbade — so it stays falsifiable via `openJobs`, and the cached-job mutation
+fails it.
+
+**The corpus ambiguity that let the defect in, now fixed in §7.7.** "Two surfaces in v1, driven by one
+`ProgressReporter` tree" sat **two lines above** "One window per job", and the two cannot both be read
+literally once a plugin runs more than one job. `P1-T25`'s `Do NOT` read it as one tree per *plugin* —
+**which is precisely how the defect got in.** §7.7 now says "one tree **per job** — not one per
+plugin", with the history and the cost recorded. Also flagged: §7.7 assigns `searchImport` to the
+in-window status list and reserves the popup for `related`/`audioReport`, while `docs/08` §4.4 says the
+import *does* raise a toast "only on completion" — they reconcile as toast-plus-status-bar, which is
+what `openOn` encodes, but §7.7's sentence reads as excluding the popup entirely and those two
+sections are now **the only thing deciding a per-job argument**.
+
+**Importers grepped before any signature change, per §4 as corrected.** `container.ts` is imported by
+`src/addon.ts`, `src/zotero/registrations.ts` and `src/bootstrap/registerUI.ts` — **none in this
+card's `Files`** — and none blocked a change: `P0-T07`'s §1 registry is **byte-identical**,
+`installServices`' signature is unchanged, and `registerUI.ts` never passed `openOn` and discards the
+returned graph, so removing `openOn`/`progressSinks`/`progressEvents` reaches it only through a doc
+link that still resolves. `progress.ts`'s importers lost no exported name or signature; the two
+latches are one term in a private predicate and one flag in a closure.
+
+**The weight→fraction helper was asked about and deliberately not written.** `forJob` **does** make
+its home obvious — it is the single per-job construction site and §4.5's `StageDescriptor.weight`
+arrives with the pipeline, so `forJob(label, { stages })` is the natural signature. But
+`StageDescriptor` lives in §4.5's `src/pipeline/types.ts`, **which does not exist** (`src/pipeline/*`
+is seven empty directories and `grep -rn StageDescriptor src/` finds nothing), and `P1-T16` step 2
+owns it.
+
+**Three things reported rather than absorbed.** **Nothing in the type system says a reporter must own
+its sinks** — the invariant is enforced only by comments, so the trap this card sidestepped is still
+*expressible* by the next card, and making it unexpressible is a design decision worth its own card.
+**Two concurrent jobs now float two `alwaysontop` popups**, and §7.7's macOS caveat is written for one
+long job; Phase 1 cannot hit it with one pipeline, but it arrives with the second. And
+**`JobProgress` / `JobProgressFactory` live in `src/bootstrap/`** while Phase 3's
+`src/core/jobQueue/queue.ts` will want them — §2.3 forbids `core/` importing `bootstrap/`, so either
+the progress half moves down with the Zotero sink injected, or Phase 3 re-declares a parallel shape.
+Better settled before `queue.ts` is written.
+
+**The integration suite was not run and nothing in the diff can reach it:** the only integration spec
+touching progress imports **only** `openZoteroProgressWindow` and `ProgressWindowHandle` from
+`src/zotero/progressWindow.ts`, which this card did not modify. **So the 51-test baseline is
+unverified by this card** — stated rather than implied.
+
 ---
 ### P1-T32 — The three platform seams the composition root could not reach
 

@@ -57,6 +57,59 @@
  * `src/zotero/registrations.ts`, which imports this file, and the cycle would
  * be real even though ESM tolerates it. The `PrefStore` arrives as an argument
  * instead, typed from `src/core/config.ts`.
+ *
+ * ## Section 3 — one reporter per job (`P1-T31`)
+ *
+ * `P1-T25` constructed **one** `CompositeProgressReporter` at the root and
+ * recorded two consequences in {@link ServiceGraph} itself: §4.1's `done()` is
+ * terminal, so that instance reported exactly one job per enabled lifetime of
+ * the plugin and silently ignored every later one; and its `dispose()` disposes
+ * the sinks it was given, so a per-job tree newed up over the *root's* sinks
+ * would have let the first job to finish close the application's progress
+ * surfaces out from under every other job. A second search showed a bar that
+ * never moved, with no error anywhere.
+ *
+ * **The shape chosen is per-job sinks behind a factory** —
+ * {@link JobProgressFactory.forJob}, which builds a fresh
+ * {@link ObservableProgressSink}, a fresh `ZoteroProgressWindowSink` and a
+ * fresh tree over them, as one {@link JobProgress} the caller owns. The graph
+ * owns only the factory and the registry of jobs still open, so the trap
+ * disappears structurally rather than behind a flag: every reporter disposes
+ * exactly the sinks that belong to its own job, and `reporter.dispose()` stays
+ * the plain thing it reads as.
+ *
+ * **The alternative was a factory over sinks it does not own** — one popup and
+ * one observable stream for the whole plugin, with the application keeping the
+ * sinks' lifetime. It was rejected on three measured counts, and the corpus is
+ * against it on all three:
+ *
+ * 1. **`docs/07` §7.7 says "One window per job".** App-scoped sinks give one
+ *    window per *plugin*: job 2's completion toast would repaint job 1's line,
+ *    and the `openOn`/close-timer state inside `ZoteroProgressWindowSink` is
+ *    per-instance, so two jobs would share one close deadline.
+ * 2. **`docs/07` §4.5's `subscribe` is `JobHandle.subscribe` — per job.** One
+ *    app-scoped {@link ObservableProgressSink} carries no job identity, so two
+ *    concurrent jobs interleave on it and a status bar cannot tell which
+ *    snapshot is its own. Per-job sinks make `JobProgress.events` the thing
+ *    Phase 3's `JobHandle.subscribe` can be implemented over unchanged.
+ * 3. **`openOn` is per-pipeline** (`docs/07` §7.7's "Choice per pipeline":
+ *    `searchImport` wants `docs/08` §4.4's completion-only toast, `related` and
+ *    `audioReport` want §7.7's progress popup) **and it is a constructor
+ *    option of `ZoteroProgressWindowSink`.** One shared sink fixes it for the
+ *    whole plugin. Making it per-job over shared sinks would mean carrying
+ *    `openOn` on every `ProgressSink.update()` — widening the port and editing
+ *    `src/zotero/progressWindow.ts`, which is **not in `P1-T31`'s `Files`
+ *    list**. Per-job sinks reach the same criterion by construction and touch
+ *    neither.
+ *
+ * What the chosen shape costs: a popup per concurrent job rather than one, and
+ * a `JobProgress` whose `dispose()` the caller must run — which is why the
+ * factory keeps a registry and the `Scope` disposes whatever is still open at
+ * teardown, so `FR-56` does not depend on a pipeline's `finally` block.
+ *
+ * **`P1-T25`'s "do not construct a second set of sinks at the root" holds
+ * exactly as written:** the root now constructs *no* sinks at all, and
+ * `installServices` still refuses a second graph.
  */
 
 import { createSystemClock, type Clock } from "../core/clock";
@@ -70,6 +123,7 @@ import {
   type HttpTransport,
 } from "../core/http/client";
 import { buildUserAgent } from "../core/http/userAgent";
+import type { CancellationToken } from "../core/jobQueue/cancellation";
 import {
   CompositeProgressReporter,
   createObservableProgressSink,
@@ -413,7 +467,12 @@ export interface ServiceGraphOptions {
    * `ZoteroProgressWindowSink` requires a resolved string — `Zotero.getString()`
    * throws on a plugin key (`docs/08` §8.2.1) and Fluent is async — and no
    * message id for one exists anywhere in `src/i18n/keys.ts`. See the `P1-T25`
-   * report: the missing id needs a card.
+   * report: the missing id needs a card, and it is `P1-T32` item 3.
+   *
+   * Application-scoped on purpose, even though the popup it headlines is now
+   * per job (`P1-T31`): it is the product's name for the surface, not the
+   * job's. A per-job headline would be the per-job `message`, which the
+   * reporter already carries.
    */
   readonly progressHeadline: string;
   /**
@@ -424,17 +483,99 @@ export interface ServiceGraphOptions {
   /** Defaults to {@link createSystemClock}. A test passes `createManualClock()`. */
   readonly clock?: Clock;
   /**
-   * How the progress popup is raised, per `docs/07` §7.7 vs `docs/08` §4.4.
-   * Defaults to `"completion"`, which is what `searchImport` — Phase 1's only
-   * pipeline — requires (`P1-T25` Notes, `P1-T15`'s `openOn` option).
-   */
-  readonly openOn?: "progress" | "completion";
-  /**
    * Test seam for the one platform call `ZoteroProgressWindowSink` makes.
    * Omitted in the product, where the sink opens a real
    * `Zotero.ProgressWindow`.
+   *
+   * Called **once per job** since `P1-T31`, because the popup is per job
+   * (`docs/07` §7.7). A test that wants to watch two jobs' windows separately
+   * returns a fresh fake from each call.
    */
   readonly openProgressWindow?: () => ProgressWindowHandle;
+}
+
+/**
+ * What one job's progress needs that the application cannot decide for it.
+ *
+ * `openOn` moved here from {@link ServiceGraphOptions} in `P1-T31`: `docs/07`
+ * §7.7's "Choice per pipeline" makes it a property of the pipeline, and the
+ * application-scoped default `"completion"` was correct only while
+ * `searchImport` was Phase 1's only pipeline.
+ */
+export interface JobProgressOptions {
+  /**
+   * When the popup is raised, per `docs/07` §7.7 vs `docs/08` §4.4.
+   *
+   * - `"completion"` — §4.4's import behaviour: nothing is drawn until
+   *   `done()`, because progress lives in the search window's status bar where
+   *   the Cancel button is. `searchImport` passes this.
+   * - `"progress"` — §7.7's behaviour for the short pipelines (`related`,
+   *   `audioReport`) that have no window of their own.
+   *
+   * Omitted falls through to `ZoteroProgressWindowSink`'s own default, which
+   * is §7.7's `"progress"`. There is deliberately no default *here*: a default
+   * at the composition root is how the `"completion"` choice of one pipeline
+   * became every pipeline's.
+   */
+  readonly openOn?: "progress" | "completion";
+  /**
+   * The job's cancellation token. The reporter goes terminal with
+   * `done("cancelled")` when it fires, so every one of this job's surfaces
+   * stops without the pipeline having to say so (FR-53).
+   */
+  readonly token?: CancellationToken;
+  /** The job's initial message, already localized. */
+  readonly message?: string;
+}
+
+/**
+ * One job's reporter and the surfaces that belong to it.
+ *
+ * The caller `dispose()`s it when the job ends — in a `finally`, next to the
+ * `done()`. Forgetting to is not a leak the user can see, because the factory's
+ * registry is bound to the `Scope` and plugin teardown disposes whatever is
+ * still open; it does mean one popup lingering until then.
+ */
+export interface JobProgress {
+  /** What {@link JobProgressFactory.forJob} was called with, for diagnostics. */
+  readonly label: string;
+  /**
+   * `docs/07` §4.1's reporter for this job, and the root of its tree. Children
+   * come from `reporter.child(...)` as before.
+   */
+  readonly reporter: CompositeProgressReporter;
+  /**
+   * This job's observable stream — `docs/08` §4.4's status bar subscribes to
+   * it, and it is the shape `docs/07` §4.5's `JobHandle.subscribe` promises.
+   * Per job, which is what §4.5 declares it as.
+   */
+  readonly events: ObservableProgressSink;
+  /** This job's sinks, in fan-out order: the stream, then §7.7's popup. */
+  readonly sinks: readonly ProgressSink[];
+  /**
+   * Close this job's surfaces and latch its tree. Idempotent, and it touches
+   * **no other job** — that is the whole point of the per-job shape.
+   */
+  dispose(): void;
+}
+
+/**
+ * {@link ServiceGraph.progress} — the thing a pipeline asks for a reporter.
+ *
+ * It replaces `P1-T25`'s single app-scoped `CompositeProgressReporter`, which
+ * could report exactly one job per plugin lifetime. See §3 of this file's
+ * header for why the sinks are per job rather than shared.
+ */
+export interface JobProgressFactory {
+  /**
+   * Build one job's reporter and surfaces.
+   *
+   * @param label - the job's name, for diagnostics. It is **not** a
+   *   `currentStageKey`: stage keys come from `reporter.child(label, …)`.
+   */
+  forJob(label: string, options?: JobProgressOptions): JobProgress;
+  /** How many jobs have surfaces open. Zero after plugin teardown. */
+  readonly openJobs: number;
 }
 
 /**
@@ -459,27 +600,27 @@ export interface ServiceGraph {
   /** The client `httpRequest()` now delegates to. */
   readonly http: HttpClient;
   /**
-   * The progress surfaces, in fan-out order: the dialog sink `docs/08` §4.4's
-   * status bar subscribes to, then `docs/07` §7.7's transient popup. Owned by
-   * the scope — their `dispose()` is registered, not the caller's to call.
-   */
-  readonly progressSinks: readonly ProgressSink[];
-  /** The sink `docs/08` §4.4's status bar subscribes to. */
-  readonly progressEvents: ObservableProgressSink;
-  /**
-   * The reporter `P1-T25` step 1 constructs, fanning out to
-   * {@link ServiceGraph.progressSinks}.
+   * Where a pipeline gets a reporter — **one per job** (`P1-T31`).
    *
-   * **One reporter, as the card's Do NOT requires** — and read the `P1-T25`
-   * report before relying on it for a second job: §4.1's `done()` is terminal
-   * ("further calls are ignored"), so this instance reports exactly one job
-   * per enabled lifetime of the plugin, and
-   * `CompositeProgressReporter.dispose()` disposes the shared sinks. A per-job
-   * reporter tree therefore cannot simply be newed up over these sinks, and
-   * who owns that factory is reported as needing a card rather than invented
-   * here.
+   * `P1-T25` exposed a single `CompositeProgressReporter` here. §4.1's `done()`
+   * is terminal, so that instance served exactly one job per enabled lifetime
+   * of the plugin and silently ignored every later one; §3 of this file's
+   * header records the measurement and why the sinks are now per job. There
+   * are deliberately **no app-scoped `progressSinks` / `progressEvents`
+   * members any more**: an app-scoped observable stream carries no job
+   * identity, and `docs/07` §4.5 declares `subscribe` on `JobHandle`.
+   *
+   * ```ts
+   * const job = graph.progress.forJob("searchImport", { openOn: "completion" });
+   * try {
+   *   job.reporter.child("fetch", 0, 0.6).setProgress(1, 2);
+   *   job.reporter.done("succeeded");
+   * } finally {
+   *   job.dispose();
+   * }
+   * ```
    */
-  readonly progress: CompositeProgressReporter;
+  readonly progress: JobProgressFactory;
 }
 
 /** The four `logLevel` values of `docs/07` §8.5, as a type guard. */
@@ -559,6 +700,106 @@ export async function adoptPrefObserverHandle(
   scope.defer(description, callable as Teardown);
 }
 
+/** What {@link createJobProgressFactory} closes over. */
+interface JobProgressFactoryDeps {
+  readonly clock: Clock;
+  /** {@link ServiceGraphOptions.progressHeadline}. */
+  readonly headline: string;
+  /** {@link ServiceGraphOptions.openProgressWindow}, if a test supplied one. */
+  readonly openWindow?: (() => ProgressWindowHandle) | undefined;
+}
+
+/**
+ * The factory and the one teardown that covers every job it has handed out.
+ *
+ * Returned as a pair so `disposeAll` stays off {@link JobProgressFactory}: the
+ * only caller that should be able to close *other* jobs' surfaces is the
+ * `Scope`, and a pipeline holding the factory must not be able to.
+ */
+interface JobProgressFactoryBundle {
+  readonly factory: JobProgressFactory;
+  /** Dispose every job still open, most recent first. Idempotent. */
+  disposeAll(): void;
+}
+
+/**
+ * Build {@link ServiceGraph.progress}.
+ *
+ * Each `forJob` call constructs the job's own sinks and its own tree over
+ * them, so that:
+ *
+ *  - `docs/07` §7.7's "One window per job" is what actually happens, including
+ *    the per-instance close deadline and `openOn` the popup carries;
+ *  - `docs/08` §4.4's status bar subscribes to *its* job's stream, which is
+ *    `docs/07` §4.5's per-job `JobHandle.subscribe` shape;
+ *  - `reporter.dispose()` releases exactly one job's surfaces, so the first
+ *    job to finish cannot close a second job's popup — the trap that makes the
+ *    obvious per-job-tree-over-shared-sinks fix wrong.
+ *
+ * The registry is what makes `FR-56` independent of a pipeline remembering its
+ * `finally`: plugin teardown disposes whatever is still open.
+ */
+function createJobProgressFactory(
+  deps: JobProgressFactoryDeps,
+): JobProgressFactoryBundle {
+  // Insertion-ordered, so `disposeAll` can run newest-first and match the
+  // scope's own last-in-first-out discipline.
+  const open = new Set<CompositeProgressReporter>();
+
+  const factory: JobProgressFactory = {
+    get openJobs(): number {
+      return open.size;
+    },
+    forJob(label: string, options: JobProgressOptions = {}): JobProgress {
+      // The dialog sink first — `docs/08` §4.4's status bar is where the Cancel
+      // button lives — then §7.7's transient popup.
+      const events = createObservableProgressSink();
+      const popup = new ZoteroProgressWindowSink({
+        clock: deps.clock,
+        headline: deps.headline,
+        // Spread rather than `openOn: options.openOn`: `tsconfig.json`'s
+        // `exactOptionalPropertyTypes` rejects an explicit `undefined`, and
+        // omitting it is what lets the sink's own §7.7 default stand.
+        ...(options.openOn !== undefined && { openOn: options.openOn }),
+        ...(deps.openWindow !== undefined && { openWindow: deps.openWindow }),
+      });
+      const sinks: readonly ProgressSink[] = [events, popup];
+      const reporter = new CompositeProgressReporter({
+        clock: deps.clock,
+        sinks,
+        ...(options.token !== undefined && { token: options.token }),
+        ...(options.message !== undefined && { message: options.message }),
+      });
+      open.add(reporter);
+      return {
+        label,
+        reporter,
+        events,
+        sinks,
+        dispose(): void {
+          // Dropped from the registry first, so a teardown running
+          // concurrently cannot dispose it twice — `dispose()` is idempotent
+          // either way, and this keeps `openJobs` honest.
+          open.delete(reporter);
+          reporter.dispose();
+        },
+      };
+    },
+  };
+
+  return {
+    factory,
+    disposeAll(): void {
+      for (const reporter of [...open].reverse()) {
+        open.delete(reporter);
+        // `CompositeProgressReporter.dispose()` swallows a sink that throws,
+        // so one bad surface cannot stop the rest from closing.
+        reporter.dispose();
+      }
+    },
+  };
+}
+
 /**
  * Build the object graph once and bind every disposable to `scope`.
  *
@@ -579,7 +820,9 @@ export async function adoptPrefObserverHandle(
  *    registry's `limiterFor`, the clock and the logger. Install it with
  *    `setHttpClient()` so `docs/13` §2.2's `httpRequest()` has something to
  *    delegate to.
- * 4. Build the progress surfaces and the reporter over them.
+ * 4. Build the per-job progress factory and bind the jobs it hands out to the
+ *    scope. **No sink is constructed at this level** — see §3 of this file's
+ *    header.
  *
  * `retryFor` is deliberately **not** supplied: `docs/07` §7.3 names a per-host
  * attempt cap and publishes no number, `P1-T04` and `P1-T05` both refused to
@@ -682,31 +925,22 @@ export async function installServices(
     setHttpClient(undefined);
   });
 
-  // 4. The progress surfaces. The dialog sink first — `docs/08` §4.4's status
-  //    bar is where the Cancel button lives — then §7.7's transient popup.
-  const progressEvents = createObservableProgressSink();
-  const progressWindow = new ZoteroProgressWindowSink({
+  // 4. The per-job progress factory. No sink is constructed here: a job's
+  //    surfaces are built by `forJob`, so one job's completion cannot close
+  //    another's popup and `openOn` is the pipeline's choice (`P1-T31`; §3 of
+  //    this file's header has the reasoning and the rejected alternative).
+  const progress = createJobProgressFactory({
     clock,
     headline: options.progressHeadline,
-    openOn: options.openOn ?? "completion",
-    ...(options.openProgressWindow !== undefined && {
-      openWindow: options.openProgressWindow,
-    }),
+    openWindow: options.openProgressWindow,
   });
-  const progressSinks: readonly ProgressSink[] = [
-    progressEvents,
-    progressWindow,
-  ];
-  const progress = new CompositeProgressReporter({
-    clock,
-    sinks: progressSinks,
-  });
-  // `reporter.dispose()` releases the token subscription *and* calls
-  // `dispose()` on every sink, which is exactly the teardown this needs: it is
+  // Every reporter still open is disposed here, which releases its token
+  // subscription, latches its tree and calls `dispose()` on its sinks. That is
   // what stops a `Zotero.ProgressWindow` outliving the plugin that opened it
-  // (`docs/01` §12 gotcha 10).
-  scope.defer("progress reporter and its surfaces", () => {
-    progress.dispose();
+  // (`docs/01` §12 gotcha 10) even for a pipeline that never reached its
+  // `finally`.
+  scope.defer("job progress reporters and their surfaces", () => {
+    progress.disposeAll();
   });
 
   logger.info("services installed", {
@@ -720,8 +954,6 @@ export async function installServices(
     prefs: options.prefs,
     limiters,
     http,
-    progressSinks,
-    progressEvents,
-    progress,
+    progress: progress.factory,
   };
 }

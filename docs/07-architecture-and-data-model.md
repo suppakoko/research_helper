@@ -2415,7 +2415,20 @@ A notification bar on startup: *"3 background tasks were interrupted when Zotero
 
 ### 7.7 Progress into Zotero's UI
 
-**Two surfaces in v1**, driven by one `ProgressReporter` tree. A third — the Job Center — is designed but deferred to v1.1; the design is kept in §7.7.1 and nothing in this section depends on it.
+**Two surfaces in v1**, driven by one `ProgressReporter` tree **per job** — not one per plugin. A third — the Job Center — is designed but deferred to v1.1; the design is kept in §7.7.1 and nothing in this section depends on it.
+
+> **Clarified 2026-10-02 (`P1-T31`), and the ambiguity was the entry point for a real defect.** This
+> sentence read "driven by one `ProgressReporter` tree" two lines above item 1's "**One window per
+> job**", and the two cannot both be read literally once a plugin runs more than one job. `P1-T25`'s
+> `Do NOT` read it as one tree per *plugin* — "do not construct a second `HttpClient`, limiter
+> registry or reporter anywhere else" — which is **precisely how the defect got in**: §4.1's `done()`
+> is terminal, so one app-scoped reporter served the first job and **silently ignored every later
+> one**, with no error anywhere. The only consistent reading is one tree **per job**, which is also
+> what §4.5's per-job `JobHandle.subscribe` requires. `P1-T31` ships a `forJob()` factory that builds
+> a fresh tree over **per-job sinks**, because `reporter.dispose()` disposes the sinks it was given —
+> so a tree over shared sinks would have the first job's completion close the application's surfaces
+> out from under every other job. The cost, stated in that card: **one popup per concurrent job**, and
+> §7.7's macOS `alwaysontop` caveat is written for one long job and says nothing about N of them.
 
 1. **`Zotero.ProgressWindow`** — the transient corner popup, for the "something is happening" signal. One window per job, updated at most ~4×/second (throttled; a 200-item loop must not repaint 200 times).
 2. **The plugin's own in-window status list** — the per-item rows, running counts, skip reasons and Cancel button drawn in `08-ui-ux-spec.md` §4 and §6.4, for bulk item operations such as a 200-item import or a 47-paper summarize.

@@ -529,6 +529,42 @@ describe("CompositeProgressReporter", () => {
       expect(reporter.snapshot.warnings).toEqual(["still recorded"]);
     });
 
+    it("keeps two trees' state apart, including their stage keys", () => {
+      // `P1-T31` criterion 2, at the level where it is decided: every node of
+      // one tree shares one `RootState` and shares it with **no other tree**,
+      // so two jobs reporting into their own sinks cannot cross.
+      const clock = createManualClock();
+      const first = recordingSink();
+      const second = recordingSink();
+      const a = new CompositeProgressReporter({ clock, sinks: [first] });
+      const b = new CompositeProgressReporter({ clock, sinks: [second] });
+
+      a.child("fetch", 0, 0.5).setProgress(1, 2);
+      b.child("write", 0.5, 1).setProgress(1, 4);
+
+      expect(a.snapshot.currentStageKey).toBe("fetch");
+      expect(a.snapshot.completed).toBe(1);
+      expect(a.snapshot.total).toBe(2);
+      expect(a.snapshot.fraction).toBeCloseTo(0.25, 10);
+
+      expect(b.snapshot.currentStageKey).toBe("write");
+      expect(b.snapshot.completed).toBe(1);
+      expect(b.snapshot.total).toBe(4);
+      expect(b.snapshot.fraction).toBeCloseTo(0.625, 10);
+
+      expect(first.snapshots).toHaveLength(1);
+      expect(second.snapshots).toHaveLength(1);
+      expect(first.snapshots[0]?.currentStageKey).toBe("fetch");
+      expect(second.snapshots[0]?.currentStageKey).toBe("write");
+
+      // And one tree's disposal latches only itself.
+      a.dispose();
+      clock.advance(PROGRESS_REPAINT_INTERVAL_MS);
+      b.increment();
+      expect(second.snapshots).toHaveLength(2);
+      expect(first.snapshots).toHaveLength(1);
+    });
+
     it("dispose() tears every sink down, once", () => {
       const sink = recordingSink();
       const reporter = new CompositeProgressReporter({
@@ -538,6 +574,115 @@ describe("CompositeProgressReporter", () => {
       reporter.dispose();
       reporter.dispose();
       expect(sink.disposeCount).toBe(1);
+    });
+  });
+
+  /**
+   * `P1-T31` step 2. Before this card a node was inert when
+   * `finished || root.terminal || parent?.inert` and **`disposed` was not one
+   * of the three** — `root.terminal` is set only by `done()` — so a reporter
+   * whose surfaces had been torn down went on fanning out into them.
+   * `P1-T25` measured it and asserted it as a known defect in
+   * `test/unit/bootstrap/container.test.ts`.
+   */
+  describe("dispose() latches the tree (P1-T31 criterion 3)", () => {
+    it("reaches no sink from any member after dispose(), on any node", () => {
+      const clock = createManualClock();
+      const sink = recordingSink();
+      const reporter = new CompositeProgressReporter({ clock, sinks: [sink] });
+      const stage = reporter.child("fetch", 0, 0.5);
+      const page = stage.child("page", 0, 1);
+
+      reporter.setProgress(1, 4);
+      const painted = sink.snapshots.length;
+      expect(painted).toBe(1);
+
+      reporter.dispose();
+      // Well past the throttle, so nothing is being held back by it: a call
+      // that reached a sink would paint.
+      clock.advance(10_000);
+
+      reporter.setMessage("later");
+      reporter.setProgress(90, 100);
+      reporter.increment(5);
+      reporter.warn("late warning", { source: "test" });
+      reporter.done("succeeded", "sneaky");
+      stage.setProgress(1, 1);
+      page.increment();
+      page.warn("later still");
+      reporter.child("born dead", 0, 1).setProgress(1, 1);
+
+      expect(sink.snapshots).toHaveLength(painted);
+      expect(sink.warnings).toEqual([]);
+    });
+
+    it("does not claim an outcome the job never reported", () => {
+      // `dispose()` ends the surfaces, `done()` ends the job. A plugin
+      // disabled under a running job leaves `status === "running"`, which is
+      // the honest reading — inventing `"cancelled"` here would write an
+      // outcome into `docs/07` §4.5's snapshot that nothing cancelled.
+      const reporter = new CompositeProgressReporter({
+        clock: createManualClock(),
+      });
+      reporter.setProgress(1, 2);
+      reporter.dispose();
+      expect(reporter.snapshot.status).toBe("running");
+      expect(reporter.snapshot.completed).toBe(1);
+    });
+
+    it("leaves a tree that finished with done() exactly as it was", () => {
+      const clock = createManualClock();
+      const sink = recordingSink();
+      const reporter = new CompositeProgressReporter({ clock, sinks: [sink] });
+      reporter.setProgress(5, 10);
+      reporter.done("succeeded", "Imported 10");
+      const painted = sink.snapshots.length;
+
+      reporter.dispose();
+
+      expect(sink.disposeCount).toBe(1);
+      expect(sink.snapshots).toHaveLength(painted);
+      expect(reporter.snapshot.status).toBe("succeeded");
+    });
+
+    it("latches the two shipped sinks identically — the P1-T25 asymmetry is gone", () => {
+      // The asymmetry `P1-T25` recorded by name: `ZoteroProgressWindowSink`
+      // carried its own `disposed` guard, so "no window survives" passed;
+      // `createObservableProgressSink()` cleared `latest` without latching, so
+      // the next `update()` repopulated a sink nothing could subscribe to.
+      const clock = createManualClock();
+      const windows: FakeWindow[] = [];
+      const dialog = createObservableProgressSink();
+      const popup = new ZoteroProgressWindowSink({
+        clock,
+        headline: "Research Helper",
+        openWindow: () => {
+          const win = fakeProgressWindow();
+          windows.push(win);
+          return win;
+        },
+      });
+      const reporter = new CompositeProgressReporter({
+        clock,
+        sinks: [dialog, popup],
+      });
+
+      reporter.setProgress(1, 4);
+      expect(windows).toHaveLength(1);
+      expect(dialog.latest?.completed).toBe(1);
+
+      reporter.dispose();
+      expect(windows[0]?.closed).toBe(true);
+      const platformCalls = windows[0]?.calls.length ?? 0;
+
+      clock.advance(10_000);
+      reporter.setProgress(4, 4);
+      reporter.done("succeeded");
+
+      // Both sinks, the same answer.
+      expect(windows).toHaveLength(1);
+      expect(windows[0]?.calls).toHaveLength(platformCalls);
+      expect(dialog.latest).toBeUndefined();
     });
   });
 });
@@ -592,6 +737,47 @@ describe("createObservableProgressSink — docs/08 §4.4's status bar", () => {
     expect(seen).toHaveLength(1);
 
     dialog.dispose();
+    expect(dialog.latest).toBeUndefined();
+  });
+
+  /**
+   * `P1-T31` step 3. Driven directly rather than through a reporter, because
+   * the reporter now latches too and would hide a sink that does not: a sink
+   * handed to Phase 3's queue, or to a test, must latch on its own.
+   */
+  it("latches on dispose(): update() is ignored and latest stays cleared", () => {
+    const clock = createManualClock();
+    const dialog = createObservableProgressSink();
+    const seen: ProgressSnapshot[] = [];
+    dialog.subscribe((snapshot) => seen.push(snapshot));
+
+    dialog.update(runningSnapshot(clock.now(), 1, 10));
+    expect(seen).toHaveLength(1);
+    expect(dialog.latest?.completed).toBe(1);
+
+    dialog.dispose();
+    dialog.dispose(); // idempotent
+    dialog.update(runningSnapshot(clock.now(), 9, 10));
+
+    // The defect `P1-T25` recorded: this used to repopulate `latest` on a sink
+    // nothing could subscribe to.
+    expect(dialog.latest).toBeUndefined();
+    expect(seen).toHaveLength(1);
+  });
+
+  it("gives a subscriber that arrives after dispose() a callable no-op", () => {
+    const dialog = createObservableProgressSink();
+    dialog.dispose();
+
+    const seen: ProgressSnapshot[] = [];
+    const off = dialog.subscribe((snapshot) => seen.push(snapshot));
+
+    expect(off).toBeInstanceOf(Function);
+    expect(seen).toEqual([]);
+    expect(() => off()).not.toThrow();
+    // And nothing was registered, so a late update reaches no one either.
+    dialog.update(runningSnapshot(0, 1, 2));
+    expect(seen).toEqual([]);
     expect(dialog.latest).toBeUndefined();
   });
 
