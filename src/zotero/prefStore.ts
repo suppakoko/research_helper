@@ -129,11 +129,17 @@ export function findBranchPrefsContaining(
  * through a port and needs no Zotero instance to be unit-tested (`docs/07` §2.3,
  * `docs/13` §2.1).
  *
- * `observe` returns `registrations.ts`'s `ScopedRegistration`, typed at the port
- * as the opaque {@link PrefObserverHandle}: `core/` may not name
- * `src/bootstrap/container.ts`'s types, and `FR-56` will not let an observer be
- * registered without the teardown that undoes it. The caller hands the handle to
- * a `Scope`.
+ * `observe` returns `registrations.ts`'s `ScopedRegistration` inside the
+ * `"scoped-registration"` variant of {@link PrefObserverHandle}: `core/` may not
+ * name `src/bootstrap/container.ts`'s types, and `FR-56` will not let an
+ * observer be registered without the teardown that undoes it. The caller hands
+ * the handle to a `Scope`, which runs it.
+ *
+ * **The tag is `P1-T32` item 4 and this file is outside that card's `Files`
+ * list.** It is edited anyway, minimally, because a discriminated
+ * `PrefStore.observe` whose only platform implementation does not produce the
+ * discriminant would not typecheck — the port and its one platform adapter
+ * cannot move apart. Reported with the card.
  *
  * @returns a store over `Zotero.Prefs`, branch-relative keys
  */
@@ -152,13 +158,25 @@ export function createZoteroPrefStore(): PrefStore {
       key: string,
       handler: (value: unknown) => void,
     ): PrefObserverHandle {
-      return prefObserverRegistration(
-        `pref observer: ${qualifiedPrefName(key)}`,
-        {
-          name: BRANCH + key,
-          handler,
-        },
-      );
+      // Tagged `"scoped-registration"`, because nothing is registered yet: a
+      // `ScopedRegistration` is inert until a `Scope` runs it. `P1-T32` item 4
+      // replaced the composition root's arity check with this tag — the two
+      // shipped handles are semantic opposites and `src/core/config.ts`'s
+      // {@link PrefObserverHandle} records what the untagged version cost.
+      //
+      // No cast: `ScopedRegistration` is `(scope: Scope) => Promise<void>` and
+      // the field is declared `(scope: never) => void | Promise<void>`, which
+      // it satisfies by parameter contravariance. `core/` may not name `Scope`.
+      return {
+        kind: "scoped-registration",
+        register: prefObserverRegistration(
+          `pref observer: ${qualifiedPrefName(key)}`,
+          {
+            name: BRANCH + key,
+            handler,
+          },
+        ),
+      };
     },
   };
 }

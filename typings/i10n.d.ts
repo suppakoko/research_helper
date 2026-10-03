@@ -10,6 +10,7 @@ export type FluentMessageId =
   | 'research-helper-menu-root'
   | 'research-helper-menu-search-import'
   | 'research-helper-menu-spike-create-item'
+  | 'research-helper-progress-headline'
   | 'research-helper-provenance-note-title'
   | 'research-helper-search-authors-overflow'
   | 'research-helper-search-cancel'

@@ -429,9 +429,14 @@ describe("setPref / clearPref / observePref", () => {
     const handle = observePref("logLevel", (value) => seen.push(value));
     store.notify("logLevel", "debug");
     expect(seen).toEqual(["debug"]);
-    // The handle is opaque at the port (src/core/config.ts) because FR-56 makes
-    // the Zotero implementation return a ScopedRegistration, not a Symbol.
-    expect(handle).toBeTypeOf("function");
+    // The handle is tagged at the port (src/core/config.ts) because the two
+    // shipped implementations return semantic opposites and FR-56 makes the
+    // Zotero one return a ScopedRegistration rather than a Symbol. The memory
+    // store's observer is live the moment `observe` returns, so its tag is
+    // `"unsubscribe"` — `P1-T32` item 4 replaced the bare function this used to
+    // assert on. Updated rather than deleted: the assertion is still that
+    // `observePref` hands back something the caller can undo.
+    expect(handle.kind).toBe("unsubscribe");
   });
 });
 

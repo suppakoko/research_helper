@@ -138,7 +138,42 @@ research-helper-import-abstract-coverage = Abstracts present for { $percent }% o
 
 # Header of the completion `ProgressWindow` toast (`docs/08` §4.4, §8.2). The
 # sink takes this already localized (`P1-T15`).
+#
+# **Declared, but named by no code today** (grepped 2026-10-03, `P1-T32`): it
+# overlaps `research-helper-progress-headline` below, which is the id the
+# composition root actually resolves. Reported with `P1-T32`; whether this one
+# is retired in its favour, or kept for a toast header distinct from the
+# popup's headline, is an owner decision and not a translator's.
 research-helper-import-toast-header = Research Helper
+
+
+## The progress popup's headline — `docs/07` §7.7, `docs/08` §8.2 (P1-T32)
+##
+## `changeHeadline(text, …)`'s first argument, for the `Zotero.ProgressWindow`
+## every job raises (`docs/07` §7.7's "One window per job", `P1-T31`). It is
+## **application-scoped**: the product's name for the surface, not the job's —
+## a per-job string is the `ItemProgress` line's text, which the reporter
+## carries separately.
+##
+## It lives in this bundle rather than in `searchDialog.ftl` because JavaScript
+## formats it and hands it to a surface that is not a document of ours, which
+## is §10.1's "From JS, no window" row and this file's third job (see the
+## header). Before `P1-T32` the composition root passed `config.addonName`, a
+## brand name read out of `package.json`, so a Korean UI showed English with
+## nothing in the log to say a string had never been looked up.
+##
+## **The en-US text is the product name, and the corpus supplies no sentence.**
+## `docs/08` §8.2's own example call is
+## `changeHeadline("Research Helper", "library", "Summarizing…")` — product
+## name as the headline, activity as the trailing text — and Zotero's own
+## in-tree call puts a sentence there instead
+## (`Zotero.getString("ingester.scrapingTo")`). Nothing in `docs/07` §7.7 or
+## `docs/08` §8.2 states which of the two shapes is ours, so the shipped text
+## is the one that was already on screen, and the owner can change this one
+## string without touching code. The point of the id is that it is now
+## translatable at all.
+
+research-helper-progress-headline = Research Helper
 
 
 ## User-facing error strings — `ResearchHelperError.messageKey`

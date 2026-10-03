@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { FakeZotero } from "../../setup/zotero-global";
 import {
   adoptPrefObserverHandle,
   createScope,
+  createZoteroLogSink,
   installServices,
   registration,
   type Scope,
@@ -34,7 +36,7 @@ import {
   PROGRESS_REPAINT_INTERVAL_MS,
   type ProgressSnapshot,
 } from "../../../src/core/jobQueue/progress";
-import type { LogSink } from "../../../src/core/logger";
+import { LOG_PREFIX, type LogSink } from "../../../src/core/logger";
 import {
   NCBI_HOST,
   NCBI_KEY_PRESENT_PREF,
@@ -43,8 +45,10 @@ import {
   type HostLimiterRegistry,
 } from "../../../src/core/rateLimit/hostLimiter";
 import { TokenBucket } from "../../../src/core/rateLimit/tokenBucket";
+import { L10N_PROGRESS_HEADLINE } from "../../../src/i18n/keys";
 import { getPrefStore, setPrefStore } from "../../../src/prefs";
 import type { ProgressWindowHandle } from "../../../src/zotero/progressWindow";
+import { debug as zoteroDebug } from "../../../src/zotero/zoteroApi";
 
 /**
  * `P1-T25` — the composition root.
@@ -74,6 +78,27 @@ import type { ProgressWindowHandle } from "../../../src/zotero/progressWindow";
  * `test/unit/core/progress.test.ts`, and §4's last test — `P1-T25`'s
  * asymmetry assertion — was **updated rather than deleted**, so the fix is
  * visible where the defect was recorded.
+ *
+ * **§7 is `P1-T32`'s** — the four seams `P1-T25` bound from inside its own two
+ * files. Three of its criteria are measured there and the fourth is measured
+ * half here:
+ *
+ * - criterion 1 (`error()` reaches `Zotero.logError`) and criterion 2 (a line
+ *   carries its mapped level) are asserted **on the fake `Zotero` global**,
+ *   through `src/zotero/zoteroApi.ts`'s facades, because the second argument
+ *   and the second channel are things the sink cannot be observed to have from
+ *   above it;
+ * - criterion 5 (one prefix) is likewise asserted on the string that reached
+ *   `Zotero.debug`, not on the string the sink was handed — the duplicate
+ *   prefix was added *by the facade*, so a test that stopped at the sink could
+ *   not see it;
+ * - criterion 4's *resolution* half is `test/integration/l10n.spec.ts`'s,
+ *   because it needs a live `L10nRegistry`. What is here is that
+ *   `installServices` awaits the resolver, uses what it returns, and makes the
+ *   fallback **visible in the log** instead of silent.
+ *
+ * §5's third test is `P1-T03`'s refusal guard, kept and annotated: `P1-T32`'s
+ * discriminated handle makes it redundant rather than wrong.
  */
 
 // ---------------------------------------------------------------------------
@@ -190,19 +215,25 @@ function createScopedPrefStore(
     clear: (key) => void values.delete(key),
     observe(key, handler): PrefObserverHandle {
       // Exactly `src/zotero/prefStore.ts`'s shape: inert until a `Scope` runs
-      // it, and the handle is what `unregister` receives.
-      return registration<number>({
-        description: `fake pref observer: ${key}`,
-        register() {
-          const id = nextId;
-          nextId += 1;
-          live.set(id, { key, handler });
-          return id;
-        },
-        unregister(id) {
-          live.delete(id);
-        },
-      });
+      // it, and the handle is what `unregister` receives. Tagged
+      // `"scoped-registration"` since `P1-T32`, which is the whole of item 4 —
+      // the tag, not the arity, is what tells the root to *run* this rather
+      // than treat it as an undo.
+      return {
+        kind: "scoped-registration",
+        register: registration<number>({
+          description: `fake pref observer: ${key}`,
+          register() {
+            const id = nextId;
+            nextId += 1;
+            live.set(id, { key, handler });
+            return id;
+          },
+          unregister(id) {
+            live.delete(id);
+          },
+        }),
+      };
     },
     notify(key, value) {
       for (const entry of live.values()) {
@@ -717,8 +748,53 @@ describe("step 3: observePref's opaque handle is bound to the scope", () => {
     // `docs/07` §8.5.1's sketched `Symbol` is exactly such a handle: nothing
     // the composition root can undo, which is why `P1-T03` reported it as
     // unreachable.
+    //
+    // **`P1-T32` made this test redundant, and it is kept rather than
+    // deleted** — it is `P1-T03`'s measurement's regression guard, and the
+    // thing it guards against is a *leak*, which is still the worst outcome.
+    // What makes it redundant is that `PrefObserverHandle` is now a
+    // discriminated union, so an untagged handle is a compile error at every
+    // `PrefStore.observe` implementation; the `as` below is the only way left
+    // to produce one, and it stands in for the untyped edges the guard exists
+    // for (a handle crossing the sandbox boundary, or a `PrefStore` built in
+    // untyped code). Before the tag, this assertion described a reachable
+    // runtime state; now it describes what happens when the type system has
+    // already been circumvented. The cast is what proves the redundancy: if it
+    // compiled without one, the union would not be doing its job.
     await expect(
-      adoptPrefObserverHandle(scope, {}, "an unbindable handle"),
+      adoptPrefObserverHandle(
+        scope,
+        {} as unknown as PrefObserverHandle,
+        "an unbindable handle",
+      ),
+    ).rejects.toBeInstanceOf(ConfigurationError);
+    expect(scope.size).toBe(0);
+  });
+
+  it("refuses the opposite tag rather than silently undoing a registration", async () => {
+    const scope = createScope({
+      description: "mis-tagged handle test",
+      onError: () => undefined,
+      strict: true,
+    });
+
+    // The defect the tag exists to stop, stated as a test: a handle that *is*
+    // callable — the shape the old arity check happily bound — but carries no
+    // tag the root understands. Arity could not distinguish this from a real
+    // registration; `kind` refuses it, and nothing is recorded in the scope,
+    // so the observer is not leaked and not silently unsubscribed either.
+    const miscallable = Object.assign(
+      () => {
+        throw new Error("a mis-tagged handle must never be called");
+      },
+      { kind: "registration" as const },
+    );
+    await expect(
+      adoptPrefObserverHandle(
+        scope,
+        miscallable as unknown as PrefObserverHandle,
+        "a third convention",
+      ),
     ).rejects.toBeInstanceOf(ConfigurationError);
     expect(scope.size).toBe(0);
   });
@@ -916,5 +992,258 @@ describe("P1-T31: ServiceGraph.progress hands out one reporter per job", () => {
 
     expect(popup.events.filter((event) => event === "close")).toHaveLength(1);
     expect(h.errors).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. `P1-T32` — the four platform seams the composition root could not reach
+// ---------------------------------------------------------------------------
+
+/**
+ * Every argument list `Zotero.debug` was called with since the last clear.
+ *
+ * The *platform* call, not the sink call: the point of these assertions is
+ * what a user pasting a debug log into a bug report actually sees, which is
+ * the string and the level that crossed the facade.
+ */
+function zoteroDebugCalls(): unknown[][] {
+  return FakeZotero.debug.mock.calls.map((call) => [...call]);
+}
+
+/** The `Error` objects `Zotero.logError` was called with since the last clear. */
+function zoteroLogErrorCalls(): Error[] {
+  return FakeZotero.logError.mock.calls.map((call) => call[0] as Error);
+}
+
+/** Only the lines that came from `createLogger` — one JSON payload each. */
+function productLogLines(): string[] {
+  return zoteroDebugCalls()
+    .map((call) => String(call[0]))
+    .filter((line) => line.includes('"lvl":'));
+}
+
+describe("P1-T32: the real LogSink reaches both of §10.3's channels", () => {
+  beforeEach(() => {
+    FakeZotero.debug.mockClear();
+    FakeZotero.logError.mockClear();
+  });
+
+  it("criterion 1: an error() line reaches Zotero.logError through the facade", async () => {
+    // The seam with the user-visible cost. `docs/07` §10.3 routes
+    // `Logger.error()` to `Zotero.logError()` "so the entry reaches the
+    // Mozilla error console and `Zotero.getErrors()`", and before this card
+    // `Zotero.logError` was named nowhere in `src/zotero/` — so an error the
+    // bug-report instructions tell the user to paste was not there.
+    const h = harness({ logSink: createZoteroLogSink() });
+    const graph = await installServices(h.scope, h.options);
+
+    graph.logger.error("efetch failed", { status: 502 });
+
+    const reported = zoteroLogErrorCalls();
+    expect(reported).toHaveLength(1);
+    const err = must(reported[0], "the reported Error");
+    // `Zotero.logError` takes an `Error`, not a string (`zotero-types@4.1.3`).
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toContain('"lvl":"error"');
+    expect(err.message).toContain("efetch failed");
+
+    await h.scope.unregisterAll();
+  });
+
+  it("criterion 1: only error() opens the second channel", async () => {
+    // §10.3 says `error()` *additionally* calls it. A `warn` that also landed
+    // in `Zotero.getErrors()` would fill its 25-entry ring buffer with
+    // non-errors and push the real ones out.
+    const h = harness(
+      { logSink: createZoteroLogSink() },
+      { logLevel: "debug" },
+    );
+    const graph = await installServices(h.scope, h.options);
+
+    graph.logger.warn("retrying");
+    graph.logger.info("installed");
+    graph.logger.debug("shape");
+    expect(zoteroLogErrorCalls()).toEqual([]);
+
+    graph.logger.error("gave up");
+    expect(zoteroLogErrorCalls()).toHaveLength(1);
+
+    await h.scope.unregisterAll();
+  });
+
+  it("criterion 2: each line carries its mapped Zotero level as debug()'s second argument", async () => {
+    // `docs/07` §10.3's table — `error -> 1`, `warn -> 2`, `info -> 3`,
+    // `debug -> 4`, lower = more severe — passed "straight through as
+    // `Zotero.debug`'s second argument". `zoteroApi.debug()` had no second
+    // argument until this card, so every line of ours landed at Zotero's
+    // default 3 and `extensions.zotero.debug.level` could not filter by our
+    // severity at all.
+    const h = harness(
+      { logSink: createZoteroLogSink() },
+      { logLevel: "debug" },
+    );
+    const graph = await installServices(h.scope, h.options);
+    FakeZotero.debug.mockClear();
+
+    graph.logger.error("e");
+    graph.logger.warn("w");
+    graph.logger.info("i");
+    graph.logger.debug("d");
+
+    // One `Zotero.debug` per line, in order, each with its level. The
+    // `logError` channel is a separate call and does not appear here.
+    expect(zoteroDebugCalls().map((call) => call[1])).toEqual([1, 2, 3, 4]);
+
+    await h.scope.unregisterAll();
+  });
+
+  it("criterion 5: a product log line carries exactly one prefix, end to end", async () => {
+    // Measured on the string that reached `Zotero.debug`, not on the string
+    // the sink was handed: the second prefix was added *by the facade*, so a
+    // test that stopped at the sink could not see it. Before this card every
+    // product line read
+    //   [research-helper] [research_helper] {"t":...}
+    // — two prefixes differing by one character, so a grep for either found
+    // half the lines of the other.
+    const h = harness(
+      { logSink: createZoteroLogSink() },
+      { logLevel: "debug" },
+    );
+    const graph = await installServices(h.scope, h.options);
+    FakeZotero.debug.mockClear();
+
+    graph.logger.info("services installed", { hosts: 1 });
+
+    const lines = productLogLines();
+    expect(lines).toHaveLength(1);
+    const line = must(lines[0], "the product log line");
+    expect(line.startsWith(`${LOG_PREFIX} `)).toBe(true);
+    expect(line.split(LOG_PREFIX)).toHaveLength(2);
+    // The retired spelling must not come back by either route.
+    expect(line).not.toContain("[research-helper]");
+    // And the remainder is still §10.3's single-line JSON payload.
+    expect(JSON.parse(line.slice(LOG_PREFIX.length + 1))).toMatchObject({
+      lvl: "info",
+      msg: "services installed",
+      hosts: 1,
+    });
+
+    await h.scope.unregisterAll();
+  });
+
+  it("criterion 5: a bare facade call is still prefixed once", () => {
+    // The other half of the idempotent prefix: `createSpikeArticle()` and the
+    // integration specs call `debug()` with an unprefixed message and must
+    // keep getting one prefix, not zero.
+    zoteroDebug("a bare message");
+    const calls = zoteroDebugCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toEqual([`${LOG_PREFIX} a bare message`]);
+  });
+});
+
+describe("P1-T32: the progress headline resolves rather than defaulting to a brand name", () => {
+  beforeEach(() => {
+    FakeZotero.debug.mockClear();
+    FakeZotero.logError.mockClear();
+  });
+
+  it("awaits the resolver and gives the popup the resolved string", async () => {
+    // `installServices` is the last `await` before the factory, and `forJob`
+    // is synchronous because `docs/07` §7.7 raises one popup per job — so a
+    // resolver that is not awaited *here* cannot be awaited at all.
+    const h = harness({
+      progressHeadline: {
+        messageId: L10N_PROGRESS_HEADLINE,
+        resolve: () => Promise.resolve("리서치 헬퍼"),
+        fallback: "Research Helper",
+      },
+    });
+    const graph = await installServices(h.scope, h.options);
+
+    // `openProgressWindow` is called lazily, on the job first update.
+    graph.progress
+      .forJob("searchImport", { openOn: "progress" })
+      .reporter.setProgress(1, 2);
+    expect(must(h.windows[0], "the popup").events).toContain(
+      "headline:리서치 헬퍼",
+    );
+
+    await h.scope.unregisterAll();
+  });
+
+  it("falls back visibly, with the message id in the log, when it resolves in no locale", async () => {
+    // `P1-T32` `Do` step 4: "do not fall back to a brand name silently, which
+    // is what today's code does with a comment". The fallback is still used —
+    // a headline-less popup is worse than an English one — but the
+    // substitution is now a `warn` line in the debug log a bug report carries,
+    // naming the id so the three different causes (missing message, bundle
+    // never inserted, locale chain that does not end in en-US) are
+    // diagnosable.
+    const h = harness({
+      progressHeadline: {
+        messageId: L10N_PROGRESS_HEADLINE,
+        resolve: () => Promise.resolve(undefined),
+        fallback: "Research Helper",
+      },
+    });
+    const graph = await installServices(h.scope, h.options);
+
+    // `openProgressWindow` is called lazily, on the job first update.
+    graph.progress
+      .forJob("searchImport", { openOn: "progress" })
+      .reporter.setProgress(1, 2);
+    expect(must(h.windows[0], "the popup").events).toContain(
+      "headline:Research Helper",
+    );
+
+    const warned = h.sink.lines.filter((line) =>
+      line.includes(L10N_PROGRESS_HEADLINE),
+    );
+    expect(warned).toHaveLength(1);
+    expect(must(warned[0], "the warn line")).toContain('"lvl":"warn"');
+
+    await h.scope.unregisterAll();
+  });
+
+  it("does not fail startup when the resolver throws", async () => {
+    // A string that did not resolve must not cost the user their menus.
+    const h = harness({
+      progressHeadline: {
+        messageId: L10N_PROGRESS_HEADLINE,
+        resolve: () => Promise.reject(new Error("L10nRegistry not ready")),
+        fallback: "Research Helper",
+      },
+    });
+    const graph = await installServices(h.scope, h.options);
+
+    expect(graph.progress.openJobs).toBe(0);
+    const warned = h.sink.lines.filter((line) =>
+      line.includes(L10N_PROGRESS_HEADLINE),
+    );
+    expect(warned).toHaveLength(1);
+    expect(must(warned[0], "the warn line")).toContain(
+      "L10nRegistry not ready",
+    );
+
+    await h.scope.unregisterAll();
+  });
+
+  it("still accepts a literal, which is what a test with no Fluent passes", async () => {
+    const h = harness({ progressHeadline: "Research Helper" });
+    const graph = await installServices(h.scope, h.options);
+
+    // `openProgressWindow` is called lazily, on the job first update.
+    graph.progress
+      .forJob("searchImport", { openOn: "progress" })
+      .reporter.setProgress(1, 2);
+    expect(must(h.windows[0], "the popup").events).toContain(
+      "headline:Research Helper",
+    );
+    expect(
+      h.sink.lines.filter((line) => line.includes(L10N_PROGRESS_HEADLINE)),
+    ).toEqual([]);
+
+    await h.scope.unregisterAll();
   });
 });

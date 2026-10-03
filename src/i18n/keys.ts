@@ -175,6 +175,13 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-import-abstract-coverage",
   "research-helper-import-toast-header",
 
+  // The progress popup's headline (docs/07 §7.7, docs/08 §8.2; P1-T32 item 3).
+  // JavaScript formats it and hands it to a surface that is not a document of
+  // ours, which is docs/08 §10.1's "From JS, no window" row and so this
+  // bundle. See L10N_PROGRESS_HEADLINE below for the overlap with
+  // `research-helper-import-toast-header`.
+  "research-helper-progress-headline",
+
   // ResearchHelperError.messageKey — see ERROR_MESSAGE_IDS below.
   "rh-error-configuration",
   "rh-error-missing-credential",
@@ -225,6 +232,27 @@ export const L10N_MENU_SEARCH_IMPORT = "research-helper-menu-search-import";
  */
 export const L10N_MENU_COLLECTION_SEARCH_IMPORT =
   "research-helper-menu-collection-search-import";
+
+/**
+ * The headline of the `Zotero.ProgressWindow` every job raises (`docs/07`
+ * §7.7, `docs/08` §8.2; `P1-T32` item 3).
+ *
+ * Resolved once at startup by `src/bootstrap/registerUI.ts` and handed to
+ * `src/bootstrap/container.ts`'s `installServices` as a
+ * `ProgressHeadlineSource`: `ZoteroProgressWindowSink` takes an
+ * **already-localized** string, `Zotero.getString()` throws on a plugin key
+ * (`docs/08` §8.2.1), and Fluent is async while the popup factory is not.
+ *
+ * **It overlaps `research-helper-import-toast-header`, and that is reported
+ * rather than resolved here.** That id's en-US text is the same string and its
+ * bundle comment calls it "Header of the completion `ProgressWindow` toast";
+ * grepped 2026-10-03, **no code names it**. `P1-T32`'s item 3 states that
+ * `keys.ts` "declares no headline id", which is not accurate — and two ids
+ * carrying one string for one surface is exactly the drift this module exists
+ * to prevent. Retiring one of them touches `docs/08` §4.4's wording and the
+ * `ko-KR` review list, so it is left to a card and to `G-41`.
+ */
+export const L10N_PROGRESS_HEADLINE = "research-helper-progress-headline";
 
 /* ------------------------------------------------ searchDialog message ids */
 
@@ -349,8 +377,8 @@ export type DeclaredMessageId = MainWindowMessageId | SearchDialogMessageId;
  *
  * This is the second half of `P1-T30`'s single source of truth. Without it the
  * `satisfies` clauses above would only prove that this file names nothing the
- * bundles lack; with it, the two sets are provably the same 84 ids and neither
- * side can move alone.
+ * bundles lack; with it, the two sets are provably the same 85 ids (84 until
+ * `P1-T32` added the progress headline) and neither side can move alone.
  */
 export type UndeclaredBundleMessageId = AssertNever<
   Exclude<FluentMessageId, DeclaredMessageId>
@@ -447,12 +475,16 @@ export const DEFERRED_ERROR_MESSAGE_IDS = [
  * either a Korean entry or an explicit admission here.
  */
 export const KO_PENDING_REVIEW = [
-  // --- mainWindow (21) ---
+  // --- mainWindow (22) ---
   "research-helper-menu-collection-search-import",
   "research-helper-provenance-note-title",
   "research-helper-import-summary",
   "research-helper-import-abstract-coverage",
   "research-helper-import-toast-header",
+  // `P1-T32` item 3. Gate `G-41` owns the translation; the `ko-KR` bundle
+  // carries the id as a commented stub with its English source, and nothing
+  // was machine-translated.
+  "research-helper-progress-headline",
   "rh-error-configuration",
   "rh-error-missing-credential",
   "rh-error-network",

@@ -43,24 +43,73 @@
 export type PrefScalar = boolean | number | string;
 
 /**
- * Whatever the platform needs in order to keep one preference observer alive and
- * to undo it later.
+ * A handle whose observer is **not installed yet**: running it installs it.
  *
- * **Opaque on purpose, and this is a deliberate divergence from `docs/07`
- * §8.5.1.** That section sketches `observePref` as returning the `Symbol` from
- * `Zotero.Prefs.registerObserver` — but `FR-56` and `eslint.config.js`'s
- * `research-helper/scoped-registration` rule make
+ * This is what `src/zotero/prefStore.ts` returns. `FR-56` and
+ * `eslint.config.js`'s `research-helper/scoped-registration` rule make
  * `Zotero.Prefs.registerObserver` callable from `src/zotero/registrations.ts`
  * and nowhere else, precisely so that no registration can exist without the
- * teardown that undoes it (`docs/01` §12 gotcha 10). The Zotero implementation
- * therefore returns `registrations.ts`'s `ScopedRegistration`, which a `Scope`
- * executes and tears down — a *function*, not a `Symbol`.
- *
- * `core/` may not name `src/bootstrap/container.ts`'s types (§2.3), so the port
- * declares the handle as `object`: enough to pass through, not enough to unwrap.
- * The composition root, which may name both, is where it is consumed.
+ * teardown that undoes it (`docs/01` §12 gotcha 10) — and that module's
+ * factories return a `ScopedRegistration`, which is **inert until a `Scope`
+ * runs it**. So the correct thing for the composition root to do with this
+ * variant is *run* it.
  */
-export type PrefObserverHandle = object;
+export interface ScopedPrefObserverHandle {
+  readonly kind: "scoped-registration";
+  /**
+   * Install the observer and record its teardown, in one statement.
+   *
+   * Typed as a one-argument function of an **unsatisfiable** parameter because
+   * `core/` may not name `src/bootstrap/container.ts`'s `Scope` (`docs/07`
+   * §2.3). `src/bootstrap/container.ts`'s `ScopedRegistration` is assignable to
+   * this signature without a cast — parameters are contravariant and `never` is
+   * assignable to `Scope` — so the implementation side needs none; the
+   * composition root, which may name `Scope`, narrows it back once.
+   */
+  readonly register: (scope: never) => void | Promise<void>;
+}
+
+/**
+ * A handle whose observer **is already installed**: calling it removes it.
+ *
+ * This is what {@link createMemoryPrefStore} returns, and the method name is
+ * the whole point of `P1-T32` item 4 — see {@link PrefObserverHandle}.
+ */
+export interface UnsubscribePrefObserverHandle {
+  readonly kind: "unsubscribe";
+  /** Detach the handler. Idempotent in both shipped implementations. */
+  unsubscribe(): void;
+}
+
+/**
+ * Whatever the platform needs in order to keep one preference observer alive and
+ * to undo it later — **discriminated by `kind`** since `P1-T32`.
+ *
+ * **Why a tag and not a bare `object`, which is what `P1-T03` shipped.** The
+ * two implementations return handles that are *semantic opposites*: the Zotero
+ * store's call **registers** the observer, the in-memory store's
+ * **unregisters** it. Both were functions, both satisfied the old `object`, and
+ * `typeof` could not tell them apart — so `src/bootstrap/container.ts`
+ * discriminated on **arity**, the only property that separated them, and the
+ * cost of guessing wrong was not a type error but the silent removal of the
+ * observer that had just been installed: `ncbi.keyPresent` would stop raising
+ * the NCBI budget with nothing anywhere to see. `P1-T25` shipped the arity
+ * check and reported it as needing a card; this is that card.
+ *
+ * A tag also closes the hole the arity check left open. Arity is a property of
+ * *every* function, so a third implementation returning a one-argument thunk
+ * would have been bound as a registration and never undone. `kind` cannot be
+ * produced by accident: a handle without it fails to typecheck at the
+ * `observe()` return, which is the site that knows which semantic it meant.
+ *
+ * **This is still a deliberate divergence from `docs/07` §8.5.1**, which
+ * sketches `observePref` as returning `Zotero.Prefs.registerObserver`'s
+ * `Symbol`. `P1-T03` measured that as unreachable and the reason has not
+ * changed; what changed is that the port no longer describes the two reachable
+ * shapes as one opaque type.
+ */
+export type PrefObserverHandle =
+  ScopedPrefObserverHandle | UnsubscribePrefObserverHandle;
 
 /**
  * Raw, string-keyed preference storage, as `core/` and `src/prefs/` see it.
@@ -101,6 +150,11 @@ export interface PrefStore {
    * provider picker's dependent blocks, and the storage-backend badge"), because
    * everything else is read on demand and so picks up a change on the next run
    * without a restart.
+   *
+   * The returned {@link PrefObserverHandle} says, in its `kind`, whether the
+   * observer is already installed. An implementation must tag the handle with
+   * the semantic it actually has; see that type's own comment for what the
+   * untagged version cost.
    */
   observe(key: string, handler: (value: unknown) => void): PrefObserverHandle;
 }
@@ -115,8 +169,9 @@ export interface PrefStore {
  * `plan/04-phase-3-llm-summaries.md` between them call for a "fake `PrefStore`"
  * or a "spying `PrefStore`" in four separate criteria.
  *
- * `observe` records the handler and returns the unsubscribe function as its
- * handle, so a test can drive a notification without a platform observer.
+ * `observe` records the handler and returns an {@link
+ * UnsubscribePrefObserverHandle}, so a test can drive a notification without a
+ * platform observer.
  *
  * @param initial - seed entries, branch-relative keys
  */
@@ -146,8 +201,16 @@ export function createMemoryPrefStore(
       const set = watchers.get(key) ?? new Set();
       set.add(handler);
       watchers.set(key, set);
-      return () => {
-        set.delete(handler);
+      // Tagged `"unsubscribe"`, because the handler is live the moment this
+      // returns: there is nothing left to register and the only thing a
+      // caller may do with the handle is undo it. The tag is what stops the
+      // composition root from *running* it as though it were a registration,
+      // which would detach the handler it just attached.
+      return {
+        kind: "unsubscribe",
+        unsubscribe(): void {
+          set.delete(handler);
+        },
       };
     },
     notify(key, value) {

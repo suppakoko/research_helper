@@ -53,10 +53,29 @@
  * **Why `src/zotero/` is imported here and nowhere lower.** `docs/07` §2.3
  * ranks `zotero/` *above* `core/`, so no `core/` module may name it; the
  * composition root is explicitly "the one place allowed to know all of it".
- * `src/zotero/prefStore.ts` is nonetheless **not** imported — it imports
+ * `src/zotero/progressWindow.ts` and `src/zotero/zoteroApi.ts` are imported —
+ * the second since `P1-T32`, for the two log facades
+ * {@link createZoteroLogSink} composes — and neither imports
+ * `src/zotero/registrations.ts`, so neither closes a cycle.
+ * `src/zotero/prefStore.ts` is nonetheless **not** imported: it *does* import
  * `src/zotero/registrations.ts`, which imports this file, and the cycle would
  * be real even though ESM tolerates it. The `PrefStore` arrives as an argument
  * instead, typed from `src/core/config.ts`.
+ *
+ * ## Section 2b — the four platform seams (`P1-T32`)
+ *
+ * `P1-T25` had to bind four seams from inside its own two files because no
+ * card's `Files` named the other side, and recorded each one at its call site:
+ * the log sink dropped `Zotero.debug`'s level, had no `reportError` channel at
+ * all, and added a second log prefix one character from `core/`'s; and
+ * `observePref`'s handle had to be discriminated on **arity** because the port
+ * typed two semantic opposites as one opaque `object`. `P1-T32` closes all
+ * four. The level and the error console arrive through
+ * {@link createZoteroLogSink} over the two facades `src/zotero/zoteroApi.ts`
+ * now exports; the handle arrives tagged, and
+ * {@link adoptPrefObserverHandle} reads the tag; and the progress headline
+ * arrives as a {@link ProgressHeadlineSource} that this file awaits once,
+ * instead of as the brand name `P1-T25` passed with a comment.
  *
  * ## Section 3 — one reporter per job (`P1-T31`)
  *
@@ -150,6 +169,10 @@ import {
   ZoteroProgressWindowSink,
   type ProgressWindowHandle,
 } from "../zotero/progressWindow";
+import {
+  debug as zoteroDebug,
+  logError as zoteroLogError,
+} from "../zotero/zoteroApi";
 
 // ===========================================================================
 // 1. The teardown registry — `P0-T07`
@@ -435,6 +458,80 @@ class ScopeImpl implements Scope {
 // ===========================================================================
 
 /**
+ * `core/`'s {@link LogSink} over Help → Debug Output Logging and the Mozilla
+ * error console — the real sink, and `P1-T32` items 1, 2 and 5 together.
+ *
+ * It composes the two facades of `src/zotero/zoteroApi.ts` and adds nothing:
+ *
+ * - **`write` forwards the level.** `docs/07` §10.3 documents the second
+ *   argument as passed "straight through as `Zotero.debug`'s second argument",
+ *   which was impossible until `P1-T32` gave the facade one. Before that every
+ *   line of ours landed at Zotero's default 3, so `docs/08` §7.3's log-level
+ *   control had nothing to act on *on the Zotero side*.
+ * - **`reportError` is implemented at all.** §10.3's "`Logger.error()`
+ *   additionally calls `Zotero.logError()`" had no implementation anywhere:
+ *   `Zotero.logError` was named nowhere in `src/zotero/`, and
+ *   `src/core/logger.ts`'s `sink.reportError?.(line)` is an optional call, so
+ *   the gap was silent. An error a bug report asks the user to paste was not in
+ *   `Zotero.getErrors()`.
+ * - **One prefix.** The line arrives carrying `src/core/logger.ts`'s
+ *   `LOG_PREFIX` and the facade no longer adds a second, differently spelled
+ *   one of its own.
+ *
+ * **Built here rather than in `src/zotero/`** for the reason the composition
+ * root exists: a `LogSink` is not a platform capability, it is the *wiring* of
+ * two of them onto a `core/` port, and `P1-T32`'s `Do NOT` closes
+ * `zoteroApi.ts` to anything beyond its two facades. It also moves the sink
+ * from `src/bootstrap/registerUI.ts`, where `P1-T25` had to put the lossy
+ * version, into the file whose unit test can import it.
+ *
+ * @returns a sink whose two channels are `Zotero.debug` and `Zotero.logError`
+ */
+export function createZoteroLogSink(): LogSink {
+  return {
+    write(line: string, zoteroLevel: 1 | 2 | 3 | 4): void {
+      zoteroDebug(line, zoteroLevel);
+    },
+    reportError(line: string): void {
+      zoteroLogError(line);
+    },
+  };
+}
+
+/**
+ * Where the progress popup's headline comes from, when it is a Fluent message
+ * rather than a literal.
+ *
+ * **Why this is a resolver and not a string.** `ZoteroProgressWindowSink`
+ * requires an already-localized headline — `Zotero.getString()` *throws* on a
+ * plugin key (`docs/08` §8.2.1), because a plugin's `.ftl` lives in
+ * `L10nRegistry` and not in that synchronous bundle — and Fluent's own API is
+ * `async`. {@link installServices} is `async` too, so the resolution happens
+ * exactly once, at startup, and the per-job factory (which is **not** async,
+ * `docs/07` §7.7's one popup per job) is handed the resolved string.
+ *
+ * **What the resolver may not do is fail quietly.** `P1-T25` passed
+ * `config.addonName` with a comment, so a Korean UI got the English brand name
+ * with nothing in the log to say the string had never been looked up.
+ * {@link fallback} is still used when {@link resolve} yields nothing, because a
+ * popup with no headline is worse than an English one, but
+ * {@link installServices} logs the substitution at `warn` with the message id —
+ * so the gap is in the debug log a bug report carries rather than in a comment.
+ */
+export interface ProgressHeadlineSource {
+  /** The Fluent id, for the `warn` line when resolution yields nothing. */
+  readonly messageId: string;
+  /**
+   * Resolve the headline. `undefined` means it resolved in **no** locale of
+   * the formatter's chain — `src/i18n/ftl.ts` never returns an identifier as a
+   * stand-in for a string (`FR-55`), so this is the only failure shape.
+   */
+  resolve(): Promise<string | undefined>;
+  /** What the popup carries if {@link resolve} yields nothing. */
+  readonly fallback: string;
+}
+
+/**
  * The platform halves the graph cannot build for itself.
  *
  * Every member is a port implementation or a build constant, never a Zotero
@@ -462,22 +559,25 @@ export interface ServiceGraphOptions {
    */
   readonly version: string;
   /**
-   * The progress popup's headline, **already localized**.
+   * The progress popup's headline — a literal, or a
+   * {@link ProgressHeadlineSource} that resolves one from Fluent.
    *
-   * `ZoteroProgressWindowSink` requires a resolved string — `Zotero.getString()`
-   * throws on a plugin key (`docs/08` §8.2.1) and Fluent is async — and no
-   * message id for one exists anywhere in `src/i18n/keys.ts`. See the `P1-T25`
-   * report: the missing id needs a card, and it is `P1-T32` item 3.
+   * `ZoteroProgressWindowSink` requires a resolved string: `Zotero.getString()`
+   * throws on a plugin key (`docs/08` §8.2.1) and Fluent is async. `P1-T32`
+   * item 3 added the message id `research-helper-progress-headline`, so the
+   * product now passes a source and {@link installServices} awaits it once at
+   * startup; a plain string stays accepted because a unit test has no Fluent.
    *
    * Application-scoped on purpose, even though the popup it headlines is now
    * per job (`P1-T31`): it is the product's name for the surface, not the
    * job's. A per-job headline would be the per-job `message`, which the
    * reporter already carries.
    */
-  readonly progressHeadline: string;
+  readonly progressHeadline: string | ProgressHeadlineSource;
   /**
-   * Where the logger's lines go — `Zotero.debug` behind a `src/zotero/`
-   * adapter. Defaults to `NULL_LOG_SINK`, which is correct only for a test.
+   * Where the logger's lines go. The product passes
+   * {@link createZoteroLogSink}; a test passes a capturing sink. Defaults to
+   * `NULL_LOG_SINK`, which is correct only for a test.
    */
   readonly logSink?: LogSink;
   /** Defaults to {@link createSystemClock}. A test passes `createManualClock()`. */
@@ -623,6 +723,49 @@ export interface ServiceGraph {
   readonly progress: JobProgressFactory;
 }
 
+/**
+ * Resolve {@link ServiceGraphOptions.progressHeadline} to the string the popup
+ * carries.
+ *
+ * A literal passes through. A {@link ProgressHeadlineSource} is awaited, and if
+ * it yields nothing the declared fallback is used **and logged at `warn` with
+ * the message id** — `P1-T32`'s `Do` step 4: "do not fall back to a brand name
+ * silently, which is what today's code does with a comment". A thrown resolver
+ * is treated the same way rather than failing startup: the plugin losing its
+ * menus because a string did not resolve would be a worse outcome than a popup
+ * headlined in English, and `FR-56`'s "no error in the debug log" is about
+ * teardown, not about a diagnosed substitution.
+ *
+ * The `warn` line is the whole deliverable of the "not silent" requirement, so
+ * it names the id, which is what makes the failure actionable: a missing
+ * message, a bundle that was never inserted, and a locale with no chain to
+ * `en-US` are three different bugs and the id is in all three reports.
+ */
+async function resolveProgressHeadline(
+  source: string | ProgressHeadlineSource,
+  logger: Logger,
+): Promise<string> {
+  if (typeof source === "string") return source;
+  let resolved: string | undefined;
+  try {
+    resolved = await source.resolve();
+  } catch (e) {
+    logger.warn("progress headline lookup threw; falling back to en-US text", {
+      messageId: source.messageId,
+      err: e,
+    });
+    return source.fallback;
+  }
+  if (resolved === undefined) {
+    logger.warn("progress headline resolved in no locale; using the fallback", {
+      messageId: source.messageId,
+      fallback: source.fallback,
+    });
+    return source.fallback;
+  }
+  return resolved;
+}
+
 /** The four `logLevel` values of `docs/07` §8.5, as a type guard. */
 function isLogLevel(value: string): value is LogLevel {
   return (
@@ -642,62 +785,82 @@ function isLogLevel(value: string): value is LogLevel {
  * `research-helper/scoped-registration` rule confine that API to
  * `src/zotero/registrations.ts`, whose factory returns a
  * {@link ScopedRegistration} — a *function*, not a `Symbol` — and `core/` may
- * not name this file's types, so `src/core/config.ts` declares the handle as
- * the opaque `object` of {@link PrefObserverHandle}. The composition root may
+ * not name this file's types, so the handle crosses the boundary as
+ * `src/core/config.ts`'s {@link PrefObserverHandle}. The composition root may
  * name both, so this is where it is unwrapped.
  *
- * **Two shapes reach here and they are opposites, which is a port defect
- * rather than a convenience.** Both are functions and both satisfy `object`:
+ * **Two shapes reach here and they are opposites:**
  *
- * | implementation | handle | calling it |
+ * | implementation | `kind` | calling it |
  * |---|---|---|
- * | `createZoteroPrefStore()` | `prefObserverRegistration(...)`, a `ScopedRegistration` | **registers** the observer |
- * | `createMemoryPrefStore()` | the unsubscribe thunk | **unregisters** it |
+ * | `createZoteroPrefStore()` | `"scoped-registration"` | **registers** the observer |
+ * | `createMemoryPrefStore()` | `"unsubscribe"` | **unregisters** it |
  *
- * So `typeof handle === "function"` cannot tell "register me" from "undo me",
- * and guessing wrong silently removes the observer that was just installed —
- * `ncbi.keyPresent` would stop raising the NCBI budget, with nothing to see.
- * They are discriminated on **arity**, which is the only property that
- * distinguishes them: a `ScopedRegistration` takes the scope, an unsubscribe
- * thunk takes nothing. Both branches are asserted in
- * `test/unit/bootstrap/container.test.ts`. The real fix is a discriminated
- * return type on `PrefStore.observe`, which touches `src/core/config.ts` —
- * outside `P1-T25`'s `Files` list — and is reported as needing a card.
+ * **Discriminated by tag since `P1-T32`, and by arity before it.** Both
+ * handles used to be bare functions satisfying `object`, so `typeof` could not
+ * tell "register me" from "undo me" and the only property that separated them
+ * was how many parameters they declared. Guessing wrong did not fail: it
+ * silently removed the observer that had just been installed, and
+ * `ncbi.keyPresent` would stop raising the NCBI budget with nothing anywhere
+ * to see. Arity also left a hole, because every function has one — a third
+ * implementation returning a one-argument thunk would have been *run* as a
+ * registration. `src/core/config.ts` now tags the handle at the `observe()`
+ * return, which is the only site that knows which semantic it meant, and this
+ * function reads the tag.
  *
  * @param scope - the lifetime the observer is bound to
  * @param handle - whatever `PrefStore.observe` returned
- * @param description - what `liveHandles()` reports for the thunk shape; the
- *   `ScopedRegistration` shape carries its own
- * @throws ConfigurationError if the handle is not callable at all, which means
- *   a third `PrefStore` implementation has appeared with a third convention
+ * @param description - what `liveHandles()` reports for the unsubscribe shape;
+ *   the `"scoped-registration"` shape carries its own
+ * @throws ConfigurationError if the handle carries neither tag. **Unreachable
+ *   through the type system** — that is what the union bought — and kept as a
+ *   runtime guard for the untyped edges, because the alternative to refusing is
+ *   leaking an observer nothing will undo. `test/unit/bootstrap/container.test.ts`
+ *   still asserts it, through a cast, and says there why the test is now
+ *   redundant rather than deleted.
  */
 export async function adoptPrefObserverHandle(
   scope: Scope,
   handle: PrefObserverHandle,
   description: string,
 ): Promise<void> {
-  const callable: unknown = handle;
-  if (typeof callable !== "function") {
-    throw new ConfigurationError(
-      `[research-helper] the PrefStore returned a ${typeof callable} as the ` +
-        `observer handle for "${description}". src/core/config.ts's ` +
-        `PrefObserverHandle is opaque, and the only shapes the composition ` +
-        `root can bind to a Scope are a ScopedRegistration (arity 1) and an ` +
-        `unsubscribe thunk (arity 0).`,
-      { description },
-    );
+  switch (handle.kind) {
+    case "scoped-registration": {
+      // Inert until a Scope runs it, which performs
+      // `Zotero.Prefs.registerObserver` and records `unregisterObserver` in
+      // one statement. The narrowing is from `(scope: never) => …` back to
+      // `ScopedRegistration`: `core/` declared the parameter unsatisfiable
+      // because it may not name `Scope`, and this is the one place that may.
+      await (handle.register as ScopedRegistration)(scope);
+      return;
+    }
+    case "unsubscribe": {
+      // Already registered, so only the undo is left. This is the one place
+      // the "registration and teardown are the same statement" property is the
+      // caller's responsibility, which is what `defer` is for.
+      const teardown: Teardown = () => {
+        handle.unsubscribe();
+      };
+      scope.defer(description, teardown);
+      return;
+    }
+    default: {
+      // `handle` is `never` here, so the tag is read back off an unnarrowed
+      // alias: a handle that reaches this line came through a cast or across
+      // the sandbox boundary, not from a typechecked `PrefStore`.
+      const untagged = handle as { readonly kind?: unknown };
+      throw new ConfigurationError(
+        `[research-helper] the PrefStore returned an observer handle for ` +
+          `"${description}" tagged ${JSON.stringify(untagged.kind)}. ` +
+          `src/core/config.ts's PrefObserverHandle has exactly two variants, ` +
+          `"scoped-registration" (inert; the Scope runs it) and "unsubscribe" ` +
+          `(already installed; the Scope undoes it), and a handle the ` +
+          `composition root cannot bind is an observer FR-56 would never ` +
+          `undo.`,
+        { description },
+      );
+    }
   }
-  if (callable.length >= 1) {
-    // The Zotero shape: inert until a Scope runs it, which performs
-    // `Zotero.Prefs.registerObserver` and records `unregisterObserver` in one
-    // statement.
-    await (callable as ScopedRegistration)(scope);
-    return;
-  }
-  // The in-memory shape: already registered, so only the undo is left. This is
-  // the one place the "registration and teardown are the same statement"
-  // property is the caller's responsibility, which is what `defer` is for.
-  scope.defer(description, callable as Teardown);
 }
 
 /** What {@link createJobProgressFactory} closes over. */
@@ -929,9 +1092,15 @@ export async function installServices(
   //    surfaces are built by `forJob`, so one job's completion cannot close
   //    another's popup and `openOn` is the pipeline's choice (`P1-T31`; §3 of
   //    this file's header has the reasoning and the rejected alternative).
+  //
+  //    The headline is resolved **once, here**, because this is the last
+  //    `await` before the factory: `forJob` is synchronous and
+  //    `ZoteroProgressWindowSink` takes a `string` (`docs/08` §8.2.1 —
+  //    `Zotero.getString()` throws on a plugin key, so Fluent is the only
+  //    route and Fluent is async).
   const progress = createJobProgressFactory({
     clock,
-    headline: options.progressHeadline,
+    headline: await resolveProgressHeadline(options.progressHeadline, logger),
     openWindow: options.openProgressWindow,
   });
   // Every reporter still open is disposed here, which releases its token

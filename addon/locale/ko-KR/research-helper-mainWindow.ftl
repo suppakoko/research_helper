@@ -89,6 +89,21 @@ research-helper-source-pubmed = PubMed
 # research-helper-import-toast-header =
 
 
+## The progress popup's headline (docs/07 §7.7, docs/08 §8.2 — P1-T32)
+##
+# NEEDS REVIEW. en-US: "Research Helper"
+# The headline of the `Zotero.ProgressWindow` each job raises. `G-41` owns this
+# translation and `P1-T32` is forbidden to draft it: the en-US text is the
+# product name, `docs/08` §10.2 renders the product name as `리서치 헬퍼` in menu
+# labels, and whether the headline follows that or becomes a Korean sentence
+# (Zotero's own in-tree headline is a sentence — see the en-US bundle's note)
+# is an owner decision. Until the gate clears a Korean UI resolves this from
+# `en-US` through the second fallback layer `P0-T24` measured, which is a
+# visible gap and is the point: a plausible wrong translation is worse than
+# English. On `KO_PENDING_REVIEW` in `src/i18n/keys.ts`.
+# research-helper-progress-headline =
+
+
 ## User-facing error strings — `ResearchHelperError.messageKey`
 ##
 ## All sixteen need a native speaker. Their ids are fixed by

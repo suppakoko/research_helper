@@ -9,10 +9,14 @@
  *
  * `P0-T10` gives it three jobs and `P1-T05` adds a fourth:
  *
- * 1. `debug()` / `reportError()` — the log sink. `docs/01` §2.3 (measured by
- *    `P0-T08` on Zotero 10.0.1) records that the plugin sandbox has **no
- *    `console`**: a stray `console.log` throws. `Zotero.debug()` is the only
- *    way out, and `docs/01` §12 gotcha 15 limits what may go into it.
+ * 1. `debug()` / `logError()` / `reportError()` — the log channels. `docs/01`
+ *    §2.3 (measured by `P0-T08` on Zotero 10.0.1) records that the plugin
+ *    sandbox has **no `console`**: a stray `console.log` throws.
+ *    `Zotero.debug()` is the only way out, and `docs/01` §12 gotcha 15 limits
+ *    what may go into it. `P1-T32` gave `debug()` the level argument
+ *    `docs/07` §10.3 requires and added `logError()`, the second channel
+ *    §10.3's `Logger.error()` needs; `src/bootstrap/container.ts`'s
+ *    `createZoteroLogSink()` composes the two into `core/`'s `LogSink` port.
  * 2. `schemaReady()` — the gate `docs/01` §12 gotcha 29 requires before any
  *    `Zotero.ItemTypes` / `Zotero.ItemFields` lookup.
  * 3. `createSpikeArticle()` — the `P0-T10` spike command itself.
@@ -26,7 +30,11 @@
  *    `P0-T10`'s `buildJournalArticle()`.
  *
  * **This file is `create`d by `P1-T05` per `plan/README.md` §4's sixteen-path
- * list, but its `P0-T10` exports are retained rather than replaced.** `debug`,
+ * list, but its `P0-T10` exports are retained rather than replaced.** `P1-T32`
+ * extended it a third time, for the same reason and after the same grep:
+ * `debug` and `reportError` are imported by `src/bootstrap/registerUI.ts` and
+ * by seven integration specs, so `reportError` keeps its two-argument shape
+ * and `debug`'s new `level` stays optional. `debug`,
  * `reportError`, `schemaReady`, `userLibraryID`, `SPIKE_COLLECTION_NAME` and
  * `createSpikeArticle` have live importers outside this card's `Files` list —
  * `src/bootstrap/registerUI.ts` and `test/integration/zotero/itemCreation.spec.ts`
@@ -47,6 +55,7 @@
  */
 
 import type { HttpTransport } from "../core/http/client";
+import { LOG_PREFIX } from "../core/logger";
 import type { CanonicalWork } from "../model/canonicalWork";
 import { normalizeDoi } from "../model/ids";
 
@@ -56,9 +65,6 @@ import {
   toZoteroItemJSON,
   type ZoteroItemJSON,
 } from "./itemMapper";
-
-/** The `[Research Helper]` prefix every line of ours carries in Debug Output. */
-const LOG_PREFIX = "[research-helper]";
 
 // ---------------------------------------------------------------------------
 // The HTTP transport port — `P1-T05`
@@ -94,18 +100,105 @@ export function createZoteroHttpTransport(): HttpTransport {
   };
 }
 
+// ---------------------------------------------------------------------------
+// The log facades — `P0-T10`, levelled and completed by `P1-T32`
+// ---------------------------------------------------------------------------
+
+/**
+ * `Zotero.debug`'s second argument (`docs/07` §10.3).
+ *
+ * The same four values `src/core/logger.ts`'s level table produces, written as
+ * a literal union rather than `number` so a caller cannot pass Zotero's own
+ * `level 5` or a mapped-wrong `0`. **Lower = more severe**, default 3.
+ */
+export type ZoteroDebugLevel = 1 | 2 | 3 | 4;
+
+/**
+ * §10.3's prefix, applied **exactly once**.
+ *
+ * `P1-T32` item 5: this file used to own a second prefix of its own,
+ * `"[research-helper]"`, which differed from `src/core/logger.ts`'s
+ * {@link LOG_PREFIX} by one character — so every product log line carried both
+ * (`[research-helper] [research_helper] {…}`) and a grep for either found half
+ * the lines of the other. There is now one constant, imported from the module
+ * `docs/07` §10.3 declares it in, and a line that already carries it is passed
+ * through untouched: {@link createLogger}'s line arrives here fully formed,
+ * while a bare message from a call site such as {@link createSpikeArticle} or
+ * an integration spec still gets prefixed.
+ *
+ * `src/zotero/` may import `core/` (`docs/07` §2.3's arrow,
+ * `eslint.config.js`'s `research-helper/layering/adapters` override), so this
+ * is the one-source-of-truth form §10.3 asks for when it says the patterns it
+ * owns "must not be duplicated with drift".
+ */
+function prefixed(message: string): string {
+  return message.startsWith(LOG_PREFIX) ? message : `${LOG_PREFIX} ${message}`;
+}
+
 /**
  * Write one line to Help → Debug Output Logging.
  *
  * `docs/01` §12 gotcha 15: users paste this into bug reports. Log shapes,
  * identifiers and status codes — never a key, a request body or library
  * content.
+ *
+ * **`level` is `P1-T32` item 2.** `docs/07` §10.3 documents
+ * `LogSink.write(line, zoteroLevel)` as passing the level "straight through as
+ * `Zotero.debug`'s second argument", and until this card there was no second
+ * argument to pass it to, so every line of ours landed at Zotero's default 3
+ * and `extensions.zotero.debug.level` filtering could not see our severities.
+ *
+ * Omitted rather than forwarded as `undefined` when the caller gives no level:
+ * `Zotero.debug`'s default is applied by its own parameter default, and
+ * `zotero-types` types the parameter as optional rather than nullable.
  */
-export function debug(message: string): void {
-  Zotero.debug(`${LOG_PREFIX} ${message}`);
+export function debug(message: string, level?: ZoteroDebugLevel): void {
+  const line = prefixed(message);
+  if (level === undefined) {
+    Zotero.debug(line);
+    return;
+  }
+  Zotero.debug(line, level);
 }
 
-/** Log a caught error with its stack. Never rethrows. */
+/**
+ * Route one already-formatted line to the Mozilla error console and
+ * `Zotero.getErrors()`.
+ *
+ * **This is the facade `P1-T32` item 1 found missing.** `docs/07` §10.3:
+ * "`Logger.error()` additionally calls `Zotero.logError()` so the entry reaches
+ * the Mozilla error console and `Zotero.getErrors()`" — and `Zotero.logError`
+ * was named nowhere in `src/zotero/`, so `LogSink.reportError` had no
+ * implementation and the optional call in `src/core/logger.ts` did nothing.
+ * The user-visible cost was that an error a bug report asks the user to paste
+ * was not in the place the instructions send them.
+ *
+ * **Not to be confused with {@link reportError} below**, which routes to
+ * {@link debug} and therefore to `Zotero.debug` only. That one is the
+ * `P0-T10` helper for a caught exception and keeps its two-argument shape for
+ * its live callers; this one is the `LogSink` channel.
+ *
+ * `Zotero.logError` takes an `Error`, not a string (`zotero-types@4.1.3`,
+ * `zotero.js`), so the line is wrapped. `Zotero.logError` also emits the line
+ * to Debug Output at level 1 itself, which is what §10.3's "additionally"
+ * means: an `error()` line appears twice in a debug log, once from
+ * {@link debug} and once from here, and only the second reaches
+ * `Zotero.getErrors()`.
+ */
+export function logError(message: string): void {
+  Zotero.logError(new Error(prefixed(message)));
+}
+
+/**
+ * Log a caught error with its stack. Never rethrows.
+ *
+ * **Reaches `Zotero.debug` only, by design and despite the name.** It is not
+ * `LogSink.reportError`'s implementation and must not be wired to it: the
+ * signatures differ (one line versus a message and a cause) and, more
+ * importantly, this function does not reach the Mozilla error console at all,
+ * so wiring it would make `P1-T32`'s first criterion *look* satisfied while
+ * the missing channel stayed missing. {@link logError} is that channel.
+ */
 export function reportError(message: string, error: unknown): void {
   const detail =
     error instanceof Error

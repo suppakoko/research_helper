@@ -74,11 +74,14 @@
 
 import { config, version } from "../../package.json";
 import {
+  createZoteroLogSink,
   installServices,
+  type ProgressHeadlineSource,
   type ScopedRegistration,
   type Scope,
 } from "./container";
-import type { LogSink } from "../core/logger";
+import { formatValue } from "../i18n/ftl";
+import { L10N_PROGRESS_HEADLINE } from "../i18n/keys";
 import { openSearchWindow } from "../ui/dialogs/searchDialog";
 import {
   COLLECTION_MENU_DESCRIPTION,
@@ -99,7 +102,6 @@ import {
 import {
   createSpikeArticle,
   createZoteroHttpTransport,
-  debug,
   reportError,
 } from "../zotero/zoteroApi";
 
@@ -118,9 +120,19 @@ export type WindowRegistration = (
  * host window as its first parameter, which the menu handler supplies from the
  * element that was clicked — `src/ui/**` may name neither `Zotero` nor
  * `src/zotero/**`, and the clicked window is the right one anyway when two
- * main windows are open. `reportError` is `src/zotero/zoteroApi.ts`'s
- * `Zotero.logError` + `Zotero.debug` pair, so a failed command lands in Debug
- * Output rather than in an unhandled rejection (`FR-56`).
+ * main windows are open. `reportError` is `src/zotero/zoteroApi.ts`'s helper
+ * for a caught exception, so a failed command lands in Debug Output rather
+ * than in an unhandled rejection (`FR-56`).
+ *
+ * **Corrected 2026-10-03 (`P1-T32`).** This paragraph used to call
+ * `reportError` "`Zotero.logError` + `Zotero.debug` pair". It is not: it
+ * formats the message and the stack and forwards to `debug()`, so it reaches
+ * `Zotero.debug` **only** — nothing in `src/zotero/` named `Zotero.logError`
+ * at all until this card added the `logError` facade. A failed menu command is
+ * therefore in Debug Output but was never in `Zotero.getErrors()`. Widening
+ * `reportError`'s destination is a behaviour change to seven integration
+ * specs' expectations and is left to a card; the `LogSink` channel below is
+ * the one `P1-T32` owns.
  */
 const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
   openSearchWindow,
@@ -197,29 +209,42 @@ const WINDOW_REGISTRATIONS: readonly WindowRegistration[] = [
 ];
 
 /**
- * `src/core/logger.ts`'s sink over Help → Debug Output Logging.
+ * The progress popup's headline, resolved from Fluent at startup (`P1-T32`
+ * item 3 and `Do` step 4).
  *
- * Built here rather than in `src/zotero/` because this card may not touch
- * `src/zotero/zoteroApi.ts`, and `debug()` is already exported from it. Two
- * consequences are reported rather than coded around (`P1-T25` report):
+ * **`new Localization([...])` is `docs/08` §10.1's "From JS, no window" row**,
+ * and `test/integration/l10n.spec.ts` layer 5 reads an unpinned one as "the
+ * form the plugin sandbox uses". It is the only route available here:
+ * `Zotero.getString()` *throws* on a plugin key under an `en-US` locale
+ * (`docs/08` §8.2.1) because a plugin's `.ftl` lives in `L10nRegistry` and not
+ * in that synchronous bundle, and `document.l10n` needs a window the
+ * application-scoped graph does not have.
  *
- * - **The Zotero level is dropped.** `LogSink.write` is documented as "pass it
- *   straight through as `Zotero.debug`'s second argument", and
- *   `zoteroApi.debug()` takes no second argument, so every line lands at
- *   Zotero's default level 3. Threading the level through needs a signature
- *   change in a file no card's `Files` list names for this purpose.
- * - **There is no `reportError` channel**, so an `error()` line does not reach
- *   `Zotero.logError()` / `Zotero.getErrors()` (`docs/07` §10.3). `logError`
- *   has no facade in `src/zotero/` at all.
+ * A `Localization` is built per lookup rather than kept, because this is one
+ * lookup for the life of the plugin and a cached one would pin the locale
+ * chain as it stood at startup.
  *
- * `createLogger` already prefixes `[research_helper]` and `debug()` prefixes
- * `[research-helper]`, so a line carries both. Harmless and greppable, but the
- * two prefixes differ by a character and only one of them is `config.addonRef`.
+ * **What is still unresolved, and is reported rather than papered over:** this
+ * runs inside `startup`, and nothing in the corpus states whether Zotero's own
+ * `registerLocales()` has contributed this plugin's bundle to the
+ * `zotero-plugins` `L10nFileSource` by then. If it has not, `resolve()` yields
+ * `undefined`, `installServices` logs a `warn` naming the id, and the popup
+ * carries {@link ProgressHeadlineSource.fallback} — which is the same string
+ * the user saw before this card, with the difference that the substitution is
+ * now in the debug log a bug report carries instead of in a code comment.
  */
-const ZOTERO_DEBUG_SINK: LogSink = {
-  write(line: string): void {
-    debug(line);
+const PROGRESS_HEADLINE: ProgressHeadlineSource = {
+  messageId: L10N_PROGRESS_HEADLINE,
+  async resolve(): Promise<string | undefined> {
+    return formatValue(
+      new Localization([MAIN_WINDOW_FTL]),
+      L10N_PROGRESS_HEADLINE,
+    );
   },
+  // `config.addonName`, which is what `P1-T25` passed unconditionally and what
+  // the en-US bundle's text is anyway. It is a fallback now rather than the
+  // headline: reaching it is logged.
+  fallback: config.addonName,
 };
 
 /**
@@ -243,14 +268,17 @@ export async function registerUI(scope: Scope): Promise<void> {
     transport: createZoteroHttpTransport(),
     prefs: createZoteroPrefStore(),
     version,
-    // Not a Fluent lookup: `ZoteroProgressWindowSink` needs an
-    // already-localized string, Fluent is async and per-window, and
-    // `src/i18n/keys.ts` declares **no message id for a progress headline** at
-    // all. The product name is the honest placeholder — it is a brand name
-    // rather than a translatable sentence — and the missing id is reported as
-    // needing a card.
-    progressHeadline: config.addonName,
-    logSink: ZOTERO_DEBUG_SINK,
+    // A Fluent lookup since `P1-T32`, awaited once by `installServices`:
+    // `ZoteroProgressWindowSink` needs an already-localized string and the
+    // factory that builds it is synchronous, so the resolution has to happen
+    // here. See {@link PROGRESS_HEADLINE} for why `new Localization([...])` is
+    // the only route from an application-scoped startup, and for what happens
+    // when it resolves nothing.
+    progressHeadline: PROGRESS_HEADLINE,
+    // Both channels of `docs/07` §10.3, and one prefix. The lossy sink
+    // `P1-T25` had to build here — no level, no `reportError` — is gone; the
+    // real one is `container.ts`'s, over `zoteroApi.ts`'s two facades.
+    logSink: createZoteroLogSink(),
   });
 
   for (const register of APP_REGISTRATIONS) {

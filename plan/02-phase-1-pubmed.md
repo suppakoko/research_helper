@@ -4856,7 +4856,7 @@ touching progress imports **only** `openZoteroProgressWindow` and `ProgressWindo
 unverified by this card** — stated rather than implied.
 
 ---
-### P1-T32 — The three platform seams the composition root could not reach
+### P1-T32 — The four platform seams the composition root could not reach
 
 | Field | Value |
 |---|---|
@@ -4873,7 +4873,10 @@ popup has a localizable headline, and `PrefStore.observe`'s handle says what it 
 
 **Why these are one card.** All four are the same shape — a seam `P1-T25` had to bind from inside its
 own two files because **no card's `Files` names the other side** — and each is small on its own.
-Measured 2026-10-01.
+Measured 2026-10-01. **Title corrected 2026-10-03 (coordinator): it read "three platform seams" while
+the list below has always had four numbered items, and an undercount in a title is exactly what makes
+an executing agent read its scope short.** `Do` step 5's double prefix is a fifth item but is a
+tidy-up in the same files rather than a seam, so it is not counted.
 
 **1. `LogSink.reportError` has no implementation at all.** `docs/07` §10.3 routes `error()` to
 `Zotero.logError()` so it reaches the Mozilla error console and `Zotero.getErrors()` — and
@@ -4891,10 +4894,21 @@ documented both losses at the call site.
 **3. No Fluent id exists for the progress-window headline.** `ZoteroProgressWindowSink` requires an
 **already-localized** string — `Zotero.getString()` **throws** on a plugin key when the locale is
 `en-US` (`docs/08` §8.2.1), because a plugin's `.ftl` lives in `L10nRegistry` and not in that
-synchronous bundle — and `src/i18n/keys.ts` declares no headline id; the nearest three are
-argument-bearing status ids for the search dialog. `config.addonName` ships today, a brand name rather
-than a translatable sentence. **The hard part is not the id**: Fluent resolution is async and
-per-window, while the graph is built app-scoped at startup.
+synchronous bundle. `config.addonName` ships today, a brand name rather than a translatable sentence.
+**The hard part is not the id**: Fluent resolution is async and per-window, while the graph is built
+app-scoped at startup.
+
+> **This item's premise was false when written, and the executing agent caught it. Corrected
+> 2026-10-03 (coordinator).** The sentence here read "`src/i18n/keys.ts` declares no headline id; the
+> nearest three are argument-bearing status ids for the search dialog." Both halves are wrong:
+> **`research-helper-import-toast-header` already existed** at `keys.ts:176`, in the en-US bundle and
+> already on `KO_PENDING_REVIEW`, introduced by `P1-T18` — which landed **before** this card was
+> written, so the claim was false at the moment of writing. It is also the nearest thing in the file,
+> not a search-dialog status id. The cause is the same as `P1-T24`'s: **a claim about a file written
+> into a card without grepping the file**, which is precisely what every card prompt tells an agent
+> not to do. What survives is the *seam* — no code anywhere names either id, so the headline is still
+> a brand name in the product — and the overlap this error created is now live drift in the one module
+> built to prevent drift. It needs its own card.
 
 **4. `PrefStore.observe`'s return type cannot be discriminated.** Two implementations return handles
 that are **semantic opposites** — the Zotero store's call **registers** the observer, the memory
@@ -4962,6 +4976,134 @@ exactly as `P1-T03` measured.
 
 **Verify with.** `npm run typecheck && npm run test:unit -- container logger`
 
+**Findings, 2026-10-03 — all six criteria pass, and the card's own item 3 turned out to rest on a
+false premise the agent caught.** Verified independently of the report: **843 unit tests in 21 files**
+(up from 833), **63 integration tests, exit 0**, typecheck 0, `lint:check` 0, `grep -rn MUTANT`-clean.
+Eleven files changed — the seven in `Files` plus four the card's list could not have avoided.
+
+**The false premise was mine, and it is the same class of error as `P1-T24`'s.** Item 3 read
+"`src/i18n/keys.ts` declares no headline id; the nearest three are argument-bearing status ids for the
+search dialog." Both halves are wrong: **`research-helper-import-toast-header` already existed** at
+`keys.ts:176`, in the en-US bundle, already on `KO_PENDING_REVIEW`, added by `P1-T18` — whose commit
+**precedes** the one that wrote this card, so the claim was false the moment it was written and
+`git show` of that commit finds the id already there. **A claim about a file, written into a card
+without grepping the file** — exactly what every card prompt tells an agent not to do. The card's
+title was separately wrong too ("three platform seams" over a four-item list), corrected before
+hand-out. What survives is the *seam*: **no code anywhere names either id**, so the headline is still
+a brand name in the product. What the error created is live drift — two ids, one en-US string, one
+probable surface — **in the one module that exists to prevent drift.** Needs a card.
+
+**The `reportError` trap was handled the right way: a new facade, and the decoy left standing with a
+sign on it.** `zoteroApi.reportError(message, error)` reached `Zotero.debug` only and `Zotero.logError`
+was named **nowhere** in `src/zotero/`. Rather than redirect it — which would change behaviour for
+`registerUI.ts`'s menu `onError` and seven integration specs — a separate single-argument
+`logError(message)` was added, and `reportError`'s doc comment now says in so many words that it is
+**not** `LogSink.reportError`'s implementation and that wiring it there would make criterion 1 *look*
+satisfied while the missing channel stayed missing. **`Zotero.logError` takes an `Error`, not a
+string** (`zotero-types@4.1.3`), so the facade constructs one. The mutant that wires the decoy is
+caught three ways.
+
+**`LogSink.reportError` stays optional, on a reason worth keeping.** The silence was never caused by
+optionality — it was caused by **no implementation existing anywhere**. Making the member required
+would force edits to `NULL_LOG_SINK` (outside `Files`) and to every test sink, and would be satisfied
+by `reportError() {}` everywhere, which buys nothing. The regression guard is instead a test asserting
+the **product** sink opens the channel. `logger.ts:309`'s `sink.reportError?.(line)` needed no edit.
+
+**`registerUI.ts` was asserting something false about the code, and that comment is very likely why
+the gap survived two cards.** Lines 121–123 claimed `reportError` is "`zoteroApi.ts`'s
+`Zotero.logError` + `Zotero.debug` pair". It was neither. **The file that wires the sink said the
+other channel already existed** — so `P1-T25` and `P1-T19` both had a reason not to look. Corrected in
+place with a dated note.
+
+**The double prefix was fixed on the documented side, and the grep decided it.** `docs/07` §10.3 is
+normative for the log line and spells it **`[research_helper]` with an underscore** (verified at
+`docs/07:3493`), as do `docs/01` §12's examples. So `logger.ts` was **not touched at all**; instead
+`zoteroApi.ts` deleted its own hyphenated constant and **imports** `logger.ts`'s, applying it
+**idempotently** — a message already carrying the prefix passes through. The grep that decided it:
+`logger.ts`'s exported `LOG_PREFIX` has exactly **one** importer, which uses it *symbolically*, so
+**no test asserted the literal underscore form**, and `logger.ts:259`'s doc-comment example stays
+accurate. One behaviour change is flagged rather than buried: direct `debug()` callers now emit the
+underscore form, which affects two helpers and seven integration specs that each already carry their
+own `[P0-T23]`-style tag. The hyphenated spelling survives where it belongs — on **thrown error
+messages**, a different convention, `addonRef`-derived. The card's own parenthetical ("only the second
+matches `config.addonRef`") read as an argument for the hyphen; the agent went the other way **on
+documented grounds and said so**, which is the right order of authority.
+
+**Criterion 4's obstacle was not where I predicted, and the correction is the useful part.** I warned
+that per-window async Fluent could not be reached from an app-scoped startup. **The per-window part is
+not the obstacle:** `docs/08` §10.1's mechanism table has a "From JS, no window" row —
+`new Localization([...])` — which `l10n.spec.ts` already exercises as the form the sandbox uses, and
+`installServices` is **already `async`**. What genuinely cannot await is **`forJob`**, which is
+synchronous by §7.7's one-popup-per-job design and needs a `string`. So the headline resolves **once**
+in `installServices`. Measured inside a live Zotero 10.0.3: the new id resolves from
+`L10nRegistry.generateBundles(["en-US"])`; the `ko-KR` gap is **asserted** to equal
+`KO_PENDING_REVIEW ∪ KO_DELIBERATELY_ABSENT` exactly; and an unpinned `new Localization` under a
+`ko-KR` UI resolves every mainWindow id, so English fallback is measured rather than assumed.
+**There is no silent brand-name fallback left** — a failed resolve logs at `warn` naming the id before
+using the fallback, and startup is deliberately not failed on it, because losing the plugin's menus
+over a string would be the worse outcome. Three tests cover resolved / `undefined` / throwing.
+
+**The one thing criterion 4 does not verify, reported rather than redefined: the *timing*.** Whether
+Zotero's `registerLocales()` has contributed this plugin's bundle to the `zotero-plugins`
+`L10nFileSource` **at the instant `startup` runs `registerUI()`** is unproven. `l10n.spec.ts` reads
+after startup from a loaded window; `lifecycle.spec.ts` passed `registerUI()` six times, but the
+resolver swallows failure by design, so that is not proof. The plugin's own `warn` could not be read
+back either — `P0-T23` recorded the runner profile's `Debug Output: storing was false`. **Filed as a
+card rather than absorbed.**
+
+**What made the arity-refusal test redundant is the sharpest thing in this report.** `PrefObserverHandle`
+is now a closed union of `{ kind: "scoped-registration" }` and `{ kind: "unsubscribe" }`, so an
+untagged handle is a **compile error at every `PrefStore.observe` implementation** — the site that
+knows which semantic it meant. The only way left to produce one is a cast, and **the cast is now in
+the test**: before the tag, the assertion described a reachable runtime state; now it describes what
+happens after the type system has been circumvented. It was kept, because it guards a *leak*, and
+annotated with that reasoning. The complementary case arity could never catch was added: a handle that
+**is** callable but carries an unrecognised tag — arity would have bound it as a registration. And
+`register` is typed `(scope: never) => void | Promise<void>` rather than `object`, because `core/` may
+not name `Scope` and `never` in parameter position makes the real shape assignable **without a cast on
+the implementation side**; one narrowing cast remains, at the composition root, where the old one was.
+**Swapping the two tags is no longer expressible in the adapters at all** — the mutant needed an edit
+to the composition root *and* two casts to compile, which is itself the measurement of what the tag
+bought.
+
+**Criterion 5 was asserted where the defect actually lived.** The duplicate was added **by the
+facade**, so a test stopping at the sink physically could not see it; the assertion is on the string
+that reached `Zotero.debug` — one prefix, exactly one occurrence, no hyphenated form, and the
+remainder still parsing as §10.3's single-line JSON payload with the right `lvl`.
+
+**Four files outside `Files`, each forced, none replaced.** `src/zotero/prefStore.ts` is the only
+platform implementation of `observe` and a discriminated return whose sole adapter does not produce
+the discriminant **does not typecheck**. `src/bootstrap/registerUI.ts` is **the other side of all four
+seams** — it holds `logSink:` and `progressHeadline:`, so leaving it would have left every seam dead
+in the product while passing in tests, *the exact failure this card was written against*.
+`test/unit/prefs/schema.test.ts` had one assertion the tag invalidates, and it **failed loudly rather
+than silently**. And `typings/i10n.d.ts` is generated-but-committed, which exposed an ordering trap
+worth recording: **`npm run build` typechecks *before* it regenerates**, so a card that adds a Fluent
+id must run `npx zotero-plugin build` directly or its own typecheck fails on the id it just declared.
+All four built `.ftl` files verified byte-identical to `addon/locale/**` per `P0-T32`.
+
+**`docs/08` §10.1 contradicts itself within four lines, and worse than the report put it.** Its file
+tree shows `locale/en-US/research-helper/mainWindow.ftl` — a **subdirectory with unprefixed
+filenames** — while the table immediately below says "FTL in `locale/<locale>/` (**flat**,
+`research-helper-` prefixed)", which is what ships and what `registerLocales()` requires (`docs/01`
+§9.1 drops subdirectories). The paragraph *between* them asserts "**This section owns the surface set
+and its names** … where the two disagree, this list wins and the tree is the defect" — so the section
+claims authority over a tree it then prints wrongly. **It is exactly the kind of block a future card
+would type straight from.** Needs a card.
+
+**`G-41`'s headline numbers are now stale, and that matters because a human sizes the gate by them.**
+`plan/06-human-gates.md` says "79 strings" in three places and "all 84 ids" in a fourth;
+`test/integration/l10n.spec.ts:45` says "79 of their 84". The live run reads **85 declared ids**
+(mainWindow 26) and `ko-KR totals: 4 present, 81 absent` — 80 pending plus one deliberately absent.
+Prose only, no assertion, and `plan/06` is a gate document, so the agent correctly left all five
+alone.
+
+**Also recorded without a card: `ko-KR` is this machine's live UI locale.** The run reports
+`Zotero.locale ko-KR; app locales ["ko-KR","en-US"]`, which is why `P1-T19`'s label test logged Korean
+menu labels beside an English collection label. Any later spec asserting English text verbatim will be
+surprised by spec order, and the fallback path is therefore the **default** path here, not the
+exception — which is a good thing for how much of `G-41` is exercised incidentally.
+
 ---
 ## 7. Estimate roll-up
 
@@ -4998,7 +5140,7 @@ exactly as `P1-T03` measured.
 | `P1-T29` | Verify the `ProgressWindow` signatures against a running Zotero | 0.25 | — |
 | `P1-T30` | Turn on `fluent.dts`; one source of truth for message ids | 0.25 | — |
 | `P1-T31` | Make a progress reporter usable for more than one job | 0.50 | — |
-| `P1-T32` | The three platform seams the composition root could not reach | 0.50 | — |
+| `P1-T32` | The four platform seams the composition root could not reach | 0.50 | — |
 | | **Total** | **22.75 d** | **4 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
