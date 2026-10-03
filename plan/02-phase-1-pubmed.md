@@ -2915,7 +2915,7 @@ being a second source of truth for the vocabulary.
 | **ID** | `P1-T19` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T18`, `P1-T25` (added 2026-10-01 — `P1-T25` wired `installServices()` into this card's own file) |
-| **Blocks** | `P1-T20`, `P2-T17` |
+| **Blocks** | `P1-T20`, `P2-T17`, `P1-T34`, `P2-T22` |
 | **Retires** | none |
 | **Implements** | `FR-1`, part of `FR-56` |
 | **Estimate** | 0.5 d |
@@ -3920,7 +3920,7 @@ disable/enable cycle on a running Zotero is owed before this card is approved.
 | **ID** | `P1-T26` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T04`, `P1-T05` |
-| **Blocks** | none |
+| **Blocks** | `P2-T21`, `P2-T23` |
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 0.5 d |
@@ -4124,7 +4124,7 @@ nothing about this; the failure is silent about its real cause and looks like a 
 | **ID** | `P1-T27` |
 | **State** | `DONE` — approved 2026-10-02; `maxConcurrent` is enforced by a new `run<T>()` holding a `Semaphore` permit for the call's lifetime, because **the missing thing was never a counter, it was a scope — an end.** `acquire` stays rate-only and ungated, which is what makes the deadlock unreachable. The slot-before-token ordering was **proven, not argued**: flipping it produced two consecutive starts 1,000 ms apart under `minIntervalMs: 3000`. Criterion 3 measures the reporting rather than the cap, so sibling assertions were added, not the criterion adjusted. The Crossref 3 → 1 concurrency gap is recorded, not hidden. |
 | **Depends on** | `P1-T04`, `P1-T05` |
-| **Blocks** | `P2-T05` |
+| **Blocks** | `P2-T05`, `P2-T21` |
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 0.5 d |
@@ -4863,7 +4863,7 @@ unverified by this card** — stated rather than implied.
 | **ID** | `P1-T32` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T25` |
-| **Blocks** | none |
+| **Blocks** | `P1-T33`, `P1-T34` |
 | **Retires** | none |
 | **Implements** | part of `NFR-16` |
 | **Estimate** | 0.5 d |
@@ -5104,6 +5104,213 @@ menu labels beside an English collection label. Any later spec asserting English
 surprised by spec order, and the fallback path is therefore the **default** path here, not the
 exception — which is a good thing for how much of `G-41` is exercised incidentally.
 
+### P1-T33 — Retire one of the two headline ids, and record which surface owns the string
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T33` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T32` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none — the surviving id's Korean string stays inside `G-41`'s existing scope |
+
+**Goal.** One Fluent id for the progress surface's headline, owned by a named surface, with the other
+retired from `keys.ts` and both bundles.
+
+**Why this is a card.** Two ids now carry the same en-US string for what may be one surface, and
+**neither is named by any code**. Measured 2026-10-03:
+
+- `research-helper-import-toast-header` — `src/i18n/keys.ts:176`, in `MAIN_WINDOW_MESSAGE_IDS` and on
+  `KO_PENDING_REVIEW`, added by `P1-T18`. Its bundle comment reads "Header of the completion
+  `ProgressWindow` toast (`docs/08` §4.4, §8.2)". en-US value: `Research Helper`.
+- `research-helper-progress-headline` — added by `P1-T32` for `docs/07` §7.7's popup. Same en-US
+  value.
+- `grep` over `src/` finds **neither id named by any code**; the only hits outside `keys.ts` are the
+  `.ftl` bundles that declare them.
+
+**This duplication is a coordinator error, not a design choice, and it is recorded as one.**
+`P1-T32`'s item 3 asserted "`src/i18n/keys.ts` declares no headline id" — false when written, since
+`P1-T18`'s commit precedes it. The executing agent found it, followed `Do` step 3 as written, and
+reported the overlap rather than silently picking a side. So the drift is live **inside the one module
+built to prevent drift**, which is why it should not sit.
+
+**The substantive question the card has to answer** is whether §4.4's completion toast and §7.7's
+per-job progress popup are **one surface or two**. `docs/08` §4.4 says the import raises a toast "only
+on completion"; `docs/07` §7.7 assigns `searchImport` to the in-window status list and reserves the
+popup for `related`/`audioReport`. `P1-T31`'s `Findings` already flagged that pair as reconciling only
+as toast-plus-status-bar, which is what `openOn` encodes — and noted that **those two sections are now
+the only thing deciding a per-job argument**. Decide it here, for the headline only.
+
+**Read first.**
+- `src/i18n/keys.ts` — `MAIN_WINDOW_MESSAGE_IDS`, `KO_PENDING_REVIEW`, `KO_DELIBERATELY_ABSENT`,
+  `L10N_PROGRESS_HEADLINE`'s doc comment (which records the overlap), and `surfaceOfMessage()`.
+- `docs/08` §4.4 (the completion toast) and §8.2; `docs/07` §7.7 (the popup, and `P1-T31`'s
+  clarification that it is one tree **per job**).
+- `src/bootstrap/container.ts`'s `ProgressHeadlineSource` and `resolveProgressHeadline()` — the only
+  consumer of either id, once one is wired.
+- `P1-T30`'s `Findings`: `typings/i10n.d.ts` is **generated but committed** and is the single source of
+  truth for `FluentMessageId`. **`npm run build` typechecks *before* it regenerates**, so removing an
+  id means running `npx zotero-plugin build` directly or the typecheck fails on the id you just
+  deleted. `P1-T32` hit this and recorded it.
+- `test/integration/l10n.spec.ts` — it asserts the `ko-KR` gap equals
+  `KO_PENDING_REVIEW ∪ KO_DELIBERATELY_ABSENT` **exactly**, so retiring an id without updating the
+  lists fails an integration test rather than passing quietly.
+
+**Files.**
+- modify `src/i18n/keys.ts`
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl`
+- modify `addon/locale/ko-KR/research-helper-mainWindow.ftl`
+- modify `src/bootstrap/container.ts`
+- modify `typings/i10n.d.ts` *(generated — regenerate, do not hand-edit)*
+
+**Do.**
+1. Decide which id survives and **write the reasoning into `keys.ts`**, naming the surface that owns
+   it. If the answer is that §4.4's toast and §7.7's popup are genuinely two surfaces, then **both ids
+   stay** and the deliverable is the comment that says so plus a distinct en-US string for each —
+   report that outcome rather than forcing a retirement.
+2. Retire the loser from `MAIN_WINDOW_MESSAGE_IDS`, `KO_PENDING_REVIEW`, both bundles, and the
+   generated typings.
+3. Point `container.ts`'s `ProgressHeadlineSource.messageId` at the survivor.
+4. Regenerate `typings/i10n.d.ts` with `npx zotero-plugin build` and verify the four built `.ftl`
+   files are byte-identical to `addon/locale/**` (`P0-T32`'s requirement).
+
+**Do NOT.**
+- Do not invent an en-US sentence for the survivor. `P1-T32` recorded that **the corpus supplies no
+  wording** — `docs/08` §8.2's own example call passes the product name as the headline — and shipped
+  the string already on screen so the owner can change one string without touching code. Keep that
+  discipline; wording is `G-41`'s and the owner's.
+- Do not machine-translate the Korean string (`G-41`, and `P1-T18`'s recorded discipline: a plausible
+  wrong translation is worse than a visible gap).
+- Do not touch `docs/07` §7.7 or `docs/08` §4.4. If the decision implies a doc amendment, **report
+  it** — those sections are outside this card's `Files` and §7.7 was last amended by `P1-T31`.
+
+**Criteria.**
+- [ ] `grep -rn '<retired id>' src test addon typings` returns nothing, or the card reports that both
+      ids survive and why.
+- [ ] `keys.ts` names the surface that owns the surviving id, in a comment, with the §4.4-versus-§7.7
+      reasoning.
+- [ ] `test/integration/l10n.spec.ts`'s `ko-KR` gap assertion passes with the updated lists — it is
+      an exact-set assertion, so a stale list fails it.
+- [ ] The progress headline still resolves in `en-US` and still falls back to English under `ko-KR`.
+- [ ] `typings/i10n.d.ts` is regenerated, not hand-edited, and the built bundles are byte-identical to
+      the source bundles.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:unit -- container && npm run test:integration -- --exit-on-finish --abort-on-fail`
+
+**Notes.** The integration suite is in the `Verify with` deliberately: the `ko-KR` gap assertion and
+the live Fluent resolution are both integration-level, and a unit run cannot see either. If the
+integration run fails to start with `EBUSY: … unlink '.scaffold\test\profile\cert9.db'`, that is the
+known harness leak and **not** a test failure — `zotero-plugin test --exit-on-finish` leaves the
+test-profile Zotero running. Terminate that instance **identified by its command line**
+(`-profile …\.scaffold\test\profile`), never by process name, because the user's own Zotero runs the
+same binary.
+
+---
+### P1-T34 — Three corpus statements measured false, corrected at the source
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T34` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T19`, `P1-T32` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** Three statements that contradict measured reality say what was measured instead.
+
+**Why these are one card.** All three are the same shape — a corpus statement a card has already
+**measured** to be false, each a few lines, none requiring a judgement — and each is too small to
+carry its own card. None of them changes any code. Every figure below was verified on 2026-10-02/03
+and the measuring card is named, so this card's job is transcription and checking, not investigation.
+
+**1. `docs/08` §4.1 still writes the chrome namespace unhyphenated.** Verified: lines 646, 647, 651,
+652, 680, 681, 689, **853**, **865** and 891 all say `chrome://researchhelper/...`, including the prose
+at 865 ("The `chrome://researchhelper/content/` namespace is registered in `bootstrap.js`"). §2.4 was
+corrected on 2026-09-30; §4.1 was not. `P1-T19` **measured** that the unhyphenated package does not
+resolve at all: `chrome://research-helper/content/icons/favicon.png` returns **1723 bytes** and
+`chrome://researchhelper/...` **rejects** (`undefined`), and both are now integration assertions.
+`P1-T19`'s own `Do` steps 3 and 5 repeated the wrong spelling, which is how it reached an executing
+agent.
+
+**2. `docs/08` §10.1 contradicts itself within four lines.** Its file-tree code block shows
+`locale/en-US/research-helper/mainWindow.ftl` — a **subdirectory with unprefixed filenames** — while
+the table immediately below it says "FTL in `locale/<locale>/` (**flat**, `research-helper-`
+prefixed)". The shipped layout is flat and prefixed (`addon/locale/en-US/research-helper-mainWindow.ftl`,
+verified), and `docs/01` §9.1 / `P0-T32` establish that Zotero 10's `registerLocales()` **drops
+subdirectories**, so the tree as printed would not work. The paragraph *between* the two says "**This
+section owns the surface set and its names** … where the two disagree, this list wins and the tree is
+the defect" — so the section claims authority over a tree it then prints wrongly. **It is exactly the
+kind of block a future card would type straight from.** Found by `P1-T32`.
+
+**3. `G-41`'s headline counts are stale, and a human sizes the gate by them.** Verified:
+`plan/06-human-gates.md` says **79** at lines 48 (the gate table), 650 (the heading), 661 (the body)
+and 667 ("Three of the 79"), and "all **84** ids" at line 680; `test/integration/l10n.spec.ts:45`
+says "79 of their 84 strings". The live integration run reads **85 declared ids** (mainWindow 26,
+searchDialog 59) and `ko-KR totals: 4 present, 81 absent` — i.e. **80** pending review plus one
+deliberately absent. `P1-T18` set the original figures; `P1-T32` added the 85th id.
+
+**Read first.**
+- `docs/08` §4.1 in full, and §2.4's 2026-09-30 correction, so the fix matches the house pattern for
+  a dated in-place correction.
+- `docs/08` §10.1's code block, the paragraph under it, and its table; `docs/01` §9.1 on
+  `registerLocales()`.
+- `plan/06-human-gates.md`'s `G-41` section — **read what the gate asks a human to do** before
+  touching its numbers.
+- `src/i18n/keys.ts`'s `KO_PENDING_REVIEW` and `KO_DELIBERATELY_ABSENT`, which are where the live
+  numbers come from, and `test/integration/l10n.spec.ts`'s exact-set assertion.
+
+**Files.**
+- modify `docs/08-ui-ux-spec.md`
+- modify `plan/06-human-gates.md`
+- modify `test/integration/l10n.spec.ts`
+
+**Do.**
+1. Correct §4.1's namespace in both the code blocks and the prose at 865, with a dated note recording
+   that the unhyphenated form was **measured not to resolve** and naming `P1-T19`.
+2. Correct §10.1's file tree to the flat, prefixed layout that ships, with a dated note naming the
+   contradiction and `docs/01` §9.1's subdirectory behaviour.
+3. **Re-derive** `G-41`'s counts from `keys.ts` rather than by adding one to the old number, and state
+   in the gate section how the figure is derived, so the next id does not silently stale it again.
+4. Update `l10n.spec.ts:45`'s comment to match. It is a comment, not an assertion — **do not** turn it
+   into an assertion here; the exact-set assertion already exists further down the file.
+
+**Do NOT.**
+- Do not change what `G-41` asks a human to do, or its gate semantics. This card touches **counts and
+  their derivation only**. The three owner *decisions* inside `G-41` stay exactly as they are.
+- Do not change any `.ftl` file, `keys.ts`, or any code. If a count will not reconcile from `keys.ts`,
+  that is a finding to report — the lists may genuinely disagree with the bundles, which is what the
+  integration assertion exists to catch.
+- Do not "tidy" `docs/08` §4.1's `openSearchWindow` code block beyond the namespace. `P1-T19`
+  separately measured that it **cannot compile where §4.1 puts it** — it calls `Zotero.getMainWindow()`
+  from `src/ui/dialogs/searchDialog.ts`, which `eslint.config.js` rejects twice over — and that is a
+  different defect needing its own decision about whether the doc or the layering rule moves.
+
+**Criteria.**
+- [ ] `grep -rn 'researchhelper' docs/08-ui-ux-spec.md` returns nothing.
+- [ ] §10.1's file tree matches `find addon/locale -type f` exactly in shape, and the dated note names
+      the contradiction.
+- [ ] `G-41`'s counts equal what `keys.ts` yields, and the gate section says how they are derived.
+- [ ] The integration run's `[P1-T18] ko-KR totals` line agrees with `plan/06`'s stated figures.
+- [ ] No file under `src/`, `addon/` or `typings/` is modified.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run lint:check && npm run test:integration -- --exit-on-finish --abort-on-fail`
+
+**Notes.** `plan/06-human-gates.md` is a gate document. A card may re-derive a **measured** number in
+it, which is what this one does; it may not change what a gate asks for, who owns it, or whether it is
+satisfied. If the distinction is unclear in any specific edit, leave that edit and report it.
+
+The same `EBUSY` harness caveat as `P1-T33` applies to the integration run — see that card's `Notes`.
+
+---
+
 ---
 ## 7. Estimate roll-up
 
@@ -5141,7 +5348,9 @@ exception — which is a good thing for how much of `G-41` is exercised incident
 | `P1-T30` | Turn on `fluent.dts`; one source of truth for message ids | 0.25 | — |
 | `P1-T31` | Make a progress reporter usable for more than one job | 0.50 | — |
 | `P1-T32` | The four platform seams the composition root could not reach | 0.50 | — |
-| | **Total** | **22.75 d** | **4 gates** |
+| `P1-T33` | Retire one of the two headline ids | 0.25 | — |
+| `P1-T34` | Three corpus statements measured false | 0.25 | — |
+| | **Total** | **23.25 d** | **4 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 

@@ -24,7 +24,11 @@
 > sum divided by 52, the top of the old 39–52-day band. It was recomputed on
 > 2026-09-09 after `P3-T04` and `P3-T20` were re-estimated — 82.0 ÷ 52 = 1.577,
 > against 80.5 ÷ 52 = 1.548 before — and **deliberately held at 1.50**, so the
-> four bands quoted below are unchanged. The reasoning is in `docs/11` §1: a
+> four bands quoted below are unchanged. It has been recomputed several times
+> since, as Phases 0–2 gained cards, and stands at **91.00 ÷ 52 = 1.750** as of
+> 2026-10-03 — still **held at 1.50**, for the same reason, so the four bands are
+> still unchanged. `docs/11` §1 carries the full sequence; this sentence exists
+> only so that the 2026-09-09 figure above is not read as the current one. The reasoning is in `docs/11` §1: a
 > 1.5-day change to a measured phase moves the factor by 1.9%, which on Phase 4's
 > 11-day base is 0.32 d, and chasing that would be false precision; holding at
 > 1.50, which is below both computed values, also keeps the inferred figures on

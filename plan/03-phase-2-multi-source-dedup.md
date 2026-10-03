@@ -21,11 +21,22 @@ them; it adds adapters and the merge layer above them.
 
 ## Effort estimate
 
-`docs/11` §1 Phase 2 is now **24.25–33.95 d, published as 24.25–34 d** — a band *derived from* the
+`docs/11` §1 Phase 2 is now **26.50–37.10 d, published as 26.50–37 d** — a band *derived from* the
 task sum in this file (low = the sum, high = the sum × 1.4, rounded to whole days), not an
 independent guess. The figure it superseded on 2026-09-09 was **12–16 developer-days** ("six
 adapters at ~1.5 days each plus 4–6 days for dedup and its evaluation corpus"). The reconciliation
 is at the end of this file.
+
+> **This paragraph had gone stale, and the staleness is the thing worth recording. Corrected
+> 2026-10-03.** It read "**24.25–33.95 d, published as 24.25–34 d**" while this file's own roll-up
+> said **25.50 d** and `docs/11` §1's table said **25.50–36** — so the one sentence in this file whose
+> job is to state what `docs/11` carries was the only one that disagreed with it. The 24.25 figure was
+> correct on 2026-09-09 and was not re-derived when `P2-T19`/`P2-T20` were added on 2026-09-30; the
+> roll-up and `docs/11` both were. **A derived figure stated in prose does not re-derive itself**, and
+> this is the same class as the `G-41` counts `P1-T34` now fixes and the `rh-error-` narrative
+> `P1-T30` found stale in four files. The rule this file follows from here: the low end is read from
+> the roll-up's `**Total**` row, never incremented by hand, and the high end is recomputed as
+> sum × 1.4 at the same time.
 
 ## Risks retired
 
@@ -267,7 +278,7 @@ the source most likely to dominate the 30 s budget.
 |---|---|
 | **ID** | `P2-T03` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01` |
+| **Depends on** | `P2-T01`, `P2-T23` |
 | **Blocks** | `P2-T07`, `P2-T08`, `P2-T12` |
 | **Retires** | part of `R-2`, part of `R-17` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -401,7 +412,7 @@ and says to make it the default; every downstream card (preprint search `P2-T07`
 |---|---|
 | **ID** | `P2-T04` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01` |
+| **Depends on** | `P2-T01`, `P2-T21` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -1695,7 +1706,7 @@ it that way (`P1-T18`–`P1-T22`); this card extends those files rather than add
 |---|---|
 | **ID** | `P2-T17` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14` |
+| **Depends on** | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` |
 | **Blocks** | `P2-T16` |
 | **Retires** | none |
 | **Implements** | `FR-12`, part of `FR-8` |
@@ -2512,6 +2523,266 @@ module header so it is visible at the call site rather than at the result.
 
 **Verify with.** `npm run typecheck && npm run test:unit -- query`
 
+### P2-T21 — Make the concurrency cap resizable, so a tightened header lands at once
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T21` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T27`, `P1-T26` |
+| **Blocks** | `P2-T04` |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** A host that advertises a lower concurrency limit gets it immediately, not at the next
+instant it happens to be idle.
+
+**Why this is a card, and why it blocks `P2-T04`.** `P1-T27` made `maxConcurrent` enforceable with a
+`Semaphore` permit and recorded the limitation in `docs/07` §7.3: `reconfigure()` adopts a changed
+`maxConcurrent` only when the host **next goes idle**, because `Semaphore`'s permit count is fixed at
+construction. `P1-T26` then wired `reconfigure()` to live response headers, which makes that
+limitation **reachable**. Both halves are measured, not inferred:
+
+- `docs/02` §5.1's verified Crossref responses carry `x-concurrency-limit: 3` on the polite pool and
+  **`1`** on the public pool, against `docs/07` §7.3's `api.crossref.org` row of `maxConcurrent: 3`.
+  A real 3 → 1 is one pool demotion away.
+- `P2-T04`'s `Files` names `src/core/rateLimit/hostLimiter.ts` and its `Do` adds the Crossref row, so
+  **`P2-T04` is the card that makes the 3 → 1 arrive.** Under continuous traffic to that host the old
+  cap of 3 stays in force until a gap appears, i.e. the cap is exceeded for as long as the traffic is
+  continuous.
+
+**Two facts bound the severity and belong in the implementation's comments.** `P1-T26` adopts
+advertised limits **only downwards**, so the deferral can only ever leave the cap *too high* — it can
+never raise a cap behind a permit holder's back, which is what `Semaphore`'s recorded invariant
+forbids. And `RateLimiter.run()`'s `finally` already calls `applyWantedConcurrency()` on **every**
+release, so today's behaviour lands the change at the first idle instant rather than at the next
+`reconfigure()`. **So this is a promptness defect, not a correctness one** — do not write the card up
+as a permit-safety bug, and do not weaken the `Semaphore` invariant to fix it.
+
+**Read first.**
+- `src/core/concurrency.ts`'s `Semaphore` and **its recorded invariant** — `next.unsubscribe()` must
+  run *before* `next.deferred.resolve(...)`, or a permit leaks to a promise nobody awaits and the
+  symptom is a hang. Any `resize()` has to preserve that ordering.
+- The same file's header, which `P1-T27` flagged as incomplete: it says "What consumes them: `docs/07`
+  §7.2's three worker pools", and `Semaphore` now also backs §7.3's per-host cap.
+- `src/core/rateLimit/tokenBucket.ts`'s `run()`, `reconfigure()`, `applyWantedConcurrency()` and
+  `wantedConcurrency` — the deferral is implemented there, so the shape of the fix is decided by what
+  `applyWantedConcurrency` currently refuses to do.
+- `docs/07` §7.3's recorded deferral (the blockquote naming `x-concurrency-limit`), and `P1-T26`'s
+  `Findings` in `plan/02` for why adoption is tighten-only.
+
+**Files.**
+- modify `src/core/concurrency.ts`
+- modify `src/core/rateLimit/tokenBucket.ts`
+- modify `test/unit/core/concurrency.test.ts`
+- modify `test/unit/core/tokenBucket.test.ts`
+
+**Do.**
+1. Give `Semaphore` a way to change its permit count while holders are outstanding, preserving the
+   recorded `unsubscribe`-before-`resolve` ordering. **Shrinking must not revoke a permit already
+   held** — it must reduce the number handed out *next*, letting the excess drain as holders release.
+2. Have `applyWantedConcurrency()` use it, so a tightened `maxConcurrent` takes effect on the next
+   acquire rather than at the next idle instant.
+3. Assert the shrink end to end on the manual clock: with the cap live-tightened from 3 to 1 while
+   three calls are in flight, no **fourth** call starts until the in-flight count has drained below
+   the new cap, and the three already running all complete.
+4. Correct `src/core/concurrency.ts`'s header to name §7.3's per-host cap alongside §7.2's pools.
+5. Retire §7.3's deferral blockquote in `docs/07` **only if** this card closes it fully; if any part
+   survives, amend it rather than deleting it. `docs/07` is **not** in this card's `Files` — if it
+   needs an edit, report it (rule 2).
+
+**Do NOT.**
+- Do not let a shrink revoke an outstanding permit, and do not add an API that lets a caller hand out
+  or take back a permit behind a holder's back. That is the invariant, not a preference.
+- Do not make the growth path adopt a *raised* advertised limit. `P1-T26` deliberately adopts only
+  downwards and the reasons are recorded there. Whether a generous header may raise the rate above
+  §7.3's table is an **owner decision that is not yet carded** — it asks whether a response header
+  may overrule §7.3 as `plan/README.md` §5 rule 4's authority — so it is not this card's
+  implementation detail either.
+- Do not widen `RateLimiterPort`. `P1-T26` added `currentConfig` and `reconfigure` as **optional**
+  members for recorded reasons; this card changes neither.
+
+**Criteria.**
+- [ ] A live 3 → 1 tightening admits no new call beyond the new cap, while every already-admitted
+      call completes — asserted on the manual clock, not on a stat.
+- [ ] `Semaphore`'s recorded `unsubscribe`-before-`resolve` ordering is still asserted, and the
+      existing permit-leak test still passes.
+- [ ] A shrink while idle and a shrink while saturated are both covered, and the saturated case fails
+      if the implementation revokes rather than drains.
+- [ ] `stats.inFlight` never exceeds the live cap after the tightening takes effect.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:unit -- concurrency tokenBucket`
+
+**Notes.** `P1-T26` measured that Phase 1 cannot reach this: NCBI's verified response (`docs/02` §3.1)
+carries **no** `x-concurrency-limit` at all, and NCBI's row is `maxConcurrent: 3` in both key modes,
+so a tighten-only adoption from an advertised 3 would be a no-op even if the header appeared. That is
+why this is a Phase 2 card rather than a Phase 1 one, and why it blocks `P2-T04` specifically rather
+than the whole phase.
+
+---
+### P2-T22 — Declare the menu-context member `docs/08` mandates and `zotero-types` omits
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T22` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T19` |
+| **Blocks** | `P2-T17` |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** A menu handler can read the selected collection rows from the menu context without a cast,
+and the member the corpus forbids is the one the compiler forbids.
+
+**Why this is a card, and why it blocks `P2-T17`.** The typings declare the trap and omit the
+replacement. Measured 2026-10-02 against the installed `zotero-types@4.1.3`:
+
+- `node_modules/zotero-types/types/xpcom/pluginAPI/menuManager.d.ts:112` declares
+  `collectionTreeRow?: _ZoteroTypes.CollectionTree` — the **singular** member — and declares
+  **no `collectionTreeRows` at all**.
+- `docs/08` §2.2's own context table (lines 190–191) lists `collectionTreeRows` for both
+  `main/library/item` and `main/library/collection`, marks `collectionTreeRow` **deprecated —
+  "throws if more than one row is selected"**, and line 215 says in as many words: **"Never read
+  `context.collectionTreeRow`. Always `context.collectionTreeRows`."**
+- So the corpus **forbids the only member the typings provide**, and `docs/08` §2.4's own code block
+  reads `context.collectionTreeRows` (lines 340 and 351).
+- `typings/zotero-augment.d.ts` §5 augments `ZoteroPane.getSelectedCollections()` (line 258) but
+  **not** this.
+
+`P2-T17`'s rerun entry is written against `docs/08` §2.4's block, which reads
+`context.collectionTreeRows[0].ref.id`. **A card following that doc literally does not compile today.**
+`P1-T19` sidestepped it by going through `ZoteroPane.getSelectedCollections()` instead — which its own
+`Do` step 2 required anyway — so nothing in the product is broken; the gap is only in front of the
+next card that wants the context route.
+
+**Read first.**
+- `node_modules/zotero-types/types/xpcom/pluginAPI/menuManager.d.ts` — `LibraryMenuContext` and
+  `BaseMenuContext`, read from the installed package, not from memory.
+- `docs/08` §2.2's context table and its "Never read" sentence; §2.4's code block.
+- `typings/zotero-augment.d.ts` §5 — the house pattern for augmenting rather than forking a typing,
+  and what `P1-T03`/`P1-T29` recorded about when `zotero-types` is wrong versus merely incomplete.
+- `src/ui/menus/registerMenus.ts` — `P1-T19`'s local structural type with `menuElem?`, and **why**:
+  `BaseMenuContext.menuElem` is declared **required** (`readonly menuElem: XULElement`) while
+  `docs/08` §2.2 and Zotero 10.0.1's own `menuManager.js` (a `WeakRef` deref that can return
+  `undefined`) make it optional.
+
+**Files.**
+- modify `typings/zotero-augment.d.ts`
+- modify `test/unit/prefs/schema.test.ts` *(or whichever unit spec the repo uses as its typings
+  compile-fixture — grep first; if none exists, say so rather than creating one)*
+
+**Do.**
+1. Augment the menu context with `collectionTreeRows`, typed to what `menuManager.js` actually puts
+   there. Read the member off the running Zotero's source rather than inferring it from the name.
+2. Make `menuElem` honestly optional if the augmentation can express that without forking the
+   interface. If it cannot, **report that** and leave `P1-T19`'s local structural type alone —
+   do not delete a working narrowing to chase a typing.
+3. Assert the augmentation compiles *and* that the singular member is still visible as deprecated, so
+   a future card reading `collectionTreeRow` gets a review signal rather than silence.
+
+**Do NOT.**
+- Do not change `src/ui/menus/registerMenus.ts` to use the context route. `P1-T19`'s `Do` step 2
+  requires `ZoteroPane.getSelectedCollections()`, and `getSelectedCollections()` already returns only
+  real collection rows — which is why `length === 1` subsumes §2.4's extra `isCollection?.()` check.
+  Switching routes is `P2-T17`'s call, with its own tests.
+- Do not fork or vendor `zotero-types`. Augment it, per the house pattern.
+- Do not file an upstream issue. `P1-T30` settled that: there is no `gh` on this machine, and opening
+  a public issue on someone else's repository is not an agent's call.
+
+**Criteria.**
+- [ ] A handler can read `context.collectionTreeRows[0]` with no cast and `npm run typecheck` exits 0.
+- [ ] Reading `context.collectionTreeRow` still compiles but is marked deprecated, so §2.2's "Never
+      read" has a compiler-visible counterpart.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Notes.** This is a typings-only card by design. If the augmentation turns out to need a code change
+anywhere in `src/`, that is a finding to report, not scope to absorb.
+
+---
+### P2-T23 — Give `hostLimiter.ts` the test file two cards already invoke
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T23` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T26` |
+| **Blocks** | `P2-T03` |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** `npm run test:unit -- hostLimiter` runs the policy module's tests instead of failing.
+
+**Why this is a card, and why it blocks `P2-T03`.** `test/unit/core/hostLimiter.test.ts` **does not
+exist**, and that is not merely a coverage gap — it makes an existing card unpassable as written.
+Measured 2026-10-02:
+
+- `plan/03`'s `P2-T03` **`Verify with`** is
+  `npm run typecheck && npm run test:unit -- europepmc && npm run test:unit -- hostLimiter` (line 387).
+- Run today, `npx vitest run --dir test/unit hostLimiter` exits **1** with `No test files found`.
+- It is an `&&` chain, so the whole `Verify with` fails. **`P2-T03` cannot satisfy its own verification
+  step** until this file exists.
+
+Two sets of tests are currently homeless in a file that is not theirs. `P1-T04`'s `Findings` already
+reported that the **registry**'s coverage lives in `test/unit/core/http-client.test.ts`, and `P1-T26`
+put `parseAdvertisedLimits` / `adoptAdvertisedLimits` there too — because `http-client.test.ts` was
+the only test file in that card's `Files`. Both are `hostLimiter.ts`'s functions.
+
+**Read first.**
+- `src/core/rateLimit/hostLimiter.ts` — the whole file: §1's registry, `policyFor`, and §3's
+  "The limits the hosts advertise" that `P1-T26` added.
+- `test/unit/core/http-client.test.ts` — identify exactly which tests belong to `hostLimiter.ts` and
+  which genuinely test the client. **Move only the first set.** `P1-T26`'s header-adoption tests
+  assert through the real client in places, deliberately; those stay.
+- `plan/03`'s `P2-T03` `Verify with` line, so the move is checked against what the chain actually
+  invokes.
+- `docs/13` §3 on where unit tests live and how they are named.
+
+**Files.**
+- create `test/unit/core/hostLimiter.test.ts`
+- modify `test/unit/core/http-client.test.ts`
+
+**Do.**
+1. Create the file and move the registry tests and the header-adoption tests that are genuinely
+   `hostLimiter.ts`'s.
+2. Leave in `http-client.test.ts` any assertion that measures the **client's** behaviour even though
+   a limiter is involved — `P1-T26`'s end-to-end reconfigure test is the clear case: it asserts what
+   reached the wire and when.
+3. Verify the move changed no total: the unit count before and after must be **equal**, and the file
+   count goes up by exactly one.
+
+**Do NOT.**
+- Do not write new tests to pad the new file. This is a move. If the move exposes something untested,
+  **report it** rather than filling the gap here (rule 2).
+- Do not touch `src/core/rateLimit/hostLimiter.ts`. It is not in this card's `Files`.
+- Do not edit `plan/03`'s `P2-T03`. Its `Verify with` becomes correct by this card existing; changing
+  the card would be adjusting a criterion rather than meeting it (rule 6).
+
+**Criteria.**
+- [ ] `npm run test:unit -- hostLimiter` exits **0** and runs a non-zero number of tests.
+- [ ] The `hostLimiter` link of `P2-T03`'s `Verify with` chain exits 0 — so that chain's only
+      remaining failure is its `europepmc` link, which `P2-T03` satisfies with its own `Files`.
+- [ ] The total unit-test count is unchanged and the file count is +1.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+
+**Verify with.** `npm run typecheck && npm run test:unit -- hostLimiter && npm run test:unit`
+
+**Notes.** The arithmetic was measured on 2026-10-03 before this card was written, so criterion 2
+asserts a known result rather than asking for a discovery. `vitest` exits **1** on an empty name
+filter, which is the mechanism that breaks the chain, and **both** links fail today —
+`test:unit -- europepmc` exits 1 as well. The difference is ownership: `P2-T03`'s own `Files`
+**creates** `test/unit/sources/europepmc.test.ts`, so that link becomes satisfiable by its own work,
+while its `Files` only *modifies* `hostLimiter.ts` and never creates the matching test file. **That
+asymmetry is the whole reason this card exists and the reason it is the one that blocks `P2-T03`.**
+
+---
+
 ---
 ## Estimate roll-up
 
@@ -2537,7 +2808,10 @@ module header so it is visible at the call site rather than at the result.
 | `P2-T18` | Translator import path behind `useTranslators` | 1.25 |
 | `P2-T19` | Work-key detection for records with no DOI or PMID; `fromZoteroItem` | 0.75 |
 | `P2-T20` | Render `languages`, `openAccessOnly` and `raw` | 0.50 |
-| **Total** | **20 tasks** | **25.50 d** |
+| `P2-T21` | Make the concurrency cap resizable | 0.50 |
+| `P2-T22` | Declare the menu-context member `zotero-types` omits | 0.25 |
+| `P2-T23` | Give `hostLimiter.ts` its test file | 0.25 |
+| **Total** | **23 tasks** | **26.50 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather
