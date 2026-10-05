@@ -136,18 +136,17 @@ research-helper-import-summary = Imported { $imported } · Linked { $linked } ·
 # The abstract-coverage figure that measures risk R-17 (`P1-T22` step 3).
 research-helper-import-abstract-coverage = Abstracts present for { $percent }% of imported items
 
-# Header of the completion `ProgressWindow` toast (`docs/08` §4.4, §8.2). The
-# sink takes this already localized (`P1-T15`).
-#
-# **Declared, but named by no code today** (grepped 2026-10-03, `P1-T32`): it
-# overlaps `research-helper-progress-headline` below, which is the id the
-# composition root actually resolves. Reported with `P1-T32`; whether this one
-# is retired in its favour, or kept for a toast header distinct from the
-# popup's headline, is an owner decision and not a translator's.
-research-helper-import-toast-header = Research Helper
-
 
 ## The progress popup's headline — `docs/07` §7.7, `docs/08` §8.2 (P1-T32)
+##
+## **`research-helper-import-toast-header` stood here and was retired by
+## `P1-T33`.** It declared "the header of the completion `ProgressWindow`
+## toast (`docs/08` §4.4)" with this same text, and `P1-T33` decided §4.4's
+## completion toast and §7.7's per-job popup are one surface: §8.2.2 found no
+## toast mechanism in Zotero 7–10, so §4.4's "toast" is this popup raised at
+## a different moment (`openOn`, `P1-T31`), and the sink has one headline.
+## The reasoning is in `src/i18n/keys.ts`'s `L10N_PROGRESS_HEADLINE`. One id,
+## one string, one owner decision.
 ##
 ## `changeHeadline(text, …)`'s first argument, for the `Zotero.ProgressWindow`
 ## every job raises (`docs/07` §7.7's "One window per job", `P1-T31`). It is

@@ -81,15 +81,16 @@ research-helper-source-pubmed = PubMed
 #
 # NEEDS REVIEW. en-US: "Abstracts present for { $percent }% of imported items"
 # research-helper-import-abstract-coverage =
-#
-# NEEDS REVIEW. en-US: "Research Helper"
-# The toast header is the product name. `docs/08` §10.2 renders the product
-# name as `리서치 헬퍼` in menu labels, so this one probably follows — but it is
-# the same owner decision as the note title above, so it is not drafted here.
-# research-helper-import-toast-header =
 
 
-## The progress popup's headline (docs/07 §7.7, docs/08 §8.2 — P1-T32)
+## The progress popup's headline (docs/07 §7.7, docs/08 §8.2 — P1-T32, P1-T33)
+##
+## **One stub fewer than before.** `research-helper-import-toast-header` stood
+## here with a stub carrying the identical en-US source, `Research Helper`, and
+## was retired by `P1-T33`: §4.4's completion toast and §7.7's per-job popup
+## are one surface, so the headline is one id. `G-41` therefore has one
+## product-name decision here, not two identical ones. Nothing was translated
+## by that card; the reasoning is in `src/i18n/keys.ts`.
 ##
 # NEEDS REVIEW. en-US: "Research Helper"
 # The headline of the `Zotero.ProgressWindow` each job raises. `G-41` owns this

@@ -5092,7 +5092,7 @@ claims authority over a tree it then prints wrongly. **It is exactly the kind of
 would type straight from.** Needs a card.
 
 **`G-41`'s headline numbers are now stale, and that matters because a human sizes the gate by them.**
-`plan/06-human-gates.md` says "79 strings" in three places and "all 84 ids" in a fourth;
+`plan/06-human-gates.md` says "79 strings" in **four** places — lines 48, 650, 661 and 667 — and "all 84 ids" in a fifth; (**corrected 2026-10-05**: this read "three places", missing line 667's "Three of the 79". The `P1-T34` card below listed all four correctly, so the undercount lived only here — and when reporting it I then misattributed it to that card, which is a second slip on the same fact.)
 `test/integration/l10n.spec.ts:45` says "79 of their 84". The live run reads **85 declared ids**
 (mainWindow 26) and `ko-KR totals: 4 present, 81 absent` — 80 pending plus one deliberately absent.
 Prose only, no assertion, and `plan/06` is a gate document, so the agent correctly left all five
@@ -5149,8 +5149,13 @@ the only thing deciding a per-job argument**. Decide it here, for the headline o
   `L10N_PROGRESS_HEADLINE`'s doc comment (which records the overlap), and `surfaceOfMessage()`.
 - `docs/08` §4.4 (the completion toast) and §8.2; `docs/07` §7.7 (the popup, and `P1-T31`'s
   clarification that it is one tree **per job**).
-- `src/bootstrap/container.ts`'s `ProgressHeadlineSource` and `resolveProgressHeadline()` — the only
-  consumer of either id, once one is wired.
+- `src/bootstrap/container.ts`'s `ProgressHeadlineSource` and `resolveProgressHeadline()` — where the
+  port and the resolver are **declared**.
+  > **Corrected 2026-10-05, reported by the executing agent.** This read "**the only consumer of either
+  > id**, once one is wired", which is false: `container.ts` declares `readonly messageId: string` and
+  > forwards `source.messageId`, and names no id. The **assignment** is
+  > `src/bootstrap/registerUI.ts:236-237`'s `PROGRESS_HEADLINE`, which is **not in this card's `Files`**.
+  > Same failure as `P1-T32` item 3 — a claim about where a thing lives, written without grepping.
 - `P1-T30`'s `Findings`: `typings/i10n.d.ts` is **generated but committed** and is the single source of
   truth for `FluentMessageId`. **`npm run build` typechecks *before* it regenerates**, so removing an
   id means running `npx zotero-plugin build` directly or the typecheck fails on the id you just
@@ -5173,7 +5178,16 @@ the only thing deciding a per-job argument**. Decide it here, for the headline o
    report that outcome rather than forcing a retirement.
 2. Retire the loser from `MAIN_WINDOW_MESSAGE_IDS`, `KO_PENDING_REVIEW`, both bundles, and the
    generated typings.
-3. Point `container.ts`'s `ProgressHeadlineSource.messageId` at the survivor.
+3. Record the surface ownership in `container.ts`, where `ProgressHeadlineSource` and
+   `progressHeadline` are declared.
+   > **Corrected 2026-10-05.** This step said "Point `container.ts`'s
+   > `ProgressHeadlineSource.messageId` at the survivor", which is **a no-op**: that assignment lives in
+   > `src/bootstrap/registerUI.ts`, outside this card's `Files`. It already pointed at
+   > `research-helper-progress-headline`, and **that is one of the reasons the survivor had to be that
+   > id** — retiring the other would have required editing `registerUI.ts` and
+   > `test/unit/bootstrap/container.test.ts`, neither listed. **So the card as written could only be
+   > executed if the decision went one particular way**, which is a defect in the card, not in the
+   > decision.
 4. Regenerate `typings/i10n.d.ts` with `npx zotero-plugin build` and verify the four built `.ftl`
    files are byte-identical to `addon/locale/**` (`P0-T32`'s requirement).
 
@@ -5188,8 +5202,16 @@ the only thing deciding a per-job argument**. Decide it here, for the headline o
   it** — those sections are outside this card's `Files` and §7.7 was last amended by `P1-T31`.
 
 **Criteria.**
-- [ ] `grep -rn '<retired id>' src test addon typings` returns nothing, or the card reports that both
-      ids survive and why.
+- [ ] No **declaration** and no **string literal** of the retired id survives in `src test addon
+      typings`; prose naming the retirement is expected. Or the card reports that both ids survive and
+      why.
+      > **Reworded 2026-10-05 after the executing agent reported it under rule 6.** It read "returns
+      > nothing", which **cannot hold together with `Do` step 1**: step 1 requires writing the reasoning
+      > for the retirement, and reasoning that may not name what was retired is not reasoning. The agent
+      > measured 6 hits, **all of them comments**, declined to spell the id as `…-import-toast-header` to
+      > satisfy a string match — "that contorts the record to satisfy a string match, which is the
+      > opposite of rule 6" — and proposed this wording. Zero declarations, zero literals, zero live
+      > references, six tombstones; re-verified by the coordinator.
 - [ ] `keys.ts` names the surface that owns the surviving id, in a comment, with the §4.4-versus-§7.7
       reasoning.
 - [ ] `test/integration/l10n.spec.ts`'s `ko-KR` gap assertion passes with the updated lists — it is
@@ -5201,13 +5223,106 @@ the only thing deciding a per-job argument**. Decide it here, for the headline o
 
 **Verify with.** `npm run typecheck && npm run test:unit -- container && npm run test:integration -- --exit-on-finish --abort-on-fail`
 
-**Notes.** The integration suite is in the `Verify with` deliberately: the `ko-KR` gap assertion and
+**Notes.** **This card's `Files` names no test file, and `plan/README.md` §6 requires a reason here —
+added 2026-10-05 after the executing agent reported the omission.** The reason: every direction of this
+edit except one is already a **compile error** (`P1-T30`'s generated union, plus the `satisfies
+readonly FluentMessageId[]` guards), and the one exception — a stale `KO_PENDING_REVIEW` — is caught by
+`test/integration/l10n.spec.ts`'s existing exact-set assertion, which is **`P1-T34`'s file and in
+flight**. The agent proved both halves by mutation rather than asserting them. Writing a new unit spec
+would have duplicated a guard that already exists.
+
+The integration suite is in the `Verify with` deliberately: the `ko-KR` gap assertion and
 the live Fluent resolution are both integration-level, and a unit run cannot see either. If the
 integration run fails to start with `EBUSY: … unlink '.scaffold\test\profile\cert9.db'`, that is the
 known harness leak and **not** a test failure — `zotero-plugin test --exit-on-finish` leaves the
 test-profile Zotero running. Terminate that instance **identified by its command line**
 (`-profile …\.scaffold\test\profile`), never by process name, because the user's own Zotero runs the
 same binary.
+
+**Findings, 2026-10-05 — one surface, so one id. `research-helper-import-toast-header` retires;
+`research-helper-progress-headline` survives, owned by `docs/07` §7.7's `Zotero.ProgressWindow`, one
+per job.** Verified independently of the report: **843 unit tests in 21 files**, **63 integration**,
+typecheck 0, `lint:check` 0, all four built `.ftl` bundles `cmp`-identical to source, and a partition
+check over `keys.ts` reading **25 + 59 = 84 declared, 79 + 4 + 1 = 84**, no orphans, no uncovered ids,
+no duplicates, and the retired id present as **no literal**.
+
+**The decision rests on a fact that settles it outright: there is no second mechanism for a second
+string to belong to.** `docs/08` §8.2.2 searched Zotero 7–10 and found **no notification surface at
+all** — no `Zotero.Notifications`, no toast element among the ~55 files in `elements/`, no plugin entry
+point to the pane's banners. So §4.4's "completion toast" **is** a `Zotero.ProgressWindow`: the word
+names a *timing*, not a mechanism. §7.7 allows one window per job and §4.4 describes the `searchImport`
+job, so the completion toast is that job's one window. What the two sections disagree about is **when**
+it opens, which is exactly `JobProgressOptions.openOn` — and the shipped code already said so:
+`ZoteroProgressWindowSink`'s lifecycle comment reads *"This is the completion toast `docs/08` §4.4 asks
+for."* **The implementation had already decided; the corpus had not caught up.**
+
+**Which id survived was forced, not chosen, and that exposed a defect in this card.**
+`research-helper-progress-headline` is the id the composition root actually resolves
+(`registerUI.ts:236-241`, asserted four times), its name describes the surface rather than one
+pipeline, and the `import-` prefix scoped to `searchImport` a string that `ServiceGraphOptions` already
+records as application-scoped. Retiring the other one instead would have required editing
+`registerUI.ts` and `test/unit/bootstrap/container.test.ts`, **neither in this card's `Files`** — so
+**the card could only be executed if the decision went one particular way.** That is a flaw in the card
+rather than in the decision, and it is recorded at `Do` step 3.
+
+**Criterion 1 could not hold together with `Do` step 1, and the agent reported it rather than
+satisfying it.** The grep returns **6 hits, every one a comment**, and each exists *because* step 1
+requires writing the reasoning — reasoning that may not name what was retired is not reasoning. The
+agent could have passed by writing the id as `…-import-toast-header` and **declined**: "that contorts
+the record to satisfy a string match, which is the opposite of rule 6." Re-verified here: **zero
+declarations, zero string literals, zero non-comment references, six tombstones.** The criterion is
+reworded above with the reason.
+
+**Every direction of this edit except one is a compile error — and the exception is the whole reason
+the integration suite was not optional.** Five mutants:
+`UndeclaredBundleMessageId` caught the retired id left in the lists against a stale union
+(**which the agent hit for real**, exactly as the hand-out predicted); the `satisfies readonly
+FluentMessageId[]` guard caught it left on `KO_PENDING_REVIEW` alone; dropping the **survivor** from
+`MAIN_WINDOW_MESSAGE_IDS` and deleting its en-US declaration both failed the typecheck, the latter with
+**five errors across three files**. The exception is **M3** — the survivor dropped from
+`KO_PENDING_REVIEW` only: **typecheck exits 0, the compiler cannot see it**, and it is caught solely by
+`l10n.spec.ts`'s exact-set assertion, which failed with `expected [ …(80) ] to deeply equal [ …(79) ]`.
+So that spec really is the arbiter, and `P1-T30`'s generated-union design carries everything else.
+
+**The build-order trap fired for real and the recorded recovery worked.** `npm run typecheck` after
+editing `keys.ts` failed with `TS2344: Type '"research-helper-import-toast-header"' does not satisfy
+the constraint 'never'` — `UndeclaredBundleMessageId` firing on the **stale committed union**, because
+`npm run build` typechecks *before* it regenerates. `npx zotero-plugin build` directly, then clean.
+`P1-T32` recorded this trap and the record paid for itself one card later.
+
+**Two agents reached the same answer from the same sections, independently.** `P1-T34` was running
+concurrently and wrote into `plan/06` that `P1-T33` had decided the two sections are "one surface, not
+two", re-deriving that gate's counts to the post-retirement 79 / 84 — without having been told the
+decision. That is not proof, but it is the only corroboration available for a judgement call.
+
+**The documented harness leak did not reproduce, which revises what we know about it.** Across three
+integration runs `--exit-on-finish` closed Zotero every time and left no leak. The `EBUSY` the agent
+*did* hit was **the other card's live runner** — identified by command line and by a creation time nine
+seconds before its own run started — and it **killed nothing**, waited for that PID to exit, and
+re-ran. Both agents handled the race correctly without being told which process was whose.
+**So the recorded recovery's assumption that the harness always leaks is wrong**; it leaks sometimes,
+and the recovery must therefore always identify the process before acting. My own earlier cleanup of
+ten leaked processes stands as a real occurrence, not a universal one.
+
+**No doc amendment is implied, and the agent checked rather than assumed.** `docs/08` §4.4's "a
+`Zotero.ProgressWindow` toast is raised only on completion" and §8.1's backgrounded-job row both
+describe *when* the popup is raised, which stays true; §8.2.2 already says "toast" names no separate
+mechanism.
+
+**Reported rather than absorbed.** `ProgressHeadlineSource.messageId` is typed `string`, so a retired
+or renamed headline id is a compile error in `keys.ts`, in the bundles and in `registerUI.ts` — but
+**not at the port that carries it**. Tightening it to `FluentMessageId` costs nothing (every caller
+already passes the literal type) but touches two files outside this card's `Files`. The agent found
+**no record of a decision either way** on the current `string` and said exactly that in the doc
+comment rather than inventing a rationale. **Needs a small card.** Separately: this card's `Files`
+names no test file and `plan/README.md` §6 requires a reason in `Notes` — the agent reported the
+schema omission rather than letting it pass, and the reason is now written there.
+
+**`G-41`'s owner decision (2) names the retired id, and both agents left it alone — correctly.** The
+decision is unchanged and still owed; only the id it hangs on has moved, to
+`research-helper-progress-headline`. `P1-T34` flagged it in place with a dated note; this card
+concurred and edited nothing. **It is a one-line edit by the gate's owner, not a card** — a card that
+rewrote a gate's decisions would be the wrong instrument.
 
 ---
 ### P1-T34 — Three corpus statements measured false, corrected at the source
@@ -5230,10 +5345,15 @@ same binary.
 carry its own card. None of them changes any code. Every figure below was verified on 2026-10-02/03
 and the measuring card is named, so this card's job is transcription and checking, not investigation.
 
-**1. `docs/08` §4.1 still writes the chrome namespace unhyphenated.** Verified: lines 646, 647, 651,
-652, 680, 681, 689, **853**, **865** and 891 all say `chrome://researchhelper/...`, including the prose
-at 865 ("The `chrome://researchhelper/content/` namespace is registered in `bootstrap.js`"). §2.4 was
-corrected on 2026-09-30; §4.1 was not. `P1-T19` **measured** that the unhyphenated package does not
+**1. `docs/08` still writes the chrome namespace unhyphenated in two sections.** Verified: lines 646,
+647, 651, 652, 680, 681, 689, **853**, **865** and 891 all say `chrome://researchhelper/...`, including
+the prose at 865. §2.4 was corrected on 2026-09-30; these were not.
+> **Corrected 2026-10-05, reported by the executing agent.** The heading said "**§4.1**" and the ten
+> lines were presented as all being there. They are not: **§3.3 starts at line 632 and §4 at 849**, so
+> seven of them (646–689, the item-pane `registerSection` block) are **§3.3**, and only 853, 865 and
+> 891 are §4.1/§4.1.1. The line numbers were grepped and are right; **the section attribution was
+> written without checking which section the lines fall in** — the same class of error as the two in
+> `P1-T32` item 3 and `P1-T33` step 3. `P1-T19` **measured** that the unhyphenated package does not
 resolve at all: `chrome://research-helper/content/icons/favicon.png` returns **1723 bytes** and
 `chrome://researchhelper/...` **rejects** (`undefined`), and both are now integration assertions.
 `P1-T19`'s own `Do` steps 3 and 5 repeated the wrong spelling, which is how it reached an executing
@@ -5252,9 +5372,16 @@ kind of block a future card would type straight from.** Found by `P1-T32`.
 **3. `G-41`'s headline counts are stale, and a human sizes the gate by them.** Verified:
 `plan/06-human-gates.md` says **79** at lines 48 (the gate table), 650 (the heading), 661 (the body)
 and 667 ("Three of the 79"), and "all **84** ids" at line 680; `test/integration/l10n.spec.ts:45`
-says "79 of their 84 strings". The live integration run reads **85 declared ids** (mainWindow 26,
-searchDialog 59) and `ko-KR totals: 4 present, 81 absent` — i.e. **80** pending review plus one
-deliberately absent. `P1-T18` set the original figures; `P1-T32` added the 85th id.
+says "79 of their 84 strings". At the time this card was written the live run read **85 declared ids**
+(mainWindow 26, searchDialog 59) and `ko-KR totals: 4 present, 81 absent` — i.e. **80** pending review
+plus one deliberately absent. `P1-T18` set the original figures and `P1-T32` added the 85th id.
+> **These figures moved while the card was being executed — recorded 2026-10-05.** `P1-T33` retired an
+> id concurrently, so the live run now reads **84 declared** (mainWindow 25, searchDialog 59) and
+> `4 present, 80 absent` — **79** pending plus the one deliberate hole, which is exactly what
+> `plan/06` already said. **The literals became correct again by coincidence**, having been wrong in
+> between with nothing in the text to say how to recompute them. That is why this card's deliverable
+> is the **derivation rule**, not the number, and why the executing agent had to defend against a torn
+> read of `keys.ts` to take a self-consistent snapshot at all.
 
 **Read first.**
 - `docs/08` §4.1 in full, and §2.4's 2026-09-30 correction, so the fix matches the house pattern for
@@ -5310,6 +5437,87 @@ satisfied. If the distinction is unclear in any specific edit, leave that edit a
 The same `EBUSY` harness caveat as `P1-T33` applies to the integration run — see that card's `Notes`.
 
 ---
+
+**Findings, 2026-10-05 — all six criteria pass, and the deliverable turned out to be the derivation
+rule rather than any number.** Verified independently: `grep -rn 'researchhelper'
+docs/08-ui-ux-spec.md` exits 1 with no output; `plan/06`'s five figures are all derivations with dated
+snapshots; `l10n.spec.ts:45` is still a comment and not an assertion; exactly **three** files touched,
+all in `Files`; **843 unit, 63 integration, typecheck 0, lint:check 0**.
+
+**The numbers came back to where they started, which is the one outcome the card did not anticipate.**
+`P1-T32` took the counts 79 → 80 and 84 → 85; `P1-T33`, running concurrently, retired an id and took
+them **back to 79 / 84** — exactly the literals `plan/06` already carried. So the *numbers* needed no
+change. **In between they were simply wrong, with nothing in the text to say how to recompute them**,
+and the agent wrote that history into the gate note explicitly so the coincidence is not mistaken for
+the figures never having been stale. Five rules now sit in `G-41`, each a one-line read of `keys.ts`,
+plus the instruction that matters: **"if a later card adds or retires an id, re-read the rules, do not
+add one to the snapshot."**
+
+**The agent defended against a torn read of `keys.ts`, twice, without being asked to.** Its first read
+gave 84 declared but 80 pending — `P1-T33` had removed the retired id from `MAIN_WINDOW_MESSAGE_IDS`
+and not yet from `KO_PENDING_REVIEW`, so the three lists did not partition the declared set. **It did
+not snapshot that.** It polled for a read that was self-consistent *and* unchanged for 45 s; a second
+tear appeared later and settled back. **This is stricter than the instruction it was given**, which
+only asked it to timestamp a late read. Re-verified at commit time with a partition check:
+25 + 59 = 84 declared, 79 + 4 + 1 = 84, no orphans, no uncovered, no duplicates — **the snapshot still
+holds.**
+
+**My own partition check first reported "OK" having parsed zero ids.** It anchored on the list names'
+first occurrence, which is a doc comment, and found no array. A check that passes on a parse failure is
+worse than no check — the exact vacuous-assertion class these card reviews keep catching in test code.
+Rewritten to anchor on `export const NAME = [`, balance the brackets, strip comments so a
+commented-out id is not counted, and **throw if any list parses empty**.
+
+**The sharpest find is a fourth instance the card did not name, and it cites its own refutation.**
+`docs/08` §4.1's preamble (line 853) said the bundle is "`searchDialog.ftl` in the per-surface locale
+folder" **citing `docs/01` §9.1** — and §9.1 is precisely what measures the opposite: Zotero 10's
+`registerLocales()` drops directory entries, so the layout is flat and prefixed. **A statement citing
+as authority the document that refutes it.** Same file, same measured-false class, same measuring
+source, so I accept the absorption rather than calling it scope-widening; the agent flagged it for
+that judgement instead of burying it.
+
+**§10.1's tree was corrected without changing the surface set, and criterion 2's literal reading was
+refused for a stated reason.** The tree is now flat and prefixed, but it still lists **four** surfaces
+while `find addon/locale -type f` returns two plus three `.gitkeep` placeholders — because §10.1
+*owns the surface set*, and two of the four are Phase 3 and so have no files yet. They are annotated
+`; Phase 3` and the note says what `find` actually reads. **Forcing a literal match would have changed
+the surface set**, which the card's `Do NOT` and §10.1's own authority paragraph forbid. The agent
+flagged the interpretation rather than deciding it silently — the right instinct, and I agree with the
+call.
+
+**One figure could not be reconciled and was reported, not reconstructed.** `G-41` said the
+searchDialog strings include "**23** state and status strings". No list in `keys.ts` yields 23; the
+file's own state/status grouping is **16**. The clause now reads 16 with its derivation named, and the
+note records that "the 23 may have counted a wider set under a definition that was never recorded; it
+is reported rather than reconstructed." **Someone who knows what the 23 counted should confirm 16 is
+right** — it does not block the gate's headline counts, all of which reconcile.
+
+**Neither dated note can spell the string it is correcting**, because criterion 1 forbids the literal
+anywhere in the file — so both say "the same package name with the hyphen removed". A small thing, but
+it is what a criterion written as a grep does to the prose around it.
+
+**Three coordinator errors in this card's own text, all mine, all corrected above.** (a) The heading
+said "**§4.1**" for ten lines of which **seven are §3.3** — §3.3 starts at 632 and §4 at 849. The line
+numbers were grepped and right; the section attribution was written without checking. (b) Item 3's
+live-run figures (85 declared, 81 absent) went stale during execution and now read 84 / 80. (c) And
+when reporting the "three places" undercount I **misattributed it to this card**, which lists all four
+lines correctly — it lives in `P1-T32`'s `Findings`, where it is now fixed. **A card whose whole
+subject is figures stated without re-deriving them, carrying three of exactly that defect, is the
+point rather than an irony** — and in each case the executing agent caught it.
+
+**`plan/06` is a gate document and the boundary held.** The agent re-derived counts and did not touch
+a single gate semantic, and when `P1-T33`'s retirement left owner decision (2) naming a retired id it
+**added a dated flag and refused to rewrite the decision**, recording that re-pointing it is the
+gate owner's call. That is the correct instrument: a card that rewrites a gate's decisions is the
+wrong one.
+
+**Needs a card, raised by both agents and worth taking.** A **unit-level partition assertion** over
+`keys.ts` — that `KO_PENDING_REVIEW ∪ KO_PRESENT ∪ KO_DELIBERATELY_ABSENT` partitions
+`MAIN_WINDOW_MESSAGE_IDS ∪ SEARCH_DIALOG_MESSAGE_IDS`. `l10n.spec.ts` catches the equivalent gap
+against the **built bundles**, which needs a full Zotero run; `P1-T33`'s M3 mutant proved that gap is
+**invisible to the compiler**. A sub-second unit check would turn a whole class of half-finished id
+edits into an immediate failure — and this card's two torn reads are the evidence that the class is
+real rather than hypothetical.
 
 ---
 ## 7. Estimate roll-up

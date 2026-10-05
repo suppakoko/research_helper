@@ -170,16 +170,18 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // Search provenance (FR-8, P1-T17).
   "research-helper-provenance-note-title",
 
-  // Import outcome (docs/08 §4.4, FR-51).
+  // Import outcome (docs/08 §4.4, FR-51). The toast *header* is not here: it
+  // is the progress popup's headline below, because §4.4's completion toast is
+  // §7.7's popup (P1-T33).
   "research-helper-import-summary",
   "research-helper-import-abstract-coverage",
-  "research-helper-import-toast-header",
 
-  // The progress popup's headline (docs/07 §7.7, docs/08 §8.2; P1-T32 item 3).
-  // JavaScript formats it and hands it to a surface that is not a document of
-  // ours, which is docs/08 §10.1's "From JS, no window" row and so this
-  // bundle. See L10N_PROGRESS_HEADLINE below for the overlap with
-  // `research-helper-import-toast-header`.
+  // The progress popup's headline (docs/07 §7.7, docs/08 §8.2; P1-T32 item 3,
+  // P1-T33). JavaScript formats it and hands it to a surface that is not a
+  // document of ours, which is docs/08 §10.1's "From JS, no window" row and so
+  // this bundle. It is the **only** headline id: `P1-T33` retired
+  // `research-helper-import-toast-header` in its favour, and
+  // L10N_PROGRESS_HEADLINE below is where that decision is recorded.
   "research-helper-progress-headline",
 
   // ResearchHelperError.messageKey — see ERROR_MESSAGE_IDS below.
@@ -243,14 +245,61 @@ export const L10N_MENU_COLLECTION_SEARCH_IMPORT =
  * **already-localized** string, `Zotero.getString()` throws on a plugin key
  * (`docs/08` §8.2.1), and Fluent is async while the popup factory is not.
  *
- * **It overlaps `research-helper-import-toast-header`, and that is reported
- * rather than resolved here.** That id's en-US text is the same string and its
- * bundle comment calls it "Header of the completion `ProgressWindow` toast";
- * grepped 2026-10-03, **no code names it**. `P1-T32`'s item 3 states that
- * `keys.ts` "declares no headline id", which is not accurate — and two ids
- * carrying one string for one surface is exactly the drift this module exists
- * to prevent. Retiring one of them touches `docs/08` §4.4's wording and the
- * `ko-KR` review list, so it is left to a card and to `G-41`.
+ * ## The surface that owns this string, and why it is the only headline id
+ *
+ * **Owner: `docs/07` §7.7's first surface — the `Zotero.ProgressWindow`, one
+ * per job.** `P1-T33` retired `research-helper-import-toast-header`, which
+ * `P1-T18` had declared for "the completion `ProgressWindow` toast (`docs/08`
+ * §4.4, §8.2)" with the same en-US text and which no code ever named, after
+ * deciding that §4.4's completion toast and §7.7's per-job popup are **one
+ * surface, not two**. The four grounds, in the order they settle it:
+ *
+ * 1. **There is no toast mechanism for a second string to belong to.**
+ *    `docs/08` §8.2.2 searched Zotero 7, 8, 9 and 10 and found no notification
+ *    surface at all — no `Zotero.Notifications`, no toast element, no plugin
+ *    entry point to the pane's banners. So §4.4's "toast" *is* a
+ *    `Zotero.ProgressWindow`, which is §7.7's first surface and nothing else.
+ *    The word names a timing, not a mechanism.
+ * 2. **§7.7 allows exactly one window per job** (`P1-T31`'s clarification,
+ *    which is also what `forJob()` builds), and §4.4 describes the
+ *    `searchImport` job. The completion toast is therefore that job's one
+ *    window rather than a second window beside it.
+ * 3. **What the two sections disagree about is *when* the window opens, not
+ *    *what* it is** — which is precisely what `P1-T31` encoded as
+ *    `JobProgressOptions.openOn`: `"completion"` for §4.4's import, whose
+ *    live progress is in the search window's status bar because that is where
+ *    the Cancel button is, and `"progress"` for §7.7's short pipelines, which
+ *    have no window of their own. One sink serves both values, and
+ *    `ZoteroProgressWindowSink`'s own lifecycle note calls the popup it raises
+ *    on a terminal snapshot "the completion toast `docs/08` §4.4 asks for".
+ * 4. **Mechanically there is one headline slot, and no design for a second.**
+ *    `ZoteroProgressWindowSink` takes a single `headline`, set once in its
+ *    constructor and used for both `openOn` values. The retired id had no
+ *    consumer and no designed one, which is why the 2026-10-03 grep found no
+ *    code naming *either* id before `P1-T32` wired this one.
+ *
+ * **Which of the two survived was not arbitrary.** This is the id the
+ * composition root actually resolves — `registerUI.ts`'s `PROGRESS_HEADLINE`,
+ * asserted by `test/unit/bootstrap/container.test.ts` — and its name describes
+ * the surface instead of one pipeline. The `import-` prefix on the retired id
+ * scoped to `searchImport` a string that is **application-scoped**: it is the
+ * product's name for the surface, not the job's, as
+ * `ServiceGraphOptions.progressHeadline` records. Retiring this one instead
+ * would also have meant editing two files outside `P1-T33`'s `Files`
+ * (`plan/README.md` §5 rule 2).
+ *
+ * **Nothing about the text changed.** `P1-T32` recorded that the corpus
+ * supplies no wording — `docs/08` §8.2's own example call passes the product
+ * name as the headline — so the shipped en-US string stays the one already on
+ * screen, and both it and the Korean remain `G-41`'s and the owner's.
+ * Retirement removed a duplicate id, not a string.
+ *
+ * **The error that produced the duplicate is recorded, not tidied away.**
+ * `P1-T32`'s item 3 asserted that `keys.ts` "declares no headline id", which
+ * was false when written: `P1-T18`'s commit precedes it. The executing agent
+ * found the overlap, added the general id as its card instructed, and reported
+ * the clash rather than silently picking a side — because which id is right is
+ * the surface judgement above and not a mechanical fix.
  */
 export const L10N_PROGRESS_HEADLINE = "research-helper-progress-headline";
 
@@ -475,15 +524,17 @@ export const DEFERRED_ERROR_MESSAGE_IDS = [
  * either a Korean entry or an explicit admission here.
  */
 export const KO_PENDING_REVIEW = [
-  // --- mainWindow (22) ---
+  // --- mainWindow (21) ---
   "research-helper-menu-collection-search-import",
   "research-helper-provenance-note-title",
   "research-helper-import-summary",
   "research-helper-import-abstract-coverage",
-  "research-helper-import-toast-header",
   // `P1-T32` item 3. Gate `G-41` owns the translation; the `ko-KR` bundle
   // carries the id as a commented stub with its English source, and nothing
-  // was machine-translated.
+  // was machine-translated. `P1-T33` retired
+  // `research-helper-import-toast-header` from this list with it: the two were
+  // one surface's headline declared twice, and `G-41` now has one product-name
+  // decision here instead of two identical ones. See L10N_PROGRESS_HEADLINE.
   "research-helper-progress-headline",
   "rh-error-configuration",
   "rh-error-missing-credential",

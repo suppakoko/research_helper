@@ -5,7 +5,6 @@
 export type FluentMessageId =
   | 'research-helper-import-abstract-coverage'
   | 'research-helper-import-summary'
-  | 'research-helper-import-toast-header'
   | 'research-helper-menu-collection-search-import'
   | 'research-helper-menu-root'
   | 'research-helper-menu-search-import'

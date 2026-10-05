@@ -634,6 +634,15 @@ Summaries are never stored in preferences, in any form: `07-architecture-and-dat
 ```javascript
 // src/modules/itemPaneSection.ts
 const PLUGIN_ID = "research-helper@suppakoko.github.io";
+// ^ every `chrome://research-helper/...` URL below is HYPHENATED, corrected 2026-10-05
+// (`P1-T34`). This block and §4.1 kept the unhyphenated spelling — the same package name with
+// the hyphen removed — after §2.4 was corrected on 2026-09-30, and `P1-T19` has since
+// **measured** that that spelling does not resolve at all: a fetch of
+// `chrome://research-helper/content/icons/favicon.png` returns **1723 bytes**, while the
+// unhyphenated package **rejects** (`undefined`). Both readings are now integration assertions
+// in `test/integration/menus.spec.ts`. `addon/bootstrap.js` registers
+// ["content", "__addonRef__", rootURI + "content/"] and `package.json`'s `config.addonRef` is
+// `research-helper`, so the hyphen is the live package name (§2.4).
 let sectionID: string | undefined;
 
 export function registerSummarySection() {
@@ -643,13 +652,13 @@ export function registerSummarySection() {
 
     header: {
       l10nID: "research-helper-itempane-header",
-      icon: "chrome://researchhelper/content/icons/section-16.svg",
-      darkIcon: "chrome://researchhelper/content/icons/section-16-dark.svg",
+      icon: "chrome://research-helper/content/icons/section-16.svg",
+      darkIcon: "chrome://research-helper/content/icons/section-16-dark.svg",
     },
     sidenav: {
       l10nID: "research-helper-itempane-sidenav",
-      icon: "chrome://researchhelper/content/icons/section-20.svg",
-      darkIcon: "chrome://researchhelper/content/icons/section-20-dark.svg",
+      icon: "chrome://research-helper/content/icons/section-20.svg",
+      darkIcon: "chrome://research-helper/content/icons/section-20-dark.svg",
     },
 
     // Static skeleton; XUL is the default namespace, HTML lives under html:
@@ -677,8 +686,8 @@ export function registerSummarySection() {
     sectionButtons: [
       {
         type: "rh-regenerate",     // becomes a CSS class; [^a-zA-Z0-9-_] is replaced with "-"
-        icon: "chrome://researchhelper/content/icons/refresh-16.svg",
-        darkIcon: "chrome://researchhelper/content/icons/refresh-16-dark.svg",
+        icon: "chrome://research-helper/content/icons/refresh-16.svg",
+        darkIcon: "chrome://research-helper/content/icons/refresh-16-dark.svg",
         l10nID: "research-helper-itempane-btn-regenerate",
         // NOTE: onClick props do NOT include `refresh` — use the captured one.
         onClick: ({ item }) => RH.jobs.summarizeItems([item.id])
@@ -686,7 +695,7 @@ export function registerSummarySection() {
       },
       {
         type: "rh-save-note",
-        icon: "chrome://researchhelper/content/icons/note-16.svg",
+        icon: "chrome://research-helper/content/icons/note-16.svg",
         l10nID: "research-helper-itempane-btn-save-note",
         onClick: ({ item }) => RH.notes.saveSummaryAsChildNote(item.id),
       },
@@ -841,7 +850,7 @@ export function unregisterSummarySection() {
 
 ### 4.1 How the window is opened
 
-> **File names come from `07-architecture-and-data-model.md` §2.2, which owns the directory tree.** The document there is `addon/content/searchDialog.xhtml`, with `searchDialog.js` beside it and `searchDialog.ftl` in the per-surface locale folder (`01-zotero-plugin-platform.md` §9.1). An earlier draft of this section named all three `searchWindow.*`, and two file-naming conventions for one surface is a defect, not a preference. The *behaviour* is still a modeless singleton **window** — that is this document's call, and it is why the entry point below is `openSearchWindow` and the controller object is `RHSearchWindow`; only the file names changed.
+> **File names come from `07-architecture-and-data-model.md` §2.2, which owns the directory tree.** The document there is `addon/content/searchDialog.xhtml`, with `searchDialog.js` beside it and the bundle at `addon/locale/<locale>/research-helper-searchDialog.ftl` — **flat and prefixed**, per `01-zotero-plugin-platform.md` §9.1 (this clause said "`searchDialog.ftl` in the per-surface locale folder" until 2026-10-05, `P1-T34`: the same subdirectory-and-unprefixed error §10.1's tree carried, and it cited §9.1 for the opposite of what §9.1 measures — `registerLocales()` on Zotero 10.0.1 drops directory entries). An earlier draft of this section named all three `searchWindow.*`, and two file-naming conventions for one surface is a defect, not a preference. The *behaviour* is still a modeless singleton **window** — that is this document's call, and it is why the entry point below is `openSearchWindow` and the controller object is `RHSearchWindow`; only the file names changed.
 
 ```javascript
 // src/ui/dialogs/searchDialog.ts  (07-… §2.2: ui/dialogs/)
@@ -850,7 +859,7 @@ export function openSearchWindow(args: SearchWindowArgs) {
   const features = "chrome,titlebar,toolbar,centerscreen,resizable,dialog=no,minwidth=880,minheight=600";
   // `args` is passed as the dialog argument; read it inside with window.arguments[0]
   const dialog = win.openDialog(
-    "chrome://researchhelper/content/searchDialog.xhtml",
+    "chrome://research-helper/content/searchDialog.xhtml",
     "research-helper-search",         // named window: re-focuses instead of duplicating
     features,
     args,
@@ -862,7 +871,9 @@ export function openSearchWindow(args: SearchWindowArgs) {
 
 `dialog=no` plus a window name gives a **modeless, singleton** window — the user can keep browsing their library while a search runs, and re-invoking the menu focuses the existing window instead of opening a second one. This matters because searches take tens of seconds.
 
-The `chrome://researchhelper/content/` namespace is registered in `bootstrap.js` via `amIAddonManagerStartup.registerChrome` (see `01-zotero-plugin-platform.md` §2.5).
+The `chrome://research-helper/content/` namespace is registered in `bootstrap.js` via `amIAddonManagerStartup.registerChrome` (see `01-zotero-plugin-platform.md` §2.5).
+
+> **Namespace spelling corrected 2026-10-05 (`P1-T34`): it is `research-helper`, hyphenated, here and in §3.3.** This section — the code block above, this paragraph and §4.1.1's markup — kept the unhyphenated spelling (the same package name with the hyphen removed) after §2.4 was corrected on 2026-09-30, so an agent reading §4.1 rather than §2.4 copied a URL that does not resolve. `P1-T19` **measured** the difference rather than inferring it: a fetch of `chrome://research-helper/content/icons/favicon.png` returns **1723 bytes**, while the unhyphenated package **rejects** with `undefined` — the package is not registered at all, so nothing under it resolves. Both readings are now assertions in `test/integration/menus.spec.ts`. `addon/bootstrap.js` registers `["content", "__addonRef__", rootURI + "content/"]` and `package.json`'s `config.addonRef` is `research-helper`, which is where the hyphen comes from.
 
 > ⚠️ Passing `rootURI + 'content/foo.xhtml'` (a `jar:file:///…!/` URL) straight to `openDialog` is used in the wild but is **not** the documented path. `registerChrome` + `chrome://` is. Use it.
 
@@ -888,7 +899,7 @@ The top-level `<dialog>` root was replaced by `<window><dialog>`. This is Zotero
           style="padding: 12px; min-width: 880px; min-height: 600px">
     <script src="chrome://global/content/globalOverlay.js"/>
     <script src="chrome://zotero/content/include.js"/>
-    <script src="chrome://researchhelper/content/searchDialog.js"/>
+    <script src="chrome://research-helper/content/searchDialog.js"/>
     <linkset>
       <html:link rel="localization" href="research-helper-searchDialog.ftl"/>
     </linkset>
@@ -2142,17 +2153,19 @@ Fluent, as described in `01-zotero-plugin-platform.md` §9. Files:
 
 ```
 locale/
-├── en-US/research-helper/
-│   ├── mainWindow.ftl      (menus, item-pane section, and every dialog raised from them)
-│   ├── searchDialog.ftl    (searchDialog.xhtml, and the Related Papers reuse of it — §5)
-│   ├── reportWindow.ftl    (reportWindow.xhtml — trend report viewer + audio player)
-│   └── preferences.ftl     (preferences.xhtml)
-└── ko-KR/research-helper/
-    ├── mainWindow.ftl
-    ├── searchDialog.ftl
-    ├── reportWindow.ftl
-    └── preferences.ftl
+├── en-US/
+│   ├── research-helper-mainWindow.ftl      (menus, item-pane section, and every dialog raised from them)
+│   ├── research-helper-searchDialog.ftl    (searchDialog.xhtml, and the Related Papers reuse of it — §5)
+│   ├── research-helper-reportWindow.ftl    (reportWindow.xhtml — trend report viewer + audio player; Phase 3)
+│   └── research-helper-preferences.ftl     (preferences.xhtml; Phase 3)
+└── ko-KR/
+    ├── research-helper-mainWindow.ftl
+    ├── research-helper-searchDialog.ftl
+    ├── research-helper-reportWindow.ftl
+    └── research-helper-preferences.ftl
 ```
+
+> **Tree corrected 2026-10-05 (`P1-T34`): flat directories, `research-helper-` prefixed filenames.** As printed until now this block showed a `locale/<locale>/research-helper/` **subdirectory** holding **unprefixed** filenames, which contradicted the table four lines below it — the one that says "FTL in `locale/<locale>/` (flat, `research-helper-` prefixed)" — and contradicted the paragraph between them, which claims this section's list wins over `07-architecture-and-data-model.md` §2.2's tree. A section cannot assert authority over a tree and then print that tree wrongly, and this is exactly the kind of block a later card types straight from. The layout above is the one that ships: `find addon/locale -type f` reads `addon/locale/{en-US,ko-KR}/research-helper-{mainWindow,searchDialog}.ftl` (Phase 1's two surfaces; the two Phase 3 surfaces above have no file yet). The subdirectory form would not have worked at all: `01-zotero-plugin-platform.md` §9.1 records, read verbatim from Zotero 10.0.1's `xpcom/plugins.js` by `P0-T10`, that `registerLocales()` enumerates `locale/<locale>/` and skips every entry not ending `.ftl`, so a **directory** entry is silently dropped — and that registered hrefs are flat, which is why the filename must carry the plugin prefix. Found by `P1-T32`. The *layout* is `01-…` §9.1's to own (its listing agrees with the one above); the *surface set and its names* remain this section's, per the paragraph below.
 
 **This section owns the surface set and its names.** `07-architecture-and-data-model.md` §2.2 owns the *tree* — where the files sit in the repository — and defers to this list for what the surfaces are called; where the two disagree, this list wins and the tree is the defect. The mapping is one-to-one except at the two ends, and both exceptions are deliberate:
 

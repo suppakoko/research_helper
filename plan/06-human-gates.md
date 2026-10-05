@@ -45,7 +45,7 @@ in this plan.
 | Phase 0, week 1 | G-09 | Provide macOS and Linux machines, one without libsecret | V-16, V-5, Phase 7 QA | Days to weeks if hardware must be arranged |
 | Phase 0, week 1 | G-11 | Line up a native Korean speaker | V-10, and again in Phases 6 and 7 | Scheduling a person; days |
 | Phase 0, week 1 | G-31 | Line up a Korean-speaking researcher for prompt review | Phase 7 | Scheduling; days to weeks |
-| **Phase 1** | **G-41** | **Review the Phase 1 `ko-KR` UI bundle — 79 strings** | **`P1-T18`, and the Korean half of `P1-T20`/`P1-T22`** | **Hours of a native speaker's time** |
+| **Phase 1** | **G-41** | **Review the Phase 1 `ko-KR` UI bundle — `KO_PENDING_REVIEW.length`, 79 as of 2026-10-05** | **`P1-T18`, and the Korean half of `P1-T20`/`P1-T22`** | **Hours of a native speaker's time** |
 | Phase 0, week 1 | G-12 | Assemble the 40-PDF IMRaD fixture set | Phase 3 ship, Phase 4 | Days of the human's own time |
 | Phase 0, early | G-06 | Acknowledge the Gemini free-tier data-training terms | Any Gemini call, incl. V-10 | Minutes, but must precede the first call |
 | Phase 0, early | G-07 | Approve the first paid API call and the spike spend | V-7, V-10 | Minutes |
@@ -647,7 +647,7 @@ this approval.
 
 ## 3. Phase 1 gates
 
-### G-41 — Review the Phase 1 `ko-KR` UI bundle (79 strings)
+### G-41 — Review the Phase 1 `ko-KR` UI bundle (`KO_PENDING_REVIEW.length`, 79 as of 2026-10-05)
 
 **Blocks:** `P1-T18`'s human gate, and the Korean half of every Phase 1 UI card
 (`P1-T20`, `P1-T21`, `P1-T22`).
@@ -658,11 +658,49 @@ this approval.
 review and its `Blocks:` line is *the release*, so as the plan stood a Phase 1 card was either
 blocked on a Phase 7 gate or had no gate at all.
 
-**What the human must do.** Translate 79 strings, listed machine-readably as `KO_PENDING_REVIEW` in
-`src/i18n/keys.ts` and written into each `ko-KR` file as a commented stub carrying its English
-source, in the order a reviewer meets them — so the workflow is "uncomment and translate in place".
-21 are in `mainWindow.ftl` (1 menu, 3 import-outcome, 1 note title, 16 `rh-error-*`); **58 are the
-entire Search & Import window**, including 23 state and status strings.
+**What the human must do.** Translate every id on `KO_PENDING_REVIEW` in `src/i18n/keys.ts` — **79
+strings as of 2026-10-05** — each written into the matching `ko-KR` file as a commented stub carrying
+its English source, in the order a reviewer meets them, so the workflow is "uncomment and translate
+in place". The split, by which surface list each pending id belongs to: **21 in
+`research-helper-mainWindow.ftl`** (1 menu id, 1 provenance note title, 2 import-outcome strings, 1
+progress headline, and the 16 `rh-error-*` ids of `ERROR_MESSAGE_IDS`); **58 — the entire Search &
+Import window — in `research-helper-searchDialog.ftl`**, of which 16 are the state and status strings
+that `keys.ts` groups under `docs/08` §8.4's five states and §4.6's per-database status list.
+
+> **Every figure in this gate is a derivation with a dated snapshot, not a literal — corrected
+> 2026-10-05 (`P1-T34`), because the literals had already gone stale once and a human sizes this gate
+> by them.** The rules, each a one-line read of `src/i18n/keys.ts`, which is the single source:
+>
+> - **Strings a human must translate** = `KO_PENDING_REVIEW.length`.
+> - **Ids declared for Phase 1 in total** = `MAIN_WINDOW_MESSAGE_IDS.length + SEARCH_DIALOG_MESSAGE_IDS.length`.
+> - **Already translated or exempt** = `KO_PRESENT.length`; **deliberately left missing** (`P0-T24`'s
+>   fallback fixture) = `KO_DELIBERATELY_ABSENT.length`. These three lists partition the declared ids,
+>   which is why `KO_PENDING_REVIEW.length + KO_PRESENT.length + KO_DELIBERATELY_ABSENT.length` equals
+>   the declared total.
+> - **The per-surface split** = how many of `KO_PENDING_REVIEW` appear in each of the two surface
+>   lists.
+> - **The `rh-error-*` share** = `ERROR_MESSAGE_IDS.length`.
+>
+> **Snapshot read 2026-10-05 13:12Z**, from a `keys.ts` whose own `mtime` was 13:10:33Z: mainWindow
+> 25 + searchDialog 59 = **84 declared**; `KO_PENDING_REVIEW` **79**, `KO_PRESENT` **4**,
+> `KO_DELIBERATELY_ABSENT` **1** (79 + 4 + 1 = 84); pending split **21 / 58**; `ERROR_MESSAGE_IDS`
+> **16**. The integration run prints the same numbers itself, as
+> `[P1-T18] declared ids: mainWindow 25, searchDialog 59, total 84` and
+> `[P1-T18] ko-KR totals: 4 present, 80 absent; expected 4 / 80` in
+> `test/integration/l10n.spec.ts` — its "absent" is the **80** of
+> `KO_PENDING_REVIEW.length + KO_DELIBERATELY_ABSENT.length`, i.e. the 79 a human must write plus the
+> one hole that must stay open, which is why that line reads one higher than this gate's headline. The
+> run asserts the gap is *exactly* those two lists, so that run, not this paragraph, is the thing to
+> believe if the two ever disagree. Both lines above were read from the run of 2026-10-05.
+>
+> **Why this note exists.** The gate was written on 2026-09-30 reading 79 / 84. `P1-T32` then added an
+> id (80 / 85) and `P1-T33` retired one (back to 79 / 84), and in between the literals here were
+> simply wrong, with nothing in the text to say how to recompute them. The numbers above are
+> therefore timestamped and the rule that produces them is written down; **if a later card adds or
+> retires an id, re-read the rules, do not add one to the snapshot.** One earlier sub-figure is *not*
+> reproduced above: this paragraph said "23 state and status strings", and no list in `keys.ts` yields
+> 23 — the file's own state/status grouping is the 16 named above. The 23 may have counted a wider set
+> under a definition that was never recorded; it is reported rather than reconstructed.
 
 **Three of the 79 are owner *decisions*, not translations, and a translator cannot answer them.**
 (1) `research-helper-provenance-note-title` — `FR-8` fixes the title literally as
@@ -674,10 +712,23 @@ same decision. (3) `research-helper-menu-collection-search-import` — both the 
 wording were created by `P1-T18` because `docs/08` §2.4/§2.5 have no collection-context entry for
 Phase 1; rule on the wording before translating it.
 
+> **Decision (2) now names a retired id — flagged, deliberately not rewritten, 2026-10-05 (`P1-T34`).**
+> `P1-T33` retired `research-helper-import-toast-header` on 2026-10-05, having decided that `docs/08`
+> §4.4's completion toast and `docs/07` §7.7's per-job popup are **one surface, not two**, and that
+> the one surviving headline id is `research-helper-progress-headline` (`src/i18n/keys.ts`'s
+> `L10N_PROGRESS_HEADLINE`, where that decision is recorded; its `KO_PENDING_REVIEW` comment says
+> "`G-41` now has one product-name decision here instead of two identical ones"). So the *decision* is
+> unchanged and still owed — whether a Korean UI writes the product name in Korean — while the id it
+> is attached to has moved. **There are still three owner decisions and they are still all on
+> `KO_PENDING_REVIEW`**; only the id in (2) is wrong. `P1-T34` re-derives this gate's **counts** and may
+> not alter its decisions, so re-pointing (2) at `research-helper-progress-headline` is left to the
+> gate's owner rather than done here.
+
 **Why an agent cannot do it.** Machine translation is forbidden for shipped UI strings: a
 plausible-looking wrong translation is worse than a visible gap, and the gap is already harmless —
 the measured per-message `ko-KR → en-US` fallback renders English for anything untranslated, with
-all 84 ids resolving under a live Korean UI.
+every declared id — `MAIN_WINDOW_MESSAGE_IDS.length + SEARCH_DIALOG_MESSAGE_IDS.length`, **84 as of
+2026-10-05** — resolving under a live Korean UI.
 
 **Lead time.** Hours of a native speaker's time. **`G-11` (line up a Korean speaker, Phase 0 week 1)
 is the scheduling prerequisite and is still open.**

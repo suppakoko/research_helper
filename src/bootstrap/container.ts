@@ -519,7 +519,17 @@ export function createZoteroLogSink(): LogSink {
  * so the gap is in the debug log a bug report carries rather than in a comment.
  */
 export interface ProgressHeadlineSource {
-  /** The Fluent id, for the `warn` line when resolution yields nothing. */
+  /**
+   * The Fluent id, for the `warn` line when resolution yields nothing.
+   *
+   * The product passes exactly one value — `research-helper-progress-headline`,
+   * the popup surface's only headline id since `P1-T33`, from
+   * `src/i18n/keys.ts`'s `L10N_PROGRESS_HEADLINE` by way of
+   * `src/bootstrap/registerUI.ts`. The type stays `string` rather than
+   * `FluentMessageId`, which would make a retired id a compile error here too —
+   * `P1-T33` found no record of a decision either way and tightening it is
+   * outside that card's `Files`, so it is reported rather than done.
+   */
   readonly messageId: string;
   /**
    * Resolve the headline. `undefined` means it resolved in **no** locale of
@@ -572,6 +582,17 @@ export interface ServiceGraphOptions {
    * per job (`P1-T31`): it is the product's name for the surface, not the
    * job's. A per-job headline would be the per-job `message`, which the
    * reporter already carries.
+   *
+   * **One surface, therefore one id (`P1-T33`).** The surface is `docs/07`
+   * §7.7's first one — the `Zotero.ProgressWindow`, one per job — and `docs/08`
+   * §4.4's "completion toast" is that same window, not a second surface with a
+   * header of its own: §8.2.2 found no toast mechanism anywhere in Zotero 7–10,
+   * so the only thing §4.4 adds is *when* the window opens, which is
+   * {@link JobProgressOptions.openOn}. `P1-T33` retired
+   * `research-helper-import-toast-header` on that reasoning, leaving
+   * `research-helper-progress-headline` as the only headline id;
+   * `src/i18n/keys.ts`'s `L10N_PROGRESS_HEADLINE` carries the argument and
+   * `src/bootstrap/registerUI.ts` is where it is named.
    */
   readonly progressHeadline: string | ProgressHeadlineSource;
   /**
