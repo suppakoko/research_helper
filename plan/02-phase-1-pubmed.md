@@ -2913,7 +2913,7 @@ being a second source of truth for the vocabulary.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T19` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-05; the Tools submenu is **extended, not replaced** (Search & Import first, above `P0-T10`'s spike item) and the collection menu is one item gated on a single selection. `openSearchWindow` takes the host window as a **parameter**, because `docs/08` §4.1's printed `Zotero.getMainWindow()` call is a lint error twice over inside `src/ui/` — and the parameter is the better behaviour, since it raises the dialog over the window that owns the clicked item. **Criteria 1–4 rest on a document `P1-T20` creates, and `P1-T20` depends on this card**: not weakened, each mechanism asserted, and a **self-activating** test prints `PENDING P1-T20` until the document lands. 63 integration tests; eight deliberate defects failed 10 of 12 tests. Found that `docs/08` §2.2's "Hook timing" is **wrong as a description of the mechanism** (read from Zotero 10.0.1's `menuManager.js`) while the user-visible behaviour is still correct — both facts now asserted. |
 | **Depends on** | `P1-T18`, `P1-T25` (added 2026-10-01 — `P1-T25` wired `installServices()` into this card's own file) |
 | **Blocks** | `P1-T20`, `P2-T17`, `P1-T34`, `P2-T22` |
 | **Retires** | none |
@@ -3918,7 +3918,7 @@ disable/enable cycle on a running Zotero is owed before this card is approved.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T26` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-05; one `Retry-After` parser, and `reconfigure()` driven by the headers hosts actually send — **including a 429's**, since the response that says most about a host's limits is the one that refused you. **Adoption is tighten-only, and the reasoning is the card's best part**: §7.3's NCBI rates sit deliberately *below* NCBI's documented 3/s and 10/s for clock-skew headroom, and the live `X-Ratelimit-Limit` is exactly the 3 the table stays under, so adopting it upwards would spend that headroom and let a response header overrule §7.3 as rule 4's authority. OpenAlex's measured `X-RateLimit-Limit: 1000` is a **daily** budget — what a per-second reading of an interval-less header gets wrong by three orders of magnitude. 833 unit tests; ten mutants, one of which survived first and exposed a test that proved nothing. |
 | **Depends on** | `P1-T04`, `P1-T05` |
 | **Blocks** | `P2-T21`, `P2-T23` |
 | **Retires** | none |
@@ -4861,7 +4861,7 @@ unverified by this card** — stated rather than implied.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T32` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-05; four seams closed — `error()` reaches `Zotero.logError`, `debug()` carries its level, `PrefObserverHandle` is a discriminated union so the root binds by tag not arity, and the progress headline resolves from Fluent once in `installServices` with a `warn` and a named fallback instead of a silent brand name. The double prefix was fixed on the **documented** side (§10.3 spells it with an underscore), so `logger.ts` was untouched and `zoteroApi.ts` imports its constant idempotently. `zoteroApi.reportError` was left alone and **signposted**: it reaches `Zotero.debug` only, and `registerUI.ts`'s comment claiming otherwise is very likely why the gap survived two cards. 843 unit tests; ten mutants, all caught. **This card's item 3 rested on a premise that was false when written** — a headline id already existed, added by `P1-T18` before the card — which the agent caught; corrected in place, and `P1-T33` now owns the drift it created. |
 | **Depends on** | `P1-T25` |
 | **Blocks** | `P1-T33`, `P1-T34` |
 | **Retires** | none |
