@@ -706,7 +706,7 @@ that `keys.ts` groups under `docs/08` §8.4's five states and §4.6's per-databa
 (1) `research-helper-provenance-note-title` — `FR-8` fixes the title literally as
 `Research Helper — search provenance <ISO timestamp>`. Should a Korean UI write a Korean note title
 at all, or keep the English so notes in one library stay greppable? **If a test ever asserts the
-literal English title, a Korean UI breaks it.** (2) `research-helper-import-toast-header` — the
+literal English title, a Korean UI breaks it.** (2) `research-helper-progress-headline` — the
 product name; `docs/08` §10.2 renders it `리서치 헬퍼` in menus, so it probably follows, but it is the
 same decision. (3) `research-helper-menu-collection-search-import` — both the id and the English
 wording were created by `P1-T18` because `docs/08` §2.4/§2.5 have no collection-context entry for
@@ -723,6 +723,12 @@ Phase 1; rule on the wording before translating it.
 > `KO_PENDING_REVIEW`**; only the id in (2) is wrong. `P1-T34` re-derives this gate's **counts** and may
 > not alter its decisions, so re-pointing (2) at `research-helper-progress-headline` is left to the
 > gate's owner rather than done here.
+>
+> **Re-pointed by the gate owner, 2026-10-06.** (2) now names `research-helper-progress-headline`.
+> The decision itself is untouched — whether a Korean UI writes the product name in Korean — and
+> there are still three owner decisions, all still on `KO_PENDING_REVIEW`. **What changed is one id,
+> and the count did not move**, which is why re-deriving this gate's counts (`P1-T34`) and
+> re-pointing this decision (here) were correctly kept as separate acts by separate hands.
 
 **Why an agent cannot do it.** Machine translation is forbidden for shipped UI strings: a
 plausible-looking wrong translation is worse than a visible gap, and the gap is already harmless —
