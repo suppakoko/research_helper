@@ -168,6 +168,17 @@ export interface RateLimiterStats {
    * Slots currently held by a {@link RateLimiter.run} call — never more than
    * {@link RateLimiterConfig.maxConcurrent}. A bare `acquire` is not counted;
    * it has no end that could decrement this.
+   *
+   * `P2-T21`: §4.1's "never more than `maxConcurrent`" has one bounded
+   * exception, and it is the only way a *tightening* can be applied without
+   * revoking a permit from a call already running. Immediately after
+   * {@link RateLimiter.reconfigure} lowers the cap, this may read *above* the
+   * new `maxConcurrent` — by at most the overshoot, i.e. the calls already
+   * admitted under the old cap. It is monotonically non-increasing from that
+   * instant until it reaches the new cap, because no further call is admitted
+   * while it is above it, and it never exceeds the new cap again afterwards.
+   * Against the *old* cap, and at every instant where no cap change is
+   * draining, §4.1's sentence holds exactly.
    */
   readonly inFlight: number;
   readonly queued: number;
@@ -241,17 +252,23 @@ export class TokenBucket implements RateLimiter {
   /**
    * The concurrency cap, as `src/core/concurrency.ts`'s {@link Semaphore}.
    *
-   * Not `readonly`: {@link reconfigure} may bring a different
+   * `readonly` since `P2-T21`: {@link reconfigure} may bring a different
    * {@link RateLimiterConfig.maxConcurrent} — §7.3 says Crossref's
-   * `x-concurrency-limit` arrives on every response — and `Semaphore`'s permit
-   * count is fixed at construction. {@link applyWantedConcurrency} swaps the gate
-   * instead, and only while it is idle; see there for why.
+   * `x-concurrency-limit` arrives on every response — and the gate is now
+   * {@link Semaphore.resize}d in place rather than swapped for a fresh one. The
+   * swap could only happen while the gate was idle, which is the deferral
+   * `P2-T21` closes; see {@link applyWantedConcurrency}.
    */
-  private gate: Semaphore;
+  private readonly gate: Semaphore;
 
   /**
-   * The cap the config in force asks for, which is {@link gate}'s permit count
-   * except while a pending change waits for the host to go idle.
+   * The cap the config in force asks for.
+   *
+   * Equal to {@link gate}'s permit count at every point a caller can observe:
+   * {@link reconfigure} records it and applies it in the same synchronous step.
+   * It stays a field rather than a read of `config.maxConcurrent` because
+   * {@link applyWantedConcurrency} is the single place the gate's count is
+   * written and it needs something to compare against.
    */
   private wantedConcurrency: number;
 
@@ -393,10 +410,12 @@ export class TokenBucket implements RateLimiter {
       return await fn();
     } finally {
       release();
-      // A cap change that could not be applied while the gate was busy may be
-      // applicable now. Cheap; and the alternative is a pending change that
-      // only lands on the next reconfigure.
-      this.applyWantedConcurrency();
+      // `P2-T21` removed an `applyWantedConcurrency()` call that stood here. It
+      // existed because the gate could only be replaced while idle, so every
+      // release was a chance to land a cap change that `reconfigure()` had been
+      // unable to apply. {@link Semaphore.resize} applies it at `reconfigure()`
+      // time instead, so there is never a pending change for a release to catch
+      // up on, and a call here would always be a no-op.
     }
   }
 
@@ -461,9 +480,12 @@ export class TokenBucket implements RateLimiter {
    * is load-bearing: credit at the *old* rate first, then adopt the new config,
    * then serve whatever the new rate already permits.
    *
-   * **A changed `maxConcurrent` lands when the host next goes idle**, not
-   * immediately — see {@link applyWantedConcurrency}. Rate, burst and spacing all
-   * take effect at once; only the slot gate waits.
+   * **A changed `maxConcurrent` lands immediately**, since `P2-T21`: rate,
+   * burst, spacing and the slot cap all take effect in this call. A *tightened*
+   * cap binds the next slot acquisition at once; the calls already admitted are
+   * not interrupted and the overshoot drains as they release, which is
+   * {@link Semaphore.resize}'s contract and the reason it does not breach that
+   * class's recorded invariant. See {@link applyWantedConcurrency}.
    *
    * @param config - the replacement policy
    */
@@ -530,14 +552,19 @@ export class TokenBucket implements RateLimiter {
   }
 
   /**
-   * The concurrency cap **in force**, which lags
-   * {@link RateLimiterConfig.maxConcurrent} while a change waits for the host to
-   * go idle ({@link applyWantedConcurrency}).
+   * The concurrency cap **in force**.
+   *
+   * Since `P2-T21` this no longer lags
+   * {@link RateLimiterConfig.maxConcurrent}: {@link applyWantedConcurrency}
+   * resizes the gate in the same step {@link reconfigure} records the change,
+   * so the two are equal at every point a caller can observe. What *does* lag a
+   * tightening is {@link RateLimiterStats.inFlight}, which drains to the new cap
+   * as the admitted calls finish.
    *
    * Not on {@link RateLimiter}: §4.1 reports the cap's *use* through
    * {@link RateLimiterStats.inFlight} and nothing else needs the limit itself.
-   * It is exported so a test can tell "the change landed" from "the change is
-   * pending" without reaching into the gate.
+   * It is exported so a test can read the cap in force without reaching into
+   * the gate.
    */
   get concurrencyLimit(): number {
     return this.gate.permits;
@@ -663,28 +690,45 @@ export class TokenBucket implements RateLimiter {
   }
 
   /**
-   * Adopt {@link wantedConcurrency} if the gate can be replaced safely.
+   * Adopt {@link wantedConcurrency} into the gate, now.
    *
-   * `Semaphore`'s permit count is fixed at construction, deliberately: its
-   * recorded invariant is about never handing out or revoking a permit behind a
-   * holder's back, and a `resize()` would be exactly that. So the gate is
-   * *replaced* — but only when it is idle, with no slot held and nobody parked.
-   * Replacing a busy gate would orphan its waiters' promises (a hang) and let its
-   * holders release into an object no longer consulted (the cap exceeded).
+   * `P2-T21`. Until that card this method could only *replace* the gate, and
+   * only while it was idle — with no slot held and nobody parked — because
+   * `Semaphore`'s permit count was fixed at construction. Replacing a busy gate
+   * would orphan its waiters' promises (a hang) and let its holders release into
+   * an object no longer consulted (the cap exceeded), so the change waited, and
+   * under continuous traffic to a host it waited indefinitely.
    *
-   * The consequence, recorded rather than hidden: **a cap change applies when the
-   * host next goes idle.** Phase 1 never exercises it — §7.3's one shipped row,
-   * NCBI, is `maxConcurrent: 3` in both key modes — but §7.3 says Crossref's
-   * `x-concurrency-limit` "comes back … on every response" and `reconfigure()` is
-   * called from it, so a live cap change is anticipated. Making it immediate needs
-   * a resizable gate, which is a change to `src/core/concurrency.ts` and a card of
-   * its own.
+   * `Semaphore.resize` removes the choice: the one gate is resized in place, so
+   * a tightening binds the **next** slot acquisition rather than the next idle
+   * instant. Nothing is revoked from a holder — see that method for why the
+   * draining shrink is compatible with `Semaphore`'s recorded invariant rather
+   * than a weakening of it.
+   *
+   * **Two facts about this path that bound what it can do wrong**, both measured
+   * and both the reason `P2-T21` is a promptness fix and not a permit-safety
+   * one:
+   *
+   * 1. `src/core/rateLimit/hostLimiter.ts` adopts an *advertised* limit only
+   *    **downwards** (`P1-T26`), so a cap arriving from a response header can
+   *    only ever tighten. The old deferral could therefore leave the cap too
+   *    high, never too low, and could never have raised one behind a permit
+   *    holder's back.
+   * 2. §7.3's one Phase 1 row, NCBI, is `maxConcurrent: 3` in both key modes and
+   *    its verified response (`docs/02` §3.1) carries no `x-concurrency-limit`
+   *    at all, so Phase 1 never reached the deferral. `docs/02` §5.1's verified
+   *    Crossref responses carry `x-concurrency-limit: 3` on the polite pool and
+   *    `1` on the public one, against §7.3's `api.crossref.org` row of
+   *    `maxConcurrent: 3` — a real 3 → 1, one pool demotion away, and `P2-T04`
+   *    is the card that makes it arrive.
+   *
+   * A growth here is a §7.3-table change (the user entering an API key), not an
+   * adopted header: whether a generous header may raise the rate above §7.3's
+   * table is an open owner decision and is not settled in this file.
    */
   private applyWantedConcurrency(): void {
     if (this.wantedConcurrency === this.gate.permits) return;
-    if (this.gate.available !== this.gate.permits) return;
-    if (this.gate.waiting > 0) return;
-    this.gate = new Semaphore(this.wantedConcurrency);
+    this.gate.resize(this.wantedConcurrency);
   }
 
   /** Reject a cost the bucket could never satisfy. */

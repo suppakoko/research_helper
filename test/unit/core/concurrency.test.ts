@@ -4,7 +4,12 @@ import {
   createDeferred,
   mapWithConcurrency,
   Semaphore,
+  type SemaphoreRelease,
 } from "../../../src/core/concurrency";
+import {
+  createCancellationTokenSource,
+  type CancellationToken,
+} from "../../../src/core/jobQueue/cancellation";
 
 /**
  * `P1-T02`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network.
@@ -21,7 +26,19 @@ import {
  * `describe("Semaphore under cancellation")` and
  * `describe("mapWithConcurrency under cancellation")` — because they belong with
  * the token whose contract they exercise. Nothing is duplicated across the two
- * files, and no token appears below.
+ * files.
+ *
+ * **One exception to that split, added by `P2-T21` and the only one.** The
+ * header note here used to end "and no token appears below", which is no longer
+ * true: `describe("Semaphore handover")` passes a token. It has to. The thing
+ * being asserted is `Semaphore`'s recorded `unsubscribe`-before-`resolve`
+ * ordering, and a waiter only *has* a subscription to drop when it was parked
+ * with a token — so the invariant is unobservable without one. The assertion
+ * belongs with the two code paths it constrains (`makeRelease`'s handover and
+ * `resize`'s growth), both of which are `P2-T21`'s, and `P2-T21`'s `Files` names
+ * this file and not `cancellation.test.ts`. The token here is a *subscription
+ * recorder*, not a cancellation: nothing below ever cancels, so no assertion
+ * about the token's own contract is duplicated.
  *
  * **Everything here is deterministic.** The interleavings are driven by explicit
  * gates built on `createDeferred` rather than by racing timers, so a slow CI box
@@ -47,6 +64,42 @@ async function settle(): Promise<void> {
 /** A real delay. Used only where completion *order* must differ from input order. */
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * A token that counts how often its cancellation subscription was dropped.
+ *
+ * The delegating getters rather than a spread are deliberate: a spread would
+ * snapshot `isCancellationRequested` and `reason` instead of following the
+ * source, and a test that silently stopped tracking the token would be worse
+ * than no test. Nothing below cancels, so the counter is the only member any
+ * assertion reads.
+ */
+function watchSubscription(inner: CancellationToken): {
+  readonly token: CancellationToken;
+  dropped(): number;
+} {
+  let dropped = 0;
+  const token: CancellationToken = {
+    get isCancellationRequested(): boolean {
+      return inner.isCancellationRequested;
+    },
+    get reason(): CancellationToken["reason"] {
+      return inner.reason;
+    },
+    throwIfCancelled: () => inner.throwIfCancelled(),
+    onCancelled(cb) {
+      const unsubscribe = inner.onCancelled(cb);
+      return () => {
+        dropped += 1;
+        unsubscribe();
+      };
+    },
+    get signal(): AbortSignal {
+      return inner.signal;
+    },
+  };
+  return { token, dropped: () => dropped };
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +351,287 @@ describe("Semaphore.run", () => {
     await Promise.all(bodies);
     expect(peak).toBe(2);
     expect(s.available).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2b. Semaphore.resize — P2-T21
+// ---------------------------------------------------------------------------
+
+describe("Semaphore.resize arguments", () => {
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses %s permits, as the constructor does",
+    (permits) => {
+      const s = new Semaphore(2);
+      expect(() => s.resize(permits)).toThrow(RangeError);
+      expect(s.permits).toBe(2);
+      expect(s.available).toBe(2);
+    },
+  );
+
+  it("is a no-op at the count already in force", async () => {
+    const s = new Semaphore(2);
+    await s.acquire();
+    s.resize(2);
+    expect(s.permits).toBe(2);
+    expect(s.available).toBe(1);
+  });
+});
+
+describe("Semaphore.resize growth", () => {
+  it("raises the count and frees the difference while idle", () => {
+    const s = new Semaphore(1);
+    s.resize(3);
+    expect(s.permits).toBe(3);
+    expect(s.available).toBe(3);
+  });
+
+  it("serves parked waiters immediately, in arrival order", async () => {
+    // The §7.3 case this is for: the user enters an API key and the policy row
+    // raises the cap. Work already queued behind the old cap must start now,
+    // not at the next release.
+    const s = new Semaphore(1);
+    const held = await s.acquire();
+    const served: number[] = [];
+    const releases: SemaphoreRelease[] = [];
+    for (const n of [1, 2, 3]) {
+      void s.acquire().then((r) => {
+        served.push(n);
+        releases.push(r);
+        return r;
+      });
+    }
+    await settle();
+    expect(served).toEqual([]);
+    expect(s.waiting).toBe(3);
+
+    s.resize(3);
+    await settle();
+    // Two of the three: the count went 1 → 3 and one permit is still held.
+    expect(served).toEqual([1, 2]);
+    expect(s.waiting).toBe(1);
+    expect(s.available).toBe(0);
+
+    held();
+    await settle();
+    expect(served).toEqual([1, 2, 3]);
+    for (const r of releases) r();
+    expect(s.available).toBe(3);
+  });
+
+  it("hands out no more than the credit, however many are parked", async () => {
+    const s = new Semaphore(1);
+    await s.acquire();
+    const served: number[] = [];
+    for (const n of [1, 2, 3, 4, 5]) {
+      void s.acquire().then((r) => {
+        served.push(n);
+        return r;
+      });
+    }
+    await settle();
+    s.resize(2);
+    await settle();
+    expect(served).toEqual([1]);
+    expect(s.waiting).toBe(4);
+    expect(s.available).toBe(0);
+  });
+
+  it("serves nobody when the growth only cancels an undrained shrink", async () => {
+    // 3 → 1 → 3 with all three permits still held. The deficit is cleared, but
+    // no permit may be conjured: three are out and three is the cap.
+    const s = new Semaphore(3);
+    const firstHeld = await s.acquire();
+    await s.acquire();
+    await s.acquire();
+    s.resize(1);
+    const served: number[] = [];
+    void s.acquire().then((r) => {
+      served.push(1);
+      return r;
+    });
+    await settle();
+    expect(s.available).toBe(-2);
+
+    s.resize(3);
+    await settle();
+    expect(s.available).toBe(0);
+    expect(served).toEqual([]);
+    expect(s.waiting).toBe(1);
+
+    firstHeld();
+    await settle();
+    expect(served).toEqual([1]);
+  });
+});
+
+describe("Semaphore.resize shrink", () => {
+  it("shrinks while idle and binds the next acquire", async () => {
+    const s = new Semaphore(3);
+    s.resize(1);
+    expect(s.permits).toBe(1);
+    expect(s.available).toBe(1);
+
+    await s.acquire();
+    const parked = vi.fn();
+    void s.acquire().then(parked);
+    await settle();
+    expect(parked).not.toHaveBeenCalled();
+    expect(s.waiting).toBe(1);
+  });
+
+  it("drains rather than revokes: holders keep their permits and the excess goes by attrition", async () => {
+    // **The load-bearing assertion of `P2-T21`.** The card's invariant forbids
+    // taking a permit back from a holder, and §7.3's blockquote reads resizing
+    // as that very thing. The two reconcile only here: a shrink reduces how
+    // many permits are handed out *next*, and the overshoot disappears as
+    // holders release. An implementation that instead reclaimed permits — so
+    // that `free` never went negative — would serve the waiter on the FIRST
+    // release, with two holders still inside the gate.
+    const s = new Semaphore(3);
+    const first = await s.acquire();
+    const second = await s.acquire();
+    const third = await s.acquire();
+    expect(s.available).toBe(0);
+
+    s.resize(1);
+    // No holder was disturbed: all three releases are still callable, and the
+    // deficit is visible rather than hidden.
+    expect(s.permits).toBe(1);
+    expect(s.available).toBe(-2);
+    expect(s.permits - s.available).toBe(3); // three permits still outstanding
+
+    // A caller arriving after the tightening parks: the cap binds admissions at
+    // once, which is the half that had to become immediate.
+    const served = vi.fn();
+    void s.acquire().then(served);
+    await settle();
+    expect(served).not.toHaveBeenCalled();
+    expect(s.waiting).toBe(1);
+
+    first();
+    await settle();
+    expect(served).not.toHaveBeenCalled(); // two still held, cap is 1
+    expect(s.available).toBe(-1);
+
+    second();
+    await settle();
+    expect(served).not.toHaveBeenCalled(); // one still held, cap is 1
+    expect(s.available).toBe(0);
+
+    third();
+    await settle();
+    expect(served).toHaveBeenCalledTimes(1); // drained; now the waiter runs
+    expect(s.waiting).toBe(0);
+    expect(s.available).toBe(0);
+    expect(s.permits - s.available).toBe(1);
+  });
+
+  it("never lets the outstanding count rise while a shrink is draining", async () => {
+    const s = new Semaphore(4);
+    const releases = [
+      await s.acquire(),
+      await s.acquire(),
+      await s.acquire(),
+      await s.acquire(),
+    ];
+    s.resize(2);
+    const outstanding = [s.permits - s.available];
+    for (const release of releases) {
+      release();
+      await settle();
+      outstanding.push(s.permits - s.available);
+    }
+    expect(outstanding).toEqual([4, 3, 2, 1, 0]);
+    // Monotonically non-increasing, and at or below the new cap from the
+    // instant it first reaches it. Asserted as properties rather than only as
+    // the literal series, so a future change that still ends at 0 by a
+    // different route does not pass by accident.
+    const rises = outstanding.filter(
+      (n, i) => i > 0 && n > (outstanding.at(i - 1) ?? n),
+    );
+    expect(rises).toEqual([]);
+    const fromTheCap = outstanding.slice(outstanding.indexOf(2));
+    expect(fromTheCap.every((n) => n <= 2)).toBe(true);
+  });
+
+  it("leaves a repeated shrink idempotent in effect", async () => {
+    const s = new Semaphore(3);
+    await s.acquire();
+    await s.acquire();
+    await s.acquire();
+    s.resize(1);
+    s.resize(1);
+    expect(s.available).toBe(-2);
+  });
+
+  it("keeps `available` at or below `permits` throughout", async () => {
+    // The property `Semaphore permit accounting` asserts for the release path,
+    // restated across a resize: the pool must never grow past its count, or
+    // §7.2's sizes and §7.3's caps stop meaning anything.
+    const s = new Semaphore(2);
+    const release = await s.acquire();
+    s.resize(1);
+    release();
+    release();
+    release();
+    expect(s.available).toBeLessThanOrEqual(s.permits);
+    expect(s.available).toBe(1);
+  });
+});
+
+describe("Semaphore handover", () => {
+  // `src/core/concurrency.ts`'s recorded invariant: a waiter's
+  // `unsubscribe()` runs before its deferred is resolved. The *relative order*
+  // of two adjacent synchronous statements is not observable through the public
+  // API — which the invariant comment itself argues, and which is why it forbids
+  // reaching past the API to "cover" the branch it guards. What is observable is
+  // that the subscription is dropped at all, on both paths that serve a waiter.
+  // Reported against `P2-T21`.
+
+  it("drops a served waiter's subscription on the release path", async () => {
+    const s = new Semaphore(1);
+    const held = await s.acquire();
+    const source = createCancellationTokenSource();
+    const watched = watchSubscription(source.token);
+    const queued = s.acquire(watched.token);
+    await settle();
+    expect(watched.dropped()).toBe(0);
+
+    held();
+    expect(watched.dropped()).toBe(1);
+    (await queued)();
+    expect(s.available).toBe(1);
+    source.dispose();
+  });
+
+  it("drops a served waiter's subscription on the resize growth path", async () => {
+    const s = new Semaphore(1);
+    await s.acquire();
+    const source = createCancellationTokenSource();
+    const watched = watchSubscription(source.token);
+    const queued = s.acquire(watched.token);
+    await settle();
+    expect(watched.dropped()).toBe(0);
+
+    s.resize(2);
+    expect(watched.dropped()).toBe(1);
+    (await queued)();
+    expect(s.available).toBe(1);
+    source.dispose();
+  });
+
+  it("leaves a still-parked waiter's subscription alone", async () => {
+    const s = new Semaphore(1);
+    await s.acquire();
+    const source = createCancellationTokenSource();
+    const watched = watchSubscription(source.token);
+    void s.acquire(watched.token);
+    await settle();
+    s.resize(1); // no-op
+    expect(watched.dropped()).toBe(0);
+    expect(s.waiting).toBe(1);
+    source.dispose();
   });
 });
 

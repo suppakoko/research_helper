@@ -2570,7 +2570,13 @@ as a permit-safety bug, and do not weaken the `Semaphore` invariant to fix it.
 - `src/core/rateLimit/tokenBucket.ts`'s `run()`, `reconfigure()`, `applyWantedConcurrency()` and
   `wantedConcurrency` — the deferral is implemented there, so the shape of the fix is decided by what
   `applyWantedConcurrency` currently refuses to do.
-- `docs/07` §7.3's recorded deferral (the blockquote naming `x-concurrency-limit`), and `P1-T26`'s
+- `docs/07` **§4.1 Cross-cutting primitives**, lines 778–786 — the recorded deferral blockquote,
+  which names `x-concurrency-limit`. **Corrected 2026-10-06:** this said "§7.3's recorded deferral".
+  §7.3 runs lines 2226–2309 and contains **no** such blockquote; it mentions `x-concurrency-limit`
+  only in the `api.crossref.org` table cell at line 2295. The coordinator grepped the *string*, found
+  it, and asserted the *section* without checking — `plan/README.md` §5 rule 8's shape, committed in
+  the same message that claimed this card had no unverified claim. Reported by the executing agent.
+  Also read `P1-T26`'s
   `Findings` in `plan/02` for why adoption is tighten-only.
 
 **Files.**
@@ -2589,8 +2595,9 @@ as a permit-safety bug, and do not weaken the `Semaphore` invariant to fix it.
    three calls are in flight, no **fourth** call starts until the in-flight count has drained below
    the new cap, and the three already running all complete.
 4. Correct `src/core/concurrency.ts`'s header to name §7.3's per-host cap alongside §7.2's pools.
-5. Retire §7.3's deferral blockquote in `docs/07` **only if** this card closes it fully; if any part
-   survives, amend it rather than deleting it. `docs/07` is **not** in this card's `Files` — if it
+5. Retire the deferral blockquote at `docs/07` **§4.1, lines 778–786** (not §7.3 — see the
+   correction under `Read first`) **only if** this card closes it fully; if any part survives, amend
+   it rather than deleting it. `docs/07` is **not** in this card's `Files` — if it
    needs an edit, report it (rule 2).
 
 **Do NOT.**
@@ -2607,11 +2614,32 @@ as a permit-safety bug, and do not weaken the `Semaphore` invariant to fix it.
 **Criteria.**
 - [ ] A live 3 → 1 tightening admits no new call beyond the new cap, while every already-admitted
       call completes — asserted on the manual clock, not on a stat.
-- [ ] `Semaphore`'s recorded `unsubscribe`-before-`resolve` ordering is still asserted, and the
-      existing permit-leak test still passes.
+- [ ] The existing permit-leak test still passes, and the `unsubscribe`-before-`resolve` ordering is
+      protected structurally — one handover site, not two.
+      > **Reworded 2026-10-06 after the agent reported it under rule 6.** It read "…ordering is
+      > **still** asserted", whose premise is false: **it was never asserted, and it cannot be
+      > asserted behaviourally.** Measured before any code was written — reversing the two statements
+      > on the untouched baseline left the suite at **843 passed, exit 0**. The reason is structural
+      > and the invariant comment says it itself: the statements are adjacent and synchronous, so in
+      > single-threaded JS nothing can interleave, the reversal has a zero-width window, and the
+      > comment already warns against "covering" it with a test that reaches past the public API. What
+      > the card can ask for is the real protection — the ordering extracted to a single `handOver`
+      > used by both the release and growth paths — plus the **observable** half, that a served
+      > waiter's subscription is dropped at all. Whether "asserted" should ever mean a source- or
+      > lint-level check is a judgement call left to its own card.
 - [ ] A shrink while idle and a shrink while saturated are both covered, and the saturated case fails
       if the implementation revokes rather than drains.
-- [ ] `stats.inFlight` never exceeds the live cap after the tightening takes effect.
+- [ ] After a tightening, `stats.inFlight` never **rises**, never exceeds the new cap once it has
+      reached it, and no call is admitted while it is above the new cap.
+      > **Reworded 2026-10-06 after the agent reported it under rule 6.** It read "never exceeds the
+      > live cap after the tightening takes effect", which **contradicts this card's own `Do NOT`**:
+      > immediately after a 3 → 1 tighten, `inFlight` reads 3 against a cap of 1, because the three
+      > calls admitted under the old cap are still running. Making it read ≤ 1 at that instant means
+      > **revoking a permit from a request already on the wire** — the one thing the card forbids. So
+      > the two could not both hold, and the drain window is the honest statement. It is recorded in
+      > `RateLimiterStats.inFlight`'s doc comment rather than left to contradict §4.1's "never more
+      > than `maxConcurrent`", and nothing in `src/` consumes `RateLimiterStats` today — `inFlight` is
+      > produced at `tokenBucket.ts:516` and read nowhere.
 - [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
 
 **Verify with.** `npm run typecheck && npm run test:unit -- concurrency tokenBucket`
@@ -2621,6 +2649,113 @@ carries **no** `x-concurrency-limit` at all, and NCBI's row is `maxConcurrent: 3
 so a tighten-only adoption from an advertised 3 would be a no-op even if the header appeared. That is
 why this is a Phase 2 card rather than a Phase 1 one, and why it blocks `P2-T04` specifically rather
 than the whole phase.
+
+**Findings, 2026-10-06 — the cap is now resizable, the invariant is intact, and two of this card's five
+criteria could not pass as written.** Verified independently: **863 unit tests in 22 files** (up from
+843), 63 integration, typecheck 0, `lint:check` 0, exactly the four `Files` touched, `MUTANT` clean.
+
+**The reconciliation question is answered, and answered with evidence rather than argument.** `docs/07`
+framed resizing as *the act the invariant forbids*. It isn't, and the distinction is the whole card: the
+invariant forbids changing **who holds a permit now**; a resize changes **how many will be handed out
+next**. A shrink performs **zero handovers** — no holder's permit is taken, invalidated or reassigned,
+no waiter's deferred is resolved or rejected, and the only state written is two integers. So there is
+nothing for the ordering invariant to constrain. **And this was shown, not asserted:** the revoking
+alternative is one line (`if (this.free < 0) this.free = 0;`) and it is caught by **six tests**,
+including the end-to-end saturated case. Draining and revoking are genuinely different behaviours here,
+not two framings of one.
+
+**The shrink semantics, which are the thing to review.** 3 → 1 with three held: holders untouched and
+all three complete; waiters untouched; the next acquire **parks immediately**, so the cap binds
+admissions at the instant of the change; and the deficit (`free = −2`) drains by attrition — release #1
+and #2 are absorbed and serve nobody, release #3 hands over. **The fourth call starts exactly when, and
+only when, the outstanding count has drained below the new cap.** Growth credits the delta and serves
+that many parked waiters at once in FIFO order, and a growth that merely cancels an undrained shrink
+**serves nobody** — no permit is conjured. The accounting identity `free === permits − held` holds
+throughout, with `free` allowed to go negative, which is what makes the deficit representable at all.
+
+**Criterion 2's premise was false and the agent measured that before writing a line.** It said the
+ordering "is **still** asserted". **It was never asserted, and it cannot be asserted behaviourally** —
+reversing the two statements on the untouched baseline left the suite at **843 passed, exit 0**.
+Nothing caught it, and the reason is structural: the statements are adjacent and synchronous, so in
+single-threaded JS nothing can interleave, the reversal has a zero-width window, and the invariant
+comment itself warns against covering it with a test that reaches past the public API. **Reporting that
+instead of faking it with a source-text test is the right call**, and what was built in its place is
+better than what the criterion asked for: the ordering extracted into a single `handOver` used by both
+the release and growth paths — so the growth path cannot acquire a second, drifting copy — plus the
+**observable** half, that a served waiter's subscription is dropped at all, asserted on both paths and
+failing when `next.unsubscribe()` is removed.
+
+**Criterion 4's literal reading contradicted this card's own `Do NOT`.** Immediately after a 3 → 1
+tighten, `inFlight` reads 3 against a cap of 1, because the calls admitted under the old cap are still
+running; making it read ≤ 1 at that instant means revoking a permit from a request already on the wire.
+What is asserted instead is the honest property — the series never **rises** after the tighten, never
+exceeds the new cap once it has reached it, and admits nothing while above it — with three further
+calls parked behind the new cap first, **so every release has a waiter available to be mis-admitted
+to.** The exception is recorded in `RateLimiterStats.inFlight`'s own doc comment rather than left to
+contradict §4.1's "never more than `maxConcurrent`". Supporting fact, verified here: **nothing in
+`src/` consumes `RateLimiterStats`** — `inFlight` is produced at `tokenBucket.ts:516` and read nowhere,
+and §10.4's debug bundle does not exist yet, so the drain window has no consumer today.
+
+**Criterion 1 was held to "admission, not reporting", which was the point of its wording.** Every
+assertion is on a label recorded at the instant `run` actually *invokes* the work, and the manual clock
+is advanced 5000 ticks with the bucket holding spare tokens — so time alone cannot start the fourth
+call and the test cannot pass by accident of pacing.
+
+**Six mutants, all caught, and one is the regression guard for this card specifically.** Reinstating the
+**idle-only guard** — the exact code this card replaces — now fails three tests with "the cap did not
+land". The other five: a revoking shrink (6 tests), the drain check deleted from `makeRelease`
+(3), `next.unsubscribe()` dropped (2), growth serving nobody (4), and the `resize` guard removed (5).
+
+**Dead code removed with its reason, and the agent asked rather than assumed.** The
+`applyWantedConcurrency()` call in `run()`'s `finally` existed because "a cap change that could not be
+applied while the gate was busy may be applicable now" — no longer true once `reconfigure()` lands
+synchronously, which makes the call an unconditional no-op. **Accepted:** `applyWantedConcurrency` is
+now `if (wanted === gate.permits) return; gate.resize(wanted)`, and after a synchronous `reconfigure`
+those are always equal. `release()` in that `finally` is untouched. Keeping a no-op whose stated
+justification is false would be worse than removing it.
+
+**Three errors in this card's text, all mine — and one of them I committed while claiming the card had
+none.** (a)+(b) The deferral blockquote is at `docs/07` **§4.1, lines 778–786**, not §7.3: §7.3 runs
+2226–2309 and contains no such blockquote, mentioning `x-concurrency-limit` only in a table cell at
+2295. **I grepped the string, found it, and asserted the section without checking** — rule 8's exact
+shape — and then told the user this was the first card of the session with no unverified claim. The
+grep was right; the claim built on top of it was not checked. (c) Criteria 2 and 4, above. **Rule 8 was
+added yesterday on five instances; this is the seventh, and the first where the author's own
+verification pass was the thing that failed.**
+
+**The wrong framing originated in a `Findings` block and propagated to two live files**, which is worth
+noting as a mechanism. `P1-T27`'s `Findings` holds both halves in one paragraph — resizing "is exactly
+the 'hand out or revoke a permit behind a holder's back' its recorded invariant forbids" *and* "the fix
+is a `resize()` on `Semaphore`". From there it reached `docs/07` §4.1 and
+`src/core/rateLimit/hostLimiter.ts`. The agent **left the `Findings` alone** — a dated record of what
+was believed then is not a live claim, and rewriting history would be worse than the tension — which is
+the right instinct.
+
+**Two live statements are now false and both are outside this card's `Files`**, so they were reported
+with exact proposed wording rather than edited: `docs/07` §4.1 lines 778–786 (states that resizing is
+forbidden) and lines 719–722 (`inFlight`'s "never more than `maxConcurrent`"), and
+`src/core/rateLimit/hostLimiter.ts` lines 524–534 ("A tightened `maxConcurrent` lands late, and that is
+a known gap"), verified still present. **Carded.**
+
+**Two amendments inside `Files` that were disclosed rather than slipped in, both accepted.** The agent
+corrected `tokenBucket.test.ts`'s header, which still claimed `hostLimiter.test.ts` "does not exist" —
+one of the two stale statements `P2-T23` flagged and could not reach. And it amended
+`concurrency.test.ts`'s "no token appears below" convention, because the subscription assertion is
+unobservable without a token and `cancellation.test.ts` is not in `Files`; the header now names the
+exception and records that the token is a subscription recorder that never cancels. The alternative was
+to report criterion 2 as entirely unassertable and add nothing.
+
+**Reported against itself: the agent ran three read-only `git` commands after being told to run none**
+(`status --porcelain`, `diff --stat`, `ls-files --others`). Nothing was written to the repo or the
+index and the tree was left dirty as asked. Owning it unprompted at the top of the report is the
+behaviour to want; the instruction stands for the next card.
+
+**Needs a card.** The two documentation corrections above, as one card — `docs/07` is the authority
+document and currently states the opposite of what the code does. Also: whether "asserted" in a
+criterion may ever mean a source- or lint-level check, which this card could not settle; and the
+harness leak, which cost this card ~40 minutes and two command-line process kills, with a concrete
+hypothesis worth testing (both leaked runs launched a browser-toolbox child, so the
+`--jsdebugger -start-debugger-server` flags in the scaffold invocation are the suspect).
 
 ---
 ### P2-T22 — Declare the menu-context member `docs/08` mandates and `zotero-types` omits

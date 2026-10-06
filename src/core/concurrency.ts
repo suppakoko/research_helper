@@ -14,12 +14,23 @@
  * `src/core/concurrency.ts` implements its own `mapWithConcurrency` and
  * `Semaphore` rather than leaning on any Zotero promise helper**".
  *
- * **What consumes them.** `docs/07` §7.2's three worker pools —
- * `network-metadata` at 4, `llm` at 3, `zotero-write` at 1. `P1-T02` step 6
- * names the first: "the `network-metadata` pool of 4 (`docs/07` §7.2) is
- * expressed with them." A `Promise.all` over the same work is the failure mode
- * §7.1 opens with: it "will trip rate limits, blow the user's budget with no
- * confirmation, freeze the UI thread with progress churn".
+ * **What consumes them.** Two things, not one — `P1-T27` flagged this header as
+ * naming only the first, and `P2-T21` corrects it:
+ *
+ * 1. `docs/07` §7.2's three worker pools — `network-metadata` at 4, `llm` at 3,
+ *    `zotero-write` at 1. `P1-T02` step 6 names the first: "the
+ *    `network-metadata` pool of 4 (`docs/07` §7.2) is expressed with them."
+ * 2. **`docs/07` §7.3's per-host concurrency cap.** `P1-T27` made
+ *    `RateLimiterConfig.maxConcurrent` enforceable by holding one
+ *    {@link Semaphore} permit for the lifetime of a
+ *    `src/core/rateLimit/tokenBucket.ts` `run()` call, so `Semaphore` now backs
+ *    the §7.3 policy table as well as §7.2's pools. That consumer is why
+ *    {@link Semaphore.resize} exists: §7.3's `api.crossref.org` row is
+ *    header-driven and the cap can change while requests are in flight.
+ *
+ * A `Promise.all` over the same work is the failure mode §7.1 opens with: it
+ * "will trip rate limits, blow the user's budget with no confirmation, freeze
+ * the UI thread with progress churn".
  */
 
 import { OperationCancelledError } from "./errors";
@@ -86,22 +97,54 @@ interface SemaphoreWaiter {
 export class Semaphore {
   private readonly queue: SemaphoreWaiter[] = [];
 
+  /**
+   * `permits` minus the permits currently held.
+   *
+   * **It may be negative**, and only after a {@link resize} that shrank the
+   * count below the number already handed out. A negative value is the
+   * *deficit* still to drain: that many releases must be absorbed before any
+   * waiter is served again. The identity `free === permits - held` holds
+   * throughout, which is what keeps {@link available} usable as a holder count.
+   */
   private free: number;
+
+  private permitCount: number;
 
   /**
    * @param permits - how many holders may run at once; §7.2's pool sizes are 4,
-   *   3 and 1
+   *   3 and 1, and §7.3's per-host `maxConcurrent` column is 1, 2 or 3
    */
-  constructor(readonly permits: number) {
+  constructor(permits: number) {
     if (!Number.isInteger(permits) || permits < 1) {
       throw new RangeError(
         `permits must be a positive integer, got ${permits}`,
       );
     }
+    this.permitCount = permits;
     this.free = permits;
   }
 
-  /** Permits not currently held. */
+  /**
+   * How many holders may run at once — the current count, which {@link resize}
+   * may have changed since construction.
+   *
+   * A getter rather than the constructor parameter property it was until
+   * `P2-T21`: the read surface is unchanged, and the count is writable only
+   * through {@link resize}.
+   */
+  get permits(): number {
+    return this.permitCount;
+  }
+
+  /**
+   * Permits not currently held.
+   *
+   * Negative while a {@link resize} shrink is still draining — see
+   * {@link free}. `permits - available` is therefore the number of permits
+   * outstanding under every condition, which is what
+   * `src/core/rateLimit/tokenBucket.ts` reports as
+   * `RateLimiterStats.inFlight`.
+   */
   get available(): number {
     return this.free;
   }
@@ -170,6 +213,82 @@ export class Semaphore {
     }
   }
 
+  /**
+   * Change how many holders may run at once, while holders are outstanding.
+   *
+   * `P2-T21`. `docs/07` §7.3's `api.crossref.org` row is header-driven —
+   * `x-concurrency-limit` "comes back … on every response" — so
+   * `src/core/rateLimit/tokenBucket.ts`'s `reconfigure()` can bring a different
+   * `maxConcurrent` at any moment, including while requests are in flight.
+   * Before this existed the gate could only be *replaced*, and only while idle,
+   * so a tightening stayed unapplied for as long as traffic was continuous.
+   *
+   * ## A shrink drains; it never revokes
+   *
+   * This is the whole of why {@link resize} does not violate the invariant
+   * recorded at {@link handOver}. A shrink
+   *
+   * - **leaves every outstanding holder alone.** No release function is
+   *   invalidated, no holder is interrupted, and nothing is taken back. All of
+   *   them run to completion and release normally.
+   * - **leaves every parked waiter parked.** No waiter is resolved and none is
+   *   rejected; a shrink settles nothing, so it cannot settle anything behind a
+   *   caller's back.
+   * - **reduces how many permits are handed out *next*.** {@link free} goes
+   *   negative by the overshoot, which is a deficit {@link makeRelease}
+   *   *absorbs*: the next releases return their permit to the pool instead of
+   *   handing it to a waiter, until the outstanding count has drained to the
+   *   new cap. Only then is a waiter served again.
+   *
+   * So the cap binds admissions immediately — an {@link acquire} arriving after
+   * a shrink parks — while the excess over it disappears by attrition. That is
+   * the distinction the invariant draws: it forbids handing out or revoking a
+   * permit behind a holder's back, not changing the number that will be handed
+   * out in future.
+   *
+   * ## A growth hands out at once
+   *
+   * Raising the count credits the difference and serves that many parked
+   * waiters immediately, through the same {@link handOver} the release path
+   * uses, so the `unsubscribe`-before-`resolve` ordering is identical. Serving a
+   * waiter is not "behind its back": a parked {@link acquire} is a caller
+   * asking for exactly this.
+   *
+   * **This is not the place `docs/07` §7.3's tighten-only adoption lives.**
+   * `P1-T26` decided that an *advertised* limit is adopted only downwards, in
+   * `src/core/rateLimit/`; a growth here serves a cap that came from §7.3's
+   * table, e.g. the user entering an API key. This primitive is symmetric on
+   * purpose and takes no view on where the number came from.
+   *
+   * @param permits - the new count; must be a positive integer, as at
+   *   construction
+   */
+  resize(permits: number): void {
+    if (!Number.isInteger(permits) || permits < 1) {
+      throw new RangeError(
+        `permits must be a positive integer, got ${permits}`,
+      );
+    }
+    const delta = permits - this.permitCount;
+    if (delta === 0) return;
+    this.permitCount = permits;
+    // `free === permits - held` is the identity every other member relies on,
+    // so crediting the delta is the whole of the change: a shrink's deficit and
+    // a growth's credit are the same arithmetic.
+    this.free += delta;
+    if (delta > 0) this.serveWaiters();
+  }
+
+  /** Hand out every free permit a waiter is asking for. */
+  private serveWaiters(): void {
+    while (this.free > 0) {
+      const next = this.queue.shift();
+      if (next === undefined) return;
+      this.free -= 1;
+      this.handOver(next);
+    }
+  }
+
   // INVARIANT, recorded 2026-09-30: `next.unsubscribe()` must run **before**
   // `next.deferred.resolve(...)` below. The order is load-bearing, not tidiness.
   //
@@ -182,21 +301,37 @@ export class Semaphore {
   // public API, and it is the one uncovered branch in this file. Do not "cover" it
   // with a test that reaches past the API — reverse this order and the branch
   // becomes reachable by way of the bug it is guarding against.
+  //
+  // `P2-T21`, 2026-10-06: extracted into this one method so that **both** paths
+  // that serve a waiter — `makeRelease`'s handover and `resize`'s growth — are
+  // the same two statements in the same order. Two copies of an ordering
+  // invariant is one copy too many.
+  private handOver(next: SemaphoreWaiter): void {
+    next.unsubscribe();
+    next.deferred.resolve(this.makeRelease());
+  }
+
   private makeRelease(): SemaphoreRelease {
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      const next = this.queue.shift();
+      // `free < 0` means a `resize` shrink is still draining: more permits are
+      // held than the current count allows, so this one must go back to the
+      // pool rather than on to a waiter. **This is what makes a shrink a drain
+      // rather than a revocation** — the holder was never interrupted; its
+      // release is simply not passed on. Serving a waiter here would hold the
+      // outstanding count above the new cap indefinitely.
+      const next = this.free < 0 ? undefined : this.queue.shift();
       if (next === undefined) {
         this.free += 1;
         return;
       }
-      next.unsubscribe();
       // The permit is handed straight over rather than returned to the pool and
       // re-taken: returning it first would let a caller arriving in between jump
-      // the queue.
-      next.deferred.resolve(this.makeRelease());
+      // the queue. `free` is therefore unchanged — the permit moved, it was not
+      // released.
+      this.handOver(next);
     };
   }
 }

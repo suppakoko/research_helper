@@ -42,11 +42,15 @@ import { PREF_KEYS } from "../../../src/prefs/keys";
  * invent, round, or tune a rate number" — is about the enforcement table, not
  * about a test's arithmetic, and no number below is read by the product.
  *
- * `test/unit/core/hostLimiter.test.ts` **does not exist**: `P1-T04`'s `Files`
- * list names only `tokenBucket.test.ts` and `backoff.test.ts`, so the registry's
- * coverage lives here in section 10. Reported against the card, because
- * `plan/03-phase-2-multi-source-dedup.md`'s `P2-T03` runs
- * `npm run test:unit -- hostLimiter` and nothing will match it.
+ * **Where the registry's coverage lives.** `P1-T04`'s `Files` list named only
+ * `tokenBucket.test.ts` and `backoff.test.ts`, so the registry's coverage
+ * started here in sections 10–11. This header used to say
+ * `test/unit/core/hostLimiter.test.ts` **did not exist** and that
+ * `npm run test:unit -- hostLimiter` would match nothing; `P2-T23` has since
+ * created that file, and its own header records that `HOST_POLICIES`,
+ * `createHostLimiterRegistry`, the key-presence switch and the process-wide
+ * holder deliberately stayed here. Corrected by `P2-T21`, which found the stale
+ * claim while editing this file; nothing about these assertions changed.
  */
 
 // ---------------------------------------------------------------------------
@@ -913,57 +917,164 @@ describe("TokenBucket.run enforces maxConcurrent", () => {
     await expect(Promise.all([a, b, c])).resolves.toEqual(["a", "b", "c"]);
   });
 
-  it("adopts a changed cap when the host next goes idle, not mid-flight", async () => {
-    const { clock, limiter } = bucket({
+  it("lands a live 3 → 1 tightening mid-flight, draining rather than revoking", async () => {
+    // **`P2-T21`'s criterion.** `docs/02` §5.1's verified Crossref responses
+    // carry `x-concurrency-limit: 3` on the polite pool and `1` on the public
+    // one, so a pool demotion is a real 3 → 1 while requests are in flight.
+    //
+    // Everything below is asserted on *admission* — `labels(g)` records a call
+    // only at the instant `run` actually invokes it — rather than on
+    // `stats.inFlight`, which would report the right number even for a gate
+    // that admitted the fourth call early.
+    const { clock, limiter, t0 } = bucket({
       ratePerSecond: 1000,
       burst: 10,
-      maxConcurrent: 2,
+      maxConcurrent: 3,
     });
     const g = gatedWork(clock);
     const a = limiter.run(g.work("a"));
     const b = limiter.run(g.work("b"));
+    const c = limiter.run(g.work("c"));
     await flush();
-    expect(limiter.stats.inFlight).toBe(2);
+    expect(labels(g)).toEqual(["a", "b", "c"]);
 
     limiter.reconfigure({ ratePerSecond: 1000, burst: 10, maxConcurrent: 1 });
-    // Rate and burst changed at once; the gate cannot, because two holders are
-    // inside it (docs/07 §4.1's recorded limitation).
+    // The cap is in force at once — this is the whole of the card. It used to
+    // read 3 here and stay at 3 for as long as the traffic was continuous.
     expect(limiter.currentConfig.maxConcurrent).toBe(1);
-    expect(limiter.concurrencyLimit).toBe(2);
+    expect(limiter.concurrencyLimit).toBe(1);
 
+    // A fourth call, arriving after the tightening, is refused admission. Time
+    // alone must not start it: `d` is parked on the cap, not on a deadline, and
+    // the bucket has tokens to spare (burst 10 at 1000/s).
+    const d = limiter.run(g.work("d"));
+    await runUntil(clock, () => clock.now() >= t0 + 5000);
+    expect(labels(g)).toEqual(["a", "b", "c"]);
+    expect(limiter.slotQueued).toBe(1);
+
+    // The three already admitted were not revoked: each runs and completes, and
+    // the first two releases are absorbed by the drain instead of admitting
+    // `d`. A revoking implementation admits `d` on the first release, with two
+    // calls still inside the gate.
     g.settle("a", "resolve");
     await expect(a).resolves.toBe("a");
     await flush();
-    expect(limiter.concurrencyLimit).toBe(2);
+    expect(labels(g)).toEqual(["a", "b", "c"]); // 2 in flight, cap 1
 
     g.settle("b", "resolve");
     await expect(b).resolves.toBe("b");
     await flush();
-    expect(limiter.stats.inFlight).toBe(0);
-    expect(limiter.concurrencyLimit).toBe(1);
+    expect(labels(g)).toEqual(["a", "b", "c"]); // 1 in flight, cap 1
 
-    // And the new cap is in force from here on.
-    const c = limiter.run(g.work("c"));
-    const d = limiter.run(g.work("d"));
-    await flush();
-    expect(labels(g)).toEqual(["a", "b", "c"]);
     g.settle("c", "resolve");
+    await expect(c).resolves.toBe("c");
     await flush();
+    // Drained below the new cap, so and only so is `d` admitted.
     expect(labels(g)).toEqual(["a", "b", "c", "d"]);
+    expect(limiter.stats.inFlight).toBe(1);
+
     g.settle("d", "resolve");
-    await expect(Promise.all([c, d])).resolves.toEqual(["c", "d"]);
+    await expect(d).resolves.toBe("d");
+    expect(limiter.stats.inFlight).toBe(0);
   });
 
-  it("adopts a changed cap immediately when nothing is in flight", () => {
-    const { limiter } = bucket(FAST);
+  it("never raises stats.inFlight while a tightening is draining", async () => {
+    const { clock, limiter } = bucket({
+      ratePerSecond: 1000,
+      burst: 10,
+      maxConcurrent: 3,
+    });
+    const g = gatedWork(clock);
+    const pending = ["a", "b", "c"].map((label) => limiter.run(g.work(label)));
+    await flush();
+
+    limiter.reconfigure({ ratePerSecond: 1000, burst: 10, maxConcurrent: 1 });
+    // Three more calls queue behind the new cap, so every release has a waiter
+    // available to be mis-admitted to.
+    const queued = ["x", "y", "z"].map((label) => limiter.run(g.work(label)));
+    await flush();
+
+    const series = [limiter.stats.inFlight];
+    for (const label of ["a", "b", "c"]) {
+      g.settle(label, "resolve");
+      await flush();
+      series.push(limiter.stats.inFlight);
+    }
+    // 3 over the cap of 1, then 2, then 1, then 1 — the last release hands over
+    // to `x` rather than dropping to 0.
+    expect(series).toEqual([3, 2, 1, 1]);
+    const rises = series.filter((n, i) => i > 0 && n > (series.at(i - 1) ?? n));
+    expect(rises).toEqual([]);
+    // From the instant it first reaches the live cap it never exceeds it again.
+    expect(series.slice(series.indexOf(1)).every((n) => n <= 1)).toBe(true);
+
+    for (const label of ["x", "y", "z"]) {
+      g.settle(label, "resolve");
+      await flush();
+      expect(limiter.stats.inFlight).toBeLessThanOrEqual(1);
+    }
+    await expect(Promise.all([...pending, ...queued])).resolves.toEqual([
+      "a",
+      "b",
+      "c",
+      "x",
+      "y",
+      "z",
+    ]);
+  });
+
+  it("adopts a changed cap immediately when nothing is in flight, and admits only that many", async () => {
+    const { clock, limiter } = bucket(FAST);
     expect(limiter.concurrencyLimit).toBe(3);
     limiter.reconfigure({ ratePerSecond: 1000, burst: 10, maxConcurrent: 1 });
     expect(limiter.concurrencyLimit).toBe(1);
+
+    // The shrink-while-idle half of the card's third criterion, asserted on
+    // admission rather than on the reported limit.
+    const g = gatedWork(clock);
+    const pending = ["a", "b"].map((label) => limiter.run(g.work(label)));
+    await flush();
+    expect(labels(g)).toEqual(["a"]);
+    g.settle("a", "resolve");
+    await flush();
+    expect(labels(g)).toEqual(["a", "b"]);
+    g.settle("b", "resolve");
+    await expect(Promise.all(pending)).resolves.toEqual(["a", "b"]);
+  });
+
+  it("raises a cap mid-flight and admits the calls parked behind the old one at once", async () => {
+    // The §7.3-table growth — the user enters an API key — not an adopted
+    // header: `hostLimiter.ts` takes an advertised limit only downwards
+    // (`P1-T26`), and whether a generous header may raise the rate above §7.3's
+    // table is an open owner decision.
+    const { clock, limiter } = bucket({
+      ratePerSecond: 1000,
+      burst: 10,
+      maxConcurrent: 1,
+    });
+    const g = gatedWork(clock);
+    const pending = ["a", "b", "c"].map((label) => limiter.run(g.work(label)));
+    await flush();
+    expect(labels(g)).toEqual(["a"]);
+    expect(limiter.slotQueued).toBe(2);
+
+    limiter.reconfigure({ ratePerSecond: 1000, burst: 10, maxConcurrent: 3 });
+    await flush();
+    expect(limiter.concurrencyLimit).toBe(3);
+    expect(labels(g)).toEqual(["a", "b", "c"]);
+    expect(limiter.slotQueued).toBe(0);
+    expect(limiter.stats.inFlight).toBe(3);
+
+    for (const label of ["a", "b", "c"]) g.settle(label, "resolve");
+    await expect(Promise.all(pending)).resolves.toEqual(["a", "b", "c"]);
+    expect(limiter.stats.inFlight).toBe(0);
   });
 
   it("keeps the NCBI row's cap of 3 across the key-presence switch", () => {
-    // docs/07 §7.3 gives NCBI maxConcurrent 3 in both modes, so the deferral
-    // above is unreachable through the shipped Phase 1 policy table.
+    // docs/07 §7.3 gives NCBI maxConcurrent 3 in both modes, which is why
+    // Phase 1 never reached the deferral `P2-T21` closed above: a tighten-only
+    // adoption from an advertised 3 is a no-op, and NCBI's verified response
+    // (`docs/02` §3.1) carries no `x-concurrency-limit` at all.
     const clock = createManualClock();
     const registry = createHostLimiterRegistry({ clock });
     const policy = must(registry.policyFor(NCBI_HOST), "the NCBI policy row");
