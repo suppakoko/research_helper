@@ -243,11 +243,33 @@ card sums rather than the cards being shaved, and the bands it now publishes for
 Phases 0–3 are **derived from these cards**: low end = the phase's task sum,
 high end = that sum × 1.4 (`docs/11`'s own ±40% convention), rounded to the
 nearest whole day — e.g. Phase 2's 24.25 × 1.4 = 33.95 → the published 24.25–34.
-So for Phases 0–3 the cards are the measurement and
-`docs/11` records it; a task sum that no longer equals its phase's low end means
-a card estimate moved and `docs/11` §1, its effort-summary table, and §2's
-critical path have to be re-derived. `00-task-index.md` §1 carries the current
-sums (15.50 / 18.75 / 24.25 / 23.50 d, 82.00 d for Phases 0–3).
+So for Phases 0–3 the cards are the measurement and `docs/11` records it.
+
+**The propagation checklist — all five sites, because naming three of them is
+why two went stale.** Whenever a card is added, removed or re-estimated, the
+phase's `**Total**` roll-up row is the measurement and these move with it, in
+this order:
+
+1. the phase file's own **`Estimate roll-up`** `**Total**` row, and its
+   **`Effort estimate`** prose near the top, which states the published band;
+2. **`docs/11` §1's per-phase table** — the phase row, the Phases 0–3 subtotal,
+   the card count, and the `**Total**` row;
+3. **`docs/11` §1's prose** — the whole-plan sum, the months arithmetic, the
+   ×1.50 factor history, and the mermaid node for that phase;
+4. **`docs/11` §2's per-phase `**Effort.**` paragraph** for that phase, plus
+   §2's **critical path** and **Phase 5 float** bullets;
+5. **`plan/00-task-index.md` §1's table** — the phase row and the Phases 0–3
+   total row.
+
+**Added 2026-10-06, after sites 4 and 5 were found stale through five
+propagations.** The instruction here previously named only §1, its table and
+§2's critical path, so `docs/11` §2's Phase 1 paragraph still read 19.00 d over
+24 cards when the phase had reached 23.25 d over 34, and `plan/00`'s table still
+read the 2026-10-02 figures. Low end = the phase's task sum, read from the
+roll-up row and **never incremented by hand**; high end = that sum × 1.4,
+recomputed at the same time. Figures stated in prose do not re-derive
+themselves — the same lesson `plan/03`'s `Effort estimate` paragraph and `G-41`'s
+string counts each had to learn separately.
 
 **Phases 4–7 are not decomposed**, so for them `docs/11` remains authoritative:
 its figures there are the old ones scaled by the ×1.50 correction factor these

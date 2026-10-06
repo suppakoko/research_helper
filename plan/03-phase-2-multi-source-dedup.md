@@ -21,7 +21,7 @@ them; it adds adapters and the merge layer above them.
 
 ## Effort estimate
 
-`docs/11` §1 Phase 2 is now **26.50–37.10 d, published as 26.50–37 d** — a band *derived from* the
+`docs/11` §1 Phase 2 is now **26.75–37.45 d, published as 26.75–37 d** — a band *derived from* the
 task sum in this file (low = the sum, high = the sum × 1.4, rounded to whole days), not an
 independent guess. The figure it superseded on 2026-09-09 was **12–16 developer-days** ("six
 adapters at ~1.5 days each plus 4–6 days for dedup and its evaluation corpus"). The reconciliation
@@ -2530,7 +2530,7 @@ module header so it is visible at the call site rather than at the result.
 | **ID** | `P2-T21` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T27`, `P1-T26` |
-| **Blocks** | `P2-T04` |
+| **Blocks** | `P2-T04`, `P2-T24` |
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 0.5 d |
@@ -3160,6 +3160,114 @@ observation is pre-existing and already recorded by `P1-T26`: the **upward** hal
 is deliberately unimplemented and therefore unasserted, and `hostLimiter.ts`'s own comment says that
 question belongs with Phase 2's Crossref row.
 
+### P2-T24 — Correct the three statements `P2-T21` made false, including one in the authority document
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T24` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T21` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | none |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** `docs/07` and `hostLimiter.ts` describe what `Semaphore.resize` actually does, and the one
+statement that survives is the narrower, true one.
+
+**Why this is a card.** `P2-T21` shipped a resizable concurrency cap, and three live statements now say
+the opposite of what the code does. Two are in **`docs/07`, which `plan/README.md` §5 rule 3 makes the
+sole authority for types and the rate-limit numbers** — so leaving them is worse than an ordinary stale
+comment. All three were verified present on 2026-10-06, after `P2-T21` landed, and the executing agent
+supplied wording for each rather than editing files outside its `Files`.
+
+1. **`docs/07` §4.1, lines 778–786** — the deferral blockquote. It states that the permit count is
+   fixed at construction "deliberately — resizing it from outside is exactly the 'hand out or revoke a
+   permit behind a holder's back' its invariant forbids", and that `reconfigure()` therefore adopts a
+   changed `maxConcurrent` only when the host next goes idle. **Both halves are now false**, and the
+   first was a conflation even before `P2-T21`: the invariant forbids changing *who holds a permit
+   now*; a resize changes *how many will be handed out next*. `P2-T21` proved the two apart — the
+   revoking alternative is a one-line change caught by six tests.
+   > **Note for whoever writes this card's edit:** this blockquote is in **§4.1 Cross-cutting
+   > primitives**, not §7.3. `P2-T21`'s own `Read first` said §7.3 and was corrected; §7.3 runs lines
+   > 2226–2309 and contains no such blockquote, mentioning `x-concurrency-limit` only in the
+   > `api.crossref.org` table cell at line 2295. Confirm the line numbers by grep before editing —
+   > they will have moved if anything above them changed.
+
+2. **`docs/07` §4.1, lines 719–722** — `RateLimiterStats.inFlight`'s "never more than
+   `maxConcurrent`". False *during a tightening drain*, and only then. This is the statement that
+   **survives in narrower form** rather than being deleted: a tightening is instant in admissions and
+   cannot be instant in `inFlight`, because the calls admitted under the old cap are still running.
+   Making it instant would mean revoking a permit from a request already on the wire.
+
+3. **`src/core/rateLimit/hostLimiter.ts`, lines 524–534** — "A tightened `maxConcurrent` lands late,
+   and that is a known gap." A live source comment in the module that owns the policy table.
+
+**Read first.**
+- `P2-T21`'s `Findings` in this file, and §6 of the report it records — the executing agent wrote
+  proposed replacement wording for all three, verified against the shipped code. **Use it as a draft
+  to check, not as text to paste**: `plan/README.md` §5 rule 8 applies to this card too, and the
+  wording was written before the code was committed.
+- `src/core/concurrency.ts`'s `resize`, `serveWaiters` and `handOver`, and the accounting identity
+  `free === permits − held` with `free` allowed to go negative — the doc wording has to match what the
+  code does, not what this card's prose says it does.
+- `src/core/rateLimit/tokenBucket.ts`'s `applyWantedConcurrency` and its `RateLimiterStats.inFlight`
+  doc comment, which `P2-T21` already corrected **inside** its own `Files`. §4.1's copy must end up
+  saying the same thing; if they disagree, the shipped comment is the measurement.
+- `P1-T27`'s `Findings` in `plan/02` — **where the wrong framing originated.** It holds both halves in
+  one paragraph. Do **not** edit it: a `Findings` block is a dated record of what was believed then,
+  and rewriting history is worse than the tension. It is listed only so the propagation path is
+  visible.
+
+**Files.**
+- modify `docs/07-architecture-and-data-model.md`
+- modify `src/core/rateLimit/hostLimiter.ts`
+
+**Do.**
+1. Replace §4.1's deferral blockquote with a dated correction that (a) records what it used to say,
+   (b) names the conflation rather than just the outcome, and (c) states the shrink and growth
+   semantics as the code implements them.
+2. Narrow §4.1's `inFlight` comment to the true statement, and cross-reference the `resize` note so
+   the two cannot drift apart again.
+3. Replace `hostLimiter.ts` lines 524–534. Keep the Phase 1 / Phase 2 reachability facts in it — NCBI
+   sends no `x-concurrency-limit` and its row is `maxConcurrent: 3` in both key modes, Crossref's
+   measured 3 → 1 is what made it reachable — because those are why `P2-T21` blocked `P2-T04` and they
+   are still true.
+4. Verify by grep that no **fourth** copy of either claim survives anywhere in `docs/` or `src/`.
+   `P2-T21` found three; a fourth is plausible, because this framing propagated from a `Findings`
+   block through two files already.
+
+**Do NOT.**
+- Do not edit `plan/02`'s `P1-T27` `Findings`, or any other `Findings` block. They are dated records.
+- Do not change any code. This card touches a doc and a comment. If a code change looks necessary,
+  report it — `P2-T21`'s tests are the behaviour's definition and they pass.
+- Do not delete §4.1's `inFlight` sentence outright. A narrower true statement survives, and deleting
+  it would lose the reason the drain window exists.
+- Do not re-open whether a generous `x-concurrency-limit` may raise the rate above §7.3's table. That
+  is an **uncarded owner decision** and `Semaphore.resize` deliberately takes no view.
+
+**Criteria.**
+- [ ] `grep -rn 'next goes idle\|lands late\|fixed at construction' docs/ src/` returns only text that
+      describes the **former** behaviour as former, with a date.
+- [ ] §4.1's `inFlight` statement is true as written, including during a drain, and names where the
+      exception comes from.
+- [ ] `hostLimiter.ts`'s comment describes shipped behaviour, and still records why Phase 1 could not
+      reach the gap and Phase 2 can.
+- [ ] The grep for a fourth copy is reported, with what it searched.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0, and the unit count is
+      **unchanged** — this card adds no test and changes no behaviour.
+
+**Verify with.** `npm run lint:check && npm run typecheck && npm run test:unit -- concurrency tokenBucket`
+
+**Notes.** **This card ships no test file, and `plan/README.md` §6's required reason is this:** it
+changes one prose block and one comment, and the behaviour they describe is already asserted by
+`P2-T21`'s six mutants and 20 new unit tests. A test that asserted the *wording* would assert the
+artefact rather than the behaviour — the defect `P1-T14` reported about its own criterion 6. The
+`unchanged unit count` criterion is the check that this card added no behaviour.
+
+---
+
 ---
 ## Estimate roll-up
 
@@ -3188,7 +3296,8 @@ question belongs with Phase 2's Crossref row.
 | `P2-T21` | Make the concurrency cap resizable | 0.50 |
 | `P2-T22` | Declare the menu-context member `zotero-types` omits | 0.25 |
 | `P2-T23` | Give `hostLimiter.ts` its test file | 0.25 |
-| **Total** | **23 tasks** | **26.50 d** |
+| `P2-T24` | Correct the three statements `P2-T21` made false | 0.25 |
+| **Total** | **24 tasks** | **26.75 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather

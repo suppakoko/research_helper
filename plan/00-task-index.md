@@ -21,10 +21,10 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
-| 1 — PubMed slice | 32 | 22.75 d | 22.75–32 d | 9–12 d (+90%) |
-| 2 — Multi-source + dedup | 20 | 25.50 d | 25.50–36 d | 12–16 d (+59%) |
+| 1 — PubMed slice | 34 | 23.25 d | 23.25–33 d | 9–12 d (+90%) |
+| 2 — Multi-source + dedup | 24 | 26.75 d | 26.75–37 d | 12–16 d (+59%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **118** | **89.50 d** | **89.50–126 d** | 39–52 d (+72% over the top of the band) |
+| **Phases 0–3** | **124** | **91.25 d** | **91.25–128 d** | 39–52 d (+72% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
