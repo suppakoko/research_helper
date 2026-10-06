@@ -2668,13 +2668,19 @@ next card that wants the context route.
   and what `P1-T03`/`P1-T29` recorded about when `zotero-types` is wrong versus merely incomplete.
 - `src/ui/menus/registerMenus.ts` — `P1-T19`'s local structural type with `menuElem?`, and **why**:
   `BaseMenuContext.menuElem` is declared **required** (`readonly menuElem: XULElement`) while
-  `docs/08` §2.2 and Zotero 10.0.1's own `menuManager.js` (a `WeakRef` deref that can return
+  `docs/08` §2.2 and Zotero **10.0.3**'s own `menuManager.js` (a `WeakRef` deref that can return
   `undefined`) make it optional.
 
 **Files.**
 - modify `typings/zotero-augment.d.ts`
-- modify `test/unit/prefs/schema.test.ts` *(or whichever unit spec the repo uses as its typings
-  compile-fixture — grep first; if none exists, say so rather than creating one)*
+> **This row was a guess and the guess was wrong — removed 2026-10-06, `plan/README.md` §5 rule 8.**
+> It read "modify `test/unit/prefs/schema.test.ts` *(or whichever unit spec the repo uses as its
+> typings compile-fixture — grep first; if none exists, say so rather than creating one)*". There is
+> **no typings compile-fixture among the unit specs**: `test/unit/prefs/schema.test.ts` is `P1-T03`'s
+> preference-schema test and imports `src/prefs/*`. The repository's actual typings fixture is
+> **`scripts/probe-types.ts`** (`P0-T06`), which `tsconfig.json`'s `include` **does** cover — verified
+> from `tsc --showConfig`. It was not in this card's `Files`, so the executing agent used a temporary
+> probe and deleted it, correctly refusing to invent a fixture.
 
 **Do.**
 1. Augment the menu context with `collectionTreeRows`, typed to what `menuManager.js` actually puts
@@ -2695,13 +2701,153 @@ next card that wants the context route.
   a public issue on someone else's repository is not an agent's call.
 
 **Criteria.**
-- [ ] A handler can read `context.collectionTreeRows[0]` with no cast and `npm run typecheck` exits 0.
+- [ ] A handler can read the selected rows off the context **with no cast** and `npm run typecheck`
+      exits 0. The form that compiles here is `context.collectionTreeRows?.[0]?.ref.id`.
+      > **Reworded 2026-10-06 after the agent reported it under rule 6.** It read "can read
+      > `context.collectionTreeRows[0]`", which **cannot pass under any augmentation**: this project
+      > sets `noUncheckedIndexedAccess: true`, so `rows[0]` is `… | undefined` however the member is
+      > declared, and the honest *optional* declaration adds `TS18048` on top. Measured in all four
+      > combinations. The card's **Goal** — "without a cast" — does pass, and that is what the
+      > criterion now says. **`docs/08` §2.4's literal `context.collectionTreeRows[0]` therefore
+      > cannot be typed straight into this repository, which is the actionable fact for `P2-T17`.**
 - [ ] Reading `context.collectionTreeRow` still compiles but is marked deprecated, so §2.2's "Never
       read" has a compiler-visible counterpart.
 - [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
+      > **A criterion this card dropped, recorded 2026-10-06.** An earlier draft asked the card to
+      > "assert the augmentation compiles". **It cannot, from inside a `.d.ts`:** `tsconfig.json`
+      > inherits **`skipLibCheck: true`**, so nothing in `typings/**` is type-checked at all. The agent
+      > proved it with a negative control — renaming the new member left typecheck at exit 0 — and the
+      > coordinator reproduced it by appending a reference to a type that exists nowhere and watching
+      > `npm run typecheck` exit **0** with zero `TS2304`. The agent removed its dead assertions rather
+      > than ship an assertion that cannot fire. A permanent one belongs in `scripts/probe-types.ts`,
+      > which is a card.
+
+**Verify with.** `npm run typecheck && npm run lint:check && npm run test`
+> **Added 2026-10-06: this card shipped with no `Verify with` line at all.**
 
 **Notes.** This is a typings-only card by design. If the augmentation turns out to need a code change
 anywhere in `src/`, that is a finding to report, not scope to absorb.
+
+**Why this card ships no test file, per `plan/README.md` §6** (added 2026-10-06 — the original `Notes`
+gave a reason for no *`src`* change, which is not the same statement): **a `.d.ts` cannot assert
+anything about itself here**, because `skipLibCheck: true` excludes all of `typings/**` from type
+checking. What *is* checked is every **use** of these types from a `.ts` file, which is why the
+before/after proof had to be a temporary `.ts` probe and why the permanent assertion belongs in
+`scripts/probe-types.ts`. Note the narrow scope of the hole: `skipLibCheck` hides incoherence *inside*
+a `.d.ts`; it does not stop a wrong type breaking its consumers — `P1-T33`'s mutants demonstrated that
+the generated `FluentMessageId` union still fails five call sites across three files when it is wrong.
+
+**Findings, 2026-10-06 — the member is declared from the running Zotero's own source, and the card
+turned up a hole bigger than itself: `skipLibCheck: true` means nothing in `typings/**` is type-checked
+at all.** Verified independently: typecheck 0, `lint:check` 0, **843 unit tests in 22 files**, 63
+integration, exactly one file changed (`typings/zotero-augment.d.ts`) and no probe file left behind.
+
+**The `skipLibCheck` finding, reproduced by the coordinator rather than taken on report.** The agent's
+negative control was to rename the new member and watch typecheck stay at exit 0. I went further:
+appended `declare const __rhProbe: ThisTypeDoesNotExistAnywhere;` to `zotero-augment.d.ts` and
+`npm run typecheck` exited **0 with zero `TS2304`**. `tsc --showConfig` confirms
+`skipLibCheck=true`, inherited from `zotero-types/entries/sandbox/`. **So `global.d.ts`, `i10n.d.ts`,
+`prefs.d.ts` and all six sections of `zotero-augment.d.ts` can be internally incoherent and still
+pass.** Recorded as header rule 5 in that file, where it applies to every section and not only this
+card's.
+
+**The scope of that hole, stated precisely, because the loose version would be alarming and wrong.**
+`skipLibCheck` hides incoherence *inside* a `.d.ts`; it does **not** stop a wrong type from breaking
+its consumers. `P1-T33`'s M4 mutant is the proof — deleting a message id made the generated
+`FluentMessageId` union fail **five call sites across three `.ts` files**. What is lost is a `.d.ts`'s
+ability to assert anything about *itself*, which is exactly why this card's "assert the augmentation
+compiles" criterion had no in-scope home and why the agent **deleted its own dead assertions rather
+than ship an assertion that cannot fire.** It also evaluated and rejected a second tsconfig with
+`skipLibCheck: false` scoped to `typings/` — tsc has no per-file granularity, so that would check all
+of `zotero-types` and the Gecko libs too.
+
+**`Do` step 1 pointed at the wrong file, and following it literally would have produced the wrong
+type.** `menuManager.js` does **not** put `collectionTreeRows` anywhere: it builds only the default
+context and then `Object.defineProperties`-copies the target's own **descriptors** over it — and its
+own comment says why, naming the singular: *"ZoteroPane's menu contexts define a collectionTreeRow
+property that throws when read"*. The member comes from **`zoteroPane.js`**'s `getContext` for
+`main/library/collection` and `main/library/item`, each passing
+`ZoteroPane.getCollectionTreeRows()`, whose JSDoc says `CollectionTreeRow[]`. Hence
+`Zotero.CollectionTreeRow[]` — which is also what §5 of the same augmentation file already declares
+for the pane getter that produces it. **Read from `omni.ja` of the installed 10.0.3 build, not
+inferred from the name**, which is what the step asked for even though it named the wrong file.
+
+**Optional, not required, forced by two independent measured facts.** `TargetToContextMap` routes all
+four library targets onto one interface, and `zoteroPane.js`'s `getContext`s for `addAttachment` and
+`addNote` carry **no** `collectionTreeRows` — so required would promise a member that is genuinely
+`undefined` on half the targets, and `TargetToContextMap` is a `type` alias and cannot be augmented to
+split them. Required also breaks a file outside `Files`: `menus.spec.ts` fails `TS2741` on its
+`libraryContext()` helper.
+
+**Criterion 1 could not pass in its literal form and the reason is the project's own strictness.**
+`noUncheckedIndexedAccess: true` makes `rows[0]` possibly `undefined` **however the member is
+declared**, and the honest optional form adds `TS18048` on top. Measured in all four combinations. The
+card's *Goal* — "without a cast" — does pass, via `context.collectionTreeRows?.[0]?.ref.id`, exit 0.
+**The consequence for `P2-T17` is the useful part: `docs/08` §2.4's literal
+`context.collectionTreeRows[0]` cannot be typed straight into this repository**, and §2.4 is already
+inconsistent with itself about it — line 340 writes `?? []` while five later lines write the bare
+index.
+
+**Criterion 2 was verified at the level the diagnostic actually lives, which took real care.**
+Deprecation is a suggestion-level diagnostic that `tsc --noEmit` never emits, so the agent read it off
+the `Program` through the TypeScript 5.9.3 compiler API — the same `getSuggestionDiagnostics` that
+tsserver and every editor use: **`TS6385 … reportsDeprecated=true`** at the exact singular read site,
+nothing at the plural read in the same file, and **zero** suggestion diagnostics without the
+augmentation. A lesser check would have asserted intent rather than effect.
+
+**`menuElem` is expressible — and the agent proved it, then declined to apply it.** TypeScript accepts
+merging `readonly menuElem?: XULElement` with upstream's required declaration, proven both ways with a
+type-level probe. **But applying it fails `TS2375` in `menus.spec.ts`**, outside this card's `Files`,
+because `menubarContext()` destructures `menuElem` and re-passes it explicitly, and
+`exactOptionalPropertyTypes: true` forbids assigning an explicit `undefined` to an optional property.
+So it was left alone, `P1-T19`'s local structural type is untouched, and the measurement plus the fix
+shape are recorded as a Known hole. **Measuring that something is possible and then not doing it
+because of rule 2 is the behaviour the protocol wants.**
+
+**`zotero-types` types the singular member as the wrong *thing*, not merely as a deprecated one — and
+this is worse than the card claimed.** `menuManager.d.ts:112` declares
+`collectionTreeRow?: _ZoteroTypes.CollectionTree`, the **tree widget**, where `zoteroPane.js` returns
+`collectionTreeRows[0]`, a **row**; same error at `zoteroPane.d.ts:40`. And because `CollectionTree`
+carries `[attr: string]: any`, `context.collectionTreeRow.ref.id` compiled **as `any`**. So before
+this card the only member upstream offered was **both forbidden by the corpus and silently
+unchecked** — and TypeScript's own fix-it made it worse: the pre-card error was
+`Property 'collectionTreeRows' does not exist … Did you mean 'collectionTreeRow'?`, **steering a
+reader straight into the member §2.2 line 215 forbids.** Not fixable by merging, since a repeated
+declaration's type must be identical. Recorded as a Known hole.
+
+**Five errors in this card's text, all mine, all corrected above — `plan/README.md` §5 rule 8's sixth
+instance, on the day the rule was written.** The card had **no `Verify with` line at all**; its `Files`
+row 2 was a guess I flagged as one in the hand-out, and the guess was wrong (**`scripts/probe-types.ts`
+is the repository's typings fixture**, and `tsc --showConfig` confirms `include` covers it);
+criterion 1 was unachievable; an earlier criterion asked for an assertion that cannot exist; and
+`Read first` said Zotero **10.0.1** when the installed build is **10.0.3**, BuildID 20260917164924.
+**The `Files` guess is the one that cost work** — the agent had to grep, find nothing, and build a
+temporary probe, which is exactly the tax rule 8 exists to remove.
+
+**`plan/README.md` §6's no-test-file reason is now written, and the original `Notes` did not satisfy
+it.** "This is a typings-only card by design" is a reason for touching no `src/`, which is a different
+statement. The real reason is the `skipLibCheck` fact, and it is recorded as such.
+
+**Needs cards.** (1) **Park the permanent compile assertion in `scripts/probe-types.ts`** — otherwise
+criterion 1 is satisfied only by a probe that no longer exists; smallest form is a
+`main/library/collection` `MenuOptions` whose `onCommand` reads `context.collectionTreeRows?.[0]?.ref.id`,
+plus an assignment pinning `rows[0]` to `Zotero.CollectionTreeRow | undefined` so it is not `any`.
+(2) **Make `menuElem` honestly optional** — three files, measured as expressible, blocked here only by
+`Files`, and it ends with deleting `MenuElementContext` from `registerMenus.ts`. (3) **Consider
+`@typescript-eslint/no-deprecated`**, which would turn §2.2's "Never read" into a `lint:check` failure
+rather than an editor strike-through; it needs a sweep of existing deprecated usages first.
+
+**Two comments elsewhere went stale and were reported rather than edited**, both in files a later card
+opens anyway: `registerMenus.ts:176-185` says reading the plural "means reading an undeclared
+property", no longer true; and `menus.spec.ts:255-258` leans on "`zotero-types@4.1.3` declares only the
+deprecated singular", still literally true of the package but now misleading about this repo. The
+agent recommends `P2-T17` absorb the first, since it owns the route switch.
+
+**One transient was correctly attributed to the other card rather than to itself.** A mid-work
+typecheck reported `hostLimiter.ts(563,9): TS2741: Property 'burst' is missing`; `git status` showed
+`src/` unmodified and it never reproduced — `P2-T23` was mid-flight on that module. **And the
+integration cleanup was done by command-line match, never by process name**, with the user's own
+Zotero verified absent before and after.
 
 ---
 ### P2-T23 — Give `hostLimiter.ts` the test file two cards already invoke

@@ -19,6 +19,18 @@
  * 3. **No `any`.** `V-6` exists to surface breakage; `any` re-hides it.
  * 4. **Delete a block when upstream ships it.** Re-run `P0-T06`'s probe after
  *    every `zotero-types` bump.
+ * 5. **Nothing in this file is type-checked. Put assertions in a `.ts` file.**
+ *    Measured 2026-10-06 (`P2-T22`): `tsconfig.json` extends
+ *    `zotero-types/entries/sandbox/`, which inherits `skipLibCheck: true` from
+ *    `entries/base`, and that switch skips type checking of **every** `.d.ts`
+ *    in the program — this one included. Appending
+ *    `declare const x: ThisTypeDoesNotExistAnywhere;` here leaves
+ *    `npm run typecheck` at exit 0; the same line in a `.ts` file under
+ *    `typings/` is TS2304. So a declaration below can be internally incoherent
+ *    and still "pass", and the only thing that validates any of it is a `.ts`
+ *    file that uses it. `scripts/probe-types.ts` is that file, and
+ *    `tsconfig.json`'s `include` does cover `scripts` — despite that file's
+ *    own header, which says it does not and is stale.
  */
 
 // ---------------------------------------------------------------------------
@@ -266,6 +278,126 @@ declare namespace _ZoteroTypes {
 }
 
 // ---------------------------------------------------------------------------
+// 6. Menu context — the plural collection rows, and the singular one the
+//    corpus forbids
+//
+// Source: docs/08 §2.2's context table (lines 190-191), which lists
+// `collectionTreeRows` for `main/library/item` and `main/library/collection`
+// and marks `collectionTreeRow` deprecated, and §2.2 line 215, which says in
+// as many words: "Never read `context.collectionTreeRow`. Always
+// `context.collectionTreeRows`." §2.4's handler block reads the plural at
+// lines 340 and 351.
+//
+// Runtime source of truth, read on 2026-10-06 out of the INSTALLED Zotero's
+// own source (`chrome/content/zotero/...` extracted from
+// `C:\Program Files\Zotero\app\omni.ja`, application.ini Version 10.0.3,
+// BuildID 20260917164924), not inferred from the member's name:
+//
+//   * `zoteroPane.js` is where the member comes from, not `menuManager.js`.
+//     `menuManager.js` builds only the default context — `menuElem`,
+//     `setL10nArgs`, `setEnabled`, `setVisible`, `setIcon` (lines 600-634) —
+//     and then copies the target's own property DESCRIPTORS over it
+//     (`wrappedGetContext`, lines 638-645). Its comment there names this very
+//     member as the reason descriptors are copied rather than values: "ZoteroPane's
+//     menu contexts define a collectionTreeRow property that throws when read".
+//   * `zoteroPane.js`'s `getContext` for `main/library/collection`
+//     (lines 4138-4151, inside `buildCollectionContextMenu`) and for
+//     `main/library/item` (lines 4689-4703, inside `buildItemContextMenu`)
+//     each put `collectionTreeRows` there verbatim — the array returned by
+//     `ZoteroPane.getCollectionTreeRows()` (line 2207, JSDoc
+//     `@return {CollectionTreeRow[]}`, implemented as
+//     `[...selection.selected].sort().map((i) => collectionsView.getRow(i))`,
+//     and `getRow()` is declared `Zotero.CollectionTreeRow` upstream in
+//     `types/collectionTree.d.ts:12`). Hence `Zotero.CollectionTreeRow[]`,
+//     which is also exactly what §5 above declares for the pane getter that
+//     produces it.
+//   * the same two `getContext`s define the singular `collectionTreeRow` as a
+//     getter that **throws** `"collectionTreeRow was removed -- use
+//     collectionTreeRows"` when more than one row is selected, and otherwise
+//     calls `Zotero.Plugins.warnRemovedAPICall`. Confirmed verbatim; docs/08
+//     §2.2's quoted block is accurate.
+//
+// Why this is a gap and not a nicety: `zotero-types@4.1.3`
+// (`types/xpcom/pluginAPI/menuManager.d.ts:112`) declares ONLY the singular
+// `collectionTreeRow?: _ZoteroTypes.CollectionTree` and no plural at all, so
+// the corpus forbids the one member the compiler offers, and TypeScript's own
+// "Did you mean 'collectionTreeRow'?" fix-it steers a reader straight into the
+// throwing getter.
+//
+// **Optional, not required, and that is a deliberate limit.**
+// `TargetToContextMap` maps all four library targets — `item`, `collection`,
+// `addAttachment`, `addNote` — onto this one `LibraryMenuContext`, and
+// `zoteroPane.js`'s `getContext`s for `addAttachment` (line 2302) and
+// `addNote` (line 2329) put `items`/`tabType`/`tabSubType`/`tabID` there and
+// **no** `collectionTreeRows`. Declaring it required would therefore promise a
+// member that is genuinely `undefined` on half the targets that share the
+// interface, and `TargetToContextMap` is a `type` alias, so it cannot be
+// augmented to split them. Upstream treats the sibling `items?` and
+// `collectionTreeRow?` as optional for the same reason. A reader needs
+// `?? []`, `?.[0]` or a length check — which is what docs/08 §2.4 line 340
+// already does, though its lines 351 onward do not. Note that §2.4's
+// unguarded `context.collectionTreeRows[0].ref.id` could not compile in this
+// repository under ANY augmentation, optional or required: `tsconfig.json`
+// sets `noUncheckedIndexedAccess`, so `rows[0]` is
+// `Zotero.CollectionTreeRow | undefined` whatever the member's optionality.
+// The form that compiles, measured 2026-10-06, is
+// `context.collectionTreeRows?.[0]?.ref.id`.
+//
+// **Where the assertion for this block lives, and why not here.** `P2-T22`
+// `Do` step 3 asks for an assertion that the augmentation compiles. It cannot
+// be in this file: rule 5 in the header above. It cannot be in `P2-T22`'s other
+// `Files` entry either — that row guesses at a unit spec serving as this
+// repository's typings compile-fixture and no unit spec does
+// (`test/unit/prefs/schema.test.ts` is `P1-T03`'s preference-schema test).
+// `scripts/probe-types.ts` is the repository's typings compile-fixture, it is
+// covered by `npm run typecheck`, and it is **not** in `P2-T22`'s `Files`, so
+// nothing was added to it. The assertion `P2-T22` measured by hand, and the
+// one a follow-up card should park there, is a `main/library/collection`
+// handler whose `onCommand` reads `context.collectionTreeRows?.[0]?.ref.id`.
+//
+// The singular member is re-declared below with its type byte-identical to
+// upstream's, purely to attach `@deprecated`. That is the only compiler-visible
+// counterpart §2.2's "Never read" can have: `tsc --noEmit` does not fail on a
+// deprecated read (it is a suggestion-level diagnostic), so this buys an IDE
+// strike-through and a language-service warning, not an error. There is no
+// `@typescript-eslint/no-deprecated` in `eslint.config.js` that would promote
+// it; adding one is a separate card.
+// ---------------------------------------------------------------------------
+
+declare namespace _ZoteroTypes {
+  namespace MenuManager {
+    interface LibraryMenuContext {
+      /**
+       * The selected collection-tree rows, in collections-list order.
+       *
+       * Present on `main/library/item` and `main/library/collection` only
+       * (docs/08 §2.2); absent on `main/library/addAttachment` and
+       * `main/library/addNote`, which is why it is optional.
+       *
+       * This is the member to read. The singular `collectionTreeRow` throws
+       * when more than one row is selected (docs/08 §2.2 line 215).
+       */
+      collectionTreeRows?: Zotero.CollectionTreeRow[];
+
+      /**
+       * @deprecated docs/08 §2.2 line 215: **never read this.** Zotero 10's
+       * `zoteroPane.js` defines it as a getter that throws
+       * `"collectionTreeRow was removed -- use collectionTreeRows"` when more
+       * than one collection row is selected, and calls
+       * `Zotero.Plugins.warnRemovedAPICall` when it does return. Use
+       * {@link LibraryMenuContext.collectionTreeRows} instead.
+       *
+       * Type repeated from `zotero-types@4.1.3`
+       * `types/xpcom/pluginAPI/menuManager.d.ts:112` byte-for-byte, because
+       * interface merging requires it; see "Known holes" (h) for why that type
+       * is itself wrong.
+       */
+      collectionTreeRow?: _ZoteroTypes.CollectionTree;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Known holes — deliberately NOT augmented
 //
 // These are recorded here rather than declared, because closing them would
@@ -336,6 +468,41 @@ declare namespace _ZoteroTypes {
 //     subset of options therefore does not compile. `research_helper` calls
 //     `executeTransaction(fn)` with no options, so this is currently harmless;
 //     it is recorded so nobody wastes time on it later.
+//
+// (h) `_ZoteroTypes.MenuManager.LibraryMenuContext.collectionTreeRow` is typed
+//     `_ZoteroTypes.CollectionTree` (menuManager.d.ts:112), and
+//     `_ZoteroTypes.ZoteroPane.getCollectionTreeRow()` is typed
+//     `undefined | CollectionTree` (zoteroPane.d.ts:40). Both are the wrong
+//     type, not merely a deprecated one: `zoteroPane.js`'s getter returns
+//     `collectionTreeRows[0]`, i.e. a `Zotero.CollectionTreeRow` (the row), not
+//     the `CollectionTree` (the tree widget). Because `CollectionTree` carries
+//     `[attr: string]: any` (collectionTree.d.ts:6), reading
+//     `context.collectionTreeRow.ref.id` compiles **as `any`** — so the member
+//     docs/08 §2.2 line 215 forbids is not only the only one upstream offered,
+//     it was also unchecked. Not fixable here: interface merging requires the
+//     repeated member's type to be identical, so §6 above can attach
+//     `@deprecated` to it but cannot correct it. An upstream fix or a local
+//     wrapper is the only way out, and `P1-T30` settled that filing the
+//     upstream issue is not an agent's call.
+//
+// (i) `_ZoteroTypes.MenuManager.BaseMenuContext.menuElem` is declared
+//     `readonly menuElem: XULElement` — REQUIRED — while docs/08 §2.2 and
+//     Zotero 10.0.3's `menuManager.js` (lines 601-603: a `WeakRef` deref,
+//     which returns `undefined` once the element is collected) make it
+//     optional. `P2-T22` `Do` step 2 asked whether an augmentation can express
+//     that. **It can** — TypeScript accepts
+//     `interface BaseMenuContext { readonly menuElem?: XULElement }` as a merge
+//     and the member becomes optional, measured 2026-10-06 — but doing it
+//     breaks `test/integration/menus.spec.ts:432` with TS2375:
+//     `menubarContext()` destructures `menuElem` out of a `LibraryMenuContext`
+//     and passes it along explicitly, and under
+//     `exactOptionalPropertyTypes: true` an explicit `XULElement | undefined`
+//     may not be assigned to an optional `menuElem?: XULElement`. That file is
+//     outside `P2-T22`'s `Files`, so the merge is NOT applied and
+//     `src/ui/menus/registerMenus.ts`'s local `MenuElementContext` narrowing
+//     stays as `P1-T19` wrote it. Closing this is its own card: the
+//     augmentation, the two-line fix to `menubarContext()`, and then the
+//     deletion of that local type.
 //
 // This file is a GLOBAL declaration file on purpose: it must contain no
 // top-level `import` or `export`, or every `declare namespace` above would
