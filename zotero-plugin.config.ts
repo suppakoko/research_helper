@@ -54,15 +54,30 @@ export default defineConfig({
     // user artifact — and would ship every future `.md` under `addon/` the same way (measured,
     // P0-T30). Adding a new asset type is now a visible decision rather than an accident.
     //
-    // Every extension currently under `addon/`: .js (bootstrap.js, prefs.js), .json
-    // (manifest.json), .ftl (the two locale bundles), .png (the two icons). `.gitkeep` files are
-    // not matched by either glob — dotfiles have no extension to match — so the empty-directory
-    // markers stay out of the XPI as before.
+    // Every extension currently under `addon/`: .js (bootstrap.js, prefs.js,
+    // content/searchDialog.js), .json (manifest.json), .ftl (the two locale bundles), .png (the
+    // two icons), .xhtml (content/searchDialog.xhtml) and .css
+    // (content/style/searchDialog.css). `.gitkeep` files are not matched by either glob —
+    // dotfiles have no extension to match — so the empty-directory markers stay out of the XPI as
+    // before.
+    //
+    // `.xhtml` and `.css` were added by P1-T20, and this is the "visible decision" P0-T34 set
+    // this list up to force. Measured 2026-10-06: without them `zotero-plugin build` copies
+    // neither file into the XPI, so `chrome://research-helper/content/searchDialog.xhtml`
+    // resolves to an EMPTY response (a missing file in a registered package does not error —
+    // P1-T18), `openSearchWindow` opens nothing, and
+    // `test/integration/menus.spec.ts`'s self-activating P1-T20 probe stays PENDING while the
+    // document sits in the repository. The card's own `Files` list does not name this file; the
+    // addition is reported with the card rather than made silently.
+    //
+    // Both new types go through `replaceDefine()` like every other asset, which is what lets the
+    // document and the stylesheet write `chrome://__addonRef__/content/…` instead of spelling the
+    // package name — the stale-hyphen trap P1-T18 and P1-T19 each had to measure.
     //
     // Keep binaries in mind when extending this list: scaffold `replaceDefine()` reads every
     // matched asset as UTF-8 and writes back only when a substitution changed the string, so a
     // binary survives unless it happens to contain a literal `__KEY__` byte sequence (P0-T02).
-    assets: ["addon/**/*.{js,json,ftl,png}"],
+    assets: ["addon/**/*.{js,json,ftl,png,xhtml,css}"],
     define: {
       ...pkg.config,
       author: pkg.author,

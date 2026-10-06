@@ -10,11 +10,16 @@
  *
  * `P1-T20` owns the document this opens — `addon/content/searchDialog.xhtml`,
  * its script and its stylesheet — and that card `modify`s this file to go with
- * it. Until then the URL below resolves to nothing: a `chrome://` fetch for a
- * missing file in a *registered* package returns an **empty response** rather
- * than an unknown-package error (`P1-T18`, measured), so the absence is only
- * detectable on the content. `test/integration/menus.spec.ts` probes exactly
- * that and gates its real-window assertions on it.
+ * it. **The document exists as of `P1-T20` (2026-10-06)**, so the probe in
+ * `test/integration/menus.spec.ts` that printed `PENDING P1-T20` now resolves
+ * with content and runs its real open/singleton assertions. Shipping it took
+ * one change outside this card's `Files` list, reported with the card:
+ * `zotero-plugin.config.ts`'s `build.assets` glob had to learn `.xhtml` and
+ * `.css`, because until it did the build copied neither file and a `chrome://`
+ * fetch for a missing file in a *registered* package returns an **empty
+ * response** rather than an unknown-package error (`P1-T18`, measured) — so a
+ * document that never shipped would have looked exactly like a document that
+ * was never written.
  *
  * ### Why this takes the window rather than fetching one
  *
@@ -118,6 +123,37 @@ export const SEARCH_WINDOW_URL = `chrome://${config.addonRef}/content/searchDial
 export const SEARCH_WINDOW_NAME = "research-helper-search";
 
 /**
+ * The window's minimum size, written once.
+ *
+ * It appears in two places that cannot import each other —
+ * {@link SEARCH_WINDOW_FEATURES}'s `minwidth=` / `minheight=`, which size the
+ * *chrome window*, and `addon/content/style/searchDialog.css`'s `min-width` /
+ * `min-height`, which size the *document* because XUL `width` / `height`
+ * attributes have not been recognised since Firefox 115 (`docs/08` §4.1.1
+ * requirement 1). This constant is the authority for both, and
+ * `test/unit/ui/searchDialog.test.ts` reads the stylesheet off disk and asserts
+ * the two agree, so a resize of one cannot leave the other behind.
+ *
+ * The pair is `docs/08` §4.1's, and `P1-T20`'s first "Done when" criterion
+ * states it as the window opening "at ≥ 880×600".
+ */
+export const SEARCH_WINDOW_MIN_SIZE = { width: 880, height: 600 } as const;
+
+/**
+ * The element id `Zotero.UIProperties.registerRoot()` is called with inside the
+ * document, from `docs/08` §4.1.1's own `init()` sample.
+ *
+ * Exported so the markup assertions have something to tie the document to;
+ * omitting that call is what §4.1.1 and §9 both call "a real accessibility
+ * defect", and the id is how a test can tell the call was made against the
+ * dialog root rather than against whatever `getElementById` happened to return.
+ */
+export const SEARCH_WINDOW_ROOT_ID = "rh-search-dialog";
+
+/** The keyword input §4.1.1's `init()` focuses on open. */
+export const SEARCH_WINDOW_KEYWORD_ID = "rh-search-keyword";
+
+/**
  * `docs/08` §4.1's feature string, verbatim.
  *
  * `dialog=no` plus the name above is what makes it modeless *and* singleton —
@@ -128,7 +164,8 @@ export const SEARCH_WINDOW_NAME = "research-helper-search";
  */
 export const SEARCH_WINDOW_FEATURES =
   "chrome,titlebar,toolbar,centerscreen,resizable,dialog=no," +
-  "minwidth=880,minheight=600";
+  `minwidth=${SEARCH_WINDOW_MIN_SIZE.width},` +
+  `minheight=${SEARCH_WINDOW_MIN_SIZE.height}`;
 
 /**
  * Open the Search & Import window, or re-focus the one that is already open.

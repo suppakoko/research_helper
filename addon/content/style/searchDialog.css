@@ -1,0 +1,163 @@
+/*
+ * The Search & Import window's stylesheet (P1-T20).
+ *
+ * This file carries the window's SIZE, because docs/08 §4.1.1 requirement 1
+ * records that `width` / `height` attributes on a XUL `<window>` have not been
+ * recognised since Firefox 115. The two numbers below are the same pair as
+ * `SEARCH_WINDOW_MIN_SIZE` in src/ui/dialogs/searchDialog.ts, which builds the
+ * `minwidth=` / `minheight=` features the chrome window itself is opened with;
+ * test/unit/ui/searchDialog.test.ts reads both files and asserts they agree, so
+ * the CSS and the feature string cannot drift apart.
+ *
+ * Three rules from the design corpus that this file is written around:
+ *
+ * - docs/08 §10.3: no fixed width on a label or a button. Korean labels are
+ *   longer than their English counterparts and a fixed width truncates them.
+ *   Where something has to be bounded, it is bounded with `min-width` and left
+ *   free to grow.
+ * - docs/08 §9: no fixed pixel font size anywhere — Zotero scales UI text from
+ *   the user's `fontSize` preference through `--zotero-font-size`, which
+ *   `Zotero.UIProperties.registerRoot()` installs on the root element. Sizes
+ *   here are `em`, so they scale with it.
+ * - docs/08 §9: colour never carries meaning on its own, and light/dark and
+ *   high-contrast modes follow the application, so every colour below is one of
+ *   Zotero's own CSS variables with a plain fallback rather than a literal.
+ */
+
+#rh-search-dialog {
+  /* docs/08 §4.1.1 requirement 1 and P1-T20 Do step 6. Keep in step with
+     SEARCH_WINDOW_MIN_SIZE in src/ui/dialogs/searchDialog.ts. */
+  min-width: 880px;
+  min-height: 600px;
+  padding: 12px;
+}
+
+/* ------------------------------------------------------------------ rows */
+
+#rh-search-dialog > hbox,
+#rh-search-dialog > groupbox {
+  margin-block: 0.25em;
+}
+
+#rh-search-query-row > label,
+#rh-search-scope-row > label,
+#rh-search-filter-row > label,
+#rh-search-target-row > label {
+  /* A shared minimum so the rows line up, and no maximum so a longer
+     translation still fits (docs/08 §10.3). */
+  min-width: 5em;
+  margin-inline-end: 0.5em;
+}
+
+#rh-search-keyword {
+  flex: 1;
+  min-width: 20em;
+}
+
+#rh-search-filter {
+  min-width: 14em;
+  margin-inline-end: 1em;
+}
+
+#rh-search-max-results {
+  /* Wide enough for the largest value docs/07 §8.5 permits, and no wider. */
+  min-width: 5em;
+  margin-inline-start: 0.5em;
+}
+
+#rh-search-run {
+  margin-inline-start: 0.5em;
+}
+
+/* The read-only mode chip of docs/08 §4.2. */
+.rh-chip {
+  margin-inline-start: 1em;
+  padding: 0.1em 0.5em;
+  border: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.15));
+  border-radius: 0.8em;
+  background: var(--fill-quinary, rgba(0, 0, 0, 0.06));
+}
+
+/* ------------------------------------------------------------ year range */
+
+/* The separator docs/08 §4.5 draws between the two year menulists. It lives
+   here rather than in the markup because the markup may hold no literal
+   string at all (P1-T20 Do NOT), and it is `aria-hidden` in the document so a
+   screen reader reads the two accessible names instead. */
+.rh-year-dash::before {
+  content: "\2013";
+  margin-inline: 0.4em;
+}
+
+.rh-hint {
+  margin-inline-start: 1em;
+  color: var(--fill-secondary, inherit);
+}
+
+/* --------------------------------------------------------- database row */
+
+/* FR-2's seven checkboxes wrap onto a second line exactly as docs/08 §4.5
+   draws them, and wrap again rather than clipping when the labels are long or
+   the user's font size is large. */
+.rh-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25em 1.2em;
+}
+
+/* The inline message FR-2 requires when nothing is selected, and the one the
+   error panel shows. ⚠ plus text, never colour alone (docs/08 §9). */
+.rh-inline-warning {
+  color: var(--accent-red, inherit);
+}
+
+.rh-inline-warning::before {
+  content: "\26a0\fe0e";
+  margin-inline-end: 0.4em;
+}
+
+/* --------------------------------------------------------- results area */
+
+#rh-results-area {
+  margin-block: 0.5em;
+  border: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.15));
+  border-radius: 5px;
+  overflow: auto;
+}
+
+.rh-state {
+  padding: 1em;
+}
+
+/* docs/08 §8.4's INITIAL and EMPTY panels are instructions, not spinners, and
+   they sit in the middle of the empty area. No fixed height: §9 forbids one on
+   a text container because Korean and English wrap differently. */
+.rh-placeholder {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--fill-secondary, inherit);
+}
+
+/* The per-database status list of docs/08 §4.6. Monospace so the rows line up
+   the way the wireframe draws them, and `em` so it still scales. */
+#rh-search-source-status {
+  font-family: monospace;
+  line-height: 1.6em;
+}
+
+#rh-state-error-actions > button {
+  margin-inline-end: 0.5em;
+  margin-block-start: 0.5em;
+}
+
+/* ------------------------------------------------------------ status bar */
+
+#rh-search-status-bar {
+  margin-block-start: 0.5em;
+}
+
+#rh-search-progress {
+  min-width: 12em;
+  margin-inline-end: 0.75em;
+}

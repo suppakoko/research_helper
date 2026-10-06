@@ -1,0 +1,321 @@
+<?xml version="1.0"?>
+<!--
+  The Search & Import window (P1-T20).
+
+  Shape copied from docs/08 §4.1.1, which is Zotero's own
+  createParentDialog.xhtml abridged: `<window>` outside, `<dialog>` inside, the
+  XUL `<tooltip>` element, the `<linkset>` localization link, and every script
+  loaded from a chrome:// path rather than inlined.
+
+  Four requirements of §4.1.1 that this file is written around:
+
+  1. NO `width` / `height` attributes on `<window>` — not recognised since
+     Firefox 115. Size lives in style/searchDialog.css as `min-width` /
+     `min-height`, and src/ui/dialogs/searchDialog.ts's SEARCH_WINDOW_MIN_SIZE
+     is the one place the two numbers are written.
+  2. `Zotero.UIProperties.registerRoot()` runs in RHSearchWindow.init() against
+     the `rh-search-dialog` element below. §4.1.1 and §9 both call omitting it
+     "a real accessibility defect".
+  3. `tooltip="html-tooltip"` on `<window>` PLUS the `<tooltip>` element: in a
+     new window `tooltiptext` alone shows nothing at all.
+  4. Arguments arrive as `window.arguments[0]` (`{ mode, collectionID?,
+     seedItemID? }`, src/ui/dialogs/searchDialog.ts's SearchWindowArgs).
+
+  No inline `<script>` and no remote resource: docs/01 §8.3 applies CSP to
+  documents the plugin creates. No network call is made from this document
+  either — §8.3 requires every request to run in the privileged sandbox and the
+  results to be passed in.
+
+  No literal human-readable string anywhere below: every visible string is a
+  `data-l10n-id` resolved from research-helper-searchDialog.ftl (P1-T18). The
+  three strings §4.1.1's own sample hard-codes — the window title and the two
+  dialog button labels — are set from Fluent in init() instead, because XUL
+  carries them in attributes (`title`, `buttonlabelaccept`,
+  `buttonlabelcancel`) that this bundle's entries do not target.
+-->
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?> <?xml-stylesheet
+href="chrome://zotero/skin/zotero.css" type="text/css"?> <?xml-stylesheet
+href="chrome://zotero-platform/content/zotero.css"?> <?xml-stylesheet
+href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
+<window
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  tooltip="html-tooltip"
+  onload="RHSearchWindow.init()"
+>
+  <tooltip id="html-tooltip" page="true" />
+  <dialog
+    id="rh-search-dialog"
+    orient="vertical"
+    buttons="cancel,accept"
+    buttondisabledaccept="true"
+  >
+    <script src="chrome://global/content/globalOverlay.js" />
+    <script src="chrome://zotero/content/include.js" />
+    <script src="chrome://__addonRef__/content/searchDialog.js" />
+    <linkset>
+      <html:link rel="localization" href="__addonRef__-searchDialog.ftl" />
+    </linkset>
+
+    <!-- 1. Query row — docs/08 §4.2, §4.5. Keyword is focused on open and
+         Enter in it starts a search (§9's keyboard contract). -->
+    <hbox id="rh-search-query-row" align="center">
+      <label
+        id="rh-search-keyword-label"
+        control="rh-search-keyword"
+        data-l10n-id="research-helper-search-keyword-label"
+      />
+      <html:input
+        id="rh-search-keyword"
+        type="text"
+        data-l10n-id="research-helper-search-keyword-input"
+      />
+      <button id="rh-search-run" data-l10n-id="research-helper-search-run" />
+      <!-- The read-only mode chip. §4.2 lists four `mode` values; Phase 1
+           registers no menu entry for the other three, so init() only ever
+           sets the `keyword` id. -->
+      <label
+        id="rh-search-mode"
+        class="rh-chip"
+        data-l10n-id="research-helper-search-mode-keyword"
+      />
+    </hbox>
+
+    <!-- 2. Year range and per-database cap — docs/08 §4.2 "Date defaults" and
+         §4.5. Both menulists and the number input are populated and seeded in
+         init(); nothing here states a year or a count. -->
+    <hbox id="rh-search-scope-row" align="center">
+      <label
+        id="rh-search-years-label"
+        control="rh-search-years-from"
+        data-l10n-id="research-helper-search-years-label"
+      />
+      <menulist
+        id="rh-search-years-from"
+        data-l10n-id="research-helper-search-years-from"
+      >
+        <menupopup id="rh-search-years-from-popup" />
+      </menulist>
+      <html:span class="rh-year-dash" aria-hidden="true" />
+      <menulist
+        id="rh-search-years-to"
+        data-l10n-id="research-helper-search-years-to"
+      >
+        <menupopup id="rh-search-years-to-popup" />
+      </menulist>
+      <!-- §4.2: "Expose the exact semantics in the UI label … so the user is
+           never guessing whether '3 years' means rolling 36 months or three
+           calendar years." The whole span is one Fluent message.
+
+           A `<description>` and not a `<label>`: the bundle's own table maps a
+           XUL `<label>` caption to a `.value` attribute, and
+           `research-helper-search-years-span` is a bare message *value* — its
+           "panel prose and status text" row — so Fluent assigns it to
+           `textContent`, which `<label value=…>` does not render. Measured in
+           a live window: as a `<label>` the span came back with `value = null`
+           and showed nothing.
+
+           Its `data-l10n-id` is set in init() alongside `data-l10n-args`
+           rather than written here, so Fluent never sees the message without
+           its three variables; translating it argumentless would both log an
+           l10n error and paint `{ $from } – { $to }` for one frame. -->
+      <description id="rh-search-years-span" class="rh-hint" />
+      <spacer flex="1" />
+      <label
+        id="rh-search-max-results-label"
+        control="rh-search-max-results"
+        data-l10n-id="research-helper-search-max-results-label"
+      />
+      <html:input
+        id="rh-search-max-results"
+        type="number"
+        data-l10n-id="research-helper-search-max-results-input"
+      />
+    </hbox>
+
+    <!-- 3. Databases — docs/08 §4.2, FR-2. The row is rendered from the source
+         registry, so there is no checkbox in this markup: init() creates one
+         per registered adapter. With none registered it renders none and shows
+         the inline message instead. -->
+    <groupbox
+      id="rh-search-databases-group"
+      aria-labelledby="rh-search-databases-label"
+    >
+      <label
+        id="rh-search-databases-label"
+        data-l10n-id="research-helper-search-databases-label"
+      />
+      <hbox id="rh-search-databases" class="rh-wrap" />
+      <description
+        id="rh-search-databases-none"
+        class="rh-inline-warning"
+        role="alert"
+        data-l10n-id="research-helper-search-databases-none"
+      />
+    </groupbox>
+
+    <separator class="groove" />
+
+    <!-- 4. Client-side filtering — docs/08 §4.2, §4.5. -->
+    <hbox id="rh-search-filter-row" align="center">
+      <label
+        id="rh-search-filter-label"
+        control="rh-search-filter"
+        data-l10n-id="research-helper-search-filter-label"
+      />
+      <html:input
+        id="rh-search-filter"
+        type="text"
+        data-l10n-id="research-helper-search-filter-input"
+      />
+      <checkbox
+        id="rh-search-hide-existing"
+        data-l10n-id="research-helper-search-hide-existing"
+      />
+      <spacer flex="1" />
+      <!-- §4.5's "142 results · 37 new". Hidden, and with no `data-l10n-id`,
+           until there is a count: `research-helper-search-result-count` takes
+           `{ $total }` and `{ $new }`, and the card that runs a search sets the
+           id and the arguments together, as applyYearRange() does for the
+           year span. -->
+      <description id="rh-search-result-count" class="rh-hint" hidden="true" />
+    </hbox>
+
+    <!-- 5. The results area and docs/08 §4.6's states as swappable panels.
+         Four of the five panels §4.6 draws are this card's; the fifth,
+         "Re-run (pre-filled from provenance)", is FR-12's and belongs to
+         P2-T17. docs/08 §8.4's PARTIAL banner is wired by P1-T22, and the
+         table inside rh-results-container is P1-T21's. -->
+    <vbox id="rh-results-area" flex="1">
+      <vbox id="rh-state-initial" class="rh-state rh-placeholder">
+        <!-- `research-helper-search-state-initial` takes `{ $years }`, so
+             init() sets the id and the argument together. -->
+        <description id="rh-state-initial-prose" />
+      </vbox>
+
+      <vbox id="rh-state-searching" class="rh-state" hidden="true">
+        <vbox id="rh-search-source-status" role="status" />
+      </vbox>
+
+      <vbox id="rh-state-empty" class="rh-state rh-placeholder" hidden="true">
+        <!-- `research-helper-search-state-empty` takes `{ $query }`,
+             `{ $from }` and `{ $to }`, which only a finished run knows, so the
+             id arrives with the arguments. -->
+        <description id="rh-state-empty-headline" />
+        <description
+          data-l10n-id="research-helper-search-state-empty-suggestions"
+        />
+      </vbox>
+
+      <vbox id="rh-state-error" class="rh-state" hidden="true">
+        <description
+          id="rh-state-error-headline"
+          class="rh-inline-warning"
+          role="alert"
+          data-l10n-id="research-helper-search-state-error"
+        />
+        <vbox id="rh-state-error-detail" />
+        <hbox id="rh-state-error-actions" align="center">
+          <button
+            id="rh-state-error-open-preferences"
+            data-l10n-id="research-helper-search-state-error-open-preferences"
+          />
+          <button
+            id="rh-state-error-retry"
+            data-l10n-id="research-helper-search-state-error-retry"
+          />
+        </hbox>
+      </vbox>
+
+      <!-- P1-T21 mounts docs/08 §4.3's plain scrollable table here. -->
+      <vbox id="rh-results-container" class="rh-state" flex="1" hidden="true" />
+    </vbox>
+
+    <separator class="groove" />
+
+    <!-- 6. Import target — docs/08 §4.2, §4.5. The picker is filled in init()
+         from the collections the host hands in; `collectionID` in
+         window.arguments[0] pre-selects one. -->
+    <hbox id="rh-search-target-row" align="center">
+      <label
+        id="rh-search-target-label"
+        control="rh-search-target"
+        data-l10n-id="research-helper-search-target-label"
+      />
+      <menulist
+        id="rh-search-target"
+        flex="1"
+        data-l10n-id="research-helper-search-target-picker"
+      >
+        <menupopup id="rh-search-target-popup">
+          <!-- §4.2's default for this row is "current collection if one is
+               selected, else 'New collection…'", which only an entry *inside*
+               the picker can express — a button cannot be a menulist's
+               selected value. §4.5 then draws a separate [ New collection… ]
+               button beside the picker, so both exist and both carry the one
+               Fluent id the bundle has for them. -->
+          <menuitem
+            id="rh-search-target-new-item"
+            value="new"
+            data-l10n-id="research-helper-search-target-new"
+          />
+        </menupopup>
+      </menulist>
+      <button
+        id="rh-search-target-new"
+        data-l10n-id="research-helper-search-target-new"
+      />
+    </hbox>
+
+    <!-- 7. Duplicate policy — docs/08 §4.4's dedup pass, drawn in §4.5 with
+         "Add existing item to collection" pre-selected. docs/07 §8.5 declares
+         no preference for it, so §4.5's wireframe is the only default there is
+         and init() selects from that one place. -->
+    <groupbox
+      id="rh-search-duplicates-group"
+      aria-labelledby="rh-search-duplicates-label"
+    >
+      <label
+        id="rh-search-duplicates-label"
+        data-l10n-id="research-helper-search-duplicates-label"
+      />
+      <radiogroup id="rh-search-duplicates" orient="horizontal">
+        <radio
+          id="rh-search-duplicates-skip"
+          value="skip"
+          data-l10n-id="research-helper-search-duplicates-skip"
+        />
+        <radio
+          id="rh-search-duplicates-link"
+          value="link"
+          data-l10n-id="research-helper-search-duplicates-link"
+        />
+        <radio
+          id="rh-search-duplicates-import"
+          value="import"
+          data-l10n-id="research-helper-search-duplicates-import"
+        />
+      </radiogroup>
+    </groupbox>
+
+    <!-- 8. Status bar — docs/08 §4.4: progress lives inside the window
+         "because we need a Cancel button". role="status" per §9. -->
+    <hbox id="rh-search-status-bar" align="center">
+      <html:progress id="rh-search-progress" max="100" hidden="true" />
+      <!-- `<description>`, for the same reason as the year span: the status
+           messages are bare Fluent values and land on `textContent`. -->
+      <description
+        id="rh-search-status"
+        role="status"
+        aria-live="polite"
+        class="rh-hint"
+      />
+      <spacer flex="1" />
+      <button
+        id="rh-search-cancel"
+        hidden="true"
+        data-l10n-id="research-helper-search-cancel"
+      />
+    </hbox>
+  </dialog>
+</window>

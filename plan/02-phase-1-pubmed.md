@@ -3180,6 +3180,16 @@ the last three calendar years and a target-collection picker.
 - create `addon/content/searchDialog.js`
 - create `addon/content/style/searchDialog.css`
 - modify `src/ui/dialogs/searchDialog.ts`
+- modify `zotero-plugin.config.ts`
+- create `test/unit/ui/searchDialog.test.ts`
+
+> **Two rows added 2026-10-06, after the executing agent reported both as outside the list.**
+> The asset glob in `zotero-plugin.config.ts` had to gain `.xhtml` and `.css`, and the coordinator
+> verified why by reverting the change: **the window document vanishes from the installer and the
+> build still exits 0**, so this card could have passed its own `Verify with` while shipping a dead
+> file. `P0-T34` wrote that glob as an explicit list so that adding an asset type would be a visible
+> decision; the decision belongs here. The unit spec is required by `plan/README.md` §6, and
+> everything it asserts is about the three files this card creates.
 
 **Do.**
 1. Copy `docs/08` §4.1.1's markup shape exactly, including the `<linkset>` with
@@ -3248,6 +3258,129 @@ source, so the row renders one checkbox from the registry (`docs/07` §11.1 step
 rendered from the registry"). Do not fake the other six — a checkbox that
 searches nothing is worse than an absent one, and Phase 2 adds them by
 registration alone.
+
+**Findings, 2026-10-06 — the window exists, and shipping the first plugin document turned two
+previously-vacuous assertions into real ones.** Verified independently: the three files are on disk
+(markup 13,140 bytes, script 35,676, stylesheet 5,009), **916 unit tests in 23 files** (up from 863 in
+22), **63 integration tests with zero failures**, typecheck 0, `lint:check` 0, and
+`npm run build` exits 0 with an installer of **76,388 bytes** (was 58,932).
+
+**The one file outside `Files` was load-bearing, and the coordinator proved it rather than accepting
+the report.** `zotero-plugin.config.ts`'s asset glob had to gain `.xhtml` and `.css`. Reverting that
+one change and rebuilding: **the window document vanishes from the installer and the build still exits
+0.** So without it this card's own `Verify with` would have passed while shipping a dead file — the
+document would sit in the repository, `chrome://research-helper/content/searchDialog.xhtml` would
+return an **empty response rather than an error** (`P1-T18`'s measurement), and nothing would have
+said so. `P0-T34` wrote that glob as an explicit list precisely so a new asset type would be "a
+visible decision rather than an accident"; this card is that decision and **the card's `Files` row for
+it is missing**. The addition also carries the `__addonRef__` substitution into both new files, so
+neither spells the chrome package name — the stale-hyphen trap `P1-T18` and `P1-T19` each had to
+measure separately.
+
+**Two assertions that were passing vacuously now do real work, and that is the most valuable thing
+this card produced.** `P1-T19` deliberately shipped a self-activating probe; before this card the log
+read `PENDING P1-T20: … yields no response, so the real-window criteria … are NOT verified by this
+spec`. **That line is now absent from the output entirely**, and the test opens the real window twice
+and asserts the same object comes back: `✔ opens the real window as a singleton once P1-T20 ships the
+document`. Separately — and the card does not mention this one — `l10n.spec.ts`'s markup scrape went
+from `0 of 1 Phase 1 documents present … satisfied only vacuously` to **`26 distinct data-l10n-id, 0
+undeclared []`**, so `P1-T18`'s first criterion is non-vacuous for the first time. **A card that
+retires two vacuous assertions is worth more than its own criteria suggest.**
+
+**Two defects in the first draft were found only by opening the real window, and neither was findable
+from Node.** First, the year label rendered **`2,024 – 2,026`**: Fluent formats a bare number argument
+through `Intl.NumberFormat`, so the year grew a thousands separator, and §4.2 requires the literal
+`2024 – 2026`. Fixed by passing the years as strings while `years` stays a number so it still selects
+the plural variant. Second, a `<label data-l10n-id>` **showed nothing at all**: the message is a bare
+Fluent *value*, which Fluent assigns to `textContent`, and `<label value=…>` does not render
+`textContent`. Fixed by using `<description>`, and the same fix applied to two more elements. **Both
+are the kind of defect a unit test cannot see**, which is the argument for this card's integration
+work rather than against it.
+
+**The zero-registered-source situation, measured and reported rather than worked around.** Nothing
+calls `registerSources()` or `installServices()` at startup — both are reached only from their own unit
+tests — so the registry is empty, there is no preference store installed at runtime, and `src/addon.ts`
+publishes nothing on the plugin instance. The Databases row therefore renders **zero** checkboxes,
+confirmed in a live window, and **no source identifier appears in the markup at all** (asserted
+mechanically; a faked checkbox is caught by a mutant). "Done when" item 4 is consequently **half
+verified and said to be half verified**: the *zero-registry* half is asserted end to end in a live
+window — Search disabled, the inline message on screen with its resolved English text — while the
+*user-unchecks-everything* half is asserted only at unit level, because there is no checkbox to drive.
+Rule 6: the criterion was left exactly as written.
+
+**The agent declined to mint a message identifier, which was the right call.** The existing FR-2 string
+("Select at least one database to search.") is reused for the empty-registry case because it is the
+same gate with the same consequence — but it is **advice the user cannot act on** when nothing is
+registered, since there is no database to select. A distinct string would be better, the bundle has
+none, and new strings belong to `P1-T18` and gate `G-41`. **Reported, not minted.**
+
+**Accessibility: `registerRoot` is asserted at two levels, and the theme behaviour was measured rather
+than eyeballed.** The live dialog root reports `--zotero-font-size`, `--zotero-ui-density` and a
+computed `font-size: 13px`, and those custom properties exist **only** because
+`Zotero.UIProperties.registerRoot` ran; the unit suite independently asserts the call happens exactly
+once with the right element. Themes were measured by forcing Gecko's dark-theme preference in a
+throwaway profile and reading computed colours both ways, which is better evidence than a screenshot.
+
+**One accessibility number is worse than the report said, recomputed here.** The inline warning colour
+is Zotero's own `--accent-red`. On the light background it reaches **4.74 : 1**, which passes the
+AA requirement of 4.5 : 1. On the dark background the composited colour is `rgb(200,43,55)` on
+`rgb(30,30,30)`, which is **3.06 : 1** — the report estimated ≈3.6 : 1, and the true figure is lower.
+NFR-13 asks for AA in both themes and the dark case does not reach it for body-sized text. **Needs a
+card**, together with the one genuinely human check this card cannot do.
+
+**What the agent said it did not verify, which is the part worth reading.** "Renders correctly in both
+light and dark themes" — meaning no clipping, no overlap, no unreadable pairing — **was not checked by
+looking at the window.** Tab *order* was read from document order plus the measured absence of any
+`tabindex`, not by pressing Tab. Enter-in-the-keyword-field was asserted at unit level only; Escape was
+driven as a real synthesised key event in a live window and closed it. **Stating which of a
+user-interface card's criteria were measured, which were inferred, and which were not checked at all
+is the only honest way to report this kind of card**, and the inferences are sound ones.
+
+**A conflict inside the card's own instructions, resolved and documented.** `Do` step 1 says to copy
+§4.1.1's markup "exactly", and §4.1.1's sample hard-codes three English strings — the window title,
+`buttonlabelaccept="Import"`, and the cancel label — while the card's `Do NOT` forbids any hard-coded
+English string in the markup. The agent resolved it for the `Do NOT` and sets all three from Fluent in
+`init()`. Verified: the markup contains **no** `label=`, `title=`, `tooltiptext=`, `placeholder=`,
+`accesskey=` or `buttonlabel*=` attribute at all, and the only `value=` attributes are four
+machine-readable values (`new`, `skip`, `link`, `import`); the live window reports a resolved title and
+button labels.
+
+**New noise in the build log that is not a regression.** The build now prints **26** warnings, one per
+message identifier in the new document that the Korean bundle does not translate. That bundle ships
+exactly one message by design, `KO_PENDING_REVIEW` enumerates the rest, and `l10n.spec.ts` asserts the
+missing set equals that list — so this is gate `G-41`'s known, deliberate gap becoming visible, exactly
+as `plan/06`'s `G-41` entry anticipated when it named "the Korean half of `P1-T20`". No `.ftl` file was
+changed. **Flagged because someone will read 26 warnings as a defect.**
+
+**Thirteen mutants, every one caught**, including the two that matter most for a document nothing
+type-checks: removing `registerRoot`, and putting `width="880"` back on the window element. Note why
+the mutants carry so much weight here — `tsconfig.json` **excludes `addon`**, so none of the three
+delivered files is type-checked at all, and `skipLibCheck` is irrelevant because these are not
+declaration files. The new unit spec reads the shipped files off disk and evaluates the script against
+a hand-built fake document, which is the only way to reach a classic chrome script with no exports.
+
+**A test file was added outside `Files`, and the reason is `plan/README.md` §6.** The card names no
+test file and gives no reason in `Notes`, which §4 requires. Everything the new spec asserts is about
+the three files this card creates, so the gap is in the list rather than in the work.
+
+**Five corpus problems found, four of them latent traps for the next card.** (a) `src/i18n/keys.ts`
+types the year-span message's `from` and `to` as **`number`**, which is exactly what produced
+`2,024 – 2,026`; the same mistake sits in the empty-state message that `P1-T22` will populate next.
+(b) The English bundle's own attribute table maps "XUL label caption" to `.value`, but four of its
+messages are bare values that a `<label>` cannot render, and it has no row for a window title at all.
+(c) The card's `Do` step 1 names the localization link as `searchDialog.ftl`; the registered resource
+is **`research-helper-searchDialog.ftl`**, flat and prefixed, because Zotero 10 drops directory
+entries — taken literally the card's phrasing yields a link that resolves to nothing. (d) §4.2's
+target-collection row and §4.5's wireframe describe **different controls**, and the agent built both
+rather than guessing. (e) `docs/07` §8.5 declares **no preference** for the duplicate policy while
+§4.5's wireframe shows one radio pre-selected, so the wireframe is the sole authority for that default
+and the agent recorded it in exactly one place.
+
+**One precision point about the hand-out, in the agent's favour.** The brief said `P1-T09` "is blocked
+behind a human gate — the owner has not supplied the … key that `P1-T06` needs", which named the right
+card; the agent noted that `P1-T09`'s own `Human gate` cell reads `none` and the block is transitive
+through `Depends on`. The conclusion is unchanged and the precision is worth keeping, because "this
+card has a gate" and "this card waits on a gated card" need different answers from an owner.
 
 ---
 
