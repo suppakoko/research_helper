@@ -191,6 +191,31 @@ When Claude Code is handed a task card:
    fails, report the failure — do not adjust the criterion to match the code.
 7. **Stop at a human gate** and say precisely what you need.
 
+8. **A card's own text is held to the same evidence standard as the work it
+   commissions — grep before you assert where anything lives.** Added
+   2026-10-06, because this was by then the single most common defect in the
+   plan corpus and every instance was caught by the agent executing the card
+   rather than by its author. The five: `P1-T24` carried an importer count
+   copied from `P1-T12`'s report without checking the file; `P1-T32` item 3
+   said `keys.ts` declared no headline id when `P1-T18` had added one in an
+   earlier commit; `P1-T33` step 3 told an agent to edit an assignment that
+   lives in a file outside its own `Files`, making the step a no-op and the
+   card executable only if the decision went one way; `P1-T34` item 1 put
+   seven `docs/08` §3.3 lines in §4.1; and `P2-T23` attributed to `P1-T04`'s
+   `Findings` the opposite of what that block says about where the registry
+   tests live. In every case the **line numbers were grepped and right** and
+   the **claim built on top of them was not checked at all** — which is the
+   shape to watch for.
+
+   So, before a claim about a file, a section, a symbol or a test goes into a
+   card: grep it, and cite what the grep returned rather than what the last
+   report said about it. A card report is evidence about the work, **not**
+   about the corpus. Where a claim cannot be checked cheaply, write it as a
+   question for the executing agent ("verify X yourself; I believe Y")
+   instead of as a premise — an agent can test a question and will inherit a
+   premise. The same applies to a `Files` row: a row written as a guess is a
+   guess the agent cannot see, so mark it as one.
+
 ## 6. Conventions
 
 - **Repository.** Not yet initialised. `P0-T01` creates it. Default branch

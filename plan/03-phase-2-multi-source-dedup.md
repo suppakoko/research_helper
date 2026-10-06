@@ -2724,15 +2724,24 @@ exist**, and that is not merely a coverage gap — it makes an existing card unp
 Measured 2026-10-02:
 
 - `plan/03`'s `P2-T03` **`Verify with`** is
-  `npm run typecheck && npm run test:unit -- europepmc && npm run test:unit -- hostLimiter` (line 387).
+  `npm run typecheck && npm run test:unit -- europepmc && npm run test:unit -- hostLimiter` (line 398).
 - Run today, `npx vitest run --dir test/unit hostLimiter` exits **1** with `No test files found`.
 - It is an `&&` chain, so the whole `Verify with` fails. **`P2-T03` cannot satisfy its own verification
   step** until this file exists.
 
-Two sets of tests are currently homeless in a file that is not theirs. `P1-T04`'s `Findings` already
-reported that the **registry**'s coverage lives in `test/unit/core/http-client.test.ts`, and `P1-T26`
-put `parseAdvertisedLimits` / `adoptAdvertisedLimits` there too — because `http-client.test.ts` was
-the only test file in that card's `Files`. Both are `hostLimiter.ts`'s functions.
+`P1-T26` put `parseAdvertisedLimits` / `adoptAdvertisedLimits` into
+`test/unit/core/http-client.test.ts`, because that was the only test file in its `Files`. They are
+`hostLimiter.ts`'s functions and they are what this card moves.
+> **Corrected 2026-10-06, reported by the executing agent — and this is `plan/README.md` §5 rule 8's
+> fifth instance.** This paragraph said "`P1-T04`'s `Findings` already reported that the
+> **registry**'s coverage lives in `test/unit/core/http-client.test.ts`". It reported the **opposite**:
+> `plan/02` line 833 says "The registry's 12 tests live in `tokenBucket.test.ts` because that is what
+> this card's `Files` names." Measured — `http-client.test.ts` imports **none** of `HOST_POLICIES`,
+> `createHostLimiterRegistry`, `installHostLimiters`, `getHostLimiters` or `peekHostLimiters`, while
+> `tokenBucket.test.ts` imports all of them. **So `Do` step 1's "registry tests" half was
+> unexecutable under this card's own `Files`**, which names neither `tokenBucket.test.ts` nor a way to
+> reach it. The Goal and all four criteria are satisfied without it, and moving those 12 tests is now
+> its own card.
 
 **Read first.**
 - `src/core/rateLimit/hostLimiter.ts` — the whole file: §1's registry, `policyFor`, and §3's
@@ -2742,15 +2751,23 @@ the only test file in that card's `Files`. Both are `hostLimiter.ts`'s functions
   assert through the real client in places, deliberately; those stay.
 - `plan/03`'s `P2-T03` `Verify with` line, so the move is checked against what the chain actually
   invokes.
-- `docs/13` §3 on where unit tests live and how they are named.
+- `docs/13` **§2.1 "Layer 1 — Unit tests in Node"** on where unit tests live.
+  > **Corrected 2026-10-06.** This cited "`docs/13` §3", which is **Fixtures** (§3.1 Inventory, §3.2
+  > Recording and redaction, §3.3 Keeping fixtures fresh) and says nothing about test placement. §2.1
+  > is the section that does. The agent followed §2.1 and took the `test/unit/core/<module>.test.ts`
+  > naming from the ten sibling files in that directory, which is the better evidence anyway.
 
 **Files.**
 - create `test/unit/core/hostLimiter.test.ts`
 - modify `test/unit/core/http-client.test.ts`
 
 **Do.**
-1. Create the file and move the registry tests and the header-adoption tests that are genuinely
-   `hostLimiter.ts`'s.
+1. Create the file and move the header-adoption tests that are genuinely `hostLimiter.ts`'s.
+   > **Narrowed 2026-10-06.** This read "move the registry tests **and** the header-adoption tests".
+   > The registry tests live in `tokenBucket.test.ts`, which this card's `Files` does not name — see
+   > the correction under **Why this is a card** — so that half was unexecutable as written. It is a
+   > second pure move of the same kind and now has its own card rather than being smuggled in under a
+   > `Files` list that does not reach it.
 2. Leave in `http-client.test.ts` any assertion that measures the **client's** behaviour even though
    a limiter is involved — `P1-T26`'s end-to-end reconfigure test is the clear case: it asserts what
    reached the wire and when.
@@ -2782,6 +2799,85 @@ while its `Files` only *modifies* `hostLimiter.ts` and never creates the matchin
 asymmetry is the whole reason this card exists and the reason it is the one that blocks `P2-T03`.**
 
 ---
+
+**Findings, 2026-10-06 — all four criteria pass. `npm run test:unit -- hostLimiter` exits 0 with 7
+tests where it exited 1 with `No test files found`, and `P2-T03`'s chain now fails only on the link
+`P2-T03` itself creates.** Verified independently: **843 unit tests in 22 files** (was 843 in 21),
+`hostLimiter` 7 tests exit 0, typecheck 0, `lint:check` 0.
+
+**The move was proved pure by name set, not by count** — which is the check that matters, because 843
+staying 843 is also what a swapped-out dead test looks like. Captured with `--reporter=json` before and
+after: the **name-only set of all 843 is `diff`-empty**, and the file-qualified set differs by exactly
+7 lines removed and the same 7 added, each moving from `http-client.test.ts` to `hostLimiter.test.ts`.
+The moved block is byte-identical — `diff` of the 173 removed lines against the new file's last 173 is
+empty.
+
+**And the moved tests were proved non-vacuous, which a pure move does not guarantee.** Six mutants
+against a pristine `hostLimiter.ts`, each run against `test:unit -- hostLimiter` alone: dropping one of
+the two measured header spellings failed 3; relaxing tighten-only from `<` to `!==` failed 2; ignoring
+the interval failed 1; weakening the two-member seam guard failed 1; accepting a literal zero failed 1;
+dropping the `...current` spread failed 2. **All 7 moved tests are implicated by at least one mutant**,
+so none lost an import or a fixture in transit, and `src/core/rateLimit/hostLimiter.ts` is
+sha256-identical to its hand-out state after the cycle.
+
+**The line the card turns on was drawn with a usable test, stated as one.** *Does the assertion fail if
+the client changes but `hostLimiter.ts` does not?* By that test the whole of
+`describe("the limits a host advertises")` moved — every one of its 7 calls `parseAdvertisedLimits` or
+`adoptAdvertisedLimits` directly, with no `createHttpClient`, no transport and no clock — while
+`P1-T26`'s four end-to-end reconfigure tests stayed, because they assert **what reached the wire and
+when** against a manual clock. The four per-host-limiter tests stayed for the same reason: they measure
+the client's call *ordering* into the port.
+
+**One helper decision is worth keeping.** `createStubLimiter` stayed in `http-client.test.ts` (six
+other client tests use it) and the new file carries a four-member equivalent typed as
+`RateLimiterPort` **from `client.ts`** — so the "missing either half of the seam" test still asserts
+that *the shape the client hands in* has neither member, rather than being weakened to a bare `{}`.
+That is the one test whose stub was rewritten, and the seam-guard mutant still kills it. `NCBI_NO_KEY`
+was duplicated rather than moved, because `http-client.test.ts` still uses it for the 429-header test.
+
+**Four errors in this card's text, all mine, all corrected above — and together they are `plan/README.md`
+§5 rule 8's fifth instance, which is why the rule now exists.** The worst: the card told the agent that
+`P1-T04`'s `Findings` "reported that the registry's coverage lives in `test/unit/core/http-client.test.ts`"
+when that block reports the **opposite** — `plan/02:833` says the registry's 12 tests live in
+`tokenBucket.test.ts`. Measured here: `http-client.test.ts` imports **none** of `HOST_POLICIES`,
+`createHostLimiterRegistry`, `installHostLimiters`, `getHostLimiters` or `peekHostLimiters`;
+`tokenBucket.test.ts` imports all of them. **So `Do` step 1's "registry tests" half was unexecutable
+under this card's own `Files`**, and the agent reported that rather than reaching outside its list —
+correctly, under rule 2. Also corrected: `docs/13` **§3 is Fixtures**, not test placement (§2.1 is),
+and `P2-T03`'s `Verify with` is at line **398**, not 387.
+
+**Rule 8 was added to `plan/README.md` §5 on the strength of this card rather than this card's
+correction alone.** Five instances across five cards, every one caught by the executing agent and none
+by me, and in every case **the line numbers were grepped and right while the claim built on top of them
+was never checked** — that is the shape, and it is now written down with the five examples and the
+remedy: where a claim cannot be checked cheaply, put it in the card as a question for the agent rather
+than as a premise, because an agent can test a question and will inherit a premise.
+
+**Two statements elsewhere went stale by this card, both outside its `Files` and both reported rather
+than edited.** `test/unit/core/tokenBucket.test.ts`'s header says
+"`test/unit/core/hostLimiter.test.ts` **does not exist**" and explains that `P2-T03`'s command "will
+match nothing" — both clauses are now false. And a useful detail the agent noticed: those three
+registry describes are *named* `hostLimiter …`, but **vitest's positional filter matches file paths,
+not test names**, so `test:unit -- hostLimiter` never reached them even before this card. Consistent,
+not a second defect — but it is exactly the misleading state this card existed to end, only narrower.
+
+**The integration suite was not run and the justification is sound.** The `Verify with` is unit-only,
+criterion 4 names `npm run test` (unit + contract), grep over `test/integration/` and `test/contract/`
+finds none of the moved symbols or either test file, and **no test file in the repo imports another**.
+So no integration spec can observe this change, the `.scaffold` profile was never touched, and no
+process had to be identified — which also means this card contributes nothing to the `EBUSY` question
+either way.
+
+**Needs a card, and it is the other half of `Do` step 1.** Move `tokenBucket.test.ts`'s 12 registry
+tests into `hostLimiter.test.ts` and fix that file's now-false header. **Worth doing rather than
+noting:** with the registry tests still where they are, `test:unit -- hostLimiter` **passes while
+running none of `hostLimiter.ts`'s registry coverage** — the same misleading green this card was
+written to remove. Same pure-move shape, same before/after name-set check available, ~0.25 d.
+
+**Nothing untested was exposed by the move**, so no second card on that account. The one coverage
+observation is pre-existing and already recorded by `P1-T26`: the **upward** half of header adoption
+is deliberately unimplemented and therefore unasserted, and `hostLimiter.ts`'s own comment says that
+question belongs with Phase 2's Crossref row.
 
 ---
 ## Estimate roll-up
