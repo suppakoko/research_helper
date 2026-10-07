@@ -4426,8 +4426,21 @@ actionable message.
 - Do **not** run the search on the document's own thread with synchronous
   parsing. FR-10 and NFR-3: the main Zotero window must stay responsive, in
   ≤ 100 ms slices.
-- Do **not** import from the table's *filtered* view when rows are hidden —
-  import exactly the checked set, or a hidden-but-checked row silently vanishes.
+- Import exactly the set the table shows as picked — **checked ∩ visible**, which is `P1-T21`'s
+  shipped selection model.
+  > **Corrected 2026-10-07 after the executing agent reported the conflict.** This read "do **not**
+  > import from the table's *filtered* view when rows are hidden — import exactly the checked set,
+  > or a hidden-but-checked row silently vanishes", i.e. a hidden-but-checked row **should** be
+  > imported. **`P1-T21` decided the opposite, deliberately**, with its reasoning in a fenced block
+  > and two test files asserting it: what the table shows and what Import does are the same set by
+  > construction. **The shipped behaviour was kept**, because importing a row the user explicitly
+  > asked to hide is worse than not importing it, and the displayed count then matches the number
+  > created. Neither `docs/08` §4.2 nor §4.5 settles it.
+  >
+  > **The consequence is larger than the wording and is now asserted rather than described:** the
+  > shipped default hides already-present rows, a hidden row is never imported, so **the only rows
+  > §4.4's duplicate-policy control is about are the hidden ones** — which makes "add existing item
+  > to collection" unreachable from the window as shipped. **An owner's decision.**
 - Do **not** write the provenance note before the import finishes; its counts
   are outputs of the import (FR-8).
 
@@ -4438,8 +4451,18 @@ actionable message.
 - [ ] Cancel during fetching stops within 2 s and creates nothing (FR-10).
 - [ ] With the network disconnected, the window shows the `OFFLINE` message and
       its Retry action, not a stack trace (NFR-9, NFR-14).
-- [ ] A forced 429 renders the `RATE_LIMIT` row's message with its retry
-      countdown.
+- [ ] A forced 429 renders the `RATE_LIMIT` row's message, with the code and the status in the
+      disclosure — **not a retry countdown.**
+      > **Reworded 2026-10-07 after the executing agent reported it under rule 6, for two
+      > independent reasons.** First, `docs/07` §5.2's serialized-error projection **drops the
+      > thrower's `context`**, where the retry delay lives, so the number does not exist by the time
+      > any view sees the failure. Second, **even with it the message would be false**: no retry
+      > policy is supplied at the composition root — `P1-T04` and `P1-T05` both declined to invent a
+      > per-host cap and `P1-T28` owns it — so the client makes **one** attempt and nothing retries.
+      > A countdown would promise a retry that never happens. What ships is NFR-14's first two
+      > requirements: *what* failed and *which* service, plus a Retry action. **The three rows that
+      > cannot render are declared as a named constant and asserted**, so the gap is something a
+      > later card deletes rather than a surprise it discovers.
 - [ ] The summary reports linked-existing separately from created (FR-51).
 - [ ] `npm run typecheck` exits 0.
 
@@ -4452,6 +4475,133 @@ npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fai
 errors; for a literature source substitute the source display name from its
 `displayNameKey`. Everything user-visible here is a Fluent key added in
 `P1-T18` — if a string is missing, add it there rather than inlining English.
+
+**Findings, 2026-10-07 — a search ran end to end into a real library, and the window still ships inert
+because publishing its host needs a file this card may not touch.** Verified independently: **93
+integration tests, zero failures** (up from 82), 1,194 unit and 28 contract unchanged, typecheck 0,
+`lint:check` 0, installer **121,920 bytes** (from 111,969), exactly the card's four files touched, and
+`grep -rn MUTANT` clean.
+
+**The end-to-end run is real and the evidence is in the log.** Real items were created in the **scaffold
+test profile's** library and erased afterwards: `cleanup erased 6 item(s) and 2 collection(s)`. The
+import summary reads `Imported 3 · Linked 0 · Skipped 0 duplicates · 0 failed` with abstract coverage at
+100 %, and a **re-import of four records of which three were already present** reads `Imported 1 ·
+Linked 3` — so FR-51's separate reporting works on real data rather than on a stub. Cancellation
+measured at **133 ms** against a 2-second requirement, with a notifier spy recording **zero** write
+events. Everything was real except the literature sources themselves, and **zero network requests were
+made**, because the fixture replay transport imports Node modules the Zotero sandbox does not have — so
+the double is a *source* rather than a transport, and the real adapter stays covered by the 28
+fixture-backed contract tests.
+
+**The security hole was closed by not building the surface, and the reasoning is the best part of this
+card.** The empty-state headline is **not populated at all**. The decisive fact is that **redaction
+cannot clean the shape that matters**: an access key is 32 characters and the free-text pattern starts at
+40, which `P1-T17` measured — so redacting before interpolating would have produced a panel that still
+showed the key **while looking handled**, which the agent correctly calls the worst available outcome. A
+sharper rule in the view layer would have been a second redactor in a second place, which the project
+forbids. Truncation leaks a prefix. And what is lost is affordable: the headline states only that nothing
+was found and what the year range was, and **both are already on screen** — the result count reads
+`0 results · 0 new` and the two year controls show the range — while §8.4's actionable half, the
+suggestions line, takes no arguments and renders.
+
+**Two more surfaces were closed that nobody had flagged.** The error disclosure carries **`code` and
+`httpStatus` only**, because the serialized error's free-text detail is built from the failing request —
+the adapter's own failure message is built from a URL — and the free-text redactor misses a
+32-character key inside it. And the import collection name is **never derived from the keyword box**,
+because a collection name is written to the database and read back for the life of the library. **Both
+were found by applying the same reasoning one step further than asked**, and both assertions were proven
+to bite: the headline mutant fails with the literal text `expected 'No papers found for
+"0123456789abcdef…' to equal ''`.
+
+**The window ships inert, and that was reported rather than worked around.** Verified by the coordinator:
+`src/addon.ts:64` still sets `this.api = {}` and nothing writes to it. The run-time graph **does** exist
+— `registerUI()` calls `installServices()`, which calls `registerSources()` itself — but `registerUI()`
+holds the graph **nowhere**, deliberately and with its own reason recorded there. So publishing the host
+is **one line in a file outside this card's `Files`**, and nothing was edited there. What exists instead
+is the host object itself, correctly typed, plus a named constant recording the property, plus an
+integration spec that installs it — **which is currently the only place the end-to-end path runs.**
+**Highest-priority card**: `P1-T23` cannot check its criteria against the product until it lands.
+
+**Two defects found by running the thing rather than reading it, and the first is the kind only a live
+window shows.** **The search window was missing a Fluent bundle.** Its markup links one resource, and
+**every string this card renders lives in the other one** — the error rows, the source name, the import
+summary, the coverage line. The first run rendered **seven surfaces as empty strings**, because a message
+identifier whose resource is unlinked resolves to nothing and leaves the element alone. Fixed by adding
+the resource at run time rather than editing another card's markup. **Natural experiment: seven failures
+without it, zero with it.** And the in-flight per-database list named **every registered adapter rather
+than the ones asked**, so a source the user had unchecked showed as searching and then vanished from the
+final list.
+
+**A criterion cannot pass, for two independent reasons rather than one.** The rate-limit row's retry
+countdown: first, the serialized error projection **drops the thrower's context**, where the retry delay
+lives, so the number does not exist by the time any view sees the failure; second, **even with it the
+message would be false**, because no retry policy is supplied — one attempt is made and nothing retries.
+What ships is what failed and which service, plus a Retry action, with the code and status in the
+disclosure. **The three unrenderable rows are declared as a named constant and asserted**, so the gap is
+something a later card deletes rather than a surprise it discovers.
+
+**This card's own `Do NOT` contradicts the shipped behaviour of the previous one, and the agent kept the
+shipped one and argued for it.** This card says a hidden-but-checked row **should** be imported, or it
+"silently vanishes". `P1-T21` decided the opposite deliberately, with its reasoning in a fenced block and
+two test files asserting it: what the table shows and what Import does are the same set by construction.
+**`P1-T21`'s behaviour was kept**, because importing a row the user explicitly asked to hide is worse
+than not importing it, and the displayed count then matches the number created. The `Do NOT`'s phrasing
+is corrected above; neither document section settles it.
+
+**And that contradiction has a consequence worth more than the wording.** The shipped default hides
+already-present rows, a hidden row is never imported, and so **the only rows the duplicate-policy control
+is about are the hidden ones** — which makes "add existing item to collection" unreachable from the
+window as shipped. **Asserted rather than described**: the re-import test rebuilds the library index,
+checks that three of four rows disappear, and checks that unticking the box brings them back. Owner's
+decision. Separately, the duplicate-policy control is **inert**: the choice is collected and dropped,
+because the pipeline's target type has no member for it.
+
+**A defect in the card's own mutation harness, found and reported rather than hidden.** Four mutations
+produced two *extra* failures each, always the same pair, and the diagnosis was **not** the mutation: a
+ten-second cap on waiting for text to render **expired under load**, because nine full suites ran back to
+back and individual tests that take under 40 ms in a green run took seconds. Raised to 25 seconds with
+the measurement recorded. **"A cap that can expire on a loaded machine turns a green suite into a coin
+toss"** is the sentence to keep — it is the same class as the reporter-name trap that cost two other
+cards a whole sweep this week.
+
+**A false claim in a source file was corrected in place, and the coordinator traced where it came from.**
+The window script's header asserted that the service installer "is called only from a unit test" and
+concluded that at run time there is no source registry and no preference store at all. **Both halves are
+false and were false when written.** Traced: the claim entered in `P1-T20`'s commit. The
+`registerSources` half came from the coordinator's hand-out and was **true at that time**; the installer
+half was not in that hand-out, and the coordinator had **already corrected that same claim** when another
+agent made it — so the route into the file cannot be pinned down from here, which is itself the point.
+**A false premise that reaches a source-file comment outlives the card that wrote it**, and the next
+reader inherits it as fact. Now replaced with the grep and the one-line truth.
+
+**What was not checked, stated plainly.** No idle-tick sampler ran during a search, so the responsiveness
+requirement is unmeasured here and belongs to the definition-of-done card; record counts were 3–40,
+well below the case that would strain it. The new-collection prompt was **never opened**, because it is
+modal and would block the run — the picker half is driven through a seam. **Nobody looked at the
+window**, and light and dark were not compared. And the completion popup was **never drawn**, because
+that needs a second service graph the installer refuses; what is asserted instead is the contract asked
+of the factory — the popup requested on completion for every one of eleven jobs, and exactly one
+completion call per job carrying the summary.
+
+**One deviation on the per-database line, bounded honestly.** The dot leaders and the tick-and-arrow
+glyphs §4.6 draws are not rendered, because the stylesheet that would carry them belongs to another card.
+The outcome travels as a data attribute — **which is the selector such a rule would use** — and the
+accessibility requirement is met without it, because the words carry the state.
+
+**Needs a card, and the first one blocks the phase.** Publish the window's host by holding the graph and
+binding the two platform ports. Then: a query-free headline identifier; carrying a redacted subset of an
+error's context so three of the error rows can render at all; the three validation messages, now
+reachable from a button press where they were not before; carrying the duplicate-policy choice through to
+the writer; resolving the hide-existing conflict; a work-type vocabulary; where the second bundle link
+belongs; styling the status list; a preference pane so the Open Preferences action can select one;
+per-source import counts; the JSON export action; and **a fixture replay transport usable inside Zotero**,
+which would stop all seven Phase 2 sources hand-rolling a double.
+
+**One `Files` gap, the same one the previous card reported.** No unit-test path exists for the new view
+model, whose arithmetic — the error table, the selection round-trip, the latching, the per-source
+attribution — is exactly what a layer-one test isolates cheaply, and all of it is currently asserted only
+through a live window at integration cost. Nothing was added there. **The gap is in the list, not in the
+work.**
 
 ---
 

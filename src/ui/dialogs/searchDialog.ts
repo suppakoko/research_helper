@@ -167,6 +167,113 @@ export const SEARCH_WINDOW_FEATURES =
   `minwidth=${SEARCH_WINDOW_MIN_SIZE.width},` +
   `minheight=${SEARCH_WINDOW_MIN_SIZE.height}`;
 
+// ---------------------------------------------------------------------------
+// The document ↔ privileged-side contract (`P1-T22`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The property on `Zotero.<addonInstance>.api` the document reads its host off.
+ *
+ * `addon/content/searchDialog.js`'s `resolveHost()` looks for
+ * `Zotero.__addonInstance__.api.searchWindow` and falls back to an empty object.
+ * The name is written here as well so the publishing side and the reading side
+ * cannot drift; the shape is {@link import("../viewModels/searchImportViewModel").SearchWindowHostApi}.
+ *
+ * **Nothing publishes it in the shipped build, and that is reported rather than
+ * worked around.** Measured 2026-10-07: `src/addon.ts`'s constructor sets
+ * `this.api = {}` and nothing writes to it afterwards (`grep -rn "\.api" src/`),
+ * and `src/bootstrap/registerUI.ts`'s `registerUI()` — which *does* call
+ * `installServices()` at startup — discards the `ServiceGraph` on purpose
+ * ("deliberately **not** held anywhere"). So publishing the host needs an edit
+ * to one of those two files, and **neither is in `P1-T22`'s `Files` list**
+ * (`plan/README.md` §5 rule 2). Until that card lands, the host is installed by
+ * `test/integration/searchDialog-flow.spec.ts`, which is where the end-to-end
+ * run in this card's report was measured.
+ */
+export const SEARCH_WINDOW_API_PROPERTY = "searchWindow";
+
+/**
+ * The target-picker value that means "New collection…".
+ *
+ * It is the `value` attribute of `#rh-search-target-new-item` in
+ * `addon/content/searchDialog.xhtml` (`P1-T20`'s markup), and the document
+ * extends it to `new:<name>` once the user has named one. Declared here because
+ * both the document and the view model parse it.
+ */
+export const NEW_COLLECTION_VALUE = "new";
+
+/** One author, as the document's `logic.authorName` accepts them. */
+export interface SearchWindowAuthor {
+  readonly family?: string;
+  readonly given?: string;
+  readonly literal?: string;
+}
+
+/**
+ * One result row, as the view model hands it to the document's `setResults()`.
+ *
+ * `key` is the record's own `SourceRecord.id` (`${sourceId}:${nativeId}`), which
+ * is what makes the document's selection round-trip into
+ * `SearchImportTarget.selectedRecordIds` without a second identity scheme — see
+ * `logic.rowKey`, which prefers `record.key` when it is a non-empty string.
+ *
+ * `sourceLabels` and `typeLabel` are **already-localized** strings, per the
+ * en-US bundle's own rule for literature-source display names: "the view model
+ * formats those and hands this document an already localized string". `title`
+ * and `doi` are data (`docs/08` §10.3), and `year` is a numeral the document
+ * writes straight into `textContent` so no `Intl.NumberFormat` can group it.
+ */
+export interface SearchWindowRecord {
+  readonly key: string;
+  readonly title: string;
+  readonly authors: readonly SearchWindowAuthor[];
+  readonly year?: number;
+  readonly sourceLabels: readonly string[];
+  readonly typeLabel: string;
+  readonly doi: string;
+  readonly existing: boolean;
+}
+
+/**
+ * What the document's `collectQuery()` returns, i.e. what Search sends.
+ *
+ * Every member is read off a control, so every member is as untrusted as a
+ * control is: `maxResults` can be `NaN` if the number input is empty, and
+ * `sources` can contain an id no adapter is registered for. The pipeline's
+ * `validate()` is what rejects the first and `searchImportPipeline`'s
+ * `missingAdapterReport` the second — FR-9's shape, not a throw.
+ */
+export interface SearchWindowQuery {
+  readonly mode: string;
+  /** The keyword box, verbatim. Never interpolated into a visible string. */
+  readonly keyword: string;
+  readonly fromYear: number;
+  readonly toYear: number;
+  readonly maxResults: number;
+  readonly sources: readonly string[];
+  /** The client-side filter box. Applied in the document, never sent upstream. */
+  readonly filter: string;
+  readonly hideExisting: boolean;
+  readonly duplicates: string;
+  /**
+   * The target picker's value: a collection id as a string,
+   * {@link NEW_COLLECTION_VALUE}, or `new:<name>`.
+   */
+  readonly collectionID: string;
+}
+
+/**
+ * What Import sends: the query, plus **exactly the checked and visible rows**.
+ *
+ * The intersection is decided in the document (`pickedRows()`), which is this
+ * card's **Do NOT** — "import exactly the checked set, or a hidden-but-checked
+ * row silently vanishes" — and `P1-T21`'s selection model is what makes it one
+ * set rather than two.
+ */
+export interface SearchWindowImportRequest extends SearchWindowQuery {
+  readonly records: readonly SearchWindowRecord[];
+}
+
 /**
  * Open the Search & Import window, or re-focus the one that is already open.
  *

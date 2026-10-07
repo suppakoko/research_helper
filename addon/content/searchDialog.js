@@ -32,14 +32,35 @@
  * a host object — {@link RHSearchWindow.resolveHost} — which the privileged
  * side is expected to publish at `Zotero.<addonInstance>.api.searchWindow`.
  *
- * **Nothing publishes it today, and that is measured, not assumed.** On
- * 2026-10-06 `src/addon.ts` still initialises `api` to `{}`,
- * `src/bootstrap/registerSources.ts`'s `registerSources()` is called only from
- * `test/unit/sources/registry.test.ts`, and `installServices()` in
- * `src/bootstrap/container.ts` is called only from
- * `test/unit/bootstrap/container.test.ts` — so at runtime there is no source
- * registry and no `PrefStore` at all. The consequences are deliberate and are
- * the behaviour `docs/07` §11.1 step 11 asks for:
+ * **Nothing publishes it today**, and the reason is narrower than this comment
+ * used to claim.
+ *
+ * **Corrected 2026-10-07 (`P1-T22`), and the error was this file's.** The
+ * paragraph here said that `installServices()` "is called only from
+ * `test/unit/bootstrap/container.test.ts`" and that `registerSources()` is
+ * called only from `test/unit/sources/registry.test.ts`, concluding that "at
+ * runtime there is no source registry and no `PrefStore` at all". Both halves
+ * are false, and were already false when the sentence was written: grepped
+ * 2026-10-07, `src/bootstrap/registerUI.ts:267` calls `installServices()` from
+ * `registerUI()`, which `src/hooks.ts`'s `onStartup` awaits, and
+ * `installServices` calls `registerSources()` itself. So at run time there **is**
+ * a filled source registry, a `PrefStore`, an `HttpClient`, a pipeline registry
+ * and a per-job pipeline-context factory.
+ *
+ * What is actually missing is one line: `registerUI()` holds the
+ * `ServiceGraph` nowhere ("deliberately **not** held anywhere", with the reason
+ * given there), and `src/addon.ts`'s constructor sets `this.api = {}` and nothing
+ * writes to it — `grep -rn "\.api\b" src/` returns those two lines and nothing
+ * else. Publishing the host therefore needs an edit to one of those two files,
+ * and **neither is in `P1-T22`'s `Files` list**, so that card reported it rather
+ * than making it (`plan/README.md` §5 rule 2). The host and the view model it
+ * wraps exist: `src/ui/viewModels/searchImportViewModel.ts`'s
+ * `createSearchImportViewModel(...).host` is exactly the object below, and
+ * `test/integration/searchDialog-flow.spec.ts` installs it to run the window end
+ * to end.
+ *
+ * With no host attached the consequences are deliberate and are the behaviour
+ * `docs/07` §11.1 step 11 asks for:
  *
  * - The Databases row is rendered from whatever the host reports, so with no
  *   registered adapter it renders **zero** checkboxes. `P1-T20`'s **Do NOT** is
@@ -60,7 +81,7 @@
  *   `src/prefs/schema.ts` and `docs/07` §8.5's own table row.
  */
 
-/* global Zotero, window, document */
+/* global Zotero, Services, window, document */
 
 var RHSearchWindow = {
   /**
@@ -102,6 +123,16 @@ var RHSearchWindow = {
     initialProse: "rh-state-initial-prose",
     emptyHeadline: "rh-state-empty-headline",
 
+    statusBar: "rh-search-status-bar",
+
+    // docs/08 §4.6's all-failed panel (P1-T22). All five are in P1-T20's
+    // markup; the parts this file builds are under `built` below.
+    errorHeadline: "rh-state-error-headline",
+    errorDetail: "rh-state-error-detail",
+    errorActions: "rh-state-error-actions",
+    errorRetry: "rh-state-error-retry",
+    errorPreferences: "rh-state-error-open-preferences",
+
     // docs/08 §4.3's plain scrollable table and §4.5's selection row (P1-T21).
     resultsScroll: "rh-results-scroll",
     resultsTable: "rh-results-table",
@@ -112,6 +143,45 @@ var RHSearchWindow = {
     selectNone: "rh-results-select-none",
     selectInvert: "rh-results-select-invert",
     selectedCount: "rh-results-selected-count",
+
+    /**
+     * Ids of elements **this file creates**, kept out of the flat list above for
+     * the same reason {@link RHSearchWindow.spec.row} is: that list is the set
+     * of ids `searchDialog.xhtml` declares, and
+     * `test/unit/ui/searchDialog.test.ts` asserts every one of them resolves in
+     * the document. These do not, until `init()` has run.
+     *
+     * **Why they are built by script rather than written into the markup.**
+     * `addon/content/searchDialog.xhtml` is `P1-T20`'s file and is **not** in
+     * `P1-T22`'s `Files` list, so adding six elements to it would be the
+     * scope-widening `plan/README.md` §5 rule 2 forbids. This file already
+     * builds the Databases row, the target picker's items and every table row,
+     * so one more construction site is the smaller change — and the markup
+     * already left `#rh-state-error-detail` as an empty `<vbox>` for exactly
+     * this.
+     *
+     * - `notices` / `warningList` / `noticeList` — FR-9's non-blocking banner,
+     *   the import summary and `R-17`'s abstract-coverage line. Inserted
+     *   **before the status bar**, outside `#rh-results-area`, so they survive a
+     *   panel swap: `showPanel()` hides every panel but one, and a banner that
+     *   vanished when the EMPTY panel came up would be a banner nobody read.
+     * - `errorLines` — one line per failed source, `docs/08` §4.6's
+     *   "PubMed: HTTP 429 …" rows.
+     * - `errorDetailsToggle` / `errorDetailsList` — NFR-14's details
+     *   disclosure.
+     * - `databaseProgress` — §4.5's `5 of 7 databases`, beside the bar. Its own
+     *   element rather than the status line's, because both are live and the
+     *   status line already carries `Searching { $database }…`.
+     */
+    built: {
+      notices: "rh-search-notices",
+      warningList: "rh-search-warnings",
+      noticeList: "rh-search-notice",
+      errorLines: "rh-state-error-lines",
+      errorDetailsToggle: "rh-state-error-details-toggle",
+      errorDetailsList: "rh-state-error-details-list",
+      databaseProgress: "rh-search-progress-databases",
+    },
 
     /**
      * Per-row naming, kept out of the flat id list above because none of these
@@ -191,6 +261,43 @@ var RHSearchWindow = {
      * recorded.
      */
     duplicatesDefault: "link",
+
+    /**
+     * The **second** Fluent bundle this window needs, added at run time.
+     *
+     * `searchDialog.xhtml`'s `<linkset>` links one resource,
+     * `research-helper-searchDialog.ftl`, which was right until this card made
+     * the window render a pipeline's outcome. Measured 2026-10-07, by grepping
+     * both bundles: **every string the error states, the per-database names and
+     * the import summary need is in `research-helper-mainWindow.ftl`** —
+     * `rh-error-offline` and the rest of `docs/08` §8.3's rows,
+     * `research-helper-source-pubmed` and every other literature-source display
+     * name, `research-helper-import-summary` and
+     * `research-helper-import-abstract-coverage`. `src/i18n/keys.ts`'s
+     * `MESSAGE_IDS_BY_SURFACE` is the authority and puts them there.
+     *
+     * The first run of `test/integration/searchDialog-flow.spec.ts` is how this
+     * was found: the per-database line rendered as an **empty string**, because
+     * a `data-l10n-id` whose message is in an unlinked resource resolves to
+     * nothing and Fluent leaves the element alone.
+     *
+     * The fix is `document.l10n.addResourceIds([...])` rather than a second
+     * `<html:link>`: `addon/content/searchDialog.xhtml` is `P1-T20`'s file and is
+     * **not** in `P1-T22`'s `Files` list (`plan/README.md` §5 rule 2). It is also
+     * not one of `eslint.config.js`'s scoped registration APIs and it is not
+     * `insertFTLIfNeeded` — that one is confined to
+     * `src/zotero/registrations.ts` and is for windows *Zotero* owns; this is
+     * our own document, which takes its resources with it when it closes.
+     *
+     * `__addonRef__` is substituted at build time by the scaffold's
+     * `replaceDefine()`, the same way `Zotero.Prefs.get("__addonRef__." + key)`
+     * below is and the same way the `<linkset>` in the markup is. **Needs a
+     * card** if the owner would rather the link be in the markup, or rather the
+     * §8.3 rows move surface.
+     */
+    ftl: {
+      mainWindow: "__addonRef__-mainWindow.ftl",
+    },
   },
 
   /** Every Fluent id this file sets from script. */
@@ -207,6 +314,24 @@ var RHSearchWindow = {
     authorsOverflow: "research-helper-search-authors-overflow",
     rowExisting: "research-helper-search-row-existing",
     rowExistingBadge: "research-helper-search-row-existing-badge",
+
+    // NFR-14's details disclosure, built by script (P1-T22). Both carry a
+    // `.label`, so they are set as a `data-l10n-id` on a `<button>`.
+    detailsShow: "research-helper-search-details-show",
+    detailsHide: "research-helper-search-details-hide",
+
+    /**
+     * The one existing message the "New collection…" prompt reuses.
+     *
+     * `research-helper-search-target-new` is already the label of both the
+     * menuitem and the button beside the picker, and its text is exactly the
+     * question the prompt asks. Minting a prompt title and a prompt body would
+     * be two new strings in `P1-T18`'s bundles, which are not in `P1-T22`'s
+     * `Files` list — so the prompt reuses this one rather than inlining
+     * English, and the fact that a dedicated string would read better is
+     * reported with the card.
+     */
+    targetNew: "research-helper-search-target-new",
   },
 
   /**
@@ -253,6 +378,22 @@ var RHSearchWindow = {
     view: { filter: "", hideExisting: false },
     /** The count the in-flight Import-label request was made for. */
     importLabelCount: 0,
+
+    /**
+     * The `recordsRevision` of the result set currently in the table (P1-T22).
+     *
+     * The host publishes a whole view state on **every** progress snapshot, and
+     * the reporter throttles those to four a second. Re-handing the same records
+     * to `setResults()` each time would rebuild the table and reset
+     * `state.selection`, so a user who had unticked five rows would watch them
+     * come back. The records are therefore applied only when this number moves,
+     * which the view model bumps once per completed fetch.
+     */
+    appliedRecordsRevision: 0,
+    /** The current detach function from `host.connect`, or null. */
+    disconnect: null,
+    /** Whether the details disclosure is expanded (NFR-14). */
+    detailsOpen: false,
   },
 
   // =========================================================================
@@ -332,11 +473,51 @@ var RHSearchWindow = {
     /**
      * Whether Import may run. `docs/08` §4.2: "disabled until ≥1 selected".
      *
+     * **Deliberately still one condition.** `docs/08` §4.4's first write step is
+     * "resolve target collection (create if 'New collection…')", and a new
+     * collection needs a *name* this window had no way to collect — so the
+     * obvious move was to add "and the target names something" to this gate.
+     * That was tried and reverted: §4.2 states the gate as "disabled until ≥1
+     * selected" and `test/unit/ui/searchDialog.test.ts` asserts exactly that in
+     * two tests, and that file is **not** in `P1-T22`'s `Files` list. Changing
+     * a documented gate to work around a missing control is the shape
+     * `plan/README.md` §5 rule 6 forbids.
+     *
+     * The name is collected by §4.5's own affordance instead — the
+     * `[ New collection… ]` button beside the picker, which
+     * {@link RHSearchWindow.newCollection} now implements. Pressing Import while
+     * the picker is on bare "New collection…" is refused on the privileged side
+     * with a `warn`, which is a dead affordance and is reported with the card.
+     *
      * @param {number} selectedCount
      * @returns {boolean}
      */
     importEnabled(selectedCount) {
       return Math.trunc(selectedCount) > 0;
+    },
+
+    /**
+     * Whether a target-picker value names a collection the import can write to.
+     *
+     * `"new"` on its own does not; `"new:My collection"` and a numeric
+     * collection id do. The same parse runs on the privileged side
+     * (`resolveTarget`), because a host driven directly must refuse what this
+     * window refuses.
+     *
+     * @param {unknown} value
+     * @returns {boolean}
+     */
+    targetNamed(value) {
+      if (typeof value !== "string" || value === "") {
+        return false;
+      }
+      if (value === "new") {
+        return false;
+      }
+      if (value.startsWith("new:")) {
+        return value.slice(4).trim() !== "";
+      }
+      return true;
     },
 
     /** The four `docs/08` §4.6 panels this card owns, and the results table. */
@@ -883,12 +1064,21 @@ var RHSearchWindow = {
     // font size the user chose.
     this.registerUIRoot();
 
+    // Before every other Fluent call: see `spec.mainWindowFtl`.
+    this.addMainWindowBundle();
+
     this.applyChromeStrings();
     this.applyColumnLabels();
     this.seedControls();
     this.renderDatabaseRow();
     this.renderCollections();
+    // Before bindEvents, so the notice area and the details disclosure exist
+    // before anything can be clicked, and before connectHost, so the first
+    // state the host publishes has somewhere to land.
+    this.buildNoticeArea();
+    this.buildDetailsDisclosure();
     this.bindEvents();
+    this.connectHost();
     // An empty table, its header captions in place and its counts at zero, so
     // no element is ever left with a `data-l10n-id` and no arguments.
     this.applyFilter();
@@ -905,6 +1095,42 @@ var RHSearchWindow = {
    */
   registerUIRoot() {
     Zotero.UIProperties.registerRoot(this.el(this.spec.root));
+  },
+
+  /**
+   * Link `research-helper-mainWindow.ftl` into this document.
+   *
+   * See {@link RHSearchWindow.spec.ftl} for why the window needs a
+   * second bundle and why the link is made here rather than in the markup.
+   *
+   * Guarded rather than assumed: `addResourceIds` is `Localization`'s, which
+   * `DOMLocalization` extends, and nothing in the corpus had called it before
+   * this card. A build where it is absent renders the §8.3 rows as empty
+   * elements — visible, and loud in the integration spec, rather than a silent
+   * English fallback.
+   *
+   * @returns {boolean} whether the resource was added
+   */
+  addMainWindowBundle() {
+    const l10n = document.l10n;
+    if (!l10n || typeof l10n.addResourceIds !== "function") {
+      return false;
+    }
+    try {
+      l10n.addResourceIds([this.spec.ftl.mainWindow]);
+      return true;
+    } catch (error) {
+      try {
+        Zotero.debug(
+          "[research-helper] could not add the main-window Fluent bundle to " +
+            "the search window: " +
+            String(error && error.name ? error.name : error),
+        );
+      } catch {
+        /* a diagnostic that cannot be written is not worth a second failure */
+      }
+      return false;
+    }
   },
 
   /**
@@ -1243,6 +1469,12 @@ var RHSearchWindow = {
     this.on(this.spec.yearsFrom, "command", () => this.onYearChanged());
     this.on(this.spec.yearsTo, "command", () => this.onYearChanged());
 
+    // docs/08 §4.6's two actions on the all-failed panel.
+    this.on(this.spec.errorRetry, "command", () => this.search());
+    this.on(this.spec.errorPreferences, "command", () =>
+      this.openPreferences(),
+    );
+
     // docs/08 §4.1.1's own init(): the accept button must not close the window,
     // because the import reports into the status bar.
     document.addEventListener("dialogaccept", (event) => {
@@ -1258,6 +1490,15 @@ var RHSearchWindow = {
         this.cancel();
       }
     });
+
+    // FR-56 in miniature: the host holds a reference to this document's render
+    // function, so a closed window must hand it back or the privileged side
+    // keeps painting into a dead document.
+    if (typeof window !== "undefined" && window.addEventListener) {
+      window.addEventListener("unload", () => this.disconnectHost(), {
+        once: true,
+      });
+    }
   },
 
   /** `docs/08` §4.2: the keyword field is focused on open. */
@@ -1342,6 +1583,446 @@ var RHSearchWindow = {
       }
     }
     this.state.panel = name;
+  },
+
+  // =========================================================================
+  // 3a. The host, and the one method that draws a whole view state (P1-T22)
+  // =========================================================================
+
+  /**
+   * Attach this document to the privileged side, so the host can drive it.
+   *
+   * Before this card the host contract was push-only — `runSearch(query)` went
+   * out and nothing came back — so a search could start and the window could
+   * never learn what happened. `connect(view)` closes the loop: the host keeps
+   * the view, publishes a whole {@link RHSearchWindow.render} state on every
+   * change, and returns the detach function this document's `unload` calls.
+   *
+   * `document.l10n` goes with it. The view model needs exactly two strings as
+   * *text* rather than as ids — the database names the Source column writes into
+   * `textContent`, and the completion toast's message — and this window's own
+   * `DOMLocalization` is the formatter that already has the bundle attached.
+   * Everything else crosses as a message id plus arguments.
+   *
+   * A host with no `connect` is left alone and the window stays on whatever
+   * panel `init()` chose, which is the honest outcome for a build where nothing
+   * is wired: `search()` makes the same check about `runSearch`.
+   */
+  connectHost() {
+    if (typeof this.host.connect !== "function") {
+      return;
+    }
+    const detach = this.host.connect({
+      render: (state) => this.render(state),
+      formatter: document.l10n || undefined,
+    });
+    this.state.disconnect = typeof detach === "function" ? detach : null;
+  },
+
+  /** Release the host subscription. Called from `unload`. */
+  disconnectHost() {
+    const detach = this.state.disconnect;
+    this.state.disconnect = null;
+    if (typeof detach === "function") {
+      detach();
+    }
+  },
+
+  /**
+   * Draw one whole view state — the only entry point the host uses.
+   *
+   * A whole state rather than a stream of deltas, because a late snapshot must
+   * not be able to resurrect a panel the run has already left: the last state
+   * published wins, field by field, and there is no merge for this document to
+   * get wrong.
+   *
+   * @param {object} state - the view model's `SearchViewState`
+   */
+  render(state) {
+    if (!state) {
+      return;
+    }
+    this.state.running = Boolean(state.running);
+
+    // The table, only when the result set actually changed — see
+    // `state.appliedRecordsRevision`.
+    if (
+      typeof state.recordsRevision === "number" &&
+      state.recordsRevision !== this.state.appliedRecordsRevision
+    ) {
+      this.state.appliedRecordsRevision = state.recordsRevision;
+      this.setResults(state.records || []);
+    }
+
+    this.renderSourceStatus(state.sources || []);
+    this.renderMessageList(
+      this.spec.built.warningList,
+      state.warnings || [],
+      "rh-inline-warning",
+    );
+    this.renderMessageList(
+      this.spec.built.noticeList,
+      state.notices || [],
+      "rh-hint",
+    );
+    this.renderEmptyPanel(state.emptyHeadline);
+    this.renderErrorPanel(state.error);
+    this.renderStatusBar(state);
+
+    // Last: `setResults()` shows the results panel when it has rows, and the
+    // view model — not this document — decides which of docs/08 §8.4's five
+    // states is current.
+    this.showPanel(state.panel || "initial");
+    this.refreshImportGate();
+  },
+
+  /**
+   * `docs/08` §4.6's per-database status list.
+   *
+   * One row per source, **never one spinner**: §4.6's own reason is that
+   * "partial failure across seven sources is the *normal* case, and collapsing
+   * it into one spinner hides the fact that a whole database was missed", and
+   * this card's **Do NOT** repeats it. The name and the state are two separate
+   * elements, each carrying its own Fluent id, so the row is never assembled
+   * from a name plus a fragment (`docs/08` §10.3).
+   *
+   * @param {object[]} lines - the view model's `SourceStatusLine[]`
+   */
+  renderSourceStatus(lines) {
+    const host = this.el(this.spec.sourceStatus);
+    if (!host) {
+      return;
+    }
+    this.clear(host);
+    for (const line of lines) {
+      const row = this.createXUL("hbox");
+      row.id = this.spec.sourceStatus + "-" + String(line.sourceId);
+      // No class on the row or the name: `P1-T21` established that "a class
+      // name with no rule behind it is dead weight", and
+      // `addon/content/style/searchDialog.css` is `P1-T20`'s file and not in
+      // this card's `Files` list, so there is no rule to point at. The outcome
+      // travels as a data attribute instead, which is both the selector a
+      // stylesheet would use and what the integration spec reads.
+      row.setAttribute("data-rh-outcome", String(line.outcome));
+
+      const name = this.createXUL("description");
+      if (line.nameId) {
+        name.setAttribute("data-l10n-id", line.nameId);
+      }
+      row.appendChild(name);
+
+      const detail = this.createXUL("description");
+      // NFR-13: a failed row carries the stylesheet's ⚠ glyph *and* its colour
+      // *and* the words of the §8.3 row, never colour alone.
+      detail.className =
+        line.outcome === "failed" ? "rh-inline-warning" : "rh-hint";
+      this.applyRef(detail, line.detail);
+      row.appendChild(detail);
+
+      host.appendChild(row);
+    }
+  },
+
+  /**
+   * Fill one notice list from a list of message references.
+   *
+   * @param {string} id - {@link RHSearchWindow.spec.warningList} or `noticeList`
+   * @param {object[]} refs - `{ id, args }` objects
+   * @param {string} className
+   */
+  renderMessageList(id, refs, className) {
+    const host = this.el(id);
+    if (!host) {
+      return;
+    }
+    this.clear(host);
+    host.hidden = refs.length === 0;
+    for (const ref of refs) {
+      const line = this.createXUL("description");
+      line.className = className;
+      this.applyRef(line, ref);
+      host.appendChild(line);
+    }
+  },
+
+  /**
+   * `docs/08` §4.6's EMPTY headline.
+   *
+   * **The view model always passes nothing**, and that is a decision rather than
+   * an omission: `research-helper-search-state-empty` interpolates the user's
+   * query verbatim, and a credential pasted into the keyword box would be drawn
+   * in the window. The full argument, including why redaction does not fix it,
+   * is `EMPTY_HEADLINE_OMITTED` in
+   * `src/ui/viewModels/searchImportViewModel.ts`. The panel's second line —
+   * `research-helper-search-state-empty-suggestions`, which takes no arguments —
+   * is in the markup and renders either way, so §8.4's "concrete suggestions"
+   * half is intact.
+   *
+   * @param {object} [ref]
+   */
+  renderEmptyPanel(ref) {
+    const element = this.el(this.spec.emptyHeadline);
+    if (!element) {
+      return;
+    }
+    if (ref && ref.id) {
+      this.applyRef(element, ref);
+      element.hidden = false;
+      return;
+    }
+    this.clearRef(element);
+    element.hidden = true;
+  },
+
+  /**
+   * `docs/08` §4.6's "All databases failed" panel, with §8.3's rows and NFR-14's
+   * disclosure.
+   *
+   * The primary text is never a stack trace and never the provider's own message
+   * (`docs/07` §10.2); the disclosure carries the machine code and the HTTP
+   * status and nothing else, which is `ERROR_DETAIL_FIELDS`' reasoning.
+   *
+   * @param {object} [error] - the view model's `ErrorView`
+   */
+  renderErrorPanel(error) {
+    const headline = this.el(this.spec.errorHeadline);
+    if (headline && error && error.headline) {
+      this.applyRef(headline, error.headline);
+    }
+
+    this.renderMessageList(
+      this.spec.built.errorLines,
+      (error && error.lines ? error.lines : []).map((line) => line.detail),
+      "rh-inline-warning",
+    );
+
+    const list = this.el(this.spec.built.errorDetailsList);
+    const toggle = this.el(this.spec.built.errorDetailsToggle);
+    const details = (error && error.details) || [];
+    if (list) {
+      this.clear(list);
+      for (const value of details) {
+        const line = this.createXUL("description");
+        line.className = "rh-hint";
+        // A machine code or an HTTP status: data, not a translatable string,
+        // and the only two fields of a SerializedError that cannot carry a key.
+        line.textContent = String(value);
+        list.appendChild(line);
+      }
+      list.hidden = !this.state.detailsOpen || details.length === 0;
+    }
+    if (toggle) {
+      toggle.hidden = details.length === 0;
+      toggle.setAttribute(
+        "data-l10n-id",
+        this.state.detailsOpen ? this.l10n.detailsHide : this.l10n.detailsShow,
+      );
+      toggle.setAttribute(
+        "aria-expanded",
+        this.state.detailsOpen ? "true" : "false",
+      );
+    }
+
+    const retry = this.el(this.spec.errorRetry);
+    if (retry) {
+      retry.hidden = !(error && error.retry);
+    }
+    const prefs = this.el(this.spec.errorPreferences);
+    if (prefs) {
+      prefs.hidden = !(error && error.openPreferences);
+    }
+  },
+
+  /**
+   * The status bar — `docs/08` §4.4: progress lives here "because we need a
+   * Cancel button".
+   *
+   * @param {object} state
+   */
+  renderStatusBar(state) {
+    const progress = this.el(this.spec.progress);
+    if (progress) {
+      const percent = state.progressPercent;
+      if (typeof percent === "number") {
+        progress.hidden = false;
+        progress.value = percent;
+      } else {
+        progress.hidden = true;
+      }
+    }
+    const status = this.el(this.spec.status);
+    if (status) {
+      if (state.status && state.status.id) {
+        this.applyRef(status, state.status);
+      } else {
+        this.clearRef(status);
+      }
+    }
+    // docs/08 §4.5's "5 of 7 databases", beside the bar. Its own element, so the
+    // two live messages in the status bar do not overwrite each other.
+    const databases = this.el(this.spec.built.databaseProgress);
+    if (databases) {
+      if (state.databaseProgress && state.databaseProgress.id) {
+        this.applyRef(databases, state.databaseProgress);
+        databases.hidden = false;
+      } else {
+        this.clearRef(databases);
+        databases.hidden = true;
+      }
+    }
+    const cancel = this.el(this.spec.cancel);
+    if (cancel) {
+      cancel.hidden = !state.cancelVisible;
+    }
+  },
+
+  /**
+   * Point an element at one message reference, id and arguments together.
+   *
+   * Together and never separately, for the reason {@link applyYearRange}
+   * records: Fluent re-translates on either mutation, and a translation that
+   * arrives without its variables both logs an l10n error and paints
+   * `{ $count }` at the user.
+   *
+   * @param {object} element
+   * @param {object} ref - `{ id, args }`
+   */
+  applyRef(element, ref) {
+    if (!element || !ref || !ref.id) {
+      return;
+    }
+    if (ref.args) {
+      element.setAttribute("data-l10n-args", JSON.stringify(ref.args));
+    } else {
+      element.removeAttribute("data-l10n-args");
+    }
+    element.setAttribute("data-l10n-id", ref.id);
+  },
+
+  /**
+   * Unpoint an element, and clear what Fluent last wrote into it.
+   *
+   * Removing `data-l10n-id` alone leaves the previous translation standing —
+   * `DOMLocalization` does not undo its own writes — so the text goes too.
+   *
+   * @param {object} element
+   */
+  clearRef(element) {
+    if (!element) {
+      return;
+    }
+    element.removeAttribute("data-l10n-id");
+    element.removeAttribute("data-l10n-args");
+    element.textContent = "";
+  },
+
+  /**
+   * Build FR-9's non-blocking notice region, once.
+   *
+   * See {@link RHSearchWindow.spec.notices} for why it is built here rather than
+   * written into `P1-T20`'s markup, and why it sits outside the panel area.
+   */
+  buildNoticeArea() {
+    if (this.el(this.spec.built.notices)) {
+      return;
+    }
+    const bar = this.el(this.spec.statusBar);
+    if (!bar || !bar.parentNode) {
+      return;
+    }
+
+    // §4.5's "5 of 7 databases", inside the status bar and after the status
+    // line, which is where the wireframe draws it.
+    const databases = this.createXUL("description");
+    databases.id = this.spec.built.databaseProgress;
+    databases.className = "rh-hint";
+    databases.setAttribute("role", "status");
+    databases.hidden = true;
+    const status = this.el(this.spec.status);
+    if (status && status.parentNode === bar && status.nextSibling) {
+      bar.insertBefore(databases, status.nextSibling);
+    } else {
+      bar.appendChild(databases);
+    }
+    const box = this.createXUL("vbox");
+    box.id = this.spec.built.notices;
+
+    // role="alert" for the warning half: docs/08 §8.1 puts a recoverable error
+    // inside a window in an "inline banner in that window, role='alert'".
+    const warnings = this.createXUL("vbox");
+    warnings.id = this.spec.built.warningList;
+    warnings.setAttribute("role", "alert");
+    warnings.hidden = true;
+    box.appendChild(warnings);
+
+    // role="status" for the outcome half: a completion summary is information,
+    // not an interruption, so it is announced politely (§9).
+    const notices = this.createXUL("vbox");
+    notices.id = this.spec.built.noticeList;
+    notices.setAttribute("role", "status");
+    notices.setAttribute("aria-live", "polite");
+    notices.hidden = true;
+    box.appendChild(notices);
+
+    bar.parentNode.insertBefore(box, bar);
+  },
+
+  /**
+   * Build the per-source error lines and NFR-14's details disclosure, once.
+   *
+   * `#rh-state-error-detail` is an empty `<vbox>` in `P1-T20`'s markup, left
+   * there for exactly this. The lines go *before* it so the panel reads
+   * headline → per-source rows → disclosure → actions, which is §4.6's drawn
+   * order.
+   */
+  buildDetailsDisclosure() {
+    const detail = this.el(this.spec.errorDetail);
+    if (!detail || this.el(this.spec.built.errorDetailsToggle)) {
+      return;
+    }
+
+    const lines = this.createXUL("vbox");
+    lines.id = this.spec.built.errorLines;
+    lines.setAttribute("role", "status");
+    lines.hidden = true;
+    if (detail.parentNode) {
+      detail.parentNode.insertBefore(lines, detail);
+    }
+
+    const toggle = this.createXUL("button");
+    toggle.id = this.spec.built.errorDetailsToggle;
+    toggle.hidden = true;
+    toggle.setAttribute("aria-controls", this.spec.built.errorDetailsList);
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("data-l10n-id", this.l10n.detailsShow);
+    toggle.addEventListener("command", () => this.toggleDetails());
+    detail.appendChild(toggle);
+
+    const list = this.createXUL("vbox");
+    list.id = this.spec.built.errorDetailsList;
+    list.hidden = true;
+    detail.appendChild(list);
+  },
+
+  /** Expand or collapse NFR-14's details disclosure. */
+  toggleDetails() {
+    this.state.detailsOpen = !this.state.detailsOpen;
+    const list = this.el(this.spec.built.errorDetailsList);
+    const toggle = this.el(this.spec.built.errorDetailsToggle);
+    if (list) {
+      list.hidden = !this.state.detailsOpen || !list.firstChild;
+    }
+    if (toggle) {
+      toggle.setAttribute(
+        "data-l10n-id",
+        this.state.detailsOpen ? this.l10n.detailsHide : this.l10n.detailsShow,
+      );
+      toggle.setAttribute(
+        "aria-expanded",
+        this.state.detailsOpen ? "true" : "false",
+      );
+    }
+    return this.state.detailsOpen;
   },
 
   // =========================================================================
@@ -1738,42 +2419,109 @@ var RHSearchWindow = {
   },
 
   // =========================================================================
-  // 4. Actions — the pipeline's half is P1-T22's
+  // 4. Actions
   // =========================================================================
 
   /**
    * Start a search, if the gate allows one.
    *
    * No request is made here. `docs/01` §8.3 requires every network call to run
-   * in the privileged sandbox, so this hands the query to the host and the
-   * host answers by driving the panels.
+   * in the privileged sandbox, so this hands the query to the host and the host
+   * answers by publishing view states back through
+   * {@link RHSearchWindow.render}.
+   *
+   * The returned promise is **not** awaited, and it is swallowed rather than
+   * ignored: the host's `runSearch` resolves when the whole run has finished
+   * rendering, which is tens of seconds away, and a rejection there must not
+   * surface as an unhandled rejection in a document that has no `console`
+   * (`docs/01` §2.3).
    */
   search() {
     if (!this.refreshSearchGate().enabled) {
       return;
     }
     if (typeof this.host.runSearch !== "function") {
-      // Nothing is wired yet. Staying on the current panel is the honest
-      // outcome: a "searching…" list that will never resolve would be a lie.
+      // Nothing is wired. Staying on the current panel is the honest outcome:
+      // a "searching…" list that will never resolve would be a lie.
       return;
     }
     this.state.running = true;
     this.showPanel("searching");
-    this.host.runSearch(this.collectQuery());
+    this.settle(this.host.runSearch(this.collectQuery()));
   },
 
   /**
-   * Hand the picked rows to the host. The item creation, the duplicate pass and
-   * FR-5's "Imported 37 · Skipped 12" accounting are `P1-T22`'s; what this card
-   * owns is **which** records go, and `collectImportRequest()` is where that is
-   * decided.
+   * Hand the picked rows to the host.
+   *
+   * What this document owns is **which** records go — `collectImportRequest()`,
+   * i.e. the checked ∩ visible set — and that the target names a collection.
+   * The item creation, the duplicate pass and the "Imported 37 · Linked 2 ·
+   * Skipped 12" accounting come back as a view state.
    */
   import() {
     if (!this.logic.importEnabled(this.state.selectedCount)) {
       return;
     }
     if (typeof this.host.runImport === "function") {
-      this.host.runImport(this.collectImportRequest());
+      this.settle(this.host.runImport(this.collectImportRequest()));
+    }
+  },
+
+  /**
+   * Swallow a host promise's outcome, visibly.
+   *
+   * There is no `console` in this document (`docs/01` §2.3) and an unhandled
+   * rejection in a chrome window is silent, so a failed host call goes to
+   * `Zotero.debug` — the one diagnostic channel this window has.
+   *
+   * @param {unknown} promise
+   */
+  settle(promise) {
+    if (!promise || typeof promise.then !== "function") {
+      return;
+    }
+    promise.then(undefined, (error) => {
+      try {
+        Zotero.debug(
+          "[research-helper] search window host call rejected: " +
+            String(error && error.name ? error.name : error),
+        );
+      } catch {
+        /* a diagnostic that cannot be written is not worth a second failure */
+      }
+    });
+  },
+
+  /**
+   * `docs/08` §4.6's `[ Open Preferences… ]` action.
+   *
+   * **This plugin registers no preference pane yet** — grepped 2026-10-07:
+   * nothing in `src/` calls `Zotero.PreferencePanes.register`, and
+   * `src/hooks.ts` only *reads* `pluginPanes` as a teardown audit. So the button
+   * opens Zotero's preferences window without selecting a pane of ours, which is
+   * the closest thing to the §8.3 action that exists today and is reported with
+   * the card. `Zotero.Utilities.Internal.openPreferences` is reached through a
+   * `typeof` guard because this window has not verified that signature against a
+   * running Zotero.
+   */
+  openPreferences() {
+    try {
+      const internal =
+        Zotero && Zotero.Utilities && Zotero.Utilities.Internal
+          ? Zotero.Utilities.Internal
+          : undefined;
+      if (internal && typeof internal.openPreferences === "function") {
+        internal.openPreferences();
+      }
+    } catch (error) {
+      try {
+        Zotero.debug(
+          "[research-helper] could not open Zotero preferences: " +
+            String(error && error.name ? error.name : error),
+        );
+      } catch {
+        /* see settle() */
+      }
     }
   },
 
@@ -1792,7 +2540,13 @@ var RHSearchWindow = {
     return request;
   },
 
-  /** Cancel a running job. FR-5: Cancel performs zero database writes. */
+  /**
+   * Cancel a running job. FR-5: Cancel performs zero database writes.
+   *
+   * `state.running` is cleared here rather than waiting for the host's next
+   * state, so a second `Escape` closes the window even if the host is wedged
+   * (`docs/08` §9's two-press contract).
+   */
   cancel() {
     this.state.running = false;
     if (typeof this.host.cancel === "function") {
@@ -1800,11 +2554,122 @@ var RHSearchWindow = {
     }
   },
 
-  /** "New collection…" — `docs/08` §4.1.2 suggests `DialogHelper` for this. */
+  /**
+   * "New collection…" — ask for the name, then put it in the picker.
+   *
+   * `docs/08` §4.4's first write step is "resolve target collection (create if
+   * 'New collection…')", and creating one needs a name. The name can only come
+   * from the user: deriving it from the keyword box would write whatever is in
+   * that box — a pasted API key included — into the Zotero database, where it
+   * would persist for the life of the library. So this asks.
+   *
+   * **`Services.prompt` is permitted here and only here.** `docs/08` §8.1 bans
+   * a modal "for anything the user did not just click"; the user just clicked
+   * this button. The prompt's one string is
+   * `research-helper-search-target-new`, which is already this button's own
+   * label and is exactly the question — minting a prompt title and body would be
+   * two new ids in `P1-T18`'s bundles, which are not in this card's `Files`
+   * list. A dedicated string would read better and that is reported.
+   *
+   * The collection is **not created here**; the name goes into the picker and
+   * `importWorks()` resolves or creates it inside the import's first
+   * transaction, which is what keeps FR-10's "cancel creates no items" true.
+   *
+   * A build where `Services.prompt` is unavailable degrades to leaving the
+   * picker alone, which leaves Import disabled rather than importing into a
+   * collection nobody named. `host.createCollection` is still called when the
+   * host offers one, so a privileged side that wants to own this flow can.
+   */
   newCollection() {
     if (typeof this.host.createCollection === "function") {
       this.host.createCollection();
     }
+    const label = this.promptForCollectionName();
+    if (label) {
+      this.adoptNewCollection(label);
+    }
+  },
+
+  /**
+   * Ask for a collection name. Returns the trimmed name, or `""`.
+   *
+   * Split from {@link newCollection} so the picker half can be driven from a
+   * test without opening a modal — a modal in an integration run blocks until
+   * the suite times out.
+   *
+   * @returns {string}
+   */
+  promptForCollectionName() {
+    try {
+      const services = typeof Services === "undefined" ? undefined : Services;
+      if (!services || !services.prompt) {
+        return "";
+      }
+      const title = document.title || "";
+      const text = this.labelOf(this.spec.targetNewItem) || "";
+      const result = { value: "" };
+      const accepted = services.prompt.prompt(
+        window,
+        title,
+        text,
+        result,
+        null,
+        {},
+      );
+      return accepted && result.value ? String(result.value).trim() : "";
+    } catch {
+      return "";
+    }
+  },
+
+  /**
+   * Put a named new collection in the target picker and select it.
+   *
+   * The value is `new:<name>`, which both this document's
+   * {@link RHSearchWindow.logic.targetNamed} and the privileged side's
+   * `resolveTarget` parse. The label is the name as typed — a collection name is
+   * user data, like a paper's title, and is not translated (`docs/08` §10.3).
+   *
+   * @param {string} name
+   * @returns {string} the picker value that was selected
+   */
+  adoptNewCollection(name) {
+    const trimmed = String(name === undefined ? "" : name).trim();
+    if (trimmed === "") {
+      return "";
+    }
+    const value = "new:" + trimmed;
+    const list = this.el(this.spec.target);
+    const popup = this.el(this.spec.targetPopup);
+    if (popup) {
+      const existing = [...(popup.children || [])].find(
+        (item) => item.getAttribute("value") === value,
+      );
+      if (!existing) {
+        const item = this.createXUL("menuitem");
+        item.setAttribute("value", value);
+        item.setAttribute("label", trimmed);
+        popup.appendChild(item);
+      }
+    }
+    if (list) {
+      list.value = value;
+    }
+    this.refreshImportGate();
+    return value;
+  },
+
+  /**
+   * One element's `label` attribute, for the two places a XUL label is read
+   * back rather than drawn.
+   *
+   * @param {string} id
+   * @returns {string}
+   */
+  labelOf(id) {
+    const element = this.el(id);
+    const value = element ? element.getAttribute("label") : null;
+    return value === null ? "" : value;
   },
 
   /** Re-state the span when the user moves either year menulist. */
