@@ -1,6 +1,28 @@
 /* eslint-disable no-restricted-globals -- an integration spec runs inside a live Zotero (docs/13 §2.3) and asserts on the platform's own state; there is no src/zotero/ facade to go through from outside the plugin bundle. */
 /**
  * `P1-T22` — the window driving the pipeline, end to end, in a live Zotero.
+ * `P1-T35` — the same path, through the host the **plugin itself** publishes.
+ *
+ * ## Two `describe` blocks, and why both exist
+ *
+ * `P1-T35` publishes the host at startup, so there are now two different things
+ * worth asserting and they need different fixtures:
+ *
+ * - **`P1-T35`'s block runs first** and drives the *published* host: the real
+ *   service graph, the real source registry, the real pipeline, the real
+ *   writer, and the `isExisting` / `writeProvenanceNote` bindings the
+ *   composition root made. Nothing of that path comes from this file. Its stub
+ *   source is registered into the **real** registry under a `SourceId` this
+ *   build ships no adapter for, because `SourceRegistry.register` throws on a
+ *   duplicate and declares no unregister — see {@link PUBLISHED_STUB}.
+ * - **`P1-T22`'s block keeps its own host**, because the state machine it
+ *   covers needs a stub that *is* `pubmed`: forced 429s, an injected
+ *   `OfflineError`, a 40-record fetch to cancel mid-flight, and the one
+ *   localized source display name any bundle declares
+ *   (`research-helper-source-pubmed`). Those cannot be reached through the real
+ *   registry, which already holds the real PubMed adapter under that id.
+ *
+ * Neither block makes an HTTP request.
  *
  * ## What is real here and what is a double
  *
@@ -31,13 +53,86 @@
  *
  * ## The host
  *
- * Nothing publishes `Zotero.<addonInstance>.api.searchWindow` in the shipped
- * build: `src/addon.ts` sets `api = {}` and `src/bootstrap/registerUI.ts`
- * discards the `ServiceGraph` on purpose. Neither file is in `P1-T22`'s `Files`
- * list, so this spec builds the host out of the same three pieces the
- * composition root would use, and **this is the only place the end-to-end path
- * runs today**. See `SEARCH_WINDOW_API_PROPERTY` in
- * `src/ui/dialogs/searchDialog.ts`.
+ * **Corrected 2026-10-07 (`P1-T35`).** This section used to read: "Nothing
+ * publishes `Zotero.<addonInstance>.api.searchWindow` in the shipped build:
+ * `src/addon.ts` sets `api = {}` and `src/bootstrap/registerUI.ts` discards the
+ * `ServiceGraph` on purpose. Neither file is in `P1-T22`'s `Files` list, so
+ * this spec builds the host out of the same three pieces the composition root
+ * would use, and **this is the only place the end-to-end path runs today**."
+ *
+ * Both halves of that are now false. `registerUI()` holds the graph at
+ * `addon.api.services`, builds the host from `createSearchImportViewModel` with
+ * every optional dependency bound, and publishes it at
+ * `SEARCH_WINDOW_API_PROPERTY` through the root `Scope` — so the path runs in a
+ * plain Zotero with no spec present, and the first `describe` below asserts
+ * exactly that. `P1-T22`'s block still installs its own host, and
+ * {@link savedApi} is now the *published* one it puts back afterwards rather
+ * than `undefined`.
+ *
+ * See `SEARCH_WINDOW_API_PROPERTY` in `src/ui/dialogs/searchDialog.ts` — whose
+ * own doc comment still says nothing publishes it. That file is outside
+ * `P1-T35`'s `Files` list, so the correction is **reported with the card**
+ * rather than made here (`plan/README.md` §5 rule 2).
+ *
+ * ## This suite flakes, and here is the measurement (2026-10-07)
+ *
+ * Three tests in `P1-T22`'s block below fail on most runs, on the machine this
+ * was measured on, and the failure is **not** caused by anything in `P1-T35`'s
+ * block. Recorded here because the natural first guess is that the newer block
+ * broke the older one, and that guess was made, tested and refuted rather than
+ * reasoned about.
+ *
+ * Twenty-eight full runs plus five matched pairs, 2026-10-07/08:
+ *
+ * | tree | full runs | all passed | 2 failed | 3 failed |
+ * |---|---|---|---|---|
+ * | before `P1-T35` (nothing published, this block absent) | 13 | 6 | 3 | **4** |
+ * | `P1-T35` published, this block absent | 6 | 1 | 0 | 5 |
+ * | `P1-T35` complete | 6 | 1 | 1 | 4 |
+ *
+ * **The tree as it stood before `P1-T35` produces the identical three
+ * failures**, with the identical messages, in four of its thirteen runs, and two
+ * of the three in three more. Five further runs alternated the two trees back to
+ * back — a matched pair at a time, so that drift in machine state over a session
+ * cannot be mistaken for a code effect — and every pair came out the same way:
+ * pair 1 green on both, pairs 2 to 5 red on both.
+ *
+ * The three:
+ *
+ * - `cancels a fetch within 2 s and creates nothing (FR-10)` times out waiting
+ *   for Fluent to put `"of 1"` into `#rh-search-progress-databases`.
+ * - `reports linked-existing separately from created (FR-51)` times out waiting
+ *   for Fluent to put `"Linked 3"` into `#rh-search-notice`. **Same cause as the
+ *   first, not a cascade of it**: one run had it *pass* at 17,593 ms, under the
+ *   25,000 ms cap, while the cancel test failed in that same run.
+ * - `asks for the popup on completion and names the outcome once per run` is the
+ *   one genuine cascade — it counts cancelled runs, and the cancel test never
+ *   reached its `cancel()`.
+ *
+ * **The discriminator is how long Fluent takes in this window, and it is
+ * bimodal per run.** The first test in `P1-T22`'s block costs about 30 ms in
+ * every passing run and about 1,010 ms in nearly every failing one, and the cost
+ * then roughly doubles per test — 1.0 s, 2.0 s, 4.0 s, 8.0 s — until the import
+ * lands on 22.92–22.99 s against that 25,000 ms cap, in 21 of the 25 runs that
+ * reached it. {@link rendered} waits on text that the run has already replaced by
+ * the time the translation lands. The slow mode is necessary but not sufficient:
+ * two runs took 1,008 ms on the first test and still passed everything.
+ *
+ * Two candidate causes were measured and **refuted**, so neither is worth
+ * retrying:
+ *
+ * - *Background-timer clamping of the runner's window.* `Zotero.Promise.delay(25)`
+ *   was timed inside a failing run and delivered 29–33 ms, six samples. The
+ *   polling granularity is fine.
+ * - *The application locale left on `ko-KR` by `l10n.spec.ts`.* Identical in
+ *   passing and failing runs: `restored intl.locale.requested (user value
+ *   false); app ["ko-KR","en-US"]` in both. Worth knowing on its own — every
+ *   later spec renders through a chain that falls back to `en-US` for every id
+ *   the Korean bundle lacks — but it does not discriminate.
+ *
+ * Fixing this means changing what `P1-T22`'s tests wait **on** — a view-state
+ * tap rather than rendered text, for the states that are transient — and that is
+ * its own card, not `P1-T35`'s.
  *
  * ## What this file does not check
  *
@@ -58,6 +153,12 @@
  */
 
 import { config } from "../../package.json";
+// Type-only, so nothing of `src/addon.ts` — and nothing of the `hooks` module
+// it imports — is bundled into this spec. The *values* this block reads all
+// come off the live plugin instance, which is the only copy that matters:
+// a spec is bundled separately from the plugin, so an imported module would be
+// a second instance with none of the plugin's state.
+import type { PluginApi } from "../../src/addon";
 import { createScope } from "../../src/bootstrap/container";
 import { createZoteroSearchImportWriter } from "../../src/bootstrap/registerPipelines";
 import { createSystemClock } from "../../src/core/clock";
@@ -89,7 +190,9 @@ import {
   UNRENDERABLE_ERROR_ROWS,
   createSearchImportViewModel,
   type SearchImportJobFactory,
+  type SearchImportViewModelDeps,
   type SearchViewState,
+  type SearchWindowHostApi,
 } from "../../src/ui/viewModels/searchImportViewModel";
 import { DEFAULT_CHUNK_SIZE } from "../../src/zotero/importer";
 import {
@@ -129,9 +232,15 @@ declare const assert: {
 declare function debug(line: string): void;
 
 const LOG_PREFIX = "[P1-T22]";
+/** The second block's prefix, so the two blocks' lines are greppable apart. */
+const LOG_PREFIX_T35 = "[P1-T35]";
 
 function log(line: string): void {
   debug(`${LOG_PREFIX} ${line}`);
+}
+
+function log35(line: string): void {
+  debug(`${LOG_PREFIX_T35} ${line}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,6 +365,8 @@ function stubSource(
 
 /** The slice of `RHSearchWindow` this spec drives. */
 interface FlowController {
+  /** What `resolveHost()` resolved to, for `P1-T35`'s identity assertion. */
+  readonly host: unknown;
   readonly state: {
     initialized?: boolean;
     panel: string;
@@ -564,6 +675,49 @@ function jobFactory(
   };
 }
 
+/**
+ * Erase every collection in `keys`, its items included, best effort.
+ *
+ * Shared by the two `describe` blocks below so that one of them failing cannot
+ * leave the other's fixtures in the library. A failed erase is swallowed —
+ * `test/integration/zotero/importer.spec.ts`'s discipline: cleanup never fails
+ * the run it is cleaning up after.
+ */
+async function eraseCollections(
+  keys: readonly string[],
+  label: string,
+): Promise<void> {
+  let items = 0;
+  let collections = 0;
+  for (const key of keys) {
+    try {
+      const found = Zotero.Collections.getByLibraryAndKey(
+        Zotero.Libraries.userLibraryID,
+        key,
+      ) as
+        | {
+            getChildItems(idsOnly: boolean): number[];
+            eraseTx(): Promise<unknown>;
+          }
+        | false;
+      if (!found) continue;
+      const childIDs = found.getChildItems(true);
+      if (childIDs.length > 0) {
+        await Zotero.Items.erase(childIDs);
+        items += childIDs.length;
+      }
+      await found.eraseTx();
+      collections += 1;
+    } catch {
+      /* cleanup is best effort */
+    }
+  }
+  log(
+    `${label}: cleanup erased ${String(items)} item(s) and ` +
+      `${String(collections)} collection(s)`,
+  );
+}
+
 /** A registry whose contents this spec fixes once, in `before()`. */
 function registryOf(adapters: readonly LiteratureSource[]): SourceRegistry {
   const byId = new Map<SourceId, LiteratureSource>(
@@ -584,6 +738,426 @@ function registryOf(adapters: readonly LiteratureSource[]): SourceRegistry {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// 4. `P1-T35` — the host the *composition root* published
+// ---------------------------------------------------------------------------
+
+/**
+ * The source id this block stubs, and **why it is not `pubmed`**.
+ *
+ * The block below drives the host `src/bootstrap/registerUI.ts` published at
+ * startup, which means the registry behind it is the **real** one — the one
+ * `installServices()` filled through `registerSources()`. `SourceRegistry`
+ * *throws* on a duplicate id (`src/sources/registry.ts:76`) and declares no
+ * unregister, so the real PubMed adapter cannot be replaced by a stub and must
+ * simply never be ticked.
+ *
+ * So a stub is registered under a `SourceId` this build has no adapter for, and
+ * every search below ticks that one alone. **No HTTP request leaves this
+ * machine in this block either** — the same guarantee `P1-T22`'s block gives,
+ * reached a different way. `test/contract/_transport.ts`'s replay transport is
+ * still unusable here (`node:fs/promises`, `node:crypto`), which is why the
+ * double is a source rather than a transport.
+ *
+ * The consequence is that no bundle declares `research-helper-source-crossref`
+ * — only `research-helper-source-pubmed` exists (`addon/locale/en-US/
+ * research-helper-mainWindow.ftl:114`) — so this block's Source column shows the
+ * documented fallback, the source id. The localized-name path stays covered by
+ * `P1-T22`'s block, which drives its own registry and can call its stub
+ * `pubmed`.
+ *
+ * ### The residue this leaves, and what it does not do
+ *
+ * Because there is no unregister, the stub **stays in the application-wide
+ * registry for the rest of the process**. That is the one piece of lasting state
+ * this block leaves behind, and it is real: a later spec asking the real registry
+ * how many adapters exist would see two. It needs a `SourceRegistry` test seam to
+ * remove, which is outside `P1-T35`'s `Files` list and is reported with the card.
+ *
+ * **It does not reach `P1-T22`'s block, and that was measured rather than
+ * assumed.** `P1-T22` publishes its own host over its own `registryOf([...])`, so
+ * the window it opens renders its own two checkboxes. Logged from inside the
+ * failing cancel test with this block enabled: `boxes=["pubmed:true",
+ * "crossref:false"]`, `asked=["pubmed"]`,
+ * `l10nArgs={"done":0,"total":1}`, and the counter element read
+ * `"0 of 1 databases"` — the exact text that test waits for, present and correct.
+ * The counter cannot read `of 2` from a registry its host never consults.
+ */
+const PUBLISHED_STUB: SourceId = "crossref";
+
+/** The dependency record that host was built from. */
+let publishedDeps: Required<SearchImportViewModelDeps> | undefined;
+/** Collections this block created, erased in its own `after()`. */
+const publishedCollections: string[] = [];
+
+/**
+ * `addon/content/searchDialog.js`'s `resolveHost()`, transcribed.
+ *
+ * The document does `Zotero.__addonInstance__.api.searchWindow || {}` — the
+ * fallback is what made every control inert before `P1-T35`. Here the fallback
+ * is a **failure**: criterion 1 is about the published object existing, so a
+ * missing one must not be papered over by an empty object.
+ */
+function publishedApi(): PluginApi {
+  const instance = (Zotero as unknown as Record<string, unknown>)[
+    config.addonInstance
+  ] as { api?: PluginApi } | undefined;
+  if (!instance) {
+    assert.fail(`Zotero.${config.addonInstance} is not installed`);
+  }
+  const api = instance.api;
+  if (!api) {
+    assert.fail(
+      `Zotero.${config.addonInstance}.api is absent, so the window's host ` +
+        `lookup resolves to {} and every control is inert`,
+    );
+  }
+  return api;
+}
+
+/**
+ * Every key of `SearchImportViewModelDeps`, as data — **criterion 4's
+ * enumeration**.
+ *
+ * `Record<keyof SearchImportViewModelDeps, true>` is what makes this
+ * unforgettable rather than a list someone has to remember to extend: adding a
+ * member to that interface leaves a key missing here and `npm run typecheck`
+ * reports `TS2741`, while removing one makes this an excess property. The names
+ * are therefore **derived from the type** and the only thing written by hand is
+ * the `true`.
+ *
+ * It is the run-time half of the same check `SearchWindowDeps =
+ * Required<SearchImportViewModelDeps>` makes at compile time in
+ * `src/bootstrap/registerUI.ts`. Both are needed and neither replaces the
+ * other: the compiler proves the composition root *declares* every member, this
+ * proves the object the plugin actually published in a live Zotero *has* them.
+ */
+const VIEW_MODEL_DEPENDENCIES: Record<keyof SearchImportViewModelDeps, true> = {
+  pipeline: true,
+  jobs: true,
+  logger: true,
+  pluginVersion: true,
+  zoteroVersion: true,
+  clock: true,
+  listSources: true,
+  listCollections: true,
+  getPrefs: true,
+  isExisting: true,
+  writeProvenanceNote: true,
+};
+
+/**
+ * Wait for a run started through the published host to finish — **all** of it.
+ *
+ * On `controller.state.running`, and the ordering is what makes this race-free
+ * rather than lucky. `RHSearchWindow.search()` sets `state.running = true`
+ * itself before it calls the host, and for an import `runJob()` publishes
+ * `running: true` **synchronously**, before its first `await`, and `render()`
+ * copies it straight onto the document's state — so the flag is already true
+ * by the time `controller.search()` / `controller.import()` returns, and the
+ * assertion below is a real check rather than a poll that can miss a fast run.
+ * It goes false in the view model's `close()`.
+ *
+ * **The summary notice is not the signal, and that is measured.**
+ * `renderImportOutcome` publishes the `Imported N · Linked M` notice *before*
+ * it builds the provenance record and awaits `writeProvenanceNote`. A version
+ * of the import test below that waited on the notice and then counted the
+ * collection's children passed once and then failed with
+ * `FR-8: exactly one provenance note … expected +0 to equal 1` — while this
+ * block's own cleanup line read `erased 4 item(s)`, i.e. three items **and the
+ * note**, which had landed a moment after the count. `close()` runs after that
+ * await, so this is the only flag that means "the note is written too".
+ *
+ * `P1-T22`'s block counts `running` transitions instead, which it can do
+ * because it wraps the host's `connect`; a spec driving the *published* host
+ * wraps nothing, so it reads the document the way a user would.
+ */
+async function awaitPublishedRun(what: string): Promise<void> {
+  assert.isTrue(
+    controller.state.running,
+    `${what} did not start: the document's host call returned without the ` +
+      `view model publishing running: true`,
+  );
+  await waitUntil(() => !controller.state.running, `${what} to finish`, 60_000);
+}
+
+/** The seven members `resolveHost()`'s own comment documents, plus `connect`. */
+const HOST_CONTRACT: readonly (keyof SearchWindowHostApi)[] = [
+  "listSources",
+  "listCollections",
+  "getPrefs",
+  "connect",
+  "runSearch",
+  "runImport",
+  "cancel",
+];
+
+describe("P1-T35: the host the composition root published", () => {
+  before(async function () {
+    this.timeout(90_000);
+
+    const api = publishedApi();
+    const services = api.services;
+    if (!services) {
+      assert.fail(
+        "registerUI() published no ServiceGraph at api.services, so the " +
+          "graph installServices() built is unreachable",
+      );
+    }
+    // Into the *real* registry. See PUBLISHED_STUB for why this id and not
+    // `pubmed`, and why nothing here reaches the network.
+    services.sources.register(
+      stubSource(
+        PUBLISHED_STUB,
+        "research-helper-source-crossref",
+        () => behaviour.get(PUBLISHED_STUB) ?? IDLE,
+      ),
+    );
+    log35(
+      `real registry now holds ` +
+        `${services.sources
+          .list()
+          .map((source) => source.id)
+          .join(",")}`,
+    );
+
+    publishedDeps = api.searchWindowDeps;
+
+    const opened = openSearchWindow(Zotero.getMainWindow(), {
+      mode: "keyword",
+    }) as FlowWindow;
+    win = opened;
+    await waitUntil(
+      () => opened.RHSearchWindow?.state.initialized === true,
+      "RHSearchWindow.init() to have run",
+      30_000,
+    );
+    doc = opened.document;
+    const found = opened.RHSearchWindow;
+    if (!found) {
+      assert.fail("the window loaded without RHSearchWindow");
+    }
+    controller = found;
+    log35("window open on the published host");
+  });
+
+  after(async function () {
+    this.timeout(60_000);
+    win?.close();
+    win = undefined;
+    await eraseCollections(publishedCollections, "P1-T35");
+    // Hand the shared behaviour map back as it was found. `P1-T22`'s `search()`
+    // helper rewrites both entries on every call, so this changes nothing today;
+    // it is here because the map is the one mutable thing the two blocks share
+    // and a block that leaves state behind invites exactly the wrong diagnosis
+    // when something else in the file flakes.
+    behaviour.set(PUBLISHED_STUB, IDLE);
+    // The window is a singleton (`SEARCH_WINDOW_NAME`), so the next block's
+    // `openSearchWindow` must not find this one still closing.
+    await Zotero.Promise.delay(250);
+  });
+
+  // =========================================================================
+  // Criterion 1 — the window's own lookup finds the whole contract
+  // =========================================================================
+
+  it("publishes a complete host at the property the document reads", async function () {
+    const api = publishedApi();
+    const host = api[SEARCH_WINDOW_API_PROPERTY];
+    if (!host) {
+      assert.fail(
+        `nothing is published at api.${SEARCH_WINDOW_API_PROPERTY}, so ` +
+          `resolveHost() falls back to {} and the window ships inert`,
+      );
+    }
+    for (const member of HOST_CONTRACT) {
+      assert.strictEqual(
+        typeof host[member],
+        "function",
+        `the published host has no ${member}()`,
+      );
+    }
+    // The document's own lookup, not a second spelling of the property.
+    assert.strictEqual(
+      controller.host === host,
+      true,
+      "the open window resolved its host to the published object",
+    );
+    log35(`published host has ${String(HOST_CONTRACT.length)} members`);
+    await Zotero.Promise.delay(0);
+  });
+
+  // =========================================================================
+  // Criterion 4 — no optional dependency is silently missing
+  // =========================================================================
+
+  it("supplies every member of SearchImportViewModelDeps", async function () {
+    const deps = publishedDeps;
+    if (!deps) {
+      assert.fail(
+        "the composition root published no dependency record, so whether " +
+          "it bound every port cannot be checked from here",
+      );
+    }
+    const expected = Object.keys(VIEW_MODEL_DEPENDENCIES).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    const supplied = Object.keys(deps)
+      .filter((name) => deps[name as keyof typeof deps] !== undefined)
+      .sort((a, b) => a.localeCompare(b));
+    assert.deepEqual(
+      supplied,
+      expected,
+      "every member of SearchImportViewModelDeps must be supplied by the " +
+        "composition root; the optional ones degrade silently when they are not",
+    );
+
+    // The four §8.5 window seeds, and the two version strings the provenance
+    // record carries. Asserted as values because a bound port that returns
+    // nothing useful is the same defect one step later.
+    const prefs = deps.getPrefs();
+    assert.deepEqual(
+      Object.keys(prefs).sort((a, b) => a.localeCompare(b)),
+      ["hideExisting", "maxResults", "searchYears", "sources"],
+      "docs/07 §8.5's four window seeds",
+    );
+    assert.strictEqual(deps.zoteroVersion, Zotero.version);
+    assert.isAbove(deps.pluginVersion.length, 0, "a plugin version is bound");
+    assert.isAbove(
+      deps.listSources().length,
+      0,
+      "the real source registry is behind listSources()",
+    );
+    log35(`dependencies supplied: ${supplied.join(",")}`);
+    await Zotero.Promise.delay(0);
+  });
+
+  // =========================================================================
+  // Criterion 2 — a search reaches P1-T16's pipeline through that host
+  // =========================================================================
+
+  it("runs a search through the published host and fills the table", async function () {
+    this.timeout(60_000);
+    setKeyword(KEYWORD);
+    selectSources([PUBLISHED_STUB]);
+    behaviour.set(PUBLISHED_STUB, { records: 3, withAbstract: true });
+
+    controller.search();
+    await awaitPublishedRun("the search");
+    assert.strictEqual(rows().length, 3, "three rows reached the table");
+
+    assert.strictEqual(controller.state.panel, "results");
+    const row = el(`rh-search-source-status-${PUBLISHED_STUB}`);
+    assert.strictEqual(row.getAttribute("data-rh-outcome"), "succeeded");
+    // The row key is `sourceId:nativeId`, which is what the pipeline matches
+    // `selectedRecordIds` against — so these rows came through the pipeline and
+    // not from anything this spec handed the document.
+    const first = controller.state.rows[0];
+    assert.strictEqual(
+      first?.key.startsWith(`${PUBLISHED_STUB}:`),
+      true,
+      "the rows carry the pipeline's own record ids",
+    );
+    log35(`${String(rows().length)} rows through the published host`);
+  });
+
+  // =========================================================================
+  // Criterion 3 — the import writes the collection, the items and ONE note
+  // =========================================================================
+
+  it("imports through the published host and writes exactly one provenance note", async function () {
+    this.timeout(120_000);
+    const name = `RH P1-T35 ${String(Date.now())}`;
+    controller.adoptNewCollection(name);
+    assert.isTrue(
+      controller.logic.importEnabled(controller.state.selectedCount),
+    );
+
+    controller.import();
+    await awaitPublishedRun("the import");
+    const summary = await rendered("rh-search-notice", "Imported");
+
+    const collection = collectionNamed(name);
+    publishedCollections.push(collection.key);
+    const children = (await Zotero.Items.getAsync(
+      collection.getChildItems(true),
+    )) as { isNote(): boolean; getNoteTitle(): string; getNote(): string }[];
+    const notes = children.filter((item) => item.isNote());
+    assert.strictEqual(
+      children.length - notes.length,
+      3,
+      "the three records became items",
+    );
+    // **The member most likely to be left unbound.** Nothing in this block
+    // supplies `writeProvenanceNote`: it is the binding the composition root
+    // made, and this is the only thing that proves it was made.
+    assert.strictEqual(
+      notes.length,
+      1,
+      "FR-8: exactly one provenance note, written through the published " +
+        "writeProvenanceNote binding",
+    );
+    assert.include(
+      notes[0]?.getNoteTitle() ?? "",
+      PROVENANCE_NOTE_TITLE_PREFIX,
+    );
+    // The record the note renders carries the version the composition root
+    // read off the platform, so `zoteroVersion` is bound and not a placeholder.
+    assert.include(
+      notes[0]?.getNote() ?? "",
+      Zotero.version,
+      "the note carries the Zotero version the composition root supplied",
+    );
+
+    // `listCollections` is bound to the real library, which the collection the
+    // import just created is now in.
+    const listed = publishedDeps
+      ?.listCollections()
+      .some((entry) => entry.name === name);
+    assert.isTrue(
+      listed,
+      "the published listCollections() sees the collection the import created",
+    );
+    log35(`import summary: ${summary.replace(/\s+/g, " ")}`);
+  });
+
+  // =========================================================================
+  // The `isExisting` binding, which has no other witness
+  // =========================================================================
+
+  it("marks the imported records as already in the library", async function () {
+    this.timeout(60_000);
+    setKeyword(KEYWORD);
+    selectSources([PUBLISHED_STUB]);
+    // **Two, not three.** The stub mints `p1t35-crossref-0…n-1` deterministically,
+    // so a two-record run is a subset of the three that were just imported — and
+    // a row count that *differs* from the previous search is what makes the wait
+    // below a real transition rather than a predicate that was already true.
+    behaviour.set(PUBLISHED_STUB, { records: 2, withAbstract: true });
+
+    controller.search();
+    await awaitPublishedRun("the second search");
+    // On `state.rows`, the whole result set, and **not** on `rows()`, the
+    // rendered table body: with `hideExisting` on and every row already in
+    // the library the body is empty, which is the outcome under test.
+    assert.strictEqual(controller.state.rows.length, 2, "two records found");
+
+    // `hideExisting` defaults to true (`docs/07` §8.5), so every row the
+    // library already holds is hidden. Both were just imported, so an
+    // `isExisting` that is bound hides both and one that is not hides neither —
+    // there is no middle reading.
+    const hide = el("rh-search-hide-existing") as HTMLInputElement;
+    assert.isTrue(hide.checked, "docs/07 §8.5 defaults hideExisting to true");
+    assert.strictEqual(
+      controller.state.visible.length,
+      0,
+      "the published isExisting() found both in the library, through a " +
+        "library index the composition root refreshed before the search",
+    );
+    log35("isExisting hid both already-imported rows");
+  });
+});
 
 // ---------------------------------------------------------------------------
 
@@ -715,35 +1289,7 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
 
     // Fixtures are erased rather than left behind; a failed erase never fails
     // the run (`test/integration/zotero/importer.spec.ts`'s discipline).
-    let items = 0;
-    let collections = 0;
-    for (const key of createdCollections) {
-      try {
-        const found = Zotero.Collections.getByLibraryAndKey(
-          Zotero.Libraries.userLibraryID,
-          key,
-        ) as
-          | {
-              getChildItems(idsOnly: boolean): number[];
-              eraseTx(): Promise<unknown>;
-            }
-          | false;
-        if (!found) continue;
-        const childIDs = found.getChildItems(true);
-        if (childIDs.length > 0) {
-          await Zotero.Items.erase(childIDs);
-          items += childIDs.length;
-        }
-        await found.eraseTx();
-        collections += 1;
-      } catch {
-        /* cleanup is best effort */
-      }
-    }
-    log(
-      `cleanup erased ${String(items)} item(s) and ` +
-        `${String(collections)} collection(s)`,
-    );
+    await eraseCollections(createdCollections, "P1-T22");
     await Zotero.Promise.delay(100);
   });
 

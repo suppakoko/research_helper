@@ -421,6 +421,19 @@ nothing at all, because ranking them without an owner's input would be a decisio
     unacceptable. The two alternatives — a notifier observer keeping the snapshot live, or a snapshot taken
     once at startup — were not costed.
 
+20. **The integration suite's waits on transient rendered text, which is the item that gates
+    `P1-T23`.** Measured by `P1-T35`'s executing agent across 25 runs: Fluent's latency in the search
+    window is **bimodal per run** — about 30 ms per test in a passing run, about 1,010 ms in a failing
+    one, roughly doubling per test (1.0, 2.0, 4.0, 8.0 s) until the import lands on 22.92–22.99 s against
+    a 25,000 ms cap, in 21 of the 25 runs that reached it. Three tests in `P1-T22`'s block then wait on
+    text the run has already replaced. Background-timer clamping and the `ko-KR` locale
+    `l10n.spec.ts` leaves behind were both measured and **refuted**. The fix is to wait on a view-state
+    tap rather than on rendered text, for the states that are transient. **On a quiet machine the suite
+    runs green** — 98 passed, three consecutive runs on 2026-10-08 — so this is load sensitivity, not a
+    broken assertion, and the coordinator's one-run-per-condition measurement that called it a regression
+    was wrong. Until it is fixed, a continuous-integration run can go red for reasons unrelated to the
+    change under test.
+
 ## 7. Regenerating this file
 
 The tables in §4 are derived from the cards' `ID`, `Depends on`, `Estimate` and

@@ -6959,6 +6959,104 @@ The installer size is a useful tell: `P1-T22` left it at **121,920 bytes**. If t
 reachable the number must move, and `src/zotero/notes.ts` should appear in the bundle for the first time
 — it has read **zero** occurrences across four cards.
 
+**Findings, 2026-10-08 — the window is live: a search started from the document now reaches the pipeline
+and writes items, a collection and one provenance note, with no part of the path supplied by a spec. All
+five criteria pass, criterion 5 only after a disagreement about measurement that the coordinator lost.**
+
+**Verified by the coordinator on a quiet machine:** typecheck 0, `lint:check` 0, 1,194 unit in 27 files,
+28 contract, installer **121,920 → 131,919 bytes**, and `npm run test:integration` at **98 passed, 0
+failed, three consecutive runs**. Exactly the card's three files were touched and `grep -rn MUTANT` is
+clean.
+
+**The single most telling number is one nobody asked for: `createSearchImportViewModel` read **zero**
+occurrences in the shipped bundle before this card.** Not the host, not the binding — **the entire view
+model `P1-T22` built was being removed by the bundler**, because nothing constructed it. `src/zotero/
+notes.ts` likewise appeared for the first time, note writer, note renderer and note title together. The
+window was not merely inert; the code behind it was not in the installer at all.
+
+**Criterion 4 is enforced twice, from the type rather than from a list of today's names.** At compile time
+the composition root's dependency builder returns `Required<SearchImportViewModelDeps>`, so adding any
+member — optional or not — fails `npm run typecheck` until it is wired, while the interface's own
+optionality is untouched and unit tests can still build a view model with no platform. At run time the
+spec enumerates `Record<keyof SearchImportViewModelDeps, true>` against the keys the plugin actually
+published. **The staleness claim was tested rather than asserted**: a temporary optional member made both
+halves fail with named `TS2741`s, quoted in the report, and was removed.
+
+**A diagnostic that bricked the plugin, found by a mutation and worth more than the mutation.** With
+`listSources` forced to `undefined` the run died with `Plugin awaiting timeout` and **zero tests
+collected** — because the new "host is published" log line called `deps.listSources().length`, so the
+diagnostic itself threw, the exception left `registerUI`, and startup never completed. **A diagnostic
+that bricks the thing it describes is the opposite of a diagnostic.** Fixed to read the registry size off
+the graph, re-mutated, and now caught by the enumeration test like the other four. Fifteen mutations in
+all, every one reverted; one assertion could not be broken and is **reported as a redundant guard rather
+than counted as coverage**, with the defect class it would catch named.
+
+**Criterion 5, and the coordinator's own error, recorded because the next reader should trust the method
+rather than the verdict.** Three tests in `P1-T22`'s block failed in the executing agent's runs. The
+agent reported them as **pre-existing**. The coordinator measured one run per condition — clean tree 93
+passed, work restored 95 passed and 3 failed, work restored with only the new `describe` skipped 93
+passed — and concluded from those three samples that the card had caused a **regression**, saying so to
+the owner and returning the card. **That conclusion was wrong.** The agent had measured **25 runs** with
+the two trees alternated in matched pairs, and on re-measurement afterwards the clean tree ran green
+**four times out of four** and the finished tree **three times out of three at 98 passed**. One sample
+per condition cannot distinguish a code effect from a load effect, which is the very trap this phase had
+already recorded twice — `P1-T22` raised a wait cap for it, and the memory note about leaked test
+profiles exists because of it. **The agent's refusal to fix `P1-T22`'s tests from inside this card was
+correct**, and so was its diagnosis.
+
+**What the failures actually are, measured by the executing agent across 25 runs.** Fluent's latency in
+this window is **bimodal per run**: the first test in `P1-T22`'s block costs about 30 ms in a passing
+run and about 1,010 ms in nearly every failing one, and the cost then roughly doubles per test — 1.0,
+2.0, 4.0, 8.0 seconds — until the import lands on 22.92–22.99 s against a 25,000 ms cap, in 21 of the 25
+runs that reached it. The waits are on **transient** text that the run has already replaced by the time
+the translation lands. Two candidate causes were measured and **refuted**: background-timer clamping
+(`Zotero.Promise.delay(25)` delivered 29–33 ms inside a failing run, six samples) and the `ko-KR`
+application locale `l10n.spec.ts` leaves behind (identical in passing and failing runs — worth knowing
+on its own, since every later spec then renders through a fallback chain). **The fix is to change what
+those tests wait on — a view-state tap instead of rendered text for states that are transient — and that
+is its own card, not this one's.**
+
+**One scope note reported rather than absorbed, and it is a layering gap.** `zoteroVersion` and
+`listCollections` are required by the view model and have **no facade in `src/zotero/`**: grepped
+2026-10-07, `Zotero.Collections` was called only at `src/zotero/collectionOps.ts:135–136` and
+`Zotero.version` was called **nowhere**, every other mention being a comment. The lint rule forbids the
+`Zotero` global outside `src/zotero/**`, `addon/**` and the three lifecycle entry files, and
+`registerUI.ts` is not among them — **so this card's own premise, that the platform ports can simply be
+bound in `bootstrap/`, is true for the note writer and the existing-item check and false for these
+two.** They were put on `src/addon.ts`, which is in the `Files` list and is the sandbox boundary
+`docs/07` §2.2 describes, following the shape already there for the error reporter. The right homes are
+beside `userLibraryID()` and `findOrCreateCollection()`; that is `plan/00` §6 item 14.
+
+**Four corpus statements measured false, each with a file and line.** `src/pipeline/registry.ts:18–25`
+makes two: `get()` is typed `Pipeline<never, unknown>` and not `Pipeline<unknown, unknown>`, and the
+claim that a caller "is better served by being handed the concretely-typed pipeline at the construction
+site (which is what `installServices` does)" is false — `PipelineSet.searchImport` is itself erased at
+`:145`, so the composition root **cannot** avoid the cast that paragraph says it avoids, and this card
+carries one with the quotation beside it. Two doc comments now say the opposite of the truth and are
+outside this card's `Files`: `src/ui/dialogs/searchDialog.ts:182` and
+`test/integration/searchDialog-table.spec.ts:47`. And **two claims in this card's own text**, corrected
+above with a dated note.
+
+**What the integration block can and cannot reach, stated rather than glossed.** `SourceRegistry.register`
+throws on a duplicate and the interface declares no unregister, so the real PubMed adapter **cannot** be
+replaced by a stub and the new block registers its stub under a spare identifier. No bundle names a
+display name for that identifier, so the new block's Source column shows the documented fallback and the
+localized-name path stays covered by `P1-T22`'s block, which drives its own registry. Both blocks and the
+reason for the split are written into the file's header. **Zero network requests were made**, in this
+block or anywhere in the card's work, and real library items were created and erased every run.
+
+**Security.** No access key reached any file, preference, log, note, export, clipboard or repository. The
+three surfaces `P1-T22` closed stay closed: the empty-state headline is still deliberately unpopulated,
+the error disclosure still carries code and status only, and the collection name still never comes from
+the keyword box. No second redaction rule was written; the note binding is handed the already-redacted
+record, with that fact recorded at the binding. Certificate verification was never disabled.
+
+**Needs a card.** The flaky waits above, which is the one that gates `P1-T23`. Then the six items now in
+`plan/00` §6.3: the two platform facades, the two stale doc comments, `src/pipeline/registry.ts`'s
+header and whether `ServiceGraph` should expose the concretely-typed pipeline, a test seam on
+`SourceRegistry` or a recorded decision that it has none, what the application-scoped view model should do
+when a window is closed and reopened, and whether a library-index rebuild belongs on every Search press.
+
 ---
 
 ### P1-T36 — FR-8's "Export provenance as JSON" control, and the record it needs to still exist

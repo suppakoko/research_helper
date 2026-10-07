@@ -79,10 +79,29 @@ import {
   type ProgressHeadlineSource,
   type ScopedRegistration,
   type Scope,
+  type ServiceGraph,
 } from "./container";
+import type { Logger } from "../core/logger";
 import { formatValue } from "../i18n/ftl";
 import { L10N_PROGRESS_HEADLINE } from "../i18n/keys";
-import { openSearchWindow } from "../ui/dialogs/searchDialog";
+import type {
+  SearchImportInput,
+  SearchImportOutput,
+} from "../pipeline/searchImport/types";
+import type { Pipeline } from "../pipeline/types";
+import { getPref } from "../prefs";
+import {
+  SEARCH_WINDOW_API_PROPERTY,
+  openSearchWindow,
+  type SearchWindowQuery,
+} from "../ui/dialogs/searchDialog";
+import {
+  createSearchImportViewModel,
+  type SearchImportViewModelDeps,
+  type SearchWindowHostApi,
+} from "../ui/viewModels/searchImportViewModel";
+import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
+import { writeProvenanceNote } from "../zotero/notes";
 import {
   COLLECTION_MENU_DESCRIPTION,
   collectionMenuOptions,
@@ -247,6 +266,285 @@ const PROGRESS_HEADLINE: ProgressHeadlineSource = {
   fallback: config.addonName,
 };
 
+// ---------------------------------------------------------------------------
+// The Search & Import window's host (`P1-T35`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The view model's dependencies, with **every optional member made required**.
+ *
+ * This is `P1-T35` criterion 4's enumeration, and it is derived from
+ * `SearchImportViewModelDeps` by a mapped type rather than written out, so it
+ * **cannot go stale**: adding a member to that interface — optional or not —
+ * immediately makes {@link searchWindowDeps} fail to satisfy this type, and
+ * `npm run typecheck` fails until the new member is wired here. A hand-written
+ * list of today's five optional names would have to be remembered; this one is
+ * the interface itself.
+ *
+ * It does **not** change `SearchImportViewModelDeps`' shape (`P1-T35`'s
+ * **Do NOT**). The optionality is what lets a unit test build a view model with
+ * no platform at all; `Required<…>` is a separate, stricter contract that only
+ * the composition root is held to — which is exactly where the card says the
+ * fix for silent degradation belongs.
+ */
+export type SearchWindowDeps = Required<SearchImportViewModelDeps>;
+
+/**
+ * The library snapshot {@link SearchWindowDeps.isExisting} reads.
+ *
+ * `P1-T13` shipped the existing-item check in `src/zotero/libraryIndex.ts`
+ * (grepped 2026-10-07: `findExisting` is declared at `libraryIndex.ts:157` and
+ * implemented at `:322`; `src/zotero/importer.ts` and
+ * `src/bootstrap/registerPipelines.ts` are its only other callers). That check
+ * is **synchronous** by design and the snapshot behind it is **async** to
+ * build, so the two cannot be bridged inside the port: the index has to exist
+ * before the first row is mapped.
+ */
+let libraryIndex: LibraryIndex | undefined;
+
+/**
+ * Rebuild the library snapshot, or leave the last one in place.
+ *
+ * A failure here must not stop a search: the consequence is that rows are not
+ * badged as already present, which is the same degradation the view model
+ * documents for an absent `isExisting`, and it is logged rather than silent.
+ */
+async function refreshLibraryIndex(logger: Logger): Promise<void> {
+  try {
+    const rebuilt = await buildLibraryIndex();
+    libraryIndex = rebuilt;
+    logger.debug("library index rebuilt for the search window", {
+      doiKeys: rebuilt.byDoi.size,
+      pmidKeys: rebuilt.byPmid.size,
+      itemsScanned: rebuilt.stats.itemsScanned,
+      elapsedMs: rebuilt.stats.elapsedMs,
+    });
+  } catch (error) {
+    logger.warn(
+      "the library index could not be rebuilt; result rows will not be " +
+        "marked as already present until the next search",
+      { reason: error instanceof Error ? error.name : typeof error },
+    );
+  }
+}
+
+/**
+ * Everything the view model needs, with nothing left optional.
+ *
+ * Each platform member and where it comes from:
+ *
+ * | member | bound to |
+ * |---|---|
+ * | `listSources` | {@link ServiceGraph.sources}, the registry `registerSources()` filled |
+ * | `listCollections` | `addon.platform.listCollections()` — `Zotero.Collections`, read in the one file allowed to name it |
+ * | `getPrefs` | `src/prefs`' typed `getPref`, the four `docs/07` §8.5 window seeds |
+ * | `isExisting` | `P1-T13`'s `LibraryIndex.findExisting`, over {@link libraryIndex} |
+ * | `writeProvenanceNote` | `src/zotero/notes.ts`'s `writeProvenanceNote`, `FR-8`'s note |
+ *
+ * The last two are the ones `P1-T22` could not make, because `src/ui/**` may
+ * not import `src/zotero/**` (`docs/07` §2.3) and no file in that card's
+ * `Files` list could reach either module. This file is the three-way junction
+ * where they can be bound, which is what its header has said since `P0-T07`.
+ *
+ * `getPrefs` reads on **every** call rather than latching a snapshot: `getPref`
+ * never throws (`docs/07` §8.5.1) and the window re-seeds its controls from
+ * this each time it opens, so a preference changed between two opens has to be
+ * visible without a restart.
+ */
+function searchWindowDeps(
+  graph: ServiceGraph,
+  pipeline: Pipeline<SearchImportInput, SearchImportOutput>,
+  logger: Logger,
+): SearchWindowDeps {
+  return {
+    pipeline,
+    jobs: graph.pipelineContext,
+    logger,
+    pluginVersion: version,
+    zoteroVersion: addon.platform.zoteroVersion,
+    clock: graph.clock,
+    listSources: () =>
+      graph.sources.list().map((source) => ({
+        id: source.id,
+        displayNameKey: source.displayNameKey,
+      })),
+    listCollections: () => addon.platform.listCollections(),
+    getPrefs: () => ({
+      sources: getPref("sources"),
+      searchYears: getPref("searchYears"),
+      maxResults: getPref("maxResults"),
+      hideExisting: getPref("hideExisting"),
+    }),
+    // `ExternalIds` in, boolean out: `findExisting` re-normalizes both
+    // identifiers itself, so a record whose DOI is cased differently from the
+    // stored one still matches.
+    isExisting: (record) =>
+      libraryIndex?.findExisting(record.work.ids) !== undefined,
+    // The default `deps` argument builds `new Zotero.Item("note")`, which is
+    // `docs/01` §5.7's standalone-note sequence. The record handed over has
+    // already been through `src/core/provenance.ts`'s redaction gate — the
+    // view model calls `redactSearchProvenance` before this port — and nothing
+    // here adds a second rule (`NFR-16`: one gate).
+    writeProvenanceNote: (provenance) => writeProvenanceNote(provenance),
+  };
+}
+
+/**
+ * Which members of {@link SearchWindowDeps} are missing at run time.
+ *
+ * The compiler already makes an unwired member impossible to ship, so this can
+ * only fire when a *value* is `undefined` — a getter that threw, a service the
+ * graph left out. Enumerated from the object rather than from a literal list of
+ * names for the same reason {@link SearchWindowDeps} is a mapped type: a list
+ * written here would be a second thing to keep in step.
+ */
+function missingDependencies(deps: SearchWindowDeps): readonly string[] {
+  return Object.entries(deps)
+    .filter(([, value]) => value === undefined)
+    .map(([name]) => name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Hold the graph on the plugin instance, and drop it again on teardown.
+ *
+ * Through `scope.use` rather than by assignment so that the holder is undone by
+ * `hooks.onShutdown`'s single `unregisterAll()` — a stale `ServiceGraph` left
+ * on a disabled plugin's instance would keep its rate limiters, its HTTP client
+ * and every open progress surface reachable (`docs/01` §12 gotcha 10).
+ *
+ * **The target object is captured once, not re-read from the `addon` global in
+ * the teardown.** A disable/enable cycle deletes the plugin object off `Zotero`
+ * and `src/index.ts` news up a fresh `Addon` with a fresh `api`, so a teardown
+ * that said `delete addon.api.services` would delete from whichever instance
+ * the global happened to name when it ran rather than from the one the
+ * registration wrote to. In the ordering `hooks.ts` uses today those are the
+ * same object — `unregisterAll()` runs before `delete Zotero[addonInstance]` —
+ * so this is not a live defect; it is the `Registration` contract's own
+ * requirement that `unregister` undo exactly what `register` did, and
+ * `test/integration/menus.spec.ts` cycles disable/enable five times looking for
+ * precisely this class of mistake.
+ */
+async function publishServiceGraph(
+  scope: Scope,
+  graph: ServiceGraph,
+): Promise<void> {
+  const api = addon.api;
+  await scope.use({
+    description: "the service graph on the plugin instance (api.services)",
+    register: () => {
+      api.services = graph;
+      return "api.services";
+    },
+    unregister: () => {
+      delete api.services;
+    },
+  });
+}
+
+/**
+ * Build the window's host and publish it where the document looks for it.
+ *
+ * **The property is imported, never respelled** (`P1-T35` step 3):
+ * {@link SEARCH_WINDOW_API_PROPERTY} is declared beside the document's own
+ * `resolveHost()` contract in `src/ui/dialogs/searchDialog.ts`, so the
+ * publishing side and the reading side cannot drift.
+ *
+ * **A search refreshes the library snapshot before it starts.** `runSearch` is
+ * wrapped for exactly that: `isExisting` is synchronous and `buildLibraryIndex`
+ * is not, and the one point where an `await` can be inserted without changing
+ * `SearchImportViewModelDeps` is the host boundary. Doing it here rather than
+ * on a timer or a notifier observer keeps `docs/02` §11.6's budget — **one**
+ * `Zotero.Search` per run, independent of library size — and makes the badge
+ * deterministic instead of racing the fetch, which is the defect
+ * `ensureSourceNames` had to be rewritten for in `P1-T22`. The cost is one
+ * index build before each search; the alternative, badging rows from a snapshot
+ * taken at startup, is wrong the moment the user imports anything.
+ *
+ * Nothing else is wrapped. `runImport` leaves the snapshot stale on purpose:
+ * the *pipeline* builds its own index for the write (`registerPipelines.ts`'s
+ * `writeBatch`), so duplicate detection during the import is already correct,
+ * and the next search refreshes the badge.
+ */
+async function publishSearchWindowHost(
+  scope: Scope,
+  graph: ServiceGraph,
+): Promise<void> {
+  const logger = graph.logger.child({ surface: "searchWindow" });
+
+  // `PipelineRegistry.get()` is typed `Pipeline<never, unknown>` on purpose —
+  // see `src/pipeline/registry.ts`'s header — so the caller that knows which
+  // pipeline it wants narrows at the construction site. This is that site.
+  const erased = graph.pipelines.get("searchImport");
+  if (erased === undefined) {
+    // Startup is not failed over this: the menus still register and the window
+    // still opens, inert, exactly as it did before this card. What changes is
+    // that the reason is in the debug log instead of nowhere.
+    logger.error(
+      "the searchImport pipeline is not registered, so the Search & Import " +
+        "window has no host and every control in it will be inert",
+      { pipelines: graph.pipelines.list().length },
+    );
+    return;
+  }
+  const pipeline = erased as Pipeline<SearchImportInput, SearchImportOutput>;
+
+  const deps = searchWindowDeps(graph, pipeline, logger);
+  const missing = missingDependencies(deps);
+  if (missing.length > 0) {
+    // Reported, not thrown. `FR-56`'s shape: a plugin that refused to load
+    // because one optional port resolved to `undefined` would be a worse
+    // outcome than one that searches and does not badge a row. The names are in
+    // the line because that is what makes it actionable.
+    logger.error(
+      "the Search & Import window's host is missing dependencies and will " +
+        "degrade silently in the ways each one's doc comment describes",
+      { missing: missing.join(",") },
+    );
+  }
+
+  const model = createSearchImportViewModel(deps);
+  const published = model.host;
+  const host: SearchWindowHostApi = {
+    ...published,
+    runSearch: async (query: SearchWindowQuery): Promise<void> => {
+      await refreshLibraryIndex(logger);
+      await published.runSearch(query);
+    },
+  };
+
+  // Captured once, for the reason {@link publishServiceGraph} gives: the
+  // teardown must act on the `api` the registration wrote to, not on whichever
+  // `Addon` instance the global names when teardown runs.
+  const api = addon.api;
+  await scope.use({
+    description: `the search window host (api.${SEARCH_WINDOW_API_PROPERTY})`,
+    register: () => {
+      api[SEARCH_WINDOW_API_PROPERTY] = host;
+      api.searchWindowDeps = deps;
+      // Read off the graph, **not** by calling `deps.listSources()`. Measured
+      // 2026-10-07: with that port forced to `undefined` the log line itself
+      // threw, the exception came out of `scope.use` and out of `registerUI`,
+      // `hooks.onStartup` never set `data.initialized`, and the whole run died
+      // with `Internal: Plugin awaiting timeout` — a diagnostic that bricked
+      // the plugin instead of describing it. The composition root must survive
+      // a missing port; reporting one is what {@link missingDependencies}
+      // above is for.
+      logger.info("the Search & Import window's host is published", {
+        property: SEARCH_WINDOW_API_PROPERTY,
+        sources: graph.sources.list().length,
+        dependencies: Object.keys(deps).length,
+      });
+      return SEARCH_WINDOW_API_PROPERTY;
+    },
+    unregister: () => {
+      delete api[SEARCH_WINDOW_API_PROPERTY];
+      delete api.searchWindowDeps;
+      libraryIndex = undefined;
+    },
+  });
+}
+
 /**
  * Run the composition root, then the application-scoped registrations, into
  * the root scope.
@@ -255,16 +553,35 @@ const PROGRESS_HEADLINE: ProgressHeadlineSource = {
  * deterministic registration order gives a deterministic teardown order, and
  * a registration that fails does not leave later ones half-applied behind it.
  *
- * The {@link import("./container").ServiceGraph} is deliberately **not** held
- * anywhere. Three of its four services are already reachable through the
- * process-wide accessors their own modules export (`httpRequest()`,
- * `getHostLimiters()`, `getPref()`), nothing in Phase 1 yet has a pipeline to
- * hand the fourth to, and the typed service locator is `P1-T16` step 7's — it
- * `create`s this path for that. Standing up a holder with no consumer is the
- * dead code `P0-T07` declined to write for the same reason.
+ * ## The {@link import("./container").ServiceGraph} is now held — and was not
+ *
+ * **Until `P1-T35` this paragraph said the graph was deliberately not held
+ * anywhere**, and gave three reasons: three of its four services are already
+ * reachable through the process-wide accessors their own modules export
+ * (`httpRequest()`, `getHostLimiters()`, `getPref()`), "nothing in Phase 1 yet
+ * has a pipeline to hand the fourth to, and the typed service locator is
+ * `P1-T16` step 7's — it `create`s this path for that. Standing up a holder
+ * with no consumer is the dead code `P0-T07` declined to write for the same
+ * reason."
+ *
+ * **The first reason still stands; the second has expired.** `P1-T16` landed
+ * and built the pipeline — `ServiceGraph.pipelineContext` is declared at
+ * `container.ts:830` and constructed at `:1419` — and `P1-T22` built the
+ * window's host around it. So there is now a consumer, and the graph is held on
+ * the plugin instance at `addon.api.services` by {@link publishServiceGraph}.
+ * That is this paragraph's own condition being met, not a reversal of
+ * `P0-T07`'s judgement: the holder exists because something reads it, which is
+ * exactly the test the old text set.
+ *
+ * It is held on `addon.api` rather than in a module-level variable because a
+ * module-level one is unreachable from outside the plugin bundle — an
+ * integration spec is bundled separately and gets its own copy of every module,
+ * with none of that module's state — and because `src/addon.ts`'s own comment
+ * has been promising this since `P0-T07`: "the service-locator half arrives
+ * with Phase 1".
  */
 export async function registerUI(scope: Scope): Promise<void> {
-  await installServices(scope, {
+  const graph = await installServices(scope, {
     transport: createZoteroHttpTransport(),
     prefs: createZoteroPrefStore(),
     version,
@@ -280,6 +597,9 @@ export async function registerUI(scope: Scope): Promise<void> {
     // real one is `container.ts`'s, over `zoteroApi.ts`'s two facades.
     logSink: createZoteroLogSink(),
   });
+
+  await publishServiceGraph(scope, graph);
+  await publishSearchWindowHost(scope, graph);
 
   for (const register of APP_REGISTRATIONS) {
     await register(scope);
