@@ -4358,7 +4358,7 @@ changed, and saying so first is the behaviour to want.
 | **ID** | `P1-T22` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T16`, `P1-T17`, `P1-T21` |
-| **Blocks** | `P1-T23`, `P1-T35` |
+| **Blocks** | `P1-T23`, `P1-T35`, `P1-T36` |
 | **Retires** | `R-17` (reported) |
 | **Implements** | `FR-5`, `FR-6`, `FR-8`, `FR-9`, `FR-10`, `FR-51`, `FR-53`, `NFR-14` |
 | **Estimate** | 0.75 d |
@@ -4611,7 +4611,7 @@ work.**
 |---|---|
 | **ID** | `P1-T23` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35` |
+| **Depends on** | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35`, `P1-T36` |
 | **Blocks** | none |
 | **Retires** | `R-16`, `R-17`, part of `R-2` |
 | **Implements** | `NFR-1`, `NFR-3`, `NFR-9`, `NFR-10` |
@@ -6841,7 +6841,7 @@ real rather than hypothetical.
 | **ID** | `P1-T35` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T16`, `P1-T17`, `P1-T22` |
-| **Blocks** | `P1-T23` |
+| **Blocks** | `P1-T23`, `P1-T36` |
 | **Retires** | none |
 | **Implements** | part of `FR-1`, part of `FR-8` |
 | **Estimate** | 0.5 d |
@@ -6954,6 +6954,148 @@ reachable the number must move, and `src/zotero/notes.ts` should appear in the b
 
 ---
 
+### P1-T36 — FR-8's "Export provenance as JSON" control, and the record it needs to still exist
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T36` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T22`, `P1-T35` |
+| **Blocks** | `P1-T23` |
+| **Retires** | none |
+| **Implements** | the third scenario of `FR-8` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** A user who has just run a search can write that run's provenance record to a file of their
+choosing, and the file validates against `schema/provenance.schema.json`.
+
+**Why this is a card, and why it blocks `P1-T23`.** Phase 1's completion criterion 4 has two halves — the
+provenance note, and the JSON export. **The note half passes and the export half cannot be checked at
+all**, because no control exists to press. Measured 2026-10-07:
+
+- `FR-8`'s third scenario is explicit and names the action in the user's own words: *"**When** the user
+  chooses "Export provenance as JSON", **Then** a JSON file matching the documented schema is written to a
+  user-chosen path"* (`docs/10` §FR-8). So the behaviour is specified; only the surface is not.
+- Both halves of the machinery already exist and **nothing calls either**. `exportJson` is at
+  `src/core/provenance.ts:398`; `exportProvenanceJson` at `src/zotero/notes.ts:339`, a one-line
+  convenience over it; `provenanceFileWriter` at `src/zotero/notes.ts:323`, which writes through
+  `Zotero.File.putContentsAsync`. A grep for callers of either export function across `src/`, `addon/` and
+  `test/` returns **zero**.
+- **The record is built and then dropped on the floor.** At
+  `src/ui/viewModels/searchImportViewModel.ts:1475` the import handler composes the record, redacts it,
+  hands it to the note writer, and returns — the record is a **local `const` inside that handler** and
+  nothing retains it. So even with a button wired to `exportProvenanceJson`, **there would be no record to
+  pass it.** Retaining the record is the real work of this card; the file writing is already done.
+- **`docs/08` specifies no export control anywhere.** §4.5's wireframe ends with
+  `[  Close  ]  [  Import 28 items  ]`, and a grep of every document for an export control finds only the
+  source-tree comment (`docs/07`:179), the roadmap lines (`docs/11`:77, :89) and the test and release
+  checklists (`docs/13`:571, :1273). **Where the control goes is therefore a decision this card makes, not
+  one it looks up** — see *Placement* below.
+- A file-chooser has **never been opened by this project**. `FilePickerHelper` is on `P0-T02` fix 8's list
+  of individually imported toolkit helpers (`addon/bootstrap.js`:56, `docs/01` §4.6 item 8), and
+  `docs/01`:436 records one constraint on the underlying interface: *"`BrowsingContext` must be passed to
+  `nsIFilePicker.init`."* Nothing in `src/` or `addon/` imports or uses either name.
+
+**Read first.**
+- `docs/10` §FR-8, all three scenarios. The third is this card; the first two shipped in `P1-T22`.
+- `src/ui/viewModels/searchImportViewModel.ts` around line 1475 — where the record is composed and
+  discarded — and `SearchImportViewModelDeps` (lines 557–586) for which members are required and which
+  optional. `P1-T35` asserts by enumeration that **every** optional member is supplied at the composition
+  root, so a new optional dependency added here **must be bound there too or that test fails**. That is
+  deliberate: it is the guard that stops this card degrading silently the way the note binding did.
+- `src/zotero/notes.ts` lines 320–344, and `src/core/provenance.ts`'s `exportJson` and
+  `serializeProvenance`.
+- `docs/07` §2.3 — the layering. `src/ui/` may **not** import `src/zotero/**`, so the writer and the
+  file-chooser are injected, exactly as `P1-T35` injects the note writer and the existing-item check.
+- `addon/content/searchDialog.xhtml` lines 417–433 — the status bar, whose Cancel button is `hidden="true"`
+  in the markup and revealed by state. That is the idiom the *Placement* default copies.
+- `P1-T22`'s and `P1-T35`'s `Findings` in this file.
+
+**Placement — a decision, with the reasoning, because no document settles it.** Export the record of the
+**run the window is currently showing**, from a control in the status bar (`#rh-search-status-bar`),
+`hidden` until a record exists and revealed when one does — the same hidden-until-relevant pattern the
+Cancel button in that row already uses. Reasons: the record exists only after a run, the status bar is
+where that run's outcome already speaks, and the row already holds a spacer and a state-toggled button, so
+no new layout is invented. The two alternatives considered and **not** taken: the selection row
+(`#rh-results-selection-row`, verified to hold three buttons, a spacer and the count) is about which rows
+are picked, not about the run; and an entry on the provenance note in the library would mean parsing the
+note's HTML back into a record, which is a new parser and a second source of truth. **This is an owner's
+decision and may be overturned** — if the owner moves it, only the markup, the handler and one Fluent
+string move with it.
+
+**Files.**
+- modify `src/ui/viewModels/searchImportViewModel.ts`
+- modify `src/bootstrap/registerUI.ts`
+- modify `addon/content/searchDialog.xhtml`
+- modify `addon/content/searchDialog.js`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl`
+- new `test/unit/ui/searchImportViewModel-export.test.ts`
+- modify `test/integration/searchDialog-flow.spec.ts`
+
+**Do.**
+1. Retain the run's record in the view model after the import handler composes it, and expose an export
+   action on the host that writes it. **Retain the redacted record**, the one `redactSearchProvenance`
+   returns — never the unredacted one — so that what is retained is already safe to write.
+2. Add the destination-chooser and the file writer as **optional** dependencies of
+   `SearchImportViewModelDeps`, and bind both in `src/bootstrap/registerUI.ts` beside the two ports
+   `P1-T35` binds there. `src/ui/` must not reach `src/zotero/**`.
+3. **Work out which scope can supply the `BrowsingContext` that `docs/01`:436 requires, and write the
+   answer into the `Findings`.** The window has a window; the composition root may not. If the chooser has
+   to be opened from the window script and the path handed inward, say so — that is a legitimate shape and
+   it keeps the toolkit helper out of `src/`.
+4. Add the control per *Placement*, its Fluent label, and messages for the two outcomes a user can see:
+   written, and failed. No string for "cancelled" — a user who dismisses the chooser knows they did.
+5. Unit-test the retention and the export action at layer one: a record is retained after a run, a second
+   run replaces it, the export action passes **that** record to the writer, and an export attempted with no
+   record is refused rather than writing an empty file.
+6. In the integration spec, run a search, export to a temporary path, **read the file back and validate it
+   against `schema/provenance.schema.json`**, then delete it. `docs/13`:1273 makes that validation a
+   release-checklist item, so assert it here rather than leaving it to a human.
+
+**Do NOT.**
+- Do not write a second redaction rule, anywhere, for any reason. `src/core/provenance.ts` is the project's
+  single gate and `serializeProvenance` is the only way the record becomes text.
+- Do not retain the unredacted record "in case the export needs more detail". It does not, and a retained
+  unredacted record is a leak waiting for the next feature to find it.
+- Do not put the chosen path into the provenance record, the note, or the exported file. **Check `docs/09`
+  for whether a chosen filesystem path may be written to the log; if it does not say, log the outcome
+  without the path and record the question in the `Findings`** — a path can carry an account name.
+- Do not make any existing member of `SearchImportViewModelDeps` required, and do not change the shape of
+  the ones that exist. `P1-T35` recorded why the optionality stays.
+- Do not add the preference pane, the query-free headline identifier, or the per-source import counts.
+  Each is its own card; `P1-T22` listed them.
+- Do not change `exportJson` or `exportProvenanceJson`. They were written for this caller and this card is
+  that caller arriving.
+
+**Criteria.**
+- [ ] After a search and import in a real Zotero, the control is visible, and pressing it writes a file to
+      a path the user chose.
+- [ ] The written file **validates against `schema/provenance.schema.json`**, asserted by reading the file
+      back in the integration spec rather than by eye.
+- [ ] The exported record is the redacted one: a test proves that a value the redactor removes is absent
+      from the file's bytes.
+- [ ] The export action with no record present does not write a file.
+- [ ] `P1-T35`'s enumeration test still passes, with the two new optional dependencies bound.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` all exit 0,
+      with no fewer tests than before.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish --abort-on-fail
+```
+
+**Notes.** **This card closes the second half of Phase 1's completion criterion 4**, which is why it blocks
+`P1-T23`. The order matters: `P1-T35` publishes the host, and this card adds a method to a host that is
+already reachable — attempted in the other order, the control would be inert for the same reason every
+other control was.
+
+The risk here is not the file writing, which is one existing line, but **the record's lifetime**. A record
+retained too long is stale (a second run must replace it), a record retained unredacted is a leak, and a
+record not retained at all is the state the code is in today. Criteria 3 and 4 are the two ends of that.
+
+---
+
 ---
 ## 7. Estimate roll-up
 
@@ -6994,7 +7136,8 @@ reachable the number must move, and `src/zotero/notes.ts` should appear in the b
 | `P1-T33` | Retire one of the two headline ids | 0.25 | — |
 | `P1-T34` | Three corpus statements measured false | 0.25 | — |
 | `P1-T35` | Publish the search window's host | 0.50 | — |
-| | **Total** | **23.75 d** | **4 gates** |
+| `P1-T36` | FR-8's JSON-export control, and the record it needs | 0.50 | — |
+| | **Total** | **24.25 d** | **4 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 

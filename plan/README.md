@@ -259,7 +259,14 @@ this order:
 4. **`docs/11` §2's per-phase `**Effort.**` paragraph** for that phase, plus
    §2's **critical path** and **Phase 5 float** bullets;
 5. **`plan/00-task-index.md` §1's table** — the phase row and the Phases 0–3
-   total row.
+   total row, **including that table's last column**, whose percentage is the
+   phase's low card-sum against the **top** of the superseded band (Phase 0's
+   17.75 ÷ 9 = 1.97 → +97% is the convention). **Found stale on 2026-10-07**
+   while propagating `P1-T36`: Phase 1 still read +90% (a figure matching no sum
+   the phase has ever had), Phase 2 read +59% against a sum that stopped being
+   25.5 d, and the subtotal read +72% against a sum that had reached 91.75 d.
+   All three were recomputed then. A percentage is a figure like any other and
+   does not re-derive itself.
 
 **Added 2026-10-06, after sites 4 and 5 were found stale through five
 propagations.** The instruction here previously named only §1, its table and
