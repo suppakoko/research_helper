@@ -1722,7 +1722,19 @@ unimplemented method. Easy to get wrong in the flattering direction.
 members and `src/sources/types.ts` is outside this card's `Files`, so a local `PubmedSearchPage` extends
 it with one member whose three keys are **NCBI's own spellings** — `count`, `querytranslation`,
 `translationset` — because `docs/07` §5.3 types that field as extras "keyed by the source's own field
-names" and names those three. `P1-T17` can assign the object straight across, and a test pins the key
+names" and names those three, and a test pins the key
+> **Corrected 2026-10-07: this said `P1-T17` "can assign the object straight across". It cannot.**
+> `PubmedSourceExtras` is an `interface`, and TypeScript synthesises an implicit index signature only
+> for *type aliases* of object types, so assigning it to §5.3's `Readonly<Record<string, unknown>>`
+> fails. Measured by the coordinator with a throwaway probe under this repository's own
+> configuration: `error TS2322 … Index signature for type 'string' is missing in type
+> 'PubmedSourceExtras'`. **The repair was measured too, so the eventual caller does not have to:
+> `{ ...extras }` typechecks**, because an anonymous object type does get the implicit signature. The
+> three keys themselves are correct and go straight into `sourceExtras` as §5.3 intends; only the
+> assignment needs a spread. The fix belongs to whichever card wires the adapter into the pipeline.
+> **This is a claim the coordinator wrote into a `Findings` block without compiling it** — a later
+> agent would have inherited it as a premise, which is what `plan/README.md` §5 rule 8 exists to
+> stop.
 set to exactly those three.
 
 **The access-key route is settled and verified step by step rather than asserted.** The adapter takes an
@@ -1831,7 +1843,8 @@ parseable.
 - `docs/07-architecture-and-data-model.md` §5.1, merge-rules table, `abstract`
   row — "PubMed structured abstracts are flattened with section labels
   preserved", which fixes the flattening format.
-- `docs/13-testing-build-and-release.md` §2.1, "Normalizers" row — the required
+- `docs/13-testing-build-and-release.md` §2.1, **"Mappers (`src/sources/*/mapper.ts`)"** row
+  (line 395) — the required
   test matrix: author-name splitting, dates across `2024`, `2024-03`,
   `2024 Mar 15`, `2024 Spring`, abstract stripping, DOI normalization,
   item-type mapping.
@@ -1918,6 +1931,96 @@ npm run typecheck && npm run test:unit -- pubmed-mapper
 article, a preprint, an item with no abstract, an item with a partial date, an
 item with 50+ authors, and a Unicode/CJK title. PubMed returns no preprints, so
 that one case is legitimately absent here — record the reason in the test file.
+
+**Findings, 2026-10-07 — all seven criteria pass, and the suite caught a real defect in the shipped
+code on its first run rather than in a mutation.** Verified independently: a mapper and a 90-test spec,
+the suite at **1,115 in 26 files**, typecheck 0, `lint:check` 0, build 0 with the installer
+**byte-identical at 76,419** — so this module contributes zero bytes, the third card in a row.
+**Zero live network requests.**
+
+**The defect worth reading about: `\s` reaches the thin space, and the shipped whitespace collapse was
+rewriting the corpus's own sample.** `docs/02` §3.4's real captured response contains `30` **U+2009**
+`million`, and a `/\s+/gu` collapse turned U+2009 into an ordinary U+0020 — **three tests failed on the
+first run, including the card's third criterion.** Reproduced by the coordinator: `/\s+/gu` yields
+`U+0020`, `/[\t\n\f\r ]+/gu` preserves `U+2009`, and `String.prototype.trim()` has the same reach, so
+the trim had to be spelled out too. **This is exactly the silent-success direction a parsing card fails
+in** — it would have read as correct whitespace handling forever, and only a fixture holding a real
+non-ASCII space could see it.
+
+**The distinction between "absent in the source" and "not understood by the mapper" was built even
+though no criterion asks for it, and the agent said so plainly.** Two channels: absent means the field
+is gone, named in `missingFields`, and **nothing logged**; not-understood means the same plus a warning
+naming the field, the path, the reason and a truncated value. A caller tells them apart by whether a
+warning accompanied the gap, and tests assert both directions for the abstract, the date, the
+identifier, the authors and the subjects — including `expect(warnings).toEqual([])` on the absent side.
+The agent also **named the fields where the distinction does not exist** and why: plain text with no
+shape to misunderstand cannot be misparsed, and a present-but-empty title is weak because §5.1 types the
+field as a plain string. **Offering to strip the channel if it counted as scope creep, while saying what
+would be lost, is the right way to raise it.**
+
+**`missingFields` is drawn from one list of sixteen names, and the reason is a downstream number.** A
+field PubMed never supplies — citation count, open access, publisher, a link — is **never** reported as
+missing, because a false gap would corrupt the coverage figure a later card computes. Both halves are
+asserted.
+
+**`raw` is omitted by default, on NFR-7's own words.** The requirement says raw payloads "must not be
+retained after normalization", §5.1 names the single exception, and `sources/` may not read a
+preference — so it arrives as an injected flag for the composition root to wire. When on, **every record
+of a batch shares the one response string by reference** rather than 200 re-serializations, which also
+avoids depending on a serializer the sandbox's measured global list does not promise. Asserted by
+identity, not equality.
+
+**The parser is an injected port for a measured reason.** `docs/01` §2.3's sandbox global list — probed
+two independent ways in Phase 0 — has `DOMParser` present, so that is the real production path; but Node
+has none and this repository declares no XML implementation, so the parse is a port with a real-DOM
+default. The element port is deliberately the smallest slice that works — local name, text, attribute,
+direct children — with **no query selector and no tag search**, so every path is an exact parent-to-child
+walk and a stray nested element can never be picked up. **No regex parses XML.**
+
+**Two mutations broke nothing, and neither was reported as dead code — both were diagnosed and then
+closed.** Removing the malformed-body branch still threw, just with a message that lost the parser's own
+diagnostic, so it is a **message-quality guard** and the agent added the distinguishing assertion rather
+than calling it redundant. Removing a trim broke nothing because **no fixture was indented**, which is a
+fixture gap and not a redundant guard — real NLM responses pretty-print some records — so the missing
+case was added. **Both now fail.**
+
+**A methodology note that is worth more than any single assertion.** The first two mutation runs reported
+every mutant caught with no per-test detail, and that was a **harness bug**: the reporter name does not
+exist in this version, so every run died at startup having executed nothing, and the non-zero exit looked
+like a caught mutation. The agent's own conclusion is the thing to keep: **treat an all-mutants-caught
+result with no per-test detail as a harness failure, not a win.**
+
+**The one real fixture is re-read from the document at test time.** The §3.4 sample is transcribed
+character for character, and a test **re-reads the fenced block out of `docs/02` and asserts byte
+equality** — so a transcription drift or a document reorganisation fails loudly instead of quietly
+asserting against a stale copy. Everything else is synthesised from that skeleton with one thing changed
+and labelled with the document row it is built from. The agent then **said plainly which fields are
+verified against real captured text and which are inferred from prose**, and that the preprint case is
+legitimately absent because PubMed returns none — which the card asked to have recorded.
+
+**Two errors in this card's text, both the coordinator's.** The `Read first` cites `docs/13` §2.1's
+"Normalizers" row; **`Normalizers` appears zero times in that document** and the row is "Mappers
+(`src/sources/*/mapper.ts`)" at line 395. Verified. No work changed, because the row's content is what
+the card listed — but it is rule 8's shape again. And §11.1 step 6 names the spec
+`test/unit/sources/<source>.test.ts` while the card's `Files` says `pubmed-mapper.test.ts`; the card
+wins, and the two should be reconciled before Phase 2 copies the pattern six times.
+
+**Three corpus defects, one of which makes a mapping table unfollowable.** `docs/02` note 2 says "the
+example above contains `<sup>1,2</sup>`" — **the sample contains no `<sup>` at all**, verified at zero
+matches, though the trap it describes is real and implemented. §10.2's PubMed `type` cell promises a
+mapping from the publication-type list, but **its own trigger table names no PubMed condition** beyond
+the journal-article default, so review, conference paper, book chapter and preprint are unreachable and
+that element is read by nothing. And two §10.2 PubMed rows have **no destination in §5.1** at all. The
+agent implemented only what the trigger table licenses, which is the right call.
+
+**Needs a card.** (a) A documented publication-type mapping — real records carry review, editorial,
+comment, preprint and clinical trial, and today **every PubMed record is one of two types**; fixing it
+means editing `docs/02` §10.2's trigger table first. (b) **Nothing in continuous integration exercises
+the production parser**, so the entity decoding and text flattening that §3.4's notes are about are
+asserted only against a Node stand-in; the agent checked that an XML implementation is reachable on this
+network and **did not install it**, which is the correct restraint. (c) A third unwired dependency — the
+raw-retention flag — joins the two the previous card reported, and all three land on the same bootstrap
+card.
 
 ---
 
@@ -2945,7 +3048,14 @@ JSON file that validates.
       quantity has a field, including a `0` for deduplicated-away.
 - [ ] `schemaVersion` is the literal `1` and the emitted JSON carries it.
 - [ ] A run made with a stubbed NCBI key produces a record in which
-      `grep -c "api_key=" ` is 0 and the redaction marker is present.
+      `grep -c "api_key=" ` is 0 and the record contains no key-shaped run.
+      > **Reworded 2026-10-07 after the executing agent reported it under rule 6.** The second half
+      > read "and the redaction marker is present", which **cannot hold for a key carried as
+      > `api_key`**: `docs/09` §2.1 and the shipped `redactUrl` **remove** a named secret parameter
+      > rather than blanking it, and `src/core/errors.ts` says why — "an empty value is the one thing
+      > `[redacted:<len>]` cannot express". So no marker can appear for the very case the criterion
+      > names. The agent shipped the strongest true form instead, pinning the marker where one *is*
+      > possible: a key-shaped run in free text.
 - [ ] `dateFilter: "none"` is recorded when the user chose "All years" (FR-3).
 - [ ] `npm run typecheck` exits 0.
 
@@ -2966,6 +3076,103 @@ this object unchanged, which is why the shape must not drift. Second, `docs/02`
 §12.4 notes PubMed's `translationset` is free MeSH expansion "worth surfacing to
 the user"; `SourceProvenance.sourceExtras` is where §5.3 puts it, and `docs/02`
 §12.4 itself now points there.
+
+**Findings, 2026-10-07 — six criteria pass, one passes in half, and the card closed two real credential
+leaks that the project's own redaction could not see.** Verified independently: four new files
+(404 + 344 + 160 + 1,026 lines), **51 tests**, the suite at **1,115 in 26 files**, typecheck 0,
+`lint:check` 0, build 0 with the installer **byte-identical at 76,419**.
+
+**The two holes are real and the coordinator reproduced both.** An NCBI key is **32 characters** and the
+free-text redactor's last-resort pattern starts at **40** — verified at
+`src/core/errors.ts`'s `/\b[A-Za-z0-9_-]{40,}\b/g` — so such a key is invisible to it. On top of that:
+
+- **A bare query string is a no-op for the URL redactor.** Reproduced: `new URL("db=pubmed&api_key=…",
+  base)` parses the whole thing as a **path**, so the parameter list is **empty** and nothing is found
+  to remove; prefixing `?` yields three parameters. The fix prefixes the `?` so the **shipped** secret
+  parameter list applies, rather than re-declaring that list.
+- **A URL embedded in free text is invisible to the free-text redactor**, which has no notion of
+  parameters. The fix puts every `https?://…` run through the URL redactor first.
+
+**One of those was found as a live defect in the agent's own first draft, not as a mutation**: the
+serialized error detail leaked the key. **Both outputs of this card are human-readable or shareable**, so
+that was the direction that mattered.
+
+**One gate rather than a convention, and it is idempotent on purpose.** A single entry point redacts, and
+the export boundary redacts **again**, so a caller that forgets costs nothing — provable only because the
+URL redactor *removes* a named parameter and the marker it leaves matches no secret pattern. Every field
+that can carry free text goes through it, including **every string at any depth inside the extras
+object**, because one of its three keys is an array of objects. The remaining fields are closed
+enumerations, numbers or identifiers. **No new redaction rule was invented** — everything delegates to
+the reference implementations.
+
+**Criterion 5's second half cannot hold, and the reason is a design decision recorded in the code.** It
+asks that a stubbed key produce a record where the parameter is absent **and the redaction marker is
+present**. The shipped redactor **removes** a named secret parameter rather than blanking it, because
+`src/core/errors.ts` says "an empty value is the one thing `[redacted:<len>]` cannot express" — so **no
+marker can appear for the very case the criterion names**. The agent shipped the strongest true form,
+pinning the marker where one *is* possible, and reported the rest under rule 6. Criterion reworded above.
+
+**The authority among the three shapes was chosen and the asymmetry disclosed rather than hidden.** The
+in-memory record is the authority; the export is a projection of the **whole** record rather than a field
+list, so a new field reaches it with no code change; the schema does **not** follow automatically but the
+drift is **caught**, because a test compares the schema's property set against the keys of a fully
+populated record. The note does not follow and **nothing fails** — deliberately, because the note is for
+a human and forcing every future field into it would be wrong. **"A new field reaches the export and the
+schema check automatically, and the note only when someone edits the renderer" is the kind of sentence a
+reader needs and rarely gets.**
+
+**The schema is validated, by exactly one thing, and the agent said which.** Nothing else reads it: it is
+outside the type system's include list, it is JSON regardless, **it does not ship in the installer**
+(verified), and continuous integration reaches it only through the unit suite. The validator is 170 lines
+inside the test file, because **this repository declares no JSON Schema validator** — verified: no such
+dependency is declared, and the one present transitively is an older major version that cannot read this
+dialect, and declaring a dependency is outside the card's `Files`. **The failure mode a hand-written
+validator has and a real one does not — silently ignoring a keyword — was closed**: a guard walks the
+schema along the validator's own traversal and fails on any keyword it does not implement, proven by a
+mutation that adds one. Seven negative tests prove it actually rejects.
+
+**One mutation broke nothing and was correctly diagnosed as a coverage gap rather than a redundant
+guard.** An empty query string renders as nothing in the note editor, which a reader would take as "not
+recorded" rather than "empty" — and the branch is reachable from a shipped caller. The agent added the
+assertion; the suite went 50 to 51.
+
+**Self-consistency and conformance were separated explicitly**, which is the distinction most test
+reports blur. Ten assertions are conformance — field names and order diffed mechanically against the
+printed interface block at **27 declarations, zero differences**; the requirement's literal note title
+including its em dash; its eight per-source quantities as both the schema's required list and the note's
+labels, zeros included; the permitted HTML element list asserted by subtracting the allowed set from
+every tag in the rendered note; the "no Markdown" rule asserted negatively; the identifier union as the
+schema's enumeration. Five are the drift alarm and prove the artefacts agree rather than that either is
+right. **And no reader was shipped, so there is no round-trip that could pass by agreeing with itself.**
+
+**A claim the coordinator wrote into a `Findings` block without compiling it, now corrected.** The
+previous card's record said this card "can assign the object straight across". **It cannot** — verified
+with a throwaway probe under this repository's own configuration: the extras type is an `interface`, and
+TypeScript synthesises an implicit index signature only for *type aliases*, so the assignment fails with
+`Index signature for type 'string' is missing`. **The repair was measured too** — a spread typechecks —
+so the eventual caller does not have to rediscover it. The three keys themselves are right. **A later
+agent would have inherited that premise**, which is what rule 8 exists to stop.
+
+**Two more corpus problems, both resolved in the stricter direction.** The interface's own header says it
+imports only the model layer while one of its fields is typed by a sibling in the same layer — harmless,
+because the rule forbids layers *above*, and an existing module already does the same. And §5.3 calls the
+user's query "verbatim" while NFR-16 says keys shall **never** be written to a provenance record; a key
+pasted into the search box makes those incompatible, and the agent resolved it **in the requirement's
+favour**, noting that a key-shaped run is never a legitimate search term and the stricter reading costs
+nothing. A one-line amendment would close it.
+
+**Measured rather than assumed: this code ships nowhere.** No importer outside the two new files, the
+installer byte-identical, and the bundle holds **zero** occurrences of five named symbols — confirmed by
+the coordinator. **Three cards in a row have now shipped working, tested modules the installer does not
+contain**, all pointing at the same missing construction site.
+
+**Nothing was written anywhere real.** No note was created, no file written, no preference touched, the
+integration suite not run, and the only key-shaped string in the tree is an invented placeholder that
+exists so the tests can assert its **absence** from both outputs.
+
+**Needs a card.** (a) A declared validator for this schema dialect, replacing 170 lines of test code.
+(b) The construction site, which belongs to the card this one blocks. (c) The spread at whichever card
+assembles the record. (d) The one-line amendment reconciling "verbatim" with NFR-16.
 
 ---
 

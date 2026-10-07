@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-helper.suppakoko.github.io/schema/provenance.schema.json",
+  "title": "SearchProvenance",
+  "description": "One executed search run, as 07-architecture-and-data-model.md §5.3 declares it and 10-requirements-and-user-stories.md FR-8 requires it. Generated from src/core/provenance.ts: every property below is a field of that file's SearchProvenance or SourceProvenance interface, and test/unit/core/provenance.test.ts fails if the two drift apart. A field is in `required` exactly when the interface cannot hold `undefined` for it, because JSON.stringify omits an `undefined`-valued member.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "pluginVersion",
+    "zoteroVersion",
+    "startedAt",
+    "finishedAt",
+    "userQuery",
+    "dateFilter",
+    "targetLibraryId",
+    "perSource",
+    "totals"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "§5.3: the literal 1. Schema version of this record, independent of the plugin version.",
+      "const": 1
+    },
+    "runId": { "type": "string" },
+    "pluginVersion": { "type": "string" },
+    "zoteroVersion": { "type": "string" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "finishedAt": { "type": "string", "format": "date-time" },
+    "userQuery": {
+      "description": "The user's query before per-source translation (FR-4), with credential-shaped runs redacted (NFR-16).",
+      "type": "string"
+    },
+    "dateFilter": {
+      "description": "The resolved recency window, or \"none\" when the user chose \"All years\" (FR-3).",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fromIso", "toIso"],
+          "properties": {
+            "fromIso": { "type": "string" },
+            "toIso": { "type": "string" }
+          }
+        },
+        { "const": "none" }
+      ]
+    },
+    "targetLibraryId": { "type": "integer" },
+    "targetCollectionKey": {
+      "description": "Absent when the run targeted no collection; the interface types it `string | undefined`.",
+      "type": "string"
+    },
+    "perSource": {
+      "description": "FR-8's per-source enumeration, one entry per source that was asked.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/SourceProvenance" }
+    },
+    "totals": {
+      "description": "Run totals. `deduplicatedAway` is 0, not absent, when only one source ran (§5.3; FR-8 requires the counts \"even when they are zero\").",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retrieved", "deduplicatedAway", "imported"],
+      "properties": {
+        "retrieved": { "type": "integer", "minimum": 0 },
+        "deduplicatedAway": { "type": "integer", "minimum": 0 },
+        "imported": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "SourceProvenance": {
+      "title": "SourceProvenance",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "endpointBaseUrl",
+        "transmittedQuery",
+        "transmittedUrl",
+        "dateFilterApplied",
+        "requestedLimit",
+        "recordsRetrieved",
+        "recordsDeduplicatedAway",
+        "recordsImported"
+      ],
+      "properties": {
+        "sourceId": {
+          "description": "The SourceId union of src/model/ids.ts, in the union's declaration order.",
+          "enum": [
+            "pubmed",
+            "europepmc",
+            "crossref",
+            "semanticscholar",
+            "arxiv",
+            "biorxiv",
+            "medrxiv",
+            "openalex"
+          ]
+        },
+        "endpointBaseUrl": {
+          "description": "Endpoint base URL, without query string (FR-8).",
+          "type": "string"
+        },
+        "transmittedQuery": {
+          "description": "The transmitted query string, with API keys redacted (FR-4, FR-8, NFR-16). No leading \"?\".",
+          "type": "string"
+        },
+        "transmittedUrl": {
+          "description": "The exact transmitted URL, with API keys redacted (FR-4, NFR-16).",
+          "type": "string"
+        },
+        "dateFilterApplied": {
+          "description": "\"server\" when the source filtered, \"client\" when we did (FR-3), \"none\".",
+          "enum": ["server", "client", "none"]
+        },
+        "requestedLimit": { "type": "integer", "minimum": 0 },
+        "rawHitCount": {
+          "description": "Raw hit count the source reported, before any local filtering. Absent when the source reported none; the interface types it `number | undefined`.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "recordsRetrieved": { "type": "integer", "minimum": 0 },
+        "recordsDeduplicatedAway": {
+          "description": "0, not absent, in a single-source run (§5.3; FR-8 requires it \"even when they are zero\").",
+          "type": "integer",
+          "minimum": 0
+        },
+        "recordsImported": { "type": "integer", "minimum": 0 },
+        "error": {
+          "description": "Populated when the source failed or degraded; absent on a clean run.",
+          "$ref": "#/$defs/SerializedError"
+        },
+        "sourceExtras": {
+          "description": "Source-specific extras keyed by the source's own field names — e.g. PubMed's count, querytranslation and translationset (02-literature-database-apis.md §12.4). Never a credential, never a raw body, so the values are unconstrained but every string in them has been through §2.1's redaction.",
+          "type": "object"
+        }
+      }
+    },
+    "SerializedError": {
+      "title": "SerializedError",
+      "description": "07-architecture-and-data-model.md §5.2's wire form of a thrown error, as src/core/errors.ts declares it. Part of an exported artefact because §5.3 stores one here.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "messageKey", "detail", "retryable"],
+      "properties": {
+        "code": { "type": "string" },
+        "messageKey": { "type": "string" },
+        "detail": {
+          "description": "Developer-facing message; already redacted.",
+          "type": "string"
+        },
+        "retryable": { "type": "boolean" },
+        "httpStatus": { "type": "integer" },
+        "stack": { "type": "string" }
+      }
+    }
+  }
+}
