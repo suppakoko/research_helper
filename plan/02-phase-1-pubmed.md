@@ -4433,7 +4433,7 @@ per-host cap. Not false, just incomplete, and the file is outside this card's `F
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 0.25 d |
-| **Human gate** | **Yes** — the owner supplies the three numbers; an agent may not invent them (`plan/README.md` §5 rule 4). |
+| **Human gate** | **Yes — satisfied 2026-10-07.** The owner supplied `base` 1000 ms, `cap` 30 000 ms and an attempt cap of 3; an agent may not invent them (`plan/README.md` §5 rule 4), and the reasoning behind each is recorded under `Do` step 1. |
 
 **Goal.** The retry policy has numbers, they live in one place, and `P1-T05`'s injected budget is
 actually populated.
@@ -4464,6 +4464,34 @@ the client makes exactly one attempt. Both agents refused to invent them, correc
 **Do.**
 1. **Stop and ask the owner for `base`, `cap` and the per-host attempt cap.** Report the evidence
    above; do not propose a number as if it were measured.
+
+> **The owner supplied the three numbers on 2026-10-07, so `Do` step 1's "stop and ask" is
+> discharged. `base` = **1000 ms**, `cap` = **30 000 ms**, per-host attempt cap = **3**, for
+> `eutils.ncbi.nlm.nih.gov`.** The reasoning was put to the owner with the evidence and is recorded
+> here so step 2 can name a source for each value:
+>
+> - **`base` = 1000 ms.** The shipped no-key pacing for this host is 2.5 requests per second, i.e.
+>   400 ms between request *starts*, so a first backoff shorter than the pacing interval cannot
+>   change anything. 1000 ms is the smallest round value comfortably above it.
+>   **This coincides with `docs/03` §11.6's LLM `baseMs` and was not taken from it** — the `Do NOT`
+>   forbids borrowing those numbers and the derivation above is independent. The coincidence is
+>   recorded rather than hidden, because the next reader will notice it.
+> - **`cap` = 30 000 ms.** `P1-T26` measured and honours `Retry-After: 120` as an absolute deadline
+>   when a server sends one, and these three numbers apply **only** when none is sent. Letting the
+>   silent case wait as long as the loudest measured explicit case would make a user sit in front
+>   of the Search window for two minutes with nothing said. 30 s also means the cap does not bind
+>   at an attempt cap of 3 (the third wait tops out near 9 s), so it is a guard against a later
+>   raise of the attempt cap rather than a value the shipped path reaches.
+> - **Attempt cap = 3.** Worst case 1 + 3 + 9 ≈ **13 s** of waiting before the job fails and §7.3's
+>   "Retry later" is offered — tolerable inside an interactive search. Five attempts reach ≈ 2 min,
+>   which is not. The decisive evidence is `P0-T21`'s arXiv measurement: **7 of 7 requests over
+>   ~14 minutes returned 429 with no `Retry-After`**, some taking up to 46 s merely to fail, while
+>   the 3-second rule was obeyed — a limit that may key on this network's shared address. **Where a
+>   limit is not per-request, more attempts buy nothing and cost the user the wait.** That argument
+>   is about arXiv rather than NCBI, so step 2 should name it as the shape of the reasoning and not
+>   as a measurement of this host.
+>
+> Phase 2 hosts get their own three values with their own rows; nothing here is a global default.
 2. Add the three columns to §7.3's table, per host, with the source of each value named.
 3. Put the values on the policy rows in `hostLimiter.ts` and assert them against §7.3 by reading the
    shipped row rather than restating it — the pattern `P1-T04`'s pacing test already uses, so a
