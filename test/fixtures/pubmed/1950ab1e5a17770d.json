@@ -1,0 +1,8 @@
+{
+  "status": 429,
+  "headers": {
+    "content-type": "text/html; charset=UTF-8",
+    "retry-after": "2"
+  },
+  "body": "<!-- synthetic fixture: docs/02 §3.8 records only that an NCBI 429 carries a short HTML/XML body. The real bytes are not captured, because provoking a rate limit risks the IP block docs/02 §3.1 quotes. -->\n<html><body><h1>Too Many Requests</h1></body></html>\n"
+}

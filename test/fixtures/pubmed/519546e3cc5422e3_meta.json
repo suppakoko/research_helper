@@ -1,0 +1,13 @@
+{
+  "scenario": "error-500",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-07T09:15:46.106Z",
+  "endpoint": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written (P1-T11 step 3). A 500 cannot be provoked on demand and docs/02 §3.8 records only the status. The body is a placeholder.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

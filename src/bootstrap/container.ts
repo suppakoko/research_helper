@@ -129,6 +129,49 @@
  * **`P1-T25`'s "do not construct a second set of sinks at the root" holds
  * exactly as written:** the root now constructs *no* sinks at all, and
  * `installServices` still refuses a second graph.
+ *
+ * ## Section 4 — the adapters, the pipelines and the key store (`P1-T16`)
+ *
+ * **Four cards in a row shipped working, fully tested modules the installer did
+ * not contain, because nothing constructed them.** Measured each time: the
+ * installer stayed byte-identical and the bundled script held **zero**
+ * occurrences of their key symbols. The four were `P1-T06`'s key store,
+ * `P1-T09`'s PubMed adapter, `P1-T10`'s record mapper and `P1-T17`'s provenance
+ * record and note writer. `P1-T16` step 7 is where the first three stop being
+ * unreachable: {@link installServices} now also
+ *
+ * 1. runs `docs/09` §1.7's **startup keystore probe** and, on a tier-1 verdict
+ *    only, builds the `SecretStore` — `src/zotero/keychain.ts` says in as many
+ *    words that "nothing calls this at startup yet. `src/bootstrap/container.ts`
+ *    is outside `P1-T06`'s `Files` list, so the probe ships unwired";
+ * 2. reconciles `ncbi.keyPresent` from the keystore **before** the limiter
+ *    registry reads it, because that flag is what selects between `docs/07`
+ *    §7.3's unkeyed and keyed NCBI budgets and a flag left stale by a key
+ *    removed outside Zotero would pace NCBI at 8 req/s against a 3 req/s
+ *    ceiling (`docs/02` §3.1);
+ * 3. builds `P1-T10`'s record mapper with `keepRaw` wired from the
+ *    `logRequestBodies` preference — `sources/` may not read a preference, so
+ *    the composition root is the only place that value can come from;
+ * 4. builds `P1-T09`'s adapter over the client, the clock, that mapper and the
+ *    key store, and hands it to `registerSources()`, which until now was called
+ *    from nowhere;
+ * 5. builds `P1-T16`'s pipeline registry and the per-job
+ *    {@link PipelineContext} factory, which is the thing `P1-T22` will ask for.
+ *
+ * **What is still unreachable after this card, and why.** `P1-T17`'s
+ * `src/core/provenance.ts` and `src/zotero/notes.ts` have no construction site
+ * here: assembling the record needs the import's own counts (FR-8, and
+ * `P1-T22`'s `Do NOT`: "do not write the provenance note before the import
+ * finishes"), and neither path is in `P1-T16`'s `Files` list. `P1-T17`'s own
+ * report puts the site in "the card this one blocks", which is `P1-T22`.
+ *
+ * **Why the key store is built here and not in `registerUI.ts`.** `registerUI.ts`
+ * chooses the platform *implementations* and is not in `P1-T16`'s `Files` list;
+ * more to the point, `createKeychainSecretStore()` takes no arguments and
+ * `probeAndRecordBackend()` needs the `PrefStore` already installed — both are
+ * facts about construction order inside this function, which is the thing this
+ * file owns. No new {@link ServiceGraphOptions} member was needed, so
+ * `registerUI.ts` compiles unchanged.
  */
 
 import { createSystemClock, type Clock } from "../core/clock";
@@ -164,7 +207,20 @@ import {
   resetHostLimiters,
   type HostLimiterRegistry,
 } from "../core/rateLimit/hostLimiter";
+import type { SecretStore } from "../core/secretStore";
+import type { PipelineRegistry } from "../pipeline/registry";
+import type { PipelineContext, PipelineId } from "../pipeline/types";
 import { getPref, setPrefStore } from "../prefs";
+import { createPubmedRecordMapper } from "../sources/pubmed/mapper";
+import {
+  createPubmedSource,
+  NCBI_SECRET_ID,
+} from "../sources/pubmed/pubmedSource";
+import { createSourceRegistry, type SourceRegistry } from "../sources/registry";
+// `src/zotero/keychain.ts` is **not** imported statically. See
+// `installSecretStore`: it runs `Components.Constructor(...)` in its module
+// body, which is a `ReferenceError` in plain Node and would take down every
+// layer-1 test whose module graph reaches this file.
 import {
   ZoteroProgressWindowSink,
   type ProgressWindowHandle,
@@ -173,6 +229,11 @@ import {
   debug as zoteroDebug,
   logError as zoteroLogError,
 } from "../zotero/zoteroApi";
+import {
+  createZoteroSearchImportWriter,
+  registerPipelines,
+} from "./registerPipelines";
+import { registerSources } from "./registerSources";
 
 // ===========================================================================
 // 1. The teardown registry — `P0-T07`
@@ -742,6 +803,75 @@ export interface ServiceGraph {
    * ```
    */
   readonly progress: JobProgressFactory;
+  /**
+   * `docs/09` §1.7's tier-1 key store, or `undefined` when the startup probe did
+   * not reach tier 1 (`P1-T16`).
+   *
+   * **`undefined` is a normal outcome, not an error.**
+   * `src/zotero/keychain.ts`'s `createKeychainSecretStore` says to "build this
+   * store only on a tier-1 verdict; on any other verdict Phase 1 has no store to
+   * offer, which is `docs/11` §1's scope and not an oversight" — tiers 2 and 3
+   * are `P3-T03`'s. Every consumer in Phase 1 treats an absent store as "no
+   * key", which `docs/02` §3.1 makes a working configuration.
+   */
+  readonly secrets: SecretStore | undefined;
+  /** `docs/07` §11.1's registry, filled by `registerSources()`. */
+  readonly sources: SourceRegistry;
+  /** `docs/07` §11.3's registry, filled by `registerPipelines()`. */
+  readonly pipelines: PipelineRegistry;
+  /**
+   * Where a caller gets one job's {@link PipelineContext} — the thing `P1-T22`
+   * asks for before it calls `pipeline.run()`.
+   *
+   * One per job, for the same reason the reporter is (`P1-T31`): the context
+   * *contains* the reporter, so an app-scoped context would carry an app-scoped
+   * reporter and report exactly one job per plugin lifetime.
+   */
+  readonly pipelineContext: PipelineContextFactory;
+}
+
+/** What {@link PipelineContextFactory.forJob} is asked for. */
+export interface PipelineJobOptions {
+  /** Which pipeline this job runs. Used for the job id and the progress label. */
+  readonly pipelineId: PipelineId;
+  /**
+   * The job's cancellation token. The caller owns the
+   * `CancellationTokenSource` — it is the thing the Cancel button fires — and
+   * the reporter goes terminal with `done("cancelled")` when it does.
+   */
+  readonly token: CancellationToken;
+  /**
+   * When the progress popup is raised, `docs/07` §7.7 vs `docs/08` §4.4.
+   *
+   * There is deliberately no default: `JobProgressOptions.openOn` explains that
+   * a default at the composition root is how `searchImport`'s `"completion"`
+   * choice became every pipeline's.
+   */
+  readonly openOn?: "progress" | "completion";
+  /** The job's initial message, already localized. */
+  readonly message?: string;
+}
+
+/** One job's context and the surfaces that belong to it. */
+export interface PipelineJob {
+  readonly jobId: string;
+  /** `docs/07` §4.5's context, ready to hand to `pipeline.run()`. */
+  readonly context: PipelineContext;
+  /** This job's reporter and sinks, for a caller that wants `events`. */
+  readonly progress: JobProgress;
+  /** Close this job's surfaces. Idempotent; touches no other job. */
+  dispose(): void;
+}
+
+/**
+ * Builds one {@link PipelineContext} per job.
+ *
+ * Separate from {@link JobProgressFactory} rather than folded into it because a
+ * context is a `pipeline/` type and the progress factory is a `core/` one; the
+ * composition root is the only place allowed to know both (`docs/07` §2.3).
+ */
+export interface PipelineContextFactory {
+  forJob(options: PipelineJobOptions): PipelineJob;
 }
 
 /**
@@ -984,6 +1114,101 @@ function createJobProgressFactory(
   };
 }
 
+/** What {@link createPipelineContextFactory} closes over. */
+interface PipelineContextDeps {
+  readonly clock: Clock;
+  readonly logger: Logger;
+  readonly sources: SourceRegistry;
+  readonly progress: JobProgressFactory;
+}
+
+/**
+ * Build {@link ServiceGraph.pipelineContext} — `docs/07` §4.5's context, per job.
+ *
+ * ## The seven members Phase 1 cannot fill, and what they are set to
+ *
+ * §4.5's `PipelineContext` names `cache`, `budget`, `llm`, `tts`, `zotero`,
+ * `config` and `privacy`. `src/pipeline/types.ts`'s header has the measurement:
+ * three of those types are declared in doc 07 but implemented by no module yet,
+ * and **four are named nowhere else in the corpus at all**, so they are forward
+ * aliases to `unknown` there. They are therefore set to `undefined` here, and
+ * because the type is `unknown` a pipeline cannot read one without writing a
+ * narrowing that would make the gap obvious at the point of use.
+ *
+ * That is the honest shape: Phase 1 ships no cache (Phase 2), no budget guard
+ * and no LLM router (Phase 3), no TTS (Phase 5) and no declared privacy or
+ * config port. `searchImport` reads `token`, `progress`, `logger`, `clock`,
+ * `sources` and `checkpoint`, and nothing else.
+ *
+ * ## `checkpoint()` is a no-op, by instruction
+ *
+ * `P1-T16`'s **Do NOT**: "do not implement `checkpoint()`/`resumeState` for
+ * real. Phase 3 owns the persistent queue; accept the members and make
+ * `checkpoint()` a no-op, with `resumable: false`." It is a resolved promise
+ * rather than a thrown error so the pipeline can call it at every stage boundary
+ * exactly as §4.5 requires, which is what makes Phase 3's queue a *caller*
+ * rather than a rewrite.
+ *
+ * ## The job id
+ *
+ * `docs/07` §5.2's `JobRecord.id` is Phase 3's, and the corpus declares no
+ * generator, so this one is local and documented rather than borrowed: the
+ * pipeline id, the clock's epoch milliseconds and a per-graph sequence number.
+ * The sequence number is what keeps two jobs started in the same millisecond
+ * distinct — `createManualClock()` makes that the common case in a test, not a
+ * rare one.
+ */
+function createPipelineContextFactory(
+  deps: PipelineContextDeps,
+): PipelineContextFactory {
+  let sequence = 0;
+
+  return {
+    forJob(options: PipelineJobOptions): PipelineJob {
+      sequence += 1;
+      const jobId = `${options.pipelineId}-${String(
+        deps.clock.now(),
+      )}-${String(sequence)}`;
+      const progress = deps.progress.forJob(options.pipelineId, {
+        token: options.token,
+        ...(options.openOn !== undefined && { openOn: options.openOn }),
+        ...(options.message !== undefined && { message: options.message }),
+      });
+
+      const context: PipelineContext = {
+        jobId,
+        token: options.token,
+        progress: progress.reporter,
+        // Bound with the job id, so every line a pipeline logs can be traced to
+        // one run without the pipeline having to remember to add it.
+        logger: deps.logger.child({ jobId, pipelineId: options.pipelineId }),
+        clock: deps.clock,
+        sources: deps.sources,
+        // See this function's doc comment: seven members doc 07 declares and
+        // Phase 1 has no implementation for.
+        cache: undefined,
+        budget: undefined,
+        llm: undefined,
+        tts: undefined,
+        zotero: undefined,
+        config: undefined,
+        privacy: undefined,
+        checkpoint: (): Promise<void> => Promise.resolve(),
+        resumeState: undefined,
+      };
+
+      return {
+        jobId,
+        context,
+        progress,
+        dispose(): void {
+          progress.dispose();
+        },
+      };
+    },
+  };
+}
+
 /**
  * Build the object graph once and bind every disposable to `scope`.
  *
@@ -1077,7 +1302,24 @@ export async function installServices(
     },
   });
 
-  // 2. The per-host buckets, and the observer that raises NCBI's budget when a
+  // 2. `docs/09` §1.7's startup keystore probe, and the key store it licenses.
+  //
+  //    **Before the limiters, deliberately.** `createHostLimiterRegistry` reads
+  //    `ncbi.keyPresent` at construction to choose between `docs/07` §7.3's
+  //    unkeyed and keyed NCBI budgets, and `refreshKeyPresence` is what makes
+  //    that flag agree with the keystore. A flag left `true` by a key the user
+  //    removed outside Zotero would pace NCBI at 8 req/s against its unkeyed
+  //    3 req/s ceiling and earn an IP block (`docs/02` §3.1) — so the
+  //    reconciliation has to happen before the bucket is sized, not after.
+  //
+  //    `probeKeystore()` is a real encrypt/decrypt round trip and never throws:
+  //    a platform without `Zotero.OSKeyStore` — a layer-1 unit test, for
+  //    instance — comes back `"unavailable"` and this phase then has no store to
+  //    offer, which `src/zotero/keychain.ts` records as `docs/11` §1's scope
+  //    rather than a failure.
+  const secrets = await installSecretStore(logger);
+
+  // 3. The per-host buckets, and the observer that raises NCBI's budget when a
   //    key is entered while Zotero is running.
   const limiters = createHostLimiterRegistry({ clock, prefs: options.prefs });
   installHostLimiters(limiters);
@@ -1092,7 +1334,7 @@ export async function installServices(
     );
   }
 
-  // 3. The one outbound choke point.
+  // 4. The one outbound choke point.
   const http = createHttpClient({
     transport: options.transport,
     userAgent: buildUserAgent(options.version),
@@ -1109,7 +1351,7 @@ export async function installServices(
     setHttpClient(undefined);
   });
 
-  // 4. The per-job progress factory. No sink is constructed here: a job's
+  // 5. The per-job progress factory. No sink is constructed here: a job's
   //    surfaces are built by `forJob`, so one job's completion cannot close
   //    another's popup and `openOn` is the pipeline's choice (`P1-T31`; §3 of
   //    this file's header has the reasoning and the rejected alternative).
@@ -1133,9 +1375,60 @@ export async function installServices(
     progress.disposeAll();
   });
 
+  // 6. The adapters (`P1-T09`, `P1-T10`) and the registry `registerSources()`
+  //    has been waiting for since `P1-T07`.
+  //
+  //    **`keepRaw` is the whole reason the mapper is built here.** `docs/07`
+  //    §5.1's `SourceRecord.raw` is "retained past that point only when
+  //    `logRequestBodies` (§8.5) is on", `sources/` may not read a preference
+  //    (§2.3), and `P1-T10` therefore takes the resolved boolean as an injected
+  //    flag. This is the only place that boolean can come from.
+  //
+  //    **It is read once, at construction, and that is a real limitation.**
+  //    `PubmedMapperDeps.keepRaw` is a `boolean`, not a getter, so toggling
+  //    `logRequestBodies` while Zotero runs does not change what the mapper
+  //    keeps until the plugin is re-enabled. Making it live would mean widening
+  //    `src/sources/pubmed/mapper.ts`, which is outside `P1-T16`'s `Files` list,
+  //    so it is reported rather than done. The safe direction is the default:
+  //    `getPref` falls back to §8.5's `false`, so a missing or malformed
+  //    preference keeps nothing.
+  const mapRecords = createPubmedRecordMapper({
+    clock,
+    keepRaw: getPref("logRequestBodies"),
+    logger,
+  });
+  const sources = createSourceRegistry();
+  registerSources(sources, {
+    pubmed: createPubmedSource({
+      http,
+      clock,
+      mapRecords,
+      // Conditional spread, not `secrets`: `tsconfig.json`'s
+      // `exactOptionalPropertyTypes` rejects an explicit `undefined`, and
+      // omitting the member is what `PubmedSourceDeps` documents as "every
+      // request goes out without `api_key`".
+      ...(secrets !== undefined && { secrets }),
+      logger,
+    }),
+  });
+
+  // 7. The pipelines (`P1-T16`) and the per-job context factory.
+  const pipelines = registerPipelines({
+    writer: createZoteroSearchImportWriter({ logger }),
+  });
+  const pipelineContext = createPipelineContextFactory({
+    clock,
+    logger,
+    sources,
+    progress: progress.factory,
+  });
+
   logger.info("services installed", {
     hosts: limiters.hosts.length,
     observers: limiters.observers.length,
+    secretBackend: secrets?.backend ?? "none",
+    sources: sources.list().length,
+    pipelines: pipelines.list().length,
   });
 
   return {
@@ -1145,5 +1438,128 @@ export async function installServices(
     limiters,
     http,
     progress: progress.factory,
+    secrets,
+    sources,
+    pipelines,
+    pipelineContext,
   };
+}
+
+/**
+ * Run `docs/09` §1.7's startup probe and build the tier-1 key store if it
+ * passed, then reconcile `ncbi.keyPresent` with what the keystore actually holds.
+ *
+ * **Three failure modes, three different handlings, and none of them fails
+ * startup.** A plugin that refused to load because a keychain was unavailable
+ * would be a worse outcome than one that runs unkeyed, which `docs/02` §3.1
+ * makes a supported configuration.
+ *
+ * 1. **The probe says `"unavailable"`.** `probeAndRecordBackend` has already
+ *    written `secretBackend = ""` and logged a `warn` naming the failure class;
+ *    no store is built, and `docs/09` §1.7's escalation to tiers 2 and 3 "with a
+ *    dialog, never silently" is `P3-T03`'s, so Phase 1 stops here by instruction
+ *    (`P1-T06`'s **Do NOT**: "a half-built ladder is worse than one rung").
+ * 2. **The probe itself throws.** It is documented as never doing so, so this is
+ *    a defect somewhere below; caught, logged, treated as unavailable.
+ * 3. **`refreshKeyPresence` throws.** It reads the login manager, which
+ *    `Services.logins` backs; an unreadable login store must not stop the plugin
+ *    loading. Caught and logged — and the consequence is named in the log line,
+ *    because a stale `true` is the expensive direction (`docs/02` §3.1's IP
+ *    block) and whoever reads the log should know which way the error leans.
+ *
+ * **Nothing here can log a key.** The probe's plaintext is a throwaway random
+ * value it never stores; `probeAndRecordBackend`'s own `ProbeAndRecordOptions`
+ * doc forbids passing anything that writes a value, and what reaches the log is
+ * a failure class, a platform error *name* and a boolean. `refreshKeyPresence`
+ * returns the boolean `hasSecret` produced and writes it to a preference whose
+ * schema row is not `secret: true`; `src/prefs/index.ts`'s `guardWritable`
+ * refuses a write to a `secret: true` row before the value is coerced at all.
+ * The store this function returns is handed to `createPubmedSource`, which reads
+ * the key per request, puts it in the query string through `P1-T08`'s builder,
+ * and logs only `request.transmittedUrl` — `redactUrl`'s output, with the
+ * parameter removed.
+ *
+ * ## Why the module is loaded with `await import()` rather than imported
+ *
+ * **Found by wiring it, not by inspection.** `src/zotero/keychain.ts` evaluates
+ *
+ * ```ts
+ * const LoginInfo = Components.Constructor(
+ *   "@mozilla.org/login-manager/loginInfo;1", …);
+ * ```
+ *
+ * **in its module body**, at line 95. `Components` is a Gecko global that exists
+ * only inside the sandbox, so merely *importing* that module from here threw
+ * `ReferenceError: Components is not defined` and took
+ * `test/unit/bootstrap/container.test.ts` down with **0 tests collected** — the
+ * suite went 1,115 passing to 1,110 with one failed *suite*, from a change that
+ * added no test and touched no assertion. That is the shape to watch for: the
+ * module graph of a layer-1 test is as much a part of its contract as its
+ * assertions, and `docs/13` §2.1's "plain Node, no Zotero" holds for `import`
+ * side effects too.
+ *
+ * The dynamic import moves the evaluation from this file's import time to this
+ * function's first call, where the `try`/`catch` that already exists for "the
+ * probe itself throws" covers it. In the sandbox `Components` is present and the
+ * module loads normally; under `vitest` it throws, is caught, and the graph
+ * continues with no secret backend — which is the same outcome a machine with no
+ * usable keychain gets, and a configuration `docs/02` §3.1 supports.
+ *
+ * It also keeps the whole module in one bundled file: `zotero-plugin.config.ts`
+ * builds with `bundle: true` and no code splitting, so esbuild inlines the
+ * dynamic import rather than emitting a second chunk.
+ *
+ * **The one-line fix belongs in `keychain.ts`** — make `LoginInfo` lazy, as every
+ * other platform reference in that file already is — and `src/zotero/keychain.ts`
+ * is **not in `P1-T16`'s `Files` list**, so it is reported rather than edited
+ * (`plan/README.md` §5 rule 2). **Needs a card.**
+ */
+async function installSecretStore(
+  logger: Logger,
+): Promise<SecretStore | undefined> {
+  let keychain: typeof import("../zotero/keychain");
+  try {
+    keychain = await import("../zotero/keychain");
+  } catch (error) {
+    // Not reachable in the sandbox; reachable in plain Node. See the doc
+    // comment above for the measurement and for where the fix belongs.
+    logger.warn(
+      "src/zotero/keychain.ts could not be loaded, so this build has no " +
+        "secret backend. It touches the Gecko `Components` global in its " +
+        "module body, which only exists inside the Zotero sandbox",
+      { err: error },
+    );
+    return undefined;
+  }
+
+  let tierOne: boolean;
+  try {
+    const verdict = await keychain.probeAndRecordBackend({ logger });
+    tierOne = verdict.backend === "os-keychain";
+  } catch (error) {
+    logger.warn(
+      "OS keystore probe threw, which docs/09 §1.7 says it cannot; " +
+        "continuing with no secret backend",
+      { err: error },
+    );
+    return undefined;
+  }
+  if (!tierOne) return undefined;
+
+  const secrets = keychain.createKeychainSecretStore();
+  try {
+    // `src/zotero/keychain.ts`: exported "so a composition root can reconcile a
+    // flag left stale by a keystore entry removed outside Zotero". This is that
+    // caller, and it runs before the limiter registry reads the flag.
+    const present = await keychain.refreshKeyPresence(NCBI_SECRET_ID);
+    logger.debug("ncbi.keyPresent reconciled from the keystore", { present });
+  } catch (error) {
+    logger.warn(
+      "could not reconcile ncbi.keyPresent from the keystore; the stored " +
+        "flag stands. If it is stale in the `true` direction, NCBI will be " +
+        "paced at the keyed budget against an unkeyed ceiling (docs/02 §3.1)",
+      { err: error },
+    );
+  }
+  return secrets;
 }

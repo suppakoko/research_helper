@@ -1,0 +1,240 @@
+/**
+ * The single wiring point for pipelines, and the Zotero side of `searchImport`'s
+ * write port.
+ *
+ * **Scope.** `P1-T16`. It is the pipeline counterpart of
+ * `./registerSources.ts`, deliberately down to the shape: the composition root
+ * calls it once, it owns the *policy* (which ids this phase registers, in what
+ * order) and not the construction, and `docs/07` §11.3 makes it the one place a
+ * new pipeline is wired in.
+ *
+ * ## Why the writer is built here
+ *
+ * `src/pipeline/searchImport/types.ts` declares a narrow
+ * {@link SearchImportWriter} port — three operations — instead of having the
+ * pipeline import `src/zotero/importer.ts` directly. Its own header says why
+ * (layer-1 testability, and §4.5's `ZoteroFacade` being declared nowhere); this
+ * file is the implementation, and it belongs in `bootstrap/` for the reason the
+ * composition root exists: it is the *wiring* of a `zotero/` capability onto a
+ * `pipeline/` port, which is neither module's business.
+ *
+ * ## Two things this file does not do, and they are reported not hidden
+ *
+ * 1. **`notePartialImport` cannot write to the collection.** `docs/07` §7.4
+ *    requires that a partial `searchImport` leave "a note in its description
+ *    that the import was partial". Grepped 2026-10-07: **nothing in
+ *    `src/zotero/` writes a collection description** — not
+ *    `collectionOps.ts`, not `zoteroApi.ts`, not `importer.ts` — and
+ *    `eslint.config.js`'s `research-helper/zotero-global` rule exempts only
+ *    `src/zotero/**`, `addon/**` and the three lifecycle entry files, so this
+ *    file may not reach `Zotero.Collections` itself. `src/zotero/collectionOps.ts`
+ *    is **not in `P1-T16`'s `Files` list**, so adding the capability there would
+ *    be the scope-widening `plan/README.md` §5 rule 2 forbids. The default
+ *    implementation therefore **logs the note at `warn`** and sets no
+ *    description, and {@link ZoteroSearchImportWriterDeps.setCollectionNote} is
+ *    the seam the card that adds the capability fills. The pipeline's behaviour
+ *    — *when* the note is composed and what it says — is complete and tested;
+ *    only the final write is missing. **Needs a card.**
+ * 2. **It writes no provenance note and no provenance JSON.** `P1-T17` shipped
+ *    `src/core/provenance.ts` and `src/zotero/notes.ts` with no importer, and
+ *    its own report says the construction site "belongs to the card this one
+ *    blocks" — which is `P1-T22`, the card `P1-T16` also blocks. Neither path is
+ *    in `P1-T16`'s `Files` list. What this card *can* do for it, and does, is
+ *    make the pipeline's output carry every per-source count `docs/07` §5.3 asks
+ *    for that the `LiteratureSource` port can actually produce;
+ *    `SearchImportSourceReport`'s doc comment lists the four it cannot and why.
+ */
+
+import { DEFAULT_CHUNK_SIZE, importWorks } from "../zotero/importer";
+import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
+import type { Logger } from "../core/logger";
+import type { CancellationToken } from "../core/jobQueue/cancellation";
+import type { CanonicalWork } from "../model/canonicalWork";
+import {
+  createPipelineRegistry,
+  registerPipelines as registerIntoRegistry,
+  type PipelineRegistry,
+  type PipelineSet,
+} from "../pipeline/registry";
+import { createSearchImportPipeline } from "../pipeline/searchImport/searchImportPipeline";
+import type {
+  SearchImportBatchResult,
+  SearchImportTarget,
+  SearchImportWriteSession,
+  SearchImportWriter,
+} from "../pipeline/searchImport/types";
+
+export { DEFAULT_CHUNK_SIZE };
+
+// ---------------------------------------------------------------------------
+// 1. The Zotero write surface
+// ---------------------------------------------------------------------------
+
+/** What {@link createZoteroSearchImportWriter} needs. */
+export interface ZoteroSearchImportWriterDeps {
+  /** Diagnostics. Never given a record, an abstract or a credential. */
+  readonly logger?: Logger;
+  /**
+   * Record `docs/07` §7.4's partial-import line on the collection.
+   *
+   * **Omitted in the product today, because there is nothing to call** — see
+   * item 1 of this file's header. When omitted, the line is logged at `warn`
+   * and the collection's description is left alone, which is the honest
+   * degradation: §7.4's other requirement, that the items and the collection be
+   * *kept*, is satisfied either way, and the note is a diagnostic rather than
+   * the thing that preserves the user's data.
+   *
+   * @param collectionKey - the target collection's key
+   * @param libraryId - the target library
+   * @param note - the already-composed line
+   */
+  readonly setCollectionNote?: (
+    collectionKey: string,
+    libraryId: number,
+    note: string,
+  ) => Promise<void>;
+}
+
+/**
+ * The production {@link SearchImportWriter}, over `src/zotero/importer.ts`.
+ *
+ * **Why `openTarget` imports an empty batch.** `importWorks()` resolves the
+ * collection lazily, inside whichever transaction runs first, and guarantees as a
+ * post-condition that "the collection must exist even when nothing was written"
+ * (`FR-6`). Calling it with `works: []` is therefore the supported way to make
+ * `CreatingCollection` a stage of its own that creates the collection and nothing
+ * else — which is what lets the pipeline keep `WritingItems` cancellable per
+ * batch while `FR-10`'s "cancel creates no items" stays true for every earlier
+ * stage. An empty call also builds **no** library index: `resolveIndex` returns
+ * early when `works.length === 0`.
+ *
+ * **Why the index is built once and passed in.** `docs/02` §11.6 says the
+ * library is searched "once per run", and `ImportRequest.index`'s own doc says
+ * supplying one "is how a pipeline that has already read the library avoids a
+ * second search". Without it, a 200-record run in four batches would run four
+ * `Zotero.Search` calls.
+ *
+ * **Why `chunkSize` is the batch's own length.** The pipeline batches so that a
+ * cancellation leaves a count behind; `FR-6` wants one transaction per batch. One
+ * `importWorks` call per pipeline batch with `chunkSize = works.length` makes
+ * those two the same batch instead of two nested batchings with different sizes.
+ */
+export function createZoteroSearchImportWriter(
+  deps: ZoteroSearchImportWriterDeps = {},
+): SearchImportWriter {
+  return {
+    async openTarget(
+      target: SearchImportTarget,
+      token: CancellationToken,
+    ): Promise<SearchImportWriteSession> {
+      const opened = await importWorks({
+        works: [],
+        collectionName: target.collectionName,
+        ...(target.libraryId !== undefined && { libraryID: target.libraryId }),
+        ...(target.parentCollectionId !== undefined && {
+          parentCollectionID: target.parentCollectionId,
+        }),
+        token,
+      });
+
+      const libraryId = opened.collection.libraryID;
+      const collectionKey = opened.collection.key;
+      // Built on the first write rather than here: a run whose only batch is
+      // empty (every row unchecked) then costs no search at all.
+      let index: LibraryIndex | undefined;
+
+      return {
+        libraryId,
+        collectionKey,
+        collectionCreated: opened.collectionCreated,
+
+        async writeBatch(
+          works: readonly CanonicalWork[],
+          batchToken: CancellationToken,
+        ): Promise<SearchImportBatchResult> {
+          index ??= await buildLibraryIndex(libraryId);
+          const report = await importWorks({
+            works,
+            collectionName: target.collectionName,
+            libraryID: libraryId,
+            ...(target.parentCollectionId !== undefined && {
+              parentCollectionID: target.parentCollectionId,
+            }),
+            index,
+            chunkSize: Math.max(1, works.length),
+            token: batchToken,
+          });
+          return {
+            created: report.created,
+            linkedExisting: report.linkedExisting,
+            skipped: report.skipped,
+            failed: report.failed.length,
+            createdWithAbstract: report.abstractCoverage.withAbstract,
+          };
+        },
+
+        async notePartialImport(note: string): Promise<void> {
+          const { setCollectionNote } = deps;
+          if (setCollectionNote === undefined) {
+            // See item 1 of this file's header. Logged rather than dropped, so
+            // the information exists somewhere a bug report can carry.
+            deps.logger?.warn(
+              "searchImport: docs/07 §7.4's partial-import note has no " +
+                "write path yet; nothing in src/zotero/ sets a collection " +
+                "description. The items and the collection are kept.",
+              { collectionKey, libraryId, note },
+            );
+            return;
+          }
+          await setCollectionNote(collectionKey, libraryId, note);
+        },
+      };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 2. The pipelines
+// ---------------------------------------------------------------------------
+
+/** What {@link buildPipelineSet} needs from the composition root. */
+export interface PipelineConstructionDeps {
+  /** The Zotero write surface, from {@link createZoteroSearchImportWriter}. */
+  readonly writer: SearchImportWriter;
+  /**
+   * Works per write transaction. Defaults to `src/zotero/importer.ts`'s
+   * {@link DEFAULT_CHUNK_SIZE}, which is the number `docs/07` §7.2 says to
+   * instrument — not a second opinion about it.
+   */
+  readonly writeBatchSize?: number;
+}
+
+/**
+ * Construct every pipeline this build ships.
+ *
+ * One function so the set is assembled in one place and a missing member is a
+ * compile error at the `PipelineSet` boundary rather than an id that resolves to
+ * nothing at run time.
+ */
+export function buildPipelineSet(deps: PipelineConstructionDeps): PipelineSet {
+  return {
+    searchImport: createSearchImportPipeline({
+      writer: deps.writer,
+      writeBatchSize: deps.writeBatchSize ?? DEFAULT_CHUNK_SIZE,
+    }),
+  };
+}
+
+/**
+ * Build the registry and fill it — `docs/07` §11.3's single wiring point.
+ *
+ * @param deps - the write surface and the batch size
+ * @returns the filled registry
+ */
+export function registerPipelines(
+  deps: PipelineConstructionDeps,
+): PipelineRegistry {
+  const registry = createPipelineRegistry();
+  registerIntoRegistry(registry, buildPipelineSet(deps));
+  return registry;
+}

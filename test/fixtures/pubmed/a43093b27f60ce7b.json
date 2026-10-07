@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json; charset=UTF-8"
+  },
+  "body": "{\"header\":{\"type\":\"esearch\",\"version\":\"0.3\"},\n \"esearchresult\":{\"ERROR\":\"Search Backend failed: Exception:\\n'retstart' cannot be larger than 9998. For PubMed, ESearch can only retrieve the first 9,999 records matching the query. ...\"}}\n"
+}

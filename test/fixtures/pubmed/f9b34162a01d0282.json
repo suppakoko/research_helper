@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "X-RateLimit-Limit,X-RateLimit-Remaining",
+    "alt-svc": "clear",
+    "cache-control": "private",
+    "content-encoding": "gzip",
+    "content-security-policy": "upgrade-insecure-requests",
+    "content-type": "text/xml; charset=UTF-8",
+    "date": "Wed, 07 Oct 2026 09:11:41 GMT",
+    "referrer-policy": "origin-when-cross-origin",
+    "server": "Finatra",
+    "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "via": "1.1 google",
+    "x-ratelimit-limit": "3",
+    "x-ratelimit-remaining": "1",
+    "x-ua-compatible": "IE=Edge",
+    "x-xss-protection": "1; mode=block"
+  },
+  "body": "<?xml version=\"1.0\" ?>\n<!DOCTYPE PubmedArticleSet PUBLIC \"-//NLM//DTD PubMedArticle, 1st January 2025//EN\" \"https://dtd.nlm.nih.gov/ncbi/pubmed/out/pubmed_250101.dtd\">\n<PubmedArticleSet>\n<PubmedArticle><MedlineCitation Status=\"MEDLINE\" Owner=\"NLM\" IndexingMethod=\"Manual\"><PMID Version=\"1\">60000</PMID><DateCompleted><Year>1976</Year><Month>10</Month><Day>01</Day></DateCompleted><DateRevised><Year>2026</Year><Month>01</Month><Day>28</Day></DateRevised><Article PubModel=\"Print\"><Journal><ISSN IssnType=\"Print\">0042-4846</ISSN><JournalIssue CitedMedium=\"Print\"><Issue>6</Issue><PubDate><Year>1976</Year><Month>Jun</Month></PubDate></JournalIssue><Title>Veterinariia</Title><ISOAbbreviation>Veterinariia</ISOAbbreviation></Journal><ArticleTitle>[Measures in ovine psoroptic mange].</ArticleTitle><Pagination><StartPage>56</StartPage><EndPage>57</EndPage><MedlinePgn>56-7</MedlinePgn></Pagination><AuthorList CompleteYN=\"Y\"><Author ValidYN=\"Y\"><LastName>Vorozhishcheva</LastName><ForeName>L M</ForeName><Initials>LM</Initials></Author><Author ValidYN=\"Y\"><LastName>Krasov</LastName><ForeName>V M</ForeName><Initials>VM</Initials></Author></AuthorList><Language>rus</Language><PublicationTypeList><PublicationType UI=\"D016428\">Journal Article</PublicationType></PublicationTypeList><VernacularTitle>Meropriiatiia pri psoroptoze ovets.</VernacularTitle></Article><MedlineJournalInfo><Country>Russia (Federation)</Country><MedlineTA>Veterinariia</MedlineTA><NlmUniqueID>0412751</NlmUniqueID><ISSNLinking>0042-4846</ISSNLinking></MedlineJournalInfo><ChemicalList><Chemical><RegistryNumber>0</RegistryNumber><NameOfSubstance UI=\"D000891\">Anti-Infective Agents, Local</NameOfSubstance></Chemical><Chemical><RegistryNumber>0</RegistryNumber><NameOfSubstance UI=\"D004655\">Emulsions</NameOfSubstance></Chemical><Chemical><RegistryNumber>59NEE7PCAB</RegistryNumber><NameOfSubstance UI=\"D001556\">Hexachlorocyclohexane</NameOfSubstance></Chemical></ChemicalList><CitationSubset>IM</CitationSubset><MeshHeadingList><MeshHeading><DescriptorName UI=\"D000818\" MajorTopicYN=\"N\">Animals</DescriptorName></MeshHeading><MeshHeading><DescriptorName UI=\"D000891\" MajorTopicYN=\"N\">Anti-Infective Agents, Local</DescriptorName></MeshHeading><MeshHeading><DescriptorName UI=\"D001494\" MajorTopicYN=\"N\">Baths</DescriptorName></MeshHeading><MeshHeading><DescriptorName UI=\"D004655\" MajorTopicYN=\"N\">Emulsions</DescriptorName></MeshHeading><MeshHeading><DescriptorName UI=\"D001556\" MajorTopicYN=\"N\">Hexachlorocyclohexane</DescriptorName><QualifierName UI=\"Q000008\" MajorTopicYN=\"N\">administration &amp; dosage</QualifierName></MeshHeading><MeshHeading><DescriptorName UI=\"D007623\" MajorTopicYN=\"N\" Type=\"Geographic\">Kazakhstan</DescriptorName></MeshHeading><MeshHeading><DescriptorName UI=\"D008925\" MajorTopicYN=\"N\">Mites</DescriptorName><QualifierName UI=\"Q000469\" MajorTopicYN=\"Y\">parasitology</QualifierName></MeshHeading><MeshHeading><DescriptorName UI=\"D012756\" MajorTopicYN=\"N\">Sheep</DescriptorName></MeshHeading><MeshHeading><DescriptorName UI=\"D012757\" MajorTopicYN=\"N\">Sheep Diseases</DescriptorName><QualifierName UI=\"Q000469\" MajorTopicYN=\"Y\">parasitology</QualifierName></MeshHeading></MeshHeadingList></MedlineCitation><PubmedData><History><PubMedPubDate PubStatus=\"pubmed\"><Year>1976</Year><Month>6</Month><Day>1</Day></PubMedPubDate><PubMedPubDate PubStatus=\"medline\"><Year>1976</Year><Month>6</Month><Day>1</Day><Hour>0</Hour><Minute>1</Minute></PubMedPubDate><PubMedPubDate PubStatus=\"entrez\"><Year>1976</Year><Month>6</Month><Day>1</Day><Hour>0</Hour><Minute>0</Minute></PubMedPubDate></History><PublicationStatus>ppublish</PublicationStatus><ArticleIdList><ArticleId IdType=\"pubmed\">60000</ArticleId></ArticleIdList></PubmedData></PubmedArticle></PubmedArticleSet>"
+}

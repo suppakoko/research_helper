@@ -2095,7 +2095,17 @@ adapter claims to handle has a fixture proving it.
 
 **Done when.**
 - [ ] `npm run test:contract` passes with the network unplugged.
-- [ ] Deleting one fixture file makes exactly one test fail, and the failure
+- [ ] Deleting one fixture file makes the scenario's own test fail with a message naming the record
+      command, and the corpus-integrity test notice the orphaned sidecar — **two** failures, and the
+      failure
+      > **Reworded 2026-10-07 after the executing agent reported it under rule 6.** This read
+      > "**exactly one** test fail". Measured by deleting a fixture: **two** tests fail — the
+      > scenario's own, whose message is exactly what this criterion asks for, and the
+      > corpus-integrity test, which notices the now-orphaned sidecar. **"Exactly one" is reachable
+      > only by dropping the integrity test, and that test is what catches a half-written
+      > recording.** The agent reported the criterion rather than weakening the suite to match its
+      > wording, which is the right order. Both messages are actionable and the record command
+      > appears twice in the output.
       message contains the record command.
 - [ ] `grep -ri "suppakoko@gmail.com\|api_key=" test/fixtures/` returns nothing.
 - [ ] The `esearchresult.ERROR` fixture produces a `SourceError`, not an empty
@@ -2110,6 +2120,133 @@ npm run typecheck && npm run test:contract
 **Notes.** These fixtures are the regression guard for the whole of `docs/02`
 §3, and Phase 2 copies this harness six more times — spend the time on
 `_transport.ts` now rather than on the sixth adapter.
+
+**Findings, 2026-10-07 — the fixture corpus is real, and recording it found that a fact the corpus
+calls "verified live" is no longer true.** Verified independently: **17 fixtures, 369,368 bytes**, of
+which **13 carry a genuine National Center for Biotechnology Information header set** (`server:
+Finatra`, the rate-limit pair) and four are marked synthetic; **28 contract tests pass, exit 0**; and
+`grep -ri "suppakoko@gmail.com\|api_key=" test/fixtures/` returns **nothing**.
+
+**The finding that outlives this card: the service changed behaviour and now fails silently where it
+used to fail loudly.** `docs/02` §3.3 says "**Verified live** — `retstart=9999` returns an error inside
+an HTTP 200". Read out of the recorded fixture: today it returns `count: "840"`, `retmax: "0"`, an
+**empty identifier list**, **no `ERROR` member at all**, and a *warning* — "Restrictions achieved. start
+and count adjusted to 9999, 0". **So the adapter's guard against an error inside a 200 is correct and
+simply unreachable from a `retstart` overflow, and the service now returns zero results where it once
+objected** — which is precisely the failure mode §3.3 warns the adapter about. **Both behaviours are
+kept**: the present-day response as a recorded fixture with a service-tagged test, and the body §3.3
+quotes as a second fixture whose test **re-reads the fenced block out of the document at run time and
+asserts byte equality**, so a drift in either artefact fails loudly. That is `P1-T10`'s pattern, reused.
+
+**Thirty live requests, all successful, and the two wasted runs disclosed rather than buried.** Every
+request went to the two documented endpoints inside a ten-minute window; all 30 returned HTTP 200, with
+**zero failures, zero rate-limit refusals and zero certificate failures** under the system-certificate
+flag. Observed latencies of 272–1,272 ms against a 400 ms floor kept the effective rate **under 1.5 per
+second against a documented ceiling of 3** — and the recordings themselves carry
+`x-ratelimit-limit: 3` with `x-ratelimit-remaining: 2`, which is direct evidence both that the ceiling
+was never approached **and** that the requests went out unkeyed. Pacing lives **inside** the transport,
+so no code path can issue a request without waiting, and the gap is read from the policy table rather
+than written down.
+
+**Twelve of the thirty were wasted, and the reason is worth keeping.** The "about twenty results"
+scenario was written as one multi-word term, and the query renderer **quotes any value that is not a
+single bare word** — so it went out as an exact phrase that matches essentially nothing, and the
+scenario came back empty. Fixed by splitting it into two bare terms, **confirmed with a single probe
+request rather than another full run**. The same run then aborted before writing anything, because the
+recorder's own redaction guard refused a sidecar whose explanatory note contained the literal text
+`api_key=`. **The guard was right and the prose was wrong** — and that is the only time in this project
+a safety check has fired on real data rather than on a mutation.
+
+**The service-versus-code distinction was built into the test names, so the suite's own output is the
+evidence.** Verified in the file: **3 tests fail only if the service changes**, 12 if either side moves,
+13 only if this project's code changes. The three service-tagged ones pin the response envelope's six
+members, seventeen exact element and attribute spellings the mapper depends on, and the new
+`retstart` behaviour. **And one structural point is stronger than any assertion**: the fixture filename
+is a hash of the method, the credential-redacted address and the body, so **a resolved fixture proves
+the transmitted request is byte-identical to the recorded one** — swapping two parameters in the
+ordering list made 12 of 28 tests fail with "Missing fixture".
+
+**What a reader should do when a fixture goes stale is written where they will hit it, not only in a
+header.** Five numbered steps sit in the module header, and the same guidance is reachable without
+opening a file: the missing-fixture message names the record command verbatim, and the staleness failure
+names the command **and repeats the rule** — never hand-edit a fixture to make a test pass; re-record,
+read the difference, and if the service changed shape fix the parser in the same commit. **A contract
+test that fails with "the service changed" and no guidance is a test people delete.**
+
+**A deliberate deviation from the testing document, and it is the right one.** That document puts the
+replay seam at the HTTP facade; doing so would skip the client's status classification, and then its own
+assertion category "error responses produce the expected typed errors" **would assert nothing** — a
+rate-limit fixture would arrive as an ordinary response object and no error would ever be constructed.
+The seam was put one layer lower, at the platform port, **so the typed errors are produced by production
+code**. The document's own helper is still exported unchanged.
+
+**Criterion 2 fails as written and the deviation is an improvement.** Deleting one fixture makes **two**
+tests fail, not one: the scenario's own test, whose message is exactly what the criterion asks for, and
+the corpus-integrity test that notices the **orphaned sidecar**. "Exactly one" is reachable only by
+dropping the integrity test, which is what catches a half-written recording. Reported under rule 6
+rather than weakening the test to match the wording.
+
+**Two mutations broke nothing and both were diagnosed rather than dismissed.** Disabling the recorder's
+redaction abort changed no result, because that guard runs only on the write path, which **no test
+invokes** — the suite checks the outcome (the committed fixtures hold no credential) and never the
+guard. The guard demonstrably works, having fired for real during recording. That is a **genuine
+coverage gap** and needs a test path no card's `Files` names. And removing the identifier-list slice
+broke nothing because **the real service honours the requested count on all six recorded responses**, so
+no recording can exercise it; the correct layer is a stub and `P1-T09`'s suite already has one, read
+rather than assumed. **A fixture gap no recording can close is a different thing from dead code.**
+
+**A cross-agent hazard that is worth recording as an operational fact.** Another agent, working in
+parallel, **overwrote a shared scratchpad script mid-run**, which silently turned two of this card's
+mutation reverts into no-ops and left a source file mutated — invalidating one result. It was caught by
+`grep -rn MUTANT`, repaired from a backup verified by diff, and the mutation re-run; later mutations ran
+from a single long-lived process with the revert in-process and a byte comparison afterwards. Separately,
+a leftover mutation marker was live in that other card's own source for a period, so **a suite run
+during that window may have given that card a misleading result.** The shared scratchpad and `/tmp` are
+not safe between concurrent agents, and that is now known the hard way.
+
+**The contract suite does not run in continuous integration, measured rather than assumed.** Verified:
+the only reference to the contract directory in the workflow is **inside a comment block**, and the
+stated blocker — "`test/contract/` is empty until Phase 1" — **is now gone**. So these 28 tests would
+silently protect nothing on a pull request. The workflow is in no card's `Files`. **Needs a card, and it
+is the highest-value item here.**
+
+**A defect in the shared harness that will bite Phase 2 six times over.** The fixture key redacts a
+credential **by value**, so a keyed recording hashes differently from a keyless replay and the fixture is
+reported missing. The intent was clearly that the two should match. It works for sources that carry a
+key in a header and **fails for every source that carries one in the query string** — which is why
+recording unkeyed here is not merely convenient but the only way the fixtures are reachable from a
+keyless automated run.
+
+**Personal data and copyrighted text are now committed, and this needs an owner's decision rather than
+a fix.** Counted by the coordinator: **13 distinct third-party e-mail addresses** inside affiliation
+elements — corresponding-author addresses the National Library of Medicine publishes as part of the
+bibliographic record — and **9 publisher copyright notices**, meaning nine abstracts under publisher
+copyright. The agent reported 7; the difference is in the counting and the direction is upward, so take
+9. The tension is between two instructions the project already holds: the testing document says fixtures
+are committed to the repository, while `docs/02` §3.8 says abstracts are **not** public domain, are
+typically under publisher copyright, and that bulk redistribution may require permission. **Both
+instructions were followed.** Whether nine abstracts and thirteen addresses in a repository is
+acceptable is above this card.
+
+**One fidelity loss, found and reported rather than left to be discovered.** The project's free-text
+redactor replaced **five legitimate address slugs** inside reference lists — 241 bytes across two
+fixtures — because its last-resort pattern matches any long opaque run. The security document
+explicitly accepts that trade **for logs**, where a false positive costs a debugging inconvenience;
+applied to a recorded body it costs fidelity instead. **No mapped field is affected** and every instance
+is greppable. The pass was left at full strength rather than narrowed, because narrowing it is a
+decision.
+
+**Four more corpus problems.** The testing document instructs reading real keys from a plaintext file,
+which binding decision D5 and `.env.example` both forbid — D5 was followed and no key was read from
+anywhere. `docs/02` note 1 says structured abstracts carry a category attribute; the recorded record
+carries **five labels and no category at all**, so the mapper keying on the label alone is right, and
+both directions are now asserted. And the two inventory rows this card did not record are Phase 2's by
+the card's own reading.
+
+**`package.json` needed no edit at all**, which is the conservative reading of the extend-rather-than-
+replace rule: the script entry already existed and pointed at a file that did not, so **creating the
+file resolved the forward reference** without touching a shared file two other agents were working
+around. Verified byte-identical.
 
 ---
 
@@ -2912,7 +3049,15 @@ and survive a source failure without losing the run.
 
 **Done when.**
 - [ ] A stubbed source that throws on page 2 yields the page-1 records plus one
-      warning naming the source, and the run succeeds.
+      warning naming the source, and the run ends in a **success** outcome — which is `"partial"`,
+      not `"succeeded"`.
+      > **Clarified 2026-10-07 after the executing agent reported it under rule 6.** This read "the
+      > run succeeds", which reads as the literal outcome `"succeeded"`. **That value would be
+      > wrong here**: `FR-9` asks for a non-blocking banner naming the failed source, and a plain
+      > success gives the window nothing to raise it from. `docs/07` §12.1 makes partial fetch "a
+      > first-class state, not an error", so `"partial"` **is** the success outcome for this case.
+      > Verified: page-one records kept, exactly one warning naming the source, the typed error
+      > preserved on that source's report, and the import completed.
 - [ ] All sources failing produces a `Failed` outcome carrying each source's
       typed error.
 - [ ] Cancelling during `Fetching` aborts the in-flight request and creates zero
@@ -2932,6 +3077,134 @@ npm run typecheck && npm run test:unit -- searchImport
 `P1-T05` wires `cancellerReceiver`; if spike `V-9` reported that abortion does
 not work, this card's cancellation criteria cannot be met and the phase needs
 re-planning before it starts.
+
+**Findings, 2026-10-07 — the installer moved for the first time in five cards, and three of the four
+stranded modules now reach it.** Verified independently: **the installer is 111,969 bytes**, up from the
+76,419 it had held across `P1-T06`, `P1-T09`, `P1-T10`, `P1-T17` and `P1-T11`. Bundle occurrence counts
+read **non-zero for the first time** on the key store, the startup keystore probe, `registerSources`,
+the adapter factory, the mapper factory, both E-utilities endpoints and the key-presence preference —
+and **zero, correctly, on the provenance modules**, which belong to a later card. 50 unit tests,
+typecheck 0, `lint:check` 0.
+
+**The agent separated its own contribution from a concurrent card's by A/B build rather than by
+inference**, neutralising its own wiring and rebuilding: **23,052 bytes of the growth are this card's**
+and 12,498 are `P1-T21`'s window files, with `container.ts` restored byte-identically before the final
+build. **With three cards in flight, a measured split is the difference between a number and a guess.**
+
+**One defect blocked the whole card and is a genuinely instructive one.** `src/zotero/keychain.ts`
+evaluates `Components.Constructor(...)` **in its module body** — verified at brace depth 0, line 95 — so
+`Components`, a platform global, runs on import. Merely *adding the import* to the composition root threw
+`ReferenceError: Components is not defined` and took a whole unit suite down with **zero tests
+collected**: the suite went from 1,115 passing to 1,110 with one failed *file*, from a change that added
+no test and touched no assertion. **The module graph of a layer-one test is as much a part of its
+contract as its assertions.** Worked around with a dynamic import inside the install function, which
+moves evaluation to first call where the existing error handling already covers it and degrades to "no
+secret backend" under the test runner. **The one-line fix — make that constructor lazy, as every other
+platform reference in that file already is — is outside this card's `Files`.** Needs a card.
+
+**The end-to-end path is real, and the agent said exactly where the doubles are.** A search input runs
+through the real pipeline, the real query parser, the real adapter, the real query builder, the real HTTP
+client, the real response parser, the real mapper and the real merge lift, with assertions on the
+artefacts that only a real run can produce: both endpoint addresses **and their order**, the identifiers
+reaching the second call being the ones the first returned, **no credential parameter on any address**,
+and the derived work key. The doubles are the Zotero write surface — because the real writer reaches the
+database before its first suspension point, and the testing document says wanting a richer platform fake
+is a signal the code belongs in an integration test, where a spec already covers it — plus the two
+bytes-on-the-wire boundaries. **And the agent named which assertions would survive swapping a real stage
+for a stub and which would not**, which is the question a pipeline test usually dodges.
+
+**Three mutations broke nothing and all three were diagnosed into real assertions, taking the suite from
+48 to 50.** Each diagnosis is worth more than the mutation. (a) Removing the pipeline's own cancellation
+check between write batches changed nothing because **the test's own stub writer was performing that
+check** — the double was providing the very thing under test; fixed by removing it from the stub, so the
+pipeline's checkpoint is the only thing between a cancel and the next batch. (b) A clamp that forces the
+last progress slice to end at exactly 1 is invisible **because the shipped weights already sum to 1**; a
+weight set summing to 1.0000000000000002 now exercises it, which is why the tolerance exists and why a
+later card re-tuning the weights would otherwise reintroduce a bar that never reaches 100 %. (c)
+Replacing an increment with a set-progress call leaves the **final** snapshot identical, so nothing
+failed — but during the write it drops the total and **the bar goes indeterminate halfway through an
+import**, which is exactly what a user would see; now asserted on every mid-stage snapshot.
+
+**Criterion 1 passes on a reading the agent argued for rather than assumed.** A source failing on its
+second page yields `"partial"`, not the literal `"succeeded"` the criterion names — and `"succeeded"`
+would be **wrong**, because the requirement asks for a non-blocking banner naming the failed source and a
+plain success gives the window nothing to raise it from. `docs/07` §12.1 makes partial fetch "a
+first-class state, not an error". Reported under rule 6 rather than adjusted. Page-one records are kept,
+exactly one warning names the source, and the typed error survives on that source's report.
+
+**Criterion 4 forced a decision the corpus had deferred.** The importer's own documentation says a thrown
+error "carries no counts; reported as needing a decision rather than invented here" — so a cancel during
+the write could not report how many items had been created. The decision taken: **the pipeline batches
+the works itself and calls the writer once per batch**, so a cancel between batches leaves the
+accumulated counts on the run, and the production writer builds the library index once per run and makes
+one pipeline batch one database transaction, which is what the requirement asks for. Verified: one batch
+written, two items created, the collection kept, and the partial note text carrying the count.
+
+**Five things the first integration surfaced that no earlier card could have.** Beyond the import
+defect: **nothing in the corpus converts a source record into a canonical work** — the former is the
+latter minus three fields and the writer requires the full type, so the lift mints them via the declared
+key algorithm, deliberately using the same function that re-derives the key when an item is read back,
+because deriving it any other way would break the round trip. **`docs/07` §7.4's partial-import note has
+no write path anywhere** — nothing in the platform layer sets a collection description, and the file that
+would is outside this card's `Files`, so the pipeline composes the note, logs it, and leaves the seam.
+**`logRequestBodies` is read once at construction**, so toggling it mid-session does not change what the
+mapper retains until the plugin restarts; the default direction is the safe one. And **eleven Fluent
+message identifiers do not exist in either bundle** — seven stage labels, the pipeline display name and
+three validation keys — which costs nothing until a surface renders a stage name, and that is the next
+card's.
+
+**A corpus finding that is larger than it looks.** `docs/07` §4.5's pipeline context names **four types
+declared nowhere in the entire corpus** — one occurrence each, the member itself — and three more that
+are declared but implemented by no module. The agent reproduced §4.5's member list name for name using
+forward aliases to `unknown`, so a diff finds no difference, **nothing can read a service Phase 1 has not
+built without writing a narrowing that makes the gap visible**, and replacing an alias with a re-export
+is a one-line change as each ships. Two of the seven have **no home anywhere**. That is the right
+treatment of a specification that names things that do not exist.
+
+**Two errors in the hand-out, both the coordinator's.** First: "all seven of this card's dependencies
+have landed." Verified — **six are `DONE` and `P1-T10` is `TODO`.** Its work has landed and carries a
+`Findings` block, so the dependency is satisfied **in code but not in approval**, and only a human can
+change that. The word "landed" was defensible; the inference a reader draws is not, and the agent was
+right to separate them. Second: the extras-spread trap I warned about **does not arise in this card** —
+this card fetches through the streaming method as its own step instructs, and that method never yields a
+page, so the extras never reach the pipeline layer at all. **This card is not the first caller**, and the
+first caller is whichever card extends the port or reads the paged method directly.
+
+**And that is itself a finding worth more than the correction.** `docs/07` §4.2's streaming method
+**cannot supply four of the required provenance fields**: the endpoint address is on no member of the
+interface, the transmitted address is built inside the adapter and never returned, the raw hit count is
+reachable only through a progress total the adapter clamps, and the extras live on the page the streaming
+method discards. One field — the explained query — *is* reachable and is recorded. §11.1's closing rule
+says widening that interface is a documented change to the architecture document, not a local workaround.
+**Needs a card, and that card is where the spread trap will finally bite.**
+
+**Security: nothing in the added path can carry a credential, stated concretely rather than generally.**
+The store is handed to the adapter, which reads the key per request and logs only the redacted address
+with the named parameter **removed**. The install function logs a failure class, a platform error name
+and a boolean — never a value — and the probe's plaintext is a throwaway string it never stores. The
+key-presence write is a boolean to a row that is not marked secret, and the preference layer refuses a
+write to a secret row before coercion. The pipeline layer never sees a key: the recorded query comes from
+the interface's own explain method, asserted alongside **no credential parameter on any issued address**.
+**Redaction is not re-implemented anywhere.** And `P1-T17`'s two holes are neither reopened nor forgotten
+— nothing added puts raw text through the free-text path, and an untyped error contributes its **name**
+rather than its message, because an arbitrary message has not been through the redactor.
+
+**The keyed path is a gate, not a result.** The owner supplied no key, so the eight-requests-a-second
+branch was not exercised end to end and the keystore probe cannot reach tier one under the test runner.
+Reported as a gate rather than worked around.
+
+**The integration suite could not be measured and no number is claimed for it.** The run entered watch
+mode and the log shows the three window files changing **during** it — another card was rewriting them —
+ending in a window-opening security error inside that card's own spec block. No Zotero process was left
+behind and none was killed. **Saying "not verifiable, and here is whose edit made it so" is the correct
+report.**
+
+**Needs a card.** The lazy platform constructor in the keychain module; a collection-description writer
+for the partial-import note; either a page-level channel on the source interface or a pipeline that pages
+the non-streaming method, so the four provenance fields become reachable; declarations and homes for the
+two undeclared context types, and re-exports replacing the five forward aliases as each service ships;
+the eleven Fluent messages; and a getter for the raw-retention flag so the preference takes effect
+without a restart.
 
 ---
 

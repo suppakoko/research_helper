@@ -1,0 +1,7 @@
+{
+  "status": 500,
+  "headers": {
+    "content-type": "text/html; charset=UTF-8"
+  },
+  "body": "<!-- synthetic fixture: docs/02 §3.8 row 4, 'Server overload: HTTP 500 / 502; back off'. Not provoked. -->\n<html><body><h1>Internal Server Error</h1></body></html>\n"
+}
