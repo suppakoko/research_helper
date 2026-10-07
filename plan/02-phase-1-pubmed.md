@@ -2031,7 +2031,7 @@ card.
 | **ID** | `P1-T11` |
 | **State** | `DONE` — approved 2026-10-07; **17 fixtures over 30 live requests, all 200**, paced under 1.5 per second against a documented ceiling of 3, unkeyed — the recordings themselves carry `x-ratelimit-limit: 3` as direct evidence. **Recording found that a fact the corpus calls "verified live" is stale:** `retstart=9999` no longer returns an error inside a 200; today the service returns an empty list and a *warning*, so **it now fails silently where it used to fail loudly** — precisely the failure mode §3.3 warns the adapter about. Both behaviours are recorded, the historical one re-read from the document at run time. **Twelve of the thirty requests were wasted and said so**, one because the recorder's own redaction guard refused a sidecar — the first time a safety check in this project fired on real data. Two criteria reported under rule 6. **Also found that the contract suite does not run in continuous integration at all**, and that 13 third-party author addresses and 9 publisher copyright notices are now committed, which is an owner's decision rather than a defect. |
 | **Depends on** | `P1-T05`, `P1-T09`, `P1-T10` |
-| **Blocks** | `P1-T23` |
+| **Blocks** | `P1-T23`, `P2-T25` |
 | **Retires** | part of `R-2` |
 | **Implements** | part of `FR-9` |
 | **Estimate** | 0.75 d |
@@ -4358,7 +4358,7 @@ changed, and saying so first is the behaviour to want.
 | **ID** | `P1-T22` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T16`, `P1-T17`, `P1-T21` |
-| **Blocks** | `P1-T23`, `P1-T35`, `P1-T36` |
+| **Blocks** | `P1-T23`, `P1-T35`, `P1-T36`, `P1-T37`, `P1-T38`, `P1-T39` |
 | **Retires** | `R-17` (reported) |
 | **Implements** | `FR-5`, `FR-6`, `FR-8`, `FR-9`, `FR-10`, `FR-51`, `FR-53`, `NFR-14` |
 | **Estimate** | 0.75 d |
@@ -5820,7 +5820,7 @@ would settle it.
 | **ID** | `P1-T30` |
 | **State** | `DONE` — approved 2026-10-01; the generated union is authoritative and `keys.ts` re-exports it. The sharp criterion was **proven in both directions by actually breaking it** — removing *and* adding a bundle id are both compile errors now. Reported an honest CI-visible limit (the typecheck that consumes the union runs before the step that writes it) and **declined to file the upstream issue**, correctly: no `gh`, and opening a public issue on someone else's repository is not an agent's call. |
 | **Depends on** | `P1-T18` |
-| **Blocks** | none |
+| **Blocks** | `P1-T40` |
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 0.25 d |
@@ -6426,7 +6426,7 @@ exception — which is a good thing for how much of `G-41` is exercised incident
 | **ID** | `P1-T33` |
 | **State** | `DONE` — approved 2026-10-07; one surface, so one id. The fact that settles it is that `docs/08` §8.2.2 searched Zotero 7–10 and found **no notification mechanism at all**, so §4.4's "completion toast" *is* the progress window and the word names a timing rather than a mechanism — and the shipped sink's own comment already said so. Which id survived was **forced rather than chosen**: retiring the other would have required editing two files outside the card's `Files`, so the card could only be executed if the decision went one way, which is a flaw in the card and is recorded as one. Criterion 1 **could not hold together with `Do` step 1** — reasoning that may not name what was retired is not reasoning — and the agent **declined to contort the record to satisfy a string match**. |
 | **Depends on** | `P1-T32` |
-| **Blocks** | none |
+| **Blocks** | `P1-T40` |
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 0.25 d |
@@ -6853,8 +6853,7 @@ real rather than hypothetical.
 **Why this is a card, and why it blocks `P1-T23`.** Everything the window needs exists and **nothing
 connects it.** Measured 2026-10-07, after `P1-T22` landed:
 
-- `src/addon.ts:64` sets `this.api = {}`, and `grep -rn '\.api\b' src/` returns **that line and nothing
-  else** — nothing ever writes to it. The window looks for its host at
+- `src/addon.ts:64` sets `this.api = {}` and **nothing writes to it**. The window looks for its host at
   `Zotero.<addonInstance>.api.searchWindow` and falls back to an empty object, so **every control is
   inert in a real Zotero.**
 - The run-time graph **does** exist. `src/hooks.ts` awaits `registerUI()`, which calls
@@ -6875,14 +6874,22 @@ connects it.** Measured 2026-10-07, after `P1-T22` landed:
   end-to-end path currently runs is `test/integration/searchDialog-flow.spec.ts`, which installs the host
   itself.**
 
+> **Two claims in this card were measured false by the executing agent and are corrected above
+> (coordinator, 2026-10-07).** The first read "`grep -rn '\.api\b' src/` returns **that line and nothing
+> else**"; the grep returns **fourteen** lines — three doc comments in `src/ui/dialogs/searchDialog.ts`,
+> two more in `src/addon.ts`, and the publication sites this card added. The claim that nothing *writes*
+> to `api` was correct; the claim about the grep's output was not checked. The second said **three**
+> members of `SearchImportViewModelDeps` are required and then listed six; **six are required and five
+> optional**. Both are `plan/README.md` §5 rule 8 instances: a line number was right and the sentence
+> built on top of it was not re-read.
+
 **Read first.**
 - `src/bootstrap/registerUI.ts` lines 250–270 — the paragraph quoted above, and what `installServices`
   is already handed. **Do not delete that paragraph; amend it**, so the next reader sees why the holder
   exists now and did not before.
-- `src/ui/viewModels/searchImportViewModel.ts`'s `SearchImportViewModelDeps` — **three members are
-  required** (`pipeline`, `jobs`, `logger`, plus the version strings and a clock) and the rest are
-  optional, including `listSources`, `listCollections`, `getPrefs`, `isExisting` and
-  `writeProvenanceNote`. **An optional member left out compiles and degrades silently**, which is the
+- `src/ui/viewModels/searchImportViewModel.ts`'s `SearchImportViewModelDeps` — **six members are
+  required** (`pipeline`, `jobs`, `logger`, `pluginVersion`, `zoteroVersion`, `clock`) and **five are
+  optional** (`listSources`, `listCollections`, `getPrefs`, `isExisting`, `writeProvenanceNote`). **An optional member left out compiles and degrades silently**, which is the
   failure mode this card has to avoid: a window that opens, searches, and quietly writes no provenance
   note.
 - `src/zotero/notes.ts`'s `writeProvenanceNote` and `src/zotero/libraryIndex.ts` (or whichever module
@@ -7096,6 +7103,672 @@ record not retained at all is the state the code is in today. Criteria 3 and 4 a
 
 ---
 
+### P1-T37 — Carry a named, redacted subset of an error's context, so the error rows that cannot render start rendering
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T37` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T22` |
+| **Blocks** | none |
+| **Retires** | part of `UNRENDERABLE_ERROR_ROWS` |
+| **Implements** | part of `NFR-14`, part of `docs/08` §8.3 |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** A timed-out request and an unreachable host each render the sentence `docs/08` §8.3 writes for
+them, naming the host and the number of seconds, instead of falling through to the generic row.
+
+**Why this is a card.** Three of `docs/08` §8.3's error rows **cannot be drawn at all today**, and the
+reason is one missing member rather than three missing features. Measured 2026-10-07:
+
+- `src/ui/viewModels/searchImportViewModel.ts:434` declares `UNRENDERABLE_ERROR_ROWS = ["RATE_LIMIT",
+  "TIMEOUT", "NETWORK"]`, and the comment above it records exactly what each row is missing:
+  `RATE_LIMIT` wants `seconds`, `TIMEOUT` wants `host` and `seconds`, `NETWORK` wants `host`. All three
+  fall through to `genericSourceError`, which names the database and offers Retry.
+- **The values exist at the throw site and are thrown away at the serialization boundary.**
+  `src/core/errors.ts:170` declares `SerializedError` with six members and **no context**, while
+  `AppError.context` (`:216`) is documented as "MUST already be redacted by the thrower". `toSerialized`
+  (`:256`) copies `code`, `messageKey`, `detail`, `retryable`, and lifts `httpStatus` and `stack` —
+  **`httpStatus` is lifted as a public class member, through a cast, not read out of `context`.** That is
+  the precedent this card should follow rather than invent a new mechanism.
+- What each thrower already has, measured in `src/core/errors.ts` lines 294–341 and
+  `src/core/http/client.ts` lines 728–743:
+  - `TimeoutError(timeoutMs, url)` — **`timeoutMs` is already a public `readonly` member**, so `seconds`
+    is one division away. Its context holds `url: redactUrl(url)` and `timeoutMs`. **No host member.**
+  - `RateLimitError(status, retryAfterMs, host)` — **`retryAfterMs` is already a public `readonly`
+    member**; `host` is a plain constructor parameter and reaches `context` only.
+  - `NetworkError` and `OfflineError` have **no constructor of their own**; the call site passes
+    `{ url: error.url, method: error.method }`.
+- **`RATE_LIMIT` will still not render after this card, for a reason this card must not paper over.**
+  `UNRENDERABLE_ERROR_ROWS`' comment records it: "Retrying in {n}s" asserts an automatic retry, and
+  `src/bootstrap/container.ts` supplies **no `retryFor`**, so the client makes one attempt and nothing
+  retries. `P1-T28` owns that behind a human gate. **This card closes `TIMEOUT` and `NETWORK` and leaves
+  `RATE_LIMIT` in the constant with its reason narrowed to the retry policy alone.**
+
+**The one defect to fix on the way, found while measuring this.** `TimeoutError` redacts its URL at the
+throw site; **`NetworkError` and `OfflineError` do not** — `client.ts:731` and `:741` pass `error.url`
+raw into a context whose own documentation says it must arrive redacted. Nothing reads it today, so
+nothing leaks today: `src/core/logger.ts`'s `redactValue` (`:195`) treats an `Error` value as
+`{ name, message, stack }` and **never walks `context`**, verified by reading that branch. But this card
+is the first reader of that context, and **a contract violation becomes a leak the moment someone obeys
+the contract.** Fix both call sites with `redactUrl`.
+
+**Read first.**
+- `src/ui/viewModels/searchImportViewModel.ts` lines 395–440 — the table of what each row needs, and the
+  constant. The comment there is the specification for this card; read it before reading anything else.
+- `src/core/errors.ts` lines 160–180 (`SerializedError`) and 240–270 (`toSerialized`, and how
+  `httpStatus` travels).
+- `docs/07` §5.2 at lines 1995–2003, which declares `SerializedError`, and `src/core/errors.ts:14`
+  and `:160`, which both say the declaration is transcribed **verbatim**. Widening it is therefore a
+  documented change to the architecture document, not a local edit — `docs/07` §11.1's closing rule.
+  `docs/07:3317` carries a second copy of `toSerialized`; check whether it needs the same amendment.
+- `src/core/http/client.ts` lines 722–748, the one function that builds all four transport errors.
+- `addon/locale/en-US/research-helper-searchDialog.ftl` — whether the three rows' messages exist as ids
+  already, or whether this card adds them. **Grep; do not assume.**
+
+**Files.**
+- modify `src/core/errors.ts`
+- modify `src/core/http/client.ts`
+- modify `src/ui/viewModels/searchImportViewModel.ts`
+- modify `docs/07-architecture-and-data-model.md`
+- modify `test/unit/core/errors.test.ts`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl` (only if the ids are missing)
+
+**Do.**
+1. Decide how the two values travel, and **write the reason into the code**. The constraint is that
+   **an open record must not cross into the view layer**: `context` is redacted only by the thrower's own
+   discipline, while everything in `SerializedError` has been through
+   `src/core/provenance.ts`'s and `src/core/errors.ts`' gate. A pair of narrowly typed optional members
+   is the shape this card expects — a host string and a seconds number — carried the way `httpStatus`
+   already is. If measurement says otherwise, say so and do the other thing.
+2. Amend `docs/07` §5.2 in the same change, and say in the amendment **why** the member exists, so the
+   next reader of the "verbatim" claim finds the widening rather than a contradiction.
+3. Give `NetworkError` and `OfflineError` their host, and **redact the URL at both call sites.**
+4. Make `TIMEOUT` and `NETWORK` render their §8.3 sentences, and remove exactly those two from
+   `UNRENDERABLE_ERROR_ROWS`. **Leave `RATE_LIMIT` in it**, and rewrite its recorded reason so only the
+   retry-policy half remains.
+5. Assert that a host reaches a view and **a path and a query string never do** — the test that matters
+   here is the negative one.
+
+**Do NOT.**
+- Do not add `context` itself, or any `Record<string, unknown>`, to `SerializedError`. That is the one
+  shape this card exists to avoid: it would put arbitrary thrower-supplied text in front of a view with
+  no gate in between.
+- Do not write a second redaction rule. `src/core/errors.ts`' `redact` and `redactUrl` are the gate.
+- Do not render `RATE_LIMIT`'s countdown. There is no retry, and a countdown would promise one. If the
+  temptation is strong, read `UNRENDERABLE_ERROR_ROWS`' comment again — `P1-T22` reported this under
+  `plan/README.md` §5 rule 6 rather than adjusting the criterion.
+- Do not widen the source interface or touch the pipeline. The values are already at the throw site.
+
+**Criteria.**
+- [ ] A forced timeout renders §8.3's timeout sentence with the host and the seconds, asserted on the
+      rendered text.
+- [ ] A forced transport failure renders §8.3's network sentence with the host.
+- [ ] A test proves that **no path and no query string** from the failing request reaches the view, and
+      fails if the whole context is passed instead of the named members.
+- [ ] `UNRENDERABLE_ERROR_ROWS` contains `RATE_LIMIT` and nothing else, with its narrowed reason.
+- [ ] `docs/07` §5.2 and the code agree, and the "verbatim" claims in `src/core/errors.ts` are either
+      still true or corrected.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish --abort-on-fail
+```
+
+**Notes.** The cheap version of this card — spread the context into the serialized error — is the version
+that leaks. The whole value here is in the **narrowing**: two named values, each with a type, each
+chosen because a view needs it, and nothing else. `P1-T22` wrote the table of what is missing and
+`P1-T17` wrote the gate; this card is only the wire between them.
+
+---
+
+### P1-T38 — The three validation sentences nobody declared, and the second bundle link's permanent home
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T38` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T22` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | part of `NFR-14`, part of `G-41` |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** Pressing Search with an empty keyword box, an out-of-range limit, or no import target says what
+is wrong in a sentence, and the window's second message bundle is linked where a reader expects to find
+it.
+
+**Why this is a card.** Two small holes, both in the window's strings, both reported by the card that
+found them rather than fixed there. Measured 2026-10-07:
+
+- `src/pipeline/searchImport/searchImportPipeline.ts:105` declares `SEARCH_IMPORT_VALIDATION_KEYS` with
+  **four** identifiers, and the pipeline throws all four (`:329`, `:335`, `:349`, `:357`). Checked one by
+  one against the message bundles and against `src/i18n/keys.ts`:
+
+  | identifier | in a bundle | in `keys.ts` |
+  |---|---|---|
+  | `research-helper-search-query-empty` | **no** | **no** |
+  | `research-helper-search-databases-none` | yes | yes |
+  | `research-helper-search-max-results-range` | **no** | **no** |
+  | `research-helper-search-target-missing` | **no** | **no** |
+
+  So "three validation messages" is the right count, and the fourth is already shipped — **which is the
+  one to copy for tone and argument shape.**
+- An unresolvable identifier does not fail loudly. `P1-T22` measured the behaviour on a live window:
+  a message whose resource is unlinked "resolves to nothing and leaves the element alone", which rendered
+  **seven surfaces as empty strings**. So a missing validation id shows the user an empty panel, not an
+  error.
+- `src/ui/viewModels/searchImportViewModel.ts:1326` records the consequence and why it got worse rather
+  than better: the empty-keyword path reaches the error panel through `Planning` rejecting the input, so
+  the headline falls back to `rh-error-configuration` — **"not the right sentence either"** — and the path
+  is now **reachable from a button press** where before it was reachable only from a pipeline call.
+- The second bundle: `addon/content/searchDialog.xhtml:57` links **one** resource,
+  `__addonRef__-searchDialog.ftl`. The strings this window needs for its error rows, source names, import
+  summary and coverage line live in `__addonRef__-mainWindow.ftl`, and
+  `addon/content/searchDialog.js:1120` adds that second resource **at run time** with
+  `document.l10n.addResourceIds([...])`, guarded by a check that the method exists (`:1116`). That was the
+  right move for a card that may not edit another card's markup. **Whether it is the right permanent home
+  is this card's decision** — see below.
+
+**The decision this card makes.** Either the second resource joins the first in the markup's
+`<linkset>`, or the run-time call stays and the markup carries a comment pointing at it. **Prefer the
+markup**, for one reason that can be stated as a fact: a reader looking for "which strings does this
+window have" reads the markup, and a run-time addition is invisible there. If measurement shows the
+markup route fails — and `addon/content/searchDialog.xhtml` lines 30–34 already record that this bundle's
+entries do not target the XUL attributes the dialog's own buttons use, so **check before assuming** —
+keep the run-time call, delete nothing, and write the measurement into the `Findings`.
+
+**Read first.**
+- `src/pipeline/searchImport/searchImportPipeline.ts` lines 100–120, for the four identifiers and the
+  order the pipeline checks them in.
+- `addon/locale/en-US/research-helper-searchDialog.ftl`, the entry for
+  `research-helper-search-databases-none`, as the model for the three new ones.
+- `src/i18n/keys.ts` — `SEARCH_DIALOG_MESSAGE_IDS`, `ARGUMENT_MESSAGE_IDS` and the three Korean lists.
+  **An id added to a bundle and not to the right lists is the half-finished edit `P1-T33` and `P1-T40`
+  are both about.** Check which lists a new id belongs on, and add it to all of them.
+- `addon/content/searchDialog.js` lines 1095–1125, and `addon/content/searchDialog.xhtml` lines 28–60.
+- `docs/08` §8.3 and §8.4 for the wording these sentences should have, and `NFR-14` for what a failure
+  message must say.
+
+**Files.**
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl`
+- modify `src/i18n/keys.ts`
+- modify `src/ui/viewModels/searchImportViewModel.ts`
+- modify `addon/content/searchDialog.xhtml`
+- modify `addon/content/searchDialog.js`
+- modify `test/integration/searchDialog-flow.spec.ts`
+
+**Do.**
+1. Write the three missing sentences, in the tone of the one that exists, and register each identifier on
+   **every** list in `src/i18n/keys.ts` that it belongs on. Say in the `Findings` which lists those were
+   and how that was determined.
+2. Make the empty-keyword path headline itself with `research-helper-search-query-empty` rather than
+   `rh-error-configuration`, and the other two likewise. The comment at
+   `searchImportViewModel.ts:1326` names the surface to change.
+3. Settle the second bundle link per *The decision this card makes*, and leave the reason at the place a
+   reader will look.
+4. Assert all three paths from a button press, in the integration spec: a rendered sentence, not an empty
+   element. **The assertion must fail if the element is empty**, because that is the exact failure mode
+   `P1-T22` measured — an unresolvable id leaves the element alone.
+
+**Do NOT.**
+- Do not invent a fourth validation message or change what the pipeline validates. Four identifiers exist;
+  three sentences are missing. `plan/README.md` §5 rule 2.
+- Do not translate into Korean here. `G-41` is a gate with a human on it, and an untranslated id belongs
+  on `KO_PENDING_REVIEW` — which is the registration step 1 asks for, not a translation.
+- Do not add the query-free headline identifier, the preference pane, or any error-row work. `P1-T37` owns
+  the error rows and each of the others is its own card.
+- Do not remove the run-time `addResourceIds` guard if the run-time route is kept. It is there because
+  `addResourceIds` belongs to `Localization` and the window cannot assume the object it has is one.
+
+**Criteria.**
+- [ ] Each of the three validation paths, started from the Search button in a real Zotero, renders a
+      sentence that names what is wrong, asserted on text rather than on an element's presence.
+- [ ] All four identifiers appear in a bundle and on every `src/i18n/keys.ts` list they belong on, with
+      the determination recorded.
+- [ ] The second bundle's home is settled, and the reason is written where a reader will find it.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0,
+      and the localization spec still passes with no new pending identifier left unregistered.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish --abort-on-fail
+```
+
+**Notes.** This is the cheapest card in the group and the one a user notices first: three of the four ways
+to get the input wrong currently produce a panel with nothing in it. The trap is the registration — an
+identifier that reaches a bundle without reaching `src/i18n/keys.ts`' lists is invisible to the compiler,
+which is what `P1-T33`'s mutation proved and what `P1-T40` exists to catch in under a second.
+
+---
+
+### P1-T39 — A unit-test path for the search window's view model, whose arithmetic is currently only tested through a live Zotero
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T39` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T22` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | `docs/13` §1.6's layer-one tier for this module |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** The view model's pure functions are asserted in a sub-second unit run, so a change to them fails
+in seconds instead of inside a Zotero launch.
+
+**Why this is a card.** **Two cards in a row reported the same gap and neither could close it**, because
+neither card's `Files` list named a unit-test path. Measured 2026-10-07:
+
+- `src/ui/viewModels/searchImportViewModel.ts` is **1,594 lines** and exports **twenty-two** names,
+  including eight plain functions — `message`, `errorView`, `errorDetails`, `initialViewState`,
+  `toWindowRecords`, `toPipelineInput`, `sourceStatusLine`, `buildProvenance` — plus
+  `createSearchImportViewModel`.
+- `grep -rl searchImportViewModel test/` finds it reached **only** from
+  `test/integration/searchDialog-flow.spec.ts`, which needs a real Zotero to run.
+- A unit-test directory for this layer **already exists**: `test/unit/ui/searchDialog.test.ts`, 2,229
+  lines, with describe blocks for the window controller's pure model *and* for the same model against a
+  real document. So the pattern to follow is in the repository; what is missing is a file, not a
+  mechanism.
+- `vitest.config.ts` configures **no `include` globs** (`:12` says so and explains why), so a new spec
+  under `test/unit/` is collected without configuration.
+
+**What makes this worth 0.5 d rather than 0.1.** The valuable assertions are the ones the integration
+suite cannot make cheaply, and `P1-T22` named them: the error table, the selection round-trip, the
+latching, and the per-source attribution. Each is a calculation over a value, and each currently costs a
+Zotero launch to check once.
+
+**Read first.**
+- `src/ui/viewModels/searchImportViewModel.ts`'s exports, and `SearchImportViewModelDeps` (lines 556–592)
+  — **six members are required** (`pipeline`, `jobs`, `logger`, `pluginVersion`, `zoteroVersion`,
+  `clock`) and **five are optional**, which is what makes a unit construction cheap: a view model can be
+  built with a pipeline double, a job factory double, a logger, a clock and two version strings, and
+  nothing else.
+- `test/unit/ui/searchDialog.test.ts`'s "pure model" describe block, as the shape to follow.
+- `docs/13` §1.6 for what belongs at layer one and what does not.
+- `test/integration/searchDialog-flow.spec.ts`'s header, which states what is real and what is doubled
+  there — **do not duplicate an assertion that spec already makes against the real platform**; the point
+  here is the arithmetic, not the wiring.
+
+**Files.**
+- new `test/unit/ui/searchImportViewModel.test.ts`
+
+**Do.**
+1. Assert the pure functions directly: `errorView` for every key of `ERROR_ROWS` **and** for every member
+   of `UNRENDERABLE_ERROR_ROWS` (the second group must reach the generic row), `errorDetails` against
+   `ERROR_DETAIL_FIELDS`, `toWindowRecords`, `toPipelineInput`, `sourceStatusLine` and `buildProvenance`.
+2. Build a view model over doubles and assert the state machine: a run publishes the panels in order, a
+   second run replaces the first run's records, the selection survives a re-render, and the latched
+   values stay latched.
+3. Assert the two security constants hold their meaning rather than merely their value:
+   `EMPTY_HEADLINE_OMITTED` means the empty-state headline is **not** populated, and `ERROR_DETAIL_FIELDS`
+   means the disclosure carries machine values only. **A test that only compares the constant to a literal
+   is vacuous** — assert the behaviour the constant describes.
+4. Check every new assertion by breaking the implementation it measures, and record in the `Findings`
+   which mutation each one caught. An assertion that passes against a deliberately wrong implementation is
+   worse than no assertion.
+
+**Do NOT.**
+- Do not change `src/ui/viewModels/searchImportViewModel.ts`. If something cannot be tested without
+  changing it, **report that** rather than reshaping production code to suit a test — and say exactly
+  which member blocks it.
+- Do not import `src/zotero/**` or touch a Zotero global. If a test needs one, it is an integration test
+  and belongs in the other suite.
+- Do not move or rewrite assertions that already live in the integration spec. Adding a cheap copy of an
+  expensive test is fine; deleting the expensive one is not this card's call.
+- Do not add a snapshot test. A snapshot of a view state records what the code does, not what it should
+  do, and the next person to change the code will update the snapshot.
+
+**Criteria.**
+- [ ] Every exported function of the module is reached by at least one assertion, and the `Findings` list
+      any that are not, with the reason.
+- [ ] `UNRENDERABLE_ERROR_ROWS`' members are asserted to reach the generic row — so the day one of them
+      becomes renderable, this test tells whoever did it to come here too.
+- [ ] Each new assertion is shown to catch a mutation, listed in the `Findings`.
+- [ ] `npm run test` exits 0, the unit count rises by the number of tests added, and the suite's wall
+      time stays in the same order of magnitude.
+- [ ] `npm run typecheck` and `npm run lint:check` exit 0.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test
+```
+
+**Notes.** This card buys nothing a user can see, which is why it keeps being deferred, and it is the
+cheapest insurance in the phase: every later card that touches the window's arithmetic currently pays a
+Zotero launch to find out whether it broke something. `P1-T22`'s own report put it plainly — the gap "is
+in the list, not in the work."
+
+---
+
+### P1-T40 — A partition assertion over `src/i18n/keys.ts` at unit speed, because the compiler cannot see a half-finished identifier edit
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T40` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T30`, `P1-T33` |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | part of `G-41`'s machinery |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** Moving a message identifier between the Korean lists, or adding one to a surface and forgetting
+the other list, fails in a sub-second unit run instead of in a Zotero launch.
+
+**Why this is a card.** **Both agents who worked on the identifier lists asked for this**, and the gap has
+a measured shape. Verified 2026-10-07:
+
+- `src/i18n/keys.ts` declares eleven exported lists and constants, among them
+  `MAIN_WINDOW_MESSAGE_IDS` (`:159`), `SEARCH_DIALOG_MESSAGE_IDS` (`:318`), `ERROR_MESSAGE_IDS` (`:463`),
+  `DEFERRED_ERROR_MESSAGE_IDS` (`:495`), `KO_PENDING_REVIEW` (`:526`), `KO_DELIBERATELY_ABSENT` (`:625`),
+  `KO_PRESENT` (`:634`) and `ARGUMENT_MESSAGE_IDS` (`:735`).
+- The equivalent check exists **only in the integration suite**.
+  `test/integration/l10n.spec.ts:611` reasons carefully about which parts of the partition are compile-time
+  facts and which are not, and lines 766–807 check the three Korean lists against the **live `ko-KR`
+  bundles** — which needs a full Zotero launch. Its own first line says so: an integration spec runs
+  inside a live Zotero.
+- **The compiler does not catch the gap.** `P1-T33`'s mutation M3 demonstrated it: `satisfies readonly
+  FluentMessageId[]` constrains what may be *in* a list, and nothing constrains what must be. So an
+  identifier moved out of one Korean list and not into another typechecks, passes the unit suite, and is
+  caught only by the slowest test in the repository.
+
+**A warning from this project's own experience, which the executing agent should treat as a requirement
+rather than advice.** A partition check written in haste for this exact file printed "PARTITION: OK"
+having parsed **zero** identifiers: it anchored on the first occurrence of a list's name, which was a
+documentation comment rather than the declaration. **A partition assertion over an empty set is vacuously
+true, and that is the single most likely way this card fails while appearing to succeed.**
+
+**Read first.**
+- `src/i18n/keys.ts`, all eleven declarations, and the doc comments that say what each list is for. **Work
+  out which unions are supposed to partition which — do not assume the three Korean lists over the two
+  surface lists is the only one.** `ERROR_MESSAGE_IDS`, `DEFERRED_ERROR_MESSAGE_IDS` and
+  `ARGUMENT_MESSAGE_IDS` each stand in some relation to the surfaces, and the card wants that relation
+  asserted too where it is a partition or an inclusion.
+- `test/integration/l10n.spec.ts` lines 600–630 and 760–810 — what is already asserted, and at what cost.
+  **Do not duplicate what is a compile-time fact there**; that file explains which parts are.
+- `P1-T33`'s `Findings` in this file for mutation M3.
+
+**Files.**
+- new `test/unit/i18n/keys.test.ts`
+
+**Do.**
+1. Assert every partition and inclusion the lists are meant to satisfy, each as its own named assertion,
+   with the relation stated in the assertion message rather than only in a comment.
+2. **Make the test fail if any list it reads is empty.** This is not optional and it is not paranoia: it is
+   the measured failure mode. Import the lists as values rather than parsing the file as text, which makes
+   the empty case impossible by construction — and if text parsing is unavoidable for some claim, assert a
+   plausible minimum count explicitly.
+3. Assert the lists are disjoint where they must be disjoint, and that no identifier appears twice within
+   one list.
+4. Prove each assertion bites, by moving one identifier out of a list and watching the named assertion
+   fail — not merely the suite. Record which assertion caught which move.
+
+**Do NOT.**
+- Do not change `src/i18n/keys.ts`. If a list turns out **not** to partition what it should, that is a
+  finding to report, not a list to edit quietly — and it may be a real bug in the shipped bundles.
+- Do not duplicate the live-bundle assertions. This card reads the source lists; the bundles stay the
+  integration suite's business, and deleting an expensive assertion is not this card's call.
+- Do not assert a count. `G-41`'s headline numbers are stale in four places precisely because somebody
+  wrote a number down; a partition assertion that compares sets does not go stale.
+
+**Criteria.**
+- [ ] Every relation between the lists that is supposed to be a partition or an inclusion is asserted by
+      name, and the `Findings` say which relations were found and how.
+- [ ] The test **fails** if any list it reads is empty, demonstrated by making one empty.
+- [ ] Moving one identifier out of `KO_PENDING_REVIEW` without adding it elsewhere fails this test, and
+      the failure message names the identifier.
+- [ ] `npm run test` exits 0 and the whole file runs in well under a second.
+- [ ] `npm run typecheck` and `npm run lint:check` exit 0.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test
+```
+
+**Notes.** The value here is entirely in the **speed**: the same class of defect is already caught, and it
+is caught by the one test that costs a Zotero launch, so in practice it is caught late or not at all. Two
+cards reported identifier edits that were torn between lists; both were found by a human reading a diff.
+
+---
+
+### P1-T41 — `P3-T02` tells its implementer to call a method that does not exist, and to build what Phase 1 already built
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T41` |
+| **State** | `TODO` |
+| **Depends on** | none |
+| **Blocks** | `P3-T02` |
+| **Retires** | none |
+| **Implements** | nothing — a corpus correction, like `P1-T34` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** An agent handed `P3-T02` can execute it without reproducing a crash this project already
+measured and retracted, and without re-declaring an interface that exists in another layer.
+
+**Why this is a card.** `P3-T02` was written before the Phase 0 spike measured the platform and before
+Phase 1 shipped the secret store. **Followed literally today it would fail in two different ways.**
+Measured 2026-10-07:
+
+1. **A retracted claim, repeated as a premise.** `plan/04-phase-3-llm-summaries.md:233–234` tells the
+   implementer, in its `Read first`, that "`findLogins()` is a throwing stub and the sync
+   `addLogin`/`removeLogin`/`searchLogins` were removed on the esr153 base, so every call here is
+   `await`ed and uses the `Async` name", and `:279–281`'s `Do NOT` repeats it as a prohibition.
+   `docs/09` §1.2 lines 141–145 carry the **dated correction, measured 2026-09-15 by `P0-T23`**: that text
+   describes Zotero's `main` branch, and in the Zotero 10 plugin sandbox **`removeLoginAsync` and
+   `modifyLoginAsync` are `undefined`** while the synchronous forms exist. The shipped code already
+   feature-detects — `src/zotero/keychain.ts:328–332` tests `typeof
+   Services.logins.removeLoginAsync === "function"` before calling it. `P3-T02` step 2 says `clear()` goes
+   "via `removeLoginAsync`", which on this platform is a call to `undefined`.
+2. **Most of the card has already landed, in a different file and a different layer.** `P3-T02` step 1
+   says to declare `SecretBackend`, `SecretId` and `SecretStore` "in `src/zotero/keychain.ts` exactly as
+   `docs/09` §1.7 gives them". The interface is declared at **`src/core/secretStore.ts:95`** — the port,
+   which is where `docs/07` §2.3's layering puts it — and `src/zotero/keychain.ts` is **529 lines** with
+   the backend, the probe, the key-presence writers and a factory. So an agent following step 1 would
+   declare a second copy of a live interface, in the layer that may not own it.
+
+**What this card does and does not decide.** It corrects the false claims and **measures** which of
+`P3-T02`'s seven `Do` steps have already landed, writing the measurement into `P3-T02` as a dated note.
+It does **not** redesign `P3-T02` or delete its steps: which of the landed steps are finished and which
+merely exist is a judgement about Phase 3's scope, and the card's owner makes that. **Report the list;
+do not prune it.**
+
+**Read first.**
+- `plan/04-phase-3-llm-summaries.md` `P3-T02` in full — the `Read first` list, all seven `Do` steps, the
+  `Files` list and every `Do NOT`.
+- `docs/09` §1.2, the whole section including the correction block at lines 141–145, and §1.7.
+- `src/zotero/keychain.ts` in full, and `src/core/secretStore.ts`. **For each of `P3-T02`'s seven steps,
+  find the shipped code that does it or establish that none exists.** That enumeration is this card's main
+  product.
+- `plan/02-phase-1-pubmed.md`'s `P1-T09` and `P1-T17` `Findings`, and the paragraph in this file that
+  first reported this (search for "`P3-T02` also contradicts this card about where the port is
+  declared").
+- `plan/README.md` §5 rule 8, which exists because of exactly this failure mode, and §4 for what a
+  coordinator may change in a card that is still `TODO`.
+
+**Files.**
+- modify `plan/04-phase-3-llm-summaries.md`
+- modify `docs/09-security-privacy-and-api-keys.md` (only if a statement there is itself wrong)
+
+**Do.**
+1. Correct both places in `P3-T02` that state the removed-synchronous-forms claim, and **leave the
+   correction visible** — a dated note saying what the text said, what was measured, and where the
+   measurement lives, in the style `P1-T34` and `P2-T24` used. Do not silently reword: the next reader must
+   be able to tell this was wrong rather than wonder whether the correction is itself drift.
+2. Point step 2's `clear()` at the feature-detected shape the shipped code uses, by reference rather than
+   by transcription.
+3. Correct step 1 to say where `SecretStore`, `SecretId` and `SecretBackend` **are** declared, and note
+   that `docs/09` §1.7's placement and `docs/07` §2.3's layering disagree — with the resolution Phase 1
+   already took, which is re-exports from the platform module so that §1.7's reading still holds.
+4. Add a dated note to `P3-T02` listing, step by step, what has already landed and where. Mark each as
+   *landed*, *partly landed* or *not started*, with the file and line that settles it.
+5. Check the rest of `P3-T02` against the shipped code for any **other** claim that has gone stale —
+   especially its `Files` list, which names files that may now exist, and its `Depends on`.
+
+**Do NOT.**
+- Do not change `P3-T02`'s `Estimate`, `State`, `Depends on` or `Blocks`. Re-estimating a card whose scope
+  may have shrunk is the owner's call, and this card's job is to put the measurement in front of that
+  decision.
+- Do not delete a `Do` step because it looks done. "Looks done" is what this card exists to replace with a
+  file and a line number.
+- Do not touch any file under `src/`. No production behaviour changes here.
+- Do not correct `docs/09` §1.2's quoted upstream text. The quote is accurate about the branch it
+  describes; the correction block beneath it is the mechanism, and it already works.
+
+**Criteria.**
+- [ ] Neither place in `P3-T02` states the removed-synchronous-forms claim as fact, and both carry a dated
+      correction naming `docs/09` §1.2's measurement.
+- [ ] Step 1 names the file where each of the three types is actually declared.
+- [ ] Every one of `P3-T02`'s seven `Do` steps carries a *landed* / *partly landed* / *not started* mark
+      with a file and line.
+- [ ] No `src/` file is modified, and `git status` shows only plan and documentation files.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` still exit 0 — this card changes no
+      code, so a failure here means something else moved.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && git status --porcelain
+```
+
+**Notes.** This is the third card in this phase whose whole content is "a document says something that was
+measured false". The pattern is worth naming: **a claim written into a card outlives the card, and an
+agent inherits a premise it would have tested had it been written as a question.** `plan/README.md` §5
+rule 8 was added for this, and the reason this particular one is worth a card of its own rather than a
+line in someone's `Findings` is the blast radius — `P3-T02` blocks six Phase 3 cards, and the crash it
+would reproduce has already cost this project one measurement.
+
+---
+
+### P1-T42 — The free-text redactor cannot see a short unprefixed credential, and the project's own measurement of that length is in no document
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T42` |
+| **State** | `TODO` |
+| **Depends on** | none |
+| **Blocks** | none |
+| **Retires** | none |
+| **Implements** | part of `NFR-16` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** A credential short enough to slip past the catch-all pattern either stops slipping past it, or the
+reason it cannot be caught is written where the next person to rely on the redactor will read it.
+
+**Why this is a card.** Three cards have now worked around the same gap locally and each one said the
+general fix needs a card. Measured 2026-10-07:
+
+- `src/core/errors.ts:79–87` declares `KEY_PATTERNS`: six vendor-prefixed shapes — Anthropic, OpenRouter,
+  two OpenAI shapes, Google, and any `Bearer` token — plus **one last-resort net,
+  `/\b[A-Za-z0-9_-]{40,}\b/g`.** A credential with **no vendor prefix** and **fewer than 40 characters**
+  matches none of them.
+- The project has measured exactly such a credential. Two cards' `Findings` record a literature-database
+  access key at **32 characters**, which is 8 short of the net. **That measurement appears in no document
+  and in no code comment**: a grep for the length across `docs/` and `src/` returns nothing. So a reader of
+  `docs/09` §2.1 cannot see that the gap exists, and the corpus still says, in the words `P1-T12` quoted,
+  that it records no length for this key at all.
+- **The gap is narrower than it first looks, and the narrowing is the useful part.** Two other rules catch
+  most real cases before the patterns run:
+  - `KEYISH_FIELD` (`src/core/errors.ts:63`) matches the **field name** — `api_key`, `token`, `secret`,
+    `authoriz`, `password`, `bearer`, `credential` — and `src/core/logger.ts`'s `redactValue` applies it per
+    key at every depth, so a named field is redacted **whatever its length**.
+  - `redactUrl` removes the named parameter, and both `src/core/logger.ts:133` and
+    `src/core/provenance.ts`'s free-text path route a URL-shaped run through it first.
+  So what is left uncovered is a credential appearing in **free text, with no field name around it and no
+  URL to parse** — a sentence, an exception message, a form body. That is exactly the case
+  `P1-T12` hit when it shipped the first request body able to carry a key, and it sidestepped it by
+  **re-rendering the redacted form from the original values without the key** rather than
+  pattern-matching. That remains the right local answer; it does not generalise.
+
+**What this card has to decide, and the decision may be "it cannot be closed".** `docs/09` §2.1 states the
+trade in its own words: the catch-all "will occasionally redact a legitimate long token (a base64 chunk, a
+hash). That is the correct trade: a false-positive redaction costs a debugging inconvenience; a false
+negative publishes a billing credential to a GitHub issue." **Lowering the threshold is therefore within
+the documented policy, not a violation of it** — but how far it can be lowered is an empirical question
+about this repository's own text, not a matter of taste. **Measure it. Do not argue it.**
+
+**Read first.**
+- `docs/09` §2.1 in full — the patterns, the trade, and the reference implementation `src/core/errors.ts`
+  says it transcribes unchanged.
+- `src/core/errors.ts` lines 55–120 — `KEYISH_FIELD`, `KEY_PATTERNS`, `redact`, `redactUrl`, and the
+  comment explaining why the patterns' `/g` flag is safe where it is used and unsafe elsewhere.
+- `src/core/logger.ts` lines 119–230 — the three-rule order (field name, URL shape, content) and the depth
+  limit, so you can see which of the three a change here would affect.
+- `src/core/provenance.ts`'s `redactText` and `redactQueryString`, and the note that this module is the
+  project's **single** redaction gate.
+- `P1-T12`'s, `P1-T17`'s and `P1-T22`'s `Findings` in `plan/02-phase-1-pubmed.md`, which are the three
+  local workarounds.
+
+**Files.**
+- modify `src/core/errors.ts`
+- modify `docs/09-security-privacy-and-api-keys.md`
+- modify `test/unit/core/errors.test.ts`
+- modify `test/unit/core/logger-redaction.test.ts`
+
+**Do.**
+1. **Record the measured length in the corpus first**, in `docs/09` §2.1, with the date and the card that
+   measured it. Do this step even if every later step turns out to be impossible: a measured fact that
+   lives only in a report is a fact the next reader does not have.
+2. Measure the false-positive cost of lowering the catch-all threshold, **against this repository's own
+   text** — the fixtures, the test names, the log lines the suites emit, the identifiers in `src/`, the
+   documentation. Report the count of runs between the candidate threshold and 40 characters, and what they
+   are. **A number with examples, not an opinion.**
+3. Decide from that measurement: lower the threshold, add a shape for this specific credential, or
+   neither — and write the decision and its evidence into `docs/09` §2.1 beside the trade it rests on. If
+   the answer is "neither", say what a caller must do instead, which is step 4.
+4. Whatever the outcome, make the **local** answer reusable: `P1-T12`'s technique — re-render the redacted
+   form from the original values rather than pattern-matching the rendered one — is the only sound answer
+   for a body that definitely contains a key, and it is currently a technique one card used rather than
+   something a later caller can find.
+5. Assert the outcome both ways: a string containing the credential shape is redacted (or is documented as
+   not redacted, with the assertion written to prove the documented behaviour), and a legitimate run that
+   the chosen threshold must **not** touch stays intact.
+
+**Do NOT.**
+- Do not write a second redaction rule in a second place. `src/core/errors.ts` holds the patterns and
+  `src/core/provenance.ts` is the gate; a sharper rule at a call site is the thing this project forbids,
+  and `P1-T22` declined to build a surface rather than break that rule.
+- Do not put a real credential, or anything resembling one, into a test fixture, a test name, a commit
+  message or a document. Build test inputs from obviously synthetic strings of the right **shape**.
+- Do not accept a key pasted into a conversation, and do not add a code path that reads one from a file, a
+  preference or a log. Keys come from a password dialog or the process environment only.
+- Do not raise the threshold, or make redaction conditional on a preference or a log level.
+  `src/core/logger.ts`'s header names that as the defect its design forecloses.
+- Do not change `redactUrl`'s parameter removal. An empty value is the one thing the `[redacted:<len>]`
+  form cannot express, which is why that function removes rather than blanks.
+
+**Criteria.**
+- [ ] `docs/09` §2.1 records the measured credential length, dated, with the card that measured it.
+- [ ] The false-positive measurement is in the `Findings` as a count with examples, and names the corpus it
+      was taken over.
+- [ ] The decision is implemented and asserted, in both directions — what must be redacted, and what must
+      survive.
+- [ ] No second redaction rule exists anywhere; `grep` for the pattern shapes finds them in one module.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` exit 0, and the redaction suites' counts
+      rise.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test
+```
+
+**Notes.** The most likely honest outcome is a small threshold change plus a documented residual gap, and
+**the documentation is worth more than the change.** The reason this is not merely tidy-up: `P1-T22`
+declined to populate the window's empty-state headline **because of this gap** — a 32-character key
+interpolated into a user-visible sentence would have been shown in full while looking handled — so
+whichever way this card goes, it should say plainly whether that surface becomes safe. **Check that
+claim rather than inheriting it**: the headline's safety depends on what the chosen rule can match, and
+this card is the one holding the measurement.
+
+---
+
 ---
 ## 7. Estimate roll-up
 
@@ -7137,7 +7810,13 @@ record not retained at all is the state the code is in today. Criteria 3 and 4 a
 | `P1-T34` | Three corpus statements measured false | 0.25 | — |
 | `P1-T35` | Publish the search window's host | 0.50 | — |
 | `P1-T36` | FR-8's JSON-export control, and the record it needs | 0.50 | — |
-| | **Total** | **24.25 d** | **4 gates** |
+| `P1-T37` | Carry a named, redacted subset of an error's context | 0.50 | — |
+| `P1-T38` | The three validation sentences, and the second bundle link | 0.25 | — |
+| `P1-T39` | A unit-test path for the view model | 0.50 | — |
+| `P1-T40` | A partition assertion over `keys.ts`, at unit speed | 0.25 | — |
+| `P1-T41` | Correct `P3-T02`'s retracted claims and measure what landed | 0.50 | — |
+| `P1-T42` | The free-text redactor's short-credential gap | 0.50 | — |
+| | **Total** | **26.75 d** | **4 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 

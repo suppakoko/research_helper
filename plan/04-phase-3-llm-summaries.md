@@ -214,7 +214,7 @@ hoist the value into a job-scoped variable.
 |---|---|
 | **ID** | `P3-T02` |
 | **State** | `TODO` |
-| **Depends on** | `P3-T01` |
+| **Depends on** | `P3-T01`, `P1-T41` |
 | **Blocks** | `P3-T03`, `P3-T04`, `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` |
 | **Retires** | most of `R-9` |
 | **Implements** | `FR-30` |

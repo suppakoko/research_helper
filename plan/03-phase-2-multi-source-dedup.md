@@ -278,7 +278,7 @@ the source most likely to dominate the 30 s budget.
 |---|---|
 | **ID** | `P2-T03` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T23` |
+| **Depends on** | `P2-T01`, `P2-T23`, `P2-T25` |
 | **Blocks** | `P2-T07`, `P2-T08`, `P2-T12` |
 | **Retires** | part of `R-2`, part of `R-17` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -412,7 +412,7 @@ and says to make it the default; every downstream card (preprint search `P2-T07`
 |---|---|
 | **ID** | `P2-T04` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T21` |
+| **Depends on** | `P2-T01`, `P2-T21`, `P2-T25` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -537,7 +537,7 @@ added to `docs/09` §1.7 first.
 |---|---|
 | **ID** | `P2-T05` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T27`, `P2-T01` |
+| **Depends on** | `P1-T27`, `P2-T01`, `P2-T25` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | `R-3` (fallback proven — full retirement is Phase 5 per `docs/11` §3.1) |
 | **Implements** | `FR-2`, `FR-4`, `FR-11`, open question 8 in `docs/10` §5 |
@@ -681,7 +681,7 @@ precisely the R-3 outcome the design is built to survive. Record the state in `0
 |---|---|
 | **ID** | `P2-T06` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01` |
+| **Depends on** | `P2-T01`, `P2-T25` |
 | **Blocks** | `P2-T08`, `P2-T11` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -798,7 +798,7 @@ part of this card — but it is the natural mitigation if `P2-T16`'s NFR-2 measu
 |---|---|
 | **ID** | `P2-T07` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T03` |
+| **Depends on** | `P2-T01`, `P2-T03`, `P2-T25` |
 | **Blocks** | `P2-T08`, `P2-T11` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -3268,6 +3268,125 @@ artefact rather than the behaviour — the defect `P1-T14` reported about its ow
 
 ---
 
+### P2-T25 — Make the fixture replay harness usable inside Zotero, so six source cards stop hand-rolling a double each
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T25` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T11` |
+| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07` |
+| **Retires** | none |
+| **Implements** | part of `docs/13` §2.2's harness |
+| **Estimate** | 0.75 d |
+| **Human gate** | none |
+
+**Goal.** An integration spec running inside a real Zotero can replay a recorded response through the
+**shipped** adapter and the **shipped** HTTP client, instead of standing in a double at the source
+interface.
+
+**Why this is a card, and why it is worth more than the sum of its users.** The harness exists and is
+good; it simply cannot be loaded where the slowest and most valuable tests run. Measured 2026-10-07:
+
+- `test/contract/_transport.ts`'s own header calls itself "the one file Phase 2 copies six more times",
+  and the arithmetic behind that checks out: `src/prefs/schema.ts:104` declares **seven** source
+  identifiers — `pubmed,europepmc,crossref,semanticscholar,arxiv,biorxiv,medrxiv` — of which PubMed has
+  shipped, leaving **six** across **five** adapter cards, because `P2-T07` covers two preprint servers in
+  one card.
+- **The reason it cannot be loaded is two imports.** `test/contract/_transport.ts:57` imports
+  `readdir`/`readFile` from `node:fs/promises` and `:58` imports `createHash` from `node:crypto`. The
+  Zotero sandbox has neither.
+- The cost is already being paid and is already documented.
+  `test/integration/searchDialog-flow.spec.ts`'s header states it in as many words: the replay transport
+  "is **not** usable from here … That is why the double is a source rather than a transport." So the
+  end-to-end spec exercises the real pipeline, parser, mapper and merge — and **stops short of the real
+  adapter and the real HTTP client**, which are exactly the two stages a network-facing source gets wrong.
+- **The platform has an answer for one half and the other half needs measuring.** `docs/01`:182 lists
+  `IOUtils` among the globals available in the sandbox and `:1564` names
+  `Zotero.File.getContentsAsync(path)`, so reading a fixture has a documented route. **Hashing does not:
+  a grep of `docs/01` for a digest facility finds nothing.** Whether `crypto.subtle` is reachable in the
+  sandbox is the one thing this card must measure before anything else, because the answer decides the
+  shape of everything after it.
+- The fixture key is a **sha256, truncated to 16 hex characters**, over
+  `` `${method} ${redactedUrl} ${body}` `` (`_transport.ts:115–118`). `crypto.subtle.digest` is
+  asynchronous where `createHash` is synchronous, so if that is the route, the key function becomes `async`
+  and every caller follows. **That is the real work in this card** — not the file reading.
+
+**Read first.**
+- `test/contract/_transport.ts` in full, especially the three explanatory sections in its header: why the
+  seam is the transport port rather than the `httpRequest` facade, why "the fixture was found" is the
+  strongest request-shape assertion in the suite, and the staleness policy.
+- `test/integration/searchDialog-flow.spec.ts`'s header, lines 1–30, for what the current double costs.
+- `docs/13` §2.2 and §3.3 — the harness this transcribes and the staleness policy it enforces.
+- `docs/01` §3 on sandbox globals, and whatever it says about digests. **If it says nothing, measure on a
+  running Zotero and write the measurement into `docs/01`** — that is how `IOUtils` came to be listed
+  there.
+- `src/core/http/client.ts`'s `HttpTransport` port, which is the interface the replay transport
+  implements.
+
+**Files.**
+- modify `test/contract/_transport.ts`
+- new `test/support/fixtureIo.ts` (or whatever the platform split turns out to need — name it for what it
+  does)
+- modify `test/integration/searchDialog-flow.spec.ts`
+- modify `docs/01-zotero-plugin-platform.md` (only to record a measurement)
+
+**Do.**
+1. **Measure first**: is a digest reachable from the Zotero sandbox, and is it synchronous or
+   asynchronous? Record the answer with the Zotero build it was measured on, exactly as `docs/01`'s other
+   measurements are recorded. **Everything else in this card depends on this answer, so do not design
+   before it is in hand.**
+2. Put the two platform needs — read a file, hash bytes — behind the smallest port that will carry them,
+   with a Node implementation and a Zotero implementation. The port belongs in test support code, not in
+   `src/`: this is a test harness and nothing ships it.
+3. Keep `fixtureKey`'s output **byte-identical** to what it produces today. Every existing fixture is
+   named by it, and a changed key silently orphans seventeen recorded responses. **Assert this, with a
+   fixture name taken from the repository as the expected value.**
+4. Make the end-to-end integration spec use the replay transport in place of its source-level double, so
+   the real adapter and the real HTTP client are in the path. Keep the spec's existing assertions.
+5. Amend the header of `test/contract/_transport.ts` and of the integration spec: both currently state
+   that the harness cannot be used from inside Zotero, which this card makes false.
+
+**Do NOT.**
+- Do not change which seam the harness replaces. Its header explains at length why replacing the
+  `httpRequest` facade would make `docs/13` §2.2's own error-response assertions assert nothing — a 429
+  fixture would arrive as an ordinary response and no typed error would ever be constructed.
+- Do not weaken the staleness policy to make a test pass. If a fixture is stale, it is stale.
+- Do not re-record any fixture. Thirteen of the seventeen carry real response headers from a live service
+  and re-recording is a network decision with an owner.
+- Do not add a Node import to anything the Zotero sandbox loads, and do not add a conditional import that
+  "works in both" by swallowing a failure. A harness that silently degrades to no replay is worse than one
+  that cannot load, because the suite stays green.
+- Do not copy this file into a source directory. If a Phase 2 adapter card needs a variant, that is a
+  parameter, not a copy — the whole point of the card.
+
+**Criteria.**
+- [ ] The digest question is answered with a measurement, recorded with its Zotero build.
+- [ ] `fixtureKey` produces the same keys as before, asserted against a fixture name from the repository.
+- [ ] The contract tests still pass unchanged, over the same 17 fixtures, with no fewer tests than before.
+- [ ] The end-to-end integration spec drives the **real** adapter and the **real** HTTP client through
+      replayed responses, and its existing assertions still hold.
+- [ ] No Node module is imported by anything the Zotero sandbox loads, verified by grep.
+- [ ] Both file headers that say the harness cannot run inside Zotero are corrected.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test`, `npm run test:contract` and
+      `npm run test:integration` all exit 0.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:contract && npm run test:integration -- --exit-on-finish --abort-on-fail
+```
+
+**Notes.** This card is in Phase 2 rather than Phase 1 because **five Phase 2 cards are its consumers** and
+nothing in Phase 1 is blocked by it — Phase 1's end-to-end spec works, at the cost of a doubled source.
+It is placed **before** the adapter cards deliberately: each of them would otherwise write its own double,
+and five hand-rolled doubles are five different ideas about what a source's failure looks like.
+
+The risk is the key function. Making it asynchronous ripples through every caller, and the one thing that
+must not change is its output — which is why criterion 2 pins it to a filename already on disk rather than
+to a recomputation.
+
+---
+
 ---
 ## Estimate roll-up
 
@@ -3297,7 +3416,8 @@ artefact rather than the behaviour — the defect `P1-T14` reported about its ow
 | `P2-T22` | Declare the menu-context member `zotero-types` omits | 0.25 |
 | `P2-T23` | Give `hostLimiter.ts` its test file | 0.25 |
 | `P2-T24` | Correct the three statements `P2-T21` made false | 0.25 |
-| **Total** | **24 tasks** | **26.75 d** |
+| `P2-T25` | Make the replay harness usable inside Zotero | 0.75 |
+| **Total** | **25 tasks** | **27.50 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather
