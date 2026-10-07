@@ -93,14 +93,28 @@ jobs:
       - name: Run unit tests with coverage
         run: npx vitest run --dir test/unit --coverage
 
-      # Placeholder, not yet a step (P0-T14 step 3). test/contract/ is empty
-      # until Phase 1, and `vitest run` exits 1 on an empty directory
-      # (docs/13 §1.6). Restore when the first contract spec lands:
+      # Restored 2026-10-07, on the condition the placeholder itself named.
+      # P0-T14 step 3 left this commented out because test/contract/ was empty
+      # and `vitest run` exits 1 on an empty directory (docs/13 §1.6), with the
+      # instruction "Restore when the first contract spec lands". P1-T11 landed
+      # it: test/contract/pubmed.contract.test.ts, 28 tests over 17 recorded
+      # fixtures, which were protecting nothing on a pull request until now.
       #
-      # - name: Run contract tests (replay mode, no network)
-      #   env:
-      #     FIXTURE_MODE: replay
-      #   run: npx vitest run --dir test/contract
+      # The placeholder's `env: FIXTURE_MODE: replay` is deliberately NOT
+      # restored. Measured 2026-10-07: `replay` is not a mode anything
+      # recognises — scripts/record-fixtures.ts reads `record` and `synthetic`
+      # and treats everything else as a dry run, and the three FIXTURE_MODE
+      # mentions under test/contract/ are all inside message text telling a
+      # reader how to re-record. Nothing reads the variable to change
+      # behaviour, so setting it here would only invite a future reader to
+      # believe a replay mode exists.
+      #
+      # No network is reachable from this step regardless: _transport.ts has no
+      # fetch and no XMLHttpRequest, and its only I/O is reading the fixture
+      # directory. `--passWithNoTests` is deliberately omitted so that a
+      # deleted or renamed spec fails here instead of passing silently.
+      - name: Run contract tests (replay from fixtures, no network)
+        run: npx vitest run --dir test/contract
 
       - name: Upload coverage report
         if: always()

@@ -2207,8 +2207,22 @@ not safe between concurrent agents, and that is now known the hard way.
 **The contract suite does not run in continuous integration, measured rather than assumed.** Verified:
 the only reference to the contract directory in the workflow is **inside a comment block**, and the
 stated blocker — "`test/contract/` is empty until Phase 1" — **is now gone**. So these 28 tests would
-silently protect nothing on a pull request. The workflow is in no card's `Files`. **Needs a card, and it
-is the highest-value item here.**
+silently protect nothing on a pull request. The workflow is in no card's `Files`.
+
+> **Done 2026-10-07 by the coordinator, and recorded here rather than carded, because the placeholder
+> named its own condition.** The step sat commented out with the instruction "Restore when the first
+> contract spec lands" and the reason "`test/contract/` is empty". This card landed the spec, so the
+> condition was met and **restoring a left instruction is not new scope**. Verified: the step now sits
+> in the `unit` job between the unit tests and the coverage upload, the file has no tab characters and
+> no misindented `run:`, and **the exact command the workflow will run passes today with 28 tests**.
+>
+> **The placeholder's own `env: FIXTURE_MODE: replay` was deliberately not restored**, which is the one
+> judgement in the edit. Measured: `replay` is a mode **nothing recognises** — the recorder reads
+> `record` and `synthetic` and treats anything else as a dry run, and all three `FIXTURE_MODE` mentions
+> under `test/contract/` sit inside **message text** telling a reader how to re-record. Nothing reads
+> the variable to change behaviour, so setting it would only invite a future reader to believe a replay
+> mode exists. **`--passWithNoTests` is also omitted**, so a deleted or renamed spec fails the build
+> instead of passing silently — which is the failure this whole item was about.
 
 **A defect in the shared harness that will bite Phase 2 six times over.** The fixture key redacts a
 credential **by value**, so a keyed recording hashes differently from a keyless replay and the fixture is
