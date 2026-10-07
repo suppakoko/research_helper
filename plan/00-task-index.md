@@ -342,7 +342,86 @@ only ones still open.**
    `create addon/locale/en-US/research-helper/mainWindow.ftl`, so the file's
    owner was undefined. `P0-T10` creates it; `P0-T24` now modifies it.
 
-## 6. Regenerating this file
+## 6. Measured gaps with no card yet
+
+**Triaged 2026-10-07.** Every `Needs a card` paragraph in `plan/02-phase-1-pubmed.md` was read with its
+context — eighteen of them — and the ones already carded were removed, including the `Semaphore.resize`
+item, which turned out to be `P2-T21` and is `DONE`. Twenty-four candidates survived. Seven were carded
+as `P1-T37`–`P1-T42` and `P2-T25`; the rest are here, with the file and line that measured each.
+
+**This list is not a plan.** An item here has been measured and has no card, which is different from being
+scheduled. Carding one is a coordinator decision, and the two groups below are deliberately ordered by
+nothing at all, because ranking them without an owner's input would be a decision disguised as a list.
+
+### 6.1 Features the corpus specifies and the build does not have
+
+1. **The duplicate-policy choice is collected and dropped.** `docs/08` §4.4's control is read and never
+   reaches the writer, because the pipeline's input type has no member for it (`P1-T22`'s `Findings`).
+2. **Per-source import counts.** The summary reports one total; §4.6 names per-database figures.
+3. **A publication-type vocabulary.** Real records carry review, editorial, comment, preprint and clinical
+   trial, and **every PubMed record currently maps to one of two types**. Fixing it means editing
+   `docs/02` §10.2's trigger table first (`P1-T10`'s `Findings`).
+4. **A query-free headline identifier for the empty state.** `P1-T22` left
+   `research-helper-search-state-empty` unpopulated on purpose, because interpolating the keyword box into
+   a user-visible sentence is the surface a short credential would have been shown in. `P1-T42` holds the
+   measurement that decides whether that surface becomes safe.
+5. **A preference pane**, so the error panel's Open Preferences action has something to select.
+6. **Styling for the per-database status list** — §4.6's dot leaders and its tick-and-arrow glyphs. The
+   outcome already travels as a data attribute, which is the selector such a rule would use.
+
+### 6.2 Seams, facades and corrections, each small on its own
+
+7. **The lazy platform constructor in `src/zotero/keychain.ts`.** `Components.Constructor` evaluates in the
+   module body at line 95, so importing the module outside the sandbox throws and takes a whole unit suite
+   down with **zero tests collected**. Worked around with a dynamic import; the one-line fix is to make
+   that constructor lazy as every other platform reference in the file already is (`P1-T16`'s `Findings`).
+8. **A getter for the raw-retention flag**, so the preference takes effect without a restart.
+9. **A collection-description writer** for `docs/07` §7.4's partial-import note.
+   `PARTIAL_IMPORT_NOTE_PREFIX` exists and is deliberately not a Fluent message; who localizes it is the
+   writer's card to decide.
+10. **A page-level channel on the source interface.** `docs/07` §4.2's streaming method cannot supply
+    **four** of the required provenance fields — endpoint address, transmitted address, raw hit count, and
+    the extras the discarded page carries. §11.1 makes widening that interface a documented change to the
+    architecture document, not a local workaround.
+11. **A declared validator for the schema dialect**, replacing roughly 170 lines of hand-written test code.
+12. **The log prefix is applied twice and the two spellings differ by one character** —
+    `[research_helper]` from `createLogger` and `[research-helper]` from the Zotero facade, of which only
+    the second matches `config.addonRef`. Cosmetic, in a line users paste into bug reports.
+13. **Nothing in continuous integration exercises the production parser.** The entity decoding and text
+    flattening `docs/02` §3.4 is about are asserted only against a Node stand-in. An agent checked that an
+    XML implementation is reachable on this network and **did not install it**, which was the right
+    restraint and left the gap.
+
+### 6.3 Raised by `P1-T35`, 2026-10-07
+
+14. **Move two platform reads out of `src/addon.ts`.** `Zotero.version` and `Zotero.Collections` have no
+    facade in `src/zotero/` — grepped 2026-10-07: before `P1-T35`, `Zotero.Collections` was called only at
+    `src/zotero/collectionOps.ts:135–136` and `Zotero.version` was called **nowhere**, every other mention
+    being a comment — so the composition root cannot reach them and `P1-T35` put them on the sandbox boundary
+    instead. A `zoteroVersion()` beside `userLibraryID()` and a `listCollections()` beside
+    `findOrCreateCollection()` are the architecturally right homes.
+15. **Two doc comments now say the opposite of the truth**, both outside `P1-T35`'s `Files`:
+    `src/ui/dialogs/searchDialog.ts:182` ("Nothing publishes it in the shipped build") and
+    `test/integration/searchDialog-table.spec.ts:47`. The second file's behaviour is unaffected; only its
+    prose is stale.
+16. **`src/pipeline/registry.ts:18–25` makes two statements measured false**, and the composition root
+    carries a cast because of the second. Whether `ServiceGraph` should expose the concretely-typed
+    `searchImport` pipeline so the cast can go away is the decision inside this item.
+17. **`SourceRegistry` has no way to replace or remove an adapter**, so an integration spec cannot stub a
+    source the build actually ships and has to register its stub under a spare identifier — which costs
+    that spec the localized source display name, since no bundle names the spare. Either a documented test
+    seam or a recorded decision that the registry is immutable after startup.
+18. **The published host is application-scoped and holds one view model for the plugin's lifetime**, so a
+    window closed and reopened reconnects to a view model still holding the previous run's records. The
+    view model's own comment says "one per window", which is true for a spec-built host and not for the
+    published one. **A behaviour decision nobody has made.**
+19. **Whether a library-index rebuild belongs on every Search press.** `P1-T35` rebuilds it per run, which
+    is `docs/02` §11.6's stated budget of one `Zotero.Search` per run, but on a very large library that is
+    a visible pause before the fetch starts and the corpus states no size at which it becomes
+    unacceptable. The two alternatives — a notifier observer keeping the snapshot live, or a snapshot taken
+    once at startup — were not costed.
+
+## 7. Regenerating this file
 
 The tables in §4 are derived from the cards' `ID`, `Depends on`, `Estimate` and
 `Human gate` rows. After editing any card, re-derive them and re-run the
