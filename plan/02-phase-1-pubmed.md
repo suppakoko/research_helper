@@ -4603,7 +4603,7 @@ the client makes exactly one attempt. Both agents refused to invent them, correc
 >   of the Search window for two minutes with nothing said. 30 s also means the cap does not bind
 >   at an attempt cap of 3 (the third wait tops out near 9 s), so it is a guard against a later
 >   raise of the attempt cap rather than a value the shipped path reaches.
-> - **Attempt cap = 3.** Worst case 1 + 3 + 9 ≈ **13 s** of waiting before the job fails and §7.3's
+> - **Attempt cap = 3.** Worst case **4 s** of waiting before the job fails and §7.3's
 >   "Retry later" is offered — tolerable inside an interactive search. Five attempts reach ≈ 2 min,
 >   which is not. The decisive evidence is `P0-T21`'s arXiv measurement: **7 of 7 requests over
 >   ~14 minutes returned 429 with no `Retry-After`**, some taking up to 46 s merely to fail, while
@@ -4611,6 +4611,17 @@ the client makes exactly one attempt. Both agents refused to invent them, correc
 >   limit is not per-request, more attempts buy nothing and cost the user the wait.** That argument
 >   is about arXiv rather than NCBI, so step 2 should name it as the shape of the reasoning and not
 >   as a measurement of this host.
+>
+> **Arithmetic corrected 2026-10-07, before the card was handed out.** The reasoning above first
+> read "worst case 1 + 3 + 9 ≈ 13 s", which assumed **three** waits. `RetryBudget.maxAttempts` is
+> counted as **total attempts including the first**, so a budget of 3 allows **2** retries and
+> therefore two waits: `min(cap, max(base, prev * 3))` gives 1 s then 3 s, i.e. **4 s** worst case.
+> Computed from the shipped `decorrelatedJitter`, whose first call passes `prevMs = base`. The error
+> was the coordinator's, and the direction is favourable, so the owner's three numbers stand
+> unchanged — but the figures a later reader would size a change by are these: **3 attempts → 4 s,
+> 4 → 13 s, 5 → 40 s**. The owner approved 3 against the 13 s figure, which is now known to be the
+> cost of **4**. Anyone revisiting the attempt cap should be told the corrected table, not the one
+> the decision was taken against.
 >
 > Phase 2 hosts get their own three values with their own rows; nothing here is a global default.
 2. Add the three columns to §7.3's table, per host, with the source of each value named.
