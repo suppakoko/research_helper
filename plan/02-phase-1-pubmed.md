@@ -4147,6 +4147,13 @@ a client-side filter, and an "already in my library" marker.
 - modify `addon/content/searchDialog.xhtml`
 - modify `addon/content/style/searchDialog.css`
 - create `test/integration/searchDialog-table.spec.ts`
+- modify `test/unit/ui/searchDialog.test.ts`
+
+> **Row added 2026-10-07, after the executing agent reported it as outside the list.** The
+> selection model is pure logic whose counts are readable in isolation, which is exactly where a
+> filter-versus-selection defect hides and exactly what a live window cannot isolate — and **two
+> of this card's mutants were caught only there**. 29 tests added. Same gap `P1-T20` reported for
+> that file's existence, so the gap is in the list rather than in the work.
 
 **Do.**
 1. Render a plain scrollable `<html:table>` inside an `overflow` container, per
@@ -4178,7 +4185,16 @@ a client-side filter, and an "already in my library" marker.
 
 **Done when.**
 - [ ] 40 results arrive with all 40 checked; unchecking 5 and importing creates
-      exactly 35 items (FR-5).
+      exactly 35 items (FR-5) — **the window half only; the item-creation half is `P1-T22`'s.**
+      > **Split 2026-10-07 after the executing agent reported it under rule 6.** Nothing imports
+      > yet: the import entry point belongs to `P1-T22` and no host publishes it at runtime, so
+      > "creates exactly 35 items" is unreachable here. Verified instead, in a live window: the
+      > request handed to the import entry point carries **exactly the right 35 records**, and the
+      > collected list is selection intersected with visible. **The item-creation half must be
+      > re-checked under `P1-T22`.** The same applies to this card's cancel criterion, whose
+      > "after a search" is vacuous while zero sources are registered — what is non-vacuous is
+      > that a full table session produced **zero** notifier events and the script names no
+      > database, item or collection surface at all.
 - [ ] Cancel after a search performs zero database writes, asserted by a
       notifier spy.
 - [ ] Typing in the filter narrows rows without re-issuing a request.
@@ -4198,6 +4214,126 @@ few hundred rows) holds while `maxResults` caps at 200 (`docs/07` §8.5). If a
 later phase raises that cap, revisit the decision — the section says to adopt
 `VirtualizedTable` only if profiling shows a problem, and to budget time for the
 window-scope hazard when doing so.
+
+**Findings, 2026-10-07 — the table ships, and the selection defect this card was warned about got past
+its own first test pass before being caught.** Verified independently: **1,194 unit tests in 27 files**
+and **82 integration tests** (up from 67, all fifteen this card's), typecheck 0, `lint:check` 0.
+
+**The selection model is the substance of this card and it is keyed correctly.** Selection is held on a
+**stable row key over the whole fetched set** — never an index, never a subset of the visible rows — with
+the host's work key preferred and an arrival ordinal as the fallback, including when the host hands back
+a **duplicate** key, because two rows sharing one key would share a checkbox and "exactly 35" would
+quietly become 34. Three consequences, all asserted: changing the filter **writes nothing** to the
+selection; the four selection commands act on the **visible** rows only; and every count the user reads,
+plus the list Import receives, is selection intersected with visible — **so what the table shows and
+what Import does are the same set by construction.**
+
+**The assertion that pins it is the one worth copying.** Forty arrive selected, five are unchecked to
+make 35, the filter narrows to three rows, then "select none" runs — and the count must be **32**. That
+number is reachable only if the command touched the visible rows and nothing else: a selection held as
+indices into the visible list would have cleared three *different* rows, and a command applied to the
+whole set would have left zero. **A single number that distinguishes three implementations.**
+
+**Two mutants genuinely survived the first test pass, and they were the exact class the hand-out named.**
+Pointing a selection command at the fetched set instead of the visible set broke **nothing**, because the
+unit tests exercised the commands only on an **unfiltered** table where the two sets are identical — and
+an over-reaching command leaves the *visible* count exactly right, so the damage is invisible until the
+filter is cleared. The pure-logic tests could not catch it at all, since they pass explicit keys and a
+wrong argument at the DOM call site is outside their reach. A new test filters, runs all four commands,
+clears the filter and checks the hidden rows. **The warning was given, the agent built the right model,
+and the test to prove it still had to be found by mutation** — which is the honest shape of this kind of
+defect.
+
+**The same false-pass trap caught this card as caught another today, and here it was closed
+structurally.** A non-existent reporter name made every mutation run die at startup, so **all nineteen
+read as caught**. Beyond fixing the flag, the harness now asserts an explicit passing-test count, so an
+infrastructure failure can never again be mistaken for a caught mutant. **Two independent agents hit the
+same trap on the same day; one of them also had its scratchpad file overwritten by the other.** Both are
+now recorded project facts rather than folklore.
+
+**A tightened assertion found a real defect on the clean tree.** A mutation that renamed a stylesheet
+rule survived because the test used a substring check, and a renamed selector still *contains* the
+original name. Tightened to a selector-boundary pattern — which immediately failed on the **unmutated**
+code: a class the row builder sets had **no rule behind it at all**. Fixed by moving the hover rule onto
+that class. **A loose assertion was hiding a live gap, and sharpening it was what surfaced it.**
+
+**Two defects only a real window could show.** The Import button read "Import 40 items" with **35**
+selected: message formatting is asynchronous and every selection change starts a new request, so an
+earlier one resolved last and overwrote the later. Fixed with an out-of-order guard and pinned by a test
+that resolves two requests in reverse deliberately. And the agent's first integration assertion — that no
+module loader is present in the window — was simply **wrong**: the window loads a Zotero script that
+installs one. The assertion now records the fact and asserts the right thing, and the correction carries
+a useful by-product: the hazard a later virtualised-table adoption would face is **already satisfied** in
+this window.
+
+**The column captions are deliberately not marked up for translation, and the reason is `P1-T20`'s
+measured defect.** The bundle supplies each column as an attribute-shaped message, and a plain table cell
+renders its text content and ignores that attribute — so a translation marker there would set something
+nothing draws. They are resolved in script instead, by the same technique and for the same reason as the
+window title. **Recognising that the previous card's trap applies to a different element is the kind of
+transfer that does not happen by itself.**
+
+**Two criteria cannot pass as written, and both were reported rather than adjusted.** "Importing creates
+exactly 35 items" — **nothing imports yet**; the import entry point belongs to the next card and no host
+publishes it at runtime, so what is verified is the window's half: the request handed over carries
+exactly the right 35 records. And "cancel after a search performs zero database writes" is **vacuous
+today**, because no search can run with zero registered sources; what is non-vacuous is that a full table
+session produced **zero** notifier events and the script names no database, item or collection surface at
+all. Both halves must be re-checked under the next card.
+
+**The zero-result case is handled, and the one thing it does not do is explained.** An empty result set
+renders an empty table rather than an error, with the count hidden and Import disabled — and it
+deliberately does **not** switch to the dedicated empty panel, because that panel's message takes the
+query and the year bounds as arguments, which only a finished run knows, so switching without them would
+paint a raw placeholder for a frame and log an error. **Left for the next card, and recorded in both the
+code and the test** rather than half-built.
+
+**A forward-looking security finding that is specific, verified, and not this card's to fix.** The
+table itself is safe: a row is built from the host's record and nothing else, the query controls are read
+only to *match* against and never to display, and a 32-character key typed into both boxes appears in no
+text node, no attribute and not in the window title — asserted mechanically and in a live window, with a
+mutation proving the assertion bites. **But the empty-state message renders the query back to the user
+verbatim.** Confirmed by the coordinator: the message interpolates the raw query, and at 32 characters an
+access key is **below** the free-text redactor's 40-character threshold that an earlier card measured. So
+**the table is safe and the empty state will not be**, the moment the next card populates it. **Needs
+raising with that card explicitly.**
+
+**What was not checked, stated plainly.** The **dark theme was not measured** — the previous card did
+measure both by forcing the preference, and this card's criteria name no theme or contrast requirement,
+so instead every colour in the stylesheet is asserted to come from a Zotero variable. **Tab traversal of
+the whole window was not automated**, only the absence of any explicit tab order plus document order.
+**No screen reader was used.** And **nobody looked at the window.** Against that, one deliberate
+subtraction is worth more than a claim: a row-level dimming colour was **removed** after being written,
+because dimming a whole data row to a secondary-text token would put that row's contrast at risk for the
+sake of decoration — the marker is a border instead, which no contrast rule governs.
+
+**The author-name cap had to be chosen because the document contradicts itself.** The wireframe draws the
+overflow form **twice with different name counts** — three names for eight authors, one name for twelve —
+and no rule satisfies both; no section states a cap at all. Three was chosen as the widest drawn row,
+recorded in exactly one place with the reasoning, and **reported as a choice rather than presented as the
+document's**. Four more clarifications are owed by the corpus: whether the result count describes the
+fetched set or the rows on screen, which fields the filter covers, that the accessibility section's grid
+role is a statement about a widget this card does not use, and **what "select all" means** — the very
+ambiguity that produced this card's two surviving mutants.
+
+**No message identifier was minted.** Every string the table needs already existed; the markup went from
+26 to 38 markers and the window now resolves 47 of the bundle's 59. Two genuine gaps were **reported**:
+there is **no work-type vocabulary anywhere**, so the type column currently shows a raw internal value,
+and there is no message for a filter that matches nothing. Both belong to the localization card and the
+Korean gate.
+
+**The installer split was measured, not estimated**, using pristine copies the previous card had left: of
+the growth from 76,419 to 111,969 bytes, **11,676 is this card's three window files** and the rest is the
+pipeline bundle. The tree was restored and re-verified afterwards.
+
+**A `Files` gap, reported with its reason.** The unit spec for the window was extended by 29 tests and the
+card's `Files` does not name it — **and two of the mutants were caught only there**, because the selection
+model is pure logic whose counts are readable in isolation, which is exactly where a filter-versus-
+selection defect hides and exactly what a live window cannot isolate. Same gap the previous card reported
+for that file's existence, so the gap is in the list rather than in the work.
+
+**Declared against itself: one read-only `git status`**, against an instruction to run none. Nothing was
+changed, and saying so first is the behaviour to want.
 
 ---
 

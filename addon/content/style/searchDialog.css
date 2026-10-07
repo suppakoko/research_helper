@@ -151,6 +151,134 @@
   margin-block-start: 0.5em;
 }
 
+/* ------------------------------------------------------- the result table
+ *
+ * docs/08 §4.3's decision for v1: a plain scrollable <html:table>, not
+ * VirtualizedTable. P1-T21's Do step 1 asks for it "inside an `overflow`
+ * container", which is #rh-results-scroll below.
+ *
+ * Not a single `width` or `height` declaration anywhere in this block, for
+ * docs/08 §10.3's reason: a Korean column caption is longer than its English
+ * one and a fixed width truncates it. Columns are bounded with `min-width`
+ * where they must not collapse and `max-width` where they must not swallow the
+ * row, and every size is in `em` so the user's font-size preference still
+ * scales it (§9). */
+
+#rh-results-container {
+  /* The table and §4.5's selection row stack; the table takes the slack. */
+  padding: 0;
+}
+
+.rh-table-scroll {
+  overflow: auto;
+  flex: 1;
+}
+
+#rh-results-table {
+  border-collapse: collapse;
+  /* Fill the window when the content is narrower, and grow past it when a
+     title or an author list is long — which is what makes the container
+     scroll rather than the cells clip. */
+  min-width: 100%;
+}
+
+#rh-results-table th,
+#rh-results-table td {
+  padding: 0.25em 0.5em;
+  text-align: start;
+  vertical-align: top;
+  border-block-end: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.1));
+}
+
+#rh-results-table thead th {
+  /* The header stays put while the rows scroll under it. */
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  background: var(--material-sidepane, var(--fill-quinary, transparent));
+}
+
+/* `.rh-row` and not `tbody tr`: the class is the one searchDialog.js puts on
+   every built row, so the rule and the builder cannot drift apart — and a class
+   in `spec.rowClass` with no rule behind it is dead weight the spec rejects. */
+.rh-row:hover {
+  background: var(--fill-quinary, rgba(0, 0, 0, 0.04));
+}
+
+.rh-col-select {
+  min-width: 1.8em;
+}
+
+/* The row checkbox sits on the first line of a title that may wrap onto two. */
+.rh-row-select {
+  margin: 0;
+  vertical-align: text-top;
+}
+
+.rh-col-title {
+  min-width: 18em;
+}
+
+.rh-col-authors {
+  min-width: 8em;
+  max-width: 16em;
+}
+
+/* A year, a source name and a type never wrap; a title and an author list
+   always may. No fixed height anywhere — §9 forbids one on a text container
+   because Korean and English wrap differently. */
+.rh-col-year,
+.rh-col-type,
+.rh-col-source {
+  white-space: nowrap;
+}
+
+/* A DOI breaks anywhere rather than stretching the row off the window; it is
+   bounded with `max-width` and not `width`, so a long one still shows in full
+   over two lines (docs/08 §10.3). */
+.rh-col-doi {
+  max-width: 14em;
+  overflow-wrap: anywhere;
+}
+
+/* NFR-13: colour is never the sole carrier of meaning. The already-in-library
+   row carries it three ways — this border, the ⚠ glyph below, and the words of
+   `research-helper-search-row-existing`, which is what the row actually reads.
+   Removing any one of the three still leaves the meaning carried twice.
+
+   **A border and not a tint of the row's text**, deliberately: NFR-13 also
+   requires body text to meet 4.5:1 in both themes, and dimming a whole data row
+   to `--fill-secondary` — a *secondary*-text token — would put that row's own
+   contrast at risk for the sake of decoration. A border is not text, so no
+   contrast rule governs it. */
+.rh-row-existing > td:first-child {
+  border-inline-start: 3px solid var(--accent-red, currentColor);
+}
+
+.rh-existing-badge {
+  color: var(--accent-red, inherit);
+}
+
+.rh-existing-badge::before {
+  content: "\26a0\fe0e";
+  margin-inline-end: 0.3em;
+}
+
+/* §4.5 stacks a multi-source row's names ("PubMed" over "Crossref"). */
+.rh-source-line {
+  display: block;
+}
+
+/* §4.5's [ Select all ] [ Select none ] [ Invert ]   28 selected */
+#rh-results-selection-row {
+  padding: 0.4em 0.5em;
+  border-block-start: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.1));
+}
+
+#rh-results-selection-row > button {
+  margin-inline-end: 0.5em;
+}
+
 /* ------------------------------------------------------------ status bar */
 
 #rh-search-status-bar {

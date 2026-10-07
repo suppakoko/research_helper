@@ -227,8 +227,122 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
         </hbox>
       </vbox>
 
-      <!-- P1-T21 mounts docs/08 §4.3's plain scrollable table here. -->
-      <vbox id="rh-results-container" class="rh-state" flex="1" hidden="true" />
+      <!-- docs/08 §4.3's plain scrollable `<html:table>` (P1-T21).
+
+           §4.3's **decision for `research_helper`** is a plain table for v1,
+           not `VirtualizedTable`: the result set is bounded (≤ `maxResults`
+           per database, `docs/07` §8.5) and the plain table "removes the
+           CJS-loader/window-scope hazard and a React dependency from the
+           critical path". So there is no `require()` here, no React, and no
+           `include.js` scoping problem — §4.3 describes the failure mode of
+           getting that wrong as "segfault Zotero".
+
+           The columns are §4.2's, in §4.2's order: ☑ / Title / Authors /
+           Year / Source / Type / DOI.
+
+           **The seven `<th>` captions carry no `data-l10n-id`, and that is
+           deliberate.** The bundle gives each column as a `.label`
+           attribute, which is the shape §4.3's `VirtualizedTable` column
+           prop takes; an `<html:th>` renders its `textContent` and ignores
+           `label`, so a `data-l10n-id` here would set an attribute nothing
+           draws — the second defect `P1-T20` measured in a live window. The
+           captions are therefore resolved in `applyColumnLabels()` through
+           `document.l10n.formatMessages`, exactly as `applyChromeStrings()`
+           already does for the window title and the two dialog buttons, and
+           for the same reason.
+
+           The table keeps its implicit `role="table"`. §9's `role="grid"`
+           note is about `VirtualizedTable`; a grid promises full
+           two-dimensional cell navigation, and what this table offers is
+           §9's row contract — Tab to each row checkbox, Space to toggle,
+           Up/Down to move, Ctrl/Cmd+A to select all. No `tabindex` anywhere:
+           every control below is natively focusable. -->
+      <vbox id="rh-results-container" class="rh-state" flex="1" hidden="true">
+        <html:div id="rh-results-scroll" class="rh-table-scroll">
+          <html:table
+            id="rh-results-table"
+            data-l10n-id="research-helper-search-table"
+          >
+            <html:thead>
+              <html:tr id="rh-results-head-row">
+                <html:th
+                  id="rh-results-col-select"
+                  scope="col"
+                  class="rh-col-select"
+                >
+                  <!-- §4.2's "Select all / none — checkbox in header". The
+                       three buttons §4.5 draws below the table do the same
+                       three things by name; both exist, as both the target
+                       picker and the [ New collection… ] button do. -->
+                  <html:input
+                    id="rh-results-select-all-box"
+                    type="checkbox"
+                    data-l10n-id="research-helper-search-col-select"
+                  />
+                </html:th>
+                <html:th
+                  id="rh-results-col-title"
+                  scope="col"
+                  class="rh-col-title"
+                />
+                <html:th
+                  id="rh-results-col-authors"
+                  scope="col"
+                  class="rh-col-authors"
+                />
+                <html:th
+                  id="rh-results-col-year"
+                  scope="col"
+                  class="rh-col-year"
+                />
+                <html:th
+                  id="rh-results-col-source"
+                  scope="col"
+                  class="rh-col-source"
+                />
+                <html:th
+                  id="rh-results-col-type"
+                  scope="col"
+                  class="rh-col-type"
+                />
+                <html:th
+                  id="rh-results-col-doi"
+                  scope="col"
+                  class="rh-col-doi"
+                />
+              </html:tr>
+            </html:thead>
+            <!-- One `<tr>` per *visible* row, built in renderResults(). -->
+            <html:tbody id="rh-results-body" />
+          </html:table>
+        </html:div>
+
+        <!-- §4.5's "[ Select all ] [ Select none ] [ Invert ]   28 selected".
+             All three act on the rows the filter currently shows and leave a
+             hidden row's state alone; see searchDialog.js's `logic.selection`
+             block for why. -->
+        <hbox id="rh-results-selection-row" align="center">
+          <button
+            id="rh-results-select-all"
+            data-l10n-id="research-helper-search-select-all"
+          />
+          <button
+            id="rh-results-select-none"
+            data-l10n-id="research-helper-search-select-none"
+          />
+          <button
+            id="rh-results-select-invert"
+            data-l10n-id="research-helper-search-select-invert"
+          />
+          <spacer flex="1" />
+          <!-- `<description>`, not `<label>`: `research-helper-search-selected-count`
+               is a bare message value and lands on `textContent`, which
+               `<label value=…>` does not render (measured by P1-T20). No
+               `data-l10n-id` here — it arrives with `{ $count }` in
+               refreshSelection(), never without it. -->
+          <description id="rh-results-selected-count" class="rh-hint" />
+        </hbox>
+      </vbox>
     </vbox>
 
     <separator class="groove" />

@@ -208,7 +208,7 @@ interface FakeL10nMessage {
 }
 
 class FakeElement {
-  public readonly children: FakeElement[] = [];
+  public children: FakeElement[] = [];
   public readonly listeners = new Map<string, ((event: unknown) => void)[]>();
   public hidden: boolean;
   public checked: boolean;
@@ -216,6 +216,18 @@ class FakeElement {
   public value: string | undefined;
   public className = "";
   public focused = false;
+  /** The namespace `createElementNS` was called with, or undefined. */
+  public namespace: string | undefined;
+  /**
+   * Backing store for {@link textContent}.
+   *
+   * `P1-T21` needs it: the result table writes a paper's title, year, source
+   * and DOI straight into `textContent` because they are data rather than
+   * translatable strings, and a plain property would have let a typo in the
+   * *name* `textContent` pass unnoticed — exactly the failure class a file
+   * nothing typechecks is exposed to.
+   */
+  private ownText = "";
 
   public constructor(
     public readonly name: string,
@@ -224,6 +236,19 @@ class FakeElement {
     this.hidden = attrs.get("hidden") === "true";
     this.checked = attrs.get("checked") === "true";
     this.value = attrs.get("value");
+  }
+
+  /** Setting it replaces the children, as the DOM's does. */
+  public get textContent(): string {
+    if (this.children.length > 0) {
+      return this.children.map((child) => child.textContent).join("");
+    }
+    return this.ownText;
+  }
+
+  public set textContent(value: string) {
+    this.children = [];
+    this.ownText = String(value);
   }
 
   public get id(): string {
@@ -280,7 +305,35 @@ interface ControllerSpec {
   prefKeys: Record<string, string>;
   prefBounds: Record<string, Record<string, number | boolean>>;
   duplicatesDefault: string;
+  row: { titleIdPrefix: string; keyAttribute: string };
+  rowClass: Record<string, string>;
+  authorNamesShown: number;
   [key: string]: unknown;
+}
+
+/** The shape `setResults` takes; the host builds it (`P1-T22`). */
+interface TableRecord {
+  key?: string;
+  title?: string;
+  authors?: ({ family?: string; given?: string; literal?: string } | string)[];
+  year?: number | string;
+  sourceLabels?: string[];
+  typeLabel?: string;
+  doi?: string;
+  existing?: boolean;
+}
+
+interface DisplayRow {
+  key: string;
+  title: string;
+  authorNames: string;
+  authorOverflow: number;
+  year: string;
+  sourceLabels: string[];
+  typeLabel: string;
+  doi: string;
+  existing: boolean;
+  filterText: string;
 }
 
 interface ControllerLogic {
@@ -302,6 +355,41 @@ interface ControllerLogic {
   ) => number;
   coerceBoolean: (raw: unknown, fallback: boolean) => boolean;
   initialSelection: (registered: string[], enabled: string[]) => string[];
+
+  // P1-T21's half.
+  columns: { id: string; messageId: string; captioned: boolean }[];
+  authorName: (author: unknown) => string;
+  authorSummary: (
+    authors: unknown[],
+    shown: number,
+  ) => { names: string; overflow: number };
+  yearText: (year: unknown) => string;
+  rowKey: (record: unknown, index: number) => string;
+  rowsFromRecords: (
+    records: TableRecord[],
+    authorNamesShown: number,
+  ) => DisplayRow[];
+  filterText: (row: DisplayRow) => string;
+  matchesFilter: (row: DisplayRow, needle: string) => boolean;
+  visibleRows: (
+    rows: DisplayRow[],
+    view: { filter: string; hideExisting: boolean },
+  ) => DisplayRow[];
+  selectionAfterResults: (rows: DisplayRow[]) => string[];
+  applySelection: (
+    selectedKeys: string[],
+    visibleKeys: string[],
+    command: "all" | "none" | "invert",
+  ) => string[];
+  pickedKeys: (visibleRows: DisplayRow[], selectedKeys: string[]) => string[];
+  visibleCounts: (
+    visibleRows: DisplayRow[],
+    selectedKeys: string[],
+  ) => { total: number; new: number; selected: number };
+  allVisibleSelected: (
+    visibleRows: DisplayRow[],
+    selectedKeys: string[],
+  ) => boolean;
 }
 
 interface Controller {
@@ -309,16 +397,40 @@ interface Controller {
   l10n: Record<string, string>;
   logic: ControllerLogic;
   clock: { now: () => number };
-  state: { running: boolean; selectedCount: number; panel: string };
+  state: {
+    running: boolean;
+    selectedCount: number;
+    panel: string;
+    results: TableRecord[];
+    rows: DisplayRow[];
+    visible: DisplayRow[];
+    selection: string[];
+    view: { filter: string; hideExisting: boolean };
+  };
   host: Record<string, unknown>;
   io: Record<string, unknown>;
   init: () => void;
   applyChromeStrings: () => Promise<void> | undefined;
+  applyColumnLabels: () => Promise<void> | undefined;
   refreshSearchGate: () => { enabled: boolean; messageId: string | null };
   refreshImportGate: () => boolean;
   showPanel: (name: string) => void;
   collectQuery: () => Record<string, unknown>;
+  collectImportRequest: () => Record<string, unknown>;
   search: () => void;
+  setResults: (records: TableRecord[]) => number;
+  applyFilter: () => { total: number; new: number; selected: number };
+  selectVisible: (command: "all" | "none" | "invert") => {
+    total: number;
+    new: number;
+    selected: number;
+  };
+  toggleRow: (key: string, checked: boolean) => unknown;
+  refreshSelection: () => { total: number; new: number; selected: number };
+  refreshImportLabel: (count: number) => Promise<void> | undefined;
+  onTableKeydown: (event: unknown) => void;
+  pickedRows: () => TableRecord[];
+  rowCheckboxes: () => FakeElement[];
   [key: string]: unknown;
 }
 
@@ -341,6 +453,17 @@ interface HarnessOptions {
   readonly args?: Record<string, unknown>;
   readonly l10n?: readonly FakeL10nMessage[];
   readonly omitUIProperties?: boolean;
+  /**
+   * Replace `document.l10n.formatMessages` outright.
+   *
+   * `P1-T21` needs it to resolve two requests **out of order**, which is the
+   * defect a live window actually produced: the Import button's label is
+   * formatted asynchronously on every selection change, and the earlier request
+   * resolving last left the button reading `Import 40 items` with 35 selected.
+   */
+  readonly formatMessages?: (
+    requests: readonly { id: string; args?: Record<string, unknown> }[],
+  ) => Promise<readonly FakeL10nMessage[]>;
 }
 
 /** Mirror the parsed markup into {@link FakeElement}s. */
@@ -377,6 +500,14 @@ function harness(options: HarnessOptions = {}): Harness {
       new FakeElement(name, new Map()),
     createElement: (name: string): FakeElement =>
       new FakeElement(name, new Map()),
+    // `createElementNS` and not `createElement`: in a XUL document the latter
+    // yields a XUL element named `tr`, which is not a table row. The namespace
+    // is recorded so the spec can assert the table is really XHTML.
+    createElementNS: (namespace: string, name: string): FakeElement => {
+      const element = new FakeElement(name, new Map());
+      element.namespace = namespace;
+      return element;
+    },
     addEventListener: (type: string, handler: (event: unknown) => void) => {
       const bucket = docListeners.get(type) ?? [];
       bucket.push(handler);
@@ -386,16 +517,18 @@ function harness(options: HarnessOptions = {}): Harness {
       for (const handler of docListeners.get(type) ?? []) handler(event);
     },
     l10n: {
-      formatMessages: (
-        requests: readonly { id: string }[],
-      ): Promise<readonly FakeL10nMessage[]> =>
-        Promise.resolve(
-          options.l10n ??
-            requests.map((request) => ({
-              value: `value:${request.id}`,
-              attributes: [{ name: "label", value: `label:${request.id}` }],
-            })),
-        ),
+      formatMessages:
+        options.formatMessages ??
+        ((
+          requests: readonly { id: string }[],
+        ): Promise<readonly FakeL10nMessage[]> =>
+          Promise.resolve(
+            options.l10n ??
+              requests.map((request) => ({
+                value: `value:${request.id}`,
+                attributes: [{ name: "label", value: `label:${request.id}` }],
+              })),
+          )),
     },
   };
 
@@ -1220,5 +1353,877 @@ describe("the controller's constants come from docs/07 §8.5", () => {
     expect(SCRIPT_CODE).not.toMatch(/XMLHttpRequest/);
     expect(SCRIPT_CODE).not.toMatch(/Zotero\.HTTP/);
     expect(XHTML).not.toMatch(/\bfetch\s*\(/);
+  });
+});
+
+// ===========================================================================
+// 9. P1-T21 — the result table, its selection model and its filter
+//
+// `docs/08` §4.2's columns, §4.3's plain-table decision, §4.5's wireframe, §9's
+// keyboard and naming rules, FR-5's arithmetic, NFR-13's "colour is never the
+// sole carrier of meaning", and `docs/07` §8.5's `hideExisting`.
+//
+// **This block is in `test/unit/ui/searchDialog.test.ts` and `P1-T21`'s `Files`
+// list names only `test/integration/searchDialog-table.spec.ts`, which is
+// reported with the card** — the same gap `P1-T20` reported for this file's
+// existence. The integration spec it does name opens a real window; what cannot
+// be reached from there is the pure selection model with every count readable in
+// isolation, which is precisely where a filter-versus-selection defect hides.
+// ===========================================================================
+
+/** One record in the shape the host hands {@link Controller.setResults}. */
+function record(n: number, overrides: Partial<TableRecord> = {}): TableRecord {
+  return {
+    key: `10.1000/rh.${String(n)}`,
+    title: `Hepatocyte delivery study ${String(n)}`,
+    authors: [{ family: `Kim${String(n)}` }],
+    year: 2024 + (n % 3),
+    sourceLabels: ["PubMed"],
+    typeLabel: "journal-article",
+    doi: `10.1000/rh.${String(n)}`,
+    ...overrides,
+  };
+}
+
+/** 40 results, `existingAt` of them already in the library. */
+function fortyResults(existingAt: readonly number[] = []): TableRecord[] {
+  return Array.from({ length: 40 }, (_unused, n) =>
+    existingAt.includes(n) ? record(n, { existing: true }) : record(n),
+  );
+}
+
+describe("P1-T21 — the result table's pure model", () => {
+  const { controller } = harness();
+  const logic = controller.logic;
+
+  it("takes docs/08 §4.2's seven columns, in §4.2's order", () => {
+    expect(logic.columns.map((column) => column.messageId)).toStrictEqual([
+      "research-helper-search-col-select",
+      "research-helper-search-col-title",
+      "research-helper-search-col-authors",
+      "research-helper-search-col-year",
+      "research-helper-search-col-source",
+      "research-helper-search-col-type",
+      "research-helper-search-col-doi",
+    ]);
+    for (const column of logic.columns) {
+      expect(SEARCH_DIALOG_MESSAGE_IDS, column.messageId).toContain(
+        column.messageId,
+      );
+      expect(byId(column.id), `column <th id="${column.id}">`).toBeDefined();
+      expect(byId(column.id)?.name).toBe("html:th");
+    }
+    // The document's `<th>`s are in the same order as the model's columns, so a
+    // reordered header cannot silently caption the wrong column.
+    const head = byId("rh-results-head-row");
+    expect(head?.children.map((cell) => cell.attrs.get("id"))).toStrictEqual(
+      logic.columns.map((column) => column.id),
+    );
+  });
+
+  it("captions six columns and leaves the ☑ header to its checkbox", () => {
+    // `research-helper-search-col-select` is an `.aria-label`, declared on the
+    // select-all checkbox in the markup; the other six are `.label` entries,
+    // which an <html:th> does not render, so they are resolved in script.
+    expect(logic.columns.filter((column) => column.captioned)).toHaveLength(6);
+    expect(logic.columns[0]?.captioned).toBe(false);
+    const box = byId("rh-results-select-all-box");
+    expect(box?.attrs.get("data-l10n-id")).toBe(
+      "research-helper-search-col-select",
+    );
+    expect(box?.attrs.get("type")).toBe("checkbox");
+  });
+
+  it("renders §4.5's authors cell as names plus an overflow count", () => {
+    const five = [
+      { family: "Kim" },
+      { family: "Park" },
+      { family: "Novak" },
+      { family: "Chen" },
+      { family: "Ito" },
+    ];
+    expect(logic.authorSummary(five, 3)).toStrictEqual({
+      names: "Kim, Park, Novak",
+      overflow: 2,
+    });
+    expect(logic.authorSummary(five.slice(0, 2), 3)).toStrictEqual({
+      names: "Kim, Park",
+      overflow: 0,
+    });
+    expect(logic.authorSummary([], 3)).toStrictEqual({
+      names: "",
+      overflow: 0,
+    });
+    // A literal-only name and a bare string both render; a nameless author is
+    // dropped rather than drawn as an empty slot in the list.
+    expect(logic.authorName({ literal: "WHO Expert Committee" })).toBe(
+      "WHO Expert Committee",
+    );
+    expect(logic.authorName("Adeyemi")).toBe("Adeyemi");
+    expect(logic.authorName({ given: "Jane" })).toBe("");
+    expect(logic.authorSummary([{ given: "Jane" }, "Rossi"], 3)).toStrictEqual({
+      names: "Rossi",
+      overflow: 0,
+    });
+  });
+
+  it("writes a year as digits, never through a number formatter", () => {
+    // The `2,024` defect P1-T20 measured cannot recur here: the year goes into
+    // textContent, so no Fluent and no Intl.NumberFormat is involved.
+    expect(logic.yearText(2026)).toBe("2026");
+    expect(logic.yearText("2026")).toBe("2026");
+    expect(logic.yearText(undefined)).toBe("");
+    expect(logic.yearText("")).toBe("");
+    expect(logic.yearText(2026.7)).toBe("2026");
+  });
+
+  it("keys a row on the host's key, and never on two rows at once", () => {
+    const rows = logic.rowsFromRecords(
+      [
+        { key: "10.1/a", title: "A" },
+        { key: "10.1/a", title: "B" },
+        { title: "C" },
+      ],
+      3,
+    );
+    expect(rows.map((row) => row.key)).toStrictEqual([
+      "10.1/a",
+      "rh-row-1",
+      "rh-row-2",
+    ]);
+    // Two rows sharing a key would share a checkbox, and FR-5's "exactly 35"
+    // would quietly become 34.
+    expect(new Set(rows.map((row) => row.key)).size).toBe(rows.length);
+  });
+
+  it("filters client-side over every column the table shows", () => {
+    const rows = logic.rowsFromRecords(
+      [
+        {
+          key: "a",
+          title: "Ionizable lipid design",
+          authors: [{ family: "Chen" }],
+          year: 2025,
+          sourceLabels: ["bioRxiv"],
+          typeLabel: "preprint",
+          doi: "10.1101/abc",
+        },
+      ],
+      3,
+    );
+    const row = rows[0] as DisplayRow;
+    for (const needle of [
+      "ionizable",
+      "IONIZABLE",
+      "chen",
+      "2025",
+      "biorxiv",
+      "preprint",
+      "10.1101",
+    ]) {
+      expect(logic.matchesFilter(row, needle), needle).toBe(true);
+    }
+    expect(logic.matchesFilter(row, "hepatocyte")).toBe(false);
+    // An empty or whitespace-only filter hides nothing.
+    expect(logic.matchesFilter(row, "")).toBe(true);
+    expect(logic.matchesFilter(row, "   ")).toBe(true);
+  });
+
+  it("hides existing rows without removing them (reversible, docs/07 §8.5)", () => {
+    const rows = logic.rowsFromRecords(fortyResults([0, 1, 2, 3, 4]), 3);
+    expect(rows).toHaveLength(40);
+    const hidden = logic.visibleRows(rows, { filter: "", hideExisting: true });
+    expect(hidden).toHaveLength(35);
+    // The same `rows` array answers the other way round, which is what makes
+    // unticking the checkbox restore the five without re-running the search.
+    expect(
+      logic.visibleRows(rows, { filter: "", hideExisting: false }),
+    ).toHaveLength(40);
+  });
+
+  // --- the invariant this card exists to get right -------------------------
+
+  it("keeps the selection keyed on the row, so a filter never changes it", () => {
+    const rows = logic.rowsFromRecords(fortyResults(), 3);
+    let selection = logic.selectionAfterResults(rows);
+    expect(selection).toHaveLength(40);
+
+    // The user unchecks five.
+    const unchecked = rows.slice(0, 5).map((row) => row.key);
+    selection = logic.applySelection(selection, unchecked, "none");
+    expect(selection).toHaveLength(35);
+
+    // Then filters down to three rows and clicks "select none".
+    const narrow = rows.slice(10, 13);
+    const narrowKeys = narrow.map((row) => row.key);
+    selection = logic.applySelection(selection, narrowKeys, "none");
+
+    // 35 − 3 = 32, which is only true if the command touched the visible rows
+    // and nothing else: a selection held as *indices into the visible list*
+    // would have deselected rows 10–12 of the filtered view, i.e. three
+    // different rows, and a command applied to the whole set would have left 0.
+    expect(selection).toHaveLength(32);
+
+    // Clearing the filter brings every row back with its own state.
+    const restored = logic.visibleRows(rows, {
+      filter: "",
+      hideExisting: false,
+    });
+    expect(restored).toHaveLength(40);
+    const selected = new Set(selection);
+    expect(restored.slice(0, 5).every((row) => selected.has(row.key))).toBe(
+      false,
+    );
+    expect(narrow.every((row) => selected.has(row.key))).toBe(false);
+    expect(restored.slice(5, 10).every((row) => selected.has(row.key))).toBe(
+      true,
+    );
+    expect(restored.slice(13).every((row) => selected.has(row.key))).toBe(true);
+  });
+
+  it("never lets select-all reach a row the filter is hiding", () => {
+    const rows = logic.rowsFromRecords(fortyResults(), 3);
+    const visible = rows.slice(0, 4);
+    const selection = logic.applySelection(
+      [],
+      visible.map((row) => row.key),
+      "all",
+    );
+    expect(selection).toHaveLength(4);
+    expect(selection).toStrictEqual(visible.map((row) => row.key));
+    // And in the other direction: what Import receives is the intersection, so
+    // a hidden row cannot be imported either.
+    expect(
+      logic.pickedKeys(visible, [...selection, "rh-row-99"]),
+    ).toStrictEqual(visible.map((row) => row.key));
+  });
+
+  it("inverts only the visible rows", () => {
+    const rows = logic.rowsFromRecords(fortyResults(), 3);
+    const visible = rows.slice(0, 4);
+    const hiddenKey = rows[20]?.key as string;
+    const before = [visible[0]?.key as string, hiddenKey];
+    const after = logic.applySelection(
+      before,
+      visible.map((row) => row.key),
+      "invert",
+    );
+    expect(new Set(after)).toStrictEqual(
+      new Set([
+        hiddenKey,
+        visible[1]?.key as string,
+        visible[2]?.key as string,
+        visible[3]?.key as string,
+      ]),
+    );
+  });
+
+  it("counts only the visible rows, and only the new ones as new", () => {
+    const rows = logic.rowsFromRecords(fortyResults([0, 1]), 3);
+    const visible = logic.visibleRows(rows, {
+      filter: "",
+      hideExisting: false,
+    });
+    const selection = logic
+      .selectionAfterResults(rows)
+      .filter((key) => key !== rows[5]?.key);
+    expect(logic.visibleCounts(visible, selection)).toStrictEqual({
+      total: 40,
+      new: 38,
+      selected: 39,
+    });
+    expect(logic.allVisibleSelected(visible, selection)).toBe(false);
+    expect(
+      logic.allVisibleSelected(visible, logic.selectionAfterResults(rows)),
+    ).toBe(true);
+    // An empty table is not "all selected" — otherwise the header checkbox
+    // would draw ticked over nothing.
+    expect(logic.allVisibleSelected([], [])).toBe(false);
+  });
+});
+
+describe("P1-T21 — the result table against the real document", () => {
+  /** The `<tr>`s currently drawn, in drawn order. */
+  function drawnRows(h: Harness): FakeElement[] {
+    return h.byId("rh-results-body")?.children ?? [];
+  }
+
+  function cell(row: FakeElement, at: number): FakeElement {
+    return row.children[at] as FakeElement;
+  }
+
+  /** Every attribute value and every text node under the table. */
+  function tableStrings(h: Harness): string[] {
+    const out: string[] = [];
+    const walk = (element: FakeElement): void => {
+      out.push(element.textContent);
+      for (const name of [
+        "aria-label",
+        "aria-labelledby",
+        "title",
+        "tooltiptext",
+        "data-l10n-args",
+        "data-rh-row-key",
+        "value",
+      ]) {
+        const held = element.getAttribute(name);
+        if (held !== null) out.push(held);
+      }
+      for (const child of element.children) walk(child);
+    };
+    const container = h.byId("rh-results-container");
+    if (container) walk(container);
+    return out;
+  }
+
+  function withResults(
+    records: TableRecord[],
+    options: HarnessOptions = {},
+  ): Harness {
+    const h = harness(options);
+    h.controller.init();
+    h.controller.setResults(records);
+    return h;
+  }
+
+  it("draws one XHTML row per result, with all 40 checked (FR-5)", () => {
+    // FR-5: "each row shows title, first author, year, venue, source(s),
+    // DOI/PMID/arXiv ID, and a checkbox, and all rows are checked by default."
+    const h = withResults(fortyResults());
+    const rows = drawnRows(h);
+    expect(rows).toHaveLength(40);
+    expect(h.controller.state.selection).toHaveLength(40);
+    expect(h.controller.state.selectedCount).toBe(40);
+    expect(h.controller.rowCheckboxes().every((box) => box.checked)).toBe(true);
+    expect(h.byId("rh-results-select-all-box")?.checked).toBe(true);
+
+    // Real HTML elements. `document.createElement("tr")` in a XUL document
+    // yields a XUL element named `tr`, which lays out as nothing at all.
+    const first = rows[0] as FakeElement;
+    expect(first.name).toBe("tr");
+    expect(first.namespace).toBe("http://www.w3.org/1999/xhtml");
+    expect(first.children.map((td) => td.name)).toStrictEqual([
+      "td",
+      "td",
+      "td",
+      "td",
+      "td",
+      "td",
+      "td",
+    ]);
+    // §4.2's seven columns, in order, carrying the record's own data.
+    expect(cell(first, 0).children[0]?.getAttribute("type")).toBe("checkbox");
+    expect(cell(first, 1).textContent).toBe("Hepatocyte delivery study 0");
+    expect(cell(first, 2).textContent).toBe("Kim0");
+    expect(cell(first, 3).textContent).toBe("2024");
+    expect(cell(first, 4).textContent).toBe("PubMed");
+    expect(cell(first, 5).textContent).toBe("journal-article");
+    expect(cell(first, 6).textContent).toBe("10.1000/rh.0");
+  });
+
+  it("hands Import exactly 35 records after five are unchecked (FR-5)", () => {
+    const h = withResults(fortyResults());
+    for (const box of h.controller.rowCheckboxes().slice(0, 5)) {
+      box.checked = false;
+      box.dispatch("change");
+    }
+    expect(h.controller.state.selectedCount).toBe(35);
+    const request = h.controller.collectImportRequest();
+    expect((request.records as TableRecord[]).length).toBe(35);
+    expect((request.records as TableRecord[])[0]?.key).toBe("10.1000/rh.5");
+    // And the gate agrees, so the button the user presses is the one that
+    // carries the 35.
+    expect(h.controller.refreshImportGate()).toBe(true);
+  });
+
+  it("narrows rows as the filter is typed, and issues no request", () => {
+    let searches = 0;
+    const h = withResults(
+      [
+        record(1, { title: "Ionizable lipid design rules" }),
+        record(2, { title: "Hepatocyte editing in vivo" }),
+        record(3, { title: "Scalable LNP manufacturing" }),
+      ],
+      {
+        host: {
+          listSources: () => [PUBMED],
+          runSearch: () => {
+            searches += 1;
+          },
+        },
+      },
+    );
+    expect(drawnRows(h)).toHaveLength(3);
+
+    const filter = h.byId("rh-search-filter") as FakeElement;
+    filter.value = "hepatocyte";
+    filter.dispatch("input");
+
+    expect(drawnRows(h)).toHaveLength(1);
+    expect(cell(drawnRows(h)[0] as FakeElement, 1).textContent).toBe(
+      "Hepatocyte editing in vivo",
+    );
+    // §4.2 and this card's Do NOT: the filter is client-side over the
+    // already-fetched results. Nothing was re-requested.
+    expect(searches).toBe(0);
+    // The whole fetched set is still there, and so is the whole selection.
+    expect(h.controller.state.rows).toHaveLength(3);
+    expect(h.controller.state.selection).toHaveLength(3);
+
+    // A filter that matches nothing leaves an empty body rather than an error.
+    filter.value = "zzzz-no-such-paper";
+    filter.dispatch("input");
+    expect(drawnRows(h)).toHaveLength(0);
+    expect(h.controller.state.selectedCount).toBe(0);
+    expect(h.byId("rh-results-select-all-box")?.checked).toBe(false);
+    expect(
+      h.byId(SEARCH_WINDOW_ROOT_ID)?.getAttribute("buttondisabledaccept"),
+    ).toBe("true");
+
+    // Clearing it restores all three, still selected.
+    filter.value = "";
+    filter.dispatch("input");
+    expect(drawnRows(h)).toHaveLength(3);
+    expect(h.controller.state.selectedCount).toBe(3);
+  });
+
+  it("hides and restores the marked rows with the checkbox (docs/07 §8.5)", () => {
+    const h = withResults(fortyResults([0, 1, 2, 3, 4]));
+    const checkbox = h.byId("rh-search-hide-existing") as FakeElement;
+    // §8.5 ships `hideExisting` true and the checkbox mirrors it, so the five
+    // start hidden.
+    expect(checkbox.checked).toBe(true);
+    expect(drawnRows(h)).toHaveLength(35);
+    expect(h.controller.state.selectedCount).toBe(35);
+    // All 40 are selected even so — FR-5 checks every row, and the duplicate
+    // policy decides what happens to an already-present one.
+    expect(h.controller.state.selection).toHaveLength(40);
+
+    checkbox.checked = false;
+    checkbox.dispatch("command");
+    expect(drawnRows(h)).toHaveLength(40);
+    expect(h.controller.state.selectedCount).toBe(40);
+
+    checkbox.checked = true;
+    checkbox.dispatch("command");
+    expect(drawnRows(h)).toHaveLength(35);
+  });
+
+  it("marks an existing row in words as well as colour (NFR-13)", () => {
+    const h = withResults(fortyResults([0]));
+    const checkbox = h.byId("rh-search-hide-existing") as FakeElement;
+    checkbox.checked = false;
+    checkbox.dispatch("command");
+
+    const row = drawnRows(h)[0] as FakeElement;
+    expect(row.className).toContain(h.controller.spec.rowClass.existingRow);
+    const title = cell(row, 1);
+    const [badge, text] = title.children;
+    // The glyph and the colour are the stylesheet's; the WORDS are a Fluent
+    // message, so the meaning survives a monochrome or high-contrast display.
+    expect(badge?.className).toBe(h.controller.spec.rowClass.badge);
+    expect(text?.className).toBe("");
+    expect(badge?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-row-existing-badge",
+    );
+    expect(badge?.getAttribute("role")).toBe("img");
+    expect(text?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-row-existing",
+    );
+    expect(
+      JSON.parse(text?.getAttribute("data-l10n-args") ?? ""),
+    ).toStrictEqual({ title: "Hepatocyte delivery study 0" });
+    // The message is on a CHILD of the cell, not on the cell: Fluent assigns a
+    // value-only message to `textContent`, which would remove the badge.
+    expect(title.getAttribute("data-l10n-id")).toBeNull();
+    // A row that is not already present carries neither.
+    expect((drawnRows(h)[1] as FakeElement).className).not.toContain(
+      h.controller.spec.rowClass.existingRow,
+    );
+  });
+
+  it("gives every row and every row checkbox an accessible name (§4.3, §9)", () => {
+    const h = withResults(fortyResults([0]));
+    const checkbox = h.byId("rh-search-hide-existing") as FakeElement;
+    checkbox.checked = false;
+    checkbox.dispatch("command");
+
+    drawnRows(h).forEach((row, at) => {
+      const titleId = `${h.controller.spec.row.titleIdPrefix}${String(at)}`;
+      expect(row.getAttribute("aria-labelledby")).toBe(titleId);
+      expect(cell(row, 1).id).toBe(titleId);
+      // The checkbox borrows the same name, so a screen reader says which row
+      // it toggles instead of saying "Select" forty times.
+      expect(cell(row, 0).children[0]?.getAttribute("aria-labelledby")).toBe(
+        titleId,
+      );
+    });
+    // Pointing at the title cell rather than copying the title in means the
+    // already-present row's name is the localized "Already in library: …".
+    expect(
+      cell(drawnRows(h)[0] as FakeElement, 1).children[1]?.getAttribute(
+        "data-l10n-id",
+      ),
+    ).toBe("research-helper-search-row-existing");
+  });
+
+  it("drives the three §4.5 buttons and the header checkbox", () => {
+    const h = withResults(fortyResults());
+    h.byId("rh-results-select-none")?.dispatch("command");
+    expect(h.controller.state.selectedCount).toBe(0);
+    expect(h.controller.rowCheckboxes().some((box) => box.checked)).toBe(false);
+    expect(h.byId("rh-results-select-all-box")?.checked).toBe(false);
+
+    h.byId("rh-results-select-invert")?.dispatch("command");
+    expect(h.controller.state.selectedCount).toBe(40);
+    expect(h.controller.rowCheckboxes().every((box) => box.checked)).toBe(true);
+
+    h.byId("rh-results-select-all")?.dispatch("command");
+    expect(h.controller.state.selectedCount).toBe(40);
+
+    // The header checkbox is §4.2's "Select all / none — checkbox in header".
+    const header = h.byId("rh-results-select-all-box") as FakeElement;
+    header.checked = false;
+    header.dispatch("change");
+    expect(h.controller.state.selectedCount).toBe(0);
+    header.checked = true;
+    header.dispatch("change");
+    expect(h.controller.state.selectedCount).toBe(40);
+  });
+
+  it("scopes every selection command to the rows the filter is showing", () => {
+    // **The two mutants that survived the first sweep were here**, not in the
+    // pure model: `selectVisible()` and the Ctrl+A handler were both mutated to
+    // pass the whole fetched set instead of the visible one, and nothing caught
+    // it — because a command that over-reaches leaves the *visible* count
+    // exactly right. It is only visible after the filter is cleared, which is
+    // what this test does. The pure-logic assertions above cannot catch it at
+    // all: they call `applySelection` with explicit keys, so a wrong argument at
+    // the call site is invisible to them.
+    const h = withResults(fortyResults());
+    const filter = h.byId("rh-search-filter") as FakeElement;
+
+    // Deselect everything, then narrow and select all.
+    h.byId("rh-results-select-none")?.dispatch("command");
+    expect(h.controller.state.selection).toStrictEqual([]);
+
+    filter.value = "study 1";
+    filter.dispatch("input");
+    const narrowed = h.controller.state.visible.map((row) => row.key);
+    expect(narrowed.length).toBeGreaterThan(0);
+    expect(narrowed.length).toBeLessThan(40);
+
+    h.byId("rh-results-select-all")?.dispatch("command");
+    filter.value = "";
+    filter.dispatch("input");
+    // Exactly the rows that were visible, and not one more.
+    expect(new Set(h.controller.state.selection)).toStrictEqual(
+      new Set(narrowed),
+    );
+    expect(h.controller.state.selectedCount).toBe(narrowed.length);
+
+    // The same for invert, and the same for Ctrl+A.
+    h.byId("rh-results-select-none")?.dispatch("command");
+    filter.value = "study 1";
+    filter.dispatch("input");
+    h.byId("rh-results-select-invert")?.dispatch("command");
+    filter.value = "";
+    filter.dispatch("input");
+    expect(new Set(h.controller.state.selection)).toStrictEqual(
+      new Set(narrowed),
+    );
+
+    h.byId("rh-results-select-none")?.dispatch("command");
+    filter.value = "study 1";
+    filter.dispatch("input");
+    (h.byId("rh-results-body") as FakeElement).dispatch("keydown", {
+      key: "a",
+      ctrlKey: true,
+      target: h.controller.rowCheckboxes()[0],
+      preventDefault: () => undefined,
+    });
+    filter.value = "";
+    filter.dispatch("input");
+    expect(new Set(h.controller.state.selection)).toStrictEqual(
+      new Set(narrowed),
+    );
+  });
+
+  it("states the two counts §4.5 draws, as numbers", () => {
+    const h = withResults(fortyResults([0, 1]));
+    const checkbox = h.byId("rh-search-hide-existing") as FakeElement;
+    checkbox.checked = false;
+    checkbox.dispatch("command");
+
+    const selected = h.byId("rh-results-selected-count");
+    expect(selected?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-selected-count",
+    );
+    expect(
+      JSON.parse(selected?.getAttribute("data-l10n-args") ?? ""),
+    ).toStrictEqual({ count: 40 });
+
+    const total = h.byId("rh-search-result-count");
+    expect(total?.hidden).toBe(false);
+    expect(total?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-result-count",
+    );
+    expect(
+      JSON.parse(total?.getAttribute("data-l10n-args") ?? ""),
+    ).toStrictEqual({ total: 40, new: 38 });
+
+    // A count is a quantity, so it goes through Fluent as a number: grouping is
+    // correct here ("1,400 results" at seven databases × maxResults) and was
+    // wrong only for a year. Two of these messages also select a plural on it,
+    // which a string argument would defeat.
+    const args: unknown = JSON.parse(
+      selected?.getAttribute("data-l10n-args") ?? "",
+    );
+    expect(typeof (args as { count: unknown }).count).toBe("number");
+  });
+
+  it("feeds the live selected count into the Import button label", async () => {
+    const h = withResults(fortyResults());
+    await h.controller.refreshImportLabel(40);
+    expect(
+      h.byId(SEARCH_WINDOW_ROOT_ID)?.getAttribute("buttonlabelaccept"),
+    ).toBe(`label:${h.controller.l10n.import}`);
+  });
+
+  it("never lets a stale Import label overwrite a newer count", async () => {
+    // **Measured in a live Zotero window on 2026-10-07, before this guard
+    // existed**: with 40 rows selected and then 5 unchecked the button read
+    // `Import 40 items` while 35 were selected, because `formatMessages` is
+    // asynchronous and the first request resolved last. Here the two resolve in
+    // reverse order deliberately.
+    const pending: {
+      count: unknown;
+      resolve: (value: readonly FakeL10nMessage[]) => void;
+    }[] = [];
+    const h = harness({
+      formatMessages: (requests) =>
+        new Promise((resolve) => {
+          pending.push({ count: requests[0]?.args?.count, resolve });
+        }),
+    });
+    h.controller.init();
+
+    const first = h.controller.refreshImportLabel(40);
+    const second = h.controller.refreshImportLabel(35);
+    // The newest request first, the stale one afterwards.
+    const [stale, fresh] = [pending.at(-2), pending.at(-1)];
+    expect(stale?.count).toBe(40);
+    expect(fresh?.count).toBe(35);
+    fresh?.resolve([
+      { value: null, attributes: [{ name: "label", value: "35" }] },
+    ]);
+    stale?.resolve([
+      { value: null, attributes: [{ name: "label", value: "40" }] },
+    ]);
+    await Promise.all([first, second]);
+
+    expect(
+      h.byId(SEARCH_WINDOW_ROOT_ID)?.getAttribute("buttonlabelaccept"),
+    ).toBe("35");
+  });
+
+  it("resolves the six column captions from the bundle, not the markup", async () => {
+    const h = harness();
+    h.controller.init();
+    await h.controller.applyColumnLabels();
+    for (const column of h.controller.logic.columns) {
+      const cellEl = h.byId(column.id);
+      if (column.captioned) {
+        expect(cellEl?.textContent, column.id).toBe(
+          `label:${column.messageId}`,
+        );
+        // And no `data-l10n-id`, which would set an attribute an <html:th>
+        // does not render.
+        expect(cellEl?.getAttribute("data-l10n-id")).toBeNull();
+      } else {
+        expect(cellEl?.textContent).toBe("");
+      }
+    }
+  });
+
+  it("behaves with zero results, which is today's normal case", () => {
+    // Nothing registers a source at runtime, so Search is disabled and
+    // setResults is never reached — the window stays on the INITIAL panel with
+    // an empty table. These are the states it passes through if it is.
+    const h = harness();
+    h.controller.init();
+    expect(drawnRows(h)).toHaveLength(0);
+    expect(h.byId("rh-search-result-count")?.hidden).toBe(true);
+    expect(h.controller.state.panel).toBe("initial");
+
+    expect(h.controller.setResults([])).toBe(0);
+    expect(drawnRows(h)).toHaveLength(0);
+    expect(h.controller.state.selection).toStrictEqual([]);
+    expect(h.controller.state.selectedCount).toBe(0);
+    expect(h.byId("rh-results-select-all-box")?.checked).toBe(false);
+    expect(h.byId("rh-search-result-count")?.hidden).toBe(true);
+    expect(
+      h.byId(SEARCH_WINDOW_ROOT_ID)?.getAttribute("buttondisabledaccept"),
+    ).toBe("true");
+    // docs/08 §4.6's EMPTY panel takes `{ $query }` and the year span, which
+    // only a finished run knows, so the panel is left to the caller rather than
+    // switched to a panel with no arguments.
+    expect(h.controller.state.panel).toBe("initial");
+    expect(h.controller.collectImportRequest().records).toStrictEqual([]);
+
+    // And one result does switch to the table.
+    h.controller.setResults([record(1)]);
+    expect(h.controller.state.panel).toBe("results");
+    expect(h.byId("rh-results-container")?.hidden).toBe(false);
+  });
+
+  it("writes no database and makes no request from the table (FR-5)", () => {
+    // FR-5: "the user clicks Cancel → zero Zotero items are created and zero
+    // database writes occur". The window cannot write: it has no Zotero.DB and
+    // no Zotero.Items reference at all, and every privileged capability is a
+    // host callback it only ever calls by name.
+    expect(SCRIPT_CODE).not.toMatch(/Zotero\.DB/);
+    expect(SCRIPT_CODE).not.toMatch(/Zotero\.Items/);
+    expect(SCRIPT_CODE).not.toMatch(/Zotero\.Collections/);
+    expect(SCRIPT_CODE).not.toMatch(/executeTransaction/);
+    expect(SCRIPT_CODE).not.toMatch(/saveTx/);
+  });
+
+  it("lets no keyword or filter text reach a row, a title or a tooltip", () => {
+    // A 32-character key is below the free-text redactor's threshold (P1-T17),
+    // so the only safe property is that the query never reaches the table at
+    // all. It does not: a row is built from the host's record and from nothing
+    // else, and no row carries a `title` or `tooltiptext` attribute.
+    const key = "sk-0123456789abcdef0123456789abcd";
+    const h = withResults(fortyResults());
+    const keyword = h.byId("rh-search-keyword") as FakeElement;
+    const filter = h.byId("rh-search-filter") as FakeElement;
+    keyword.value = key;
+    filter.value = key;
+    filter.dispatch("input");
+
+    for (const text of tableStrings(h)) {
+      expect(text, text).not.toContain(key);
+    }
+    // Belt and braces: the table-building code never reads either control.
+    const builder = SCRIPT_CODE.slice(
+      SCRIPT_CODE.indexOf("buildRow(row, index)"),
+      SCRIPT_CODE.indexOf("selectVisible(command)"),
+    );
+    expect(builder.length).toBeGreaterThan(500);
+    expect(builder).not.toContain("spec.keyword");
+    expect(builder).not.toContain("spec.filter");
+    for (const element of ELEMENTS) {
+      expect(element.attrs.has("tooltiptext")).toBe(false);
+    }
+  });
+
+  it("moves between rows and selects all from the keyboard (docs/08 §9)", () => {
+    const h = withResults(fortyResults());
+    const boxes = h.controller.rowCheckboxes();
+    let prevented = 0;
+    const event = (
+      extra: Record<string, unknown>,
+    ): Record<string, unknown> => ({
+      preventDefault: () => {
+        prevented += 1;
+      },
+      ...extra,
+    });
+
+    const body = h.byId("rh-results-body") as FakeElement;
+    body.dispatch("keydown", event({ key: "ArrowDown", target: boxes[0] }));
+    expect(boxes[1]?.focused).toBe(true);
+    body.dispatch("keydown", event({ key: "ArrowUp", target: boxes[1] }));
+    expect(boxes[0]?.focused).toBe(true);
+    expect(prevented).toBe(2);
+
+    // At the ends nothing moves and nothing is swallowed.
+    body.dispatch("keydown", event({ key: "ArrowUp", target: boxes[0] }));
+    expect(prevented).toBe(2);
+
+    h.byId("rh-results-select-none")?.dispatch("command");
+    expect(h.controller.state.selectedCount).toBe(0);
+    body.dispatch(
+      "keydown",
+      event({ key: "a", ctrlKey: true, target: boxes[0] }),
+    );
+    expect(h.controller.state.selectedCount).toBe(40);
+    body.dispatch(
+      "keydown",
+      event({ key: "A", metaKey: true, target: boxes[0] }),
+    );
+    expect(h.controller.state.selectedCount).toBe(40);
+    // Ctrl/Cmd+A over a filtered table still cannot reach a hidden row.
+    const filter = h.byId("rh-search-filter") as FakeElement;
+    filter.value = "study 1";
+    filter.dispatch("input");
+    h.byId("rh-results-select-none")?.dispatch("command");
+    const narrowed = h.controller.state.visible.length;
+    expect(narrowed).toBeGreaterThan(0);
+    expect(narrowed).toBeLessThan(40);
+    body.dispatch(
+      "keydown",
+      event({
+        key: "a",
+        ctrlKey: true,
+        target: h.controller.rowCheckboxes()[0],
+      }),
+    );
+    expect(h.controller.state.selectedCount).toBe(narrowed);
+  });
+
+  it("declares every row class the stylesheet styles", () => {
+    // Nothing typechecks either file, so a typo here is a silently unstyled
+    // table. P1-T20 found the same class of defect twice by running the window.
+    //
+    // **A selector-boundary match, not a substring one.** A first version used
+    // `toContain(".rh-row-existing")`, and a deliberately broken rule renamed to
+    // `.rh-row-existing-typo` passed it, because the typo *contains* the right
+    // name. `(?![\w-])` is what makes the assertion about a selector. Tightening
+    // it immediately found a real one: `.rh-row` was in `spec.rowClass` with no
+    // rule behind it at all.
+    const styles = (name: string): boolean =>
+      new RegExp(`\\.${name}(?![\\w-])`).test(CSS_CODE);
+
+    const { controller } = harness();
+    const classes = Object.values(controller.spec.rowClass);
+    expect(classes.length).toBeGreaterThan(4);
+    for (const name of classes) {
+      expect(styles(name), `.${name} has no rule`).toBe(true);
+    }
+    // And the row class every built row carries, plus §4.2's six column classes.
+    for (const name of [
+      "rh-col-select",
+      "rh-col-title",
+      "rh-col-authors",
+      "rh-col-year",
+      "rh-col-source",
+      "rh-col-type",
+      "rh-col-doi",
+    ]) {
+      expect(styles(name), `.${name} has no rule`).toBe(true);
+      expect(XHTML, `.${name} in the markup`).toContain(name);
+    }
+  });
+
+  it("mounts the table inside an overflow container (§4.3, Do step 1)", () => {
+    const scroll = byId("rh-results-scroll");
+    expect(scroll?.name).toBe("html:div");
+    expect(scroll?.attrs.get("class")).toBe("rh-table-scroll");
+    expect(byId("rh-results-table")?.parent?.attrs.get("id")).toBe(
+      "rh-results-scroll",
+    );
+    expect(CSS_CODE).toMatch(/\.rh-table-scroll\s*\{[^}]*overflow:\s*auto/);
+    // §4.3's decision for v1: a plain table, so no React and no CJS loader.
+    expect(SCRIPT_CODE).not.toMatch(/require\s*\(/);
+    expect(SCRIPT_CODE).not.toMatch(/VirtualizedTable/);
+    expect(SCRIPT_CODE).not.toMatch(/setLocale/);
+    expect(SCRIPT_CODE).not.toMatch(/createRoot/);
+    // And it is a real <html:table>, with the accessible name §4.3 requires.
+    expect(byId("rh-results-table")?.name).toBe("html:table");
+    expect(byId("rh-results-table")?.attrs.get("data-l10n-id")).toBe(
+      "research-helper-search-table",
+    );
   });
 });
