@@ -2976,7 +2976,7 @@ constructs any of it** — `P1-T25` owns that.
 | **ID** | `P1-T16` |
 | **State** | `DONE` — approved 2026-10-07; **the installer moved for the first time in five cards**, 76,419 → 111,969 bytes, and three of the four stranded modules now reach it — the key store, the adapter and the mapper, with the startup keystore probe and `registerSources` called for the first time. The agent **separated its own 23,052 bytes from a concurrent card's by A/B build rather than by inference.** One defect blocked the whole card and is instructive: the keychain module evaluates a platform global **in its module body**, so merely importing it threw and took a unit suite down with **zero tests collected** — *the module graph of a layer-one test is as much a part of its contract as its assertions*. Criterion 1 passes as `"partial"` rather than `"succeeded"`, argued from §12.1 rather than assumed. Three mutations broke nothing and all three became real assertions, including one where **the test's own stub was performing the check under test**. |
 | **Depends on** | `P1-T07`, `P1-T09`, `P1-T10`, `P1-T14`, `P1-T15`, `P1-T25`, `P1-T31` |
-| **Blocks** | `P1-T22`, `P2-T02` |
+| **Blocks** | `P1-T22`, `P2-T02`, `P1-T35` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-9`, `FR-10`, `FR-53`, part of `FR-3` |
 | **Estimate** | 1.0 d |
@@ -3229,7 +3229,7 @@ without a restart.
 | **ID** | `P1-T17` |
 | **State** | `DONE` — approved 2026-10-07; the provenance record, the human note and the JSON export, with the in-memory record as the authority and the asymmetry **disclosed**: a new field reaches the export and the schema check automatically, the note only when someone edits the renderer. **Closed two real credential leaks the project's own redaction could not see**, both reproduced by the coordinator — a bare query string parses as a *path*, so the parameter list is empty and nothing is removed; and a URL inside free text is invisible to the free-text redactor. A 32-character key is below its 40-character threshold. **One of the two was a live defect in the first draft, not a mutation.** Criterion 5's second half cannot hold, because the shipped redactor *removes* a named parameter and an empty value is the one thing a marker cannot express. **Separated conformance assertions from self-consistency ones**, and shipped no reader, so no round-trip can pass by agreeing with itself. |
 | **Depends on** | `P1-T09`, `P1-T14` |
-| **Blocks** | `P1-T22`, `P2-T17` |
+| **Blocks** | `P1-T22`, `P2-T17`, `P1-T35` |
 | **Retires** | none |
 | **Implements** | `FR-8`, part of `FR-4` |
 | **Estimate** | 0.75 d |
@@ -4358,7 +4358,7 @@ changed, and saying so first is the behaviour to want.
 | **ID** | `P1-T22` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T16`, `P1-T17`, `P1-T21` |
-| **Blocks** | `P1-T23` |
+| **Blocks** | `P1-T23`, `P1-T35` |
 | **Retires** | `R-17` (reported) |
 | **Implements** | `FR-5`, `FR-6`, `FR-8`, `FR-9`, `FR-10`, `FR-51`, `FR-53`, `NFR-14` |
 | **Estimate** | 0.75 d |
@@ -4611,7 +4611,7 @@ work.**
 |---|---|
 | **ID** | `P1-T23` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T11`, `P1-T22`, `P1-T28` |
+| **Depends on** | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35` |
 | **Blocks** | none |
 | **Retires** | `R-16`, `R-17`, part of `R-2` |
 | **Implements** | `NFR-1`, `NFR-3`, `NFR-9`, `NFR-10` |
@@ -6834,6 +6834,126 @@ against the **built bundles**, which needs a full Zotero run; `P1-T33`'s M3 muta
 edits into an immediate failure — and this card's two torn reads are the evidence that the class is
 real rather than hypothetical.
 
+### P1-T35 — Publish the search window's host, so the window stops shipping inert
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T35` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T16`, `P1-T17`, `P1-T22` |
+| **Blocks** | `P1-T23` |
+| **Retires** | none |
+| **Implements** | part of `FR-1`, part of `FR-8` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** Pressing Search in a real Zotero does something: the window finds its host, the host drives
+`P1-T16`'s pipeline, and the provenance note lands in the collection.
+
+**Why this is a card, and why it blocks `P1-T23`.** Everything the window needs exists and **nothing
+connects it.** Measured 2026-10-07, after `P1-T22` landed:
+
+- `src/addon.ts:64` sets `this.api = {}`, and `grep -rn '\.api\b' src/` returns **that line and nothing
+  else** — nothing ever writes to it. The window looks for its host at
+  `Zotero.<addonInstance>.api.searchWindow` and falls back to an empty object, so **every control is
+  inert in a real Zotero.**
+- The run-time graph **does** exist. `src/hooks.ts` awaits `registerUI()`, which calls
+  `installServices()` at line 267, and `installServices` calls `registerSources()` itself. So at run time
+  there is a filled source registry, a preference store, an HTTP client, a pipeline registry and
+  `ServiceGraph.pipelineContext` (declared at `container.ts:830`, constructed at `:1419`).
+- What is missing is that **`registerUI()` holds the graph nowhere.** That is deliberate and the file
+  says why at line 258 — and **the reason has expired**:
+
+  > "nothing in Phase 1 yet has a pipeline to hand the fourth to, and the typed service locator is
+  > `P1-T16` step 7's — it `create`s this path for that. Standing up a holder with no consumer is the
+  > dead code `P0-T07` declined to write for the same reason."
+
+  `P1-T16` landed and built the pipeline. **There is now a consumer**, so the holder is no longer dead
+  code. This card is that consumer arriving, not a reversal of `P0-T07`'s judgement.
+- `P1-T22` built the host object itself — `createSearchImportViewModel(...).host`, typed as
+  `SearchWindowHostApi` — and named the property in `SEARCH_WINDOW_API_PROPERTY`. **The only place the
+  end-to-end path currently runs is `test/integration/searchDialog-flow.spec.ts`, which installs the host
+  itself.**
+
+**Read first.**
+- `src/bootstrap/registerUI.ts` lines 250–270 — the paragraph quoted above, and what `installServices`
+  is already handed. **Do not delete that paragraph; amend it**, so the next reader sees why the holder
+  exists now and did not before.
+- `src/ui/viewModels/searchImportViewModel.ts`'s `SearchImportViewModelDeps` — **three members are
+  required** (`pipeline`, `jobs`, `logger`, plus the version strings and a clock) and the rest are
+  optional, including `listSources`, `listCollections`, `getPrefs`, `isExisting` and
+  `writeProvenanceNote`. **An optional member left out compiles and degrades silently**, which is the
+  failure mode this card has to avoid: a window that opens, searches, and quietly writes no provenance
+  note.
+- `src/zotero/notes.ts`'s `writeProvenanceNote` and `src/zotero/libraryIndex.ts` (or whichever module
+  `P1-T13` shipped the existing-item check in — **grep for it, do not assume the path**). `bootstrap/` may
+  import `zotero/`; `registerUI.ts` already imports `createZoteroPrefStore` from there.
+- `src/addon.ts` — how `hooks` is assigned, and what type `api` has.
+- `docs/07` §2.3 — the layering. `src/ui/` may **not** import `src/zotero/**`, which is exactly why the
+  two platform ports are injected rather than imported by the view model.
+- `P1-T22`'s `Findings` in this file, for what it verified and what it left.
+
+**Files.**
+- modify `src/bootstrap/registerUI.ts`
+- modify `src/addon.ts`
+- modify `test/integration/searchDialog-flow.spec.ts`
+
+**Do.**
+1. Hold the `ServiceGraph` that `installServices()` returns, in `registerUI()`, and amend the paragraph
+   that explains why it was not held.
+2. Build the host from `createSearchImportViewModel`, supplying **every** optional dependency the view
+   model declares — including `isExisting` and `writeProvenanceNote`, bound to the platform modules.
+3. Publish it on the plugin instance at the property `SEARCH_WINDOW_API_PROPERTY` names, so the window's
+   own lookup finds it. **Do not respell that property here**; import the constant.
+4. Make the integration spec prove the **published** host, not a host the spec built: it should read the
+   host from the plugin instance the way the window does, and fail if it is absent.
+5. Assert that **no optional dependency is silently missing** — a test that enumerates the view model's
+   optional members against what the composition root supplies, so adding one later without wiring it
+   fails here rather than degrading in a user's library.
+
+**Do NOT.**
+- Do not change `SearchImportViewModelDeps`' shape, and do not make an optional member required. The
+  optionality is what lets the unit tests construct a view model without a platform; the fix for silent
+  degradation is an assertion at the composition root, not a type change.
+- Do not import `src/zotero/**` from `src/ui/**`. That is `docs/07` §2.3 and the one layering arm ESLint
+  does enforce.
+- Do not build a second service graph. `installServices` refuses one, and `P1-T22` recorded that as the
+  reason its spec cannot draw the completion popup.
+- Do not add a preference pane, a JSON-export action, or any missing Fluent message. Each is its own card
+  and `P1-T22` listed them.
+- Do not touch `addon/content/searchDialog.js` or the window markup. The window already looks in the
+  right place; this card is the other half.
+
+**Criteria.**
+- [ ] In a real Zotero, the window's own host lookup returns an object with **every** member of the
+      documented contract, asserted through the plugin instance rather than through a spec-built host.
+- [ ] A search started from the window reaches `P1-T16`'s pipeline and fills the table, with no part of
+      the path supplied by the spec.
+- [ ] An import writes the collection, the items **and exactly one provenance note**, with the note's
+      presence asserted — this is the member most likely to be left unbound.
+- [ ] Every optional member of `SearchImportViewModelDeps` is supplied, asserted by enumeration so a
+      later addition cannot be forgotten silently.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0, and
+      `npm run test:integration` passes with no fewer tests than before.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test:integration -- --exit-on-finish --abort-on-fail
+```
+
+**Notes.** **This card is where `P1-T23` becomes possible**, so its criteria are deliberately about the
+*published* path rather than about new behaviour: everything it wires has already been tested by the card
+that built it. The risk is not that a piece is wrong but that a piece is **not connected and nothing
+says so** — which is why criterion 4 exists and why criterion 3 names the provenance note specifically.
+`P1-T22` measured that the note's binding has to be made in `bootstrap/`, because `src/ui/` may not reach
+`src/zotero/notes.ts`.
+
+The installer size is a useful tell: `P1-T22` left it at **121,920 bytes**. If this card's wiring is
+reachable the number must move, and `src/zotero/notes.ts` should appear in the bundle for the first time
+— it has read **zero** occurrences across four cards.
+
+---
+
 ---
 ## 7. Estimate roll-up
 
@@ -6873,7 +6993,8 @@ real rather than hypothetical.
 | `P1-T32` | The four platform seams the composition root could not reach | 0.50 | — |
 | `P1-T33` | Retire one of the two headline ids | 0.25 | — |
 | `P1-T34` | Three corpus statements measured false | 0.25 | — |
-| | **Total** | **23.25 d** | **4 gates** |
+| `P1-T35` | Publish the search window's host | 0.50 | — |
+| | **Total** | **23.75 d** | **4 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 
