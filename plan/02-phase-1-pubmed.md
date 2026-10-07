@@ -1090,8 +1090,129 @@ two flags outright, and says no key-entry UI ships in this phase — so in Phase
 the key is absent for every real user and the limiter simply stays on the no-key
 budget. Phase 3 completes the ladder. Spike `V-16`
 (`docs/11` §4.3) is the prerequisite: if the keystore round-trip failed there,
-stop and re-plan rather than inventing a fallback. Human gate details go in
-[`06-human-gates.md`](06-human-gates.md).
+stop and re-plan rather than inventing a fallback.
+
+> **The gate this card names does not exist under that name — corrected 2026-10-07, reported by the
+> executing agent.** This `Notes` read "Human gate details go in `06-human-gates.md`", and **that
+> file has no `P1-T06` entry and no Phase 1 gate for the NCBI key**. The nearest is **`G-04`**, filed
+> under **Phase 0** gates, whose subject is registering the `tool`/`email` pair as a release task
+> with the optional key as a secondary clause — and whose "agent behaviour on reaching it" is
+> written about the release checklist rather than about this card. **A second half of the same
+> mismatch is worse:** the gate sits on a card that **cannot discharge it**. The missing assertion is
+> that a real key is accepted by E-utilities as `api_key=` and raises the observed ceiling from 3 to
+> 10 requests per second, and **nothing in this card's scope issues an HTTP request**. The card that
+> does is `P1-T09`, whose own `Human gate` cell reads `none`. All five of this card's criteria were
+> satisfied with a dummy value, so the gate blocked nothing here.
+
+**Findings, 2026-10-07 — all five criteria pass, and the flag nobody wrote now has a writer that is
+proven to move the rate limiter.** Verified independently: **67 integration tests** (up from 63),
+**916 unit tests in 23 files, unchanged**, typecheck 0, `lint:check` 0, `grep -rn MUTANT src test`
+clean, and the test profile's `prefs.js` free of the deliberate violation written during mutation.
+
+**The work was far smaller than the card, because the spike had already built most of it.**
+`src/zotero/keychain.ts` existed at 286 lines with the whole tier-1 implementation; the card says
+`create`. It was **extended to 529 lines, with nothing removed and nothing changed in behaviour** apart
+from the two flag calls. The genuinely new work was the port — `src/core/secretStore.ts`, 106 lines,
+declaring §1.7's seven members and naming no `Zotero` global — and the flag.
+
+**The key-presence flag was the real gap, and the test that proves the write is not vacuous is the
+best thing in this card.** The obvious version — assert that the function just written sets the
+preference just chosen — proves nothing. Instead the spec asserts that
+`createHostLimiterRegistry(...).refresh()` returns `["eutils.ncbi.nlm.nih.gov"]` after a `set`, `[]` on
+an immediate second call, and the host again after a `clear`. `refresh()` names a host only when a
+*different* frozen configuration object is selected, which happens only when the flag actually reads
+true. Live: `after set(): ncbi.keyPresent=true; registry.refresh() reconfigured
+[eutils.ncbi.nlm.nih.gov]; withoutKey 2.5/s -> withKey 8/s`. **Deleting either flag write makes those
+assertions read `[]`** — mutations A1 and B, with the failure text recorded.
+
+**The flag is derived, never asserted, and the error direction is why.** `refreshKeyPresence` reads
+the answer back out of the login manager rather than inferring it from what the caller asked for, so a
+`set` whose login the platform refused cannot leave the flag claiming a key is present. **A key wrongly
+believed present paces NCBI at 8 requests per second against a published 3-per-second ceiling** — the
+expensive direction — so the cheap direction was chosen deliberately.
+
+**The one thing this card does not achieve is a scope boundary, and the coordinator verified it rather
+than taking the report's word.** `src/bootstrap/container.ts` is outside `Files`, so nothing calls
+`createKeychainSecretStore()` or `probeAndRecordBackend()` at startup — and the consequence is sharper
+than "not wired": the bundler **removes the whole module as unused**. Measured on the built script:
+`grep -c 'research_helper API Keys'` returns **0** while `grep -c 'ncbi.keyPresent'` returns **2**, and
+the installer stayed **byte-identical at 76,388 bytes**. So the shipped plugin contains the flag's
+*reader* and not its *writer*, `secretBackend` still reads `""` in a running plugin, and **a real key
+could not be stored today even if the owner had one.** The writer exists and is proven; wiring it needs
+a card.
+
+**The human gate is attached to the card that cannot discharge it, which is a defect worth fixing
+rather than working around.** No key was obtained, embedded or simulated, and the gate blocks **no
+listed criterion** — all five were satisfied with a dummy value. The missing assertion is precisely
+that a real key stored through `set("source.ncbi", …)` is accepted by E-utilities as the `api_key=`
+parameter and raises the observed ceiling, i.e. a live response carrying `X-Ratelimit-Limit: 10`
+instead of `3`. **That assertion cannot be written on this card even with a key in hand, because
+nothing in this card's scope issues an HTTP request.** The card that does is `P1-T09`, whose step 2
+sends `api_key` "when `P1-T06` returns one" — and whose `Human gate` cell reads `none`. Reported under
+rule 6 rather than adjusted.
+
+**The duplicate-spec question was settled by evidence from another phase, which is the right kind of
+answer.** `Files` names a new `keychain.spec.ts` while `secrets.spec.ts` already existed; the deciding
+fact is that **`plan/04`'s `P3-T02` lists `modify test/integration/zotero/keychain.spec.ts` in its own
+`Files`**, so extending the other file would leave a later card with a `modify` of a file that does not
+exist. The two specs do not overlap: `secrets.spec.ts` measures the **platform** — which login-manager
+methods Zotero 10 exposes, that the keystore round-trips, and that no preference, no `prefs.js`, no
+`logins.json`, no Debug Output and neither console channel ever holds a stored value — borrowing a
+different secret id entirely. The new file measures **this card's product surface**. The deep leak
+sweep was not repeated; only the branch enumeration criterion 2 names, against `source.ncbi`.
+**And both specs refuse to run if a login already exists for the id they use**, so a real key stored
+later will not be overwritten, read or even measured for length.
+
+**A measured preference-branch enumeration, which is what criterion 2 actually asks for.** Twelve
+preferences under the plugin branch, named in the log, and **zero holding the dummy value, its
+`oskv1:` ciphertext, or that ciphertext without its prefix** — three separate needles. The flag is
+asserted both through the typed reader and through `Zotero.Prefs` raw, so a coercion cannot manufacture
+the pass.
+
+**The spelling conflict between two authority documents bit one phase earlier than both predicted, and
+the schema caught it.** `docs/07` §8.5 ships `secretBackend` as one of `"oskeystore" | "session" |
+"passphrase" | ""` while `docs/09` §1.7's `SecretBackend` spells the first `"os-keychain"`; both
+documents say the mismatch bites at `P3-T02`'s startup probe, and `Do` step 3 ships that probe **here**.
+Mutation A3 made the mapping return §1.7's spelling and the typed write was **rejected** —
+`a string is not a usable string (one of "oskeystore", "session", "passphrase", "")` — rather than a
+status badge silently reading empty. That is the argument for routing the write through the typed
+accessor instead of the raw preference store, and `docs/07` §8.5's standing instruction that one of the
+two documents must be corrected is still outstanding.
+
+**A later card repeats a claim this project has already retracted, and following it literally would
+reproduce a known crash.** `plan/04`'s `P3-T02` tells its implementer that "`findLogins()` is a
+throwing stub and the sync `addLogin`/`removeLogin`/`searchLogins` were removed on the esr153 base, so
+every call here is `await`ed and uses the `Async` name", and that `clear()` goes via
+`removeLoginAsync`. **Both are false on Zotero 10.0.3, re-measured in this run**: `removeLoginAsync`
+and `modifyLoginAsync` are `undefined`, and the synchronous forms all exist. `docs/09` §1.2 already
+carries the dated correction. `P3-T02` also contradicts this card about where the port is declared.
+**Needs a card or a correction before `P3-T02` runs.**
+
+**`docs/09` §1.7 itself is clean, checked line by line.** The only remaining `esr153` text is in §1.2
+and already carries its 2026-09-15 correction immediately after it; §1.7's removal call is
+feature-detected with the correct comment, and its measured platform block cites the right Gecko
+branch. Two §1.7 divergences are not branch errors and are recorded in the code: the section places the
+three type declarations in the platform module where the card puts them in the port — resolved for the
+card and `docs/07` §2.3, with re-exports so §1.7's reading still holds — and §1.7's reference
+implementation has no guard on the encrypt result, where the shipped code refuses to store an
+unprefixed value, which is the spike's strictly safer addition.
+
+**A deliberate violation was written into the test profile and cleaned up, disclosed unprompted.**
+Mutation C made `setSecret` write the key value to a preference, to prove criterion 2's branch
+enumeration catches a D5 breach; it did, naming the offending preference and taking the branch count
+from 12 to 13. The `user_pref` line was then removed from the test profile with Zotero confirmed
+stopped, and the next clean run printed 12 again. **Writing a real violation to prove a real guard is
+the right experiment, and saying so afterwards is what makes it safe.**
+
+**Two notes on the hand-out, in the agent's favour.** It checked all six facts the coordinator supplied
+and found one imprecise: of the three files named as referencing the keychain module, **only
+`secrets.spec.ts` imports from it** — the other two mention the path in a message string and in
+comments. The coordinator's wording said "reference", which is accurate, but "importer" would not have
+been, and the distinction is what the §4 grep exists to make. It also found the spec imports **ten**
+symbols rather than the nine implied. Separately, `P1-T06`'s `Notes` says "human gate details go in
+`06-human-gates.md`" and **that file has no `P1-T06` entry**; the nearest is `G-04`, filed under Phase 0,
+whose subject is registering the `tool`/`email` pair as a release task with the key as a secondary
+clause. The card should name `G-04` by identifier.
 
 ---
 
