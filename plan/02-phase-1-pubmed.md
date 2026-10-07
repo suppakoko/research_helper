@@ -1010,7 +1010,7 @@ shape from a call site.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T06` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; the port is declared in `src/core/secretStore.ts` and the Phase 0 spike's 286-line keychain was **extended, not replaced**. The real gap was the key-presence flag, which **nothing in the product wrote** while the limiter registry read it. The write is proved load-bearing rather than decorative: the spec asserts that `refresh()` names the host after a `set`, nothing on an immediate second call, and the host again after a `clear` — so deleting either write makes it read empty. The flag is **derived, never asserted** (read back out of the login manager), because a key wrongly believed present would pace NCBI at 8 requests per second against a published ceiling of 3. **Verified by the coordinator and recorded honestly: nothing calls the store at startup, so the bundler removes the module entirely** — the shipped script holds the flag's reader and not its writer. The human gate sits on a card that cannot discharge it, which is recorded rather than worked around. |
 | **Depends on** | `P1-T03` |
 | **Blocks** | `P1-T09` |
 | **Retires** | none |
@@ -1563,7 +1563,7 @@ gap is visible at the call site rather than at the result count.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T09` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; `esearch` then `efetch`, parameters **passed into** `P1-T08`'s builder rather than appended, the body-level error checked before the identifier list, batches of 200 with POST past 2,000 characters, and the identity pair unoverridable so neither builder can forget it. 53 tests, **zero live network requests**, 19 mutations — one of which broke nothing and was reported as a **redundant guard rather than missing coverage**. **A test found a real defect before review did:** the identifier list was not truncated to the `retmax` asked for, so a server returning more identifiers than requested would walk past the 9,998 ceiling by the back door. Criterion 4 **cannot pass as written** — it says "every issued URL" while `docs/02` §3.4 mandates a POST, which has no URL parameters — reported under rule 6 and reworded. Left the most useful thing possible for whoever gets a key: the corpus has **never observed** the rate-limit header reading 10, and one `healthCheck()` with a real key settles it. |
 | **Depends on** | `P1-T05`, `P1-T06`, `P1-T07`, `P1-T08` |
 | **Blocks** | `P1-T10`, `P1-T11`, `P1-T16`, `P1-T17` |
 | **Retires** | part of `R-2` |
@@ -3375,7 +3375,7 @@ a constant, and parallel cards need the reading taken at hand-out.**
 | Field | Value |
 |---|---|
 | **ID** | `P1-T20` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; the window exists with `docs/08` §4.2's controls in §4.5's order, sized by CSS, every visible string from the Fluent bundle, and `registerRoot` called so it follows the user's font size and density. **Shipping the first plugin document switched on two assertions that had been passing vacuously** — `P1-T19`'s self-activating probe now opens the real window twice to check the singleton, and the markup scrape went from "0 of 1 documents present, satisfied only vacuously" to 26 message ids with 0 undeclared. **Two defects were findable only by opening the real window:** the year label rendered `2,024 – 2,026` because Fluent puts a bare number through a number formatter, and a label with a Fluent *value* rendered nothing at all. The asset glob had to grow and the card's `Files` did not name it; verified by reverting. Honest about what was not checked: **nobody looked at the window**, and the dark-theme warning colour measures **3.06 : 1** against the 4.5 : 1 requirement. |
 | **Depends on** | `P1-T03`, `P1-T07`, `P1-T19` |
 | **Blocks** | `P1-T21` |
 | **Retires** | none |
@@ -4667,7 +4667,7 @@ per-host cap. Not false, just incomplete, and the file is outside this card's `F
 | Field | Value |
 |---|---|
 | **ID** | `P1-T28` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; `base` 1000 ms, `cap` 30 000 ms and an attempt cap of 3 are in §7.3's table **with a named source each**, and on the shipped NCBI row. **The test parses §7.3 out of the document and compares it against the row the registry serves**, so editing either side fails — changing the document from 1000 to 1200 ms fails the test. **That is the first test in this repository to read an authority document**, and the pattern the card told the agent to copy did not exist. Criterion 3 asserts the transport count is **exactly 3**, not "more than 1", so the retries-versus-attempts off-by-one fails it. Reported rather than absorbed: the numbers are **not yet in effect**, because `retryFor` is still unsupplied at the composition root, which is outside this card's `Files`. |
 | **Depends on** | `P1-T05` |
 | **Blocks** | `P1-T23` |
 | **Retires** | none |
@@ -5644,7 +5644,7 @@ exception — which is a good thing for how much of `G-41` is exercised incident
 | Field | Value |
 |---|---|
 | **ID** | `P1-T33` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; one surface, so one id. The fact that settles it is that `docs/08` §8.2.2 searched Zotero 7–10 and found **no notification mechanism at all**, so §4.4's "completion toast" *is* the progress window and the word names a timing rather than a mechanism — and the shipped sink's own comment already said so. Which id survived was **forced rather than chosen**: retiring the other would have required editing two files outside the card's `Files`, so the card could only be executed if the decision went one way, which is a flaw in the card and is recorded as one. Criterion 1 **could not hold together with `Do` step 1** — reasoning that may not name what was retired is not reasoning — and the agent **declined to contort the record to satisfy a string match**. |
 | **Depends on** | `P1-T32` |
 | **Blocks** | none |
 | **Retires** | none |
@@ -5865,7 +5865,7 @@ rewrote a gate's decisions would be the wrong instrument.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T34` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; three statements measured false, corrected at the source, **plus a fourth the card did not name** — `docs/08` §4.1's preamble cited `docs/01` §9.1 as authority for the **opposite** of what §9.1 measures. The deliverable turned out to be the **derivation rule, not the numbers**: `P1-T32` took the counts to 80/85 and `P1-T33` took them back to 79/84, so the old literals are accidentally right again after a spell of being wrong, and the gate now says how to recompute them. The agent **defended against a torn read of `keys.ts` twice**, refusing to snapshot a state in which the three lists did not partition the declared set — stricter than it was asked to be. |
 | **Depends on** | `P1-T19`, `P1-T32` |
 | **Blocks** | none |
 | **Retires** | none |

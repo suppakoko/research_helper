@@ -2528,7 +2528,7 @@ module header so it is visible at the call site rather than at the result.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T21` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; `Semaphore.resize` changes **how many permits are handed out next, not who holds one now**. A shrink performs zero handovers: holders keep their permits and complete, waiters stay parked, nothing is resolved or rejected, and the overshoot drains by attrition. `docs/07` framed resizing as the act the invariant forbids; that **conflated changing the count with changing who holds one**, and the point was shown rather than argued — the revoking alternative is one line and six tests catch it. Two criteria could not pass as written and were reported: the handover **ordering was never asserted and cannot be behaviourally** (reversing the two statements left the suite green), and `stats.inFlight` cannot obey a tightening instantly without revoking a permit from a request already on the wire. |
 | **Depends on** | `P1-T27`, `P1-T26` |
 | **Blocks** | `P2-T04`, `P2-T24` |
 | **Retires** | none |
@@ -2763,7 +2763,7 @@ hypothesis worth testing (both leaked runs launched a browser-toolbox child, so 
 | Field | Value |
 |---|---|
 | **ID** | `P2-T22` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; the menu-context member is declared from the **installed Zotero's own source**, and not from the file the card named — `menuManager.js` copies the target's descriptors and its own comment says why, while the member actually comes from `zoteroPane.js`. Optional rather than required, because two of the four targets genuinely lack it. **The finding bigger than the card: `skipLibCheck` means nothing under `typings/` is type-checked** — reproduced by the coordinator, a reference to a type that exists nowhere leaves the typecheck at exit 0 — which is why the "assert the augmentation compiles" criterion had no home and the agent **deleted its own dead assertions rather than ship one that cannot fire**. Upstream types the singular member as the **tree widget rather than a row**, with an index signature that made the read compile as `any`. |
 | **Depends on** | `P1-T19` |
 | **Blocks** | `P2-T17` |
 | **Retires** | none |
@@ -2990,7 +2990,7 @@ Zotero verified absent before and after.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T23` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; `npm run test:unit -- hostLimiter` exits 0 with 7 tests where it exited 1 with `No test files found`, so `P2-T03`'s chain now fails only on the link that card creates itself. **The move was proved pure by test-name set, not by count** — the name-only set of all 843 is `diff`-empty — and then **proved non-vacuous by six mutants**, because a count-only check cannot tell a pure move from one that carried a dead test. `Do` step 1's registry half was **unexecutable under the card's own `Files`**, and the agent reported that instead of reaching outside the list. This card is `plan/README.md` §5 rule 8's fifth instance and the reason the rule exists. |
 | **Depends on** | `P1-T26` |
 | **Blocks** | `P2-T03` |
 | **Retires** | none |

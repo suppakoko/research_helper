@@ -4619,7 +4619,7 @@ comparison against functions captured before the plugin loaded.
 | Field | Value |
 |---|---|
 | **ID** | `P0-T34` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; the asset list became an **explicit** set of extensions rather than a wildcard, so adding an asset type is a visible decision. **That design paid off on 2026-10-06:** `P1-T20` had to add `.xhtml` and `.css` to ship the Search window, and the coordinator verified by reverting the change that **the window document vanishes from the installer while the build still exits 0** — so without the explicit list that card would have passed its own `Verify with` while shipping a dead file. |
 | **Depends on** | `P0-T30` |
 | **Blocks** | none |
 | **Retires** | none |
