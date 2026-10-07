@@ -1,12 +1,30 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
-import { createManualClock } from "../../../src/core/clock";
+import { createManualClock, type Clock } from "../../../src/core/clock";
+import { UpstreamServerError } from "../../../src/core/errors";
+import {
+  createHttpClient,
+  type HttpExceptionClass,
+  type HttpTransport,
+  type HttpTransportOptions,
+  type HttpTransportXhr,
+} from "../../../src/core/http/client";
+import { type RetryPolicy } from "../../../src/core/http/retry";
 import {
   createBackoff,
   decorrelatedJitter,
   parseRetryAfter,
   type RetryBudget,
 } from "../../../src/core/rateLimit/backoff";
+import {
+  createHostLimiterRegistry,
+  HOST_POLICIES,
+  NCBI_HOST,
+} from "../../../src/core/rateLimit/hostLimiter";
 
 /**
  * `P1-T04`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network, no real
@@ -21,6 +39,15 @@ import {
  * specifies instead of drawing a few values and hoping. A test that called
  * `Math.random` and asserted a range would pass on a broken implementation that
  * happened to stay inside it.
+ *
+ * **Section 4 is `P1-T28`'s**, and it is the one part of this file that is not
+ * pure: it reads `docs/07` §7.3 off disk and drives a real `createHttpClient`
+ * over a stub transport, because the card's criteria are about the *shipped*
+ * numbers rather than about the shape. It stays in this file rather than in a new
+ * one because `P1-T28`'s `Verify with` filters on `backoff http`, so a
+ * `retryBudget.test.ts` would not be run by the command that gates the card —
+ * the same reasoning `test/unit/core/http-client.test.ts`'s header records for
+ * keeping `retry.ts`'s tests there.
  */
 
 /** Narrow away `undefined` without a non-null assertion. */
@@ -238,5 +265,327 @@ describe("createBackoff", () => {
     expect(must(delays[1], "the second delay")).toBeGreaterThan(
       must(delays[0], "the first delay"),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. §7.3's three retry numbers, on the shipped policy row — `P1-T28`
+// ---------------------------------------------------------------------------
+
+/**
+ * `docs/07` §7.3's policy table, parsed out of the document.
+ *
+ * **Why the document is read rather than restated.** `P1-T28`'s second criterion
+ * is that "a test reads §7.3's values from the row", and `plan/README.md` §5
+ * rule 4 makes §7.3 the only place a limit may be declared. A test that spelled
+ * `1000` and `30_000` again would pass with §7.3 saying something else, which is
+ * the one failure mode worth catching here. So the parse is the authority and
+ * {@link HOST_POLICIES} is what is checked against it: edit §7.3's table and this
+ * file fails, which is what makes the document load-bearing rather than
+ * decorative.
+ *
+ * The parsing discipline is `test/unit/prefs/schema.test.ts`'s `readPrefsJs`,
+ * named here because it is the pattern and not a coincidence: parse the
+ * authoritative file, then **guard against a parse that silently matched
+ * nothing** — that file counts `pref(` calls against the rows it consumed, and
+ * the guards below count columns and rows. A table this test cannot read is an
+ * error, never an empty result set, because an empty result set makes every
+ * assertion downstream vacuously true.
+ *
+ * Column *names* are resolved from the header row rather than by position, so
+ * inserting a column into §7.3 does not silently shift this test onto the wrong
+ * cell.
+ */
+interface Section73Table {
+  readonly columns: readonly string[];
+  readonly rows: readonly (readonly string[])[];
+}
+
+function readSection73Table(): Section73Table {
+  // `fileURLToPath(import.meta.url)` rather than `new URL(relative,
+  // import.meta.url)`, for the reason `test/unit/prefs/schema.test.ts` records:
+  // `tsconfig.json` extends `zotero-types/entries/sandbox`, whose `URL` is not
+  // structurally the one `fileURLToPath` takes.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const doc = readFileSync(
+    resolve(here, "../../../docs/07-architecture-and-data-model.md"),
+    "utf8",
+  );
+
+  const lines = doc.split("\n");
+  const start = lines.findIndex((line) => line.startsWith("### 7.3 "));
+  if (start < 0) {
+    throw new Error(
+      "docs/07 has no `### 7.3 ` heading; §7.3 could not be read",
+    );
+  }
+  const after = lines.findIndex(
+    (line, index) => index > start && line.startsWith("### "),
+  );
+  const section = lines.slice(start, after < 0 ? lines.length : after);
+
+  const cellsOf = (line: string): string[] =>
+    line
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim());
+
+  // The *contiguous* block starting at the header, not every table line in the
+  // section: §7.3 carries a second table — the attempt cap's cost in waiting —
+  // and a filter over the whole section mixes the two. The cell-count guard
+  // below caught exactly that while this test was being written.
+  const headerIndex = section.findIndex((line) => line.startsWith("| Host |"));
+  if (headerIndex < 0) {
+    throw new Error(
+      "§7.3 has no policy table whose header row starts `| Host |`",
+    );
+  }
+  const block: string[] = [];
+  for (let i = headerIndex; i < section.length; i += 1) {
+    const line = must(section[i], "a line of §7.3");
+    if (!line.startsWith("|")) break;
+    if (/^\|[\s\-:|]*\|$/.test(line)) continue;
+    block.push(line);
+  }
+  const columns = cellsOf(must(block[0], "§7.3's header row"));
+  const rows = block.slice(1).map(cellsOf);
+
+  // The three guards that stop a mis-parse from reading as "nothing to assert".
+  if (rows.length === 0) {
+    throw new Error("§7.3's policy table parsed to zero data rows");
+  }
+  for (const row of rows) {
+    if (row.length !== columns.length) {
+      throw new Error(
+        `§7.3's policy table has a row of ${row.length} cells against ` +
+          `${columns.length} columns: ${row.join(" | ")}`,
+      );
+    }
+  }
+  return { columns, rows };
+}
+
+/** One cell of §7.3's table, by host and column name. */
+function section73Cell(
+  table: Section73Table,
+  host: string,
+  column: string,
+): string {
+  const hostColumn = table.columns.indexOf("Host");
+  const index = table.columns.indexOf(column);
+  if (hostColumn < 0 || index < 0) {
+    throw new Error(
+      `§7.3's policy table has no "${column}" column; it has ` +
+        `${table.columns.join(", ")}`,
+    );
+  }
+  const row = table.rows.find(
+    (cells) => must(cells[hostColumn], "a Host cell") === `\`${host}\``,
+  );
+  if (row === undefined) {
+    throw new Error(`§7.3's policy table has no row for \`${host}\``);
+  }
+  return must(row[index], `${host}'s "${column}" cell`);
+}
+
+/** `1000 ms`, `30 000 ms` — digits may be space-grouped, as §7.3 writes them. */
+function millisecondsIn(cell: string, what: string): number {
+  const match = /^(\d+)ms$/.exec(cell.replace(/[\s*`]/g, ""));
+  if (match === null) {
+    throw new Error(
+      `§7.3's ${what} cell is not a millisecond figure: ${JSON.stringify(cell)}`,
+    );
+  }
+  return Number(match[1]);
+}
+
+/** A bare count, as §7.3 writes the attempt cap. */
+function countIn(cell: string, what: string): number {
+  const match = /^(\d+)$/.exec(cell.replace(/[\s*`]/g, ""));
+  if (match === null) {
+    throw new Error(
+      `§7.3's ${what} cell is not a count: ${JSON.stringify(cell)}`,
+    );
+  }
+  return Number(match[1]);
+}
+
+/** The shipped NCBI row, through the registry that serves it. */
+function shippedNcbiBudget(): RetryBudget {
+  const registry = createHostLimiterRegistry({ clock: createManualClock() });
+  const policy = must(registry.policyFor(NCBI_HOST), "the NCBI policy row");
+  return must(policy.retry, "the NCBI row's retry budget");
+}
+
+/**
+ * The `RetryPolicy` a composition root builds from a §7.3 row — `maxAttempts`
+ * straight off the row and `nextDelayMs` partially applied to that row's `base`
+ * and `cap`, which is exactly what `src/core/http/retry.ts`'s
+ * `RetryPolicy.nextDelayMs` documents as its "intended supplier".
+ */
+function policyOver(budget: RetryBudget, random: () => number): RetryPolicy {
+  return {
+    maxAttempts: budget.maxAttempts,
+    nextDelayMs: (prevDelayMs) =>
+      decorrelatedJitter(prevDelayMs, budget.baseMs, budget.capMs, random),
+  };
+}
+
+/** A clock that records what it was asked to wait and waits none of it. */
+function recordingClock(): Clock & { readonly slept: number[] } {
+  const slept: number[] = [];
+  return {
+    slept,
+    now: () => 1_700_000_000_000,
+    sleep: (ms: number) => {
+      slept.push(ms);
+      return Promise.resolve();
+    },
+  };
+}
+
+class StubZoteroException extends Error {}
+class StubUnexpectedStatusException extends Error {
+  constructor(readonly xmlhttp: HttpTransportXhr) {
+    super("unexpected status");
+  }
+}
+
+/** A transport that answers every call with one status and counts the calls. */
+function createCountingTransport(
+  status: number,
+): HttpTransport & { readonly calls: HttpTransportOptions[] } {
+  const calls: HttpTransportOptions[] = [];
+  return {
+    calls,
+    request(_method, _url, options) {
+      calls.push(options);
+      return Promise.resolve({
+        status,
+        responseText: "",
+        responseURL: "",
+        getAllResponseHeaders: () => "",
+      });
+    },
+    UnexpectedStatusException:
+      StubUnexpectedStatusException as unknown as HttpExceptionClass<
+        Error & { readonly xmlhttp: HttpTransportXhr }
+      >,
+    TimeoutException: StubZoteroException,
+    BrowserOfflineException: StubZoteroException,
+    SecurityException: StubZoteroException,
+    CancelledException: StubZoteroException,
+  };
+}
+
+const UA =
+  "research_helper/9.9.9 (https://example.test; mailto:x@example.test)";
+
+describe("docs/07 §7.3's retry budget on the shipped policy row", () => {
+  it("transcribes §7.3's three columns, read from the document itself", () => {
+    const table = readSection73Table();
+    const budget = shippedNcbiBudget();
+
+    expect(budget.baseMs).toBe(
+      millisecondsIn(
+        section73Cell(table, NCBI_HOST, "Retry base"),
+        "NCBI retry base",
+      ),
+    );
+    expect(budget.capMs).toBe(
+      millisecondsIn(
+        section73Cell(table, NCBI_HOST, "Retry cap"),
+        "NCBI retry cap",
+      ),
+    );
+    expect(budget.maxAttempts).toBe(
+      countIn(
+        section73Cell(table, NCBI_HOST, "Attempt cap"),
+        "NCBI attempt cap",
+      ),
+    );
+  });
+
+  it("names every shipped host in §7.3's table, so no row is read from nowhere", () => {
+    const table = readSection73Table();
+    for (const policy of HOST_POLICIES) {
+      // Throws rather than returns undefined when the host has no row, which is
+      // the guard that keeps the assertion above from matching a row §7.3 does
+      // not contain.
+      expect(section73Cell(table, policy.host, "Attempt cap")).not.toBe("—");
+    }
+  });
+
+  it("gives every shipped policy row a retry budget", () => {
+    // `retry` is optional on the type for a compatibility reason recorded in
+    // `hostLimiter.ts`; it is not optional in practice. A Phase 2 row added
+    // without its own three values fails here rather than silently shipping a
+    // host that never retries.
+    for (const policy of HOST_POLICIES) {
+      const budget = must(policy.retry, `${policy.host}'s retry budget`);
+      // Accepted by the shape that will consume it: `createBackoff` validates a
+      // budget eagerly, so an impossible base/cap/attempt trio throws here.
+      expect(() => createBackoff(budget)).not.toThrow();
+    }
+  });
+
+  it("spends an attempt cap of 3 as two waits of at most base then 3x base", () => {
+    // The arithmetic §7.3's cost table publishes, recomputed from the shipped
+    // row rather than restated: `maxAttempts` counts the first attempt, so a
+    // budget of 3 buys two waits, and `withRetry` enters the first retry with
+    // `prevDelayMs = 0` so the first wait is exactly `base`.
+    const budget = shippedNcbiBudget();
+    const longest = policyOver(budget, () => 1);
+    const shortest = policyOver(budget, () => 0);
+
+    const walk = (policy: RetryPolicy): number[] => {
+      const waits: number[] = [];
+      let prev = 0;
+      for (let attempt = 1; attempt < policy.maxAttempts; attempt += 1) {
+        prev = policy.nextDelayMs(prev, attempt);
+        waits.push(prev);
+      }
+      return waits;
+    };
+
+    expect(walk(longest)).toEqual([budget.baseMs, budget.baseMs * 3]);
+    expect(walk(shortest)).toEqual([budget.baseMs, budget.baseMs]);
+    // 4 s, which is the figure §7.3 weighs the attempt cap against.
+    expect(walk(longest).reduce((a, b) => a + b, 0)).toBe(4000);
+    // And the cap does not bind at this attempt cap, as §7.3 states.
+    expect(Math.max(...walk(longest))).toBeLessThan(budget.capMs);
+  });
+
+  it("retries a 503 to exactly §7.3's attempt cap, counted on the transport", async () => {
+    const budget = shippedNcbiBudget();
+    const transport = createCountingTransport(503);
+    const clock = recordingClock();
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      // Exactly what a composition root supplies: the policy for this host and
+      // nothing for any other.
+      retryFor: (host) =>
+        host === NCBI_HOST ? policyOver(budget, () => 1) : undefined,
+    });
+
+    await expect(
+      client.request(
+        "GET",
+        `https://${NCBI_HOST}/entrez/eutils/esearch.fcgi?db=pubmed`,
+      ),
+    ).rejects.toBeInstanceOf(UpstreamServerError);
+
+    // Exactly the cap, not "more than one": `maxAttempts` is total attempts
+    // including the first, so 3 means 3 requests and 2 waits. A caller that read
+    // the cap as *retries* would issue 4 requests and 3 waits, and all four
+    // assertions below would fail. They are asserted after the rejection rather
+    // than inside a `.catch`, so a failure reports the count rather than an
+    // `AssertionError` wrapped in the rejection.
+    expect(transport.calls).toHaveLength(budget.maxAttempts);
+    expect(transport.calls).toHaveLength(3);
+    expect(clock.slept).toEqual([1000, 3000]);
+    expect(clock.slept).toHaveLength(budget.maxAttempts - 1);
   });
 });

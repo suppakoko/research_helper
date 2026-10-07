@@ -1660,7 +1660,14 @@ paging, and a loud failure on the errors PubMed hides inside HTTP 200.
 - [ ] A requested `limit` of 12 000 stops at the 9998 ceiling and the returned
       page carries a truncation warning.
 - [ ] A 250-PMID result set issues exactly two `efetch` calls.
-- [ ] Every issued URL carries `tool=research_helper` and the maintainer
+- [ ] Every issued **request** carries `tool=research_helper` and the maintainer
+      > **Reworded 2026-10-07 after the executing agent reported it under rule 6.** This read "Every
+      > issued **URL**", which **cannot hold alongside `docs/02` §3.4**: that section requires a POST
+      > once the URL would pass about 2,000 characters, a full 200-identifier `efetch` batch of
+      > eight-digit identifiers passes it, and **a POST carries no parameters in its URL at all**. So
+      > the criterion forbade what the same document mandates. Decision D10 and `docs/02` §3.1
+      > oblige the pair on every *request*, which is what is asserted — in the URL for each GET and
+      > in the form body for the POST, across all three requests of a 250-identifier search.
       `email=`, asserted against the transport spy.
 - [ ] With `ncbi.keyPresent` true and a stubbed key, `api_key=` is present and
       the limiter was reconfigured to the with-key budget.
@@ -1677,6 +1684,118 @@ npm run typecheck && npm run test:unit -- pubmed-source
 built here — Phase 1's `maxResults` ceiling is 200 (`docs/07` §8.5). If a later
 phase needs it, `WebEnv` is transient: treat it as valid for one session and
 re-issue `esearch` on failure.
+
+**Findings, 2026-10-07 — six of seven criteria pass, the seventh cannot pass as written, and the
+adapter is correct but unreachable until something constructs it.** Verified independently: an
+864-line adapter and a 1,176-line spec with **53 tests**, the suite at **974 in 24 files**, typecheck 0,
+`lint:check` 0, build 0 — and **zero live network requests**, every response served by a stub.
+
+**Criterion 4 is unsatisfiable as written, and the reason is a conflict inside the corpus rather than a
+shortfall in the work.** It says "**Every issued URL** carries `tool=research_helper` and the maintainer
+`email=`". But `docs/02` §3.4 requires a **POST** once the URL would pass about 2,000 characters, and a
+full 200-identifier batch of eight-digit identifiers passes it — **and a POST carries no parameters in
+its URL at all.** So the criterion forbids what the same document mandates. What decision D10 and
+`docs/02` §3.1 actually oblige is "on **every request**", and that is what is asserted: across all three
+requests of a 250-identifier search the pair is present — in the URL for each GET and **in the form body
+for the POST**. Reported under rule 6 rather than adjusted; the card text now carries the repair.
+
+**One real defect was found by a test rather than by review, which is the best thing in this report.**
+The identifier list returned by `esearch` was not truncated to the `retmax` that was asked for — so a
+server returning more identifiers than requested would walk the adapter **past the 9,998 ceiling by the
+back door**. The ceiling assertion caught it on its first run. The fix is cited to the card's own
+`Do NOT` in a comment, and mutation 14 now pins it.
+
+**Nineteen mutations, and the one that failed to break anything was reported as such rather than
+quietly dropped.** Removing `searchAll`'s own cancellation check broke **nothing**, because a second
+guard at the top of `esearch()` still stops the request before it is issued — so the stated behaviour
+remained true. The agent recorded it as a **redundant guard rather than as missing coverage** and re-ran
+with both guards removed, which then failed two tests. **That distinction is the difference between an
+honest mutation table and a padded one.**
+
+**The capability flags were kept honest in the direction that costs something.** `relatedByWork`,
+`citationGraph` and `lookupById` are all off and the corresponding methods are **absent entirely**,
+because the card's `Do NOT` keeps the related-articles, summary and identifier-converter endpoints out
+of this card — and §4.2's requirement to advertise capabilities "honestly" rules out a flag promising an
+unimplemented method. Easy to get wrong in the flattering direction.
+
+**Provenance was added without widening a shared type.** `docs/07` §4.2's `SourcePage` has exactly four
+members and `src/sources/types.ts` is outside this card's `Files`, so a local `PubmedSearchPage` extends
+it with one member whose three keys are **NCBI's own spellings** — `count`, `querytranslation`,
+`translationset` — because `docs/07` §5.3 types that field as extras "keyed by the source's own field
+names" and names those three. `P1-T17` can assign the object straight across, and a test pins the key
+set to exactly those three.
+
+**The access-key route is settled and verified step by step rather than asserted.** The adapter takes an
+optional `SecretStore` — the port in `src/core/secretStore.ts`, a `core/` module — reads `source.ncbi`
+before each request, and goes out unkeyed when no store is given. A store that throws is treated as "no
+key" and logs a line naming **neither the value nor the error**. What a later card must supply is a
+**constructor dependency, not a new per-call context member**, because a per-call credential channel
+would put the key at every call site instead of in one wiring point. The route: `P1-T16` step 7 extends
+`installServices()`, that path is already in `P1-T16`'s `Files`, and `P1-T16` already depends on this
+card — so no plan change is needed, only a note that the key store is one of the dependencies step 7
+must wire, since that step does not mention credentials at all.
+
+**The rate-limit half needs no new code, and that was checked rather than hoped.** `keychain.ts` maps
+`source.ncbi` to the key-presence preference and writes it inside `set()`, and the limiter registry
+observes that flag and raises the bucket. **Storing a real key therefore raises the budget with no
+further wiring** — which is `P1-T06`'s work paying off one card later.
+
+**The adapter is correct and unreachable, measured the same way `P1-T06`'s store was.** `npm run build`
+exits 0 and the bundled script contains `efetch.fcgi` **zero** times: nothing constructs the adapter, so
+the bundler removes it. Confirmed by the coordinator. **Two cards in a row have now shipped working code
+that the installer does not contain**, and both point at the same missing construction site.
+
+**The exact assertion a real key would unlock, which is the most useful thing left for whoever gets
+one.** `docs/09` records that the corpus has **never observed** the rate-limit header reading `10` on a
+keyed request — only `3` unkeyed — while §2.3's healthy row for NCBI *assumes* the header tracks the
+documented rate. `healthCheck()` already reads both headers into a quota hint, and it is the cheapest
+request in the codebase. So: **one health check carrying a real key returning HTTP 200 with a quota hint
+of `<remaining>/10`.** That single observation discharges §2.3's assumption and settles an open item, and
+it is what the human gate recorded against `P1-T06` actually exists to buy — on the card that can issue
+a request, which `P1-T06` cannot.
+
+**One claim in the hand-out was false, and it was load-bearing in the argument I built on it.** I wrote
+that `src/sources/**` may not import `src/zotero/**` and called it ESLint-enforced. **It is not.**
+Verified: `eslint.config.js`'s adapter-tier override groups `src/sources/**` and `src/zotero/**`
+**together in the same tier** and forbids both only from `pipeline/` and `ui/`; `P1-T07`'s own findings
+record that a `sources → zotero` import probe exits 0 with no error at all, and `docs/07` §2.3 explains
+why the arm cannot simply be added to that group. The rule is documented and was obeyed here anyway —
+the adapter imports only `core/`, `model/` and its own directory — so the conclusion survives for a
+better reason than the one I gave. **`eslint.config.js` is already in `P1-T07`'s `Files`, so this is an
+open item on that card rather than a new one.**
+
+**Two further corpus problems, both genuine and neither absorbed.** `docs/07` §4.2 says `search`
+"throws `SourceError` subclasses", which cannot hold alongside this card's `Do NOT`: the client
+classifies every status into §10.1 classes — rate limit, upstream server, timeout, offline — none of
+which is a `SourceError` subclass, and wrapping them would discard the `retryable` flag and the
+classification two earlier cards own. Transport classes therefore propagate **unwrapped** and only
+PubMed-specific failures become a source or parse error, with a test pinning it; §4.2 needs either a
+qualification or an explicit statement that adapters re-throw §10.1 classes untouched. And
+**`SourceHealth.messageKey` has no vocabulary at all** — sixteen error identifiers exist and nothing
+resembling a health status — so a healthy probe currently returns the source-name identifier, which
+renders as "PubMed". Both are single named constants, so the substitution is one line once the
+vocabulary exists.
+
+**A real gap in credential redaction, found because this card ships the first request body that can
+carry a key.** The URL redactor removes the key **by name** and is sound. The free-text redactor has no
+pattern for this credential and its only applicable rule matches runs of **40 or more** characters — so
+**any shorter key is untouched** in a log line or a form body, and the corpus records no length for an
+NCBI key, so it cannot even say whether this one is safe. The adapter sidesteps it: the POST body is
+never logged and never placed in an error, and the redacted form offered to callers is **re-rendered
+from the same values without the key** rather than pattern-matched. That is the right local answer and
+the general one needs a card — it is an NFR-16 gap, not a style point.
+
+**Cross-card attribution was handled correctly in both directions.** This card named a transient
+typecheck failure in `backoff.test.ts` as the other agent's, noted that `hostLimiter.ts` and `docs/07`
+changed under it mid-run while every exported name it imports stayed intact, and attributed the
+installer's 31-byte growth to the other card by observing that its own module contributes **zero** bytes
+to the bundle. The other card reported the mirror image. **With two cards in flight that arithmetic is
+what keeps a report from becoming a muddle.**
+
+**The integration suite was deliberately skipped with a reason, not an omission.** Nothing here touches
+the Zotero global, a preference or a file, so no integration assertion can reach it — and starting a
+second Zotero profile to exercise unreachable code, while another agent might be running suites, was the
+worse trade. No process was inspected and none was killed.
 
 ---
 
@@ -4559,7 +4678,7 @@ per-host cap. Not false, just incomplete, and the file is outside this card's `F
 **Goal.** The retry policy has numbers, they live in one place, and `P1-T05`'s injected budget is
 actually populated.
 
-**Why this is a card.** Measured 2026-09-30 (`P1-T04`, `P1-T05`): `docs/02` §2.4 and `docs/05` §9.4
+**Why this is a card.** Measured 2026-09-30 (`P1-T04`, `P1-T05`): `docs/02` §2.4 and `docs/05` §9.5
 both name `docs/07` §7.3 as the owner of "the shipped backoff shape **and attempt cap**" — and
 §7.3's policy table has columns for rate, burst and max-concurrent **only**. There is no `base`, no
 `cap` and no attempt-cap number anywhere, and `docs/07` §8.5 has no retry rows either. `docs/03`
@@ -4571,7 +4690,11 @@ the client makes exactly one attempt. Both agents refused to invent them, correc
 **Read first.**
 - `docs/07` §7.3's policy table — the columns that exist, and the sentence that claims ownership.
 - `src/core/rateLimit/backoff.ts`'s `RetryBudget` / `createBackoff`, and §7.3's decorrelated-jitter
-  shape `min(cap, random(base, prev*3))`. **`docs/05` §9.4 explicitly forbids a second shape.**
+  shape `min(cap, random(base, prev*3))`. **`docs/05` §9.5 explicitly forbids a second shape.**
+  > **Section number corrected 2026-10-07.** Every citation of this rule in the corpus said §9.4,
+  > which is "Concurrency shape"; the authority note is in **§9.5 "Backoff and degradation"**. The
+  > executing agent found **eight** wrong citations — three in `src/core/rateLimit/backoff.ts`, four
+  > elsewhere in this file, and one in the hand-out prompt. Three of the eight were in this card.
 - `src/core/http/retry.ts`'s `RetryPolicy`, the injection point.
 - `P0-T21`'s `Findings` for what real hosts did under load, and `P0-T22`'s — Semantic Scholar
   returned **429 on 12 of 12** unauthenticated requests over 72 s, which is the shape of evidence an
@@ -4597,11 +4720,18 @@ the client makes exactly one attempt. Both agents refused to invent them, correc
 >   **This coincides with `docs/03` §11.6's LLM `baseMs` and was not taken from it** — the `Do NOT`
 >   forbids borrowing those numbers and the derivation above is independent. The coincidence is
 >   recorded rather than hidden, because the next reader will notice it.
-> - **`cap` = 30 000 ms.** `P1-T26` measured and honours `Retry-After: 120` as an absolute deadline
+> - **`cap` = 30 000 ms.** `P1-T26` **honours** `Retry-After: 120` as an absolute deadline
+>   (**corrected 2026-10-07: the coordinator wrote "measured", and 120 is a *test fixture* in
+>   `P1-T26`'s own criterion, not an observation. Grepping every `Retry-After` mention in `docs/` and
+>   `plan/`, no host has ever been recorded sending the header at all — `docs/02` §7.1 records arXiv's
+>   429 explicitly *without* one. The reasoning survives: 120 000 ms is the largest delay the shipped
+>   code is *specified* to honour, and §8.5's 60-second `timeoutSeconds` is a second anchor**)
 >   when a server sends one, and these three numbers apply **only** when none is sent. Letting the
 >   silent case wait as long as the loudest measured explicit case would make a user sit in front
 >   of the Search window for two minutes with nothing said. 30 s also means the cap does not bind
->   at an attempt cap of 3 (the third wait tops out near 9 s), so it is a guard against a later
+>   at an attempt cap of 3 (**corrected 2026-10-07: this read "the third wait tops out near 9 s",
+>   and at a cap of 3 there is no third wait — there are two, topping out at 1 s and 3 s**), so it is
+>   a guard against a later
 >   raise of the attempt cap rather than a value the shipped path reaches.
 > - **Attempt cap = 3.** Worst case **4 s** of waiting before the job fails and §7.3's
 >   "Retry later" is offered — tolerable inside an interactive search. Five attempts reach ≈ 2 min,
@@ -4616,7 +4746,13 @@ the client makes exactly one attempt. Both agents refused to invent them, correc
 > read "worst case 1 + 3 + 9 ≈ 13 s", which assumed **three** waits. `RetryBudget.maxAttempts` is
 > counted as **total attempts including the first**, so a budget of 3 allows **2** retries and
 > therefore two waits: `min(cap, max(base, prev * 3))` gives 1 s then 3 s, i.e. **4 s** worst case.
-> Computed from the shipped `decorrelatedJitter`, whose first call passes `prevMs = base`. The error
+> Computed from `withRetry` (`src/core/http/retry.ts`), which seeds `previousDelayMs = 0`, so
+> `decorrelatedJitter` collapses to exactly `base` on the first wait. **Corrected 2026-10-07, reported
+> by the executing agent: this read "computed from the shipped `decorrelatedJitter`, whose first call
+> passes `prevMs = base`", which describes `createBackoff` — and `createBackoff` gives 12 / 39 / 69 s,
+> not 4 / 13 / 40.** The figures were right and the derivation was wrong. `withRetry` is the seam that
+> ships: `src/core/http/client.ts` calls it, and **no production code calls `createBackoff` at all**,
+> which is itself worth a card (see below). The error
 > was the coordinator's, and the direction is favourable, so the owner's three numbers stand
 > unchanged — but the figures a later reader would size a change by are these: **3 attempts → 4 s,
 > 4 → 13 s, 5 → 40 s**. The owner approved 3 against the 13 s figure, which is now known to be the
@@ -4626,11 +4762,11 @@ the client makes exactly one attempt. Both agents refused to invent them, correc
 > Phase 2 hosts get their own three values with their own rows; nothing here is a global default.
 2. Add the three columns to §7.3's table, per host, with the source of each value named.
 3. Put the values on the policy rows in `hostLimiter.ts` and assert them against §7.3 by reading the
-   shipped row rather than restating it — the pattern `P1-T04`'s pacing test already uses, so a
+   shipped row rather than restating it, so a
    change to §7.3 fails loudly.
 
 **Do NOT.**
-- Do not copy `docs/03` §11.6's numbers. Different shape, different subsystem, and §9.4 forbids a
+- Do not copy `docs/03` §11.6's numbers. Different shape, different subsystem, and §9.5 forbids a
   second shape.
 - Do not hardcode a limit outside the policy table (`plan/README.md` §5 rule 4).
 
@@ -4644,9 +4780,115 @@ the client makes exactly one attempt. Both agents refused to invent them, correc
 
 **Notes.** There is a second, pre-existing conflict this card should flag but **not** resolve:
 `P3-T05` step 7 instructs **full** jitter over `min(cap, base * 2**attempt)` from `docs/03` §11.6,
-while §7.3 and `docs/05` §9.4 specify **decorrelated** jitter — and `P3-T05`'s `Files` list modifies
+while §7.3 and `docs/05` §9.5 specify **decorrelated** jitter — and `P3-T05`'s `Files` list modifies
 `backoff.ts`. Two differently-shaped backoffs will otherwise end up in one file. Report it; the
 decision is the owner's.
+
+**Findings, 2026-10-07 — the retry numbers have a home, a named source each, and the first test in this
+repository that reads an authority document.** Verified independently: typecheck 0, `lint:check` 0,
+**974 unit tests in 24 files**, and `backoff` alone at **27**. The gate was discharged before hand-out,
+so `Do` step 1's "stop and ask" did not fire.
+
+**Criterion 2 passes on the stronger of two readings, and that is the most durable thing here.** The
+test does not merely read the shipped row — it **parses §7.3's table out of `docs/07` and compares it
+against the row** `createHostLimiterRegistry(...).policyFor(NCBI_HOST).retry` serves, so editing
+*either* side fails. Mutant E proves it: changing the **document** from `1000 ms` to `1200 ms` fails
+with `expected 1000 to be 1200`. **So §7.3 is load-bearing rather than decorative, which it has never
+been before** — see the correction below about what the card claimed on this point.
+
+**The vacuity guard fired for real while the test was being written, which is the best evidence it
+works.** The parser first matched every table line in §7.3 and so mixed the new cost table into the
+policy table; it failed loudly — `§7.3's policy table has a row of 4 cells against 8 columns` —
+instead of quietly asserting over a ragged parse. It now takes the contiguous block from the `| Host |`
+header, resolves columns **by name** so inserting a column cannot silently shift the test onto the
+wrong cell, and requires at least one data row with every row's cell count equal to the header's.
+
+**Criterion 3 was made non-vacuous in exactly the way that mattered.** With an attempt cap of 3 the
+transport count must be **3**, not "more than 1": the test drives a real client over a counting stub
+and asserts the count equals the shipped `maxAttempts` **and** equals 3 **and** that the recorded sleeps
+are `[1000, 3000]`. Mutant D — the composition-root error of reading 3 as three *retries* — fails it at
+`expected … to have a length of 3 but got 4`.
+
+**One mutation was deliberately not run, and the restraint was right.** The most direct probe of the
+off-by-one would have been to break `src/core/http/retry.ts`'s `attempt >= maxAttempts` comparison —
+but the other agent was compiling against that module graph at the time, and a transient defect there
+would have surfaced in its run as a confusing unrelated failure. Mutant D proves the same property from
+a file this card owns. **Six mutants, all caught; `grep -rn MUTANT src test` clean and all three files
+`diff`-identical to their pre-mutation copies.**
+
+**Six errors in this card's text and the hand-out prompt, all the coordinator's, all corrected above —
+and four of the six are about the same arithmetic.**
+
+1. **"worst case 1 + 3 + 9 ≈ 13 s"** — conflated attempts with retries. `maxAttempts` counts total
+   attempts including the first, so a cap of 3 means **two** waits.
+2. **The correction then named the wrong code path.** It said the 4 / 13 / 40 figures were "computed
+   from the shipped `decorrelatedJitter`, whose first call passes `prevMs = base`" — that describes
+   `createBackoff`, which gives **12 / 39 / 69**. The figures come from `withRetry`, which seeds
+   `previousDelayMs = 0` so the first wait collapses to exactly `base`. Verified here:
+   `backoff.ts:257` is `let prevMs = budget.baseMs`, `retry.ts:151` is `let previousDelayMs = 0`, and
+   **no production code calls `createBackoff` at all** while `client.ts` calls `withRetry`. **The
+   numbers were right and the derivation was wrong**, which is the harder error to catch.
+3. **"the third wait tops out near 9 s" at a cap of 3** — there is no third wait.
+4. **"`P1-T26` measured and honours `Retry-After: 120`"** — 120 is a **test fixture** in `P1-T26`'s own
+   criterion, not an observation. Grepping every mention in `docs/` and `plan/`, **no host has ever
+   been recorded sending the header**; `docs/02` §7.1 records arXiv's 429 explicitly *without* one. The
+   reasoning survives — it is the largest delay the shipped code is *specified* to honour — but the word
+   was wrong.
+5. **"the pattern `P1-T04`'s pacing test already uses, so a change to §7.3 fails loudly"** — false.
+   Verified: before this card **no test in the repository read any `docs/*.md`**; the only tests that
+   read a file at all read `addon/prefs.js`, `package.json` and the window's own three files, and
+   `P1-T04`'s pacing tests read the shipped row and then compare it to **restated literals**. The
+   pattern the agent actually followed is `test/unit/prefs/schema.test.ts`'s — parse the authoritative
+   file, then count what was consumed against what is there, so a parse matching nothing cannot read as
+   "nothing to assert". **Naming a pattern that did not exist sent the agent looking for it.**
+6. **`docs/05` §9.4 should be §9.5** throughout. §9.4 is "Concurrency shape"; the authority note and
+   the ownership sentence are both in §9.5 "Backoff and degradation", verified at
+   `docs/05-related-work-discovery.md:1330`. The agent found **eight** wrong citations in the corpus;
+   **three were in this card** and one was in the hand-out prompt. The three in the card are fixed; the
+   rest need a card.
+
+**Two things this card could not reach, and the first means the numbers are not yet in effect.**
+`src/bootstrap/container.ts` still reads that `retryFor` is "deliberately **not** supplied", and that
+file is outside this card's `Files` — so **the shipped client still makes exactly one attempt.** The
+card's Goal says `P1-T05`'s injected budget is "actually populated", and only half of that is reachable
+inside the card's own scope: the numbers exist and the row carries them, nothing consumes them. Flagged
+in the row's doc comment rather than done quietly.
+
+**The second is a genuine seam defect worth its own card:** `createBackoff` seeds `prev = base` while
+`withRetry` seeds `prev = 0`, so **one published `base` means 1 s or 3 s depending on which helper a
+caller picks**, and a threefold difference in every published cost figure. `createBackoff` is currently
+dead production code, which is why nobody has noticed. Both files are outside this card's `Files`.
+
+**A type was widened as optional rather than required, and the reasoning is the `Files` rule applied to
+a type.** `HostRateLimitPolicy.retry` is optional because `grep` found exactly one policy-row literal
+outside `hostLimiter.ts` — in `test/unit/core/tokenBucket.test.ts` — and a required member would have
+made that file a typecheck error **outside this card's `Files`**. A test asserts instead that every
+shipped row carries one, which is the enforcement a required type would have given without breaking a
+file the card may not touch. **Reported rather than done quietly**, which is the distinction that
+matters.
+
+**No exported name or signature in `hostLimiter.ts` changed** — verified, because the other agent was
+compiling against it: one `import type`, one optional member, one object property and comments. The
+installer grew by **31 bytes**.
+
+**The integration suite was skipped and the justification is a grep, not an assumption.**
+`grep -rn "HOST_POLICIES\|backoff\|RetryBudget\|retryFor\|\.retry\b" test/integration` finds nothing,
+the one integration spec importing `hostLimiter` reads only `policyFor(NCBI_HOST).withoutKey.ratePerSecond`
+— which an added optional sibling cannot affect — and no integration spec reads `docs/07`. No Zotero
+process was started or killed.
+
+**Mid-run failures were correctly attributed to the other card rather than absorbed.** Two transient
+breakages appeared in `src/sources/pubmed/pubmedSource.ts` and its spec; the agent named them, said it
+had touched neither file, and confirmed the final runs clean. **With two cards in flight that is the
+difference between a report and a muddle.**
+
+**Needs a card.** (a) Populate `retryFor` at the composition root, with the three now-stale comments in
+`backoff.ts`, `retry.ts` and `container.ts` folded in. (b) Settle the first wait between the two seams.
+(c) Fix the remaining `docs/05` §9.4 citations. (d) **`P3-T05` specifies full jitter over
+`min(cap, base * 2**attempt)` from `docs/03` §11.6 while §7.3 and §9.5 specify decorrelated jitter and
+§9.5 forbids a second shape — and `P3-T05`'s `Files` modifies `backoff.ts`, so two shapes would land in
+one file.** The agent copied none of those numbers and mutant C proves the test would catch someone who
+did. **That one is an owner decision, not a correction.**
 
 ---
 

@@ -61,6 +61,7 @@ import type { Clock } from "../clock";
 import type { PrefObserverHandle, PrefScalar, PrefStore } from "../config";
 import { ConfigurationError } from "../errors";
 
+import type { RetryBudget } from "./backoff";
 import {
   TokenBucket,
   type RateLimiter,
@@ -100,6 +101,29 @@ export interface HostRateLimitPolicy {
    * rule 5. Nothing in `src/core/rateLimit/` ever sees a credential.
    */
   readonly keyPresencePref?: string;
+  /**
+   * §7.3's retry budget for this host — `base`, `cap` and the per-host attempt
+   * cap — as the three columns added to §7.3's policy table on 2026-10-07
+   * (`P1-T28`). The source of each value is named in §7.3 immediately below the
+   * table, and `plan/README.md` §5 rule 4 is why they are here and nowhere else.
+   *
+   * The budget does **not** vary with the key-presence flag, which is why it sits
+   * on the row rather than inside {@link RateLimiterConfig}: a key raises how
+   * fast we may ask, not how patiently we wait after a refusal.
+   *
+   * **Optional, and that is a compatibility decision rather than a design one.**
+   * A required member would make every existing `policies:` literal a typecheck
+   * error, including the two-row one in `test/unit/core/tokenBucket.test.ts`, a
+   * file `P1-T28`'s `Files` list does not name — so the member is added rather
+   * than imposed, which is `plan/README.md` §4's "extend rather than replace when
+   * an importer is outside your `Files`" applied to a type instead of a module.
+   * Absent means exactly what an absent `RetryPolicy` already means to
+   * `src/core/http/client.ts`: one attempt and no retry. That is documented
+   * behaviour, not a silent default. `test/unit/core/backoff.test.ts` asserts that
+   * every row in {@link HOST_POLICIES} carries one, so a Phase 2 row cannot ship
+   * without its own three values.
+   */
+  readonly retry?: RetryBudget;
 }
 
 /** The host `P1-T07`'s PubMed adapter talks to. */
@@ -116,6 +140,24 @@ export const NCBI_KEY_PRESENT_PREF = "ncbi.keyPresent";
  * the *maintainer's* address on this host — decision D10, because NBK25497
  * demands the developer's, "not that of a third-party end user" — which is
  * `src/core/http/userAgent.ts`'s business (`P1-T05`), not this file's.
+ *
+ * **The retry budget, settled 2026-10-07 (`P1-T28`).** `base` 1000 ms, `cap`
+ * 30 000 ms, attempt cap **3** — transcribed from the three columns that card
+ * added to §7.3's table, with the source of each value named in §7.3 under the
+ * table. The attempt cap is **total attempts including the first**
+ * ({@link ./backoff.RetryBudget.maxAttempts}), so it allows two retries and two
+ * waits. Through the seam `src/core/http/retry.ts` drives — `withRetry` enters
+ * the first retry with `prevDelayMs = 0`, so the first wait is exactly `base` —
+ * the longest a failing request can wait before the job fails is **4 s**
+ * (1 s + 3 s). `createBackoff` in this directory seeds `prev = base` instead and
+ * would give 3 s + 9 s = 12 s for the same row; §7.3 records that divergence and
+ * no shipped code calls `createBackoff`.
+ *
+ * **Nothing consumes this field yet.** `src/core/http/client.ts` takes the policy
+ * through `retryFor`, and `src/bootstrap/container.ts` does not supply one — so
+ * the shipped client still makes exactly one attempt. Populating `retryFor` from
+ * this row touches a file outside `P1-T28`'s `Files` list and is reported against
+ * the card rather than done quietly (`plan/README.md` §5 rule 2).
  *
  * **Off-peak scheduling, carried forward from §7.3 as `P1-T04`'s Notes require.**
  * NCBI's own guidance is that large jobs run "either weekends or between 9:00 PM
@@ -143,7 +185,10 @@ export const NCBI_KEY_PRESENT_PREF = "ncbi.keyPresent";
  * under our control — and `api.biorxiv.org`. `api.openalex.org` gets **no** row:
  * decision D2 puts OpenAlex out of v1 and one of `plan/03`'s cards greps this
  * file to prove it. The LLM and TTS hosts are Phase 3's and Phase 5's and are driven from
- * provider prefs rather than from a static row.
+ * provider prefs rather than from a static row. **Each of those five rows needs
+ * its own `retry` budget with its own named sources in §7.3** — the NCBI numbers
+ * are that host's and not a global default, which §7.3 states and
+ * `test/unit/core/backoff.test.ts` enforces.
  */
 export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
   {
@@ -151,6 +196,7 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
     withoutKey: { ratePerSecond: 2.5, burst: 1, maxConcurrent: 3 },
     withKey: { ratePerSecond: 8, burst: 1, maxConcurrent: 3 },
     keyPresencePref: NCBI_KEY_PRESENT_PREF,
+    retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
   },
 ];
 
