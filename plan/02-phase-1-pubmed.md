@@ -1816,7 +1816,7 @@ worse trade. No process was inspected and none was killed.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T10` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; PubMed responses map to canonical records, with the parse behind an injected port because the sandbox has a document parser and Node does not, and an element port narrow enough that **every path is an exact parent-to-child walk** — no query selector, no tag search, so a stray nested element can never be picked up. Raw payloads are omitted by default on NFR-7's wording and shared **by reference** when the preference turns them on. **The suite caught a defect in the shipped code on its first run rather than in a mutation:** a whitespace collapse was rewriting the thin space in `docs/02` §3.4's own captured sample into an ordinary space — reproduced by the coordinator, and `trim()` has the same reach. **Built the absent-versus-not-understood distinction no criterion asked for**, and named the fields where it cannot exist. Two mutations broke nothing and were diagnosed as a message-quality guard and a fixture gap rather than dismissed as dead code. |
 | **Depends on** | `P1-T01`, `P1-T09` |
 | **Blocks** | `P1-T11`, `P1-T16` |
 | **Retires** | `R-17` (measured) |
@@ -2029,7 +2029,7 @@ card.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T11` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; **17 fixtures over 30 live requests, all 200**, paced under 1.5 per second against a documented ceiling of 3, unkeyed — the recordings themselves carry `x-ratelimit-limit: 3` as direct evidence. **Recording found that a fact the corpus calls "verified live" is stale:** `retstart=9999` no longer returns an error inside a 200; today the service returns an empty list and a *warning*, so **it now fails silently where it used to fail loudly** — precisely the failure mode §3.3 warns the adapter about. Both behaviours are recorded, the historical one re-read from the document at run time. **Twelve of the thirty requests were wasted and said so**, one because the recorder's own redaction guard refused a sidecar — the first time a safety check in this project fired on real data. Two criteria reported under rule 6. **Also found that the contract suite does not run in continuous integration at all**, and that 13 third-party author addresses and 9 publisher copyright notices are now committed, which is an owner's decision rather than a defect. |
 | **Depends on** | `P1-T05`, `P1-T09`, `P1-T10` |
 | **Blocks** | `P1-T23` |
 | **Retires** | part of `R-2` |
@@ -2960,7 +2960,7 @@ constructs any of it** — `P1-T25` owns that.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T16` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; **the installer moved for the first time in five cards**, 76,419 → 111,969 bytes, and three of the four stranded modules now reach it — the key store, the adapter and the mapper, with the startup keystore probe and `registerSources` called for the first time. The agent **separated its own 23,052 bytes from a concurrent card's by A/B build rather than by inference.** One defect blocked the whole card and is instructive: the keychain module evaluates a platform global **in its module body**, so merely importing it threw and took a unit suite down with **zero tests collected** — *the module graph of a layer-one test is as much a part of its contract as its assertions*. Criterion 1 passes as `"partial"` rather than `"succeeded"`, argued from §12.1 rather than assumed. Three mutations broke nothing and all three became real assertions, including one where **the test's own stub was performing the check under test**. |
 | **Depends on** | `P1-T07`, `P1-T09`, `P1-T10`, `P1-T14`, `P1-T15`, `P1-T25`, `P1-T31` |
 | **Blocks** | `P1-T22`, `P2-T02` |
 | **Retires** | part of `R-2` |
@@ -3213,7 +3213,7 @@ without a restart.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T17` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; the provenance record, the human note and the JSON export, with the in-memory record as the authority and the asymmetry **disclosed**: a new field reaches the export and the schema check automatically, the note only when someone edits the renderer. **Closed two real credential leaks the project's own redaction could not see**, both reproduced by the coordinator — a bare query string parses as a *path*, so the parameter list is empty and nothing is removed; and a URL inside free text is invisible to the free-text redactor. A 32-character key is below its 40-character threshold. **One of the two was a live defect in the first draft, not a mutation.** Criterion 5's second half cannot hold, because the shipped redactor *removes* a named parameter and an empty value is the one thing a marker cannot express. **Separated conformance assertions from self-consistency ones**, and shipped no reader, so no round-trip can pass by agreeing with itself. |
 | **Depends on** | `P1-T09`, `P1-T14` |
 | **Blocks** | `P1-T22`, `P2-T17` |
 | **Retires** | none |
@@ -4109,7 +4109,7 @@ card has a gate" and "this card waits on a gated card" need different answers fr
 | Field | Value |
 |---|---|
 | **ID** | `P1-T21` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-07; selection is keyed on a **stable row key over the whole fetched set**, never an index, with a duplicate host key falling back to an ordinal because two rows sharing a checkbox would turn "exactly 35" into 34. Filtering writes nothing to the selection, commands act on visible rows only, and every count plus the list Import receives is selection ∩ visible. **The defect the hand-out warned about got past the card's own first test pass** — an over-reaching command leaves the *visible* count exactly right, and the pure-logic tests cannot see a wrong argument at the DOM call site. **A tightened assertion then failed on unmutated code**, finding a class the row builder sets with no rule behind it. Two defects only a live window could show. Honest about the dark theme, Tab traversal and screen reader being unchecked — and **a dimming colour was deliberately removed** rather than added, because dimming a data row would risk its contrast for decoration. **Found the hole `P1-T22` must close: the empty-state message interpolates the query verbatim.** |
 | **Depends on** | `P1-T20` |
 | **Blocks** | `P1-T22` |
 | **Retires** | none |
