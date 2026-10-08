@@ -21,10 +21,10 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
-| 1 — PubMed slice | 42 | 26.75 d | 26.75–37 d | 9–12 d (+123%) |
+| 1 — PubMed slice | 43 | 27.25 d | 27.25–38 d | 9–12 d (+127%) |
 | 2 — Multi-source + dedup | 25 | 27.50 d | 27.50–39 d | 12–16 d (+72%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **133** | **95.50 d** | **95.50–134 d** | 39–52 d (+84% over the top of the band) |
+| **Phases 0–3** | **134** | **96.00 d** | **96.00–135 d** | 39–52 d (+85% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -355,8 +355,11 @@ nothing at all, because ranking them without an owner's input would be a decisio
 
 ### 6.1 Features the corpus specifies and the build does not have
 
-1. **The duplicate-policy choice is collected and dropped.** `docs/08` §4.4's control is read and never
-   reaches the writer, because the pipeline's input type has no member for it (`P1-T22`'s `Findings`).
+1. ~~**The duplicate-policy choice is collected and dropped.**~~ **CARDED 2026-10-08 as `P1-T43`**, with
+   the hide-already-present decision the owner took the same day, because the two are one behaviour. The
+   triage figure that made it a card: the mechanism is **complete and unreached** —
+   `src/zotero/importer.ts` declares the three-way policy, its default, an optional request member and
+   **all three branches**, and no caller in `src/` supplies a value.
 2. **Per-source import counts.** The summary reports one total; §4.6 names per-database figures.
 3. **A publication-type vocabulary.** Real records carry review, editorial, comment, preprint and clinical
    trial, and **every PubMed record currently maps to one of two types**. Fixing it means editing

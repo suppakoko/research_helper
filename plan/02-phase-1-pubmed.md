@@ -4125,7 +4125,7 @@ card has a gate" and "this card waits on a gated card" need different answers fr
 | **ID** | `P1-T21` |
 | **State** | `DONE` — approved 2026-10-07; selection is keyed on a **stable row key over the whole fetched set**, never an index, with a duplicate host key falling back to an ordinal because two rows sharing a checkbox would turn "exactly 35" into 34. Filtering writes nothing to the selection, commands act on visible rows only, and every count plus the list Import receives is selection ∩ visible. **The defect the hand-out warned about got past the card's own first test pass** — an over-reaching command leaves the *visible* count exactly right, and the pure-logic tests cannot see a wrong argument at the DOM call site. **A tightened assertion then failed on unmutated code**, finding a class the row builder sets with no rule behind it. Two defects only a live window could show. Honest about the dark theme, Tab traversal and screen reader being unchecked — and **a dimming colour was deliberately removed** rather than added, because dimming a data row would risk its contrast for decoration. **Found the hole `P1-T22` must close: the empty-state message interpolates the query verbatim.** |
 | **Depends on** | `P1-T20` |
-| **Blocks** | `P1-T22` |
+| **Blocks** | `P1-T22`, `P1-T43` |
 | **Retires** | none |
 | **Implements** | `FR-5`, part of `FR-51`, `NFR-13` |
 | **Estimate** | 0.75 d |
@@ -4358,7 +4358,7 @@ changed, and saying so first is the behaviour to want.
 | **ID** | `P1-T22` |
 | **State** | `DONE` — approved 2026-10-08; the window drives the real pipeline into a real library, and the empty-state headline is **deliberately unpopulated** because redaction cannot clean a 32-character credential interpolated into a sentence. Two further surfaces were closed unasked. One criterion was reported as unpassable as written rather than adjusted, and the three unrenderable error rows are a named constant — `P1-T37` empties two of them. |
 | **Depends on** | `P1-T16`, `P1-T17`, `P1-T21` |
-| **Blocks** | `P1-T23`, `P1-T35`, `P1-T36`, `P1-T37`, `P1-T38`, `P1-T39` |
+| **Blocks** | `P1-T23`, `P1-T35`, `P1-T36`, `P1-T37`, `P1-T38`, `P1-T39`, `P1-T43` |
 | **Retires** | `R-17` (reported) |
 | **Implements** | `FR-5`, `FR-6`, `FR-8`, `FR-9`, `FR-10`, `FR-51`, `FR-53`, `NFR-14` |
 | **Estimate** | 0.75 d |
@@ -7867,6 +7867,145 @@ this card is the one holding the measurement.
 
 ---
 
+### P1-T43 — Stop hiding already-present papers, and carry the duplicate choice to the importer that already implements it
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T43` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T21`, `P1-T22` |
+| **Blocks** | none |
+| **Retires** | the conflict `P1-T22` escalated |
+| **Implements** | part of `FR-51`, `docs/08` §4.4 |
+| **Estimate** | 0.5 d |
+| **Human gate** | none — **the decision this card exists to implement was taken by the owner on 2026-10-08** |
+
+**Goal.** A paper already in the library appears in the result list, marked, and the three-way duplicate
+control decides what happens to it — because all three outcomes are already implemented and nobody ever
+chooses between them.
+
+**The owner's decision, 2026-10-08.** `P1-T22` escalated a conflict: the shipped default **hides**
+already-present rows, a hidden row is never imported, and therefore the only rows the duplicate-policy
+control could be about were the hidden ones — which made "add existing item to collection" unreachable
+from the window as shipped. **The owner chose: stop hiding by default, and let the user decide.**
+
+**Why this is much smaller than it looks.** Measured 2026-10-08, and the measurement is the useful part:
+**the mechanism is complete and unreached.** `src/zotero/importer.ts` declares
+`DuplicatePolicy = "link-existing" | "skip" | "import-anyway"` (`:112`), a
+`DEFAULT_DUPLICATE_POLICY` of `"link-existing"` (`:115`), an optional `duplicatePolicy?` on its request
+(`:137`), reads it as `request.duplicatePolicy ?? DEFAULT_DUPLICATE_POLICY` (`:352`), and **implements all
+three branches** (`:633`, `:673`, `:677`). The report type even documents the vocabulary:
+`types.ts:217` says a record is "Dropped without a write: a library duplicate under `"skip"`, or a
+repeat."
+
+And the window already collects the choice: `addon/content/searchDialog.js:2700` puts it on the query,
+`:263` pre-selects `"link"`, and `src/ui/dialogs/searchDialog.ts:257` declares
+`readonly duplicates: string`. **A grep of `src/` for any reader of that member returns nothing.** So the
+value is collected, carried across one type boundary, and dropped — and what it would have selected is the
+behaviour that happens unconditionally today.
+
+**So this card is a flip and a wire, with two traps.**
+
+**Trap 1 — the default lives in two places and changing one is worse than changing neither.**
+`src/prefs/schema.ts:141–144` has `hideExisting` with `default: true`, and
+`addon/content/searchDialog.js:252` has its own `hideExisting: { default: true }` inside `prefBounds`.
+`src/bootstrap/registerUI.ts:385` seeds the query from the preference. **Work out which one the window
+actually honours at run time, say so in the `Findings`, and leave both consistent.** A window that honours
+its own literal would ignore a changed preference, and a user who then unticks the box would see a
+different list from the one the preference promised.
+
+**Trap 2 — the two layers use different words for the same three outcomes, and the type will not catch it.**
+The window's radio values are `skip`, `link` and `import` (`addon/content/searchDialog.xhtml:396–412`);
+the importer's are `"skip"`, `"link-existing"` and `"import-anyway"`. `SearchWindowQuery.duplicates` is
+typed **`string`**, so passing `"link"` straight through compiles, reaches
+`request.duplicatePolicy ?? DEFAULT_DUPLICATE_POLICY`, and **silently falls back to the default** — the
+exact failure this card exists to end, wearing a different hat. **Narrow the window-facing type to a union
+of the three values it can hold, and make the mapping to `DuplicatePolicy` explicit and total**, so adding
+a fourth outcome later fails to compile rather than falling back.
+
+**Read first.**
+- `src/zotero/importer.ts` lines 100–145 and 340–360 and 620–690 — the policy type, its default, where it
+  is read, and all three branches. **Read these before writing anything**: the point of this card is that
+  none of it needs to be written again.
+- `src/pipeline/searchImport/types.ts` — `SearchImportInput` (line 90), `SearchImportTarget`,
+  `SearchImportWriter.openTarget` (line 335) and the report's `created` / `linkedExisting` / `skipped`
+  members (lines 213–220). **Where the policy member belongs is your call**: the pipeline input, the
+  target, or the write session. Say which you chose and why.
+- `addon/content/searchDialog.js` lines 240–270 (the defaults, and the comment explaining that
+  `docs/07` §8.5 declares **no** preference for the duplicate policy, so `docs/08` §4.5's wireframe is the
+  only default there is) and line 2690–2705 (`collectQuery`).
+- `P1-T21`'s `Findings` and its selection model. **Its invariant must survive**: Import takes exactly the
+  rows the table shows as picked — checked ∩ visible. With hiding off, an already-present row is visible
+  and checkable, so the invariant holds unchanged and the policy decides what happens to it. **That is why
+  the two halves of this card are one card.**
+- `docs/08` §4.4 for the control and §4.5 for the wireframe's pre-selected radio.
+- `P1-T22`'s `Findings`, for the re-import test that asserts the current behaviour — **it will have to
+  change, and changing it is correct here** because the behaviour it asserts is the one the owner replaced.
+
+**Files.**
+- modify `src/prefs/schema.ts`
+- modify `src/ui/dialogs/searchDialog.ts`
+- modify `src/ui/viewModels/searchImportViewModel.ts`
+- modify `src/pipeline/searchImport/types.ts`
+- modify `src/pipeline/searchImport/searchImportPipeline.ts`
+- modify `addon/content/searchDialog.js`
+- modify `test/integration/searchDialog-flow.spec.ts`
+- modify `test/integration/zotero/importer.spec.ts` (only if a policy branch gains an assertion — grepped 2026-10-08: the importer has **no unit-test file**; it is covered by that spec, by `test/integration/zotero/import-perf.spec.ts` and by `test/unit/pipeline/searchImport.test.ts`)
+
+**Do.**
+1. Change `hideExisting`'s default to **false** in `src/prefs/schema.ts`, and reconcile the window's own
+   default with it per trap 1.
+2. Narrow the window-facing duplicate member to a union of its three values, and carry it through to the
+   importer's `duplicatePolicy` with an **explicit, total** mapping per trap 2.
+3. Leave the pre-selected radio as it is. `docs/08` §4.5's wireframe draws "add existing to collection"
+   selected, the importer's own default is `"link-existing"`, and those already agree — **changing a
+   default nobody asked you to change is how a card grows.**
+4. Keep an already-present row **visible and marked**. The badge and the row class already exist
+   (`addon/content/searchDialog.js:208–210`, and the two Fluent ids at `:315–316`) — check whether they
+   render when the row is not hidden, which has never been exercised, and say so either way.
+5. Assert each of the three outcomes end to end: a re-import under "add to collection" links and creates
+   nothing, under "skip" does neither, and under "import anyway" creates a second item. The report's
+   `created` / `linkedExisting` / `skipped` counts are the assertion.
+6. Update `P1-T22`'s re-import test to the new behaviour, and **say in the `Findings` what it asserted
+   before**, so the change is legible as a decision rather than as a test that was in the way.
+
+**Do NOT.**
+- Do not re-implement any policy branch. All three exist. If one is wrong, that is a finding, not a rewrite.
+- Do not break `P1-T21`'s invariant. Import takes checked ∩ visible, and that is deliberate with two test
+  files behind it.
+- Do not add a preference for the duplicate policy. `docs/07` §8.5 declares none, and adding one is a
+  schema change with an owner.
+- Do not change what "already present" means. `P1-T13`'s existing-item check is the definition; this card
+  changes only whether such a row is hidden.
+- Do not touch the provenance record's shape. If the chosen policy ought to be recorded there, **say so as
+  a finding** — it is a schema change and `schema/provenance.schema.json` has its own gate.
+
+**Criteria.**
+- [ ] With the preference at its new default, a search whose results include already-present papers shows
+      those rows, marked, and the marking renders in a real Zotero.
+- [ ] Each of the three duplicate outcomes is reachable from the control and asserted end to end by the
+      report's own counts.
+- [ ] A value the window cannot produce **fails to compile** rather than falling back to the default,
+      demonstrated by a mutation.
+- [ ] The two places holding the hide default agree, and the `Findings` say which one the window honours.
+- [ ] `P1-T21`'s selection invariant still holds, with its existing tests unchanged.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
+      **Repeat the integration run three times** and report all three — that suite is load-sensitive
+      (`plan/00` §6 item 20).
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** This is the cheapest card in the group and the one that changes what a user sees most. The whole
+value is in **not writing the thing that already exists**: three policy branches, a default, and an
+optional request member, all of them shipped and none of them chosen. `P1-T22` found the conflict and
+escalated it instead of picking a side, which is what made the owner's decision possible — and the
+decision turned out to cost a flip and a wire.
+
+---
+
 ---
 ## 7. Estimate roll-up
 
@@ -7914,7 +8053,8 @@ this card is the one holding the measurement.
 | `P1-T40` | A partition assertion over `keys.ts`, at unit speed | 0.25 | — |
 | `P1-T41` | Correct `P3-T02`'s retracted claims and measure what landed | 0.50 | — |
 | `P1-T42` | The free-text redactor's short-credential gap | 0.50 | — |
-| | **Total** | **26.75 d** | **4 gates** |
+| `P1-T43` | Stop hiding already-present papers; wire the duplicate choice | 0.50 | — |
+| | **Total** | **27.25 d** | **4 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 

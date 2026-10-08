@@ -499,6 +499,22 @@ the shipped JS module, and the gate stays open until it is run.
 
 ### G-10 — Decide the Linux-without-libsecret fallback tier
 
+> **DECIDED 2026-10-08 — tier 2, session-only.** When the operating-system keystore probe fails, keys are
+> re-entered each launch and are **written nowhere**. The owner took the safest option knowing the cost:
+> **work that runs on its own in the background stops** on such a machine until someone enters the keys
+> again.
+>
+> **The second half of this gate follows from the first, and the inference is stated rather than assumed:**
+> `docs/09` §8 item 2 asked whether the passphrase-encrypted-file tier ships in v1 at all. With tier 2
+> chosen as the offered fallback, **tier 3 has no caller, so it does not ship in v1** — one word from the
+> owner reverses that. This is consistent with decision D5, which already refuses a plaintext tier.
+>
+> **What is still owed, and it is less than before.** `G-09` still asks for a machine without a keystore,
+> because what must be verified is that the probe **fails cleanly and says so** rather than appearing to
+> succeed — `P0-T28`'s own escalation was that the degraded tier has no measurement behind it, only a
+> deliberately throwing encrypt call on Windows. Choosing tier 2 shrinks the work to be verified; it does
+> not remove the measurement.
+
 **Blocks:** Phase 3's prefs design (`docs/11` §5 lists this explicitly as the
 Before-Phase-0-ends decision that remains open under D5).
 
