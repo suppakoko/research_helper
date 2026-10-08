@@ -919,7 +919,8 @@ Explicitly **not** built in v1. Each is listed with the reason, so the decision 
 
 Each question has a **recommended default**. If no decision is made, the default is what gets built. Questions that have since been **decided** are struck through and carry the decision and its ID in `00-overview.md` §3; they are kept here (rather than deleted) so the IDs referenced from `11-implementation-roadmap.md` §5 stay stable.
 
-1. **Is the 3-year window a hard default or a soft one?**
+1. ~~**Is the 3-year window a hard default or a soft one?**~~
+   **DECIDED 2026-10-08 — soft.** The three-year span is a starting value, always overridable in the search dialog, and the span actually used is recorded in the provenance record (FR-3). The owner took the recommended default, on its stated ground: Persona C cannot use a hard window. **Both halves of this question are now closed** — the width was settled on 2026-09-09 and the hardness on 2026-10-08 — which discharges gate `G-13`.
    *Recommended default:* soft — default to 3 years, always overridable in the search dialog, and always recorded in provenance (FR-3). Persona C cannot use a hard window.
    *The width of the window is no longer open.* **DECIDED 2026-09-09 — three calendar years (the current year and the two before it), not a rolling 36 months.** The computation belongs to `08-ui-ux-spec.md` §4.2 and FR-3 defers to it. Only the hard-versus-soft question above remains open.
 

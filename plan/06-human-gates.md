@@ -38,23 +38,23 @@ in this plan.
 |---|---|---|---|---|
 | **Phase 0, week 1** | **G-03** | **Apply for the Semantic Scholar API key** | **Phase 5** | **Weeks — the longest in the plan (`docs/11` R-3)** |
 | ~~Phase 0, week 1~~ | ~~G-32~~ | ~~Confirm MIT with the institution's IP office~~ **CLOSED 2026-09-09** | nothing | — |
-| Phase 0, week 1 | G-04 | Register the NCBI `tool`/`email` pair; obtain the optional NCBI key | Phase 1 politeness; Phase 7 release | Unknown; treat as days-to-weeks |
+| Phase 0, week 1 | G-04 | Register the NCBI `tool`/`email` pair; obtain the optional NCBI key | Phase 1 politeness; Phase 7 release | **IN MOTION 2026-10-08** — owner registering; the optional key is deliberately deferred until a surface exists to enter one |
 | Phase 0, week 1 | G-01 | Create the GitHub repository and grant permissions | Everything (`P0-T01`) | Minutes |
 | Phase 0, week 1 | G-02 | Provide the Zotero 10 install, dev profile and `.env` paths | Phase 0 entirely | Hours |
 | Phase 0, week 1 | G-05 | Create provider accounts and obtain LLM/TTS keys | V-7, V-10, Phase 3 | Hours; Gemini billing linkage may take longer |
 | Phase 0, week 1 | G-09 | Provide macOS and Linux machines, one without libsecret | V-16, V-5, Phase 7 QA | Days to weeks if hardware must be arranged |
 | Phase 0, week 1 | G-11 | Line up a native Korean speaker | V-10, and again in Phases 6 and 7 | Scheduling a person; days |
 | Phase 0, week 1 | G-31 | Line up a Korean-speaking researcher for prompt review | Phase 7 | Scheduling; days to weeks |
-| **Phase 1** | **G-41** | **Review the Phase 1 `ko-KR` UI bundle — `KO_PENDING_REVIEW.length`, 79 as of 2026-10-05** | **`P1-T18`, and the Korean half of `P1-T20`/`P1-T22`** | **Hours of a native speaker's time** |
+| **Before release** | **G-41** | **Review the Phase 1 `ko-KR` UI bundle — 79 ids, re-counted from `src/i18n/keys.ts` on 2026-10-08** | **the v1.0 release** | **DEFERRED 2026-10-08 by the owner — English only until then; a Korean-locale user sees English for 79 of 84 strings, not a broken screen** |
 | Phase 0, week 1 | G-12 | Assemble the 40-PDF IMRaD fixture set | Phase 3 ship, Phase 4 | Days of the human's own time |
 | Phase 0, early | G-06 | Acknowledge the Gemini free-tier data-training terms | Any Gemini call, incl. V-10 | Minutes, but must precede the first call |
 | Phase 0, early | G-07 | Approve the first paid API call and the spike spend | V-7, V-10 | Minutes |
 | Phase 0 | G-08 | Install the XPI by hand; run the teardown cycles | V-1, V-4, Phase 0 DoD | Minutes per cycle |
 | Phase 0 | G-40 | Approve the two throwaway public releases of the V-18 update dry run | V-18, R-15 | Minutes, once G-01 is done |
 | Phase 0, end | G-10 | Decide the Linux-without-libsecret fallback tier | Phase 3 prefs design | Product-owner turnaround |
-| Before Phase 1 | G-13 | Confirm the 3-year window is soft (the *width* was settled 2026-09-09: three calendar years) | Search dialog design | Product-owner turnaround |
+| ~~Before Phase 1~~ | ~~G-13~~ | ~~Confirm the 3-year window is soft~~ **CLOSED 2026-10-08 — soft; the build was already soft** | nothing | — |
 | Phase 1 | G-14 | Accept and monitor the maintainer-address obligation | Ongoing from the first outbound request | Ongoing |
-| Phase 1 | G-15 | Authorize the first import into a real Zotero library | Phase 1 DoD | Minutes |
+| Phase 1 | G-15 | Authorize the first import into a real Zotero library | Phase 1 DoD | **ANSWERED 2026-10-08** — a separate practice profile, never the research library; the DoD says a real *term*, not a real *library* |
 | Before Phase 2 | G-16 | Decide the preprint/published merge policy | Dedup engine | Product-owner turnaround |
 | Phase 2 | G-17 | Label the ≥ 200-pair deduplication corpus | Phase 2 DoD | Days of the human's own time |
 | Phase 3 | G-18 | Enter API keys into the prefs pane | Phase 3 DoD, all LLM features | Minutes |
@@ -226,6 +226,51 @@ mode).
 ---
 
 ### G-04 — Register the NCBI `tool`/`email` pair and obtain the optional key
+
+> **IN MOTION 2026-10-08.** The owner chose to start the registration now rather than defer it to the
+> release, on the ground that the external turnaround is the part nobody controls. The coordinator
+> supplied the steps; the submission itself is the owner's, because it is made under a real identity and
+> commits the project to a usage policy. **The optional key is a separate thing and is deliberately not
+> being obtained yet**, because no surface exists to enter one and `docs/09` forbids a key in any file,
+> preference or log — so a key obtained today would have nowhere safe to live. Revisit the key when the
+> preference pane lands (`plan/00` §6 item 5).
+>
+> ### The steps, 2026-10-08
+>
+> **1. Register exactly these two values, character for character.** They are what the build sends, read
+> from the source rather than from prose:
+>
+> | parameter | value | where it is defined |
+> |---|---|---|
+> | `tool` | `research_helper` | `src/core/http/userAgent.ts:34` (`TOOL_NAME`) |
+> | `email` | `suppakoko@gmail.com` | `src/core/http/userAgent.ts:28` (`MAINTAINER_EMAIL`) |
+>
+> **A registration that does not match these exactly does not cover what the program sends.** Decision
+> D10 fixes the address as the **maintainer's**, never the end user's, and `src/core/http/client.ts:934`
+> refuses a request to NCBI carrying any other address — so these two values are the only ones that can
+> ever appear, and changing either one means registering again.
+>
+> **2. Why it is not enough to send them.** NCBI's own wording, quoted in `docs/09` §5.1 from its General
+> Introduction to the E-utilities (NBK25497): *"merely providing values for tool and email in requests is
+> not sufficient to comply with this policy; these values must be registered with NCBI"*, and the same
+> page states that unregistered addresses violating the usage policy may be blocked.
+>
+> **3. Where to submit it — read this from NCBI's own page, not from here.** The corpus records the
+> **obligation** and does not record the **route**, and the coordinator **could not read NCBI's page to
+> find out**: on 2026-10-08 `https://www.ncbi.nlm.nih.gov/books/NBK25497/` served a bot-verification
+> check instead of the document, and working around such a check is forbidden. **So this step is the
+> owner's, in the owner's own browser**, on that page's usage-guidelines section. Expect one of two
+> shapes: a setting inside the NCBI account, or a message to the E-utilities contact address that page
+> names. **Do not guess between them** — whichever the page says today is the one that counts.
+>
+> **4. Record the outcome back here** when it is done: the date, the two values as submitted, and where
+> any confirmation is kept. The release checklist reads this gate (`docs/13` §8.9), so an unrecorded
+> registration is the same as none.
+>
+> **5. Do not obtain the optional key yet, and do not paste a key anywhere.** No surface exists to enter
+> one, `docs/09` forbids a key in any file, preference or log, and a key pasted into a conversation is
+> not accepted or used. The key raises the request rate from 3 per second to 10; the build already runs
+> under the keyless limit, so nothing is waiting on it.
 
 **Blocks:** Phase 1's politeness posture; **the v1.0 release** (`docs/13` §8.9
 carries it as a release-hygiene checkbox).
@@ -649,6 +694,17 @@ this approval.
 
 ### G-41 — Review the Phase 1 `ko-KR` UI bundle (`KO_PENDING_REVIEW.length`, 79 as of 2026-10-05)
 
+> **DEFERRED 2026-10-08, by the owner, to before the v1.0 release.** English only until then. Measured
+> the same day, by counting the lists in `src/i18n/keys.ts` rather than reading the figure off this
+> document: `KO_PENDING_REVIEW` is **79**, `KO_PRESENT` 4, `KO_DELIBERATELY_ABSENT` 1, over 84 surface
+> ids — so **79 is still the live number** and this document is not stale on it.
+>
+> **What deferral costs, stated so the decision stays visible.** The Korean half of the product does not
+> work until this is done: an id with no Korean entry falls back to English, so a Korean-locale user sees
+> a mixed screen rather than a broken one. **This gate therefore moves from blocking Phase 1 to blocking
+> the release**, and `docs/13`'s release checklist is where it must be caught. Phase 1's UI cards are
+> already approved and are not reopened by this.
+
 **Blocks:** `P1-T18`'s human gate, and the Korean half of every Phase 1 UI card
 (`P1-T20`, `P1-T21`, `P1-T22`).
 
@@ -750,6 +806,15 @@ Never fill a Korean string to make a count look complete.
 
 ### G-13 — Confirm the 3-year window is soft
 
+> **CLOSED 2026-10-08 — soft.** The owner took the recommended default: three years is a starting value,
+> always overridable, and the span actually used is recorded in the provenance record. `docs/10` §5
+> question 1 is now struck through in both halves. **Nothing in the shipped code changes, and the build was already soft** — verified
+> 2026-10-08: the window carries both year controls (`rh-search-years-from` and `rh-search-years-to` in
+> `addon/content/searchDialog.xhtml`), and `SearchProvenance.dateFilter` is typed
+> `{ fromIso, toIso } | "none"`, where `"none"` is the **All years** case FR-3 names. A hard window would
+> have made that `"none"` arm unreachable. So this gate was confirming the design the build already has
+> rather than asking for work.
+
 **Blocks:** the search dialog design (`docs/11` §5 lists it as "Before Phase 1").
 
 **What the human must do.** Answer the *one remaining half* of `docs/10` §5
@@ -807,6 +872,19 @@ the Phase 1 completion report.
 ---
 
 ### G-15 — Authorize the first import into a real Zotero library
+
+> **ANSWERED 2026-10-08: a separate practice library, never the everyday research library.** The owner
+> chose to keep real research data out of this entirely.
+>
+> **Two things measured while recording this, both of which make the answer cheaper than it looked.**
+> First, inside one Zotero profile there is only one personal library, so "a separate library" means **a
+> separate profile** — which is already this project's convention: `G-02` asks for "a dedicated
+> development profile separate from the real library", and `.scaffold/test/profile` is one. Second, and
+> more useful: Phase 1's completion condition says **"a search for a real term imports ≥ 50 items into a
+> new collection"** — a real *term*, not a real *library*. Re-read 2026-10-08 at `plan/02` §2, quoted
+> verbatim from `docs/11` §1. **So the condition is satisfiable in the practice profile and the gate's
+> stricter concern — writing to the human's own research data — does not arise.** `G-38`'s standing rule
+> is untouched: any destructive action against the real library still needs its own permission.
 
 **Blocks:** `docs/11` §1 Phase 1's DoD, which requires importing ≥ 50 real items
 into a collection.
