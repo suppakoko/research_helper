@@ -153,6 +153,11 @@
  */
 
 import { config } from "../../package.json";
+// The shipped artefact itself, bundled into this spec by esbuild. `docs/13`
+// §1.2 and `src/core/provenance.ts`'s `PROVENANCE_SCHEMA_PATH` name this path,
+// and `node:fs` does not exist in the Zotero sandbox, so the only way an
+// integration spec can hold the schema is to import it.
+import PROVENANCE_SCHEMA from "../../schema/provenance.schema.json";
 // Type-only, so nothing of `src/addon.ts` — and nothing of the `hooks` module
 // it imports — is bundled into this spec. The *values* this block reads all
 // come off the live plugin instance, which is the only copy that matters:
@@ -791,6 +796,261 @@ let publishedDeps: Required<SearchImportViewModelDeps> | undefined;
 /** Collections this block created, erased in its own `after()`. */
 const publishedCollections: string[] = [];
 
+// ---------------------------------------------------------------------------
+// 4b. `P1-T36` — FR-8's JSON export, validated against the shipped schema
+// ---------------------------------------------------------------------------
+
+/**
+ * A synthetic credential-shaped run, put into the **query** so the redactor has
+ * something to remove from the exported bytes.
+ *
+ * **48 characters, not 32, and that distinction is the whole point.**
+ * `src/core/errors.ts`'s last-resort pattern is `/\b[A-Za-z0-9_-]{40,}\b/g`, so
+ * a 32-character NCBI-shaped key is *not* removed from free text — `P1-T17`
+ * measured that and `P1-T22` closed three surfaces because of it. A test that
+ * put a 32-character run here and watched it survive would be asserting the
+ * hole rather than the gate. 48 characters is above the threshold, so its
+ * absence from the file is a measurement of the redactor doing its job.
+ *
+ * It is not a key. It is `rh` plus a repeated hexadecimal pattern, generated
+ * here, matching nothing that exists.
+ */
+const SYNTHETIC_KEYISH = `rh${"0123456789abcdef".repeat(2)}aaaaaaaaaaaaaa`;
+
+/** What the redactor writes in its place. See `redactText`. */
+const REDACTION_MARK = `[redacted:${String(SYNTHETIC_KEYISH.length)}]`;
+
+type SchemaNode = Readonly<Record<string, unknown>>;
+
+/**
+ * The keywords {@link validateAgainstSchema} enforces.
+ *
+ * **Duplicated from `test/unit/core/provenance.test.ts`, deliberately and with
+ * the cost stated.** That file holds the same subset validator and cannot be
+ * imported from here: it imports `vitest` and `node:fs`, and neither exists in
+ * the Zotero sandbox — the same wall `test/contract/_transport.ts` hit, recorded
+ * in this file's header. Hoisting the validator into a shared test helper would
+ * be a new file, which is outside `P1-T36`'s `Files` list
+ * (`plan/README.md` §5 rule 2), so the duplication is reported with the card
+ * rather than made invisible. {@link unimplementedSchemaKeywords} is what keeps
+ * the copy honest: a keyword the shipped schema grows and this validator ignores
+ * fails the test instead of silently passing it.
+ */
+const IMPLEMENTED_KEYWORDS: readonly string[] = [
+  "type",
+  "const",
+  "enum",
+  "properties",
+  "required",
+  "additionalProperties",
+  "items",
+  "oneOf",
+  "minimum",
+  "$ref",
+  // Core and annotation-only: these carry no constraint. `format` is an
+  // annotation in draft 2020-12 unless a vocabulary opts in, so the ISO shape
+  // of `startedAt` / `finishedAt` is asserted separately below.
+  "$schema",
+  "$id",
+  "$defs",
+  "title",
+  "description",
+  "format",
+];
+
+function isSchemaObject(value: unknown): value is SchemaNode {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function jsonEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function resolveSchemaRef(root: SchemaNode, ref: string): SchemaNode {
+  const prefix = "#/$defs/";
+  if (!ref.startsWith(prefix)) {
+    assert.fail(`unsupported $ref: ${ref}`);
+  }
+  const defs = root["$defs"];
+  if (!isSchemaObject(defs)) {
+    assert.fail("the shipped schema has no $defs");
+  }
+  const target = defs[ref.slice(prefix.length)];
+  if (!isSchemaObject(target)) {
+    assert.fail(`unresolvable $ref: ${ref}`);
+  }
+  return target;
+}
+
+function matchesSchemaType(type: string, value: unknown): boolean {
+  switch (type) {
+    case "object":
+      return isSchemaObject(value);
+    case "array":
+      return Array.isArray(value);
+    case "string":
+      return typeof value === "string";
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value);
+    case "number":
+      return typeof value === "number";
+    case "boolean":
+      return typeof value === "boolean";
+    case "null":
+      return value === null;
+    default:
+      return assert.fail(`unsupported type keyword: ${type}`);
+  }
+}
+
+/**
+ * Validate `value` against `schema`. An empty array means valid.
+ *
+ * Each message carries a path, so a failure names the field rather than handing
+ * a human the whole document to diff.
+ */
+function validateAgainstSchema(
+  schema: SchemaNode,
+  value: unknown,
+  root: SchemaNode,
+  path = "$",
+): string[] {
+  const errors: string[] = [];
+
+  const ref = schema["$ref"];
+  if (typeof ref === "string") {
+    errors.push(
+      ...validateAgainstSchema(resolveSchemaRef(root, ref), value, root, path),
+    );
+  }
+
+  const type = schema["type"];
+  if (typeof type === "string" && !matchesSchemaType(type, value)) {
+    errors.push(`${path}: expected type ${type}, got ${typeof value}`);
+    // A wrong type makes every nested assertion noise.
+    return errors;
+  }
+
+  if ("const" in schema && !jsonEqual(schema["const"], value)) {
+    errors.push(
+      `${path}: expected const ${JSON.stringify(schema["const"])}, got ` +
+        `${JSON.stringify(value)}`,
+    );
+  }
+
+  const enumeration = schema["enum"];
+  if (
+    Array.isArray(enumeration) &&
+    !enumeration.some((allowed) => jsonEqual(allowed, value))
+  ) {
+    errors.push(`${path}: ${JSON.stringify(value)} is not in enum`);
+  }
+
+  const minimum = schema["minimum"];
+  if (
+    typeof minimum === "number" &&
+    typeof value === "number" &&
+    value < minimum
+  ) {
+    errors.push(`${path}: ${String(value)} is below ${String(minimum)}`);
+  }
+
+  const oneOf = schema["oneOf"];
+  if (Array.isArray(oneOf)) {
+    const matched = oneOf.filter(
+      (branch) =>
+        isSchemaObject(branch) &&
+        validateAgainstSchema(branch, value, root, path).length === 0,
+    );
+    if (matched.length !== 1) {
+      errors.push(
+        `${path}: matched ${String(matched.length)} oneOf branches, expected 1`,
+      );
+    }
+  }
+
+  const items = schema["items"];
+  if (isSchemaObject(items) && Array.isArray(value)) {
+    value.forEach((element, index) => {
+      errors.push(
+        ...validateAgainstSchema(
+          items,
+          element,
+          root,
+          `${path}[${String(index)}]`,
+        ),
+      );
+    });
+  }
+
+  if (isSchemaObject(value)) {
+    const properties = schema["properties"];
+    const declared = isSchemaObject(properties) ? properties : {};
+
+    const required = schema["required"];
+    if (Array.isArray(required)) {
+      for (const name of required) {
+        if (typeof name === "string" && !(name in value)) {
+          errors.push(`${path}: missing required property ${name}`);
+        }
+      }
+    }
+
+    for (const [name, element] of Object.entries(value)) {
+      const subschema = declared[name];
+      if (isSchemaObject(subschema)) {
+        errors.push(
+          ...validateAgainstSchema(subschema, element, root, `${path}.${name}`),
+        );
+        continue;
+      }
+      const additional = schema["additionalProperties"];
+      if (additional === false) {
+        errors.push(`${path}: additional property ${name} is not allowed`);
+      } else if (isSchemaObject(additional)) {
+        errors.push(
+          ...validateAgainstSchema(
+            additional,
+            element,
+            root,
+            `${path}.${name}`,
+          ),
+        );
+      }
+    }
+  }
+
+  return errors;
+}
+
+/** Which keywords the shipped schema uses that the validator above ignores. */
+function unimplementedSchemaKeywords(
+  schema: SchemaNode,
+  out = new Set<string>(),
+): Set<string> {
+  for (const key of Object.keys(schema)) out.add(key);
+  const descend = (node: unknown): void => {
+    if (isSchemaObject(node)) unimplementedSchemaKeywords(node, out);
+  };
+  for (const name of ["properties", "$defs"]) {
+    const group = schema[name];
+    if (isSchemaObject(group)) Object.values(group).forEach(descend);
+  }
+  descend(schema["items"]);
+  descend(schema["additionalProperties"]);
+  const oneOf = schema["oneOf"];
+  if (Array.isArray(oneOf)) oneOf.forEach(descend);
+  return out;
+}
+
+/** Where this block's one exported file goes, and what it is deleted by. */
+function exportPath(): string {
+  return PathUtils.join(
+    PathUtils.tempDir,
+    `rh-p1t36-provenance-${String(Date.now())}.json`,
+  );
+}
+
 /**
  * `addon/content/searchDialog.js`'s `resolveHost()`, transcribed.
  *
@@ -845,6 +1105,7 @@ const VIEW_MODEL_DEPENDENCIES: Record<keyof SearchImportViewModelDeps, true> = {
   getPrefs: true,
   isExisting: true,
   writeProvenanceNote: true,
+  provenanceFiles: true,
 };
 
 /**
@@ -882,7 +1143,10 @@ async function awaitPublishedRun(what: string): Promise<void> {
   await waitUntil(() => !controller.state.running, `${what} to finish`, 60_000);
 }
 
-/** The seven members `resolveHost()`'s own comment documents, plus `connect`. */
+/**
+ * The seven members `resolveHost()`'s own comment documents, plus `connect`
+ * (`P1-T22`) and `exportProvenance` (`P1-T36`).
+ */
 const HOST_CONTRACT: readonly (keyof SearchWindowHostApi)[] = [
   "listSources",
   "listCollections",
@@ -891,6 +1155,7 @@ const HOST_CONTRACT: readonly (keyof SearchWindowHostApi)[] = [
   "runSearch",
   "runImport",
   "cancel",
+  "exportProvenance",
 ];
 
 describe("P1-T35: the host the composition root published", () => {
@@ -1063,6 +1328,38 @@ describe("P1-T35: the host the composition root published", () => {
   });
 
   // =========================================================================
+  // `P1-T36` criterion 4 — no record, no file
+  //
+  // Placed **after the search and before the import**, which is what makes it
+  // deterministic rather than lucky: `runSearch` clears the retained record, so
+  // at this point in the block the window is showing a result table that no
+  // import has written. That is exactly the state in which a user could press
+  // an export control, and the one in which writing anything would be wrong.
+  // =========================================================================
+
+  it("FR-8: refuses to export when the current run produced no record", async function () {
+    this.timeout(30_000);
+    const host = publishedApi()[SEARCH_WINDOW_API_PROPERTY];
+    if (!host) {
+      assert.fail(`nothing is published at api.${SEARCH_WINDOW_API_PROPERTY}`);
+    }
+    const path = exportPath();
+    const outcome = await host.exportProvenance(path);
+    assert.strictEqual(
+      outcome,
+      "no-record",
+      "a search clears the retained record, so there is nothing to export",
+    );
+    assert.isFalse(
+      await IOUtils.exists(path),
+      "a refused export must not leave a file behind — an empty or " +
+        "half-built provenance file on disk is worse than no file, because a " +
+        "user would keep it",
+    );
+    log35(`export with no record: ${outcome}, no file written`);
+  });
+
+  // =========================================================================
   // Criterion 3 — the import writes the collection, the items and ONE note
   // =========================================================================
 
@@ -1120,6 +1417,143 @@ describe("P1-T35: the host the composition root published", () => {
       "the published listCollections() sees the collection the import created",
     );
     log35(`import summary: ${summary.replace(/\s+/g, " ")}`);
+  });
+
+  // =========================================================================
+  // `P1-T36` criteria 2 and 3 — the file is written, it validates against the
+  // shipped schema, and the redactor's work is in the bytes
+  //
+  // `docs/13`:1273 makes "the exported JSON validates against
+  // `schema/provenance.schema.json`" a release-checklist item for a human. It
+  // is asserted here instead, by reading the file back off disk.
+  //
+  // This test runs its own search and import rather than exporting the record
+  // the previous test left, for one reason: the redaction criterion needs a
+  // credential-shaped run **in the query**, and the query is read out of the
+  // keyword box at import time. Reaching into the previous test's input would
+  // make two tests share one fixture, which is the shape that turned
+  // `P1-T22`'s cancel test into a cascade. The run is kept cheap — a fourth
+  // record, so exactly one item is written.
+  // =========================================================================
+
+  it("FR-8: exports the retained record, and the file validates against the shipped schema", async function () {
+    this.timeout(120_000);
+
+    // The guard that keeps the validator in this file honest: a keyword the
+    // shipped schema grows and this validator ignores would otherwise make the
+    // assertion below look stricter than it is.
+    const ignored = [...unimplementedSchemaKeywords(PROVENANCE_SCHEMA)].filter(
+      (keyword) => !IMPLEMENTED_KEYWORDS.includes(keyword),
+    );
+    assert.deepEqual(
+      ignored,
+      [],
+      "every keyword the shipped schema uses is one this validator enforces",
+    );
+
+    // A credential-shaped run inside an otherwise ordinary query. Synthetic:
+    // see SYNTHETIC_KEYISH.
+    const query = `${KEYWORD} ${SYNTHETIC_KEYISH}`;
+    setKeyword(query);
+    selectSources([PUBLISHED_STUB]);
+    // Four, so the fourth record is one the library does not hold: the previous
+    // test imported the first three and `hideExisting` defaults to true, so a
+    // smaller run would leave nothing importable and the Import gate shut.
+    behaviour.set(PUBLISHED_STUB, { records: 4, withAbstract: true });
+
+    controller.search();
+    await awaitPublishedRun("the search before the export");
+    assert.strictEqual(
+      controller.state.visible.length,
+      1,
+      "three of four rows are already in the library, so one is importable",
+    );
+
+    const name = `RH P1-T36 ${String(Date.now())}`;
+    controller.adoptNewCollection(name);
+    controller.import();
+    await awaitPublishedRun("the import before the export");
+    const collection = collectionNamed(name);
+    publishedCollections.push(collection.key);
+
+    const host = publishedApi()[SEARCH_WINDOW_API_PROPERTY];
+    if (!host) {
+      assert.fail(`nothing is published at api.${SEARCH_WINDOW_API_PROPERTY}`);
+    }
+    const path = exportPath();
+    const outcome = await host.exportProvenance(path);
+    assert.strictEqual(
+      outcome,
+      "written",
+      "the export action wrote the record the import retained",
+    );
+
+    try {
+      assert.isTrue(await IOUtils.exists(path), "the export wrote a file");
+      // `IOUtils.readUTF8` rather than `Zotero.File.getContentsAsync`: the
+      // latter is typed as a six-member union including `void`, and reading the
+      // bytes back is the assertion, so a cast to make the types line up would
+      // be a cast over the thing under test. `Zotero.File.putContentsAsync`
+      // wrote them, which is the path the product uses.
+      const text = await IOUtils.readUTF8(path);
+
+      // Criterion 3, as bytes rather than as a parsed object: the synthetic
+      // credential-shaped run is **absent**, and what is in its place is the
+      // single gate's own marker. Both halves matter — an export that wrote
+      // nothing at all would also pass the first.
+      assert.notInclude(
+        text,
+        SYNTHETIC_KEYISH,
+        "src/core/provenance.ts's redaction gate removed the " +
+          "credential-shaped run before the bytes were written",
+      );
+      assert.include(
+        text,
+        REDACTION_MARK,
+        "and left its own marker, so the value was redacted rather than the " +
+          "whole query dropped",
+      );
+
+      // Criterion 2. The parse is part of the assertion: FR-8 says "a JSON
+      // file matching the documented schema".
+      const parsed: unknown = JSON.parse(text);
+      const errors = validateAgainstSchema(
+        PROVENANCE_SCHEMA,
+        parsed,
+        PROVENANCE_SCHEMA,
+      );
+      assert.deepEqual(
+        errors,
+        [],
+        `the exported file does not validate: ${errors.join("; ")}`,
+      );
+
+      // And it is this run's record, not a stale one: the collection the import
+      // just created is the one named in the file.
+      if (!isSchemaObject(parsed)) {
+        assert.fail("the exported file is not a JSON object");
+      }
+      assert.strictEqual(
+        parsed["targetCollectionKey"],
+        collection.key,
+        "the exported record describes the run the window is showing",
+      );
+      assert.strictEqual(
+        parsed["zoteroVersion"],
+        Zotero.version,
+        "and carries the platform version the composition root supplied",
+      );
+      log35(
+        `exported ${String(text.length)} byte(s), schema-valid, ` +
+          `redaction marker present`,
+      );
+    } finally {
+      // The spec leaves nothing on disk, for the same reason it erases its
+      // collections: a temporary file carrying a provenance record is still a
+      // record of a run.
+      await IOUtils.remove(path, { ignoreAbsent: true });
+    }
+    assert.isFalse(await IOUtils.exists(path), "and deleted it afterwards");
   });
 
   // =========================================================================

@@ -35,14 +35,29 @@
  * | the library's collections | `Zotero.Collections` | {@link SearchImportViewModelDeps.listCollections} |
  * | the library-duplicate probe | `src/zotero/libraryIndex.ts` | {@link SearchImportViewModelDeps.isExisting} |
  * | `FR-8`'s provenance note | `src/zotero/notes.ts` | {@link SearchImportViewModelDeps.writeProvenanceNote} |
+ * | `FR-8`'s JSON export, the file write | `src/zotero/notes.ts` | {@link SearchImportViewModelDeps.provenanceFiles} |
  *
  * Every one of them is **optional**, and the window degrades rather than
  * breaking: no `listSources` means zero database checkboxes and a disabled
  * Search button (`P1-T20`'s FR-2 gate), no `isExisting` means no row is marked
  * as already present, no `writeProvenanceNote` means the record is built,
- * redacted and logged but not written. That last one is reported with the card:
- * the binding is one line in the composition root, and **no file in `P1-T22`'s
- * `Files` list can make it** (`plan/README.md` §5 rule 2).
+ * redacted and logged but not written, and no `provenanceFiles` means
+ * {@link SearchImportViewModel.exportProvenance} refuses instead of writing.
+ * The note binding was reported with `P1-T22`: it is one line in the
+ * composition root, and **no file in that card's `Files` list could make it**
+ * (`plan/README.md` §5 rule 2). `P1-T35` made it, and `P1-T36` binds the file
+ * writer beside it.
+ *
+ * ### `FR-8`'s third scenario, and why the *path* comes from outside
+ *
+ * The record is retained here ({@link SearchImportViewModel.exportProvenance})
+ * because it is composed here. The **destination** is not: a file chooser needs
+ * a `BrowsingContext` (`docs/01`:436, Firefox 128's `nsIFilePicker.init`
+ * change), only a window has one, and this module is constructed once at
+ * startup with no window at all. So the chooser is opened by the window
+ * document and the chosen path is handed inward as this method's one argument —
+ * which also keeps `nsIFilePicker` and the toolkit's `FilePickerHelper` out of
+ * `src/` entirely. Measured, with the alternatives, in `P1-T36`'s report.
  *
  * ### The query is never interpolated into a visible string
  *
@@ -76,7 +91,9 @@ import {
 } from "../../core/jobQueue/cancellation";
 import type { ProgressSnapshot } from "../../core/jobQueue/progress";
 import {
+  exportJson,
   redactSearchProvenance,
+  type ProvenanceFileWriter,
   type SearchProvenance,
   type SourceProvenance,
 } from "../../core/provenance";
@@ -586,6 +603,20 @@ export interface SearchImportViewModelDeps {
   readonly writeProvenanceNote?: (
     provenance: SearchProvenance,
   ) => Promise<string>;
+  /**
+   * `src/core/provenance.ts`'s file-writing port, for `FR-8`'s JSON export.
+   *
+   * The port rather than `src/zotero/notes.ts`'s `exportProvenanceJson`, so the
+   * serialisation stays where its one redaction gate is: this module calls
+   * `exportJson(path, record, files)` and the platform contributes nothing but
+   * the write. `src/zotero/notes.ts`'s `provenanceFileWriter()` satisfies it in
+   * the product; a unit test satisfies it with one method and reads the bytes.
+   *
+   * Absent means {@link SearchImportViewModel.exportProvenance} writes nothing
+   * and says so, which is the same degradation shape as
+   * {@link SearchImportViewModelDeps.writeProvenanceNote}.
+   */
+  readonly provenanceFiles?: ProvenanceFileWriter;
 }
 
 /** What the document hands over when it connects. */
@@ -833,6 +864,30 @@ export function buildProvenance(
 // 6. The view model
 // ---------------------------------------------------------------------------
 
+/**
+ * What {@link SearchImportViewModel.exportProvenance} did — `FR-8`'s third
+ * scenario, as a value rather than as a rendered string.
+ *
+ * A value and not a {@link MessageRef}, deliberately: the two user-visible
+ * strings `P1-T36` step 4 asks for cannot be added inside that card's `Files`
+ * list (every new Fluent identifier needs `src/i18n/keys.ts` and the generated
+ * `typings/i10n.d.ts`, and a user-visible string also moves `G-41`'s count), so
+ * the outcome is published in the form a later card can render without changing
+ * this method again. The reason is measured in `P1-T36`'s report.
+ *
+ * - `written` — the bytes reached the path the caller chose.
+ * - `no-record` — nothing has been imported since the last run started, so
+ *   there is no record. **Nothing is written** (`P1-T36` criterion 4).
+ * - `no-writer` — {@link SearchImportViewModelDeps.provenanceFiles} is unbound.
+ * - `no-path` — the caller supplied an empty destination.
+ * - `failed` — the writer threw.
+ *
+ * There is no `cancelled`: a user who dismisses the chooser already knows, and
+ * the window never calls this without a path.
+ */
+export type ProvenanceExportOutcome =
+  "written" | "no-record" | "no-writer" | "no-path" | "failed";
+
 /** What {@link createSearchImportViewModel} returns. */
 export interface SearchImportViewModel {
   /** The current state. Handed to a view the moment it connects. */
@@ -845,6 +900,20 @@ export interface SearchImportViewModel {
   runImport(request: SearchWindowImportRequest): Promise<void>;
   /** The Cancel button, and `Escape` while a job runs (FR-10). */
   cancel(): void;
+  /**
+   * `FR-8`'s third scenario: write the retained record to `path`, as JSON.
+   *
+   * The record is the **redacted** one `redactSearchProvenance` returned when
+   * the import composed it, and `exportJson` → `serializeProvenance` runs the
+   * same gate again on the way out (it is idempotent). No second rule exists
+   * anywhere, which is `P1-T17`'s NFR-16 requirement and `P1-T36`'s first
+   * **Do NOT**.
+   *
+   * @param path - the destination the *window* chose; never stored, never
+   *   logged, and never put into the record, the note or the file
+   * @returns which of {@link ProvenanceExportOutcome} happened
+   */
+  exportProvenance(path: string): Promise<ProvenanceExportOutcome>;
   /** The host object the document reads off `api.searchWindow`. */
   readonly host: SearchWindowHostApi;
 }
@@ -866,6 +935,12 @@ export interface SearchWindowHostApi {
   runSearch(query: SearchWindowQuery): Promise<void>;
   runImport(request: SearchWindowImportRequest): Promise<void>;
   cancel(): void;
+  /**
+   * `FR-8`'s third scenario. Added by `P1-T36`, and the document tolerates it
+   * being absent exactly as it tolerates every other member — so a window
+   * running against an older host simply has nothing to press.
+   */
+  exportProvenance(path: string): Promise<ProvenanceExportOutcome>;
 }
 
 /** One running job: its surfaces, and the one call that closes them. */
@@ -913,6 +988,47 @@ export function createSearchImportViewModel(
    * which asks nobody.
    */
   let asked: readonly string[] = [];
+  /**
+   * The **redacted** provenance record of the run the window is showing, or
+   * `undefined` when the window is showing a run that produced none.
+   *
+   * `P1-T36`'s whole risk is this variable's lifetime, and all three failure
+   * modes are decided here rather than left to the caller:
+   *
+   * - **Stale** — cleared at the *start* of every run, search or import, so a
+   *   second run cannot be exported as the first. Clearing on a search matters
+   *   as much as clearing on an import: after a search the window shows a
+   *   result table that no import has written, and exporting the previous
+   *   import's record would describe a collection that is no longer on screen.
+   * - **A leak** — only {@link redactSearchProvenance}'s output is ever
+   *   assigned, never the draft {@link buildProvenance} returns. Retaining the
+   *   unredacted record "in case the export needs more detail" is `P1-T36`'s
+   *   second **Do NOT**, and the detail is not needed: the export is a
+   *   `JSON.stringify` of the whole object either way.
+   * - **Absent** — which is the state the code was in before `P1-T36`: the
+   *   record was composed as a local `const`, handed to the note writer and
+   *   dropped. `exportProvenance` returns `no-record` rather than writing an
+   *   empty file.
+   *
+   * **Cleared per run and deliberately not per window.** This view model is
+   * application-scoped — the composition root builds one at startup — so
+   * closing and reopening the window does not reset it, and `connect()` does
+   * **not** clear this. That is on purpose: {@link state} is not reset either,
+   * so a reopened window still shows the previous run's table, and a record
+   * cleared on `connect` would refuse to export the very run the user is
+   * looking at. The record and what is on screen therefore always agree. What
+   * *should* happen to an application-scoped view model across a window
+   * reopen is an open question `P1-T35` already recorded in `plan/00` §6; this
+   * card follows the behaviour that is shipped rather than pre-empting it.
+   *
+   * **The lifetime is the plugin session, and `docs/07` §5.3 says it will not
+   * stay that way.** §5.3's "Where it lives" (`docs/07`:2073) makes the SQLite
+   * `search_provenance` row authoritative and says the export "serialises the
+   * stored object"; Phase 1 ships no plugin-owned SQLite, which
+   * `src/core/provenance.ts`'s own header already records, and `P2-T17` creates
+   * the table. Until then this variable *is* the stored object.
+   */
+  let retained: SearchProvenance | undefined;
 
   const descriptors = (): readonly SourceDescriptor[] =>
     deps.listSources?.() ?? [];
@@ -1481,6 +1597,13 @@ export function createSearchImportViewModel(
         finishedAt: new Date(deps.clock.now()).toISOString(),
       }),
     );
+    // **`FR-8`'s third scenario needs this to still exist.** Before `P1-T36`
+    // the next line was the last use of `provenance`: the record was handed to
+    // the note writer and the handler returned. Assigned *after* the redaction
+    // call and never before it, so the only thing this module can hold is the
+    // record that is already safe to write.
+    retained = provenance;
+
     const writeNote = deps.writeProvenanceNote;
     if (writeNote === undefined) {
       deps.logger.warn(
@@ -1519,6 +1642,9 @@ export function createSearchImportViewModel(
     },
 
     async runSearch(query: SearchWindowQuery): Promise<void> {
+      // See {@link retained}: a search replaces what the window shows, so the
+      // previous import's record stops being this window's record.
+      retained = undefined;
       // Before the records are handed over, never after: the table's Source
       // column draws these as text.
       await ensureSourceNames();
@@ -1532,6 +1658,10 @@ export function createSearchImportViewModel(
     },
 
     async runImport(request: SearchWindowImportRequest): Promise<void> {
+      // Cleared before the refusal below, not after it: an import the window
+      // declined to start has not replaced the record, but it has also not left
+      // the previous one describing what is on screen.
+      retained = undefined;
       const target = resolveTarget(request);
       if (target === undefined) {
         // The document's Import gate already refuses this; a host driven
@@ -1571,6 +1701,55 @@ export function createSearchImportViewModel(
       source?.cancel({ kind: "user" });
     },
 
+    async exportProvenance(path: string): Promise<ProvenanceExportOutcome> {
+      // **The path is never in a log line, and that is a question rather than a
+      // rule.** `docs/09` has no statement about writing a chosen filesystem
+      // path to the debug log: §2.1 is about credentials, §2.2 about the debug
+      // bundle, and §3.2's egress table lists "file paths" only among what is
+      // *not* sent to an LLM provider. A path can carry an account name, so
+      // `P1-T36`'s **Do NOT** is followed to the letter here and the question
+      // is recorded in the report instead of answered by this file.
+      const files = deps.provenanceFiles;
+      if (path === "") {
+        deps.logger.warn("FR-8's JSON export was asked for no destination");
+        return "no-path";
+      }
+      if (retained === undefined) {
+        // Criterion 4: no record, no file. An empty or half-built file on disk
+        // would be worse than a refusal, because a user would keep it.
+        deps.logger.warn(
+          "FR-8's JSON export was asked for, and nothing has been imported " +
+            "since the current run started, so there is no record to write",
+          { panel: state.panel },
+        );
+        return "no-record";
+      }
+      if (files === undefined) {
+        deps.logger.warn(
+          "FR-8's JSON export has a record but no file-writing port is " +
+            "bound, so nothing was written",
+        );
+        return "no-writer";
+      }
+      try {
+        // `exportJson` and `serializeProvenance` unchanged (`P1-T36`'s last
+        // **Do NOT**): they were written for this caller, and this is the
+        // caller arriving.
+        await exportJson(path, retained, files);
+      } catch {
+        deps.logger.warn(
+          "FR-8's JSON export could not be written; the destination is not " +
+            "logged (see this method's comment)",
+          { runId: retained.runId },
+        );
+        return "failed";
+      }
+      deps.logger.info("FR-8's provenance JSON written", {
+        runId: retained.runId,
+      });
+      return "written";
+    },
+
     get host(): SearchWindowHostApi {
       return {
         listSources: (): readonly SourceDescriptor[] => descriptors(),
@@ -1586,6 +1765,8 @@ export function createSearchImportViewModel(
         cancel: (): void => {
           model.cancel();
         },
+        exportProvenance: (path: string): Promise<ProvenanceExportOutcome> =>
+          model.exportProvenance(path),
       };
     },
   };

@@ -458,6 +458,14 @@ The bundle's confirmation dialog must state exactly what is included, offer a pr
 
 The plugin's own 5000-line ring buffer is redacted **at write time**, not at export time, so a key never sits in memory as log text.
 
+**A user-chosen file-system path is never written to the log. Decided 2026-10-08 by the product owner**,
+after `P1-T36` reported that this section, §2.1 and §3.2's egress table together said nothing about it.
+FR-8's JSON export writes to a path the user picks, and a path can carry an account name or a folder name
+the user would not choose to disclose; the log is something a user is asked to paste into a bug report. So
+the export logs its **outcome and the run identifier**, never the destination — and an assertion enforces
+it, because a rule nobody tests is a rule that lasts until the next caller. The same reasoning applies to
+any later feature that takes a path from the user.
+
 ### 2.3 Per-provider key validation ("Test key")
 
 **Six credentials are validated here, not four.** The `SecretId` set in §1.7 has one entry per credential the user can supply, and `07-architecture-and-data-model.md` §8.5 carries a `keyPresent` / `lastValidatedAt` / `lastValidationResult` trio for each of the six IDs `openrouter`, `openai`, `gemini`, `anthropic`, `ncbi` and `semanticscholar`. Every one of them needs a test call, because a *wrong* key is not the same failure as an *absent* one and only two of the six announce themselves:

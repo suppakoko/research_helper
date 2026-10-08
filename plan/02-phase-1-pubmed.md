@@ -7085,8 +7085,14 @@ all**, because no control exists to press. Measured 2026-10-07:
 - Both halves of the machinery already exist and **nothing calls either**. `exportJson` is at
   `src/core/provenance.ts:398`; `exportProvenanceJson` at `src/zotero/notes.ts:339`, a one-line
   convenience over it; `provenanceFileWriter` at `src/zotero/notes.ts:323`, which writes through
-  `Zotero.File.putContentsAsync`. A grep for callers of either export function across `src/`, `addon/` and
-  `test/` returns **zero**.
+  `Zotero.File.putContentsAsync`. **No product code calls either.**
+  > **Corrected 2026-10-08 after the executing agent measured it.** This read "a grep for callers of either
+  > export function across `src/`, `addon/` and `test/` returns **zero**", which is false for one of the
+  > two: `exportJson` was already called by its own unit test at `test/unit/core/provenance.test.ts:799`
+  > and by `exportProvenanceJson` itself at `src/zotero/notes.ts:343`. `exportProvenanceJson` had zero
+  > callers and **still has zero**, because this card deliberately calls `exportJson` through the port so
+  > the serialisation stays in `src/core/`. The claim that nothing in the **product** called either was
+  > right; the sentence built on top of it was not checked. `plan/README.md` §5 rule 8.
 - **The record is built and then dropped on the floor.** At
   `src/ui/viewModels/searchImportViewModel.ts:1475` the import handler composes the record, redacts it,
   hands it to the note writer, and returns — the record is a **local `const` inside that handler** and
@@ -7181,7 +7187,15 @@ string move with it.
 - [ ] The exported record is the redacted one: a test proves that a value the redactor removes is absent
       from the file's bytes.
 - [ ] The export action with no record present does not write a file.
-- [ ] `P1-T35`'s enumeration test still passes, with the two new optional dependencies bound.
+- [ ] `P1-T35`'s enumeration test still passes, with the new optional dependency bound.
+      > **Corrected 2026-10-08: "two" was wrong, and only one such dependency can exist.** Measured by the
+      > executing agent: the destination chooser cannot be bound at the composition root, for three
+      > independent reasons. `docs/01:436` requires a `BrowsingContext` for `nsIFilePicker.init` and only a
+      > window has one; the view model is built once at startup and has no window; and
+      > `eslint.config.js`'s `research-helper/zotero-global` rule does not exempt
+      > `src/bootstrap/registerUI.ts`, so that file cannot name the `Zotero` global to borrow one. **So the
+      > chooser belongs in the window document and the chosen path is handed inward** — which is the shape
+      > step 3 called legitimate, and it keeps `nsIFilePicker` out of `src/` entirely.
 - [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` all exit 0,
       with no fewer tests than before.
 
@@ -7198,6 +7212,95 @@ other control was.
 The risk here is not the file writing, which is one existing line, but **the record's lifetime**. A record
 retained too long is stale (a second run must replace it), a record retained unredacted is a leak, and a
 record not retained at all is the state the code is in today. Criteria 3 and 4 are the two ends of that.
+
+**Findings, 2026-10-08 — the record now survives the run that made it, the export writes a
+schema-valid file in a real Zotero, and the control that would press it cannot be built inside this card's
+`Files` list. Five criteria pass; criterion 1 is reported under rule 6 rather than adjusted.**
+
+**Verified by the coordinator:** typecheck 0, `lint:check` 0, **1,208 unit in 28 files** (from 1,194 in
+27), 28 contract unchanged, installer **131,925 → 132,417 bytes**, exactly four files touched and the fifth
+new. The integration suite was run three times: **97 passed with 3 failed, 97 passed with 3 failed, then
+100 passed** — the three failures are the known load-sensitive ones in `P1-T22`'s block, named in
+`plan/00` §6 item 20, and **neither of this card's two new integration tests failed in any run**. The
+executing agent saw the same thing across eight runs, green in seven.
+
+**That makes item 20 more urgent than its size suggests.** It is a 0.25–0.5 d fix, and on this machine the
+suite now fails more often than it passes. **`P1-T23` cannot be run until it lands**, because a
+definition-of-done run that is a coin toss settles nothing.
+
+**The retention was the work, and its lifetime is three rules with a test each.** One variable holds the
+**redacted** record — the value `redactSearchProvenance` returns — set immediately after the redaction
+call, cleared at the **start** of every run so a search that replaces the table also replaces what can be
+exported, and never set from an unredacted value because the handler never binds one to a name. The export
+action returns one of five plain values rather than message references, so a later card can render them
+without changing the method.
+
+**Why the control is missing, measured rather than argued, and the measurement is the finding.** Three
+Fluent strings are needed — a button label and two outcome messages. The agent appended **one probe
+message** and ran the build: the build regenerated `typings/i10n.d.ts`, and `npm run typecheck` then
+failed with `TS2344: Type '"research-helper-search-probe-mutant"' does not satisfy the constraint 'never'`
+— `UndeclaredBundleMessageId` at `src/i18n/keys.ts:423–433`, which exists precisely to make a bundle
+message with no assigned surface a compile error. **So every new user-visible string in this project
+requires `src/i18n/keys.ts` and the regenerated `typings/i10n.d.ts`, and neither is in this card's
+`Files`.** Two further consequences the agent measured: a new string raises `KO_PENDING_REVIEW`, which is
+the count the Korean gate `G-41` publishes — **so the card's `Human gate: none` was wrong** — and the
+`ko-KR` bundle needs a stub for each id. **A button with no label is worse than no button**, so nothing
+was added to the markup and three of the seven `Files` rows were deliberately left untouched. The probe
+was removed and both files verified byte-identical by hash.
+
+**Eighteen mutations, and three of them are reported as unbreakable-alone rather than counted as
+coverage.** Retaining the **unredacted** record cannot be caught from outside the module, because
+`serializeProvenance` runs the gate again on the way out and the gate is repeatable, so the bytes on disk
+are identical either way; bypassing the gate on the way out cannot be caught alone for the mirror reason;
+**the two together are caught.** So the redaction assertion is a layered guard whose real defect class is
+"a future export path skips `serializeProvenance` while something upstream retains a raw record" — worth
+having, and weaker than the criterion's wording. The third, `retained ??= provenance`, is an **equivalent
+mutation**: the record is cleared before every run, so `??=` always assigns. Paired with the clear removed
+it becomes a real defect and is caught. **What holds the no-raw-retention rule is code shape plus the
+gate's repeatability, not a test**, and the agent said so plainly instead of claiming the test proved it.
+
+**A trap hit and correctly diagnosed.** While reverting a mutation a brace was left unbalanced; the run
+exited 1 with `Tests no tests` and a parse error. **At the exit-code level that is indistinguishable from
+a caught mutation** — only the per-test detail showed nothing had run. Same class as the
+reporter-name trap, and the reason every mutation in the report carries a named test and its message.
+
+**A behaviour of the single redaction gate that corrected one of the agent's own assertions.** The two
+free-text fields of the record are cleaned by **different** mechanisms: the user's query goes through the
+text redactor, which substitutes a marker, while the per-source transmitted query goes through the
+query-string redactor, which **removes the whole parameter** rather than marking its value
+(`src/core/provenance.ts:183–189` and `:275`). A first draft expected a marker in both places and failed
+against unmutated code. Both assertions now match the measured behaviour, and the distinction is written
+into the test file.
+
+**The credential-shaped test string is 48 characters, not 32, and the reason is worth keeping.** The
+last-resort redaction pattern starts at 40 characters and the key shape this project worries about is 32.
+**A test using 32 characters and watching the value survive would be asserting the hole rather than the
+gate** — which is exactly what `P1-T42` exists to close.
+
+**One decision taken, with the shipped behaviour as the reason.** The view model is built once at startup,
+not once per window, so closing and reopening the window does **not** clear the retained record, and
+`connect()` was deliberately left not clearing it: the view state is not reset either, so a reopened window
+still shows the previous run's table, and clearing the record would refuse to export the very run the user
+is looking at. **The record and the screen always agree.** What an application-scoped view model should do
+across a reopen is `plan/00` §6 item 18, and this card follows what ships rather than pre-empting it. An
+owner may overturn it.
+
+**The scope of the export, stated because it will surprise someone.** `docs/07:2073` makes a database row
+the authoritative copy and says the export "serialises the stored object rather than re-parsing the note" —
+and Phase 1 ships **no plugin-owned database**; `P2-T17` creates the table. So until then the retained
+value **is** the stored object, and the export's reach is **one plugin session**. Recorded in the code.
+
+**The question this card was asked to record, now answered.** `docs/09` makes **no statement** about
+whether a user-chosen file-system path may be written to the debug log — the agent checked §2.1, §2.2 and
+§3.2's egress table. The implementation follows the card's `Do NOT` to the letter and an assertion enforces
+it. **The owner answered on 2026-10-08: do not log the path.** `docs/09` §2.2 now says so.
+
+**Needs a card.** The control, its three strings and the file chooser — the highest-value one, because the
+host method it calls already exists and is tested, and because it closes Phase 1's completion criterion 4.
+It **carries `G-41`** and must say so. The chooser's shape is already decided and recorded: open it in the
+window document, hand the path inward. Then: a shared test helper for the schema validator, which now
+exists twice because the unit copy imports the test framework and Node's file system and the Zotero sandbox
+has neither — the duplication is written into the spec with its reason rather than hidden.
 
 ---
 

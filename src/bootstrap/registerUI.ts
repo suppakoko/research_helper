@@ -101,7 +101,7 @@ import {
   type SearchWindowHostApi,
 } from "../ui/viewModels/searchImportViewModel";
 import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
-import { writeProvenanceNote } from "../zotero/notes";
+import { provenanceFileWriter, writeProvenanceNote } from "../zotero/notes";
 import {
   COLLECTION_MENU_DESCRIPTION,
   collectionMenuOptions,
@@ -340,11 +340,20 @@ async function refreshLibraryIndex(logger: Logger): Promise<void> {
  * | `getPrefs` | `src/prefs`' typed `getPref`, the four `docs/07` §8.5 window seeds |
  * | `isExisting` | `P1-T13`'s `LibraryIndex.findExisting`, over {@link libraryIndex} |
  * | `writeProvenanceNote` | `src/zotero/notes.ts`'s `writeProvenanceNote`, `FR-8`'s note |
+ * | `provenanceFiles` | `src/zotero/notes.ts`'s `provenanceFileWriter()`, `FR-8`'s JSON export |
  *
- * The last two are the ones `P1-T22` could not make, because `src/ui/**` may
+ * The last three are the ones `P1-T22` could not make, because `src/ui/**` may
  * not import `src/zotero/**` (`docs/07` §2.3) and no file in that card's
  * `Files` list could reach either module. This file is the three-way junction
  * where they can be bound, which is what its header has said since `P0-T07`.
+ *
+ * **What this file cannot bind, and `P1-T36` measured why.** The *destination*
+ * half of the JSON export — the file chooser — is not here and cannot be. A
+ * chooser needs a `BrowsingContext` (`docs/01`:436), only a window has one, and
+ * `eslint.config.js`'s `research-helper/zotero-global` rule does not exempt this
+ * file, so it cannot reach `Zotero.getMainWindow()` to borrow one either. The
+ * window document opens the chooser and hands the path to
+ * `host.exportProvenance(path)`; this file binds only the write.
  *
  * `getPrefs` reads on **every** call rather than latching a snapshot: `getPref`
  * never throws (`docs/07` §8.5.1) and the window re-seeds its controls from
@@ -386,6 +395,11 @@ function searchWindowDeps(
     // view model calls `redactSearchProvenance` before this port — and nothing
     // here adds a second rule (`NFR-16`: one gate).
     writeProvenanceNote: (provenance) => writeProvenanceNote(provenance),
+    // `FR-8`'s third scenario. The **port**, not `exportProvenanceJson`: the
+    // view model calls `src/core/provenance.ts`'s `exportJson`, so the
+    // serialisation and the one redaction gate stay in `core/` and the platform
+    // contributes `Zotero.File.putContentsAsync` and nothing else.
+    provenanceFiles: provenanceFileWriter(),
   };
 }
 
