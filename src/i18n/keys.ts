@@ -378,6 +378,17 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   "research-helper-search-cancel",
   "research-helper-search-import",
 
+  // FR-8's third scenario: the status-bar export control and its two outcome
+  // sentences (`P1-T45`). This surface and no other — the control is a child of
+  // `#rh-search-status-bar` in `addon/content/searchDialog.xhtml`, which is this
+  // window's own document, so all three belong here rather than in
+  // `MAIN_WINDOW_MESSAGE_IDS`. None of the three takes an argument: see
+  // {@link L10N_EXPORT_TAKES_NO_PATH} for why the success sentence does not
+  // name the file it wrote.
+  "research-helper-search-export",
+  "research-helper-search-export-written",
+  "research-helper-search-export-failed",
+
   // docs/08 §8.4's five states: INITIAL.
   "research-helper-search-state-initial",
 
@@ -408,6 +419,29 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
 ] as const satisfies readonly FluentMessageId[];
 
 export type SearchDialogMessageId = (typeof SEARCH_DIALOG_MESSAGE_IDS)[number];
+
+/**
+ * Why none of `P1-T45`'s three export ids is in {@link FluentMessageArgsMap},
+ * and why the absence is a security property rather than an omission.
+ *
+ * The success sentence a user would expect is "Written to
+ * `/Users/<name>/Desktop/run.json`", which needs a `{ $path }` placeable. **It
+ * must not exist.** `docs/09` §2.2's 2026-10-08 paragraph settles that a
+ * user-chosen filesystem path is not written to the debug log, because a path
+ * carries an account name; a placeable would put the same string on the screen,
+ * where screenshots, screen recordings and bug reports read it — the exposure
+ * `P1-T21` closed for the result table and
+ * {@link EMPTY_HEADLINE_OMITTED} for the EMPTY panel.
+ *
+ * So the argument map is where this is enforced: with no entry here,
+ * `FluentArgsParam` types the lookup as taking no arguments at all, and a later
+ * card that tries to pass a path does not compile. The window script never
+ * holds the path beyond the one call that hands it to
+ * `host.exportProvenance(path)`.
+ */
+export const L10N_EXPORT_TAKES_NO_PATH =
+  "research-helper-search-export-written takes no { $path }; see " +
+  "L10N_EXPORT_TAKES_NO_PATH in src/i18n/keys.ts";
 
 /**
  * Every message id this file assigns to a surface.
@@ -553,7 +587,7 @@ export const KO_PENDING_REVIEW = [
   "rh-error-storage",
   "rh-error-cancelled",
 
-  // --- searchDialog (58) ---
+  // --- searchDialog (61) ---
   "research-helper-search-window-title",
   "research-helper-search-keyword-label",
   "research-helper-search-keyword-input",
@@ -596,6 +630,15 @@ export const KO_PENDING_REVIEW = [
   "research-helper-search-close",
   "research-helper-search-cancel",
   "research-helper-search-import",
+  // `P1-T45`. On this list and not on `KO_PRESENT`: the `ko-KR` bundle carries
+  // all three as commented stubs with their English source, which the
+  // localization spec counts as absent — correctly, because a commented line
+  // resolves to nothing at runtime. `G-41` owns the translation; the owner
+  // deferred Korean on 2026-10-08 and nothing here was machine-translated.
+  // "JSON" itself is exempt from translation (`docs/08` §10.3).
+  "research-helper-search-export",
+  "research-helper-search-export-written",
+  "research-helper-search-export-failed",
   "research-helper-search-state-initial",
   "research-helper-search-source-searching",
   "research-helper-search-source-results",

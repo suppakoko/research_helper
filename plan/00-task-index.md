@@ -446,6 +446,25 @@ nothing at all, because ranking them without an owner's input would be a decisio
     was wrong. Until it is fixed, a continuous-integration run can go red for reasons unrelated to the
     change under test.
 
+21. **One published boolean for "a record exists" on `SearchViewState`.** `P1-T45` had to **derive** the
+    export control's visibility from `state.notices` being non-empty, because the view state has a
+    `cancelVisible` field for the Cancel button and **no equivalent for the retained record** — and that
+    file was outside its list. The derivation is justified by measurement and has **one measured
+    divergence**: a *refused* run clears the record without publishing any state, so the previous run's
+    summary stays on screen, the control stays visible with nothing to export, and the attempt renders
+    the failure sentence. One published boolean, set and cleared with the record, plus one line in the
+    window script, removes it. Needs `src/ui/viewModels/searchImportViewModel.ts` and
+    `addon/content/searchDialog.js`.
+
+22. **Whether the documentation inside `addon/content/searchDialog.js` should ship to users.**
+    **An owner's decision about a user artefact, not a code question.** That file is **copied into the
+    installer verbatim** rather than bundled, and measured 2026-10-08 it is **3,100 lines, 44 % of them
+    comment, 116,975 bytes**. `P1-T45` grew the installer by **5,965 bytes — about 4.5 %** — and almost
+    all of that growth is comment. The comments are unusually valuable here (they carry measurements a
+    reader cannot recover), so the choice is real: ship them, strip them at build time, or move the long
+    passages to a document. **Nothing is wrong today**; the number simply grows with every card that
+    touches that file.
+
 ## 7. Regenerating this file
 
 The tables in §4 are derived from the cards' `ID`, `Depends on`, `Estimate` and

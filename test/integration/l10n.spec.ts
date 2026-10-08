@@ -44,9 +44,9 @@
  *    from the Korean file resolves from the English one. This is what the
  *    `ko-KR` bundles depend on for `KO_PENDING_REVIEW.length` of the
  *    `MAIN_WINDOW_MESSAGE_IDS.length + SEARCH_DIALOG_MESSAGE_IDS.length`
- *    declared ids — **79 of 84 as of 2026-10-05**, a snapshot rather than a
+ *    declared ids — **82 of 87 as of 2026-10-08**, a snapshot rather than a
  *    constant, since every card that adds or retires an id moves it (`P1-T32`
- *    took it to 80 of 85, `P1-T33` back to 79 of 84). The run's own
+ *    took it to 80 of 85, `P1-T33` back to 79 of 84, `P1-T45` to 82 of 87). The run's own
  *    `[P1-T18] declared ids` and `[P1-T18] ko-KR totals` lines print the live
  *    figures, and `plan/06-human-gates.md`'s `G-41` states the derivation.
  * 4. **The error contract.** Every `ResearchHelperError` subclass's

@@ -425,6 +425,36 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
         class="rh-hint"
       />
       <spacer flex="1" />
+      <!-- FR-8's third scenario (P1-T45). Both elements are `hidden` in the
+           markup and revealed from view state, which is the idiom the Cancel
+           button below established: the record exists only after an import, and
+           a control that writes a run's provenance before any run has happened
+           has nothing to write.
+
+           The message is its own `<description>` rather than a second write into
+           `#rh-search-status`, for the reason the database-progress element in
+           this row exists: the status line carries the run's live message, and
+           two live messages in one element overwrite each other. `role="status"`
+           per docs/08 §9 — an export outcome is information, not an
+           interruption.
+
+           **The outcome sentence never names the chosen file.** docs/09 §2.2
+           (2026-10-08) keeps a user-chosen path out of the log because a path
+           carries an account name, and a window's text is read by screenshots
+           and bug reports the same way a log is. See
+           L10N_EXPORT_TAKES_NO_PATH in src/i18n/keys.ts. -->
+      <description
+        id="rh-search-export-status"
+        role="status"
+        aria-live="polite"
+        class="rh-hint"
+        hidden="true"
+      />
+      <button
+        id="rh-search-export"
+        hidden="true"
+        data-l10n-id="research-helper-search-export"
+      />
       <button
         id="rh-search-cancel"
         hidden="true"

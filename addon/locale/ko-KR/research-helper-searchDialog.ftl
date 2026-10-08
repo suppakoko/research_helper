@@ -23,8 +23,10 @@
 # on Zotero 10.0.1, not assumed (`docs/01` §9.1, `P0-T24`).
 #
 # **This is the single largest item the gate has to clear**, and it is reported
-# as such: 58 strings, listed here in the order a reviewer will meet them in
-# the window. `src/i18n/keys.ts` exports the same list as `KO_PENDING_REVIEW`
+# as such: 61 strings, listed here in the order a reviewer will meet them in
+# the window — 58 from `P1-T18` plus the three `P1-T45` added for FR-8's
+# provenance export. `src/i18n/keys.ts` exports the same list as
+# `KO_PENDING_REVIEW`
 # and `test/integration/l10n.spec.ts` asserts that the messages actually
 # missing from this file are exactly that list, so a new en-US string cannot be
 # added without either a Korean entry or an explicit entry on the review list.
@@ -211,6 +213,24 @@ research-helper-search-col-doi =
 # NEEDS REVIEW. en-US `.label`, a `{ $count }` selector: "Import 1 item" /
 # "Import { $count } items". Keep the selector with only `*[other]`.
 # research-helper-search-import =
+
+
+## Provenance export (FR-8, P1-T45)
+##
+## None of these three takes a placeable, and the success sentence deliberately
+## does not name the file that was written — `docs/09` §2.2 forbids the chosen
+## path leaving the window. Do not add the path when translating.
+##
+# NEEDS REVIEW. en-US `.label`: "Export provenance as JSON…". "JSON" is not
+# translated (`docs/08` §10.3, the same rule as "DOI").
+# research-helper-search-export =
+#
+# NEEDS REVIEW. en-US: "Provenance record exported."
+# research-helper-search-export-written =
+#
+# NEEDS REVIEW. en-US: "Could not export the provenance record. Try a
+# different location."
+# research-helper-search-export-failed =
 
 
 ## 1. INITIAL (docs/08 §8.4)

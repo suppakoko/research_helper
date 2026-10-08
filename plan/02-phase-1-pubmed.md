@@ -5453,7 +5453,7 @@ per-host cap. Not false, just incomplete, and the file is outside this card's `F
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 0.25 d |
-| **Human gate** | **Yes — satisfied 2026-10-07.** The owner supplied `base` 1000 ms, `cap` 30 000 ms and an attempt cap of 3; an agent may not invent them (`plan/README.md` §5 rule 4), and the reasoning behind each is recorded under `Do` step 1. |
+| **Human gate** | **Yes** — the owner names the first wait, the ceiling and the attempt cap; an agent may not invent them (`plan/README.md` §5 rule 4). Satisfied 2026-10-07; the figures and the reasoning are under `Do` step 1. |
 
 **Goal.** The retry policy has numbers, they live in one place, and `P1-T05`'s injected budget is
 actually populated.
@@ -6430,7 +6430,7 @@ exception — which is a good thing for how much of `G-41` is exercised incident
 | **Retires** | none |
 | **Implements** | none |
 | **Estimate** | 0.25 d |
-| **Human gate** | none — the surviving id's Korean string stays inside `G-41`'s existing scope |
+| **Human gate** | none |
 
 **Goal.** One Fluent id for the progress surface's headline, owned by a named surface, with the other
 retired from `keys.ts` and both bundles.
@@ -6538,7 +6538,9 @@ the only thing deciding a per-job argument**. Decide it here, for the headline o
 
 **Verify with.** `npm run typecheck && npm run test:unit -- container && npm run test:integration -- --exit-on-finish --abort-on-fail`
 
-**Notes.** **This card's `Files` names no test file, and `plan/README.md` §6 requires a reason here —
+**Notes.** **Why this card is ungated**, which §4 keeps out of the `Human gate` cell: the surviving id's Korean string stays inside `G-41`'s existing scope, so no new human work appears.
+
+**This card's `Files` names no test file, and `plan/README.md` §6 requires a reason here —
 added 2026-10-05 after the executing agent reported the omission.** The reason: every direction of this
 edit except one is already a **compile error** (`P1-T30`'s generated union, plus the `satisfies
 readonly FluentMessageId[]` guards), and the one exception — a stale `KO_PENDING_REVIEW` — is caught by
@@ -7981,7 +7983,7 @@ this card is the one holding the measurement.
 | **Retires** | the conflict `P1-T22` escalated |
 | **Implements** | part of `FR-51`, `docs/08` §4.4 |
 | **Estimate** | 0.5 d |
-| **Human gate** | none — **the decision this card exists to implement was taken by the owner on 2026-10-08** |
+| **Human gate** | none |
 
 **Goal.** A paper already in the library appears in the result list, marked, and the three-way duplicate
 control decides what happens to it — because all three outcomes are already implemented and nobody ever
@@ -8120,7 +8122,7 @@ decision turned out to cost a flip and a wire.
 | **Retires** | the literature-source half of `P3-T04` |
 | **Implements** | the source-credential half of `docs/08` §7.5 and `docs/09` §1.9 |
 | **Estimate** | 1.0 d |
-| **Human gate** | none to build. **Entering a real key is `G-18`'s** and stays the owner's. |
+| **Human gate** | none |
 
 **Goal.** A key the owner has in hand can be stored in the operating system's keystore through the
 plugin's own preferences, and never appears anywhere else.
@@ -8256,7 +8258,9 @@ test needs to assert the digest, assert it against a synthetic value.
 npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
 ```
 
-**Notes.** This card exists because of a **scheduling error, not a missing capability**: a pane whose two
+**Notes.** **Why this card is ungated**, which §4 keeps out of the `Human gate` cell: building the pane needs no human, and **entering a real key is `G-18`'s** and stays the owner's.
+
+This card exists because of a **scheduling error, not a missing capability**: a pane whose two
 dependencies had already been satisfied by other cards sat two phases away, and the only visible symptom
 was that an arriving key would have nowhere to go. That is worth remembering as a class — **a card's
 `Depends on` is written once and never re-read, so work that arrives early by another route leaves the
@@ -8279,7 +8283,7 @@ failure path as well as the success path.
 | **Retires** | nothing |
 | **Implements** | the rest of the third scenario of `FR-8` |
 | **Estimate** | 0.5 d |
-| **Human gate** | **Yes — `G-41`.** Three new user-visible strings raise `KO_PENDING_REVIEW`, which is the count that gate publishes. **The Korean translation itself is deferred** (owner, 2026-10-08), so what this card owes the gate is registration, not translation. |
+| **Human gate** | **Yes** — `G-41`: three new user-visible strings raise the count that gate publishes, and this card owes the gate registration rather than translation, because the owner deferred the Korean text on 2026-10-08. |
 
 **Goal.** A user who has just imported can press a control, choose a file, and get the run's provenance
 record written to it — with a sentence telling them it worked or did not.
@@ -8339,8 +8343,18 @@ correctly, at a boundary it measured rather than guessed. Its evidence, which th
    determined it.** Then run the build and commit the regenerated typings as the build writes them.
 2. Add the `ko-KR` stub for each new id, as a commented placeholder in the form that file already uses, so
    `KO_PENDING_REVIEW` accounts for them and the localization spec still passes.
-3. Add the control to the status bar, hidden until a record exists, revealed from view state the way the
-   Cancel button is.
+3. Add the control to the status bar, hidden until a record exists.
+   > **Corrected 2026-10-08 after the executing agent measured it.** This read "revealed from view state
+   > the way the Cancel button is", and the second half of that is false. The Cancel button reads
+   > `SearchViewState.cancelVisible`, a boolean published for exactly that purpose — **and there is no
+   > equivalent field for the record.** `SearchViewState` declares thirteen members and not one concerns
+   > the retained record, and that file is not in this card's `Files`. The claim about the Cancel button
+   > was grepped and is right; the claim built on top of it was never checked, which is
+   > `plan/README.md` §5 rule 8 for the third time this week. **What shipped instead**: visibility
+   > derived from `state.notices` being non-empty, justified by measurement — the record is assigned on
+   > the line after the publish that fills `notices`, and both are cleared at the start of every run.
+   > **The derivation has one measured divergence**, recorded in the `Findings`, and removing it is
+   > `plan/00` §6 item 21.
 4. Open the chooser in the window document and hand the path inward. Handle the user dismissing it: that is
    the one outcome with **no** message, because a user who cancelled knows they did.
 5. Render each of the five return values: two have strings, `no-record` should not be reachable from a
@@ -8370,8 +8384,13 @@ correctly, at a boundary it measured rather than guessed. Its evidence, which th
       on an element being present.
 - [ ] A failing write renders the failure message, asserted the same way.
 - [ ] Dismissing the chooser writes nothing and shows nothing.
-- [ ] Every new id is in both bundles and on every `src/i18n/keys.ts` list it belongs on, with the
-      determination recorded, and the localization spec passes.
+- [ ] Every new id is a message in the English bundle, a commented stub in the `ko-KR` bundle, and on
+      every `src/i18n/keys.ts` list it belongs on, with the determination recorded, and the localization
+      spec passes.
+      > **Reworded 2026-10-08.** This read "in both bundles", which on a literal reading would require
+      > Korean **messages** — the opposite of what gate `G-41`'s deferral asks for, and of what this
+      > card's own `Do` step 2 says. A commented stub is not a message, and the localization spec counts
+      > it as absent, correctly.
 - [ ] The chosen path appears in no log line, asserted.
 - [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
       **Run the integration suite three times and report all three.** On this machine it currently fails
@@ -8390,6 +8409,92 @@ The one thing worth care is step 1. The Fluent vocabulary in this project has a 
 turns a forgotten registration into a type error — which is why `P1-T36` could not cross this boundary and
 also why crossing it is safe: **if you get the registration wrong, the build tells you.** The part the
 compiler cannot tell you is which *list* an id belongs on, and that is what `P1-T40` exists to catch.
+
+**Findings, 2026-10-08 — the control, the chooser and the three strings all ship, and all seven criteria
+pass. Phase 1's completion criterion 4 is closed.**
+
+**Verified by the coordinator:** typecheck 0, `lint:check` 0, **1,234 unit in 28 files** (from 1,208, 26
+added), 28 contract unchanged, installer **132,417 → 138,382 bytes**, exactly the card's eight files
+touched, and `npm run test:integration` at **105 passed, 0 failed, three consecutive runs**. The executing
+agent ran that suite **17 times** and the three load-sensitive tests of `plan/00` §6 item 20 fired in
+**none** of them.
+
+**That last number is itself a finding, and it changes what `P1-T46` has to prove.** This morning the
+coordinator saw those three tests fail in **2 of 3** runs; this evening, **0 of 3**; the agent, **0 of 17**
+across the same day. **Twenty runs with no occurrence, hours after a two-in-three rate.** A green streak
+therefore cannot distinguish a fix from a quiet machine, and `P1-T46`'s criterion has been rewritten to
+demand either a reproduction first or a demonstration of the mechanism.
+
+**The chooser question the card asked to be settled was settled three ways, and the answer is that no
+toolkit is needed.** The window script cannot import anything — `zotero-plugin.config.ts` gives the bundler
+exactly one entry point and everything under `addon/` is copied as a plain asset — so the toolkit helper is
+unreachable from it. Reading the toolkit's own source showed it merely calls
+`ChromeUtils.importESModule("chrome://zotero/content/modules/filePicker.mjs")`, which the window script can
+do directly. **And the address and the behaviour were read off the installed Zotero 10.0.3 binary**, not off
+a document: the module sits inside `omni.ja`, whose own `chrome.manifest` maps the `content zotero` prefix,
+and its source shows that `init()` takes a **window** and reads `browsingContext` itself, that `show()`
+resolves to a number, and that the `file` getter returns a **string path**. That is the kind of evidence a
+document cannot give.
+
+**Three of the card's claims were re-measured and all three held**: the lint rule's exemption list, the
+Cancel button's hidden-flag pattern, and the vocabulary gate — which was reproduced exactly, with all three
+new ids in the bundle and none registered, failing as `TS2344 … does not satisfy the constraint 'never'`.
+
+**One gap in that safety net, measured, and it is the gap `P1-T40` exists for.** Dropping all three ids from
+`KO_PENDING_REVIEW` leaves `npm run typecheck` at **exit 0**: that list uses `satisfies`, which constrains
+what may be *in* the list and cannot require that every id *be* in one. **So "which list" is caught only by
+the integration localization check** — the slowest test in the repository — and never by the compiler.
+
+**A security property built by omission, which is the best kind.** The natural success sentence would name
+the file just written, which needs a `path` placeable. The three ids were deliberately left **off**
+`FluentMessageArgsMap` and `ARGUMENT_MESSAGE_IDS`, so the message type takes **no arguments at all** and a
+later card that tries to pass a path **will not compile**. Recorded in `src/i18n/keys.ts` as
+`L10N_EXPORT_TAKES_NO_PATH`, and a mutation that adds a `path` placeable to real code is caught.
+
+**Twenty-eight mutations, every one reverted, all eight files checksum-identical afterwards.** The most
+valuable is the one that makes the message pointer unresolvable: **the element was present and revealed, and
+only the text was empty** — so an assertion written on the element's presence would have passed. That is
+the blank-surface class `P1-T22` measured, now caught by an assertion rather than by luck. Three
+assertions are classified rather than counted: the branch on the picker's return code is **genuinely
+unreachable** from an automated test here (the unit layer has no `ChromeUtils`, and a native dialog would
+hang the runner), the `catch` around the picker is **untested and kept anyway** because without it a picker
+error could quote the path the user was typing into the log, and the handler's wrapper is a **redundant
+guard** kept for consistency with every other host call in that file.
+
+**Two platform facts found by this card's own assertions failing against correct code, both now written into
+the tests.** `Zotero.File.putContentsAsync` **succeeds when the destination's parent directory does not
+exist** — a string reaches a writer whose shim creates the parent — so "the parent is missing" is not a way
+to make the writer reject; the failure test now names a directory as the destination. And
+`nsIFilePicker.defaultString` **can be written and not read back on Windows**: reading it threw
+`NS_ERROR_FAILURE`, *after* `init(window, …)` had already succeeded, which was the measurement wanted. The
+product only ever sets that property, so the product was never at risk — **a test that read it back would
+have failed on this platform while the product worked.**
+
+**What a person still has to do, and it is one press.** A native save dialog blocks the test runner until
+the whole suite times out, so `show()` is never called by a test. Everything up to that call is asserted in
+a real Zotero: the module exists at the stated address, the class constructs, and `init` accepts this
+window. **What is unverified is that the operating system draws the dialog and that its accept and cancel
+paths behave** — including whether the return-code branch is written the right way round, which no test
+here can reach.
+
+**Three defects in this card's own text, all mine, all corrected at the source.** Step 3's premise — that
+the control could be revealed "the way the Cancel button is" — is false, because no `SearchViewState` field
+concerns the record; that is `plan/README.md` §5 rule 8 for the third time this week, and the same shape
+each time: a grepped fact with an unchecked claim built on top. Criterion 5's "in both bundles" would, read
+literally, demand the Korean messages gate `G-41` defers. And the `Human gate` cell put its requirement
+inside the bold, which §4 forbids because `plan/00`'s gate column is generated by matching on the exact
+spelling. **A script then checked all 137 gate cells across the four phase files: five were wrong and all
+five were mine.** All five are now compliant and the explanations moved to `Notes`, where §4 puts them.
+
+**`G-41`'s published counts were stale in three places and are now re-derived by script** rather than
+copied: 25 + 62 = **87 declared**, `KO_PENDING_REVIEW` **82**, present 4, deliberately absent 1, pending
+split **21 / 61**, and the three Korean lists **partition the 87 exactly**. The gate's table row, its
+heading, its snapshot paragraph and the localization spec's header prose all carried 79 of 84.
+
+**Needs a card.** The published boolean that removes the visibility derivation's one divergence, now
+`plan/00` §6 item 21. And an owner's decision, now item 22: **the window script is copied into the
+installer verbatim**, it is 3,100 lines of which 44 % is comment, and this card's share of that is most of
+the 4.5 % installer growth.
 
 ---
 
@@ -8496,8 +8601,14 @@ flaky test for a blind one.
 - Do not convert every assertion to a state assertion. See the trade above.
 
 **Criteria.**
-- [ ] `npm run test:integration` passes **five consecutive times**, each after clearing leftover
-      test-profile processes, with every result reported.
+- [ ] **Reproduce the failure first**, then show it gone. Five consecutive green runs is **not**
+      sufficient evidence on its own, and the reason is measured: on 2026-10-08 the coordinator saw the
+      three failures in **2 of 3** runs in the morning and in **0 of 3** in the evening, while
+      `P1-T45`'s agent saw them in **0 of 17** runs across that day — **twenty runs with no occurrence,
+      hours after a two-in-three rate.** So a green streak can mean a quiet machine. **Either establish
+      conditions under which the failure reproduces and show it gone under those, or demonstrate the
+      mechanism directly** — that no wait in these tests depends on text the run can replace — and say
+      which you did.
 - [ ] Both FR-10 and FR-51 are still asserted, with the same claims, and the `Findings` say what each one
       now observes.
 - [ ] Every surface the three tests cover keeps at least one text assertion on a persisting value, named in

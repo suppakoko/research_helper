@@ -251,6 +251,40 @@ research-helper-search-import =
         }
 
 
+## Provenance export (FR-8's third scenario, P1-T45)
+##
+## The control sits in the status bar beside Cancel and is hidden until the
+## current run has a provenance record, so the label is written for a user who
+## has just imported.
+##
+## **None of these three takes an argument, and the missing one is deliberate.**
+## The obvious success message would name the file that was just written, but
+## `docs/09` §2.2 forbids the chosen path leaving the window at all — a path
+## carries a user account name — so the sentence confirms the outcome without
+## naming the destination. The user chose the destination one dialog ago and
+## their file manager can show it; `src/core/provenance.ts` is the only thing
+## that ever sees the path, and it does not keep it.
+
+# FR-8's own words for the action, which is what a user searching the window
+# for it will look for. The ellipsis follows this bundle's convention for a
+# control that opens a dialog (`research-helper-search-target-new`,
+# `research-helper-search-state-error-open-preferences`).
+research-helper-search-export =
+    .label = Export provenance as JSON…
+
+# Status text, not an attribute: it lands on a `<description>`'s `textContent`
+# in the status bar, like `research-helper-search-status-importing`.
+research-helper-search-export-written = Provenance record exported.
+
+# Every outcome that is not "written" and not "the user dismissed the chooser"
+# renders this one sentence. There are three such outcomes and no string per
+# outcome: two of them cannot be reached from a visible control at all (see
+# `exportProvenance` in addon/content/searchDialog.js), and inventing a
+# distinct sentence for each would be three strings on `G-41` for one
+# user-visible event.
+research-helper-search-export-failed = Could not export the provenance record. Try a different location.
+
+
 ## The five list states (docs/08 §8.4)
 ##
 ## INITIAL / LOADING / EMPTY / PARTIAL / ERROR. §8.4 names PARTIAL as "the one

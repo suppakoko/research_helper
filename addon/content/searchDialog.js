@@ -81,7 +81,7 @@
  *   `src/prefs/schema.ts` and `docs/07` §8.5's own table row.
  */
 
-/* global Zotero, Services, window, document */
+/* global Zotero, Services, window, document, ChromeUtils */
 
 var RHSearchWindow = {
   /**
@@ -116,6 +116,10 @@ var RHSearchWindow = {
     status: "rh-search-status",
     progress: "rh-search-progress",
     cancel: "rh-search-cancel",
+    // FR-8's third scenario (P1-T45). Both are in the markup, `hidden`, and
+    // revealed from view state the way `cancel` is.
+    exportProvenance: "rh-search-export",
+    exportStatus: "rh-search-export-status",
     stateInitial: "rh-state-initial",
     stateSearching: "rh-state-searching",
     stateEmpty: "rh-state-empty",
@@ -332,6 +336,33 @@ var RHSearchWindow = {
      * reported with the card.
      */
     targetNew: "research-helper-search-target-new",
+
+    /**
+     * FR-8's third scenario — the control's label and its two outcome
+     * sentences (P1-T45).
+     *
+     * `exportWritten` and `exportFailed` are plain values, set on a
+     * `<description>`'s `data-l10n-id` so Fluent writes them into
+     * `textContent`; `exportProvenance` carries a `.label` because it is a
+     * `<button>`. All three are declared by `src/i18n/keys.ts`'s
+     * `SEARCH_DIALOG_MESSAGE_IDS` and asserted against it by
+     * `test/unit/ui/searchDialog.test.ts`.
+     *
+     * **There are two sentences for five outcomes, and that is a decision.**
+     * `host.exportProvenance` returns `written`, `no-record`, `no-writer`,
+     * `no-path` or `failed`. `written` gets the first sentence; the other four
+     * all get the second, because from the user's side they are one event —
+     * "it did not write" — and because three of them cannot be reached from a
+     * visible control at all (see {@link RHSearchWindow.exportProvenance}).
+     * Minting a sentence per outcome would put three more strings on `G-41`
+     * for events a user is not supposed to see. A dismissed chooser gets
+     * **no** sentence: this document never calls the host without a path, so
+     * there is no outcome value for it, and a user who cancelled knows they
+     * did (`P1-T45` step 4).
+     */
+    exportProvenance: "research-helper-search-export",
+    exportWritten: "research-helper-search-export-written",
+    exportFailed: "research-helper-search-export-failed",
   },
 
   /**
@@ -348,6 +379,32 @@ var RHSearchWindow = {
       return Date.now();
     },
   },
+
+  /**
+   * Zotero's own file-picker wrapper, as a module URL (P1-T45).
+   *
+   * **Read off the shipped Zotero 10.0.3, not guessed.** `app/omni.ja` holds it
+   * at `chrome/content/zotero/modules/filePicker.mjs` and that archive's
+   * `chrome.manifest` maps `content zotero chrome/content/zotero/`, which is the
+   * URL below. The class it exports takes a **window** in `init()` and does
+   * `parentWindow.browsingContext` itself, which is the `docs/01`:436
+   * requirement that kept this out of `src/`; `show()` returns a promise; and
+   * its `file` getter returns a **string path**, not an `nsIFile`.
+   *
+   * **The toolkit is not used, and could not be.** `docs/01` §4.6 item 8 keeps
+   * `FilePickerHelper` on the approved list, but `zotero-plugin.config.ts` only
+   * bundles `src/index.ts` — every file under `addon/` is copied by
+   * `build.assets` as a plain asset — so this document cannot `import` from
+   * `node_modules` at all. `P1-T45`'s **Do NOT** asked for that to be verified
+   * before importing the toolkit; it was, and the helper turns out to do exactly
+   * what the four lines in {@link RHSearchWindow.pickExportPath} do, through
+   * this same module and this same `ChromeUtils.importESModule`.
+   *
+   * Not in {@link RHSearchWindow.spec}: that object is the set of element ids,
+   * and `test/unit/ui/searchDialog.test.ts` asserts every string in it resolves
+   * to an element in the document.
+   */
+  filePickerModule: "chrome://zotero/content/modules/filePicker.mjs",
 
   /** `window.arguments[0]`, per `docs/08` §4.1.1 requirement 4. */
   io: null,
@@ -394,6 +451,20 @@ var RHSearchWindow = {
     disconnect: null,
     /** Whether the details disclosure is expanded (NFR-14). */
     detailsOpen: false,
+
+    /**
+     * Whether the run the window is showing has a provenance record to export
+     * (P1-T45), and which outcome sentence is on screen, or `null`.
+     *
+     * See {@link RHSearchWindow.logic.exportAvailable} for how the first is
+     * derived and why it is derived rather than published.
+     *
+     * **Neither holds the chosen path**, and no field in this document ever
+     * does: the path exists for the length of one `host.exportProvenance(path)`
+     * call and is then gone (`docs/09` §2.2).
+     */
+    exportAvailable: false,
+    exportMessage: null,
   },
 
   // =========================================================================
@@ -494,6 +565,73 @@ var RHSearchWindow = {
      */
     importEnabled(selectedCount) {
       return Math.trunc(selectedCount) > 0;
+    },
+
+    /**
+     * Whether the run the window is showing has a provenance record, read off
+     * one published view state (FR-8's third scenario, P1-T45).
+     *
+     * **This is a derivation, and the card asked for a published field.**
+     * `P1-T45` step 3 says the control is "revealed from view state the way the
+     * Cancel button is", and the Cancel button reads
+     * `SearchViewState.cancelVisible`, a boolean the view model publishes for
+     * exactly that purpose. **There is no such field for the record**:
+     * `SearchViewState` (`src/ui/viewModels/searchImportViewModel.ts`,
+     * `interface SearchViewState`) declares thirteen members and none of them
+     * is about the retained record, and that file is **not** in `P1-T45`'s
+     * `Files` list, so adding one would be the scope `plan/README.md` §5 rule 2
+     * forbids. The gap is reported with the card rather than closed quietly.
+     *
+     * **Why `notices` is the right proxy, measured rather than guessed.** In
+     * the view model the retained record is assigned on the line immediately
+     * after the `publish()` that fills `notices` with the import summary and
+     * the abstract-coverage line (`renderImportOutcome`), and `notices` is
+     * published **empty** at the start of every job (`runJob`) just as the
+     * record is cleared at the start of every `runSearch` and `runImport`. So
+     * the two move together, and `notices.length > 0` means "an import has
+     * produced a write report for the run on screen", which is exactly when a
+     * record exists.
+     *
+     * **The one divergence, and it is why the failure sentence covers
+     * `no-record`.** A *refused* run clears the record without publishing a
+     * state: `runImport` clears it before `resolveTarget` can refuse, and
+     * `runJob` refuses a second concurrent run before its own `publish`. In
+     * both cases the previous import's notices are still on screen, so the
+     * control stays visible with nothing to export and the host answers
+     * `no-record`. That is a sentence, never a blank element — see
+     * {@link RHSearchWindow.exportProvenance}.
+     *
+     * @param {object} state - the view model's `SearchViewState`
+     * @returns {boolean}
+     */
+    exportAvailable(state) {
+      if (!state || !Array.isArray(state.notices)) {
+        return false;
+      }
+      return state.notices.length > 0;
+    },
+
+    /**
+     * The filename the chooser opens with (P1-T45).
+     *
+     * **Built from the clock and nothing else.** The obvious suggestion is the
+     * keyword the user searched for, and it is forbidden for the reason
+     * `EMPTY_HEADLINE_OMITTED` in `src/ui/viewModels/searchImportViewModel.ts`
+     * records: a credential pasted into the keyword box would be drawn in a
+     * file-save dialog, and from there into a filename on disk. The collection
+     * name is user data for the same reason. So the only variable part is the
+     * date.
+     *
+     * Digits and hyphens only — `toISOString()`'s time half carries colons,
+     * which are not legal in a Windows filename and which `docs/13` §8's
+     * three-OS QA would find.
+     *
+     * @param {number} nowEpochMs - epoch milliseconds, from the clock
+     * @returns {string}
+     */
+    exportFileName(nowEpochMs) {
+      const iso = new Date(nowEpochMs).toISOString();
+      return "research-helper-provenance-" + iso.slice(0, 10) + ".json";
     },
 
     /**
@@ -1464,6 +1602,11 @@ var RHSearchWindow = {
 
     this.on(this.spec.run, "command", () => this.search());
     this.on(this.spec.cancel, "command", () => this.cancel());
+    // FR-8's third scenario. `settle` for the same reason `search()` and
+    // `import()` use it: an unhandled rejection in a chrome window is silent.
+    this.on(this.spec.exportProvenance, "command", () =>
+      this.settle(this.exportProvenance()),
+    );
     this.on(this.spec.targetNew, "command", () => this.newCollection());
     this.on(this.spec.targetNewItem, "command", () => this.newCollection());
     this.on(this.spec.yearsFrom, "command", () => this.onYearChanged());
@@ -1873,6 +2016,47 @@ var RHSearchWindow = {
     const cancel = this.el(this.spec.cancel);
     if (cancel) {
       cancel.hidden = !state.cancelVisible;
+    }
+    this.renderExportControl(state);
+  },
+
+  /**
+   * FR-8's third scenario: the export control and its outcome sentence
+   * (P1-T45).
+   *
+   * Hidden until the run on screen has a record, revealed when it does, and the
+   * sentence is dropped the moment the control goes away — a "Provenance record
+   * exported." left standing beside the next run's table would be describing a
+   * run the window no longer shows.
+   *
+   * @param {object} state - the view model's `SearchViewState`
+   */
+  renderExportControl(state) {
+    const available = this.logic.exportAvailable(state);
+    if (!available && this.state.exportAvailable) {
+      // A new run replaced what can be exported, so the previous run's outcome
+      // sentence stops being true.
+      this.state.exportMessage = null;
+    }
+    this.state.exportAvailable = available;
+
+    const button = this.el(this.spec.exportProvenance);
+    if (button) {
+      button.hidden = !available;
+    }
+    const message = this.el(this.spec.exportStatus);
+    if (message) {
+      const id = available ? this.state.exportMessage : null;
+      if (id) {
+        this.applyRef(message, { id: id });
+        message.hidden = false;
+      } else {
+        // `clearRef` and not just `hidden`: `DOMLocalization` does not undo its
+        // own writes, so removing the id alone would leave the old sentence in
+        // `textContent` for the next reveal to show.
+        this.clearRef(message);
+        message.hidden = true;
+      }
     }
   },
 
@@ -2464,6 +2648,137 @@ var RHSearchWindow = {
     }
     if (typeof this.host.runImport === "function") {
       this.settle(this.host.runImport(this.collectImportRequest()));
+    }
+  },
+
+  /**
+   * FR-8's third scenario: choose a file, and write this run's provenance
+   * record to it (P1-T45).
+   *
+   * **The chooser opens here and the path is handed inward**, which is
+   * `P1-T36`'s measured decision rather than this card's preference:
+   * `nsIFilePicker.init` needs a `BrowsingContext` (`docs/01`:436) and only a
+   * window has one, the view model is built once at startup with no window, and
+   * `eslint.config.js`'s `research-helper/zotero-global` rule does not exempt
+   * `src/bootstrap/registerUI.ts`. All three were re-measured for this card and
+   * all three hold.
+   *
+   * **The path lives for the length of this method.** It is a local `const`,
+   * passed to the host and then gone: not stored on `state`, not logged at any
+   * level, not put into the record, the note or the file. `docs/09` §2.2
+   * (2026-10-08) is the rule, and a path carrying an account name is the reason.
+   *
+   * **A dismissed chooser shows nothing**, which is the one outcome with no
+   * sentence (`P1-T45` step 4): `pickExportPath` returns `""` and this returns
+   * without calling the host, so there is no outcome value to render and a user
+   * who cancelled is not told what they just did.
+   *
+   * @returns {Promise<string>} the outcome the host reported, or `""` when the
+   *   host was never called
+   */
+  async exportProvenance() {
+    if (!this.state.exportAvailable) {
+      // Not reachable from the control, which is hidden in this state. A host
+      // driven directly still gets the refusal the view model makes.
+      return "";
+    }
+    if (typeof this.host.exportProvenance !== "function") {
+      return "";
+    }
+    const path = await this.pickExportPath();
+    if (!path) {
+      return "";
+    }
+    let outcome;
+    try {
+      outcome = await this.host.exportProvenance(path);
+    } catch {
+      // A rejection is a failed write from the user's side. Nothing about the
+      // error is logged here, because the message could quote the path; the
+      // view model logs the outcome without it.
+      outcome = "failed";
+    }
+    this.showExportOutcome(outcome);
+    return outcome;
+  },
+
+  /**
+   * Draw one of {@link RHSearchWindow.l10n}'s two sentences for an export
+   * outcome.
+   *
+   * `written` is the first; **every other value is the second**, including the
+   * three a visible control is not supposed to be able to produce. That is
+   * `P1-T45` step 5's "do not leave an empty element": `P1-T22` measured that
+   * an unresolvable `data-l10n-id` leaves an element's text alone, which is how
+   * seven surfaces once rendered blank, and an unmapped outcome falling through
+   * to no id at all would do the same thing one layer earlier.
+   *
+   * @param {string} outcome - one of `ProvenanceExportOutcome`
+   */
+  showExportOutcome(outcome) {
+    this.state.exportMessage =
+      outcome === "written" ? this.l10n.exportWritten : this.l10n.exportFailed;
+    const message = this.el(this.spec.exportStatus);
+    if (!message) {
+      return;
+    }
+    // Drawn here rather than waiting for the host's next state: the export
+    // publishes no view state, so there is no render to wait for.
+    this.applyRef(message, { id: this.state.exportMessage });
+    message.hidden = false;
+  },
+
+  /**
+   * Open the save dialog and return the chosen path, or `""`.
+   *
+   * Split from {@link RHSearchWindow.exportProvenance} for the reason
+   * {@link RHSearchWindow.promptForCollectionName} is split from
+   * {@link RHSearchWindow.newCollection}: a modal in an integration run blocks
+   * until the suite times out, so the half that opens one must be replaceable
+   * from a test.
+   *
+   * Every failure path returns `""`, which the caller treats as a dismissal —
+   * a build where the module has moved shows no sentence rather than claiming a
+   * write that did not happen.
+   *
+   * @returns {Promise<string>} an absolute path, or `""`
+   */
+  async pickExportPath() {
+    try {
+      const utils =
+        typeof ChromeUtils === "undefined" ? undefined : ChromeUtils;
+      if (!utils || typeof utils.importESModule !== "function") {
+        return "";
+      }
+      const module = utils.importESModule(this.filePickerModule);
+      const Picker = module ? module.FilePicker : undefined;
+      if (typeof Picker !== "function") {
+        return "";
+      }
+      const picker = new Picker();
+      // The button's own label is the dialog's title, the way the "New
+      // collection…" prompt reuses its button's label: a dedicated title string
+      // would be a fourth id on `G-41` for one word of chrome.
+      const title =
+        this.labelOf(this.spec.exportProvenance) || document.title || "";
+      // A window, not a BrowsingContext: Zotero's wrapper reads
+      // `parentWindow.browsingContext` itself. See `filePickerModule`.
+      picker.init(window, title, picker.modeSave);
+      // "JSON" is a format name and is not translated (`docs/08` §10.3, the
+      // rule that ships "DOI" verbatim in `ko-KR`).
+      picker.appendFilter("JSON", "*.json");
+      picker.defaultExtension = "json";
+      picker.defaultString = this.logic.exportFileName(this.clock.now());
+      const result = await picker.show();
+      if (result !== picker.returnOK && result !== picker.returnReplace) {
+        return "";
+      }
+      // A string, not an `nsIFile`: Zotero's wrapper converts it.
+      return typeof picker.file === "string" ? picker.file : "";
+    } catch {
+      // Nothing is logged: a picker error message can quote the path the user
+      // was typing. `docs/09` §2.2.
+      return "";
     }
   },
 

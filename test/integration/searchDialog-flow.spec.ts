@@ -380,11 +380,26 @@ interface FlowController {
     rows: { key: string }[];
     visible: { key: string }[];
     detailsOpen: boolean;
+    /** `P1-T45`. Neither ever holds the chosen path. */
+    exportAvailable: boolean;
+    exportMessage: string | null;
   };
   readonly logic: {
     targetNamed(value: unknown): boolean;
     importEnabled(count: number): boolean;
+    /** `P1-T45`. */
+    exportFileName(nowEpochMs: number): string;
   };
+  /** `P1-T45`: FR-8's third scenario, driven from the document. */
+  exportProvenance(): Promise<string>;
+  /**
+   * The half that opens the save dialog, replaceable for the reason
+   * `promptForCollectionName` is split out of `newCollection`: a modal in an
+   * integration run blocks until the whole suite times out.
+   */
+  pickExportPath(): Promise<string>;
+  /** `P1-T45`: Zotero's own file-picker module, as a URL. */
+  readonly filePickerModule: string;
   search(): void;
   import(): void;
   cancel(): void;
@@ -1224,6 +1239,39 @@ describe("P1-T35: the host the composition root published", () => {
   });
 
   // =========================================================================
+  // `P1-T45` criterion 1, first half — hidden before a run
+  //
+  // **First in the block, and that is the whole point.** This is the only
+  // moment in the suite when a real window has connected to the real host and
+  // no import has happened yet, so it is the only place the "hidden before a
+  // run" half of the criterion can be measured rather than argued. Every later
+  // test in this block leaves a record behind.
+  // =========================================================================
+
+  it("P1-T45: the export control is hidden before any run", async function () {
+    this.timeout(30_000);
+    const button = el("rh-search-export");
+    const message = el("rh-search-export-status");
+    assert.isTrue(
+      (button as unknown as { hidden: boolean }).hidden,
+      "FR-8's export control is revealed by view state, and the window has " +
+        "published one state with no notices in it, so there is no record " +
+        "to export and nothing to press",
+    );
+    assert.isTrue(
+      (message as unknown as { hidden: boolean }).hidden,
+      "and its outcome sentence is hidden too",
+    );
+    assert.strictEqual(
+      textOf("rh-search-export-status"),
+      "",
+      "an element revealed empty is what P1-T45 step 5 forbids",
+    );
+    assert.isFalse(controller.state.exportAvailable);
+    log35("export control hidden before any run");
+  });
+
+  // =========================================================================
   // Criterion 1 — the window's own lookup finds the whole contract
   // =========================================================================
 
@@ -1554,6 +1602,260 @@ describe("P1-T35: the host the composition root published", () => {
       await IOUtils.remove(path, { ignoreAbsent: true });
     }
     assert.isFalse(await IOUtils.exists(path), "and deleted it afterwards");
+  });
+
+  // =========================================================================
+  // `P1-T45` criteria 1–4 and 6 — the control a user actually presses
+  //
+  // These run **after** the export test above and **before** the `isExisting`
+  // test below, and the order is load-bearing in both directions: the test
+  // above leaves a retained record on the application-scoped view model, and
+  // the test below runs a fresh search, which clears it.
+  //
+  // The chooser is replaced, not opened. A real save dialog is modal and would
+  // block the runner until the suite timed out; what is under test here is the
+  // path being handed inward, the file arriving, and the sentence rendering —
+  // not the operating system's dialog. The dialog's own wiring is asserted
+  // structurally by `test/unit/ui/searchDialog.test.ts` against the module URL
+  // read off the shipped Zotero binary, and
+  // {@link FlowController.pickExportPath} exists as a separate method for
+  // exactly this reason.
+  // =========================================================================
+
+  /** Run `body` with the chooser replaced, and put the real one back. */
+  async function withChosenPath(
+    chosen: string,
+    body: () => Promise<void>,
+  ): Promise<void> {
+    const real = controller.pickExportPath;
+    (controller as { pickExportPath: () => Promise<string> }).pickExportPath =
+      (): Promise<string> => Promise.resolve(chosen);
+    try {
+      await body();
+    } finally {
+      (controller as { pickExportPath: () => Promise<string> }).pickExportPath =
+        real;
+    }
+  }
+
+  it("P1-T45: the control is visible after an import, and pressing it writes the chosen file", async function () {
+    this.timeout(60_000);
+    // The first half of criterion 1, from the other side of the import: the
+    // test above imported and exported, so a record exists for this window.
+    assert.isTrue(
+      (el("rh-search-export") as unknown as { hidden: boolean }).hidden ===
+        false,
+      "the control is revealed once the run on screen has a record",
+    );
+    assert.isTrue(controller.state.exportAvailable);
+
+    const path = exportPath();
+    try {
+      await withChosenPath(path, async () => {
+        const outcome = await controller.exportProvenance();
+        assert.strictEqual(
+          outcome,
+          "written",
+          "the document handed the chosen path to the published host",
+        );
+      });
+      assert.isTrue(
+        await IOUtils.exists(path),
+        "the file the chooser named received the record",
+      );
+
+      // Criterion 2, asserted **on the text** and not on the element being
+      // present: an unresolvable `data-l10n-id` leaves an element alone
+      // (`P1-T22`), so "the element exists" and "the sentence rendered" are
+      // different claims and only the second one matters to a user.
+      const sentence = await rendered(
+        "rh-search-export-status",
+        "Provenance record exported",
+      );
+      assert.isAbove(sentence.length, 0);
+      assert.isFalse(
+        (el("rh-search-export-status") as unknown as { hidden: boolean })
+          .hidden,
+      );
+
+      // Criterion 6 — the chosen path is in no log line, and in nothing the
+      // window shows. `docs/09` §2.2 (2026-10-08). The DOM half is asserted
+      // here because a window's text is read by screenshots and bug reports the
+      // same way a log is; the log half is asserted at layer 1, where
+      // `Zotero.debug` can be captured.
+      const shown = stringsUnder("rh-search-status-bar");
+      assert.isAbove(shown.length, 4, "the status bar yielded strings to scan");
+      for (const text of shown) {
+        assert.notInclude(
+          text,
+          path,
+          "the chosen path is not drawn anywhere in the status bar",
+        );
+      }
+      // And not in the bytes it wrote either, which is the half `P1-T36`
+      // already proved for the record and this re-measures now that the path
+      // is a real one the user chose.
+      assert.notInclude(await IOUtils.readUTF8(path), path);
+      log35(`export through the control: written, sentence rendered as text`);
+    } finally {
+      await IOUtils.remove(path, { ignoreAbsent: true });
+    }
+  });
+
+  it("P1-T45: Zotero's own file picker constructs and accepts this window", async function () {
+    this.timeout(30_000);
+    // **Criterion 1's third clause, as far as it can be automated.** "Pressing
+    // it opens a chooser" ends in a native modal, and a native modal blocks the
+    // mocha runner until the whole suite times out, so `show()` is deliberately
+    // **not** called. Everything up to that call is asserted here, in a real
+    // Zotero, with the real window:
+    //
+    // - the module is at the URL the document names;
+    // - it exports a `FilePicker` that constructs;
+    // - `init()` accepts **this window** — which is `docs/01`:436's actual
+    //   requirement, because Zotero's wrapper passes
+    //   `parentWindow.browsingContext` to `nsIFilePicker.init`, and that is the
+    //   measurement `P1-T36` could not make from the composition root;
+    // - the save mode, the filter and the suggested filename are all accepted.
+    //
+    // What is left for a human is only that the operating system draws the
+    // dialog, which is reported with the card rather than claimed here.
+    const module = ChromeUtils.importESModule(
+      controller.filePickerModule,
+    ) as unknown as { FilePicker?: new () => Record<string, unknown> };
+    assert.strictEqual(
+      typeof module.FilePicker,
+      "function",
+      `${controller.filePickerModule} exports no FilePicker; the document ` +
+        `would then show no sentence rather than claim a write`,
+    );
+    const Picker = module.FilePicker;
+    if (!Picker) {
+      assert.fail("unreachable: asserted above");
+    }
+    const picker = new Picker() as unknown as {
+      modeSave: number;
+      returnOK: number;
+      returnCancel: number;
+      returnReplace: number;
+      defaultString: string;
+      defaultExtension: string;
+      init(parent: unknown, title: string, mode: number): void;
+      appendFilter(title: string, filter: string): void;
+    };
+
+    // The three constants the document branches on, read off the shipped class
+    // rather than transcribed.
+    assert.strictEqual(picker.modeSave, 1, "modeSave");
+    assert.strictEqual(picker.returnOK, 0, "returnOK");
+    assert.strictEqual(picker.returnCancel, 1, "returnCancel");
+    assert.strictEqual(picker.returnReplace, 2, "returnReplace");
+
+    const title = (el("rh-search-export").getAttribute("label") ?? "").trim();
+    assert.isAbove(
+      title.length,
+      0,
+      "Fluent resolved the control's own label, which is the dialog's title " +
+        "and the reason no fourth string was minted for it",
+    );
+    // The call `docs/01`:436 is about. A window with no `browsingContext`
+    // throws here, which is exactly why this could not be done from the
+    // composition root.
+    picker.init(win, title, picker.modeSave);
+    picker.appendFilter("JSON", "*.json");
+    picker.defaultExtension = "json";
+
+    // **`defaultString` can be written and not read back, measured here on
+    // Windows and Zotero 10.0.3.** Reading it threw `NS_ERROR_FAILURE
+    // [nsIFilePicker.defaultString]`, so this test asserts the value it is
+    // about to set rather than the value the picker returns — and the product
+    // code only ever sets it, which is what makes that safe. A test that read
+    // it back would fail on this platform while the product worked, which is
+    // the opposite of useful. Recorded rather than worked around silently: the
+    // first draft of this test read it and failed against correct code.
+    const suggested = controller.logic.exportFileName(Date.now());
+    assert.isTrue(
+      /^research-helper-provenance-\d{4}-\d{2}-\d{2}\.json$/.test(suggested),
+      "the suggested filename carries the date and no user data",
+    );
+    picker.defaultString = suggested;
+    log35(
+      `file picker: constructed, init(window) accepted, suggested ` +
+        `${suggested}`,
+    );
+  });
+
+  it("P1-T45: a failing write renders the failure sentence", async function () {
+    this.timeout(60_000);
+    // **The writer is made to fail by naming a directory as the destination.**
+    // The real failure path is driven: no bound dependency is replaced and
+    // nothing in `src/` is touched. `provenanceFileWriter` is
+    // `Zotero.File.putContentsAsync` (`src/zotero/notes.ts`), a file cannot be
+    // written over a directory, so it rejects and `exportProvenance` returns
+    // `failed`.
+    //
+    // **A file inside a missing directory was tried first and does not fail** —
+    // measured on Zotero 10.0.3 in the run of 2026-10-08, where it returned
+    // `written`. `putContentsAsync` hands a string to `OS.File.writeAtomic`,
+    // whose Zotero 10 shim creates the parent, so "the parent does not exist"
+    // is not a way to make this writer reject. Recorded here rather than left
+    // as a comment on a passing test, because the first draft of this test
+    // asserted the opposite and failed against unmutated code.
+    const directory = PathUtils.join(
+      PathUtils.tempDir,
+      `rh-p1t45-is-a-directory-${String(Date.now())}`,
+    );
+    await IOUtils.makeDirectory(directory);
+    try {
+      assert.isTrue(
+        await IOUtils.exists(directory),
+        "the destination exists and is a directory, so no file can take its " +
+          "place",
+      );
+      await withChosenPath(directory, async () => {
+        const outcome = await controller.exportProvenance();
+        assert.strictEqual(outcome, "failed", "the writer rejected");
+      });
+
+      const sentence = await rendered(
+        "rh-search-export-status",
+        "Could not export the provenance record",
+      );
+      assert.isAbove(sentence.length, 0);
+      log35("failed export: failure sentence rendered as text");
+    } finally {
+      await IOUtils.remove(directory, { ignoreAbsent: true, recursive: true });
+    }
+  });
+
+  it("P1-T45: dismissing the chooser writes nothing and shows nothing", async function () {
+    this.timeout(60_000);
+    // Step 4's one outcome with no message. The previous test left the failure
+    // sentence on screen, so this asserts the sentence is **unchanged** rather
+    // than absent: a dismissal must not say anything, and it must not erase
+    // what the window was already saying either.
+    const before = textOf("rh-search-export-status");
+    assert.isAbove(before.length, 0, "a sentence is on screen to begin with");
+
+    const path = exportPath();
+    await withChosenPath("", async () => {
+      const outcome = await controller.exportProvenance();
+      assert.strictEqual(
+        outcome,
+        "",
+        "the host was never called, so there is no outcome to render",
+      );
+    });
+    assert.strictEqual(
+      textOf("rh-search-export-status"),
+      before,
+      "a dismissed chooser changes nothing on screen",
+    );
+    assert.isFalse(
+      await IOUtils.exists(path),
+      "and writes no file anywhere the export would have written one",
+    );
+    log35("dismissed chooser: nothing written, nothing said");
   });
 
   // =========================================================================

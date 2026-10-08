@@ -267,6 +267,17 @@ class FakeElement {
     this.attrs.set(name, String(value));
   }
 
+  /**
+   * Added by `P1-T45`, and its absence is why nothing before this card drove
+   * {@link Controller.render} end to end from this spec: `clearRef()` removes
+   * `data-l10n-id` and `data-l10n-args` on every render that has no message
+   * for an element, and a fake without this method threw `TypeError:
+   * element.removeAttribute is not a function` inside `renderEmptyPanel`.
+   */
+  public removeAttribute(name: string): void {
+    this.attrs.delete(name);
+  }
+
   public get firstElementChild(): FakeElement | undefined {
     return this.children[0];
   }
@@ -390,6 +401,10 @@ interface ControllerLogic {
     visibleRows: DisplayRow[],
     selectedKeys: string[],
   ) => boolean;
+
+  // P1-T45's half.
+  exportAvailable: (state: unknown) => boolean;
+  exportFileName: (nowEpochMs: number) => string;
 }
 
 interface Controller {
@@ -406,6 +421,9 @@ interface Controller {
     visible: DisplayRow[];
     selection: string[];
     view: { filter: string; hideExisting: boolean };
+    // P1-T45. Neither ever holds the chosen path; see the card's security note.
+    exportAvailable: boolean;
+    exportMessage: string | null;
   };
   host: Record<string, unknown>;
   io: Record<string, unknown>;
@@ -431,6 +449,12 @@ interface Controller {
   onTableKeydown: (event: unknown) => void;
   pickedRows: () => TableRecord[];
   rowCheckboxes: () => FakeElement[];
+  // P1-T45.
+  render: (state: unknown) => void;
+  exportProvenance: () => Promise<string>;
+  pickExportPath: () => Promise<string>;
+  showExportOutcome: (outcome: string) => void;
+  filePickerModule: string;
   [key: string]: unknown;
 }
 
@@ -439,6 +463,15 @@ interface Harness {
   readonly byId: (id: string) => FakeElement | undefined;
   readonly registerRootCalls: FakeElement[];
   readonly prefReads: string[];
+  /**
+   * Every string the controller passed to `Zotero.debug`, in order.
+   *
+   * Added by `P1-T45`: `docs/09` §2.2 forbids a user-chosen file-system path
+   * reaching the log at any level, and this document has exactly one log
+   * channel — `Zotero.debug`, through `settle()` and `openPreferences()`. A
+   * rule with no recorder behind it is a rule nothing checks.
+   */
+  readonly debugLines: string[];
   readonly doc: {
     title: string;
     listeners: Map<string, ((event: unknown) => void)[]>;
@@ -490,6 +523,7 @@ function harness(options: HarnessOptions = {}): Harness {
 
   const registerRootCalls: FakeElement[] = [];
   const prefReads: string[] = [];
+  const debugLines: string[] = [];
   const docListeners = new Map<string, ((event: unknown) => void)[]>();
 
   const doc = {
@@ -534,6 +568,11 @@ function harness(options: HarnessOptions = {}): Harness {
 
   const prefs = options.prefs ?? {};
   const zotero = {
+    // `P1-T45`: the document's only log channel, recorded so an assertion can
+    // be made about what never reaches it.
+    debug: (line: unknown) => {
+      debugLines.push(String(line));
+    },
     UIProperties: options.omitUIProperties
       ? undefined
       : {
@@ -577,6 +616,7 @@ function harness(options: HarnessOptions = {}): Harness {
     byId: (id) => index.get(id),
     registerRootCalls,
     prefReads,
+    debugLines,
     doc,
   };
 }
@@ -2225,5 +2265,423 @@ describe("P1-T21 — the result table against the real document", () => {
     expect(byId("rh-results-table")?.attrs.get("data-l10n-id")).toBe(
       "research-helper-search-table",
     );
+  });
+});
+
+// ===========================================================================
+// 9. P1-T45 — FR-8's export control, its three strings and its file chooser
+//
+// Layer 1, so the chooser itself is not here: `ChromeUtils` does not exist in
+// Node, and `pickExportPath()` is written to return "" when it is absent. That
+// is what makes these tests about the surface — the visibility rule, the two
+// sentences, the five outcomes and the path's lifetime — and leaves the chooser
+// to the integration spec, which has a real window with a real
+// `BrowsingContext`.
+// ===========================================================================
+
+/** One published view state, with only the members this block reads set. */
+function exportState(
+  notices: readonly { id: string }[],
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    panel: "results",
+    running: false,
+    sources: [],
+    records: undefined,
+    recordsRevision: 0,
+    emptyHeadline: undefined,
+    error: undefined,
+    warnings: [],
+    notices,
+    status: undefined,
+    databaseProgress: undefined,
+    progressPercent: undefined,
+    cancelVisible: false,
+    ...extra,
+  };
+}
+
+const SUMMARY = [{ id: "research-helper-import-summary" }];
+
+/**
+ * A path shaped like the one a user would really choose.
+ *
+ * The account name is the point: `docs/09` §2.2's reason for keeping a chosen
+ * path out of the log is that a path carries one, so a test asserting the rule
+ * has to use a path that would prove the leak if it happened. Synthetic.
+ */
+const CHOSEN_PATH = "/Users/a-real-person/Desktop/rh-provenance.json";
+
+describe("P1-T45 — the three export strings are registered, not invented", () => {
+  const { controller } = harness();
+
+  it("declares all three ids in P1-T18's searchDialog bundle", () => {
+    // The compile-time gate (`UndeclaredBundleMessageId`) proves a bundle
+    // message has *a* surface; it cannot prove the surface is this one. This
+    // does.
+    for (const id of [
+      controller.l10n.exportProvenance,
+      controller.l10n.exportWritten,
+      controller.l10n.exportFailed,
+    ]) {
+      expect(SEARCH_DIALOG_MESSAGE_IDS, `l10n id "${id ?? ""}"`).toContain(id);
+    }
+  });
+
+  it("names three distinct ids, so no outcome shares the control's label", () => {
+    const ids = [
+      controller.l10n.exportProvenance,
+      controller.l10n.exportWritten,
+      controller.l10n.exportFailed,
+    ];
+    expect(new Set(ids).size).toBe(3);
+  });
+
+  it("puts the control and its message in the status bar, before Cancel", () => {
+    const bar = byId("rh-search-status-bar");
+    const ids = (bar?.children ?? []).map((child) => child.attrs.get("id"));
+    expect(ids).toContain("rh-search-export");
+    expect(ids).toContain("rh-search-export-status");
+    // Reading order: the sentence sits beside the control it describes, and the
+    // window's own Cancel stays last in the row.
+    expect(ids.indexOf("rh-search-export-status")).toBeLessThan(
+      ids.indexOf("rh-search-export"),
+    );
+    expect(ids.indexOf("rh-search-export")).toBeLessThan(
+      ids.indexOf("rh-search-cancel"),
+    );
+  });
+
+  it("ships both new elements hidden, the way Cancel is", () => {
+    // `docs/08` §4.6's idiom and `P1-T45` step 3: hidden in the markup,
+    // revealed from state. A control that is visible before the first render
+    // would be pressable with nothing to export.
+    expect(byId("rh-search-export")?.attrs.get("hidden")).toBe("true");
+    expect(byId("rh-search-export-status")?.attrs.get("hidden")).toBe("true");
+    expect(byId("rh-search-cancel")?.attrs.get("hidden")).toBe("true");
+  });
+
+  it("carries no literal label on either element (docs/08 §10.3)", () => {
+    const button = byId("rh-search-export");
+    expect(button?.attrs.get("label")).toBeUndefined();
+    expect(button?.attrs.get("data-l10n-id")).toBe(
+      "research-helper-search-export",
+    );
+    // The message element is pointed at an id by script, never in the markup:
+    // it has two of them and the markup cannot know which.
+    expect(byId("rh-search-export-status")?.attrs.get("data-l10n-id")).toBe(
+      undefined,
+    );
+  });
+
+  it("reads Zotero's own file-picker module, at the URL Zotero 10 serves", () => {
+    // Verified against the shipped binary rather than a document: Zotero's
+    // `app/omni.ja` holds the module at `chrome/content/zotero/modules/` and
+    // that archive's `chrome.manifest` maps `content zotero
+    // chrome/content/zotero/`.
+    expect(controller.filePickerModule).toBe(
+      "chrome://zotero/content/modules/filePicker.mjs",
+    );
+    // And the toolkit is not reached for: this file is copied as a build asset,
+    // never bundled, so it cannot import from `node_modules` at all.
+    expect(SCRIPT_CODE).not.toContain("zotero-plugin-toolkit");
+    expect(SCRIPT_CODE).not.toContain("FilePickerHelper");
+  });
+});
+
+describe("P1-T45 — a record exists, derived from one published state", () => {
+  const { controller } = harness();
+
+  it("is false before any import and true once a summary is published", () => {
+    expect(controller.logic.exportAvailable(exportState([]))).toBe(false);
+    expect(controller.logic.exportAvailable(exportState(SUMMARY))).toBe(true);
+  });
+
+  it("tolerates a state with no notices member at all", () => {
+    // A host older than `P1-T22` publishes states this document has to survive.
+    expect(controller.logic.exportAvailable(undefined)).toBe(false);
+    expect(controller.logic.exportAvailable({})).toBe(false);
+    expect(controller.logic.exportAvailable({ notices: null })).toBe(false);
+  });
+});
+
+describe("P1-T45 — the suggested filename carries no user data", () => {
+  const { controller } = harness();
+
+  it("is built from the date and nothing else", () => {
+    const name = controller.logic.exportFileName(
+      Date.UTC(2026, 9, 8, 13, 45, 12),
+    );
+    expect(name).toBe("research-helper-provenance-2026-10-08.json");
+  });
+
+  it("moves with the clock, so it is not a constant", () => {
+    expect(controller.logic.exportFileName(Date.UTC(2027, 0, 1))).toBe(
+      "research-helper-provenance-2027-01-01.json",
+    );
+  });
+
+  it("uses only characters legal in a filename on all three OSes", () => {
+    // `toISOString()`'s time half carries colons, which Windows rejects — the
+    // reason the date half is sliced off rather than the whole string used.
+    const name = controller.logic.exportFileName(Date.UTC(2026, 9, 8, 23, 59));
+    expect(name).not.toContain(":");
+    expect(/^[a-z0-9.-]+$/.test(name)).toBe(true);
+    expect(name.endsWith(".json")).toBe(true);
+  });
+});
+
+describe("P1-T45 — the control is revealed and hidden from view state", () => {
+  it("stays hidden while the run on screen has no record", () => {
+    const h = harness();
+    h.controller.render(exportState([]));
+    expect(h.byId("rh-search-export")?.hidden).toBe(true);
+    expect(h.byId("rh-search-export-status")?.hidden).toBe(true);
+  });
+
+  it("appears once an import has published its summary", () => {
+    const h = harness();
+    h.controller.render(exportState(SUMMARY));
+    expect(h.byId("rh-search-export")?.hidden).toBe(false);
+    // The sentence does **not** appear with the control: nothing has been
+    // exported yet, and `P1-T45` step 5 forbids an element that is revealed
+    // empty.
+    expect(h.byId("rh-search-export-status")?.hidden).toBe(true);
+  });
+
+  it("hides the control again when the next run clears the record", () => {
+    const h = harness();
+    h.controller.render(exportState(SUMMARY));
+    h.controller.showExportOutcome("written");
+    expect(h.byId("rh-search-export-status")?.hidden).toBe(false);
+
+    h.controller.render(exportState([]));
+    const message = h.byId("rh-search-export-status");
+    expect(h.byId("rh-search-export")?.hidden).toBe(true);
+    expect(message?.hidden).toBe(true);
+    // `clearRef`, not just `hidden`: `DOMLocalization` does not undo its own
+    // writes, so the previous sentence would otherwise still be in the element
+    // for the next reveal to show.
+    expect(message?.getAttribute("data-l10n-id")).toBeNull();
+    expect(message?.textContent).toBe("");
+    expect(h.controller.state.exportMessage).toBeNull();
+  });
+});
+
+describe("P1-T45 — all five outcomes render a sentence, and only one is success", () => {
+  it("renders the written sentence for `written`", () => {
+    const h = harness();
+    h.controller.render(exportState(SUMMARY));
+    h.controller.showExportOutcome("written");
+    const message = h.byId("rh-search-export-status");
+    expect(message?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-export-written",
+    );
+    expect(message?.hidden).toBe(false);
+  });
+
+  it("renders the failure sentence for every other value, never an empty element", () => {
+    // `P1-T22` measured that an unresolvable id leaves an element's text alone,
+    // which is how seven surfaces once rendered blank. `no-record`, `no-writer`
+    // and `no-path` are the three a visible control is not supposed to be able
+    // to produce, and they are the ones a blank element would hide.
+    for (const outcome of ["failed", "no-record", "no-writer", "no-path"]) {
+      const h = harness();
+      h.controller.render(exportState(SUMMARY));
+      h.controller.showExportOutcome(outcome);
+      const message = h.byId("rh-search-export-status");
+      expect(
+        message?.getAttribute("data-l10n-id"),
+        `outcome "${outcome}"`,
+      ).toBe("research-helper-search-export-failed");
+      expect(message?.hidden, `outcome "${outcome}"`).toBe(false);
+    }
+  });
+
+  it("sets no data-l10n-args, because neither sentence takes an argument", () => {
+    // The enforcement is in `src/i18n/keys.ts`'s `FluentMessageArgsMap`, which
+    // declares neither id — see `L10N_EXPORT_TAKES_NO_PATH`. This is the same
+    // rule read off the element: an argument object is where a `{ $path }`
+    // would have to travel.
+    const h = harness();
+    h.controller.render(exportState(SUMMARY));
+    h.controller.showExportOutcome("written");
+    expect(
+      h.byId("rh-search-export-status")?.getAttribute("data-l10n-args"),
+    ).toBeNull();
+  });
+});
+
+describe("P1-T45 — pressing the control hands the path inward, once", () => {
+  /** A host that records every path it was handed. */
+  function recordingHost(outcome: string): {
+    host: Record<string, unknown>;
+    paths: string[];
+  } {
+    const paths: string[] = [];
+    return {
+      paths,
+      host: {
+        exportProvenance: (path: string): Promise<string> => {
+          paths.push(path);
+          return Promise.resolve(outcome);
+        },
+      },
+    };
+  }
+
+  it("passes exactly the chosen path and renders the written sentence", async () => {
+    const { host, paths } = recordingHost("written");
+    const h = harness({ host });
+    h.controller.init();
+    h.controller.render(exportState(SUMMARY));
+    h.controller.pickExportPath = (): Promise<string> =>
+      Promise.resolve(CHOSEN_PATH);
+
+    expect(await h.controller.exportProvenance()).toBe("written");
+    expect(paths).toStrictEqual([CHOSEN_PATH]);
+    expect(
+      h.byId("rh-search-export-status")?.getAttribute("data-l10n-id"),
+    ).toBe("research-helper-search-export-written");
+  });
+
+  it("writes nothing and shows nothing when the chooser is dismissed", async () => {
+    // `P1-T45` step 4: the one outcome with no message. A user who cancelled a
+    // save dialog knows they did, and the host is never called, so there is no
+    // outcome value for this document to render.
+    const { host, paths } = recordingHost("written");
+    const h = harness({ host });
+    h.controller.init();
+    h.controller.render(exportState(SUMMARY));
+    h.controller.pickExportPath = (): Promise<string> => Promise.resolve("");
+
+    expect(await h.controller.exportProvenance()).toBe("");
+    expect(paths).toStrictEqual([]);
+    const message = h.byId("rh-search-export-status");
+    expect(message?.hidden).toBe(true);
+    expect(message?.getAttribute("data-l10n-id")).toBeNull();
+    expect(h.controller.state.exportMessage).toBeNull();
+  });
+
+  it("refuses before the control is visible, so no host call is made", async () => {
+    const { host, paths } = recordingHost("written");
+    const h = harness({ host });
+    h.controller.init();
+    h.controller.render(exportState([]));
+    h.controller.pickExportPath = (): Promise<string> =>
+      Promise.resolve(CHOSEN_PATH);
+
+    expect(await h.controller.exportProvenance()).toBe("");
+    expect(paths).toStrictEqual([]);
+  });
+
+  it("renders the failure sentence when the host rejects", async () => {
+    const h = harness({
+      host: {
+        exportProvenance: (): Promise<string> =>
+          Promise.reject(new Error("putContentsAsync failed")),
+      },
+    });
+    h.controller.init();
+    h.controller.render(exportState(SUMMARY));
+    h.controller.pickExportPath = (): Promise<string> =>
+      Promise.resolve(CHOSEN_PATH);
+
+    expect(await h.controller.exportProvenance()).toBe("failed");
+    expect(
+      h.byId("rh-search-export-status")?.getAttribute("data-l10n-id"),
+    ).toBe("research-helper-search-export-failed");
+  });
+
+  it("does nothing at all against a host with no export method", async () => {
+    const h = harness({ host: {} });
+    h.controller.init();
+    h.controller.render(exportState(SUMMARY));
+    h.controller.pickExportPath = (): Promise<string> =>
+      Promise.resolve(CHOSEN_PATH);
+    expect(await h.controller.exportProvenance()).toBe("");
+    expect(h.byId("rh-search-export-status")?.hidden).toBe(true);
+  });
+
+  it("returns an empty path when no file-picker module can be reached", async () => {
+    // `ChromeUtils` does not exist in Node, which is this layer's version of a
+    // build where the module has moved. A missing chooser must read as a
+    // dismissal — no sentence — rather than as a write that did not happen.
+    const { host, paths } = recordingHost("written");
+    const h = harness({ host });
+    h.controller.init();
+    h.controller.render(exportState(SUMMARY));
+    expect(await h.controller.pickExportPath()).toBe("");
+    expect(await h.controller.exportProvenance()).toBe("");
+    expect(paths).toStrictEqual([]);
+  });
+});
+
+describe("P1-T45 — the chosen path leaves no trace in the window", () => {
+  it("is in no log line, no state field and no element", async () => {
+    // `docs/09` §2.2, 2026-10-08: a user-chosen path is not logged at any
+    // level, because a path carries an account name. This is the assertion
+    // `P1-T45` forbids weakening now that a real chooser supplies real paths.
+    const h = harness({
+      host: {
+        exportProvenance: (): Promise<string> => Promise.resolve("written"),
+      },
+    });
+    h.controller.init();
+    h.controller.render(exportState(SUMMARY));
+    h.controller.pickExportPath = (): Promise<string> =>
+      Promise.resolve(CHOSEN_PATH);
+    await h.controller.exportProvenance();
+
+    for (const line of h.debugLines) {
+      expect(line, "a log line").not.toContain(CHOSEN_PATH);
+      expect(line, "a log line").not.toContain("a-real-person");
+    }
+    // Not retained anywhere on the document's own state either: the path is a
+    // local `const` for the length of one call.
+    const retained = JSON.stringify(h.controller.state);
+    expect(retained).not.toContain("a-real-person");
+    // And not written into the status bar beside the sentence.
+    const strings: string[] = [];
+    const walk = (element: FakeElement | undefined): void => {
+      if (!element) return;
+      strings.push(element.textContent);
+      for (const name of ["data-l10n-id", "data-l10n-args", "label", "value"]) {
+        strings.push(element.getAttribute(name) ?? "");
+      }
+      for (const child of element.children) walk(child);
+    };
+    walk(h.byId("rh-search-status-bar"));
+    expect(strings.length).toBeGreaterThan(4);
+    for (const text of strings) {
+      expect(text).not.toContain("a-real-person");
+    }
+  });
+
+  it("names no path-bearing placeable anywhere in the shipped script", () => {
+    // The structural half: a `{ $path }` would have to travel as a Fluent
+    // argument, and the only way to send one is `data-l10n-args`. The export
+    // sentences are applied through `applyRef` with an `{ id }` and no `args`.
+    expect(SCRIPT_CODE).not.toContain("$path");
+    expect(SCRIPT_CODE).not.toMatch(/exportMessage[^\n]*args/);
+  });
+
+  it("logs nothing from the chooser or the export path at all", async () => {
+    const h = harness({
+      host: {
+        exportProvenance: (): Promise<string> => Promise.reject(new Error("x")),
+      },
+    });
+    h.controller.init();
+    const before = h.debugLines.length;
+    h.controller.render(exportState(SUMMARY));
+    h.controller.pickExportPath = (): Promise<string> =>
+      Promise.resolve(CHOSEN_PATH);
+    await h.controller.exportProvenance();
+    // A rejected host call is rendered, not logged: the error's own message
+    // could quote the path the user typed. `settle()` is what logs a rejection,
+    // and `exportProvenance()` resolves rather than rejecting.
+    expect(h.debugLines.length).toBe(before);
   });
 });

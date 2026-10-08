@@ -45,7 +45,7 @@ in this plan.
 | Phase 0, week 1 | G-09 | Provide macOS and Linux machines, one without libsecret | V-16, V-5, Phase 7 QA | Days to weeks if hardware must be arranged |
 | Phase 0, week 1 | G-11 | Line up a native Korean speaker | V-10, and again in Phases 6 and 7 | Scheduling a person; days |
 | Phase 0, week 1 | G-31 | Line up a Korean-speaking researcher for prompt review | Phase 7 | Scheduling; days to weeks |
-| **Before release** | **G-41** | **Review the Phase 1 `ko-KR` UI bundle — 79 ids, re-counted from `src/i18n/keys.ts` on 2026-10-08** | **the v1.0 release** | **DEFERRED 2026-10-08 by the owner — English only until then; a Korean-locale user sees English for 79 of 84 strings, not a broken screen** |
+| **Before release** | **G-41** | **Review the Phase 1 `ko-KR` UI bundle — 82 ids, re-counted from `src/i18n/keys.ts` on 2026-10-08** | **the v1.0 release** | **DEFERRED 2026-10-08 by the owner — English only until then; a Korean-locale user sees English for 79 of 84 strings, not a broken screen** |
 | Phase 0, week 1 | G-12 | Assemble the 40-PDF IMRaD fixture set | Phase 3 ship, Phase 4 | Days of the human's own time |
 | Phase 0, early | G-06 | Acknowledge the Gemini free-tier data-training terms | Any Gemini call, incl. V-10 | Minutes, but must precede the first call |
 | Phase 0, early | G-07 | Approve the first paid API call and the spike spend | V-7, V-10 | Minutes |
@@ -724,12 +724,13 @@ this approval.
 
 ## 3. Phase 1 gates
 
-### G-41 — Review the Phase 1 `ko-KR` UI bundle (`KO_PENDING_REVIEW.length`, 79 as of 2026-10-05)
+### G-41 — Review the Phase 1 `ko-KR` UI bundle (`KO_PENDING_REVIEW.length`, 82 as of 2026-10-08)
 
 > **DEFERRED 2026-10-08, by the owner, to before the v1.0 release.** English only until then. Measured
 > the same day, by counting the lists in `src/i18n/keys.ts` rather than reading the figure off this
-> document: `KO_PENDING_REVIEW` is **79**, `KO_PRESENT` 4, `KO_DELIBERATELY_ABSENT` 1, over 84 surface
-> ids — so **79 is still the live number** and this document is not stale on it.
+> document: `KO_PENDING_REVIEW` is **82**, `KO_PRESENT` 4, `KO_DELIBERATELY_ABSENT` 1, over **87**
+> surface ids. **Re-counted by script on 2026-10-08, after `P1-T45` added three**, which is what moved 79
+> to 82 and 84 to 87; the three lists still partition the 87 declared ids exactly.
 >
 > **What deferral costs, stated so the decision stays visible.** The Korean half of the product does not
 > work until this is done: an id with no Korean entry falls back to English, so a Korean-locale user sees
@@ -746,8 +747,8 @@ this approval.
 review and its `Blocks:` line is *the release*, so as the plan stood a Phase 1 card was either
 blocked on a Phase 7 gate or had no gate at all.
 
-**What the human must do.** Translate every id on `KO_PENDING_REVIEW` in `src/i18n/keys.ts` — **79
-strings as of 2026-10-05** — each written into the matching `ko-KR` file as a commented stub carrying
+**What the human must do.** Translate every id on `KO_PENDING_REVIEW` in `src/i18n/keys.ts` — **82
+strings as of 2026-10-08** — each written into the matching `ko-KR` file as a commented stub carrying
 its English source, in the order a reviewer meets them, so the workflow is "uncomment and translate
 in place". The split, by which surface list each pending id belongs to: **21 in
 `research-helper-mainWindow.ftl`** (1 menu id, 1 provenance note title, 2 import-outcome strings, 1
@@ -769,14 +770,15 @@ that `keys.ts` groups under `docs/08` §8.4's five states and §4.6's per-databa
 >   lists.
 > - **The `rh-error-*` share** = `ERROR_MESSAGE_IDS.length`.
 >
-> **Snapshot read 2026-10-05 13:12Z**, from a `keys.ts` whose own `mtime` was 13:10:33Z: mainWindow
-> 25 + searchDialog 59 = **84 declared**; `KO_PENDING_REVIEW` **79**, `KO_PRESENT` **4**,
-> `KO_DELIBERATELY_ABSENT` **1** (79 + 4 + 1 = 84); pending split **21 / 58**; `ERROR_MESSAGE_IDS`
-> **16**. The integration run prints the same numbers itself, as
-> `[P1-T18] declared ids: mainWindow 25, searchDialog 59, total 84` and
-> `[P1-T18] ko-KR totals: 4 present, 80 absent; expected 4 / 80` in
-> `test/integration/l10n.spec.ts` — its "absent" is the **80** of
-> `KO_PENDING_REVIEW.length + KO_DELIBERATELY_ABSENT.length`, i.e. the 79 a human must write plus the
+> **Snapshot re-read 2026-10-08 by the coordinator**, by script from `src/i18n/keys.ts` rather than from
+> this document: mainWindow 25 + searchDialog 62 = **87 declared**; `KO_PENDING_REVIEW` **82**,
+> `KO_PRESENT` **4**, `KO_DELIBERATELY_ABSENT` **1** (82 + 4 + 1 = 87); pending split **21 / 61**.
+> `P1-T45` added the three that moved them on 2026-10-08. **The earlier snapshot of 2026-10-05 read
+> 25 + 59 = 84, pending 79, split 21 / 58.** The integration run prints the live numbers itself, as
+> `[P1-T18] declared ids: mainWindow 25, searchDialog 62, total 87` and
+> `[P1-T18] ko-KR totals: 4 present, 83 absent; expected 4 / 83` in
+> `test/integration/l10n.spec.ts` — its "absent" is the **83** of
+> `KO_PENDING_REVIEW.length + KO_DELIBERATELY_ABSENT.length`, i.e. the 82 a human must write plus the
 > one hole that must stay open, which is why that line reads one higher than this gate's headline. The
 > run asserts the gap is *exactly* those two lists, so that run, not this paragraph, is the thing to
 > believe if the two ever disagree. Both lines above were read from the run of 2026-10-05.
