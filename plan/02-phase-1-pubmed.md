@@ -4611,7 +4611,7 @@ work.**
 |---|---|
 | **ID** | `P1-T23` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35`, `P1-T36` |
+| **Depends on** | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35`, `P1-T36`, `P1-T45` |
 | **Blocks** | none |
 | **Retires** | `R-16`, `R-17`, part of `R-2` |
 | **Implements** | `NFR-1`, `NFR-3`, `NFR-9`, `NFR-10` |
@@ -7066,7 +7066,7 @@ when a window is closed and reopened, and whether a library-index rebuild belong
 | **ID** | `P1-T36` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T22`, `P1-T35` |
-| **Blocks** | `P1-T23` |
+| **Blocks** | `P1-T23`, `P1-T45` |
 | **Retires** | none |
 | **Implements** | the third scenario of `FR-8` |
 | **Estimate** | 0.5 d |
@@ -8268,6 +8268,131 @@ failure path as well as the success path.
 
 ---
 
+### P1-T45 — The export control, its three strings and the file chooser, which is the boundary `P1-T36` stopped at
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T45` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T36` |
+| **Blocks** | `P1-T23` |
+| **Retires** | nothing |
+| **Implements** | the rest of the third scenario of `FR-8` |
+| **Estimate** | 0.5 d |
+| **Human gate** | **Yes — `G-41`.** Three new user-visible strings raise `KO_PENDING_REVIEW`, which is the count that gate publishes. **The Korean translation itself is deferred** (owner, 2026-10-08), so what this card owes the gate is registration, not translation. |
+
+**Goal.** A user who has just imported can press a control, choose a file, and get the run's provenance
+record written to it — with a sentence telling them it worked or did not.
+
+**Why this is a separate card.** `P1-T36` built and tested everything behind the control and then stopped,
+correctly, at a boundary it measured rather than guessed. Its evidence, which this card inherits as fact:
+
+- **The host method exists and is tested.** `exportProvenance(path)` is on the view model and on the
+  published host, returns one of five plain values — `written`, `no-record`, `no-writer`, `no-path`,
+  `failed` — and writes through `src/core/provenance.ts`'s `exportJson`, which runs the single redaction
+  gate again. Fourteen unit tests and two integration tests cover it, including a file read back off disk
+  and validated against `schema/provenance.schema.json`.
+- **Three Fluent strings are the whole blockage.** `P1-T36` appended one probe message, ran the build, and
+  `npm run typecheck` failed with `TS2344: Type '"research-helper-search-probe-mutant"' does not satisfy
+  the constraint 'never'` — `UndeclaredBundleMessageId` at `src/i18n/keys.ts:423–433`. **So a new bundle
+  message requires `src/i18n/keys.ts` and the regenerated `typings/i10n.d.ts`**, and `P1-T36`'s `Files`
+  named neither. That is this card's first job, and the probe's own failure is the proof it is needed.
+- **The chooser's shape is already decided, with three independent measurements behind it.**
+  `docs/01:436` requires a `BrowsingContext` for `nsIFilePicker.init` and only a window has one; the view
+  model is built once at startup and has none; and `eslint.config.js`'s `research-helper/zotero-global`
+  rule does not exempt `src/bootstrap/registerUI.ts`, so that file cannot name the `Zotero` global to
+  borrow one. **So the chooser opens in the window document and the chosen path is handed inward to
+  `host.exportProvenance(path)`.** Do not relitigate this; if you find it wrong, say what you measured.
+- **The placement is already decided too**: the status bar (`#rh-search-status-bar`), hidden until a record
+  exists, copying the pattern the Cancel button in that row already uses — `addon/content/searchDialog.js`
+  sets that button's hidden flag from one view-state field. `P1-T36` found no measurement against it.
+
+**Read first.**
+- `P1-T36`'s `Findings` in this file, all of it. It is the specification for this card.
+- `src/i18n/keys.ts` — `SEARCH_DIALOG_MESSAGE_IDS`, `ARGUMENT_MESSAGE_IDS`, and the three Korean lists.
+  **Work out which lists each new id belongs on**; `P1-T40` exists because a half-finished id edit is
+  invisible to the compiler.
+- `addon/content/searchDialog.xhtml` lines 417–433 (the status bar) and `addon/content/searchDialog.js`'s
+  controller — how it reads view state, toggles hidden flags, and resolves the host.
+- `src/ui/viewModels/searchImportViewModel.ts`'s `exportProvenance` and the five values it returns.
+- `docs/01` §4.6's toolkit-helper list, which includes a file-picker helper — **and `P1-T36`'s measurement
+  that the window script is copied as an asset rather than bundled, so it cannot import it** and would use
+  the platform interface directly. Verify that yourself before choosing.
+- `plan/06-human-gates.md`'s `G-41`, including the 2026-10-08 deferral note, so you register the ids the
+  way the gate expects without translating them.
+- `docs/09` §2.2's 2026-10-08 paragraph: **the chosen path is never logged.** The existing assertion
+  enforces it; do not weaken it when the chooser starts supplying real paths.
+
+**Files.**
+- modify `addon/content/searchDialog.xhtml`
+- modify `addon/content/searchDialog.js`
+- modify `addon/locale/en-US/research-helper-searchDialog.ftl`
+- modify `addon/locale/ko-KR/research-helper-searchDialog.ftl`
+- modify `src/i18n/keys.ts`
+- modify `typings/i10n.d.ts` (regenerated by the build; commit what the build writes)
+- modify `test/integration/searchDialog-flow.spec.ts`
+- modify `test/unit/ui/searchDialog.test.ts`
+
+**Do.**
+1. Add the three strings — a control label, a written message, a failed message — and register every id on
+   every `src/i18n/keys.ts` list it belongs on. **Say in the `Findings` which lists those were and how you
+   determined it.** Then run the build and commit the regenerated typings as the build writes them.
+2. Add the `ko-KR` stub for each new id, as a commented placeholder in the form that file already uses, so
+   `KO_PENDING_REVIEW` accounts for them and the localization spec still passes.
+3. Add the control to the status bar, hidden until a record exists, revealed from view state the way the
+   Cancel button is.
+4. Open the chooser in the window document and hand the path inward. Handle the user dismissing it: that is
+   the one outcome with **no** message, because a user who cancelled knows they did.
+5. Render each of the five return values: two have strings, `no-record` should not be reachable from a
+   visible control, and the remaining two are failures. **Decide what the two unreachable-in-theory ones
+   show if they ever happen, and do not leave an empty element** — `P1-T22` measured that an unresolvable
+   id leaves the element alone, which is how seven surfaces once rendered blank.
+6. Assert from a live window: the control is hidden before a run and visible after an import, pressing it
+   with a path writes the file, and the written message renders **as text**. Assert the failure path too, by
+   making the writer fail.
+
+**Do NOT.**
+- Do not change `exportProvenance`, its five return values, or anything in `src/core/provenance.ts`. The
+  behaviour is built and tested; this card is the surface.
+- Do not translate the new strings into Korean. The owner deferred Korean to before the release on
+  2026-10-08; a stub on `KO_PENDING_REVIEW` is what this card owes.
+- Do not log the chosen path, at any level, and do not put it in the record, the note, or the exported file.
+- Do not raise any wait cap to make the integration suite green. Three tests in `P1-T22`'s block fail
+  under load and that is `plan/00` §6 item 20, not yours.
+- Do not import the toolkit into the window script before verifying it can be imported there at all.
+- Do not add a preference for the export, a second control, or an export of anything other than the current
+  run's record.
+
+**Criteria.**
+- [ ] In a real Zotero, the control is hidden before a run and visible after an import, and pressing it
+      opens a chooser.
+- [ ] A chosen path receives the file, and the success message renders as text — asserted on the text, not
+      on an element being present.
+- [ ] A failing write renders the failure message, asserted the same way.
+- [ ] Dismissing the chooser writes nothing and shows nothing.
+- [ ] Every new id is in both bundles and on every `src/i18n/keys.ts` list it belongs on, with the
+      determination recorded, and the localization spec passes.
+- [ ] The chosen path appears in no log line, asserted.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
+      **Run the integration suite three times and report all three.** On this machine it currently fails
+      more often than it passes, for reasons that are not yours.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** **This card closes the second half of Phase 1's completion criterion 4**, which is why it blocks
+`P1-T23`. It is deliberately small: everything hard was done by `P1-T36`, and what is left is a label, a
+chooser and two sentences.
+
+The one thing worth care is step 1. The Fluent vocabulary in this project has a compile-time gate that
+turns a forgotten registration into a type error — which is why `P1-T36` could not cross this boundary and
+also why crossing it is safe: **if you get the registration wrong, the build tells you.** The part the
+compiler cannot tell you is which *list* an id belongs on, and that is what `P1-T40` exists to catch.
+
+---
+
 ---
 ## 7. Estimate roll-up
 
@@ -8317,7 +8442,8 @@ failure path as well as the success path.
 | `P1-T42` | The free-text redactor's short-credential gap | 0.50 | — |
 | `P1-T43` | Stop hiding already-present papers; wire the duplicate choice | 0.50 | — |
 | `P1-T44` | A preferences pane, so an arriving key has somewhere to go | 1.00 | — |
-| | **Total** | **28.25 d** | **4 gates** |
+| `P1-T45` | The export control, its three strings and the file chooser | 0.50 | **Yes** |
+| | **Total** | **28.75 d** | **5 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 
