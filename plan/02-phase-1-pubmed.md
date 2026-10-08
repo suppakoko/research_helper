@@ -4611,7 +4611,7 @@ work.**
 |---|---|
 | **ID** | `P1-T23` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35`, `P1-T36`, `P1-T45` |
+| **Depends on** | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35`, `P1-T36`, `P1-T45`, `P1-T46` |
 | **Blocks** | none |
 | **Retires** | `R-16`, `R-17`, part of `R-2` |
 | **Implements** | `NFR-1`, `NFR-3`, `NFR-9`, `NFR-10` |
@@ -8275,7 +8275,7 @@ failure path as well as the success path.
 | **ID** | `P1-T45` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T36` |
-| **Blocks** | `P1-T23` |
+| **Blocks** | `P1-T23`, `P1-T46` |
 | **Retires** | nothing |
 | **Implements** | the rest of the third scenario of `FR-8` |
 | **Estimate** | 0.5 d |
@@ -8393,6 +8393,136 @@ compiler cannot tell you is which *list* an id belongs on, and that is what `P1-
 
 ---
 
+### P1-T46 — Stop three tests waiting on text the run has already replaced, so the phase can be signed off
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T46` |
+| **State** | `TODO` |
+| **Depends on** | `P1-T45` |
+| **Blocks** | `P1-T23` |
+| **Retires** | `plan/00` §6 item 20 |
+| **Implements** | nothing — a test-harness correction |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** `npm run test:integration` passes every time on a quiet machine and on a loaded one, so a
+definition-of-done run means something.
+
+**Why this is the card that matters most right now.** It is half a day of work and it is **the only thing
+between the phase and its sign-off**. Measured by the coordinator on 2026-10-08, three consecutive runs of
+the same unchanged tree: **97 passed with 3 failed, 97 passed with 3 failed, then 100 passed.** One green in
+three. `P1-T36`'s executing agent saw seven green in eight the same day. **`P1-T23` cannot be run until this
+lands**, because a definition-of-done run that is a coin toss settles nothing — and two cards in a row have
+now had to explain that their failures were not theirs.
+
+**The three tests, and what each waits on.** All three are in `test/integration/searchDialog-flow.spec.ts`,
+in the block headed `P1-T22`. **Find them by title, not by line number** — a card was in flight in that file
+when this one was written:
+
+| test title | waits for | in element |
+|---|---|---|
+| `cancels a fetch within 2 s and creates nothing (FR-10)` | the text `of 1` | `#rh-search-progress-databases` |
+| `reports linked-existing separately from created (FR-51)` | the text `Linked 3` | `#rh-search-notice` |
+| `asks for the popup on completion and names the outcome once per run` | — | the cascade: it counts cancelled runs and the first test never reached its `cancel()` |
+
+**Both waits are on facts that stop being true.** The per-database counter is replaced as each database
+finishes; the import summary is replaced by the next run. `P1-T35`'s and `P1-T36`'s agents measured the
+mechanism between them: Fluent's latency in this window is **bimodal per run** — about 30 ms per test in a
+passing run and about 1,010 ms in a failing one, then roughly doubling per test (1.0, 2.0, 4.0, 8.0 s) until
+an import lands near 22.9 s against a **25,000 ms** cap. So under load the translation resolves after the
+value it was asked to render has already gone.
+
+**Two candidate causes were measured and refuted, so do not spend time on them.** Background-timer clamping
+of the runner's window: `Zotero.Promise.delay(25)` delivered 29–33 ms inside a failing run, six samples.
+The `ko-KR` application locale that `l10n.spec.ts` leaves behind: identical in passing and failing runs.
+
+**The fix has a shape already, and most of it exists.** The spec **already taps the published view state** —
+it wraps the host's `connect` and its own comment says why: *"A tap on the published state, so an assertion
+can read the model's own view of a run as well as the document's."* **It keeps only the latest state**, in
+one variable, so a transient fact is overwritten before any assertion can see it. And the facts are all in
+that state: `databaseProgress`, `status` and `notices` are declared on the published view state
+(`src/ui/viewModels/searchImportViewModel.ts`, the `SearchViewState` interface) as message references.
+
+**So: record the sequence of published states, and assert the transient facts over the recording.**
+
+**The trade this makes, and why one half of it must not be given up.** A message reference carries an
+identifier and its arguments. Asserting over the recorded states therefore checks **what the view model
+decided**, which is a stronger claim than the rendered text — and it stops checking **that Fluent resolved
+it**, which is weaker. `P1-T22` measured that a message whose resource is unlinked renders as an **empty
+string and leaves the element alone**, which is how seven surfaces once shipped blank. **So every surface
+these tests cover must keep at least one text assertion** — on a value that survives to the end of the run,
+where a wait cannot expire under it. Do not convert all of them to state assertions; that would trade a
+flaky test for a blind one.
+
+**Read first.**
+- `test/integration/searchDialog-flow.spec.ts`: `waitUntil` and its `timeoutMs = 25_000` default, `rendered`,
+  the `connect` tap in the `P1-T22` block's setup, and all three failing tests.
+- `src/ui/viewModels/searchImportViewModel.ts`'s `SearchViewState` — every member, so you can see which
+  facts are available without going through the document.
+- `plan/00` §6 item 20, which this card retires, and the `Findings` of `P1-T22`, `P1-T35` and `P1-T36` for
+  the three independent measurements of the same effect.
+- `docs/13` §2.3 on what an integration spec is for, before deciding what may move to a state assertion.
+
+**Files.**
+- modify `test/integration/searchDialog-flow.spec.ts`
+
+**Do.**
+1. Make the tap record the **sequence** of published states rather than only the latest, bounded so a long
+   run cannot grow it without limit, and say in the `Findings` what bound you chose and why.
+2. Rewrite the two primary waits to assert over the recording: that some published state carried the
+   per-database counter with the expected arguments, and that some published state carried the import
+   summary with the expected counts. The third test should then pass on its own; **confirm that rather than
+   assuming it**, and if it does not, say what else it needs.
+3. Keep at least one **text** assertion per surface, on a value that persists to the end of the run.
+   Name in the `Findings` which text assertion now covers each surface.
+4. **Do not raise the 25,000 ms cap.** If something still needs longer, that is a finding about the product,
+   not a number to increase.
+5. Run the whole integration suite **at least five times**, with leftover test-profile Zotero processes
+   killed by command line before each run, and report every result. Five green runs is the evidence this
+   card exists to produce; four green and one red means it is not done.
+6. Measure and report the per-test durations in `P1-T22`'s block before and after, so the next reader can
+   see whether the doubling is gone or merely survivable. **If the doubling is still there, say so** — this
+   card makes the tests honest, and whether the window itself is slow is a separate question nobody has
+   asked yet.
+
+**Do NOT.**
+- Do not change any production file. If a test cannot be made honest without one, **report that and stop**.
+- Do not raise or remove a timeout, anywhere.
+- Do not delete or weaken an assertion to make a run green. The three tests assert FR-10 and FR-51; what
+  changes is **what they observe**, never **what they claim**.
+- Do not touch the two blocks' structure or ordering. The `P1-T35` block runs first and registers a stub
+  source in the application-wide registry; that is recorded and is not this card's business.
+- Do not convert every assertion to a state assertion. See the trade above.
+
+**Criteria.**
+- [ ] `npm run test:integration` passes **five consecutive times**, each after clearing leftover
+      test-profile processes, with every result reported.
+- [ ] Both FR-10 and FR-51 are still asserted, with the same claims, and the `Findings` say what each one
+      now observes.
+- [ ] Every surface the three tests cover keeps at least one text assertion on a persisting value, named in
+      the `Findings`.
+- [ ] No timeout was raised and no production file changed, verifiable from the diff.
+- [ ] The per-test durations before and after are reported.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` exit 0, with no fewer tests than before.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** **This card is cheap and it unblocks the phase**, which is why it is worth doing before anything
+larger. The thing to resist is the five-minute version: raising the cap. That would make the suite green and
+leave the next person to discover, under some other load, that the suite was never measuring what they
+thought. Three separate cards have now paid to rediscover this effect; the point of this one is that the
+fourth does not have to.
+
+The honest residue: this card does not make the window faster, and nobody has established whether the
+doubling is a defect or just what a loaded machine does. Step 6 exists so that question is at least
+**recorded with numbers** rather than inherited as folklore.
+
+---
+
 ---
 ## 7. Estimate roll-up
 
@@ -8443,7 +8573,8 @@ compiler cannot tell you is which *list* an id belongs on, and that is what `P1-
 | `P1-T43` | Stop hiding already-present papers; wire the duplicate choice | 0.50 | — |
 | `P1-T44` | A preferences pane, so an arriving key has somewhere to go | 1.00 | — |
 | `P1-T45` | The export control, its three strings and the file chooser | 0.50 | **Yes** |
-| | **Total** | **28.75 d** | **5 gates** |
+| `P1-T46` | Stop three tests waiting on text the run has replaced | 0.50 | — |
+| | **Total** | **29.25 d** | **5 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 

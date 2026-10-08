@@ -21,10 +21,10 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
-| 1 — PubMed slice | 45 | 28.75 d | 28.75–40 d | 9–12 d (+140%) |
+| 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
 | 2 — Multi-source + dedup | 25 | 27.50 d | 27.50–39 d | 12–16 d (+72%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **136** | **97.50 d** | **97.50–137 d** | 39–52 d (+88% over the top of the band) |
+| **Phases 0–3** | **137** | **98.00 d** | **98.00–138 d** | 39–52 d (+88% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -428,8 +428,13 @@ nothing at all, because ranking them without an owner's input would be a decisio
     unacceptable. The two alternatives — a notifier observer keeping the snapshot live, or a snapshot taken
     once at startup — were not costed.
 
-20. **The integration suite's waits on transient rendered text, which is the item that gates
-    `P1-T23`.** Measured by `P1-T35`'s executing agent across 25 runs: Fluent's latency in the search
+20. ~~**The integration suite's waits on transient rendered text.**~~ **CARDED 2026-10-08 as `P1-T46`**,
+    after a third independent measurement — three consecutive runs of an unchanged tree gave one green.
+    The fix has a shape: **the spec already taps the published view state** and keeps only the latest one,
+    so a transient fact is overwritten before any assertion can see it; recording the sequence makes the
+    two primary waits assertable without touching a timeout. The original measurement follows.
+
+    **The item that gates `P1-T23`.** Measured by `P1-T35`'s executing agent across 25 runs: Fluent's latency in the search
     window is **bimodal per run** — about 30 ms per test in a passing run, about 1,010 ms in a failing
     one, roughly doubling per test (1.0, 2.0, 4.0, 8.0 s) until the import lands on 22.92–22.99 s against
     a 25,000 ms cap, in 21 of the 25 runs that reached it. Three tests in `P1-T22`'s block then wait on
