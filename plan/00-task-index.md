@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-02 · **118 tasks: 50 `DONE`, 68 `TODO`.** Phase 0 is **33 of 35**; its two open cards, `P0-T34` and `P0-T35`, came out of `P0-T28`'s own escalations. Phase 1 is **17 of 32 `DONE`**, and gained **eight** cards (`P1-T25`–`P1-T32`) from those ten reports plus `P1-T25`'s own; Phase 2 gained two (`P2-T19`, `P2-T20`). **Eighteen of the plan's 116 cards now exist because running the code found work no reading of the corpus had.**
+> **Last updated:** 2026-10-08 · **133 tasks: 71 `DONE`, 62 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **34 of 42 `DONE`**, Phase 2 **3 of 25**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 133, so 35 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 

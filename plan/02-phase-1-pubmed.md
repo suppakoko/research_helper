@@ -4356,7 +4356,7 @@ changed, and saying so first is the behaviour to want.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T22` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-08; the window drives the real pipeline into a real library, and the empty-state headline is **deliberately unpopulated** because redaction cannot clean a 32-character credential interpolated into a sentence. Two further surfaces were closed unasked. One criterion was reported as unpassable as written rather than adjusted, and the three unrenderable error rows are a named constant — `P1-T37` empties two of them. |
 | **Depends on** | `P1-T16`, `P1-T17`, `P1-T21` |
 | **Blocks** | `P1-T23`, `P1-T35`, `P1-T36`, `P1-T37`, `P1-T38`, `P1-T39` |
 | **Retires** | `R-17` (reported) |
@@ -6839,7 +6839,7 @@ real rather than hypothetical.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T35` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-08; the host is published and the window is live. The view model `P1-T22` built had been **removed entirely by the bundler** until this card constructed it. Criterion 4 is enforced twice from the type. Criterion 5 passes on a quiet machine — 98 tests, three consecutive runs — and the load sensitivity behind the earlier failures is `plan/00` §6 item 20, which **gates `P1-T23`**. |
 | **Depends on** | `P1-T16`, `P1-T17`, `P1-T22` |
 | **Blocks** | `P1-T23`, `P1-T36` |
 | **Retires** | none |
