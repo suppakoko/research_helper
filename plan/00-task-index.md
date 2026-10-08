@@ -21,10 +21,10 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | Phase | Tasks | Task-sum estimate | `docs/11` figure (revised 2026-09-09) | Superseded figure |
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
-| 1 — PubMed slice | 43 | 27.25 d | 27.25–38 d | 9–12 d (+127%) |
+| 1 — PubMed slice | 44 | 28.25 d | 28.25–40 d | 9–12 d (+135%) |
 | 2 — Multi-source + dedup | 25 | 27.50 d | 27.50–39 d | 12–16 d (+72%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **134** | **96.00 d** | **96.00–135 d** | 39–52 d (+85% over the top of the band) |
+| **Phases 0–3** | **135** | **97.00 d** | **97.00–137 d** | 39–52 d (+87% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -368,7 +368,11 @@ nothing at all, because ranking them without an owner's input would be a decisio
    `research-helper-search-state-empty` unpopulated on purpose, because interpolating the keyword box into
    a user-visible sentence is the surface a short credential would have been shown in. `P1-T42` holds the
    measurement that decides whether that surface becomes safe.
-5. **A preference pane**, so the error panel's Open Preferences action has something to select.
+5. ~~**A preference pane**, so the error panel's Open Preferences action has something to select.~~
+   **CARDED 2026-10-08 as `P1-T44`.** The triage figure that made it a card: **the storage and the pane
+   registration both already exist** — eleven exported functions in `src/zotero/keychain.ts` from Phase 1
+   and `preferencePaneRegistration` from Phase 0 — so only the pane's markup and controller are missing,
+   and the card that would add them was two phases away behind dependencies already satisfied.
 6. **Styling for the per-database status list** — §4.6's dot leaders and its tick-and-arrow glyphs. The
    outcome already travels as a data attribute, which is the selector such a rule would use.
 

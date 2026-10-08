@@ -151,6 +151,22 @@ confirmed.
 
 ### G-03 — Apply for the Semantic Scholar API key
 
+> **The record of this gate rests on one sentence and nothing else — flagged 2026-10-08 so it is not
+> mistaken for a confirmed fact.** The status log below reads "Submitted" because **the owner reported on
+> 2026-09-15 that the application had been submitted**. No agent submitted it and no agent could: this is a
+> web form carrying a real identity. What the record does **not** have: the exact submission day (the log
+> says so in as many words), any confirmation reference, and any reply. **23 days have passed** against a
+> lead time this plan calls "the longest in the plan".
+>
+> **What to check, because the longest lead time in the plan should not rest on a memory.** Look for the
+> application's own confirmation message in the maintainer mailbox, and record its date and reference here.
+> If no confirmation exists, treat the application as **not submitted** and submit it — in which case the
+> 23 days were never spent and the wait starts now, which is exactly the thing worth knowing early.
+>
+> **This blocks Phase 5 only**, and Phase 5 carries 10.5–15 days of float (`docs/11` §2), so nothing is
+> stalled today. `P2-T05` ships the adapter with unauthenticated degradation, so Phase 2 does not wait
+> either.
+
 **Blocks:** Phase 5 (`docs/11` §1 Phase 5; the `Source` adapter's keyed path in
 Phase 2).
 

@@ -427,6 +427,24 @@ change.
 | **Estimate** | 1.75 d |
 | **Human gate** | **Yes** — a human must enter real API keys. An agent must stop here and report which providers still need a key. Keys are never pasted into a task card, a commit, a log or a test fixture. |
 
+> **Scope reduced and ordering corrected 2026-10-08 (coordinator).** The two **literature-source**
+> credential blocks, the pane itself and the storage-backend badge move to `P1-T44`, because the work this
+> card waits on has **already landed**: `src/zotero/keychain.ts` shipped the keystore tier in Phase 1
+> (`setSecret`, `getSecret`, `hasSecret`, `clearSecret`, `listStoredIds`, `probeKeystore`,
+> `probeAndRecordBackend`, `createKeychainSecretStore`), and `preferencePaneRegistration` shipped in
+> Phase 0 at `src/zotero/registrations.ts:144`. **What remains here is the summarizing-provider half** —
+> the four provider base URLs, the provider credential blocks, the spend rows and the cache rows.
+>
+> **The `Estimate` of 1.75 d is deliberately left alone**, so Phase 3 is now slightly overstated and the
+> plan double-counts the pane shell. Re-estimating a card whose scope shrank is the owner's call, and the
+> same rule was applied to `P3-T02` by `P1-T41`: put the measurement in front of the decision rather than
+> quietly adjusting the number.
+>
+> **The `Depends on` row above is the thing that went wrong, and it is a class rather than an incident.**
+> It was written once and never re-read, so when `P3-T02`'s substance arrived in Phase 1 by another route
+> this card stayed two phases away and the only visible symptom was that an arriving key would have had
+> nowhere to go. `P1-T41` measures `P3-T02` step by step for the same reason.
+
 **Goal.** The user can store, mask, replace and remove a key per provider, see which storage
 tier is in effect, and read the residual-risk statement without clicking anything.
 

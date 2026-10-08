@@ -8006,6 +8006,165 @@ decision turned out to cost a flip and a wire.
 
 ---
 
+### P1-T44 — A place to put a key, because the storage landed in Phase 1 and the window is still scheduled for Phase 3
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T44` |
+| **State** | `TODO` |
+| **Depends on** | none |
+| **Blocks** | none |
+| **Retires** | the literature-source half of `P3-T04` |
+| **Implements** | the source-credential half of `docs/08` §7.5 and `docs/09` §1.9 |
+| **Estimate** | 1.0 d |
+| **Human gate** | none to build. **Entering a real key is `G-18`'s** and stays the owner's. |
+
+**Goal.** A key the owner has in hand can be stored in the operating system's keystore through the
+plugin's own preferences, and never appears anywhere else.
+
+**Why this is a card, and why it is in Phase 1.** **Everything a key needs already exists except the
+place to type it.** Measured 2026-10-08:
+
+- **The storage shipped in Phase 1.** `src/zotero/keychain.ts` exports `setSecret`, `getSecret`,
+  `hasSecret`, `clearSecret`, `listStoredIds`, `probeKeystore`, `probeAndRecordBackend`,
+  `secretBackendPrefValue`, `createKeychainSecretStore`, `KEY_PRESENCE_PREFS` and `refreshKeyPresence` —
+  529 lines of it — and `src/core/secretStore.ts` declares the port.
+- **The pane registration shipped in Phase 0.** `preferencePaneRegistration` is at
+  `src/zotero/registrations.ts:144`, paired with an explicit unregister and visible to the leak check.
+- **So what is missing is the pane's markup and its controller, and nothing else.**
+- **The schedule is why nobody noticed.** The pane is `P3-T04` — "Prefs pane: key fields, backend badge,
+  remove-all", `plan/04`, 1.75 d — and its `Depends on` reads `P3-T02`, `P3-T03`: the keystore tier and
+  the tier ladder. That ordering was right when the plan was written. **It is now wrong**, because
+  `P3-T02`'s substance arrived in Phase 1 by another route and `P3-T03`'s tier 3 was cancelled by the
+  owner on 2026-10-08. `P1-T41` is the card that measures `P3-T02` step by step; **this card does not
+  wait for it**, because what this card needs is the shipped code, not the corrected text.
+- **The consequence today is concrete.** The literature-source key the owner applied for can arrive any
+  day and there is nowhere to put it — which means it would sit in an e-mail, and `docs/09` is emphatic
+  that a key must not sit anywhere a person might copy it from. The optional key for the other source has
+  the same problem; that is why `G-04` deliberately defers obtaining it.
+
+**Scope — the source half only, and the reason for the line.** `P3-T04` carries six credentials, four
+provider base URLs, spend ceilings and the cache rows. **This card builds the pane and the two
+literature-source credential blocks, and leaves every summarizing-provider control to `P3-T04`.** The line
+is drawn there because the two source keys are the ones that can arrive before Phase 3, and because a pane
+that exists is also what makes the search window's **Open Preferences** action have a target at all.
+**That button already exists and already works** — `addon/content/searchDialog.js:2507` calls
+`Zotero.Utilities.Internal.openPreferences()` behind a `typeof` guard — and its own comment, dated
+2026-10-07, says what it opens: *"This plugin registers no preference pane yet … So the button opens
+Zotero's preferences window without selecting a pane of ours."* **So the gap is already visible in the
+product, from a button a user can press** (`plan/00` §6 item 5).
+
+**What must ship with the very first key field, and is not negotiable.** These are `docs/09` §1.9's and
+`docs/08` §7.5's, not this card's inventions, and they are security requirements rather than polish:
+
+1. The field is `type="password"` always, with a **hold-to-show** reveal — **not** a sticky toggle.
+2. Once stored, the key is **never re-displayed**. The field shows a digest: first three and last four
+   characters only.
+3. A **storage-backend badge** beside the fields names the active tier, or warns when the probe failed.
+   `secretBackendPrefValue` already computes the value.
+4. **The residual-risk text of `docs/09` §1.8 is visible in the pane, verbatim, not behind a link** —
+   including the sentence about other Zotero plugins. This ships with the first field, not later.
+5. A per-credential status row: present or absent, last validated when and with what result, and a
+   **Test** button that makes one minimal call and reports inline — never a modal.
+6. A **Remove all stored keys** button that clears every stored id and reports how many were removed.
+7. On paste, trim whitespace and strip a leading `Bearer `.
+8. **No key on the clipboard, ever, and no "copy key" affordance.**
+9. **The key field carries no preference attribute and no key is ever written to `Zotero.Prefs`** —
+   decision D5. Only the non-secret presence flags go to preferences, and `KEY_PRESENCE_PREFS` already
+   names them.
+
+**The one tension in those rules, named so it is not "fixed" by accident.** Rule 2's digest shows seven
+characters of a real key. That is a deliberate exception to this project's habit, and the habit exists for
+a reason: `P1-T22` rejected truncation as a redaction strategy because **"truncation leaks a prefix"**, and
+`P1-T42` exists because the free-text redactor cannot see a short key. **The exception holds only because
+the pane is the owner's own screen showing the owner's own key.** So: compute the digest and **never let it
+travel** — not into a log line, not into an error, not into the provenance record, not into a note. If a
+test needs to assert the digest, assert it against a synthetic value.
+
+**Read first.**
+- `docs/09` §1.9 in full — the nine rules — and §1.8 for the residual-risk text to reproduce verbatim.
+- `docs/08` §7.4's wireframe and §7.5's rules. §7.5 says it restates `docs/09` §1.9 and **must not diverge
+  from it**; if the two disagree, `docs/09` wins and the disagreement is a finding.
+- `src/zotero/keychain.ts` — every exported function listed above, and in particular what
+  `probeAndRecordBackend` writes and what `refreshKeyPresence` is for. **Call these; do not reimplement
+  any of them.**
+- `src/zotero/registrations.ts` lines 115–175 — `PreferencePaneOptions` and
+  `preferencePaneRegistration`, including the two traps `P0-T07` recorded: `defaultXUL` is **not** a caller
+  option, and there is no `l10nID` — `label` is a raw string.
+- `src/bootstrap/registerUI.ts` — how the search window's registration is scoped, and where this one goes.
+- `addon/content/searchDialog.xhtml` and its controller as the shape to follow for markup plus a
+  controller, including how that window links its Fluent resources.
+- `src/i18n/keys.ts` — **every new string needs an id on the right lists**, which is the half-finished edit
+  `P1-T40` exists to catch.
+- `docs/07` §8.5 for the presence and validation preference rows this pane may write, and **only those**.
+
+**Files.**
+- new `addon/content/preferences.xhtml`
+- new `addon/content/preferences.js`
+- new `src/ui/prefs/preferencesPane.ts`
+- modify `src/bootstrap/registerUI.ts`
+- modify `src/i18n/keys.ts`
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl`
+- modify `addon/prefs.js` (only if a non-secret row is missing)
+- new `test/integration/preferences.spec.ts`
+- modify `test/unit/ui/searchDialog.test.ts` (only if the Open Preferences action gains a target to assert)
+
+**Do.**
+1. Build the pane, register it through the existing helper inside the same scope the other registrations
+   use, and confirm it disappears on a plain disable — the leak check is already there to tell you.
+2. Build the two source-credential blocks against the shipped storage functions. **Write no new storage
+   code.** If a function you need is missing, report that rather than adding one here.
+3. Ship all nine rules above. Assert each one that can be asserted.
+4. Make the search window's **Open Preferences** action select this pane, and assert it does.
+5. Prove the negative, which is the assertion that matters most: after storing a synthetic key, **the key's
+   characters appear in no log line, no preference value, no error, and no note.** Drive a failing Test
+   call as well as a succeeding one, because a failure path is where a value usually escapes.
+
+**Do NOT.**
+- Do not add any summarizing-provider control, base URL, or spend ceiling. Those are `P3-T04`'s and this
+  card's `Retires` line is deliberately narrow.
+- Do not write a key to a preference, a file, a note, the clipboard, or a log, at any level, for any
+  reason. Do not add a "copy key" button.
+- Do not implement the session-only or passphrase tiers. The owner chose session-only as the fallback on
+  2026-10-08 and **it is not built**; on a machine whose keystore probe fails, this pane must say so
+  through the badge and refuse to store, which is the honest behaviour until `P3-T03` lands.
+- Do not accept a key from a test fixture, an environment variable read at run time, or a conversation.
+  Tests use synthetic values of the right shape.
+- Do not re-display a stored key, and do not let the digest travel.
+- Do not touch the search window's markup beyond the Open Preferences target.
+
+**Criteria.**
+- [ ] The pane appears in Zotero's preferences, and disappears on a plain disable with no survivor
+      reported.
+- [ ] A synthetic key can be stored, its presence shown, its digest shown, re-entered to replace, and
+      cleared — through the shipped storage functions, verified by reading the keystore back.
+- [ ] The backend badge names the tier actually probed, and says so plainly when the probe failed.
+- [ ] `docs/09` §1.8's residual-risk text is visible in the pane, verbatim.
+- [ ] **The stored key's characters appear in no log line, no preference, no error and no note**, asserted
+      on both a succeeding and a failing Test call.
+- [ ] The search window's Open Preferences action selects this pane.
+- [ ] Every new string is registered on every `src/i18n/keys.ts` list it belongs on.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
+      **Run the integration suite three times** and report all three; that suite is load-sensitive
+      (`plan/00` §6 item 20).
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** This card exists because of a **scheduling error, not a missing capability**: a pane whose two
+dependencies had already been satisfied by other cards sat two phases away, and the only visible symptom
+was that an arriving key would have nowhere to go. That is worth remembering as a class — **a card's
+`Depends on` is written once and never re-read, so work that arrives early by another route leaves the
+schedule quietly wrong.** `P1-T41` is the same discovery from the other end.
+
+The expensive part here is not the pane. It is rule 4 and the negative assertion in criterion 5: the
+residual-risk text has to be reproduced exactly, and proving a key does not escape means driving the
+failure path as well as the success path.
+
+---
+
 ---
 ## 7. Estimate roll-up
 
@@ -8054,7 +8213,8 @@ decision turned out to cost a flip and a wire.
 | `P1-T41` | Correct `P3-T02`'s retracted claims and measure what landed | 0.50 | — |
 | `P1-T42` | The free-text redactor's short-credential gap | 0.50 | — |
 | `P1-T43` | Stop hiding already-present papers; wire the duplicate choice | 0.50 | — |
-| | **Total** | **27.25 d** | **4 gates** |
+| `P1-T44` | A preferences pane, so an arriving key has somewhere to go | 1.00 | — |
+| | **Total** | **28.25 d** | **4 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 
