@@ -8532,7 +8532,14 @@ when this one was written:
 | `asks for the popup on completion and names the outcome once per run` | — | the cascade: it counts cancelled runs and the first test never reached its `cancel()` |
 
 **Both waits are on facts that stop being true.** The per-database counter is replaced as each database
-finishes; the import summary is replaced by the next run. `P1-T35`'s and `P1-T36`'s agents measured the
+finishes; the import summary is replaced by the next run.
+> **Corrected 2026-10-12 after the executing agent measured it.** The summary half is right in substance
+> and wrong in detail: **inside that test no next run happens.** The replacement that actually breaks it
+> is **at the node level** — `addon/content/searchDialog.js`'s `renderMessageList` **clears its host and builds a
+> fresh `<description>` for every published state**, so the node the platform was asked to translate is
+> thrown away by the next publish. The baseline failure read `it reads ""` rather than stale text, which
+> fits node replacement and not a slow-but-stable wait. **The remedy prescribed below is correct either
+> way**, and the rebuild is now `plan/00` §6 item 24. `P1-T35`'s and `P1-T36`'s agents measured the
 mechanism between them: Fluent's latency in this window is **bimodal per run** — about 30 ms per test in a
 passing run and about 1,010 ms in a failing one, then roughly doubling per test (1.0, 2.0, 4.0, 8.0 s) until
 an import lands near 22.9 s against a **25,000 ms** cap. So under load the translation resolves after the
@@ -8631,6 +8638,99 @@ fourth does not have to.
 The honest residue: this card does not make the window faster, and nobody has established whether the
 doubling is a defect or just what a loaded machine does. Step 6 exists so that question is at least
 **recorded with numbers** rather than inherited as folklore.
+
+**Findings, 2026-10-12 — the three tests no longer wait on text the run can replace, and the evidence is a
+deterministic reproduction rather than a green streak. Every criterion passes. `P1-T23` is unblocked.**
+
+**Verified by the coordinator:** typecheck 0, `lint:check` 0, **1,234 unit in 28 files** and **28 contract**
+— every count identical to the baseline — installer **138,382 bytes, unchanged to the byte**, and
+`git diff` showing **exactly one file touched**, the integration spec, with **no production file and no
+timeout altered**. `npm run test:integration` ran **105 passed four consecutive times** here, on top of the
+agent's ten green runs of the same bytes.
+
+**The important thing about those fourteen green runs is that they are not the evidence.** The card was
+rewritten to say so, because the effect had shown a two-in-three failure rate in the morning and none in
+twenty runs that evening. **The agent took both routes the card offered and the second one carries the
+weight.**
+
+**Route 1 — reproduced, by luck rather than by control.** The **first** baseline run of the unchanged tree
+failed with all three tests and the exact recorded messages. The second was green, and the effect never
+returned in 22 further runs. **That alone settles one thing: `P1-T45`'s "0 of 17 runs" did not mean the
+effect had gone.**
+
+**Route 2 — the mechanism, demonstrated deterministically, and this is the good part.** The agent wrote two
+temporary tests that **force the end state a slow machine produces** without needing one: a search that
+finishes immediately, so the value the old wait looks for is already gone, with the old wait running beside
+the new assertions. One run, and the result is unambiguous — the new assertions passed and the old waits
+failed with messages that are **character for character** the ones the loaded machine produced. The probes
+were then removed.
+
+**Two more candidate causes refuted, bringing the total to four.** Twelve processes saturating every core
+for a whole run left the suite **in the fast mode and green**. Running without `--exit-on-finish` — the way
+the three earlier cards ran it — produced a *partial* slow mode once (first test 699 ms against 27 ms) and
+still passed. **So neither heavy load nor watch mode is the switch**, which joins timer clamping and the
+`ko-KR` locale on the refuted list.
+
+**The doubling is still there, it is still unexplained, and the agent put a sharper number on it than
+anyone had.** In the red baseline run the cost roughly doubles with **every test that asks for rendered
+text** — 1.0, 2.0, 4.0, 8.0 seconds — while the one test in that block which asks for none **stays at
+41 ms**. So the cost scales with **the number of text requests, not with elapsed time**. Whole-suite wall
+clock fell from 86.7 s to 67.8–68.8 s.
+
+**The strongest untested candidate is in the configuration and the coordinator confirmed it.**
+`zotero-plugin.config.ts:196` sets `devtools: true`, which appends `--jsdebugger`, and `:212` records that
+**test runs inherit it, so the Browser Toolbox opens**. So a debugger is attached to the window in every
+run in this report, and "cost per text request" is the shape an attached observer would produce. Turning it
+off is a configuration change outside this card's one file, and it is now `plan/00` §6 item 23.
+
+**Each rewritten surface gets three observations, and the third one is the one the card fought for.** What
+the view model decided, which message the document pointed the element at, and what text the bundle
+produces. **Mutations 3, 5 and 9 each remove a message from the English bundle, and in mutation 3 the state
+assertion and the attribute wait both *passed* — only the remaining text assertion caught the blank
+surface.** Had every assertion been converted to a state assertion, **three blank surfaces would have
+shipped silently.** That is the trade the card named, now measured in both directions, and it is the reason
+the card's insistence on keeping a text assertion per surface was not pedantry.
+
+**One honest deviation from the card's letter, declared rather than smoothed over.** For §4.5's counter
+there is **no text that persists to the end of a run**: the product publishes `databaseProgress: undefined`
+in both the cancelled and the success branch, so no assertion anywhere can read that element's text
+afterwards. Instead of inventing one, the agent kept a text check and moved it somewhere a wait **cannot
+expire at all** — it `await`s the window's own localization for an answer rather than polling the document,
+so there is no cap to run out of. Verified by the coordinator by reading the new helper: it awaits
+`formatMessages` and **fails loudly on an empty result**, which is the blank-surface class. What this gives
+up is "the platform wrote the text into that exact element", and the element's own half is covered by the
+attribute wait beside it.
+
+**Ten mutations, every one reverted, every one attributed to a named test and its printed message.** None
+was unbreakable, so none needed classifying. The recording's bound is **500** with a loud guard rather than
+a silent window — mutation 10 cut it to 2 and the guard said so by name instead of answering from a short
+history. The two tests that read the recording log how many states they published: **5** for the cancelled
+fetch and **13** for the re-import, so 500 is about forty times the worst case observed.
+
+**The card's account of the FR-51 failure is right in substance and wrong in one detail.** The card said
+"the import summary is replaced by the next run" — true in general, and probe 2 demonstrated it — but
+*inside that test* no next run happens. The replacement that actually breaks it is **at the node level**:
+`addon/content/searchDialog.js`'s `renderMessageList` **clears its host and builds a fresh `<description>`
+for every published state**, so the node the platform was asked to translate is thrown away by the next
+publish. The baseline failure read `it reads ""` rather than stale text, which fits node replacement and
+not a slow-but-stable wait. **The remedy the card prescribed is correct either way**, and the corrected
+mechanism is now `plan/00` §6 item 24.
+
+**A new trap, which cost the agent one step and is now written into `plan/README.md` §6.** Editing a Fluent
+bundle during a mutation sweep is **not self-reverting**, because the builder regenerates
+`typings/i10n.d.ts` from the bundles — and **`npm run build` cannot repair it**, because the type check runs
+*before* the generator. `npx zotero-plugin build` can, and does.
+
+**What was not checked.** Nobody looked at the window; light and dark were not compared. **No full slow-mode
+run was ever seen with the fix in place**, because the full slow mode did not recur — the probes stand in
+for it, which is the whole point of building them. The attached Browser Toolbox was not tested as the
+discriminator. And whether the doubling is a defect or simply what this platform does under a debugger
+remains open; this card put numbers on it, as its step 6 asked.
+
+**Needs a card.** The window's bimodal text rendering, now with four candidates refuted and three untested,
+`plan/00` §6 item 23. And `renderMessageList` and `renderSourceStatus` rebuilding their children on every
+published state, item 24 — both the reason a notice's text is transient at node level and a plausible
+contributor to the slowness.
 
 ---
 

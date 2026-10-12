@@ -428,7 +428,10 @@ nothing at all, because ranking them without an owner's input would be a decisio
     unacceptable. The two alternatives — a notifier observer keeping the snapshot live, or a snapshot taken
     once at startup — were not costed.
 
-20. ~~**The integration suite's waits on transient rendered text.**~~ **CARDED 2026-10-08 as `P1-T46`**,
+20. ~~**The integration suite's waits on transient rendered text.**~~ **CLOSED 2026-10-12 by `P1-T46`** —
+    the three tests now read the recorded published states, the element's Fluent attributes and the
+    bundle's own answer, and the evidence is a deterministic reproduction rather than a green streak.
+    Carded 2026-10-08 as `P1-T46`,
     after a third independent measurement — three consecutive runs of an unchanged tree gave one green.
     The fix has a shape: **the spec already taps the published view state** and keeps only the latest one,
     so a transient fact is overwritten before any assertion can see it; recording the sequence makes the
@@ -464,6 +467,28 @@ nothing at all, because ranking them without an owner's input would be a decisio
     reader cannot recover), so the choice is real: ship them, strip them at build time, or move the long
     passages to a document. **Nothing is wrong today**; the number simply grows with every card that
     touches that file.
+
+### 6.4 Raised by `P1-T46`, 2026-10-12
+
+23. **Why the search window's text rendering is bimodally slow, and why the cost doubles with every text
+    request.** Measured: in a slow run the per-test cost roughly doubles — 1.0, 2.0, 4.0, 8.0 seconds —
+    while the one test in that block that asks for **no** rendered text stays at **41 ms**. So the cost
+    scales with **the number of text requests, not with elapsed time**. **Four candidates are refuted**:
+    background-timer clamping, the `ko-KR` application locale, twelve processes saturating every core
+    (the suite stayed fast and green), and watch mode (a partial slow mode once, still green). **The
+    strongest untested candidate is in the configuration**: `zotero-plugin.config.ts:196` sets
+    `devtools: true`, which appends `--jsdebugger`, and `:212` records that test runs inherit it, **so the
+    Browser Toolbox is attached to the window in every run ever measured** — and "cost per text request"
+    is the shape an attached observer would produce. Turning it off for a measurement is one line of
+    configuration. The other two untested: the rebuild described in item 24, and a cold first run.
+    **Nothing is broken today** — `P1-T46` made the tests immune to it — but the product renders text
+    for users through the same path.
+
+24. **`renderMessageList` and `renderSourceStatus` destroy and rebuild their children on every published
+    state**, even when the message references have not changed. This is **both** the reason a notice's
+    text is transient at node level — which is what actually broke the FR-51 test, measured by
+    `P1-T46` — **and** a plausible contributor to item 23. Making them update in place needs
+    `addon/content/searchDialog.js`.
 
 ## 7. Regenerating this file
 

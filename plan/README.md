@@ -227,6 +227,14 @@ When Claude Code is handed a task card:
   test file needs a reason in `Notes`.
 - **Cost.** Any task that spends money on an API carries a Human gate and states
   the expected spend.
+- **Reverting a Fluent-bundle mutation is not self-reverting.** Found by `P1-T46` on
+  **2026-10-12**, at the cost of one wasted step. Editing a `.ftl` file during a
+  mutation sweep makes the builder regenerate `typings/i10n.d.ts` from the bundles, so
+  putting the `.ftl` back leaves the generated typings holding the mutant identifier and
+  the type check failing with `TS2820` and `TS2344` across several files. **`npm run build`
+  cannot repair it**, because the type check runs *before* the generator;
+  `npx zotero-plugin build` can, and does. Check both generated typings by hash before
+  calling a sweep clean.
 
 ## 7. Estimates
 

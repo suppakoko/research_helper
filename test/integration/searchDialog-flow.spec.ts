@@ -134,6 +134,38 @@
  * tap rather than rendered text, for the states that are transient — and that is
  * its own card, not `P1-T35`'s.
  *
+ * ## What `P1-T46` changed, and what it deliberately did not (2026-10-12)
+ *
+ * **Reproduced first, then removed by construction.** The first run of the
+ * unchanged tree on this machine produced all three failures with the messages
+ * quoted above, the second was green, and the discriminator was again the
+ * per-test cost: `1,043 ms` on the first test of this block in the red run
+ * against `31 ms` in the green one, then `940 → 2,024 → 4,002 → 8,028 ms` and
+ * a `22,914 ms` import that passed by two seconds. So the slow mode is real,
+ * it is not caused by anything a test does, and **the doubling is still
+ * there** — `P1-T46` made the tests honest and left the window's speed as the
+ * separate, still-unanswered question it is.
+ *
+ * What changed is only what the two primary waits **observe**:
+ *
+ * - The tap records the **sequence** of published states
+ *   ({@link publishedStates}, bounded by {@link PUBLISHED_STATE_LIMIT}) rather
+ *   than only the latest, so a fact the run has already replaced is still
+ *   there to be asserted.
+ * - Each rewritten surface gets **three** observations instead of one:
+ *   {@link assertPublished} for what the view model decided,
+ *   {@link pointedAt} for the two attributes the document set, and
+ *   {@link resolved} for the text the bundle produces. None of the three can
+ *   expire against a value that has gone.
+ * - **The text half was kept everywhere**, deliberately: a state assertion
+ *   cannot see the blank-surface defect `P1-T22` measured — an id whose
+ *   resource is unlinked resolves to nothing and leaves the element alone —
+ *   and converting all of these would have traded a flaky test for a blind
+ *   one. `#rh-search-status` keeps a real rendered-text wait in the document,
+ *   on the terminal row no later state replaces.
+ * - No timeout was touched, including {@link waitUntil}'s 25,000 ms default,
+ *   and no production file was changed.
+ *
  * ## What this file does not check
  *
  * - **Nobody looked at the window.** Every assertion below is a computed value
@@ -194,6 +226,8 @@ import {
 import {
   UNRENDERABLE_ERROR_ROWS,
   createSearchImportViewModel,
+  message,
+  type MessageRef,
   type SearchImportJobFactory,
   type SearchImportViewModelDeps,
   type SearchViewState,
@@ -430,6 +464,39 @@ let savedApi: unknown;
 const behaviour = new Map<SourceId, StubBehaviour>();
 /** The last state the view model published, for assertions about the model. */
 let lastState: SearchViewState | undefined;
+/**
+ * **Every** state the view model published, most recent last (`P1-T46`).
+ *
+ * The tap below used to keep only {@link lastState}, which is enough for a fact
+ * that is still true when the assertion runs and useless for one that is not.
+ * Two of this block's assertions are about **transient** facts — §4.5's
+ * per-database counter, which `renderSearchOutcome` sets back to `undefined` at
+ * the end of every run, and the import summary, which the next run replaces —
+ * and waiting for Fluent to put either of them into the document is a race the
+ * test loses whenever the translation lands after the value has gone. Measured
+ * three times (`P1-T22`, `P1-T35`, `P1-T36`) and reproduced once more while
+ * this card was executed. A recording cannot lose a fact that was published.
+ */
+const publishedStates: SearchViewState[] = [];
+/**
+ * How many states the recording keeps, dropping the oldest beyond it.
+ *
+ * **500, and the bound matters rather than the number.** An unbounded array
+ * would grow with the run: the throttle is off in this spec (`throttleMs: 0`,
+ * see the file header), so every progress snapshot publishes, and the longest
+ * fetch in this block is 40 records — one state per record plus a handful per
+ * stage. **Measured rather than guessed:** the two tests that read the
+ * recording log how many states they published, and across the runs this card
+ * made it is **5** for the cancelled fetch and **13** for the re-import, so
+ * 500 is roughly forty times the worst case observed and still a fixed
+ * ceiling. Each entry is a shallow object whose arrays are the ones the view
+ * model already holds, so the ceiling is cheap. {@link statesSince} **fails
+ * loudly** rather than silently returning a short window if a test ever
+ * outgrows it, so the bound can never turn into a wrong answer.
+ */
+const PUBLISHED_STATE_LIMIT = 500;
+/** How many states have been published in all, including dropped ones. */
+let publishedStateCount = 0;
 /** The library index behind the `isExisting` port; rebuilt by `refreshIndex()`. */
 let index: LibraryIndex;
 /** Collection keys this spec created, erased in `after()`. */
@@ -512,13 +579,226 @@ function textOf(id: string): string {
   return (doc.getElementById(id)?.textContent ?? "").trim();
 }
 
-/** Wait for Fluent to have put `needle` into the element at `id`. */
+/**
+ * Wait for Fluent to have put `needle` into the element at `id`.
+ *
+ * **Only safe on a value that is still the current one when the wait ends**
+ * (`P1-T46`). The view model replaces §4.5's counter and the import summary
+ * during a run, and `renderMessageList`/`clearRef` take the previous text with
+ * them, so this wait on either of those loses its needle rather than waiting
+ * for it. Those two now go through {@link assertPublished}, {@link pointedAt}
+ * and {@link resolved} instead. What is left here is `#rh-search-status`'s
+ * terminal row, which the run does not touch again.
+ */
 async function rendered(id: string, needle: string): Promise<string> {
   await waitUntil(
     () => textOf(id).includes(needle),
     `Fluent to render "${needle}" into #${id} (it reads "${textOf(id)}")`,
   );
   return textOf(id);
+}
+
+// ---------------------------------------------------------------------------
+// 2b. The published-state recording, and the three observations it enables
+//     (`P1-T46`)
+// ---------------------------------------------------------------------------
+
+/** Add one published state to {@link publishedStates}, oldest first out. */
+function recordState(state: SearchViewState): void {
+  publishedStateCount += 1;
+  publishedStates.push(state);
+  if (publishedStates.length > PUBLISHED_STATE_LIMIT) {
+    publishedStates.shift();
+  }
+}
+
+/**
+ * A mark in the published sequence, for {@link statesSince}.
+ *
+ * Taken immediately before the action under test, so an assertion is about the
+ * states *that action* published and never about a leftover from an earlier
+ * test — which matters here, because the window and the view model are shared
+ * by every test in this block.
+ */
+function markStates(): number {
+  return publishedStateCount;
+}
+
+/** Every state published since `mark`, in order. */
+function statesSince(mark: number): readonly SearchViewState[] {
+  const firstHeld = publishedStateCount - publishedStates.length;
+  if (mark < firstHeld) {
+    assert.fail(
+      `the recording keeps only the last ${String(PUBLISHED_STATE_LIMIT)} ` +
+        `published state(s) and has already dropped ` +
+        `${String(firstHeld - mark)} of the ones published since the mark, ` +
+        `so this assertion cannot be answered: raise PUBLISHED_STATE_LIMIT`,
+    );
+  }
+  return publishedStates.slice(mark - firstHeld);
+}
+
+/**
+ * One message reference as a comparable, order-independent string.
+ *
+ * The arguments are sorted by name rather than compared as JSON, so a
+ * reordering of an object literal in the view model is not a test failure while
+ * a changed id, a changed argument name and a changed argument value all are.
+ */
+function refKey(
+  id: string,
+  args: Readonly<Record<string, string | number>> | undefined,
+): string {
+  if (args === undefined) return id;
+  const named = Object.entries(args)
+    .map(([name, value]) => `${name}=${String(value)}`)
+    .sort()
+    .join(",");
+  return `${id}(${named})`;
+}
+
+/** The same key, read off an element's two Fluent attributes. */
+function pointerKey(element: Element): string | undefined {
+  const id = element.getAttribute("data-l10n-id");
+  if (id === null) return undefined;
+  const raw = element.getAttribute("data-l10n-args");
+  if (raw === null || raw === "") return refKey(id, undefined);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    return `${id}(unparseable args ${raw})`;
+  }
+  if (parsed === null || typeof parsed !== "object") {
+    return `${id}(non-object args ${raw})`;
+  }
+  return refKey(id, parsed as Readonly<Record<string, string | number>>);
+}
+
+/**
+ * Assert that some state published since `mark` carried `expected`.
+ *
+ * This is the half of the trade `P1-T46` buys: it checks **what the view model
+ * decided**, which is a stronger claim than the rendered text, because the
+ * identifier and its arguments are both in it and `message()` type-checks the
+ * arguments at the call site. It is also the half that stops checking that
+ * Fluent resolved anything, which is why every surface below keeps a text
+ * assertion as well.
+ */
+function assertPublished(
+  mark: number,
+  pick: (state: SearchViewState) => readonly (MessageRef | undefined)[],
+  expected: MessageRef,
+  what: string,
+): void {
+  const states = statesSince(mark);
+  const seen: string[] = [];
+  for (const state of states) {
+    for (const ref of pick(state)) {
+      if (ref === undefined) continue;
+      const key = refKey(ref.id, ref.args);
+      if (!seen.includes(key)) seen.push(key);
+    }
+  }
+  const wanted = refKey(expected.id, expected.args);
+  if (!seen.includes(wanted)) {
+    assert.fail(
+      `no state published since the mark carried ${what} as ${wanted}; ` +
+        `the ${String(states.length)} recorded state(s) carried ` +
+        `${seen.length === 0 ? "nothing there" : seen.join(" ; ")}`,
+    );
+  }
+}
+
+/**
+ * Wait until `id`, or an element under it, is pointed at `ref`.
+ *
+ * **A wait on the document's own two attributes, not on Fluent's output.**
+ * `applyRef` sets `data-l10n-id` and `data-l10n-args` together and
+ * synchronously, inside the same `render()` call the view model publishes from,
+ * so this answers "did the document point this surface at the message the model
+ * decided" without depending on when the translation lands. It is the second of
+ * the three observations each rewritten surface now gets.
+ */
+async function pointedAt(id: string, ref: MessageRef): Promise<void> {
+  const wanted = refKey(ref.id, ref.args);
+  const pointers = (): string[] => {
+    const out: string[] = [];
+    const visit = (element: Element): void => {
+      const key = pointerKey(element);
+      if (key !== undefined) out.push(key);
+      for (const child of Array.from(element.children)) visit(child);
+    };
+    const root = doc.getElementById(id);
+    if (root) visit(root);
+    return out;
+  };
+  await waitUntil(
+    () => pointers().includes(wanted),
+    `#${id} to be pointed at ${wanted} (it carries ` +
+      `${pointers().join(" ; ") || "no data-l10n-id"})`,
+  );
+}
+
+/** What the window's own `DOMLocalization` exposes, typed to what is used. */
+interface WindowLocalization {
+  formatMessages(
+    requests: readonly {
+      readonly id: string;
+      readonly args?: Readonly<Record<string, string | number>>;
+    }[],
+  ): Promise<({ value?: string | null } | null | undefined)[]>;
+}
+
+/**
+ * Resolve `ref` through the window's own `document.l10n`, and fail if it is
+ * blank.
+ *
+ * **The text assertion that cannot expire, and the reason it is not a weaker
+ * check.** `P1-T22` measured that a message whose resource is unlinked
+ * "resolves to nothing and leaves the element alone" — seven surfaces once
+ * shipped blank that way, and `P1-T45`'s most valuable mutation was exactly
+ * this class. That is a property of the **bundle**, and this asks the bundle
+ * directly, through the same `DOMLocalization` and the same resource list the
+ * window renders with (`addon/content/searchDialog.js` hands
+ * `document.l10n` to the view model as its `formatter`, and resolves its own
+ * column labels through `formatMessages` for a related reason). Because it
+ * *awaits* the answer instead of polling the document for a mutation, a slow
+ * Fluent makes it slow rather than wrong: there is no cap for it to expire
+ * against, and a transient value cannot have been replaced by the time the
+ * answer arrives.
+ *
+ * What it does **not** check is that `DOMLocalization` wrote the text into that
+ * particular element. {@link pointedAt} covers the document's half of that, and
+ * `#rh-search-status` below still has a real rendered-text wait on a value the
+ * run does not replace.
+ */
+async function resolved(ref: MessageRef): Promise<string> {
+  const l10n = (doc as unknown as { l10n?: WindowLocalization }).l10n;
+  if (l10n === undefined) {
+    assert.fail("the search window's document exposes no l10n");
+  }
+  const wanted = refKey(ref.id, ref.args);
+  let value: unknown;
+  try {
+    const [first] = await l10n.formatMessages([
+      ref.args === undefined ? { id: ref.id } : { id: ref.id, args: ref.args },
+    ]);
+    value = first?.value;
+  } catch (error) {
+    assert.fail(
+      `${wanted} threw while resolving in this window: ${String(error)}`,
+    );
+  }
+  if (typeof value !== "string" || value === "") {
+    assert.fail(
+      `${wanted} resolves to no text in this window — a message whose ` +
+        `resource is unlinked renders as an empty string and leaves the ` +
+        `element alone (P1-T22), which is how seven surfaces once shipped ` +
+        `blank; it resolved to ${JSON.stringify(value)}`,
+    );
+  }
+  return value;
 }
 
 /** Every attribute value and every leaf text node under `id`. */
@@ -1977,6 +2257,13 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       ...model.host,
       // A tap on the published state, so an assertion can read the model's own
       // view of a run as well as the document's.
+      //
+      // **`P1-T46`: the whole sequence, not only the latest.** `lastState` is
+      // kept because most assertions here are about a fact that is still true
+      // when they run; `recordState` is what makes a *transient* fact — §4.5's
+      // counter, the import summary — observable at all. The two are written
+      // together and in this order so that `runsFinished` and the recording can
+      // never disagree about which states belong to which run.
       connect: (viewArg: Parameters<typeof model.connect>[0]) =>
         model.connect({
           ...viewArg,
@@ -1986,6 +2273,7 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
             }
             wasRunning = state.running;
             lastState = state;
+            recordState(state);
             viewArg.render(state);
           },
         }),
@@ -2296,6 +2584,7 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       behaviour.set(PUBMED, { records: 40, delayMs: 150 });
       behaviour.set(CROSSREF, IDLE);
       const before = runsFinished;
+      const mark = markStates();
       controller.search();
       // Wait until the fetch is demonstrably under way, so the cancel lands in
       // `Fetching` rather than before `Planning`.
@@ -2326,8 +2615,27 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
         "searching",
         "and reports it as in flight",
       );
-      // §4.5's "5 of 7 databases", beside the bar.
-      const databases = await rendered("rh-search-progress-databases", "of 1");
+      // §4.5's "5 of 7 databases", beside the bar — three observations of the
+      // same claim, and **none of them a wait on text the run can replace**
+      // (`P1-T46`). `renderSearchOutcome` publishes `databaseProgress:
+      // undefined` at the end of every run and `clearRef` then empties the
+      // element, so a wait for this counter's *text* in the document is lost
+      // the moment Fluent takes longer than the fetch does. Reproduced on this
+      // machine before the rewrite, with the element reading "".
+      const counter = message("research-helper-search-progress-databases", {
+        done: 0,
+        total: 1,
+      });
+      assertPublished(
+        mark,
+        (state) => [state.databaseProgress],
+        counter,
+        "§4.5's per-database counter",
+      );
+      await pointedAt("rh-search-progress-databases", counter);
+      const resolvedAt = Date.now();
+      const databases = await resolved(counter);
+      const resolveMs = Date.now() - resolvedAt;
       assert.include(databases, "0 of 1 databases");
       const startedAt = Date.now();
       controller.cancel();
@@ -2335,7 +2643,22 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       const elapsed = Date.now() - startedAt;
       assert.isAtMost(elapsed, 2_000, "FR-10: aborted within 2 s");
 
+      // §8.3's CANCELLED row, and the text assertion this test keeps in the
+      // document rather than in the bundle: `renderSearchOutcome`'s cancelled
+      // branch publishes it as the run's **terminal** status and nothing
+      // touches it again, so the needle cannot go missing under the wait. The
+      // state assertion beside it names the count the model decided, which the
+      // text alone cannot distinguish from a plural-form accident.
+      const cancelledRow = message("rh-error-cancelled", { imported: 0 });
+      assertPublished(
+        mark,
+        (state) => [state.status],
+        cancelledRow,
+        "§8.3's CANCELLED row",
+      );
+      const renderedAt = Date.now();
       const status = await rendered("rh-search-status", "Cancelled");
+      const renderMs = Date.now() - renderedAt;
       assert.include(status, "0 items", "§8.3's CANCELLED row with its count");
       assert.isTrue(
         (el("rh-search-progress-databases") as HTMLElement).hidden,
@@ -2346,7 +2669,13 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
         [],
         `a cancelled search wrote to the database: ${events.join(", ")}`,
       );
-      log(`cancel took ${String(elapsed)} ms and wrote nothing`);
+      log(
+        `cancel took ${String(elapsed)} ms and wrote nothing; ` +
+          `${String(statesSince(mark).length)} state(s) recorded, ` +
+          `the counter resolved through document.l10n in ` +
+          `${String(resolveMs)} ms, and the CANCELLED row rendered into the ` +
+          `document in ${String(renderMs)} ms`,
+      );
     } finally {
       await scope.unregisterAll();
     }
@@ -2453,10 +2782,42 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
 
     const name = `RH P1-T22 second ${String(Date.now())}`;
     controller.adoptNewCollection(name);
+    const mark = markStates();
     await runImport();
     createdCollections.push(collectionNamed(name).key);
 
-    const summary = await rendered("rh-search-notice", "Linked 3");
+    // FR-51's split, as three observations of the same claim (`P1-T46`). The
+    // notice region is **rebuilt** on every published state —
+    // `renderMessageList` clears its host and makes a fresh `<description>`
+    // per line — so a wait for this summary's text in the document waits on
+    // nodes the next state has already thrown away, and the next run replaces
+    // the summary outright. Reproduced on this machine before the rewrite,
+    // with the element reading "".
+    //
+    // The counts are in the assertion rather than in the needle, so what is
+    // checked is what the view model **decided**: `write.created` 1,
+    // `write.linkedExisting` 3, and nothing skipped or failed. The old needle
+    // could not tell "Linked 3" from "Linked 3" beside a wrong skipped count.
+    const summaryRef = message("research-helper-import-summary", {
+      imported: 1,
+      linked: 3,
+      skipped: 0,
+      failed: 0,
+    });
+    assertPublished(
+      mark,
+      (state) => state.notices,
+      summaryRef,
+      "FR-51's import summary, in the notice region",
+    );
+    assertPublished(
+      mark,
+      (state) => [state.status],
+      summaryRef,
+      "FR-51's import summary, in the status bar",
+    );
+    await pointedAt("rh-search-notice", summaryRef);
+    const summary = await resolved(summaryRef);
     assert.include(summary, "Imported 1", "only the fourth record was new");
     assert.include(
       summary,
@@ -2465,7 +2826,10 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
     );
     hide.checked = true;
     controller.applyFilter();
-    log(`re-import summary: ${summary.replace(/\s+/g, " ")}`);
+    log(
+      `re-import summary: ${summary.replace(/\s+/g, " ")} ` +
+        `(${String(statesSince(mark).length)} state(s) recorded)`,
+    );
   });
 
   // =========================================================================
