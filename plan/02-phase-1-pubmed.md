@@ -4641,10 +4641,14 @@ closed or its gaps are written up as new cards.
 **Files.**
 - create `test/integration/phase1-dod.spec.ts`
 - create `docs/spikes/phase-1-dod.md` (measurements and sign-off)
-- modify `plan/00-task-index.md` (mark states)
+- modify `plan/00-task-index.md` — **the measured figures only, never a state.** Corrected 2026-10-12:
+  "mark states" contradicted this card's own `Do NOT` and `plan/README.md` §4, both of which reserve
+  every state change to a human.
 
 **Do.**
-1. Run the five §2 criteria against Zotero 10.0.1 on the developer machine, with
+1. Run the five §2 criteria against the **installed** Zotero on the developer machine — **10.0.3** as of
+   2026-10-12, not the 10.0.1 this step used to name; record the exact build you ran on, because this
+   project has had Zotero self-update twice mid-phase. With
    a real biomedical query returning ≥ 50 records.
 2. Measure and record: NFR-1 (100 pre-fetched records, wall time), abstract
    coverage percentage (R-17), the write chunk size actually used and the time
@@ -8503,7 +8507,7 @@ the 4.5 % installer growth.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T46` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-12; **the evidence is a deterministic reproduction, not a green streak.** The agent built two temporary tests that force the end state a slow machine produces, and the old waits died there with messages character for character identical to the loaded-machine ones. It also showed why the card's insistence on keeping one text assertion per surface was load-bearing: in one mutation the state assertion and the attribute wait both passed and **only the text assertion caught the blank surface.** |
 | **Depends on** | `P1-T45` |
 | **Blocks** | `P1-T23` |
 | **Retires** | `plan/00` §6 item 20 |
