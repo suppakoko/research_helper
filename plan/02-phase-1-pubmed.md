@@ -4693,10 +4693,148 @@ closed or its gaps are written up as new cards.
 npm run lint:check && npm run typecheck && npm run test:unit && npm run test:contract && npm run build && npm run test:integration -- --exit-on-finish --abort-on-fail
 ```
 
-**Notes.** This is the card that turns `docs/07` §7.2's "**Unverified:** the
-exact optimal transaction chunk size" into a measured number — write the answer
-back into `docs/07` in the same change. Human gate details go in
+**Notes.** **Corrected 2026-10-12 after the executing agent checked the corpus.** This used to say the
+card turns `docs/07` §7.2's *"Unverified: the exact optimal transaction chunk size"* into a measured
+number and must write the answer back. **That was already done eleven days earlier**:
+`docs/07-architecture-and-data-model.md:2196` has read *"Chunk size: MEASURED 2026-10-01 (`P1-T14`), this
+half of the marker is closed. Ship 50."* since 2026-10-01, with the sweep table beside it. So nothing
+needed writing back and `docs/07` was correctly left alone. The only unverified item still in §7.2 is
+its question about suppressing database-change events, which `P1-T14` deliberately did not implement
+and which this card does not touch. **`plan/README.md` §5 rule 8 again** — and this time the claim was
+not even grepped before it was written.
+
+A measurement from this card worth carrying forward: §7.2 states that a chunk size of 25 "costs **47 %**
+more for nothing", which is **one run**. Across four runs here the penalty was **7 % to 25 %**, never
+47 %. The direction holds and "ship 50" is unaffected, but the size does not reproduce and §7.2 does not
+say how many runs it rests on — now `plan/00` §6 item 29. Human gate details go in
 [`06-human-gates.md`](06-human-gates.md).
+
+**Findings, 2026-10-12 — all five of §2's finishing conditions pass, measured against a live service and a
+real Zotero. Nothing is signed: two things still need a person, and neither is a failure.**
+
+**Verified by the coordinator:** typecheck 0, `lint:check` 0, **1,234 unit in 28 files**, **28 contract**,
+installer **138,382 bytes — unchanged to the byte**, **no production file touched**, and
+`npm run test:integration` at **108 passed twice** with the live test switched off. Three files: the new
+spec, the evidence document `docs/spikes/phase-1-dod.md`, and measured figures added to `plan/00`.
+
+| condition | verdict | the number |
+|---|---|---|
+| 50+ papers imported into a new collection, each with an abstract where the service supplies one | **pass**, one half unmeasurable | **100 imported**, 99 with an abstract |
+| 100 pre-fetched records import in ≤ 10 s | **pass** | **441 / 456 / 621 / 624 ms** |
+| Cancelling mid-search leaves zero items | **pass** | **121–153 ms**, zero items, measured by a database listener |
+| Provenance note present, export validates against the schema | **pass** | one note; **496 bytes, zero schema errors** |
+| Re-running the same search links rather than duplicates | **pass** | 100 of 100 linked, **no duplicate** |
+
+**Beyond the five: startup cost 10–16 ms against a 200 ms budget, zero network requests at startup, and the
+longest unresponsive moment 38–54 ms against 100 ms.** The startup measurement is the better piece of
+method in the report — a request observer watched the **whole Zotero process**, and a **control window with
+the plugin switched off** was recorded first. Both lists were empty, so there is nothing to attribute to
+anybody.
+
+**The one half of condition 1 that cannot be measured from where the test stands, stated rather than
+glossed.** The condition says "where PubMed supplies one". The record objects the window receives do not
+carry the abstract text, so no measurement in that run can tell "the service had no abstract for that one
+paper" apart from "the adapter lost it". The agent **did not chase it**, because that would have meant
+another live request — which is the card's own prohibition. The adapter side of the claim is covered by the
+28 fixture-backed contract tests. **The honest reading of condition 1 is therefore: 100 imported, 99 with
+an abstract, and one paper whose cause is unattributed.**
+
+**Every figure is a ceiling, not a best case, and the reason is now confirmed from two sources.**
+`zotero-plugin.config.ts:196` attaches the browser debugger to every test run, and the agent verified it
+independently by reading the installed test runner's own source — the flag is added at one line and the
+test runner's setting is built from `server.devtools` at another — and confirmed the runner's command line
+offers **no switch to turn it off**. So nothing in this report was measured without a debugger attached.
+That is the safe direction for a requirement, and two things limit how much it matters: the timings read
+the Zotero database rather than waiting for text on screen, so `P1-T46`'s slow text drawing is outside the
+measured region, and the new spec opens no window at all.
+
+**The live run was made once, and it ended red.** Four requests reached the service in total — one keyword
+request and one record fetch per search, two searches — at the shipped pacing, with no key and nothing in
+parallel. All five conditions passed inside that run. **The single failure was collateral and in another
+file**, and it is the most interesting finding here.
+
+**Finding B, where three shipped decisions meet.** The view model is built **once at application start**;
+`P1-T36` deliberately left `connect()` not clearing the retained provenance record and not resetting the
+view state; and the window works out whether the export control is visible from `state.notices.length > 0`.
+So **any import anywhere in the suite leaves that control visible for every window opened afterwards** —
+and `P1-T45`'s test asserting it is hidden before any run depends on being first in the whole suite, which
+the new file broke by sorting before it alphabetically. The failing test's own comment had already admitted
+the dependency. The agent **restored** it inside its own file — one empty search in teardown, because the
+run starter publishes an empty notice list at the start of every run — and said plainly that **this is a
+restore, not a fix**: the check has to be made order-independent, which is the published boolean `plan/00`
+§6 item 21 already asks for. **The confirming live run was deliberately not made**, because re-running the
+live fetch for a greener report is what the card prohibits; the restore was confirmed on the identical
+offline path.
+
+**The export button still has not been pressed, and the agent did the next best thing instead.** Permission
+to control the application was **requested and denied**, so the press did not happen — and the agent
+reported that rather than asking anyone to do it for it. What it did instead was **remove the main
+suspicion by reading the shipped platform source**: `P1-T45` had flagged that nothing could reach the
+branch on the picker's return code. That branch was checked against Zotero 10.0.3's own file-picker module,
+extracted from the installed binary: the module declares the three return codes, resolves with one of them,
+and returns the chosen file as a string, and **the product's branch is written the right way round.** Three
+further details check out, including that the suggested-filename property is write-only in practice, which
+matches `P1-T45`'s Windows finding. **So what remains unwitnessed is narrower than before: that Windows
+draws the dialog at all, and that the file-type filter and default extension behave.**
+
+**Six findings, none fixed, each written as proposed card text — and one of them has a deadline.**
+**Finding C**: the source registry still has no removal, so a test needing a stand-in source squats on a
+spare source name for the life of the process. **Two test files now do this, on `crossref` and
+`europepmc`, and Phase 2 ships real adapters for both** — at which point neither registration succeeds and
+both files break. `P1-T35` raised this as tidiness; it now has to land **before the first Phase 2 adapter
+card**. **Finding A**: `Tools ▸ Research Helper` still shows `Create spike item (P0-T10)` beside
+`Search & Import…` — it works, so the letter of "nothing half-built is reachable from a menu" holds, but a
+developer command labelled with an internal task number is visible to every user, and **no card retires
+it**. **Finding D**: the schema checker now exists **three times**, because none of the three copies can
+import another.
+
+**Finding E is mine and it is rule 8 again, in the oldest card text in this phase.** This card's `Notes` and
+`Do` step 2 both tell the agent to write the batch-size answer back into `docs/07` §7.2's unverified
+marker. **That marker was closed on 2026-10-01 by `P1-T14`** and `docs/07:2196` has read "MEASURED … Ship
+50" ever since. So nothing needed writing back, and `docs/07` was correctly not edited. Both places are
+corrected above. The agent also found that §7.2's claim that batch size 25 "costs **47 %** more for
+nothing" is a **single-run figure**: across four runs here the penalty was **7 % to 25 %**, never 47. The
+direction holds and "ship 50" is unaffected, but the size does not reproduce — and §7.2 does not say how
+many runs it rests on.
+
+**Finding F was mine too, and the fix is a tool rather than a correction.** `plan/00`'s header counts were
+stale — 133 tasks against 137, Phase 1 at 34 of 42 against 37 of 46 — **in a sentence I had written four
+days earlier claiming the counts are "re-derived from the cards' `State` rows, never incremented by hand".**
+Measuring further found worse: §4's tables are **derived** per §7, and nobody had re-derived them —
+**Phase 1's table held 23 of its 46 cards, Phase 2's 18 of 25, Phase 0's 33 of 35, and Phase 1's `DONE`
+ticks had never been applied at all.** So the rule existed and could not be run. It is now
+`npm run index:derive` (`scripts/derive-task-index.ts`), which rebuilds all four tables and every figure in
+that header from the cards, refuses to empty a table, and **fails loudly when a pattern stops matching**
+rather than leaving a stale number. Run against the hand-corrected file it reproduced the tables exactly,
+which is how the tool was checked.
+
+**One methodological note worth keeping, because it was mine.** My first version of the table checker
+reported that Phase 0's index table was missing **33 of its 35 cards**. It was missing two: the pattern
+required the card id at the start of the cell, and a `DONE` row carries a tick before it. **A checker that
+is wrong in the alarming direction wastes exactly as much time as one that is wrong in the quiet
+direction**, and the only reason it cost nothing here is that the number was implausible enough to check.
+
+**What was not checked.** Nobody looked at the window, and nobody read a single one of the 100 real papers'
+titles, authors or dates against the service. No cold Zotero start, no figure without the debugger, no large
+library (the practice library held a few hundred against the release checklist's ~10,000), no real loss of
+network, one operating system, and no confirming live run after finding B's restore.
+
+**Cleanup.** Every item was created in the **practice profile** only, which is what the owner's answer to
+`G-15` requires, and the runs reported `cleanup erased 203 item(s) and 2 collection(s)` for the live run and
+`101 item(s) and 1 collection(s)` for the offline ones. The developer profile was started once and no search
+was run in it.
+
+**What a person must do before this phase can be signed**, and the agent's own recommendation is **do not
+sign yet** — not because anything failed, but because of these two:
+
+1. **Press the export control once and watch Windows draw the save dialog**, confirming that saving writes a
+   file and that cancelling writes nothing and says nothing.
+2. **Run the card's `Verify with` chain once with the live switch on and confirm it is green** — four
+   requests — which closes finding B's collateral failure.
+
+Then the manual checklist rows that need a person (the hand install, the uninstall-and-survive check, five
+switch cycles, a look at real paper metadata), the decision whether the live test stays behind its
+environment switch, and which of findings A to F become cards.
 
 ---
 

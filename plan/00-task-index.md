@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-08 · **133 tasks: 71 `DONE`, 62 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **34 of 42 `DONE`**, Phase 2 **3 of 25**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 133, so 35 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-12 · **137 tasks: 74 `DONE`, 63 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **37 of 46 `DONE`**, Phase 2 **3 of 25**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 137, so 39 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -126,19 +126,21 @@ column means the card cannot complete without a human — read
 | ✅ `P0-T18` | `getStructuredDocumentText` and IMRaD feasibility | `P0-T08` | 0.5 d | 🔒 |
 | ✅ `P0-T19` | Read Zotero's existing full-text index from a plugin | `P0-T18` | 0.75 d |  |
 | ✅ `P0-T20` | Create 100 Zotero items in one transaction within NFR-1 | `P0-T10` | 0.5 d |  |
-| `P0-T21` | Measure abstract availability across the seven sources | `P0-T08` | 0.5 d |  |
-| ✅ `P0-T22` | Measure S2 throttling and submit the key application | — | 0.25 d + external wait | 🔒 |
+| ✅ `P0-T21` | Measure abstract availability across the seven sources | `P0-T08` | 0.5 d |  |
+| ✅ `P0-T22` | Measure S2 throttling and submit the key application | — | 0.25 d | 🔒 |
 | ✅ `P0-T23` | OS keystore and preference round-trip | `P0-T08` | 0.5 d |  |
 | ✅ `P0-T24` | Fluent localization with an `en-US` and `ko-KR` bundle | `P0-T08`, `P0-T10`, `P0-T32` | 0.5 d |  |
 | ✅ `P0-T25` | Gemini TTS Korean quality spike | `P0-T15` | 1.0 d | 🔒 |
 | ✅ `P0-T26` | Binary/audio response handling and attachment | `P0-T25` | 0.5 d |  |
 | ✅ `P0-T27` | `update.json` delivery dry run | `P0-T09`, `P0-T14` | 0.5 d | 🔒 |
+| ✅ `P0-T28` | Write and commit the Phase 0 spike report | `P0-T14`, `P0-T15`, `P0-T16`, `P0-T17`, `P0-T18`, `P0-T19`, `P0-T20`, `P0-T21`, `P0-T22`, `P0-T23`, `P0-T24`, `P0-T25`, `P0-T26`, `P0-T27` | 0.5 d | 🔒 |
 | ✅ `P0-T29` | Pin line endings with `.gitattributes` | `P0-T01` | 0.25 d |  |
 | ✅ `P0-T30` | Create the plugin icon assets | `P0-T04` | 0.25 d |  |
 | ✅ `P0-T31` | Make unscoped platform registration a lint error | `P0-T07` | 0.25 d |  |
 | ✅ `P0-T32` | Make the plugin's Fluent messages actually resolve | `P0-T10` | 0.5 d |  |
 | ✅ `P0-T33` | Stop constructing `ZoteroToolkit`, which leaks on every cycle | `P0-T32` | 0.5 d |  |
-| `P0-T28` | Write and commit the Phase 0 spike report | `P0-T14`, `P0-T15`, `P0-T16`, `P0-T17`, `P0-T18`, `P0-T19`, `P0-T20`, `P0-T21`, `P0-T22`, `P0-T23`, `P0-T24`, `P0-T25`, `P0-T26`, `P0-T27` | 0.5 d | 🔒 |
+| ✅ `P0-T34` | Narrow `build.assets` so the XPI ships only what a user needs | `P0-T30` | 0.25 d |  |
+| `P0-T35` | Re-probe cancellation with the abort fired after the first… | `P0-T17` | 0.25 d |  |
 
 **Nine of Phase 0's 35 cards carry a gate**, not fourteen: `P0-T08`, `P0-T09`,
 `P0-T11`, `P0-T15`, `P0-T18`, `P0-T22`, `P0-T25`, `P0-T27`, `P0-T28`. An earlier
@@ -158,29 +160,52 @@ uses a synthetic API-key-shaped string, never a real key.
 
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
-| `P1-T01` | Declare the canonical model and identifier normalizers | — | 0.75 d |  |
-| `P1-T02` | Core primitives: cancellation, clock, errors, logger | `P1-T01` | 1.0 d |  |
-| `P1-T03` | Typed preference schema, `PrefStore` port, `prefs.js` rows | `P1-T02` | 0.75 d |  |
-| `P1-T04` | Per-host token-bucket rate limiter and backoff | `P1-T02`, `P1-T03` | 1.0 d |  |
-| `P1-T05` | HTTP client over `Zotero.HTTP.request` | `P1-T02`, `P1-T03`, `P1-T04` | 1.0 d |  |
-| `P1-T06` | Tier-1 `SecretStore` for the NCBI key | `P1-T03` | 0.5 d | 🔒 |
-| `P1-T07` | `LiteratureSource` contract and the source registry | `P1-T01` | 0.5 d |  |
-| `P1-T08` | PubMed query builder | `P1-T07` | 0.75 d |  |
-| `P1-T09` | PubMed adapter: `esearch` → `efetch` | `P1-T05`, `P1-T06`, `P1-T07`, `P1-T08` | 1.25 d |  |
-| `P1-T10` | PubMed XML → `SourceRecord` mapper | `P1-T01`, `P1-T09` | 1.25 d |  |
-| `P1-T11` | Contract-test harness and PubMed fixtures | `P1-T05`, `P1-T09`, `P1-T10` | 0.75 d |  |
-| `P1-T12` | `CanonicalWork` → Zotero item JSON and the `extra` rules | `P1-T01` | 1.0 d |  |
-| `P1-T13` | Existing-item detection by DOI and PMID | `P1-T01`, `P1-T12` | 0.5 d |  |
-| `P1-T14` | Batched importer and collection operations | `P1-T12`, `P1-T13` | 1.0 d |  |
-| `P1-T15` | `ProgressReporter` and its Zotero surfaces | `P1-T02` | 0.5 d |  |
-| `P1-T16` | `searchImport` pipeline | `P1-T09`, `P1-T10`, `P1-T14`, `P1-T15`, `P1-T07` | 1.0 d |  |
-| `P1-T17` | Provenance record, note writer and JSON export | `P1-T09`, `P1-T14` | 0.75 d |  |
-| `P1-T18` | Localization scaffolding for the Phase 1 strings | `P1-T02` | 0.5 d | 🔒 |
-| `P1-T19` | Menu entry points and the window opener | `P1-T18` | 0.5 d |  |
-| `P1-T20` | Search & Import window: markup and controls | `P1-T03`, `P1-T07`, `P1-T19` | 1.0 d |  |
-| `P1-T21` | Result table, selection and filtering | `P1-T20` | 0.75 d |  |
-| `P1-T22` | Wire search, import, progress, cancellation, five states | `P1-T16`, `P1-T17`, `P1-T21` | 0.75 d |  |
-| `P1-T23` | Phase 1 definition-of-done run | `P1-T11`, `P1-T22` | 1.0 d | 🔒 |
+| ✅ `P1-T01` | Declare the canonical model and identifier normalizers | — | 0.75 d |  |
+| ✅ `P1-T02` | Core primitives: cancellation, clock, errors, logger | `P1-T01` | 1.0 d |  |
+| ✅ `P1-T03` | Typed preference schema, `PrefStore` port, `prefs.js` rows | `P1-T02` | 0.75 d |  |
+| ✅ `P1-T04` | Per-host token-bucket rate limiter and backoff | `P1-T02`, `P1-T03` | 1.0 d |  |
+| ✅ `P1-T05` | HTTP client over `Zotero.HTTP.request` | `P1-T02`, `P1-T03`, `P1-T04` | 1.0 d |  |
+| ✅ `P1-T06` | Tier-1 `SecretStore` for the NCBI key | `P1-T03` | 0.5 d | 🔒 |
+| ✅ `P1-T07` | `LiteratureSource` contract and the source registry | `P1-T01`, `P1-T02` (added 2026-09-30 — `docs/07` §4.2 imports `CancellationToken` and `ProgressReporter`, both `P1-T02`'s) | 0.5 d |  |
+| ✅ `P1-T08` | PubMed query builder | `P1-T07` | 0.75 d |  |
+| ✅ `P1-T09` | PubMed adapter: `esearch` → `efetch` | `P1-T05`, `P1-T06`, `P1-T07`, `P1-T08` | 1.25 d |  |
+| ✅ `P1-T10` | PubMed XML → `SourceRecord` mapper | `P1-T01`, `P1-T09` | 1.25 d |  |
+| ✅ `P1-T11` | Contract-test harness and PubMed fixtures | `P1-T05`, `P1-T09`, `P1-T10` | 0.75 d |  |
+| ✅ `P1-T12` | `CanonicalWork` → Zotero item JSON and the `extra` rules | `P1-T01`, `P1-T02` (added 2026-09-30 — the `Notes` require `throw new ZoteroApiError(...)` for the preprint gap, and `docs/07` §10.1's hierarchy is `P1-T02`'s `src/core/errors.ts`) | 1.0 d |  |
+| ✅ `P1-T13` | Existing-item detection by DOI and PMID | `P1-T01`, `P1-T12` | 0.5 d |  |
+| ✅ `P1-T14` | Batched importer and collection operations | `P1-T12`, `P1-T13` | 1.0 d |  |
+| ✅ `P1-T15` | `ProgressReporter` and its Zotero surfaces | `P1-T02` | 0.5 d |  |
+| ✅ `P1-T16` | `searchImport` pipeline | `P1-T07`, `P1-T09`, `P1-T10`, `P1-T14`, `P1-T15`, `P1-T25`, `P1-T31` | 1.0 d |  |
+| ✅ `P1-T17` | Provenance record, note writer and JSON export | `P1-T09`, `P1-T14` | 0.75 d |  |
+| ✅ `P1-T18` | Localization scaffolding for the Phase 1 strings | `P1-T02` | 0.5 d | 🔒 |
+| ✅ `P1-T19` | Menu entry points and the window opener | `P1-T18`, `P1-T25` (added 2026-10-01 — `P1-T25` wired `installServices()` into this card's own file) | 0.5 d |  |
+| ✅ `P1-T20` | Search & Import window: markup and controls | `P1-T03`, `P1-T07`, `P1-T19` | 1.0 d |  |
+| ✅ `P1-T21` | Result table, selection and filtering | `P1-T20` | 0.75 d |  |
+| ✅ `P1-T22` | Wire search, import, progress, cancellation, five states | `P1-T16`, `P1-T17`, `P1-T21` | 0.75 d |  |
+| `P1-T23` | Phase 1 definition-of-done run | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35`, `P1-T36`, `P1-T45`, `P1-T46` | 1.0 d | 🔒 |
+| ✅ `P1-T24` | Retire the `P0-T10` spike surface from `itemMapper.ts` | `P1-T12` | 0.25 d |  |
+| ✅ `P1-T25` | Composition root: construct the HTTP client, limiters and… | `P1-T04`, `P1-T05`, `P1-T15` | 1.0 d |  |
+| ✅ `P1-T26` | Collapse the duplicate `Retry-After` parser and drive… | `P1-T04`, `P1-T05` | 0.5 d |  |
+| ✅ `P1-T27` | Give the concurrency cap an owner, or remove it from the… | `P1-T04`, `P1-T05` | 0.5 d |  |
+| ✅ `P1-T28` | Settle §7.3's retry numbers, and wire them | `P1-T05` | 0.25 d | 🔒 |
+| ✅ `P1-T29` | Verify the `ProgressWindow` / `ItemProgress` signatures… | `P1-T15` | 0.25 d |  |
+| ✅ `P1-T30` | Turn on `fluent.dts` and make one source of truth for message… | `P1-T18` | 0.25 d |  |
+| ✅ `P1-T31` | Make a progress reporter usable for more than one job | `P1-T15`, `P1-T25` | 0.5 d |  |
+| ✅ `P1-T32` | The four platform seams the composition root could not reach | `P1-T25` | 0.5 d |  |
+| ✅ `P1-T33` | Retire one of the two headline ids, and record which surface… | `P1-T32` | 0.25 d |  |
+| ✅ `P1-T34` | Three corpus statements measured false, corrected at the… | `P1-T19`, `P1-T32` | 0.25 d |  |
+| ✅ `P1-T35` | Publish the search window's host, so the window stops… | `P1-T16`, `P1-T17`, `P1-T22` | 0.5 d |  |
+| ✅ `P1-T36` | FR-8's "Export provenance as JSON" control, and the record it… | `P1-T22`, `P1-T35` | 0.5 d |  |
+| `P1-T37` | Carry a named, redacted subset of an error's context, so the… | `P1-T22` | 0.5 d |  |
+| `P1-T38` | The three validation sentences nobody declared, and the… | `P1-T22` | 0.25 d |  |
+| `P1-T39` | A unit-test path for the search window's view model, whose… | `P1-T22` | 0.5 d |  |
+| `P1-T40` | A partition assertion over `src/i18n/keys.ts` at unit speed… | `P1-T30`, `P1-T33` | 0.25 d |  |
+| `P1-T41` | `P3-T02` tells its implementer to call a method that does not… | — | 0.5 d |  |
+| `P1-T42` | The free-text redactor cannot see a short unprefixed… | — | 0.5 d |  |
+| `P1-T43` | Stop hiding already-present papers, and carry the duplicate… | `P1-T21`, `P1-T22` | 0.5 d |  |
+| `P1-T44` | A place to put a key, because the storage landed in Phase 1… | — | 1.0 d |  |
+| ✅ `P1-T45` | The export control, its three strings and the file chooser… | `P1-T36` | 0.5 d | 🔒 |
+| ✅ `P1-T46` | Stop three tests waiting on text the run has already… | `P1-T45` | 0.5 d |  |
 
 ### Phase 2
 
@@ -188,11 +213,11 @@ uses a synthetic API-key-shaped string, never a real key.
 |---|---|---|---|---|
 | `P2-T01` | Ship the user-query parser and per-source render contract | `P1-T07`, `P1-T08` | 1.0 d |  |
 | `P2-T02` | Parallel fan-out: per-source timeouts, failure isolation | `P1-T04`, `P1-T07`, `P1-T16` | 1.25 d |  |
-| `P2-T03` | Europe PMC adapter | `P2-T01` | 2.0 d |  |
-| `P2-T04` | Crossref adapter | `P2-T01` | 1.5 d |  |
-| `P2-T05` | Semantic Scholar adapter with unauthenticated degradation | `P2-T01` | 2.0 d | 🔒 |
-| `P2-T06` | arXiv adapter | `P2-T01` | 1.25 d |  |
-| `P2-T07` | bioRxiv / medRxiv adapter (ID lookup and cross-walk only) | `P2-T01`, `P2-T03` | 1.5 d |  |
+| `P2-T03` | Europe PMC adapter | `P2-T01`, `P2-T23`, `P2-T25` | 2.0 d |  |
+| `P2-T04` | Crossref adapter | `P2-T01`, `P2-T21`, `P2-T25` | 1.5 d |  |
+| `P2-T05` | Semantic Scholar adapter with unauthenticated degradation | `P1-T27`, `P2-T01`, `P2-T25` | 2.0 d | 🔒 |
+| `P2-T06` | arXiv adapter | `P2-T01`, `P2-T25` | 1.25 d |  |
+| `P2-T07` | bioRxiv / medRxiv adapter (ID lookup and cross-walk only) | `P2-T01`, `P2-T03`, `P2-T25` | 1.5 d |  |
 | `P2-T08` | `preprint` item-type mapping and server attribution | `P2-T03`, `P2-T06`, `P2-T07` | 1.0 d |  |
 | `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
 | `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
@@ -200,17 +225,24 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10` | 0.75 d |  |
 | `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11` | 2.0 d | 🔒 |
 | `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10` | 1.5 d |  |
-| `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d (recording the closed decision and wiring the guard; there is no adapter to build) |  |
-| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18` | 1.0 d |  |
-| `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14` | 1.5 d |  |
+| `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
 | `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
+| `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
+| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18` | 1.0 d |  |
+| `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
+| `P2-T20` | Render `languages`, `openAccessOnly` and `raw` across the… | `P1-T08` | 0.5 d |  |
+| ✅ `P2-T21` | Make the concurrency cap resizable, so a tightened header… | `P1-T27`, `P1-T26` | 0.5 d |  |
+| ✅ `P2-T22` | Declare the menu-context member `docs/08` mandates and… | `P1-T19` | 0.25 d |  |
+| ✅ `P2-T23` | Give `hostLimiter.ts` the test file two cards already invoke | `P1-T26` | 0.25 d |  |
+| `P2-T24` | Correct the three statements `P2-T21` made false, including… | `P2-T21` | 0.25 d |  |
+| `P2-T25` | Make the fixture replay harness usable inside Zotero, so six… | `P1-T11` | 0.75 d |  |
 
 ### Phase 3
 
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
 | `P3-T01` | Secret wrapper and unconditional log redaction | — | 0.5 d |  |
-| `P3-T02` | `SecretStore` tier 1 — OS keychain via `Services.logins` | `P3-T01` | 0.75 d |  |
+| `P3-T02` | `SecretStore` tier 1 — OS keychain via `Services.logins` | `P3-T01`, `P1-T41` | 0.75 d |  |
 | `P3-T03` | Tier ladder — session-only and passphrase, no tier 4 | `P3-T02` | 0.75 d |  |
 | `P3-T04` | Prefs pane: key fields, backend badge, remove-all | `P3-T02`, `P3-T03` | 1.75 d | 🔒 |
 | `P3-T05` | LLM error taxonomy and the retry/backoff policy | `P3-T01` | 0.5 d |  |
@@ -490,7 +522,137 @@ nothing at all, because ranking them without an owner's input would be a decisio
     `P1-T46` — **and** a plausible contributor to item 23. Making them update in place needs
     `addon/content/searchDialog.js`.
 
+### 6.5 Raised by `P1-T23`, 2026-10-12 — the definition-of-done run
+
+**The figures first, because they are the deliverable.** Measured against a real Zotero **10.0.3** on
+Windows, through the host the plugin publishes at startup, with the Browser Toolbox attached (so every
+figure is a **ceiling**, not a best case — `zotero-plugin.config.ts:196`, re-verified in the installed
+scaffold's own source at `:3737` and `:3934`). Full evidence in
+[`docs/spikes/phase-1-dod.md`](../docs/spikes/phase-1-dod.md); **no state is set here, and §1's counts are
+not touched.**
+
+| figure | requirement | measured, 4 runs |
+|---|---|---|
+| `NFR-1` — 100 pre-fetched records to "collection contains 100" | ≤ 10,000 ms, target 6,000 | **441 / 456 / 621 / 624 ms** |
+| `NFR-3` — longest main-window gap during that import | ≤ 100 ms per task | **38 / 50 / 52 / 54 ms**, 0 gaps over 100 ms |
+| `NFR-10` — the plugin's own startup work | ≤ 200 ms | **10 / 13 / 14 / 16 ms** |
+| `NFR-10` — HTTP requests at startup | none | **0**, with a control window in which the plugin was disabled |
+| `FR-10` — cancel mid-fetch to stopped | ≤ 2,000 ms | **121 / 123 / 128 / 153 ms**, and 0 `item`/`collection` notifier events |
+| `R-17` — abstract coverage on a real PubMed query | measure it | **99 % (99 of 100)**, and the plugin's own published figure agrees |
+| `R-16` / `docs/07` §7.2 — write chunk | the shipped 50 | **50**, 2 transactions for 100 records, ~256–441 ms then ~180–200 ms |
+
+**`docs/07` §7.2's chunk-size question did not need answering — `:2196` has read "MEASURED 2026-10-01
+(`P1-T14`) … Ship 50" since 2026-10-01, which this card's `Notes` had not noticed (item 29).** What the
+four runs add is **four independent reproductions of a table `docs/07` records from one run**, and they
+confirm it: throughput is **flat** from 25 to 200 per transaction (730–1188 ms for 200 records, with no
+ordering that survives four runs); what chunk size changes is the **slowest single transaction**, which
+grows roughly linearly — ~200 ms at 25, ~280 at 50, ~430 at 100, ~900 at 200; and the **main window's
+longest gap never exceeded 59 ms at any chunk size**, not even behind a single 1,173 ms transaction, so a
+long `executeTransaction` is not one long main-thread task, exactly as §7.2 says citing `P0-T20`. **Ship
+50 stands.** One correction: §7.2's "25 costs **47 %** more for nothing" is a single-run figure; four runs
+put the penalty at **7–25 %**, which changes the number and not the conclusion. The live acceptance run
+spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s limiter.
+
+25. **A developer spike command ships in the Tools menu.** `Tools ▸ Research Helper` shows
+    **`Create spike item (P0-T10)`** beside `Search & Import…`. It works, so it does not breach
+    `docs/11` §0 principle 5 on the letter, but it is a developer artefact labelled with an internal task
+    ID and visible in a release. `plan/01-phase-0-toolchain-spike.md:3355` calls the id "deliberate and
+    permanent while the spike command exists" and **no card retires the command**. Retiring it means
+    rewriting two integration assertions: `l10n.spec.ts`'s `ko-KR` fallback check is built on that id, and
+    `lifecycle.spec.ts` counts menu items by it.
+
+26. **`searchDialog-flow.spec.ts`'s `P1-T45: the export control is hidden before any run` depends on being
+    the first thing in the suite to touch the published host** — and the live acceptance run broke it,
+    `expected false to be true`. Three shipped decisions meet: the view model is application-scoped;
+    `P1-T36` deliberately left `connect()` not clearing the retained record and not resetting the view
+    state; and the document derives visibility from `state.notices.length > 0`. So **any** import anywhere
+    in the suite reveals the control for every later window. `phase1-dod.spec.ts` restores the precondition
+    in its own `after()` with one empty search — `runJob` publishes `notices: []` at the **start** of every
+    run, `searchImportViewModel.ts:1318` — but that is a restore, not a fix. The fix is a test over a fresh
+    view model, or the published boolean item 21 already asks for.
+
+27. **`SourceRegistry` has no unregister, and that now has a deadline.** A spec needing a stub must take a
+    spare `SourceId` and leave it in the application-wide registry for the process. Two specs now do:
+    `searchDialog-flow.spec.ts` takes `crossref`, `phase1-dod.spec.ts` takes `europepmc`. **Phase 2 ships
+    adapters for both**, at which point neither registration succeeds and both specs break. `P1-T35` raised
+    the seam as tidiness; it must now land **before the first Phase 2 adapter card**.
+
+28. **The provenance schema validator exists three times**, ~200 lines each, in
+    `test/unit/core/provenance.test.ts`, `test/integration/searchDialog-flow.spec.ts` and now
+    `test/integration/phase1-dod.spec.ts`. None can import another: the unit copy needs `vitest` and
+    `node:fs`, which the Zotero sandbox lacks, and each integration spec is bundled alone. `P1-T36` asked
+    for the shared helper; the shape that works is a module under `test/support/` that imports **nothing**.
+
+29. **`P1-T23`'s own `Notes` and `Do` step 2 ask for work that was finished eleven days earlier.** Both
+    (`plan/02-phase-1-pubmed.md:4696–4698` and step 2) say to write the chunk-size answer back into
+    `docs/07` §7.2's "unverified note". **`docs/07-architecture-and-data-model.md:2196` has read "Chunk
+    size: MEASURED 2026-10-01 (`P1-T14`), this half of the marker is closed. Ship 50." since
+    2026-10-01**, sweep table included; the only `> **Unverified:**` left in §7.2 is `:2219`'s
+    `Zotero.Notifier` suppression, which `P1-T14` deliberately did not implement. So nothing needed
+    writing back and `docs/07` was not edited. The card is: correct the `Notes` and step 2, and soften
+    §7.2's "**25 costs 47 % more for nothing**" — a single-run figure that four further runs put at
+    **7–25 %** — while naming how many runs each figure rests on. `plan/README.md` §5 rule 8 again, and
+    this time the claim was not even grepped.
+
+30. **Four counts in this file's own header are stale**, re-derived from the cards' `State` rows on
+    2026-10-12: the header says **133 tasks, 71 `DONE`, 62 `TODO`** and "Phase 1 is 34 of 42"; the cards say
+    **137 tasks** (35 + 46 + 25 + 31, which is what §1's own table already prints), **74 `DONE`, 63
+    `TODO`**, and Phase 1 at **37 of 46**. §4's Phase 1 table is stale in two further ways: it stops at
+    `P1-T23`, omitting `P1-T24`–`P1-T45`, and `P1-T23`'s `Depends on` cell reads `P1-T11, P1-T22` where the
+    card reads `P1-T11, P1-T22, P1-T28, P1-T35, P1-T36, P1-T45, P1-T46`. **Not corrected here**: every one
+    of those figures is derived from a `State`, and `P1-T23`'s `Files` row permits the measured figures and
+    never a state. §7's regeneration is the card.
+
+### 6.5 Raised by `P1-T23`, the phase acceptance run, 2026-10-12
+
+**All five finishing conditions passed.** Nothing below is a failed condition; they are the things the
+run found on the way, and none was fixed.
+
+25. **The source registry still has no removal, and that now has a deadline.** A test needing a
+    stand-in source must take a spare source name and leave it in the application-wide registry for
+    the life of the process, because the registry throws on a duplicate and declares no removal.
+    **Two test files now do this** — `searchDialog-flow.spec.ts` on `crossref` and
+    `phase1-dod.spec.ts` on `europepmc` — **and Phase 2 ships real adapters for both names**, at
+    which point neither registration succeeds and both files break. `P1-T35` raised this as tidiness;
+    **it must land before the first Phase 2 adapter card.** Needs `src/sources/registry.ts` and the
+    two test files.
+
+26. **A developer command ships in the Tools menu.** `Tools ▸ Research Helper` shows
+    **`Create spike item (P0-T10)`** beside `Search & Import…`. It works, so the letter of "nothing
+    half-built is reachable from a menu" holds, but a developer command labelled with an internal task
+    number is visible to every user and **no card retires it**. The card must choose: retire it, hide it
+    behind a developer setting, or keep it and record why a release ships it. Retiring it means
+    rewriting two integration checks, because one is built on that message identifier and another
+    counts menu entries by it.
+
+27. **One test depends on being first in the whole suite, and the dependency is now broken.** Three
+    shipped decisions meet: the view model is built once at application start, `P1-T36` deliberately
+    left `connect()` not clearing the retained record or resetting the view state, and the window
+    derives the export control's visibility from `state.notices.length > 0`. **So any import anywhere
+    in the suite leaves that control visible for every window opened afterwards.** `P1-T23` restored
+    it inside its own file and said plainly that **a restore is not a fix**: the check has to be made
+    order-independent, which **item 21's published boolean would do**. Treat 21 and 27 as one card.
+
+28. **The provenance schema checker now exists three times** — about 200 lines each in the unit tests
+    and in two integration specs — because none of the three can import another: the unit copy needs
+    the test framework and Node's file system, neither of which exists inside Zotero, and each
+    integration spec is bundled on its own. `P1-T36` already asked for the shared helper. The shape
+    that works is one module under `test/support/` that imports **nothing**.
+
+29. **`docs/07` §7.2's "25 costs 47 % more" is a one-run figure that does not reproduce.** Four runs in
+    `P1-T23` put the penalty at **7 % to 25 %**. The direction holds and "ship 50" is unaffected, and
+    §7.2's other two statements reproduced exactly four times. The card is: state how many runs each
+    figure rests on, which is the habit every stale number in this plan has lacked.
+
 ## 7. Regenerating this file
+
+**Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
+was not: `P1-T23`'s report found the header counts stale, and measuring further found §4's tables
+stale too — **Phase 1's held 23 of its 46 cards, Phase 2's 18 of 25, Phase 0's 33 of 35, and Phase 1's
+`DONE` ticks had never been applied at all.** `scripts/derive-task-index.ts` rebuilds all four tables
+and every figure in §1's header from the cards, refuses to empty a table, and **fails loudly when one
+of its patterns stops matching** rather than leaving a stale number behind. Checked against a
+hand-corrected file, it reproduced the tables exactly.
 
 The tables in §4 are derived from the cards' `ID`, `Depends on`, `Estimate` and
 `Human gate` rows. After editing any card, re-derive them and re-run the
