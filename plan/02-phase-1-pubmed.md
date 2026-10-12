@@ -7066,7 +7066,7 @@ when a window is closed and reopened, and whether a library-index rebuild belong
 | Field | Value |
 |---|---|
 | **ID** | `P1-T36` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-12; the provenance record now survives the run that made it, and the export writes a schema-valid file. Five of six criteria passed and the sixth was **reported rather than adjusted**: the control needed two files outside this card's list, proven by appending one probe message and watching the type check fail. Three mutations were classified as unbreakable-alone instead of being counted as coverage. |
 | **Depends on** | `P1-T22`, `P1-T35` |
 | **Blocks** | `P1-T23`, `P1-T45` |
 | **Retires** | none |
@@ -8277,7 +8277,7 @@ failure path as well as the success path.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T45` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-12; **Phase 1's completion criterion 4 is closed.** The chooser question was settled by reading the installed Zotero binary rather than a document, and the three message ids were deliberately left off the argument map so a later card **cannot compile** an attempt to interpolate the file path. One thing is still owed to a person: a native save dialog hangs the test runner, so **nobody has watched the operating system draw it.** |
 | **Depends on** | `P1-T36` |
 | **Blocks** | `P1-T23`, `P1-T46` |
 | **Retires** | nothing |
