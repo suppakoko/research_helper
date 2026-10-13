@@ -681,6 +681,23 @@ byte**: this card adds a test file and no production code), integration 105 →
 
 ## 8. What a human must do before this phase can be signed
 
+> **Item 2 is done. Confirmed 2026-10-13 by the coordinator, with the owner's permission to make a
+> second live run** — the card prohibits repeating a live search to get a number, and closing a known
+> collateral failure is a different purpose, so the owner was asked and said yes.
+>
+> The whole `Verify with` chain was run with `RH_DOD_LIVE=1`: style 0, types 0, **1,234 unit**, **28
+> contract**, build 0, and the integration suite **109 passed, 0 failed** — one more than the offline 108,
+> which is the live test running instead of pending. **Finding B's collateral failure is closed.**
+>
+> What the run reported of itself: Zotero **10.0.3** on Windows, Gecko **140.15.0**; **100 records from
+> PubMed in 1,983 ms**; import of 100 in **1,211 ms with the network included, so not an NFR-1 figure**;
+> abstract coverage **99 of 100**, agreeing with the plugin's own published figure; the re-run recognised
+> **100 of 100** as already present; and **12 HTTP requests in total, 4 of them to NCBI** — which is the
+> four the earlier report predicted, and the eight others belong to other tests in the suite.
+>
+> **So one thing is left for a person before signing: item 1, the one press of the export control.** The
+> rows in item 3 remain, and items 4 and 5 are decisions rather than work.
+
 1. **Press the export button once and watch Windows draw the save dialog.** Open
    the Search & Import window, run a search, import, press the export control,
    and confirm that the dialog appears, that saving writes a file and that

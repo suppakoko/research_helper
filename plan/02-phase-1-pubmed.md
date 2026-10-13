@@ -4829,8 +4829,13 @@ sign yet** — not because anything failed, but because of these two:
 
 1. **Press the export control once and watch Windows draw the save dialog**, confirming that saving writes a
    file and that cancelling writes nothing and says nothing.
-2. **Run the card's `Verify with` chain once with the live switch on and confirm it is green** — four
-   requests — which closes finding B's collateral failure.
+2. ~~**Run the card's `Verify with` chain once with the live switch on and confirm it is green.**~~
+   **Done 2026-10-13 by the coordinator, with the owner's permission for a second live run.** The whole
+   chain ran green and the integration suite read **109 passed, 0 failed** — one more than the offline
+   108, which is the live test running instead of pending. **Finding B's collateral failure is closed.**
+   The run reported **4 requests to NCBI** of 12 in the suite, exactly the four predicted, and
+   re-confirmed the figures: 100 records in 1,983 ms, abstract coverage 99 of 100, and the re-run
+   recognising 100 of 100 as already present.
 
 Then the manual checklist rows that need a person (the hand install, the uninstall-and-survive check, five
 switch cycles, a look at real paper metadata), the decision whether the live test stays behind its
