@@ -8330,7 +8330,7 @@ keyring-library presence check**, and steps 3 and 5 wait on it.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T42` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-13; the 40-character floor stays by measurement (one character lower redacts seven of the plugin's own identifiers), a hexadecimal shape joins it, and the measured key length is finally in `docs/09`. |
 | **Depends on** | none |
 | **Blocks** | none |
 | **Retires** | none |
@@ -8563,7 +8563,7 @@ empty-state headline, still the only way to populate that surface. And the Seman
 | Field | Value |
 |---|---|
 | **ID** | `P1-T43` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-13; all three duplicate outcomes reach the importer and are proven by counts in a real Zotero. The hide-existing flip is an owner-authorised schema change, recorded as `plan/00` §6 item 40. |
 | **Depends on** | `P1-T21`, `P1-T22` |
 | **Blocks** | none |
 | **Retires** | the conflict `P1-T22` escalated |
@@ -8822,7 +8822,7 @@ And the last transient-text wait, in the export test.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T44` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-13; the pane, both key fields, all nine rules, and a key that reached no log, preference, error or note on either path. Report at `plan/reports/P1-T44.md`. |
 | **Depends on** | none |
 | **Blocks** | none |
 | **Retires** | the literature-source half of `P3-T04` |
