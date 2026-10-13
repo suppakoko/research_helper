@@ -667,6 +667,36 @@ run found on the way, and none was fixed.
     rather than removed.** The same decision should settle whether the measured shrinkage — three of
     seven steps landed, two partly — changes `P3-T02`'s 0.75 d estimate.
 
+### 6.7 Raised by `P1-T40`, 2026-10-13
+
+33. **The same gap this card closed, one file further out — and it is the cheaper half.** The agreement
+    between the error keys `src/core/errors.ts` can actually throw and the two lists in
+    `src/i18n/keys.ts` meant to cover them is checked **only** by the integration suite, at
+    Zotero-launch speed. Grepped rather than assumed: `test/unit/core/errors.test.ts` **does not
+    import** `src/i18n/keys.ts` at all, and carries **its own hand-written table of the same 23 keys**
+    as plain strings. So two independent hand-written lists of the same keys sit in two files with
+    nothing fast holding them together: **an error key renamed on one side passes the type check and
+    the whole unit suite**, exactly as the Korean lists did before 2026-10-13. Constructing the error
+    instances needs no Zotero, so the check is cheap. Needs `src/core/errors.ts` read and one test
+    file.
+
+34. **A stale count inside shipped code, and the clean illustration of why counts should not be
+    asserted.** `src/i18n/keys.ts:463` says the two sets are "provably the same **85** ids (84 until
+    `P1-T32` added the progress headline)". The measured declared set is **87**: 85 at writing, minus
+    one when `P1-T33` retired an identifier, plus three from `P1-T45`. **The sentence's claim that
+    the two sets are equal is still correct; only the number is wrong.** One comment, no behaviour
+    change — and worth fixing by **deleting the number** rather than updating it.
+
+35. **A trap for any future automated check of the identifier module.** The exported constant
+    `L10N_EXPORT_TAKES_NO_PATH` is a **sentence of documentation**, and its value begins
+    `"research-helper-search-export-written takes no …"` — **so it starts with the plugin's message
+    prefix.** Verified 2026-10-13. Any future check that decides "which exported string constants are
+    message identifiers" **by testing the prefix** will silently treat a documentation sentence as an
+    identifier. `P1-T40`'s test lists the five real identifier constants by hand for this reason, with
+    the reason beside them. **A rule that looks mechanical and has one deliberate exception is exactly
+    the shape that defeats a later tool** — so either the constant is renamed out of the prefix, or the
+    exception stays written down wherever a tool might look.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

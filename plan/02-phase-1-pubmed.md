@@ -7814,10 +7814,19 @@ the other list, fails in a sub-second unit run instead of in a Zotero launch.
 **Why this is a card.** **Both agents who worked on the identifier lists asked for this**, and the gap has
 a measured shape. Verified 2026-10-07:
 
-- `src/i18n/keys.ts` declares eleven exported lists and constants, among them
-  `MAIN_WINDOW_MESSAGE_IDS` (`:159`), `SEARCH_DIALOG_MESSAGE_IDS` (`:318`), `ERROR_MESSAGE_IDS` (`:463`),
-  `DEFERRED_ERROR_MESSAGE_IDS` (`:495`), `KO_PENDING_REVIEW` (`:526`), `KO_DELIBERATELY_ABSENT` (`:625`),
-  `KO_PRESENT` (`:634`) and `ARGUMENT_MESSAGE_IDS` (`:735`).
+- `src/i18n/keys.ts` exports **nine lists** among its run-time exports, including
+  `MAIN_WINDOW_MESSAGE_IDS`, `SEARCH_DIALOG_MESSAGE_IDS`, `ERROR_MESSAGE_IDS`,
+  `DEFERRED_ERROR_MESSAGE_IDS`, `KO_PENDING_REVIEW`, `KO_DELIBERATELY_ABSENT`, `KO_PRESENT` and
+  `ARGUMENT_MESSAGE_IDS`. **Find each by its `export const <NAME> = [` line, not by a line number.**
+  > **Corrected 2026-10-13 after the executing agent measured it.** This listed a line number for each
+  > name and **six of the eight were stale** — `ERROR_MESSAGE_IDS` 463→497, `DEFERRED_ERROR_MESSAGE_IDS`
+  > 495→529, `KO_PENDING_REVIEW` 526→560, `KO_DELIBERATELY_ABSENT` 625→668, `KO_PRESENT` 634→677,
+  > `ARGUMENT_MESSAGE_IDS` 735→778 — a clean drift of 34 and then 43 lines, which is `P1-T45` adding
+  > three export identifiers and their comments after this card was written. Checked by the
+  > coordinator. **The claim the card rests on stayed true; only the addresses moved**, which is the one
+  > flavour of this defect that grepping at writing time cannot prevent — so the names are now cited
+  > instead. The count was wrong too: the module has **19 run-time exports** (9 arrays, 1 surface map,
+  > 1 function, 8 string constants) and "eleven" matched none of those groupings.
 - The equivalent check exists **only in the integration suite**.
   `test/integration/l10n.spec.ts:611` reasons carefully about which parts of the partition are compile-time
   facts and which are not, and lines 766–807 check the three Korean lists against the **live `ko-KR`
@@ -7884,6 +7893,107 @@ npm run typecheck && npm run lint:check && npm run test
 **Notes.** The value here is entirely in the **speed**: the same class of defect is already caught, and it
 is caught by the one test that costs a Zotero launch, so in practice it is caught late or not at all. Two
 cards reported identifier edits that were torn between lists; both were found by a human reading a diff.
+
+**Findings, 2026-10-13 — eleven named relations over the identifier lists now hold at unit speed, every
+one proven to catch a real break, and the central measurement is reconfirmed for a third time.**
+
+**Verified by the coordinator:** the new file runs **11 tests in 259 ms** on its own, `src/i18n/keys.ts` is
+back to its exact starting bytes (it left the working tree entirely, and `grep -rn MUTANT` over `src`,
+`test`, `addon` and `typings` is clean), and one new file is all that was added.
+
+**The measurement this card rests on, confirmed a third time and by a third agent.** Removing one
+identifier from `KO_PENDING_REVIEW` and putting it nowhere else leaves `npm run typecheck` at **exit 0**.
+That list uses `satisfies`, which constrains what may be *in* it and cannot require that every identifier
+*be* in one. The new check catches it in a quarter of a second **and names the identifier in the failure
+message**, which is criterion 3 exactly as written.
+
+**Eleven relations, and the useful part is which ones were deliberately left out.** Asserted: no list
+repeats an identifier; the two surface lists are disjoint; the surface map and the surface list agree; the
+run-time surface lookup is total on the declared set and empty off it; **the three Korean lists partition
+the declared set**, checked in both directions; those three are pairwise disjoint; the declared set splits
+by prefix into exactly two parts with the error list exactly the error-prefixed part; the deferred error
+keys stay outside both; the argument list is contained in the declared set; the five single-identifier
+constants belong to the list that owns them; and — the guard over the other ten — **the module is asked
+which of its exports are arrays, and the test fails until each one is registered**, so a list added later
+cannot escape the empty-set guard with nobody noticing.
+
+**Left out on purpose, each with a reason**: anything needing a real translation file, which stays with the
+integration suite and was neither deleted nor weakened; facts the compiler already turns into errors; **any
+count**; and one relation that holds today and is required by nothing — all sixteen error keys currently
+sit on `KO_PENDING_REVIEW`, which no document requires, **so asserting it would raise a false alarm the day
+one error message gets Korean text.** That last judgement is the difference between a test that helps and a
+test that nags.
+
+**One exception to "do not assert what the compiler enforces", and it is a good one.** The argument list's
+containment in the declared set *is* asserted, although a chain of compile-time facts implies it, because
+**that chain runs through a generated file the build writes only after the type check runs** — so the chain
+can lag a translation-file edit by one build. The reason is written into the failure message rather than
+left for the next reader to work out.
+
+**Twelve mutations, every one reverted, each attributed to a named check with its real failure text.**
+Three of them trip two checks rather than one, which is unavoidable — an identifier in two lists really
+does break two relations — and the report says which of the two states the relation being demonstrated.
+Every failure message names the offending identifier, which is what makes a failing run actionable rather
+than merely red.
+
+**The empty-set guard is built in three layers, and the agent demonstrated all three.** The lists are
+imported as **values**, so no amount of parsing can yield zero identifiers; every list reaches its
+assertion through a helper that fails first if the list is empty; and the registration check means a future
+list cannot slip past. Emptying one list fired the guard **by name, in the dedicated check and in all three
+other checks that read that list** — and the partition check did **not** pass quietly, because the guard
+runs before the comparison. That is the failure mode this card was written to prevent, demonstrated rather
+than asserted.
+
+**Six of the eight line numbers in this card are stale, and that is mine.** Checked by the coordinator
+against the declaration lines: two are right (159, 318) and six have drifted — 463→**497**, 495→**529**,
+526→**560**, 625→**668**, 634→**677**, 735→**778**. The drift is a clean 34 lines for the first group and
+43 for the second, which is `P1-T45` adding three export identifiers and their comments after this card was
+written. **The card's claim that the gap is real stays true; only the addresses moved** — which is the
+third flavour of the same defect this week, and the one no amount of grepping at writing time prevents.
+Corrected above, and the lesson is to cite declarations by **name** rather than by line.
+
+**A stale count inside shipped code, found and correctly left alone.** `src/i18n/keys.ts:463` says the two
+sets are "provably the same **85** ids (84 until `P1-T32` added the progress headline)". The measured
+declared set is **87**: 85 at writing, minus one when `P1-T33` retired an identifier, plus three from
+`P1-T45`. **The sentence's claim that the two sets are equal is still correct; only the number is wrong**,
+and the file is outside this card's list, so nothing was changed. It is also the cleanest possible
+illustration of why this card forbids asserting a count — now `plan/00` §6 item 34.
+
+**A trap worth more than the card that found it.** The exported constant `L10N_EXPORT_TAKES_NO_PATH` is a
+**sentence of documentation**, and its value begins `"research-helper-search-export-written takes no …"` —
+so **it starts with the plugin's message prefix.** Verified by the coordinator. Any future automated check
+that decides "which exported string constants are message identifiers" by testing the prefix will silently
+treat a documentation sentence as an identifier. The new test therefore lists the five real identifier
+constants by hand and classifies that one separately, with the reason beside it. **A rule that looks
+mechanical and has one deliberate exception is exactly the shape that defeats a later tool.**
+
+**Cross-card arithmetic, again exact.** The unit count moved 1,234 → 1,276, and the agent accounted for all
+of it: **+11 from this card, +31 from the file the parallel agent was writing**, the second measured by
+running that file on its own. Two agents reporting on the same minute both got this right, which is the
+discipline this project had to learn the hard way.
+
+**Needs a card, and it is the same gap one file further out.** The agreement between the error keys
+`src/core/errors.ts` can actually throw and the two lists meant to cover them is checked **only** by the
+integration suite, at Zotero-launch speed. Grepped rather than assumed: `test/unit/core/errors.test.ts`
+does **not** import `src/i18n/keys.ts` at all, and carries **its own hand-written table of the same 23
+keys** as plain strings. **So two independent hand-written lists of the same keys sit in two files with
+nothing fast holding them together** — an error key renamed on one side passes the type check and the whole
+unit suite, exactly as the Korean lists did before today. Constructing the error instances needs no Zotero,
+so the check is cheap. Now `plan/00` §6 item 33. The work was correctly **not** done here, because both
+files are outside this card's one-file list.
+
+**What was not checked.** The integration suite was not run, for two stated reasons: this card's own
+`Verify with` does not include it, and nothing here can move it — but the better reason is the second one
+the agent gave, that **a Zotero launch while two other agents were working would be the process collision
+an earlier card had to recover from.** Nothing was verified against a real translation file; that stays the
+integration suite's job and none of its assertions were removed, weakened or duplicated. The argument map
+was not walked, because a TypeScript interface cannot be enumerated at run time and both directions are
+already compile errors.
+
+**One judgement deliberately left to the owner.** Three of the relations now asserted at unit speed were
+previously asserted **only** inside the integration suite, although all three are pure set arithmetic
+needing no Zotero. Whether those slow copies should now be thinned is **not this card's call**, the agent
+said so plainly, and nothing there was touched.
 
 ---
 
