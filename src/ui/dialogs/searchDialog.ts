@@ -202,6 +202,34 @@ export const SEARCH_WINDOW_API_PROPERTY = "searchWindow";
  */
 export const NEW_COLLECTION_VALUE = "new";
 
+/**
+ * The three values the duplicate-policy radiogroup can hold (`P1-T43`).
+ *
+ * They are the `value` attributes of the three `<radio>` elements under
+ * `#rh-search-duplicates` in `addon/content/searchDialog.xhtml`, which draws
+ * `docs/08` §4.4's "skip | add existing item to collection | import anyway"
+ * control, and nothing else can reach {@link SearchWindowQuery.duplicates}.
+ *
+ * **These are the window's words, not the importer's.** `src/zotero/importer.ts`
+ * spells the same three outcomes `"skip"`, `"link-existing"` and
+ * `"import-anyway"`, and only one of the three pairs coincides. Until `P1-T43`
+ * the member below was typed `string`, so the importer's word compiled in the
+ * window's slot and was then dropped on the floor — `test/integration/phase1-dod.spec.ts`
+ * carried `"link-existing"` there for five days without a complaint. The
+ * mapping between the two vocabularies lives in exactly one place,
+ * `src/ui/viewModels/searchImportViewModel.ts`'s `DUPLICATE_POLICY_BY_CHOICE`,
+ * and is total over this tuple, so a fourth radio added here without a mapping
+ * is a type error rather than a silent fall-back to the importer's default.
+ *
+ * `test/integration/searchDialog-flow.spec.ts` asserts that the live document's
+ * radios carry exactly this set, because the markup is a plain asset nothing
+ * typechecks.
+ */
+export const SEARCH_WINDOW_DUPLICATES = ["skip", "link", "import"] as const;
+
+/** One of {@link SEARCH_WINDOW_DUPLICATES}. */
+export type SearchWindowDuplicates = (typeof SEARCH_WINDOW_DUPLICATES)[number];
+
 /** One author, as the document's `logic.authorName` accepts them. */
 export interface SearchWindowAuthor {
   readonly family?: string;
@@ -254,7 +282,12 @@ export interface SearchWindowQuery {
   /** The client-side filter box. Applied in the document, never sent upstream. */
   readonly filter: string;
   readonly hideExisting: boolean;
-  readonly duplicates: string;
+  /**
+   * The duplicate-policy radio, in the **window's** vocabulary
+   * ({@link SEARCH_WINDOW_DUPLICATES}). The view model maps it to the importer's
+   * `DuplicatePolicy` before it reaches the pipeline; see `P1-T43`.
+   */
+  readonly duplicates: SearchWindowDuplicates;
   /**
    * The target picker's value: a collection id as a string,
    * {@link NEW_COLLECTION_VALUE}, or `new:<name>`.

@@ -160,6 +160,15 @@ export function createZoteroSearchImportWriter(
             ...(target.parentCollectionId !== undefined && {
               parentCollectionID: target.parentCollectionId,
             }),
+            // `P1-T43`: the user's §4.4 choice, already in the importer's own
+            // vocabulary. Omitted when the target carries none, so `importWorks`
+            // applies `DEFAULT_DUPLICATE_POLICY` exactly as before. Measured
+            // 2026-10-13 before this line existed: the window's "skip" and
+            // "import anyway" both behaved as "link-existing" here, because
+            // this was the one call on the path that never passed it on.
+            ...(target.duplicatePolicy !== undefined && {
+              duplicatePolicy: target.duplicatePolicy,
+            }),
             index,
             chunkSize: Math.max(1, works.length),
             token: batchToken,

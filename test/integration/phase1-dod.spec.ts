@@ -470,7 +470,12 @@ function queryFor(
     // False on purpose: this spec decides which rows it imports, and the
     // product's hide-existing filter lives in the document, not the host.
     hideExisting: false,
-    duplicates: "link-existing",
+    // The **window's** word, not the importer's: `P1-T43` narrowed this member
+    // to the three radio values, and `"link-existing"` — which sat here from
+    // 2026-10-12 — stopped compiling. The view model maps `"link"` to the
+    // importer's `"link-existing"`; the DoD claim this spec makes (a re-run
+    // links rather than duplicates) is unchanged.
+    duplicates: "link",
     collectionID,
   };
 }

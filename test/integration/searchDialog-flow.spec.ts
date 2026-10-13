@@ -166,6 +166,39 @@
  * - No timeout was touched, including {@link waitUntil}'s 25,000 ms default,
  *   and no production file was changed.
  *
+ * ## What `P1-T43` changed (2026-10-13)
+ *
+ * The owner decided on 2026-10-08 that an already-present paper is **shown,
+ * marked**, and that `docs/08` §4.4's duplicate control decides what happens to
+ * it. Before this card the control was collected and dropped — the window said
+ * `skip` / `link` / `import`, the importer says `"skip"` / `"link-existing"` /
+ * `"import-anyway"`, the window-facing member was a `string`, and no caller
+ * ever supplied `ImportRequest.duplicatePolicy`. Now `SearchWindowQuery.duplicates`
+ * is the three-value union `SearchWindowDuplicates`, the view model maps it
+ * through `DUPLICATE_POLICY_BY_CHOICE` onto `SearchImportTarget.duplicatePolicy`,
+ * and the production writer passes it to `importWorks()`.
+ *
+ * In `P1-T22`'s block, four tests carry that:
+ *
+ * - the radiogroup's values are asserted to be **exactly** the union, because
+ *   the markup is an asset nothing typechecks and this is the only binding;
+ * - the FR-51 re-import test switches hiding **off explicitly** rather than
+ *   reading the default, asserts the three present rows render with the row
+ *   class, the badge and the words (never exercised before, because a marked
+ *   row was hidden by default), and imports under `link`;
+ * - two new tests import the same rows under `skip` and under `import`, and the
+ *   report's own counts are the assertion — `Skipped 4` with one item in the
+ *   collection, then `Imported 5` with five;
+ * - a host driven with the importer's word in the window's slot (what
+ *   `phase1-dod.spec.ts` carried until this card) is **refused**, not defaulted.
+ *
+ * **What this test asserted before, for the record:** that `hideExisting`
+ * starts ticked, that three of four rows were therefore gone, and that unticking
+ * brought them back. The first of those is still asserted once, in `P1-T35`'s
+ * `marks the imported records as already in the library`, because the shipped
+ * default is still `true` — flipping it needs `addon/prefs.js`, `docs/07` §8.5
+ * and two unit tests outside this card's `Files`, and is reported with the card.
+ *
  * ## What this file does not check
  *
  * - **Nobody looked at the window.** Every assertion below is a computed value
@@ -218,9 +251,12 @@ import type {
 } from "../../src/sources/types";
 import {
   SEARCH_WINDOW_API_PROPERTY,
+  SEARCH_WINDOW_DUPLICATES,
   SEARCH_WINDOW_URL,
   openSearchWindow,
+  type SearchWindowDuplicates,
   type SearchWindowHandle,
+  type SearchWindowImportRequest,
   type SearchWindowRecord,
 } from "../../src/ui/dialogs/searchDialog";
 import {
@@ -242,6 +278,7 @@ import {
   PROVENANCE_NOTE_TITLE_PREFIX,
   writeProvenanceNote,
 } from "../../src/zotero/notes";
+import { qualifiedPrefName } from "../../src/zotero/prefStore";
 import { notifierRegistration } from "../../src/zotero/registrations";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
@@ -436,6 +473,8 @@ interface FlowController {
   readonly filePickerModule: string;
   search(): void;
   import(): void;
+  /** What `import()` hands the host: the query plus the checked ∩ visible rows. */
+  collectImportRequest(): SearchWindowImportRequest;
   cancel(): void;
   applyFilter(): { total: number; new: number; selected: number };
   adoptNewCollection(name: string): string;
@@ -747,7 +786,44 @@ interface WindowLocalization {
       readonly id: string;
       readonly args?: Readonly<Record<string, string | number>>;
     }[],
-  ): Promise<({ value?: string | null } | null | undefined)[]>;
+  ): Promise<
+    (
+      | {
+          value?: string | null;
+          attributes?: readonly { name: string; value: string }[] | null;
+        }
+      | null
+      | undefined
+    )[]
+  >;
+}
+
+/**
+ * Resolve an **attribute-shaped** message — one with no value and a
+ * `.aria-label =` line — through the window's own `document.l10n`, and fail if
+ * the attribute is blank (`P1-T43`).
+ *
+ * {@link resolved} cannot be used for these: Fluent returns `value: null` for a
+ * message that has only attributes, and that is correct rather than blank. Same
+ * no-cap property as `resolved`: it awaits the bundle's answer, so a slow
+ * Fluent makes it slow rather than wrong.
+ */
+async function resolvedAttribute(id: string, name: string): Promise<string> {
+  const l10n = (doc as unknown as { l10n?: WindowLocalization }).l10n;
+  if (l10n === undefined) {
+    assert.fail("the search window's document exposes no l10n");
+  }
+  const [first] = await l10n.formatMessages([{ id }]);
+  const found = (first?.attributes ?? []).find(
+    (attribute) => attribute.name === name,
+  );
+  if (found === undefined || found.value === "") {
+    assert.fail(
+      `${id} resolves to no .${name} in this window; it carries ` +
+        `${JSON.stringify(first?.attributes ?? null)}`,
+    );
+  }
+  return found.value;
 }
 
 /**
@@ -897,6 +973,132 @@ async function runImport(timeoutMs = 60_000): Promise<void> {
     "the import to finish",
     timeoutMs,
   );
+}
+
+// ---------------------------------------------------------------------------
+// 2c. `P1-T43` — the hide-existing checkbox, the duplicate radios and one
+//     import under one policy
+// ---------------------------------------------------------------------------
+
+/** Tick or untick "Hide items already in my library" and re-filter. */
+function setHideExisting(checked: boolean): void {
+  (el("rh-search-hide-existing") as HTMLInputElement).checked = checked;
+  controller.applyFilter();
+}
+
+/** The `#rh-search-duplicates` radiogroup, typed to the one member read. */
+function duplicatesGroup(): { value: string } {
+  return el("rh-search-duplicates") as unknown as { value: string };
+}
+
+/** Select one of `docs/08` §4.4's three radios, as a user would. */
+function setDuplicates(choice: SearchWindowDuplicates): void {
+  duplicatesGroup().value = choice;
+}
+
+/** The rendered rows carrying `P1-T21`'s already-present row class. */
+function markedRows(): Element[] {
+  return rows().filter((row) => row.classList.contains("rh-row-existing"));
+}
+
+/**
+ * One already-present row renders as `docs/08` §4.5 draws it and `NFR-13`
+ * requires it: the row class, the badge, **and the words** — never the colour
+ * alone. Three observations per surface, `P1-T46`'s shape: the document's
+ * class and pointer attributes, then the texts the bundle produces, resolved
+ * through `document.l10n` so no wait can expire under them.
+ */
+async function assertMarkedRow(row: Element): Promise<void> {
+  const key = row.getAttribute("data-rh-row-key") ?? "";
+  const record = lastState?.records?.find((r) => r.key === key);
+  if (record === undefined) {
+    assert.fail(`the marked row ${key} matches no published record`);
+  }
+  assert.isTrue(record.existing, "the view model marked this record existing");
+
+  const titleCell = row.children[1];
+  if (titleCell === undefined) assert.fail("a marked row has no title cell");
+  const badge = titleCell.querySelector(".rh-existing-badge");
+  if (badge === null) assert.fail("a marked row draws no badge");
+  assert.strictEqual(badge.getAttribute("role"), "img");
+  assert.strictEqual(
+    pointerKey(badge),
+    refKey("research-helper-search-row-existing-badge", undefined),
+    "the badge is pointed at its Fluent id",
+  );
+  const text = Array.from(titleCell.children).find(
+    (child) =>
+      child.getAttribute("data-l10n-id") ===
+      "research-helper-search-row-existing",
+  );
+  if (text === undefined) assert.fail("a marked row carries no words");
+  const wordsRef = message("research-helper-search-row-existing", {
+    title: record.title,
+  });
+  assert.strictEqual(
+    pointerKey(text),
+    refKey(wordsRef.id, wordsRef.args),
+    "the words carry the paper's own title as their argument",
+  );
+
+  const words = await resolved(wordsRef);
+  assert.include(words, "Already in library", "NFR-13: the words say it");
+  assert.include(words, record.title, "and name the paper");
+  const label = await resolvedAttribute(
+    "research-helper-search-row-existing-badge",
+    "aria-label",
+  );
+  assert.include(label, "library", "the badge has an accessible name");
+}
+
+/**
+ * Import the rows the table shows as picked, under one duplicate-policy radio,
+ * into a fresh collection — and assert the outcome by the report's own counts
+ * (`P1-T43` step 5), three ways (`P1-T46`), plus the collection's non-note item
+ * count read back off the library.
+ */
+async function importUnder(
+  choice: SearchWindowDuplicates,
+  expected: { imported: number; linked: number; skipped: number },
+): Promise<{ summary: string; items: number }> {
+  setDuplicates(choice);
+  assert.strictEqual(duplicatesGroup().value, choice, "the radio took");
+  const name = `RH P1-T43 ${choice} ${String(Date.now())}`;
+  controller.adoptNewCollection(name);
+  const mark = markStates();
+  await runImport();
+  const collection = collectionNamed(name);
+  createdCollections.push(collection.key);
+
+  const summaryRef = message("research-helper-import-summary", {
+    ...expected,
+    failed: 0,
+  });
+  assertPublished(
+    mark,
+    (state) => state.notices,
+    summaryRef,
+    `the import summary under "${choice}", in the notice region`,
+  );
+  assertPublished(
+    mark,
+    (state) => [state.status],
+    summaryRef,
+    `the import summary under "${choice}", in the status bar`,
+  );
+  await pointedAt("rh-search-notice", summaryRef);
+  const summary = await resolved(summaryRef);
+
+  const children = (await Zotero.Items.getAsync(
+    collection.getChildItems(true),
+  )) as { isNote(): boolean }[];
+  const items = children.filter((item) => !item.isNote()).length;
+  log(
+    `import under "${choice}": ${summary.replace(/\s+/g, " ")}; ` +
+      `${String(items)} item(s) in the collection ` +
+      `(${String(statesSince(mark).length)} state(s) recorded)`,
+  );
+  return { summary, items };
 }
 
 // ---------------------------------------------------------------------------
@@ -1785,12 +1987,15 @@ describe("P1-T35: the host the composition root published", () => {
     setKeyword(query);
     selectSources([PUBLISHED_STUB]);
     // Four, so the fourth record is one the library does not hold: the previous
-    // test imported the first three and `hideExisting` defaults to true, so a
-    // smaller run would leave nothing importable and the Import gate shut.
+    // test imported the first three, and with hiding **on** a smaller run would
+    // leave nothing importable and the Import gate shut. Hiding is ticked here
+    // explicitly (`P1-T43`) rather than relied on as the default, so this
+    // test's claim about the export does not move when the default does.
     behaviour.set(PUBLISHED_STUB, { records: 4, withAbstract: true });
 
     controller.search();
     await awaitPublishedRun("the search before the export");
+    setHideExisting(true);
     assert.strictEqual(
       controller.state.visible.length,
       1,
@@ -2155,23 +2360,57 @@ describe("P1-T35: the host the composition root published", () => {
     controller.search();
     await awaitPublishedRun("the second search");
     // On `state.rows`, the whole result set, and **not** on `rows()`, the
-    // rendered table body: with `hideExisting` on and every row already in
-    // the library the body is empty, which is the outcome under test.
+    // rendered table body, which is empty while hiding is on.
     assert.strictEqual(controller.state.rows.length, 2, "two records found");
 
-    // `hideExisting` defaults to true (`docs/07` §8.5), so every row the
-    // library already holds is hidden. Both were just imported, so an
-    // `isExisting` that is bound hides both and one that is not hides neither —
-    // there is no middle reading.
+    // **Which default the window honours (`P1-T43`, trap 1), measured rather
+    // than reasoned.** Three places spell a default for `hideExisting` —
+    // `docs/07` §8.5 transcribed into `src/prefs/schema.ts`,
+    // `addon/content/searchDialog.js`'s `prefBounds`, and `addon/prefs.js` —
+    // and only the last is read at run time: Zotero loads `prefs.js` onto the
+    // **default branch**, the typed accessor's `Zotero.Prefs.get` returns that
+    // value, and the two literals are reached only when the read yields nothing
+    // or a non-boolean. So the checkbox is asserted against the default branch
+    // and not against a number copied from a document: this claim stays true
+    // whichever default ships, and this test does not have to change when the
+    // owner's 2026-10-08 flip lands.
+    const qualified = qualifiedPrefName("hideExisting");
+    assert.isFalse(
+      Services.prefs.prefHasUserValue(qualified),
+      "the practice profile holds no user value, so what the window read " +
+        "is the shipped default",
+    );
+    const shipped = Services.prefs.getDefaultBranch("").getBoolPref(qualified);
     const hide = el("rh-search-hide-existing") as HTMLInputElement;
-    assert.isTrue(hide.checked, "docs/07 §8.5 defaults hideExisting to true");
+    assert.strictEqual(
+      hide.checked,
+      shipped,
+      "the checkbox starts at the value addon/prefs.js put on the default branch",
+    );
     assert.strictEqual(
       controller.state.visible.length,
-      0,
+      shipped ? 0 : 2,
+      shipped
+        ? "hiding is on, so both already-imported rows are hidden"
+        : "hiding is off, so both rows are shown",
+    );
+
+    // The `isExisting` binding itself, independent of the checkbox: with hiding
+    // off both rows are on screen and both carry the marker, because both were
+    // just imported — a bound `isExisting` marks both and an unbound one marks
+    // neither, and there is no middle reading.
+    setHideExisting(false);
+    assert.strictEqual(
+      markedRows().length,
+      2,
       "the published isExisting() found both in the library, through a " +
         "library index the composition root refreshed before the search",
     );
-    log35("isExisting hid both already-imported rows");
+    setHideExisting(shipped);
+    log35(
+      `hideExisting: default branch ${String(shipped)}, checkbox started ` +
+        `${String(hide.checked)}; isExisting marked both rows`,
+    );
   });
 });
 
@@ -2711,6 +2950,7 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       controller.logic.importEnabled(controller.state.selectedCount),
     );
 
+    const mark = markStates();
     await runImport();
 
     const collection = collectionNamed(name);
@@ -2731,12 +2971,49 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       "the note is the provenance note",
     );
 
-    // Step 3's summary, with FR-51's split and R-17's coverage figure.
-    const summary = await rendered("rh-search-notice", "Imported");
+    // Step 3's summary, with FR-51's split and R-17's coverage figure — as
+    // `P1-T46`'s three observations rather than a `rendered()` wait on
+    // `#rh-search-notice`. **Converted by `P1-T43` on 2026-10-13 after it
+    // failed twice in one afternoon** with `timed out after 25000 ms waiting
+    // for Fluent to render "Imported" into #rh-search-notice (it reads "")`,
+    // in runs whose first test of this block took 1,030 ms and whose costs then
+    // doubled (915 → 2,000 → 4,019 → 8,002 → 16,024 ms) — the slow mode
+    // `plan/00` §6 item 23 records. `P1-T46` left this wait alone because it
+    // passed its red run by two seconds; it no longer does. The claims are
+    // unchanged: what the view model decided, where the document pointed the
+    // notice, and the text the bundle produces for both lines.
+    const summaryRef = message("research-helper-import-summary", {
+      imported: 3,
+      linked: 0,
+      skipped: 0,
+      failed: 0,
+    });
+    const coverageRef = message("research-helper-import-abstract-coverage", {
+      percent: 100,
+    });
+    assertPublished(
+      mark,
+      (state) => state.notices,
+      summaryRef,
+      "the import summary, in the notice region",
+    );
+    assertPublished(
+      mark,
+      (state) => state.notices,
+      coverageRef,
+      "R-17's coverage line, in the notice region",
+    );
+    await pointedAt("rh-search-notice", summaryRef);
+    await pointedAt("rh-search-notice", coverageRef);
+    const summary = await resolved(summaryRef);
     assert.include(summary, "Imported 3");
     assert.include(summary, "Linked 0");
     assert.include(summary, "0 failed");
-    assert.include(summary, "Abstracts present for 100%", "R-17's coverage");
+    assert.include(
+      await resolved(coverageRef),
+      "Abstracts present for 100%",
+      "R-17's coverage",
+    );
     assert.strictEqual(lastState?.notices.length, 2);
 
     // The import publishes a view state on every progress snapshot. If the
@@ -2750,6 +3027,28 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
     log(`import summary: ${summary.replace(/\s+/g, " ")}`);
   });
 
+  it("P1-T43: offers exactly the three outcomes the host maps, with 'link' pre-selected", async function () {
+    // `addon/content/searchDialog.xhtml` is a plain asset nothing typechecks, so
+    // the one binding between its radio values and `SearchWindowDuplicates` —
+    // the union the view model's mapping is total over — is this assertion.
+    const radios = Array.from(el("rh-search-duplicates").children).map(
+      (radio) => radio.getAttribute("value") ?? "",
+    );
+    assert.deepEqual(
+      radios.toSorted(),
+      [...SEARCH_WINDOW_DUPLICATES].toSorted(),
+      "the document's radios are the union: no more, no fewer, no other words",
+    );
+    // Card step 3: the pre-selection is docs/08 §4.5's wireframe's and was left
+    // alone — it agrees with the importer's own default, "link-existing".
+    assert.strictEqual(
+      duplicatesGroup().value,
+      "link",
+      "docs/08 §4.5 pre-selects 'Add existing item to collection'",
+    );
+    await Zotero.Promise.delay(0);
+  });
+
   it("reports linked-existing separately from created (FR-51)", async function () {
     this.timeout(90_000);
     // The index the `existing` badge reads is built once per run in the product
@@ -2760,76 +3059,174 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
     selectSources([PUBMED]);
     await search({ pubmed: { records: 4, withAbstract: true } });
 
-    // **A conflict in the spec, found here.** `docs/07` §8.5 defaults
-    // `hideExisting` to `true`, `docs/08` §4.2 makes that checkbox hide rows
-    // already in the library, and this card's **Do NOT** forbids importing a row
-    // the filter hides. Together they make §4.4's duplicate policy — and FR-51's
-    // "add existing item to collection" — unreachable from the window with its
-    // shipped defaults: the only rows the policy is about are the hidden ones.
-    // Asserted rather than described, and reported with the card.
-    const hide = el("rh-search-hide-existing") as HTMLInputElement;
-    assert.isTrue(hide.checked, "docs/07 §8.5 defaults hideExisting to true");
+    // **`P1-T43`, the owner's decision of 2026-10-08:** an already-present
+    // paper is **shown, marked**, and §4.4's control decides what happens to
+    // it. Until that card this test asserted the opposite — the box starts
+    // ticked, three of four rows are gone, unticking brings them back — which
+    // was the measurement that made the control unreachable from the window.
+    // Hiding is switched off **explicitly** here rather than read off the
+    // preference, so what this test claims about FR-51 does not depend on
+    // which default ships; the preference-to-checkbox seeding is asserted
+    // where the preference is read (`P1-T35`'s block, and
+    // `test/unit/ui/searchDialog.test.ts`).
+    setHideExisting(false);
     assert.strictEqual(
       controller.state.visible.length,
-      1,
-      "the three imported records are hidden, so three of four rows are gone",
+      4,
+      "all four rows are shown, the three present ones included",
+    );
+    assert.strictEqual(
+      controller.state.selectedCount,
+      4,
+      "and all four are checked (FR-5) — P1-T21's checked ∩ visible, unchanged",
     );
 
-    hide.checked = false;
-    controller.applyFilter();
-    assert.strictEqual(controller.state.visible.length, 4);
-    assert.strictEqual(controller.state.selectedCount, 4);
+    // The marking, in a real Zotero. Never exercised before `P1-T43`: a marked
+    // row was hidden by default, so `buildRow`'s badge branch had never run
+    // where anything could look at it.
+    const marked = markedRows();
+    assert.strictEqual(
+      marked.length,
+      3,
+      "exactly the three imported records carry the already-present row class",
+    );
+    assert.strictEqual(
+      rows().length - marked.length,
+      1,
+      "and the one new record does not",
+    );
+    for (const row of marked) {
+      await assertMarkedRow(row);
+    }
 
-    const name = `RH P1-T22 second ${String(Date.now())}`;
-    controller.adoptNewCollection(name);
-    const mark = markStates();
-    await runImport();
-    createdCollections.push(collectionNamed(name).key);
-
-    // FR-51's split, as three observations of the same claim (`P1-T46`). The
-    // notice region is **rebuilt** on every published state —
-    // `renderMessageList` clears its host and makes a fresh `<description>`
-    // per line — so a wait for this summary's text in the document waits on
-    // nodes the next state has already thrown away, and the next run replaces
-    // the summary outright. Reproduced on this machine before the rewrite,
-    // with the element reading "".
+    // FR-51's split under "Add existing item to collection", as three
+    // observations of the same claim (`P1-T46`). The notice region is
+    // **rebuilt** on every published state — `renderMessageList` clears its
+    // host and makes a fresh `<description>` per line — so a wait for this
+    // summary's text in the document waits on nodes the next state has already
+    // thrown away. Reproduced on this machine before the rewrite, with the
+    // element reading "".
     //
     // The counts are in the assertion rather than in the needle, so what is
     // checked is what the view model **decided**: `write.created` 1,
     // `write.linkedExisting` 3, and nothing skipped or failed. The old needle
     // could not tell "Linked 3" from "Linked 3" beside a wrong skipped count.
-    const summaryRef = message("research-helper-import-summary", {
+    const { summary, items } = await importUnder("link", {
       imported: 1,
       linked: 3,
       skipped: 0,
-      failed: 0,
     });
-    assertPublished(
-      mark,
-      (state) => state.notices,
-      summaryRef,
-      "FR-51's import summary, in the notice region",
-    );
-    assertPublished(
-      mark,
-      (state) => [state.status],
-      summaryRef,
-      "FR-51's import summary, in the status bar",
-    );
-    await pointedAt("rh-search-notice", summaryRef);
-    const summary = await resolved(summaryRef);
     assert.include(summary, "Imported 1", "only the fourth record was new");
     assert.include(
       summary,
       "Linked 3",
       "FR-51: the three existing ones linked",
     );
-    hide.checked = true;
-    controller.applyFilter();
-    log(
-      `re-import summary: ${summary.replace(/\s+/g, " ")} ` +
-        `(${String(statesSince(mark).length)} state(s) recorded)`,
+    assert.strictEqual(
+      items,
+      4,
+      "the collection holds the one new item plus the three linked ones",
     );
+    setHideExisting(true);
+  });
+
+  it("P1-T43: skips the present rows when the control says so, and writes nothing for them", async function () {
+    this.timeout(90_000);
+    await refreshIndex();
+    setKeyword(KEYWORD);
+    selectSources([PUBMED]);
+    // Five: the four the two imports above created, plus one the library does
+    // not hold — so "skip" is told apart from "link" (which would link four)
+    // and from "import anyway" (which would create five) by a single summary.
+    await search({ pubmed: { records: 5, withAbstract: true } });
+    setHideExisting(false);
+    assert.strictEqual(controller.state.visible.length, 5);
+    assert.strictEqual(controller.state.selectedCount, 5);
+    assert.strictEqual(markedRows().length, 4, "four of five are marked");
+
+    const { summary, items } = await importUnder("skip", {
+      imported: 1,
+      linked: 0,
+      skipped: 4,
+    });
+    assert.include(summary, "Skipped 4 duplicates", "docs/08 §4.4: skip");
+    assert.include(summary, "Linked 0", "and nothing was linked");
+    assert.strictEqual(
+      items,
+      1,
+      "only the fifth record reached the collection; the four present ones " +
+        "were neither copied nor added to it",
+    );
+    setHideExisting(true);
+  });
+
+  it("P1-T43: creates a second item for every present row under 'import anyway'", async function () {
+    this.timeout(90_000);
+    await refreshIndex();
+    setKeyword(KEYWORD);
+    selectSources([PUBMED]);
+    await search({ pubmed: { records: 5, withAbstract: true } });
+    setHideExisting(false);
+    assert.strictEqual(controller.state.visible.length, 5);
+    assert.strictEqual(
+      markedRows().length,
+      5,
+      "all five are in the library now, and all five are marked",
+    );
+
+    // FR-51 says never to do this silently; the user's explicit radio is what
+    // makes it not silent, and the summary says so in its own words.
+    const { summary, items } = await importUnder("import", {
+      imported: 5,
+      linked: 0,
+      skipped: 0,
+    });
+    assert.include(summary, "Imported 5", "docs/08 §4.4: import anyway");
+    assert.include(summary, "Skipped 0", "nothing was dropped");
+    assert.strictEqual(
+      items,
+      5,
+      "five new items, although every one of them already had a twin",
+    );
+    setHideExisting(true);
+  });
+
+  it("P1-T43: refuses an import whose duplicate value the window cannot produce, rather than defaulting", async function () {
+    this.timeout(20_000);
+    const host = pluginApi()[SEARCH_WINDOW_API_PROPERTY] as SearchWindowHostApi;
+    const name = `RH P1-T43 refused ${String(Date.now())}`;
+    controller.adoptNewCollection(name);
+    setHideExisting(false);
+    const request = controller.collectImportRequest();
+    assert.isAbove(
+      request.records.length,
+      0,
+      "the request carries rows and names a target, so neither is what refuses it",
+    );
+
+    const before = runsFinished;
+    const mark = markStates();
+    // The importer's own word in the window's slot — what `phase1-dod.spec.ts`
+    // carried until `P1-T43`. The type now forbids it, so a cast is the only
+    // way to write it: that is the compile-time half of the claim, and this is
+    // the run-time half for a document nothing typechecks.
+    await host.runImport({
+      ...request,
+      duplicates: "link-existing" as unknown as SearchWindowDuplicates,
+    });
+    assert.strictEqual(runsFinished, before, "no job was started");
+    assert.strictEqual(statesSince(mark).length, 0, "nothing was published");
+    const created = Zotero.Collections.getByLibrary(
+      Zotero.Libraries.userLibraryID,
+    ).find((collection) => collection.name === name);
+    if (created !== undefined) {
+      // A product that imported anyway must not leave its fixture behind in
+      // the shared practice profile on top of failing this assertion.
+      createdCollections.push(created.key);
+    }
+    assert.strictEqual(created, undefined, "no collection was created");
+    setHideExisting(true);
+    log("refused: a value outside the union started no job and wrote nothing");
   });
 
   // =========================================================================

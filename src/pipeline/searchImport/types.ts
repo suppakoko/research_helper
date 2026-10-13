@@ -45,7 +45,17 @@ import type { CanonicalWork } from "../../model/canonicalWork";
 import type { SourceId } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
 import type { RecencyWindow } from "../../sources/shared/recency";
+import type { DuplicatePolicy } from "../../zotero/importer";
 import type { SearchImportStageKey } from "./stages";
+
+/**
+ * Re-exported so `src/ui/**` can name the importer's policy vocabulary without
+ * importing `src/zotero/**`, which `eslint.config.js`'s
+ * `research-helper/layering/ui` forbids. `pipeline/` may import `zotero/`
+ * (this file's header, and `research-helper/layering/pipeline` forbids only
+ * `ui/`), so the type crosses here and nowhere else.
+ */
+export type { DuplicatePolicy };
 
 // ---------------------------------------------------------------------------
 // 1. Input
@@ -69,6 +79,22 @@ export interface SearchImportTarget {
    * an error — the table is a projection of a fetch that may have been re-run.
    */
   readonly selectedRecordIds?: readonly string[];
+  /**
+   * What happens to a selected record the library already holds — `docs/08`
+   * §4.4's "skip | add existing item to collection | import anyway", in the
+   * **importer's** vocabulary (`P1-T43`).
+   *
+   * On the target rather than on {@link SearchImportInput} or the write
+   * session, because it is a fact about *writing*: a preview run has no target
+   * and therefore no policy, and the choice holds for the whole run rather than
+   * for one batch. The view model maps the window's radio value onto it
+   * (`DUPLICATE_POLICY_BY_CHOICE`), the pipeline hands the target to
+   * `SearchImportWriter.openTarget` whole, and the production writer in
+   * `src/bootstrap/registerPipelines.ts` passes it to `importWorks()`, which
+   * implements all three branches and defaults to `"link-existing"` when this
+   * is omitted.
+   */
+  readonly duplicatePolicy?: DuplicatePolicy;
 }
 
 /**

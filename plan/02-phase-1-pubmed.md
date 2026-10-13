@@ -8585,6 +8585,16 @@ behaviour that happens unconditionally today.
 **So this card is a flip and a wire, with two traps.**
 
 **Trap 1 — the default lives in two places and changing one is worse than changing neither.**
+> **Corrected 2026-10-13 after the executing agent measured it: the default lives in *four* places, and
+> the window honours a fifth thing — Zotero's default preference branch, which `addon/prefs.js:59` fills
+> at startup.** The four: `docs/07` §8.5's table at `:2925` (the schema **authority**, which
+> `plan/README.md` §5 rule 3 forbids an agent to change), `addon/prefs.js:59`, `src/prefs/schema.ts:144`,
+> and the window's own literal. Measured in a real Zotero: no user value is set, the default branch reads
+> `true`, and the checkbox starts equal to it — **so both literals this trap named are fall-backs never
+> reached in a normal profile, and flipping both would change nothing a user sees.** Three unit tests bind
+> the sites together. **The flip is therefore an owner-authorised schema change, not an edit inside this
+> card's list**, and step 1 below could not be done here; it is `plan/00` §6 item 40, with the six exact
+> edits recorded there.
 `src/prefs/schema.ts:141–144` has `hideExisting` with `default: true`, and
 `addon/content/searchDialog.js:252` has its own `hideExisting: { default: true }` inside `prefBounds`.
 `src/bootstrap/registerUI.ts:385` seeds the query from the preference. **Work out which one the window
@@ -8625,14 +8635,26 @@ a fourth outcome later fails to compile rather than falling back.
 - modify `src/ui/dialogs/searchDialog.ts`
 - modify `src/ui/viewModels/searchImportViewModel.ts`
 - modify `src/pipeline/searchImport/types.ts`
-- modify `src/pipeline/searchImport/searchImportPipeline.ts`
-- modify `addon/content/searchDialog.js`
+- modify `src/pipeline/searchImport/searchImportPipeline.ts` — **not needed**: the target reaches `openTarget` whole
+- modify `src/bootstrap/registerPipelines.ts` — **added 2026-10-13, after the fact.** The card said the pipeline
+  hands the target to the writer whole, which is true and insufficient: the writer then hands the
+  *importer* a request, and that call never passed the policy on. Run 0 measured it — with every in-list
+  edit and without this file, `skip` and `import anyway` **both behaved as `link-existing`**. One
+  conditional spread. The agent made the edit, led its report with it, and the coordinator accepts it as
+  the card's defect rather than the agent's.
+- modify `test/integration/phase1-dod.spec.ts` — **added 2026-10-13, after the fact.** That file had carried the
+  importer's word in the window's slot since 2026-10-12 — a live instance of trap 2 — and narrowing the
+  type made the tree fail `tsc` until one token changed.
+- modify `addon/content/searchDialog.js` — **not needed** by this card: the flip is blocked, and the marked-row
+  branch already renders
 - modify `test/integration/searchDialog-flow.spec.ts`
 - modify `test/integration/zotero/importer.spec.ts` (only if a policy branch gains an assertion — grepped 2026-10-08: the importer has **no unit-test file**; it is covered by that spec, by `test/integration/zotero/import-perf.spec.ts` and by `test/unit/pipeline/searchImport.test.ts`)
 
 **Do.**
-1. Change `hideExisting`'s default to **false** in `src/prefs/schema.ts`, and reconcile the window's own
-   default with it per trap 1.
+1. ~~Change `hideExisting`'s default to **false** in `src/prefs/schema.ts`, and reconcile the window's own
+   default with it per trap 1.~~ **Blocked outside this card's list, reported 2026-10-13 — see the
+   corrected trap 1.** What this card did instead: made the integration suite **default-independent**, so
+   the card that performs the flip needs no integration change.
 2. Narrow the window-facing duplicate member to a union of its three values, and carry it through to the
    importer's `duplicatePolicy` with an **explicit, total** mapping per trap 2.
 3. Leave the pre-selected radio as it is. `docs/08` §4.5's wireframe draws "add existing to collection"
@@ -8681,6 +8703,104 @@ value is in **not writing the thing that already exists**: three policy branches
 optional request member, all of them shipped and none of them chosen. `P1-T22` found the conflict and
 escalated it instead of picking a side, which is what made the owner's decision possible — and the
 decision turned out to cost a flip and a wire.
+
+**Findings, 2026-10-13 — the wire half is done and proven end to end in a real Zotero; the flip half is
+blocked outside the card's `Files` list and is reported, not done. Two one-line edits were made outside
+the list, both declared before anything else, both forced by the in-list work.**
+
+**Verified by the coordinator, scoped because another agent was still editing the tree:** the three-value
+union is at `src/ui/dialogs/searchDialog.ts:228`, the mapping table in the view model carries all three
+rows with the importer's words on the right, the four default sites the agent found all read `true`
+(`docs/07:2925`, `addon/prefs.js:59`, `src/prefs/schema.ts:144`, `addon/content/searchDialog.js:256`), the
+two out-of-list edits are exactly what the report says, and no mutation marker survives in this card's
+files. The agent's final gate on the final tree: typecheck 0, `lint:check` 0, build 0, and the
+integration suite **112 passed three consecutive times** (from 108) — two of those runs in the **slow**
+mode, which is worth more than three fast ones.
+
+**The two edits outside the list, and why both were right to make and right to declare.** First,
+`src/bootstrap/registerPipelines.ts`: one conditional spread passing `target.duplicatePolicy` into the
+writer's `importWorks()` call. **The card said no caller in `src/` supplies a value, and that was true; the
+card also said the pipeline hands the target to the writer whole, and that was true too — but the writer
+then hands the *importer* a request, and that call never passed the policy on.** Run 0, with every in-list
+edit and without this line, measured it: `skip` and `import anyway` **both behaved as `link-existing`**.
+The wire ended one call short, in a file the card did not name. Second, `test/integration/phase1-dod.spec.ts`
+— a one-token change from `"link-existing"` to `"link"`, because **that file had been putting the
+importer's word in the window's slot since 2026-10-12**: a live instance of the very trap the card named,
+and the narrowed type made the tree fail `tsc` until it was fixed. **Both are `plan/README.md` §5 rule 2
+infractions in letter and the correct engineering in substance**, and the reason they are acceptable is
+that the agent led its report with them rather than burying them. The coordinator's card is the defect
+here, twice: a `Files` list that stopped one file short of where the wire ends, and a premise about "the
+pipeline hands the target whole" that was true and insufficient.
+
+**Trap 1 was undercounted, and the undercount is why the flip is blocked.** The card said the hide default
+lives in two places. **It lives in four**, and the window honours a fifth thing: Zotero's **default
+preference branch**, which `addon/prefs.js` fills at startup. The run-time chain, read from the code and
+then **measured in a real Zotero** — `prefHasUserValue` is `false`, the default branch reads `true`, and
+the checkbox starts equal to it — means **both literals the card named are fall-backs that are never reached
+in a normal profile**, and flipping both would change nothing a user sees. Worse, one of the four is
+**`docs/07` §8.5, the schema authority**, which `plan/README.md` §5 rule 3 forbids an agent to change, and
+flipping `schema.ts` alone breaks two unit tests that hold the schema to the document and to `prefs.js`.
+**So "change the default" is an owner-authorised schema change, not a flip, and the agent reported it as
+one.** The six exact edits the next card needs are in the report, line by line. And the agent made the
+integration suite **default-independent** first, so that card needs no integration change — the test that
+used to assert `true` now asserts the checkbox **against the default branch**, and stays correct when the
+flip lands.
+
+**Trap 2 is closed in both directions, and the proof is the compiler.** Passing the window's word straight
+through fails `tsc`; adding a fourth radio value without a table row fails `tsc`; putting the window's word
+on the right of the table fails `tsc`. A value outside the union that arrives at run time — possible only
+from the untyped document or a mis-driven host — is **refused with a warning rather than falling back to the
+importer's default**, mirroring the existing refusal for an unnamed target, and a test proves the refusal
+starts no job and creates nothing. **Where the member lives is argued rather than assumed**: on the target,
+because the policy is a fact about writing, a preview has no target and therefore no policy, and the pipeline
+already hands the target through whole.
+
+**All three outcomes are now reachable from the real radio and asserted by the report's own counts**, each
+three ways in `P1-T46`'s shape — published state, document pointer, bundle text — plus the collection's item
+count read back from the library: `link` gives *Imported 1 · Linked 3* and 4 items; `skip` gives *Imported 1
+· Skipped 4* and 1 item; `import` gives *Imported 5* and 5 items. **And the marked-row rendering ran where a
+test could see it for the first time**: with hiding off, the three present rows carry the row class, a badge
+whose accessible label resolves to "Already in my library", and a text span resolving to "Already in library:
+*title*". That branch of the row builder had never executed in front of an assertion.
+
+**A fourth transient-text wait was found and converted, and it had failed twice that day.** `P1-T46` fixed
+three such waits and left a fourth because it passed its red run by two seconds. It failed twice during this
+card's runs, with the doubling pattern on display — 915 → 2,000 → 4,019 → 8,002 → 16,024 ms. The agent
+converted it to the same three observations with the claims unchanged, and the next run passed **in the slow
+mode**. One such wait remains, in the export test; it did not fail and was left. **So `P1-T46`'s statement
+"no wait in these tests depends on text the run can replace" was true of its three and not of the block.**
+
+**One datum for the open slowness question, free.** In the slow runs, `document.l10n.formatMessages` stayed
+fast — this card's tests took 350–650 ms — while **only document-translation waits doubled**. That narrows
+`plan/00` §6 item 23: whatever is slow is not the formatter; it is the path from a published state to text
+in the document.
+
+**Two figures are contaminated by the concurrent cards and the agent said so rather than claiming them.**
+The unit count was already 1,307 before its first change and 1,310 at the end — **it added zero unit tests**
+— and the installer read 152,980 bytes because the preferences-pane card was adding its pane in the same
+window. Three of its final runs executed on a tree containing that card's in-progress edits. **Separating
+the figures was impossible and the report says which ones, which is the most a report can do.**
+
+**Contradictions, all mine or the corpus's.** The card's trap 1: two places, actually four, bound by three
+unit tests the card did not know about. The card's `Files` list: the wire ends in a file not on it. The
+card's claim that "a grep of `src/` for any reader returns nothing": true for `src/`, and a *writer* in
+`test/` had the wrong word. Four files on the list needed no change, each with a reason. And two comments
+in shipped code still quote `P1-T22`'s **pre-correction** `Do NOT` — the hidden-but-checked rule that was
+reversed on 2026-10-07 — now `plan/00` §6 item 43.
+
+**What the card asked to be reported as a finding, reported.** The provenance record does not carry the
+chosen policy, so a record saying `skipped: 4` cannot say whether those were skipped **by choice**. A schema
+change with its own gate; `plan/00` §6 item 44.
+
+**What was not checked.** Nobody looked at the window; the badge's glyph and colour are not asserted, only
+class, pointer and text. No live network run. The record's content under `skip` and `import anyway` was not
+inspected. The remaining `rendered()` wait was not converted. Whether the four-run slow streak related to the
+other agents' activity is unmeasured.
+
+**Needs a card.** The flip itself, six edits, owner-authorised (item 40). The writer builds a library index
+under `import-anyway` that the importer never reads — one wasted search per such run (item 41). Unit tests
+for the mapping table (item 42). The two stale quotations (item 43). The provenance schema question (item 44).
+And the last transient-text wait, in the export test.
 
 ---
 

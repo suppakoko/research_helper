@@ -102,6 +102,7 @@ import type { Author } from "../../model/canonicalWork";
 import { isSourceId, type SourceId } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
 import type {
+  DuplicatePolicy,
   SearchImportInput,
   SearchImportOutput,
   SearchImportSourceReport,
@@ -110,6 +111,7 @@ import type {
 import type { Pipeline, PipelineContext } from "../../pipeline/types";
 import type { FluentArgsParam, FluentMessageId } from "../../i18n/keys";
 import type {
+  SearchWindowDuplicates,
   SearchWindowImportRequest,
   SearchWindowQuery,
   SearchWindowRecord,
@@ -733,6 +735,49 @@ export function toPipelineInput(
     ...(target !== undefined && { target }),
     ...(records !== undefined && { records }),
   };
+}
+
+/**
+ * The window's three duplicate-policy words → the importer's three (`P1-T43`).
+ *
+ * **Total, and checked by the compiler.** `Record<SearchWindowDuplicates, …>`
+ * requires one entry per member of `SEARCH_WINDOW_DUPLICATES`, so a fourth
+ * radio added to the window without a row here is `TS2741`, and a value on the
+ * right that is not a `DuplicatePolicy` is `TS2322`. Before this table existed
+ * the window-facing member was a `string`, so the importer's own word
+ * `"link-existing"` compiled in the window's slot — `phase1-dod.spec.ts`
+ * carried exactly that — and the pipeline read `request.duplicatePolicy ??
+ * DEFAULT_DUPLICATE_POLICY`, which would have silently turned every unmapped
+ * choice into the default. The same three outcomes, two vocabularies, one
+ * mapping, written once.
+ */
+export const DUPLICATE_POLICY_BY_CHOICE: Readonly<
+  Record<SearchWindowDuplicates, DuplicatePolicy>
+> = {
+  skip: "skip",
+  link: "link-existing",
+  import: "import-anyway",
+};
+
+/**
+ * {@link DUPLICATE_POLICY_BY_CHOICE} as a lookup that survives the untyped
+ * document boundary.
+ *
+ * `choice` is typed as the union, but it is read off a XUL radiogroup by a
+ * script nothing typechecks, so a value outside the union *can* arrive at run
+ * time. For that case this returns `undefined` and the caller **refuses the
+ * import** rather than falling back to the importer's default — a fall-back is
+ * the failure `P1-T43` exists to end, and a refusal is the shape `runImport`
+ * already uses for a target picker that names no collection. `Object.hasOwn`
+ * rather than a bare index so that a prototype name such as `"toString"`
+ * cannot read as a policy.
+ */
+export function toDuplicatePolicy(
+  choice: SearchWindowDuplicates,
+): DuplicatePolicy | undefined {
+  return Object.hasOwn(DUPLICATE_POLICY_BY_CHOICE, choice)
+    ? DUPLICATE_POLICY_BY_CHOICE[choice]
+    : undefined;
 }
 
 /**
@@ -1674,6 +1719,21 @@ export function createSearchImportViewModel(
         );
         return;
       }
+      const duplicatePolicy = toDuplicatePolicy(request.duplicates);
+      if (duplicatePolicy === undefined) {
+        // The type forbids this and the document's three radios cannot produce
+        // it, so reaching here is a programming error — a host driven directly
+        // with the importer's word in the window's slot, which is exactly what
+        // `phase1-dod.spec.ts` once did. Refused rather than defaulted: a
+        // silent fall-back to `"link-existing"` would write something the
+        // caller did not choose, and would hide the defect (`P1-T43`).
+        deps.logger.warn(
+          "import refused: the duplicate-policy value is not one the window " +
+            "can produce, so no policy can be chosen for it",
+          { duplicates: String(request.duplicates) },
+        );
+        return;
+      }
       const startedAt = new Date(deps.clock.now()).toISOString();
       const input = toPipelineInput(
         request,
@@ -1682,8 +1742,11 @@ export function createSearchImportViewModel(
           // This card's **Do NOT**: exactly the checked set, which the document
           // has already intersected with the *visible* rows, so a
           // hidden-but-checked row cannot vanish and a hidden row cannot be
-          // written.
+          // written. With hiding off (`P1-T43`) an already-present row is
+          // visible and checked, and `duplicatePolicy` decides what the
+          // importer does with it.
           selectedRecordIds: request.records.map((record) => record.key),
+          duplicatePolicy,
         },
         fetched,
       );

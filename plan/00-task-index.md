@@ -731,6 +731,39 @@ run found on the way, and none was fixed.
     card makes false, left in place because nobody re-reads a comment. **Do not** let any of them be
     rewritten to say the headline is now safe — it is not; see item 4 and `docs/09` §2.1.
 
+### 6.10 Raised by `P1-T43`, 2026-10-13
+
+40. **The hide-existing flip is an owner-authorised schema change, and the six edits are known.** The
+    default lives in four places — `docs/07` §8.5 at `:2925` (the authority), `addon/prefs.js:59`,
+    `src/prefs/schema.ts:144`, `addon/content/searchDialog.js:256` — bound by `test/unit/prefs/schema.test.ts:117`
+    and `:607–633` and `test/unit/ui/searchDialog.test.ts:1830–1850` (which starts from 35 drawn rows
+    and must start from 40). **The integration suite needs no change**: `P1-T43` made it
+    default-independent. The owner decided the flip on 2026-10-08; this item is its execution, and it
+    needs the owner's authority on `docs/07` because rule 3 forbids an agent to change the schema
+    document.
+
+41. **The writer builds a library index under `import-anyway` that the importer never reads** — one
+    wasted `Zotero.Search` per such run, at `src/bootstrap/registerPipelines.ts:155`. Small.
+
+42. **Unit tests for the duplicate-policy mapping** (`DUPLICATE_POLICY_BY_CHOICE` and its lookup) in
+    `test/unit/ui/searchImportViewModel.test.ts` — the same `Files` gap three cards have reported.
+
+43. **Two comments in shipped code quote `P1-T22`'s *pre-correction* `Do NOT`** — "import exactly the
+    checked set, or a hidden-but-checked row silently vanishes" — at `src/pipeline/searchImport/types.ts:62–68`
+    and in `src/ui/dialogs/searchDialog.ts`'s import-request doc. The shipped rule is checked ∩ visible,
+    corrected 2026-10-07. Same class as item 39.
+
+44. **The provenance record does not carry the chosen duplicate policy**, so a record saying `skipped: 4`
+    cannot say whether those were skipped **by choice**. A schema change to `schema/provenance.schema.json`
+    with its own gate. `P1-T43`'s `Do NOT` asked for exactly this as a finding.
+
+45. **One transient-text wait remains in the integration suite**, in the export test at
+    `test/integration/searchDialog-flow.spec.ts` (`rendered("rh-search-notice", …)`). `P1-T46` converted
+    three, `P1-T43` found and converted a fourth that had failed twice that day; this fifth did not fail
+    and was left. **And a datum for item 23**: in slow runs `formatMessages` stayed fast while only
+    document-translation waits doubled — whatever is slow is the path from a published state to text in
+    the document, not the formatter.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
