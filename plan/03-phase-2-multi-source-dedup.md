@@ -105,7 +105,7 @@ both:
 | **ID** | `P2-T01` |
 | **State** | `DONE` — approved 2026-10-13 under the readings dated on the card; the owner also authorised the `docs/07` §4.2 extension for the per-source query dialect (`P2-T28`). Report at `plan/reports/P2-T01.md`. |
 | **Depends on** | `P1-T07`, `P1-T08` |
-| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T17`, `P2-T02` |
+| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T17`, `P2-T02`, `P2-T28` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-4`, part of `FR-8` |
 | **Estimate** | 1.0 d |
@@ -347,7 +347,7 @@ the integration suite. Follow-ups are `plan/00` §6.14; the wiring is carded.
 |---|---|
 | **ID** | `P2-T03` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T23`, `P2-T25`, `P2-T26` |
+| **Depends on** | `P2-T01`, `P2-T23`, `P2-T25`, `P2-T26`, `P2-T28` |
 | **Blocks** | `P2-T07`, `P2-T08`, `P2-T12` |
 | **Retires** | part of `R-2`, part of `R-17` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -481,7 +481,7 @@ and says to make it the default; every downstream card (preprint search `P2-T07`
 |---|---|
 | **ID** | `P2-T04` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26` |
+| **Depends on** | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26`, `P2-T28` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -606,7 +606,7 @@ added to `docs/09` §1.7 first.
 |---|---|
 | **ID** | `P2-T05` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26` |
+| **Depends on** | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | `R-3` (fallback proven — full retirement is Phase 5 per `docs/11` §3.1) |
 | **Implements** | `FR-2`, `FR-4`, `FR-11`, open question 8 in `docs/10` §5 |
@@ -750,7 +750,7 @@ precisely the R-3 outcome the design is built to survive. Record the state in `0
 |---|---|
 | **ID** | `P2-T06` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T25`, `P2-T26` |
+| **Depends on** | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28` |
 | **Blocks** | `P2-T08`, `P2-T11` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -867,7 +867,7 @@ part of this card — but it is the natural mitigation if `P2-T16`'s NFR-2 measu
 |---|---|
 | **ID** | `P2-T07` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26` |
+| **Depends on** | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28` |
 | **Blocks** | `P2-T08`, `P2-T11` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -1146,6 +1146,10 @@ below the confidence threshold.
   produce branded values, and `model/ids.ts` already owns DOI/PMID/arXiv normalization.
 
 **Files.**
+> **Coordinator note 2026-10-13:** `P2-T27` edits `src/pipeline/searchImport/stages.ts` in the same wave
+> as this card. **Leave `stages.ts` untouched in this run**; the engine lives in `dedupe.ts`, and the
+> stage hookup is `P2-T10`'s and `P2-T11`'s once the merge policy exists. State in the report what the
+> hookup will need.
 - create `src/sources/shared/dedupe.ts`
 - modify `src/model/ids.ts` (normalizers, if Phase 1 left them stubbed)
 - modify `src/pipeline/searchImport/stages.ts`
@@ -3534,7 +3538,7 @@ in `pubmedSource.ts` pages at `min(limit − emitted, 200)`, so a replayed `limi
 | **ID** | `P2-T26` |
 | **State** | `TODO` |
 | **Depends on** | `P2-T25` |
-| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07` |
+| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T28` |
 | **Retires** | `plan/00` §6 item 27 |
 | **Implements** | nothing — a test seam the adapter cards need |
 | **Estimate** | 0.25 d |
@@ -3586,7 +3590,7 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 | **ID** | `P2-T27` |
 | **State** | `TODO` |
 | **Depends on** | `P2-T01`, `P2-T02` |
-| **Blocks** | `P2-T14`, `P2-T16` |
+| **Blocks** | `P2-T14`, `P2-T16`, `P2-T28` |
 | **Retires** | `plan/00` §6 item 66 |
 | **Implements** | `FR-9`, `FR-10`, `NFR-2` in the shipped product (`P2-T02` implemented them in a function nothing calls) |
 | **Estimate** | 0.5 d |
@@ -3654,6 +3658,86 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 
 ---
 
+### P2-T28 — Give the per-source query dialect its home in `SourceCapabilities` (owner-authorised `docs/07` §4.2 extension)
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T28` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T01`, `P2-T26`, `P2-T27` |
+| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07` |
+| **Retires** | `plan/00` §6 item 61 |
+| **Implements** | the `docs/07` §11.1 rule that a type changes in the document first, then in code |
+| **Estimate** | 0.25 d |
+| **Human gate** | none — the owner authorised the schema change on 2026-10-13 (`P2-T01` approval) |
+
+**Goal.** `SourceCapabilities` states, per source, which query operators and fields the source really
+renders, so `normalizeForSource` takes the adapter's own declaration instead of an inline shape each
+adapter card would otherwise copy from `docs/02` §12.3.
+
+**Why this is a card (rule 9).** `P2-T01` had to type `normalizeForSource`'s second parameter inline
+because `docs/07` §4.2's `SourceCapabilities` carries `keywordSearch` and nothing about OR, NOT,
+phrases or renderable fields — the very column `docs/02` §12.3 tabulates. Every adapter card
+(`P2-T03` to `P2-T07`) would pass that column inline, five copies of a fact that belongs on the
+adapter. `plan/README.md` §5 rule 3 makes `docs/07` the sole authority for types, so the document
+changes first; the owner authorised that on 2026-10-13. It depends on `P2-T26` and `P2-T27` only
+because the test fakes those cards edit also construct a `SourceCapabilities`.
+
+**Read first.**
+- `docs/07-architecture-and-data-model.md` §4.2 — `SourceCapabilities` as it stands; §11.1 — the order
+  of a type change (document row, then code, then tests).
+- `docs/02-literature-database-apis.md` §12.3 — the per-source column: OR, NOT, Phrase, Title,
+  Abstract, Author. PubMed's column has no n/a cell.
+- `normalizeForSource` in `src/sources/shared/queryParse.ts` — the inline parameter type and its doc
+  comment, which already names this card's outcome.
+
+**Do.**
+1. In `docs/07` §4.2, extend `SourceCapabilities` with one member, `query`, an object with
+   `or: boolean`, `not: boolean`, `phrase: boolean`, `fields: readonly QueryField[]` (the members the
+   source renders; `"any"` is never listed because it is the absence of a field). Doc-comment each
+   with the §12.3 row it mirrors. Date a one-line note in §4.2 that the member was added 2026-10-13
+   for `P2-T01`'s `normalizeForSource`.
+2. Mirror the member in `src/sources/types.ts`; change `normalizeForSource`'s second parameter to
+   `Pick<SourceCapabilities, "keywordSearch" | "query">` and its body to read `capabilities.query`.
+3. Fill PubMed's declaration (`PUBMED_CAPABILITIES` in `src/sources/pubmed/pubmedSource.ts`) from
+   §12.3's PubMed column: `or`, `not`, `phrase` true; `fields` title, abstract, author, journal
+   (`FIELD_TAGS` in `src/sources/pubmed/query.ts` renders `[Journal]`, which §12.3 omits — `plan/00`
+   §6 item 63).
+4. Update every test fake that constructs a `SourceCapabilities` so typecheck passes: the ones in
+   `test/unit/pipeline/fanout.test.ts`, `test/unit/pipeline/searchImport.test.ts`,
+   `test/unit/sources/registry.test.ts`, `test/integration/searchDialog-flow.spec.ts`,
+   `test/integration/phase1-dod.spec.ts`, and `test/unit/sources/queryParse.test.ts`'s transcribed
+   §12.3 columns.
+
+**Do NOT.** Do not add a Journal row to `docs/02` §12.3 (item 63, the owner's document edit). Do not
+change `normalizeForSource`'s behaviour or return type. Do not touch any adapter other than PubMed's
+declaration.
+
+**Criteria.**
+- [ ] `docs/07` §4.2 and `src/sources/types.ts` declare the same `query` member, and the document
+      carries the dated note.
+- [ ] `normalizeForSource` has no inline object type in its signature.
+- [ ] `PUBMED_CAPABILITIES.query` matches `docs/02` §12.3's PubMed column plus `journal`.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` exit 0; the integration suite is
+      not required (the fakes change shape, not behaviour) but `npm run test:integration` must still
+      compile, which typecheck covers.
+
+**Files.**
+- modify `docs/07-architecture-and-data-model.md` (§4.2 only)
+- modify `src/sources/types.ts`
+- modify `src/sources/shared/queryParse.ts`
+- modify `src/sources/pubmed/pubmedSource.ts`
+- modify `test/unit/sources/queryParse.test.ts`, `test/unit/pipeline/fanout.test.ts`,
+  `test/unit/pipeline/searchImport.test.ts`, `test/unit/sources/registry.test.ts`,
+  `test/integration/searchDialog-flow.spec.ts`, `test/integration/phase1-dod.spec.ts`
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test
+```
+
+---
+
 ---
 ## Estimate roll-up
 
@@ -3686,7 +3770,8 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 | `P2-T25` | Make the replay harness usable inside Zotero | 0.75 |
 | `P2-T26` | A test-only removal on the source registry, before the adapters | 0.25 |
 | `P2-T27` | Wire `fanOut` into the running pipeline | 0.50 |
-| **Total** | **27 tasks** | **28.25 d** |
+| `P2-T28` | The per-source query dialect's home in `SourceCapabilities` | 0.25 |
+| **Total** | **28 tasks** | **28.50 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather
