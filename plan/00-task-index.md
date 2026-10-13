@@ -644,6 +644,29 @@ run found on the way, and none was fixed.
     §7.2's other two statements reproduced exactly four times. The card is: state how many runs each
     figure rests on, which is the habit every stale number in this plan has lacked.
 
+### 6.6 Raised by `P1-T41`, 2026-10-13
+
+30. **Gate `G-09` still owes the system-keyring-library presence check, and two of `P3-T02`'s steps wait
+    on it.** The startup probe round-trips a value through encryption, which is what was asked for —
+    but **on Linux a missing keyring library does not make encryption fail**: the platform silently
+    substitutes a store that keeps the key inside the user profile, so **a round trip cannot tell a
+    real keyring from the degraded substitute.** `docs/09` §1.7's 2026-09-30 block says so and names
+    the check as owed. **The owner's 2026-10-08 choice of the session-only fallback does not remove
+    this**: choosing what to fall back *to* is a different question from being able to tell that you
+    must. `P3-T02`'s steps 3 and 5 cannot be finished until the check lands.
+
+31. **A stale comment in shipped code** at `src/zotero/keychain.ts:462–465` says nothing calls the
+    startup probe. A later card wired it — `src/bootstrap/container.ts:1537` calls it inside a
+    function called at `:1320`. One comment, no behaviour change.
+
+32. **Two stale rows in `P3-T02`'s `Files` list — an owner's decision, deliberately not pruned.** One
+    row creates `test/unit/prefs/secretSchema.spec.ts`, which **does not exist and whose assertions
+    already live in** `test/unit/prefs/schema.test.ts`; its filename also breaks the house convention,
+    since 27 of 29 unit test files end the other way, and the matching fragment of that card's
+    `Verify with` points at nothing. **Deleting the row changes the card's scope, so it was reported
+    rather than removed.** The same decision should settle whether the measured shrinkage — three of
+    seven steps landed, two partly — changes `P3-T02`'s 0.75 d estimate.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

@@ -227,11 +227,33 @@ no secret anywhere else on disk.
 
 **Read first.**
 - `docs/09-security-privacy-and-api-keys.md` §1.7 — the `SecretStore` interface, the
-  `SecretId` union, `LOGIN_ORIGIN` / `LOGIN_REALM` constants and the literal `setTier1()`
-  implementation this task reproduces
-- `docs/09-security-privacy-and-api-keys.md` §1.2 — the async-only `nsILoginManager` note:
-  `findLogins()` is a throwing stub and the sync `addLogin`/`removeLogin`/`searchLogins` were
-  removed on the esr153 base, so every call here is `await`ed and uses the `Async` name
+  `SecretId` union, the `LOGIN_ORIGIN` / `LOGIN_REALM` constants, the `setTier1()` listing this
+  task's `set()` follows, and the **2026-09-30 block on the Linux `NSSKeyStore` fallback**, which
+  constrains this card's startup probe and the badge in step 5
+  > **Narrowed 2026-10-13 by `P1-T41`.** This bullet used to call §1.7's listing "the literal
+  > `setTier1()` implementation this task reproduces". It is already **implemented**, at
+  > `src/zotero/keychain.ts:241` (`setSecret`), so there is nothing to reproduce; read §1.7 to
+  > check the shipped function against it, not to transcribe it. The 2026-09-30 block was added to
+  > §1.7 after this card was written and was not in the bullet at all — see the step 3 row of the
+  > landed table after the `Do` list for why it matters here.
+- `docs/09-security-privacy-and-api-keys.md` §1.2 — **the whole section, and the dated correction
+  block at lines 141–145 in particular**, because that block and not the upstream quote above it
+  gives the rule for the platform this plugin ships on: **feature-detect each `Services.logins`
+  member and `await` whichever form exists**
+  > **Corrected 2026-10-13 by `P1-T41`.** This bullet used to read: "the async-only
+  > `nsILoginManager` note: `findLogins()` is a throwing stub and the sync
+  > `addLogin`/`removeLogin`/`searchLogins` were removed on the esr153 base, so every call here is
+  > `await`ed and uses the `Async` name". **That was measured false on 2026-09-15 by `P0-T23`, and
+  > re-measured during `P1-T06`'s run.** It describes Zotero's `main` branch — Zotero 11 on Gecko
+  > 153 ESR. On the shipping Zotero 10.0.x (Gecko 140.15.0), read at runtime from inside the plugin
+  > sandbox: **`removeLoginAsync` and `modifyLoginAsync` are `undefined`**, the only `…Async`
+  > members are `addLoginAsync` and `searchLoginsAsync`, and the synchronous `removeLogin`,
+  > `modifyLogin`, `findLogins` (working, not a throwing stub), `countLogins`, `searchLogins` and
+  > `addLogin` all still exist. Zotero's own shipped `syncLocal.js` calls the synchronous forms.
+  > **Where the measurement lives:** `docs/09` §1.2's correction block (lines 141–145); `P0-T23`'s
+  > `Findings` at `plan/01-phase-0-toolchain-spike.md:3205–3207`; and the shipped feature-detection
+  > at `src/zotero/keychain.ts:120–133` (`removeLogin`), with `:139–149` (`loginRemovalMethod`) as
+  > the diagnostic that reports which form the running platform gave it
 - `docs/09-security-privacy-and-api-keys.md` §1.3 — that `encrypt()`/`decrypt()` are async, the
   `oskv1:` prefix, and the implementer note that the `available` getter is **not** a capability
   check and `ensureLoggedIn()`/`hasCredentials()` are not re-exported
@@ -244,21 +266,73 @@ no secret anywhere else on disk.
   one operation, and `uninstall()` (not `shutdown()`) clears every `SecretId`
 
 **Files.**
-- modify `src/zotero/keychain.ts` (created by `P1-T06`, which shipped tier 1 for `source.ncbi`
-  only; this card widens it to every `SecretId`)
+- modify `src/zotero/keychain.ts` (created by `P0-T23` as a spike and extended by `P1-T06`, which
+  shipped tier 1; this card widens the key-presence flags and the badge mapping to every
+  `SecretId`)
 - modify `src/prefs/schema.ts`
 - modify `src/prefs/keys.ts`
 - modify `addon/bootstrap.js`
 - modify `test/integration/zotero/keychain.spec.ts`
 - create `test/unit/prefs/secretSchema.spec.ts`
 
+> **Two rows checked against the shipped tree on 2026-10-13 by `P1-T41`; both are stale, and
+> neither is changed here because the fix is a scope judgement for this card's owner.**
+>
+> 1. **The first row used to read "created by `P1-T06`, which shipped tier 1 for `source.ncbi`
+>    only".** Two things in that are wrong. The file was **created by `P0-T23`** and `P1-T06`
+>    **extended** it rather than replacing it, for the reason recorded at
+>    `src/zotero/keychain.ts:9–21` — `test/integration/zotero/secrets.spec.ts` imports ten symbols
+>    from it and was outside `P1-T06`'s `Files` list, so `plan/README.md` §4's 2026-09-30
+>    correction applied. And the shipped tier-1 mechanism is **not** scoped to `source.ncbi`:
+>    `setSecret`, `getSecret`, `clearSecret`, `hasSecret` and `listStoredIds` take any `SecretId`.
+>    What is scoped to one id is the key-presence table, `KEY_PRESENCE_PREFS` at
+>    `src/zotero/keychain.ts:177`, which has a single row.
+> 2. **`create test/unit/prefs/secretSchema.spec.ts` names a file that does not exist, and the
+>    assertions it is meant to carry already do.** `test/unit/prefs/schema.test.ts:447–494` is a
+>    `describe("D5: no credential can reach a preference")` block that already asserts no `PREFS`
+>    entry is `secret: true`, that a synthetic `secret: true` definition is refused by the typed
+>    writer and by `guardWritable` directly, and that the rejection message does not contain the
+>    value. Note also the filename convention: **27 of the 28 unit test files use `.test.ts`**, not
+>    `.spec.ts`. So `Do` step 6's test is done and this row, plus the `secretSchema` fragment in
+>    **`Verify with`** below, point at nothing. Left for the owner to decide between deleting the
+>    row and renaming it to an extension of the existing file.
+
 **Do.**
-1. Declare `SecretBackend`, `SecretId` and the `SecretStore` interface in
-   `src/zotero/keychain.ts` exactly as `docs/09` §1.7 gives them — including the deliberate
-   absence of a `"plaintext-prefs"` member.
+1. **Check the three type declarations that already exist; do not write a second copy.**
+   `SecretBackend`, `SecretId` (with its frozen `SECRET_IDS` list and the `isSecretId` guard) and
+   the `SecretStore` interface are declared in **`src/core/secretStore.ts`** — `SECRET_IDS` at
+   `:54`, `SecretId` at `:65`, `SecretBackend` at `:86`, `SecretStore` at `:95` — and
+   `src/zotero/keychain.ts:76–77` **re-exports all three**. Confirm the union and the member list
+   still match `docs/09` §1.7, including the deliberate absence of a `"plaintext-prefs"` member,
+   and add nothing.
+   > **Corrected 2026-10-13 by `P1-T41`.** This step used to read: "Declare `SecretBackend`,
+   > `SecretId` and the `SecretStore` interface in `src/zotero/keychain.ts` exactly as `docs/09`
+   > §1.7 gives them — including the deliberate absence of a `"plaintext-prefs"` member." Followed
+   > literally today it would declare a **second copy of a live interface**, in the layer that may
+   > not own it. **The two authority documents disagree about the placement, and Phase 1 already
+   > resolved it.** `docs/09` §1.7 prints the block under a `// src/zotero/keychain.ts` comment,
+   > while `docs/07` §2.3 — the authority on placement — says `core/` declares a **port** for a
+   > platform capability and receives the implementation through the container. `P1-T06` shipped
+   > first and followed §2.3, so the declarations live in the port **and
+   > `src/zotero/keychain.ts` re-exports them**, which is what keeps §1.7's own reading of the
+   > module surface true. The resolution and the reason are recorded in the code at
+   > `src/core/secretStore.ts:12–28`, which names this step by number, and were reported with
+   > `P1-T06` in `plan/02-phase-1-pubmed.md`. Neither document was edited: the re-export means
+   > neither has to be.
 2. Implement the tier-1 backend: `set()` per §1.7's `setTier1()`, `get()` decrypting via
-   `Zotero.OSKeyStore.decrypt()` when `isEncrypted()` is true, `clear()` via
-   `removeLoginAsync`, `has()` as a search that never decrypts, and `listStoredIds()`.
+   `Zotero.OSKeyStore.decrypt()` when `isEncrypted()` is true, `clear()` **through
+   `src/zotero/keychain.ts`'s exported `removeLogin()` helper, which feature-detects the removal
+   method** — call the helper, do not transcribe its body — `has()` as a search that never
+   decrypts, and `listStoredIds()`.
+   > **Corrected 2026-10-13 by `P1-T41`.** This step used to say that `clear()` goes "via
+   > `removeLoginAsync`". On Zotero 10.0.x that member is **`undefined`**, so the step as written
+   > was an instruction to call `undefined`; the measurement is the one named in the correction on
+   > the `docs/09` §1.2 bullet above. The shipped shape is `src/zotero/keychain.ts:120–133`: prefer
+   > `removeLoginAsync` when `typeof` reports it a function, fall back to the synchronous
+   > `removeLogin`, `await` either, and throw only when the platform has neither.
+   > `src/zotero/keychain.ts:139–149` (`loginRemovalMethod`) reports which one was chosen.
+   > **`docs/09` §1.7's own `setTier1()` listing already feature-detects the same way**, so §1.7
+   > needs no correction and this step now simply agrees with it.
 3. Implement `probeBackend()`: round-trip a throwaway value through
    `encrypt()`/`decrypt()` at startup and classify the backend from the result, not from the
    `available` flag. Write the outcome to the `secretBackend` pref.
@@ -270,15 +344,47 @@ no secret anywhere else on disk.
 7. Call `await secretStore.clearAll()` from `uninstall()` in `addon/bootstrap.js`. Leave
    `shutdown()` untouched.
 
+> **What has already landed, step by step — measured 2026-10-13 by `P1-T41` against the shipped
+> tree.** This card was written before the Phase 0 spike measured the platform and before Phase 1
+> shipped the secret store, so several steps describe work that now exists. **Nothing above has
+> been deleted.** Whether a *landed* step is finished or merely present is a judgement about Phase
+> 3's scope, and this card's owner takes it; the table is the measurement that decision needs, and
+> the `Estimate` of 0.75 d has deliberately not been changed.
+>
+> | Step | Mark | The file and line that settles it |
+> |---|---|---|
+> | 1 — declare the three types | **landed**, in a different file and layer | `src/core/secretStore.ts`: `SECRET_IDS` `:54`, `SecretId` `:65`, `SecretBackend` `:86`, `SecretStore` `:95` (all seven §1.7 members, no `"plaintext-prefs"`). Re-exported at `src/zotero/keychain.ts:76–77`. See the dated note on step 1 |
+> | 2 — the tier-1 backend | **landed**, and already for every `SecretId` | `src/zotero/keychain.ts`: `setSecret` `:241`, `getSecret` `:265`, `clearSecret` `:295`, `hasSecret` `:283`, `listStoredIds` `:305`, assembled into the port's shape by `createKeychainSecretStore` `:517`. None of the five is restricted to one id |
+> | 3 — `probeBackend()` and the `secretBackend` pref | **partly landed** | Round trip at `probeKeystore` `src/zotero/keychain.ts:357` (a real `encrypt`→`decrypt` of a throwaway value, not a read of `available`); pref write at `probeAndRecordBackend` `:474`; the `docs/09`→`docs/07` spelling map at `secretBackendPrefValue` `:430`; wired at startup by `installSecretStore` in `src/bootstrap/container.ts:1517`, probe called at `:1537`, store built at `:1549`, whole function called at `:1320`. **What is missing:** `docs/09` §1.7's 2026-09-30 block measured that on Linux a missing libsecret does **not** make `encrypt()` throw — Gecko silently substitutes `NSSKeyStore`, which keeps the key inside the profile — so a round trip alone cannot tell a real system keyring from the degraded case. §1.7 says this probe therefore "cannot be 'catch the throw'" and that gate `G-09` owes a `js-ctypes` libsecret-presence check first. The shipped probe has no such check, so on Linux it can report tier 1 for a backend the owner has already decided is **not** tier 1 |
+> | 4 — `set()` and `clear()` the only writers of `*.keyPresent` | **partly landed** | The single-writer property is landed: `refreshKeyPresence` `src/zotero/keychain.ts:217` is the only writer and is called only from `setSecret` `:255` and `clearSecret` `:300`, and it **derives** the flag from `hasSecret()` rather than asserting it. The flag **table** is not: `KEY_PRESENCE_PREFS` `:177` holds one row, `source.ncbi` → `ncbiKeyPresent`, and `src/prefs/keys.ts:89` is the only `*.keyPresent` key declared. For the other six ids `refreshKeyPresence` returns `undefined` and writes nothing (`:220–223`). `docs/07` §8.5 wants six flags for seven ids, because `tts.gemini` shares `gemini.keyPresent` with `llm.gemini`; **five flags remain to add** |
+> | 5 — map `SecretBackend` to the badge string key | **not started** | No mapping and no string exists. `grep -n "backend\|keyring\|keychain" src/i18n/keys.ts addon/locale/en-US/*.ftl` returns nothing. The only mapping that exists, `secretBackendPrefValue` `src/zotero/keychain.ts:430`, converts a probe verdict to the **preference** value of `docs/07` §8.5 (`"oskeystore"` or `""`), which is not a user-facing string. Note the dependency on step 3's gap: `docs/09` §1.7's 2026-09-30 decision forbids showing a system-keyring badge in the NSS fallback case, and §1.7 also says a Linux machine is still needed to learn what that backend **reports**, so the badge can name it instead of guessing |
+> | 6 — `secret: true` in the prefs schema, with the unit test | **landed**, under a different filename | Flag declared at `src/prefs/schema.ts:61`; the guard that makes it enforceable at `guardWritable` `src/prefs/index.ts:239–248`, called from the typed writer at `:311`; the test at `test/unit/prefs/schema.test.ts:447–494`. The file the `Files` list names, `test/unit/prefs/secretSchema.spec.ts`, does not exist — see the dated note under `Files` |
+> | 7 — `clearAll()` from `uninstall()` | **not started** | `uninstall(data, reason) {}` is an empty body at `addon/bootstrap.js:137`. `clearAll()` is **not** a member of the port, and its absence is deliberate and documented at `src/core/secretStore.ts:34–37`, which names this step as its intended first caller — so this step still has to add the member as well as the call. `shutdown()` is at `addon/bootstrap.js:107` and must stay untouched |
+
 **Do NOT.**
 - Do **not** write a key, encrypted or otherwise, to `Zotero.Prefs`. Decision **D5**. There is
   no `*.apiKey` / `apiKey.*` pref and there must never be one (`docs/07` §8.5).
 - Do **not** write a key to the plugin's SQLite database, "not even encrypted, not even
   transiently" — the database lives in the **data** directory and travels in every backup
   (`docs/09` §1.6).
-- Do **not** call `Services.logins.findLogins()`, `addLogin()`, `removeLogin()`,
-  `searchLogins()` or `countLogins()`. They are removed or throwing on this Gecko base; use the
-  `…Async` forms and `await` all of them (`docs/09` §1.2).
+- Do **not** assume which `Services.logins` members this Gecko has, in either direction. Go through
+  `src/zotero/keychain.ts`'s helpers — `searchOwnLogins()` (`:102`) and `removeLogin()` (`:120`) —
+  `await` every call, and feature-detect anything new you need, preferring an `…Async` member when
+  `typeof` says it exists and falling back to the synchronous form (`docs/09` §1.2's correction
+  block, lines 141–145). Do **not** decrypt a stored value that lacks the `oskv1:` prefix either:
+  `Zotero.OSKeyStore.decrypt()` returns an unprefixed input unchanged, so
+  `src/zotero/keychain.ts:265–276` refuses it instead.
+  > **Corrected 2026-10-13 by `P1-T41`.** This bullet used to read: "Do **not** call
+  > `Services.logins.findLogins()`, `addLogin()`, `removeLogin()`, `searchLogins()` or
+  > `countLogins()`. They are removed or throwing on this Gecko base; use the `…Async` forms and
+  > `await` all of them (`docs/09` §1.2)." **Measured false on 2026-09-15 by `P0-T23`**: on
+  > Zotero 10.0.x every one of those synchronous members exists and works, while `removeLoginAsync`
+  > and `modifyLoginAsync` do **not** exist — so the prohibition forbade the members that are
+  > actually there and mandated two that are not. The shipped code calls `addLoginAsync` and
+  > `searchLoginsAsync`, which do exist here, and feature-detects removal. Same measurement as the
+  > `Read first` correction above: `docs/09` §1.2 lines 141–145, `P0-T23` at
+  > `plan/01-phase-0-toolchain-spike.md:3205–3207`, shipped code at
+  > `src/zotero/keychain.ts:120–133`.
 - Do **not** treat `Zotero.OSKeyStore.available` as proof that encryption works, and do **not**
   call `ensureLoggedIn()` or `hasCredentials()` on Zotero's wrapper — it does not re-export
   them (`docs/09` §1.3 implementer note).
@@ -311,6 +417,15 @@ over the sketch in `docs/09` §1.7 and this card should be amended before it is 
 one `SecretId` per login entry (with the id as the `username` field) is what makes
 `listStoredIds()` and the "remove all keys" count in `P3-T04` possible.
 
+> **That conditional fired, and it is discharged — 2026-10-13 by `P1-T41`.** `V-16` shipped as
+> `P0-T23`, and it **did** record a deviation: `removeLoginAsync` does not exist on Zotero 10.0.x,
+> and Zotero's own `syncLocal.js` there calls the synchronous `removeLogin`. The amendment is the
+> four dated corrections above — on the `docs/09` §1.2 `Read first` bullet, on `Do` steps 1 and 2,
+> and on the `Services.logins` `Do NOT` — plus the step-by-step landed table after the `Do` list.
+> **No `docs/09` edit was needed:** §1.7's `setTier1()` listing was corrected earlier and already
+> feature-detects, and §1.2's upstream quote is accurate about the branch it describes and carries
+> its own correction block beneath it, so the spike report and §1.7 no longer disagree.
+
 **This card widens an existing module, it does not create one.** `P1-T06` already shipped
 `src/core/secretStore.ts` (the port, with `docs/09` §1.7's full member list and the full
 `SecretId` union) and tier 1 in `src/zotero/keychain.ts` and its integration spec, scoped to
@@ -319,6 +434,14 @@ there. Do not re-declare the port, do not re-declare the `SecretId` union, and d
 second keychain module — extend what is there to every `SecretId` and add the LLM cases to the
 existing spec. There is no `Depends on` edge to `P1-T06` because Phase 3 is reachable only after
 Phase 1 has shipped in full.
+
+> **One word in the paragraph above narrowed, 2026-10-13 by `P1-T41`: "scoped to `source.ncbi`".**
+> The tier-1 **mechanism** is not scoped to that id — `setSecret`, `getSecret`, `clearSecret`,
+> `hasSecret` and `listStoredIds` (`src/zotero/keychain.ts:241`, `:265`, `:295`, `:283`, `:305`)
+> each take any `SecretId`. What is scoped to `source.ncbi` is the **key-presence flag table**
+> (`KEY_PRESENCE_PREFS`, `:177`, one row) and the integration spec. So "extend what is there to
+> every `SecretId`" means steps 4 and 5, not step 2. The step-by-step table after the `Do` list has
+> the per-step measurement.
 
 ---
 

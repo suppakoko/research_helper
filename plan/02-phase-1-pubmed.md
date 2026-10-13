@@ -7914,8 +7914,13 @@ Measured 2026-10-07:
    `docs/09` §1.2 lines 141–145 carry the **dated correction, measured 2026-09-15 by `P0-T23`**: that text
    describes Zotero's `main` branch, and in the Zotero 10 plugin sandbox **`removeLoginAsync` and
    `modifyLoginAsync` are `undefined`** while the synchronous forms exist. The shipped code already
-   feature-detects — `src/zotero/keychain.ts:328–332` tests `typeof
-   Services.logins.removeLoginAsync === "function"` before calling it. `P3-T02` step 2 says `clear()` goes
+   feature-detects — `src/zotero/keychain.ts:120–133` tests `typeof
+   Services.logins.removeLoginAsync === "function"` before calling it, with a diagnostic copy at
+   `:139–149`.
+   > **Line numbers corrected 2026-10-13 after the executing agent checked them.** This cited
+   > `:328–332`, which is part of a **result type**, not the detection. The surrounding claim was right
+   > and the number on top of it was never checked — `plan/README.md` §5 rule 8, and the sixth time this
+   > week that I handed an agent a grepped fact with an ungrepped number attached. `P3-T02` step 2 says `clear()` goes
    "via `removeLoginAsync`", which on this platform is a call to `undefined`.
 2. **Most of the card has already landed, in a different file and a different layer.** `P3-T02` step 1
    says to declare `SecretBackend`, `SecretId` and `SecretStore` "in `src/zotero/keychain.ts` exactly as
@@ -7993,6 +7998,96 @@ agent inherits a premise it would have tested had it been written as a question.
 rule 8 was added for this, and the reason this particular one is worth a card of its own rather than a
 line in someone's `Findings` is the blast radius — `P3-T02` blocks six Phase 3 cards, and the crash it
 would reproduce has already cost this project one measurement.
+
+**Findings, 2026-10-13 — `P3-T02` now carries a step-by-step measurement of itself against the shipped
+code, and the answer is that three of its seven steps have landed, two partly, and two not at all. One
+file changed; no step was deleted.**
+
+**Verified by the coordinator:** `plan/04-phase-3-llm-summaries.md` is the only file this card touched —
+`docs/09` needed no edit, and nothing under `src/`, `test/` or `addon/` was modified by it.
+
+| `P3-T02`'s step | mark |
+|---|---|
+| 1 — declare the three secret types | **landed**, in a different file and a different layer |
+| 2 — the tier-1 backend: store, read, replace, clear, exists, list | **landed**, and for every credential identifier rather than one |
+| 3 — the startup probe and the backend preference | **partly** |
+| 4 — make store and clear the only writers of the key-presence flags | **partly** |
+| 5 — translate the backend into the user-facing badge text | **not started** |
+| 6 — the secret flag in the preference schema, plus a test | **landed**, under a different filename |
+| 7 — clear every stored secret on uninstall | **not started** |
+
+**Step 3's "partly" is the finding with consequences, and it is not about code quality.** The probe round-
+trips a throwaway value through encryption, which is what the card asked for. But **on Linux a missing
+system keyring library does not make encryption fail** — the platform silently substitutes a store that
+keeps the key inside the user profile — so **a round trip alone cannot tell a real keyring from the
+degraded substitute.** `docs/09` §1.7's block dated 2026-09-30 says exactly that and says gate `G-09` owes
+a **library-presence check** first. No such check exists in the shipped probe. **So steps 3 and 5 cannot
+be finished until that check lands**, and the owner's 2026-10-08 choice of the session-only fallback does
+not remove the requirement: choosing what to fall back *to* is a different question from being able to
+tell that you must.
+
+**Step 4 is the better-shaped half of the same story.** The single-writer property **has** landed, and
+properly: one function writes the flags, it is called from exactly two places, and **it reads the answer
+back out of the login store rather than trusting its caller.** What has not landed is the flag *table* —
+one row exists where seven credentials need one, and for the other six the function writes nothing.
+
+**Step 7 turns out to be larger than its wording.** The uninstall function's body is empty, and a
+clear-everything method is **not a member of the store interface** — deliberately, with the absence
+documented at `src/core/secretStore.ts:34–37`, which names this very step as the intended first caller. So
+step 7 has to add the method as well as the call.
+
+**The retracted claim was corrected in both places it appeared, and the fix is by reference rather than by
+transcription.** The card told its implementer that the synchronous login-store methods were removed and
+that one method is a throwing stub. Measured false on 2026-09-15. Worse, the old `Do NOT` **forbade the
+five methods that actually exist on this platform and required two that do not**, which made step 2 an
+instruction to call nothing. It now states the rule that survives measurement — prefer the asynchronous
+member when present, fall back to the synchronous one, await either — and the shipped feature detection is
+pointed at rather than copied. A second, true prohibition was added from the shipped code: **never decrypt
+a stored value that lacks the plugin's own prefix.**
+
+**The card's own conditional fired, which is worth noticing as a pattern that worked.** `P3-T02`'s closing
+note said: amend this card before execution if the spike found a deviation. **The spike did, eleven months
+of plan-time ago in card-numbering terms, and nobody came back.** A conditional instruction with no owner
+is a note that waits forever; this is the amendment it asked for, and the note now says so.
+
+**Five further stale things were found, reported and left alone.** Two are in `P3-T02`'s `Files` list: a row
+that mis-attributed who created the keychain module, and a row that creates a test file **which does not
+exist and whose assertions already live elsewhere** — with a filename that also breaks the house
+convention, since 27 of 29 unit test files end one way and this names the other. **Deleting that row would
+change the card's scope, so it was reported rather than pruned**, which is the right call. One is a stale
+comment in shipped code claiming the startup probe has no caller, when a later card wired it. One is the
+lazy-platform-global fix already flagged in the composition root. And one is mine.
+
+**The one that is mine is rule 8 for the sixth time this week, and the shape is identical every time.** My
+card cited `src/zotero/keychain.ts:328–332` as the place that feature-detects the asynchronous removal
+method. **Lines 328–332 are part of a result type**; the real detection is at `:120–133`, with a diagnostic
+copy at `:139–149`. I checked it myself before accepting the correction. **The surrounding claim was right
+and the line numbers were not** — which is exactly what rule 8 was written for, and the sixth time I have
+supplied an agent with a grepped fact and an ungrepped number on top of it. Corrected above.
+
+**The unprompted second check came back clean, and that is useful rather than dull.** Asked to look for the
+same retracted claim elsewhere in `plan/04`, the agent searched the whole file for the five method names
+and four other phrasings and found it **only** in `P3-T02`, at the places now corrected. Two cards
+elsewhere mention those methods and are **correct** — one records the open question, the other records the
+answer. **So the false claim did not spread**, and knowing that is worth the search.
+
+**One piece of cross-card hygiene the agent got right without being asked.** The unit-test count moved from
+1,234 to 1,245 during its run, and rather than claiming or ignoring it, the agent **attributed it** to the
+agent working in parallel on a new identifier test, named the file, named the time it appeared, and proved
+its own innocence with a timestamp sweep showing **no file under `src/` or `addon/` modified at all**. With
+three cards in flight at once that arithmetic is what keeps a report from becoming a muddle.
+
+**What was not checked.** No git command, as instructed — the timestamp sweep stands in for the one in the
+card's own `Verify with`. The integration suite was not run, because the baseline named only the unit and
+contract counts. **Nothing was verified on Linux or macOS**: every mark above is read from source, and the
+platform measurements quoted are Phase 0's, taken on Windows. `plan/04` was searched as a whole but
+compared against shipped code only for `P3-T02`.
+
+**Needs a card.** Retire the stale comment that says the startup probe has no caller. Make the
+platform-global reference lazy, which the composition root already flags. And an **owner's decision**: close
+out `P3-T02`'s two stale `Files` rows and decide whether the measured shrinkage changes its estimate — the
+measurement is now inside the card, which is where the decision wanted it. **Gate `G-09` still owes the
+keyring-library presence check**, and steps 3 and 5 wait on it.
 
 ---
 
