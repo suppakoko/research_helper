@@ -608,50 +608,9 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     of those figures is derived from a `State`, and `P1-T23`'s `Files` row permits the measured figures and
     never a state. §7's regeneration is the card.
 
-### 6.5 Raised by `P1-T23`, the phase acceptance run, 2026-10-12
-
-**All five finishing conditions passed.** Nothing below is a failed condition; they are the things the
-run found on the way, and none was fixed.
-
-25. **The source registry still has no removal, and that now has a deadline.** A test needing a
-    stand-in source must take a spare source name and leave it in the application-wide registry for
-    the life of the process, because the registry throws on a duplicate and declares no removal.
-    **Two test files now do this** — `searchDialog-flow.spec.ts` on `crossref` and
-    `phase1-dod.spec.ts` on `europepmc` — **and Phase 2 ships real adapters for both names**, at
-    which point neither registration succeeds and both files break. `P1-T35` raised this as tidiness;
-    **it must land before the first Phase 2 adapter card.** Needs `src/sources/registry.ts` and the
-    two test files.
-
-26. **A developer command ships in the Tools menu.** `Tools ▸ Research Helper` shows
-    **`Create spike item (P0-T10)`** beside `Search & Import…`. It works, so the letter of "nothing
-    half-built is reachable from a menu" holds, but a developer command labelled with an internal task
-    number is visible to every user and **no card retires it**. The card must choose: retire it, hide it
-    behind a developer setting, or keep it and record why a release ships it. Retiring it means
-    rewriting two integration checks, because one is built on that message identifier and another
-    counts menu entries by it.
-
-27. **One test depends on being first in the whole suite, and the dependency is now broken.** Three
-    shipped decisions meet: the view model is built once at application start, `P1-T36` deliberately
-    left `connect()` not clearing the retained record or resetting the view state, and the window
-    derives the export control's visibility from `state.notices.length > 0`. **So any import anywhere
-    in the suite leaves that control visible for every window opened afterwards.** `P1-T23` restored
-    it inside its own file and said plainly that **a restore is not a fix**: the check has to be made
-    order-independent, which **item 21's published boolean would do**. Treat 21 and 27 as one card.
-
-28. **The provenance schema checker now exists three times** — about 200 lines each in the unit tests
-    and in two integration specs — because none of the three can import another: the unit copy needs
-    the test framework and Node's file system, neither of which exists inside Zotero, and each
-    integration spec is bundled on its own. `P1-T36` already asked for the shared helper. The shape
-    that works is one module under `test/support/` that imports **nothing**.
-
-29. **`docs/07` §7.2's "25 costs 47 % more" is a one-run figure that does not reproduce.** Four runs in
-    `P1-T23` put the penalty at **7 % to 25 %**. The direction holds and "ship 50" is unaffected, and
-    §7.2's other two statements reproduced exactly four times. The card is: state how many runs each
-    figure rests on, which is the habit every stale number in this plan has lacked.
-
 ### 6.6 Raised by `P1-T41`, 2026-10-13
 
-30. **Gate `G-09` still owes the system-keyring-library presence check, and two of `P3-T02`'s steps wait
+55. **Gate `G-09` still owes the system-keyring-library presence check, and two of `P3-T02`'s steps wait
     on it.** The startup probe round-trips a value through encryption, which is what was asked for —
     but **on Linux a missing keyring library does not make encryption fail**: the platform silently
     substitutes a store that keeps the key inside the user profile, so **a round trip cannot tell a
@@ -660,6 +619,11 @@ run found on the way, and none was fixed.
     this**: choosing what to fall back *to* is a different question from being able to tell that you
     must. `P3-T02`'s steps 3 and 5 cannot be finished until the check lands.
 
+
+56. **`docs/07` §7.2's "25 costs 47 % more" is a one-run figure that does not reproduce.** Four runs in
+    `P1-T23` put the penalty at **7 % to 25 %**. The direction holds and "ship 50" is unaffected, and
+    §7.2's other two statements reproduced exactly four times. The card is: state how many runs each
+    figure rests on, which is the habit every stale number in this plan has lacked.
 31. **A stale comment in shipped code** at `src/zotero/keychain.ts:462–465` says nothing calls the
     startup probe. A later card wired it — `src/bootstrap/container.ts:1537` calls it inside a
     function called at `:1320`. One comment, no behaviour change.
@@ -789,7 +753,7 @@ run found on the way, and none was fixed.
 50. **(owner decision)** The badge vocabulary in `docs/09` §1.9 item 3 and `docs/08` §7.5 rule 7 has **no state
     for "the probe passed but the tier cannot be told"** — which, after `P1-T41`'s finding, is every Linux
     machine without a keyring library. `P1-T44` added `indeterminate` rather than claim a tier. Either
-    the two documents gain the state, or item 30's library-presence check lands and retires it.
+    the two documents gain the state, or item 55's library-presence check lands and retires it.
 
 51. **(owner decision)** `docs/08` §7.3 and §10.1 put the pane's strings in a **fourth bundle**,
     `research-helper-preferences.ftl`; the card put them in the main-window bundle and `P1-T44` followed the

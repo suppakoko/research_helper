@@ -4719,7 +4719,7 @@ not even grepped before it was written.
 A measurement from this card worth carrying forward: §7.2 states that a chunk size of 25 "costs **47 %**
 more for nothing", which is **one run**. Across four runs here the penalty was **7 % to 25 %**, never
 47 %. The direction holds and "ship 50" is unaffected, but the size does not reproduce and §7.2 does not
-say how many runs it rests on — now `plan/00` §6 item 29. Human gate details go in
+say how many runs it rests on — now `plan/00` §6 item 56. Human gate details go in
 [`06-human-gates.md`](06-human-gates.md).
 
 **Findings, 2026-10-12 — all five of §2's finishing conditions pass, measured against a live service and a
