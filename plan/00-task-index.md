@@ -714,6 +714,23 @@ run found on the way, and none was fixed.
     one file per card, nothing needs doing. **The new file's header states which file owns what**, so
     no reader is left guessing while the question is open. An owner's call.
 
+### 6.9 Raised by `P1-T42`, 2026-10-13
+
+38. **Swap the PubMed adapter's inline second render for `omitSecretFields`.** `P1-T42` made the
+    re-render technique reusable as `src/core/errors.ts`'s `omitSecretFields(values)` — the field-name
+    rule applied to a parameter list, removing rather than blanking — and the one existing caller of the
+    technique, `src/sources/pubmed/pubmedSource.ts`'s request builder, still does it inline. One line,
+    outside that card's list.
+
+39. **A dozen comments now say a 32-character key is below the redactor and nothing can catch it.** True
+    when written, stale since `P1-T42` added the hexadecimal shape — the NCBI shape is now caught, and
+    only a non-hexadecimal short key still passes. The agent listed them with lines: the view model (four
+    places), two integration specs, two unit specs, and `src/core/provenance.ts`, which also carries a
+    misattribution at `:207–208` (it quotes a sentence from the adapter as if from `errors.ts`).
+    None is a failing assertion. **The mirror image of the premise defect**: a true statement a later
+    card makes false, left in place because nobody re-reads a comment. **Do not** let any of them be
+    rewritten to say the headline is now safe — it is not; see item 4 and `docs/09` §2.1.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

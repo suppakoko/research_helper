@@ -422,6 +422,7 @@ const KEY_PATTERNS: readonly RegExp[] = [
   /\bsk-[A-Za-z0-9]{32,}/g,                // OpenAI legacy
   /\bAIza[A-Za-z0-9_-]{35}/g,              // Google API keys
   /\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*/gi, // any bearer token
+  /\b[0-9a-fA-F]{32,}\b/g,                 // unprefixed hexadecimal run — NCBI shape (P1-T42)
   /\b[A-Za-z0-9_-]{40,}\b/g,               // long opaque run — last-resort net
 ];
 
@@ -433,6 +434,68 @@ export function redact(input: string): string {
 ```
 
 The final catch-all pattern will occasionally redact a legitimate long token (a base64 chunk, a hash). That is the correct trade: a false-positive redaction costs a debugging inconvenience; a false negative publishes a billing credential to a GitHub issue.
+
+**The project's own short credential is below the catch-all. Recorded 2026-10-13 by `P1-T42`; measured
+2026-10-07 by `P1-T17`.** An NCBI `api_key` is unprefixed and hexadecimal, and `P1-T17` measured one at
+**32 characters** (its `Findings` in `plan/02-phase-1-pubmed.md`); `P1-T09`'s unit test
+(`test/unit/sources/pubmed-source.test.ts`, "the NCBI api_key") models it at **36**. NCBI's own
+documentation, as `02-literature-database-apis.md` §3.1 records it, gives no length, so the corpus holds two
+measurements and no authority; both are below 40, so the gap is the same at either. The catch-all above
+therefore never saw this key. It is caught anyway in two of the three places it can appear — `redactUrl()`
+removes the `api_key` parameter **by name**, and `src/core/logger.ts` redacts a context value **by field
+name** whatever its length — which leaves exactly one uncovered shape: the key in **free text, with no
+field name around it and no URL to parse** — a sentence, an exception message, a form body. Three cards
+(`P1-T09`, `P1-T17`, `P1-T22`) worked around that shape locally before this paragraph existed.
+
+**Why the threshold stays at 40 — measured, not argued, 2026-10-13.** Lowering the catch-all is within the
+trade stated above, so `P1-T42` measured its cost over this repository's own text: `src/`, `test/` (code and
+the recorded fixtures), the `addon/` bundles, `docs/`, `plan/`, the schema, scripts and typings, and the
+verbose output of the unit and contract suites — 202 files. The six vendor shapes were applied first, as
+`redact()` applies them, and every remaining run of `[A-Za-z0-9_-]` between a candidate floor and 39
+characters was counted:
+
+| floor | newly redacted runs (occurrences / distinct) | what they are |
+|---|---|---|
+| 39 | 45 / 7 | all shipped Fluent ids: `research-helper-search-authors-overflow`, `research-helper-search-status-searching`, `research-helper-search-status-importing`, `research-helper-search-duplicates-label`, `research-helper-search-source-searching` |
+| 36 | 268 / 69 | 60+ shipped Fluent ids (`research-helper-search-state-initial`, `research-helper-search-source-failed`, `research-helper-search-export-failed`, …) |
+| 34 | 439 / 103 | adds `research-helper-search-state-empty` (34), `research-helper-search-state-error` (34), `research-helper-menu-search-import` (34), `L10N_MENU_COLLECTION_SEARCH_IMPORT` (34) |
+| 32 | 930 / 147 | 494 occurrences are `research-helper-*` / `rh-*` ids (`research-helper-progress-headline`, 33; `research-helper-search-result-count`, 35); 137 are this document's own slug `09-security-privacy-and-api-keys` (32); the rest are document slugs and constants such as `MESSAGE_PREFIX_MATCHES_ADDON_REF` |
+
+There is no free step: even one character costs seven identifiers the window ships. Those identifiers
+do reach `redact()`: `src/bootstrap/container.ts` logs `{ messageId }` when the progress headline falls
+back to its en-US text, and `src/i18n/ftl.ts` interpolates a Fluent id into the `Error` it throws for an
+unprefixed one, whose message and stack `toSerialized()` redacts. So a lower floor would turn the plugin's
+own message ids into `[redacted:33]` in the very log a bug report pastes, while still missing a
+31-character key. **The floor stays at 40.** For the record, the floor already
+redacts 189 occurrences / 70 distinct runs in the corpus today, among them eleven shipped Fluent ids of 40
+or more characters (`research-helper-import-abstract-coverage` is exactly 40) and every `hash:<sha1>` work
+key `src/model/ids.ts` derives; that is the trade the paragraph above accepts, and it is now measured.
+
+**What was added instead: a shape for the unprefixed hexadecimal credential**, second to last in
+`KEY_PATTERNS` — `/\b[0-9a-fA-F]{32,}\b/g`. Over the same 202 files it matches **3 distinct runs** shorter
+than 40 characters, in 9 places: the synthetic stubs the tests build from `0123456789abcdef` (8 places) and
+one checksum in `01-zotero-plugin-platform.md` that never passes through the redactor. No identifier, message
+id, DOI, PMID, PMCID, Zotero item key or fixture name in the repository is 32 hexadecimal characters long,
+and a 32-hexadecimal run is never a legitimate search term. The shape covers 32 and 36 alike and is
+idempotent with the marker it leaves. **This is a shape, not a lower floor**, and it is held to the same
+rule as the rest of this block: `src/core/errors.ts` transcribes it, `test/unit/core/errors.test.ts`
+compares the printed block above against the shipped array entry by entry, and nothing else declares it.
+
+**Residual gap, stated so the next reader has it.** `redact()` still passes an unprefixed credential that is
+**not** hexadecimal and shorter than 40 characters (the corpus records no shape for a Semantic Scholar key,
+so that case is open), and a hexadecimal one shorter than 32. Both are asserted as passing in
+`test/unit/core/errors.test.ts`, so the gap is documented behaviour rather than a surprise. The practical
+consequence for `08-ui-ux-spec.md` §4.6's empty-state headline, which interpolates the user's query: a
+32-hexadecimal key in that sentence is now redacted, a 32-character non-hexadecimal run is not, so the
+headline stays omitted (`EMPTY_HEADLINE_OMITTED` in `src/ui/viewModels/searchImportViewModel.ts`) and the
+right fix is still a message that takes no `$query` — `P1-T22`'s recommendation stands.
+
+**A body that definitely carries a key is not this function's job.** Never pattern-match the rendered form.
+Render the real form from the original values, then render the loggable form a **second time** from
+`omitSecretFields(values)` (`src/core/errors.ts`), which removes — not blanks, for `redactUrl()`'s reason —
+every entry whose name `KEYISH_FIELD` matches. `src/sources/pubmed/pubmedSource.ts`'s `buildEfetchRequest`
+shipped the technique inline on 2026-10-07; `P1-T42` lifted it into the module that holds the patterns so
+it is one rule in one place rather than a technique one card used.
 
 **Level 3 — headers are structurally excluded.** The HTTP client logs a *derived* header summary, never the header object:
 

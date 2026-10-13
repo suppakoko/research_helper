@@ -10,6 +10,7 @@ import {
   type LogLevel,
   type LogSink,
 } from "../../../src/core/logger";
+import { L10N_PROGRESS_HEADLINE } from "../../../src/i18n/keys";
 
 /**
  * `P1-T02`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network.
@@ -137,6 +138,62 @@ describe("the card's redaction criterion", () => {
     expect(line).toContain('"lvl":"warn"');
     expect(line).toContain('"msg":"odd"');
     expect(line).toContain('"ctx.lvl":"info"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The unprefixed short credential — P1-T42
+// ---------------------------------------------------------------------------
+
+/**
+ * The one shape `src/core/logger.ts`'s three rules did not cover before
+ * `P1-T42`: a credential with no vendor prefix, shorter than the catch-all, in
+ * free text — no field name for rule 1, no scheme for rule 2, and nothing for
+ * rule 3 to match. `docs/09` §2.1 now carries a hexadecimal shape for it and
+ * records that the catch-all's floor stays at 40; both halves are asserted on
+ * the emitted text here.
+ *
+ * The value is a repeated `0123456789abcdef`, built here. It is the shape
+ * `P1-T17` measured for an NCBI key and nobody's key.
+ */
+describe("the unprefixed short credential (P1-T42)", () => {
+  const HEX_32 = "0123456789abcdef".repeat(2);
+
+  it.each(LEVELS)(
+    'at level "%s", a bare hexadecimal run in the message is redacted',
+    (level) => {
+      const log = createLogger({ sink, clock, level: "debug" });
+      log[level](`efetch failed: db=pubmed&api_key=${HEX_32}`);
+      expect(sink.lines).toHaveLength(1);
+      expect(sink.text()).not.toContain(HEX_32);
+      expect(sink.text()).toContain("[redacted:32]");
+    },
+  );
+
+  it("redacts it in a context value whose field name says nothing", () => {
+    // `detail` is not KEYISH_FIELD and the value has no scheme, so rules 1 and
+    // 2 pass it by; only the content rule can catch it, and before P1-T42 it
+    // did not — this is SerializedError.detail's shape.
+    const log = loggerAt("debug");
+    log.warn("source failed", { detail: `efetch failed for ${HEX_32}` });
+    expect(sink.text()).not.toContain(HEX_32);
+    expect(sink.text()).toContain('"detail":"efetch failed for [redacted:32]"');
+  });
+
+  it("redacts it from an Error's message and stack on both channels", () => {
+    const log = loggerAt("debug");
+    log.error("boom", { err: new Error(`sent ${HEX_32}`) });
+    expect(sink.text()).not.toContain(HEX_32);
+    expect(sink.reported).toHaveLength(1);
+    expect(sink.reported[0]).not.toContain(HEX_32);
+  });
+
+  it("leaves a shipped 33-character Fluent message id in a context value intact", () => {
+    // The legitimate run the 2026-10-13 measurement found most often between
+    // 32 and 39 characters, and the reason the catch-all's floor did not move.
+    const log = loggerAt("debug");
+    log.info("rendered", { messageId: L10N_PROGRESS_HEADLINE });
+    expect(sink.text()).toContain(`"messageId":"${L10N_PROGRESS_HEADLINE}"`);
   });
 });
 

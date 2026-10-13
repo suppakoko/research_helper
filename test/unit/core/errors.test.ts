@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,6 +18,7 @@ import {
   MissingCredentialError,
   NetworkError,
   OfflineError,
+  omitSecretFields,
   OperationCancelledError,
   ParseError,
   PolicyViolationError,
@@ -30,6 +35,7 @@ import {
   UpstreamServerError,
   ZoteroApiError,
 } from "../../../src/core/errors";
+import { L10N_PROGRESS_HEADLINE } from "../../../src/i18n/keys";
 
 /**
  * `P1-T02`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network.
@@ -361,6 +367,7 @@ describe("redact (docs/09 §2.1)", () => {
     ["OpenAI legacy", `sk-${"c".repeat(40)}`],
     ["Google", `AIza${"D".repeat(35)}`],
     ["bearer token", `Bearer ${"e".repeat(30)}`],
+    ["unprefixed hexadecimal", "0123456789abcdef".repeat(2)],
     ["long opaque run", "f".repeat(48)],
   ])("removes a %s-shaped key", (_label, secret) => {
     const out = redact(`request failed with ${secret} attached`);
@@ -389,6 +396,179 @@ describe("redact (docs/09 §2.1)", () => {
     // a `.test()` on the same objects would not, and the second call would miss.
     const secret = `AIza${"J".repeat(35)}`;
     expect(redact(secret)).toBe(redact(secret));
+  });
+});
+
+/**
+ * `P1-T42`. The catch-all's floor, the hexadecimal shape, and the residual gap
+ * — asserted in both directions, so what `docs/09` §2.1 documents as redacted
+ * is redacted and what it documents as *passing* is proven to pass.
+ *
+ * Every credential-shaped value here is a repeated `0123456789abcdef`, built in
+ * this file. It is the shape `P1-T17` measured for an NCBI key and nobody's key.
+ */
+describe("the catch-all's floor and the hexadecimal shape (P1-T42)", () => {
+  /** 32 hexadecimal characters — the length `P1-T17` measured. */
+  const HEX_32 = "0123456789abcdef".repeat(2);
+
+  it.each([32, 36, 39])(
+    "redacts an unprefixed %i-character hexadecimal run in free text",
+    (length) => {
+      // 32 is P1-T17's measurement, 36 is pubmed-source.test.ts's, 39 is the
+      // last length the catch-all does not reach. The text is the shape
+      // P1-T09's efetch failure message has: a query string in a sentence.
+      const run = "0123456789abcdef".repeat(3).slice(0, length);
+      expect(redact(`efetch failed for db=pubmed&api_key=${run}&tool=rh`)).toBe(
+        `efetch failed for db=pubmed&api_key=[redacted:${length}]&tool=rh`,
+      );
+    },
+  );
+
+  it("redacts it inside the sentence docs/08 §4.6's empty-state headline draws", () => {
+    // P1-T22 left the headline unpopulated because this shape passed redact().
+    // The card asked for that claim to be checked rather than inherited.
+    const out = redact(`No papers found for “${HEX_32}” in 2024–2026.`);
+    expect(out).toBe("No papers found for “[redacted:32]” in 2024–2026.");
+  });
+
+  it("still passes a 32-character run that is not hexadecimal — the residual gap", () => {
+    // `g` and `h` are outside [0-9a-fA-F]. docs/09 §2.1 documents this as
+    // passing, which is why the headline stays omitted: the shape closes the
+    // NCBI case, not the general one.
+    const run = "gh".repeat(16);
+    expect(run).toHaveLength(32);
+    const sentence = `No papers found for “${run}” in 2024–2026.`;
+    expect(redact(sentence)).toBe(sentence);
+  });
+
+  it("still passes a 31-character hexadecimal run — the shape's floor", () => {
+    const run = HEX_32.slice(0, 31);
+    expect(redact(`got ${run} back`)).toBe(`got ${run} back`);
+  });
+
+  it("keeps the catch-all's floor at exactly 40", () => {
+    // Measured 2026-10-13: a floor of 39 would redact seven shipped Fluent
+    // message ids; raising it is forbidden by the card. Both edges pinned.
+    expect(redact("x".repeat(39))).toBe("x".repeat(39));
+    expect(redact("x".repeat(40))).toBe("[redacted:40]");
+  });
+
+  it("leaves a shipped 33-character Fluent message id intact", () => {
+    // The class of legitimate run the measurement found most often between 32
+    // and 39 characters. Imported from the shipped list so the assertion
+    // follows the bundle rather than a copy of it.
+    expect(L10N_PROGRESS_HEADLINE).toHaveLength(33);
+    const msg = `headline ${L10N_PROGRESS_HEADLINE} resolved`;
+    expect(redact(msg)).toBe(msg);
+  });
+
+  it("is idempotent with the hexadecimal shape", () => {
+    // provenance.ts redacts again at the export boundary; the marker the shape
+    // leaves must match nothing, including itself.
+    const once = redact(`key ${HEX_32}0123 sent`);
+    expect(once).toBe("key [redacted:36] sent");
+    expect(redact(once)).toBe(once);
+  });
+
+  it("requires a word boundary, so a hexadecimal tail inside a longer word is the catch-all's", () => {
+    // searchImportViewModel-export.test.ts builds a 48-character run that
+    // *starts* with two non-hexadecimal letters. Without `\b` the shape would
+    // eat the 46-character tail and leave `rh[redacted:46]`.
+    expect(redact(`rh${HEX_32}bbbbbbbbbbbbbb`)).toBe("[redacted:48]");
+  });
+});
+
+/**
+ * `P1-T42`'s fourth criterion made mechanical: "No second redaction rule exists
+ * anywhere; `grep` for the pattern shapes finds them in one module." The one
+ * place the shapes are *printed* outside `src/core/errors.ts` is `docs/09`
+ * §2.1's normative block, which the module's header says it transcribes
+ * verbatim. This compares the two, entry by entry and in order, so a shape
+ * added to one and not the other fails here rather than in a bug report.
+ */
+describe("docs/09 §2.1 and src/core/errors.ts hold one pattern set", () => {
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+  const doc = readFileSync(
+    resolve(repoRoot, "docs/09-security-privacy-and-api-keys.md"),
+    "utf8",
+  );
+
+  /** `/…/flags` as a regex literal prints; `.source` escapes `/`, the doc does not. */
+  const literalOf = (re: RegExp): string =>
+    `/${re.source.replaceAll("\\/", "/")}/${re.flags}`;
+
+  it("prints every KEY_PATTERNS entry, in the code's order", () => {
+    const start = doc.indexOf("const KEY_PATTERNS: readonly RegExp[] = [");
+    expect(start).toBeGreaterThan(-1);
+    const block = doc.slice(start, doc.indexOf("];", start));
+    const printed = [...block.matchAll(/^\s*(\/.*?\/[a-z]*),/gm)].map(
+      (m) => m[1],
+    );
+    expect(printed).toEqual(KEY_PATTERNS.map(literalOf));
+  });
+
+  it("prints the same KEYISH_FIELD", () => {
+    expect(doc).toContain(`const KEYISH_FIELD = ${literalOf(KEYISH_FIELD)};`);
+  });
+});
+
+/**
+ * `P1-T42` step 4: the re-render technique, lifted from
+ * `src/sources/pubmed/pubmedSource.ts` into the module that holds the patterns.
+ */
+describe("omitSecretFields (docs/09 §2.1, P1-T42)", () => {
+  // A fresh object per call, not a shared constant: a mutant that deletes the
+  // secret from the *caller's* object escaped the first sweep because every
+  // earlier test had already damaged the shared fixture before the
+  // no-mutation test copied it as its "before".
+  const values = () => ({
+    db: "pubmed",
+    id: "1,2,3",
+    api_key: "0123456789abcdef".repeat(2),
+    tool: "rh",
+    email: "dev@example.invalid",
+  });
+
+  it("removes every KEYISH_FIELD-named entry and keeps the rest in order", () => {
+    expect(Object.keys(omitSecretFields(values()))).toEqual([
+      "db",
+      "id",
+      "tool",
+      "email",
+    ]);
+  });
+
+  it("removes rather than blanks, for redactUrl's reason", () => {
+    // `api_key=` with nothing after it still says the request carried a key.
+    const out = omitSecretFields(values());
+    expect("api_key" in out).toBe(false);
+    expect(Object.values(out)).not.toContain("");
+  });
+
+  it.each(["API_KEY", "apiKey", "x-api-key", "Authorization", "access_token"])(
+    "drops %s whatever its value, by the field-name rule",
+    (name) => {
+      expect(omitSecretFields({ [name]: "v", db: "pubmed" })).toEqual({
+        db: "pubmed",
+      });
+    },
+  );
+
+  it("renders a form body with no trace of the key", () => {
+    // The caller's renderer, applied to the omitted map — the second render
+    // pubmedSource.ts's buildEfetchRequest does inline.
+    const body = new URLSearchParams(omitSecretFields(values())).toString();
+    expect(body).toBe(
+      "db=pubmed&id=1%2C2%2C3&tool=rh&email=dev%40example.invalid",
+    );
+    expect(body).not.toContain("api_key");
+  });
+
+  it("does not mutate the caller's values", () => {
+    const input = values();
+    omitSecretFields(input);
+    expect(input).toEqual(values());
+    expect("api_key" in input).toBe(true);
   });
 });
 

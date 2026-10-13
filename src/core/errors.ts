@@ -75,6 +75,41 @@ export const KEYISH_FIELD =
  * The patterns carry `/g`, so they are stateful (`lastIndex`). {@link redact}
  * uses `String.replace`, which resets `lastIndex` for a global pattern, so
  * reuse across calls is safe — but nothing else may call `.test()` on these.
+ *
+ * ## The catch-all's floor is 40 and cannot move — measured 2026-10-13 (`P1-T42`)
+ *
+ * The project's own short credential is an NCBI `api_key`: unprefixed,
+ * hexadecimal, and **32** characters as `P1-T17` measured it (**36** as
+ * `test/unit/sources/pubmed-source.test.ts` models it; `docs/02` §3.1 records
+ * no length). Either is below the catch-all, which is why `redactUrl` removes
+ * that parameter by *name* and `src/core/logger.ts` redacts by *field name*
+ * first. The remaining gap is free text with neither — a sentence, an
+ * exception message, a form body.
+ *
+ * Lowering the floor was measured against this repository's own text
+ * (`src/`, `test/`, the fixtures, the `addon/` bundles, `docs/`, `plan/`, the
+ * schema, scripts and typings, and the unit and contract suites' verbose
+ * output — 202 files) and rejected: at **39** it would newly redact 7 distinct
+ * runs / 45 occurrences, every one a shipped Fluent message id
+ * (`research-helper-search-authors-overflow`,
+ * `research-helper-search-status-searching`, …); at **32**, 147 distinct runs /
+ * 930 occurrences, 494 of them the project's own `research-helper-*` ids
+ * (`research-helper-search-state-empty` is 34, `research-helper-progress-headline`
+ * 33). Those ids reach log lines and error contexts, so a lower floor would
+ * turn the UI's own identifiers into `[redacted:34]` in the very log a bug
+ * report pastes. `docs/09` §2.1 carries the table.
+ *
+ * What was added instead is the **hexadecimal shape**, second to last: a run of
+ * 32 or more `[0-9a-fA-F]` with word boundaries. Over the same corpus it
+ * matches 3 distinct runs below 40 characters — the synthetic stubs the tests
+ * build and one checksum in `docs/01` that never passes through this function
+ * — and no identifier, message id, DOI, PMID or Zotero key, because none of
+ * those is 32 hexadecimal characters long. It covers 32 and 36 alike.
+ *
+ * **Residual gap, deliberately stated:** an unprefixed credential that is *not*
+ * hexadecimal and shorter than 40, or hexadecimal and shorter than 32, still
+ * passes. A caller holding a body that definitely carries a key must not rely
+ * on this function at all — see {@link omitSecretFields}.
  */
 export const KEY_PATTERNS: readonly RegExp[] = [
   /\bsk-ant-[A-Za-z0-9_-]{20,}/g, // Anthropic
@@ -83,6 +118,7 @@ export const KEY_PATTERNS: readonly RegExp[] = [
   /\bsk-[A-Za-z0-9]{32,}/g, // OpenAI legacy
   /\bAIza[A-Za-z0-9_-]{35}/g, // Google API keys
   /\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*/gi, // any bearer token
+  /\b[0-9a-fA-F]{32,}\b/g, // unprefixed hexadecimal run — NCBI shape (P1-T42)
   /\b[A-Za-z0-9_-]{40,}\b/g, // long opaque run — last-resort net
 ];
 
@@ -154,6 +190,41 @@ export function redactUrl(url: string): string {
   } catch {
     return redact(url);
   }
+}
+
+/**
+ * A parameter map with every credential-named entry **removed**, so a request
+ * body's loggable form can be rendered from the original values.
+ *
+ * This is the technique for a body that **definitely** carries a key, and it is
+ * the only sound one: render the real form from the values, then render the
+ * loggable form a second time from `omitSecretFields(values)` with the same
+ * renderer. Never pattern-match the rendered form — {@link redact}'s shapes
+ * are a net for text that *might* carry a key, and a key shorter than the
+ * catch-all with no vendor prefix slips through them (see {@link KEY_PATTERNS}'
+ * measurement). `src/sources/pubmed/pubmedSource.ts`'s `buildEfetchRequest`
+ * shipped the technique first, inline, for exactly that reason; `P1-T42`
+ * lifted it here so the next caller can find it.
+ *
+ * The entry is **removed**, not blanked, for {@link redactUrl}'s reason: an
+ * empty value is the one thing `[redacted:<len>]` cannot express, and a
+ * `api_key=` with nothing after it still tells a reader the request carried a
+ * key. The names are {@link KEYISH_FIELD}'s — `api_key`, `token`, `secret`,
+ * `authoriz…`, `password`, `bearer`, `credential`, case-insensitively — so this
+ * is the field-name rule applied to a parameter list, not a second rule.
+ *
+ * @param values - the parameters the real request was rendered from
+ * @returns a new object holding only the entries whose name is not a
+ *   credential's, in the original order; the caller's object is not touched
+ */
+export function omitSecretFields<V>(
+  values: Readonly<Record<string, V>>,
+): Record<string, V> {
+  const out: Record<string, V> = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (!KEYISH_FIELD.test(name)) out[name] = value;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

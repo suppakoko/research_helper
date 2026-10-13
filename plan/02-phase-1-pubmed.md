@@ -8336,10 +8336,16 @@ general fix needs a card. Measured 2026-10-07:
   `/\b[A-Za-z0-9_-]{40,}\b/g`.** A credential with **no vendor prefix** and **fewer than 40 characters**
   matches none of them.
 - The project has measured exactly such a credential. Two cards' `Findings` record a literature-database
-  access key at **32 characters**, which is 8 short of the net. **That measurement appears in no document
-  and in no code comment**: a grep for the length across `docs/` and `src/` returns nothing. So a reader of
-  `docs/09` §2.1 cannot see that the gap exists, and the corpus still says, in the words `P1-T12` quoted,
-  that it records no length for this key at all.
+  access key at **32 characters**, which is 8 short of the net. **That measurement appears in no
+  document**, so a reader of `docs/09` §2.1 cannot see that the gap exists.
+  > **Corrected 2026-10-13 after the executing agent measured it.** This read "in no document **and in no
+  > code comment**: a grep for the length across `docs/` and `src/` returns nothing". **False for
+  > `src/`**: `src/core/provenance.ts:159` says "an NCBI key is 32 hexadecimal characters" in so many
+  > words, the view model says it four times, and six test files carry it. I grepped `docs/` and asserted
+  > `src/`. The `docs/` half was true and is the half this card fixed. **Two more things the agent found
+  > that this bullet did not know**: the corpus holds **two** measurements of the length, 32 (`P1-T17`)
+  > and 36 (a unit test's stub "the shape NCBI issues"), and neither cites an authority, because NCBI's
+  > own documentation gives no length. `docs/09` now records both as measurements, not facts.
 - **The gap is narrower than it first looks, and the narrowing is the useful part.** Two other rules catch
   most real cases before the patterns run:
   - `KEYISH_FIELD` (`src/core/errors.ts:63`) matches the **field name** — `api_key`, `token`, `secret`,
@@ -8349,7 +8355,7 @@ general fix needs a card. Measured 2026-10-07:
     `src/core/provenance.ts`'s free-text path route a URL-shaped run through it first.
   So what is left uncovered is a credential appearing in **free text, with no field name around it and no
   URL to parse** — a sentence, an exception message, a form body. That is exactly the case
-  `P1-T12` hit when it shipped the first request body able to carry a key, and it sidestepped it by
+  `P1-T09` hit when it shipped the first request body able to carry a key, and it sidestepped it by
   **re-rendering the redacted form from the original values without the key** rather than
   pattern-matching. That remains the right local answer; it does not generalise.
 
@@ -8369,7 +8375,12 @@ about this repository's own text, not a matter of taste. **Measure it. Do not ar
   limit, so you can see which of the three a change here would affect.
 - `src/core/provenance.ts`'s `redactText` and `redactQueryString`, and the note that this module is the
   project's **single** redaction gate.
-- `P1-T12`'s, `P1-T17`'s and `P1-T22`'s `Findings` in `plan/02-phase-1-pubmed.md`, which are the three
+- `P1-T09`'s, `P1-T17`'s and `P1-T22`'s `Findings` in `plan/02-phase-1-pubmed.md`, which are the three
+  > **`P1-T12` → `P1-T09`, corrected 2026-10-13 in all four places this card named it.** `P1-T12` is the
+  > item mapper and its `Findings` say nothing about redaction; the quoted re-render technique is inside
+  > `P1-T09`'s `Findings` — the PubMed adapter, which shipped the first request body able to carry
+  > a key — and the shipped code is `src/sources/pubmed/pubmedSource.ts`'s request builder. Checked by the
+  > coordinator against both card headings.
   local workarounds.
 
 **Files.**
@@ -8389,7 +8400,7 @@ about this repository's own text, not a matter of taste. **Measure it. Do not ar
 3. Decide from that measurement: lower the threshold, add a shape for this specific credential, or
    neither — and write the decision and its evidence into `docs/09` §2.1 beside the trade it rests on. If
    the answer is "neither", say what a caller must do instead, which is step 4.
-4. Whatever the outcome, make the **local** answer reusable: `P1-T12`'s technique — re-render the redacted
+4. Whatever the outcome, make the **local** answer reusable: `P1-T09`'s technique — re-render the redacted
    form from the original values rather than pattern-matching the rendered one — is the only sound answer
    for a body that definitely contains a key, and it is currently a technique one card used rather than
    something a later caller can find.
@@ -8432,6 +8443,105 @@ interpolated into a user-visible sentence would have been shown in full while lo
 whichever way this card goes, it should say plainly whether that surface becomes safe. **Check that
 claim rather than inheriting it**: the headline's safety depends on what the chosen rule can match, and
 this card is the one holding the measurement.
+
+**Findings, 2026-10-13 — the 40-character floor stays, a narrow hexadecimal shape joins it, the measured
+length is finally in the corpus, and the gap that remains is written down and asserted rather than left for
+the next caller to rediscover.**
+
+**Verified by the coordinator, scoped to this card's files because two other agents were editing the tree
+at the same time:** the new pattern is at `src/core/errors.ts:121`; `docs/09` §2.1 carries the new entry
+in its printed pattern block and a dated paragraph beneath it; the two test files this card owns run
+**198 tests** on their own (149 and 49, from 127 and 42); and no mutation marker survives in them. The
+agent's own full run read **1,307 unit in 30 files** and 28 contract against the tree as it stood at that
+moment.
+
+**The decision was measured, not argued, and the measurement is the finding.** Lowering the catch-all floor
+by **even one character**, from 40 to 39, would newly redact **seven distinct runs in 45 places — every one
+a Fluent message identifier the search window ships**, such as `research-helper-search-status-searching`.
+At 32 it would redact **147 distinct runs in 930 places**, 494 of them the plugin's own identifiers. And
+those identifiers really do pass through the redactor: the composition root logs `{ messageId }` when the
+progress headline falls back, and a thrown error interpolates a Fluent id into a message that
+`toSerialized()` redacts. **A lower floor would therefore print `[redacted:33]` in place of the plugin's
+own identifiers in the very log a bug report pastes — and would still miss a 31-character key.** There is
+no free step, and the card's "lower the threshold" option is closed by arithmetic.
+
+**The shape that works is narrow because the corpus let it be.** `/\b[0-9a-fA-F]{32,}\b/g` matches
+**three distinct runs under 40 characters in the whole repository, in nine places** — eight are synthetic
+test stubs built from `0123456789abcdef`, one is a checksum in `docs/01` that never reaches the redactor.
+Zero in fixtures, zero in the suites' emitted text, zero in `addon/`. No identifier, DOI, PMID, Zotero key
+or fixture filename (those are 16 hexadecimal characters) is 32 hexadecimal characters long. The shape
+covers **both** lengths the project has recorded for the key — see below — and lives in one place.
+
+**Step 1 was done first, as the card demanded, and the corpus now says what two cards' reports knew.**
+`docs/09` §2.1 states the measured length, attributes it to the card that measured it, names the two rules
+that already catch the key (by parameter name in a URL, by field name in a log), and names the one shape
+nothing caught: **free text with neither**. Four paragraphs follow — the measurement table, the added
+shape and its cost, the residual gap, and the re-render technique.
+
+**Criterion 4 — "one module holds the patterns" — is now mechanical rather than a grep.** A new test reads
+`docs/09`, finds the printed `KEY_PATTERNS` block, and compares it **entry by entry and in order** against
+the shipped array, and the printed `KEYISH_FIELD` against the shipped one. So `src/core/errors.ts`'s claim
+that it transcribes `docs/09` verbatim is now enforced in both directions: three mutations that changed
+the document's copy and not the code's were caught by this test alone.
+
+**The local technique is now reusable, which was step 4.** `omitSecretFields(values)` returns a parameter
+map with every secret-named entry **removed — not blanked**, for the same reason `redactUrl` removes: an
+empty value is the one thing the marker cannot express. It applies the existing field-name rule to a
+parameter list rather than adding a rule, and a caller renders the loggable form a second time from the
+original values. The adapter's own inline second render can now become one call, which is `plan/00` §6
+item 38.
+
+**Fourteen mutations, and one escaped on its first run — reported, diagnosed and fixed rather than
+hidden.** The mutation that made the helper delete the secret from the **caller's** object passed all 198
+tests the first time, because the tests shared one mutable fixture and earlier tests had already damaged
+it before the no-mutation test copied it. **The fixture is now a factory, and the mutation is caught.** A
+shared mutable fixture is a class of vacuity this project had not yet named; it has one now.
+
+**Does the empty-state headline become safe? Checked rather than inherited, and the answer is partly, and
+not enough.** The §4.6 sentence with a 32-character hexadecimal key now redacts to
+`No papers found for “[redacted:32]” in 2024–2026.` — so **`P1-T22`'s and `P1-T39`'s premise that no
+redactor can clean this shape is no longer true for the NCBI shape.** But the same sentence with a
+32-character **non**-hexadecimal run passes unchanged, asserted, and the corpus records no shape for a
+Semantic Scholar key. So "redact before interpolating" would still show a non-NCBI short key **while
+looking handled** — which `P1-T22` correctly called the worst available outcome. **`EMPTY_HEADLINE_OMITTED`
+stays right, and the correct fix is still the query-free message `P1-T22` recommended.** Written into
+`docs/09`.
+
+**Three errors in my card, two of them the same shape as every other this week, one new.** The card said
+the measured length "appears in no document **and in no code comment**: a grep across `docs/` and `src/`
+returns nothing." **False for `src/`**: `src/core/provenance.ts:159` says it in so many words, the view
+model says it four times, and six test files carry it — I grepped `docs/` and asserted `src/`. The card
+attributed the re-render technique to **`P1-T12`** in four places; **`P1-T12` is the item mapper** and its
+`Findings` say nothing about redaction — the quoted text is inside **`P1-T09`'s** `Findings`, and the
+shipped code is `pubmedSource.ts`'s request builder. I checked both headings myself. And the new one: **two
+measurements of the key's length coexist in the corpus — 32 and 36 — and neither cites an authority**, since
+NCBI's own documentation gives no length. The card spoke of one measurement; there were two. The shape
+covers both, and `docs/09` now records both as measurements rather than facts.
+
+**What the card's correction leaves behind, and it is a class.** A dozen comments across `src/` and
+`test/` now say a 32-character key is below the redactor and nothing can catch it — true when written,
+stale since this afternoon. None is a failing assertion and none is in this card's files. They are
+`plan/00` §6 item 39, and they are the mirror image of the premise defect: **a true statement that a later
+card makes false, left in place because nobody re-reads a comment.**
+
+**Scope was proven without a git command, by a 264-file checksum manifest taken before and after.** Four
+files differ that are this card's. **Five more differ that this card never opened for writing**, changed by
+the agents working in parallel — including `test/integration/phase1-dod.spec.ts` and
+`src/bootstrap/registerPipelines.ts`, which belong to neither of the other two cards' `Files` lists; the
+coordinator will take that up when those cards report. The agent noted that its full test run therefore
+ran against whatever state those files were in at that moment, and that it passed.
+
+**What was not checked.** The real length or alphabet of an NCBI key — forbidden, and both recorded
+figures are attributed rather than verified. The integration suite and the installer, neither in this
+card's `Verify with`, and Zotero was correctly not launched while two other agents were working. Whether a
+real Zotero log line ever carries a 32-hexadecimal value that is not a key — attachment checksums would
+be redacted, Phase 1 creates no attachments, and such a redaction is inside the documented trade.
+
+**Needs a card.** The adapter's inline second render → `omitSecretFields` (item 38). The stale "nothing can
+catch it" comments and one misattribution inside `src/core/provenance.ts` (item 39). The query-free
+empty-state headline, still the only way to populate that surface. And the Semantic Scholar key's shape,
+**once it is known** — if it is unprefixed, non-hexadecimal and under 40 characters, it is the open case
+`docs/09` now names.
 
 ---
 
