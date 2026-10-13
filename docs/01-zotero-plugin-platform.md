@@ -195,6 +195,19 @@ Recommended manifest for `research_helper`:
 > - **`console` does not exist.** A stray `console.log` is not merely ignored, it throws. Use
 >   `Zotero.debug()`; `dump()` also exists and reaches stdout when Zotero is started with
 >   `-ZoteroDebugText`.
+>
+> **Measured 2026-10-13 on Zotero 10.0.3 (Gecko 140.15.0, Windows), task `P2-T25`: a digest is
+> reachable through the `crypto` global above, and it is asynchronous.** `crypto.subtle.digest`
+> is a function both in the plugin sandbox — reached as
+> `Components.utils.getGlobalForObject(Zotero.<addonInstance>).crypto.subtle.digest`, the global of
+> the object `src/index.ts` constructs inside the sandbox — and in the scaffold test-runner's chrome
+> window, where integration specs run. It returns a `Promise<ArrayBuffer>`; there is no synchronous
+> digest beside it (`crypto.subtle.digestSync` is absent) and there is no `node:crypto`. The two
+> scopes' SHA-256 of the same bytes agree, and agree with `node:crypto`'s. **Consequence:** code
+> that must hash *synchronously* and run on both platforms carries its own implementation —
+> `test/support/sha256.ts` is that, and `test/support/fixtureReplay.ts`'s `fixtureKey` stays
+> synchronous because of it; the measurement and the agreement are asserted on every run by
+> `test/integration/searchDialog-flow.spec.ts`'s `P2-T25` block.
 
 ```javascript
 function install(data, reason) { }

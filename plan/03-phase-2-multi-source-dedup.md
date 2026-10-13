@@ -3419,6 +3419,12 @@ good; it simply cannot be loaded where the slowest and most valuable tests run. 
   implements.
 
 **Files.**
+> **Noted 2026-10-13 — accepted deviation (report):** the platform split became six files under
+> `test/support/` (`sha256.ts`, `fixtureIo.ts`, `fixtureIo.node.ts`, `fixtureIo.zotero.ts`,
+> `fixtureReplay.ts`, `pubmedRecordedRequests.ts`), which the list's "or whatever the platform split turns
+> out to need" covers, **and one file it does not cover: `test/contract/replayHarness.test.ts`**, the
+> Node home of criterion 2's key pin and the digest proofs. Accepted on the same ground as `P1-T44`'s
+> extra test file: eleven of the twelve staged mutants were killed through it.
 - modify `test/contract/_transport.ts`
 - new `test/support/fixtureIo.ts` (or whatever the platform split turns out to need — name it for what it
   does)
@@ -3426,6 +3432,20 @@ good; it simply cannot be loaded where the slowest and most valuable tests run. 
 - modify `docs/01-zotero-plugin-platform.md` (only to record a measurement)
 
 **Do.**
+> **Corrected 2026-10-13 after the executing agent measured: two steps below rest on premises the tree does
+> not support (report).** Step 1 assumed the digest route decides whether `fixtureKey` becomes `async`
+> "and every caller follows"; `crypto.subtle.digest` is indeed the only digest in both the sandbox and the
+> test-runner window and it is asynchronous, but a synchronous SHA-256 in plain TypeScript
+> (`test/support/sha256.ts`) keeps `fixtureKey`'s signature and its bytes on both platforms, and the
+> callers the `async` route would have rippled into (`scripts/record-fixtures.ts`,
+> `test/contract/pubmed.contract.test.ts`) are outside this card's list. Step 4 cannot be done for the
+> **window** blocks with the committed corpus: `toPipelineInput` in
+> `src/ui/viewModels/searchImportViewModel.ts` renders whole years while every recorded `esearch` carries
+> the quarter 2023-01-01 to 2023-03-31, and `PREFS.maxResults` in `src/prefs/schema.ts` has `min: 10`
+> (enforced by `validate` in `searchImportPipeline.ts`) while the only complete `esearch`+`efetch` chains
+> are two pages at `retmax=3`. Recording a matching fixture is forbidden by Do NOT and is the owner's
+> recording decision — `plan/00` §6 item 74. The real adapter and the real client are driven through the
+> corpus in a new block of the same spec instead; the window blocks keep their stub.
 1. **Measure first**: is a digest reachable from the Zotero sandbox, and is it synchronous or
    asynchronous? Record the answer with the Zotero build it was measured on, exactly as `docs/01`'s other
    measurements are recorded. **Everything else in this card depends on this answer, so do not design
@@ -3455,6 +3475,9 @@ good; it simply cannot be loaded where the slowest and most valuable tests run. 
   parameter, not a copy — the whole point of the card.
 
 **Criteria.**
+> Noted 2026-10-13: the fourth criterion is met **in part** — the real adapter and real client replay the
+> corpus inside Zotero in the spec's new `P2-T25` block, and all existing window assertions hold, but the
+> window blocks themselves still stand in a stub source for the reason stated under Do.
 - [ ] The digest question is answered with a measurement, recorded with its Zotero build.
 - [ ] `fixtureKey` produces the same keys as before, asserted against a fixture name from the repository.
 - [ ] The contract tests still pass unchanged, over the same 17 fixtures, with no fewer tests than before.
@@ -3479,6 +3502,29 @@ The risk is the key function. Making it asynchronous ripples through every calle
 must not change is its output — which is why criterion 2 pins it to a filename already on disk rather than
 to a recomputation.
 
+
+**Findings, 2026-10-13 — done; the `Verify with` command exits 0 on the coordinator's run and on the agent's three; criterion 4 met in part; full report at `plan/reports/P2-T25.md`.**
+Verified by the coordinator on the quiet tree after the other three wave-1 cards landed: typecheck 0,
+`lint:check` 0, **1,410 unit in 32 files**, **40 contract**, **122 integration in one run** (the agent's
+clean run with the card's exact flags also 122; baseline 117 + the new block's 5), no `MUTANT` marker, and
+the only `node:` import under `test/support/` is in `fixtureIo.node.ts`, which no integration spec
+imports. The digest question is answered with a measurement now in `docs/01` §2.3: `crypto.subtle.digest`
+exists in both the plugin sandbox and the test-runner window on Zotero 10.0.3 (Gecko 140.15.0) and is
+asynchronous, with no synchronous digest beside it. The harness did not go `async`: a synchronous SHA-256
+in plain TypeScript keeps `fixtureKey` byte-identical, proven against `node:crypto` on every committed
+fixture's input, on published vectors, on 131 padding-boundary lengths and 300 generated inputs, against
+the on-disk name `b68358327ce730cd` in both Node and Zotero, and against `crypto.subtle.digest` in both
+scopes. The port takes `(dir, name)` because `IOUtils.exists` on a mixed-separator path throws
+`NS_ERROR_FILE_UNRECOGNIZED_PATH` on Windows (measured). Inside Zotero the shipped `createPubmedSource`,
+the shipped `createHttpClient` and Gecko's `DOMParser` now replay two recorded pages, the recorded 429
+(`RateLimitError`, `retryAfterMs` 2000, one `penalize`) and the recorded 500 (`UpstreamServerError`); the
+window blocks keep their stub because no recorded request matches what the window can issue (dated
+above). Twelve mutants staged, eleven killed, one classified equivalent (the `REDACTED` placeholder's
+spelling is observable only through a keyed fixture, and none exists). One deviation accepted: the file
+`test/contract/replayHarness.test.ts` outside the list. Two things adapter cards must know: `searchAll`
+in `pubmedSource.ts` pages at `min(limit − emitted, 200)`, so a replayed `limit` must equal a recorded
+`retmax` or page through `search()`; and integration specs import `../support/fixtureReplay` and
+`../support/fixtureIo.zotero` and call `repositoryFixtureDir("<source>")`. Follow-ups are `plan/00` §6.15.
 ---
 
 ### P2-T26 — Give the source registry a test-only removal, before two Phase 2 adapters break two specs

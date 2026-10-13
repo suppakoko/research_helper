@@ -856,6 +856,34 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     `test/integration/searchDialog-flow.spec.ts` (`no-useless-assignment`, `slashSpelling`) — an in-progress
     edit by `P2-T25`'s agent; re-check when that card lands.
 
+### 6.15 Raised by `P2-T25`, 2026-10-13 — recorded under rule 9, none carded
+
+72. **`docs/13` §2.2's code block is stale in two places.** It shows `node:crypto`, `readFile` and a
+    one-argument `replayTransport`; the harness now hashes with `test/support/sha256.ts` and takes a
+    `(dir, name)` port. A document edit, the owner's.
+
+73. **The recorder duplicates its synthetic queries.** `scripts/record-fixtures.ts` and
+    `test/support/pubmedRecordedRequests.ts` carry the same list; a Node drift guard catches divergence
+    today. Let the recorder import the support module and delete its copy when the recorder is next
+    touched.
+
+74. **(owner's recording decision)** A whole-year, `retmax ≥ 10` `esearch` with its matching `efetch` would
+    let the search window itself replay through the real adapter instead of a stub. Recording means one
+    more live NCBI request pair and a committed fixture; until then `P2-T25` criterion 4 stays met in part.
+
+75. **The `REDACTED` placeholder's spelling is pinned by nothing** — the equivalent mutant. It becomes
+    observable the day a fixture is recorded with a key present; record one only when a keyed source is
+    recorded for its own reasons.
+
+76. **For the adapter cards `P2-T03` to `P2-T07`:** `searchAll` in `src/sources/pubmed/pubmedSource.ts`
+    sizes each page as `min(limit − emitted, 200)`, so a replayed `limit` must equal a recorded `retmax`
+    or the spec must page through `search()`; contract tests import `./_transport` unchanged; integration
+    specs import `../support/fixtureReplay` and `../support/fixtureIo.zotero` and call
+    `repositoryFixtureDir("<source>")`. Measured by `P2-T25`, stated here so no adapter card re-learns it.
+
+77. **Observed, not interpreted:** the Zotero process printed `fatal error: ` at exit after a passing
+    integration run (122 passed, runner exit 0). Seen once; look for it again before treating it as noise.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

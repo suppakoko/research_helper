@@ -3,10 +3,17 @@
  * `P1-T22` — the window driving the pipeline, end to end, in a live Zotero.
  * `P1-T35` — the same path, through the host the **plugin itself** publishes.
  *
- * ## Two `describe` blocks, and why both exist
+ * ## Three `describe` blocks, and why each exists
  *
- * `P1-T35` publishes the host at startup, so there are now two different things
- * worth asserting and they need different fixtures:
+ * `P2-T25`'s block runs first and opens no window: it is the one place in the
+ * suite where the **real** PubMed adapter, the **real** `createHttpClient` and
+ * Gecko's own `DOMParser` run over **recorded** NCBI responses inside Zotero,
+ * through `test/support/fixtureReplay.ts`. See "The replay harness, and what it
+ * does and does not replace here" below for why the two window blocks keep
+ * their stub source.
+ *
+ * `P1-T35` publishes the host at startup, so there are two different things
+ * worth asserting about the window and they need different fixtures:
  *
  * - **`P1-T35`'s block runs first** and drives the *published* host: the real
  *   service graph, the real source registry, the real pipeline, the real
@@ -22,7 +29,7 @@
  *   (`research-helper-source-pubmed`). Those cannot be reached through the real
  *   registry, which already holds the real PubMed adapter under that id.
  *
- * Neither block makes an HTTP request.
+ * None of the three blocks makes an HTTP request.
  *
  * ## What is real here and what is a double
  *
@@ -41,10 +48,36 @@
  * the one failure mode a live source could add (a real 429) is injected here as
  * the typed error the adapter would have thrown.
  *
- * `test/contract/_transport.ts`'s replay transport is **not** usable from here:
- * it imports `node:fs/promises` and `node:crypto`, neither of which exists in
- * the Zotero sandbox. That is why the double is a source rather than a
- * transport, and it is reported with the card.
+ * ## The replay harness, and what it does and does not replace here (`P2-T25`)
+ *
+ * **Corrected 2026-10-13.** This section used to say the replay transport "is
+ * **not** usable from here: it imports `node:fs/promises` and `node:crypto`,
+ * neither of which exists in the Zotero sandbox". Both imports are gone:
+ * `test/support/fixtureReplay.ts` is the harness with no platform import,
+ * `test/support/fixtureIo.zotero.ts` reads fixtures through `IOUtils`, and the
+ * `P2-T25` block below runs the shipped adapter and the shipped HTTP client over
+ * the committed `test/fixtures/pubmed/` corpus inside this very runner.
+ *
+ * **What the harness still cannot replace is the window's source, and the
+ * reason is the corpus, not the harness.** A fixture is found only when the
+ * request matches the recorded one byte for byte, and the window cannot issue a
+ * request the corpus holds:
+ *
+ * - `toPipelineInput` in `src/ui/viewModels/searchImportViewModel.ts` renders
+ *   the two year menulists as whole years (`YYYY-01-01` … `YYYY-12-31`); every
+ *   recorded `esearch` carries the quarter `2023/01/01`–`2023/03/31`.
+ * - `PREFS.maxResults` in `src/prefs/schema.ts` has `min: 10`, which
+ *   `validate` in `searchImportPipeline.ts` enforces on `limit`; the only
+ *   `esearch` + `efetch` chains on disk are the two `paginated-*` pages at
+ *   `retmax=3`. `search-typical` (`retmax=20`) has no `efetch` for its ids.
+ *
+ * So the two window blocks keep the stub: forced 429s, an injected
+ * `OfflineError`, a 40-record fetch to cancel and three present rows to re-link
+ * are states a recorded corpus of seventeen files does not hold, and
+ * re-recording is a network decision with an owner (`P2-T25`'s **Do NOT**).
+ * The real adapter and client are exercised in the `P2-T25` block up to the
+ * `LiteratureSource` boundary — the same boundary the stub stands at — and the
+ * window blocks exercise everything above it.
  *
  * **Written into a real library:** one collection per import test, its items, and
  * one provenance note. All of them are erased in `after()` — the discipline
@@ -232,16 +265,27 @@ import type { PluginApi } from "../../src/addon";
 import { createScope } from "../../src/bootstrap/container";
 import { createZoteroSearchImportWriter } from "../../src/bootstrap/registerPipelines";
 import { createSystemClock } from "../../src/core/clock";
-import { OfflineError, RateLimitError } from "../../src/core/errors";
+import {
+  OfflineError,
+  RateLimitError,
+  UpstreamServerError,
+} from "../../src/core/errors";
+import { createCancellationTokenSource } from "../../src/core/jobQueue/cancellation";
 import { createLogger } from "../../src/core/logger";
 import {
   CompositeProgressReporter,
   createObservableProgressSink,
 } from "../../src/core/jobQueue/progress";
+import { NCBI_HOST } from "../../src/core/rateLimit/hostLimiter";
 import { normalizeDoi, type SourceId } from "../../src/model/ids";
 import type { SourceRecord } from "../../src/model/sourceRecord";
 import { createSearchImportPipeline } from "../../src/pipeline/searchImport/searchImportPipeline";
 import type { PipelineContext } from "../../src/pipeline/types";
+import { createPubmedRecordMapper } from "../../src/sources/pubmed/mapper";
+import {
+  createPubmedSource,
+  parseEsearchBody,
+} from "../../src/sources/pubmed/pubmedSource";
 import type { SourceRegistry } from "../../src/sources/registry";
 import type {
   LiteratureSource,
@@ -280,6 +324,29 @@ import {
 } from "../../src/zotero/notes";
 import { qualifiedPrefName } from "../../src/zotero/prefStore";
 import { notifierRegistration } from "../../src/zotero/registrations";
+// The replay harness, platform-free, and its Zotero file port. Never
+// `test/contract/_transport.ts` from here: that is the Node face and it imports
+// `node:fs/promises`, which the scaffold's bundler cannot resolve for the
+// sandbox — the bundle fails to build, which is the right failure.
+import {
+  repositoryFixtureDir,
+  zoteroFixtureIo,
+} from "../support/fixtureIo.zotero";
+import {
+  assertFixturesFresh,
+  createReplayHttpClient,
+  fixtureKey,
+  FROZEN_NOW_EPOCH_MS,
+  type ReplayHttpClient,
+} from "../support/fixtureReplay";
+import {
+  PUBMED_PAGE_SIZE,
+  PUBMED_SYNTHETIC_429_QUERY,
+  PUBMED_SYNTHETIC_500_QUERY,
+  PUBMED_TYPICAL_QUERY,
+  recordedEsearchRequest,
+} from "../support/pubmedRecordedRequests";
+import { sha256Hex, toHex } from "../support/sha256";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -295,6 +362,7 @@ declare function before(body: (this: TestContext) => Promise<void>): void;
 declare function after(body: (this: TestContext) => Promise<void>): void;
 declare const assert: {
   strictEqual<T>(actual: T, expected: T, message?: string): void;
+  notStrictEqual<T>(actual: T, expected: T, message?: string): void;
   deepEqual<T>(actual: T, expected: T, message?: string): void;
   isAtMost(value: number, ceiling: number, message?: string): void;
   isAbove(value: number, floor: number, message?: string): void;
@@ -1258,9 +1326,10 @@ function registryOf(adapters: readonly LiteratureSource[]): SourceRegistry {
  * So a stub is registered under a `SourceId` this build has no adapter for, and
  * every search below ticks that one alone. **No HTTP request leaves this
  * machine in this block either** — the same guarantee `P1-T22`'s block gives,
- * reached a different way. `test/contract/_transport.ts`'s replay transport is
- * still unusable here (`node:fs/promises`, `node:crypto`), which is why the
- * double is a source rather than a transport.
+ * reached a different way. The replay harness **is** usable here since
+ * `P2-T25` (see the file header), but the window cannot issue a request the
+ * recorded corpus holds, which is why the double is still a source rather than
+ * a transport.
  *
  * The consequence is that no bundle declares `research-helper-source-crossref`
  * — only `research-helper-source-pubmed` exists (`addon/locale/en-US/
@@ -1654,6 +1723,424 @@ const HOST_CONTRACT: readonly (keyof SearchWindowHostApi)[] = [
   "cancel",
   "exportProvenance",
 ];
+
+// ---------------------------------------------------------------------------
+// 3b. `P2-T25` — the replay harness inside Zotero: the shipped adapter, the
+//     shipped client and Gecko's parser over the recorded corpus
+// ---------------------------------------------------------------------------
+
+/**
+ * The fixture name this block pins by hand: `paginated-page-1`, an `esearch`
+ * for `PUBMED_TYPICAL_QUERY` at `retmax=3`, recorded 2026-10-07. Written out,
+ * not derived, so that a changed digest, a changed redaction or a changed input
+ * shape fails against a constant on disk rather than against itself
+ * (`P2-T25` criterion 2). `test/contract/replayHarness.test.ts` pins the same
+ * constant in Node.
+ */
+const PAGINATED_PAGE_1_KEY = "b68358327ce730cd";
+
+/** How many fixtures `test/fixtures/pubmed/` holds; one sidecar each. */
+const PUBMED_FIXTURE_COUNT = 17;
+
+const LOG_PREFIX_T25 = "[P2-T25]";
+
+function log25(line: string): void {
+  debug(`${LOG_PREFIX_T25} ${line}`);
+}
+
+/** The slice of `SubtleCrypto` the measurement reads, typed to what is used. */
+interface DigestFacility {
+  readonly crypto?: {
+    readonly subtle?: {
+      readonly digest?: (
+        algorithm: string,
+        data: Uint8Array,
+      ) => Promise<ArrayBuffer>;
+    };
+  };
+}
+
+describe("P2-T25: the replay harness inside Zotero — real adapter, real client, recorded responses", () => {
+  /** `test/fixtures/pubmed`, as a native path, found from the plugin's root. */
+  let fixtureDir: string;
+
+  /** The shipped adapter, mapper and client over the Zotero file port. */
+  function harness(): ReplayHttpClient & {
+    readonly source: ReturnType<typeof createPubmedSource>;
+  } {
+    const replay = createReplayHttpClient({
+      dir: fixtureDir,
+      host: NCBI_HOST,
+      io: zoteroFixtureIo,
+    });
+    // No `parseXml`: the mapper's default is `domParserXml`, Gecko's own
+    // `DOMParser`, which is what the composition root uses too
+    // (`src/bootstrap/container.ts`). The Node contract test has to supply a
+    // parser of its own; this is the one place the shipped parser is exercised
+    // over the recorded corpus.
+    const mapRecords = createPubmedRecordMapper({ clock: replay.clock });
+    const source = createPubmedSource({
+      http: replay.client,
+      clock: replay.clock,
+      mapRecords,
+    });
+    return { ...replay, source };
+  }
+
+  function callContext(): SourceCallContext {
+    return { token: createCancellationTokenSource().token };
+  }
+
+  /** The recorded `esearch` body of one page, read off disk through the port. */
+  async function recordedPageIds(retstart: number): Promise<readonly string[]> {
+    const request = recordedEsearchRequest(
+      PUBMED_TYPICAL_QUERY,
+      PUBMED_PAGE_SIZE,
+      retstart,
+    );
+    const text = await zoteroFixtureIo.readText(
+      fixtureDir,
+      `${fixtureKey(request)}.json`,
+    );
+    const { body } = JSON.parse(text) as { body: string };
+    return parseEsearchBody(body, request.url).pmids;
+  }
+
+  before(async function () {
+    this.timeout(30_000);
+    fixtureDir = await repositoryFixtureDir("pubmed");
+    log25(`fixture directory: ${fixtureDir}`);
+  });
+
+  // =========================================================================
+  // Step 1 — the measurement everything else in the card depends on
+  // =========================================================================
+
+  it("measures the digest facility: crypto.subtle.digest is reachable and asynchronous", async function () {
+    this.timeout(30_000);
+    const request = recordedEsearchRequest(
+      PUBMED_TYPICAL_QUERY,
+      PUBMED_PAGE_SIZE,
+      0,
+    );
+    const input = `${request.method} ${request.url} `;
+
+    // Where specs run: the scaffold's test-runner chrome window.
+    const here = globalThis as unknown as DigestFacility;
+    const windowDigest = here.crypto?.subtle?.digest;
+    const windowHasDigest = typeof windowDigest === "function";
+
+    // Where the plugin runs: the sandbox `_loadScope()` built. The plugin
+    // object was constructed by code inside it, so its global *is* that
+    // sandbox, and `getGlobalForObject` is the one way to reach it from here.
+    const instance = (Zotero as unknown as Record<string, unknown>)[
+      config.addonInstance
+    ];
+    const sandboxGlobal = (
+      Components.utils.getGlobalForObject as (object: unknown) => unknown
+    )(instance) as DigestFacility | undefined;
+    const sandboxDigest = sandboxGlobal?.crypto?.subtle?.digest;
+    const sandboxHasDigest = typeof sandboxDigest === "function";
+    const hasSyncDigest =
+      typeof (here.crypto as { subtle?: Record<string, unknown> } | undefined)
+        ?.subtle?.["digestSync"] === "function";
+
+    let returnsPromise = false;
+    let windowHex = "(not computed)";
+    if (windowDigest !== undefined && here.crypto?.subtle !== undefined) {
+      const returned: unknown = windowDigest.call(
+        here.crypto.subtle,
+        "SHA-256",
+        new TextEncoder().encode(input),
+      );
+      returnsPromise = returned instanceof Promise;
+      windowHex = toHex(
+        new Uint8Array(await (returned as Promise<ArrayBuffer>)),
+      );
+    }
+    let sandboxHex = "(not computed)";
+    if (sandboxDigest !== undefined && sandboxGlobal?.crypto?.subtle) {
+      sandboxHex = toHex(
+        new Uint8Array(
+          await sandboxDigest.call(
+            sandboxGlobal.crypto.subtle,
+            "SHA-256",
+            new TextEncoder().encode(input),
+          ),
+        ),
+      );
+    }
+
+    // A second, cheaper measurement while a live Gecko is at hand: does
+    // `IOUtils` accept the `${dir}/${name}` spelling the Node side uses? This
+    // is what decides whether `FixtureIo` may take one joined path. Logged, not
+    // asserted — the answer is per platform.
+    let slashSpelling: string;
+    try {
+      slashSpelling = String(
+        await IOUtils.exists(`${fixtureDir}/${PAGINATED_PAGE_1_KEY}.json`),
+      );
+    } catch (error) {
+      slashSpelling = `throws ${String(error)}`;
+    }
+
+    log25(
+      `Zotero ${Zotero.version}, Gecko ${Services.appinfo.platformVersion}, ` +
+        `${Services.appinfo.OS}: crypto.subtle.digest in the test-runner ` +
+        `window=${String(windowHasDigest)}, in the plugin sandbox=` +
+        `${String(sandboxHasDigest)}, returns a Promise=${String(returnsPromise)}, ` +
+        `any synchronous digest=${String(hasSyncDigest)}; node:crypto is ` +
+        `absent by construction; IOUtils.exists on a forward-slash path ` +
+        `under a native directory: ${slashSpelling}`,
+    );
+
+    assert.isTrue(
+      windowHasDigest,
+      "crypto.subtle.digest is reachable where integration specs run",
+    );
+    assert.isTrue(
+      returnsPromise,
+      "crypto.subtle.digest is asynchronous: it returns a Promise",
+    );
+    assert.isFalse(hasSyncDigest, "there is no synchronous digest to prefer");
+    // The platform's digest and the pure one agree on the fixture key's input,
+    // inside Zotero — the second half of the proof `replayHarness.test.ts`
+    // gives against node:crypto.
+    assert.strictEqual(
+      windowHex,
+      sha256Hex(input),
+      "test/support/sha256.ts agrees with crypto.subtle.digest in this window",
+    );
+    assert.strictEqual(
+      windowHex.slice(0, 16),
+      fixtureKey(request),
+      "and fixtureKey is that digest's first 16 hex characters",
+    );
+    if (sandboxHasDigest) {
+      assert.strictEqual(
+        sandboxHex,
+        windowHex,
+        "the sandbox's digest agrees with the window's",
+      );
+    }
+  });
+
+  // =========================================================================
+  // Criterion 2 — the key is byte-identical to what P1-T11 recorded under
+  // =========================================================================
+
+  it("names an on-disk fixture with fixtureKey, byte for byte, and misses on a one-byte drift", async function () {
+    this.timeout(30_000);
+    const request = recordedEsearchRequest(
+      PUBMED_TYPICAL_QUERY,
+      PUBMED_PAGE_SIZE,
+      0,
+    );
+    assert.strictEqual(
+      fixtureKey(request),
+      PAGINATED_PAGE_1_KEY,
+      "the key the recorder wrote paginated-page-1 under",
+    );
+    const file = PathUtils.join(fixtureDir, `${PAGINATED_PAGE_1_KEY}.json`);
+    assert.isTrue(await IOUtils.exists(file), `${file} is on disk`);
+    assert.isTrue(
+      await IOUtils.exists(
+        PathUtils.join(fixtureDir, `${PAGINATED_PAGE_1_KEY}_meta.json`),
+      ),
+      "and so is its sidecar",
+    );
+
+    const drifted = fixtureKey({ ...request, url: `${request.url}&` });
+    assert.notStrictEqual(drifted, PAGINATED_PAGE_1_KEY);
+    assert.isFalse(
+      await IOUtils.exists(PathUtils.join(fixtureDir, `${drifted}.json`)),
+      "a request one byte off names a file that does not exist",
+    );
+    log25(`paginated-page-1 → ${fixtureKey(request)} (drifted: ${drifted})`);
+  });
+
+  it("reads and ages every sidecar through IOUtils, under docs/13 §3.3's policy", async function () {
+    this.timeout(30_000);
+    const report = await assertFixturesFresh(
+      fixtureDir,
+      Date.now(),
+      zoteroFixtureIo,
+    );
+    assert.strictEqual(report.checked, PUBMED_FIXTURE_COUNT);
+    assert.strictEqual(
+      report.warnings.length,
+      0,
+      `nothing is past the warn age: ${report.warnings.join("; ")}`,
+    );
+    log25(
+      `${String(report.checked)} sidecars aged; oldest ${String(report.oldestDays)} day(s)`,
+    );
+  });
+
+  // =========================================================================
+  // Criterion 4 — the real adapter and the real client, over replay
+  // =========================================================================
+
+  it("drives the shipped adapter, client and DOMParser through two recorded pages", async function () {
+    this.timeout(30_000);
+    const { source, transport, clock } = harness();
+    const pageOne = await recordedPageIds(0);
+    const pageTwo = await recordedPageIds(PUBMED_PAGE_SIZE);
+    assert.strictEqual(pageOne.length, PUBMED_PAGE_SIZE);
+    assert.strictEqual(pageTwo.length, PUBMED_PAGE_SIZE);
+
+    // Page 1 through `searchAll`, the pipeline's entry point: one esearch and
+    // one efetch. **Not `limit: 6` for both pages at once** — `searchAll` sizes
+    // each page as `min(limit - emitted, 200)`, so that asks NCBI for
+    // `retmax=6`, and no fixture was recorded at that size. Measured on the
+    // first run of this test, 2026-10-13: `Missing fixture …
+    // bb0945d1b9ffb92c.json for GET …&retmax=6&retstart=0…`, which is the
+    // harness refusing loudly rather than reaching the network.
+    const records: SourceRecord[] = [];
+    for await (const record of source.searchAll(
+      { ...PUBMED_TYPICAL_QUERY, limit: PUBMED_PAGE_SIZE },
+      callContext(),
+    )) {
+      records.push(record);
+    }
+    assert.deepEqual(
+      records.map((record) => record.nativeId),
+      [...pageOne],
+      "searchAll yields page 1's recorded idlist, in NCBI's order",
+    );
+
+    // Page 2 through the adapter's own paging contract — `search()` with the
+    // cursor page 1 offers — into `paginated-page-2` and its efetch.
+    const first = await source.search(
+      { ...PUBMED_TYPICAL_QUERY, limit: PUBMED_PAGE_SIZE },
+      callContext(),
+    );
+    assert.strictEqual(first.nextCursor, String(PUBMED_PAGE_SIZE));
+    assert.strictEqual(first.totalAvailable, 840, "the recorded count");
+    const second = await source.search(
+      {
+        ...PUBMED_TYPICAL_QUERY,
+        limit: PUBMED_PAGE_SIZE,
+        cursor: first.nextCursor ?? "",
+      },
+      callContext(),
+    );
+    records.push(...second.records);
+
+    assert.deepEqual(
+      records.map((record) => record.nativeId),
+      [...pageOne, ...pageTwo],
+      "the records are the two recorded idlists, in NCBI's order",
+    );
+    assert.strictEqual(
+      new Set(records.map((record) => record.nativeId)).size,
+      PUBMED_PAGE_SIZE * 2,
+      "six distinct records",
+    );
+    assert.isTrue(
+      records.every((record) => record.sourceId === "pubmed"),
+      "every record names the shipped adapter",
+    );
+    assert.isTrue(
+      records.every((record) => record.retrievedAtEpochMs === clock.now()),
+      "the mapper stamped the frozen clock, so the snapshot is stable",
+    );
+    assert.strictEqual(clock.now(), FROZEN_NOW_EPOCH_MS);
+    assert.isTrue(
+      records.every((record) => record.work.title.trim() !== ""),
+      "Gecko's DOMParser gave the mapper a title for every record",
+    );
+
+    // The fixture names the transport resolved are the strongest request-shape
+    // assertion there is: each one exists only because the adapter's URL is
+    // byte-identical to the recorder's.
+    const calls = transport.calls.map((call) => ({
+      key: fixtureKey({
+        method: call.method,
+        url: call.url,
+        ...(call.options.body !== undefined && { body: call.options.body }),
+      }),
+      endpoint: new URL(call.url).pathname.split("/").pop() ?? "",
+      retstart: new URL(call.url).searchParams.get("retstart"),
+    }));
+    assert.deepEqual(
+      calls.map((call) => call.endpoint),
+      [
+        "esearch.fcgi",
+        "efetch.fcgi",
+        "esearch.fcgi",
+        "efetch.fcgi",
+        "esearch.fcgi",
+        "efetch.fcgi",
+      ],
+      "one esearch and one efetch per page fetched",
+    );
+    assert.strictEqual(calls[0]?.key, PAGINATED_PAGE_1_KEY);
+    assert.strictEqual(calls[2]?.key, PAGINATED_PAGE_1_KEY, "page 1 again");
+    assert.strictEqual(calls[4]?.retstart, String(PUBMED_PAGE_SIZE));
+    assert.strictEqual(
+      new Set(calls.map((call) => call.key)).size,
+      4,
+      "four distinct fixtures: two esearch pages and their two efetch batches",
+    );
+    for (const call of calls) {
+      assert.isTrue(
+        await IOUtils.exists(PathUtils.join(fixtureDir, `${call.key}.json`)),
+        `${call.endpoint} resolved to the committed fixture ${call.key}`,
+      );
+    }
+    log25(
+      `${String(records.length)} records through ${String(calls.length)} ` +
+        `fixtures: ${calls.map((call) => call.key).join(", ")}`,
+    );
+  });
+
+  it("turns the recorded 429 into RateLimitError in production code and parks the host", async function () {
+    this.timeout(30_000);
+    const { client, limiter, clock } = harness();
+    const request = recordedEsearchRequest(PUBMED_SYNTHETIC_429_QUERY, 20, 0);
+
+    let thrown: unknown;
+    try {
+      await client.request("GET", request.url, { responseType: "text" });
+    } catch (error) {
+      thrown = error;
+    }
+    assert.isTrue(
+      thrown instanceof RateLimitError,
+      `a RateLimitError, not ${String(thrown)}`,
+    );
+    if (thrown instanceof RateLimitError) {
+      assert.strictEqual(thrown.retryAfterMs, 2000, "Retry-After: 2");
+      assert.strictEqual(thrown.messageKey, "rh-error-rate-limit");
+    }
+    // docs/07 §7.3: "Any 429 or 503 with Retry-After calls
+    // limiter.penalize(...)". The limiter is the harness's recording one; the
+    // call is the shipped client's.
+    assert.strictEqual(limiter.penalties.length, 1);
+    assert.strictEqual(limiter.penalties[0]?.untilEpochMs, clock.now() + 2000);
+
+    const { client: second } = harness();
+    let serverError: unknown;
+    try {
+      await second.request(
+        "GET",
+        recordedEsearchRequest(PUBMED_SYNTHETIC_500_QUERY, 20, 0).url,
+        { responseType: "text" },
+      );
+    } catch (error) {
+      serverError = error;
+    }
+    assert.isTrue(
+      serverError instanceof UpstreamServerError,
+      `an UpstreamServerError, not ${String(serverError)}`,
+    );
+    log25(
+      `429 → ${thrown instanceof Error ? thrown.constructor.name : "?"}, ` +
+        `500 → ${serverError instanceof Error ? serverError.constructor.name : "?"}`,
+    );
+  });
+});
 
 describe("P1-T35: the host the composition root published", () => {
   before(async function () {
