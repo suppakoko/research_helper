@@ -64,6 +64,17 @@ import type { SourceRecord } from "../model/sourceRecord";
  */
 export type { SourceId };
 
+/**
+ * The parser's entry point, re-exported so the contract an adapter implements
+ * and the function that produces its `SourceQuery.terms` share one import
+ * (`P2-T01`). The parser lives in `./shared/queryParse.ts` and nowhere else;
+ * `normalizeForSource` is deliberately not re-exported, because only a
+ * renderer calls it and a renderer already imports the module. This is the
+ * file's only runtime export — every other member is a type, and the parser
+ * imports from here with `import type`, so there is no runtime cycle.
+ */
+export { parseUserQuery } from "./shared/queryParse";
+
 /** What a given adapter can actually do. The orchestrator plans around this. */
 export interface SourceCapabilities {
   /** Free-text/boolean keyword search. */

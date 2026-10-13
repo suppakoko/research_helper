@@ -797,6 +797,34 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     is the one `plan/README.md` §5 rule 8 already carries: a card's verification must be run once against
     the tree before the card is written.
 
+### 6.13 Raised by `P2-T01`, 2026-10-13 — recorded under rule 9, none carded
+
+61. **The per-source query dialect has no home in `docs/07` §4.2.** `SourceCapabilities` carries
+    `keywordSearch` but nothing about whether a source renders OR, NOT, phrases or which `QueryField`
+    members — the very column `docs/02` §12.3 tabulates and `P2-T04`'s lossiness notice needs.
+    `normalizeForSource` in `src/sources/shared/queryParse.ts` takes it as an inline object shape for now,
+    and each adapter card (`P2-T03` to `P2-T07`) passes its §12.3 column inline. The fix is an extension to
+    `SourceCapabilities` under `docs/07` §11.1 — an owner-authorised schema change — after which the
+    parameter type and the adapters' calls change together.
+
+62. **`P2-T01` criterion 1 cannot be read literally.** "Round-trips all nine §12.3 concept rows" names
+    Date range and Pagination, which the card's own Do NOT keeps out of the tree. Met under the reading
+    recorded in the card; the owner confirms the reading or rewords the criterion to the seven tree rows
+    plus the `SourceQuery` boundary.
+
+63. **`docs/02` §12.3 has no Journal row** although §12.1 names `journal:` as a user prefix and the PubMed
+    renderer's `FIELD_TAGS` in `src/sources/pubmed/query.ts` renders `[Journal]`. The row would read:
+    PubMed `[Journal]`, Europe PMC `JOURNAL:`, Crossref `query.container-title`, the rest n/a. A document
+    edit, the owner's.
+
+64. **`docs/07` §2.2's directory tree omits `src/sources/shared/queryParse.ts`.** `P2-T01`'s Notes already
+    ask for it at the next revision of document 07.
+
+65. **Harmless redundancy:** `Parser.parseAnd` in `queryParse.ts` has a binary-`NOT` branch that
+    `parseUnary` already covers — removing it yields the same tree. Its comment explains PubMed's binary
+    reading, so it is a readability choice; remove it or say so in the comment whenever the file is next
+    edited.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

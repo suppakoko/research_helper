@@ -1,9 +1,12 @@
 /**
  * The user's one search box → a {@link QueryNode} tree.
  *
- * **Scope.** `P1-T08` step 1. Source-agnostic on purpose: every adapter renders
+ * **Scope.** `P1-T08` step 1 shipped {@link parseUserQuery} for the PubMed
+ * slice; `P2-T01` made this file the multi-source contract and added
+ * {@link normalizeForSource}. Source-agnostic on purpose: every adapter renders
  * the same tree into its own syntax (`docs/02` §12.2), so the parse happens
- * once, here, and each `sources/<id>/query.ts` only renders.
+ * once, here, and each `sources/<id>/query.ts` only renders. One module, one
+ * name: `P2-T01` forbids a second parser file under a near-identical name.
  *
  * **Authority for the types.** `docs/07-architecture-and-data-model.md` §4.2
  * declares `QueryNode` and `QueryField`, and `src/sources/types.ts` transcribes
@@ -51,7 +54,7 @@
  * else.
  */
 
-import type { QueryField, QueryNode } from "../types";
+import type { QueryField, QueryNode, SourceCapabilities } from "../types";
 
 /**
  * The `field:` prefixes `docs/02` §12.1 names, mapped onto `docs/07` §4.2's
@@ -123,6 +126,104 @@ export function parseUserQuery(input: string): QueryNode {
   } catch {
     return rawTermNode(input);
   }
+}
+
+/**
+ * Report which parts of a parsed tree one source cannot express.
+ *
+ * `P2-T01` step 4. `docs/02` §12.3's translation table has a column per source
+ * and a row per concept, and some cells read *n/a* or *client-side*: Crossref
+ * has no OR, no NOT and no phrase; Semantic Scholar's bulk endpoint has no
+ * field syntax at all; bioRxiv has no keyword search of any kind (§8.4). This
+ * is the one place that turns such a column into a list of the exact nodes a
+ * rendering would lose, so the adapter can degrade **visibly** — the "Crossref
+ * results are approximate" notice `docs/02` §12.2 requires — instead of
+ * dropping the user's Boolean intent in silence.
+ *
+ * **What the second argument is.** `keywordSearch` is `docs/07` §4.2's own
+ * `SourceCapabilities` flag, taken by `Pick` in the shape
+ * `resolveDateFilterMode` (`recency.ts`) already uses, so an adapter passes its
+ * declared capabilities through. The four other members are that adapter's
+ * §12.3 column — the rows `docs/07` §4.2 does not model. They are typed inline
+ * on purpose: `P2-T01` allows no new type declaration under
+ * `src/sources/shared/`, and the honest home for a per-source query dialect is
+ * `SourceCapabilities` itself, as a documented extension to `docs/07` §4.2
+ * (§11.1's rule for anything the interface cannot say). Until that happens the
+ * shape lives here and nowhere else.
+ *
+ * **Rules, in the order they are applied.**
+ *
+ * 1. `keywordSearch: false` — nothing is expressible. The whole tree is reported
+ *    as one entry, the root, and the adapter emits **no query** (`docs/02`
+ *    §8.4, and `P2-T01`'s "Do NOT" list). Listing the sub-parts of a tree that
+ *    is lost entirely would be noise.
+ * 2. Otherwise the tree is walked in document (pre-order) order and every node
+ *    the source cannot express is reported **once, by reference** — the very
+ *    object inside the tree, so a renderer can skip it by identity. The walk
+ *    continues into a reported node's children, because an OR that cannot be
+ *    rendered and a phrase inside it are two different losses and the notice
+ *    should name both.
+ * 3. An `and` node is always expressible: §12.3's AND row has no *n/a* cell
+ *    (Crossref renders it as an implicit, scored bag of words). A term with no
+ *    `field`, or with `field: "any"`, is always expressible for the same
+ *    reason — `"any"` is the *absence* of a field restriction, which is what the
+ *    raw-string fallback carries.
+ *
+ * The input is never modified; nothing here is a renderer. Which of `phrase` or
+ * `field` made a term unexpressible is visible on the reported node itself.
+ *
+ * @param node - the tree, from {@link parseUserQuery} or any other builder of a
+ *   `docs/07` §4.2 `QueryNode`
+ * @param capabilities - the source's `keywordSearch` flag plus its §12.3 column:
+ *   `or`, `not` and `phrase` say whether that row's cell is a real operator for
+ *   this source; `fields` lists the `QueryField` members it renders (`"any"`
+ *   need not be listed)
+ * @returns the unexpressible nodes in pre-order, empty when the source can
+ *   render the whole tree
+ */
+export function normalizeForSource(
+  node: QueryNode,
+  capabilities: Pick<SourceCapabilities, "keywordSearch"> & {
+    /** §12.3 "OR" row: a real disjunction, not a flattened bag of words. */
+    readonly or: boolean;
+    /** §12.3 "NOT" row: a real exclusion, not a client-side afterthought. */
+    readonly not: boolean;
+    /** §12.3 "Phrase" row: quotes keep adjacent words together. */
+    readonly phrase: boolean;
+    /** §12.3 field rows: the `QueryField` members this source renders. */
+    readonly fields: readonly QueryField[];
+  },
+): readonly QueryNode[] {
+  if (!capabilities.keywordSearch) return [node];
+
+  const unexpressible: QueryNode[] = [];
+  const visit = (current: QueryNode): void => {
+    switch (current.kind) {
+      case "term":
+        if (
+          (current.phrase === true && !capabilities.phrase) ||
+          (current.field !== undefined &&
+            current.field !== "any" &&
+            !capabilities.fields.includes(current.field))
+        ) {
+          unexpressible.push(current);
+        }
+        return;
+      case "and":
+        for (const child of current.children) visit(child);
+        return;
+      case "or":
+        if (!capabilities.or) unexpressible.push(current);
+        for (const child of current.children) visit(child);
+        return;
+      case "not":
+        if (!capabilities.not) unexpressible.push(current);
+        visit(current.child);
+        return;
+    }
+  };
+  visit(node);
+  return unexpressible;
 }
 
 /**

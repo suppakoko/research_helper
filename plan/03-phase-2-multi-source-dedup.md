@@ -135,6 +135,12 @@ native syntax, and the exact transmitted query is recoverable for provenance and
   already declared per `docs/07` §4.2)
 
 **Do.**
+> **Corrected 2026-10-13 after the executing agent measured the tree before writing: steps 1 to 3 below
+> describe work `P1-T08` had already finished.** `parseUserQuery`, `USER_FIELD_PREFIXES` and the raw-string
+> fallback `rawTermNode` in `src/sources/shared/queryParse.ts` already handled quotes, uppercase
+> `AND`/`OR`/`NOT`, leading `-`, parentheses, the four prefixes and the implicit AND, with 23 passing
+> tests. The card read as if the syntax were new; only step 4 (`normalizeForSource`) and step 5's
+> tests were new code. The syntax was not changed.
 1. Extend the `parseUserQuery(input: string): QueryNode` that `P1-T08` already shipped in
    `src/sources/shared/queryParse.ts`, so it produces `docs/07` §4.2's exact node shapes for the
    full syntax below. **Do not create a second parser module.** `P1-T08` built this file for the
@@ -168,6 +174,15 @@ native syntax, and the exact transmitted query is recoverable for provenance and
   adapters would import whichever one they met first.
 
 **Done when.**
+> **Noted 2026-10-13 — two criteria below are met under a reading the owner should confirm (report).**
+> Criterion 1: `docs/02` §12.3's Date range and Pagination rows are not tree concepts — this card's own
+> Do NOT forbids a date node, and `fromDate`/`toDate`/`limit`/`cursor` live on `SourceQuery` — so the
+> tests assert the seven tree rows as input → exact tree, and for the two others assert the boundary: the
+> parser leaves `2024-01-01` and `cursor:*` as ordinary terms and a `SourceQuery` carries the tree
+> unchanged beside its window and paging members. Criterion 3: `normalizeForSource`'s second parameter
+> is typed inline (an object shape intersected with `Pick<SourceCapabilities, "keywordSearch">`), not as
+> a `type`/`interface`/`enum` declaration; its proper home is `SourceCapabilities` in `docs/07` §4.2,
+> which is `plan/00` §6 item 61.
 - [ ] `parseUserQuery` round-trips all nine `docs/02` §12.3 concept rows in unit tests.
 - [ ] A deliberately malformed input (`"unclosed AND (`) returns a single `term` node and does not
       throw, asserted in a test.
@@ -185,6 +200,24 @@ lives in a file not present in `docs/07` §2.2's tree, which lists only `dedupe.
 under `src/sources/shared/`: `P1-T08` created `queryParse.ts` there and this card extends it. One
 module, one name — add it to the tree when doc 07 is next revised.
 
+
+**Findings, 2026-10-13 — done; the `Verify with` command passes; two criteria are met under a stated reading; full report at `plan/reports/P2-T01.md`.**
+Verified by the coordinator on the live tree: typecheck 0, `test/unit/sources/queryParse.test.ts` **43 passed**
+(23 before this card, 20 new), no `MUTANT` marker anywhere, the only `type`/`interface`/`enum` declarations
+under `src/sources/shared/` are the three that were already in the committed tree (`Token`, `RecencyWindow`,
+`ClientRecencyFilterResult`), and the diff touches exactly the card's three files (434 insertions). The new
+code is one function, `normalizeForSource`, which returns by reference the nodes a source cannot express
+(the root alone when `keywordSearch` is false; never an `and`, an unfielded term or `field: "any"`; the
+walk continues below a reported node; the input is never modified), plus a runtime re-export of
+`parseUserQuery` from `src/sources/types.ts` that every current importer reaches only through `import
+type`. The agent killed all nineteen mutants it staged (the `keywordSearch` gate, each operator check,
+pre-order versus post-order, copy versus reference, each prefix, the operator words, the phrase flag, the
+unterminated quote, the re-export), restoring by copy and hash each time, and classified the one
+unbreakable half-assertion (determinism). The card's premise was wrong — steps 1 to 3 were `P1-T08`'s — and
+two criteria cannot be read literally; both corrections are dated above and the readings await the owner.
+Four follow-ups are `plan/00` §6.13: the per-source query dialect needs a home in `SourceCapabilities`
+(a `docs/07` §4.2 extension, owner's), `docs/02` §12.3 lacks a Journal row, `docs/07` §2.2's tree lacks
+`queryParse.ts`, and `Parser.parseAnd`'s binary-`NOT` branch is redundant but harmless.
 ---
 
 ### P2-T02 — Parallel fan-out: per-source timeouts, failure isolation
