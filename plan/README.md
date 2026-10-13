@@ -207,6 +207,22 @@ When Claude Code is handed a task card:
    the **claim built on top of them was not checked at all** — which is the
    shape to watch for.
 
+   **Added 2026-10-13, after forty correction notes accumulated in one phase
+   file.** Cite declarations **by name, never by line number** — six of eight
+   line numbers in one card drifted within a week while every name stayed
+   true. And a card states **only what its `Do` steps need**: every extra
+   sentence is an extra claim, and the measured rate is that nearly every card
+   carried one that was false. Shorter cards have fewer things to be wrong.
+
+9. **A finding becomes a card only if it blocks a phase's finishing conditions.**
+   Everything else goes to `plan/00-task-index.md` §6, tagged with the phase
+   whose conditions it would serve, and waits there. **A phase closes on its
+   finishing conditions, not on its card list.** Added 2026-10-13, when Phase 1
+   had met its five conditions on 2026-10-12 and then gained seven more executed
+   cards and thirty-eight backlog items that none of those conditions asked
+   for — each card closing one finding and opening several. The owner stopped
+   it; this rule is so the next phase does not need stopping.
+
    So, before a claim about a file, a section, a symbol or a test goes into a
    card: grep it, and cite what the grep returned rather than what the last
    report said about it. A card report is evidence about the work, **not**
@@ -225,6 +241,14 @@ When Claude Code is handed a task card:
   behind a broken menu item (`docs/11` §0 principle 5).
 - **Tests ship with the task, not after it.** A task whose `Files` list has no
   test file needs a reason in `Notes`.
+- **A `Findings` block is one paragraph.** Added 2026-10-13, when Findings had
+  grown to 45 % of a phase file. The paragraph states the verdict, the verified
+  numbers, and anything that changes a later decision; the executing agent's
+  full report is saved verbatim as `plan/reports/<card-id>.md` and linked. **A
+  fact that matters goes into the document, the code or a test on the day it is
+  measured — never only into Findings**, where the next agent re-measures it:
+  one credential length was measured on 2026-10-07 and reached its document on
+  2026-10-13, after fifteen mentions and three workarounds.
 - **Cost.** Any task that spends money on an API carries a Human gate and states
   the expected spend.
 - **Reverting a Fluent-bundle mutation is not self-reverting.** Found by `P1-T46` on

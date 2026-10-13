@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-13 · **137 tasks: 77 `DONE`, 60 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **40 of 46 `DONE`**, Phase 2 **3 of 25**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 137, so 39 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-13 · **137 tasks: 78 `DONE`, 59 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **41 of 46 `DONE`**, Phase 2 **3 of 25**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 137, so 39 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -182,7 +182,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P1-T20` | Search & Import window: markup and controls | `P1-T03`, `P1-T07`, `P1-T19` | 1.0 d |  |
 | ✅ `P1-T21` | Result table, selection and filtering | `P1-T20` | 0.75 d |  |
 | ✅ `P1-T22` | Wire search, import, progress, cancellation, five states | `P1-T16`, `P1-T17`, `P1-T21` | 0.75 d |  |
-| `P1-T23` | Phase 1 definition-of-done run | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35`, `P1-T36`, `P1-T45`, `P1-T46` | 1.0 d | 🔒 |
+| ✅ `P1-T23` | Phase 1 definition-of-done run | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35`, `P1-T36`, `P1-T45`, `P1-T46` | 1.0 d | 🔒 |
 | ✅ `P1-T24` | Retire the `P0-T10` spike surface from `itemMapper.ts` | `P1-T12` | 0.25 d |  |
 | ✅ `P1-T25` | Composition root: construct the HTTP client, limiters and… | `P1-T04`, `P1-T05`, `P1-T15` | 1.0 d |  |
 | ✅ `P1-T26` | Collapse the duplicate `Retry-After` parser and drive… | `P1-T04`, `P1-T05` | 0.5 d |  |
@@ -375,6 +375,11 @@ only ones still open.**
    owner was undefined. `P0-T10` creates it; `P0-T24` now modifies it.
 
 ## 6. Measured gaps with no card yet
+
+**This section is the intake, and the rule is `plan/README.md` §5 rule 9 (2026-10-13): an item here
+becomes a card only when it blocks the finishing conditions of the phase being executed.** Items are
+tagged below with the phase they would serve where that is known. Phase 1 is closed; nothing here is
+Phase 1 work any more.
 
 **Triaged 2026-10-07.** Every `Needs a card` paragraph in `plan/02-phase-1-pubmed.md` was read with its
 context — eighteen of them — and the ones already carded were removed, including the `Semaphore.resize`

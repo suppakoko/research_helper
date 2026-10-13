@@ -732,8 +732,14 @@ measured numbers before the phase is marked done". The executing agent produced
 
 | field | value |
 |---|---|
-| Signed by | |
-| Date | |
-| Criteria accepted | |
+| Closed by | the owner, by instruction to the coordinator, after reading §1–§8 and the coordinator's report |
+| Date | 2026-10-13 |
+| Criteria accepted | all five of §1, as measured in the live run of 2026-10-12 and the confirming live run of 2026-10-13 (109 passed) |
+| Carried forward, **not** signed | §8 item 1 — that Windows draws the native save dialog; no automated run can witness it, and nobody has pressed the control. Everything after the dialog closes is verified against Zotero 10.0.3's own file-picker source (§3). |
+| Also carried | §8 item 3's manual rows, and the decisions in §8 items 4–5 |
+
+**This block was written by the coordinator recording the owner's decision, not by the owner's hand.**
+The distinction matters for the next reader: the five criteria are accepted on their measurements; the
+one unwitnessed item is listed as unwitnessed. The owner closed the phase knowing it.
 | Findings in §6 accepted as cards | |
 | Items in §8 completed | |

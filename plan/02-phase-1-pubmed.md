@@ -60,6 +60,19 @@ half-built is reachable from a menu.
 
 `P1-T23` is the card that executes this list.
 
+**Phase 1 closed 2026-10-13, by the owner, on this list.** All five bullets passed in `P1-T23`'s live
+run of 2026-10-12 and again in the confirming live run of 2026-10-13 (`docs/spikes/phase-1-dod.md`).
+**Two cards remain `TODO` in this file — `P1-T37` and `P1-T38` — and neither is required by any
+bullet above.** They stay here, keep their numbers, and are taken up only if a later phase's finishing
+conditions need them (`plan/README.md` §5 rule 9). **One item was never witnessed by an automated run
+and is carried forward open rather than signed**: that Windows draws the export control's native save
+dialog. Everything after the dialog closes is verified against Zotero's own source.
+
+**Why the phase closed with cards open, in one sentence, because it is the lesson of the phase:** between
+2026-10-12 and 2026-10-13 seven cards were executed that no bullet above required, each closing one
+finding and opening several, and the owner stopped it. A phase ends on its finishing conditions, not on
+its card list.
+
 ---
 
 ## 3. Scope boundaries
@@ -4610,7 +4623,7 @@ work.**
 | Field | Value |
 |---|---|
 | **ID** | `P1-T23` |
-| **State** | `TODO` |
+| **State** | `DONE` — closed 2026-10-13 by the owner. All five finishing conditions passed in the live run and the confirming run; the one item no automated run witnessed — the native save dialog being drawn — is **carried forward open, not signed**. |
 | **Depends on** | `P1-T11`, `P1-T22`, `P1-T28`, `P1-T35`, `P1-T36`, `P1-T45`, `P1-T46` |
 | **Blocks** | none |
 | **Retires** | `R-16`, `R-17`, part of `R-2` |
