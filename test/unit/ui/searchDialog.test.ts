@@ -14,6 +14,7 @@ import {
   SEARCH_WINDOW_MIN_SIZE,
   SEARCH_WINDOW_ROOT_ID,
 } from "../../../src/ui/dialogs/searchDialog";
+import { PREFERENCES_PANE_ID } from "../../../src/ui/prefs/preferencesPane";
 
 /**
  * `P1-T20` — the Search & Import window's markup and controls.
@@ -455,6 +456,9 @@ interface Controller {
   pickExportPath: () => Promise<string>;
   showExportOutcome: (outcome: string) => void;
   filePickerModule: string;
+  // P1-T44: the Open Preferences action now has a target.
+  preferencesPaneId: string;
+  openPreferences: () => void;
   [key: string]: unknown;
 }
 
@@ -472,6 +476,11 @@ interface Harness {
    * rule with no recorder behind it is a rule nothing checks.
    */
   readonly debugLines: string[];
+  /**
+   * Every argument list the controller passed to
+   * `Zotero.Utilities.Internal.openPreferences`, in order (`P1-T44`).
+   */
+  readonly openPreferencesCalls: unknown[][];
   readonly doc: {
     title: string;
     listeners: Map<string, ((event: unknown) => void)[]>;
@@ -567,11 +576,21 @@ function harness(options: HarnessOptions = {}): Harness {
   };
 
   const prefs = options.prefs ?? {};
+  const openPreferencesCalls: unknown[][] = [];
   const zotero = {
     // `P1-T45`: the document's only log channel, recorded so an assertion can
     // be made about what never reaches it.
     debug: (line: unknown) => {
       debugLines.push(String(line));
+    },
+    // `P1-T44`: the Open Preferences action's target, recorded.
+    Utilities: {
+      Internal: {
+        openPreferences: (...args: unknown[]) => {
+          openPreferencesCalls.push(args);
+          return null;
+        },
+      },
     },
     UIProperties: options.omitUIProperties
       ? undefined
@@ -617,6 +636,7 @@ function harness(options: HarnessOptions = {}): Harness {
     registerRootCalls,
     prefReads,
     debugLines,
+    openPreferencesCalls,
     doc,
   };
 }
@@ -2683,5 +2703,32 @@ describe("P1-T45 — the chosen path leaves no trace in the window", () => {
     // could quote the path the user typed. `settle()` is what logs a rejection,
     // and `exportProvenance()` resolves rather than rejecting.
     expect(h.debugLines.length).toBe(before);
+  });
+});
+
+// ===========================================================================
+// P1-T44 — the Open Preferences action selects this plugin's pane
+// ===========================================================================
+
+describe("P1-T44 — the Open Preferences action has a target", () => {
+  it("carries the pane id P1-T44 registers, as the same literal", () => {
+    // The script cannot import the constant; the two strings are asserted
+    // equal so a rename of either fails here rather than opening the wrong pane.
+    const h = harness();
+    expect(h.controller.preferencesPaneId).toBe(PREFERENCES_PANE_ID);
+  });
+
+  it("passes exactly that pane id to Zotero.Utilities.Internal.openPreferences", () => {
+    const h = harness();
+    h.controller.init();
+    h.controller.openPreferences();
+    expect(h.openPreferencesCalls).toEqual([[PREFERENCES_PANE_ID]]);
+  });
+
+  it("names the pane in the shipped source, not only on the evaluated object", () => {
+    // Belt and braces: `openPreferences(` is called with the property, and the
+    // zero-argument form the file carried until 2026-10-13 is gone.
+    expect(SCRIPT_CODE).toMatch(/openPreferences\(this\.preferencesPaneId\)/);
+    expect(SCRIPT_CODE).not.toMatch(/openPreferences\(\)\s*;/);
   });
 });

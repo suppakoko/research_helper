@@ -769,6 +769,44 @@ run found on the way, and none was fixed.
     document-translation waits doubled — whatever is slow is the path from a published state to text in
     the document, not the formatter.
 
+### 6.11 Raised by `P1-T44`, 2026-10-13 — recorded under rule 9, none carded
+
+46. **(Phase 3)** Schema rows for `ncbi` and `semanticscholar` `lastValidatedAt` / `lastValidationResult`, plus
+    `semanticscholar.keyPresent` and its `KEY_PRESENCE_PREFS` row. `P1-T44`'s pane holds the last Test
+    result **for the session only** because the schema has nowhere to put it. `docs/07` §8.5 is the
+    authority, so this is an owner-authorised schema change — the same shape as item 40.
+
+47. **(any phase that next touches `src/addon.ts`)** Move `preferences?: PreferencesHostApi` from a module
+    augmentation in `src/bootstrap/registerUI.ts` into `PluginApi` proper, beside `searchWindow`. Two lines.
+
+48. **Accepted, not open:** `test/unit/ui/preferencesPane.test.ts` stays. It was outside the card's list; the
+    precedent is `P1-T20`'s window test, and fourteen of the card's sixteen mutations were cheap only
+    because it exists. Recorded so the next reader does not reopen it.
+
+49. **(before release, `G-41`)** `ko-KR` commented stubs for the 35 new pane ids, and the owner's wording for
+    the status-row sentences and especially `backend-indeterminate`.
+
+50. **(owner decision)** The badge vocabulary in `docs/09` §1.9 item 3 and `docs/08` §7.5 rule 7 has **no state
+    for "the probe passed but the tier cannot be told"** — which, after `P1-T41`'s finding, is every Linux
+    machine without a keyring library. `P1-T44` added `indeterminate` rather than claim a tier. Either
+    the two documents gain the state, or item 30's library-presence check lands and retires it.
+
+51. **(owner decision)** `docs/08` §7.3 and §10.1 put the pane's strings in a **fourth bundle**,
+    `research-helper-preferences.ftl`; the card put them in the main-window bundle and `P1-T44` followed the
+    card, recording the divergence in the bundle header, `keys.ts` and the module. Either `docs/08` is
+    corrected or a fourth surface is added to `SHIPPED_SURFACES` and the localization spec.
+
+52. **(Phase 2, when the Semantic Scholar adapter lands)** Move the two `docs/09` §2.3 Test-call request builders
+    and outcome classifiers from `src/ui/prefs/preferencesPane.ts` into the source adapters, where §2.3 says
+    they live. `src/sources/semanticscholar/` is empty today, which is why they are in the pane.
+
+53. **(Phase 3 / `G-18`)** Expose the pane host's `testKey` behind `RH_DOD_LIVE` in the acceptance spec, so the
+    owner can run the real Test once with a real key. Nothing establishes today what either service returns
+    for an invalid key; `docs/09` §2.3's unverified marker stands.
+
+54. **(stale comment)** `src/core/secretStore.ts` says every id but `source.ncbi` is unreachable in Phase 1 and no
+    user can supply a value. `P1-T44` made `source.semanticscholar` reachable. Same class as items 31 and 39.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

@@ -258,7 +258,12 @@ When Claude Code is handed a task card:
   the type check failing with `TS2820` and `TS2344` across several files. **`npm run build`
   cannot repair it**, because the type check runs *before* the generator;
   `npx zotero-plugin build` can, and does. Check both generated typings by hash before
-  calling a sweep clean.
+  calling a sweep clean. **And mutate a `.ftl` only with byte-safe tools** (`Copy-Item`,
+  `[IO.File]` with explicit UTF-8): `P1-T44` found on 2026-10-13 that PowerShell 5.1's
+  `Get-Content` without `-Encoding` decodes a BOM-less bundle in the system codepage and
+  corrupts every `—`, `…` and `·` — which looked like the generator dropping an id and
+  was not. With several agents in one tree the typings hash can also move with no
+  build of one's own, so hash immediately before and after each step.
 
 ## 7. Estimates
 

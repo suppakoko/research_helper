@@ -2808,16 +2808,29 @@ var RHSearchWindow = {
   },
 
   /**
+   * The id of this plugin's preference pane, as `P1-T44` registers it through
+   * `Zotero.PreferencePanes.register({ id })`.
+   *
+   * A literal, because this is a classic chrome script and cannot import
+   * `PREFERENCES_PANE_ID` from `src/ui/prefs/preferencesPane.ts`;
+   * `test/unit/ui/searchDialog.test.ts` asserts the two strings agree.
+   */
+  preferencesPaneId: "research-helper-preferences",
+
+  /**
    * `docs/08` §4.6's `[ Open Preferences… ]` action.
    *
-   * **This plugin registers no preference pane yet** — grepped 2026-10-07:
-   * nothing in `src/` calls `Zotero.PreferencePanes.register`, and
-   * `src/hooks.ts` only *reads* `pluginPanes` as a teardown audit. So the button
-   * opens Zotero's preferences window without selecting a pane of ours, which is
-   * the closest thing to the §8.3 action that exists today and is reported with
-   * the card. `Zotero.Utilities.Internal.openPreferences` is reached through a
-   * `typeof` guard because this window has not verified that signature against a
-   * running Zotero.
+   * **Corrected 2026-10-13 (`P1-T44`).** This comment said, from a 2026-10-07
+   * grep, that the plugin registered no preference pane and that the button
+   * therefore opened Zotero's preferences "without selecting a pane of ours".
+   * `P1-T44` registers the pane (`src/bootstrap/registerUI.ts`,
+   * `APP_REGISTRATIONS`), so the button now passes
+   * {@link RHSearchWindow.preferencesPaneId} and Zotero selects it —
+   * `Zotero.Utilities.Internal.openPreferences(paneID)` navigates an open
+   * `zotero:pref` window to the pane, or opens one with `io.pane` set
+   * (`utilities_internal.js`, read from Zotero 10.0.3's omni.ja). The
+   * `typeof` guard stays: `test/integration/preferences.spec.ts` is what
+   * verifies the signature against a running Zotero, not this file.
    */
   openPreferences() {
     try {
@@ -2826,7 +2839,7 @@ var RHSearchWindow = {
           ? Zotero.Utilities.Internal
           : undefined;
       if (internal && typeof internal.openPreferences === "function") {
-        internal.openPreferences();
+        internal.openPreferences(this.preferencesPaneId);
       }
     } catch (error) {
       try {

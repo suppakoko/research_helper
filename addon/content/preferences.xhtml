@@ -1,0 +1,161 @@
+<!--
+  The Research Helper preference pane — a FRAGMENT (P1-T44).
+
+  Loaded by Zotero.PreferencePanes.register (docs/01 §7.3, docs/08 §7.1): no
+  <!DOCTYPE>, no <html> wrapper, XUL as the default namespace and HTML under
+  `html:`. Zotero parses it with MozXULElement.parseXULToFragment, inserts it
+  into the preferences window, translates it with the window's document.l10n,
+  then dispatches a non-bubbling `load` event on this root. content/preferences.js
+  catches that event with a capturing listener on `document` and initialises —
+  there is no inline handler here, because a pane script runs in an isolated
+  sandbox (Zotero 8+) and an inline `onload="X.init()"` would resolve X in the
+  window's scope, not the script's.
+
+  Scope: the storage block and the TWO literature-source credential blocks, and
+  nothing else. Every summarizing-provider control, base URL and spend ceiling is
+  P3-T04's; the general contact address (`contactEmail`) is Phase 2's Crossref
+  work. The card's `Retires` line is deliberately narrow.
+
+  docs/09 §1.9's nine rules, as this markup carries them:
+    1. every key field is type="password"; the reveal button is hold-to-show
+       (pressed = text, released = password), never a toggle;
+    2. a stored key is never re-displayed: after a store the field is emptied
+       and its placeholder shows the digest the host returned;
+    3. a storage-backend badge, painted from `secretBackend` + the platform;
+    4. docs/09 §1.8's residual-risk text, verbatim, in five always-visible
+       paragraphs — not behind a link, not in a collapsed disclosure;
+    5. a per-credential status row with a Test button that reports inline;
+    6. a Remove all stored keys button that reports how many were removed;
+    7. paste normalisation (trim, strip a leading `Bearer `) in the host;
+    8. no copy affordance anywhere, and copy/cut are refused on the key fields;
+    9. NO `preference` attribute on any key field — decision D5. The only
+       `preference=` binding this pane will ever carry is a non-secret row.
+
+  No literal human-readable string: every visible string is a `data-l10n-id`
+  resolved from research-helper-mainWindow.ftl (see that bundle's header for
+  why this pane uses it). `class`, `id` and `data-l10n-id` are all namespaced
+  `rh-` / `research-helper-` (Zotero 7 for Developers).
+-->
+<vbox
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  id="rh-preferences"
+>
+  <linkset>
+    <html:link rel="localization" href="__addonRef__-mainWindow.ftl" />
+  </linkset>
+
+  <!-- ============ Stored API keys: badge, residual risk, remove all ============ -->
+  <groupbox id="rh-prefs-storage" aria-labelledby="rh-prefs-storage-title">
+    <label>
+      <html:h2
+        id="rh-prefs-storage-title"
+        data-l10n-id="research-helper-prefs-storage"
+      />
+    </label>
+
+    <!-- Rule 3. Painted by preferences.js from the `secretBackend` preference
+         and Zotero.isWin / isMac / isLinux; see backendBadge() in
+         src/ui/prefs/preferencesPane.ts for the four states and for why Linux
+         is "indeterminate" rather than "System keyring". -->
+    <html:p id="rh-prefs-backend" class="rh-backend-badge" role="status" />
+
+    <!-- Rule 4. docs/09 §1.8, verbatim. Always visible. -->
+    <html:p
+      class="rh-hint rh-risk"
+      data-l10n-id="research-helper-prefs-risk-1"
+    />
+    <html:p
+      class="rh-hint rh-risk"
+      data-l10n-id="research-helper-prefs-risk-2"
+    />
+    <html:p
+      class="rh-hint rh-risk"
+      data-l10n-id="research-helper-prefs-risk-3"
+    />
+    <html:p
+      class="rh-hint rh-risk"
+      data-l10n-id="research-helper-prefs-risk-4"
+    />
+    <html:p
+      class="rh-hint rh-risk"
+      data-l10n-id="research-helper-prefs-risk-5"
+    />
+
+    <!-- Rule 6. -->
+    <hbox align="center">
+      <button
+        id="rh-prefs-remove-all"
+        data-l10n-id="research-helper-prefs-remove-all"
+      />
+    </hbox>
+    <html:p id="rh-prefs-remove-all-status" class="rh-hint" role="status" />
+  </groupbox>
+
+  <!-- ============ NCBI (PubMed) — SecretId "source.ncbi" ============ -->
+  <groupbox id="rh-prefs-ncbi" aria-labelledby="rh-prefs-ncbi-title">
+    <label>
+      <html:h2
+        id="rh-prefs-ncbi-title"
+        data-l10n-id="research-helper-prefs-ncbi"
+      />
+    </label>
+    <html:p class="rh-hint" data-l10n-id="research-helper-prefs-ncbi-note" />
+    <hbox align="center">
+      <label
+        data-l10n-id="research-helper-prefs-ncbi-key"
+        control="rh-ncbi-key"
+      />
+      <!-- Rules 1, 2, 9: password, digest in the placeholder, NO preference
+           attribute. autocomplete="off" keeps the form manager out. -->
+      <html:input
+        id="rh-ncbi-key"
+        class="rh-key"
+        type="password"
+        size="40"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button id="rh-ncbi-reveal" data-l10n-id="research-helper-prefs-reveal" />
+      <button id="rh-ncbi-test" data-l10n-id="research-helper-prefs-test-key" />
+      <button
+        id="rh-ncbi-clear"
+        data-l10n-id="research-helper-prefs-clear-key"
+      />
+    </hbox>
+    <html:span id="rh-ncbi-backend" class="rh-backend-badge" />
+    <!-- Rule 5. Output, not input: no `preference` attribute. -->
+    <html:p id="rh-ncbi-status" class="rh-hint" role="status" />
+  </groupbox>
+
+  <!-- ============ Semantic Scholar — SecretId "source.semanticscholar" ============ -->
+  <groupbox id="rh-prefs-s2" aria-labelledby="rh-prefs-s2-title">
+    <label>
+      <html:h2 id="rh-prefs-s2-title" data-l10n-id="research-helper-prefs-s2" />
+    </label>
+    <html:p class="rh-hint" data-l10n-id="research-helper-prefs-s2-note" />
+    <hbox align="center">
+      <label data-l10n-id="research-helper-prefs-s2-key" control="rh-s2-key" />
+      <html:input
+        id="rh-s2-key"
+        class="rh-key"
+        type="password"
+        size="40"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button id="rh-s2-reveal" data-l10n-id="research-helper-prefs-reveal" />
+      <button id="rh-s2-test" data-l10n-id="research-helper-prefs-test-key" />
+      <button id="rh-s2-clear" data-l10n-id="research-helper-prefs-clear-key" />
+    </hbox>
+    <html:span id="rh-s2-backend" class="rh-backend-badge" />
+    <html:p id="rh-s2-status" class="rh-hint" role="status" />
+    <!-- docs/08 §7.3's request link. Opened through Zotero.launchURL by the
+         script; the href is kept for the accessibility tree. -->
+    <html:a
+      id="rh-s2-request"
+      href="https://www.semanticscholar.org/product/api#api-key-form"
+      data-l10n-id="research-helper-prefs-s2-request"
+    />
+  </groupbox>
+</vbox>

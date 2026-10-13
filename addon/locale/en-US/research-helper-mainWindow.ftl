@@ -261,3 +261,106 @@ rh-error-cancelled =
         [one] Cancelled. 1 item was already imported.
        *[other] Cancelled. { $imported } items were already imported.
     }
+
+
+## The preference pane — literature-source credentials (docs/08 §7.3–7.5,
+## docs/09 §1.8–1.9; P1-T44)
+##
+## ### Why these are in this bundle and not in `research-helper-preferences.ftl`
+##
+## `docs/08` §10.1 plans a fourth surface file for the pane. `P1-T44`'s `Files`
+## list names this bundle instead, and this bundle's own header gives the
+## reason that fits: the pane is a fragment inside a window **Zotero** owns
+## (`zotero:pref`), which is this file's first job. A fourth bundle also needs
+## a fourth entry in `src/i18n/keys.ts`'s `SHIPPED_SURFACES` and in the
+## localization spec, none of which the card's `Files` list covers. Reported
+## with the card as a divergence from §10.1; moving the block later is a
+## rename, not a rewrite.
+##
+## ### The residual-risk statement is verbatim and must stay so
+##
+## `research-helper-prefs-risk-1` … `-5` are the five paragraphs of `docs/09`
+## §1.8's blockquote, reproduced word for word with only the Markdown emphasis
+## markers dropped (`docs/09` §1.9 item 4, `docs/08` §7.5 rule 8: "verbatim and
+## visible, not behind a link"). `test/unit/ui/preferencesPane.test.ts` reads
+## §1.8 off disk and fails if a word here differs. Edit `docs/09` first.
+##
+## ### The badge wording is load-bearing, not decorative
+##
+## `docs/09` §1.8 (corrected 2026-09-30): "the text is only true if the badge
+## is accurate". `-backend-indeterminate` exists because the startup probe
+## cannot tell a Linux system keyring from Gecko's in-profile `NSSKeyStore`
+## substitute (`P1-T41`, 2026-10-13); until gate `G-09`'s library-presence
+## check lands, a Linux badge may not claim either tier. `G-41` owns the
+## wording of all of these, as it owns every string in this file.
+
+research-helper-prefs-storage = Stored API keys
+
+research-helper-prefs-backend-windows = Protected by Windows Credential Manager
+research-helper-prefs-backend-mac = Protected by the macOS Keychain
+# Linux, or an unrecognised platform: the probe passed, but which store answered
+# it cannot yet be determined. Deliberately not "System keyring".
+research-helper-prefs-backend-indeterminate = Encrypted by your operating system. Research Helper cannot yet tell whether this is your system keyring or Zotero's own database — read the third paragraph below before storing a key on this computer.
+research-helper-prefs-backend-unavailable = No credential store is available on this computer. Keys cannot be stored here until one is.
+
+research-helper-prefs-risk-1 = Your API keys are encrypted using your operating system's credential store and stored in Zotero's login manager. The preferences pane names the store actually in use next to the key fields.
+research-helper-prefs-risk-2 = When that store is Windows Credential Manager, the macOS Keychain, or your Linux system keyring, the key is held outside your Zotero folder: copying that folder, or restoring it from a backup, does not carry the key with it, and another user account on this computer cannot read it.
+research-helper-prefs-risk-3 = When the pane says the key is stored in Zotero's own database instead, that protection does not apply: the key is inside your Zotero profile, so it travels with a copy or a backup of it, and it is protected only by Zotero's primary password if you have set one. Set one, or do not store keys on that machine.
+research-helper-prefs-risk-4 = It does not protect them from software running under your own user account. Any program you run — including any other Zotero plugin — can decrypt them, because your operating system will decrypt them for anything running as you. Zotero does not isolate plugins from each other.
+research-helper-prefs-risk-5 = Treat these keys as you would a password saved in your browser. Set spending limits with your provider, and rotate any key you think may have been exposed.
+
+research-helper-prefs-remove-all =
+    .label = Remove all stored keys
+# docs/09 §1.9 item 6: the button "reports how many were removed".
+research-helper-prefs-remove-all-done =
+    { $count ->
+        [one] Removed 1 stored key.
+       *[other] Removed { $count } stored keys.
+    }
+
+research-helper-prefs-ncbi = NCBI (PubMed)
+# docs/02 §3.1: the keyed budget is 10 requests per second, the unkeyed 3.
+research-helper-prefs-ncbi-note = An NCBI API key raises the request limit from 3 to 10 per second. Searches work without one, more slowly.
+research-helper-prefs-ncbi-key =
+    .value = API key
+
+research-helper-prefs-s2 = Semantic Scholar
+# docs/08 §7.4's wireframe text for this block.
+research-helper-prefs-s2-note = Related papers and recommendations need a key — the anonymous pool is rate-limited to the point of being unusable. Free, but approval takes time.
+research-helper-prefs-s2-key =
+    .value = API key
+research-helper-prefs-s2-request = Request an API key
+
+# docs/09 §1.9 item 1: hold-to-show, never a sticky toggle. The label says so.
+research-helper-prefs-reveal =
+    .label = Hold to show
+research-helper-prefs-test-key =
+    .label = Test
+research-helper-prefs-clear-key =
+    .label = Clear
+
+## The per-credential status row (docs/09 §1.9 item 5). Painted by
+## `addon/content/preferences.js`; never bound to a preference. `$time` is a
+## clock time already formatted by the script with `Intl.DateTimeFormat` over
+## `Zotero.locale` (docs/08 §10.3).
+
+research-helper-prefs-key-absent = No key stored.
+# docs/09 §1.9 item 8's restore explanation, shown only when the badge names an
+# operating-system store — under the NSSKeyStore fallback the key *does* travel
+# with the profile, so this sentence would be false there (G-09, 2026-09-30).
+research-helper-prefs-key-absent-os = No key stored. API keys are stored in this computer's credential store and do not travel with your Zotero data folder.
+# "This session": the last test result is not yet persisted — docs/07 §8.5's
+# lastValidatedAt / lastValidationResult rows have no schema entry yet (P1-T44).
+research-helper-prefs-key-present = A key is stored. Not tested yet this session.
+research-helper-prefs-key-cleared = Key removed.
+research-helper-prefs-store-unavailable = This key was not stored: no credential store is available on this computer.
+research-helper-prefs-store-empty = Nothing to store: the field is empty after trimming.
+research-helper-prefs-test-running = Testing…
+research-helper-prefs-test-ok = Key accepted · checked { $time }
+# docs/09 §2.3 maps every non-success outcome for the two source credentials to
+# `inconclusive`; docs/08 §7.5 rule 2 permits only this neutral wording there.
+research-helper-prefs-test-inconclusive = Could not verify this key · checked { $time }
+research-helper-prefs-test-rejected = The service rejected this key (HTTP 401) · checked { $time }
+research-helper-prefs-test-forbidden = The service refused the request (HTTP 403) · checked { $time }
+research-helper-prefs-test-absent = Store a key before testing it.
+research-helper-prefs-test-unavailable = No credential store is available, so there is no key to test.

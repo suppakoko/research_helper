@@ -201,6 +201,53 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "rh-error-zotero",
   "rh-error-storage",
   "rh-error-cancelled",
+
+  // The preference pane's literature-source credential blocks (docs/08 §7.3,
+  // docs/09 §1.8–1.9; P1-T44). On *this* surface rather than a fourth
+  // `preferences` one because the pane is a fragment inside a window Zotero
+  // owns (`zotero:pref`), which is this bundle's first job, and because a
+  // fourth bundle needs a fourth SHIPPED_SURFACES entry that the card's Files
+  // list does not cover — reported with the card as a divergence from
+  // docs/08 §10.1. `src/ui/prefs/preferencesPane.ts`'s PREFERENCES_L10N is
+  // typed against MainWindowMessageId, so an id used by the pane and missing
+  // here does not compile. Order matches the bundle.
+  "research-helper-prefs-storage",
+  "research-helper-prefs-backend-windows",
+  "research-helper-prefs-backend-mac",
+  "research-helper-prefs-backend-indeterminate",
+  "research-helper-prefs-backend-unavailable",
+  // docs/09 §1.8's five paragraphs, verbatim. Edit docs/09 first.
+  "research-helper-prefs-risk-1",
+  "research-helper-prefs-risk-2",
+  "research-helper-prefs-risk-3",
+  "research-helper-prefs-risk-4",
+  "research-helper-prefs-risk-5",
+  "research-helper-prefs-remove-all",
+  "research-helper-prefs-remove-all-done",
+  "research-helper-prefs-ncbi",
+  "research-helper-prefs-ncbi-note",
+  "research-helper-prefs-ncbi-key",
+  "research-helper-prefs-s2",
+  "research-helper-prefs-s2-note",
+  "research-helper-prefs-s2-key",
+  "research-helper-prefs-s2-request",
+  "research-helper-prefs-reveal",
+  "research-helper-prefs-test-key",
+  "research-helper-prefs-clear-key",
+  // The per-credential status row (docs/09 §1.9 item 5).
+  "research-helper-prefs-key-absent",
+  "research-helper-prefs-key-absent-os",
+  "research-helper-prefs-key-present",
+  "research-helper-prefs-key-cleared",
+  "research-helper-prefs-store-unavailable",
+  "research-helper-prefs-store-empty",
+  "research-helper-prefs-test-running",
+  "research-helper-prefs-test-ok",
+  "research-helper-prefs-test-inconclusive",
+  "research-helper-prefs-test-rejected",
+  "research-helper-prefs-test-forbidden",
+  "research-helper-prefs-test-absent",
+  "research-helper-prefs-test-unavailable",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -586,6 +633,47 @@ export const KO_PENDING_REVIEW = [
   "rh-error-zotero",
   "rh-error-storage",
   "rh-error-cancelled",
+  // `P1-T44`'s preference-pane strings. `G-41` owns the translation; the
+  // `ko-KR` bundle is outside that card's `Files` list, so it carries no
+  // commented stubs for these yet (reported with the card). Nothing was
+  // machine-translated. "API", "NCBI", "PubMed" and "Semantic Scholar" are
+  // names and exempt from translation (`docs/08` §10.3), but every message
+  // here carries prose around them, so all are pending.
+  "research-helper-prefs-storage",
+  "research-helper-prefs-backend-windows",
+  "research-helper-prefs-backend-mac",
+  "research-helper-prefs-backend-indeterminate",
+  "research-helper-prefs-backend-unavailable",
+  "research-helper-prefs-risk-1",
+  "research-helper-prefs-risk-2",
+  "research-helper-prefs-risk-3",
+  "research-helper-prefs-risk-4",
+  "research-helper-prefs-risk-5",
+  "research-helper-prefs-remove-all",
+  "research-helper-prefs-remove-all-done",
+  "research-helper-prefs-ncbi",
+  "research-helper-prefs-ncbi-note",
+  "research-helper-prefs-ncbi-key",
+  "research-helper-prefs-s2",
+  "research-helper-prefs-s2-note",
+  "research-helper-prefs-s2-key",
+  "research-helper-prefs-s2-request",
+  "research-helper-prefs-reveal",
+  "research-helper-prefs-test-key",
+  "research-helper-prefs-clear-key",
+  "research-helper-prefs-key-absent",
+  "research-helper-prefs-key-absent-os",
+  "research-helper-prefs-key-present",
+  "research-helper-prefs-key-cleared",
+  "research-helper-prefs-store-unavailable",
+  "research-helper-prefs-store-empty",
+  "research-helper-prefs-test-running",
+  "research-helper-prefs-test-ok",
+  "research-helper-prefs-test-inconclusive",
+  "research-helper-prefs-test-rejected",
+  "research-helper-prefs-test-forbidden",
+  "research-helper-prefs-test-absent",
+  "research-helper-prefs-test-unavailable",
 
   // --- searchDialog (61) ---
   "research-helper-search-window-title",
@@ -721,6 +809,18 @@ export interface FluentMessageArgsMap {
   "rh-error-source": { database: string };
   "rh-error-parse": { database: string };
   "rh-error-cancelled": { imported: number };
+  // The preference pane (P1-T44). `$count` is a plural selector; `$time` is a
+  // clock time the pane script has already formatted with
+  // `Intl.DateTimeFormat` over `Zotero.locale` (docs/08 §10.3). **No message
+  // takes the key, the digest, or any part of either** — the status row is
+  // painted from an outcome enum and a timestamp, and that absence is a
+  // security property, not an omission (docs/09 §2.3: "never store or display
+  // any part of the key in the validation result").
+  "research-helper-prefs-remove-all-done": { count: number };
+  "research-helper-prefs-test-ok": { time: string };
+  "research-helper-prefs-test-inconclusive": { time: string };
+  "research-helper-prefs-test-rejected": { time: string };
+  "research-helper-prefs-test-forbidden": { time: string };
 
   // searchDialog
   "research-helper-search-years-span": {
@@ -792,6 +892,12 @@ export const ARGUMENT_MESSAGE_IDS = [
   "rh-error-source",
   "rh-error-parse",
   "rh-error-cancelled",
+  // mainWindow — the preference pane (5, P1-T44)
+  "research-helper-prefs-remove-all-done",
+  "research-helper-prefs-test-ok",
+  "research-helper-prefs-test-inconclusive",
+  "research-helper-prefs-test-rejected",
+  "research-helper-prefs-test-forbidden",
 
   // searchDialog (14)
   "research-helper-search-years-span",

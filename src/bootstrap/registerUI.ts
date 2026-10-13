@@ -89,12 +89,20 @@ import type {
   SearchImportOutput,
 } from "../pipeline/searchImport/types";
 import type { Pipeline } from "../pipeline/types";
+import { httpRequest } from "../core/http/client";
 import { getPref } from "../prefs";
 import {
   SEARCH_WINDOW_API_PROPERTY,
   openSearchWindow,
   type SearchWindowQuery,
 } from "../ui/dialogs/searchDialog";
+import {
+  PREFERENCES_API_PROPERTY,
+  PREFERENCES_PANE_DESCRIPTION,
+  createPreferencesHost,
+  preferencePaneOptions,
+  type PreferencesHostApi,
+} from "../ui/prefs/preferencesPane";
 import {
   createSearchImportViewModel,
   type SearchImportViewModelDeps,
@@ -117,6 +125,7 @@ import { createZoteroPrefStore } from "../zotero/prefStore";
 import {
   fluentResourceRegistration,
   menuRegistration,
+  preferencePaneRegistration,
 } from "../zotero/registrations";
 import {
   createSpikeArticle,
@@ -194,6 +203,18 @@ const APP_REGISTRATIONS: readonly ScopedRegistration[] = [
   menuRegistration(
     COLLECTION_MENU_DESCRIPTION,
     collectionMenuOptions(SEARCH_MENU_COMMANDS),
+  ),
+  // The preference pane (`P1-T44`). Application-scoped: `docs/01` §2.4 lists
+  // `Zotero.PreferencePanes.register` with the once-per-startup registrations,
+  // and Zotero propagates it to every open `zotero:pref` window itself. Through
+  // `preferencePaneRegistration` so the pane is paired with its unregister and
+  // visible to `liveHandles()`; `hooks.ts`'s `reportSurvivors` reads
+  // `pluginPanes` after teardown and now has something to find. The literal
+  // plugin ID is D9's permanent constant, read from `package.json` as every
+  // other registration here reads it.
+  preferencePaneRegistration(
+    PREFERENCES_PANE_DESCRIPTION,
+    preferencePaneOptions(config.addonID),
   ),
 ];
 
@@ -559,6 +580,75 @@ async function publishSearchWindowHost(
   });
 }
 
+// ---------------------------------------------------------------------------
+// The preference pane's host (`P1-T44`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The pane's host property on the plugin instance.
+ *
+ * **This is a module augmentation of `src/addon.ts`'s `PluginApi`, and it is
+ * here because that file is outside `P1-T44`'s `Files` list** (`plan/README.md`
+ * §5 rule 2). The member belongs in `PluginApi` proper, beside `searchWindow`,
+ * with the same doc comment; moving it there is a two-line edit and needs a
+ * card. Until then this declaration is what lets `publishPreferencesHost`
+ * write the property without a cast, and the document reads it by the same
+ * name through {@link PREFERENCES_API_PROPERTY}.
+ */
+declare module "../addon" {
+  interface PluginApi {
+    /**
+     * The preference pane's privileged host (`src/ui/prefs/preferencesPane.ts`),
+     * at the property `PREFERENCES_API_PROPERTY` names. The pane script reads
+     * it off `api` by that name; nothing respells it.
+     */
+    preferences?: PreferencesHostApi;
+  }
+}
+
+/**
+ * Build the pane's host over the graph and publish it where
+ * `addon/content/preferences.js` looks for it.
+ *
+ * The bindings, member by member:
+ *
+ * | port | bound to |
+ * |---|---|
+ * | `secrets` | {@link ServiceGraph.secrets} — the tier-1 store, or `undefined` after a failed probe, in which case the host refuses every write and the badge warns |
+ * | `request` | `src/core/http/client.ts`'s `httpRequest`: the one outbound choke point, with its per-host limiter, D10 guard and redacted log line |
+ * | `getBackendPref` | `src/prefs`' typed `getPref("secretBackend")`, the non-secret row `probeAndRecordBackend` wrote |
+ * | `clock` | the graph's clock, for the Semantic Scholar retry delay and the `checkedAt` stamp |
+ * | `logger` | a child of the graph's redacting logger |
+ *
+ * Nothing here can reach a key: the host asks the store for one only inside
+ * its Test call, to build one request, and the store it asks is the shipped
+ * `src/zotero/keychain.ts` through the `SecretStore` port.
+ */
+async function publishPreferencesHost(
+  scope: Scope,
+  graph: ServiceGraph,
+): Promise<void> {
+  const host = createPreferencesHost({
+    secrets: graph.secrets,
+    request: httpRequest,
+    getBackendPref: () => getPref("secretBackend"),
+    clock: graph.clock,
+    logger: graph.logger.child({ surface: "preferences" }),
+  });
+  // Captured once, for the reason {@link publishServiceGraph} gives.
+  const api = addon.api;
+  await scope.use({
+    description: `the preference pane host (api.${PREFERENCES_API_PROPERTY})`,
+    register: () => {
+      api[PREFERENCES_API_PROPERTY] = host;
+      return PREFERENCES_API_PROPERTY;
+    },
+    unregister: () => {
+      delete api[PREFERENCES_API_PROPERTY];
+    },
+  });
+}
+
 /**
  * Run the composition root, then the application-scoped registrations, into
  * the root scope.
@@ -614,6 +704,10 @@ export async function registerUI(scope: Scope): Promise<void> {
 
   await publishServiceGraph(scope, graph);
   await publishSearchWindowHost(scope, graph);
+  // Before `APP_REGISTRATIONS`, for the same reason the services are: the
+  // pane registration below can make a `zotero:pref` window reload and load
+  // our fragment at once, and its script resolves the host on load.
+  await publishPreferencesHost(scope, graph);
 
   for (const register of APP_REGISTRATIONS) {
     await register(scope);

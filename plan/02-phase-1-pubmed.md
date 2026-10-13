@@ -8976,6 +8976,25 @@ The expensive part here is not the pane. It is rule 4 and the negative assertion
 residual-risk text has to be reproduced exactly, and proving a key does not escape means driving the
 failure path as well as the success path.
 
+**Findings, 2026-10-13 — done; all eight criteria pass; full report at `plan/reports/P1-T44.md`.**
+Verified by the coordinator on a quiet tree: typecheck 0, `lint:check` 0, **1,363 unit in 31 files**, 28
+contract, installer **152,980 bytes**, integration **117 passed** (plus the agent's three consecutive 117s),
+no mutation marker, and all five `docs/09` §1.8 paragraphs present in the bundle. The pane registers and
+unregisters cleanly, the search window's Open Preferences button now selects it, a synthetic key was
+stored, replaced, cleared and read back through the shipped keystore, and **the key reached no log line,
+no preference (5,562 scanned), no error and no note on both a succeeding and a failing Test call** —
+the assertion that mattered most, driven against transports that deliberately echo the key. Two
+declared deviations are accepted: a unit test file outside the list (the precedent is `P1-T20`, and
+fourteen of sixteen mutations were cheap only because of it) and the host's type added as a module
+augmentation rather than in `src/addon.ts`. Three things change later decisions: on Linux the badge says
+**indeterminate** rather than claiming a tier the probe cannot tell apart (`P1-T41`'s finding, now in
+the product; wording is the owner's); the last-validated result is **held for the session only**,
+because the schema has no row for it; and `docs/08` §7.3 and §10.1 put the pane's strings in a fourth
+bundle while the card put them in the main-window bundle — the card was followed and the divergence is
+recorded in three places. One product gap found and fixed by the tests: `"  Bearer   "` used to store a
+six-character key. Nobody has looked at the pane in either theme. Nine follow-ups are recorded in
+`plan/00` §6.11, none carded (rule 9).
+
 ---
 
 ### P1-T45 — The export control, its three strings and the file chooser, which is the boundary `P1-T36` stopped at
