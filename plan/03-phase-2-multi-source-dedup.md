@@ -278,7 +278,7 @@ the source most likely to dominate the 30 s budget.
 |---|---|
 | **ID** | `P2-T03` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T23`, `P2-T25` |
+| **Depends on** | `P2-T01`, `P2-T23`, `P2-T25`, `P2-T26` |
 | **Blocks** | `P2-T07`, `P2-T08`, `P2-T12` |
 | **Retires** | part of `R-2`, part of `R-17` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -412,7 +412,7 @@ and says to make it the default; every downstream card (preprint search `P2-T07`
 |---|---|
 | **ID** | `P2-T04` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T21`, `P2-T25` |
+| **Depends on** | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -537,7 +537,7 @@ added to `docs/09` §1.7 first.
 |---|---|
 | **ID** | `P2-T05` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T27`, `P2-T01`, `P2-T25` |
+| **Depends on** | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | `R-3` (fallback proven — full retirement is Phase 5 per `docs/11` §3.1) |
 | **Implements** | `FR-2`, `FR-4`, `FR-11`, open question 8 in `docs/10` §5 |
@@ -681,7 +681,7 @@ precisely the R-3 outcome the design is built to survive. Record the state in `0
 |---|---|
 | **ID** | `P2-T06` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T25` |
+| **Depends on** | `P2-T01`, `P2-T25`, `P2-T26` |
 | **Blocks** | `P2-T08`, `P2-T11` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -798,7 +798,7 @@ part of this card — but it is the natural mitigation if `P2-T16`'s NFR-2 measu
 |---|---|
 | **ID** | `P2-T07` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T03`, `P2-T25` |
+| **Depends on** | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26` |
 | **Blocks** | `P2-T08`, `P2-T11` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -3275,7 +3275,7 @@ artefact rather than the behaviour — the defect `P1-T14` reported about its ow
 | **ID** | `P2-T25` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T11` |
-| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07` |
+| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T26` |
 | **Retires** | none |
 | **Implements** | part of `docs/13` §2.2's harness |
 | **Estimate** | 0.75 d |
@@ -3387,6 +3387,58 @@ to a recomputation.
 
 ---
 
+### P2-T26 — Give the source registry a test-only removal, before two Phase 2 adapters break two specs
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T26` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T25` |
+| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07` |
+| **Retires** | `plan/00` §6 item 27 |
+| **Implements** | nothing — a test seam the adapter cards need |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** An integration spec can stand in for a shipped source without taking a spare source name, so
+shipping a real adapter for that name does not break the spec.
+
+**Why this is a card (rule 9).** `createSourceRegistry` in `src/sources/registry.ts` exposes `register`,
+which throws on a duplicate id, and **no removal**. So `test/integration/searchDialog-flow.spec.ts`
+registers its stub as `crossref` (constants `CROSSREF` and `PUBLISHED_STUB`) and
+`test/integration/phase1-dod.spec.ts` as `europepmc` (`STUB_SOURCE`) — spare names today, **real adapters
+in `P2-T03` and `P2-T04`**. The day either adapter registers, the matching spec's `register` call throws
+and the spec fails for a reason unrelated to what it tests. That blocks the phase's first finishing
+condition through the cards that serve it.
+
+**Do.**
+1. Decide the seam: a test-only `unregister`/`replace` on the registry, or a documented decision that the
+   registry is immutable after startup and specs must build their own. State the reason; the registry's
+   own doc comment and `P1-T35`'s findings record why no removal exists today.
+2. Rewrite both specs to use the seam (or their own registry) so neither depends on a spare name.
+3. Cover the seam in `test/unit/sources/registry.test.ts`; keep the duplicate-id throw.
+
+**Do NOT.** Do not change what the shipped registry does at startup. Do not touch any adapter. Do not weaken
+the duplicate-id check.
+
+**Criteria.**
+- [ ] Neither spec names `crossref` or `europepmc` for a stub, and both still pass.
+- [ ] The duplicate-id throw is still asserted.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
+
+**Files.**
+- modify `src/sources/registry.ts`
+- modify `test/unit/sources/registry.test.ts`
+- modify `test/integration/searchDialog-flow.spec.ts`
+- modify `test/integration/phase1-dod.spec.ts`
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+---
+
 ---
 ## Estimate roll-up
 
@@ -3417,7 +3469,8 @@ to a recomputation.
 | `P2-T23` | Give `hostLimiter.ts` its test file | 0.25 |
 | `P2-T24` | Correct the three statements `P2-T21` made false | 0.25 |
 | `P2-T25` | Make the replay harness usable inside Zotero | 0.75 |
-| **Total** | **25 tasks** | **27.50 d** |
+| `P2-T26` | A test-only removal on the source registry, before the adapters | 0.25 |
+| **Total** | **26 tasks** | **27.75 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather
