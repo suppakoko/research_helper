@@ -233,24 +233,28 @@ const LIVE_ENV = "RH_DOD_LIVE";
  */
 const LIVE_QUERY = "lipid nanoparticle mRNA delivery";
 
-/** The `SourceId` the offline tests stub. */
-const STUB_SOURCE: SourceId = "europepmc";
 /** Phase 1's one real adapter. */
 const PUBMED: SourceId = "pubmed";
-
 /**
- * Why the stub is `europepmc` and not `pubmed`.
+ * The `SourceId` the offline tests stub — `pubmed` itself, since `P2-T26`.
  *
- * `SourceRegistry.register` throws on a duplicate id and the interface declares
- * no unregister (`src/sources/registry.ts`), so the real PubMed adapter cannot
- * be replaced. `searchDialog-flow.spec.ts` takes `crossref` for the same reason
- * and under the same constraint; taking a different spare id here means the two
- * files cannot collide whichever order the runner loads them in. The residue is
- * the same one that file reports: the stub stays in the application-wide
- * registry for the rest of the process, and removing it needs a test seam on
- * `SourceRegistry` that is outside this card's `Files` list.
+ * `SourceRegistry.register` throws on a duplicate id, so `P1-T23` could not
+ * *add* a stub under `pubmed` and took a spare id, `europepmc`, leaving the
+ * stub in the application-wide registry for the rest of the process
+ * (`searchDialog-flow.spec.ts` did the same on `crossref`). Phase 2 ships real
+ * adapters under both ids, and the day one registers, the spare-id
+ * registration throws and this file fails for a reason unrelated to the
+ * phase's definition of done (`plan/00` §6 item 27).
+ *
+ * So the stub is now **swapped into the real adapter's slot** through
+ * `SourceRegistry.replaceForTest`, which hands back the adapter it displaced
+ * ({@link installStub}), and swapped out again before the one live test and in
+ * `after()` ({@link restoreRealSource}). The registry holds one id throughout,
+ * and nothing is left behind for the specs that run after this file.
  */
-const STUB_REGISTRATION_NOTE = "europepmc, because register() throws on pubmed";
+const STUB_SOURCE: SourceId = PUBMED;
+const STUB_REGISTRATION_NOTE =
+  "the stub sits in the real pubmed adapter's slot via replaceForTest";
 
 // ---------------------------------------------------------------------------
 // 2. The stub source — the offline half
@@ -301,7 +305,7 @@ function stubRecord(n: number, withAbstract: boolean): SourceRecord {
 function stubSource(): LiteratureSource {
   return {
     id: STUB_SOURCE,
-    displayNameKey: "research-helper-source-europepmc",
+    displayNameKey: `research-helper-source-${STUB_SOURCE}`,
     rateLimitKey: `${STUB_SOURCE}.invalid`,
     capabilities: {
       keywordSearch: true,
@@ -340,6 +344,68 @@ function stubSource(): LiteratureSource {
     },
     explainQuery: (query: SourceQuery) => `stub(${String(query.limit)})`,
   };
+}
+
+/**
+ * The one stub instance. One, so {@link installStub} can tell by identity
+ * whether the registry already holds it — a second `stubSource()` call would
+ * look like a real adapter to swap out.
+ */
+const STUB: LiteratureSource = stubSource();
+
+/**
+ * The real PubMed adapter the stub displaced in the **current** service graph,
+ * or `undefined` while the real one is in place. The NFR-10 test replaces the
+ * whole graph, so this is overwritten — never restored into the old graph,
+ * which is disposed.
+ */
+let displacedPubmed: LiteratureSource | undefined;
+
+type Services = NonNullable<PluginApi["services"]>;
+
+/** Swap the stub into the real adapter's slot, if it is not already there. */
+function installStub(services: Services): void {
+  if (services.sources.get(STUB_SOURCE) === STUB) {
+    return;
+  }
+  displacedPubmed = services.sources.replaceForTest(STUB);
+  // A swap that did not take would send NFR-1's 100-record search and FR-10's
+  // cancel to the real adapter — and so to NCBI. Asserted in the hook so the
+  // block is skipped rather than run live.
+  assert.isTrue(
+    services.sources.get(STUB_SOURCE) === STUB && displacedPubmed !== STUB,
+    "the stub is not in the real adapter's slot, so searches would go live",
+  );
+  log(
+    `stub installed in place of "${displacedPubmed.id}"; registry holds ` +
+      `${services.sources
+        .list()
+        .map((source) => source.id)
+        .join(",")}`,
+  );
+}
+
+/**
+ * Put the real adapter back. Called before the live acceptance run, which
+ * must reach NCBI, and in `after()`, so the registry the rest of the suite
+ * sees is the one startup built.
+ */
+function restoreRealSource(services: Services): void {
+  if (displacedPubmed === undefined) {
+    return;
+  }
+  if (services.sources.get(STUB_SOURCE) !== STUB) {
+    // The graph was replaced after the swap (NFR-10's cycle) and setupHost()
+    // has not run on the new one yet; there is nothing of ours to undo there.
+    displacedPubmed = undefined;
+    return;
+  }
+  const stub = services.sources.replaceForTest(displacedPubmed);
+  log(
+    `real "${displacedPubmed.id}" adapter restored in place of the stub ` +
+      `(${stub === STUB ? "the stub" : "NOT the stub"} came back out)`,
+  );
+  displacedPubmed = undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -398,18 +464,21 @@ const created: string[] = [];
  * registry and a fresh view model — the old `host` reference would then be a
  * live object nothing is published at.
  */
-function setupHost(): void {
-  const api = publishedApi();
-  const services = api.services;
+function currentServices(): Services {
+  const services = publishedApi().services;
   if (!services) {
     assert.fail(
       "registerUI() published no ServiceGraph at api.services, so the graph " +
         "installServices() built is unreachable",
     );
   }
-  if (services.sources.get(STUB_SOURCE) === undefined) {
-    services.sources.register(stubSource());
-  }
+  return services;
+}
+
+function setupHost(): void {
+  const api = publishedApi();
+  const services = currentServices();
+  installStub(services);
   const published = api[SEARCH_WINDOW_API_PROPERTY];
   if (!published) {
     assert.fail(
@@ -569,6 +638,11 @@ async function regularItemCount(name: string): Promise<number> {
 async function restoreHostState(): Promise<void> {
   try {
     stubBehaviour = IDLE;
+    // The restore search names `pubmed`, so it must find the **stub** there:
+    // with the real adapter in place this line would be a network request.
+    // The live test puts the stub back itself; this is the guard for the path
+    // where it threw before it could.
+    installStub(currentServices());
     await host.runSearch(queryFor("rh-p1t23-restore", [STUB_SOURCE], 10, ""));
     const outcome = await host.exportProvenance("");
     log(
@@ -1047,6 +1121,9 @@ describe("P1-T23: Phase 1 definition-of-done run", () => {
   after(async function () {
     this.timeout(120_000);
     await restoreHostState();
+    // After the restore search, which needs the stub: hand the registry back
+    // with the real adapter in the slot startup put it in.
+    restoreRealSource(currentServices());
     disconnect?.();
     disconnect = undefined;
     await eraseCreated();
@@ -1355,6 +1432,18 @@ describe("P1-T23: Phase 1 definition-of-done run", () => {
       "every keyword the shipped schema uses is one this validator enforces",
     );
 
+    // `PUBMED` below must reach the **real** adapter, which the stub has been
+    // sitting in place of since `before()`. Swap it back for the duration of
+    // the run and put the stub in again afterwards. No `try`/`finally`: this is
+    // the last test in the file, and `restoreHostState()` re-installs the stub
+    // itself before its own search, so a throw here leaves nothing unguarded.
+    const services = currentServices();
+    restoreRealSource(services);
+    assert.isTrue(
+      services.sources.get(PUBMED) !== STUB,
+      "the live run would have searched the stub, not PubMed",
+    );
+
     const { result, urls } = await recordingRequests(async () => {
       // ----- criterion 1: the search -------------------------------------
       const searchStartedAt = Date.now();
@@ -1601,6 +1690,7 @@ describe("P1-T23: Phase 1 definition-of-done run", () => {
         alreadyPresent,
       };
     });
+    installStub(services);
 
     const ncbi = urls.filter((url) => url.includes("ncbi.nlm.nih.gov"));
     log(

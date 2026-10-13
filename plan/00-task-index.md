@@ -579,7 +579,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     run, `searchImportViewModel.ts:1318` — but that is a restore, not a fix. The fix is a test over a fresh
     view model, or the published boolean item 21 already asks for.
 
-27. ~~**`SourceRegistry` has no unregister, and that now has a deadline.**~~ **CARDED 2026-10-13 as `P2-T26`** under rule 9 — it blocks Phase 2's first finishing condition through the adapter cards. A spec needing a stub must take a
+27. ~~**`SourceRegistry` has no unregister, and that now has a deadline.**~~ **CARDED 2026-10-13 as `P2-T26`** under rule 9 — it blocks Phase 2's first finishing condition through the adapter cards. *(2026-10-14: only `PUBLISHED_STUB` and `STUB_SOURCE` were ever in the real registry; `CROSSREF` was `P1-T22`'s private-registry stub.)* A spec needing a stub must take a
     spare `SourceId` and leave it in the application-wide registry for the process. Two specs now do:
     `searchDialog-flow.spec.ts` takes `crossref`, `phase1-dod.spec.ts` takes `europepmc`. **Phase 2 ships
     adapters for both**, at which point neither registration succeeds and both specs break. `P1-T35` raised
@@ -909,6 +909,26 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 82. **The pool is reachable only through `buildPipelineSet`.** A later metadata-fetching pipeline that must
     share the `network-metadata` pool would need it on the `ServiceGraph` in `src/bootstrap/container.ts`.
     Becomes a card when such a pipeline is carded.
+
+### 6.17 Raised by `P2-T26`, 2026-10-14 — recorded under rule 9, none carded
+
+83. **`P1-T22`'s private-registry `CROSSREF` stays.** It never reaches the real registry (`registryOf` starts
+    empty), so renaming it would be churn; the card's criterion 1 is read as "for a real-registry stub".
+
+84. **Both specs' `after()` restores are asserted by nothing later in the suite.** Skipping the flow spec's
+    restore passed 123/123 (equivalent mutant). A one-line probe at the start of the next spec, or a
+    suite-level teardown, would make a leaked stub a failure instead of a log line.
+
+85. **Startup-traffic flake, once in six runs:** `NFR-10 … 1 host(s) were contacted while the plugin started
+    … api.zotero.org` — Zotero's own traffic, which the spec's comment already names as possible. Count it
+    before treating a single NFR-10 failure as a regression.
+
+86. **`P1-T35`'s and `P1-T22`'s blocks now mint identical stub DOIs** (`10.5555/p1t22-pubmed-N`).
+    `P1-T35`'s `after()` erases its items first, so no cross-block effect was observed; distinct prefixes
+    per block would remove the coupling if that erase ever fails silently.
+
+87. **For the adapter cards `P2-T03` to `P2-T07`:** a spec that needs a stand-in for a shipped source calls
+    `replaceForTest` and restores in `after()`, as both specs now do; never register under a spare id.
 
 ## 7. Regenerating this file
 

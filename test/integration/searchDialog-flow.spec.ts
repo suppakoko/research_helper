@@ -19,9 +19,9 @@
  *   service graph, the real source registry, the real pipeline, the real
  *   writer, and the `isExisting` / `writeProvenanceNote` bindings the
  *   composition root made. Nothing of that path comes from this file. Its stub
- *   source is registered into the **real** registry under a `SourceId` this
- *   build ships no adapter for, because `SourceRegistry.register` throws on a
- *   duplicate and declares no unregister — see {@link PUBLISHED_STUB}.
+ *   source is swapped into the **real** registry *in place of* the real PubMed
+ *   adapter through `SourceRegistry.replaceForTest` (`P2-T26`), and the real
+ *   adapter is put back in `after()` — see {@link PUBLISHED_STUB}.
  * - **`P1-T22`'s block keeps its own host**, because the state machine it
  *   covers needs a stub that *is* `pubmed`: forced 429s, an injected
  *   `OfflineError`, a 40-record fetch to cancel mid-flight, and the one
@@ -286,7 +286,10 @@ import {
   createPubmedSource,
   parseEsearchBody,
 } from "../../src/sources/pubmed/pubmedSource";
-import type { SourceRegistry } from "../../src/sources/registry";
+import {
+  createSourceRegistry,
+  type SourceRegistry,
+} from "../../src/sources/registry";
 import type {
   LiteratureSource,
   SourceCallContext,
@@ -1288,25 +1291,21 @@ async function eraseCollections(
   );
 }
 
-/** A registry whose contents this spec fixes once, in `before()`. */
+/**
+ * A registry whose contents this spec fixes once, in `before()`.
+ *
+ * The shipped factory, not a hand-rolled fake: until `P2-T26` this was a
+ * `Map`-backed object literal that re-implemented the four lookup members and
+ * silently overwrote on a duplicate id. A fake of an interface drifts from it
+ * the day the interface gains a member, which is what happened; the real thing
+ * cannot.
+ */
 function registryOf(adapters: readonly LiteratureSource[]): SourceRegistry {
-  const byId = new Map<SourceId, LiteratureSource>(
-    adapters.map((adapter) => [adapter.id, adapter]),
-  );
-  return {
-    register(source: LiteratureSource): void {
-      byId.set(source.id, source);
-    },
-    get(id: SourceId): LiteratureSource | undefined {
-      return byId.get(id);
-    },
-    list(): readonly LiteratureSource[] {
-      return [...byId.values()];
-    },
-    listConfigured(): readonly LiteratureSource[] {
-      return [...byId.values()].filter((source) => source.isConfigured());
-    },
-  };
+  const registry = createSourceRegistry();
+  for (const adapter of adapters) {
+    registry.register(adapter);
+  }
+  return registry;
 }
 
 // ---------------------------------------------------------------------------
@@ -1314,48 +1313,55 @@ function registryOf(adapters: readonly LiteratureSource[]): SourceRegistry {
 // ---------------------------------------------------------------------------
 
 /**
- * The source id this block stubs, and **why it is not `pubmed`**.
+ * The source id this block stubs, and **why it is `pubmed`** (since `P2-T26`).
  *
  * The block below drives the host `src/bootstrap/registerUI.ts` published at
  * startup, which means the registry behind it is the **real** one — the one
  * `installServices()` filled through `registerSources()`. `SourceRegistry`
- * *throws* on a duplicate id (`src/sources/registry.ts:76`) and declares no
- * unregister, so the real PubMed adapter cannot be replaced by a stub and must
- * simply never be ticked.
+ * *throws* on a duplicate id, so the stub cannot be *added* under `pubmed`;
+ * `P1-T35` therefore registered it under a spare id, `crossref`, and left it
+ * in the application-wide registry for the rest of the process. That stopped
+ * being safe the moment Phase 2 planned a real Crossref adapter: the day one
+ * registers, the spare-id registration throws and this block fails for a
+ * reason unrelated to anything it tests (`plan/00` §6 item 27).
  *
- * So a stub is registered under a `SourceId` this build has no adapter for, and
- * every search below ticks that one alone. **No HTTP request leaves this
- * machine in this block either** — the same guarantee `P1-T22`'s block gives,
- * reached a different way. The replay harness **is** usable here since
- * `P2-T25` (see the file header), but the window cannot issue a request the
- * recorded corpus holds, which is why the double is still a source rather than
- * a transport.
+ * So `before()` now **swaps** the stub in through
+ * `SourceRegistry.replaceForTest`, which puts it in the real adapter's slot and
+ * hands back the adapter it displaced; `after()` swaps that adapter back. The
+ * registry holds the same one id throughout, in the same order, and nothing is
+ * left behind for the specs that run after this file — {@link
+ * displacedByPublishedStub} is the whole of the state involved.
  *
- * The consequence is that no bundle declares `research-helper-source-crossref`
- * — only `research-helper-source-pubmed` exists (`addon/locale/en-US/
- * research-helper-mainWindow.ftl:114`) — so this block's Source column shows the
- * documented fallback, the source id. The localized-name path stays covered by
- * `P1-T22`'s block, which drives its own registry and can call its stub
- * `pubmed`.
+ * Every search below ticks `pubmed` alone and reaches the stub. **No HTTP
+ * request leaves this machine in this block** — the same guarantee `P1-T22`'s
+ * block gives, reached a different way. The replay harness **is** usable here
+ * since `P2-T25` (see the file header), but the window cannot issue a request
+ * the recorded corpus holds, which is why the double is still a source rather
+ * than a transport.
  *
- * ### The residue this leaves, and what it does not do
+ * Two consequences of the id, both measured before the change: the Source
+ * column now shows the localized name `PubMed` rather than the fallback id,
+ * which no test in this block asserted on; and the per-source status row's
+ * element id is `rh-search-source-status-pubmed`, which every lookup below
+ * derives from this constant rather than spelling.
  *
- * Because there is no unregister, the stub **stays in the application-wide
- * registry for the rest of the process**. That is the one piece of lasting state
- * this block leaves behind, and it is real: a later spec asking the real registry
- * how many adapters exist would see two. It needs a `SourceRegistry` test seam to
- * remove, which is outside `P1-T35`'s `Files` list and is reported with the card.
- *
- * **It does not reach `P1-T22`'s block, and that was measured rather than
- * assumed.** `P1-T22` publishes its own host over its own `registryOf([...])`, so
- * the window it opens renders its own two checkboxes. Logged from inside the
- * failing cancel test with this block enabled: `boxes=["pubmed:true",
- * "crossref:false"]`, `asked=["pubmed"]`,
- * `l10nArgs={"done":0,"total":1}`, and the counter element read
- * `"0 of 1 databases"` — the exact text that test waits for, present and correct.
- * The counter cannot read `of 2` from a registry its host never consults.
+ * **The swap does not reach `P1-T22`'s block.** `P1-T22` publishes its own host
+ * over its own `registryOf([...])`, so the window it opens renders its own two
+ * checkboxes from a registry this block never touches, and the real registry's
+ * state when that block runs is exactly what startup left — restored, not
+ * assumed: `after()` logs the id of what it put back.
  */
-const PUBLISHED_STUB: SourceId = "crossref";
+const PUBLISHED_STUB: SourceId = PUBMED;
+
+/**
+ * The real PubMed adapter `before()` displaced, held so `after()` can put it
+ * back. `undefined` outside the block, and after a restore.
+ */
+let displacedByPublishedStub: LiteratureSource | undefined;
+/** The stub `before()` swapped in, held so the block can assert by identity. */
+let publishedStub: LiteratureSource | undefined;
+/** The real registry the swap was made in — the one `after()` restores. */
+let publishedRegistry: SourceRegistry | undefined;
 
 /** The dependency record that host was built from. */
 let publishedDeps: Required<SearchImportViewModelDeps> | undefined;
@@ -2154,21 +2160,30 @@ describe("P1-T35: the host the composition root published", () => {
           "graph installServices() built is unreachable",
       );
     }
-    // Into the *real* registry. See PUBLISHED_STUB for why this id and not
-    // `pubmed`, and why nothing here reaches the network.
-    services.sources.register(
-      stubSource(
-        PUBLISHED_STUB,
-        "research-helper-source-crossref",
-        () => behaviour.get(PUBLISHED_STUB) ?? IDLE,
-      ),
+    // Into the *real* registry, in the real adapter's slot. See PUBLISHED_STUB
+    // for why a swap and not a registration, and why nothing here reaches the
+    // network.
+    publishedRegistry = services.sources;
+    publishedStub = stubSource(
+      PUBLISHED_STUB,
+      "research-helper-source-pubmed",
+      () => behaviour.get(PUBLISHED_STUB) ?? IDLE,
+    );
+    displacedByPublishedStub = services.sources.replaceForTest(publishedStub);
+    // Asserted here and not only in the test below, because a swap that did
+    // not take would send every search in this block to the real adapter —
+    // and so to NCBI. A failing hook skips the block; a failing test does not.
+    assert.strictEqual(
+      services.sources.get(PUBLISHED_STUB),
+      publishedStub,
+      "the stub is not in the real adapter's slot, so searches would go live",
     );
     log35(
       `real registry now holds ` +
         `${services.sources
           .list()
           .map((source) => source.id)
-          .join(",")}`,
+          .join(",")}; the stub displaced "${displacedByPublishedStub.id}"`,
     );
 
     publishedDeps = api.searchWindowDeps;
@@ -2196,6 +2211,20 @@ describe("P1-T35: the host the composition root published", () => {
     win?.close();
     win = undefined;
     await eraseCollections(publishedCollections, "P1-T35");
+    // Put the real adapter back where the stub sat, so the registry the rest
+    // of the suite sees is the one startup built. Logged, because "restored"
+    // is a claim a later spec's failure would otherwise have to take on trust.
+    if (publishedRegistry && displacedByPublishedStub) {
+      const stub = publishedRegistry.replaceForTest(displacedByPublishedStub);
+      log35(
+        `real registry restored: "${displacedByPublishedStub.id}" is back in ` +
+          `place of the stub (${stub === displacedByPublishedStub ? "NOT " : ""}` +
+          `a different object)`,
+      );
+    }
+    displacedByPublishedStub = undefined;
+    publishedStub = undefined;
+    publishedRegistry = undefined;
     // Hand the shared behaviour map back as it was found. `P1-T22`'s `search()`
     // helper rewrites both entries on every call, so this changes nothing today;
     // it is here because the map is the one mutable thing the two blocks share
@@ -2238,6 +2267,42 @@ describe("P1-T35: the host the composition root published", () => {
     );
     assert.isFalse(controller.state.exportAvailable);
     log35("export control hidden before any run");
+  });
+
+  // =========================================================================
+  // `P2-T26` — the stub sits in the real adapter's slot, and only there
+  // =========================================================================
+
+  it("P2-T26: the stub occupies the real PubMed adapter's slot in the real registry", async function () {
+    this.timeout(10_000);
+    if (!publishedRegistry || !publishedStub || !displacedByPublishedStub) {
+      assert.fail("before() did not record the swap");
+    }
+    const held = publishedRegistry
+      .list()
+      .filter((source) => source.id === PUBLISHED_STUB);
+    assert.strictEqual(held.length, 1, "exactly one entry under the id");
+    assert.strictEqual(held[0], publishedStub, "and it is the stub");
+    assert.strictEqual(
+      displacedByPublishedStub.id,
+      PUBLISHED_STUB,
+      "what came out carries the same id",
+    );
+    assert.isTrue(
+      displacedByPublishedStub !== publishedStub,
+      "what came out is the real adapter, not the stub handed in",
+    );
+    // The registry behind the window's checkbox row is this one, so the row
+    // the window drew is the stub's: the view model reads displayNameKey off
+    // the source, and the stub carries the real adapter's key.
+    assert.strictEqual(
+      publishedDeps?.listSources().find((s) => s.id === PUBLISHED_STUB)
+        ?.displayNameKey,
+      publishedStub.displayNameKey,
+      "the published listSources() sees the stub",
+    );
+    log35(`stub in slot "${PUBLISHED_STUB}"; displaced the real adapter`);
+    await Zotero.Promise.delay(0);
   });
 
   // =========================================================================
@@ -2838,7 +2903,7 @@ describe("P1-T35: the host the composition root published", () => {
     this.timeout(60_000);
     setKeyword(KEYWORD);
     selectSources([PUBLISHED_STUB]);
-    // **Two, not three.** The stub mints `p1t35-crossref-0…n-1` deterministically,
+    // **Two, not three.** The stub mints `p1t22-pubmed-0…n-1` deterministically,
     // so a two-record run is a subset of the three that were just imported — and
     // a row count that *differs* from the previous search is what makes the wait
     // below a real transition rather than a predicate that was already true.
@@ -2941,7 +3006,10 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       // No bundle declares a display name for a second source yet — Phase 2
       // brings each one with its adapter — so this id resolves in no locale and
       // the view model's documented fallback (the source id) is what the table
-      // and the status bar show for it.
+      // and the status bar show for it. The id can stay `crossref` here where
+      // it could not in `P1-T35`'s block (`P2-T26`): this registry is private
+      // to this block and starts empty, so a shipped Crossref adapter never
+      // collides with it.
       stubSource(
         CROSSREF,
         "research-helper-source-crossref",

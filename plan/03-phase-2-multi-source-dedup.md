@@ -3556,6 +3556,16 @@ and the spec fails for a reason unrelated to what it tests. That blocks the phas
 condition through the cards that serve it.
 
 **Do.**
+> **Corrected 2026-10-14 after the executing agent measured (report):** the "Why" paragraph above says the flow
+> spec registered its stub as `crossref` through `CROSSREF` and `PUBLISHED_STUB`. Only `PUBLISHED_STUB` ever
+> reached the real registry; `CROSSREF` belongs to `P1-T22`'s block, which builds its own registry from
+> empty through `registryOf` and was never exposed to the hazard. Criterion 1's letter ("neither spec
+> names `crossref`") is therefore unmet by one harmless line; the coordinator accepts it unrenamed. The
+> paragraph also says the registry's doc comment and `P1-T35`'s findings "record why no removal exists" —
+> both recorded only *that* none existed; the reason now lives in the registry header. Step 1's choice: a
+> **replace**, not an unregister — `replaceForTest` swaps a stub into an already-registered slot and returns
+> the displaced adapter, so the id set stays closed and `list()` order (which `docs/08` §4.2 renders) is
+> kept.
 1. Decide the seam: a test-only `unregister`/`replace` on the registry, or a documented decision that the
    registry is immutable after startup and specs must build their own. State the reason; the registry's
    own doc comment and `P1-T35`'s findings record why no removal exists today.
@@ -3581,6 +3591,24 @@ the duplicate-id check.
 npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
 ```
 
+
+**Findings, 2026-10-14 — done; the `Verify with` chain exits 0 on the agent's third run and on the coordinator's; full report at `plan/reports/P2-T26.md`.**
+Verified by the coordinator on the combined wave-2 tree: typecheck 0, `lint:check` 0, **1,500 unit in 33
+files**, **40 contract**, **123 integration in one run** (the agent's three clean runs also 123),
+`test/unit/sources/registry.test.ts` 15 passed (9 + 6), `replaceForTest` named in no `src/` file but
+`registry.ts` (a unit test walks `src/**` to enforce it), and the only `"crossref"`/`"europepmc"` literal
+left in either spec is `P1-T22`'s private-registry `CROSSREF`, accepted above. The seam is
+`SourceRegistry.replaceForTest(source)`: it throws when nothing holds the id, keeps the slot through
+`Map.set` on the present key, and returns the displaced adapter; both specs now stub `pubmed` in place,
+assert in `before()` that the swap took (so a failed swap skips the block instead of sending searches to
+NCBI), and restore the real adapter in `after()` — the run log shows the swap and the restore each time.
+`registryOf` in the flow spec, a hand-rolled fake that silently overwrote duplicates, now builds on the real
+factory. Ten mutants: eight killed (six in Node, two inside Zotero), one classified equivalent in the
+suite (skipping the `after()` restore — nothing later asserts the real registry's identity, item 84), one a
+control that also surfaced a once-in-six startup-traffic flake (`api.zotero.org`, item 85). Nine failures
+under one Zotero mutant were attributed, not proven, to `P2-T27`'s concurrent `stages.ts` edit and did not
+reproduce. Follow-ups are `plan/00` §6.17; adapter cards must `replaceForTest` a shipped source rather than
+register under a spare id (item 87).
 ---
 
 ### P2-T27 — Wire `fanOut` into the running pipeline, which still fetches sources one after another

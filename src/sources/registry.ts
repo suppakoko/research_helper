@@ -3,11 +3,26 @@
  * this build can talk to.
  *
  * **Scope.** `P1-T07` step 2: `register`, `get(id)`, `list()` and
- * `listConfigured()`. Nothing else. The registry is a lookup table, not a
+ * `listConfigured()` — plus, since `P2-T26`, one **test seam**,
+ * {@link SourceRegistry.replaceForTest}, which no production code calls (the
+ * unit test reads the tree and fails if any file under `src/` other than this
+ * one names it). Nothing else. The registry is a lookup table, not a
  * planner: deciding *which* registered sources a given run should ask is the
  * pipeline's job (`docs/07` §12.1), and deciding which are *enabled* is the
  * `sources` preference's (`docs/07` §8.5 — "there is no per-source `enabled`
  * boolean; membership in `sources` *is* the enable flag").
+ *
+ * **Why there is still no `unregister`.** `P1-T35` and `P1-T23` each needed a
+ * stand-in source inside a live Zotero and, with `register` the only way in,
+ * each took a spare `SourceId` (`crossref`, `europepmc`) and left its stub in
+ * the application-wide registry for the rest of the process. Phase 2 ships
+ * adapters under both ids, so both registrations would start throwing
+ * (`plan/00` §6 item 27). A removal was the first idea; it was not taken
+ * because a removed-then-re-registered adapter moves to the **end** of
+ * registration order, and `docs/08` §4.2's checkbox row is rendered from that
+ * order. A replacement keeps the slot, keeps the id set closed, and gives the
+ * caller the displaced adapter back so the swap can be undone — which is all
+ * a spec needs.
  *
  * **Why it exists at all.** Two consumers need to enumerate sources without
  * naming them:
@@ -60,6 +75,25 @@ export interface SourceRegistry {
    * configured mid-session must not need a restart to appear.
    */
   listConfigured(): readonly LiteratureSource[];
+
+  /**
+   * **Test seam, not a lifecycle operation** (`P2-T26`). Put `source` where
+   * the adapter with the same `id` currently sits — the same slot in
+   * registration order, so `list()` and the checkbox row it renders keep their
+   * order — and return the adapter it displaced, so the caller can put that one
+   * back with a second call.
+   *
+   * Throws if nothing is registered under `source.id`. That is what keeps this
+   * from being a second way into the registry: the set of registered ids grows
+   * only through {@link register}, whose duplicate check stays the only gate,
+   * and a spec cannot use this to take a `SourceId` the build ships no adapter
+   * for — the mistake it exists to end.
+   *
+   * Nothing in `src/` calls this, and `test/unit/sources/registry.test.ts`
+   * fails if anything there starts to. The startup path
+   * (`registerSources` → {@link register}) is unchanged.
+   */
+  replaceForTest(source: LiteratureSource): LiteratureSource;
 }
 
 /** Create an empty registry. The composition root fills it exactly once. */
@@ -93,6 +127,21 @@ export function createSourceRegistry(): SourceRegistry {
 
     listConfigured(): readonly LiteratureSource[] {
       return [...sources.values()].filter((source) => source.isConfigured());
+    },
+
+    replaceForTest(source: LiteratureSource): LiteratureSource {
+      const displaced = sources.get(source.id);
+      if (displaced === undefined) {
+        throw new Error(
+          `[research-helper] replaceForTest("${source.id}"): no literature source is registered under that id. ` +
+            `The seam swaps an adapter that is already registered; it never registers one — ` +
+            `register() and its duplicate check are the only way in.`,
+        );
+      }
+      // `Map.set` on a key that is present keeps the key's insertion position,
+      // which is the property the checkbox row's ordering rests on.
+      sources.set(source.id, source);
+      return displaced;
     },
   };
 }

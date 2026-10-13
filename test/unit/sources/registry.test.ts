@@ -1,3 +1,7 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -22,7 +26,27 @@ import type {
  * {@link FULL_CAPABILITIES} doubles as a compile-time assertion that every
  * member of docs/07 §4.2's `SourceCapabilities` exists under that exact name:
  * the annotation makes a renamed or dropped field a typecheck failure.
+ *
+ * `P2-T26` added `replaceForTest`, the one member that is a test seam rather
+ * than part of the lookup table. Its `describe` below covers the swap, the
+ * order it keeps, the throw that keeps it from registering, and — by reading
+ * `src/` — that nothing shipped calls it.
  */
+
+const SRC_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../src",
+);
+
+/** Every `.ts` file under `src/` whose text names `member`, repository-relative. */
+function sourceFilesNaming(member: string): string[] {
+  return readdirSync(SRC_DIR, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+    .map((entry) => resolve(entry.parentPath, entry.name))
+    .filter((file) => readFileSync(file, "utf8").includes(member))
+    .map((file) => relative(SRC_DIR, file).replaceAll("\\", "/"))
+    .sort((a, b) => a.localeCompare(b));
+}
 
 const FULL_CAPABILITIES: SourceCapabilities = {
   keywordSearch: true,
@@ -126,6 +150,83 @@ describe("createSourceRegistry", () => {
     expect(registry.listConfigured()).toEqual([]);
     keyPresent = true;
     expect(registry.listConfigured()).toHaveLength(1);
+  });
+});
+
+describe("replaceForTest", () => {
+  it("swaps the adapter under an existing id and returns the one it displaced", () => {
+    const registry = createSourceRegistry();
+    const real = stubSource("pubmed");
+    const stub = stubSource("pubmed", false);
+    registry.register(real);
+
+    const displaced = registry.replaceForTest(stub);
+
+    expect(displaced).toBe(real);
+    expect(registry.get("pubmed")).toBe(stub);
+    expect(registry.list()).toEqual([stub]);
+    expect(registry.listConfigured()).toEqual([]);
+  });
+
+  it("keeps the replaced adapter's slot in registration order", () => {
+    const registry = createSourceRegistry();
+    registry.register(stubSource("arxiv"));
+    registry.register(stubSource("pubmed"));
+    registry.register(stubSource("crossref"));
+    const stub = stubSource("pubmed");
+
+    registry.replaceForTest(stub);
+
+    expect(registry.list().map((source) => source.id)).toEqual([
+      "arxiv",
+      "pubmed",
+      "crossref",
+    ]);
+    expect(registry.list()[1]).toBe(stub);
+  });
+
+  it("round-trips: putting the displaced adapter back restores get()", () => {
+    const registry = createSourceRegistry();
+    const real = stubSource("pubmed");
+    registry.register(real);
+
+    const displaced = registry.replaceForTest(stubSource("pubmed"));
+    const stubAgain = registry.replaceForTest(displaced);
+
+    expect(registry.get("pubmed")).toBe(real);
+    expect(stubAgain).not.toBe(real);
+    expect(registry.list()).toHaveLength(1);
+  });
+
+  it("throws, and registers nothing, when no adapter holds the id", () => {
+    const registry = createSourceRegistry();
+    registry.register(stubSource("pubmed"));
+
+    expect(() => registry.replaceForTest(stubSource("crossref"))).toThrow(
+      /replaceForTest\("crossref"\): no literature source is registered under that id/,
+    );
+    expect(registry.get("crossref")).toBeUndefined();
+    expect(registry.list().map((source) => source.id)).toEqual(["pubmed"]);
+  });
+
+  it("opens no second way past the duplicate-id check", () => {
+    const registry = createSourceRegistry();
+    registry.register(stubSource("pubmed"));
+    registry.replaceForTest(stubSource("pubmed"));
+
+    expect(() => registry.register(stubSource("pubmed"))).toThrow(
+      /already registered for "pubmed"/,
+    );
+    expect(registry.list()).toHaveLength(1);
+  });
+
+  it("is named by no file under src/ except the registry itself", () => {
+    // The seam is test-only by contract, and a contract nothing checks is a
+    // comment. A shipped caller would make the startup path depend on a
+    // swap, which is what `P2-T26`'s Do NOT forbids.
+    expect(sourceFilesNaming("replaceForTest")).toEqual([
+      "sources/registry.ts",
+    ]);
   });
 });
 
