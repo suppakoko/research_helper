@@ -834,7 +834,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     product, and the gap blocks Phase 2's third and fourth finishing conditions. The card also threads one
     process-wide `Semaphore` through `SearchImportDeps` from `registerPipelines.ts` and settles item 67.
 
-67. **Two state functions disagree on one case.** `outcomeFromReports` (pipeline) calls "one source errored,
+67. ~~**Two state functions disagree on one case.**~~ **RESOLVED 2026-10-14 by `P2-T27`:** `fetchStateFromReports` kept, `outcomeFromReports` deleted; the consequence is item 81. `outcomeFromReports` (pipeline) calls "one source errored,
     one healthy source with zero hits" `failed`; `fetchStateFromReports` (`P2-T02`) calls it `partial`,
     because a healthy zero-hit source did not fail. `docs/07` §12.1 says `Failed` is "all sources failed".
     `P2-T27` step 3 keeps one and deletes the other; the owner may overrule the default reading there.
@@ -884,6 +884,31 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 
 77. **Observed, not interpreted:** the Zotero process printed `fatal error: ` at exit after a passing
     integration run (122 passed, runner exit 0). Seen once; look for it again before treating it as noise.
+
+### 6.16 Raised by `P2-T27`, 2026-10-14 — recorded under rule 9, none carded (one folded into `P2-T28`)
+
+78. **`SearchImportDeps.pool` is optional with a fallback the product never reaches**, because
+    `test/integration/searchDialog-flow.spec.ts`'s `P1-T22` block constructs the pipeline without one.
+    Folded into `P2-T28` step 5 (same files): pass a pool there, make the member required, delete the
+    fallback; the equivalent mutant becomes killable.
+
+79. **The pipeline still has its own `serialize`.** Three callers (`backfillAbstracts`, `notePartial`, `run`'s
+    final `catch`); `stages.ts`'s copy is not exported. One `export` keyword in `stages.ts` and one deletion
+    in the pipeline, the next time either file is in a card's list (`P2-T10` edits `stages.ts`).
+
+80. **Stale prose in `stages.ts` and `types.ts`** about the loop and `outcomeFromReports` (`stages.ts` header
+    "What is still the caller's", `fetchStateFromReports`'s and `serialize`'s docs; `types.ts`'s
+    `SearchImportFetchState` doc). Refresh with item 79.
+
+81. **(owner's confirmation)** With `fetchStateFromReports` kept, a run where one source errors and the
+    other healthy source finds nothing is `partial`, continues to `Merging` and creates an **empty
+    collection** (FR-6) with a banner naming the failed source; it previously ended `failed` with no
+    collection. `docs/07` §12.1 supports the new reading; whether an empty collection is wanted is the
+    owner's call.
+
+82. **The pool is reachable only through `buildPipelineSet`.** A later metadata-fetching pipeline that must
+    share the `network-metadata` pool would need it on the `ServiceGraph` in `src/bootstrap/container.ts`.
+    Becomes a card when such a pipeline is carded.
 
 ## 7. Regenerating this file
 

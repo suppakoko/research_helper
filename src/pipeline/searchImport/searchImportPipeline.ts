@@ -7,9 +7,14 @@
  *
  * 1. **A source failing is not the run failing.** §12.1: "`PartialFetch` is a
  *    first-class state, not an error", and FR-9 requires the other sources'
- *    results plus a banner naming the failed one. Each source's `searchAll` runs
- *    in its own `try`/`catch`; the error is **recorded on that source's report**
- *    and the loop continues. Only an all-sources failure is `"failed"`.
+ *    results plus a banner naming the failed one. `Fetching` is `./stages.ts`'s
+ *    {@link fanOut} (`P2-T02`, wired here by `P2-T27`): the selected sources
+ *    are asked **concurrently** under the process-wide `network-metadata` pool,
+ *    each in its own `try` with its own deadline, and a throw is **recorded on
+ *    that source's report** while the others run on. Only an all-sources
+ *    failure is `"failed"`; `fetchStateFromReports` is the one function that
+ *    decides it, and {@link fetchOutcome} says why it is applied over the whole
+ *    report list rather than to `fanOut`'s own verdict.
  * 2. **Cancellation is checked everywhere §7.4 names, and nothing is rolled
  *    back.** §7.4's per-pipeline rule for `searchImport` is explicit: "items
  *    already written to Zotero are **kept**; the collection is kept with a note
@@ -46,6 +51,7 @@
  *   in the schema, so re-typing `10` and `200` here is the thing to avoid.
  */
 
+import { Semaphore } from "../../core/concurrency";
 import {
   OperationCancelledError,
   ResearchHelperError,
@@ -56,12 +62,7 @@ import type { CanonicalWork } from "../../model/canonicalWork";
 import { buildWorkKey, type SourceId } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
 import { PREFS } from "../../prefs/schema";
-import {
-  applyClientRecencyFilter,
-  resolveDateFilterMode,
-} from "../../sources/shared/recency";
-import { parseUserQuery } from "../../sources/shared/queryParse";
-import type { LiteratureSource, SourceQuery } from "../../sources/types";
+import type { LiteratureSource } from "../../sources/types";
 import {
   stageSlices,
   type Pipeline,
@@ -71,6 +72,9 @@ import {
   type ValidationResult,
 } from "../types";
 import {
+  fanOut,
+  fetchStateFromReports,
+  NETWORK_METADATA_POOL_SIZE,
   SEARCH_IMPORT_DISPLAY_NAME_KEY,
   SEARCH_IMPORT_STAGES,
   type SearchImportStageKey,
@@ -144,17 +148,31 @@ export interface SearchImportDeps {
    * rule 4).
    */
   readonly writeBatchSize: number;
+  /**
+   * The process-wide `network-metadata` pool that `fanOut` runs the sources
+   * under — `docs/07` §7.2: one pool of {@link NETWORK_METADATA_POOL_SIZE},
+   * not configurable, shared by every run so that two concurrent searches
+   * cannot hold eight sockets between them.
+   *
+   * **Built once, in `src/bootstrap/registerPipelines.ts`, and passed in**
+   * (`P2-T27` step 2). The product never omits it.
+   *
+   * **Optional for one reason only.** `test/integration/searchDialog-flow.spec.ts`
+   * constructs this pipeline directly without a pool, and that file is outside
+   * `P2-T27`'s `Files`; a required member would fail the type check on a file
+   * the card may not edit. When omitted, {@link createSearchImportPipeline}
+   * builds **one pool per pipeline instance** — never one per run — so a
+   * directly-constructed pipeline still bounds its own fan-out at §7.2's
+   * figure. Make this required, and delete that fallback, once that spec
+   * passes one; until then the "exactly one pool" rule is enforced at the
+   * composition root rather than by the type.
+   */
+  readonly pool?: Semaphore;
 }
 
 // ---------------------------------------------------------------------------
 // 3. Run state
 // ---------------------------------------------------------------------------
-
-/** One source's fetch result, before it becomes part of the output. */
-interface SourceFetch {
-  readonly records: readonly SourceRecord[];
-  readonly report: SearchImportSourceReport;
-}
 
 /** Everything one `run()` accumulates, so one `catch` can build the output. */
 interface RunState {
@@ -201,6 +219,13 @@ function freshState(): RunState {
  * is §10.1's `SerializedError`; the `code` says plainly that the throw was not
  * typed, and `detail` carries the error's **name** rather than its message,
  * because an arbitrary message has not been through `redact()`.
+ *
+ * **Still here after `P2-T27`, deliberately.** The card asked for this copy to
+ * go with the fetch loop, on the premise that only the loop used it; it has
+ * three other callers — `backfillAbstracts`, `notePartial` and `run()`'s final
+ * `catch` — and `./stages.ts`'s copy is module-private, so removing this one
+ * needs an `export` there, which the card's `Files` row for `stages.ts` did
+ * not license. One `export` keyword is the whole of the follow-up.
  */
 function serialize(error: unknown): SerializedError {
   if (error instanceof ResearchHelperError) return error.toSerialized();
@@ -277,38 +302,6 @@ function batches<T>(items: readonly T[], size: number): readonly T[][] {
 }
 
 /**
- * `docs/07` §12.1's `Fetching → PartialFetch` / `Fetching → Failed` test, as the
- * run's outcome.
- *
- * - No source errored → `"succeeded"`.
- * - Some source errored **and at least one record came back** → `"partial"`.
- *   §12.1: "`PartialFetch` is a first-class state, not an error."
- * - Every source errored **and nothing came back** → `"failed"`. §12.1's edge is
- *   `Fetching --> Failed : all sources failed`, and FR-9's own example of a
- *   failed source is one that "returns HTTP 500 on **all** retries" — a source
- *   that produced nothing at all.
- *
- * **A source that threw *after* yielding records is degraded, not failed, and
- * getting that wrong is a one-source regression that a seven-source test would
- * not catch.** `P1-T16`'s first criterion is "a stubbed source that throws on
- * page 2 yields the page-1 records plus one warning naming the source, and the
- * run succeeds" — with one source selected, counting any error as a failed source
- * makes `failedCount === reports.length` and the run `"failed"`, discarding page
- * 1. Productivity, not the presence of an error, is what separates §12.1's two
- * edges.
- *
- * A run that asked **no** source never reaches here: `validate()` rejects it.
- */
-export function outcomeFromReports(
-  reports: readonly SearchImportSourceReport[],
-): SearchImportOutcome {
-  const errored = reports.filter((r) => r.error !== undefined);
-  if (errored.length === 0) return "succeeded";
-  const productive = reports.some((r) => r.recordsRetrieved > 0);
-  return productive ? "partial" : "failed";
-}
-
-/**
  * `docs/07` §4.5's `validate()` — "structural validation before a job is
  * created. Cheap, synchronous."
  *
@@ -381,6 +374,11 @@ export function createSearchImportPipeline(
   // that does not sum to 1.
   const slices: readonly StageSlice[] = stageSlices(SEARCH_IMPORT_STAGES);
 
+  // See `SearchImportDeps.pool` for why the fallback exists and why it is one
+  // per pipeline instance rather than one per run.
+  const pool: Semaphore =
+    deps.pool ?? new Semaphore(NETWORK_METADATA_POOL_SIZE);
+
   const sliceFor = (key: SearchImportStageKey): StageSlice => {
     const slice = slices.find((s) => s.stage.key === key);
     if (slice === undefined) {
@@ -423,110 +421,6 @@ export function createSearchImportPipeline(
   ): void {
     state.warnings.push(message);
     reporter.warn(message);
-  }
-
-  /** The `SourceQuery` one source is asked, and how its dates were handled. */
-  function queryFor(
-    source: LiteratureSource,
-    input: SearchImportInput,
-  ): { query: SourceQuery; mode: "server" | "client" | "none" } {
-    const mode = resolveDateFilterMode(source.capabilities, input.dateFilter);
-    const window = input.dateFilter;
-    return {
-      mode,
-      query: {
-        terms: parseUserQuery(input.query),
-        limit: input.limit,
-        // Server-side bounds only when the source says it can filter. §11.1
-        // step 2's prohibition, as `resolveDateFilterMode` states it: "if the
-        // API has no server-side date filter … let the shared recency filter
-        // handle it; do not fake it."
-        ...(mode === "server" &&
-          window !== "none" && {
-            fromDate: window.fromDate,
-            toDate: window.toDate,
-          }),
-      },
-    };
-  }
-
-  /** Fetch one source, catching everything except cancellation. */
-  async function fetchOneSource(
-    source: LiteratureSource,
-    input: SearchImportInput,
-    ctx: PipelineContext,
-    stage: ProgressReporter,
-  ): Promise<SourceFetch> {
-    const { query, mode } = queryFor(source, input);
-    const transmittedQuery = source.explainQuery(query);
-
-    const collected: SourceRecord[] = [];
-    const warnings: string[] = [];
-    let error: SerializedError | undefined;
-
-    // A child of the fetch stage per source, so two sources share the stage's
-    // slice rather than each claiming all of it.
-    const sourceReporter = stage.child(source.id, 0, 1);
-    try {
-      for await (const record of source.searchAll(query, {
-        token: ctx.token,
-        progress: sourceReporter,
-      })) {
-        // §7.4 check point 1. The adapter checks before each page and before
-        // each `efetch` batch (`P1-T09`); this is the per-record check, which is
-        // strictly tighter, and it is why FR-10's 2 s budget depends on the
-        // in-flight request alone rather than on how big a page is.
-        ctx.token.throwIfCancelled();
-        collected.push(record);
-      }
-    } catch (caught) {
-      // Cancellation is the run's, not this source's. Re-thrown so a cancelled
-      // source is never reported as a *failed* source and so the remaining
-      // sources do not carry on fetching through a cancel the user asked for.
-      if (caught instanceof OperationCancelledError) throw caught;
-      error = serialize(caught);
-      // FR-9's banner "names the failed source and the error class".
-      warnings.push(
-        `${source.id}: ${error.code} — the other databases were still searched.`,
-      );
-      ctx.logger.warn("searchImport: a source failed; continuing", {
-        sourceId: source.id,
-        code: error.code,
-      });
-    }
-
-    const recordsRetrieved = collected.length;
-    let kept: readonly SourceRecord[] = collected;
-    let droppedOutOfWindow = 0;
-    let keptWithoutDate = 0;
-    if (mode === "client" && input.dateFilter !== "none") {
-      // FR-3: "the plugin filters client-side using the parsed publication date
-      // and records `dateFilterApplied: client`". Applied per source, here,
-      // because whether it runs at all is a property of that source's declared
-      // capability.
-      const filtered = applyClientRecencyFilter(collected, input.dateFilter);
-      kept = filtered.kept;
-      droppedOutOfWindow = filtered.droppedOutOfWindow;
-      keptWithoutDate = filtered.keptWithoutDate;
-    }
-
-    return {
-      records: kept,
-      report: {
-        sourceId: source.id,
-        transmittedQuery,
-        requestedLimit: input.limit,
-        dateFilterApplied: mode,
-        recordsRetrieved,
-        droppedOutOfWindow,
-        keptWithoutDate,
-        // `P1-T16`'s `Do NOT`: nothing is merged in Phase 1, so the count is
-        // zero — recorded, not omitted (`docs/07` §5.3, FR-8).
-        recordsDeduplicatedAway: 0,
-        error,
-        warnings,
-      },
-    };
   }
 
   /**
@@ -838,17 +732,26 @@ export function createSearchImportPipeline(
         // ---- Fetching -----------------------------------------------------
         const fetching = await enterStage(state, ctx, "fetching");
         if (input.records === undefined) {
-          const fetched: SourceRecord[] = [];
-          for (const source of resolved) {
-            const result = await fetchOneSource(source, input, ctx, fetching);
-            state.perSource.push(result.report);
-            for (const message of result.report.warnings) {
-              state.warnings.push(message);
-              fetching.warn(message);
-            }
-            fetched.push(...result.records);
-          }
-          state.records = fetched;
+          // `P2-T27`: the sources are asked concurrently under the pool, each
+          // isolated and under its own deadline. `fanOut` throws only for the
+          // run's own cancellation, and only after every source has settled,
+          // so the `catch` below never races an adapter still writing.
+          const fetched = await fanOut({
+            sources: resolved,
+            input,
+            token: ctx.token,
+            clock: ctx.clock,
+            progress: fetching,
+            logger: ctx.logger,
+            pool,
+          });
+          state.perSource.push(...fetched.perSource);
+          // The FR-9 banners only — `fanOut` has already raised each one on
+          // `fetching`. An adapter's own page warnings reached the reporter
+          // once, through the per-source child, and sit on that source's
+          // report; they are not run-level warnings.
+          state.warnings.push(...fetched.warnings);
+          state.records = fetched.records;
         } else {
           // `P1-T22` step 3's import of an already-rendered preview. The stage
           // is still entered and completed, so the bar behaves the same either
@@ -968,7 +871,23 @@ function missingAdapterReport(
 }
 
 /**
- * The outcome the fetch half implies.
+ * The outcome the fetch half implies — `docs/07` §12.1's `Fetching →
+ * PartialFetch` / `Fetching → Failed` test, over **every** per-source report.
+ *
+ * `./stages.ts`'s `fetchStateFromReports` is the one state function left after
+ * `P2-T27` step 3. Its predecessor here, `outcomeFromReports`, keyed on
+ * productivity alone and called "one source errored, one healthy with zero
+ * hits" a failure. The kept reading rests on §12.1's edge `Fetching --> Failed
+ * : all sources failed`: a healthy source that found nothing did not fail, so
+ * that run is `"partial"`. `P1-T16`'s first criterion — a source that threw
+ * after yielding is degraded, not failed, and its page 1 is kept — holds under
+ * both readings and is still asserted by the pipeline's own tests.
+ *
+ * Applied to `state.perSource` rather than to `fanOut`'s own `state`, because
+ * the list also carries `Planning`'s {@link missingAdapterReport} rows, which
+ * `fanOut` never saw: a run whose only adapter-less source sits beside a
+ * healthy one is `"partial"` on the whole list and would be `"succeeded"` on
+ * `fanOut`'s view alone.
  *
  * A run that was handed its records did not ask any source, so it has no
  * per-source verdict to aggregate and is `"succeeded"` on that count.
@@ -980,5 +899,5 @@ function fetchOutcome(
   if (input.records !== undefined || state.perSource.length === 0) {
     return "succeeded";
   }
-  return outcomeFromReports(state.perSource);
+  return fetchStateFromReports(state.perSource);
 }

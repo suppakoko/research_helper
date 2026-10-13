@@ -3614,6 +3614,18 @@ Phase 2's third finishing condition (one source's 500 or 429 does not block the 
 - `docs/10-requirements-and-user-stories.md` FR-9, FR-10, NFR-2.
 
 **Do.**
+> **Corrected 2026-10-14 after the executing agent delivered (report):** step 1's "delete `serialize`" cannot be
+> done — the pipeline's `serialize` has three other callers (`backfillAbstracts`, `notePartial`, `run`'s final
+> `catch`) and `stages.ts`'s copy is module-private, so it stays until one `export` keyword lands in
+> `stages.ts` (`plan/00` §6 item 79). Step 2's "nothing else may construct a second pool" cannot be
+> enforced by the type while `test/integration/searchDialog-flow.spec.ts`'s `P1-T22` block constructs the
+> pipeline without one, so `SearchImportDeps.pool` is optional with a per-pipeline-instance fallback the
+> product never reaches; `P2-T28` step 5 passes a pool there and makes the member required. Step 3's
+> premise that `fanOut`'s own state can be used directly misses `Planning`'s `missingAdapterReport` rows,
+> so `fetchOutcome` applies `fetchStateFromReports` to the whole `state.perSource`. Step 4's "every existing
+> test green" collided with the goal in one assertion ("does not let a cancelled source look like a failed
+> source" asserted the second source is never asked — a serial-loop property); it now asserts the part
+> that mattered, an empty `perSource`.
 1. In `run` (`searchImportPipeline.ts`), replace the per-source loop and `fetchOneSource` with one
    call to `fanOut`, passing the run token, the clock, the `Fetching` stage reporter, the logger and
    the pool. Delete the pipeline's private `fetchOneSource`, `queryFor` and `serialize` — `stages.ts`
@@ -3656,6 +3668,25 @@ rate-limit layer's). Do not make the pool size configurable (`docs/07` §7.2). D
 npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
 ```
 
+
+**Findings, 2026-10-14 — done inside the card's files; three of four criteria met in full, criterion 1 in part (`serialize`); the product now fetches sources concurrently; full report at `plan/reports/P2-T27.md`.**
+Verified by the coordinator on the combined wave-2 tree: typecheck 0, `lint:check` 0, **1,500 unit in 33
+files**, **40 contract**, **123 integration in one run** (the agent's chain also 123), the pipeline test
+files 83 passed, the three file hashes equal to the agent's (`edd79d62…`, `526c1f6f…`, `f6e96b40…`) and
+`stages.ts`/`fanout.test.ts` unchanged, `grep` finds no per-source `for` loop, `fetchOneSource`, `queryFor`
+or `outcomeFromReports` in the pipeline (one doc-comment mention), and `new Semaphore(` appears in
+`registerPipelines.ts`, the pre-existing per-host gate in `tokenBucket.ts`, and the fallback. `run`'s
+`Fetching` block is one `fanOut` call; `buildPipelineSet` constructs the one `network-metadata` pool and
+two concurrent runs of the shipped pipeline admit exactly 4 of 8 held sources. **Kept `fetchStateFromReports`**
+on `docs/07` §12.1's edge `Fetching --> Failed : all sources failed`: a healthy zero-hit source did not fail,
+so one errored source beside it is `partial`, and the run proceeds to `Merging` and creates an **empty
+collection** where it previously ended `failed` with none — a behaviour change for the owner to confirm
+(`plan/00` §6 item 81). Twelve mutants: eleven killed, one equivalent (omitting `pool` in
+`buildPipelineSet` is indistinguishable while the fallback exists), and the sweep found the assertion that
+was missing — nothing had pinned that `fanOut` gets the `Fetching` stage's reporter rather than the root,
+now tested from `stageSlices`. Three agents shared the tree; three of four chain runs were stopped by
+their transient states, none a defect here. Not checked: NFR-2's wall clock and the real HTTP abort
+(`P2-T16`). Follow-ups are `plan/00` §6.16; item 66 is retired and item 67 resolved.
 ---
 
 ### P2-T28 — Give the per-source query dialect its home in `SourceCapabilities` (owner-authorised `docs/07` §4.2 extension)
@@ -3708,6 +3739,12 @@ because the test fakes those cards edit also construct a `SourceCapabilities`.
    `test/unit/sources/registry.test.ts`, `test/integration/searchDialog-flow.spec.ts`,
    `test/integration/phase1-dod.spec.ts`, and `test/unit/sources/queryParse.test.ts`'s transcribed
    §12.3 columns.
+5. *(added 2026-10-14 from `P2-T27`'s report, same files)* In `test/integration/searchDialog-flow.spec.ts`'s
+   `P1-T22` block, pass a `Semaphore(NETWORK_METADATA_POOL_SIZE)` as `pool` to `createSearchImportPipeline`;
+   then make `SearchImportDeps.pool` required and delete the fallback in `createSearchImportPipeline`
+   (`src/pipeline/searchImport/searchImportPipeline.ts`, added to Files below). `P2-T27`'s equivalent
+   mutant (omitting `pool` in `buildPipelineSet`) must then be killable — add that assertion to
+   `test/unit/pipeline/searchImport.test.ts`.
 
 **Do NOT.** Do not add a Journal row to `docs/02` §12.3 (item 63, the owner's document edit). Do not
 change `normalizeForSource`'s behaviour or return type. Do not touch any adapter other than PubMed's
@@ -3727,6 +3764,7 @@ declaration.
 - modify `src/sources/types.ts`
 - modify `src/sources/shared/queryParse.ts`
 - modify `src/sources/pubmed/pubmedSource.ts`
+- modify `src/pipeline/searchImport/searchImportPipeline.ts` (step 5 only — added 2026-10-14)
 - modify `test/unit/sources/queryParse.test.ts`, `test/unit/pipeline/fanout.test.ts`,
   `test/unit/pipeline/searchImport.test.ts`, `test/unit/sources/registry.test.ts`,
   `test/integration/searchDialog-flow.spec.ts`, `test/integration/phase1-dod.spec.ts`

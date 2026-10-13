@@ -18,6 +18,16 @@
  * composition root exists: it is the *wiring* of a `zotero/` capability onto a
  * `pipeline/` port, which is neither module's business.
  *
+ * ## The `network-metadata` pool lives here
+ *
+ * `docs/07` §7.2 sizes it at four and `P2-T27` step 2 gives it one home: the
+ * `Semaphore` is constructed in {@link buildPipelineSet} — which the
+ * composition root calls once — and reaches `stages.ts`'s `fanOut` through
+ * `SearchImportDeps.pool`. A pool built per pipeline, per run or per call would
+ * be a per-job budget under another name, so nothing else constructs one; the
+ * size is `stages.ts`'s `NETWORK_METADATA_POOL_SIZE`, not a figure of this
+ * file's, and it is not read from a preference (§7.2 fixes it).
+ *
  * ## Two things this file does not do, and they are reported not hidden
  *
  * 1. **`notePartialImport` cannot write to the collection.** `docs/07` §7.4
@@ -47,6 +57,7 @@
 
 import { DEFAULT_CHUNK_SIZE, importWorks } from "../zotero/importer";
 import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
+import { Semaphore } from "../core/concurrency";
 import type { Logger } from "../core/logger";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
 import type { CanonicalWork } from "../model/canonicalWork";
@@ -57,6 +68,7 @@ import {
   type PipelineSet,
 } from "../pipeline/registry";
 import { createSearchImportPipeline } from "../pipeline/searchImport/searchImportPipeline";
+import { NETWORK_METADATA_POOL_SIZE } from "../pipeline/searchImport/stages";
 import type {
   SearchImportBatchResult,
   SearchImportTarget,
@@ -226,10 +238,15 @@ export interface PipelineConstructionDeps {
  * nothing at run time.
  */
 export function buildPipelineSet(deps: PipelineConstructionDeps): PipelineSet {
+  // The one construction site of `docs/07` §7.2's `network-metadata` pool —
+  // see the header. Every pipeline in this set that fetches literature
+  // metadata takes this same instance.
+  const pool = new Semaphore(NETWORK_METADATA_POOL_SIZE);
   return {
     searchImport: createSearchImportPipeline({
       writer: deps.writer,
       writeBatchSize: deps.writeBatchSize ?? DEFAULT_CHUNK_SIZE,
+      pool,
     }),
   };
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { buildPipelineSet } from "../../../src/bootstrap/registerPipelines";
 import { createManualClock, type Clock } from "../../../src/core/clock";
+import { createDeferred, Semaphore } from "../../../src/core/concurrency";
 import {
   OperationCancelledError,
   UpstreamServerError,
@@ -38,18 +40,20 @@ import {
 import {
   createSearchImportPipeline,
   liftToCanonicalWorks,
-  outcomeFromReports,
   PARTIAL_IMPORT_NOTE_PREFIX,
   SEARCH_IMPORT_VALIDATION_KEYS,
   validateSearchImportInput,
 } from "../../../src/pipeline/searchImport/searchImportPipeline";
 import {
+  fetchStateFromReports,
+  NETWORK_METADATA_POOL_SIZE,
   SEARCH_IMPORT_STAGE_KEYS,
   SEARCH_IMPORT_STAGES,
 } from "../../../src/pipeline/searchImport/stages";
 import type {
   SearchImportBatchResult,
   SearchImportInput,
+  SearchImportOutput,
   SearchImportSourceReport,
   SearchImportTarget,
   SearchImportWriteSession,
@@ -57,6 +61,7 @@ import type {
 } from "../../../src/pipeline/searchImport/types";
 import {
   stageSlices,
+  type Pipeline,
   type PipelineContext,
   type StageDescriptor,
 } from "../../../src/pipeline/types";
@@ -248,9 +253,21 @@ interface StubSourceOptions {
   readonly throwOnPage?: number;
   readonly error?: Error;
   readonly dateFilter?: boolean;
-  /** Yield this many records, then wait for `gate` before the next. */
+  /** Yield this many records, then call `gate` and await `hold` before the next. */
   readonly gateAfter?: number;
   readonly gate?: () => void;
+  /**
+   * Awaited after `gateAfter` records, so a test can keep the source *in
+   * flight* — permit held, deadline armed — until it chooses to let it finish.
+   * `P2-T27`'s concurrency assertions need two sources parked here at once.
+   */
+  readonly hold?: () => Promise<void>;
+  /**
+   * Called when `searchAll` is entered, before the first page, with the call
+   * context the pipeline handed the source — so a test can report progress the
+   * way a real adapter does.
+   */
+  readonly onStart?: (ctx: SourceCallContext) => void;
 }
 
 /** A `LiteratureSource` that can be made to fail on a chosen page. */
@@ -278,6 +295,7 @@ function stubSource(options: StubSourceOptions): LiteratureSource {
       }),
     async *searchAll(query: SourceQuery, ctx: SourceCallContext) {
       seen.push(query);
+      options.onStart?.(ctx);
       let emitted = 0;
       for (const [index, page] of options.pages.entries()) {
         ctx.token.throwIfCancelled();
@@ -290,7 +308,10 @@ function stubSource(options: StubSourceOptions): LiteratureSource {
         for (const item of page) {
           yield item;
           emitted += 1;
-          if (emitted === options.gateAfter) options.gate?.();
+          if (emitted === options.gateAfter) {
+            options.gate?.();
+            if (options.hold !== undefined) await options.hold();
+          }
         }
       }
     },
@@ -391,11 +412,25 @@ const BASE_INPUT: SearchImportInput = {
   dateFilter: "none",
 };
 
+/**
+ * Let every pending microtask and the macrotask queue drain once.
+ *
+ * The fan-out's admissions happen in microtasks (`Semaphore.acquire`, the
+ * async generators' first `next()`); one timer tick is enough for every source
+ * that *can* start to have started and nothing more to happen until a gate is
+ * released. Same helper as `fanout.test.ts`'s.
+ */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /** Build everything one run needs. */
 function harness(options: {
   readonly sources: readonly LiteratureSource[];
   readonly writer?: SearchImportWriter;
   readonly writeBatchSize?: number;
+  /** The `network-metadata` pool; omitted, the pipeline builds its own. */
+  readonly pool?: Semaphore;
 }): {
   readonly pipeline: ReturnType<typeof createSearchImportPipeline>;
   readonly ctx: PipelineContext;
@@ -413,6 +448,9 @@ function harness(options: {
   const pipeline = createSearchImportPipeline({
     writer: options.writer ?? stubWriter().writer,
     writeBatchSize: options.writeBatchSize ?? 50,
+    // Spread, not `pool: options.pool`: `exactOptionalPropertyTypes` rejects
+    // an explicit `undefined`.
+    ...(options.pool !== undefined && { pool: options.pool }),
   });
   return {
     pipeline,
@@ -598,7 +636,7 @@ describe("estimate", () => {
 // 3. The outcome table (criteria 1 and 2)
 // ===========================================================================
 
-describe("outcomeFromReports", () => {
+describe("fetchStateFromReports — the one state function kept (P2-T27 step 3)", () => {
   const report = (
     sourceId: SourceId,
     recordsRetrieved: number,
@@ -624,27 +662,42 @@ describe("outcomeFromReports", () => {
   });
 
   it("is `succeeded` when nothing errored", () => {
-    expect(outcomeFromReports([report("pubmed", 3, false)])).toBe("succeeded");
+    expect(fetchStateFromReports([report("pubmed", 3, false)])).toBe(
+      "succeeded",
+    );
   });
 
   it("is `partial` for one source that errored after yielding records", () => {
-    // The one-source regression: counting any error as a failed source makes
-    // this `failed` and throws page 1 away.
-    expect(outcomeFromReports([report("pubmed", 2, true)])).toBe("partial");
+    // The one-source regression `P1-T16`'s first criterion guards: counting
+    // any error as a failed source makes this `failed` and throws page 1 away.
+    expect(fetchStateFromReports([report("pubmed", 2, true)])).toBe("partial");
   });
 
-  it("is `failed` only when every source errored and nothing came back", () => {
-    expect(outcomeFromReports([report("pubmed", 0, true)])).toBe("failed");
+  it("is `failed` only when every source failed (docs/07 §12.1's edge)", () => {
+    expect(fetchStateFromReports([report("pubmed", 0, true)])).toBe("failed");
     expect(
-      outcomeFromReports([
+      fetchStateFromReports([
         report("pubmed", 0, true),
         report("crossref", 0, true),
       ]),
     ).toBe("failed");
     expect(
-      outcomeFromReports([
+      fetchStateFromReports([
         report("pubmed", 0, true),
         report("crossref", 4, false),
+      ]),
+    ).toBe("partial");
+  });
+
+  it("counts a healthy source with zero hits as succeeded, so its errored neighbour is `partial`", () => {
+    // The one case the retired `outcomeFromReports` read the other way
+    // (`failed`, because nothing was productive). §12.1's edge is
+    // `Fetching --> Failed : all sources failed`; an empty result set is not a
+    // failure, so this is `PartialFetch`, not `Failed`.
+    expect(
+      fetchStateFromReports([
+        report("pubmed", 0, true),
+        report("crossref", 0, false),
       ]),
     ).toBe("partial");
   });
@@ -768,6 +821,219 @@ describe("all sources failing (criterion 2)", () => {
 });
 
 // ===========================================================================
+// 3b. The fan-out wiring (P2-T27): concurrency, the pool, the zero-hit case
+// ===========================================================================
+
+describe("the fan-out wiring (P2-T27)", () => {
+  /**
+   * Sources that each yield one record, then hold — permit held, in flight —
+   * until `release()`; `started[i]` counts how many times source `i` was asked.
+   */
+  function heldSources(ids: readonly SourceId[]): {
+    readonly sources: LiteratureSource[];
+    readonly started: number[];
+    readonly release: () => void;
+  } {
+    const gates = ids.map(() => createDeferred<void>());
+    const started = ids.map(() => 0);
+    const sources = ids.map((id, i) =>
+      stubSource({
+        id,
+        pages: [[record(id, `${i + 1}0`)], [record(id, `${i + 1}1`)]],
+        gateAfter: 1,
+        hold: () => gates[i]?.promise ?? Promise.resolve(),
+        onStart: () => {
+          started[i] = (started[i] ?? 0) + 1;
+        },
+      }),
+    );
+    return {
+      sources,
+      started,
+      release: () => {
+        for (const gate of gates) gate.resolve();
+      },
+    };
+  }
+
+  it("asks the selected sources concurrently: both in flight before either resolves (FR-9, NFR-2)", async () => {
+    const pool = new Semaphore(NETWORK_METADATA_POOL_SIZE);
+    const held = heldSources(["pubmed", "crossref"]);
+    const h = harness({ sources: held.sources, pool });
+
+    const run = h.pipeline.run(
+      { ...BASE_INPUT, sourceIds: ["pubmed", "crossref"] },
+      h.ctx,
+    );
+    await settle();
+
+    // Both started, both holding a permit, neither finished. The serial loop
+    // this replaced would show `[1, 0]` and three permits free here.
+    expect(held.started).toEqual([1, 1]);
+    expect(pool.available).toBe(NETWORK_METADATA_POOL_SIZE - 2);
+    expect(pool.waiting).toBe(0);
+
+    held.release();
+    const out = await run;
+    expect(out.outcome).toBe("succeeded");
+    // Source order, not completion order.
+    expect(out.records.map((r) => r.id)).toEqual([
+      "pubmed:10",
+      "pubmed:11",
+      "crossref:20",
+      "crossref:21",
+    ]);
+    expect(out.perSource.map((r) => r.sourceId)).toEqual([
+      "pubmed",
+      "crossref",
+    ]);
+    // Every permit back.
+    expect(pool.available).toBe(NETWORK_METADATA_POOL_SIZE);
+  });
+
+  it("runs under the injected pool, not one of its own: a one-permit pool serialises the sources", async () => {
+    const pool = new Semaphore(1);
+    const held = heldSources(["pubmed", "crossref"]);
+    const h = harness({ sources: held.sources, pool });
+
+    const run = h.pipeline.run(
+      { ...BASE_INPUT, sourceIds: ["pubmed", "crossref"] },
+      h.ctx,
+    );
+    await settle();
+
+    // Had the pipeline built its own 4-permit pool, both would have started.
+    expect(held.started).toEqual([1, 0]);
+    expect(pool.available).toBe(0);
+    expect(pool.waiting).toBe(1);
+
+    held.release();
+    const out = await run;
+    expect(out.outcome).toBe("succeeded");
+    expect(held.started).toEqual([1, 1]);
+    expect(pool.available).toBe(1);
+  });
+
+  it("hands fanOut the Fetching stage's reporter: a source's progress moves the bar inside the Fetching slice", async () => {
+    const fetching = stageSlices(SEARCH_IMPORT_STAGES).find(
+      (s) => s.stage.key === "fetching",
+    );
+    expect(fetching).toBeDefined();
+    if (fetching === undefined) return;
+
+    const h = harness({
+      sources: [
+        stubSource({
+          id: "pubmed",
+          pages: [[record("pubmed", "1")]],
+          // Halfway through this source, as a real adapter reports pages.
+          onStart: (ctx) => {
+            // `SourceCallContext.progress` is optional on the port; the
+            // pipeline always supplies one, and `toHaveLength(1)` below is
+            // what fails if it ever stops doing so.
+            ctx.progress?.setProgress(1, 2);
+          },
+        }),
+      ],
+    });
+    await h.pipeline.run(BASE_INPUT, h.ctx);
+
+    const fromSource = h.progress.snapshots
+      .filter((s) => s.currentStageKey === "pubmed")
+      .map((s) => s.fraction);
+    expect(fromSource).toHaveLength(1);
+    // Mapped into Fetching's slice of the bar. Handed the root reporter
+    // instead, the source's child would span the whole bar and this would
+    // read 0.5 — the mutant a first sweep of this wiring did not catch.
+    expect(fromSource[0]).toBeCloseTo(
+      fetching.from + 0.5 * (fetching.to - fetching.from),
+      10,
+    );
+  });
+
+  it("registerPipelines.ts builds the one network-metadata pool, and concurrent runs share it", async () => {
+    // Two concurrent runs of the pipeline the composition root ships, four held
+    // sources each: eight fetches. One shared pool of `NETWORK_METADATA_POOL_SIZE`
+    // admits exactly four; a pool per run (or per call) would admit all eight.
+    // `PipelineSet` holds `ErasedPipeline`s; narrowed the way
+    // `src/bootstrap/registerUI.ts` narrows the one it takes off the registry.
+    const erased = buildPipelineSet({
+      writer: stubWriter().writer,
+    }).searchImport;
+    expect(erased.id).toBe("searchImport");
+    const pipeline = erased as Pipeline<SearchImportInput, SearchImportOutput>;
+    const held = heldSources(["pubmed", "crossref", "europepmc", "arxiv"]);
+    const registry = createSourceRegistry();
+    for (const s of held.sources) registry.register(s);
+    const contextFor = (): PipelineContext => {
+      const clock = createManualClock(1_000);
+      const { token } = createCancellationTokenSource();
+      return createContext({
+        clock,
+        token,
+        progress: createProgress(clock, token).reporter,
+        sources: registry,
+      });
+    };
+    const input: SearchImportInput = {
+      ...BASE_INPUT,
+      sourceIds: ["pubmed", "crossref", "europepmc", "arxiv"],
+    };
+
+    const runs = [
+      pipeline.run(input, contextFor()),
+      pipeline.run(input, contextFor()),
+    ];
+    await settle();
+
+    const inFlight = held.started.reduce((sum, n) => sum + n, 0);
+    expect(inFlight).toBe(NETWORK_METADATA_POOL_SIZE);
+
+    held.release();
+    const outs = await Promise.all(runs);
+    expect(outs.map((o) => o.outcome)).toEqual(["succeeded", "succeeded"]);
+    expect(held.started.reduce((sum, n) => sum + n, 0)).toBe(8);
+  });
+
+  it("one source errored beside a healthy source with zero hits is `partial`, not `failed` (docs/07 §12.1)", async () => {
+    // The pipeline-level form of the kept state function's zero-hit case. Under
+    // the retired `outcomeFromReports` this run was `failed` and stopped at
+    // `Fetching`; §12.1's `PartialFetch --> Merging : continue with what we
+    // have` carries it on, and FR-6's collection is created, empty.
+    const writer = stubWriter();
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[]], throwOnPage: 0 }),
+        stubSource({ id: "crossref", pages: [[]] }),
+      ],
+      writer: writer.writer,
+    });
+    const out = await h.pipeline.run(
+      {
+        ...BASE_INPUT,
+        sourceIds: ["pubmed", "crossref"],
+        target: { collectionName: "Empty but not failed" },
+      },
+      h.ctx,
+    );
+
+    expect(out.outcome).toBe("partial");
+    expect(out.records).toEqual([]);
+    expect(out.warnings).toHaveLength(1);
+    expect(out.warnings[0]).toContain("pubmed");
+    expect(
+      out.perSource.map((r) => [r.sourceId, r.error?.code, r.recordsRetrieved]),
+    ).toEqual([
+      ["pubmed", "UPSTREAM_SERVER", 0],
+      ["crossref", undefined, 0],
+    ]);
+    expect(out.stageReached).toBe("writingItems");
+    expect(writer.log.opened).toHaveLength(1);
+    expect(out.write?.created).toBe(0);
+  });
+});
+
+// ===========================================================================
 // 4. Cancellation (criteria 3 and 4, docs/07 §7.4, FR-10)
 // ===========================================================================
 
@@ -808,8 +1074,10 @@ describe("cancellation during Fetching (criterion 3, FR-10)", () => {
   });
 
   it("does not let a cancelled source look like a failed source", async () => {
-    // Two sources; the first is cancelled mid-flight. The second must not be
-    // asked, and neither must be marked failed.
+    // Two sources; the first is cancelled mid-flight. Since `P2-T27` the second
+    // is asked *concurrently* — the fan-out starts both before either yields —
+    // so it is in flight when the cancel lands. What must hold is that neither
+    // ends up on the report as a **failed** source and the run is `cancelled`.
     let asked = 0;
     const second = stubSource({ id: "crossref", pages: [[]] });
     const h = harness({
@@ -835,7 +1103,11 @@ describe("cancellation during Fetching (criterion 3, FR-10)", () => {
     );
     expect(out.outcome).toBe("cancelled");
     expect(out.cancellationKind).toBe("shutdown");
-    expect(asked).toBe(0);
+    // Asked, because the fan-out is concurrent (`P2-T27`); under the serial
+    // loop it replaced this read `0`, the second source never being reached.
+    expect(asked).toBe(1);
+    // And neither source is on the report as failed.
+    expect(out.perSource).toEqual([]);
   });
 });
 
