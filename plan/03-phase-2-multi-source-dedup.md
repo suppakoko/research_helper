@@ -1156,6 +1156,17 @@ below the confidence threshold.
 - create `test/unit/sources/dedupe.test.ts`
 
 **Do.**
+> **Corrected 2026-10-14 after the executing agent measured (report):** step 2 and Do NOT bullet 3 below say to
+> keep the first-seen original DOI form for display and the Zotero write. `docs/02` §11.1 withdrew that
+> ("`normalizeDoi()`'s lowercase output is the only DOI the plugin stores, displays, or writes"), `docs/07`
+> §5.1 brands `Doi` lowercase with no second slot, and `normalizeDoi`'s doc records it as closed conflict
+> C9; the agent followed the corpus and `dedupe.ts` never rewrites a record. Read first's "`model/ids.ts`
+> already owns DOI/PMID/arXiv normalization" was false for arXiv — `normalizeArxivId` was added under the
+> `ids.ts` row. "Exactly as §11.3.1" was not followed for PMIDs: the shipped `normalizePmid` (pinned by
+> `test/unit/model/ids.test.ts`) strips only a `PMID:` label where §11.3.1 strips every non-digit; one of
+> the two is wrong (`plan/00` §6 item 90). `P2-T08`'s `preprintServers.ts` does not exist yet, so the two
+> prefix sets live in `dedupe.ts` with a comment naming their future home. The `stages.ts` row was
+> superseded by the coordinator note above.
 1. Implement the `docs/02` §11.3 cascade as an ordered, data-driven tier list returning
    `{ verdict: "match" | "link" | "flag" | "distinct", tier, confidence, evidence }`.
 2. Implement the normalizers exactly as `docs/02` §11.1 and §11.3.1 specify, in `model/ids.ts`, and
@@ -1221,6 +1232,25 @@ npm run typecheck && npm run test:unit -- dedupe
 `P2-T13` measures them and may move them. Keep the algorithm and the constants separable so that
 tuning is a one-line diff plus a re-run of the corpus report.
 
+
+**Findings, 2026-10-14 — done within the reduced scope; all six criteria pass; the stage hookup is `P2-T10`'s and `P2-T11`'s; full report at `plan/reports/P2-T09.md`.**
+Verified by the coordinator on the combined wave-2 tree: typecheck 0, `lint:check` 0, **1,500 unit in 33
+files** including `test/unit/sources/dedupe.test.ts`'s 78, `stages.ts` untouched. `src/sources/shared/dedupe.ts`
+is the `docs/02` §11.3 cascade as a data-driven list of eight `DedupTier` rows (`DEDUP_TIERS`), every
+threshold an exported constant, with `normalizeTitle` per §11.3.2 (the real trailing-period case passes),
+blocking by year ±1 and the 3-longest-token signature before any pairwise work (500 synthetic records:
+**2,250 comparisons** against the 25,000 bound; one bucket for everything measured 124,150), `levSim`/`jaccard`
+with the §11.3.3 rows, all three false-positive guards ("Part II" vs "Part III" at levSim 0.98 is
+`distinct`), the bioRxiv accession key, the §11.5 conflicting-identifier downgrade, and the §11.6 library
+index gaining `byPmcid` and `bySignature`. A pair at levSim 0.82 with nothing corroborating is a `flag`, and
+the only `union` in `dedupeRecords` is under `case "match"`. Twenty-three mutants: twenty-one killed, one
+surviving mutant exposed a missing year-tolerance test that was added and killed it, one equivalent (the
+final period strip is already covered by the punctuation pass). Three card statements were stale (dated
+above). **Two facts matter to this owner:** `normalizeTitle`'s `[^a-z0-9]+` pass reduces a Korean or any
+CJK title to the empty string, so such records can match on identifiers only (item 88, for `P2-T13`'s
+corpus); and the blocking signature drops a pair whose changed word is one of the three longest (item 89).
+Decisions beyond the card's letter were all conservative (unknown year or Δyear > 1 on an exact title is a
+flag; one-sided preprint is a 0.75 flag; short titles come out `distinct`). Follow-ups are `plan/00` §6.18.
 ---
 
 ### P2-T10 — Field-merge policy, source precedence, record provenance

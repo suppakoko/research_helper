@@ -930,6 +930,40 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 87. **For the adapter cards `P2-T03` to `P2-T07`:** a spec that needs a stand-in for a shipped source calls
     `replaceForTest` and restores in `after()`, as both specs now do; never register under a spare id.
 
+### 6.18 Raised by `P2-T09`, 2026-10-14 — recorded under rule 9, none carded
+
+88. **Korean and other CJK titles collapse to `""` in `normalizeTitle`** (`docs/02` §11.3.2's `[^a-z0-9]+`
+    pass), so they can match on identifiers only. Decide how §11.3.2 treats non-Latin scripts and put
+    Korean titles in `P2-T13`'s labelled corpus. A document decision first (`docs/02` is the owner's).
+
+89. **Blocking recall, measured:** a pair `compareRecords` would flag (levSim 0.857) is never compared by
+    `dedupeRecords` when the changed word is one of the three longest. `P2-T13` measures the recall lost and
+    weighs a second signature per record; worst case (every record in one block) is 124,750 comparisons
+    for 500 records, 2.4 s.
+
+90. **`normalizePmid` and `docs/02` §11.3.1 disagree.** The shipped function strips a `PMID:` label and
+    returns `null` for anything else; §11.3.1's `normPmid` strips every non-digit. One is wrong; the
+    owner picks, then either `src/model/ids.ts` (with `test/unit/model/ids.test.ts`) or the document moves.
+
+91. **§11.3.1's old-style arXiv regex rejects real identifiers** such as `cond-mat.mes-hall/0309136`
+    (the class has a dotted subject). `normalizeArxivId` transcribes it verbatim; a document decision.
+
+92. **Two internal disagreements in `docs/02` §11:** the §11.3 tier table's Tier 6 band "MATCH (0.80–0.94)"
+    versus §11.3.3 row 4, where `levSim ≥ 0.80` alone is a flag; and §11.3 Tier 4 / §11.5 naming
+    `s2PaperId`, which `docs/07` §5.1's `ExternalIds` does not have (only `s2CorpusId`). Document edits.
+
+93. **When `P2-T08` lands,** move `PREPRINT_DOI_PREFIXES` and `BIORXIV_ACCESSION_PREFIXES` from `dedupe.ts`
+    into `preprintServers.ts` and import them; `normalizeArxivId`'s tests move from `dedupe.test.ts` to
+    `test/unit/model/ids.test.ts` the next time that file is in a card's list.
+
+94. **`matchAgainstLibrary` keeps the first library item claiming an identifier**; a library that itself
+    holds two items with one DOI is not resolved here. FR-51's wiring card decides.
+
+95. **What the stage hookup needs** is in `plan/reports/P2-T09.md` under "What the stage hookup will need":
+    `dedupeRecords` once over the fan-out output; `SourceFetchReport.recordsDeduplicatedAway` is hard-coded
+    `0` at two sites in `stages.ts` and needs an attribution rule; `flags` feed `P2-T14`, `links` feed
+    `P2-T11`; FR-51 belongs to the `zotero/` layer. `P2-T10` and `P2-T11` read it before starting.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

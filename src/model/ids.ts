@@ -116,9 +116,9 @@ export interface ExternalIds {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Normalizers — docs/02 §11.1, §10.2
+// 2. Normalizers — docs/02 §11.1, §11.3.1, §10.2
 //
-// All three share one shape: `(raw: string | null | undefined) => T | null`.
+// All four share one shape: `(raw: string | null | undefined) => T | null`.
 // A source that omitted the field, spelled it in a form this plugin does not
 // recognise, or sent something that is not an identifier at all all collapse
 // to `null`, so a caller has exactly one case to handle.
@@ -217,6 +217,46 @@ export function normalizePmcid(raw: string | null | undefined): Pmcid | null {
     .trim()
     .replace(/^pmc/i, "");
   return DIGITS_ONLY.test(digits) ? (`PMC${digits}` as Pmcid) : null;
+}
+
+/**
+ * The two arXiv identifier shapes `docs/02` §11.3.1 accepts once the version
+ * suffix is gone: new-style `2106.15928` (four digits, a dot, four or five
+ * digits) and old-style `math.GT/0309136` (an archive, an optional two-letter
+ * subject class, a slash, seven digits).
+ */
+const ARXIV_SHAPE = /^(\d{4}\.\d{4,5}|[a-z-]+(\.[A-Z]{2})?\/\d{7})$/;
+
+/**
+ * Normalize an arXiv identifier to the version-stripped form `docs/07` §5.1
+ * brands (`"2401.01234" (no version)`).
+ *
+ * The body is `docs/02` §11.3.1's `normArxiv`, unchanged apart from the
+ * branded return type and the nullable input the other normalizers in this
+ * file share. It strips the `arXiv:` scheme, the `arxiv.org/abs/` and
+ * `arxiv.org/pdf/` URL forms, a `.pdf` extension and the `vN` version suffix,
+ * because `docs/02` §11.3's Tier 3 matches on the version-stripped id and
+ * `docs/07` §6.2 writes the id into Zotero's `archiveID` as `arXiv:<id>`,
+ * which §6.6 has to read back to the same value.
+ *
+ * Added by `P2-T09`: `P1-T01` shipped the DOI, PMID and PMCID normalizers and
+ * no arXiv adapter existed to need this one. The shape test is §11.3.1's
+ * verbatim, including its case-sensitive two-letter subject class.
+ *
+ * @param raw - an arXiv id as some source or URL spelled it, or nothing
+ * @returns the version-stripped arXiv id, or `null` if `raw` is not one
+ */
+export function normalizeArxivId(
+  raw: string | null | undefined,
+): ArxivId | null {
+  if (!raw) return null;
+  let a = String(raw)
+    .trim()
+    .replace(/^ar[xX]iv:/i, "")
+    .replace(/^https?:\/\/arxiv\.org\/(abs|pdf)\//i, "")
+    .replace(/\.pdf$/i, "");
+  a = a.replace(/v\d+$/i, ""); // strip version for matching
+  return ARXIV_SHAPE.test(a) ? (a as ArxivId) : null;
 }
 
 // ---------------------------------------------------------------------------
