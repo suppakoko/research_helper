@@ -1,10 +1,13 @@
 /**
  * `searchImport`'s stage list — `docs/07` §12.1's states, as
- * `docs/07` §4.5 `StageDescriptor`s.
+ * `docs/07` §4.5 `StageDescriptor`s — and the one stage that is more than a
+ * descriptor: {@link fanOut}, `docs/07` §2.2's "plan → **fanOut** → merge →
+ * dedupe → import".
  *
- * **Scope.** `P1-T16` step 2. The seven states the card's `Read first` names:
- * `Planning → Fetching → Merging → Deduping → BackfillingAbstracts →
- * CreatingCollection → WritingItems`.
+ * **Scope.** `P1-T16` step 2 declared the seven states the card's `Read first`
+ * names: `Planning → Fetching → Merging → Deduping → BackfillingAbstracts →
+ * CreatingCollection → WritingItems`. `P2-T02` adds the parallel fan-out that
+ * runs *inside* `Fetching` — section 3 below.
  *
  * ## What is deliberately **not** a stage
  *
@@ -23,7 +26,9 @@
  *   "`PartialFetch` is a first-class state, not an error". Giving it a slice of
  *   the bar would mean the bar jumped differently depending on whether a source
  *   failed, which is backwards: the work done is the same. It is carried on the
- *   outcome instead (`./types.ts`'s `SearchImportOutcome`).
+ *   outcome instead (`./types.ts`'s `SearchImportOutcome`), and {@link fanOut}
+ *   reports which of §12.1's three `Fetching →` edges was taken as
+ *   `SearchImportFanOutResult.state`.
  * - `Cancelling` and the terminals are what `ProgressReporter.done()` reports.
  *
  * ## The weights
@@ -65,9 +70,99 @@
  * renders a stage name, which is `P1-T22`'s. **It needs a card** (or a line in
  * `P1-T18`'s bundles): seven stage labels plus
  * {@link SEARCH_IMPORT_DISPLAY_NAME_KEY}.
+ *
+ * ## The fan-out (`P2-T02`) — what it guarantees and what it does not
+ *
+ * {@link fanOut} is the `Fetching` stage's body for a multi-source run. Its one
+ * job is the Phase 2 finishing condition "one source returning 500 or 429 does
+ * not prevent the others from delivering results" (`plan/03`, FR-9), plus the
+ * two NFR-2 clauses "per-source timeouts of 20 s and overall cancellation
+ * always available". Concretely:
+ *
+ * - **Every source runs in its own `try`, with its own cancellation token.**
+ *   A throw from one adapter is recorded on *that* source's
+ *   `SearchImportSourceReport.error` and nowhere else; the others are not
+ *   touched. The per-source token is linked to the run's token, so Cancel still
+ *   reaches every adapter, but a *timeout* cancels one source only.
+ * - **Concurrency is bounded by the `network-metadata` pool, not by
+ *   `Promise.all`.** `docs/07` §7.1 names `Promise.all` as the failure mode and
+ *   §7.2 fixes the pool at {@link NETWORK_METADATA_POOL_SIZE}. The pool is
+ *   *injected* — one `Semaphore` per process, owned by the composition root,
+ *   for the same reason `src/core/rateLimit/hostLimiter.ts` keeps one bucket
+ *   per host: a pool created per call would be a per-job budget under another
+ *   name. Pacing *within* a host is the per-host limiter's, which
+ *   `src/core/http/client.ts` already applies underneath every adapter; the
+ *   pool only bounds how many sources are in flight at once.
+ * - **The 20 s deadline is armed when the source starts, not when it is
+ *   dispatched.** A source parked behind the pool has not been asked anything
+ *   yet, so timing its wait would cut a healthy source for the sin of being
+ *   fifth. For NFR-2's own case — four sources — the pool admits all four at
+ *   once and the two readings coincide.
+ * - **On the deadline the source's token is cancelled with
+ *   `{ kind: "timeout" }`, which aborts its in-flight request through
+ *   `cancellerReceiver`** (`docs/07` §7.4), and the source is reported with a
+ *   §10.1 `TimeoutError`. The records it had already yielded are **kept**: a
+ *   source that returned two pages and hung on the third is degraded, not
+ *   failed — the same reading `outcomeFromReports` gives a page-2 throw.
+ *   The fan-out stops *waiting* for that source at the deadline even if the
+ *   adapter ignores its token, and **its pool permit is released at the
+ *   deadline** — the `TimeoutError` is thrown inside `Semaphore.run`, whose
+ *   `finally` returns the permit. A non-cooperating adapter therefore runs on
+ *   without a permit, bounded only by its host limiter, which is why the
+ *   deadline is logged.
+ * - **No retry, no backoff, no `Retry-After` handling here.** Those live in
+ *   `src/core/http/retry.ts` and `src/core/rateLimit/`, below the adapter;
+ *   `docs/02` §2.4 defers the shape to `docs/07` §7.3, and a second shape
+ *   here would be a retry the limiter cannot see. A `RateLimitError` arriving
+ *   at this layer has already exhausted the host's retry budget and is
+ *   recorded as that source's failure.
+ * - **Cancellation settles everything before it is reported.** The per-source
+ *   promises are gathered with `Promise.allSettled`, so the
+ *   `OperationCancelledError` {@link fanOut} throws is thrown only after every
+ *   in-flight adapter promise has settled and every deadline timer has been
+ *   disarmed — no adapter keeps writing into a result the caller has moved on
+ *   from.
+ *
+ * **What is still the caller's.** The `Fetching` stage's `enterStage`,
+ * `done()`, and the `Fetching → Failed` early return are
+ * `searchImportPipeline.ts`'s, which `P2-T02`'s `Files` list does not name;
+ * that file's serial `for (const source of resolved)` loop is what this
+ * function replaces, and the replacement is reported rather than made here
+ * (`plan/README.md` §5 rule 2). Until it is wired, `fanOut` is exercised by
+ * `test/unit/pipeline/fanout.test.ts` alone.
  */
 
+import type { Clock } from "../../core/clock";
+import type { Semaphore } from "../../core/concurrency";
+import {
+  ResearchHelperError,
+  TimeoutError,
+  type SerializedError,
+} from "../../core/errors";
+import {
+  createCancellationTokenSource,
+  type CancellationToken,
+} from "../../core/jobQueue/cancellation";
+import type { ProgressReporter } from "../../core/jobQueue/progress";
+import type { Logger } from "../../core/logger";
+import type { SourceRecord } from "../../model/sourceRecord";
+import { parseUserQuery } from "../../sources/shared/queryParse";
+import {
+  applyClientRecencyFilter,
+  resolveDateFilterMode,
+} from "../../sources/shared/recency";
+import type { LiteratureSource, SourceQuery } from "../../sources/types";
 import type { StageDescriptor } from "../types";
+import type {
+  SearchImportFanOutResult,
+  SearchImportFetchState,
+  SearchImportInput,
+  SearchImportSourceReport,
+} from "./types";
+
+// ---------------------------------------------------------------------------
+// 1. The stage declaration — P1-T16
+// ---------------------------------------------------------------------------
 
 /**
  * `Pipeline.displayNameKey` for `searchImport`.
@@ -146,3 +241,481 @@ export const SEARCH_IMPORT_STAGES: readonly StageDescriptor[] = Object.freeze([
  */
 export const SEARCH_IMPORT_STAGE_KEYS: readonly SearchImportStageKey[] =
   SEARCH_IMPORT_STAGES.map((stage) => stage.key as SearchImportStageKey);
+
+// ---------------------------------------------------------------------------
+// 2. The two fan-out constants, and where each number comes from
+// ---------------------------------------------------------------------------
+
+/**
+ * `docs/07` §7.2's `network-metadata` pool: **4**, "not user-configurable"
+ * (`docs/10` NFR-6, `docs/07` §8.5's note on `concurrency`, which sizes the
+ * `llm` pool only).
+ *
+ * This is the size the composition root builds its one `Semaphore` with; it is
+ * exported so that the root and `fanOut`'s tests name the same figure, and it
+ * is not read by {@link fanOut} itself — the pool arrives built.
+ */
+export const NETWORK_METADATA_POOL_SIZE = 4;
+
+/**
+ * `docs/10` NFR-2's "per-source timeouts of 20 s", in milliseconds.
+ *
+ * **`docs/10` is the only place in the corpus that states this figure**:
+ * grepped 2026-10-13, `docs/07` does not restate it, although the card's
+ * `Read first` says the numbers are doc 07's. It is a *source* deadline, not
+ * a request timeout — `src/core/http/client.ts`'s per-request `timeout` comes
+ * from the `timeoutSeconds` preference (`docs/07` §8.5, default 60 s) and sits
+ * one layer down; a source whose single request runs long is cut here first.
+ */
+export const PER_SOURCE_TIMEOUT_MS = 20_000;
+
+// ---------------------------------------------------------------------------
+// 3. The fan-out — P2-T02
+// ---------------------------------------------------------------------------
+
+/** What {@link fanOut} needs. Everything is a `PipelineContext` member or a port. */
+export interface FanOutOptions {
+  /**
+   * The sources to ask, already resolved from the registry by `Planning`, in
+   * the order the user selected them. Results and reports come back in this
+   * order regardless of which source finished first.
+   */
+  readonly sources: readonly LiteratureSource[];
+  /** The run's query, limit and recency window — `SearchImportInput`'s three. */
+  readonly input: Pick<SearchImportInput, "query" | "limit" | "dateFilter">;
+  /** The run's token. A cancel here reaches every source. */
+  readonly token: CancellationToken;
+  /** The clock the per-source deadline sleeps on. */
+  readonly clock: Clock;
+  /**
+   * The `Fetching` stage's reporter. Each source gets a child of it, and the
+   * FR-9 banner for a failed source is raised on it.
+   */
+  readonly progress: ProgressReporter;
+  readonly logger: Logger;
+  /**
+   * The process-wide `network-metadata` pool — one `Semaphore` built with
+   * {@link NETWORK_METADATA_POOL_SIZE} permits and shared by every run. See the
+   * header for why it is injected rather than created here.
+   */
+  readonly pool: Semaphore;
+  /** Defaults to {@link PER_SOURCE_TIMEOUT_MS}. Tests shorten it; nothing else should. */
+  readonly perSourceTimeoutMs?: number;
+}
+
+/** One source's fetch, before it becomes part of the result. */
+interface SourceFetch {
+  readonly records: readonly SourceRecord[];
+  readonly report: SearchImportSourceReport;
+  /** The FR-9 banner this source raised, if it failed. */
+  readonly banner: string | undefined;
+}
+
+/**
+ * Query `sources` concurrently under `pool`, isolate each one's failure, and
+ * report which of `docs/07` §12.1's three `Fetching →` edges was taken.
+ *
+ * See the header's "The fan-out" section for the guarantees. In one sentence:
+ * a source that times out, 500s or 429s produces a report with an `error` and
+ * a warning naming it, and never an exception — the only thing this function
+ * throws is the run's own `OperationCancelledError`, after every in-flight
+ * source has settled.
+ *
+ * @param options - see {@link FanOutOptions}
+ * @returns records in `sources` order, one report per source in the same
+ *   order, the run-level warnings this call raised, and the fetch state
+ * @throws OperationCancelledError when `options.token` was cancelled, carrying
+ *   the run's reason — and only once every per-source promise has settled
+ */
+export async function fanOut(
+  options: FanOutOptions,
+): Promise<SearchImportFanOutResult> {
+  const { sources, token } = options;
+
+  // `allSettled`, not `all`, and not the card's forbidden `Promise.all` over
+  // the sources: `all` would surface the first rejection while the others were
+  // still writing, and the pool — not this call — bounds how many run at once.
+  // `fetchOne` rejects only for the run's cancellation, so the `rejected` arm
+  // below is cancellation or a defect, never a source's failure.
+  const settled = await Promise.allSettled(
+    sources.map((source) => fetchOne(source, options)),
+  );
+
+  // The run's cancel outranks everything that was collected: `Fetching →
+  // Cancelling` in §12.1, and `searchImportPipeline.ts`'s `catch` maps the
+  // throw to the `"cancelled"` outcome. Thrown *after* `allSettled`, so no
+  // adapter is still running behind the caller's back (FR-10).
+  token.throwIfCancelled();
+
+  const records: SourceRecord[] = [];
+  const perSource: SearchImportSourceReport[] = [];
+  const warnings: string[] = [];
+  for (const [index, source] of sources.entries()) {
+    const outcome = settled[index];
+    if (outcome === undefined) {
+      // `allSettled` returns one entry per input; `noUncheckedIndexedAccess`
+      // cannot know that.
+      throw new RangeError(
+        `[research-helper] fanOut: no outcome for source ${source.id}`,
+      );
+    }
+    const fetch =
+      outcome.status === "fulfilled"
+        ? outcome.value
+        : // Unreachable through `fetchOne`'s own `catch`, which converts every
+          // non-cancellation throw into a report. Kept because this loop is
+          // the isolation boundary: if a future edit lets a source's throw
+          // escape `fetchOne`, it must still land on *that* source's row
+          // rather than take the fan-out down.
+          unexpectedFetch(source, options.input.limit, outcome.reason);
+    records.push(...fetch.records);
+    perSource.push(fetch.report);
+    if (fetch.banner !== undefined) warnings.push(fetch.banner);
+  }
+
+  return {
+    records,
+    perSource,
+    warnings,
+    state: fetchStateFromReports(perSource),
+  };
+}
+
+/**
+ * Which of `docs/07` §12.1's three edges out of `Fetching` the reports imply.
+ *
+ * - **`"failed"`** — `Fetching --> Failed : all sources failed`. Every source
+ *   errored **and none yielded a record**. A source that threw after yielding
+ *   is degraded, not failed — `P1-T16`'s first criterion keeps its page 1 and
+ *   `searchImportPipeline.ts`'s `outcomeFromReports` documents why — so one
+ *   such source alone is `"partial"`, not `"failed"`.
+ * - **`"partial"`** — `Fetching --> PartialFetch : some sources failed, some
+ *   succeeded`. At least one report carries an `error` and the run is not
+ *   `"failed"`. **Note the one reading that differs from
+ *   `outcomeFromReports`:** a healthy source that found *nothing* still
+ *   succeeded. One source erroring beside one that returned an empty result
+ *   set is `"partial"` here, where `outcomeFromReports` — which keys on
+ *   productivity alone — says `"failed"`. §12.1's edge is "all sources
+ *   failed", and an empty result is not a failure; reconcile the two when the
+ *   pipeline is wired to this function.
+ * - **`"succeeded"`** — no report carries an `error`. An empty `reports` list
+ *   is `"succeeded"` for the reason `fetchOutcome` gives: nothing was asked, so
+ *   nothing failed.
+ *
+ * @param reports - one per source asked
+ * @returns the state `Fetching` ends in
+ */
+export function fetchStateFromReports(
+  reports: readonly SearchImportSourceReport[],
+): SearchImportFetchState {
+  if (reports.length === 0) return "succeeded";
+  const errored = reports.filter((report) => report.error !== undefined);
+  if (errored.length === 0) return "succeeded";
+  const allFailedOutright = reports.every(
+    (report) => report.error !== undefined && report.recordsRetrieved === 0,
+  );
+  return allFailedOutright ? "failed" : "partial";
+}
+
+// ---------------------------------------------------------------------------
+// 4. One source
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch one source: build its query, run `searchAll` under the pool and the
+ * deadline, and turn whatever happened into a report.
+ *
+ * **Throws only for the run's cancellation.** Every other throw — the adapter's,
+ * `explainQuery`'s, the deadline's `TimeoutError` — becomes `report.error`,
+ * which is the isolation the header promises. The run's token is checked in
+ * the `catch` *before* the error is classified, so an adapter that throws
+ * something else while being cancelled is still reported as cancelled, not
+ * failed (`searchImport.test.ts`, "does not let a cancelled source look like a
+ * failed source").
+ */
+async function fetchOne(
+  source: LiteratureSource,
+  options: FanOutOptions,
+): Promise<SourceFetch> {
+  const { input, token, clock, pool, logger, progress } = options;
+  const timeoutMs = options.perSourceTimeoutMs ?? PER_SOURCE_TIMEOUT_MS;
+
+  const collected: SourceRecord[] = [];
+  const warnings: string[] = [];
+  let error: SerializedError | undefined;
+  let banner: string | undefined;
+  let transmittedQuery = "";
+  let mode: "server" | "client" | "none" = "none";
+
+  // The source's own token: cancelled by the run's cancel (linked below) *or*
+  // by this source's deadline, so a timeout aborts this source's in-flight
+  // request (`docs/07` §7.4, `cancellerReceiver`) and nobody else's.
+  const own = createCancellationTokenSource();
+  const unlink = token.onCancelled((reason) => {
+    own.cancel(reason);
+  });
+
+  try {
+    const planned = queryFor(source, input);
+    mode = planned.mode;
+    transmittedQuery = source.explainQuery(planned.query);
+
+    // A child of the stage per source, so sources share the stage's slice
+    // rather than each claiming all of it; wrapped so the adapter's page
+    // warnings — which `searchAll` can only deliver through
+    // `ProgressReporter.warn`, there being no page object in an async
+    // iterable — also land on *this* source's report (card step 6).
+    const reporter = capturingReporter(
+      progress.child(source.id, 0, 1),
+      warnings,
+    );
+
+    // The pool permit is held for the whole of this source's `searchAll`;
+    // parked here with the *run's* token so a Cancel releases a waiting source
+    // at once (`docs/07` §7.4 check point 2, one layer up).
+    await pool.run(async () => {
+      // Armed once the permit is held — see the header on why the wait is
+      // not timed.
+      const deadline = armDeadline(clock, timeoutMs);
+      try {
+        const work = drain(
+          source,
+          planned.query,
+          own.token,
+          reporter,
+          collected,
+        );
+        const winner = await Promise.race([work, deadline.expired]);
+        if (winner === "expired") {
+          // Abort this source's request, then stop waiting for it. The
+          // adapter's eventual rejection is handled so it cannot surface as an
+          // unhandled rejection. The `throw` below leaves `pool.run`, whose
+          // `finally` releases this source's permit now — a non-cooperating
+          // adapter runs on without one, paced only by its host limiter, which
+          // is why this is logged.
+          own.cancel({ kind: "timeout", ms: timeoutMs });
+          work.catch(() => undefined);
+          logger.warn("searchImport: a source hit its deadline; continuing", {
+            sourceId: source.id,
+            timeoutMs,
+          });
+          throw new TimeoutError(timeoutMs, source.rateLimitKey);
+        }
+      } finally {
+        deadline.disarm();
+      }
+    }, token);
+  } catch (caught) {
+    // The run's cancel outranks whatever the adapter threw on the way out.
+    token.throwIfCancelled();
+    error = serialize(caught);
+    // FR-9's banner "names the failed source and the error class".
+    banner = `${source.id}: ${error.code} — the other databases were still searched.`;
+    warnings.push(banner);
+    progress.warn(banner);
+    logger.warn("searchImport: a source failed; continuing", {
+      sourceId: source.id,
+      code: error.code,
+    });
+  } finally {
+    unlink();
+    own.dispose();
+  }
+
+  // Whatever was collected before a failure is kept — a degraded source still
+  // contributes — and the client recency filter runs over it exactly as it
+  // would over a clean fetch (FR-3).
+  const recordsRetrieved = collected.length;
+  let kept: readonly SourceRecord[] = collected;
+  let droppedOutOfWindow = 0;
+  let keptWithoutDate = 0;
+  if (mode === "client" && input.dateFilter !== "none") {
+    const filtered = applyClientRecencyFilter(collected, input.dateFilter);
+    kept = filtered.kept;
+    droppedOutOfWindow = filtered.droppedOutOfWindow;
+    keptWithoutDate = filtered.keptWithoutDate;
+  }
+
+  return {
+    records: kept,
+    banner,
+    report: {
+      sourceId: source.id,
+      transmittedQuery,
+      requestedLimit: input.limit,
+      dateFilterApplied: mode,
+      recordsRetrieved,
+      droppedOutOfWindow,
+      keptWithoutDate,
+      // Nothing is merged in `Fetching`; `Deduping` (`P2-T09`) owns the count.
+      recordsDeduplicatedAway: 0,
+      error,
+      warnings,
+    },
+  };
+}
+
+/**
+ * Pull every record out of `searchAll`, checking the source's token before
+ * each one is kept — `docs/07` §7.4 check point 1, and the reason a record a
+ * misbehaving adapter yields *after* its deadline is never counted.
+ */
+async function drain(
+  source: LiteratureSource,
+  query: SourceQuery,
+  token: CancellationToken,
+  progress: ProgressReporter,
+  into: SourceRecord[],
+): Promise<"done"> {
+  for await (const record of source.searchAll(query, { token, progress })) {
+    token.throwIfCancelled();
+    into.push(record);
+  }
+  return "done";
+}
+
+/** The `SourceQuery` one source is asked, and how its dates were handled. */
+function queryFor(
+  source: LiteratureSource,
+  input: FanOutOptions["input"],
+): { query: SourceQuery; mode: "server" | "client" | "none" } {
+  const mode = resolveDateFilterMode(source.capabilities, input.dateFilter);
+  const window = input.dateFilter;
+  return {
+    mode,
+    query: {
+      terms: parseUserQuery(input.query),
+      limit: input.limit,
+      // Server-side bounds only when the source says it can filter;
+      // `resolveDateFilterMode` states §11.1 step 2's rule: "do not fake it."
+      ...(mode === "server" &&
+        window !== "none" && {
+          fromDate: window.fromDate,
+          toDate: window.toDate,
+        }),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 5. Small helpers
+// ---------------------------------------------------------------------------
+
+/** A disarmable deadline over the injected clock. */
+interface Deadline {
+  /** Resolves `"expired"` when the deadline passes; never settles once disarmed. */
+  readonly expired: Promise<"expired">;
+  /** Stop the timer. Idempotent. Call it once the race is decided. */
+  disarm(): void;
+}
+
+/**
+ * Start a deadline of `ms` on `clock`.
+ *
+ * `Clock.sleep`'s only early exit is a cancellation, so the timer gets a
+ * private token and `disarm()` cancels it. The reason is `{ kind: "shutdown" }`
+ * — the timer is being shut down — and it is observed by nothing: the sleep's
+ * rejection is swallowed here, at the one place it can land, and the token
+ * never leaves this function. Disarming is what keeps a finished source from
+ * leaving a 20 s timer behind (`docs/01` §12 gotcha 10 is about exactly that
+ * kind of straggler).
+ */
+function armDeadline(clock: Clock, ms: number): Deadline {
+  const timer = createCancellationTokenSource();
+  const expired = clock.sleep(ms, timer.token).then(
+    () => "expired" as const,
+    // Disarmed before it fired: the race has already been decided by the
+    // work, so this promise must simply never win. A never-settling promise
+    // is the honest shape of "this timer no longer exists".
+    () => new Promise<"expired">(() => undefined),
+  );
+  return {
+    expired,
+    disarm(): void {
+      timer.cancel({ kind: "shutdown" });
+      timer.dispose();
+    },
+  };
+}
+
+/**
+ * A `ProgressReporter` that records every `warn` into `into` and forwards
+ * everything to `inner`.
+ *
+ * The forward keeps the tree's own `warnings` list intact — a page warning
+ * still reaches the run through the reporter exactly once — and the record
+ * is what puts it on the per-source status row.
+ */
+function capturingReporter(
+  inner: ProgressReporter,
+  into: string[],
+): ProgressReporter {
+  return {
+    setMessage: (message) => {
+      inner.setMessage(message);
+    },
+    setProgress: (completed, total) => {
+      inner.setProgress(completed, total);
+    },
+    increment: (n) => {
+      inner.increment(n);
+    },
+    child: (label, from, to) => inner.child(label, from, to),
+    warn: (message, detail) => {
+      into.push(message);
+      inner.warn(message, detail);
+    },
+    done: (outcome, message) => {
+      inner.done(outcome, message);
+    },
+  };
+}
+
+/**
+ * `SerializedError` for anything, including a throw that is not one of ours.
+ *
+ * `docs/07` §10.1 declares no class for "something untyped threw", and inventing
+ * one would be a new error code in a file that may not declare one. The *shape*
+ * is §10.1's `SerializedError`; the `code` says plainly that the throw was not
+ * typed, and `detail` carries the error's **name** rather than its message,
+ * because an arbitrary message has not been through `redact()`.
+ *
+ * The same function as `searchImportPipeline.ts`'s private `serialize`, which
+ * this file cannot import without a cycle; the pipeline's copy goes when its
+ * fetch loop is replaced by {@link fanOut}.
+ */
+function serialize(error: unknown): SerializedError {
+  if (error instanceof ResearchHelperError) return error.toSerialized();
+  return {
+    code: "UNTYPED",
+    messageKey: "rh-error-source",
+    detail: error instanceof Error ? error.name : "non-Error throw",
+    retryable: false,
+  };
+}
+
+/** The report for a source whose `fetchOne` escaped — see the `fanOut` loop. */
+function unexpectedFetch(
+  source: LiteratureSource,
+  requestedLimit: number,
+  reason: unknown,
+): SourceFetch {
+  const error = serialize(reason);
+  const banner = `${source.id}: ${error.code} — the other databases were still searched.`;
+  return {
+    records: [],
+    banner,
+    report: {
+      sourceId: source.id,
+      transmittedQuery: "",
+      requestedLimit,
+      dateFilterApplied: "none",
+      recordsRetrieved: 0,
+      droppedOutOfWindow: 0,
+      keptWithoutDate: 0,
+      recordsDeduplicatedAway: 0,
+      error,
+      warnings: [banner],
+    },
+  };
+}

@@ -225,8 +225,54 @@ export interface SearchImportSourceReport {
    * (`P1-T16` step 4, FR-9).
    */
   readonly error: SerializedError | undefined;
-  /** Warnings this source raised, e.g. PubMed's pagination ceiling. */
+  /**
+   * Warnings this source raised, e.g. PubMed's pagination ceiling.
+   *
+   * Under `stages.ts`'s `fanOut` (`P2-T02`) this holds the adapter's own page
+   * warnings — delivered through `SourceCallContext.progress.warn`, the only
+   * route out of `searchAll` — followed by the FR-9 banner when the source
+   * failed. `docs/08` §4.6's per-source status row renders it.
+   */
   readonly warnings: readonly string[];
+}
+
+/**
+ * Which of `docs/07` §12.1's three edges out of `Fetching` a fan-out took.
+ *
+ * - `"succeeded"` — `Fetching --> Merging : all sources exhausted or limit reached`
+ * - `"partial"` — `Fetching --> PartialFetch : some sources failed, some succeeded`
+ * - `"failed"` — `Fetching --> Failed : all sources failed`
+ *
+ * A subset of {@link SearchImportOutcome}: the fetch half cannot be
+ * `"cancelled"`, because a cancel is thrown out of the stage rather than
+ * reported from it. `stages.ts`'s `fetchStateFromReports` derives it, and
+ * documents the one case where its reading and `outcomeFromReports`' differ.
+ */
+export type SearchImportFetchState = Exclude<SearchImportOutcome, "cancelled">;
+
+/**
+ * What `stages.ts`'s `fanOut` (`P2-T02`) hands the pipeline at the end of
+ * `Fetching`.
+ *
+ * Every array is in the **order the sources were asked**, never in completion
+ * order: `docs/07` §12.1 previews results in the order the user's query
+ * produced them, and a table that reshuffled between two runs of the same
+ * query would look like a different result set.
+ */
+export interface SearchImportFanOutResult {
+  /** Every source's kept records, concatenated in source order. */
+  readonly records: readonly SourceRecord[];
+  /** One per source asked, in the same order. */
+  readonly perSource: readonly SearchImportSourceReport[];
+  /**
+   * The FR-9 banners `fanOut` itself raised, in the order they were raised.
+   * Each was also sent to the stage's `ProgressReporter.warn`; an adapter's
+   * own page warnings are **not** repeated here — they reached the reporter
+   * once, through the per-source child, and sit on that source's report.
+   */
+  readonly warnings: readonly string[];
+  /** Which `Fetching →` edge the pipeline should take. */
+  readonly state: SearchImportFetchState;
 }
 
 /** What the write half did. Absent when it did not run. */

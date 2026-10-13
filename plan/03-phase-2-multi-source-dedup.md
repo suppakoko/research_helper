@@ -105,7 +105,7 @@ both:
 | **ID** | `P2-T01` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T07`, `P1-T08` |
-| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T17` |
+| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T17`, `P2-T02` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-4`, part of `FR-8` |
 | **Estimate** | 1.0 d |
@@ -226,8 +226,8 @@ Four follow-ups are `plan/00` §6.13: the per-source query dialect needs a home 
 |---|---|
 | **ID** | `P2-T02` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T04`, `P1-T07`, `P1-T16` |
-| **Blocks** | `P2-T14`, `P2-T16` |
+| **Depends on** | `P1-T04`, `P1-T07`, `P1-T16`, `P2-T01` |
+| **Blocks** | `P2-T14`, `P2-T16`, `P2-T27` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-9`, `NFR-2`, `NFR-6`, `NFR-3` |
 | **Estimate** | 1.25 d |
@@ -251,15 +251,31 @@ produces a warning row instead of failing the search, and the job reaches `Parti
   classify into (`RateLimitError`, `UpstreamServerError`, `TimeoutError`, `SourceError`).
 - `docs/10-requirements-and-user-stories.md` NFR-2 — "per-source timeouts of 20 s and overall
   cancellation always available"; NFR-6 — the numbers are doc 07's, not this task's.
+  > Corrected 2026-10-13: `docs/07` states no per-source timeout anywhere; the 20 s figure lives only in
+  > `docs/10` NFR-2, and `PER_SOURCE_TIMEOUT_MS`'s doc comment cites it there. `plan/00` §6 item 69.
 - `docs/10-requirements-and-user-stories.md` FR-9 — the two acceptance scenarios (one source 500s,
   one source 429s) this task's tests must mirror.
 
 **Files.**
+> **Corrected 2026-10-13 after the executing agent delivered: this list cannot deliver the Goal above.**
+> The loop that fetches sources one after another is `run` in
+> `src/pipeline/searchImport/searchImportPipeline.ts`, through its private `fetchOneSource`; that file is
+> not listed, so `fanOut` was built and proven in `stages.ts` and **nothing calls it yet**. The product
+> still fetches serially. Wiring it is `P2-T27`, created under rule 9 because the gap blocks Phase 2's
+> third and fourth finishing conditions.
 - modify `src/pipeline/searchImport/stages.ts`
 - modify `src/pipeline/searchImport/types.ts`
 - create `test/unit/pipeline/fanout.test.ts`
 
 **Do.**
+> **Noted 2026-10-13, three defects in the steps below, measured by the executing agent (report).** Step 3's
+> `totalAvailable` "as reported by the server" has no route out of `searchAll` — `SourcePage.totalAvailable`
+> cannot leave an `AsyncIterable`, which the header of `types.ts` already records — so the result object
+> does not carry it rather than carry an always-empty field. Step 4's "`Failed` only when all failed" is
+> not what the pipeline's `outcomeFromReports` does (it keys on productivity, and `P1-T16`'s approved
+> criterion depends on that); `fetchStateFromReports` keeps that reading and treats a healthy zero-hit
+> source as succeeded, so the two functions disagree on one case, which `P2-T27` step 3 settles. Step 1
+> uses `P2-T01`'s tree but the `Depends on` row did not list `P2-T01`; both rows are now consistent.
 1. Implement the `fanOut` stage: for each selected `LiteratureSource`, build its `SourceQuery`
    (`P2-T01`'s tree + the shared recency window from `src/sources/shared/recency.ts`) and run
    `searchAll` under the `network-metadata` pool.
@@ -303,6 +319,26 @@ npm run typecheck && npm run test:unit -- fanout
 spacing (`docs/07` §7.3) means a 100-result arXiv page set alone costs ≥ 3 s per page — arXiv is
 the source most likely to dominate the 30 s budget.
 
+
+**Findings, 2026-10-13 — done inside the card's three files and all four criteria pass at unit level; nothing calls `fanOut` yet (`P2-T27`); full report at `plan/reports/P2-T02.md`.**
+Verified by the coordinator on the live tree: typecheck 0, `test/unit/pipeline/fanout.test.ts` **27 passed**
+and the four pipeline test files 124 passed together, eslint clean on the three files, no `MUTANT` marker,
+the diff confined to the card's files (625 insertions), and the three file hashes equal to the agent's
+(`54af4402…`, `63c31065…`, `55311535…`). `fanOut` builds each `SourceQuery` with `parseUserQuery` and
+`resolveDateFilterMode`, links a per-source token to the run token, takes a permit from an injected
+`Semaphore`, arms a 20 s deadline on the injected clock that cancels **that source only** with
+`{ kind: "timeout" }`, records each source's own `SerializedError` and raises the FR-9 banner, keeps the
+records a source yielded before failing, returns reports in source order, and gathers with
+`Promise.allSettled` so a run cancel throws only after every in-flight adapter settled. Fifteen mutants,
+fifteen killed — including the one that matters most, a failed neighbour's error stamped on the next
+report — with two tests added when a first sweep showed two mutants surviving (a cancel-time
+misclassification visible only in the log, and the per-record token check). The agent also corrected its
+own comment before delivery (`Semaphore.run`'s `finally` releases a stubborn adapter's permit at the
+deadline, now pinned by an assertion). What the card got wrong is dated above: its `Files` list omits the
+caller, so the product still fetches serially until `P2-T27`; step 3's `totalAvailable` has no route;
+step 4's wording differs from the shipped semantic, which `P2-T27` settles; and `docs/07` never states
+the 20 s figure. Not checked: the real HTTP layer's abort on timeout, NFR-2's wall clock (`P2-T16`), and
+the integration suite. Follow-ups are `plan/00` §6.14; the wiring is carded.
 ---
 
 ### P2-T03 — Europe PMC adapter
@@ -3497,6 +3533,81 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 
 ---
 
+### P2-T27 — Wire `fanOut` into the running pipeline, which still fetches sources one after another
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T27` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T01`, `P2-T02` |
+| **Blocks** | `P2-T14`, `P2-T16` |
+| **Retires** | `plan/00` §6 item 66 |
+| **Implements** | `FR-9`, `FR-10`, `NFR-2` in the shipped product (`P2-T02` implemented them in a function nothing calls) |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** The search pipeline that runs in Zotero queries the selected sources concurrently through
+`fanOut`, so a source that times out, 500s or 429s no longer delays or blocks the others.
+
+**Why this is a card (rule 9).** `P2-T02` built `fanOut` in `src/pipeline/searchImport/stages.ts`
+and proved it with 27 tests, but its `Files` list did not include the caller. The fetch loop the
+product actually runs is `run` in `src/pipeline/searchImport/searchImportPipeline.ts`, which walks the
+resolved sources one at a time through its private `fetchOneSource`. Until that loop calls `fanOut`,
+Phase 2's third finishing condition (one source's 500 or 429 does not block the others) and fourth
+(NFR-2's four-source budget) cannot be met by the shipped build.
+
+**Read first.**
+- `plan/reports/P2-T02.md` — the executing agent's report; its "Things that contradict the card" items
+  1 to 3 are this card's scope.
+- `docs/07-architecture-and-data-model.md` §7.2 — the `network-metadata` pool is fixed at 4 and shared
+  process-wide; §12.1 — `PartialFetch` is a first-class state and `Failed` means all sources failed.
+- `docs/10-requirements-and-user-stories.md` FR-9, FR-10, NFR-2.
+
+**Do.**
+1. In `run` (`searchImportPipeline.ts`), replace the per-source loop and `fetchOneSource` with one
+   call to `fanOut`, passing the run token, the clock, the `Fetching` stage reporter, the logger and
+   the pool. Delete the pipeline's private `fetchOneSource`, `queryFor` and `serialize` — `stages.ts`
+   now carries them — so the logic exists once.
+2. Give the pool one home. `SearchImportDeps` gains the `Semaphore` (from `src/core/concurrency.ts`)
+   sized `NETWORK_METADATA_POOL_SIZE`; `registerPipelines.ts` constructs exactly one and passes it in.
+   Nothing else may construct a second `network-metadata` pool.
+3. Settle the one semantic the two state functions disagree on and keep **one** of them:
+   `outcomeFromReports` (the pipeline's, keyed on productivity — a source that yielded then threw is
+   `partial`) and `fetchStateFromReports` (`P2-T02`'s, which also counts a healthy source with zero
+   hits as succeeded, so "one source errored, one healthy with zero hits" is `partial`, not `failed`).
+   `docs/07` §12.1 says `Failed` is "all sources failed"; a healthy zero-hit source did not fail, so
+   keep `fetchStateFromReports`'s reading unless the owner says otherwise, and delete the other
+   function. `P1-T16`'s approved criterion must still pass.
+4. Keep every existing pipeline test in `test/unit/pipeline/searchImport.test.ts` green; add the one
+   assertion the wiring needs — two fake sources run concurrently (both in flight before either
+   resolves), observable through the pool's `available` count.
+
+**Do NOT.** Do not change `fanOut`'s behaviour or its tests. Do not add retry or backoff (that is the
+rate-limit layer's). Do not make the pool size configurable (`docs/07` §7.2). Do not touch the adapters.
+
+**Criteria.**
+- [ ] `searchImportPipeline.ts` has no per-source `for` loop and no `fetchOneSource`, `queryFor` or
+      `serialize` of its own; `stages.ts` is the only definition.
+- [ ] One `Semaphore` for the `network-metadata` pool is constructed in `registerPipelines.ts` and
+      reaches `fanOut` through `SearchImportDeps`.
+- [ ] Exactly one of `outcomeFromReports` / `fetchStateFromReports` remains, and the choice is stated
+      in the card's Findings with the `docs/07` §12.1 sentence it rests on.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0;
+      `P1-T16`'s and `P1-T23`'s integration specs still pass.
+
+**Files.**
+- modify `src/pipeline/searchImport/searchImportPipeline.ts`
+- modify `src/bootstrap/registerPipelines.ts`
+- modify `src/pipeline/searchImport/stages.ts` (only if step 3 deletes `fetchStateFromReports`)
+- modify `test/unit/pipeline/searchImport.test.ts`
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+---
+
 ---
 ## Estimate roll-up
 
@@ -3528,7 +3639,8 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 | `P2-T24` | Correct the three statements `P2-T21` made false | 0.25 |
 | `P2-T25` | Make the replay harness usable inside Zotero | 0.75 |
 | `P2-T26` | A test-only removal on the source registry, before the adapters | 0.25 |
-| **Total** | **26 tasks** | **27.75 d** |
+| `P2-T27` | Wire `fanOut` into the running pipeline | 0.50 |
+| **Total** | **27 tasks** | **28.25 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather
