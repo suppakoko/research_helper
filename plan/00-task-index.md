@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-13 · **137 tasks: 74 `DONE`, 63 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **37 of 46 `DONE`**, Phase 2 **3 of 25**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 137, so 39 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-13 · **137 tasks: 77 `DONE`, 60 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **40 of 46 `DONE`**, Phase 2 **3 of 25**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 137, so 39 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -198,9 +198,9 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P1-T36` | FR-8's "Export provenance as JSON" control, and the record it… | `P1-T22`, `P1-T35` | 0.5 d |  |
 | `P1-T37` | Carry a named, redacted subset of an error's context, so the… | `P1-T22` | 0.5 d |  |
 | `P1-T38` | The three validation sentences nobody declared, and the… | `P1-T22` | 0.25 d |  |
-| `P1-T39` | A unit-test path for the search window's view model, whose… | `P1-T22` | 0.5 d |  |
-| `P1-T40` | A partition assertion over `src/i18n/keys.ts` at unit speed… | `P1-T30`, `P1-T33` | 0.25 d |  |
-| `P1-T41` | `P3-T02` tells its implementer to call a method that does not… | — | 0.5 d |  |
+| ✅ `P1-T39` | A unit-test path for the search window's view model, whose… | `P1-T22` | 0.5 d |  |
+| ✅ `P1-T40` | A partition assertion over `src/i18n/keys.ts` at unit speed… | `P1-T30`, `P1-T33` | 0.25 d |  |
+| ✅ `P1-T41` | `P3-T02` tells its implementer to call a method that does not… | — | 0.5 d |  |
 | `P1-T42` | The free-text redactor cannot see a short unprefixed… | — | 0.5 d |  |
 | `P1-T43` | Stop hiding already-present papers, and carry the duplicate… | `P1-T21`, `P1-T22` | 0.5 d |  |
 | `P1-T44` | A place to put a key, because the storage landed in Phase 1… | — | 1.0 d |  |

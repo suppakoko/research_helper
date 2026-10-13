@@ -7700,7 +7700,7 @@ which is what `P1-T33`'s mutation proved and what `P1-T40` exists to catch in un
 | Field | Value |
 |---|---|
 | **ID** | `P1-T39` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-13; thirty-three tests in 0.4 s over all nine exported functions, proven by ninety-one mutations with the production file hash-checked after every one. The card's own premise was false when written — a unit file already reached the module, created by a commit the coordinator had landed four days earlier — and **the conclusion held while the reason did not**, which is the most dangerous shape a premise can take. |
 | **Depends on** | `P1-T22` |
 | **Blocks** | none |
 | **Retires** | none |
@@ -7911,7 +7911,7 @@ reader is left guessing — which is the right thing to do while the question is
 | Field | Value |
 |---|---|
 | **ID** | `P1-T40` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-13; eleven relations over the identifier lists at a quarter of a second, and the measurement the card rests on confirmed a third time: dropping an id from the Korean list alone leaves the type check at exit 0. The empty-set guard is built in three layers, and one relation that holds today was **deliberately not asserted** because no document requires it. |
 | **Depends on** | `P1-T30`, `P1-T33` |
 | **Blocks** | none |
 | **Retires** | none |
@@ -8113,7 +8113,7 @@ said so plainly, and nothing there was touched.
 | Field | Value |
 |---|---|
 | **ID** | `P1-T41` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-13; `P3-T02` now carries a seven-step measurement of itself against the shipped code — three landed, two partly, two not started — with a file and line for every mark and no step deleted. The retracted claim is corrected in both places, and the old `Do NOT` turned out to **forbid the five methods that exist and require two that do not**. The owner's decision on the two stale `Files` rows and the estimate is deliberately left open. |
 | **Depends on** | none |
 | **Blocks** | `P3-T02` |
 | **Retires** | none |
