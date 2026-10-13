@@ -3669,7 +3669,7 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 | **Retires** | `plan/00` §6 item 61 |
 | **Implements** | the `docs/07` §11.1 rule that a type changes in the document first, then in code |
 | **Estimate** | 0.25 d |
-| **Human gate** | none — the owner authorised the schema change on 2026-10-13 (`P2-T01` approval) |
+| **Human gate** | none |
 
 **Goal.** `SourceCapabilities` states, per source, which query operators and fields the source really
 renders, so `normalizeForSource` takes the adapter's own declaration instead of an inline shape each
