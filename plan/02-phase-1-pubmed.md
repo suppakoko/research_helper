@@ -7704,7 +7704,7 @@ which is what `P1-T33`'s mutation proved and what `P1-T40` exists to catch in un
 | **Depends on** | `P1-T22` |
 | **Blocks** | none |
 | **Retires** | none |
-| **Implements** | `docs/13` §1.6's layer-one tier for this module |
+| **Implements** | `docs/13` §2.1's layer-one tier for this module |
 | **Estimate** | 0.5 d |
 | **Human gate** | none |
 
@@ -7714,13 +7714,24 @@ in seconds instead of inside a Zotero launch.
 **Why this is a card.** **Two cards in a row reported the same gap and neither could close it**, because
 neither card's `Files` list named a unit-test path. Measured 2026-10-07:
 
-- `src/ui/viewModels/searchImportViewModel.ts` is **1,594 lines** and exports **twenty-two** names,
-  including eight plain functions — `message`, `errorView`, `errorDetails`, `initialViewState`,
-  `toWindowRecords`, `toPipelineInput`, `sourceStatusLine`, `buildProvenance` — plus
-  `createSearchImportViewModel`.
-- `grep -rl searchImportViewModel test/` finds it reached **only** from
-  `test/integration/searchDialog-flow.spec.ts`, which needs a real Zotero to run.
-- A unit-test directory for this layer **already exists**: `test/unit/ui/searchDialog.test.ts`, 2,229
+- `src/ui/viewModels/searchImportViewModel.ts` is **1,775 lines** and exports **27** names, **nine of
+  them functions** — `message`, `errorView`, `errorDetails`, `initialViewState`, `toWindowRecords`,
+  `toPipelineInput`, `sourceStatusLine`, `buildProvenance` and `createSearchImportViewModel`.
+- **The module's *arithmetic* is reachable only through a live window**: the error table, the panel
+  state machine, the selection that survives a re-render, the latched per-database counts and the
+  per-source attribution in the provenance record.
+  > **Corrected 2026-10-13, and this was the card's premise rather than a detail.** The bullet read:
+  > *"`grep -rl searchImportViewModel test/` finds it reached **only** from
+  > `test/integration/searchDialog-flow.spec.ts`, which needs a real Zotero to run."* **That was false
+  > when it was written.** The grep returns four paths, two of them older than this card, and one of
+  > those is `test/unit/ui/searchImportViewModel-export.test.ts` — a **unit** test needing no Zotero,
+  > 21,762 bytes, **created by commit `7497b20` four days earlier, which the coordinator landed
+  > himself**. So the premise was not merely unchecked: the coordinator's own commit was the
+  > refutation. **The card's conclusion held and its reason did not**, which is the most dangerous shape
+  > a premise can take, because the work looks justified and the review passes. What the older file
+  > covers is the **export path** — the retained record and the export outcomes — and not the
+  > arithmetic named above, which is why this card was still worth running.
+- A unit-test directory for this layer **already exists**: `test/unit/ui/searchDialog.test.ts`, **2,687**
   lines, with describe blocks for the window controller's pure model *and* for the same model against a
   real document. So the pattern to follow is in the repository; what is missing is a file, not a
   mechanism.
@@ -7733,13 +7744,20 @@ latching, and the per-source attribution. Each is a calculation over a value, an
 Zotero launch to check once.
 
 **Read first.**
-- `src/ui/viewModels/searchImportViewModel.ts`'s exports, and `SearchImportViewModelDeps` (lines 556–592)
+- `src/ui/viewModels/searchImportViewModel.ts`'s exports, and `SearchImportViewModelDeps` (**from line
+  573**; cited by name rather than by range, after six line numbers in `P1-T40`'s card drifted the same way)
   — **six members are required** (`pipeline`, `jobs`, `logger`, `pluginVersion`, `zoteroVersion`,
   `clock`) and **five are optional**, which is what makes a unit construction cheap: a view model can be
   built with a pipeline double, a job factory double, a logger, a clock and two version strings, and
   nothing else.
 - `test/unit/ui/searchDialog.test.ts`'s "pure model" describe block, as the shape to follow.
-- `docs/13` §1.6 for what belongs at layer one and what does not.
+- `docs/13` **§2.1, "Layer 1 — Unit tests in Node"**, for what belongs at layer one and what does not.
+  > **Corrected 2026-10-13: this cited §1.6, which is "Development environment".** Checked by the
+  > coordinator — §1.6 is at `docs/13-testing-build-and-release.md:284` and §2.1 at `:384`. **The
+  > mistake is plausible rather than careless, which is what makes it worth recording**: §1.6 is where
+  > the `package.json` scripts block lives, which is why `vitest.config.ts` cites §1.6 **correctly**,
+  > for the script form rather than for the tier. So a reader following the old citation would land
+  > somewhere real and wrong.
 - `test/integration/searchDialog-flow.spec.ts`'s header, which states what is real and what is doubled
   there — **do not duplicate an assertion that spec already makes against the real platform**; the point
   here is the arithmetic, not the wiring.
@@ -7792,6 +7810,99 @@ npm run typecheck && npm run lint:check && npm run test
 cheapest insurance in the phase: every later card that touches the window's arithmetic currently pays a
 Zotero launch to find out whether it broke something. `P1-T22`'s own report put it plainly — the gap "is
 in the list, not in the work."
+
+**Findings, 2026-10-13 — thirty-three tests in 0.4 seconds now assert all nine of the module's exported
+functions, proven by ninety-one mutations. The card's own stated reason for existing was false when I wrote
+it, and the work was still worth doing.**
+
+**Verified by the coordinator:** the new file runs **33 tests in 393 ms** alone; the whole suite reads
+**1,278 unit in 30 files** and **28 contract**, which accounts exactly for 1,234 + 33 + 11 where the eleven
+are the parallel card's; **no production file changed** and `grep -rn MUTANT` is clean. One new file,
+nothing else on disk.
+
+**Ninety-one mutations, every one caught with per-test detail, and the method is the part to keep.** Each
+mutation was written into the production file, the spec run alone, the per-test report read, and the file
+**restored from a pristine copy and compared by hash — after every single mutation**, not at the end. A
+mismatch would have stopped the sweep. Every run collected the full test count, which is how a runner that
+died at startup would have been told apart from a caught mutation. **Eight assertions are classified rather
+than counted** — redundant guards, non-vacuity guards, one genuinely unreachable, and one that measures a
+comment rather than behaviour and is labelled as such.
+
+**The two security constants are asserted by meaning, which is what the card asked and the harder thing to
+do.** The empty-state headline: a search whose keyword box holds a 32-character credential-shaped value and
+which finds nothing ends on the empty panel with the headline **still absent**, and the keyword appears in
+**no published state at all** — checked by serialising every state the view received and searching the
+text. The length is deliberate: 32 characters is below the project's 40-character last-resort redaction
+rule, **so no redactor could clean this shape and the omission is the whole protection**. The disclosure
+fields: the expected lines are **derived from the constant** rather than transcribed, so a field added to
+one and not the other fails in either direction, and a separate assertion feeds the error free text and a
+stack trace carrying the credential value and checks that neither the value, the parameter name, the host
+nor the stack frame reaches any line.
+
+**Five statements in my card were stale, all five grepped by the agent and re-checked by me. Four are
+numbers. The fifth is the card's premise, and it was false when written.**
+
+The card said the module is "reached from **exactly one** test file, which needs a real Zotero to run". It
+is reached from four, two of which pre-date the card — and one of those is
+`test/unit/ui/searchImportViewModel-export.test.ts`, a **unit** test needing no Zotero, 21,762 bytes.
+**I committed that file myself four days earlier, in `7497b20`.** So the premise was not merely unchecked;
+**my own commit was the refutation**, and I wrote the card without looking at what I had landed. That is a
+new flavour of rule 8: not a stale line number, not an unverified claim about someone else's file, but a
+claim contradicted by my own recent work.
+
+**The work was still worth doing, and the distinction matters.** The pre-existing unit file covers the
+**export path** — the retained record and the export outcomes. It does not touch the arithmetic: the error
+table, the panel state machine, the selection that survives a re-render, the latched per-database counts,
+the per-source attribution in the provenance record. Those are what the new file asserts, and they were
+reachable only through a live window before today. **So the card's conclusion was right and its reason was
+wrong**, which is the most dangerous shape a premise can have — it survives review because the work looks
+justified.
+
+**The other four, corrected above:** the module is **1,775** lines with **27** exports, not 1,594 and
+twenty-two (the subsidiary claim of **nine** exported functions is exact, and the eight names the card
+lists plus the factory are precisely those nine); the sibling spec is **2,687** lines, not 2,229; the
+dependency interface starts at **573**, not 556; and the `docs/13` reference was wrong in a way worth
+naming.
+
+**That reference is the one that would have misled the next reader.** The card cited `docs/13` **§1.6** for
+"what belongs at layer one". §1.6 is **"Development environment"**; the layer-one tier is **§2.1, "Layer 1
+— Unit tests in Node"** — checked by the coordinator. And the agent found why the mistake is plausible
+rather than careless: **§1.6 is where the `package.json` scripts block lives**, which is why
+`vitest.config.ts` cites §1.6 correctly — for the script form, not for the tier. So a reader who followed
+the card would land somewhere real and wrong. The sibling spec cites §2.1; so does the new file.
+
+**A rule was broken and disclosed unprompted.** The agent ran one git command, `git status --porcelain`,
+against an instruction to run none. It read only, changed nothing, and the agent reported it plainly rather
+than leaving it to be found. **That is the right handling of a rule one has already broken.** Two incidental
+facts came out of it: the new test file was the only untracked path, and the environment banner that says
+this is not a git repository is wrong for this directory — which is worth knowing, because it is the sort of
+false environmental fact an agent could otherwise build a decision on.
+
+**One transient platform failure, managed and reported.** At mutation 17 a write to the production file
+failed with a Windows error that is the shape of a short-lived file lock, **at the moment of writing the
+mutation, before any test ran**. The file was verified pristine straight afterwards, a retry loop was added,
+and the sweep resumed. With three agents in flight this is exactly the class of event that becomes a
+mystery if it is not written down.
+
+**Cross-card attribution, got right by all three agents on the same afternoon.** This one noticed a unit
+failure at 11:56 in the parallel card's new file, traced it to that card rather than to itself, named the
+file and the minute, and recorded that nothing in its own one-file scope touches the identifier module.
+By 12:15 that failure was gone. **Three cards in flight, three reports that each accounted for the other's
+numbers** — this project had to learn that the hard way and it is now the habit.
+
+**What was not checked, and the honest size of the remaining gap.** The **import half's rendering
+arithmetic** is the largest unit-level hole left in the module: the completion summary, the
+abstract-coverage notice, the cancelled-import branch and the no-write error branch. The pre-existing unit
+file reaches that function but asserts the record and the export, not the notices, and the live spec asserts
+the created-versus-linked reporting through a real window. Also uncovered: everything needing a message
+formatter (the new file supplies none, which exercises the documented fallback to source identifiers), the
+import branch of progress folding, the module-private target resolution, and the guard that swallows a
+throwing view. Now `plan/00` §6 item 36.
+
+**One question left to the owner rather than answered.** Two unit files now cover this module from the same
+layer under two card numbers. If the preference is one file per module, merging them is small and safe; if
+it is one file per card, nothing needs doing. The new file's header states which file owns what, so no
+reader is left guessing — which is the right thing to do while the question is open.
 
 ---
 

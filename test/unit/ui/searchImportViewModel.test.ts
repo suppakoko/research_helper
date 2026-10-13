@@ -1,0 +1,1671 @@
+/**
+ * `P1-T39` — the Search & Import window's view model at layer 1.
+ *
+ * ## What this file is for
+ *
+ * `src/ui/viewModels/searchImportViewModel.ts` decides every one of `docs/08`
+ * §8.4's five panel states, folds `docs/08` §8.3's error table, and composes
+ * `FR-8`'s provenance record. Before this file its arithmetic was reached from
+ * exactly one place — `test/integration/searchDialog-flow.spec.ts`, which needs
+ * a live Zotero and whose own header measures three load-sensitive failures
+ * (`plan/00` §6 item 20). `test/unit/ui/searchImportViewModel-export.test.ts`
+ * (`P1-T36`) covers one member, `exportProvenance`, and the retained record's
+ * lifetime. Everything else was a Zotero launch away.
+ *
+ * So what is here is the **arithmetic**: the error table, the selection
+ * round-trip, the latching and the per-source attribution — `P1-T22`'s own four
+ * names for the assertions an integration suite cannot make cheaply.
+ *
+ * Layer 1 (`docs/13` §2.1): plain Node, no Zotero global, no network, no DOM.
+ * Nothing under `src/zotero/` is imported. The view model's six required
+ * dependencies are a pipeline double, a job-factory double, a logger over a
+ * capturing sink, two version strings and a fixed clock.
+ *
+ * ## What is deliberately not here
+ *
+ * - **No snapshot test.** A snapshot of a view state records what the code
+ *   does, not what it should do (`P1-T39`'s fourth **Do NOT**).
+ * - **Nothing that needs the platform.** The integration spec reads a real file
+ *   back off disk, resolves real Fluent bundles through a real `document.l10n`,
+ *   and writes into a real library. None of that is copied here; where an
+ *   assertion below looks like one of that spec's, it is the same *calculation*
+ *   asserted on the value rather than on the window.
+ * - **No type-level claim asserted at run time.** {@link message}'s whole
+ *   reason to exist is that `FluentArgsParam` makes a message's argument object
+ *   required at *compile* time. A test cannot observe that; what it can observe
+ *   is the value that reaches `data-l10n-args`, which is what section 2 does.
+ *
+ * ## Nothing here is a real credential
+ *
+ * {@link NCBI_SHAPED_KEY} is 32 hexadecimal characters, built in this file,
+ * matching nothing that exists. The length is the point: `src/core/errors.ts`'s
+ * last-resort pattern starts at 40, so **no redactor in this project can clean
+ * this shape** — which is exactly why
+ * {@link EMPTY_HEADLINE_OMITTED} keeps the query off the screen instead of
+ * redacting it. A test that put a 48-character run through the gate would be
+ * measuring the gate; this one measures the omission.
+ */
+
+import { describe, expect, it } from "vitest";
+
+import { createSystemClock } from "../../../src/core/clock";
+import type { SerializedError } from "../../../src/core/errors";
+import type { CancellationToken } from "../../../src/core/jobQueue/cancellation";
+import type { ProgressSnapshot } from "../../../src/core/jobQueue/progress";
+import { createLogger } from "../../../src/core/logger";
+import type { SearchProvenance } from "../../../src/core/provenance";
+import type { Author, WorkType } from "../../../src/model/canonicalWork";
+import { normalizeDoi, type Doi, type SourceId } from "../../../src/model/ids";
+import type { SourceRecord } from "../../../src/model/sourceRecord";
+import type {
+  SearchImportInput,
+  SearchImportOutcome,
+  SearchImportOutput,
+  SearchImportSourceReport,
+  SearchImportWriteReport,
+} from "../../../src/pipeline/searchImport/types";
+import type { Pipeline, PipelineContext } from "../../../src/pipeline/types";
+import { NEW_COLLECTION_VALUE } from "../../../src/ui/dialogs/searchDialog";
+import type {
+  SearchWindowQuery,
+  SearchWindowRecord,
+} from "../../../src/ui/dialogs/searchDialog";
+import {
+  buildProvenance,
+  createSearchImportViewModel,
+  errorDetails,
+  errorView,
+  initialViewState,
+  message,
+  sourceStatusLine,
+  toPipelineInput,
+  toWindowRecords,
+  EMPTY_HEADLINE_OMITTED,
+  ERROR_DETAIL_FIELDS,
+  ERROR_ROWS,
+  UNRENDERABLE_ERROR_ROWS,
+  type CollectionDescriptor,
+  type MessageRef,
+  type SearchImportJobFactory,
+  type SearchImportViewModel,
+  type SearchImportViewModelDeps,
+  type SearchViewState,
+  type SourceDescriptor,
+} from "../../../src/ui/viewModels/searchImportViewModel";
+
+// ---------------------------------------------------------------------------
+// 1. Fixtures and builders
+// ---------------------------------------------------------------------------
+
+/** 32 hexadecimal characters — an NCBI key's shape, and nobody's key. */
+const NCBI_SHAPED_KEY = "0123456789abcdef".repeat(2);
+
+/** The localized database name the window would have resolved. */
+const DATABASE = "PubMed";
+
+const STATUS = 503;
+
+const PLUGIN_VERSION = "0.0.2-test";
+const ZOTERO_VERSION = "10.0.3-test";
+const NOW = 1_760_000_000_000;
+
+const DOI = normalizeDoi("10.1056/nejmoa2300709");
+if (DOI === null) {
+  throw new Error("test fixtures must normalize");
+}
+
+/**
+ * One `SerializedError`, as a pipeline outcome carries it.
+ *
+ * `detail` and `stack` default to text carrying {@link NCBI_SHAPED_KEY},
+ * because the two members {@link ERROR_DETAIL_FIELDS} excludes are the two that
+ * can carry one — so every assertion over an error below is also an assertion
+ * that the free text did not leak.
+ */
+function failure(
+  code: string,
+  options: {
+    readonly retryable?: boolean;
+    readonly httpStatus?: number;
+    readonly detail?: string;
+    readonly stack?: string;
+  } = {},
+): SerializedError {
+  const { httpStatus, stack } = options;
+  return {
+    code,
+    messageKey: `rh-error-${code.toLowerCase()}`,
+    detail:
+      options.detail ??
+      `GET https://eutils.ncbi.nlm.nih.gov/esearch?api_key=${NCBI_SHAPED_KEY}`,
+    retryable: options.retryable ?? false,
+    ...(httpStatus === undefined ? {} : { httpStatus }),
+    ...(stack === undefined ? {} : { stack }),
+  };
+}
+
+/** One `SourceRecord`, in the shape a mapper produces. */
+function record(options: {
+  readonly sourceId: SourceId;
+  readonly nativeId: string;
+  readonly title: string;
+  readonly year?: number;
+  readonly doi?: Doi;
+  readonly type?: WorkType;
+  readonly authors?: readonly Author[];
+}): SourceRecord {
+  const { year, doi } = options;
+  return {
+    id: `${options.sourceId}:${options.nativeId}`,
+    sourceId: options.sourceId,
+    nativeId: options.nativeId,
+    work: {
+      ids: doi === undefined ? {} : { doi },
+      type: options.type ?? "journal-article",
+      title: options.title,
+      authors: options.authors ?? [{ family: "Kim", given: "Jisoo" }],
+      ...(year === undefined
+        ? {}
+        : { publishedDate: { year, iso: String(year) } }),
+    },
+    retrievedAtEpochMs: NOW,
+    missingFields: [],
+  };
+}
+
+/** One per-source report, as `searchImport` returns it. */
+function report(options: {
+  readonly sourceId: SourceId;
+  readonly recordsRetrieved?: number;
+  readonly deduplicatedAway?: number;
+  readonly error?: SerializedError;
+  readonly transmittedQuery?: string;
+}): SearchImportSourceReport {
+  const { error } = options;
+  return {
+    sourceId: options.sourceId,
+    transmittedQuery: options.transmittedQuery ?? "term=crispr",
+    requestedLimit: 25,
+    dateFilterApplied: "server",
+    recordsRetrieved: options.recordsRetrieved ?? 0,
+    droppedOutOfWindow: 0,
+    keptWithoutDate: 0,
+    recordsDeduplicatedAway: options.deduplicatedAway ?? 0,
+    error,
+    warnings: [],
+  };
+}
+
+/** One write report, as the write half returns it. */
+function writeReport(options: {
+  readonly created: number;
+  readonly linkedExisting?: number;
+  readonly collectionKey?: string;
+}): SearchImportWriteReport {
+  return {
+    libraryId: 1,
+    collectionKey: options.collectionKey ?? "AAAA1111",
+    collectionName: "RH P1-T39",
+    collectionCreated: true,
+    created: options.created,
+    linkedExisting: options.linkedExisting ?? 0,
+    skipped: 0,
+    failed: 0,
+    abstractCoveragePercent: 100,
+    partialNoteRecorded: false,
+  };
+}
+
+/** One `searchImport` output. */
+function output(options: {
+  readonly outcome: SearchImportOutcome;
+  readonly records?: readonly SourceRecord[];
+  readonly perSource?: readonly SearchImportSourceReport[];
+  readonly error?: SerializedError;
+  readonly write?: SearchImportWriteReport;
+}): SearchImportOutput {
+  const { error, write } = options;
+  return {
+    outcome: options.outcome,
+    stageReached: "fetching",
+    records: options.records ?? [],
+    works: [],
+    perSource: options.perSource ?? [],
+    write,
+    error,
+    warnings: [],
+    cancellationKind: undefined,
+  };
+}
+
+function query(overrides: Partial<SearchWindowQuery> = {}): SearchWindowQuery {
+  return {
+    mode: "keyword",
+    keyword: "ionizable lipid nanoparticle",
+    fromYear: 2024,
+    toYear: 2026,
+    maxResults: 25,
+    sources: ["pubmed", "crossref"],
+    filter: "",
+    hideExisting: true,
+    duplicates: "skip",
+    collectionID: `${NEW_COLLECTION_VALUE}:RH P1-T39`,
+    ...overrides,
+  };
+}
+
+/** One progress snapshot, with only the members `onSnapshot` reads. */
+function snapshot(options: {
+  readonly currentStageKey?: string;
+  readonly completed?: number;
+  readonly total?: number;
+  readonly fraction?: number;
+}): ProgressSnapshot {
+  return {
+    status: "running",
+    completed: options.completed ?? 0,
+    total: options.total,
+    fraction: options.fraction,
+    message: "",
+    currentStageKey: options.currentStageKey,
+    warnings: [],
+    startedAtEpochMs: NOW,
+    etaSeconds: undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 2. The doubles, and the harness over them
+// ---------------------------------------------------------------------------
+
+/** One queued pipeline run: the snapshots it publishes, then its output. */
+interface Run {
+  readonly snapshots?: readonly ProgressSnapshot[];
+  readonly output: SearchImportOutput;
+  /** Press Cancel while this run is in flight, as the user's Escape does. */
+  readonly cancelMidRun?: boolean;
+}
+
+interface Harness {
+  readonly model: SearchImportViewModel;
+  /** Every state the connected view was handed, in order. */
+  readonly states: SearchViewState[];
+  /** Every line the logger emitted. */
+  readonly lines: string[];
+  /** Detach the recording view, as the window's unload does. */
+  readonly detach: () => void;
+  /**
+   * The cancellation token each job was started with.
+   *
+   * The real `createCancellationTokenSource` is used by the view model, so
+   * these are real tokens and `cancel()` is observable on them — the one part
+   * of FR-10 that is arithmetic rather than platform behaviour.
+   */
+  readonly tokens: CancellationToken[];
+}
+
+/**
+ * Build a view model over doubles and connect a recording view.
+ *
+ * No `formatter` is supplied, so every source display name falls back to its
+ * `sourceId` — the documented degradation, and the one that keeps this file out
+ * of Fluent's way. The *ids* are what the document localizes; a resolved string
+ * is the integration spec's business.
+ */
+function harness(options: {
+  readonly runs: readonly Run[];
+  readonly sources?: readonly SourceDescriptor[];
+  readonly collections?: readonly CollectionDescriptor[];
+  readonly isExisting?: (item: SourceRecord) => boolean;
+}): Harness {
+  const states: SearchViewState[] = [];
+  const lines: string[] = [];
+  const tokens: CancellationToken[] = [];
+  const listeners: ((item: ProgressSnapshot) => void)[] = [];
+  const queue = [...options.runs];
+  /**
+   * The model, once it exists.
+   *
+   * A holder rather than a `let`, because the pipeline stub below closes over
+   * it and is itself a dependency of the model's construction: the Cancel press
+   * happens inside `run()`, which only runs after the model has been built.
+   */
+  const built: { model?: SearchImportViewModel } = {};
+
+  const pipeline: Pipeline<SearchImportInput, SearchImportOutput> = {
+    id: "searchImport",
+    displayNameKey: "research-helper-pipeline-search-import",
+    stages: [],
+    validate: () => ({ ok: true, errors: [] }),
+    // Never called: `runJob` runs the pipeline directly.
+    estimate: () =>
+      Promise.resolve({
+        itemCount: 0,
+        externalRequests: 0,
+        estimatedInputTokens: 0,
+        estimatedOutputTokens: 0,
+        estimatedCostUsd: undefined,
+        estimatedDurationSeconds: 0,
+        notesKeys: [],
+      }),
+    run: () => {
+      const next = queue.shift();
+      if (next === undefined) {
+        throw new Error("the stub pipeline ran out of queued runs");
+      }
+      // Published from inside `run()`, which is where the real reporter fires:
+      // the subscription is live by now and the output has not arrived.
+      for (const item of next.snapshots ?? []) {
+        for (const listener of [...listeners]) listener(item);
+      }
+      // Cancel while the job is still open, which is the only moment the
+      // window's Cancel button and its Escape key can be pressed.
+      if (next.cancelMidRun === true) built.model?.cancel();
+      return Promise.resolve(next.output);
+    },
+    resumable: false,
+  };
+
+  const jobs: SearchImportJobFactory = {
+    forJob: (job) => ({
+      jobId: "job-1",
+      context: (() => {
+        tokens.push(job.token);
+        return { token: job.token } as unknown as PipelineContext;
+      })(),
+      progress: {
+        reporter: { done: (): void => undefined },
+        events: {
+          subscribe: (listener: (item: ProgressSnapshot) => void) => {
+            listeners.push(listener);
+            return (): void => {
+              listeners.splice(listeners.indexOf(listener), 1);
+            };
+          },
+        },
+      },
+      dispose: (): void => undefined,
+    }),
+  };
+
+  const { sources, collections, isExisting } = options;
+  const deps: SearchImportViewModelDeps = {
+    pipeline,
+    jobs,
+    logger: createLogger({
+      sink: {
+        write: (line: string) => {
+          lines.push(line);
+        },
+      },
+      clock: createSystemClock(),
+      level: "debug",
+    }),
+    pluginVersion: PLUGIN_VERSION,
+    zoteroVersion: ZOTERO_VERSION,
+    clock: { now: () => NOW },
+    ...(sources === undefined ? {} : { listSources: () => sources }),
+    ...(collections === undefined
+      ? {}
+      : { listCollections: () => collections }),
+    ...(isExisting === undefined ? {} : { isExisting }),
+  };
+
+  const model = createSearchImportViewModel(deps);
+  built.model = model;
+  const detach = model.connect({
+    render: (state: SearchViewState) => {
+      states.push(state);
+    },
+  });
+  return { model, states, lines, detach, tokens };
+}
+
+/** The two sources every state-machine test below asks. */
+const TWO_SOURCES: readonly SourceDescriptor[] = [
+  { id: "pubmed", displayNameKey: "research-helper-source-pubmed" },
+  { id: "crossref", displayNameKey: "research-helper-source-crossref" },
+];
+
+/** The panel sequence, with consecutive repeats collapsed. */
+function panels(states: readonly SearchViewState[]): readonly string[] {
+  return states
+    .map((state) => state.panel)
+    .filter((panel, at, all) => at === 0 || all[at - 1] !== panel);
+}
+
+// ===========================================================================
+// 3. `message` — one Fluent lookup, as data
+// ===========================================================================
+
+describe("P1-T39 — message()", () => {
+  it("carries the id and only the arguments the caller supplied", () => {
+    // A message with placeables: the object reaches `data-l10n-args` verbatim.
+    expect(
+      message("rh-error-auth", { provider: DATABASE, status: 401 }),
+    ).toStrictEqual({
+      id: "rh-error-auth",
+      args: { provider: DATABASE, status: 401 },
+    });
+
+    // A message without placeables: `args` is `undefined`, **not** an empty
+    // object, because the document sets no `data-l10n-args` at all in that
+    // case — a stale argument object left on an element is one of the two
+    // defects `P1-T20` measured in a live window.
+    const plain = message("rh-error-offline");
+    expect(plain).toStrictEqual({ id: "rh-error-offline", args: undefined });
+    expect(Object.hasOwn(plain, "args")).toBe(true);
+    expect(plain.args).toBeUndefined();
+  });
+});
+
+// ===========================================================================
+// 4. `errorView` — docs/08 §8.3's table
+// ===========================================================================
+
+/**
+ * The §8.3 row each renderable code draws, and the actions that row offers.
+ *
+ * Written out rather than read back from {@link ERROR_ROWS}: a loop that built
+ * its expectation by calling the table's own `ref` would compare the
+ * implementation with itself and pass against any message id at all.
+ */
+const EXPECTED_ROWS: Readonly<
+  Record<
+    string,
+    {
+      readonly ref: MessageRef;
+      readonly retry: boolean;
+      readonly prefs: boolean;
+    }
+  >
+> = {
+  MISSING_CREDENTIAL: {
+    ref: {
+      id: "rh-error-missing-credential",
+      args: { provider: DATABASE },
+    },
+    retry: false,
+    prefs: true,
+  },
+  CONFIGURATION: {
+    ref: { id: "rh-error-configuration", args: undefined },
+    retry: false,
+    prefs: true,
+  },
+  AUTHENTICATION: {
+    ref: { id: "rh-error-auth", args: { provider: DATABASE, status: STATUS } },
+    retry: false,
+    prefs: true,
+  },
+  AUTHORIZATION: {
+    ref: {
+      id: "rh-error-forbidden",
+      args: { provider: DATABASE, status: STATUS },
+    },
+    retry: false,
+    prefs: true,
+  },
+  QUOTA_EXCEEDED: {
+    ref: { id: "rh-error-quota", args: { provider: DATABASE } },
+    retry: false,
+    prefs: true,
+  },
+  OFFLINE: {
+    ref: { id: "rh-error-offline", args: undefined },
+    retry: true,
+    prefs: false,
+  },
+  UPSTREAM_SERVER: {
+    ref: {
+      id: "rh-error-upstream",
+      args: { database: DATABASE, status: STATUS },
+    },
+    retry: true,
+    prefs: false,
+  },
+  PARSE: {
+    ref: { id: "rh-error-parse", args: { database: DATABASE } },
+    retry: true,
+    prefs: false,
+  },
+  ZOTERO_API: {
+    ref: { id: "rh-error-zotero", args: undefined },
+    retry: false,
+    prefs: false,
+  },
+  STORAGE: {
+    ref: { id: "rh-error-storage", args: undefined },
+    retry: false,
+    prefs: false,
+  },
+  BAD_REQUEST: {
+    ref: { id: "rh-error-bad-request", args: { database: DATABASE } },
+    retry: false,
+    prefs: false,
+  },
+};
+
+describe("P1-T39 — errorView() over docs/08 §8.3's table", () => {
+  it("draws every renderable row, and the row's own two actions", () => {
+    // The table and this file's expectation name the same codes, so a row
+    // added to one without the other is a failure here rather than a row
+    // nothing asserts.
+    expect(Object.keys(ERROR_ROWS).toSorted()).toStrictEqual(
+      Object.keys(EXPECTED_ROWS).toSorted(),
+    );
+
+    for (const [code, expected] of Object.entries(EXPECTED_ROWS)) {
+      // `retryable: true` on every error, so a row whose §8.3 verdict is "no
+      // retry" cannot pass by inheriting the thrower's verdict instead.
+      const view = errorView(
+        failure(code, { httpStatus: STATUS, retryable: true }),
+        DATABASE,
+      );
+      expect(view.ref, code).toStrictEqual(expected.ref);
+      expect(view.retry, code).toBe(expected.retry);
+      expect(view.prefs, code).toBe(expected.prefs);
+
+      // And the other way round: a mapped row's actions are the table's, so
+      // flipping the error's own verdict changes nothing.
+      const flipped = errorView(
+        failure(code, { httpStatus: STATUS, retryable: false }),
+        DATABASE,
+      );
+      expect(flipped.retry, code).toBe(expected.retry);
+      expect(flipped.prefs, code).toBe(expected.prefs);
+    }
+  });
+
+  it("supplies 0 for a status the error does not carry", () => {
+    // `{ $status }` is declared by `rh-error-auth`, so the argument cannot be
+    // omitted; an absent HTTP status becomes 0 rather than `undefined` painted
+    // at the user as the literal string.
+    expect(errorView(failure("AUTHENTICATION"), DATABASE).ref).toStrictEqual({
+      id: "rh-error-auth",
+      args: { provider: DATABASE, status: 0 },
+    });
+    expect(errorView(failure("UPSTREAM_SERVER"), DATABASE).ref).toStrictEqual({
+      id: "rh-error-upstream",
+      args: { database: DATABASE, status: 0 },
+    });
+  });
+
+  it("sends every row this build cannot render to the generic row", () => {
+    // The three §8.3 rows `UNRENDERABLE_ERROR_ROWS`' doc comment names. Listed
+    // here as well so that the day one of them becomes renderable — a row in
+    // `ERROR_ROWS`, or a member dropped from the constant — this test fails and
+    // says to come here too.
+    for (const code of ["RATE_LIMIT", "TIMEOUT", "NETWORK"]) {
+      expect(UNRENDERABLE_ERROR_ROWS, code).toContain(code);
+    }
+    // Guards the loop below against a constant emptied by accident, which
+    // would make every assertion in it vacuous.
+    expect(UNRENDERABLE_ERROR_ROWS.length).toBeGreaterThan(0);
+
+    for (const code of UNRENDERABLE_ERROR_ROWS) {
+      expect(Object.keys(ERROR_ROWS), code).not.toContain(code);
+      const view = errorView(
+        failure(code, { retryable: true, httpStatus: 429 }),
+        DATABASE,
+      );
+      // NFR-14's first two requirements: what failed, and which service.
+      expect(view.ref, code).toStrictEqual({
+        id: "rh-error-source",
+        args: { database: DATABASE },
+      });
+      // No invented countdown, no Preferences button, and Retry exactly when
+      // the thrower said a retry could plausibly succeed.
+      expect(view.retry, code).toBe(true);
+      expect(view.prefs, code).toBe(false);
+      expect(errorView(failure(code), DATABASE).retry, code).toBe(false);
+    }
+  });
+
+  it("falls back to the generic row for a code the table never heard of", () => {
+    const view = errorView(failure("A_CODE_NOBODY_DECLARED"), DATABASE);
+    expect(view.ref).toStrictEqual({
+      id: "rh-error-source",
+      args: { database: DATABASE },
+    });
+    expect(view.retry).toBe(false);
+    expect(view.prefs).toBe(false);
+    expect(
+      errorView(failure("A_CODE_NOBODY_DECLARED", { retryable: true }), "arXiv")
+        .retry,
+    ).toBe(true);
+  });
+});
+
+// ===========================================================================
+// 5. `errorDetails` — NFR-14's disclosure
+// ===========================================================================
+
+describe("P1-T39 — errorDetails()", () => {
+  it("emits exactly the fields ERROR_DETAIL_FIELDS names, in order", () => {
+    const errors = [
+      failure("UPSTREAM_SERVER", { httpStatus: STATUS }),
+      failure("OFFLINE"),
+    ];
+    const lines = errorDetails(errors);
+
+    // Derived from the constant rather than transcribed from it: a field added
+    // to `ERROR_DETAIL_FIELDS` that `errorDetails` does not emit fails here,
+    // and so does a field `errorDetails` emits that the constant does not name.
+    const fromConstant = errors.flatMap((error) =>
+      ERROR_DETAIL_FIELDS.flatMap((field) => {
+        const value = error[field];
+        return value === undefined ? [] : [String(value)];
+      }),
+    );
+    expect(lines).toStrictEqual(fromConstant);
+
+    // And the concrete shape, so a constant and an implementation that drifted
+    // together are still caught: the code, then the status, per error, with an
+    // absent status contributing no line at all.
+    expect(lines).toStrictEqual(["UPSTREAM_SERVER", String(STATUS), "OFFLINE"]);
+    expect(errorDetails([])).toStrictEqual([]);
+  });
+
+  it("carries machine values only — the meaning of ERROR_DETAIL_FIELDS", () => {
+    // `detail` is free text built from the failing request and `stack` is a
+    // trace; `src/core/provenance.ts`'s gate cannot clean a 32-character key
+    // out of either, which is why neither is in the constant.
+    const lines = errorDetails([
+      failure("UPSTREAM_SERVER", {
+        httpStatus: STATUS,
+        stack: `at request (https://eutils.nlm.nih.gov/?api_key=${NCBI_SHAPED_KEY})`,
+      }),
+    ]);
+    const text = lines.join("\n");
+    expect(text).not.toContain(NCBI_SHAPED_KEY);
+    expect(text).not.toContain("api_key");
+    expect(text).not.toContain("nlm.nih.gov");
+    expect(text).not.toContain("at request");
+    // Every line is a machine value: a closed enumeration member, or a number.
+    for (const line of lines) {
+      expect(
+        /^[A-Z_]+$|^[0-9]+$/.test(line),
+        `${line} is neither a code nor a number`,
+      ).toBe(true);
+    }
+  });
+});
+
+// ===========================================================================
+// 6. `initialViewState` — docs/08 §8.4's INITIAL
+// ===========================================================================
+
+describe("P1-T39 — initialViewState()", () => {
+  it("is §8.4's INITIAL: nothing drawn, nothing running, nothing latched", () => {
+    expect(initialViewState()).toStrictEqual({
+      panel: "initial",
+      running: false,
+      sources: [],
+      records: undefined,
+      recordsRevision: 0,
+      emptyHeadline: undefined,
+      error: undefined,
+      warnings: [],
+      notices: [],
+      status: undefined,
+      databaseProgress: undefined,
+      progressPercent: undefined,
+      cancelVisible: false,
+    });
+
+    // A fresh object per call, and fresh arrays with it. A shared literal would
+    // make two windows — or two tests — write into one state.
+    const first = initialViewState();
+    const second = initialViewState();
+    expect(first).not.toBe(second);
+    expect(first.sources).not.toBe(second.sources);
+  });
+});
+
+// ===========================================================================
+// 7. `toWindowRecords` — docs/07 §5.1 as the table's rows
+// ===========================================================================
+
+describe("P1-T39 — toWindowRecords()", () => {
+  it("keys each row on the record's own id and names its database", () => {
+    const rows = toWindowRecords(
+      [
+        record({
+          sourceId: "pubmed",
+          nativeId: "40123456",
+          title: "Ionizable lipid design",
+          year: 2025,
+          doi: DOI,
+          type: "preprint",
+          authors: [{ family: "Chen" }, { family: "Novak", given: "Ana" }],
+        }),
+        record({
+          sourceId: "crossref",
+          nativeId: "10.1/x",
+          title: "A record with no year and no DOI",
+        }),
+      ],
+      new Map([["pubmed", DATABASE]]),
+      undefined,
+    );
+
+    const first = rows[0] as SearchWindowRecord;
+    expect(first.key).toBe("pubmed:40123456");
+    expect(first.title).toBe("Ionizable lipid design");
+    expect(first.authors).toStrictEqual([
+      { family: "Chen" },
+      { family: "Novak", given: "Ana" },
+    ]);
+    expect(first.year).toBe(2025);
+    expect(first.sourceLabels).toStrictEqual([DATABASE]);
+    // The `WorkType` token, not a localized string: no bundle declares a
+    // work-type vocabulary, and minting English here would break `P1-T20`.
+    expect(first.typeLabel).toBe("preprint");
+    expect(first.doi).toBe(DOI);
+    // No `isExisting` port: no row is marked as already in the library.
+    expect(first.existing).toBe(false);
+
+    const second = rows[1] as SearchWindowRecord;
+    // The source's own id is the fallback label, never an empty cell.
+    expect(second.sourceLabels).toStrictEqual(["crossref"]);
+    // `year` is absent rather than `undefined`, so the Year cell draws empty
+    // instead of the string "undefined".
+    expect(Object.hasOwn(second, "year")).toBe(false);
+    expect(second.doi).toBe("");
+    expect(rows).toHaveLength(2);
+  });
+
+  it("marks a row existing only when the probe says so", () => {
+    const rows = toWindowRecords(
+      [
+        record({ sourceId: "pubmed", nativeId: "1", title: "Already here" }),
+        record({ sourceId: "pubmed", nativeId: "2", title: "New" }),
+      ],
+      new Map(),
+      (item) => item.nativeId === "1",
+    );
+    expect(rows.map((row) => row.existing)).toStrictEqual([true, false]);
+  });
+});
+
+// ===========================================================================
+// 8. `toPipelineInput` — the window's query as the pipeline's input
+// ===========================================================================
+
+describe("P1-T39 — toPipelineInput()", () => {
+  it("builds FR-3's window from the two year menulists", () => {
+    const input = toPipelineInput(query(), undefined, undefined);
+    expect(input.query).toBe("ionizable lipid nanoparticle");
+    expect(input.limit).toBe(25);
+    expect(input.dateFilter).toStrictEqual({
+      fromYear: 2024,
+      toYear: 2026,
+      fromDate: "2024-01-01",
+      toDate: "2026-12-31",
+      label: "2024 – 2026",
+    });
+    // A preview: no target and no records, and both members absent rather than
+    // present-and-undefined, because the pipeline branches on `records`.
+    expect(Object.hasOwn(input, "target")).toBe(false);
+    expect(Object.hasOwn(input, "records")).toBe(false);
+  });
+
+  it("orders the two years, whichever way the user set them", () => {
+    const input = toPipelineInput(
+      query({ fromYear: 2026, toYear: 2024 }),
+      undefined,
+      undefined,
+    );
+    // Reversed menulists must not produce an empty window that silently
+    // matches nothing.
+    expect(input.dateFilter).toStrictEqual({
+      fromYear: 2024,
+      toYear: 2026,
+      fromDate: "2024-01-01",
+      toDate: "2026-12-31",
+      label: "2024 – 2026",
+    });
+  });
+
+  it("asks no date filter when a year is not a whole number", () => {
+    expect(
+      toPipelineInput(query({ fromYear: Number.NaN }), undefined, undefined)
+        .dateFilter,
+    ).toBe("none");
+    expect(
+      toPipelineInput(query({ toYear: 2026.5 }), undefined, undefined)
+        .dateFilter,
+    ).toBe("none");
+  });
+
+  it("drops a checkbox value that is not a registered source id", () => {
+    const input = toPipelineInput(
+      query({ sources: ["pubmed", "not-a-source", "crossref", ""] }),
+      undefined,
+      undefined,
+    );
+    // `SourceId` is a closed union; a value from the document that is not one
+    // would reach an adapter lookup that has nothing to find.
+    expect(input.sourceIds).toStrictEqual(["pubmed", "crossref"]);
+  });
+
+  it("passes the target and the held records through for the write half", () => {
+    const held = [record({ sourceId: "pubmed", nativeId: "1", title: "Held" })];
+    const input = toPipelineInput(
+      query(),
+      { collectionName: "RH P1-T39", selectedRecordIds: ["pubmed:1"] },
+      held,
+    );
+    expect(input.target).toStrictEqual({
+      collectionName: "RH P1-T39",
+      selectedRecordIds: ["pubmed:1"],
+    });
+    expect(input.records).toBe(held);
+  });
+});
+
+// ===========================================================================
+// 9. `sourceStatusLine` — docs/08 §4.6's per-database row
+// ===========================================================================
+
+describe("P1-T39 — sourceStatusLine()", () => {
+  it("counts a succeeded source and carries its displayNameKey", () => {
+    const line = sourceStatusLine(
+      report({ sourceId: "pubmed", recordsRetrieved: 12 }),
+      { id: "pubmed", displayNameKey: "research-helper-source-pubmed" },
+      DATABASE,
+    );
+    expect(line).toStrictEqual({
+      sourceId: "pubmed",
+      // The id, not the resolved string: the document sets it as a
+      // `data-l10n-id`, so the database name is never minted here.
+      nameId: "research-helper-source-pubmed",
+      outcome: "succeeded",
+      detail: {
+        id: "research-helper-search-source-results",
+        args: { count: 12 },
+      },
+    });
+
+    // An unregistered source still gets a line; the name is left to the
+    // document rather than guessed.
+    expect(
+      sourceStatusLine(
+        report({ sourceId: "arxiv", recordsRetrieved: 0 }),
+        undefined,
+        "arXiv",
+      ),
+    ).toStrictEqual({
+      sourceId: "arxiv",
+      nameId: "",
+      outcome: "succeeded",
+      detail: {
+        id: "research-helper-search-source-results",
+        args: { count: 0 },
+      },
+    });
+  });
+
+  it("carries §8.3's row itself on a failed source, not a concatenation", () => {
+    const line = sourceStatusLine(
+      report({
+        sourceId: "pubmed",
+        recordsRetrieved: 0,
+        error: failure("OFFLINE", { retryable: true }),
+      }),
+      { id: "pubmed", displayNameKey: "research-helper-source-pubmed" },
+      DATABASE,
+    );
+    expect(line.outcome).toBe("failed");
+    // Not `research-helper-search-source-failed`, whose `$reason` is "an
+    // already-localized rh-error-* string, never a message id" — which this
+    // module cannot produce without a formatter. So the row travels as its own
+    // message and `docs/08` §10.3's no-concatenation rule holds.
+    expect(line.detail).toStrictEqual({
+      id: "rh-error-offline",
+      args: undefined,
+    });
+    expect(line.detail.id).not.toBe("research-helper-search-source-failed");
+  });
+});
+
+// ===========================================================================
+// 10. `buildProvenance` — FR-8's record, and §5.3's per-source attribution
+// ===========================================================================
+
+/** The `meta` block the import handler supplies. */
+const META = {
+  runId: "run-1",
+  pluginVersion: PLUGIN_VERSION,
+  zoteroVersion: ZOTERO_VERSION,
+  startedAt: "2026-10-13T00:00:00.000Z",
+  finishedAt: "2026-10-13T00:00:07.000Z",
+};
+
+/** The input the import half ran with. */
+function importInput(
+  overrides: Partial<SearchImportInput> = {},
+): SearchImportInput {
+  return {
+    query: "crispr delivery",
+    sourceIds: ["pubmed"],
+    limit: 25,
+    dateFilter: {
+      fromYear: 2024,
+      toYear: 2026,
+      fromDate: "2024-01-01",
+      toDate: "2026-12-31",
+      label: "2024 – 2026",
+    },
+    ...overrides,
+  };
+}
+
+describe("P1-T39 — buildProvenance()", () => {
+  it("attributes the run's imports to the one source that contributed", () => {
+    const provenance: SearchProvenance = buildProvenance(
+      output({
+        outcome: "succeeded",
+        records: [record({ sourceId: "pubmed", nativeId: "1", title: "A" })],
+        perSource: [
+          report({ sourceId: "pubmed", recordsRetrieved: 9 }),
+          // Asked, contributed nothing: not a contributor, so it is not the
+          // one the total belongs to.
+          report({ sourceId: "crossref", recordsRetrieved: 0 }),
+        ],
+        write: writeReport({ created: 7, linkedExisting: 2 }),
+      }),
+      importInput(),
+      META,
+    );
+
+    // FR-51 reports created and linked-existing separately; §5.3's
+    // `recordsImported` is the run's write total, which is their sum.
+    expect(provenance.totals.imported).toBe(9);
+    expect(provenance.perSource[0]?.recordsImported).toBe(9);
+    expect(provenance.perSource[1]?.recordsImported).toBe(0);
+    expect(provenance.totals.retrieved).toBe(1);
+    expect(provenance.targetLibraryId).toBe(1);
+    expect(provenance.targetCollectionKey).toBe("AAAA1111");
+  });
+
+  it("attributes nothing when two sources contributed", () => {
+    const provenance = buildProvenance(
+      output({
+        outcome: "succeeded",
+        records: [
+          record({ sourceId: "pubmed", nativeId: "1", title: "A" }),
+          record({ sourceId: "crossref", nativeId: "2", title: "B" }),
+        ],
+        perSource: [
+          report({ sourceId: "pubmed", recordsRetrieved: 4 }),
+          report({ sourceId: "crossref", recordsRetrieved: 3 }),
+        ],
+        write: writeReport({ created: 7 }),
+      }),
+      importInput({ sourceIds: ["pubmed", "crossref"] }),
+      META,
+    );
+
+    // `importWorks` batches works and cannot trace a created item back to the
+    // record it came from, so a per-source figure would be a number nobody
+    // measured. A zero beside a non-zero run total reads as "not attributed".
+    expect(provenance.perSource.map((entry) => entry.recordsImported)).toEqual([
+      0, 0,
+    ]);
+    expect(provenance.totals.imported).toBe(7);
+  });
+
+  it("writes the four fields the pipeline cannot supply as empty, not guessed", () => {
+    const provenance = buildProvenance(
+      output({
+        outcome: "succeeded",
+        perSource: [
+          report({
+            sourceId: "pubmed",
+            recordsRetrieved: 2,
+            deduplicatedAway: 1,
+            transmittedQuery: "term=crispr",
+            error: failure("PARSE", { retryable: true }),
+          }),
+        ],
+      }),
+      importInput({ dateFilter: "none" }),
+      META,
+    );
+
+    const entry = provenance.perSource[0];
+    // `SearchImportSourceReport` carries none of these four, and `searchAll`
+    // cannot reach them. **Needs a card**, as this function's doc says.
+    expect(entry?.endpointBaseUrl).toBe("");
+    expect(entry?.transmittedUrl).toBe("");
+    expect(entry?.rawHitCount).toBeUndefined();
+    expect(entry?.sourceExtras).toBeUndefined();
+    // What it does carry is carried through unchanged, error included.
+    expect(entry?.transmittedQuery).toBe("term=crispr");
+    expect(entry?.recordsDeduplicatedAway).toBe(1);
+    expect(entry?.dateFilterApplied).toBe("server");
+    expect(entry?.error?.code).toBe("PARSE");
+
+    // No write half: a preview's record targets nothing rather than library 1.
+    expect(provenance.targetLibraryId).toBe(0);
+    expect(provenance.targetCollectionKey).toBeUndefined();
+    expect(provenance.totals.imported).toBe(0);
+    // FR-3: "the provenance record states dateFilter: none".
+    expect(provenance.dateFilter).toBe("none");
+    expect(provenance.schemaVersion).toBe(1);
+    expect(provenance.runId).toBe("run-1");
+    expect(provenance.userQuery).toBe("crispr delivery");
+    expect(provenance.startedAt).toBe(META.startedAt);
+    expect(provenance.finishedAt).toBe(META.finishedAt);
+  });
+
+  it("records the resolved window as two ISO bounds", () => {
+    const provenance = buildProvenance(
+      output({ outcome: "succeeded" }),
+      importInput(),
+      META,
+    );
+    expect(provenance.dateFilter).toStrictEqual({
+      fromIso: "2024-01-01",
+      toIso: "2026-12-31",
+    });
+  });
+});
+
+// ===========================================================================
+// 11. The state machine, over doubles
+// ===========================================================================
+
+describe("P1-T39 — the run's panels, in order", () => {
+  it("goes INITIAL → SEARCHING → RESULTS, and lowers Cancel at the end", async () => {
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          snapshots: [snapshot({ currentStageKey: "pubmed", completed: 2 })],
+          output: output({
+            outcome: "succeeded",
+            records: [
+              record({ sourceId: "pubmed", nativeId: "1", title: "A" }),
+            ],
+            perSource: [report({ sourceId: "pubmed", recordsRetrieved: 1 })],
+          }),
+        },
+      ],
+    });
+
+    await h.model.runSearch(query());
+
+    expect(panels(h.states)).toStrictEqual(["initial", "searching", "results"]);
+
+    // Cancel is drawn exactly while a job is in flight: `docs/08` §4.4 puts it
+    // in the status bar beside the bar, and a window that keeps it after the
+    // run has nothing left to cancel.
+    for (const state of h.states) {
+      expect(state.cancelVisible).toBe(state.running);
+    }
+    const last = h.states[h.states.length - 1] as SearchViewState;
+    expect(last.running).toBe(false);
+    expect(last.cancelVisible).toBe(false);
+    // The run's transient surfaces are cleared, not left on the last value.
+    expect(last.status).toBeUndefined();
+    expect(last.databaseProgress).toBeUndefined();
+    expect(last.progressPercent).toBeUndefined();
+    expect(last.error).toBeUndefined();
+    expect(h.model.state.panel).toBe("results");
+  });
+
+  it("shows EMPTY for a run that found nothing, and RESULTS otherwise", async () => {
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          output: output({
+            outcome: "succeeded",
+            records: [],
+            perSource: [report({ sourceId: "pubmed", recordsRetrieved: 0 })],
+          }),
+        },
+      ],
+    });
+    await h.model.runSearch(query());
+    expect(h.model.state.panel).toBe("empty");
+    expect(h.model.state.records).toStrictEqual([]);
+  });
+
+  it("shows results plus FR-9's banner when one of two sources failed", async () => {
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          output: output({
+            outcome: "partial",
+            records: [
+              record({ sourceId: "pubmed", nativeId: "1", title: "A" }),
+            ],
+            perSource: [
+              report({ sourceId: "pubmed", recordsRetrieved: 1 }),
+              report({
+                sourceId: "crossref",
+                error: failure("OFFLINE", { retryable: true }),
+              }),
+            ],
+          }),
+        },
+      ],
+    });
+
+    await h.model.runSearch(query());
+
+    // A *completed* run: one panel plus a non-blocking banner, never the error
+    // panel and never a modal.
+    expect(h.model.state.panel).toBe("results");
+    expect(h.model.state.error).toBeUndefined();
+    expect(h.model.state.warnings).toStrictEqual([
+      {
+        id: "research-helper-search-state-partial",
+        args: { failed: 1, succeeded: 1 },
+      },
+    ]);
+    // The §4.6 list keeps both sources, one of each outcome.
+    expect(h.model.state.sources.map((line) => line.outcome)).toStrictEqual([
+      "succeeded",
+      "failed",
+    ]);
+  });
+
+  it("headlines a wholly failed run and folds the two actions", async () => {
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          output: output({
+            outcome: "failed",
+            // A record carried on a failed outcome, deliberately: the table is
+            // emptied by the error branch rather than left showing rows, and
+            // with `records: []` in the fixture the assertion below could not
+            // tell the two apart.
+            records: [
+              record({ sourceId: "pubmed", nativeId: "1", title: "A" }),
+            ],
+            perSource: [
+              report({
+                sourceId: "pubmed",
+                error: failure("OFFLINE", { retryable: true }),
+              }),
+              report({
+                sourceId: "crossref",
+                error: failure("MISSING_CREDENTIAL", { httpStatus: 401 }),
+              }),
+            ],
+          }),
+        },
+      ],
+    });
+
+    await h.model.runSearch(query());
+    const error = h.model.state.error;
+
+    expect(h.model.state.panel).toBe("error");
+    expect(error?.headline).toStrictEqual({
+      id: "research-helper-search-state-error",
+      args: undefined,
+    });
+    // Only the failed sources are listed under the headline.
+    expect(error?.lines.map((line) => line.sourceId)).toStrictEqual([
+      "pubmed",
+      "crossref",
+    ]);
+    // Retry because OFFLINE offers it; Open Preferences because
+    // MISSING_CREDENTIAL offers it. Both are an `or` across the rows, so one
+    // actionable source is enough to draw the button.
+    expect(error?.retry).toBe(true);
+    expect(error?.openPreferences).toBe(true);
+    expect(error?.details).toStrictEqual([
+      "OFFLINE",
+      "MISSING_CREDENTIAL",
+      "401",
+    ]);
+    // The table is emptied rather than left showing the previous run's rows.
+    expect(h.model.state.records).toStrictEqual([]);
+  });
+
+  it("does not blame the network for a run that asked nobody", async () => {
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          output: output({
+            outcome: "failed",
+            perSource: [],
+            error: failure("CONFIGURATION"),
+          }),
+        },
+      ],
+    });
+
+    await h.model.runSearch(query({ keyword: "" }));
+
+    // `Planning` rejected the input before any source was asked, so the
+    // headline is that error's own §8.3 row. "Could not reach any database"
+    // would be exactly the misleading primary text NFR-14 forbids.
+    expect(h.model.state.error?.headline).toStrictEqual({
+      id: "rh-error-configuration",
+      args: undefined,
+    });
+    expect(h.model.state.error?.lines).toStrictEqual([]);
+    expect(h.model.state.error?.openPreferences).toBe(true);
+    expect(h.model.state.error?.retry).toBe(false);
+  });
+});
+
+describe("P1-T39 — cancel(), and the view that detaches", () => {
+  it("requests cancellation on the running job's own token (FR-10)", async () => {
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          snapshots: [snapshot({ currentStageKey: "pubmed", completed: 2 })],
+          cancelMidRun: true,
+          output: output({
+            outcome: "cancelled",
+            records: [],
+            perSource: [report({ sourceId: "pubmed", recordsRetrieved: 2 })],
+          }),
+        },
+      ],
+    });
+
+    // Pressing Cancel with nothing running is not an error: the document's
+    // Escape handler reads `running`, but a host driven directly may not.
+    expect(() => {
+      h.model.cancel();
+    }).not.toThrow();
+
+    await h.model.runSearch(query());
+
+    // One job, one cancellation source, and the reason is the user's.
+    // `cancel()` is synchronous and the token's callbacks run inside it, so the
+    // 2 s budget FR-10 sets belongs to the HTTP layer alone.
+    expect(h.tokens).toHaveLength(1);
+    expect(h.tokens[0]?.isCancellationRequested).toBe(true);
+    expect(h.tokens[0]?.reason).toStrictEqual({ kind: "user" });
+
+    // A cancelled search wrote nothing, so §8.3's CANCELLED row reports zero
+    // imported rather than the window pretending nothing happened.
+    expect(h.model.state.status).toStrictEqual({
+      id: "rh-error-cancelled",
+      args: { imported: 0 },
+    });
+    expect(h.model.state.running).toBe(false);
+    // Nothing was fetched, so there is no table to show and the window goes
+    // back to INITIAL rather than drawing an empty results panel.
+    expect(h.model.state.panel).toBe("initial");
+  });
+
+  it("stops rendering into a detached view, and only that one", async () => {
+    const succeeded: Run = {
+      output: output({
+        outcome: "succeeded",
+        records: [record({ sourceId: "pubmed", nativeId: "1", title: "A" })],
+        perSource: [report({ sourceId: "pubmed", recordsRetrieved: 1 })],
+      }),
+    };
+
+    // One window, which unloads before the run finishes. Its `render` must not
+    // be called again: the document it belongs to is gone.
+    const alone = harness({ sources: TWO_SOURCES, runs: [succeeded] });
+    const atUnload = alone.states.length;
+    alone.detach();
+    await alone.model.runSearch(query());
+    expect(alone.states).toHaveLength(atUnload);
+    // The run still completed; only the painting stopped.
+    expect(alone.model.state.panel).toBe("results");
+
+    // Two windows. The second connect replaces the first as the view, and the
+    // first window's later detach must leave the second alone — a detach that
+    // blanked whichever view happened to be current would freeze a live window.
+    const two = harness({ sources: TWO_SOURCES, runs: [succeeded] });
+    const second: SearchViewState[] = [];
+    two.model.connect({
+      render: (state: SearchViewState) => {
+        second.push(state);
+      },
+    });
+    const secondOnConnect = second.length;
+    two.detach();
+    await two.model.runSearch(query());
+    expect(second.length).toBeGreaterThan(secondOnConnect);
+    expect((second.at(-1) as SearchViewState).panel).toBe("results");
+  });
+});
+
+describe("P1-T39 — a second run, and the selection that survives it", () => {
+  it("replaces the first run's rows and bumps the revision once per run", async () => {
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          output: output({
+            outcome: "succeeded",
+            records: [
+              record({ sourceId: "pubmed", nativeId: "1", title: "A" }),
+              record({ sourceId: "pubmed", nativeId: "2", title: "B" }),
+            ],
+            perSource: [report({ sourceId: "pubmed", recordsRetrieved: 2 })],
+          }),
+        },
+        {
+          snapshots: [
+            snapshot({ currentStageKey: "pubmed", completed: 1 }),
+            snapshot({ currentStageKey: "pubmed", completed: 3 }),
+            snapshot({ currentStageKey: "crossref", completed: 1 }),
+          ],
+          output: output({
+            outcome: "succeeded",
+            records: [
+              record({ sourceId: "crossref", nativeId: "9", title: "C" }),
+            ],
+            perSource: [report({ sourceId: "crossref", recordsRetrieved: 1 })],
+          }),
+        },
+      ],
+    });
+
+    await h.model.runSearch(query());
+    expect(h.model.state.recordsRevision).toBe(1);
+    const firstRows = h.model.state.records;
+    expect(firstRows?.map((row) => row.key)).toStrictEqual([
+      "pubmed:1",
+      "pubmed:2",
+    ]);
+
+    const mark = h.states.length;
+    await h.model.runSearch(query());
+
+    // **The invariant the selection depends on.** The document re-applies the
+    // rows only when `recordsRevision` changes, and rebuilding the table resets
+    // the selection — so a user who unticked five rows would watch them come
+    // back four times a second if a progress snapshot bumped it. Every state
+    // published while the second run was fetching carries the first run's
+    // revision and the very same rows array.
+    const whileSearching = h.states
+      .slice(mark)
+      .filter((state) => state.panel === "searching");
+    expect(whileSearching.length).toBeGreaterThan(3);
+    for (const state of whileSearching) {
+      expect(state.recordsRevision).toBe(1);
+      expect(state.records).toBe(firstRows);
+    }
+
+    // Then exactly one bump, and the new rows replace the old ones rather than
+    // being appended to them.
+    expect(h.model.state.recordsRevision).toBe(2);
+    expect(h.model.state.records?.map((row) => row.key)).toStrictEqual([
+      "crossref:9",
+    ]);
+  });
+});
+
+describe("P1-T39 — the latched per-database counts", () => {
+  it("keeps a finished source's count while the next one is searching", async () => {
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          snapshots: [
+            snapshot({
+              currentStageKey: "pubmed",
+              completed: 12,
+              fraction: 0.25,
+            }),
+            snapshot({
+              currentStageKey: "crossref",
+              completed: 5,
+              fraction: 0.555,
+            }),
+            snapshot({
+              currentStageKey: "crossref",
+              completed: 9,
+              fraction: 1.3,
+            }),
+          ],
+          output: output({
+            outcome: "succeeded",
+            records: [
+              record({ sourceId: "pubmed", nativeId: "1", title: "A" }),
+            ],
+            perSource: [
+              report({ sourceId: "pubmed", recordsRetrieved: 12 }),
+              report({ sourceId: "crossref", recordsRetrieved: 9 }),
+            ],
+          }),
+        },
+      ],
+    });
+
+    await h.model.runSearch(query());
+
+    const searching = h.states.filter((state) => state.panel === "searching");
+    // The run's own publish, then one per snapshot.
+    expect(searching).toHaveLength(4);
+    const [start, first, second, third] = searching as [
+      SearchViewState,
+      SearchViewState,
+      SearchViewState,
+      SearchViewState,
+    ];
+
+    // Before any snapshot: both asked sources are listed as searching, with no
+    // count, and `5 of 7 databases` has nothing to say yet.
+    expect(start.sources.map((line) => line.outcome)).toStrictEqual([
+      "searching",
+      "searching",
+    ]);
+    expect(start.databaseProgress).toBeUndefined();
+
+    // While PubMed is in flight it stays "searching" even though it has
+    // reported 12 — a source that is still being read is not finished.
+    expect(first.sources.map((line) => line.outcome)).toStrictEqual([
+      "searching",
+      "searching",
+    ]);
+    expect(first.databaseProgress).toStrictEqual({
+      id: "research-helper-search-progress-databases",
+      args: { done: 0, total: 2 },
+    });
+    expect(first.status).toStrictEqual({
+      id: "research-helper-search-status-searching",
+      args: { database: "pubmed" },
+    });
+    expect(first.progressPercent).toBe(25);
+
+    // The fetch moves on: PubMed's last count is latched and shown as a
+    // result, which is how a finished source shows `✓ N results` before
+    // `output.perSource` arrives at the end of the run.
+    expect(second.sources[0]).toStrictEqual({
+      sourceId: "pubmed",
+      nameId: "research-helper-source-pubmed",
+      outcome: "succeeded",
+      detail: {
+        id: "research-helper-search-source-results",
+        args: { count: 12 },
+      },
+    });
+    expect(second.sources[1]?.outcome).toBe("searching");
+    expect(second.databaseProgress).toStrictEqual({
+      id: "research-helper-search-progress-databases",
+      args: { done: 1, total: 2 },
+    });
+    // 0.555 → 55.5 → 56: rounded, not truncated.
+    expect(second.progressPercent).toBe(56);
+
+    // A later snapshot for Crossref does not disturb PubMed's latched 12, and
+    // a fraction above 1 is clamped rather than drawn as 130%.
+    expect(third.sources[0]?.detail.args).toStrictEqual({ count: 12 });
+    expect(third.sources[1]?.outcome).toBe("searching");
+    expect(third.databaseProgress).toStrictEqual({
+      id: "research-helper-search-progress-databases",
+      args: { done: 1, total: 2 },
+    });
+    expect(third.progressPercent).toBe(100);
+  });
+
+  it("lists only the databases the run asked, and clears them per run", async () => {
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          snapshots: [snapshot({ currentStageKey: "pubmed", completed: 12 })],
+          output: output({
+            outcome: "succeeded",
+            records: [
+              record({ sourceId: "pubmed", nativeId: "1", title: "A" }),
+            ],
+            perSource: [report({ sourceId: "pubmed", recordsRetrieved: 12 })],
+          }),
+        },
+        {
+          snapshots: [snapshot({ currentStageKey: "crossref", completed: 1 })],
+          output: output({
+            outcome: "succeeded",
+            records: [],
+            perSource: [report({ sourceId: "crossref", recordsRetrieved: 0 })],
+          }),
+        },
+      ],
+    });
+
+    // Only PubMed is checked, so only PubMed may be drawn as being searched:
+    // listing a database the user unchecked claims a search nobody asked for.
+    await h.model.runSearch(query({ sources: ["pubmed"] }));
+    const firstRun = h.states.filter((state) => state.panel === "searching");
+    for (const state of firstRun) {
+      expect(state.sources.map((line) => line.sourceId)).toStrictEqual([
+        "pubmed",
+      ]);
+    }
+
+    const mark = h.states.length;
+    await h.model.runSearch(query({ sources: ["crossref"] }));
+    const second = h.states
+      .slice(mark)
+      .filter((state) => state.panel === "searching");
+    // `[0]` is the run's own publish, which sets the list but leaves
+    // `databaseProgress` alone; `[1]` is the first snapshot, which is the first
+    // state that counts databases.
+    const start = second[0] as SearchViewState;
+    const counted = second[1] as SearchViewState;
+    expect(start.sources.map((line) => line.sourceId)).toStrictEqual([
+      "crossref",
+    ]);
+    expect(start.sources[0]?.outcome).toBe("searching");
+    // The previous run's latched 12 is gone: a new run starts with nothing
+    // counted. Were it kept, PubMed would still be a finished database here —
+    // `done` would read 1 of 1 before Crossref had returned anything, and the
+    // §4.6 list would credit Crossref's run with PubMed's results.
+    expect(counted.sources).toHaveLength(1);
+    expect(counted.sources[0]?.outcome).toBe("searching");
+    expect(counted.databaseProgress).toStrictEqual({
+      id: "research-helper-search-progress-databases",
+      args: { done: 0, total: 1 },
+    });
+  });
+});
+
+// ===========================================================================
+// 12. The two security constants, by their meaning
+// ===========================================================================
+
+describe("P1-T39 — EMPTY_HEADLINE_OMITTED, as behaviour", () => {
+  it("never populates the EMPTY headline, and never shows the query", async () => {
+    const pasted = `crispr ${NCBI_SHAPED_KEY}`;
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          snapshots: [snapshot({ currentStageKey: "pubmed", completed: 0 })],
+          output: output({
+            outcome: "succeeded",
+            records: [],
+            perSource: [report({ sourceId: "pubmed", recordsRetrieved: 0 })],
+          }),
+        },
+      ],
+    });
+
+    await h.model.runSearch(query({ keyword: pasted }));
+
+    expect(h.model.state.panel).toBe("empty");
+    // The member exists so the decision is visible in the type; it is never
+    // filled, because `research-helper-search-state-empty` interpolates
+    // `{ $query }` verbatim and a window's text is read by screenshots.
+    expect(h.model.state.emptyHeadline).toBeUndefined();
+
+    // **And nothing else carries the query either.** 32 hexadecimal characters
+    // is below `src/core/errors.ts`'s 40-character last-resort pattern, so no
+    // redactor in this project could clean this value — the omission is the
+    // whole protection, and this asserts the omission over every state the
+    // window was handed rather than over one member.
+    for (const state of h.states) {
+      const text = JSON.stringify(state);
+      expect(text).not.toContain(NCBI_SHAPED_KEY);
+      expect(text).not.toContain("crispr");
+    }
+    // The constant says where the decision is written down, so the next person
+    // to look finds the reasoning rather than re-deciding it.
+    expect(EMPTY_HEADLINE_OMITTED).toContain(
+      "src/ui/viewModels/searchImportViewModel.ts",
+    );
+  });
+});
+
+describe("P1-T39 — ERROR_DETAIL_FIELDS, as behaviour", () => {
+  it("puts machine values in the disclosure and free text nowhere", async () => {
+    const h = harness({
+      sources: TWO_SOURCES,
+      runs: [
+        {
+          output: output({
+            outcome: "failed",
+            perSource: [
+              report({
+                sourceId: "pubmed",
+                error: failure("UPSTREAM_SERVER", {
+                  httpStatus: STATUS,
+                  retryable: true,
+                  stack: `at request (https://eutils.nlm.nih.gov/?api_key=${NCBI_SHAPED_KEY})`,
+                }),
+              }),
+            ],
+          }),
+        },
+      ],
+    });
+
+    await h.model.runSearch(query());
+
+    // NFR-14's details disclosure: the machine code and the HTTP status, each
+    // on its own line, with no prose between them.
+    expect(h.model.state.error?.details).toStrictEqual([
+      "UPSTREAM_SERVER",
+      String(STATUS),
+    ]);
+
+    // The failing request's URL, the key inside it and the stack reach no
+    // published state at all — not the disclosure, not the headline, not the
+    // per-source line. `detail` is free text built from the failing request
+    // and `redact()` does not catch a 32-character key inside it.
+    for (const state of h.states) {
+      const text = JSON.stringify(state);
+      expect(text).not.toContain(NCBI_SHAPED_KEY);
+      expect(text).not.toContain("api_key");
+      expect(text).not.toContain("nlm.nih.gov");
+      expect(text).not.toContain("at request");
+    }
+    // NFR-14 again: never a stack trace on the screen.
+    expect(JSON.stringify(h.model.state)).not.toContain("stack");
+  });
+});

@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-12 · **137 tasks: 74 `DONE`, 63 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **37 of 46 `DONE`**, Phase 2 **3 of 25**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 137, so 39 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-13 · **137 tasks: 74 `DONE`, 63 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **37 of 46 `DONE`**, Phase 2 **3 of 25**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 137, so 39 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -696,6 +696,23 @@ run found on the way, and none was fixed.
     the reason beside them. **A rule that looks mechanical and has one deliberate exception is exactly
     the shape that defeats a later tool** — so either the constant is renamed out of the prefix, or the
     exception stays written down wherever a tool might look.
+
+### 6.8 Raised by `P1-T39`, 2026-10-13
+
+36. **The import half's rendering arithmetic is the largest unit-level hole left in the view model.**
+    Uncovered: the completion summary, the abstract-coverage notice, the cancelled-import branch and
+    the no-write error branch — plus everything needing a message formatter (the new unit file supplies
+    none, which exercises the documented fallback to source identifiers), the import branch of progress
+    folding, the module-private target resolution, and the guard that swallows a throwing view. The
+    older unit file reaches the same function but asserts the retained record and the export rather
+    than the notices, and the live spec asserts created-versus-linked through a real window.
+    **Everything needed is already in the new file's harness**: one more describe block and a formatter
+    stub.
+
+37. **Two unit files now cover one module from the same layer, under two card numbers — a question,
+    not a defect.** If the preference is one file per module, merging them is small and safe; if it is
+    one file per card, nothing needs doing. **The new file's header states which file owns what**, so
+    no reader is left guessing while the question is open. An owner's call.
 
 ## 7. Regenerating this file
 
