@@ -66,6 +66,83 @@ jobs:
       - name: TypeScript typecheck
         run: npm run typecheck
 
+      # P2-T15 — the plugin ships no OpenAlex surface. OpenAlex is out of v1
+      # (docs/02 §9.3, on the authority of docs/00 §3 D2 and docs/10 §4 item
+      # 10; the record is plan/decisions/D-P2-openalex.md). The step fails on
+      # any of: a path named after the source under src/, addon/ or test/; a
+      # code line in src/ or addon/ that names it; the host name on a code
+      # line anywhere in src/ or addon/. It deliberately allows what docs/07
+      # §5.1 reserves on purpose — the `openalex` SourceId member, the
+      # `OpenAlexId` brand and the `ExternalIds.openAlexId` slot in
+      # src/model/ids.ts, and docs/02 §10.4's inert precedence entries, which
+      # land in src/model/merge.ts — plus the one display-name row that
+      # Record<SourceId, string> forces on src/zotero/itemMapper.ts. Comment
+      # lines are skipped because addon/prefs.js and
+      # src/core/rateLimit/hostLimiter.ts record the exclusion in their own
+      # comments; the word alone is not a surface. schema/provenance.schema.json
+      # mirrors the union and is not scanned. Measured 2026-10-13: a sources
+      # member, an openalex.keyPresent row, a SecretId, a policy row, an adapter
+      # directory, a fixture directory and a registration slot were each
+      # reintroduced in turn and each failed this step (the decision record
+      # lists them). Runs from the repository root; RH_GUARD_ROOT points it at
+      # another checkout.
+      - name: Assert no OpenAlex surface ships (P2-T15)
+        run: |
+          set -euo pipefail
+          cd "${RH_GUARD_ROOT:-.}"
+          fail=0
+          comment='^[^:]+:[0-9]+:[[:space:]]*(//|/\*|\*)'
+
+          # 1. No file or directory is named after the source. Catches an adapter
+          #    directory (docs/07 §11.1 step 1) and a fixture set (step 5) alike.
+          paths="$(find src addon test -ipath '*openalex*' | LC_ALL=C sort || true)"
+          if [ -n "$paths" ]; then
+            echo "::error::OpenAlex adapter or fixture path exists — OpenAlex is out of v1 (P2-T15, docs/02 §9.3)"
+            echo "$paths"
+            fail=1
+          fi
+
+          # 2. No code line in src/ or addon/ names the source. Comment lines are
+          #    skipped because the code's own comments record the exclusion. Allowed:
+          #    src/model/ (the reserved SourceId member, the OpenAlexId brand, the
+          #    ExternalIds.openAlexId slot — docs/07 §5.1 — and docs/02 §10.4's inert
+          #    precedence entries) and itemMapper's display-name row, which
+          #    Record<SourceId, string> makes mandatory.
+          hits="$(grep -rniE 'openalex' src addon \
+            | grep -vE "$comment" \
+            | grep -vE '^src/model/' \
+            | grep -vE '^src/zotero/itemMapper\.ts:[0-9]+:[[:space:]]*openalex: "OpenAlex",$' \
+            || true)"
+          if [ -n "$hits" ]; then
+            while IFS= read -r hit; do
+              case "$hit" in
+                src/sources/*) what="adapter code" ;;
+                src/prefs/*|addon/prefs.js:*) what="preference row or sources member" ;;
+                src/core/secretStore.ts:*|src/zotero/keychain.ts:*) what="SecretId" ;;
+                src/core/rateLimit/*) what="rate-limit policy row" ;;
+                src/bootstrap/registerSources.ts:*) what="source registration" ;;
+                *) what="OpenAlex surface" ;;
+              esac
+              echo "::error::${what} — OpenAlex is out of v1 (P2-T15, docs/02 §9.3): ${hit}"
+            done <<< "$hits"
+            fail=1
+          fi
+
+          # 3. The host name on a code line fails everywhere, allowlist or not: a
+          #    policy row (docs/07 §7.3) and an endpoint both need it.
+          hosts="$(grep -rniE 'openalex\.org' src addon | grep -vE "$comment" || true)"
+          if [ -n "$hosts" ]; then
+            echo "::error::api.openalex.org / openalex.org on a code line — OpenAlex is out of v1 (P2-T15, docs/07 §7.3)"
+            echo "$hosts"
+            fail=1
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "Reversing this needs a dated decision record and the three document rows first: plan/decisions/D-P2-openalex.md."
+            exit 1
+          fi
+          echo "No OpenAlex surface: no path, no code line, no host name (reserved SourceId member allowed)."
+
       # Placeholder, not yet a step (P0-T14 step 6). scripts/check-l10n.mjs
       # does not exist, and docs/11 R-22 keeps the localization gate warn-only
       # until Phase 7. The en-US / ko-KR Fluent bundles it compares come from

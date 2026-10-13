@@ -2265,9 +2265,17 @@ adapter, no preference member, no `SecretId`, no rate-limit row.
 - [ ] `06-human-gates.md` needs no new row: this card closes with a decision record, not a gate.
 
 **Verify with.**
+> **Corrected 2026-10-13 after the executing agent ran it: the command below is the corrected one. The
+> original — `! grep -rniE "openalex" src/sources/ addon/prefs.js src/core/rateLimit/hostLimiter.ts` —
+> cannot pass on any tree**, because the two named files state the exclusion in comments that contain
+> the word: the `sources` default's comment in `addon/prefs.js`, and the `HOST_POLICIES`,
+> `ADVERTISED_RATE_LIMIT_HEADERS` and `readAdvertisedRate` comments in `hostLimiter.ts` (seven lines,
+> all comments). Deleting them would remove the code's own record of the decision from files outside
+> this card. The check that holds is the CI step this card adds, which skips comment lines, allowlists
+> the reserved `SourceId` member, and fails on nine measured reintroductions (report).
 ```bash
 npm run typecheck && test -f plan/decisions/D-P2-openalex.md && \
-! grep -rniE "openalex" src/sources/ addon/prefs.js src/core/rateLimit/hostLimiter.ts
+node -e "const y=require('yaml'),f=require('fs');const w=y.parse(f.readFileSync('.github/workflows/ci.yml','utf8'));process.stdout.write(w.jobs.lint.steps.find(s=>/OpenAlex/.test(s.name||'')).run)" | bash
 ```
 
 **Notes.** This card used to be a ship-or-defer gate, because `docs/02` §9.3 recommended shipping
@@ -2278,6 +2286,23 @@ file of its own because the evaluation that argued the other way is still in the
 and an implementer who reads §9.1/§9.2 without reaching §9.3 will conclude the opposite. The guard is
 worth the CI step for the same reason.
 
+**Findings, 2026-10-13 — done for the two files the card owns; two of four criteria are defects in the card, not the code; full report at `plan/reports/P2-T15.md`.**
+Verified by the coordinator on the live tree: `plan/decisions/D-P2-openalex.md` is 144 lines and names the
+three deciding records in order of authority; the CI step "Assert no OpenAlex surface ships (P2-T15)" is
+the last step of the `lint` job, its `run` block extracted through the repository's `yaml` package exits 0
+and prints "No OpenAlex surface: no path, no code line, no host name (reserved SourceId member allowed).",
+and `prettier --check` on the workflow passes. The agent proved the guard bites on **nine reintroduced
+surfaces** (preference default in two files, `openalex.keyPresent`, a `SecretId`, a rate-limit row, a host
+constant inside the allowlisted `src/model/`, an adapter directory, a fixture directory, a registration
+slot) on a hash-verified scratch copy, each failing with its real `::error::` text, while a comment-only
+mention passed; the shipped block and the tested block are byte-identical by the agent's hash comparison. Two criteria could not pass as
+written and the card is at fault for both (rule 6, rule 2): the original `Verify with` greps for a word
+that the exclusion's own comments contain — corrected above with the CI step as the command — and the
+third criterion wants a typed error plus a unit test from a card whose `Files` list has no source file and
+no test file. Measured instead: `isSourceId` accepts the reserved member, `validateSearchImportInput`
+checks only non-emptiness, and the pipeline's `run` skips an `openalex` member with a warning through
+`missingAdapterReport` — never registers or queries it, but does not reject it. That fact is in the
+decision record's section 5 today; whether the run-time half is worth a card is `plan/00` §6.12.
 ---
 
 ### P2-T16 — Phase 2 end-to-end run against the definition of done

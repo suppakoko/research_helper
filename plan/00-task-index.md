@@ -772,6 +772,31 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 54. **(stale comment)** `src/core/secretStore.ts` says every id but `source.ncbi` is unreachable in Phase 1 and no
     user can supply a value. `P1-T44` made `source.semanticscholar` reachable. Same class as items 31 and 39.
 
+### 6.12 Raised by `P2-T15`, 2026-10-13 — recorded under rule 9, none carded
+
+57. **The run-time half of the OpenAlex guard does not exist.** `P2-T15`'s third criterion wanted a typed
+    error when `openalex` appears in the `sources` preference, asserted by a unit test; the card's `Files`
+    list had nowhere to put it. Measured: `isSourceId` in `src/model/ids.ts` accepts the reserved member,
+    `validateSearchImportInput` in `src/pipeline/searchImport/searchImportPipeline.ts` checks only that the
+    list is non-empty, and the pipeline's `run` skips the member with a warning through
+    `missingAdapterReport`. The two candidate homes are the `getPrefs` closure in
+    `src/bootstrap/registerUI.ts` or `validateSearchImportInput`. Phase 2's sixth finishing condition (no
+    OpenAlex surface) is met by the CI step; this is the stricter half and becomes a card only if a
+    finishing condition needs it.
+
+58. **(`P2-T10`)** When `src/model/merge.ts` lands with `docs/02` §10.4's four inert OpenAlex precedence
+    entries, confirm the CI step still exits 0. Expected yes — the guard allowlists `src/model/` for the
+    word but not for the host name — and the confirmation belongs in `P2-T10`'s Findings.
+
+59. **The guard treats `#` as code in `.ftl` files.** Fluent comments start with `#`, which the step's
+    comment pattern does not recognise, so a future bundle comment naming OpenAlex fails the build. Baseline
+    has none. Either extend the pattern for `.ftl` when the need arises, or keep not mentioning it.
+
+60. **`P2-T15`'s original `Verify with` was unsatisfiable** — a bare-word grep over two files whose comments
+    state the exclusion. Corrected in the card on 2026-10-13 with the CI step as the command. The lesson
+    is the one `plan/README.md` §5 rule 8 already carries: a card's verification must be run once against
+    the tree before the card is written.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
