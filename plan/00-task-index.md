@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-13 · **139 tasks: 81 `DONE`, 58 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **3 of 27**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 139, so 41 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-13 · **139 tasks: 85 `DONE`, 54 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **7 of 27**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 139, so 41 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -211,8 +211,8 @@ uses a synthetic API-key-shaped string, never a real key.
 
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
-| `P2-T01` | Ship the user-query parser and per-source render contract | `P1-T07`, `P1-T08` | 1.0 d |  |
-| `P2-T02` | Parallel fan-out: per-source timeouts, failure isolation | `P1-T04`, `P1-T07`, `P1-T16`, `P2-T01` | 1.25 d |  |
+| ✅ `P2-T01` | Ship the user-query parser and per-source render contract | `P1-T07`, `P1-T08` | 1.0 d |  |
+| ✅ `P2-T02` | Parallel fan-out: per-source timeouts, failure isolation | `P1-T04`, `P1-T07`, `P1-T16`, `P2-T01` | 1.25 d |  |
 | `P2-T03` | Europe PMC adapter | `P2-T01`, `P2-T23`, `P2-T25`, `P2-T26` | 2.0 d |  |
 | `P2-T04` | Crossref adapter | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26` | 1.5 d |  |
 | `P2-T05` | Semantic Scholar adapter with unauthenticated degradation | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26` | 2.0 d | 🔒 |
@@ -227,7 +227,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10` | 1.5 d |  |
 | `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
 | `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
-| `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
+| ✅ `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
 | `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18` | 1.0 d |  |
 | `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
 | `P2-T20` | Render `languages`, `openAccessOnly` and `raw` across the… | `P1-T08` | 0.5 d |  |
@@ -235,7 +235,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T22` | Declare the menu-context member `docs/08` mandates and… | `P1-T19` | 0.25 d |  |
 | ✅ `P2-T23` | Give `hostLimiter.ts` the test file two cards already invoke | `P1-T26` | 0.25 d |  |
 | `P2-T24` | Correct the three statements `P2-T21` made false, including… | `P2-T21` | 0.25 d |  |
-| `P2-T25` | Make the fixture replay harness usable inside Zotero, so six… | `P1-T11` | 0.75 d |  |
+| ✅ `P2-T25` | Make the fixture replay harness usable inside Zotero, so six… | `P1-T11` | 0.75 d |  |
 | `P2-T26` | Give the source registry a test-only removal, before two… | `P2-T25` | 0.25 d |  |
 | `P2-T27` | Wire `fanOut` into the running pipeline, which still fetches… | `P2-T01`, `P2-T02` | 0.5 d |  |
 

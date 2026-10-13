@@ -103,7 +103,7 @@ both:
 | Field | Value |
 |---|---|
 | **ID** | `P2-T01` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-13 under the readings dated on the card; the owner also authorised the `docs/07` §4.2 extension for the per-source query dialect (`P2-T28`). Report at `plan/reports/P2-T01.md`. |
 | **Depends on** | `P1-T07`, `P1-T08` |
 | **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T17`, `P2-T02` |
 | **Retires** | part of `R-2` |
@@ -225,7 +225,7 @@ Four follow-ups are `plan/00` §6.13: the per-source query dialect needs a home 
 | Field | Value |
 |---|---|
 | **ID** | `P2-T02` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-13; `fanOut` is built and proven, and its wiring into the running pipeline is `P2-T27`. Report at `plan/reports/P2-T02.md`. |
 | **Depends on** | `P1-T04`, `P1-T07`, `P1-T16`, `P2-T01` |
 | **Blocks** | `P2-T14`, `P2-T16`, `P2-T27` |
 | **Retires** | part of `R-2` |
@@ -2227,7 +2227,7 @@ to avoid adding a file.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T15` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-13; the closed OpenAlex decision has a dated record and a CI step that fails on nine measured reintroductions. Report at `plan/reports/P2-T15.md`. |
 | **Depends on** | none |
 | **Blocks** | none |
 | **Retires** | part of `R-2` |
@@ -3367,7 +3367,7 @@ artefact rather than the behaviour — the defect `P1-T14` reported about its ow
 | Field | Value |
 |---|---|
 | **ID** | `P2-T25` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-13 with criterion 4 met in part (the window blocks keep their stub until a matching fixture is recorded, `plan/00` §6 item 74). Report at `plan/reports/P2-T25.md`. |
 | **Depends on** | `P1-T11` |
 | **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T26` |
 | **Retires** | none |
