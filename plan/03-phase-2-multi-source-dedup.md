@@ -346,7 +346,7 @@ the integration suite. Follow-ups are `plan/00` §6.14; the wiring is carded.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T03` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14 with the CJK-title reading accepted; construction in the product is `P2-T32`. Report at `plan/reports/P2-T03.md`. |
 | **Depends on** | `P2-T01`, `P2-T23`, `P2-T25`, `P2-T26`, `P2-T28` |
 | **Blocks** | `P2-T07`, `P2-T08`, `P2-T12`, `P2-T32`, `P2-T33` |
 | **Retires** | part of `R-2`, part of `R-17` |
@@ -2733,7 +2733,7 @@ index — one per run should be decided (item 106); `s2CorpusId` has no home on 
 | Field | Value |
 |---|---|
 | **ID** | `P2-T20` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14; PubMed renders `languages` and `raw`, refuses `openAccessOnly` by name until `docs/02` §12 gains the row. Report at `plan/reports/P2-T20.md`. |
 | **Depends on** | `P1-T08` |
 | **Blocks** | none |
 | **Retires** | none |
@@ -4035,7 +4035,7 @@ renders or stay at §12.3's four. Adapter cards now fill `capabilities.query` fr
 | Field | Value |
 |---|---|
 | **ID** | `P2-T29` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14; the product dedups and merges on every search; the NFR-3 regression it exposed is `P2-T30` and the import-half gap `P2-T31`. Report at `plan/reports/P2-T29.md`. |
 | **Depends on** | `P2-T10`, `P2-T27` |
 | **Blocks** | `P2-T12`, `P2-T14`, `P2-T16`, `P2-T30`, `P2-T31` |
 | **Retires** | `plan/00` §6 item 98 |
