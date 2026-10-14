@@ -949,6 +949,11 @@ test collection is preferred.
 
 ### G-16 — Decide the preprint/published merge policy
 
+> **DECIDED 2026-10-14 — keep both, linked.** The owner chose the `docs/10` §5 default: a preprint and its
+> published version stay two Zotero items, connected through *Related*, the preprint tagged
+> `research_helper/superseded-by-published`, so the preprint's date survives for trend analysis. `P2-T10`
+> builds exactly this (coordinator note on the card); no merge of the two is to be offered in v1.
+
 **Blocks:** the dedup engine (`docs/11` §5 lists it as "Before Phase 2"), and
 inherited by Phase 5's recommendation presentation (`docs/05` §3.2).
 
