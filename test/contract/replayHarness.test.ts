@@ -12,7 +12,7 @@
  *    inputs and on generated inputs that cross every padding boundary and carry
  *    non-ASCII text. `createHash` is the reference the fixtures were made with.
  * 3. **The Node face and the core answer alike**: `test/contract/_transport.ts`
- *    binds `test/support/fixtureIo.node.ts` and nothing else.
+ *    binds `test/support/fixtureIoNode.ts` and nothing else.
  *
  * Everything here is `[ours]` in `pubmed.contract.test.ts`'s vocabulary: no
  * service can make these fail.
@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { independentPlan, plannedRequest } from "../../scripts/record-fixtures";
-import { nodeFixtureIo } from "../support/fixtureIo.node";
+import { nodeFixtureIo } from "../support/fixtureIoNode";
 import {
   assertFixturesFresh as assertFixturesFreshWith,
   createReplayHttpClient as createReplayHttpClientWith,

@@ -4428,6 +4428,13 @@ fixture key function.
 - [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:contract` exit 0.
 
 **Files.**
+> **Noted 2026-10-14 — accepted deviation (report):** step 2's "import the scenario constants from the unit test"
+> was not executable — the constants were unexported `const`s in a module that calls `describe` at load — so
+> they moved verbatim into a new node-free module `test/support/europepmcRecordedRequests.ts` (the layout
+> `pubmedRecordedRequests.ts`'s own header prescribes) and `test/unit/sources/europepmc.test.ts` imports them.
+> Two files outside this list; accepted by the coordinator because the alternative was to leave step 2
+> undone. Step 1's first option (import with the `.ts` extension) fails typecheck (TS5097, `tsconfig.json` is
+> outside the list), so the port file is renamed `fixtureIoNode.ts` and its two importers repointed.
 - modify `scripts/record-fixtures.ts`, `test/contract/_transport.ts` (or rename
   `test/support/fixtureIo.node.ts`)
 - modify `docs/13-testing-build-and-release.md` (§3.2, one line)
@@ -4438,6 +4445,20 @@ fixture key function.
 npm run typecheck && npm run lint:check && npm run test && npm run fixtures:record -- --dry-run && npm run fixtures:record -- --source europepmc --dry-run
 ```
 
+
+**Findings, 2026-10-14 — done; both dry runs print the committed keys byte-for-byte under tsx; one accepted deviation; full report at `plan/reports/P2-T33.md`.**
+Verified by the coordinator on the live tree: typecheck 0, `lint:check` 0, contract 40, unit 1,757 passed with
+the four known `HOST_POLICIES` pins red, `test/support/` now holds `fixtureIoNode.ts` and
+`europepmcRecordedRequests.ts`, and `npm run fixtures:record -- --source europepmc --dry-run` ends with the
+19 committed keys and their scenario names (the agent's `diff` against `ls test/fixtures/<source>` was empty for
+both sources, three runs each). The recorder takes `--source <id>` with a per-source plan, directory and pacing
+host (`spacingMsFor` — it had paced every source at NCBI's 400 ms), lists dependent and synthetic keys in the
+dry run, scrubs the maintainer address in both its plain and percent-encoded spellings and refuses to write a
+fixture that still carries either; a seven-test unit file pins the scrub and the refusal. No live request was
+made and no fixture changed. Four mutants, four killed — one only by the dry run (the tsx resolution has no
+test guard, item 137). The `P2-T03` report's claim that its scratch recorder mirrored `redactExchange` "line
+for line" is false in two sidecar strings (item 138). The four adapter cards each add one `case` to `planFor`,
+one plan and one `test/support/<source>RecordedRequests.ts`.
 ---
 
 ---

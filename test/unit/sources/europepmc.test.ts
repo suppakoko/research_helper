@@ -81,6 +81,27 @@ import {
   META_SUFFIX,
   type RecordedExchange,
 } from "../../contract/_transport";
+import {
+  EUROPEPMC_Q1_2023 as Q1_2023,
+  EUROPEPMC_QUERY_CJK as QUERY_CJK,
+  EUROPEPMC_QUERY_EMPTY as QUERY_EMPTY,
+  EUROPEPMC_QUERY_ERROR_EMPTY as QUERY_ERROR_EMPTY,
+  EUROPEPMC_QUERY_JATS as QUERY_JATS,
+  EUROPEPMC_QUERY_MANY as QUERY_MANY,
+  EUROPEPMC_QUERY_PAGINATED as QUERY_PAGINATED,
+  EUROPEPMC_QUERY_PAIR as QUERY_PAIR,
+  EUROPEPMC_QUERY_POST_LONG as QUERY_POST_LONG,
+  EUROPEPMC_QUERY_PREPRINT as QUERY_PREPRINT,
+  EUROPEPMC_QUERY_RICH as QUERY_RICH,
+  EUROPEPMC_QUERY_SPARSE as QUERY_SPARSE,
+  EUROPEPMC_QUERY_SYNTHETIC_429 as QUERY_SYNTHETIC_429,
+  EUROPEPMC_QUERY_SYNTHETIC_500 as QUERY_SYNTHETIC_500,
+  EUROPEPMC_QUERY_SYNTHETIC_MALFORMED as QUERY_SYNTHETIC_MALFORMED,
+  EUROPEPMC_QUERY_TYPICAL as QUERY_TYPICAL,
+  EUROPEPMC_QUERY_UNICODE as QUERY_UNICODE,
+  EUROPEPMC_TITLE_RICH as T_RICH,
+  EUROPEPMC_TITLE_UNICODE_1 as T_UNI_1,
+} from "../../support/europepmcRecordedRequests";
 
 /**
  * `P2-T03`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, **no network**.
@@ -133,7 +154,6 @@ const term = (
   ...(field !== undefined && { field }),
   ...(phrase !== undefined && { phrase }),
 });
-const title = (value: string): QueryNode => term(value, "title", true);
 const and = (...children: QueryNode[]): QueryNode => ({
   kind: "and",
   children,
@@ -234,78 +254,14 @@ function createSource(
 }
 
 // ---------------------------------------------------------------------------
-// The recorder's queries, repeated — see the file header
+// The recorder's queries — one declaration, imported (P2-T33)
 // ---------------------------------------------------------------------------
 
-const Q1_2023 = { fromDate: "2023-01-01", toDate: "2023-03-31" } as const;
-
-const QUERY_TYPICAL: SourceQuery = {
-  terms: and(term("CRISPR"), term("editing")),
-  ...Q1_2023,
-  limit: 20,
-};
-const QUERY_EMPTY: SourceQuery = {
-  terms: term("zqxjkwv nonexistent biomedical phrase"),
-  ...Q1_2023,
-  limit: 20,
-};
-const T_RICH = "Transfer learning enables predictions in network biology";
-const T_SPARSE = "Measures in ovine psoroptic mange";
-const T_JATS =
-  "Effect of topical Zingiber cassumunar on painful diabetic neuropathy";
-const T_MANY = "A reference map of the human binary protein interactome";
-const T_UNI_1 =
-  "Role in post-translational modification of M2-type pyruvate kinase in tumorigenesis and development";
-const T_UNI_2 =
-  "Effects of Ashwagandha (Withania somnifera) standardized root extract on physical endurance and VO2max in healthy adults";
-const T_UNI_3 =
-  "Physical and psychological effects of neuromuscular integrative activity vs Pilates on sedentary females";
-
-const QUERY_RICH: SourceQuery = { terms: title(T_RICH), limit: 5 };
-const QUERY_SPARSE: SourceQuery = { terms: title(T_SPARSE), limit: 5 };
-const QUERY_JATS: SourceQuery = { terms: title(T_JATS), limit: 5 };
-const QUERY_MANY: SourceQuery = { terms: title(T_MANY), limit: 5 };
-const QUERY_UNICODE: SourceQuery = {
-  terms: or(title(T_UNI_1), title(T_UNI_2), title(T_UNI_3)),
-  limit: 5,
-};
-const QUERY_CJK: SourceQuery = { terms: title("基因编辑"), limit: 3 };
-const QUERY_PAIR: SourceQuery = {
-  terms: term("10.1038/s41586-023-06139-9"),
-  limit: 5,
-};
-const QUERY_PREPRINT: SourceQuery = {
-  terms: and(title("base editing"), term("bioRxiv")),
-  fromDate: "2023-01-01",
-  toDate: "2023-06-30",
-  limit: 3,
-};
-const QUERY_PAGINATED: SourceQuery = {
-  terms: or(title(T_RICH), title(T_SPARSE), title(T_MANY), title(T_JATS)),
-  limit: 3,
-};
-const QUERY_ERROR_EMPTY: SourceQuery = { terms: term('""'), limit: 20 };
-const QUERY_POST_LONG: SourceQuery = {
-  terms: or(
-    ...Array.from({ length: 99 }, (_, i) =>
-      term(`zqxjkwv filler phrase ${String(i).padStart(3, "0")}`),
-    ),
-    title("CRISPR"),
-  ),
-  limit: 5,
-};
-const QUERY_SYNTHETIC_429: SourceQuery = {
-  terms: term("synthetic rate limit fixture"),
-  limit: 20,
-};
-const QUERY_SYNTHETIC_500: SourceQuery = {
-  terms: term("synthetic server error fixture"),
-  limit: 20,
-};
-const QUERY_SYNTHETIC_MALFORMED: SourceQuery = {
-  terms: term("synthetic malformed body fixture"),
-  limit: 20,
-};
+/*
+ * `test/support/europepmcRecordedRequests.ts` is the single home of the
+ * queries the fixtures are keyed under; `scripts/record-fixtures.ts` imports
+ * the same names. The local aliases keep this file's vocabulary.
+ */
 
 /** `docs/13` §3.1's thirteen names, as this corpus spells them. */
 const DOCS_13_SCENARIOS: readonly string[] = [

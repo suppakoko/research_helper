@@ -1117,7 +1117,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `P2-T04`–`P2-T07` launch, or each will stop at the same wall.
 
 127. ~~**`npm run fixtures:record` has been broken since `P2-T25`** (tsx reads `.node` as an extension) and is
-    PubMed-only.~~ **CARDED 2026-10-14 as `P2-T33`** — `P2-T03` recorded from an uncommitted scratch script.
+    PubMed-only.~~ **CARDED 2026-10-14 as `P2-T33`, DONE the same day** — `P2-T03` recorded from an uncommitted scratch script.
 
 128. **(owner's document edits, `docs/02`)** §4.6: the measured termination shapes (a short page with a fresh
     cursor; an empty page with no cursor member; never a repeated cursor); §4.4: `request.email` and
@@ -1154,6 +1154,26 @@ the caller of what the card builds; if it does not, the caller is added with a d
 135. **The yield is `createSystemClock().sleep(0)`, measured at ≈ 10 ms per tick under Node on Windows and
     ≈ 4 ms in Firefox** — wall time, not stall. On the 500-record 50-block set that is ≈ 200 ms of wall time;
     `P2-T16` measures NFR-2 with it in place.
+
+### 6.26 Raised by `P2-T33`, 2026-10-14 — recorded under rule 9, none carded
+
+136. **No test pins Europe PMC's 19 fixture keys to on-disk names** the way `replayHarness.test.ts` pins
+    PubMed's; a wrong plan is caught today only by reading the dry run. A `plannedRequest(name, "europepmc")`
+    pin beside the PubMed one, the next time `test/contract/replayHarness.test.ts` is in a card's list.
+
+137. **Only the dry run guards the tsx module resolution** (renaming the port back survived the contract
+    suite). A CI step running `npm run fixtures:record -- --dry-run` would make the next `.node`-style
+    regression visible; one line in `.github/workflows/ci.yml`.
+
+138. **`plan/reports/P2-T03.md` Contradiction 12 overstates:** the scratch recorder's sidecar wording differs
+    from `redactExchange`'s in two strings. Harmless to replay; a re-record through the committed recorder
+    will change them.
+
+139. **`docs/13` §3.2 still says the recorder "reads real keys from `.env`"** — contradicts D5 and the
+    recorder's own header; open since Phase 1. A one-sentence document edit, the owner's.
+
+140. **Stale prose:** `test/support/fixtureIo.ts` and `test/support/fixtureReplay.ts` still name
+    `fixtureIo.node.ts`. Fix when either file is next in a card's list.
 
 ## 7. Regenerating this file
 

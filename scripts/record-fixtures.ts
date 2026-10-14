@@ -1,28 +1,37 @@
 /**
  * `scripts/record-fixtures.ts` — the recorder behind `npm run fixtures:record`.
  *
- * **Scope.** `P1-T11` steps 2–4. It records the `docs/13` §3.1 inventory for
- * PubMed `esearch` and `efetch` into `test/fixtures/pubmed/`, keyed by
- * `test/contract/_transport.ts`'s {@link fixtureKey} so that
- * `replayTransport` finds what this writes. The scenario list below is fixed and
- * versioned ({@link SCENARIO_VERSION}) so a re-record is reproducible.
+ * **Scope.** `P1-T11` steps 2–4 wrote it for PubMed `esearch` and `efetch`
+ * into `test/fixtures/pubmed/`; `P2-T33` gave it `docs/07` §11.1 step 5's
+ * `--source <id>` flag, so that every `docs/13` §3.1 inventory is recorded by
+ * this committed script and not by a scratch one. Each source contributes a
+ * {@link SourcePlan}: its fixture directory, its rate-limit host, the requests
+ * whose shape is known up front, the ones that depend on an earlier answer
+ * (pagination), and the hand-written fixtures. Fixtures are keyed by
+ * `test/contract/_transport.ts`'s {@link fixtureKey} so that `replayTransport`
+ * finds what this writes. Every scenario list is fixed and versioned
+ * ({@link SCENARIO_VERSION}) so a re-record is reproducible.
  *
  * ## Running it
  *
  * ```sh
- * npm run fixtures:record                      # dry run: prints the plan only
- * FIXTURE_MODE=record npm run fixtures:record  # live: issues the requests
- * FIXTURE_MODE=synthetic npm run fixtures:record   # rewrites the 3 hand-written
- *                                                  # fixtures, no network
+ * npm run fixtures:record -- --dry-run                       # PubMed: prints the plan only
+ * npm run fixtures:record -- --source europepmc --dry-run    # Europe PMC: prints the plan only
+ * FIXTURE_MODE=record npm run fixtures:record -- --source europepmc   # live
+ * FIXTURE_MODE=synthetic npm run fixtures:record                      # rewrites the
+ *                                                  # hand-written fixtures, no network
  * ```
  *
  * `FIXTURE_MODE` is `docs/13` §2.2's own spelling, and the default being a dry
  * run is deliberate: `npm run fixtures:record` typed by accident must not put
- * thirteen requests on NCBI.
+ * requests on anyone's server. `--dry-run` wins over `FIXTURE_MODE`, so a
+ * shell that still exports `FIXTURE_MODE=record` cannot record by mistake.
+ * `--source` defaults to `pubmed`, which is what the flagless Phase 1 command
+ * always meant.
  *
  * On this network Node needs `NODE_USE_SYSTEM_CA=1` — a TLS-inspecting appliance
  * sits in front of everything, and the sanctioned flag is the answer. Disabling
- * certificate verification is never the answer.
+ * certificate verification is never the answer. A dry run needs no network.
  *
  * ## Politeness, which outranks completeness
  *
@@ -32,20 +41,23 @@
  *   `api_key=REDACTED` rather than vanishing, so a fixture recorded with a key
  *   could never be found by a keyless replay. See the card report.
  * - **Requests are strictly sequential**, one host, one connection, with a
- *   minimum end-to-start gap of {@link ncbiSpacingMs}, read from
- *   `HOST_POLICIES`' unkeyed `ratePerSecond` (2.5/s) rather than written down
- *   here — `plan/README.md` §5 rule 4.
+ *   minimum end-to-start gap of {@link spacingMsFor} the plan's host, read from
+ *   `HOST_POLICIES`' unkeyed `ratePerSecond` rather than written down here —
+ *   `plan/README.md` §5 rule 4.
  * - **`tool` and `email` are not this file's to choose.** Every URL comes from
- *   `buildEsearchRequest` / `buildEfetchRequest`, which take them from
- *   `ncbiIdentityParams()` (decision D10). The shipped `createHttpClient` then
- *   refuses any NCBI request carrying anything else, so a mistake here is a
- *   thrown `PolicyViolationError` and not a quiet impoliteness.
+ *   the shipped builders — `buildEsearchRequest` / `buildEfetchRequest`, which
+ *   take them from `ncbiIdentityParams()` (decision D10), and
+ *   `buildEuropePmcSearchRequest`, which appends `email=`. The shipped
+ *   `createHttpClient` then refuses any NCBI request carrying anything else, so
+ *   a mistake here is a thrown `PolicyViolationError` and not a quiet
+ *   impoliteness.
  * - **`error-429` and `error-500` are hand-written**, per `P1-T11` step 3:
  *   `docs/02` §3.1 quotes NCBI's "failure to comply with this policy may result
  *   in an IP address being blocked from accessing NCBI", so the rate limit is not
- *   provoked. `error-malformed` is likewise constructed, by truncating the
- *   recorded `record-rich` body. All three carry `"synthetic": true` and a reason
- *   in their `_meta.json`, so nobody mistakes them for evidence about NCBI.
+ *   provoked, for any source. `error-malformed` is likewise constructed, by
+ *   truncating the recorded `record-rich` body. All three carry
+ *   `"synthetic": true` and a reason in their `_meta.json`, so nobody mistakes
+ *   them for evidence about the service.
  * - **NCBI asks that large jobs run off-peak** (`docs/02` §3.1). Thirteen
  *   requests is not a large job. Nothing here loops over a result set, and that
  *   is on purpose: this recorder must not be a harvester.
@@ -65,11 +77,18 @@
  *    business in a committed file.
  * 3. Every remaining header value and the body are passed through
  *    `src/core/errors.ts`'s `redact()` and then through a literal scrub of the
- *    maintainer address and of any key-shaped environment value.
+ *    maintainer address — **in both its plain and its percent-encoded
+ *    spelling** — and of any key-shaped environment value.
  * 4. **The literal scrub is not optional and `redact()` alone is not enough.**
  *    `redact()`'s catch-all pattern needs a 40-character run; an NCBI key is
  *    shorter than that. So key-shaped values are matched literally, by value,
  *    whatever their length.
+ * 5. **The percent-encoded spelling is not optional either.** Measured by
+ *    `P2-T03` on 2026-10-14: Europe PMC echoes the request's `email=` back in
+ *    the body, verbatim in `request.email` and as `suppakoko%40gmail.com` in
+ *    `nextPageUrl`. A scrub of the plain spelling alone left the address in six
+ *    fixtures. {@link MAINTAINER_ADDRESS_SPELLINGS} carries both, and
+ *    {@link assertClean} refuses both.
  *
  * ## What is *not* read from `.env`, and the contradiction behind that
  *
@@ -95,8 +114,13 @@ import {
   type HttpTransportXhr,
 } from "../src/core/http/client";
 import { buildUserAgent, MAINTAINER_EMAIL } from "../src/core/http/userAgent";
-import { HOST_POLICIES, NCBI_HOST } from "../src/core/rateLimit/hostLimiter";
+import {
+  EBI_HOST,
+  HOST_POLICIES,
+  NCBI_HOST,
+} from "../src/core/rateLimit/hostLimiter";
 import { createCancellationTokenSource } from "../src/core/jobQueue/cancellation";
+import { parseEuropePmcSearchBody } from "../src/sources/europepmc/europepmcSource";
 import {
   buildEfetchRequest,
   parseEsearchBody,
@@ -113,6 +137,94 @@ import {
   type FixtureMeta,
   type RecordedExchange,
 } from "../test/contract/_transport";
+import {
+  EUROPEPMC_QUERY_CJK,
+  EUROPEPMC_QUERY_EMPTY,
+  EUROPEPMC_QUERY_ERROR_EMPTY,
+  EUROPEPMC_QUERY_JATS,
+  EUROPEPMC_QUERY_MANY,
+  EUROPEPMC_QUERY_PAGINATED,
+  EUROPEPMC_QUERY_PAIR,
+  EUROPEPMC_QUERY_POST_LONG,
+  EUROPEPMC_QUERY_PREPRINT,
+  EUROPEPMC_QUERY_RICH,
+  EUROPEPMC_QUERY_SPARSE,
+  EUROPEPMC_QUERY_SYNTHETIC_429,
+  EUROPEPMC_QUERY_SYNTHETIC_500,
+  EUROPEPMC_QUERY_SYNTHETIC_MALFORMED,
+  EUROPEPMC_QUERY_TYPICAL,
+  EUROPEPMC_QUERY_UNICODE,
+  recordedEuropePmcRequest,
+} from "../test/support/europepmcRecordedRequests";
+
+// ---------------------------------------------------------------------------
+// 0. The command line
+// ---------------------------------------------------------------------------
+
+/** The sources this recorder has a plan for. One directory per id (`docs/07` §2.2). */
+export const RECORDABLE_SOURCES = ["pubmed", "europepmc"] as const;
+export type RecordableSourceId = (typeof RECORDABLE_SOURCES)[number];
+
+function isRecordableSource(value: string): value is RecordableSourceId {
+  return (RECORDABLE_SOURCES as readonly string[]).includes(value);
+}
+
+/** What `--source` and `--dry-run` resolved to. */
+export interface CliOptions {
+  readonly source: RecordableSourceId;
+  /** `--dry-run` was given. Wins over `FIXTURE_MODE`. */
+  readonly dryRun: boolean;
+}
+
+/** A command-line mistake. Exit code 2, no plan printed. */
+export class UsageError extends Error {}
+
+const USAGE =
+  "usage: npm run fixtures:record -- [--source <id>] [--dry-run]   " +
+  `(sources: ${RECORDABLE_SOURCES.join(", ")})`;
+
+/**
+ * Parse the arguments after the script path.
+ *
+ * `--source <id>` and `--source=<id>` are both accepted; `--dry-run` takes no
+ * value. Anything else is a {@link UsageError}: an unknown flag must not be
+ * mistaken for "record everything".
+ *
+ * @param argv - `process.argv.slice(2)`
+ * @returns the options, with `pubmed` as the default source
+ * @throws UsageError on an unknown argument, a missing value or an unknown source
+ */
+export function parseCliArgs(argv: readonly string[]): CliOptions {
+  let source: RecordableSourceId = "pubmed";
+  let dryRun = false;
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === undefined) continue;
+    if (arg === "--dry-run") {
+      dryRun = true;
+      continue;
+    }
+    let value: string | undefined;
+    if (arg === "--source") {
+      i += 1;
+      value = argv[i];
+    } else if (arg.startsWith("--source=")) {
+      value = arg.slice("--source=".length);
+    } else {
+      throw new UsageError(`Unknown argument "${arg}".\n${USAGE}`);
+    }
+    if (value === undefined || value === "") {
+      throw new UsageError(`--source needs a value.\n${USAGE}`);
+    }
+    if (!isRecordableSource(value)) {
+      throw new UsageError(
+        `No recording plan for source "${value}".\n${USAGE}`,
+      );
+    }
+    source = value;
+  }
+  return { source, dryRun };
+}
 
 // ---------------------------------------------------------------------------
 // 1. Where things go, and the scenario list's version
@@ -120,7 +232,20 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..");
-export const FIXTURE_DIR = resolve(REPO_ROOT, "test/fixtures/pubmed");
+
+/**
+ * `test/fixtures/<source>/` — one directory per `SourceId`, no abbreviations
+ * (`docs/07` §2.2, §11.1 step 5).
+ *
+ * @param source - the source id
+ * @returns the absolute directory
+ */
+export function fixtureDirFor(source: RecordableSourceId): string {
+  return resolve(REPO_ROOT, "test/fixtures", source);
+}
+
+/** PubMed's directory, kept under its Phase 1 name. */
+export const FIXTURE_DIR = fixtureDirFor("pubmed");
 
 /**
  * The scenario list's version. Bump it when a scenario's *request* changes, so
@@ -140,7 +265,7 @@ async function toolVersion(): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// 2. The queries. Fixed, and every date bound is a closed historical window.
+// 2. The PubMed queries. Fixed, and every date bound is a closed historical window.
 // ---------------------------------------------------------------------------
 
 /*
@@ -297,7 +422,7 @@ export const RECORD_PMIDS = {
   /**
    * `record-sparse`. §3.1 asks for "no abstract, no DOI, incomplete date" and
    * this record is all three: no `<Abstract>`, no `doi` `ArticleId` and no
-   * `ELocationID`, `<PubDate>` of `<Year>1976</Year><Month>Jun</Month>` with no
+   * `<ELocationID>`, `<PubDate>` of `<Year>1976</Year><Month>Jun</Month>` with no
    * day. A bracketed translated title as a bonus.
    */
   sparse: ["60000"],
@@ -345,24 +470,31 @@ export const PAGE_SIZE = 3;
 // ---------------------------------------------------------------------------
 
 /**
- * The minimum end-to-start gap between NCBI requests, in milliseconds.
+ * The minimum end-to-start gap between requests to `host`, in milliseconds.
  *
- * Derived from `HOST_POLICIES`' unkeyed `ratePerSecond` for
- * `eutils.ncbi.nlm.nih.gov` — 2.5/s, which `docs/07` §7.3 sets below `docs/02`
- * §3.1's unkeyed ceiling of 3/s on purpose. Nothing is written down here;
- * change the policy row and this follows.
+ * Derived from `HOST_POLICIES`' unkeyed `ratePerSecond` for the host — for
+ * `eutils.ncbi.nlm.nih.gov` 2.5/s, which `docs/07` §7.3 sets below `docs/02`
+ * §3.1's unkeyed ceiling of 3/s on purpose; for `www.ebi.ac.uk` §7.3's 5/s.
+ * Nothing is written down here; change the policy row and this follows.
  *
- * @returns the gap, or `undefined` if the host has no policy row
+ * @param host - a plan's host
+ * @returns the gap
+ * @throws Error if the host has no policy row — a rate limit is never guessed
  */
-export function ncbiSpacingMs(): number {
-  const row = HOST_POLICIES.find((p) => p.host === NCBI_HOST);
+export function spacingMsFor(host: string): number {
+  const row = HOST_POLICIES.find((p) => p.host === host);
   if (row === undefined) {
     throw new Error(
-      `No HOST_POLICIES row for ${NCBI_HOST}: refusing to guess a rate limit ` +
+      `No HOST_POLICIES row for ${host}: refusing to guess a rate limit ` +
         `(plan/README.md §5 rule 4).`,
     );
   }
   return Math.ceil(1000 / row.withoutKey.ratePerSecond);
+}
+
+/** {@link spacingMsFor} NCBI — the Phase 1 name, kept. */
+export function ncbiSpacingMs(): number {
+  return spacingMsFor(NCBI_HOST);
 }
 
 // ---------------------------------------------------------------------------
@@ -380,11 +512,25 @@ const HEADER_DENY_LIST: readonly string[] = [
 ];
 
 /**
+ * The maintainer address in every spelling a service has echoed it in.
+ *
+ * `docs/02` §2.2 puts the address in every outbound URL by construction. The
+ * plain spelling is what PubMed never echoes and Europe PMC echoes in
+ * `request.email`; the percent-encoded one (`%40` for `@`) is what Europe PMC
+ * writes into `nextPageUrl` (`P2-T03`, contradiction 5, measured 2026-10-14).
+ * Both scrub to {@link EMAIL_PLACEHOLDER} and both abort {@link assertClean}.
+ */
+export const MAINTAINER_ADDRESS_SPELLINGS: readonly string[] = [
+  MAINTAINER_EMAIL,
+  encodeURIComponent(MAINTAINER_EMAIL),
+];
+
+/**
  * Literal strings scrubbed from every header value and body before writing.
  *
- * The maintainer address is first: `docs/02` §2.2 puts it in every outbound
- * URL by construction, and `P1-T11`'s **Do NOT** requires §3.2's `mailto` strip.
- * Then every environment value whose *variable name* matches
+ * The maintainer address comes first, in both spellings
+ * ({@link MAINTAINER_ADDRESS_SPELLINGS}); `P1-T11`'s **Do NOT** requires §3.2's
+ * `mailto` strip. Then every environment value whose *variable name* matches
  * `src/core/errors.ts`'s `KEYISH_FIELD` — matched literally, by value, because
  * `redact()`'s catch-all needs a 40-character run and a 32- or 36-character key
  * slips under it.
@@ -394,7 +540,7 @@ const HEADER_DENY_LIST: readonly string[] = [
 export function literalDenyList(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): readonly string[] {
-  const out = new Set<string>([MAINTAINER_EMAIL]);
+  const out = new Set<string>(MAINTAINER_ADDRESS_SPELLINGS);
   for (const [name, value] of Object.entries(env)) {
     if (value === undefined || value.length < 8) continue;
     if (KEYISH_FIELD.test(name)) out.add(value);
@@ -413,7 +559,9 @@ function scrub(value: string, deny: readonly string[]): string {
     out = out
       .split(literal)
       .join(
-        literal === MAINTAINER_EMAIL ? EMAIL_PLACEHOLDER : SECRET_PLACEHOLDER,
+        MAINTAINER_ADDRESS_SPELLINGS.includes(literal)
+          ? EMAIL_PLACEHOLDER
+          : SECRET_PLACEHOLDER,
       );
   }
   return out;
@@ -454,6 +602,12 @@ export function redactExchange(
   }
   const body = scrub(raw.body, deny);
   if (body !== raw.body) notes.push("scrubbed body");
+  const encoded = MAINTAINER_ADDRESS_SPELLINGS.find(
+    (spelling) => spelling !== MAINTAINER_EMAIL && raw.body.includes(spelling),
+  );
+  if (encoded !== undefined) {
+    notes.push("scrubbed body: percent-encoded contact address");
+  }
   // Worded without a literal `api_key=` or `email=`: `assertClean` greps the
   // metadata it is about to write, and prose naming the parameter would trip it.
   notes.push("request URL withheld: it carries the contact and key parameters");
@@ -463,9 +617,21 @@ export function redactExchange(
   };
 }
 
+/** `address` as a pattern matching its plain and percent-encoded spellings. */
+function addressPattern(address: string): RegExp {
+  const escape = (s: string): string =>
+    s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const at = address.indexOf("@");
+  if (at === -1) return new RegExp(escape(address), "iu");
+  return new RegExp(
+    `${escape(address.slice(0, at))}(?:@|%40)${escape(address.slice(at + 1))}`,
+    "iu",
+  );
+}
+
 /** Patterns a written fixture must not match, with what each one means. */
 const FORBIDDEN: readonly { readonly what: string; readonly re: RegExp }[] = [
-  { what: "the maintainer address", re: /suppakoko@gmail\.com/i },
+  { what: "the maintainer address", re: addressPattern(MAINTAINER_EMAIL) },
   { what: "an api_key parameter", re: /api[_-]?key\s*=/i },
   { what: "an Authorization header", re: /^authorization\s*:/im },
   { what: "a mailto value", re: /mailto[:=]\s*[^\s"'<>]+@/i },
@@ -535,8 +701,8 @@ interface WriteRequest {
   readonly deny: readonly string[];
 }
 
-/** Write one `<key>.json` and its `<key>_meta.json`. Returns the key. */
-async function writeFixture(req: WriteRequest): Promise<string> {
+/** Write one `<key>.json` and its `<key>_meta.json` into `dir`. Returns the key. */
+async function writeFixture(dir: string, req: WriteRequest): Promise<string> {
   const key = fixtureKey({
     method: req.method,
     url: req.url,
@@ -561,8 +727,8 @@ async function writeFixture(req: WriteRequest): Promise<string> {
   const metaText = toJson(meta);
   assertClean(`${req.scenario} (metadata)`, metaText, req.deny);
 
-  await writeFile(`${FIXTURE_DIR}/${key}.json`, fixtureText, "utf8");
-  await writeFile(`${FIXTURE_DIR}/${key}${META_SUFFIX}`, metaText, "utf8");
+  await writeFile(`${dir}/${key}.json`, fixtureText, "utf8");
+  await writeFile(`${dir}/${key}${META_SUFFIX}`, metaText, "utf8");
   return key;
 }
 
@@ -570,7 +736,11 @@ async function writeFixture(req: WriteRequest): Promise<string> {
 // 6. The live transport
 // ---------------------------------------------------------------------------
 
-/** One exchange, as the transport saw it, before redaction. */
+/**
+ * One exchange as the transport saw it, before redaction — or as a committed
+ * fixture holds it, after. The three members are the same either way, which is
+ * what lets a dry run answer a dependent request from disk.
+ */
 interface RawExchange {
   readonly status: number;
   readonly headers: Readonly<Record<string, string>>;
@@ -657,7 +827,7 @@ function createFetchTransport(
 }
 
 // ---------------------------------------------------------------------------
-// 7. The scenario list, as a plan a dry run can print
+// 7. Plans: what one source records, as something a dry run can print
 // ---------------------------------------------------------------------------
 
 /** One request the recorder will make, or has keyed a synthetic fixture under. */
@@ -669,6 +839,68 @@ export interface PlannedRequest {
   readonly endpoint: string;
   readonly purpose: string;
 }
+
+/** A fixture that is written rather than recorded, with the reason. */
+export interface SyntheticFixture {
+  readonly planned: PlannedRequest;
+  readonly exchange: RecordedExchange;
+  readonly reason: string;
+}
+
+/**
+ * "What did this request return?" In record mode the answer comes from the
+ * live captures; in a dry run and in synthetic mode it comes from the committed
+ * fixture with the same key, so that pagination cursors and the `record-rich`
+ * body are available without a request. `undefined` means "nothing to answer
+ * with", and the dependent request is then skipped and said to be skipped.
+ */
+export type Answer = (
+  planned: PlannedRequest,
+) => Promise<RawExchange | undefined>;
+
+/**
+ * Everything the recorder needs to know about one source. `docs/07` §11.1
+ * step 5: a new adapter adds one of these and nothing else here.
+ */
+export interface SourcePlan {
+  readonly source: RecordableSourceId;
+  /** The `HOST_POLICIES` row the pacing is read from. */
+  readonly host: string;
+  readonly fixtureDir: string;
+  /** Requests whose shape is known before any response arrives. */
+  readonly independent: () => readonly PlannedRequest[];
+  /** Requests that need an earlier answer — pagination cursors, resolved ids. */
+  readonly dependent: (answer: Answer) => Promise<readonly PlannedRequest[]>;
+  /** The hand-written fixtures' requests, for keys; no body needed. */
+  readonly syntheticRequests: () => readonly PlannedRequest[];
+  /** The hand-written fixtures with bodies; may read an earlier answer. */
+  readonly syntheticFixtures: (
+    answer: Answer,
+  ) => Promise<readonly SyntheticFixture[]>;
+}
+
+/** The planned request's hash key — what the fixture file is named. */
+function keyOf(p: PlannedRequest): string {
+  return fixtureKey({
+    method: p.method,
+    url: p.url,
+    ...(p.body !== undefined && { body: p.body }),
+  });
+}
+
+/** An {@link Answer} that reads committed fixtures from `dir`. */
+function committedAnswer(dir: string): Answer {
+  return async (planned) => {
+    try {
+      const text = await readFile(`${dir}/${keyOf(planned)}.json`, "utf8");
+      return JSON.parse(text) as RecordedExchange;
+    } catch {
+      return undefined;
+    }
+  };
+}
+
+// --- 7a. PubMed -------------------------------------------------------------
 
 /** An `esearch` request for the plan, built by the shipped builder. */
 function esearch(
@@ -711,12 +943,13 @@ function efetch(
 }
 
 /**
- * The scenarios whose request is known before any response arrives.
+ * PubMed's scenarios whose request is known before any response arrives.
  *
  * `docs/13` §3.1's PubMed rows, less the three that cannot be provoked politely
- * (§7's synthetic set) and less the two the `P1-T11` card deliberately leaves
+ * (§8's synthetic set) and less the two the `P1-T11` card deliberately leaves
  * out of its own inventory — §3.1's `record-preprint` and `dedup-pair-set`,
  * which are a Phase 2 concern because they need a second source.
+ * `test/contract/replayHarness.test.ts` imports this by name.
  */
 export function independentPlan(): readonly PlannedRequest[] {
   return [
@@ -811,8 +1044,316 @@ function paginatedEfetchPlan(
   return out;
 }
 
+/** The PMIDs a recorded `esearch` page resolved to; none if it is not usable. */
+async function pubmedPageIds(
+  answer: Answer,
+  scenario: string,
+): Promise<readonly string[]> {
+  const planned = independentPlan().find((p) => p.scenario === scenario);
+  if (planned === undefined) return [];
+  const got = await answer(planned);
+  if (got === undefined || got.status !== 200) return [];
+  try {
+    return parseEsearchBody(got.body, planned.endpoint).pmids;
+  } catch {
+    return [];
+  }
+}
+
+// --- 7b. Europe PMC ---------------------------------------------------------
+
+/**
+ * A Europe PMC `search` request for the plan, exactly as the shipped adapter
+ * builds it (`recordedEuropePmcRequest`): clamped `pageSize`, `resultType=core`,
+ * `cursorMark` from `cursor` or `*`.
+ */
+function epmcSearch(
+  scenario: string,
+  purpose: string,
+  query: SourceQuery,
+  cursor?: string,
+): PlannedRequest {
+  const built = recordedEuropePmcRequest(query, cursor);
+  return {
+    scenario,
+    purpose,
+    method: built.method,
+    url: built.url,
+    ...(built.body !== undefined && { body: built.body }),
+    endpoint: built.endpointBaseUrl,
+  };
+}
+
+/**
+ * Europe PMC's scenarios whose request is known up front: `docs/13` §3.1's
+ * thirteen names less the three synthetic ones and pages 2–3, plus the five
+ * extras `P2-T03` recorded (`record-many-authors`, `record-unicode-cjk`,
+ * `search-error-empty-query`, `search-post-long-query`, and the paginated
+ * pages). The queries are `test/support/europepmcRecordedRequests.ts`'s.
+ */
+export function europepmcIndependentPlan(): readonly PlannedRequest[] {
+  return [
+    epmcSearch(
+      "search-typical",
+      "§3.1: ~20 results for a stable biomedical query, date filter applied",
+      EUROPEPMC_QUERY_TYPICAL,
+    ),
+    epmcSearch("search-empty", "§3.1: zero results", EUROPEPMC_QUERY_EMPTY),
+    epmcSearch(
+      "search-single",
+      "§3.1: one result — off-by-one and not-an-array bugs (pageSize 1)",
+      { ...EUROPEPMC_QUERY_TYPICAL, limit: 1 },
+    ),
+    epmcSearch(
+      "search-error-empty-query",
+      "docs/02 §4.9: errCode 404 inside an HTTP 200, for an empty query=",
+      EUROPEPMC_QUERY_ERROR_EMPTY,
+    ),
+    epmcSearch(
+      "record-rich",
+      "§3.1: every optional field populated (docs/02 §3.4's paper, by title)",
+      EUROPEPMC_QUERY_RICH,
+    ),
+    epmcSearch(
+      "record-sparse",
+      "§3.1: no abstract, no DOI (MED/60000)",
+      EUROPEPMC_QUERY_SPARSE,
+    ),
+    epmcSearch(
+      "record-unicode",
+      "§3.1: diacritics in author names, markup and a VO2max title",
+      EUROPEPMC_QUERY_UNICODE,
+    ),
+    epmcSearch(
+      "record-unicode-cjk",
+      "§3.1 probe: a CJK title query — the service's title field stays Latin",
+      EUROPEPMC_QUERY_CJK,
+    ),
+    epmcSearch(
+      "record-jats-abstract",
+      "§3.1: a structured abstract with inline markup",
+      EUROPEPMC_QUERY_JATS,
+    ),
+    epmcSearch(
+      "record-many-authors",
+      "docs/07 §11.1 step 6: a record with 50+ authors (88)",
+      EUROPEPMC_QUERY_MANY,
+    ),
+    epmcSearch(
+      "record-preprint",
+      "§3.1: PPR records with a linked published version",
+      EUROPEPMC_QUERY_PREPRINT,
+    ),
+    epmcSearch(
+      "dedup-pair-set",
+      "§3.1: PubMed's record-rich paper as Europe PMC returns it, by DOI",
+      EUROPEPMC_QUERY_PAIR,
+    ),
+    epmcSearch(
+      "paginated-page-1",
+      "§3.1: page 1 of a five-hit set at pageSize 3",
+      EUROPEPMC_QUERY_PAGINATED,
+    ),
+    epmcSearch(
+      "search-post-long-query",
+      "docs/02 §4.2: a query over the design budget travels as POST /searchPOST",
+      EUROPEPMC_QUERY_POST_LONG,
+    ),
+  ];
+}
+
+/** The cursor a recorded Europe PMC page offered, or `undefined`. */
+async function europepmcCursorAfter(
+  answer: Answer,
+  planned: PlannedRequest | undefined,
+): Promise<string | undefined> {
+  if (planned === undefined) return undefined;
+  const got = await answer(planned);
+  if (got === undefined || got.status !== 200) return undefined;
+  try {
+    // The raw `nextCursorMark`, not `nextCursorAfter`'s verdict: page 3 was
+    // recorded on purpose, past the short-page rule, to prove the rule right.
+    return parseEuropePmcSearchBody(got.body, planned.endpoint).nextCursorMark;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Pages 2 and 3 of `paginated`, each keyed under the cursor the page before it
+ * returned. Measured 2026-10-14: page 2 held 2 of 5 and still offered a cursor;
+ * page 3 held nothing and no cursor (`P2-T03`, contradiction 4).
+ */
+async function europepmcDependentPlan(
+  answer: Answer,
+): Promise<readonly PlannedRequest[]> {
+  const out: PlannedRequest[] = [];
+  const page1 = europepmcIndependentPlan().find(
+    (p) => p.scenario === "paginated-page-1",
+  );
+  const cursor2 = await europepmcCursorAfter(answer, page1);
+  if (cursor2 === undefined) return out;
+  const page2 = epmcSearch(
+    "paginated-page-2",
+    "§3.1: page 2, under page 1's nextCursorMark — a short page with a cursor",
+    EUROPEPMC_QUERY_PAGINATED,
+    cursor2,
+  );
+  out.push(page2);
+  const cursor3 = await europepmcCursorAfter(answer, page2);
+  if (cursor3 === undefined) return out;
+  out.push(
+    epmcSearch(
+      "paginated-page-3",
+      "§3.1: page 3, under page 2's nextCursorMark — empty, no cursor",
+      EUROPEPMC_QUERY_PAGINATED,
+      cursor3,
+    ),
+  );
+  return out;
+}
+
+/** `error-429`'s Europe PMC body: a placeholder that says so. */
+const EUROPEPMC_SYNTHETIC_429_BODY =
+  "synthetic fixture: Europe PMC publishes no 429 body shape (docs/02 §4.1, " +
+  "§4.9); the limit was not provoked. Status and Retry-After are the " +
+  "assertable parts.\n";
+
+/** `error-500`'s Europe PMC body: `docs/02` §4.7's measured 503, verbatim. */
+const EUROPEPMC_SYNTHETIC_503_BODY =
+  "This API is temporarily unavailable due to maintenance.";
+
+/**
+ * Europe PMC's three hand-written fixtures. The same three names and reasons
+ * `P2-T03` committed; `error-500` is a 503 because that is the 5xx the corpus
+ * has actually measured (`docs/02` §4.7).
+ *
+ * @param richBody - the recorded `record-rich` body, for `error-malformed`;
+ *   `undefined` skips that fixture
+ */
+function europepmcSyntheticPlan(
+  richBody: string | undefined,
+): readonly SyntheticFixture[] {
+  const out: SyntheticFixture[] = [
+    {
+      planned: epmcSearch(
+        "error-429",
+        "§3.1: rate-limit response including Retry-After",
+        EUROPEPMC_QUERY_SYNTHETIC_429,
+      ),
+      exchange: {
+        status: 429,
+        headers: { "content-type": "text/plain", "retry-after": "2" },
+        body: EUROPEPMC_SYNTHETIC_429_BODY,
+      },
+      reason:
+        "Hand-written. Provoking a rate limit on a shared, per-IP budget " +
+        "(docs/07 §7.3's unverified note) is not acceptable; status and " +
+        "Retry-After are the assertable parts, the body is a placeholder.",
+    },
+    {
+      planned: epmcSearch(
+        "error-500",
+        "§3.1: server error (docs/02 §4.7's measured text/plain 503)",
+        EUROPEPMC_QUERY_SYNTHETIC_500,
+      ),
+      exchange: {
+        status: 503,
+        headers: { "content-type": "text/plain" },
+        body: EUROPEPMC_SYNTHETIC_503_BODY,
+      },
+      reason:
+        "Hand-written from docs/02 §4.7's measured /references outage: HTTP " +
+        "503, Content-Type text/plain, that exact body. A 5xx cannot be " +
+        "provoked on demand.",
+    },
+  ];
+  if (richBody !== undefined) {
+    out.push({
+      planned: epmcSearch(
+        "error-malformed",
+        "§3.1: truncated/invalid body",
+        EUROPEPMC_QUERY_SYNTHETIC_MALFORMED,
+      ),
+      exchange: {
+        status: 200,
+        headers: { "content-type": "application/json;charset=UTF-8" },
+        body: richBody.slice(0, MALFORMED_PREFIX_BYTES),
+      },
+      reason:
+        `Derived, not recorded: the first ${String(MALFORMED_PREFIX_BYTES)} ` +
+        `bytes of the recorded record-rich body, cut inside the JSON. Europe ` +
+        `PMC has no documented way to ask for a truncated body.`,
+    });
+  }
+  return out;
+}
+
+// --- 7c. The registry -------------------------------------------------------
+
+/** The `record-rich` body a plan's `error-malformed` is cut from. */
+async function recordedRichBody(
+  answer: Answer,
+  plan: readonly PlannedRequest[],
+): Promise<string | undefined> {
+  const rich = plan.find((p) => p.scenario === "record-rich");
+  if (rich === undefined) return undefined;
+  const got = await answer(rich);
+  if (got === undefined) {
+    process.stderr.write(
+      `  record-rich is not available, so error-malformed is skipped ` +
+        `(it is a truncation of that body).\n`,
+    );
+    return undefined;
+  }
+  return got.body;
+}
+
+/**
+ * The plan for one source.
+ *
+ * @param source - a {@link RecordableSourceId}
+ * @returns its plan
+ */
+export function planFor(source: RecordableSourceId): SourcePlan {
+  switch (source) {
+    case "pubmed":
+      return {
+        source,
+        host: NCBI_HOST,
+        fixtureDir: fixtureDirFor("pubmed"),
+        independent: independentPlan,
+        dependent: async (answer) =>
+          paginatedEfetchPlan(
+            await pubmedPageIds(answer, "paginated-page-1"),
+            await pubmedPageIds(answer, "paginated-page-2"),
+          ),
+        syntheticRequests: () => syntheticPlan("", "").map((s) => s.planned),
+        syntheticFixtures: async (answer) =>
+          syntheticPlan(
+            await recordedRichBody(answer, independentPlan()),
+            await readDocs02ErrorBody(),
+          ),
+      };
+    case "europepmc":
+      return {
+        source,
+        host: EBI_HOST,
+        fixtureDir: fixtureDirFor("europepmc"),
+        independent: europepmcIndependentPlan,
+        dependent: europepmcDependentPlan,
+        syntheticRequests: () =>
+          europepmcSyntheticPlan("").map((s) => s.planned),
+        syntheticFixtures: async (answer) =>
+          europepmcSyntheticPlan(
+            await recordedRichBody(answer, europepmcIndependentPlan()),
+          ),
+      };
+  }
+}
+
 // ---------------------------------------------------------------------------
-// 8. The synthetic fixtures
+// 8. PubMed's synthetic fixtures
 // ---------------------------------------------------------------------------
 
 /**
@@ -836,11 +1377,11 @@ const SYNTHETIC_500_BODY =
   "502; back off'. Not provoked. -->\n" +
   "<html><body><h1>Internal Server Error</h1></body></html>\n";
 
-/** How much of the `record-rich` body `error-malformed` keeps. */
+/** How much of the `record-rich` body `error-malformed` keeps, for every source. */
 const MALFORMED_PREFIX_BYTES = 1024;
 
 /**
- * Build the three fixtures that are written rather than recorded.
+ * Build PubMed's fixtures that are written rather than recorded.
  *
  * @param richBody - the recorded `record-rich` body, truncated for
  *   `error-malformed`. `undefined` when it is not available, in which case
@@ -849,16 +1390,8 @@ const MALFORMED_PREFIX_BYTES = 1024;
 function syntheticPlan(
   richBody: string | undefined,
   upstreamErrorBody: string,
-): readonly {
-  readonly planned: PlannedRequest;
-  readonly exchange: RecordedExchange;
-  readonly reason: string;
-}[] {
-  const out: {
-    planned: PlannedRequest;
-    exchange: RecordedExchange;
-    reason: string;
-  }[] = [
+): readonly SyntheticFixture[] {
+  const out: SyntheticFixture[] = [
     {
       planned: esearch(
         "search-error-upstream",
@@ -957,7 +1490,7 @@ function readMode(raw: string | undefined): Mode {
   return "dry-run";
 }
 
-/** Look one recorded exchange up by the request that produced it. */
+/** Look one live exchange up by the request that produced it. */
 function take(
   captured: ReadonlyMap<string, RawExchange>,
   planned: PlannedRequest,
@@ -965,39 +1498,66 @@ function take(
   return captured.get(`${planned.method} ${planned.url} ${planned.body ?? ""}`);
 }
 
-async function main(): Promise<number> {
-  const mode = readMode(process.env["FIXTURE_MODE"]);
+/** One `  <key>  <scenario>` line and its purpose, as the dry run prints it. */
+function planLine(p: PlannedRequest, suffix = ""): string {
+  return `  ${keyOf(p)}  ${p.scenario}${suffix}\n      ${p.purpose}\n`;
+}
+
+async function main(argv: readonly string[]): Promise<number> {
+  let cli: CliOptions;
+  try {
+    cli = parseCliArgs(argv);
+  } catch (error) {
+    if (error instanceof UsageError) {
+      process.stderr.write(`fixtures:record: ${error.message}\n`);
+      return 2;
+    }
+    throw error;
+  }
+  const mode: Mode = cli.dryRun
+    ? "dry-run"
+    : readMode(process.env["FIXTURE_MODE"]);
+  const plan = planFor(cli.source);
   const deny = literalDenyList();
   const version = await toolVersion();
-  const spacingMs = ncbiSpacingMs();
+  const spacingMs = spacingMsFor(plan.host);
+  const fromDisk = committedAnswer(plan.fixtureDir);
 
-  const plan = independentPlan();
+  const independent = plan.independent();
   if (mode === "dry-run") {
+    // Dependent requests are resolved from the committed fixtures, so a dry
+    // run over a recorded source prints every key the directory holds.
+    const dependent = await plan.dependent(fromDisk);
+    const synthetic = plan.syntheticRequests();
     process.stdout.write(
-      `fixtures:record — dry run. Nothing was requested and nothing written.\n` +
+      `fixtures:record — dry run for ${plan.source}. Nothing was requested ` +
+        `and nothing written.\n` +
         `Scenario list version ${String(SCENARIO_VERSION)}; ` +
-        `${String(plan.length)} independent live requests plus up to 2 ` +
-        `pagination efetch calls, paced at >= ${String(spacingMs)} ms.\n` +
-        `Run it for real with: FIXTURE_MODE=record npm run fixtures:record\n` +
+        `${String(independent.length)} independent live requests, ` +
+        `${String(dependent.length)} dependent (resolved from ` +
+        `test/fixtures/${plan.source}/ where recorded), ` +
+        `${String(synthetic.length)} synthetic; paced at >= ` +
+        `${String(spacingMs)} ms on ${plan.host}.\n` +
+        `Run it for real with: FIXTURE_MODE=record npm run fixtures:record ` +
+        `-- --source ${plan.source}\n` +
         `Rewrite only the hand-written fixtures with: ` +
-        `FIXTURE_MODE=synthetic npm run fixtures:record\n\n`,
+        `FIXTURE_MODE=synthetic npm run fixtures:record -- --source ` +
+        `${plan.source}\n\n`,
     );
-    for (const p of plan) {
-      process.stdout.write(
-        `  ${fixtureKey({ method: p.method, url: p.url, ...(p.body !== undefined && { body: p.body }) })}  ` +
-          `${p.scenario}\n      ${p.purpose}\n`,
-      );
-    }
+    for (const p of independent) process.stdout.write(planLine(p));
+    for (const p of dependent)
+      process.stdout.write(planLine(p, " (dependent)"));
+    for (const p of synthetic)
+      process.stdout.write(planLine(p, " (synthetic)"));
     return 0;
   }
 
-  await mkdir(FIXTURE_DIR, { recursive: true });
+  await mkdir(plan.fixtureDir, { recursive: true });
 
   if (mode === "synthetic") {
-    const rich = await readRecordedRichBody();
     let written = 0;
-    for (const s of syntheticPlan(rich, await readDocs02ErrorBody())) {
-      const key = await writeFixture({
+    for (const s of await plan.syntheticFixtures(fromDisk)) {
+      const key = await writeFixture(plan.fixtureDir, {
         scenario: s.planned.scenario,
         method: s.planned.method,
         url: s.planned.url,
@@ -1014,7 +1574,8 @@ async function main(): Promise<number> {
       written += 1;
     }
     process.stdout.write(
-      `Wrote ${String(written)} synthetic fixtures. Zero live requests.\n`,
+      `Wrote ${String(written)} synthetic fixtures to ` +
+        `test/fixtures/${plan.source}/. Zero live requests.\n`,
     );
     return 0;
   }
@@ -1030,6 +1591,7 @@ async function main(): Promise<number> {
     clock: createSystemClock(),
   });
   const token = createCancellationTokenSource().token;
+  const fromLive: Answer = (p) => Promise.resolve(take(captured, p));
 
   const failures: string[] = [];
   let live = 0;
@@ -1058,40 +1620,26 @@ async function main(): Promise<number> {
   };
 
   process.stderr.write(
-    `Recording ${String(plan.length)} independent requests, >= ` +
-      `${String(spacingMs)} ms apart, unkeyed.\n`,
+    `Recording ${plan.source}: ${String(independent.length)} independent ` +
+      `requests, >= ${String(spacingMs)} ms apart, unkeyed.\n`,
   );
-  for (const p of plan) await issue(p);
+  for (const p of independent) await issue(p);
 
-  // The two pagination `efetch` calls depend on what the two `esearch` pages
-  // returned, so they are planned only now. `parseEsearchBody` is the shipped
-  // validator; a page that failed simply contributes no efetch.
-  const pageIds = (scenario: string): readonly string[] => {
-    const planned = plan.find((p) => p.scenario === scenario);
-    const got = planned === undefined ? undefined : take(captured, planned);
-    if (got === undefined || got.status !== 200) return [];
-    try {
-      return parseEsearchBody(got.body, planned?.endpoint ?? "").pmids;
-    } catch {
-      return [];
-    }
-  };
-  const extra = paginatedEfetchPlan(
-    pageIds("paginated-page-1"),
-    pageIds("paginated-page-2"),
-  );
+  // Dependent requests (pagination) are planned only now, from what the live
+  // answers hold. A page that failed simply contributes nothing further.
+  const extra = await plan.dependent(fromLive);
   for (const p of extra) await issue(p);
 
   // --- write ---------------------------------------------------------------
   let written = 0;
-  for (const p of [...plan, ...extra]) {
+  for (const p of [...independent, ...extra]) {
     const raw = take(captured, p);
     if (raw === undefined) {
       failures.push(`${p.scenario}: nothing was captured`);
       continue;
     }
     const { exchange, notes } = redactExchange(raw, deny);
-    const key = await writeFixture({
+    const key = await writeFixture(plan.fixtureDir, {
       scenario: p.scenario,
       method: p.method,
       url: p.url,
@@ -1110,11 +1658,8 @@ async function main(): Promise<number> {
     written += 1;
   }
 
-  const richPlanned = plan.find((p) => p.scenario === "record-rich");
-  const richRaw =
-    richPlanned === undefined ? undefined : take(captured, richPlanned);
-  for (const s of syntheticPlan(richRaw?.body, await readDocs02ErrorBody())) {
-    const key = await writeFixture({
+  for (const s of await plan.syntheticFixtures(fromLive)) {
+    const key = await writeFixture(plan.fixtureDir, {
       scenario: s.planned.scenario,
       method: s.planned.method,
       url: s.planned.url,
@@ -1133,7 +1678,7 @@ async function main(): Promise<number> {
 
   process.stdout.write(
     `\n${String(live)} live requests; ${String(written)} fixtures written to ` +
-      `test/fixtures/pubmed/.\n`,
+      `test/fixtures/${plan.source}/.\n`,
   );
   if (failures.length > 0) {
     process.stdout.write(
@@ -1142,28 +1687,6 @@ async function main(): Promise<number> {
     return 1;
   }
   return 0;
-}
-
-/** The recorded `record-rich` body, read back for `FIXTURE_MODE=synthetic`. */
-async function readRecordedRichBody(): Promise<string | undefined> {
-  const planned = independentPlan().find((p) => p.scenario === "record-rich");
-  if (planned === undefined) return undefined;
-  const key = fixtureKey({
-    method: planned.method,
-    url: planned.url,
-    ...(planned.body !== undefined && { body: planned.body }),
-  });
-  try {
-    const text = await readFile(`${FIXTURE_DIR}/${key}.json`, "utf8");
-    const parsed = JSON.parse(text) as RecordedExchange;
-    return parsed.body;
-  } catch {
-    process.stderr.write(
-      `  record-rich is not recorded yet, so error-malformed is skipped ` +
-        `(it is a truncation of that body).\n`,
-    );
-    return undefined;
-  }
 }
 
 /** A one-line description of a thrown value, with no body and no URL query. */
@@ -1177,24 +1700,26 @@ function describe(error: unknown): string {
 /**
  * One scenario's planned request, by name.
  *
- * `test/contract/pubmed.contract.test.ts` imports this so that the test and the
+ * `test/contract/replayHarness.test.ts` imports this so that the test and the
  * recorder cannot disagree about what a scenario's request is. That is why the
  * `main()` call below is guarded: importing this module must not record
  * anything.
  *
- * @param scenario - a name from {@link independentPlan} or the synthetic set
+ * @param scenario - a name from the source's independent or synthetic set
+ * @param source - defaults to `pubmed`, the Phase 1 caller's meaning
  * @returns the planned request
  * @throws Error when no scenario has that name
  */
-export function plannedRequest(scenario: string): PlannedRequest {
-  const all = [
-    ...independentPlan(),
-    ...syntheticPlan("", "").map((s) => s.planned),
-  ];
+export function plannedRequest(
+  scenario: string,
+  source: RecordableSourceId = "pubmed",
+): PlannedRequest {
+  const plan = planFor(source);
+  const all = [...plan.independent(), ...plan.syntheticRequests()];
   const found = all.find((p) => p.scenario === scenario);
   if (found === undefined) {
     throw new Error(
-      `No scenario named "${scenario}". Known: ${all
+      `No ${source} scenario named "${scenario}". Known: ${all
         .map((p) => p.scenario)
         .join(", ")}`,
     );
@@ -1209,4 +1734,4 @@ function isEntryPoint(): boolean {
   return resolve(argv1) === resolve(fileURLToPath(import.meta.url));
 }
 
-if (isEntryPoint()) process.exitCode = await main();
+if (isEntryPoint()) process.exitCode = await main(process.argv.slice(2));

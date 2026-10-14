@@ -5,7 +5,7 @@
  * **Scope.** `P1-T11` wrote the harness here. `P2-T25` moved its body to
  * `test/support/fixtureReplay.ts`, which has no platform import and takes a
  * {@link FixtureIo} port instead, and left this file as the **Node face**: every
- * export below is the core's, bound to `test/support/fixtureIo.node.ts`, under
+ * export below is the core's, bound to `test/support/fixtureIoNode.ts`, under
  * the signatures `test/contract/pubmed.contract.test.ts` and
  * `scripts/record-fixtures.ts` already call. Nothing those two files import
  * changed shape.
@@ -29,7 +29,7 @@
  * the two deviations from `docs/13` §2.2's code block that `P2-T25` made.
  */
 
-import { nodeFixtureIo } from "../support/fixtureIo.node";
+import { nodeFixtureIo } from "../support/fixtureIoNode";
 import {
   assertFixturesFresh as assertFixturesFreshWith,
   createReplayHttpClient as createReplayHttpClientWith,
@@ -69,7 +69,7 @@ export {
 } from "../support/fixtureReplay";
 
 /** The Node implementation every function in this file is bound to. */
-export { nodeFixtureIo } from "../support/fixtureIo.node";
+export { nodeFixtureIo } from "../support/fixtureIoNode";
 
 /**
  * `docs/13` §2.2's replay transport over the Node file system.
