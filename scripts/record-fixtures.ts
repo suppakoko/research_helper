@@ -17,6 +17,7 @@
  * ```sh
  * npm run fixtures:record -- --dry-run                       # PubMed: prints the plan only
  * npm run fixtures:record -- --source europepmc --dry-run    # Europe PMC: prints the plan only
+ * npm run fixtures:record -- --source crossref --dry-run     # Crossref: prints the plan only
  * FIXTURE_MODE=record npm run fixtures:record -- --source europepmc   # live
  * FIXTURE_MODE=synthetic npm run fixtures:record                      # rewrites the
  *                                                  # hand-written fixtures, no network
@@ -46,8 +47,10 @@
  *   `plan/README.md` §5 rule 4.
  * - **`tool` and `email` are not this file's to choose.** Every URL comes from
  *   the shipped builders — `buildEsearchRequest` / `buildEfetchRequest`, which
- *   take them from `ncbiIdentityParams()` (decision D10), and
- *   `buildEuropePmcSearchRequest`, which appends `email=`. The shipped
+ *   take them from `ncbiIdentityParams()` (decision D10),
+ *   `buildEuropePmcSearchRequest`, which appends `email=`, and
+ *   `buildCrossrefWorksRequest`, whose `mailto=` is the maintainer address
+ *   here because the recorder has no `contactEmail` preference. The shipped
  *   `createHttpClient` then refuses any NCBI request carrying anything else, so
  *   a mistake here is a thrown `PolicyViolationError` and not a quiet
  *   impoliteness.
@@ -89,6 +92,13 @@
  *    `nextPageUrl`. A scrub of the plain spelling alone left the address in six
  *    fixtures. {@link MAINTAINER_ADDRESS_SPELLINGS} carries both, and
  *    {@link assertClean} refuses both.
+ * 6. **One class of long opaque run is exempt, per source and by name.**
+ *    `redact()`'s 40-character catch-all also matches a pagination cursor, and
+ *    a fixture whose cursor reads `[redacted:52]` cannot drive a replayed
+ *    paging loop (measured 2026-10-15 on every Crossref page). A plan may name
+ *    the tokens its bodies carry that are opaque but not secret
+ *    ({@link SourcePlan.opaqueTokens}); {@link scrub} shields exactly those and
+ *    {@link assertClean} ignores exactly those. Nothing else is exempt.
  *
  * ## What is *not* read from `.env`, and the contradiction behind that
  *
@@ -115,11 +125,13 @@ import {
 } from "../src/core/http/client";
 import { buildUserAgent, MAINTAINER_EMAIL } from "../src/core/http/userAgent";
 import {
+  CROSSREF_HOST,
   EBI_HOST,
   HOST_POLICIES,
   NCBI_HOST,
 } from "../src/core/rateLimit/hostLimiter";
 import { createCancellationTokenSource } from "../src/core/jobQueue/cancellation";
+import { parseCrossrefWorksBody } from "../src/sources/crossref/crossrefSource";
 import { parseEuropePmcSearchBody } from "../src/sources/europepmc/europepmcSource";
 import {
   buildEfetchRequest,
@@ -137,6 +149,23 @@ import {
   type FixtureMeta,
   type RecordedExchange,
 } from "../test/contract/_transport";
+import {
+  CROSSREF_QUERY_DOI_STRING,
+  CROSSREF_QUERY_EMPTY,
+  CROSSREF_QUERY_JATS,
+  CROSSREF_QUERY_PAGINATED,
+  CROSSREF_QUERY_PAIR,
+  CROSSREF_QUERY_PREPRINT,
+  CROSSREF_QUERY_RICH,
+  CROSSREF_QUERY_SPARSE,
+  CROSSREF_QUERY_SYNTHETIC_400,
+  CROSSREF_QUERY_SYNTHETIC_429,
+  CROSSREF_QUERY_SYNTHETIC_500,
+  CROSSREF_QUERY_SYNTHETIC_MALFORMED,
+  CROSSREF_QUERY_TYPICAL,
+  CROSSREF_QUERY_UNICODE,
+  recordedCrossrefRequest,
+} from "../test/support/crossrefRecordedRequests";
 import {
   EUROPEPMC_QUERY_CJK,
   EUROPEPMC_QUERY_EMPTY,
@@ -162,7 +191,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /** The sources this recorder has a plan for. One directory per id (`docs/07` §2.2). */
-export const RECORDABLE_SOURCES = ["pubmed", "europepmc"] as const;
+export const RECORDABLE_SOURCES = ["pubmed", "europepmc", "crossref"] as const;
 export type RecordableSourceId = (typeof RECORDABLE_SOURCES)[number];
 
 function isRecordableSource(value: string): value is RecordableSourceId {
@@ -551,9 +580,32 @@ export function literalDenyList(
 const EMAIL_PLACEHOLDER = "[redacted:maintainer-address]";
 const SECRET_PLACEHOLDER = "[redacted:env-secret]";
 
-/** Scrub one string: `redact()` first, then the literal deny-list. */
-function scrub(value: string, deny: readonly string[]): string {
-  let out = redact(value);
+/** The stand-in an allowed opaque token wears while {@link scrub} runs. */
+function allowPlaceholder(index: number): string {
+  return `\u0000RH_ALLOW_${String(index)}\u0000`;
+}
+
+/**
+ * Scrub one string: `redact()` first, then the literal deny-list — with the
+ * `allow` tokens shielded. Each allowed token is swapped for a placeholder
+ * `redact()` cannot match before the pass and swapped back after it, so a
+ * pagination cursor survives the 40-character catch-all that would otherwise
+ * replace it (measured 2026-10-15: every Crossref `next-cursor`, 51–68
+ * opaque characters, came back `[redacted:NN]` and no page 2 could be replayed).
+ */
+function scrub(
+  value: string,
+  deny: readonly string[],
+  allow: readonly string[] = [],
+): string {
+  let working = value;
+  const shielded: string[] = [];
+  for (const token of allow) {
+    if (token === "" || !working.includes(token)) continue;
+    working = working.split(token).join(allowPlaceholder(shielded.length));
+    shielded.push(token);
+  }
+  let out = redact(working);
   for (const literal of deny) {
     if (literal === "") continue;
     out = out
@@ -563,6 +615,9 @@ function scrub(value: string, deny: readonly string[]): string {
           ? EMAIL_PLACEHOLDER
           : SECRET_PLACEHOLDER,
       );
+  }
+  for (const [index, token] of shielded.entries()) {
+    out = out.split(allowPlaceholder(index)).join(token);
   }
   return out;
 }
@@ -578,7 +633,9 @@ interface Redacted {
  *
  * @param raw - the exchange exactly as received
  * @param deny - {@link literalDenyList}'s output
- * @returns the writable exchange and a note per thing removed
+ * @param allow - opaque tokens the source's plan vouches for as non-secret
+ *   ({@link SourcePlan.opaqueTokens}); kept verbatim through the pass
+ * @returns the writable exchange and a note per thing removed or kept
  */
 export function redactExchange(
   raw: {
@@ -587,6 +644,7 @@ export function redactExchange(
     readonly body: string;
   },
   deny: readonly string[],
+  allow: readonly string[] = [],
 ): Redacted {
   const notes: string[] = [];
   const headers: Record<string, string> = {};
@@ -596,12 +654,21 @@ export function redactExchange(
       notes.push(`dropped header ${lower}`);
       continue;
     }
-    const scrubbed = scrub(value, deny);
+    const scrubbed = scrub(value, deny, allow);
     if (scrubbed !== value) notes.push(`scrubbed header ${lower}`);
     headers[lower] = scrubbed;
   }
-  const body = scrub(raw.body, deny);
+  const body = scrub(raw.body, deny, allow);
   if (body !== raw.body) notes.push("scrubbed body");
+  const kept = allow.filter(
+    (token) => token !== "" && raw.body.includes(token),
+  );
+  if (kept.length > 0) {
+    notes.push(
+      `preserved ${String(kept.length)} opaque pagination token(s) the ` +
+        `source plan vouches for; they are not credentials`,
+    );
+  }
   const encoded = MAINTAINER_ADDRESS_SPELLINGS.find(
     (spelling) => spelling !== MAINTAINER_EMAIL && raw.body.includes(spelling),
   );
@@ -645,12 +712,15 @@ const FORBIDDEN: readonly { readonly what: string; readonly re: RegExp }[] = [
  * @param scenario - the scenario name, for the message
  * @param text - the exact JSON about to be written
  * @param deny - the literal deny-list, re-checked after scrubbing
+ * @param allow - the opaque tokens {@link redactExchange} preserved; removed
+ *   from `text` before the credential-shape check, nowhere else
  * @throws Error naming what matched, without quoting it
  */
 export function assertClean(
   scenario: string,
   text: string,
   deny: readonly string[],
+  allow: readonly string[] = [],
 ): void {
   for (const { what, re } of FORBIDDEN) {
     if (re.test(text)) {
@@ -669,8 +739,12 @@ export function assertClean(
       );
     }
   }
-  const stillKeyish = redact(text);
-  if (stillKeyish !== text) {
+  const withoutAllowed = allow.reduce(
+    (acc, token) => (token === "" ? acc : acc.split(token).join("")),
+    text,
+  );
+  const stillKeyish = redact(withoutAllowed);
+  if (stillKeyish !== withoutAllowed) {
     throw new Error(
       `Refusing to write fixture "${scenario}": it matches a credential ` +
         `pattern from docs/09 §2.1 (docs/13 §3.2).`,
@@ -699,6 +773,8 @@ interface WriteRequest {
   readonly syntheticReason?: string;
   readonly version: string;
   readonly deny: readonly string[];
+  /** Opaque tokens preserved by {@link redactExchange}; see {@link SourcePlan.opaqueTokens}. */
+  readonly allow?: readonly string[];
 }
 
 /** Write one `<key>.json` and its `<key>_meta.json` into `dir`. Returns the key. */
@@ -709,7 +785,7 @@ async function writeFixture(dir: string, req: WriteRequest): Promise<string> {
     ...(req.body !== undefined && { body: req.body }),
   });
   const fixtureText = toJson(req.exchange);
-  assertClean(req.scenario, fixtureText, req.deny);
+  assertClean(req.scenario, fixtureText, req.deny, req.allow ?? []);
 
   const meta: FixtureMeta = {
     scenario: req.scenario,
@@ -877,6 +953,14 @@ export interface SourcePlan {
   readonly syntheticFixtures: (
     answer: Answer,
   ) => Promise<readonly SyntheticFixture[]>;
+  /**
+   * Opaque, non-secret tokens in a live body that the redaction pass must keep
+   * verbatim — a pagination cursor, which is exactly the long opaque run
+   * `redact()`'s catch-all exists to catch. Absent means nothing is exempt.
+   * Added for Crossref (`P2-T04`), whose `message.next-cursor` is 51–68
+   * base64 characters; PubMed and Europe PMC have no such token.
+   */
+  readonly opaqueTokens?: (body: string) => readonly string[];
 }
 
 /** The planned request's hash key — what the fixture file is named. */
@@ -1289,7 +1373,291 @@ function europepmcSyntheticPlan(
   return out;
 }
 
-// --- 7c. The registry -------------------------------------------------------
+// --- 7c. Crossref -------------------------------------------------------------
+
+/**
+ * A Crossref `/works` request for the plan, exactly as the shipped adapter
+ * builds it (`recordedCrossrefRequest`): clamped `rows`, the shipped `select`
+ * whitelist, `cursor` from `cursor` or `*`, `mailto` the maintainer address
+ * (no `contactEmail` preference exists here).
+ */
+function crossrefWorks(
+  scenario: string,
+  purpose: string,
+  query: SourceQuery,
+  cursor?: string,
+): PlannedRequest {
+  const built = recordedCrossrefRequest(query, cursor);
+  return {
+    scenario,
+    purpose,
+    method: built.method,
+    url: built.url,
+    endpoint: built.endpointBaseUrl,
+  };
+}
+
+/**
+ * Crossref's scenarios whose request is known up front: `docs/13` §3.1's
+ * thirteen names less the three synthetic ones and page 2, plus one probe
+ * (`search-doi-string`). The queries are `test/support/crossrefRecordedRequests.ts`'s.
+ * Every request carries the polite-pool `mailto` and the `User-Agent`
+ * (`docs/02` §5.1), and the pacing is §7.3's starting rate for the host.
+ */
+export function crossrefIndependentPlan(): readonly PlannedRequest[] {
+  return [
+    crossrefWorks(
+      "search-typical",
+      "§3.1: ~20 results for a stable biomedical query, date filter applied",
+      CROSSREF_QUERY_TYPICAL,
+    ),
+    crossrefWorks(
+      "search-empty",
+      "§3.1: zero results (one token that matches nothing)",
+      CROSSREF_QUERY_EMPTY,
+    ),
+    crossrefWorks(
+      "search-single",
+      "§3.1: one result — off-by-one and not-an-array bugs (rows 1)",
+      { ...CROSSREF_QUERY_TYPICAL, limit: 1 },
+    ),
+    crossrefWorks(
+      "record-rich",
+      "§3.1: every optional field populated (docs/02 §3.4's paper, by title)",
+      CROSSREF_QUERY_RICH,
+    ),
+    crossrefWorks(
+      "record-sparse",
+      "§3.1: no abstract, coarse date (a 1976 Veterinary Record paper)",
+      CROSSREF_QUERY_SPARSE,
+    ),
+    crossrefWorks(
+      "record-unicode",
+      "§3.1: diacritics in author names, inline markup and a VO2max title",
+      CROSSREF_QUERY_UNICODE,
+    ),
+    crossrefWorks(
+      "record-jats-abstract",
+      "§3.1 / docs/02 §5.4: a boxed-text JATS abstract (the document's own example)",
+      CROSSREF_QUERY_JATS,
+    ),
+    crossrefWorks(
+      "record-preprint",
+      "§3.1: a bioRxiv posted-content with relation.is-preprint-of",
+      CROSSREF_QUERY_PREPRINT,
+    ),
+    crossrefWorks(
+      "dedup-pair-set",
+      "§3.1: PubMed's record-rich paper as Crossref returns it, by title, 3 rows",
+      CROSSREF_QUERY_PAIR,
+    ),
+    crossrefWorks(
+      "search-doi-string",
+      "probe: does query.bibliographic resolve a bare DOI string? (for P2-T12)",
+      CROSSREF_QUERY_DOI_STRING,
+    ),
+    crossrefWorks(
+      "paginated-page-1",
+      "§3.1: page 1 of the typical query at rows 3, cursor=*",
+      CROSSREF_QUERY_PAGINATED,
+    ),
+  ];
+}
+
+/**
+ * `message.next-cursor`, the one opaque token a Crossref body carries that the
+ * redaction pass must keep ({@link SourcePlan.opaqueTokens}). A body that is
+ * not a `/works` page vouches for nothing.
+ */
+function crossrefOpaqueTokens(body: string): readonly string[] {
+  try {
+    const cursor = parseCrossrefWorksBody(body, "").nextCursor;
+    return cursor === undefined ? [] : [cursor];
+  } catch {
+    return [];
+  }
+}
+
+/** The cursor a recorded Crossref page offered, or `undefined`. */
+async function crossrefCursorAfter(
+  answer: Answer,
+  planned: PlannedRequest | undefined,
+): Promise<string | undefined> {
+  if (planned === undefined) return undefined;
+  const got = await answer(planned);
+  if (got === undefined || got.status !== 200) return undefined;
+  try {
+    return parseCrossrefWorksBody(got.body, planned.endpoint).nextCursor;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Page 2 of `paginated`, keyed under the `next-cursor` page 1 returned
+ * (`docs/02` §5.5). One dependent request: the typical query has hundreds of
+ * hits, so termination is not recorded here — the empty-`items` rule is
+ * exercised on `search-empty` and with stubs in the unit test.
+ */
+async function crossrefDependentPlan(
+  answer: Answer,
+): Promise<readonly PlannedRequest[]> {
+  const page1 = crossrefIndependentPlan().find(
+    (p) => p.scenario === "paginated-page-1",
+  );
+  const cursor2 = await crossrefCursorAfter(answer, page1);
+  if (cursor2 === undefined) return [];
+  return [
+    crossrefWorks(
+      "paginated-page-2",
+      "§3.1: page 2, under page 1's next-cursor",
+      CROSSREF_QUERY_PAGINATED,
+      cursor2,
+    ),
+  ];
+}
+
+/**
+ * `error-429`'s Crossref body: a placeholder that says so. The headers are
+ * the measured public-pool set of `docs/02` §5.1 plus a `Retry-After`, which
+ * §5.6 says to honour ("back off, check `x-rate-limit-*`").
+ */
+const CROSSREF_SYNTHETIC_429_BODY =
+  "synthetic fixture: Crossref publishes no 429 body shape (docs/02 §5.6); " +
+  "the limit was not provoked. Status, Retry-After and the x-rate-limit-* " +
+  "headers are the assertable parts.\n";
+
+/** `error-500`'s Crossref body: §5.6's 504 "timeout on a heavy query". */
+const CROSSREF_SYNTHETIC_504_BODY =
+  "<html><body><h1>504 Gateway Time-out</h1></body></html>\n";
+
+/**
+ * `error-400`'s body: `docs/02` §5.6's "malformed filter or param — the body
+ * names the offending token", **measured 2026-10-14** on eleven live requests
+ * whose `select` named `reference-count`, `institution` and `language`. The
+ * first of the three `message` entries, verbatim (the other two differ only in
+ * `value`); the valid-selects list is the route's own and is why
+ * `CROSSREF_SELECT_FIELDS` reads `references-count`.
+ */
+const CROSSREF_MEASURED_400_BODY =
+  '{"status":"failed","message-type":"validation-failure","message":[{"type":' +
+  '"select-not-available","value":"reference-count","message":"Select ' +
+  "'reference-count' specified but there is no such select for this route. " +
+  "Valid selects for this route are: abstract, URL, resource, member, posted, " +
+  "score, created, degree, update-policy, short-title, license, ISSN, " +
+  "container-title, issued, update-to, issue, prefix, approved, indexed, " +
+  "article-number, clinical-trial-number, accepted, author, group-title, DOI, " +
+  "is-referenced-by-count, updated-by, event, chair, standards-body, " +
+  "original-title, funder, translator, published, archive, published-print, " +
+  "alternative-id, subject, subtitle, published-online, publisher-location, " +
+  "content-domain, reference, title, link, type, publisher, volume, " +
+  "references-count, ISBN, issn-type, assertion, deposited, page, contributor, " +
+  'content-created, short-container-title, relation, editor"}]}';
+
+/**
+ * Crossref's four written fixtures: `error-400` (measured body, see
+ * {@link CROSSREF_MEASURED_400_BODY}), `error-429`, `error-500` — a 504,
+ * because that is the 5xx `docs/02` §5.6 documents for this host ("reduce
+ * `rows`, add `select`") — and `error-malformed`.
+ *
+ * @param richBody - the recorded `record-rich` body, for `error-malformed`;
+ *   `undefined` skips that fixture
+ */
+function crossrefSyntheticPlan(
+  richBody: string | undefined,
+): readonly SyntheticFixture[] {
+  const out: SyntheticFixture[] = [
+    {
+      planned: crossrefWorks(
+        "error-429",
+        "§3.1: rate-limit response including Retry-After and x-rate-limit-*",
+        CROSSREF_QUERY_SYNTHETIC_429,
+      ),
+      exchange: {
+        status: 429,
+        headers: {
+          "content-type": "text/plain",
+          "retry-after": "2",
+          "x-rate-limit-limit": "1",
+          "x-rate-limit-interval": "1s",
+          "x-concurrency-limit": "1",
+          "x-api-pool": "public-array",
+        },
+        body: CROSSREF_SYNTHETIC_429_BODY,
+      },
+      reason:
+        "Hand-written. Provoking a rate limit on the shared polite pool is " +
+        "not acceptable; status, Retry-After and the public-pool headers " +
+        "docs/02 §5.1 measured are the assertable parts, the body is a " +
+        "placeholder.",
+    },
+    {
+      planned: crossrefWorks(
+        "error-400",
+        "docs/02 §5.6: 400 validation-failure naming the offending select (measured)",
+        CROSSREF_QUERY_SYNTHETIC_400,
+      ),
+      exchange: {
+        status: 400,
+        headers: {
+          "content-type": "application/json;charset=utf-8",
+          "x-api-pool": "polite-array",
+          "x-concurrency-limit": "3",
+          "x-rate-limit-interval": "1s",
+          "x-rate-limit-limit": "3",
+        },
+        body: CROSSREF_MEASURED_400_BODY,
+      },
+      reason:
+        "Measured live 2026-10-14 (status, the polite-pool headers and the " +
+        "first message entry verbatim), then written under a reproducible " +
+        "key: the select list that drew it is one the shipped builder no " +
+        "longer sends, so the live request cannot be replayed from the " +
+        "builder.",
+    },
+    {
+      planned: crossrefWorks(
+        "error-500",
+        "§3.1: server error (docs/02 §5.6's 504 on a heavy query)",
+        CROSSREF_QUERY_SYNTHETIC_500,
+      ),
+      exchange: {
+        status: 504,
+        headers: { "content-type": "text/html" },
+        body: CROSSREF_SYNTHETIC_504_BODY,
+      },
+      reason:
+        "Hand-written from docs/02 §5.6's error table: 504 'timeout on a " +
+        "heavy query'. A 5xx cannot be provoked on demand; the body is a " +
+        "placeholder.",
+    },
+  ];
+  if (richBody !== undefined) {
+    out.push({
+      planned: crossrefWorks(
+        "error-malformed",
+        "§3.1: truncated/invalid body",
+        CROSSREF_QUERY_SYNTHETIC_MALFORMED,
+      ),
+      exchange: {
+        status: 200,
+        headers: { "content-type": "application/json" },
+        // `redact()` first: the live body opens with `next-cursor`, and the
+        // truncated fixture is not a page anyone pages from, so the cursor is
+        // redacted here rather than exempted (`assertClean` would otherwise
+        // refuse the credential-shaped run).
+        body: redact(richBody).slice(0, MALFORMED_PREFIX_BYTES),
+      },
+      reason:
+        `Derived, not recorded: the first ${String(MALFORMED_PREFIX_BYTES)} ` +
+        `bytes of the recorded record-rich body after redaction, cut inside ` +
+        `the JSON. Crossref has no documented way to ask for a truncated body.`,
+    });
+  }
+  return out;
+}
+
+// --- 7d. The registry -------------------------------------------------------
 
 /** The `record-rich` body a plan's `error-malformed` is cut from. */
 async function recordedRichBody(
@@ -1348,6 +1716,21 @@ export function planFor(source: RecordableSourceId): SourcePlan {
           europepmcSyntheticPlan(
             await recordedRichBody(answer, europepmcIndependentPlan()),
           ),
+      };
+    case "crossref":
+      return {
+        source,
+        host: CROSSREF_HOST,
+        fixtureDir: fixtureDirFor("crossref"),
+        independent: crossrefIndependentPlan,
+        dependent: crossrefDependentPlan,
+        syntheticRequests: () =>
+          crossrefSyntheticPlan("").map((s) => s.planned),
+        syntheticFixtures: async (answer) =>
+          crossrefSyntheticPlan(
+            await recordedRichBody(answer, crossrefIndependentPlan()),
+          ),
+        opaqueTokens: crossrefOpaqueTokens,
       };
   }
 }
@@ -1638,7 +2021,8 @@ async function main(argv: readonly string[]): Promise<number> {
       failures.push(`${p.scenario}: nothing was captured`);
       continue;
     }
-    const { exchange, notes } = redactExchange(raw, deny);
+    const allow = plan.opaqueTokens?.(raw.body) ?? [];
+    const { exchange, notes } = redactExchange(raw, deny, allow);
     const key = await writeFixture(plan.fixtureDir, {
       scenario: p.scenario,
       method: p.method,
@@ -1650,6 +2034,7 @@ async function main(argv: readonly string[]): Promise<number> {
       synthetic: false,
       version,
       deny,
+      allow,
     });
     process.stdout.write(
       `  ${key}  ${p.scenario}  status=${String(exchange.status)} ` +

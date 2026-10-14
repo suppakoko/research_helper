@@ -16,9 +16,9 @@
 # * `research-helper-menu-root` and `research-helper-menu-search-import` —
 #   taken verbatim from `docs/08` §10.2, which ships owner-written Korean for
 #   them. `"리서치 헬퍼"` is measured working on Zotero 10.0.1 (`P0-T24`).
-# * `research-helper-source-pubmed` and `research-helper-source-europepmc` —
-#   `docs/08` §10.3 forbids translating a database name, so the Korean bundle
-#   carries them unchanged. Not translations, and nothing for a reviewer to
+# * `research-helper-source-pubmed`, `research-helper-source-europepmc` and
+#   `research-helper-source-crossref` — `docs/08` §10.3 forbids translating a
+#   database name, so the Korean bundle carries them unchanged. Not translations, and nothing for a reviewer to
 #   decide.
 #
 # **Every other identifier in the en-US bundle is listed below as a comment,
@@ -63,6 +63,7 @@ research-helper-menu-search-import =
 
 research-helper-source-pubmed = PubMed
 research-helper-source-europepmc = Europe PMC
+research-helper-source-crossref = Crossref
 
 
 ## Search provenance (FR-8)

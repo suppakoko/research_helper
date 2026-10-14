@@ -18,6 +18,7 @@ import {
   type PrefStore,
 } from "../../../src/core/config";
 import { ConfigurationError } from "../../../src/core/errors";
+import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import {
   getHttpClient,
   httpRequest,
@@ -38,6 +39,7 @@ import {
 } from "../../../src/core/jobQueue/progress";
 import { LOG_PREFIX, type LogSink } from "../../../src/core/logger";
 import {
+  CROSSREF_HOST,
   EBI_HOST,
   NCBI_HOST,
   NCBI_KEY_PRESENT_PREF,
@@ -396,20 +398,30 @@ describe("installServices wires the graph Phase 1 built", () => {
     expect(peekHostLimiters()).toBe(graph.limiters);
     expect(getHttpClient()).toBe(graph.http);
     // `docs/07` §7.3's rows for the hosts the registered adapters talk to:
-    // NCBI (`P1-T04`) and Europe PMC (`P2-T03`, wired by `P2-T32`). Phase 1
-    // pinned this at one host; the pin went with the second adapter.
-    expect(graph.limiters.hosts).toEqual([NCBI_HOST, EBI_HOST]);
+    // NCBI (`P1-T04`), Europe PMC (`P2-T03`, wired by `P2-T32`) and Crossref
+    // (`P2-T04`). Phase 1 pinned this at one host; the pin went with the
+    // second adapter.
+    expect(graph.limiters.hosts).toEqual([NCBI_HOST, EBI_HOST, CROSSREF_HOST]);
     expect(graph.limiters.limiterFor(NCBI_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(EBI_HOST)).toBeDefined();
-    // `registerSources()` was handed both adapters, in `SOURCE_IDS` order —
+    expect(graph.limiters.limiterFor(CROSSREF_HOST)).toBeDefined();
+    // `registerSources()` was handed every adapter, in `SOURCE_IDS` order —
     // the order the search dialog's Databases row renders (`docs/08` §4.2).
     expect(graph.sources.list().map((source) => source.id)).toEqual([
       "pubmed",
       "europepmc",
+      "crossref",
     ]);
     expect(graph.sources.list().map((source) => source.displayNameKey)).toEqual(
-      ["research-helper-source-pubmed", "research-helper-source-europepmc"],
+      [
+        "research-helper-source-pubmed",
+        "research-helper-source-europepmc",
+        "research-helper-source-crossref",
+      ],
     );
+    // The Crossref adapter paces on the same bucket the client does, so its
+    // header-driven `reconfigure()` lands on the limiter that actually paces.
+    expect(graph.sources.get("crossref")?.rateLimitKey).toBe(CROSSREF_HOST);
     // Every disposable is in the scope, not merely constructed.
     expect(h.scope.size).toBeGreaterThan(0);
 
@@ -1256,6 +1268,113 @@ describe("P1-T32: the progress headline resolves rather than defaulting to a bra
     expect(
       h.sink.lines.filter((line) => line.includes(L10N_PROGRESS_HEADLINE)),
     ).toEqual([]);
+
+    await h.scope.unregisterAll();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-T04: the Crossref adapter is wired with the two things only this root has
+// ---------------------------------------------------------------------------
+
+describe("P2-T04: installServices hands Crossref the contact preference and the host's own bucket", () => {
+  /** A transport answering one Crossref `/works` page from the polite pool. */
+  function createCrossrefTransport(clock: ManualClock): FakeTransport {
+    const calls: RecordedCall[] = [];
+    const body = JSON.stringify({
+      status: "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      message: {
+        "total-results": 1,
+        items: [
+          {
+            DOI: "10.1234/wired",
+            type: "journal-article",
+            title: ["Wired"],
+            issued: { "date-parts": [[2024]] },
+          },
+        ],
+        "items-per-page": 1,
+      },
+    });
+    const xhr: HttpTransportXhr = {
+      status: 200,
+      responseText: body,
+      responseURL: "",
+      getAllResponseHeaders: () =>
+        [
+          "x-api-pool: polite-array",
+          "x-rate-limit-limit: 3",
+          "x-rate-limit-interval: 1s",
+          "x-concurrency-limit: 3",
+        ].join("\r\n"),
+    };
+    return {
+      calls,
+      request(_method, url, options) {
+        calls.push({ url, options, atMs: clock.now() });
+        return Promise.resolve(xhr);
+      },
+      UnexpectedStatusException:
+        StubUnexpectedStatusException as unknown as HttpExceptionClass<
+          Error & { readonly xmlhttp: HttpTransportXhr }
+        >,
+      TimeoutException: StubTimeoutException,
+      BrowserOfflineException: StubBrowserOfflineException,
+      SecurityException: StubSecurityException,
+      CancelledException: StubCancelledException,
+    };
+  }
+
+  it("sends the user's contactEmail as mailto and reconfigures the shared bucket from the response headers", async () => {
+    const clock = createManualClock();
+    const transport = createCrossrefTransport(clock);
+    const h = harness(
+      { transport, clock },
+      { contactEmail: "reader@example.org" },
+    );
+    const graph = await installServices(h.scope, h.options);
+    const crossref = graph.sources.get("crossref");
+    if (crossref === undefined) throw new Error("crossref is not registered");
+    const bucket = bucketOf(graph.limiters, CROSSREF_HOST);
+    // `docs/07` §7.3's static starting point, before any response.
+    expect(bucket.currentConfig.ratePerSecond).toBe(2);
+
+    const page = await crossref.search(
+      { terms: { kind: "term", value: "wired" }, limit: 1 },
+      { token: createCancellationTokenSource().token },
+    );
+    expect(page.records.map((r) => r.nativeId)).toEqual(["10.1234/wired"]);
+    const url = new URL(must(transport.calls[0], "the Crossref call").url);
+    expect(url.host).toBe(CROSSREF_HOST);
+    // D10: the user's address in `mailto`; the maintainer's stays in the
+    // `User-Agent` the client adds.
+    expect(url.searchParams.get("mailto")).toBe("reader@example.org");
+    expect(
+      must(transport.calls[0], "the Crossref call").options.headers?.[
+        "User-Agent"
+      ],
+    ).toMatch(/mailto:suppakoko@gmail\.com/u);
+    // The header-driven row: the polite pool's 3/s landed on the very bucket
+    // the client paces with — raised from 2, which the client alone never does.
+    expect(bucket.currentConfig).toEqual({
+      ratePerSecond: 3,
+      burst: 2,
+      maxConcurrent: 3,
+    });
+
+    // The preference is read on every request, so a change needs no restart.
+    h.prefs.set("contactEmail", "");
+    await crossref.search(
+      { terms: { kind: "term", value: "wired" }, limit: 1 },
+      { token: createCancellationTokenSource().token },
+    );
+    expect(
+      new URL(must(transport.calls[1], "the second call").url).searchParams.get(
+        "mailto",
+      ),
+    ).toBe("suppakoko@gmail.com");
 
     await h.scope.unregisterAll();
   });

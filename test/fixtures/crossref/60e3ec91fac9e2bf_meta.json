@@ -1,0 +1,13 @@
+{
+  "scenario": "error-400",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-14T15:08:22.201Z",
+  "endpoint": "https://api.crossref.org/works",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Measured live 2026-10-14 (status, the polite-pool headers and the first message entry verbatim), then written under a reproducible key: the select list that drew it is one the shipped builder no longer sends, so the live request cannot be replayed from the builder.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

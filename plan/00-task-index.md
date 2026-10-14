@@ -1212,6 +1212,38 @@ the caller of what the card builds; if it does not, the caller is added with a d
 148. **A `link` or `flag` member imported** is written as the preview had it (`relatedVersionIds` intact), but
     no test asserts the relation survives the writer — `P2-T11` writes and tests the Zotero relation.
 
+### 6.29 Raised by `P2-T04`, 2026-10-15 — recorded under rule 9, none carded
+
+149. **(owner's document edits, `docs/02`)** §5.2/§10.2: `references-count` (not `reference-count`), and
+    `institution` and `language` are not selectable on `/works` (measured, HTTP 400 body committed as the
+    `error-400` fixture); §5.5 and §12.2: `cursor=*` must travel with `sort=score&order=desc` or relevance
+    ranking is lost (measured: index order); §5.4: deposits also arrive under `ns3:`, as bare `<p>` and
+    with an entity-escaped HTML layer; §5.2: a DOI string in `query.bibliographic` does not resolve. Added
+    to the owner review page as group 나.
+
+150. **(owner's document edit, `docs/13` §3.2)** pagination tokens are exempt from the credential catch-all
+    **by name** (`SourcePlan.opaqueTokens` in the recorder) — Crossref's `next-cursor` is 51–84 opaque
+    characters and was being scrubbed to `[redacted:NN]`.
+
+151. **Where the upward header adoption lives.** `adoptAdvertisedLimits` in the HTTP client stays tighten-only
+    (`P1-T26`); `adoptHeaderDrivenLimits` raises and lowers for rows flagged `headerDriven` and is called by
+    the Crossref adapter. Whether it should move into the client for header-driven rows is a design choice
+    for the owner; today both run and agree whenever the host tightened.
+
+152. **`journal:` terms go into Crossref's bag and are reported as a loss**, although §5.2 documents
+    `query.container-title`; §12.3's column has no Journal row (item 63). Promote with one `FIELD_PARAMS`
+    entry when item 63 is decided.
+
+153. **For `P2-T12`:** Crossref's `lookup()` must use `/works/{doi}` or `filter=doi:`; the bibliographic query
+    is not a resolver (measured: three unrelated records for a bare DOI). `lookupById` is empty today.
+
+154. **Live-request budget.** `P2-T04` spent 38 requests, 23 of them on a rejected `select` list and a
+    discarded first recording. The remaining adapter cards dry-run their `select`/field list against **one**
+    live request before recording the set; written into their briefs.
+
+155. **No test pins Crossref's dependent page to disk** (the same gap as items 136 and 60); the dry-run
+    `diff` is the only guard. Fold into the pin item 136 describes.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

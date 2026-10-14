@@ -1,0 +1,13 @@
+{
+  "scenario": "record-preprint",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-14T15:08:22.195Z",
+  "endpoint": "https://api.crossref.org/works",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "preserved 1 opaque pagination token(s) the source plan vouches for; they are not credentials",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

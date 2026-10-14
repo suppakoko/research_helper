@@ -1,0 +1,22 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-headers": "X-Requested-With, Accept, Accept-Encoding, Accept-Charset, Accept-Language, Accept-Ranges, Cache-Control",
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "Link",
+    "connection": "keep-alive",
+    "content-encoding": "gzip",
+    "content-length": "1064",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 15:08:23 GMT",
+    "permissions-policy": "interest-cohort=()",
+    "server": "Jetty(9.4.40.v20210413)",
+    "strict-transport-security": "max-age=31536000;",
+    "vary": "Accept-Encoding",
+    "x-api-pool": "polite-array",
+    "x-concurrency-limit": "3",
+    "x-rate-limit-interval": "1s",
+    "x-rate-limit-limit": "3"
+  },
+  "body": "{\"status\":\"ok\",\"message-type\":\"work-list\",\"message-version\":\"1.0.0\",\"message\":{\"facets\":{},\"next-cursor\":\"MjAuOTQ3MjIsMTcwMjcyMDUyMTAwMCwxMC4yOTIyOCUyRmdlbmVkaXRpbmcuNjY5NzY=\",\"total-results\":2475,\"items\":[{\"publisher\":\"ASOS Yayinevi\",\"issue\":\"4\",\"short-container-title\":[\"genediting\"],\"DOI\":\"10.29228\\/genediting.66930\",\"type\":\"journal-article\",\"page\":\"25-30\",\"is-referenced-by-count\":0,\"title\":[\"Making Antibiotic-Resistant E. coli Non-Resistant with CRISPR\\/Cas9 Gene Editing\"],\"volume\":\"4\",\"author\":[{\"given\":\"Ilayda\",\"family\":\"Cavrar\",\"sequence\":\"first\",\"affiliation\":[],\"role\":[{\"role\":\"author\",\"vocabulary\":\"crossref\"}]}],\"published-online\":{\"date-parts\":[[2023]]},\"container-title\":[\"Gene Editing\"],\"issued\":{\"date-parts\":[[2023]]},\"references-count\":0,\"URL\":\"https:\\/\\/doi.org\\/10.29228\\/genediting.66930\",\"ISSN\":[\"2687-640X\"]},{\"publisher\":\"Springer New York\",\"license\":[{\"start\":{\"date-parts\":[[2023,1,1]],\"date-time\":\"2023-01-01T00:00:00Z\",\"timestamp\":1672531200000},\"content-version\":\"tdm\",\"delay-in-days\":0,\"URL\":\"https:\\/\\/www.springernature.com\\/gp\\/researchers\\/text-and-data-mining\"},{\"start\":{\"date-parts\":[[2023,1,1]],\"date-time\":\"2023-01-01T00:00:00Z\",\"timestamp\":1672531200000},\"content-version\":\"vor\",\"delay-in-days\":0,\"URL\":\"https:\\/\\/www.springernature.com\\/gp\\/researchers\\/text-and-data-mining\"}],\"published-print\":{\"date-parts\":[[2023]]},\"DOI\":\"10.1007\\/978-1-4939-8991-1_27\",\"type\":\"book-chapter\",\"page\":\"C1-C1\",\"is-referenced-by-count\":0,\"title\":[\"Correction to: Application of CRISPR\\/Cas9-Mediated Gene Editing in Tomato\"],\"author\":[{\"given\":\"Nathan T.\",\"family\":\"Reem\",\"sequence\":\"first\",\"affiliation\":[],\"role\":[{\"role\":\"author\",\"vocabulary\":\"crossref\"}]},{\"given\":\"Joyce\",\"family\":\"Van Eck\",\"sequence\":\"additional\",\"affiliation\":[],\"role\":[{\"role\":\"author\",\"vocabulary\":\"crossref\"}]}],\"published-online\":{\"date-parts\":[[2023,3,11]]},\"container-title\":[\"Methods in Molecular Biology\",\"Plant Genome Editing with CRISPR Systems\"],\"link\":[{\"URL\":\"https:\\/\\/link.springer.com\\/content\\/pdf\\/10.1007\\/978-1-4939-8991-1_27\",\"content-type\":\"unspecified\",\"content-version\":\"vor\",\"intended-application\":\"similarity-checking\"}],\"issued\":{\"date-parts\":[[2023]]},\"references-count\":0,\"URL\":\"https:\\/\\/doi.org\\/10.1007\\/978-1-4939-8991-1_27\",\"ISSN\":[\"1064-3745\",\"1940-6029\"]},{\"publisher\":\"ASOS Yayinevi\",\"issue\":\"4\",\"short-container-title\":[\"genediting\"],\"DOI\":\"10.29228\\/genediting.66976\",\"type\":\"journal-article\",\"page\":\"1-13\",\"is-referenced-by-count\":0,\"title\":[\"Sensitization of The Antibiotic Resistant M. smegmatis Bacteria Using CRISPR\\/FnCpf1 Gene Editing\"],\"volume\":\"4\",\"author\":[{\"given\":\"Hasret\",\"family\":\"Araz\",\"sequence\":\"first\",\"affiliation\":[],\"role\":[{\"role\":\"author\",\"vocabulary\":\"crossref\"}]}],\"published-online\":{\"date-parts\":[[2023]]},\"container-title\":[\"Gene Editing\"],\"issued\":{\"date-parts\":[[2023]]},\"references-count\":0,\"URL\":\"https:\\/\\/doi.org\\/10.29228\\/genediting.66976\",\"ISSN\":[\"2687-640X\"]}],\"items-per-page\":3,\"query\":{\"start-index\":0,\"search-terms\":null}}}"
+}

@@ -202,6 +202,7 @@ import {
 } from "../core/logger";
 import {
   createHostLimiterRegistry,
+  CROSSREF_HOST,
   installHostLimiters,
   peekHostLimiters,
   resetHostLimiters,
@@ -211,6 +212,8 @@ import type { SecretStore } from "../core/secretStore";
 import type { PipelineRegistry } from "../pipeline/registry";
 import type { PipelineContext, PipelineId } from "../pipeline/types";
 import { getPref, setPrefStore } from "../prefs";
+import { createCrossrefSource } from "../sources/crossref/crossrefSource";
+import { createCrossrefRecordMapper } from "../sources/crossref/mapper";
 import { createEuropePmcSource } from "../sources/europepmc/europepmcSource";
 import { createEuropePmcRecordMapper } from "../sources/europepmc/mapper";
 import { createPubmedRecordMapper } from "../sources/pubmed/mapper";
@@ -1398,6 +1401,9 @@ export async function installServices(
   const keepRaw = getPref("logRequestBodies");
   const mapRecords = createPubmedRecordMapper({ clock, keepRaw, logger });
   const sources = createSourceRegistry();
+  // The same bucket the client paces Crossref with (`limiterFor` above), so
+  // the adapter's header-driven `reconfigure()` and the client's pacing agree.
+  const crossrefLimiter = limiters.limiterFor(CROSSREF_HOST);
   // `satisfies ShippedSourceAdapters`: every slot the registry knows must be
   // constructed here, so a dropped adapter is a compile error at this literal
   // rather than a database row missing from the search dialog (`P2-T32`).
@@ -1420,6 +1426,22 @@ export async function installServices(
       http,
       clock,
       mapRecords: createEuropePmcRecordMapper({ clock, keepRaw, logger }),
+      logger,
+    }),
+    // Crossref (`P2-T04`). No key (Crossref Plus is out of scope, `docs/02`
+    // §2.3). Two things only this root can supply: the `contactEmail`
+    // preference for the `mailto` parameter — a getter, read on every request,
+    // because `sources/` may not read a preference (§2.3) and a pref change
+    // must not need a restart (D10: the user's address when set, the
+    // maintainer's otherwise) — and the host's own limiter, so the adapter can
+    // adopt the limits every Crossref response advertises in both directions
+    // (`docs/07` §7.3's header-driven row; the client alone only tightens).
+    crossref: createCrossrefSource({
+      http,
+      clock,
+      mapRecords: createCrossrefRecordMapper({ clock, keepRaw, logger }),
+      userContactEmail: () => getPref("contactEmail"),
+      ...(crossrefLimiter !== undefined && { limiter: crossrefLimiter }),
       logger,
     }),
   } satisfies ShippedSourceAdapters);

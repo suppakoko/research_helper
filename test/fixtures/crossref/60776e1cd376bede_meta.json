@@ -1,0 +1,13 @@
+{
+  "scenario": "error-429",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-14T15:08:22.200Z",
+  "endpoint": "https://api.crossref.org/works",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written. Provoking a rate limit on the shared polite pool is not acceptable; status, Retry-After and the public-pool headers docs/02 §5.1 measured are the assertable parts, the body is a placeholder.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

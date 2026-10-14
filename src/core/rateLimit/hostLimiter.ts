@@ -124,6 +124,17 @@ export interface HostRateLimitPolicy {
    * without its own three values.
    */
   readonly retry?: RetryBudget;
+  /**
+   * §7.3 marks this row **header-driven**: the host advertises its current
+   * limits on every response (`x-rate-limit-limit`, `x-rate-limit-interval`,
+   * `x-concurrency-limit`) and the static cells are only the **starting**
+   * point. For such a row the adapter calls {@link adoptHeaderDrivenLimits},
+   * which adopts the advertised values in **both** directions; for every other
+   * row only the HTTP client's {@link adoptAdvertisedLimits} runs, which
+   * tightens and never raises. Absent means `false`. `P2-T04` added it for
+   * `api.crossref.org`, the one row §7.3 writes this way.
+   */
+  readonly headerDriven?: boolean;
 }
 
 /** The host `P1-T07`'s PubMed adapter talks to. */
@@ -140,6 +151,14 @@ export const NCBI_KEY_PRESENT_PREF = "ncbi.keyPresent";
  * rule stays mechanical.
  */
 export const EBI_HOST = "www.ebi.ac.uk";
+
+/**
+ * The host `P2-T04`'s Crossref adapter talks to — the authority of
+ * `https://api.crossref.org` (`docs/02` §5.1). Imported by
+ * `src/sources/crossref/` rather than respelled, for the reason
+ * {@link EBI_HOST} gives.
+ */
+export const CROSSREF_HOST = "api.crossref.org";
 
 /**
  * `docs/07` §7.3's policy table, as far as Phase 1 needs it.
@@ -189,7 +208,8 @@ export const EBI_HOST = "www.ebi.ac.uk";
  *
  * **The five rows Phase 2 adds**, each from §7.3 verbatim and each with the card
  * that adds it: `www.ebi.ac.uk` (Europe PMC, `P2-T03` — **shipped below**),
- * `api.crossref.org`, `api.semanticscholar.org`, `export.arxiv.org` — which
+ * `api.crossref.org` (Crossref, `P2-T04` — **shipped below**),
+ * `api.semanticscholar.org`, `export.arxiv.org` — which
  * needs `minIntervalMs: 3000` and `maxConcurrent: 1`, aggregated across every
  * machine under our control — and `api.biorxiv.org`. `api.openalex.org` gets
  * **no** row: decision D2 puts OpenAlex out of v1 and one of `plan/03`'s cards
@@ -215,6 +235,22 @@ export const EBI_HOST = "www.ebi.ac.uk";
  * `plan/README.md` §5 rule 4 forbids writing a number here that the document
  * does not carry; `test/unit/core/backoff.test.ts` reads the cells back from
  * the document and compares them to this row, so the two cannot drift apart.
+ *
+ * **Crossref, `P2-T04` (2026-10-14).** §7.3's `api.crossref.org` row:
+ * "header-driven; **start at 2/interval**", burst 2, max concurrent 3, retry
+ * 1000 ms / 30 000 ms / 3 (the cells the owner filled on 2026-10-14). The
+ * static rate is a starting point and nothing more: the row's basis cell says
+ * the interval "is **not** fixed at one second — it comes back in
+ * `x-rate-limit-limit` / `x-rate-limit-interval`, with `x-concurrency-limit`
+ * alongside, and `reconfigure()` is called from those headers on every
+ * response". So `ratePerSecond: 2` is §7.3's "2/interval" read against the
+ * one-second interval `docs/02` §5.1 measured, and the row carries
+ * `headerDriven: true` so that the adapter adopts whatever the host advertises
+ * — upwards to the polite pool's 3/s as well as downwards to the public
+ * pool's 1/s — through {@link adoptHeaderDrivenLimits}. No key: Crossref Plus
+ * is out of scope (`docs/02` §2.3), so no `withKey` and no `keyPresencePref`.
+ * The polite pool is earned by a contact address, not a key, and that is
+ * `src/core/http/userAgent.ts`'s and the adapter's business.
  */
 export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
   {
@@ -231,6 +267,15 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
     host: EBI_HOST,
     withoutKey: { ratePerSecond: 5, burst: 5, maxConcurrent: 3 },
     retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
+  },
+  {
+    // `docs/07` §7.3, `api.crossref.org`: header-driven, start at 2/interval,
+    // burst 2, max concurrent 3; retry 1000 ms / 30 000 ms / 3. See the
+    // header's "Crossref" paragraph.
+    host: CROSSREF_HOST,
+    withoutKey: { ratePerSecond: 2, burst: 2, maxConcurrent: 3 },
+    retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
+    headerDriven: true,
   },
 ];
 
@@ -645,6 +690,59 @@ export function adoptAdvertisedLimits(
     ratePerSecond: tighterRate ?? current.ratePerSecond,
     maxConcurrent: tighterConcurrency ?? current.maxConcurrent,
   };
+  limiter.reconfigure(next);
+  return next;
+}
+
+/**
+ * `reconfigure()` a **header-driven** host's limiter to exactly what the
+ * response advertised, in both directions.
+ *
+ * This is the upward half {@link adoptAdvertisedLimits} deliberately does not
+ * have, and it is confined to the rows §7.3 marks header-driven
+ * ({@link HostRateLimitPolicy.headerDriven}) — today `api.crossref.org`, whose
+ * row reads "header-driven; start at 2/interval" and whose basis cell says the
+ * governor is reconfigured "from those headers on every response". For that
+ * host the advertised figure *is* the policy (`docs/02` §5.1: Crossref
+ * "advertises the current values on every call"), so adopting it invents
+ * nothing and raising to it overrules no document; the tighten-only rule
+ * exists for hosts whose §7.3 cell sits below the advertised figure on
+ * purpose, and those rows do not carry the flag. `P2-T04` (2026-10-14).
+ *
+ * The same three disciplines as the tighten-only function: only what the
+ * response carried is read (`burst` is never advertised and is kept); a
+ * malformed header is treated as absent; and `reconfigure()` is not called
+ * when the advertised values equal the config in force, because it refills,
+ * re-queues and re-schedules. The HTTP client's own call on every response
+ * runs first and can only tighten; this call then lands the advertised value
+ * exactly, so the two agree whenever the host tightened and only this one
+ * acts when it loosened. The adapter calls it with the limiter the composition
+ * root resolved for the host, after every response.
+ *
+ * @param limiter - the host's limiter; one that publishes no config is a no-op
+ * @param header - case-insensitive lookup over the response's headers
+ * @returns the config adopted, or `undefined` when nothing was
+ */
+export function adoptHeaderDrivenLimits(
+  limiter: AdvertisedLimitTarget,
+  header: ResponseHeaderLookup,
+): RateLimiterConfig | undefined {
+  const current = limiter.currentConfig;
+  if (current === undefined || limiter.reconfigure === undefined) {
+    return undefined;
+  }
+
+  const advertised = parseAdvertisedLimits(header);
+  const ratePerSecond = advertised.ratePerSecond ?? current.ratePerSecond;
+  const maxConcurrent = advertised.maxConcurrent ?? current.maxConcurrent;
+  if (
+    ratePerSecond === current.ratePerSecond &&
+    maxConcurrent === current.maxConcurrent
+  ) {
+    return undefined;
+  }
+
+  const next: RateLimiterConfig = { ...current, ratePerSecond, maxConcurrent };
   limiter.reconfigure(next);
   return next;
 }

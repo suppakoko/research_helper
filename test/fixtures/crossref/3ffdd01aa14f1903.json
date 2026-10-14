@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"status\":\"ok\",\"message-type\":\"work-list\",\"message-version\":\"1.0.0\",\"message\":{\"facets\":{},\"next-cursor\":\"[redacted:72]\",\"total-results\":4222889,\"items\":[{\"publisher\":\"Springer Science and Business Media LLC\",\"issue\":\"7965\",\"license\":[{\"start\":{\"date-parts\":[[2023,5,31]],\"date-time\":\"2023-05-31T00:00:00Z\",\"timestamp\":1685491200000},\"content-version\":\"tdm\",\"delay-in-days\":0,\"URL\":\"https:\\/\\/www.springernature.com\\/gp\\/researchers\\/text-and-data-mining\"},{\"start\":{\"date-parts\":[[2023,5,31]],\"date-time\":\"2023-05-31T00:00:00Z\",\"timestamp\":1685491200000},\"content-version\":\"vor\",\"delay-in-days\":0,\"URL\":\"https:\\/\\/www.springernature.com\\/gp\\/researchers\\/text-and-data-mining\"}],\"short-container-title\":[\"Nature\"],\"published-print\":{\"date-parts\":[[2023,6,15]]},\"DOI\":\"10.1038\\/s41586-023-06139-9\",\"type\":\"journal-article\",\"page\":\"616-624\",\"is-referenced-by-count\":1310,\"title\":[\"Transfer learning enables predictions in network biology\"],\"volume\":\"618\",\"author\":[{\"ORCID\":\"https:\\/\\/orcid.org\\/0000-0003-1658-1447\",\"authent"
+}

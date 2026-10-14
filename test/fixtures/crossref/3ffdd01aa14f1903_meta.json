@@ -1,0 +1,13 @@
+{
+  "scenario": "error-malformed",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-14T15:08:22.203Z",
+  "endpoint": "https://api.crossref.org/works",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Derived, not recorded: the first 1024 bytes of the recorded record-rich body after redaction, cut inside the JSON. Crossref has no documented way to ask for a truncated body.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

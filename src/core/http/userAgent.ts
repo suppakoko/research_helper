@@ -5,10 +5,9 @@
  * **Scope.** `P1-T05`, the shipped module (`plan/README.md` §4 lists this path
  * among the sixteen a Phase 1 card `create`s again over `P0-T15`'s spike).
  * Crossref's `mailto` — the user's `contactEmail` pref, the maintainer address
- * otherwise — is Phase 2's and is deliberately still absent: `core/` reads no
- * preference (`docs/07` §2.3), so the user's address has to arrive as an
- * argument from a layer that may, and no Phase 1 card has a Crossref adapter to
- * pass it.
+ * otherwise — is {@link crossrefContactParams} (`P2-T04`, 2026-10-14): `core/`
+ * reads no preference (`docs/07` §2.3), so the user's address arrives as an
+ * argument from the composition root through the Crossref adapter.
  *
  * The rules, all decision D10 (`docs/00` §3, confirmed 2026-09-09) with the
  * per-host assignment table in `docs/02` §2.2:
@@ -101,4 +100,35 @@ export function ncbiIdentityParams(): Readonly<{
  */
 export function contactParamsForHost(host: string): ContactParams {
   return host.toLowerCase() === NCBI_EUTILS_HOST ? ncbiIdentityParams() : {};
+}
+
+/**
+ * Crossref's `mailto` parameter (`P2-T04`): the **user's** address when the
+ * `contactEmail` preference holds one, the maintainer's otherwise.
+ *
+ * Decision D10 (`docs/00` §3) and `docs/02` §2.2's final assignment table:
+ * "Crossref — `mailto=` **user's, if set**; maintainer otherwise". The address
+ * arrives as an argument because `core/` reads no preference (`docs/07` §2.3);
+ * `src/bootstrap/container.ts` resolves `contactEmail` and the Crossref
+ * adapter passes it through. `docs/02` §5.1 verified that a contact address in
+ * **either** `mailto` or the `User-Agent` earns the polite pool, so an empty
+ * preference costs the user nothing — the maintainer address goes out in the
+ * parameter as well as in the `User-Agent` {@link buildUserAgent} builds, and
+ * the two are never swapped: the user's address never reaches the
+ * `User-Agent`, and the maintainer's never displaces a user's `mailto`.
+ *
+ * A value that is not address-shaped — blank, or carrying no `@` — is
+ * treated as unset rather than sent, because Crossref reads the parameter and
+ * a malformed one would identify nobody.
+ *
+ * @param userContactEmail - the `contactEmail` preference's value, if any
+ * @returns the one `mailto` pair every Crossref request carries
+ */
+export function crossrefContactParams(
+  userContactEmail: string | undefined,
+): Readonly<{ mailto: string }> {
+  const trimmed = userContactEmail?.trim() ?? "";
+  const usable =
+    trimmed.length > 0 && trimmed.includes("@") && !/\s/u.test(trimmed);
+  return { mailto: usable ? trimmed : MAINTAINER_EMAIL };
 }

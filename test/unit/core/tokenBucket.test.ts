@@ -7,6 +7,7 @@ import { OperationCancelledError } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import {
   createHostLimiterRegistry,
+  CROSSREF_HOST,
   EBI_HOST,
   getHostLimiters,
   HOST_POLICIES,
@@ -1099,12 +1100,13 @@ describe("hostLimiter policy table", () => {
   it("carries docs/07 §7.3's NCBI row exactly, and serves every shipped row and no other", () => {
     // Phase 1 pinned this table at one row ("only that row in Phase 1").
     // `P2-T32` retired the pin: the table carries one row per host the shipped
-    // adapters talk to — NCBI (`P1-T04`) and Europe PMC (`P2-T03`) — and the
-    // registry serves exactly those, in table order, each from §7.3. That every
-    // row here is a §7.3 row, with §7.3's own retry cells, is asserted against
-    // the document itself in `backoff.test.ts`, so this test names the hosts
-    // and leaves the numbers to the one place that reads them off the page.
-    const shippedHosts = [NCBI_HOST, EBI_HOST];
+    // adapters talk to — NCBI (`P1-T04`), Europe PMC (`P2-T03`) and Crossref
+    // (`P2-T04`) — and the registry serves exactly those, in table order, each
+    // from §7.3. That every row here is a §7.3 row, with §7.3's own retry
+    // cells, is asserted against the document itself in `backoff.test.ts`, so
+    // this test names the hosts and leaves the numbers to the one place that
+    // reads them off the page.
+    const shippedHosts = [NCBI_HOST, EBI_HOST, CROSSREF_HOST];
     expect(HOST_POLICIES.map((policy) => policy.host)).toEqual(shippedHosts);
     const clock = createManualClock();
     const registry = createHostLimiterRegistry({ clock });
@@ -1160,8 +1162,10 @@ describe("hostLimiter policy table", () => {
     // host, shared by every job".
     expect(registry.limiterFor(NCBI_HOST)).toBe(first);
     expect(must(first, "the NCBI limiter").key).toBe(NCBI_HOST);
-    expect(registry.limiterFor("api.crossref.org")).toBeUndefined();
-    expect(registry.policyFor("api.crossref.org")).toBeUndefined();
+    // `api.crossref.org` was the unregistered example until `P2-T04` shipped
+    // its row; Semantic Scholar's is still `P2-T05`'s to add.
+    expect(registry.limiterFor("api.semanticscholar.org")).toBeUndefined();
+    expect(registry.policyFor("api.semanticscholar.org")).toBeUndefined();
   });
 
   it("refuses two rows for one host", () => {

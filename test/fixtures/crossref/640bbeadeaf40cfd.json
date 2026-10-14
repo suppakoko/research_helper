@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-headers": "X-Requested-With, Accept, Accept-Encoding, Accept-Charset, Accept-Language, Accept-Ranges, Cache-Control",
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "Link",
+    "connection": "keep-alive",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 15:08:06 GMT",
+    "permissions-policy": "interest-cohort=()",
+    "server": "Jetty(9.4.40.v20210413)",
+    "strict-transport-security": "max-age=31536000;",
+    "transfer-encoding": "chunked",
+    "x-api-pool": "polite-array",
+    "x-concurrency-limit": "3",
+    "x-rate-limit-interval": "1s",
+    "x-rate-limit-limit": "3"
+  },
+  "body": "{\"status\":\"ok\",\"message-type\":\"work-list\",\"message-version\":\"1.0.0\",\"message\":{\"facets\":{},\"total-results\":0,\"items\":[],\"items-per-page\":20,\"query\":{\"start-index\":0,\"search-terms\":null}}}"
+}

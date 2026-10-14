@@ -1989,7 +1989,13 @@ describe("hostLimiter: the www.ebi.ac.uk row", () => {
     const registry = createHostLimiterRegistry({
       clock: createManualClock(NOW),
     });
-    expect(registry.hosts).toEqual(["eutils.ncbi.nlm.nih.gov", EBI_HOST]);
+    // Until 2026-10-15 this pinned the whole host list to [NCBI, EBI]; a third
+    // row (P2-T04's Crossref) made it stale. tokenBucket.test.ts owns the full
+    // shipped-host list; here only this row's place after NCBI is asserted.
+    expect(registry.hosts).toContain(EBI_HOST);
+    expect(registry.hosts.indexOf(EBI_HOST)).toBeGreaterThan(
+      registry.hosts.indexOf("eutils.ncbi.nlm.nih.gov"),
+    );
     expect(registry.policyFor(EBI_HOST)?.withoutKey.ratePerSecond).toBe(5);
     expect(registry.limiterFor(EBI_HOST)).toBeDefined();
     expect(registry.limiterFor(EBI_HOST)).not.toBe(

@@ -581,6 +581,22 @@ in the polite pool, with its Boolean lossiness handled explicitly rather than si
 - create `test/fixtures/crossref/` (the `docs/13` §3.1 set)
 
 **Do.**
+> **Corrected 2026-10-15 after the executing agent measured on the live API (report):** `docs/02` §10.2's Crossref column
+> names three fields `/works` **cannot `select`** — `reference-count` is `references-count` on that route, and
+> `institution` and `language` are not selectable at all (eleven HTTP 400s, body committed as `error-400`), so
+> step 5's `language` and `venue.repository` cells cannot be served and a preprint's container falls back to
+> `publisher`. §5.5's bare `cursor=*` **discards relevance ranking** (measured: index order, 1990s records
+> first); the adapter sends `sort=score&order=desc` on every request and §5.5/§12.2 should too (`plan/00`
+> §6 item 149). Criterion 4 cannot pass through the shipped HTTP client, whose `adoptAdvertisedLimits` is
+> tighten-only by `P1-T26`'s decision; the upward half is `adoptHeaderDrivenLimits`, confined to rows flagged
+> `headerDriven` (Crossref alone) and called by the adapter (item 151). Step 9's "note in the display string"
+> contradicts `docs/08` §10.3 (database names are not decorated); the coverage caveat is
+> `CROSSREF_ABSTRACT_COVERAGE_NOTE` — measured 18 of 63 recorded items (29 %) carry an abstract. Step 1 and
+> §12.2 differ on whether `title:` terms stay in the bag — §12.2 (both) was followed. Step 3 names no value
+> for `from-created-date`; the same lower bound is used. The recorder's 40-character credential catch-all
+> destroyed every `next-cursor` on the first recording; it now exempts named opaque tokens per source
+> (`SourcePlan.opaqueTokens`, item 150). The one test that kept the unit suite red afterwards — the Europe PMC
+> file's two-host pin, outside this list — was loosened by the coordinator on landing.
 > **Coordinator note 2026-10-14.** Order decided by the owner: the four adapters run one at a time because they
 > share five files — Crossref first, then arXiv (`P2-T06`), Semantic Scholar (`P2-T05`), bioRxiv/medRxiv
 > (`P2-T07`); `P2-T24` runs beside Crossref since its files differ. Record fixtures through
@@ -656,6 +672,27 @@ authority, and abstracts are backfilled from Europe PMC or Semantic Scholar. Cro
 (`Crossref-Plus-API-Token`) is out of scope: `docs/02` §2.3 notes it would need a new `SecretId`
 added to `docs/09` §1.7 first.
 
+
+**Findings, 2026-10-15 — done; the product registers three sources; 38 live requests, 16 fixtures; the unit suite is green after one coordinator pin fix; full report at `plan/reports/P2-T04.md`.**
+Verified by the coordinator on the live tree: 16 fixture pairs under `test/fixtures/crossref/` with the contact
+address absent in both spellings, no `MUTANT` marker, `typings/i10n.d.ts` moved `82bb91ab` → `30bae1a7` by one
+member, both bundles declare `research-helper-source-crossref = Crossref` once, typecheck 0, `lint:check` 0,
+the OpenAlex guard exit 0, the recorder dry run printing the 16 committed keys, and the whole unit suite
+**1,861 passed with one failure** — `europepmc.test.ts`'s two-host pin, the same class `P2-T32` retired
+elsewhere, loosened by the coordinator to assert only Europe PMC's place after NCBI (103 passed after). The
+agent's two integration runs passed 129. `createCrossrefSource` renders the bag of words into
+`query.bibliographic` with `title:`/`author:` also into their `query.*` fields, keeps `AND`/`OR`/`NOT` tokens
+off the wire (NOT terms are filtered client-side after retrieval, with a lossiness notice; OR, phrases and
+unsupported fields are reported through `normalizeForSource`), sends `select=` with a measured-valid field
+list, `sort=score&order=desc` beside the cursor, `mailto=` (the user's `contactEmail` when set, the
+maintainer's otherwise) plus the `User-Agent` contact, adopts the polite pool's advertised limits in both
+directions through `adoptHeaderDrivenLimits` on the one `headerDriven` row, and maps JATS abstracts through
+a namespace-aware DOM walk that also handles `ns3:` prefixes, bare `<p>` and an entity-escaped HTML layer.
+`installServices` constructs it with the user's contact preference and the shared limiter; 90 tests; **61
+mutants, 59 killed, one equivalent, one that exposed a missing paragraph assertion and was then killed**.
+Thirteen corpus or card statements were wrong or incomplete and are dated above; the document edits are
+items 149–153 for the owner's review page. Live-request budget: 38 (11 rejected `select`, 12 discarded, 3
+probe, 12 kept) — the next adapter dry-runs its `select` list against one request first (item 154).
 ---
 
 ### P2-T05 — Semantic Scholar adapter with unauthenticated degradation
