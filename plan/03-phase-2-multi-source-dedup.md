@@ -4136,7 +4136,7 @@ shared tree; each leg's count is stated with its run.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T30` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14; the cascade yields and the 100-record import stalls 43–57 ms. Report at `plan/reports/P2-T30.md`. |
 | **Depends on** | `P2-T29` |
 | **Blocks** | `P2-T12`, `P2-T14`, `P2-T16`, `P2-T31` |
 | **Retires** | `plan/00` §6 item 119 |
@@ -4382,7 +4382,7 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 | Field | Value |
 |---|---|
 | **ID** | `P2-T33` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14, deviation accepted; the recorder runs under tsx with `--source`. Report at `plan/reports/P2-T33.md`. |
 | **Depends on** | `P2-T03`, `P2-T25` |
 | **Blocks** | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07` |
 | **Retires** | `plan/00` §6 item 127 |
