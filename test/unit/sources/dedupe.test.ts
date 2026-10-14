@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { OperationCancelledError } from "../../../src/core/errors";
+import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import type { WorkType } from "../../../src/model/canonicalWork";
 import {
   normalizeArxivId,
@@ -21,7 +23,10 @@ import {
   buildLibraryIndex,
   compareRecords,
   DEDUP_TIERS,
+  DEDUP_YIELD_EVERY_COMPARISONS,
   dedupeRecords,
+  dedupeRecordsAsync,
+  defaultYieldToEventLoop,
   isPreprintDoi,
   JACCARD_CORROBORATED_THRESHOLD,
   JACCARD_REORDER_THRESHOLD,
@@ -996,40 +1001,60 @@ describe("dedupeRecords", () => {
   });
 });
 
-describe("blocking keeps a 500-record set far below n²/10 comparisons", () => {
-  /** 50 families × 10 variants; every variant keeps the family's three longest words. */
-  function synthetic(): SourceRecord[] {
-    const out: SourceRecord[] = [];
-    const words = [
-      "alpha",
-      "bravo",
-      "charlie",
-      "delta",
-      "echo",
-      "foxtrot",
-      "golf",
-      "hotel",
-      "india",
-      "juliet",
-    ];
-    for (let f = 0; f < 50; f += 1) {
-      const long1 = `${words[f % 10]}ization${f}`;
-      const long2 = `${words[(f + 3) % 10]}ological${f}`;
-      const long3 = `${words[(f + 7) % 10]}morphism${f}`;
-      for (let v = 0; v < 10; v += 1) {
-        const filler = words[v] ?? "x";
-        out.push(
-          record({
-            title: `${long1} and ${long2} in ${long3} of ${filler} cells ${v}`,
-            year: 2020 + (v % 2),
-            authors: [`Author${f}`],
-          }),
-        );
-      }
+/**
+ * 50 families × 10 variants; every variant keeps the family's three longest
+ * words, so the set falls into 50 blocks of 10. Shared by the blocking bound
+ * below and the `dedupeRecordsAsync` yield tests.
+ */
+function synthetic(): SourceRecord[] {
+  const out: SourceRecord[] = [];
+  const words = [
+    "alpha",
+    "bravo",
+    "charlie",
+    "delta",
+    "echo",
+    "foxtrot",
+    "golf",
+    "hotel",
+    "india",
+    "juliet",
+  ];
+  for (let f = 0; f < 50; f += 1) {
+    const long1 = `${words[f % 10]}ization${f}`;
+    const long2 = `${words[(f + 3) % 10]}ological${f}`;
+    const long3 = `${words[(f + 7) % 10]}morphism${f}`;
+    for (let v = 0; v < 10; v += 1) {
+      const filler = words[v] ?? "x";
+      out.push(
+        record({
+          title: `${long1} and ${long2} in ${long3} of ${filler} cells ${v}`,
+          year: 2020 + (v % 2),
+          authors: [`Author${f}`],
+        }),
+      );
     }
-    return out;
   }
+  return out;
+}
 
+/**
+ * `P1-T23`'s NFR-1 shape: 100 records whose titles share their longest words,
+ * so `blockingSignature` puts them in one block — the set `P2-T29` measured
+ * stalling the main thread 246–274 ms unchunked.
+ */
+function oneBlockOfHundred(): SourceRecord[] {
+  return Array.from({ length: 100 }, (_, i) =>
+    record({
+      title: `Pre-fetched record ${String(i + 1)} for NFR-1`,
+      year: 2025,
+      authors: ["Kim", "Park"],
+      ids: { doi: doi(`10.5555/p1t23.${String(i + 1)}`) },
+    }),
+  );
+}
+
+describe("blocking keeps a 500-record set far below n²/10 comparisons", () => {
   it("asserts the instrumented comparison counter", () => {
     const records = synthetic();
     expect(records).toHaveLength(500);
@@ -1041,6 +1066,273 @@ describe("blocking keeps a 500-record set far below n²/10 comparisons", () => {
     expect(r.comparisons).toBeLessThanOrEqual(50 * 45);
     // Trailing-digit variants are a series: forced distinct, so nothing merges.
     expect(r.groups).toHaveLength(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The yielding form — P2-T30, docs/10 NFR-3
+// ---------------------------------------------------------------------------
+
+describe("dedupeRecordsAsync (P2-T30)", () => {
+  /** A yield that counts itself and otherwise behaves like the default. */
+  function countingYield(): {
+    readonly yieldToEventLoop: () => Promise<void>;
+    readonly calls: () => number;
+  } {
+    let calls = 0;
+    return {
+      yieldToEventLoop: () => {
+        calls += 1;
+        return new Promise((resolve) => setTimeout(resolve, 0));
+      },
+      calls: () => calls,
+    };
+  }
+
+  /**
+   * Every fixture the synchronous `dedupeRecords` tests above use, built once
+   * so both forms see the very same record objects, plus the two large sets.
+   */
+  const fixtures: readonly (readonly [string, readonly SourceRecord[]])[] = [
+    [
+      "transitive identifier trio",
+      [
+        record({ title: "a", ids: { doi: doi("10.1000/x") } }),
+        record({
+          title: "b",
+          ids: { doi: doi("10.1000/X"), pmid: pmid("42") },
+        }),
+        record({ title: "c", ids: { pmid: pmid("42") } }),
+      ],
+    ],
+    [
+      "flagged pair",
+      [
+        record({ title: S2_TITLE, year: 2023, authors: ["Theodoris"] }),
+        record({
+          title: "Transfer learning enables predictions in protein biology",
+          year: 2023,
+          authors: ["Nobody"],
+        }),
+      ],
+    ],
+    [
+      "linked pair",
+      [
+        record({ title: S2_TITLE, year: 2023, ids: { doi: doi("10.1000/a") } }),
+        record({ title: S2_TITLE, year: 2023, ids: { doi: doi("10.1000/b") } }),
+      ],
+    ],
+    [
+      "mixed seven",
+      [
+        record({
+          title: S2_TITLE,
+          year: 2023,
+          ids: { doi: doi("10.1038/s41586-023-06139-9") },
+        }),
+        record({
+          title: PUBMED_TITLE,
+          year: 2023,
+          ids: { pmid: pmid("37258680") },
+        }),
+        record({
+          title: S2_TITLE,
+          year: 2023,
+          ids: { pmid: pmid("37258680") },
+        }),
+        record({
+          title: "Transfer learning enables predictions in protein biology",
+          year: 2023,
+        }),
+        record({
+          type: "preprint",
+          title: S2_TITLE,
+          year: 2022,
+          ids: { doi: doi("10.1101/2022.08.10.503517") },
+        }),
+        record({
+          title: "Studies on the mechanism of enzyme catalysis, Part II",
+          year: 1998,
+        }),
+        record({
+          title: "Studies on the mechanism of enzyme catalysis, Part III",
+          year: 1998,
+        }),
+      ],
+    ],
+    [
+      "different title blocks",
+      [
+        record({ title: "Alpha beta gamma delta epsilon zeta", year: 2020 }),
+        record({
+          title: "Completely unrelated words here now please",
+          year: 2020,
+        }),
+      ],
+    ],
+    [
+      "same block, years too far apart",
+      [
+        record({ title: S2_TITLE, year: 2020 }),
+        record({ title: S2_TITLE, year: 2020 + MAX_YEAR_DELTA + 1 }),
+      ],
+    ],
+    [
+      "same DOI, two spellings",
+      [
+        record({
+          title: PUBMED_TITLE,
+          ids: { doi: doi("10.18653/V1/2020.ACL-MAIN.447") },
+        }),
+        record({
+          title: S2_TITLE,
+          ids: { doi: doi("10.18653/v1/2020.acl-main.447") },
+        }),
+      ],
+    ],
+    [
+      "blocking trade-off pair",
+      [
+        record({ title: S2_TITLE, year: 2023 }),
+        record({
+          title: "Transfer learning enables prediction in protein biology",
+          year: 2023,
+        }),
+      ],
+    ],
+    ["empty", []],
+    ["500 records in 50 blocks", synthetic()],
+    ["100 records in one block (NFR-1's shape)", oneBlockOfHundred()],
+  ];
+
+  it.each(fixtures)(
+    "returns a result deep-equal to dedupeRecords on: %s",
+    async (_name, records) => {
+      const sync = dedupeRecords(records);
+      const async = await dedupeRecordsAsync(records);
+      expect(async).toEqual(sync);
+      // The two share the record objects too, not just their shape.
+      expect(async.groups.flatMap((g) => g.records)).toEqual(
+        sync.groups.flatMap((g) => g.records),
+      );
+      expect(async.comparisons).toBe(sync.comparisons);
+    },
+  );
+
+  it("yields every DEDUP_YIELD_EVERY_COMPARISONS comparisons inside one block", async () => {
+    const records = oneBlockOfHundred();
+    const counting = countingYield();
+    const r = await dedupeRecordsAsync(records, {
+      yieldToEventLoop: counting.yieldToEventLoop,
+    });
+    // One block, nothing in the identifier pass: the yields are the in-block
+    // ones plus the boundary yield for the remainder, i.e. the ceiling.
+    expect(r.comparisons).toBeGreaterThan(DEDUP_YIELD_EVERY_COMPARISONS);
+    expect(counting.calls()).toBe(
+      Math.ceil(r.comparisons / DEDUP_YIELD_EVERY_COMPARISONS),
+    );
+    // And the constant is the measured one: 250 comparisons is about 12 ms
+    // on Zotero's main thread at P2-T29's 50 µs a comparison.
+    expect(DEDUP_YIELD_EVERY_COMPARISONS).toBe(250);
+  });
+
+  it("yields once at the end of every block that compared something", async () => {
+    const records = synthetic();
+    const counting = countingYield();
+    const r = await dedupeRecordsAsync(records, {
+      yieldToEventLoop: counting.yieldToEventLoop,
+    });
+    // 50 blocks of 10, 45 comparisons each — below the in-block interval, so
+    // exactly one boundary yield per block.
+    expect(r.comparisons).toBe(50 * 45);
+    expect(counting.calls()).toBe(50);
+  });
+
+  it("does not yield at all when nothing is compared", async () => {
+    const counting = countingYield();
+    const apart = await dedupeRecordsAsync(
+      [
+        record({ title: "Alpha beta gamma delta epsilon zeta", year: 2020 }),
+        record({
+          title: "Completely unrelated words here now please",
+          year: 2020,
+        }),
+      ],
+      { yieldToEventLoop: counting.yieldToEventLoop },
+    );
+    expect(apart.comparisons).toBe(0);
+    const empty = await dedupeRecordsAsync([], {
+      yieldToEventLoop: counting.yieldToEventLoop,
+    });
+    expect(empty.groups).toEqual([]);
+    expect(counting.calls()).toBe(0);
+  });
+
+  it("increments an externally supplied counter in place", async () => {
+    const counter = { comparisons: 10 };
+    await dedupeRecordsAsync(
+      [
+        record({ title: "a", ids: { doi: doi("10.1000/x") } }),
+        record({ title: "b", ids: { doi: doi("10.1000/x") } }),
+      ],
+      { counter },
+    );
+    expect(counter.comparisons).toBe(11);
+  });
+
+  it("stops at the next yield once the token is cancelled, with OperationCancelledError", async () => {
+    const records = oneBlockOfHundred();
+    const source = createCancellationTokenSource();
+    const counter = { comparisons: 0 };
+    let yields = 0;
+    const cancelOnSecondYield = (): Promise<void> => {
+      yields += 1;
+      if (yields === 2) source.cancel({ kind: "user" });
+      return new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    await expect(
+      dedupeRecordsAsync(records, {
+        counter,
+        token: source.token,
+        yieldToEventLoop: cancelOnSecondYield,
+      }),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+    // Exactly two slices ran: the cancel landed inside the second yield and
+    // was seen right after it, before a third slice could start.
+    expect(yields).toBe(2);
+    expect(counter.comparisons).toBe(2 * DEDUP_YIELD_EVERY_COMPARISONS);
+    expect(counter.comparisons).toBeLessThan(
+      dedupeRecords(records).comparisons,
+    );
+  });
+
+  it("rejects on entry for an already-cancelled token, before any comparison", async () => {
+    const source = createCancellationTokenSource();
+    source.cancel({ kind: "shutdown" });
+    const counter = { comparisons: 0 };
+    const counting = countingYield();
+    await expect(
+      dedupeRecordsAsync(oneBlockOfHundred(), {
+        counter,
+        token: source.token,
+        yieldToEventLoop: counting.yieldToEventLoop,
+      }),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+    expect(counter.comparisons).toBe(0);
+    expect(counting.calls()).toBe(0);
+  });
+
+  it("the default yield is a macrotask, so the event loop runs in between", async () => {
+    // A timer queued before the yield has fired by the time the yield
+    // resolves; a microtask yield (`await Promise.resolve()`) would resolve
+    // first and leave the main thread exactly as blocked as before.
+    let timerFired = false;
+    setTimeout(() => {
+      timerFired = true;
+    }, 0);
+    await defaultYieldToEventLoop();
+    expect(timerFired).toBe(true);
   });
 });
 

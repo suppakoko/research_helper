@@ -1083,7 +1083,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     library side.
 
 119. ~~**`Merging` stalls the main thread 246–274 ms on a 100-record import** (NFR-3 budget 100 ms).~~
-    **CARDED 2026-10-14 as `P2-T30`** — `dedupeRecords` is synchronous and same-topic titles fall into one
+    **CARDED 2026-10-14 as `P2-T30`, DONE the same day — 43 / 57 / 56 / 46 ms, no gap over 100 ms, four runs** — `dedupeRecords` is synchronous and same-topic titles fall into one
     block (4,851 comparisons, 33–45 ms in Node, several times that under Zotero with the toolbox attached).
     Four runs of four; `plan/00` §5's NFR-3 row carries the figures. NFR-3's own text prescribes yields.
 
@@ -1139,6 +1139,21 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 132. **For `P2-T12`:** Europe PMC's `lookup()` (`EXT_ID:`, `DOI:`, `PMCID:`) is not implemented and
     `lookupById` is empty; the backfill card decides whether it needs it.
+
+### 6.25 Raised by `P2-T30`, 2026-10-14 — recorded under rule 9, none carded
+
+133. **The yield interval is pinned, not guarded.** Doubling `DEDUP_YIELD_EVERY_COMPARISONS` (250 → 500) fails
+    only the test that pins the number; the integration case is the real guard against a too-large interval
+    and would likely still pass at 500 (≈ 25 ms slices). Accept, or write a count assertion independent of
+    the constant.
+
+134. **Two synchronous forms survive for the unit tests:** `dedupeRecords` and `dedupeAndMerge`. When
+    `test/unit/model/merge.test.ts` is next in a card's list, retire `dedupeAndMerge` in favour of the async
+    one; `P2-T31` step 3's prose refresh should mention `dedupeAndMergeAsync` and why the sync form remains.
+
+135. **The yield is `createSystemClock().sleep(0)`, measured at ≈ 10 ms per tick under Node on Windows and
+    ≈ 4 ms in Firefox** — wall time, not stall. On the 500-record 50-block set that is ≈ 200 ms of wall time;
+    `P2-T16` measures NFR-2 with it in place.
 
 ## 7. Regenerating this file
 

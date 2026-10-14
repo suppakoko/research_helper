@@ -25,7 +25,10 @@
  *    half is batched, a cancel between batches keeps every earlier batch, and
  *    the outcome carries the count.
  * 3. **`Merging` and `Deduping` are one body, `./stages.ts`'s
- *    {@link dedupeAndMerge}** (`P2-T10`, wired here by `P2-T29`). Phase 1 ran
+ *    {@link dedupeAndMergeAsync}** (`P2-T10`, wired here by `P2-T29`; made to
+ *    yield to the event loop by `P2-T30`, because the unchunked cascade stalled
+ *    the main thread 246–274 ms on a 100-record import against NFR-3's
+ *    100 ms). Phase 1 ran
  *    both stages as named no-ops — `P1-T16`'s `Do NOT` forbade `Deduping`
  *    merging anything because `R-18` makes a false merge the expensive error
  *    — and lifted records to `CanonicalWork` one-for-one. Phase 2 owns the
@@ -81,7 +84,7 @@ import {
 } from "../types";
 import {
   attributeDeduplicatedAway,
-  dedupeAndMerge,
+  dedupeAndMergeAsync,
   fanOut,
   fetchStateFromReports,
   SEARCH_IMPORT_DISPLAY_NAME_KEY,
@@ -173,6 +176,17 @@ export interface SearchImportDeps {
    * without one; `P2-T28` passed that spec a pool and deleted the fallback.
    */
   readonly pool: Semaphore;
+  /**
+   * The yield `Merging`'s cascade makes between slices (`P2-T30`, NFR-3).
+   *
+   * Optional, and the composition root does not pass it: the default is
+   * `src/sources/shared/dedupe.ts`'s `defaultYieldToEventLoop`, a
+   * `setTimeout(…, 0)` macrotask. Injectable for the same reason
+   * `src/zotero/importer.ts`'s `ImportRequest.yieldToUi` is — so a unit test
+   * can count the yields and cancel inside one, instead of inferring either
+   * from timing.
+   */
+  readonly yieldToEventLoop?: () => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -742,7 +756,21 @@ export function createSearchImportPipeline(
         // works for review (FR-50 scenario 4), a linked pair stays two works
         // each carrying the other's ids in `relatedVersionIds` (gate `G-16`).
         // `P2-T14` renders both; `P2-T11` writes the Zotero relation and tag.
-        const merged = dedupeAndMerge(state.records, ctx.clock.now());
+        //
+        // Awaited, not called (`P2-T30`): the cascade yields to the event loop
+        // every `DEDUP_YIELD_EVERY_COMPARISONS` comparisons and between blocks,
+        // and checks `ctx.token` at each yield — the one-block 100-record case
+        // stalled the main thread 246–274 ms unchunked against NFR-3's 100 ms.
+        const merged = await dedupeAndMergeAsync(
+          state.records,
+          ctx.clock.now(),
+          {
+            token: ctx.token,
+            ...(deps.yieldToEventLoop !== undefined && {
+              yieldToEventLoop: deps.yieldToEventLoop,
+            }),
+          },
+        );
         state.records = merged.records;
         state.works = merged.works;
         state.flags = merged.flags;

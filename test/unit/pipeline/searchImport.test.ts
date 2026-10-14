@@ -49,6 +49,8 @@ import {
   validateSearchImportInput,
 } from "../../../src/pipeline/searchImport/searchImportPipeline";
 import {
+  dedupeAndMerge,
+  dedupeAndMergeAsync,
   fetchStateFromReports,
   NETWORK_METADATA_POOL_SIZE,
   SEARCH_IMPORT_STAGE_KEYS,
@@ -72,6 +74,10 @@ import {
 import { createPubmedRecordMapper } from "../../../src/sources/pubmed/mapper";
 import { createPubmedSource } from "../../../src/sources/pubmed/pubmedSource";
 import { createSourceRegistry } from "../../../src/sources/registry";
+import {
+  DEDUP_YIELD_EVERY_COMPARISONS,
+  dedupeRecords,
+} from "../../../src/sources/shared/dedupe";
 import { recencyWindow } from "../../../src/sources/shared/recency";
 import type {
   LiteratureSource,
@@ -454,6 +460,8 @@ function harness(options: {
    * size — the pipeline itself takes no default since `P2-T28`.
    */
   readonly pool?: Semaphore;
+  /** `Merging`'s yield (`P2-T30`); omitted, the pipeline's default runs. */
+  readonly yieldToEventLoop?: () => Promise<void>;
 }): {
   readonly pipeline: ReturnType<typeof createSearchImportPipeline>;
   readonly ctx: PipelineContext;
@@ -472,6 +480,9 @@ function harness(options: {
     writer: options.writer ?? stubWriter().writer,
     writeBatchSize: options.writeBatchSize ?? 50,
     pool: options.pool ?? new Semaphore(NETWORK_METADATA_POOL_SIZE),
+    ...(options.yieldToEventLoop !== undefined && {
+      yieldToEventLoop: options.yieldToEventLoop,
+    }),
   });
   return {
     pipeline,
@@ -1797,6 +1808,182 @@ describe("the dedup and merge wiring (P2-T29)", () => {
     expect(out.flags).toEqual([]);
     expect(out.links).toEqual([]);
     expect(out.perSource.map((r) => r.recordsDeduplicatedAway)).toEqual([0, 0]);
+  });
+});
+
+// ===========================================================================
+// 6b. Merging yields to the event loop (P2-T30, docs/10 NFR-3)
+// ===========================================================================
+
+describe("Merging yields to the event loop (P2-T30)", () => {
+  const sharedTitle =
+    "Adenine base editors convert A to G in genomic DNA without cleavage";
+
+  /**
+   * `P1-T23`'s NFR-1 shape: 100 records in one title block, the set that
+   * stalled the main thread 246–274 ms when `Merging` ran it unchunked.
+   */
+  function oneBlockOfHundred(): SourceRecord[] {
+    return Array.from({ length: 100 }, (_, i) =>
+      record("pubmed", `p1t23-${String(i + 1)}`, {
+        doi: `10.5555/p1t23.${String(i + 1)}`,
+        title: `Pre-fetched record ${String(i + 1)} for NFR-1`,
+        year: 2025,
+      }),
+    );
+  }
+
+  const paperDoi = normalizeDoi("10.1000/paper");
+  if (paperDoi === null) throw new Error("fixture DOI must normalize");
+
+  /** The three P2-T29 shapes plus the two large ones, built once each. */
+  const fixtures: readonly (readonly [string, readonly SourceRecord[]])[] = [
+    [
+      "same DOI from two sources",
+      [
+        record("pubmed", "40", {
+          doi: "10.1000/one",
+          title: sharedTitle,
+          year: 2024,
+          abstract: "short",
+        }),
+        record("crossref", "c40", {
+          doi: "10.1000/one",
+          title: sharedTitle,
+          year: 2024,
+          abstract: "Crossref's abstract",
+        }),
+      ],
+    ],
+    [
+      "preprint and its published version",
+      [
+        record("pubmed", "41", {
+          doi: "10.1000/paper",
+          title: sharedTitle,
+          year: 2024,
+        }),
+        record("crossref", "pre", {
+          doi: "10.1101/2023.01.01.000001",
+          title: sharedTitle,
+          year: 2023,
+          type: "preprint",
+          related: { doi: paperDoi },
+        }),
+      ],
+    ],
+    [
+      "a flagged pair",
+      [
+        record("pubmed", "x1", { title: sharedTitle, year: 2024 }),
+        record("crossref", "x2", {
+          title:
+            "Adenine base editors convert A to G in genomic RNA without cleavage",
+          year: 2024,
+        }),
+      ],
+    ],
+    ["empty", []],
+    ["100 records in one block", oneBlockOfHundred()],
+  ];
+
+  it.each(fixtures)(
+    "dedupeAndMergeAsync returns what dedupeAndMerge returns on: %s",
+    async (_name, records) => {
+      const at = 1_234;
+      expect(await dedupeAndMergeAsync(records, at)).toEqual(
+        dedupeAndMerge(records, at),
+      );
+    },
+  );
+
+  it("run awaits the yielding cascade: one yield per DEDUP_YIELD_EVERY_COMPARISONS comparisons on a 100-record supplied set", async () => {
+    const records = oneBlockOfHundred();
+    let yields = 0;
+    const h = harness({
+      sources: [],
+      yieldToEventLoop: () => {
+        yields += 1;
+        return settle();
+      },
+    });
+    const out = await h.pipeline.run(
+      {
+        ...BASE_INPUT,
+        query: "",
+        sourceIds: [],
+        records,
+        target: { collectionName: "C" },
+      },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    expect(out.works).toHaveLength(100);
+    const { comparisons } = dedupeRecords(records);
+    expect(comparisons).toBeGreaterThan(DEDUP_YIELD_EVERY_COMPARISONS);
+    expect(yields).toBe(Math.ceil(comparisons / DEDUP_YIELD_EVERY_COMPARISONS));
+  });
+
+  it("makes no yield when the cascade compares nothing", async () => {
+    let yields = 0;
+    const h = harness({
+      sources: [],
+      yieldToEventLoop: () => {
+        yields += 1;
+        return settle();
+      },
+    });
+    const out = await h.pipeline.run(
+      {
+        ...BASE_INPUT,
+        query: "",
+        sourceIds: [],
+        records: [
+          record("pubmed", "a1", { title: "Alpha beta gamma delta epsilon" }),
+          record("pubmed", "a2", { title: "Completely unrelated words here" }),
+        ],
+        target: { collectionName: "C" },
+      },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    expect(out.works).toHaveLength(2);
+    expect(yields).toBe(0);
+  });
+
+  it("a Cancel during Merging lands at the next yield: the run is cancelled in Merging and nothing is written (FR-10)", async () => {
+    const writer = stubWriter();
+    let yields = 0;
+    let cancel: () => void = () => undefined;
+    const h = harness({
+      sources: [],
+      writer: writer.writer,
+      yieldToEventLoop: () => {
+        yields += 1;
+        if (yields === 1) cancel();
+        return settle();
+      },
+    });
+    cancel = () => h.source.cancel({ kind: "user" });
+    const out = await h.pipeline.run(
+      {
+        ...BASE_INPUT,
+        query: "",
+        sourceIds: [],
+        records: oneBlockOfHundred(),
+        target: { collectionName: "C" },
+      },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("cancelled");
+    expect(out.cancellationKind).toBe("user");
+    expect(out.stageReached).toBe("merging");
+    // Stopped at that yield — no second slice ran.
+    expect(yields).toBe(1);
+    // Nothing reached the writer: no collection, no batch, no note.
+    expect(writer.log.opened).toEqual([]);
+    expect(writer.log.batches).toEqual([]);
+    expect(out.write).toBeUndefined();
   });
 });
 

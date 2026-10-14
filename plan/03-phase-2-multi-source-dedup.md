@@ -4167,6 +4167,16 @@ finishing condition and its own text says how: "long parsing/normalization work 
   without changing it.
 
 **Do.**
+> **Corrected 2026-10-14 after the executing agent measured (report):** steps 1 and 2 say make `dedupeRecords` and
+> `dedupeAndMerge` asynchronous; both synchronous forms stay, because `test/unit/model/merge.test.ts` (outside
+> this list) calls `dedupeAndMerge` at six sites and the dedup unit tests call `dedupeRecords` throughout —
+> one generator (`dedupeCascade`) now has two drivers, `dedupeRecords` and `dedupeRecordsAsync`, and `run`
+> awaits `dedupeAndMergeAsync`. "Yield between blocks" is read as "between blocks that compared at least one
+> pair" — a singleton bucket costs no timer tick. The yield primitive is `createSystemClock().sleep(0)`, not
+> the pipeline's own `ctx.clock.sleep`, because every pipeline unit test runs on a manual clock whose `sleep`
+> never resolves on its own; the yield is injectable (`SearchImportDeps.yieldToEventLoop`) the way
+> `ImportRequest.yieldToUi` already is. `Retires` named item 119, which was already struck when the card
+> was created; it is now marked done.
 1. Give `dedupeRecords` an asynchronous form that yields to the event loop between blocks (and inside a
    block every N comparisons, N a named exported constant), without changing a single verdict: the
    synchronous result and the asynchronous result must be deep-equal on every existing test fixture.
@@ -4200,6 +4210,23 @@ runs. Do not widen the blocking signature to make fewer pairs. Do not move work 
 npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
 ```
 
+
+**Findings, 2026-10-14 — done; the stall is gone (43–57 ms, five runs of five) with every verdict unchanged; full report at `plan/reports/P2-T30.md`.**
+Verified by the coordinator on the live tree: the five md5 hashes equal the agent's (`a7433c07`, `077b571c`,
+`79be7407`, `6cac7c94`, `d5a7dfee`), no `MUTANT` marker, typecheck 0, `lint:check` 0, unit **1,757 passed with
+the four known `HOST_POLICIES` pins red** (`P2-T32`'s), contract 40, and one integration run **128 passed, 0
+failed** — the agent's four runs the same, with the longest main-thread stall during the 100-record import at
+**43 / 57 / 56 / 46 ms and no gap over 100 ms**, against 246–274 ms before and Phase 1's 38–79 ms. The cascade
+is one generator, `dedupeCascade`, that marks a yield every `DEDUP_YIELD_EVERY_COMPARISONS` (250) comparisons
+inside a block and at every block boundary that compared something; `dedupeRecords` drains it synchronously,
+`dedupeRecordsAsync` awaits an injectable macrotask yield at each mark and checks the cancellation token on
+entry and after every yield, so a Cancel during `Merging` lands at the next yield (asserted at both levels).
+The asynchronous result is deep-equal to the synchronous one on 16 fixture sets, including the 500-record
+50-block set and the 100-record one-block set. Eleven mutants, eleven killed — the yield-count and
+cancellation tests carry the load, since the equal-verdicts tests cannot see a yield by design; the interval
+constant is killed by its pin alone (item 133). Two synchronous forms remain for the unit tests' sake
+(dated above). Not checked: stalls without the Browser Toolbox attached, or on 200–500 records (the Node
+figure says the 50-block set yields 50 times — wall time, not stall).
 ---
 
 ### P2-T31 — Give the import half the merged work the preview showed, and make `flags`/`links` required

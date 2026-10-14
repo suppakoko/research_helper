@@ -35,6 +35,8 @@
  * it. Nothing below compares against a literal.
  */
 
+import { createSystemClock } from "../../core/clock";
+import type { CancellationToken } from "../../core/jobQueue/cancellation";
 import type { WorkType } from "../../model/canonicalWork";
 import {
   normalizeArxivId,
@@ -869,35 +871,83 @@ function yearsCompatible(a: DedupCandidate, b: DedupCandidate): boolean {
 }
 
 /**
- * Deduplicate a result set.
+ * How many cascade comparisons {@link dedupeRecordsAsync} runs between two
+ * yields to the event loop **inside one block**.
  *
- * Two passes, neither of them `O(n²)` over the set:
- *
- * 1. **Identifier pass.** Every candidate is indexed by each id it carries
- *    (and by bioRxiv accession). Records sharing a key are compared with the
- *    first holder of that key — a cascade call that terminates at Tier 0–4.
- * 2. **Blocking pass** (§11.3.3). Candidates with a comparable title are
- *    bucketed by {@link blockingSignature}; within a bucket, pairs within
- *    {@link MAX_YEAR_DELTA} of each other (or with an unknown year) are
- *    compared, unless pass 1 already put them in one group.
- *
- * Only a `"match"` unions two records. A `"flag"` or `"link"` is reported as
- * a pair and both records stay in the output — there is no path from either
- * to a group merge, which is FR-50 scenario 4 and R-18's mitigation.
- *
- * @param records - the fetched records, in fetch order
- * @param counter - optional external comparison counter, incremented in place
+ * `docs/10` NFR-3 caps a single main-thread task at 100 ms and says long
+ * normalization work "is chunked with yields". `P2-T29` measured the
+ * unchunked cascade at 246–274 ms on Zotero's main thread for one block of
+ * 100 records (4 851 comparisons — every title of one query shares its
+ * longest words, so one block is the normal case, not a fixture artefact).
+ * That is roughly 50 µs a comparison under the Browser Toolbox; 250
+ * comparisons is then about 12 ms of work per slice, an order of magnitude
+ * under the budget, and some 20 yields for that import. Tuned by measurement
+ * (`P2-T30`), not derived; the figure to re-measure if the cascade changes.
  */
-export function dedupeRecords(
+export const DEDUP_YIELD_EVERY_COMPARISONS = 250;
+
+/** What {@link dedupeRecordsAsync} takes beside the records. */
+export interface DedupeAsyncOptions {
+  /** External comparison counter, incremented in place, as {@link dedupeRecords}'. */
+  readonly counter?: DedupCounter;
+  /**
+   * Checked on entry and after **every** yield: a cancelled token stops the
+   * cascade at the next yield with `OperationCancelledError` (`docs/07` §7.4;
+   * FR-10's "within 2 seconds" is then bounded by one slice).
+   */
+  readonly token?: CancellationToken;
+  /**
+   * The yield itself. Defaults to {@link defaultYieldToEventLoop}; injectable
+   * so a test can count the yields instead of inferring them — `P1-T14`'s
+   * `ImportRequest.yieldToUi` pattern in `src/zotero/importer.ts`.
+   */
+  readonly yieldToEventLoop?: () => Promise<void>;
+}
+
+const systemClock = createSystemClock();
+
+/**
+ * One macrotask yield: `Clock.sleep(0)` on the system clock, which is a
+ * `setTimeout(…, 0)` — the primitive `src/core/clock.ts` already offers, and
+ * the same mechanism as the inter-chunk `Zotero.Promise.delay(0)` in
+ * `src/zotero/importer.ts`, which this module may not call (`sources/` never
+ * names `Zotero`, `docs/13` §2.1). A microtask (`await Promise.resolve()`)
+ * would **not** do: the main window's event loop runs only between
+ * macrotasks, so a microtask yield leaves the stall exactly as long.
+ */
+export function defaultYieldToEventLoop(): Promise<void> {
+  return systemClock.sleep(0);
+}
+
+/**
+ * The cascade over a result set, as a generator.
+ *
+ * It is the one body behind {@link dedupeRecords} and
+ * {@link dedupeRecordsAsync}: the synchronous driver drains it in one go, the
+ * asynchronous one hands the event loop back at every `yield`. Both therefore
+ * run exactly the same comparisons in exactly the same order, which is what
+ * makes their results deep-equal by construction (and asserted, in
+ * `test/unit/sources/dedupe.test.ts`).
+ *
+ * Where it yields (`P2-T30`): after every {@link DEDUP_YIELD_EVERY_COMPARISONS}
+ * comparisons inside a block, and at every block boundary that had at least
+ * one comparison since the last yield — the end of the identifier pass, and
+ * the end of each title bucket. A boundary with nothing compared since the
+ * last yield is not a yield, so a set of 500 singleton buckets does not pay
+ * 500 timer ticks.
+ */
+function* dedupeCascade(
   records: readonly SourceRecord[],
-  counter: DedupCounter = { comparisons: 0 },
-): DedupResult {
+  counter: DedupCounter,
+): Generator<void, DedupResult, void> {
   const candidates = records.map(toCandidate);
   const uf = new UnionFind(candidates.length);
   const seen = new Set<string>();
   const matchPairs: { i: number; j: number; decision: DedupDecision }[] = [];
   const flags: DedupPair[] = [];
   const links: DedupPair[] = [];
+  /** Comparisons since the last yield; the generator's only yield state. */
+  let sinceYield = 0;
 
   const pair = (i: number, j: number, decision: DedupDecision): DedupPair => {
     const a = records[i];
@@ -908,16 +958,17 @@ export function dedupeRecords(
     return { a, b, decision };
   };
 
-  const consider = (i: number, j: number): void => {
+  /** Compare the pair unless already seen or already one group; true if compared. */
+  const consider = (i: number, j: number): boolean => {
     const lo = Math.min(i, j);
     const hi = Math.max(i, j);
     const pairKey = `${lo}:${hi}`;
-    if (seen.has(pairKey)) return;
+    if (seen.has(pairKey)) return false;
     seen.add(pairKey);
-    if (uf.find(lo) === uf.find(hi)) return;
+    if (uf.find(lo) === uf.find(hi)) return false;
     const a = candidates[lo];
     const b = candidates[hi];
-    if (a === undefined || b === undefined) return;
+    if (a === undefined || b === undefined) return false;
     counter.comparisons += 1;
     const decision = compareCandidates(a, b);
     switch (decision.verdict) {
@@ -934,6 +985,7 @@ export function dedupeRecords(
       case "distinct":
         break;
     }
+    return true;
   };
 
   // Pass 1: identifiers.
@@ -948,7 +1000,13 @@ export function dedupeRecords(
       if (first === undefined) continue;
       for (let k = 1; k < holders.length; k += 1) {
         const other = holders[k];
-        if (other !== undefined) consider(first, other);
+        if (other !== undefined && consider(first, other)) {
+          sinceYield += 1;
+          if (sinceYield >= DEDUP_YIELD_EVERY_COMPARISONS) {
+            yield;
+            sinceYield = 0;
+          }
+        }
       }
     }
   }
@@ -961,8 +1019,19 @@ export function dedupeRecords(
     if (first === undefined) continue;
     for (let k = 1; k < holders.length; k += 1) {
       const other = holders[k];
-      if (other !== undefined) consider(first, other);
+      if (other !== undefined && consider(first, other)) {
+        sinceYield += 1;
+        if (sinceYield >= DEDUP_YIELD_EVERY_COMPARISONS) {
+          yield;
+          sinceYield = 0;
+        }
+      }
     }
+  }
+  // The identifier pass is one block for yielding purposes.
+  if (sinceYield > 0) {
+    yield;
+    sinceYield = 0;
   }
 
   // Pass 2: blocking by title signature, then year.
@@ -979,8 +1048,19 @@ export function dedupeRecords(
         const a = candidates[i];
         const b = candidates[j];
         if (a === undefined || b === undefined) continue;
-        if (yearsCompatible(a, b)) consider(i, j);
+        if (yearsCompatible(a, b) && consider(i, j)) {
+          sinceYield += 1;
+          if (sinceYield >= DEDUP_YIELD_EVERY_COMPARISONS) {
+            yield;
+            sinceYield = 0;
+          }
+        }
       }
+    }
+    // Block boundary.
+    if (sinceYield > 0) {
+      yield;
+      sinceYield = 0;
     }
   }
 
@@ -1014,6 +1094,78 @@ export function dedupeRecords(
     comparisons: counter.comparisons,
     recordsDeduplicatedAway: records.length - groups.length,
   };
+}
+
+/**
+ * Deduplicate a result set, synchronously.
+ *
+ * Two passes, neither of them `O(n²)` over the set:
+ *
+ * 1. **Identifier pass.** Every candidate is indexed by each id it carries
+ *    (and by bioRxiv accession). Records sharing a key are compared with the
+ *    first holder of that key — a cascade call that terminates at Tier 0–4.
+ * 2. **Blocking pass** (§11.3.3). Candidates with a comparable title are
+ *    bucketed by {@link blockingSignature}; within a bucket, pairs within
+ *    {@link MAX_YEAR_DELTA} of each other (or with an unknown year) are
+ *    compared, unless pass 1 already put them in one group.
+ *
+ * Only a `"match"` unions two records. A `"flag"` or `"link"` is reported as
+ * a pair and both records stay in the output — there is no path from either
+ * to a group merge, which is FR-50 scenario 4 and R-18's mitigation.
+ *
+ * **Kept beside {@link dedupeRecordsAsync}** (`P2-T30`) for the callers that
+ * have no event loop to yield to: the unit tests in
+ * `test/unit/sources/dedupe.test.ts` and `test/unit/model/merge.test.ts`, and
+ * `src/pipeline/searchImport/stages.ts`'s synchronous `dedupeAndMerge`. The
+ * pipeline's `Merging` stage runs the asynchronous form. The two share
+ * {@link dedupeCascade}, so there is one cascade and not two to drift.
+ *
+ * @param records - the fetched records, in fetch order
+ * @param counter - optional external comparison counter, incremented in place
+ */
+export function dedupeRecords(
+  records: readonly SourceRecord[],
+  counter: DedupCounter = { comparisons: 0 },
+): DedupResult {
+  const cascade = dedupeCascade(records, counter);
+  for (;;) {
+    const step = cascade.next();
+    if (step.done) return step.value;
+  }
+}
+
+/**
+ * {@link dedupeRecords}, yielding to the event loop as it goes — the form the
+ * pipeline's `Merging` stage runs (`P2-T30`, `docs/10` NFR-3).
+ *
+ * Same cascade, same verdicts, same result: the two drivers drain one
+ * generator ({@link dedupeCascade}), and the asynchronous one awaits
+ * {@link DedupeAsyncOptions.yieldToEventLoop} at each of its yields — every
+ * {@link DEDUP_YIELD_EVERY_COMPARISONS} comparisons inside a block and at
+ * every block boundary that compared something — then checks
+ * {@link DedupeAsyncOptions.token}, so a Cancel lands within one slice
+ * (`docs/07` §7.4, FR-10). A set that compares nothing never yields.
+ *
+ * @param records - the fetched records, in fetch order
+ * @param options - counter, cancellation token and the yield, all optional
+ * @returns the same {@link DedupResult} {@link dedupeRecords} returns
+ * @throws OperationCancelledError when `options.token` is cancelled, at the
+ *   first yield after the request (or on entry if already cancelled)
+ */
+export async function dedupeRecordsAsync(
+  records: readonly SourceRecord[],
+  options: DedupeAsyncOptions = {},
+): Promise<DedupResult> {
+  const counter = options.counter ?? { comparisons: 0 };
+  const yieldToEventLoop = options.yieldToEventLoop ?? defaultYieldToEventLoop;
+  options.token?.throwIfCancelled();
+  const cascade = dedupeCascade(records, counter);
+  for (;;) {
+    const step = cascade.next();
+    if (step.done) return step.value;
+    await yieldToEventLoop();
+    options.token?.throwIfCancelled();
+  }
 }
 
 // ---------------------------------------------------------------------------

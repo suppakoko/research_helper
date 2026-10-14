@@ -161,8 +161,10 @@ import { merge, type IdConflict } from "../../model/merge";
 import type { SourceRecord } from "../../model/sourceRecord";
 import {
   dedupeRecords,
+  dedupeRecordsAsync,
   isPreprintDoi,
   type DedupDecision,
+  type DedupeAsyncOptions,
   type DedupPair,
   type DedupResult,
 } from "../../sources/shared/dedupe";
@@ -843,6 +845,11 @@ export interface DedupeMergeResult {
  * Pure apart from the `normalizedAtEpochMs` the caller supplies: no clock, no
  * network, no Zotero.
  *
+ * Two entry points over one body (`P2-T30`): {@link dedupeAndMerge} runs the
+ * cascade synchronously and {@link dedupeAndMergeAsync} runs
+ * `dedupeRecordsAsync`, which yields to the event loop as it compares; the
+ * merge of the groups ({@link mergeGroups}) is the same code after either.
+ *
  * @param records - the fan-out output, in fetch order
  * @param normalizedAtEpochMs - `ctx.clock.now()`, stamped on every work
  */
@@ -850,8 +857,38 @@ export function dedupeAndMerge(
   records: readonly SourceRecord[],
   normalizedAtEpochMs: number,
 ): DedupeMergeResult {
-  const dedup: DedupResult = dedupeRecords(records);
+  return mergeGroups(dedupeRecords(records), normalizedAtEpochMs);
+}
 
+/**
+ * {@link dedupeAndMerge} with the cascade yielding to the event loop — what
+ * `run`'s `Merging` stage awaits (`P2-T30`, `docs/10` NFR-3).
+ *
+ * The synchronous form is kept because `test/unit/model/merge.test.ts` calls
+ * it directly, and that file is outside `P2-T30`'s list; the two return the
+ * same {@link DedupeMergeResult} for the same input, asserted in
+ * `test/unit/pipeline/searchImport.test.ts`. The cancellation token is
+ * checked at every yield inside the cascade, so a Cancel during `Merging`
+ * rejects with `OperationCancelledError` within one slice (FR-10).
+ *
+ * @param records - the fan-out output, in fetch order
+ * @param normalizedAtEpochMs - `ctx.clock.now()`, stamped on every work
+ * @param options - the token to check at each yield and, for tests, the yield
+ */
+export async function dedupeAndMergeAsync(
+  records: readonly SourceRecord[],
+  normalizedAtEpochMs: number,
+  options: Omit<DedupeAsyncOptions, "counter"> = {},
+): Promise<DedupeMergeResult> {
+  const dedup = await dedupeRecordsAsync(records, options);
+  return mergeGroups(dedup, normalizedAtEpochMs);
+}
+
+/** `merge()` once per group, then the pair lists and per-source figures. */
+function mergeGroups(
+  dedup: DedupResult,
+  normalizedAtEpochMs: number,
+): DedupeMergeResult {
   const merged: MergedWork[] = dedup.groups.map((group) => {
     const { work, conflicts } = merge(group.records, normalizedAtEpochMs);
     return {
