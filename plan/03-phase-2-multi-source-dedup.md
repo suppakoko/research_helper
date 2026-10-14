@@ -745,6 +745,11 @@ are thin.
 > received (`G-03`). Build and test the unauthenticated path fully; implement the keyed path against the
 > documented contract but mark its live test as waiting on the key, and say so in the report. Do not ask for
 > the key, do not stub a key value anywhere.
+> *(later the same day)* The owner reports the key has **arrived**. Nothing changes for the executing agent:
+> build both paths against the documented contract, test the unauthenticated path live if the card asks,
+> and leave the keyed path's live test to the owner, who enters the key through the preferences pane's
+> dialog (`P1-T44`) after the adapter lands. The key is not in any file, log, fixture or transcript the
+> project keeps, and an agent that finds a key-shaped string anywhere stops and reports.
 1. Implement `query.ts` with **two** renderings (`docs/02` §12.2): the bulk-endpoint form with
    `+`/`|`/`-`/quotes/parentheses, and the plain-text form for `/paper/search`. Normalise hyphens
    inside terms to spaces **first**, then apply `-` as NOT.
@@ -4346,7 +4351,7 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 | Field | Value |
 |---|---|
 | **ID** | `P2-T32` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14; the product registers two sources and the unit suite is green. Report at `plan/reports/P2-T32.md`. |
 | **Depends on** | `P2-T03` |
 | **Blocks** | `P2-T04`, `P2-T14`, `P2-T16` |
 | **Retires** | `plan/00` §6 items 124, 125, 126 |

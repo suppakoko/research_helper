@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-14 · **145 tasks: 96 `DONE`, 49 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **18 of 33**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 145, so 47 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-14 · **145 tasks: 97 `DONE`, 48 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **19 of 33**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 145, so 47 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -242,7 +242,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T29` | Wire `dedupeAndMerge` into the running pipeline, which still… | `P2-T10`, `P2-T27` | 0.5 d |  |
 | ✅ `P2-T30` | Make the dedup cascade yield, so `Merging` stops stalling the… | `P2-T29` | 0.5 d |  |
 | `P2-T31` | Give the import half the merged work the preview showed, and… | `P2-T29`, `P2-T30` | 0.5 d |  |
-| `P2-T32` | Register Europe PMC in the composition root, name it in both… | `P2-T03` | 0.5 d |  |
+| ✅ `P2-T32` | Register Europe PMC in the composition root, name it in both… | `P2-T03` | 0.5 d |  |
 | ✅ `P2-T33` | Make the fixture recorder run again and take a per-source… | `P2-T03`, `P2-T25` | 0.25 d |  |
 
 ### Phase 3

@@ -151,7 +151,12 @@ confirmed.
 
 ### G-03 — Apply for the Semantic Scholar API key
 
-> **Status 2026-10-14 (owner): applied for, not yet received.** `P2-T05` builds the unauthenticated path as
+> **Status 2026-10-14, later (owner): the key has arrived.** It is entered only through the preferences pane's
+> key dialog (`P1-T44`) once the Semantic Scholar adapter (`P2-T05`) lands; it is recorded in no file. The
+> owner pasted it once into the coordinator's chat, which the coordinator refused to use or store — that copy
+> should be treated as exposed and the key **rotated** at Semantic Scholar before it is entered.
+>
+> *(Earlier the same day: applied for, not yet received.)* `P2-T05` builds the unauthenticated path as
 > the default and leaves the keyed path's live test for the day the key arrives; the key then goes in through
 > the runtime dialog only, never a file or a chat message. Until it arrives this gate stays open and `G-26`
 > cannot start.
