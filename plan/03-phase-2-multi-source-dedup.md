@@ -2590,6 +2590,15 @@ guarantee.
 - modify `test/integration/zotero/libraryIndex.spec.ts`
 
 **Do.**
+> **Corrected 2026-10-14 after the executing agent measured (report):** step 1 says `byWorkKey` is populated
+> "from the native field, the `extra` lines and `rh-work-key`" — there is no native field for a work key;
+> `byWorkKey` is filled from `rh-work-key` only, and `byArxiv` from `archiveID` and `arXiv:` extra lines. The
+> five-arm round trip holds on the S2 arm **only through `rh-work-key`**, because `docs/07` §6.2 writes
+> `s2CorpusId` to no field; with that line gone the derived key is the hash arm (measured, pinned by a test;
+> `plan/00` §6 item 109). `findExisting` has no title, so the hash arm cannot be derived inside it: the
+> signature gained an optional `workKey`, and the two callers (`planImport` in `src/zotero/importer.ts`,
+> `isExisting` in `src/bootstrap/registerUI.ts`) do not pass it yet (item 105). The Notes' optional
+> `test/unit/zotero/libraryIndex.test.ts` was outside the list and was not created (item 108).
 1. Add `byArxiv` and a `byWorkKey` map, populated from the native field, the `extra` lines **and**
    `rh-work-key` — `P1-T13` measured that `setField` performs no Extra→field migration and `P1-T12`
    measured that strict-mode `fromJSON` does not either, so **an identifier genuinely cannot be
@@ -2620,6 +2629,9 @@ guarantee.
 - [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
 
 **Verify with.** `npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fail`
+> Noted 2026-10-14: `--abort-on-fail` stops the suite at the first failure, so a count under this flag says
+> less than the card's "check the test count" wants (the agent's two red runs reported 115, not 128 minus
+> failures). Run without the flag when a count matters.
 — and **check the test count, not just the exit code.**
 
 **Notes.** `P1-T13` also reported that its card names no unit-test file and its `Notes` give no reason,
@@ -2627,6 +2639,25 @@ against `plan/README.md` §6, so the pure parts (`doisOf`/`pmidsOf` composition,
 no plain-Node coverage. This card should add `test/unit/zotero/libraryIndex.test.ts` if it touches
 them — and if that is judged out of scope, say so rather than leaving the gap unrecorded twice.
 
+
+**Findings, 2026-10-14 — done; all five criteria pass; full report at `plan/reports/P2-T19.md`.**
+Verified by the coordinator on the quiet tree: the three hashes equal the agent's (`libraryIndex.ts`
+3ba455d9, `itemMapper.ts` fc7f23c2, spec 5ffe0485), no `MUTANT` marker, typecheck 0, `lint:check` 0,
+**1,601 unit**, and the integration suite **128 passed in two of three runs** — the first run failed one
+test whose name the coordinator's output filter dropped, the next two passed, and the agent's two runs on the
+same tree passed, so four of five runs are green and the one failure is unidentified rather than
+attributed. The index now has four maps from one `Zotero.Search` (`byDoi`, `byPmid`, `byArxiv`, `byWorkKey`),
+`findExisting` tries them in `docs/07` §5.1 order with the work key last, and `fromZoteroItem` (`docs/07`
+§6.6) reads a real item back into a `CanonicalWork` through a pure `canonicalWorkFromSnapshot`, trusting
+`rh-work-key` when present and deriving through `buildWorkKey` otherwise. Measured: 3,271 items indexed in
+36–39 ms (11–12 µs per item, against `P1-T13`'s 7 µs with two maps), 200 lookups across four arms in 0 ms
+with zero searches; `getField("date", true)` returns `"2023-05-00 2023-05"` for a month-precision date, so
+month precision survives the round trip without `Zotero.Date`. Thirteen mutants: ten killed, two survivors
+exposed spec gaps that were fixed and then killed, three equivalent **on this platform** — `Zotero.Search`
+on 10.0.3 excludes trashed items by default, so both trash guards are unreachable insurance; that fact is
+now in `docs/01` §5.5. Four card statements were wrong and are dated above. Open: the two callers must pass
+`work.workKey` for hash-arm matches (item 105); `dedupe.ts` and `libraryIndex.ts` now each build a library
+index — one per run should be decided (item 106); `s2CorpusId` has no home on an item (item 109).
 ---
 ### P2-T20 — Render `languages`, `openAccessOnly` and `raw` across the sources
 

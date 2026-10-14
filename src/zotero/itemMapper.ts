@@ -1,6 +1,7 @@
 /**
  * `CanonicalWork` → Zotero item JSON (`docs/07-architecture-and-data-model.md`
- * §6.2), and the `extra` rules that go with it (§6.3).
+ * §6.2), the `extra` rules that go with it (§6.3), and the inverse read-back
+ * `fromZoteroItem` (§6.6, added by `P2-T19` in §7 below).
  *
  * **Scope.** `P1-T12`, with `P0-T10`'s spike surface retired by `P1-T24`.
  * `plan/README.md` §4 lists this path among the sixteen where a Phase 1
@@ -46,18 +47,33 @@
  * (`newItemFromMapping()` in `src/zotero/zoteroApi.ts`).
  */
 
-import type {
-  Author,
-  CanonicalWork,
-  Subject,
-  WorkType,
+import {
+  isWorkType,
+  type Author,
+  type CanonicalWork,
+  type PartialDate,
+  type Subject,
+  type WorkType,
 } from "../model/canonicalWork";
-import type { SourceId } from "../model/ids";
+import {
+  buildWorkKey,
+  isSourceId,
+  normalizeArxivId,
+  normalizeDoi,
+  normalizePmcid,
+  normalizePmid,
+  type ExternalIds,
+  type SourceId,
+} from "../model/ids";
 import {
   applyExtraUpdate,
+  findExtraLine,
+  parseExtra,
+  readWorkKey,
   RH_SOURCES_KEY,
   RH_WORK_KEY,
   type ExtraEntry,
+  type ExtraLine,
 } from "./extraField";
 
 // ---------------------------------------------------------------------------
@@ -117,6 +133,34 @@ export const AUTOMATIC_TAG_TYPE = 1;
  * "one provenance tag per run").
  */
 export const RESEARCH_HELPER_TAG = "research_helper";
+
+/**
+ * The non-namespaced `extra` keys this plugin writes (§6.2's rows, §6.3's
+ * "standard, non-namespaced lines the ecosystem already understands") and
+ * reads back (§6.6). One declaration for both directions, imported by
+ * `src/zotero/libraryIndex.ts` for its `extra` branches, so the spelling the
+ * index looks for is by construction the spelling the mapper writes.
+ *
+ * `extraField.ts`'s {@link findExtraLine} compares case-insensitively, so the
+ * case here is the *written* form only; `arxiv:` and `ARXIV:` lines left by
+ * other software are read all the same.
+ */
+export const ECOSYSTEM_EXTRA_KEY = {
+  doi: "DOI",
+  pmid: "PMID",
+  pmcid: "PMCID",
+  arxiv: "arXiv",
+  orcid: "ORCID",
+  citations: "Citations",
+} as const;
+
+/**
+ * The plugin's own `extra` keys beyond {@link RH_WORK_KEY} and
+ * {@link RH_SOURCES_KEY}: §6.2's two rows added by `P1-T12`, declared once so
+ * {@link toZoteroMapping} and {@link canonicalWorkFromSnapshot} cannot drift.
+ */
+export const RH_WORK_TYPE_KEY = "rh-work-type";
+export const RH_ISSN_KEY = "rh-issn";
 
 // ---------------------------------------------------------------------------
 // 2. WorkType ↔ Zotero item type — the camelCase/kebab-case boundary
@@ -352,14 +396,14 @@ export function toZoteroMapping(
     // §6.2's "everything else → journalArticle with a note in extra". The note
     // is namespaced because §6.3 gives the plugin exactly one prefix, and it
     // records the real type so §6.6's read-back is not lossy.
-    pluginLines.push({ key: "rh-work-type", value: work.type });
+    pluginLines.push({ key: RH_WORK_TYPE_KEY, value: work.type });
   }
   const extraIssns = work.issn?.slice(1) ?? [];
   if (extraIssns.length > 0) {
     // §6.2: "Additional ISSNs → extra". Namespaced, not a bare `ISSN:` line:
     // `journalArticle` *has* a native `ISSN` field (holding issn[0]), and §6.3
     // permits a non-namespaced line only where there is no native field.
-    pluginLines.push({ key: "rh-issn", value: extraIssns.join(", ") });
+    pluginLines.push({ key: RH_ISSN_KEY, value: extraIssns.join(", ") });
   }
 
   // Non-namespaced ecosystem lines. Written only where there is no native
@@ -367,25 +411,31 @@ export function toZoteroMapping(
   // is enforced by applyExtraUpdate().
   const standardLines: ExtraEntry[] = [];
   if (work.ids.pmid !== undefined && !native.pmid) {
-    standardLines.push({ key: "PMID", value: work.ids.pmid });
+    standardLines.push({ key: ECOSYSTEM_EXTRA_KEY.pmid, value: work.ids.pmid });
   }
   if (work.ids.pmcid !== undefined && !native.pmcid) {
-    standardLines.push({ key: "PMCID", value: work.ids.pmcid });
+    standardLines.push({
+      key: ECOSYSTEM_EXTRA_KEY.pmcid,
+      value: work.ids.pmcid,
+    });
   }
   if (work.ids.arxivId !== undefined) {
     // No Zotero item type has a native arXiv-ID field (`docs/02` §10.3); on
     // `preprint` it goes in `archiveID`, which this arm never reaches.
-    standardLines.push({ key: "arXiv", value: work.ids.arxivId });
+    standardLines.push({
+      key: ECOSYSTEM_EXTRA_KEY.arxiv,
+      value: work.ids.arxivId,
+    });
   }
   const firstOrcid = work.authors[0]?.orcid;
   if (firstOrcid !== undefined && firstOrcid !== "") {
     // §6.2: "ORCID → extra line `ORCID: <orcid>` only for the first author
     // (Zotero has no creator-level ORCID field)."
-    standardLines.push({ key: "ORCID", value: firstOrcid });
+    standardLines.push({ key: ECOSYSTEM_EXTRA_KEY.orcid, value: firstOrcid });
   }
   if (work.citationCount !== undefined) {
     standardLines.push({
-      key: "Citations",
+      key: ECOSYSTEM_EXTRA_KEY.citations,
       value: citationsValue(work, accessedAtEpochMs),
     });
   }
@@ -633,4 +683,399 @@ export async function detectNativeIdentifierFields(): Promise<NativeIdentifierFi
     }
   };
   return { pmid: has("PMID"), pmcid: has("PMCID") };
+}
+
+// ---------------------------------------------------------------------------
+// 7. Reading from Zotero — `docs/07` §6.6's `fromZoteroItem` (`P2-T19`)
+//
+// The same split as §§2–5 vs §6: everything that decides what a `CanonicalWork`
+// looks like is a pure function of a plain snapshot (§7.1–7.2), and the one
+// function that touches a `Zotero.Item` only takes that snapshot (§7.3). That
+// is what lets the round trip `toZoteroMapping` → `fromZoteroItem` be asserted
+// against a real item in the integration spec while every branch of the
+// derivation stays assertable in plain Node.
+// ---------------------------------------------------------------------------
+
+// ---- 7.1 The snapshot ------------------------------------------------------
+
+/**
+ * One creator as `Zotero.Item#getCreatorsJSON()` reports it: two-field
+ * (`firstName`/`lastName`) or single-field (`name`), with Zotero's creator-type
+ * name. Mirrors {@link ZoteroCreatorJSON} without the `fieldMode` discriminant,
+ * because the read side gets `name` *or* the pair and never both.
+ */
+export interface ZoteroCreatorSnapshot {
+  readonly creatorType: string;
+  readonly firstName?: string;
+  readonly lastName?: string;
+  readonly name?: string;
+}
+
+/**
+ * The plain data `fromZoteroItem` reads off a `Zotero.Item` before mapping.
+ *
+ * Every member is a string or an array of strings so the snapshot can be built
+ * by hand in a unit test. `fields` holds `getField(name)` for each name in
+ * {@link READ_FIELDS}, with `""` where the item has no such field — which is
+ * exactly what `Zotero.Item#getField` returns for a field that is not valid
+ * for the item's type (read from 10.0.3's `item.js`: `if (value === undefined)
+ * return ''`), so `repository` can be asked of a `journalArticle` and
+ * `publicationTitle` of a `preprint` without a per-type matrix.
+ */
+export interface ZoteroItemSnapshot {
+  /** Zotero's camelCase item-type name, e.g. `"journalArticle"`. */
+  readonly itemType: string;
+  readonly fields: Readonly<Partial<Record<ReadField, string>>>;
+  /**
+   * `getField("date", true)`: Zotero's **unformatted multipart** value,
+   * `"YYYY-MM-DD <original string>"` with `00` for an unknown month or day
+   * (`docs/01` §6.1 "Dates": `setField` runs `strToMultipart` on every date it
+   * is given). The SQL half is what {@link partialDateFrom} parses, so the
+   * read-back needs no `Zotero.Date` call and stays pure.
+   */
+  readonly dateMultipart: string;
+  readonly creators: readonly ZoteroCreatorSnapshot[];
+  /** Tag names only; the automatic/manual type is not needed to invert §6.2. */
+  readonly tags: readonly string[];
+}
+
+/**
+ * The fields §6.2's table writes and §6.6 therefore reads back, as Zotero
+ * spells them. `date` is read separately (unformatted) and `extra` is parsed
+ * through `extraField.ts`.
+ */
+export const READ_FIELDS = [
+  "title",
+  "abstractNote",
+  "publicationTitle",
+  "repository",
+  "journalAbbreviation",
+  "publisher",
+  "volume",
+  "issue",
+  "pages",
+  "ISSN",
+  "DOI",
+  "PMID",
+  "PMCID",
+  "archiveID",
+  "url",
+  "language",
+  "extra",
+] as const;
+
+export type ReadField = (typeof READ_FIELDS)[number];
+
+/** Options for {@link fromZoteroItem} / {@link canonicalWorkFromSnapshot}. */
+export interface FromZoteroItemOptions {
+  /**
+   * `normalizedAtEpochMs` for the returned work — §5.1: "ms since epoch when
+   * this canonical record was last rebuilt", which a read-back is. Defaults to
+   * `Date.now()`; passed in so a test can pin it.
+   */
+  readonly nowEpochMs?: number;
+}
+
+// ---- 7.2 The pure inverse --------------------------------------------------
+
+/**
+ * `docs/07` §6.6's inverse mapping, over a plain snapshot.
+ *
+ * **Lossy-tolerant, as §6.6 requires**: an unknown item type maps to
+ * `type: "other"` through {@link workTypeFor} unless the write path left its
+ * `rh-work-type` line, which is trusted first because it records the real
+ * type §6.2 could not express as an item type; a missing or unparseable date
+ * yields `publishedDate: undefined`; a creator with no family name is dropped
+ * (§5.1: "an author with no name is dropped").
+ *
+ * **The work key.** `rh-work-key` in `extra` "is trusted when present;
+ * otherwise a key is derived by §5.1's five-arm precedence" — and the
+ * derivation is {@link buildWorkKey} itself, called with the same four inputs
+ * the pipeline's `liftToCanonicalWorks` gives it (title, `publishedDate.year`,
+ * first author's family name), never a re-implementation of the order. Two
+ * consequences worth stating:
+ *
+ * - For a record whose only identifier is a Semantic Scholar corpus id the
+ *   round trip rests on `rh-work-key` **alone**: §6.2 has no row that writes
+ *   `s2CorpusId` into any field, so the derived key for such an item would be
+ *   the hash arm. The trusted line is what keeps `s2:<corpusId>` stable, which
+ *   is the exact case §6.6's 2026-09-30 correction describes.
+ * - The hash arm hashes the title **verbatim**, as `buildWorkKey` does:
+ *   `docs/07` §5.1's hash is pinned literal and `P2-T09` keys on it.
+ *
+ * **Identifiers are read from both homes.** `docs/01` §5.5 and `P1-T13`'s
+ * measurement: `setField` performs no Extra→field migration and strict-mode
+ * `fromJSON` does not either, so a `PMID` may sit in the native field, in a
+ * `PMID:` line, or both. The native field wins when both are present; the
+ * line is read when it is empty. Every `extra` read goes through
+ * `extraField.ts`'s parser (§6.3; the CRLF trap `P1-T12` measured).
+ *
+ * **What is not recovered.** `openAccess` — `rights` holds a licence string
+ * but §5.1's `OpenAccessInfo.isOpenAccess` is a required boolean nothing on the
+ * item answers, so inventing one would be a claim, not a read; and
+ * `provenance.recordIds` / `fieldOrigin`, which describe the source records
+ * that were merged and have no representation on the item. `seenIn` is read
+ * from `rh-sources` when present.
+ *
+ * @param snapshot - the item's plain data, from {@link snapshotZoteroItem}
+ * @param options - the clock
+ * @returns a {@link CanonicalWork} whose `workKey` the write path will reproduce
+ */
+export function canonicalWorkFromSnapshot(
+  snapshot: ZoteroItemSnapshot,
+  options: FromZoteroItemOptions = {},
+): CanonicalWork {
+  const field = (name: ReadField): string => snapshot.fields[name] ?? "";
+  const lines = parseExtra(field("extra"));
+  const extra = (key: string): string | undefined => {
+    const hit = findExtraLine(lines, key);
+    return hit === undefined || hit.value === "" ? undefined : hit.value;
+  };
+
+  const title = field("title");
+  const authors = authorsFrom(snapshot.creators);
+  const publishedDate = partialDateFrom(snapshot.dateMultipart);
+  const ids = identifiersFrom(field, lines);
+
+  const rhType = extra(RH_WORK_TYPE_KEY);
+  const type: WorkType = isWorkType(rhType)
+    ? rhType
+    : workTypeFor(snapshot.itemType);
+
+  const issn = [field("ISSN"), ...(extra(RH_ISSN_KEY)?.split(",") ?? [])]
+    .map((value) => value.trim())
+    .filter((value) => value !== "");
+
+  const { subjects, keywords } = tagsToSubjects(snapshot.tags);
+  const citations = extra(ECOSYSTEM_EXTRA_KEY.citations);
+  const citationCount =
+    citations === undefined ? undefined : leadingInt(citations);
+  const seenIn = (extra(RH_SOURCES_KEY)?.split(",") ?? [])
+    .map((value) => value.trim())
+    .filter(isSourceId);
+
+  const work: CanonicalWork = {
+    workKey:
+      readWorkKey(field("extra")) ??
+      buildWorkKey(ids, title, publishedDate?.year, authors[0]?.family),
+    ids,
+    type,
+    title,
+    authors,
+    provenance: { recordIds: [], fieldOrigin: {}, seenIn },
+    normalizedAtEpochMs: options.nowEpochMs ?? Date.now(),
+  };
+  return {
+    ...work,
+    ...optional("abstract", field("abstractNote")),
+    // §6.2: `containerTitle` → `publicationTitle` on a journalArticle and
+    // `repository` on a preprint. Whichever the type has is the one set.
+    ...optional(
+      "containerTitle",
+      field("publicationTitle") || field("repository"),
+    ),
+    ...optional("containerAbbreviation", field("journalAbbreviation")),
+    ...optional("publisher", field("publisher")),
+    ...optional("volume", field("volume")),
+    ...optional("issue", field("issue")),
+    ...optional("pages", field("pages")),
+    ...(issn.length > 0 ? { issn } : {}),
+    ...(publishedDate === undefined ? {} : { publishedDate }),
+    ...optional("language", field("language")),
+    ...(subjects.length > 0 ? { subjects } : {}),
+    ...(keywords.length > 0 ? { keywords } : {}),
+    ...(citationCount === undefined ? {} : { citationCount }),
+    ...optional("url", field("url")),
+  };
+}
+
+/** `{ [key]: value }` when `value` is non-empty, `{}` otherwise. */
+function optional<K extends string>(
+  key: K,
+  value: string,
+): Partial<Record<K, string>> {
+  return value === "" ? {} : ({ [key]: value } as Record<K, string>);
+}
+
+/**
+ * The four identifiers §6.2 writes, each read from its native field first and
+ * its ecosystem `extra` line second, normalized through `model/ids.ts` so the
+ * value is the branded form `buildWorkKey` expects. `archiveID` is the
+ * `preprint` field holding `arXiv:<id>`; {@link normalizeArxivId} strips that
+ * prefix, which is what makes the native and the `extra` spelling one key.
+ *
+ * `s2CorpusId` has no home on the item (see {@link canonicalWorkFromSnapshot})
+ * and is therefore never populated here.
+ */
+function identifiersFrom(
+  field: (name: ReadField) => string,
+  lines: readonly ExtraLine[],
+): ExternalIds {
+  const line = (key: string): string | undefined =>
+    findExtraLine(lines, key)?.value;
+  const doi =
+    normalizeDoi(field("DOI")) ?? normalizeDoi(line(ECOSYSTEM_EXTRA_KEY.doi));
+  const pmid =
+    normalizePmid(field("PMID")) ??
+    normalizePmid(line(ECOSYSTEM_EXTRA_KEY.pmid));
+  const pmcid =
+    normalizePmcid(field("PMCID")) ??
+    normalizePmcid(line(ECOSYSTEM_EXTRA_KEY.pmcid));
+  const arxivId =
+    normalizeArxivId(field("archiveID")) ??
+    normalizeArxivId(line(ECOSYSTEM_EXTRA_KEY.arxiv));
+  const url = field("url");
+  return {
+    ...(doi === null ? {} : { doi }),
+    ...(pmid === null ? {} : { pmid }),
+    ...(pmcid === null ? {} : { pmcid }),
+    ...(arxivId === null ? {} : { arxivId }),
+    ...(url === "" ? {} : { url }),
+  };
+}
+
+/**
+ * The inverse of {@link toCreatorJSON}: `author` creators only, single-field
+ * creators becoming an {@link Author} whose `family` and `literal` are both the
+ * verbatim name (the shape §6.2 says a single-field creator came from), and a
+ * creator with no family name dropped (§5.1).
+ */
+function authorsFrom(
+  creators: readonly ZoteroCreatorSnapshot[],
+): readonly Author[] {
+  const out: Author[] = [];
+  for (const creator of creators) {
+    if (creator.creatorType !== "author") continue;
+    const name = (creator.name ?? "").trim();
+    if (name !== "") {
+      out.push({ family: name, literal: name });
+      continue;
+    }
+    const family = (creator.lastName ?? "").trim();
+    if (family === "") continue;
+    const given = (creator.firstName ?? "").trim();
+    out.push(given === "" ? { family } : { family, given });
+  }
+  return out;
+}
+
+/** The SQL half of a multipart date: `YYYY-MM-DD`, `00` for an unknown part. */
+const MULTIPART_SQL = /^(\d{4})-(\d{2})-(\d{2})/;
+
+/**
+ * §5.1's {@link PartialDate} from Zotero's multipart `date`, or `undefined`
+ * when there is no year — §6.6: "missing dates yield `publishedDate:
+ * undefined`". Precision follows the parts Zotero knew: a `00` month stops
+ * the ISO string at the year, a `00` day at the month.
+ */
+export function partialDateFrom(
+  dateMultipart: string,
+): PartialDate | undefined {
+  const match = MULTIPART_SQL.exec(dateMultipart);
+  if (match === null) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year === 0) return undefined;
+  const yyyy = String(year).padStart(4, "0");
+  if (month === 0) return { year, iso: yyyy };
+  const mm = String(month).padStart(2, "0");
+  if (day === 0) return { year, month, iso: `${yyyy}-${mm}` };
+  return {
+    year,
+    month,
+    day,
+    iso: `${yyyy}-${mm}-${String(day).padStart(2, "0")}`,
+  };
+}
+
+/** `MeSH: Neoplasms` / `MeSH*: Neoplasms` / `arXiv: cs.LG` back to a scheme. */
+const SUBJECT_TAG = /^(MeSH|arXiv)(\*?): (.+)$/;
+
+/** Scheme names by rendered prefix — the inverse of {@link SUBJECT_TAG_PREFIXES}. */
+const SUBJECT_SCHEMES: Readonly<Record<string, string>> = {
+  MeSH: "mesh",
+  arXiv: "arxiv-category",
+};
+
+/**
+ * The inverse of {@link tagsFor}: prefixed tags become {@link Subject}s, the
+ * plugin's run tag is dropped, and everything else is a keyword. Lossy where
+ * §6.2 was: an author keyword that happened to be written `MeSH: x` by someone
+ * else reads back as a MeSH subject.
+ */
+function tagsToSubjects(tags: readonly string[]): {
+  subjects: readonly Subject[];
+  keywords: readonly string[];
+} {
+  const subjects: Subject[] = [];
+  const keywords: string[] = [];
+  for (const raw of tags) {
+    const tag = raw.trim();
+    if (tag === "" || tag === RESEARCH_HELPER_TAG) continue;
+    const match = SUBJECT_TAG.exec(tag);
+    const scheme = match === null ? undefined : SUBJECT_SCHEMES[match[1] ?? ""];
+    if (match === null || scheme === undefined) {
+      keywords.push(tag);
+      continue;
+    }
+    const term = (match[3] ?? "").trim();
+    subjects.push(
+      scheme === "mesh"
+        ? { term, scheme, isMajor: match[2] === "*" }
+        : { term, scheme },
+    );
+  }
+  return { subjects, keywords };
+}
+
+/** The leading integer of `Citations: 1220 (semanticscholar, 2026-03-07)`. */
+function leadingInt(value: string): number | undefined {
+  const match = /^\d+/.exec(value.trim());
+  return match === null ? undefined : Number(match[0]);
+}
+
+// ---- 7.3 The one Zotero-touching part --------------------------------------
+
+/**
+ * Read a {@link ZoteroItemSnapshot} off a live item.
+ *
+ * Requires the item's data to be loaded: `getField()` throws
+ * `Zotero.Exception.UnloadedDataException` otherwise, and an item from
+ * `Zotero.Items.get()` may be in the object cache without it. Callers that
+ * hold a batch should `await Zotero.Items.loadDataTypes(items)` once, as
+ * `libraryIndex.ts` does; a freshly saved item is loaded already.
+ */
+export function snapshotZoteroItem(item: Zotero.Item): ZoteroItemSnapshot {
+  const fields: Partial<Record<ReadField, string>> = {};
+  for (const name of READ_FIELDS) fields[name] = item.getField(name);
+  return {
+    itemType: Zotero.ItemTypes.getName(item.itemTypeID),
+    fields,
+    // `true` = unformatted: the multipart form, not the user's original text.
+    dateMultipart: item.getField("date", true),
+    creators: item.getCreatorsJSON().map((creator) => ({
+      creatorType: creator.creatorType,
+      ...(creator.firstName === undefined
+        ? {}
+        : { firstName: creator.firstName }),
+      ...(creator.lastName === undefined ? {} : { lastName: creator.lastName }),
+      ...(creator.name === undefined ? {} : { name: creator.name }),
+    })),
+    tags: item.getTags().map((tag) => tag.tag),
+  };
+}
+
+/**
+ * `docs/07` §6.6's declared entry point: `fromZoteroItem(item): CanonicalWork`.
+ *
+ * {@link snapshotZoteroItem} then {@link canonicalWorkFromSnapshot}; see the
+ * latter for every rule. §6.6's "written back on next write" clause — storing
+ * a derived key into `rh-work-key` — is a write and is not performed here.
+ */
+export function fromZoteroItem(
+  item: Zotero.Item,
+  options: FromZoteroItemOptions = {},
+): CanonicalWork {
+  return canonicalWorkFromSnapshot(snapshotZoteroItem(item), options);
 }

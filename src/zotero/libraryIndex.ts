@@ -1,6 +1,6 @@
 /**
- * Existing-item detection: "does this DOI or PMID already exist in this
- * library?" (`P1-T13`, `docs/10` FR-51).
+ * Existing-item detection: "does this DOI, PMID, arXiv id or work key already
+ * exist in this library?" (`P1-T13`, widened by `P2-T19`; `docs/10` FR-51).
  *
  * **Why an index and not a lookup.** `docs/02` §11.6 is explicit: build the
  * index **once per run** from a single read of the library, then every
@@ -31,11 +31,25 @@
  * `\r` is a JavaScript line terminator, so a value group written `.*` matches
  * nothing on a **CRLF** `extra` field and every line parses as key-less.
  *
- * **No fuzzy matching, deliberately.** `P1-T13`'s **Do NOT**: FR-50's fuzzy
- * title cascade is Phase 2 (`P2-T09`), and `R-18` makes a false merge the
- * expensive error. `byTitle` from `docs/02` §11.6's sketch is therefore *not*
- * built here, and neither is `byArxiv` — `P1-T13` names `byDoi` and `byPmid`
- * and nothing else.
+ * **No fuzzy matching, deliberately.** `P1-T13`'s and `P2-T19`'s **Do NOT**:
+ * FR-50's fuzzy title cascade is `P2-T09`'s `src/sources/shared/dedupe.ts`
+ * (`matchAgainstLibrary`, over its own `byTitle` / `bySignature` buckets), and
+ * `R-18` makes a false merge the expensive error. `byTitle` from `docs/02`
+ * §11.6's sketch is therefore *not* built here. What **is** built, since
+ * `P2-T19`: §11.6's `byArxiv`, and a `byWorkKey` map over the `rh-work-key`
+ * lines this plugin itself wrote (`docs/07` §6.2), so a record whose only
+ * identifier is an arXiv id or a Semantic Scholar corpus id — the records the
+ * Phase 2 preprint adapters import — still has a join key the index can see.
+ *
+ * **Four arms, in `docs/07` §5.1's order, and the work key is last.** DOI,
+ * then PMID, then arXiv id, then the stored work key. The work key is the
+ * weakest evidence of the four: its own first three arms duplicate the
+ * identifier maps, its `s2:` arm is the one thing only it can match, and its
+ * `hash:` arm is `sha1(title|year|firstAuthor)` — which can collide on a
+ * title alone, so it must never outrank an identifier that disagrees with it.
+ * Only keys *stored* by this plugin are indexed; nothing here derives a hash
+ * key from a library item's title, because that would be title matching by
+ * another name.
  *
  * **No `ZoteroPane` selection getter is consulted.** `docs/01` §3.4(a) and §12
  * gotcha 3: `getSelectedCollection()`, `getSelectedLibraryID()` and
@@ -51,13 +65,17 @@
  */
 
 import {
+  type ArxivId,
   type Doi,
   type ExternalIds,
   type Pmid,
+  buildWorkKey,
+  normalizeArxivId,
   normalizeDoi,
   normalizePmid,
 } from "../model/ids";
-import { findExtraLine, parseExtra } from "./extraField";
+import { findExtraLine, parseExtra, readWorkKey } from "./extraField";
+import { ECOSYSTEM_EXTRA_KEY } from "./itemMapper";
 
 // ---------------------------------------------------------------------------
 // 1. Field and `extra`-line names
@@ -73,6 +91,10 @@ import { findExtraLine, parseExtra } from "./extraField";
  * `seriesNumber` and `issue` is registered as an alias of the generic `field`
  * condition. No registration is needed.
  *
+ * `archiveID` is the `preprint` field `docs/07` §6.2 fills with
+ * `arXiv:<id>` (and `docs/02` §11.6 names as the `byArxiv` source); on every
+ * other type it reads as `""`.
+ *
  * `Zotero.Item.prototype.getField()` returns `""` — it does not throw — for a
  * field that is not valid for the item's type (read from `item.js` on
  * 10.0.3: `if (value === undefined) return ''`), so these are safe to ask of
@@ -81,18 +103,19 @@ import { findExtraLine, parseExtra } from "./extraField";
 const FIELD = {
   doi: "DOI",
   pmid: "PMID",
+  archiveID: "archiveID",
   extra: "extra",
 } as const;
 
 /**
  * The non-namespaced `extra` keys the ecosystem writes for these identifiers
  * (`docs/07` §6.3's "standard, non-namespaced lines the ecosystem already
- * understands"). Matched case-insensitively by {@link findExtraLine}.
+ * understands"). The *same declaration* the write path uses
+ * (`itemMapper.ts`'s {@link ECOSYSTEM_EXTRA_KEY}), so the spelling looked for
+ * here is the spelling written there. Matched case-insensitively by
+ * {@link findExtraLine}.
  */
-const EXTRA_KEY = {
-  doi: "DOI",
-  pmid: "PMID",
-} as const;
+const EXTRA_KEY = ECOSYSTEM_EXTRA_KEY;
 
 // ---------------------------------------------------------------------------
 // 2. The result type
@@ -101,14 +124,15 @@ const EXTRA_KEY = {
 /**
  * One hit: the library item an incoming record turned out to already be.
  *
- * `matchedOn` is exactly `P1-T13`'s two arms. It is **not** the work-key
- * precedence of `docs/07` §5.1/§6.6 — there is deliberately no `"workKey"`
- * arm, because this card detects "by DOI and PMID" and widening the union
- * would be widening the card (`plan/README.md` §5 rule 2).
+ * `matchedOn` names the arm that hit, in the order the arms are tried:
+ * `P1-T13`'s `"doi"` and `"pmid"`, then `P2-T19`'s `"arxiv"` (the `archiveID`
+ * field or an `arXiv:` line) and `"workKey"` (a stored `rh-work-key` line).
+ * `"workKey"` is last because it is the weakest evidence — see the module
+ * comment — so a caller that sees it knows no identifier corroborated the hit.
  */
 export interface ExistingItemMatch {
   readonly itemID: number;
-  readonly matchedOn: "doi" | "pmid";
+  readonly matchedOn: "doi" | "pmid" | "arxiv" | "workKey";
 }
 
 /** What building the index cost, so a caller can assert and log it. */
@@ -128,7 +152,8 @@ export interface LibraryIndexStats {
 }
 
 /**
- * A snapshot of one library's DOI and PMID identifiers.
+ * A snapshot of one library's DOI, PMID and arXiv identifiers and of the work
+ * keys this plugin stored in it.
  *
  * **A snapshot, not a live view.** `docs/02` §11.6's "once per run" is the
  * whole point; nothing here observes `Zotero.Notifier`. A run that writes
@@ -140,21 +165,45 @@ export interface LibraryIndex {
   readonly byDoi: ReadonlyMap<string, number>;
   /** Bare-digits PMID → `itemID`. */
   readonly byPmid: ReadonlyMap<string, number>;
+  /**
+   * Version-stripped arXiv id → `itemID` (`docs/02` §11.6's `byArxiv`), from
+   * the `preprint` type's `archiveID` field and from `arXiv:` lines in `extra`
+   * — both, always, for the reason the module comment gives for DOI and PMID.
+   */
+  readonly byArxiv: ReadonlyMap<string, number>;
+  /**
+   * Stored `rh-work-key` → `itemID`. Exactly the string `docs/07` §6.2 wrote
+   * (`doi:…`, `pmid:…`, `arxiv:…`, `s2:…` or `hash:…`), read back through
+   * `extraField.ts`'s `readWorkKey`, never derived from the item's own fields.
+   */
+  readonly byWorkKey: ReadonlyMap<string, number>;
   readonly stats: LibraryIndexStats;
   /**
    * Is this record already in the library?
    *
-   * Synchronous by design — see the module comment. DOI is tried before PMID,
-   * matching FR-51's wording ("by DOI or PMID") and §5.1's identifier
-   * precedence, so a record whose DOI and PMID point at different items
-   * reports the DOI one.
+   * Synchronous by design — see the module comment. The arms are tried in
+   * `docs/07` §5.1's order — DOI, PMID, arXiv id, work key — so a record whose
+   * identifiers point at different items reports the strongest one, and the
+   * work key, the weakest, decides only when no identifier matched anything.
    *
-   * Both identifiers are re-normalized on the way in, so a caller that has not
+   * `workKey` is the record's `CanonicalWork.workKey` when the caller has one.
+   * When it is omitted the key is derived from `ids` through
+   * {@link buildWorkKey} — the only place the five-arm precedence is defined —
+   * **but only as far as its identifier arms reach**: with no DOI, PMID, arXiv
+   * id or S2 corpus id the derivation would be the hash arm over a title this
+   * function does not have, so no key is tried at all. A caller that wants a
+   * `hash:` key matched must pass the key it built.
+   *
+   * Every identifier is re-normalized on the way in, so a caller that has not
    * been through {@link normalizeDoi} still matches: that is what makes
    * `10.18653/V1/2020.acl-main.447` find the stored
-   * `10.18653/v1/2020.acl-main.447`.
+   * `10.18653/v1/2020.acl-main.447`, and `arXiv:2106.15928v2` find the stored
+   * `2106.15928`.
    */
-  findExisting(ids: ExternalIds): ExistingItemMatch | undefined;
+  findExisting(
+    ids: ExternalIds,
+    workKey?: string,
+  ): ExistingItemMatch | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -209,6 +258,40 @@ function pmidsOf(item: Zotero.Item): readonly Pmid[] {
 }
 
 /**
+ * Every arXiv id this item carries, version-stripped: the `preprint` type's
+ * native `archiveID` field (`docs/07` §6.2 writes `arXiv:<id>` there, and
+ * {@link normalizeArxivId} strips that scheme) **and** an `arXiv:` line in
+ * `extra` (§6.2's row for every other item type, since no type but `preprint`
+ * has a native home for it — `docs/02` §10.3).
+ *
+ * Same two-branches-always shape as {@link doisOf} / {@link pmidsOf}, for the
+ * same measured reason: nothing migrates between the two homes.
+ */
+function arxivIdsOf(item: Zotero.Item): readonly ArxivId[] {
+  const out: ArxivId[] = [];
+  const native = normalizeArxivId(item.getField(FIELD.archiveID));
+  if (native !== null) out.push(native);
+  const line = findExtraLine(
+    parseExtra(item.getField(FIELD.extra)),
+    EXTRA_KEY.arxiv,
+  );
+  const fromExtra = normalizeArxivId(line?.value);
+  if (fromExtra !== null && fromExtra !== native) out.push(fromExtra);
+  return out;
+}
+
+/**
+ * The work key this plugin stored on the item, if any: the `rh-work-key`
+ * line `docs/07` §6.2 writes on every import, read through the write path's
+ * own `readWorkKey` (§6.3: one parser). Taken verbatim — it is already the
+ * canonical string, and re-deriving it from the item's fields is what
+ * {@link fromZoteroItem} in `itemMapper.ts` does for an item that has none.
+ */
+function workKeyOf(item: Zotero.Item): string | undefined {
+  return readWorkKey(item.getField(FIELD.extra));
+}
+
+/**
  * First value wins.
  *
  * A library can hold two items with the same DOI — Zotero does not enforce
@@ -229,7 +312,10 @@ function keepFirst<K>(map: Map<K, number>, key: K, itemID: number): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Read the library once and index its DOIs and PMIDs.
+ * Read the library once and index its DOIs, PMIDs, arXiv ids and stored work
+ * keys. **Still one search** (`P2-T19` step 4): the third and fourth maps are
+ * filled from the same item pass as the first two, so they cost `getField`
+ * reads, not queries.
  *
  * The search is deliberately condition-poor: `deleted false` and
  * `noChildren true` are both *special* conditions in Zotero's search compiler
@@ -264,7 +350,7 @@ function keepFirst<K>(map: Map<K, number>, key: K, itemID: number): void {
  * cheapest way to respect that.
  *
  * @param libraryID - the library to index; defaults to the user library
- * @returns the snapshot, its two maps, and what the build cost
+ * @returns the snapshot, its four maps, and what the build cost
  */
 export async function buildLibraryIndex(
   libraryID: number = Zotero.Libraries.userLibraryID,
@@ -293,18 +379,29 @@ export async function buildLibraryIndex(
   // also far cheaper than the lazy per-item load it replaces.
   await Zotero.Items.loadDataTypes(items);
 
-  const byDoi = new Map<string, number>();
-  const byPmid = new Map<string, number>();
+  const maps: IndexMaps = {
+    byDoi: new Map<string, number>(),
+    byPmid: new Map<string, number>(),
+    byArxiv: new Map<string, number>(),
+    byWorkKey: new Map<string, number>(),
+  };
   let trashedSkipped = 0;
 
   for (const item of items) {
+    // One skip for all four maps: a trashed item is in none of them
+    // (`docs/02` §11.6), so it cannot be returned on any arm.
     if (item.deleted) {
       trashedSkipped += 1;
       continue;
     }
     const itemID = item.id;
-    for (const doi of doisOf(item)) keepFirst(byDoi, doi, itemID);
-    for (const pmid of pmidsOf(item)) keepFirst(byPmid, pmid, itemID);
+    for (const doi of doisOf(item)) keepFirst(maps.byDoi, doi, itemID);
+    for (const pmid of pmidsOf(item)) keepFirst(maps.byPmid, pmid, itemID);
+    for (const arxivId of arxivIdsOf(item)) {
+      keepFirst(maps.byArxiv, arxivId, itemID);
+    }
+    const workKey = workKeyOf(item);
+    if (workKey !== undefined) keepFirst(maps.byWorkKey, workKey, itemID);
   }
 
   const stats: LibraryIndexStats = {
@@ -316,35 +413,86 @@ export async function buildLibraryIndex(
 
   return {
     libraryID,
-    byDoi,
-    byPmid,
+    ...maps,
     stats,
-    findExisting: (ids) => lookup(byDoi, byPmid, ids),
+    findExisting: (ids, workKey) => lookup(maps, ids, workKey),
   };
 }
 
+/** The four maps, mutable while building and read-only once returned. */
+interface IndexMaps {
+  readonly byDoi: Map<string, number>;
+  readonly byPmid: Map<string, number>;
+  readonly byArxiv: Map<string, number>;
+  readonly byWorkKey: Map<string, number>;
+}
+
 /**
- * The O(1) half of the card: two map reads, no I/O.
+ * The O(1) half of the card: at most four map reads, no I/O.
  *
- * Extracted so {@link buildLibraryIndex} and any future caller that already
- * holds the maps share one precedence rule.
+ * The order is `docs/07` §5.1's and is load-bearing — see the module comment
+ * on why the work key is last. Extracted so {@link buildLibraryIndex} and any
+ * future caller that already holds the maps share one precedence rule.
  */
 function lookup(
-  byDoi: ReadonlyMap<string, number>,
-  byPmid: ReadonlyMap<string, number>,
+  maps: IndexMaps,
   ids: ExternalIds,
+  workKey: string | undefined,
 ): ExistingItemMatch | undefined {
   const doi = normalizeDoi(ids.doi);
   if (doi !== null) {
-    const itemID = byDoi.get(doi);
+    const itemID = maps.byDoi.get(doi);
     if (itemID !== undefined) return { itemID, matchedOn: "doi" };
   }
   const pmid = normalizePmid(ids.pmid);
   if (pmid !== null) {
-    const itemID = byPmid.get(pmid);
+    const itemID = maps.byPmid.get(pmid);
     if (itemID !== undefined) return { itemID, matchedOn: "pmid" };
   }
+  const arxivId = normalizeArxivId(ids.arxivId);
+  if (arxivId !== null) {
+    const itemID = maps.byArxiv.get(arxivId);
+    if (itemID !== undefined) return { itemID, matchedOn: "arxiv" };
+  }
+  // Last, and only now: the weakest arm. See the module comment.
+  const key = workKey ?? identifierWorkKey(ids, doi, pmid, arxivId);
+  if (key !== undefined) {
+    const itemID = maps.byWorkKey.get(key);
+    if (itemID !== undefined) return { itemID, matchedOn: "workKey" };
+  }
   return undefined;
+}
+
+/**
+ * The work key `buildWorkKey` derives from identifiers alone, or `undefined`
+ * when it would have to fall through to the hash arm.
+ *
+ * `buildWorkKey` owns the precedence (`docs/07` §5.1; `P2-T19`'s **Read
+ * first**: "call it; never reimplement"), so it is called with the normalized
+ * identifiers and an empty title, and its answer is kept only if it is not a
+ * hash — a `hash:` here would be `sha1("|year|author")` over a title this
+ * module never sees, a key no write path ever stored. The S2 corpus id is
+ * passed through as the caller gave it: `docs/02` §11.3.1 defines no
+ * normalizer for it and `buildWorkKey` wrote it verbatim.
+ */
+function identifierWorkKey(
+  ids: ExternalIds,
+  doi: Doi | null,
+  pmid: Pmid | null,
+  arxivId: ArxivId | null,
+): string | undefined {
+  const key = buildWorkKey(
+    {
+      ...(doi === null ? {} : { doi }),
+      ...(pmid === null ? {} : { pmid }),
+      ...(arxivId === null ? {} : { arxivId }),
+      ...(ids.s2CorpusId === undefined || ids.s2CorpusId === ""
+        ? {}
+        : { s2CorpusId: ids.s2CorpusId }),
+    },
+    "",
+  );
+  return key.startsWith("hash:") ? undefined : key;
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +508,10 @@ function lookup(
  * are *unverified*, "so keep a fallback that runs two flat searches and unions
  * the results". This is that fallback. It issues up to three searches — one
  * for the DOI, and §5.5's two `findByPMID` branches — every one of them flat,
- * with no group and no `joinMode`.
+ * with no group and no `joinMode`. It still has `P1-T13`'s two arms only:
+ * `P2-T19` widened the *index*, and its criteria name the index; the arXiv
+ * and work-key arms of a per-record search would be two more `extra contains`
+ * queries nothing yet calls for.
  *
  * **It is the fallback, not the path.** It costs O(candidates) searches, which
  * is exactly what {@link buildLibraryIndex} exists to avoid. Use it for a

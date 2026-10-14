@@ -1012,6 +1012,39 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 rule 10, pending the owner: *before a card is launched, the coordinator checks that its `Files` list names
 the caller of what the card builds; if it does not, the caller is added with a dated note before launch.*
 
+### 6.21 Raised by `P2-T19`, 2026-10-14 — recorded under rule 9, none carded
+
+105. **Hash-arm library matches need the callers to pass the key.** `findExisting(ids, workKey?)` matches a
+    `hash:` key only when given one; `planImport` in `src/zotero/importer.ts` and `isExisting` in
+    `src/bootstrap/registerUI.ts` still call `findExisting(work.ids)`. One argument at each site, the next
+    time either file is in a card's list (`P2-T11` touches `itemMapper.ts`, not these; `P2-T14` touches
+    `registerUI.ts`'s neighbours — fold it where it fits). Not a Phase 2 finishing condition.
+
+106. **Two library indexes over one library per run.** `src/sources/shared/dedupe.ts` (`buildLibraryIndex`,
+    `matchAgainstLibrary`, keyed on `LibraryItemFields`, with title and signature buckets, no `byWorkKey`) and
+    `src/zotero/libraryIndex.ts` (four identifier maps from one `Zotero.Search`, `byWorkKey`, no titles).
+    `zotero/` cannot import `sources/` (`docs/07` §2.3 siblings). Either `pipeline/` maps
+    `snapshotZoteroItem` output into `LibraryItemFields` and `dedupe.ts`'s index gains `byWorkKey`, or
+    `libraryIndex.ts` stays the only index and `matchAgainstLibrary` consumes it. Decide before `P2-T11`
+    wires FR-51; the owner's call on which module owns the library view.
+
+107. ~~**`docs/01` §5.5 should state that `Zotero.Search` excludes the trash by default.**~~ **DONE 2026-10-14** —
+    measured by `P2-T19`'s mutants M5/M5b/M5c on 10.0.3, written into §5.5 the same day.
+
+108. **No plain-Node coverage for the pure parts** of `libraryIndex.ts` (`arxivIdsOf`, `lookup`,
+    `identifierWorkKey`) and of the reader (`canonicalWorkFromSnapshot`, `partialDateFrom`). A
+    `test/unit/zotero/` file the next time either source file is in a card's list.
+
+109. **(owner's document decision)** `docs/07` §6.2 writes `s2CorpusId` to no Zotero field, so an S2-only
+    item's identity lives in its `rh-work-key` extra line alone. An `rh-s2-corpus-id` line would make the S2
+    arm derivable; otherwise §6.6 should state the dependence.
+
+110. **(owner's document decision)** `fromZoteroItem` does not recover `openAccess` (from `rights`) or
+    `provenance.recordIds` / `fieldOrigin`; `docs/07` §6.6 should say whether it wants them.
+
+111. **Every integration spec declares its own `MochaContext` / `assert` typings** (`P1-T13` noted it too). One
+    shared typing under `test/support/` the next time a spec is created.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

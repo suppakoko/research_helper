@@ -1251,6 +1251,13 @@ await coll.addItems(itemIDs);                // batched, transaction-wrapped
 
 ### 5.5 Search
 
+> **Measured 2026-10-14 on Zotero 10.0.3 (Gecko 140.15.0, Windows), task `P2-T19`: `Zotero.Search` excludes trashed
+> items by default.** With neither an `addCondition('deleted', 'false')` condition nor an `item.deleted` check,
+> a search over the user library returned no trashed item (three mutants in `src/zotero/libraryIndex.ts`,
+> each run against the full integration suite, `trashedSkipped=0`). The `deleted` condition below is therefore
+> needed only in the `'true'` direction, to *include* the trash; the explicit `'false'` condition and any
+> `item.deleted` guard are insurance against a future default change, not a requirement of this version.
+
 Official examples:
 
 ```javascript
