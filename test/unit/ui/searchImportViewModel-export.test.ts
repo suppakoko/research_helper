@@ -124,6 +124,9 @@ function output(overrides: {
     stageReached: "writingItems",
     records: [] as readonly SourceRecord[],
     works: [] as readonly CanonicalWork[],
+    // Required since `P2-T31`; a fixture that constructs the type names them.
+    flags: [],
+    links: [],
     perSource: [
       {
         sourceId: "pubmed",
@@ -163,6 +166,9 @@ function previewOutput(): SearchImportOutput {
     stageReached: "backfillingAbstracts",
     records: [] as readonly SourceRecord[],
     works: [] as readonly CanonicalWork[],
+    // Required since `P2-T31`; a fixture that constructs the type names them.
+    flags: [],
+    links: [],
     perSource: [],
     write: undefined,
     error: undefined,

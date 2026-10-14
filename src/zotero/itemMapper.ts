@@ -791,9 +791,11 @@ export interface FromZoteroItemOptions {
  * **The work key.** `rh-work-key` in `extra` "is trusted when present;
  * otherwise a key is derived by §5.1's five-arm precedence" — and the
  * derivation is {@link buildWorkKey} itself, called with the same four inputs
- * the pipeline's `liftToCanonicalWorks` gives it (title, `publishedDate.year`,
- * first author's family name), never a re-implementation of the order. Two
- * consequences worth stating:
+ * `src/model/merge.ts`'s `merge()` gives it when `stages.ts`'s
+ * `dedupeAndMerge` builds the work (the merged `ids`, title,
+ * `publishedDate.year`, first author's family name — `P2-T29` deleted the
+ * pipeline's Phase 1 lift that used to make the same call), never a
+ * re-implementation of the order. Two consequences worth stating:
  *
  * - For a record whose only identifier is a Semantic Scholar corpus id the
  *   round trip rests on `rh-work-key` **alone**: §6.2 has no row that writes

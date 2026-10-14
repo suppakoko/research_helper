@@ -134,12 +134,21 @@
  * ## Deduping and Merging (`P2-T10`) — the same shape, one card later
  *
  * Section 6 is the body of the `Deduping` and `Merging` stages for a
- * multi-source run, as {@link fanOut} is `Fetching`'s: {@link dedupeAndMerge}
- * runs `P2-T09`'s cascade once over the fan-out output and `P2-T10`'s
- * `merge()` once per group, and {@link attributeDeduplicatedAway} turns the
- * cross-source count into the per-source figure `docs/07` §5.3 asks for.
- * Wiring it into the pipeline's `run()` is reported rather than made by
- * `P2-T10`, whose `Files` row for the pipeline licenses one deletion only.
+ * multi-source run, as {@link fanOut} is `Fetching`'s: `P2-T09`'s cascade
+ * once over the fan-out output and `P2-T10`'s `merge()` once per group, with
+ * {@link attributeDeduplicatedAway} turning the cross-source count into the
+ * per-source figure `docs/07` §5.3 asks for. `P2-T10` built it and reported
+ * the wiring rather than making it (its `Files` row for the pipeline licensed
+ * one deletion only); `P2-T29` wired it — the pipeline's `run()` calls it in
+ * `Merging` and `attributeDeduplicatedAway` in `Deduping`. Since `P2-T30`
+ * the call `run()` awaits is {@link dedupeAndMergeAsync}, whose cascade
+ * yields to the event loop between slices (`docs/10` NFR-3); the synchronous
+ * {@link dedupeAndMerge} stays because `test/unit/model/merge.test.ts` calls
+ * it directly, and the two are asserted equal in
+ * `test/unit/pipeline/searchImport.test.ts`. One path skips both: an import
+ * handed the preview's own `works` beside its `records`
+ * (`SearchImportInput.works`, `P2-T31`) writes those works as given, so the
+ * cascade runs once per search, never again over the representatives.
  */
 
 import type { Clock } from "../../core/clock";
@@ -996,6 +1005,11 @@ function preprintSide(a: CanonicalWork, b: CanonicalWork): string | undefined {
  * the fetch report is built; this is the one place the figure becomes true.
  * Reports are returned in the order given, every other member untouched, and
  * a source with nothing charged keeps `0` — `docs/07` §5.3: "`0`, not absent".
+ *
+ * Called by the pipeline's `run()` in its `Deduping` stage (`P2-T29`) over
+ * the {@link DedupeMergeResult} `Merging` just produced. Not called on an
+ * import handed its `works` (`P2-T31`): that run asked no source, so it has
+ * no report to stamp, and ran no cascade, so it has nothing to stamp from.
  */
 export function attributeDeduplicatedAway(
   reports: readonly SearchImportSourceReport[],

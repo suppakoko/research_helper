@@ -278,11 +278,17 @@ import {
   createObservableProgressSink,
 } from "../../src/core/jobQueue/progress";
 import { NCBI_HOST } from "../../src/core/rateLimit/hostLimiter";
+import type { CanonicalWork } from "../../src/model/canonicalWork";
 import { normalizeDoi, type SourceId } from "../../src/model/ids";
 import type { SourceRecord } from "../../src/model/sourceRecord";
 import { createSearchImportPipeline } from "../../src/pipeline/searchImport/searchImportPipeline";
 import { NETWORK_METADATA_POOL_SIZE } from "../../src/pipeline/searchImport/stages";
-import type { PipelineContext } from "../../src/pipeline/types";
+import type {
+  SearchImportInput,
+  SearchImportOutput,
+  SearchImportWriter,
+} from "../../src/pipeline/searchImport/types";
+import type { Pipeline, PipelineContext } from "../../src/pipeline/types";
 import { createPubmedRecordMapper } from "../../src/sources/pubmed/mapper";
 import {
   createPubmedSource,
@@ -406,6 +412,14 @@ interface StubBehaviour {
   readonly delayMs?: number;
   /** Whether each record carries an abstract (`R-17`'s coverage figure). */
   readonly withAbstract?: boolean;
+  /**
+   * A DOI stem minted identically by every source given the same value, so
+   * two sources return the **same work** (`P2-T31`): record `n` of each
+   * carries `10.5555/<sharedWork>-<n>` instead of its own per-source DOI, and
+   * the cascade's identifier tier folds the pair into one row. Keep the stem
+   * distinct per test; the DOI is what the library index matches on.
+   */
+  readonly sharedWork?: string;
 }
 
 const IDLE: StubBehaviour = { records: 0 };
@@ -430,6 +444,7 @@ function stubRecord(
   sourceId: SourceId,
   n: number,
   withAbstract: boolean,
+  sharedWork?: string,
 ): SourceRecord {
   const nativeId = `p1t22-${sourceId}-${String(n)}`;
   return {
@@ -439,7 +454,11 @@ function stubRecord(
     retrievedAtEpochMs: Date.now(),
     missingFields: [],
     work: {
-      ids: { doi: doiOf(nativeId) },
+      ids: {
+        doi: doiOf(
+          sharedWork === undefined ? nativeId : `${sharedWork}-${String(n)}`,
+        ),
+      },
       type: "journal-article",
       title: `Ionizable LNP delivery to hepatocytes, study ${String(n)}`,
       ...(withAbstract && {
@@ -502,7 +521,12 @@ function stubSource(
             // What a real adapter reports, and the signal the view model latches
             // as "this source is at N" (`searchingLines`).
             ctx.progress?.setProgress(n + 1, behaviour.records);
-            yield stubRecord(id, n, behaviour.withAbstract === true);
+            yield stubRecord(
+              id,
+              n,
+              behaviour.withAbstract === true,
+              behaviour.sharedWork,
+            );
           }
           if (behaviour.error !== undefined) {
             throw behaviour.error;
@@ -580,6 +604,14 @@ let controller: FlowController;
 let savedApi: unknown;
 /** Per-source behaviour for the next search, rewritten by each test. */
 const behaviour = new Map<SourceId, StubBehaviour>();
+/**
+ * Every output `P1-T22`'s pipeline returned, in order — the preview's
+ * `works` are otherwise unobservable from outside the view model, and
+ * `P2-T31`'s criterion compares the written work against them.
+ */
+const pipelineOutputs: SearchImportOutput[] = [];
+/** Every `CanonicalWork` `P1-T22`'s writer was handed, across batches. */
+const writtenWorks: CanonicalWork[] = [];
 /** The last state the view model published, for assertions about the model. */
 let lastState: SearchViewState | undefined;
 /**
@@ -1314,6 +1346,52 @@ function registryOf(adapters: readonly LiteratureSource[]): SourceRegistry {
     registry.register(adapter);
   }
   return registry;
+}
+
+/**
+ * The pipeline, with every output it returns also pushed to `into` (`P2-T31`).
+ *
+ * A tap, not a stub: `run` is the real `run`, and the view model sees exactly
+ * what it would see without the tap. It exists because the view model keeps
+ * the preview's `works` private and the criterion is about them.
+ */
+function recordingPipeline(
+  pipeline: Pipeline<SearchImportInput, SearchImportOutput>,
+  into: SearchImportOutput[],
+): Pipeline<SearchImportInput, SearchImportOutput> {
+  return {
+    ...pipeline,
+    async run(input, ctx) {
+      const output = await pipeline.run(input, ctx);
+      into.push(output);
+      return output;
+    },
+  };
+}
+
+/**
+ * The real Zotero writer, with every work handed to `writeBatch` also pushed
+ * to `into` before the importer sees it (`P2-T31`). The session is a plain
+ * object whose methods close over their own state rather than reading `this`
+ * (`createZoteroSearchImportWriter` in `src/bootstrap/registerPipelines.ts`),
+ * so spreading it and replacing one method is safe.
+ */
+function recordingWriter(
+  writer: SearchImportWriter,
+  into: CanonicalWork[],
+): SearchImportWriter {
+  return {
+    async openTarget(target, token) {
+      const session = await writer.openTarget(target, token);
+      return {
+        ...session,
+        writeBatch(works, batchToken) {
+          into.push(...works);
+          return session.writeBatch(works, batchToken);
+        },
+      };
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -3025,7 +3103,12 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       ),
     ]);
     const pipeline = createSearchImportPipeline({
-      writer: createZoteroSearchImportWriter({ logger }),
+      // The real writer, tapped so `P2-T31`'s case can read the works that
+      // reached it; every other case here is unchanged by the tap.
+      writer: recordingWriter(
+        createZoteroSearchImportWriter({ logger }),
+        writtenWorks,
+      ),
       writeBatchSize: DEFAULT_CHUNK_SIZE,
       // This block builds its pipeline directly rather than through
       // `buildPipelineSet`, so it supplies the `network-metadata` pool the
@@ -3035,7 +3118,7 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
     await refreshIndex();
 
     const model = createSearchImportViewModel({
-      pipeline,
+      pipeline: recordingPipeline(pipeline, pipelineOutputs),
       jobs: jobFactory(sources, logger),
       logger,
       pluginVersion: config.addonID,
@@ -3592,6 +3675,78 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       "the selection survived the import's progress snapshots",
     );
     log(`import summary: ${summary.replace(/\s+/g, " ")}`);
+  });
+
+  it("P2-T31: a two-source same-DOI preview, then its import, writes the merged work the table showed — every source in seenIn, the preview's fieldOrigin, deep-equal", async function () {
+    this.timeout(90_000);
+    setKeyword(KEYWORD);
+    selectSources([PUBMED, CROSSREF]);
+    // Both stubs mint `10.5555/p2t31-<n>`, so the two sources return the same
+    // two works and the cascade's identifier tier folds each pair (FR-50).
+    const shared: StubBehaviour = {
+      records: 2,
+      withAbstract: true,
+      sharedWork: "p2t31",
+    };
+    await search({ pubmed: shared, crossref: shared });
+    assert.strictEqual(rows().length, 2, "one row per work, not per record");
+
+    const preview = pipelineOutputs[pipelineOutputs.length - 1];
+    if (preview === undefined) {
+      assert.fail("the tap saw no preview output");
+    }
+    assert.strictEqual(preview.works.length, 2);
+    for (const work of preview.works) {
+      assert.deepEqual(
+        [...work.provenance.seenIn].sort(),
+        [CROSSREF, PUBMED].sort(),
+        "the preview shows both contributing sources",
+      );
+      assert.isAbove(
+        Object.keys(work.provenance.fieldOrigin).length,
+        0,
+        "a two-record merge contests fields and records their winners",
+      );
+    }
+    assert.strictEqual(controller.state.selectedCount, 2);
+
+    const name = `RH P2-T31 ${String(Date.now())}`;
+    controller.adoptNewCollection(name);
+    writtenWorks.length = 0;
+    await runImport();
+
+    const imported = pipelineOutputs[pipelineOutputs.length - 1];
+    assert.strictEqual(imported?.outcome, "succeeded");
+    assert.strictEqual(imported?.write?.created, 2, "two new items");
+    // The criterion: what reached the writer is the previewed work — deep-equal
+    // as a whole, and in particular `seenIn` and `fieldOrigin`, which a
+    // re-merge of the representative alone would have reduced to one source
+    // and an empty record.
+    assert.deepEqual(writtenWorks, [...preview.works]);
+    assert.deepEqual(
+      writtenWorks.map((work) => work.provenance.seenIn),
+      preview.works.map((work) => work.provenance.seenIn),
+    );
+    assert.deepEqual(
+      writtenWorks.map((work) => work.provenance.fieldOrigin),
+      preview.works.map((work) => work.provenance.fieldOrigin),
+    );
+
+    const collection = collectionNamed(name);
+    createdCollections.push(collection.key);
+    const children = (await Zotero.Items.getAsync(
+      collection.getChildItems(true),
+    )) as { isNote(): boolean }[];
+    assert.strictEqual(
+      children.filter((item) => !item.isNote()).length,
+      2,
+      "the two merged works became two items, not four",
+    );
+    log(
+      `P2-T31 written seenIn: ${writtenWorks
+        .map((work) => work.provenance.seenIn.join("+"))
+        .join(", ")}`,
+    );
   });
 
   it("P1-T43: offers exactly the three outcomes the host maps, with 'link' pre-selected", async function () {

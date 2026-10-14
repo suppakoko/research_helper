@@ -1812,6 +1812,305 @@ describe("the dedup and merge wiring (P2-T29)", () => {
 });
 
 // ===========================================================================
+// 6c. The import writes the preview's works — P2-T31
+// ===========================================================================
+
+describe("the import of a preview writes the merged works the preview showed (P2-T31)", () => {
+  const sharedTitle =
+    "Adenine base editors convert A to G in genomic DNA without cleavage";
+
+  /** The same DOI from PubMed (asked first) and Crossref, abstracts contested. */
+  function sameDoiPair(): {
+    readonly pubmed: SourceRecord;
+    readonly crossref: SourceRecord;
+  } {
+    return {
+      pubmed: record("pubmed", "40", {
+        doi: "10.1000/one",
+        title: sharedTitle,
+        year: 2024,
+        abstract: "short",
+      }),
+      crossref: record("crossref", "c40", {
+        doi: "10.1000/one",
+        title: sharedTitle,
+        year: 2024,
+        abstract: "Crossref's abstract",
+      }),
+    };
+  }
+
+  /** FR-5's preview over two sources: no target, so nothing is written. */
+  async function preview(pair: ReturnType<typeof sameDoiPair>) {
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[pair.pubmed]] }),
+        stubSource({ id: "crossref", pages: [[pair.crossref]] }),
+      ],
+    });
+    const out = await h.pipeline.run(
+      { ...BASE_INPUT, sourceIds: ["pubmed", "crossref"] },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    expect(out.works).toHaveLength(1);
+    expect(out.write).toBeUndefined();
+    return out;
+  }
+
+  /** The write half's input, as `searchImportViewModel.ts` builds it. */
+  function importInput(
+    previewed: SearchImportOutput,
+    selectedRecordIds: readonly string[],
+    // A boolean rather than an optional `works` with a default: an explicit
+    // `undefined` argument takes a default parameter's value, which is how
+    // the records-alone case below first ran the works path by accident.
+    withWorks = true,
+  ): SearchImportInput {
+    return {
+      ...BASE_INPUT,
+      query: "",
+      sourceIds: [],
+      records: previewed.records,
+      ...(withWorks && { works: previewed.works }),
+      target: { collectionName: "C", selectedRecordIds },
+    };
+  }
+
+  it("a two-source same-DOI preview followed by an import of its records and works writes the previewed CanonicalWork: same seenIn, same fieldOrigin, deep-equal", async () => {
+    const pair = sameDoiPair();
+    const previewed = await preview(pair);
+    const shown = previewed.works[0];
+    if (shown === undefined) throw new Error("the preview produced no work");
+    expect(new Set(shown.provenance.seenIn)).toEqual(
+      new Set(["pubmed", "crossref"]),
+    );
+    expect(shown.provenance.fieldOrigin["abstract"]).toBe("crossref");
+
+    const writer = stubWriter();
+    const h = harness({ sources: [], writer: writer.writer });
+    const out = await h.pipeline.run(
+      importInput(previewed, [pair.pubmed.id]),
+      h.ctx,
+    );
+
+    expect(out.outcome).toBe("succeeded");
+    expect(out.stageReached).toBe("writingItems");
+    expect(out.write?.created).toBe(1);
+    const written = writer.log.batches.flat();
+    expect(written).toHaveLength(1);
+    // Deep-equal to the previewed work — and in fact the same object: the
+    // pipeline wrote what it was handed, it did not re-derive it.
+    expect(written[0]).toStrictEqual(shown);
+    expect(written[0]).toBe(shown);
+    expect(written[0]?.provenance.seenIn).toStrictEqual(
+      shown.provenance.seenIn,
+    );
+    expect(written[0]?.provenance.fieldOrigin).toStrictEqual(
+      shown.provenance.fieldOrigin,
+    );
+    expect(written[0]?.abstract).toBe("Crossref's abstract");
+    // The output is the preview's pair, unchanged, with nothing to review and
+    // no source to stamp.
+    expect(out.records).toBe(previewed.records);
+    expect(out.works).toBe(previewed.works);
+    expect(out.flags).toEqual([]);
+    expect(out.links).toEqual([]);
+    expect(out.perSource).toEqual([]);
+  });
+
+  it("the same import with records alone re-merges the representative as a singleton — the narrower write P2-T29 reported and this card closes", async () => {
+    const pair = sameDoiPair();
+    const previewed = await preview(pair);
+    const writer = stubWriter();
+    const h = harness({ sources: [], writer: writer.writer });
+    const out = await h.pipeline.run(
+      importInput(previewed, [pair.pubmed.id], false),
+      h.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    const written = writer.log.batches.flat();
+    expect(written).toHaveLength(1);
+    // One source, no contested field, the shorter abstract: not the preview.
+    expect(written[0]?.provenance.seenIn).toStrictEqual(["pubmed"]);
+    expect(written[0]?.provenance.fieldOrigin).toStrictEqual({});
+    expect(written[0]?.abstract).toBe("short");
+    expect(written[0]).not.toStrictEqual(previewed.works[0]);
+  });
+
+  it("supplied works are written as given and the cascade is not run: zero yields, the marker survives, the clock is not re-read into the work", async () => {
+    const pair = sameDoiPair();
+    const previewed = await preview(pair);
+    const shown = previewed.works[0];
+    if (shown === undefined) throw new Error("the preview produced no work");
+    // A work `merge()` could never produce from these records: the title is
+    // the marker, the stamp is the preview's, not this run's clock.
+    const marked: CanonicalWork = { ...shown, title: "AS GIVEN" };
+    const writer = stubWriter();
+    let yields = 0;
+    const h = harness({
+      sources: [],
+      writer: writer.writer,
+      yieldToEventLoop: () => {
+        yields += 1;
+        return Promise.resolve();
+      },
+    });
+    // Two records of the same DOI as the "representatives": were the cascade
+    // run over them it would compare the pair once and yield at the block
+    // boundary; handed works, it compares nothing.
+    const out = await h.pipeline.run(
+      {
+        ...importInput(previewed, [pair.pubmed.id, pair.crossref.id]),
+        records: [pair.pubmed, pair.crossref],
+        works: [marked, { ...shown, title: "AS GIVEN TOO" }],
+      },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    expect(yields).toBe(0);
+    const written = writer.log.batches.flat();
+    expect(written.map((w) => w.title)).toEqual(["AS GIVEN", "AS GIVEN TOO"]);
+    expect(written[0]?.normalizedAtEpochMs).toBe(shown.normalizedAtEpochMs);
+    // Neither array was re-derived.
+    expect(out.records).toHaveLength(2);
+    expect(out.works).toHaveLength(2);
+  });
+
+  it("selectedRecordIds still names representatives: a checked row writes its work, an unchecked one does not", async () => {
+    const pair = sameDoiPair();
+    const alone = record("pubmed", "41", { title: "A different paper" });
+    const h0 = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[pair.pubmed, alone]] }),
+        stubSource({ id: "crossref", pages: [[pair.crossref]] }),
+      ],
+    });
+    const previewed = await h0.pipeline.run(
+      { ...BASE_INPUT, sourceIds: ["pubmed", "crossref"] },
+      h0.ctx,
+    );
+    expect(previewed.records.map((r) => r.id)).toEqual([
+      pair.pubmed.id,
+      alone.id,
+    ]);
+
+    const writer = stubWriter();
+    const h = harness({ sources: [], writer: writer.writer });
+    const out = await h.pipeline.run(importInput(previewed, [alone.id]), h.ctx);
+    expect(out.write?.created).toBe(1);
+    expect(writer.log.batches.flat()).toStrictEqual([previewed.works[1]]);
+  });
+
+  it("validate rejects works without records, and works of another length than records", () => {
+    const pair = sameDoiPair();
+    const previewed: Pick<SearchImportOutput, "records" | "works"> = {
+      records: [pair.pubmed],
+      works: [],
+    };
+    const noRecords = validateSearchImportInput({
+      ...BASE_INPUT,
+      works: [],
+      target: { collectionName: "C" },
+    });
+    expect(noRecords.ok).toBe(false);
+    expect(noRecords.errors.map((e) => e.field)).toEqual(["works"]);
+    expect(noRecords.errors[0]?.messageKey).toBe(
+      SEARCH_IMPORT_VALIDATION_KEYS.worksMisaligned,
+    );
+
+    const misaligned = validateSearchImportInput({
+      ...BASE_INPUT,
+      query: "",
+      sourceIds: [],
+      records: previewed.records,
+      works: previewed.works,
+      target: { collectionName: "C" },
+    });
+    expect(misaligned.ok).toBe(false);
+    expect(misaligned.errors.map((e) => e.messageKey)).toEqual([
+      SEARCH_IMPORT_VALIDATION_KEYS.worksMisaligned,
+    ]);
+
+    // Aligned, with a target: accepted. Aligned, without one: `noTarget`
+    // still, and only that.
+    const aligned = {
+      ...BASE_INPUT,
+      query: "",
+      sourceIds: [],
+      records: [pair.pubmed],
+      works: dedupeAndMerge([pair.pubmed], 1).works,
+    };
+    expect(
+      validateSearchImportInput({ ...aligned, target: { collectionName: "C" } })
+        .ok,
+    ).toBe(true);
+    expect(
+      validateSearchImportInput(aligned).errors.map((e) => e.messageKey),
+    ).toEqual([SEARCH_IMPORT_VALIDATION_KEYS.noTarget]);
+  });
+
+  it("SearchImportOutput.flags and .links are required members, checked by the compiler", () => {
+    // `P2-T29` had to leave both optional for two `test/unit/ui/*` fixtures
+    // outside its list; `P2-T31` closes that. Two compile-time checks, because
+    // no runtime assertion can tell `flags: []` from `flags?: []`:
+    //
+    // 1. Reading the member never yields `undefined` — true only of a required
+    //    member, since an optional one reads as `T | undefined`.
+    const flagsRequired: undefined extends SearchImportOutput["flags"]
+      ? never
+      : true = true;
+    const linksRequired: undefined extends SearchImportOutput["links"]
+      ? never
+      : true = true;
+    expect(flagsRequired && linksRequired).toBe(true);
+
+    // 2. A literal that omits them does not compile. Were either made optional
+    //    again, this directive would become unused and `tsc` would say so
+    //    (TS2578), which is the failure that catches the regression.
+    const sansFlagsAndLinks = {
+      outcome: "succeeded",
+      stageReached: "writingItems",
+      records: [],
+      works: [],
+      perSource: [],
+      write: undefined,
+      warnings: [],
+      error: undefined,
+      cancellationKind: undefined,
+    } as const;
+    // @ts-expect-error -- `flags` and `links` are required (P2-T31)
+    const incomplete: SearchImportOutput = sansFlagsAndLinks;
+    expect(Object.keys(incomplete)).not.toContain("flags");
+  });
+
+  it("run() turns a misaligned pair into a failed outcome at Planning and writes nothing", async () => {
+    const pair = sameDoiPair();
+    const writer = stubWriter();
+    const h = harness({ sources: [], writer: writer.writer });
+    const out = await h.pipeline.run(
+      {
+        ...BASE_INPUT,
+        query: "",
+        sourceIds: [],
+        records: [pair.pubmed, pair.crossref],
+        works: [],
+        target: { collectionName: "C" },
+      },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("failed");
+    expect(out.stageReached).toBe("planning");
+    expect(out.error?.code).toBe("CONFIGURATION");
+    expect(out.error?.messageKey).toBe(
+      SEARCH_IMPORT_VALIDATION_KEYS.worksMisaligned,
+    );
+    expect(writer.log.opened).toEqual([]);
+    expect(out.write).toBeUndefined();
+  });
+});
+
+// ===========================================================================
 // 6b. Merging yields to the event loop (P2-T30, docs/10 NFR-3)
 // ===========================================================================
 

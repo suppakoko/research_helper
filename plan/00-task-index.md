@@ -1077,7 +1077,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.23 Raised by `P2-T29`, 2026-10-14 — two carded under rule 9 (`P2-T30`, `P2-T31`), the rest recorded
 
-118. ~~**The import half re-merges representatives alone.**~~ **CARDED 2026-10-14 as `P2-T31`** — the window's import
+118. ~~**The import half re-merges representatives alone.**~~ **CARDED 2026-10-14 as `P2-T31`, DONE the same day** — the window's import
     path passes `output.records` (one representative per work) back as `SearchImportInput.records`, so the
     written item has one source where the preview had two. Blocks Phase 2's first finishing condition on the
     library side.
@@ -1087,7 +1087,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     block (4,851 comparisons, 33–45 ms in Node, several times that under Zotero with the toolbox attached).
     Four runs of four; `plan/00` §5's NFR-3 row carries the figures. NFR-3's own text prescribes yields.
 
-120. ~~**`SearchImportOutput.flags` and `links` are optional.**~~ **CARDED 2026-10-14 into `P2-T31`** — forced by two
+120. ~~**`SearchImportOutput.flags` and `links` are optional.**~~ **CARDED 2026-10-14 into `P2-T31`, DONE the same day** — forced by two
     `test/unit/ui/` fixtures outside `P2-T29`'s list.
 
 121. **Stale prose outside `P2-T29`'s list:** `stages.ts`'s "Deduping and Merging" paragraph and
@@ -1195,6 +1195,22 @@ the caller of what the card builds; if it does not, the caller is added with a d
 144. **For the adapter cards:** each new `HOST_POLICIES` row needs one entry in `tokenBucket.test.ts`'s shipped
     host list and one in `container.test.ts`'s `hosts` and `sources` expectations; `backoff.test.ts` reads the
     document and needs nothing. Both test files are already in the adapter cards' Files notes.
+
+### 6.28 Raised by `P2-T31`, 2026-10-14 — recorded under rule 9, none carded
+
+145. **Four validation message ids have no bundle message** — `P1-T16`'s three and `P2-T31`'s
+    `worksMisaligned` (a misaligned pair cannot come from the window). Whichever card next owns
+    `src/i18n/keys.ts` and the bundles adds all four or records that they are never user-facing.
+
+146. **For `P2-T14`:** on the import path the output's `flags`/`links` are empty by design (the cascade is
+    skipped); the window keeps rendering the preview's, not the import's.
+
+147. **The view model infers alignment from `works.length === records.length`.** If the pipeline ever
+    publishes a partial `works` of the same length (it does not today), switch the guard to `stageReached`.
+    Noted on the declaration.
+
+148. **A `link` or `flag` member imported** is written as the preview had it (`relatedVersionIds` intact), but
+    no test asserts the relation survives the writer — `P2-T11` writes and tests the Zotero relation.
 
 ## 7. Regenerating this file
 

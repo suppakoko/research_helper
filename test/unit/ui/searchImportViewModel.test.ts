@@ -54,7 +54,11 @@ import type { CancellationToken } from "../../../src/core/jobQueue/cancellation"
 import type { ProgressSnapshot } from "../../../src/core/jobQueue/progress";
 import { createLogger } from "../../../src/core/logger";
 import type { SearchProvenance } from "../../../src/core/provenance";
-import type { Author, WorkType } from "../../../src/model/canonicalWork";
+import type {
+  Author,
+  CanonicalWork,
+  WorkType,
+} from "../../../src/model/canonicalWork";
 import { normalizeDoi, type Doi, type SourceId } from "../../../src/model/ids";
 import type { SourceRecord } from "../../../src/model/sourceRecord";
 import type {
@@ -220,6 +224,12 @@ function writeReport(options: {
 function output(options: {
   readonly outcome: SearchImportOutcome;
   readonly records?: readonly SourceRecord[];
+  /**
+   * The merged works, one per record (`P2-T31`). Omitted, the output carries
+   * none — the shape of a run that stopped before `Merging`, which most of
+   * this file's fixtures are about (they are `stageReached: "fetching"`).
+   */
+  readonly works?: readonly CanonicalWork[];
   readonly perSource?: readonly SearchImportSourceReport[];
   readonly error?: SerializedError;
   readonly write?: SearchImportWriteReport;
@@ -229,12 +239,38 @@ function output(options: {
     outcome: options.outcome,
     stageReached: "fetching",
     records: options.records ?? [],
-    works: [],
+    works: options.works ?? [],
+    // Required since `P2-T31`; a fixture that constructs the type names them.
+    flags: [],
+    links: [],
     perSource: options.perSource ?? [],
     write,
     error,
     warnings: [],
     cancellationKind: undefined,
+  };
+}
+
+/**
+ * The `CanonicalWork` a two-source merge of `record` would produce, with a
+ * second source in `seenIn` and a won field in `fieldOrigin` — the two facts
+ * `P2-T31` is about. Built by hand: this file does not run the pipeline, it
+ * checks what the view model hands it.
+ */
+function mergedWork(record: SourceRecord, alsoIn: SourceId): CanonicalWork {
+  return {
+    workKey: `doi:${record.work.ids.doi ?? record.id}`,
+    ids: record.work.ids,
+    type: record.work.type,
+    title: record.work.title,
+    authors: record.work.authors,
+    abstract: `An abstract ${alsoIn} supplied`,
+    provenance: {
+      recordIds: [record.id, `${alsoIn}:other`],
+      fieldOrigin: { abstract: alsoIn },
+      seenIn: [record.sourceId, alsoIn],
+    },
+    normalizedAtEpochMs: NOW,
   };
 }
 
@@ -302,6 +338,12 @@ interface Harness {
    * of FR-10 that is arithmetic rather than platform behaviour.
    */
   readonly tokens: CancellationToken[];
+  /**
+   * The input each queued run was started with, in order — what the view
+   * model handed the pipeline, which is the only observable `P2-T31`'s
+   * "pass the preview's works back" leaves at this layer.
+   */
+  readonly inputs: SearchImportInput[];
 }
 
 /**
@@ -321,6 +363,7 @@ function harness(options: {
   const states: SearchViewState[] = [];
   const lines: string[] = [];
   const tokens: CancellationToken[] = [];
+  const inputs: SearchImportInput[] = [];
   const listeners: ((item: ProgressSnapshot) => void)[] = [];
   const queue = [...options.runs];
   /**
@@ -348,7 +391,8 @@ function harness(options: {
         estimatedDurationSeconds: 0,
         notesKeys: [],
       }),
-    run: () => {
+    run: (input: SearchImportInput) => {
+      inputs.push(input);
       const next = queue.shift();
       if (next === undefined) {
         throw new Error("the stub pipeline ran out of queued runs");
@@ -418,7 +462,7 @@ function harness(options: {
       states.push(state);
     },
   });
-  return { model, states, lines, detach, tokens };
+  return { model, states, lines, detach, tokens, inputs };
 }
 
 /** The two sources every state-machine test below asks. */
@@ -862,6 +906,116 @@ describe("P1-T39 — toPipelineInput()", () => {
       selectedRecordIds: ["pubmed:1"],
     });
     expect(input.records).toBe(held);
+    // No works were given, so none are claimed: the pipeline merges the
+    // records itself, as it did before `P2-T31`.
+    expect("works" in input).toBe(false);
+  });
+
+  it("P2-T31: passes the preview's works through beside its records, the same objects", () => {
+    const first = record({ sourceId: "pubmed", nativeId: "1", title: "Held" });
+    const held = [first];
+    const works = [mergedWork(first, "crossref")];
+    const input = toPipelineInput(
+      query(),
+      { collectionName: "RH P1-T39", selectedRecordIds: ["pubmed:1"] },
+      held,
+      works,
+    );
+    expect(input.records).toBe(held);
+    expect(input.works).toBe(works);
+  });
+});
+
+// ===========================================================================
+// 8b. `P2-T31` — the import hands back the merged works the table showed
+// ===========================================================================
+
+describe("P2-T31 — runImport() passes the preview's works back", () => {
+  const pubmed = record({
+    sourceId: "pubmed",
+    nativeId: "1",
+    title: "Shared",
+    doi: DOI,
+  });
+  const other = record({ sourceId: "pubmed", nativeId: "2", title: "Alone" });
+
+  /** The window's Import press over every row the search drew. */
+  function importAll(h: Harness): Promise<void> {
+    const rows = h.model.state.records ?? [];
+    return h.model.runImport({ ...query(), records: rows });
+  }
+
+  it("hands the pipeline the preview's records and works, by reference, so the written item is the merged work", async () => {
+    const works = [mergedWork(pubmed, "crossref"), mergedWork(other, "pubmed")];
+    const preview = output({
+      outcome: "succeeded",
+      records: [pubmed, other],
+      works,
+      perSource: [report({ sourceId: "pubmed", recordsRetrieved: 2 })],
+    });
+    const h = harness({
+      runs: [
+        { output: preview },
+        {
+          output: output({
+            outcome: "succeeded",
+            write: writeReport({ created: 2 }),
+          }),
+        },
+      ],
+      sources: TWO_SOURCES,
+    });
+    await h.model.runSearch(query());
+    await importAll(h);
+
+    expect(h.inputs).toHaveLength(2);
+    const imported = h.inputs[1];
+    // The same arrays the pipeline returned, not copies and not re-derived:
+    // `works[i]` still belongs to `records[i]`, and every contributing source
+    // and won field the table showed is what the write half receives.
+    expect(imported?.records).toBe(preview.records);
+    expect(imported?.works).toBe(works);
+    expect(imported?.works?.[0]?.provenance.seenIn).toStrictEqual([
+      "pubmed",
+      "crossref",
+    ]);
+    expect(imported?.works?.[0]?.provenance.fieldOrigin).toStrictEqual({
+      abstract: "crossref",
+    });
+    expect(imported?.target?.selectedRecordIds).toStrictEqual([
+      pubmed.id,
+      other.id,
+    ]);
+  });
+
+  it("hands back no works when the search stopped before Merging and so published none aligned with its records", async () => {
+    // A cancelled fetch carries the fetch output and an empty `works`; handing
+    // that pair back would be rejected as misaligned, so the import sends the
+    // records alone and the pipeline merges them itself.
+    const cancelled = output({
+      outcome: "cancelled",
+      records: [pubmed, other],
+      perSource: [report({ sourceId: "pubmed", recordsRetrieved: 2 })],
+    });
+    const h = harness({
+      runs: [
+        { output: cancelled },
+        {
+          output: output({
+            outcome: "succeeded",
+            write: writeReport({ created: 2 }),
+          }),
+        },
+      ],
+      sources: TWO_SOURCES,
+    });
+    await h.model.runSearch(query());
+    expect(h.model.state.records).toHaveLength(2);
+    await importAll(h);
+
+    const imported = h.inputs[1];
+    expect(imported?.records).toBe(cancelled.records);
+    expect(imported?.works).toBeUndefined();
   });
 });
 

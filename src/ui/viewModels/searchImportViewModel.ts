@@ -98,7 +98,7 @@ import {
   type SourceProvenance,
 } from "../../core/provenance";
 import type { Logger } from "../../core/logger";
-import type { Author } from "../../model/canonicalWork";
+import type { Author, CanonicalWork } from "../../model/canonicalWork";
 import { isSourceId, type SourceId } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
 import type {
@@ -710,11 +710,21 @@ export function toWindowRecords(
  * bounds — and the window draws its own span through
  * `research-helper-search-years-span`, so this is not a second opinion about
  * how a year range is written for a user.
+ *
+ * `records` and `works` are the preview's `SearchImportOutput.records` and
+ * `.works`, handed back together for the write half (`P2-T31`): the pipeline
+ * then writes the works the table showed instead of re-merging each
+ * representative alone, which left the written item with one source in
+ * `seenIn` and without the fields the other contributors had won. `works` is
+ * omitted when the caller holds none aligned with the records — a run that
+ * stopped before `Merging` — and the pipeline merges the records itself, as
+ * it did before `P2-T31`.
  */
 export function toPipelineInput(
   query: SearchWindowQuery,
   target: SearchImportTarget | undefined,
   records: readonly SourceRecord[] | undefined,
+  works?: readonly CanonicalWork[],
 ): SearchImportInput {
   const from = Math.min(query.fromYear, query.toYear);
   const to = Math.max(query.fromYear, query.toYear);
@@ -734,6 +744,7 @@ export function toPipelineInput(
       : "none",
     ...(target !== undefined && { target }),
     ...(records !== undefined && { records }),
+    ...(works !== undefined && { works }),
   };
 }
 
@@ -1017,6 +1028,15 @@ export function createSearchImportViewModel(
   let source: CancellationTokenSource | undefined;
   /** The fetched records the Import half writes, held between the two halves. */
   let fetched: readonly SourceRecord[] = [];
+  /**
+   * The preview's merged works, aligned with {@link fetched} one per row, held
+   * for the Import half (`P2-T31`) so the pipeline writes what the table
+   * showed rather than re-merging each representative alone. `undefined` when
+   * the last run stopped before `Merging` and so published no aligned works;
+   * the import then hands the records back on their own and the pipeline
+   * merges them, as it did before `P2-T31`.
+   */
+  let previewed: readonly CanonicalWork[] | undefined;
   /** `sourceId` → localized display name, resolved once per connect. */
   let sourceNames: ReadonlyMap<string, string> = new Map();
   let revision = 0;
@@ -1418,6 +1438,13 @@ export function createSearchImportViewModel(
       ),
     );
     fetched = output.records;
+    // `works[i]` belongs to `records[i]` only once `Merging` has run; a run
+    // that stopped earlier (a cancel during `Fetching`, an all-sources
+    // failure) carries the fetch output and an empty `works`, and handing
+    // that pair back would be rejected as misaligned. The lengths say which
+    // case this is, so the import never has to know the stage order.
+    previewed =
+      output.works.length === output.records.length ? output.works : undefined;
     revision += 1;
     const records = toWindowRecords(
       output.records,
@@ -1749,6 +1776,9 @@ export function createSearchImportViewModel(
           duplicatePolicy,
         },
         fetched,
+        // The preview's own works, so the item written is the merged work the
+        // row showed — every contributing source, every won field (`P2-T31`).
+        previewed,
       );
       const running = await runJob(input, true);
       if (running === undefined) return;

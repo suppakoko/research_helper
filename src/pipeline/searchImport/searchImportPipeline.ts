@@ -40,7 +40,12 @@
  *    source's `recordsDeduplicatedAway` through `attributeDeduplicatedAway`.
  *    `records` and `works` stay positionally aligned: `records[i]` is the
  *    representative of the group `works[i]` was merged from, which is the
- *    contract {@link selectedWorks} reads.
+ *    contract {@link selectedWorks} reads. **The import of a preview hands
+ *    that pair back** (`SearchImportInput.works` beside `records`, `P2-T31`)
+ *    and `Merging` then writes the works through as given — the cascade is
+ *    not run again over representatives, which would have made each work a
+ *    singleton of one source and lost every field the other contributors
+ *    won. `records` alone still merges, for a caller holding raw records.
  *
  * ## What this file does not do
  *
@@ -90,6 +95,7 @@ import {
   SEARCH_IMPORT_DISPLAY_NAME_KEY,
   SEARCH_IMPORT_STAGES,
   serialize,
+  type DedupeMergeResult,
   type SearchImportStageKey,
   type VersionLink,
 } from "./stages";
@@ -109,22 +115,26 @@ import type {
 // ---------------------------------------------------------------------------
 
 /**
- * `validate()`'s four message ids.
+ * `validate()`'s five message ids.
  *
  * `noSources` is the id `P1-T18` already ships —
  * `research-helper-search-databases-none` = "Select at least one database to
- * search." **The other three have no message in either bundle**: verified by
- * grep over `addon/locale/<lang>/research-helper-mainWindow.ftl and -searchDialog.ftl` on 2026-10-07. The bundles
- * and `src/i18n/keys.ts` are `P1-T18`'s files and neither is in `P1-T16`'s
- * `Files` list, so they are declared here and reported rather than added
- * (`plan/README.md` §5 rule 2). `./stages.ts`'s header records the same finding
- * about the seven stage labels.
+ * search." **The other four have no message in either bundle**: three were
+ * verified absent by grep over `addon/locale/<lang>/research-helper-mainWindow.ftl and -searchDialog.ftl` on 2026-10-07, and
+ * `worksMisaligned` (`P2-T31`) was declared the same way on 2026-10-14. The
+ * bundles and `src/i18n/keys.ts` are `P1-T18`'s files and in neither
+ * `P1-T16`'s nor `P2-T31`'s `Files` list, so they are declared here and
+ * reported rather than added (`plan/README.md` §5 rule 2). `./stages.ts`'s
+ * header records the same finding about the seven stage labels.
+ * `worksMisaligned` is also the one of the five no window can trigger: the
+ * view model hands back a pair the pipeline itself produced aligned.
  */
 export const SEARCH_IMPORT_VALIDATION_KEYS = {
   emptyQuery: "research-helper-search-query-empty",
   noSources: "research-helper-search-databases-none",
   limitOutOfRange: "research-helper-search-max-results-range",
   noTarget: "research-helper-search-target-missing",
+  worksMisaligned: "research-helper-search-works-misaligned",
 } as const;
 
 /**
@@ -305,6 +315,19 @@ export function validateSearchImportInput(
     errors.push({
       field: "target",
       messageKey: SEARCH_IMPORT_VALIDATION_KEYS.noTarget,
+    });
+  }
+  // `works` is read by position against `records` (`selectedWorks`), so a
+  // list with nothing to align with, or of another length, would write the
+  // wrong work for a checked row — or `undefined` — silently. Rejected here,
+  // before `Planning` ends (`P2-T31`).
+  if (
+    input.works !== undefined &&
+    (fetching || input.works.length !== input.records.length)
+  ) {
+    errors.push({
+      field: "works",
+      messageKey: SEARCH_IMPORT_VALIDATION_KEYS.worksMisaligned,
     });
   }
 
@@ -748,33 +771,41 @@ export function createSearchImportPipeline(
         // — so it runs here, where the works have to exist, and `Deduping`
         // below does the per-source bookkeeping. `records` becomes one
         // representative per work, aligned with `works` (see `selectedWorks`).
-        // Applied to a supplied `input.records` too: that path is the write
-        // half of a preview the caller already saw, and the lift is the same
-        // function either way.
+        // Applied to a supplied `input.records` too, **unless the caller also
+        // supplied `input.works`** (`P2-T31`): that pair is a preview's own
+        // output handed back for its write half, already one representative
+        // per work and already merged, and running the cascade over the
+        // representatives again would make every work a singleton of one
+        // source — the written item would lose the sources and fields the
+        // table showed. So the works are taken as given, and the stage is
+        // entered and completed like any other so the bar behaves the same.
         //
         // Flags and links never reach `merge()`: a flagged pair stays two
         // works for review (FR-50 scenario 4), a linked pair stays two works
         // each carrying the other's ids in `relatedVersionIds` (gate `G-16`).
         // `P2-T14` renders both; `P2-T11` writes the Zotero relation and tag.
+        // On the supplied-works path both stay empty: the review was the
+        // preview's, and an import has nothing new to show.
         //
         // Awaited, not called (`P2-T30`): the cascade yields to the event loop
         // every `DEDUP_YIELD_EVERY_COMPARISONS` comparisons and between blocks,
         // and checks `ctx.token` at each yield — the one-block 100-record case
         // stalled the main thread 246–274 ms unchunked against NFR-3's 100 ms.
-        const merged = await dedupeAndMergeAsync(
-          state.records,
-          ctx.clock.now(),
-          {
+        let merged: DedupeMergeResult | undefined;
+        if (input.works !== undefined) {
+          state.works = input.works;
+        } else {
+          merged = await dedupeAndMergeAsync(state.records, ctx.clock.now(), {
             token: ctx.token,
             ...(deps.yieldToEventLoop !== undefined && {
               yieldToEventLoop: deps.yieldToEventLoop,
             }),
-          },
-        );
-        state.records = merged.records;
-        state.works = merged.works;
-        state.flags = merged.flags;
-        state.links = merged.links;
+          });
+          state.records = merged.records;
+          state.works = merged.works;
+          state.flags = merged.flags;
+          state.links = merged.links;
+        }
         merging.done("succeeded");
 
         // ---- Deduping -----------------------------------------------------
@@ -787,9 +818,13 @@ export function createSearchImportPipeline(
         // its own source and `Planning`'s adapter-less rows left at `0`. The
         // *library* duplicate check is a different mechanism and happens
         // inside the writer (`src/zotero/importer.ts`'s dedup pass, `FR-51`).
-        state.perSource = [
-          ...attributeDeduplicatedAway(state.perSource, merged),
-        ];
+        // A run handed its works asked no source and ran no cascade, so it
+        // has no report to stamp and nothing to stamp it from.
+        if (merged !== undefined) {
+          state.perSource = [
+            ...attributeDeduplicatedAway(state.perSource, merged),
+          ];
+        }
         deduping.done("succeeded");
 
         // ---- BackfillingAbstracts -----------------------------------------

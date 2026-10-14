@@ -4309,6 +4309,13 @@ card's list.
   supplied-records path in `src/pipeline/searchImport/searchImportPipeline.ts`.
 
 **Do.**
+> **Noted 2026-10-14 after the executing agent delivered (report):** step 1's design **(b)** was chosen — the preview's
+> `works` go back with the `records` and `run` writes them as given, skipping the cascade — because (a) would
+> re-run the cascade on the main thread at import time (a second NFR-3 cost) and stamp a new
+> `normalizedAtEpochMs`, so "deep-equal to the preview" would have needed a pinned clock. Step 3's claim that
+> `attributeDeduplicatedAway`'s doc said "`run()` has yet to call it" was false on this tree (the other two
+> stale sentences were as described); the doc now names its caller. `validateSearchImportInput` gained a fifth
+> message id, `worksMisaligned`, with no bundle message like the three before it (`plan/00` §6 item 145).
 1. Choose the simpler of two and say why: (a) `SearchImportOutput` carries every fetched record
    (or the `merged` groups) and the view model passes **all contributing records** of the checked works
    back, so `run`'s merge reproduces the preview; or (b) `SearchImportInput` accepts the preview's
@@ -4344,6 +4351,21 @@ card's list.
 npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
 ```
 
+
+**Findings, 2026-10-14 — done; the imported item is now the very object the table showed; `flags`/`links` required; full report at `plan/reports/P2-T31.md`.**
+Verified by the coordinator on the live tree: all nine md5 hashes equal the agent's, no `MUTANT` marker,
+typecheck 0, the three unit files with `merge.test.ts` **174 passed**, `SearchImportOutput.flags` and `links`
+are required members with two compile-time checks that fail `tsc` if either is made optional again, and one
+integration run **129 passed, 2 pending** (the agent's three runs the same; baseline 128 plus the new case), its
+log line reading `P2-T31 written seenIn: crossref+pubmed, crossref+pubmed`. `SearchImportInput` gained
+`works?`, positionally aligned with `records` and validated as such (a misaligned pair fails at `Planning`
+with nothing opened); `run`'s `Merging` writes a supplied work list through and skips the cascade, so the
+written `CanonicalWork` is the preview's by identity — every contributing source in `seenIn`, every won field
+in `fieldOrigin`; the view model holds the preview's `works` beside `fetched` only when the run reached
+`Merging` (a cancelled search hands back records alone). The records-only path (`P1-T23`'s 100-record case)
+merges exactly as before. Ten mutants: nine killed, one equivalent at run time and killed by `tsc`. The stale
+prose `P2-T29` left is refreshed. Not checked: a `link`/`flag` member imported and its relation surviving the
+writer (`P2-T11`'s). Follow-ups are `plan/00` §6.28; items 118 and 120 are done.
 ---
 
 ### P2-T32 — Register Europe PMC in the composition root, name it in both bundles, and retire the one-host pins

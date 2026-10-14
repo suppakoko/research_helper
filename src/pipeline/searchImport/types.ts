@@ -104,12 +104,14 @@ export interface SearchImportTarget {
  * The two optional members are what let `P1-T22` run the state machine in the
  * two halves its steps 2 and 3 describe, **without re-fetching between them**:
  *
- * | `records` | `target` | what runs |
- * |---|---|---|
- * | absent | absent | `Planning → … → BackfillingAbstracts` — FR-5's preview |
- * | absent | present | the whole machine, `Planning → WritingItems` |
- * | present | present | `Merging → WritingItems` over records already fetched |
- * | present | absent | rejected by `validate()`: it would do nothing |
+ * | `records` | `works` | `target` | what runs |
+ * |---|---|---|---|
+ * | absent | absent | absent | `Planning → … → BackfillingAbstracts` — FR-5's preview |
+ * | absent | absent | present | the whole machine, `Planning → WritingItems` |
+ * | present | absent | present | `Merging → WritingItems` over records already fetched, merged here |
+ * | present | present | present | `WritingItems` over the preview's own works; `Merging` writes them through unchanged (`P2-T31`) |
+ * | present | any | absent | rejected by `validate()`: it would do nothing |
+ * | absent | present | any | rejected by `validate()`: `works` is aligned with `records` and has nothing to align with |
  *
  * A skipped stage still reports `done("succeeded")` into its slice, so the bar
  * reaches 100 % in every accepted combination.
@@ -143,17 +145,38 @@ export interface SearchImportInput {
    * Records from an earlier run of this same pipeline, to write without
    * re-fetching. Omitted fetches.
    *
-   * These go through `Merging`'s `dedupeAndMerge` exactly as a fetch output
-   * does (`P2-T29`), so what is passed here decides what is written: the
-   * earlier run's {@link SearchImportOutput.records} holds **one
-   * representative per work**, and a representative merged alone is a
+   * Without {@link works} these go through `Merging`'s `dedupeAndMergeAsync`
+   * exactly as a fetch output does (`P2-T29`), so what is passed decides what
+   * is written: the earlier run's {@link SearchImportOutput.records} holds
+   * **one representative per work**, and a representative merged alone is a
    * singleton — one source in `seenIn`, the other contributors' fields gone.
-   * A caller that wants the merged work written as the preview showed it
-   * must pass every contributing record, which the output does not yet carry
-   * (`DedupeMergeResult.merged` has them; surfacing it is a follow-up on
-   * `P2-T29`'s report).
+   * That is the right thing for a caller holding raw records (a pre-fetched
+   * set, a run that stopped before `Merging`) and the wrong thing for the
+   * import of a preview, which is why the preview's caller passes
+   * {@link works} too.
    */
   readonly records?: readonly SourceRecord[];
+  /**
+   * The earlier run's {@link SearchImportOutput.works}, **positionally
+   * aligned with {@link records}** exactly as the output had them: `works[i]`
+   * is the work whose representative is `records[i]`. `P2-T31`.
+   *
+   * Present, `Merging` writes these through as given — no cascade, no
+   * re-merge — so the `CanonicalWork` that reaches the writer is the same
+   * object the results table showed: every contributing source in
+   * `provenance.seenIn`, every contested field's winner in `fieldOrigin`,
+   * `flags` and `links` empty because an import reviews nothing. Chosen over
+   * carrying every contributing record back and merging again because it is
+   * one member and one branch, costs the main thread no second cascade
+   * (`docs/10` NFR-3), and makes "the written work equals the previewed one"
+   * true by identity rather than by re-derivation under a new clock reading.
+   *
+   * Requires {@link records} and the same length; `validate()` rejects
+   * anything else with `SEARCH_IMPORT_VALIDATION_KEYS.worksMisaligned`.
+   * `SearchImportTarget.selectedRecordIds` still names representatives, and
+   * the pipeline's `selectedWorks` still reads the alignment.
+   */
+  readonly works?: readonly CanonicalWork[];
 }
 
 // ---------------------------------------------------------------------------
@@ -346,8 +369,10 @@ export interface SearchImportOutput {
    *
    * This is what `docs/08` §4.6's table renders, and a checked row's
    * `SourceRecord.id` is what {@link SearchImportTarget.selectedRecordIds}
-   * names. The other members of each group are not here; they are on
-   * `DedupeMergeResult.merged`, which the output does not yet carry.
+   * names. The other members of each group are not rows and are not here
+   * (`DedupeMergeResult.merged` holds them, inside `stages.ts`); what the
+   * import of a preview needs is the merged work itself, which is
+   * {@link works} handed back as {@link SearchImportInput.works} (`P2-T31`).
    */
   readonly records: readonly SourceRecord[];
   /**
@@ -362,22 +387,21 @@ export interface SearchImportOutput {
   /**
    * Possible duplicates the cascade would not merge — FR-50 scenario 4's
    * "flagged for user review". Both records of each pair are separate rows in
-   * {@link records}; `P2-T14` renders the badge. Empty before `Merging`.
-   *
-   * Optional only because two `test/unit/ui/*` fixtures construct this type
-   * outside `P2-T29`'s `Files`; the pipeline sets it on every output. Make it
-   * required the next time those fixtures are in a card's list.
+   * {@link records}; `P2-T14` renders the badge. Empty before `Merging`, and
+   * empty on an import that was handed {@link SearchImportInput.works}: the
+   * review happened on the preview. Required since `P2-T31` (`P2-T29` had to
+   * leave it optional for two `test/unit/ui/*` fixtures outside its list).
    */
-  readonly flags?: readonly DedupPair[];
+  readonly flags: readonly DedupPair[];
   /**
    * Pairs kept as two linked works — a preprint and its published version
    * (gate `G-16`), or a title match with conflicting identifiers (`docs/02`
    * §11.5 rule 1). Each side's `CanonicalWork` carries the other's ids in
    * `relatedVersionIds`; `P2-T11` writes the Zotero *Related* relation and
    * tags the side `VersionLink.preprintWorkKey` names. Empty before
-   * `Merging`. Optional for the same reason as {@link flags}.
+   * `Merging` and on an import handed its works, as {@link flags} is.
    */
-  readonly links?: readonly VersionLink[];
+  readonly links: readonly VersionLink[];
   /**
    * One entry per source that was **asked**, in `input.sourceIds` order, with
    * `recordsDeduplicatedAway` stamped once `Deduping` has run.
