@@ -2,7 +2,8 @@
  * The single wiring point for literature sources.
  *
  * **Scope.** `P1-T07` step 5: register `pubmed` and nothing else; `P2-T03`
- * adds the `europepmc` slot (see {@link SourceAdapters}).
+ * adds the `europepmc` slot (see {@link SourceAdapters}) and `P2-T32` makes
+ * the composition root fill it (see {@link ShippedSourceAdapters}).
  * `docs/07` §11.1 step 8 makes this file the *only* place a new source is wired
  * in — that is what lets step 11 claim "the source appears automatically in the
  * search dialog because it is rendered from the registry", and what keeps
@@ -19,11 +20,13 @@
  * *policy* (which ids this phase registers, and in what order) rather than the
  * construction. The composition root calls it once.
  *
- * **Phase 1 registers one source, deliberately.** The contract and the registry
- * ship here for all seven (`plan/02-phase-1-pubmed.md` §3, "Six more source
- * adapters … Phase 2 … so Phase 2 is additive, but only `pubmed` is
- * registered"). `openalex` is never registered at all: the id is reserved and
- * out of v1 by decision D2 (`src/model/ids.ts` records the full rule).
+ * **Phase 1 registered one source, deliberately; Phase 2 adds them one card
+ * at a time.** The contract and the registry ship here for all seven
+ * (`plan/02-phase-1-pubmed.md` §3, "Six more source adapters … Phase 2 … so
+ * Phase 2 is additive, but only `pubmed` is registered"); `europepmc` is the
+ * first Phase 2 addition (`P2-T03`, wired by `P2-T32`). `openalex` is never
+ * registered at all: the id is reserved and out of v1 by decision D2
+ * (`src/model/ids.ts` records the full rule).
  */
 
 import { SOURCE_IDS, type SourceId } from "../model/ids";
@@ -38,25 +41,41 @@ import type { LiteratureSource } from "../sources/types";
  * Phase 2 adds `europepmc`, `crossref`, `semanticscholar`, `arxiv`, `biorxiv`
  * and `medrxiv` here as its adapter cards land.
  *
- * **`europepmc` is optional, and that is a compatibility decision rather than
- * a design one (`P2-T03`, 2026-10-14).** The member should be required for the
- * reason the paragraph above gives, but the one caller —
- * `src/bootstrap/container.ts`, which constructs the adapters and calls
- * {@link registerSources} — is outside `P2-T03`'s `Files`, and a required
- * member would break its typecheck from a file the card may not touch
- * (`plan/README.md` §4: extend rather than break an importer outside the
- * list). The consequence is documented: until the container constructs
- * `createEuropePmcSource` (`src/sources/europepmc/europepmcSource.ts`) and
- * passes it here, the shipped plugin registers PubMed alone and Europe PMC is
- * reachable only from tests. Reported with the card under rule 10; the member
- * becomes required in the same change that wires the container.
+ * **`europepmc` stays optional on this interface, and the requirement lives
+ * on {@link ShippedSourceAdapters} instead (`P2-T32`, 2026-10-14).** `P2-T03`
+ * left the member optional because its one caller, `installServices` in
+ * `src/bootstrap/container.ts`, was outside that card's `Files`. `P2-T32`
+ * wired the container, and its card asked for the member to become required
+ * here — but by then two test files outside `P2-T32`'s `Files` typed
+ * literals against this interface with no `europepmc` member
+ * (`test/unit/sources/registry.test.ts`'s "registers pubmed and nothing
+ * else", "rejects an adapter whose own id does not match its key" and "is not
+ * idempotent"; `test/unit/sources/europepmc.test.ts`'s "still registers
+ * pubmed alone when the slot is absent"), so a required member here fails
+ * `npm run typecheck` from files the card may not touch (`plan/README.md` §4:
+ * extend rather than break an importer outside the list). The requirement is
+ * therefore placed where it matters — on what the composition root hands in —
+ * and {@link registerSources} keeps accepting a partial set so a test can
+ * register one stub. Reported with `P2-T32`.
  */
 export interface SourceAdapters {
   /** Phase 1's only adapter. `P1-T09` builds it. */
   readonly pubmed: LiteratureSource;
-  /** `P2-T03`'s adapter. Optional only until the container constructs it. */
+  /** `P2-T03`'s adapter; `P2-T32`'s container constructs it. */
   readonly europepmc?: LiteratureSource;
 }
+
+/**
+ * Every slot of {@link SourceAdapters}, required.
+ *
+ * This is the type the composition root's literal `satisfies`, so dropping an
+ * adapter from `installServices` is a compile error at the construction site
+ * — the property the interface's own header asks for — while a test may still
+ * hand {@link registerSources} a single stub. When a Phase 2 adapter card adds
+ * a slot to {@link SourceAdapters}, the container fails to compile until it
+ * constructs that adapter too.
+ */
+export type ShippedSourceAdapters = Required<SourceAdapters>;
 
 /**
  * Register every adapter in {@link SourceAdapters} into `registry`.

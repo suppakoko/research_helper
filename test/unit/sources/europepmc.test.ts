@@ -1966,16 +1966,23 @@ describe("hostLimiter: the www.ebi.ac.uk row", () => {
     expect(policy?.keyPresencePref).toBeUndefined();
   });
 
-  it("carries no retry budget because §7.3's three cells read — (transcription, not omission)", () => {
+  // Until 2026-10-14 §7.3's three retry cells for this host read `—` and this
+  // test pinned the row at "no retry budget" (transcription, not omission). The
+  // owner filled the cells that day (P2-T03 report, plan/00 §6 item 126) and
+  // P2-T32 copied them; the pin now reads the document the same way
+  // backoff.test.ts does, so a future edit to either side fails here.
+  it("carries the retry budget §7.3's three cells state, read from the document", () => {
     const row = section73Row(EBI_HOST);
-    expect([row["Retry base"], row["Retry cap"], row["Attempt cap"]]).toEqual([
-      "—",
-      "—",
-      "—",
-    ]);
-    expect(
-      HOST_POLICIES.find((p) => p.host === EBI_HOST)?.retry,
-    ).toBeUndefined();
+    const ms = (cell: string | undefined): number =>
+      Number((cell ?? "").replace(/\s/g, "").replace("ms", ""));
+    const retry = HOST_POLICIES.find((p) => p.host === EBI_HOST)?.retry;
+    expect(retry).toBeDefined();
+    expect(retry).toEqual({
+      baseMs: ms(row["Retry base"]),
+      capMs: ms(row["Retry cap"]),
+      maxAttempts: Number(row["Attempt cap"]),
+    });
+    expect(retry).toEqual({ baseMs: 1000, capMs: 30_000, maxAttempts: 3 });
   });
 
   it("is served by the registry as its own bucket, in table order after NCBI", () => {

@@ -164,8 +164,10 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-menu-collection-search-import",
   "research-helper-menu-spike-create-item",
 
-  // LiteratureSource.displayNameKey (docs/07 §4.2). Never translated.
+  // LiteratureSource.displayNameKey (docs/07 §4.2). Never translated. One
+  // per registered source, in SOURCE_IDS order (P2-T32 added Europe PMC).
   "research-helper-source-pubmed",
+  "research-helper-source-europepmc",
 
   // Search provenance (FR-8, P1-T17).
   "research-helper-provenance-note-title",
@@ -766,6 +768,7 @@ export const KO_PRESENT = [
   "research-helper-menu-root",
   "research-helper-menu-search-import",
   "research-helper-source-pubmed",
+  "research-helper-source-europepmc",
   "research-helper-search-col-doi",
 ] as const satisfies readonly FluentMessageId[];
 

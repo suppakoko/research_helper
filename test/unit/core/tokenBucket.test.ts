@@ -7,6 +7,7 @@ import { OperationCancelledError } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import {
   createHostLimiterRegistry,
+  EBI_HOST,
   getHostLimiters,
   HOST_POLICIES,
   installHostLimiters,
@@ -1095,11 +1096,24 @@ describe("hostLimiter policy table", () => {
     resetHostLimiters();
   });
 
-  it("carries docs/07 §7.3's NCBI row exactly, and only that row in Phase 1", () => {
-    expect(HOST_POLICIES).toHaveLength(1);
+  it("carries docs/07 §7.3's NCBI row exactly, and serves every shipped row and no other", () => {
+    // Phase 1 pinned this table at one row ("only that row in Phase 1").
+    // `P2-T32` retired the pin: the table carries one row per host the shipped
+    // adapters talk to — NCBI (`P1-T04`) and Europe PMC (`P2-T03`) — and the
+    // registry serves exactly those, in table order, each from §7.3. That every
+    // row here is a §7.3 row, with §7.3's own retry cells, is asserted against
+    // the document itself in `backoff.test.ts`, so this test names the hosts
+    // and leaves the numbers to the one place that reads them off the page.
+    const shippedHosts = [NCBI_HOST, EBI_HOST];
+    expect(HOST_POLICIES.map((policy) => policy.host)).toEqual(shippedHosts);
     const clock = createManualClock();
     const registry = createHostLimiterRegistry({ clock });
-    expect(registry.hosts).toEqual([NCBI_HOST]);
+    expect(registry.hosts).toEqual(shippedHosts);
+    for (const host of shippedHosts) {
+      expect(registry.policyFor(host)).toBe(
+        HOST_POLICIES.find((policy) => policy.host === host),
+      );
+    }
 
     const policy = must(registry.policyFor(NCBI_HOST), "the NCBI policy row");
     expect(policy.withoutKey).toEqual({

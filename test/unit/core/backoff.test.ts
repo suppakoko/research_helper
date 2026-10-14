@@ -410,11 +410,16 @@ function countIn(cell: string, what: string): number {
   return Number(match[1]);
 }
 
+/** A shipped row's retry budget, through the registry that serves it. */
+function shippedBudget(host: string): RetryBudget {
+  const registry = createHostLimiterRegistry({ clock: createManualClock() });
+  const policy = must(registry.policyFor(host), `the ${host} policy row`);
+  return must(policy.retry, `the ${host} row's retry budget`);
+}
+
 /** The shipped NCBI row, through the registry that serves it. */
 function shippedNcbiBudget(): RetryBudget {
-  const registry = createHostLimiterRegistry({ clock: createManualClock() });
-  const policy = must(registry.policyFor(NCBI_HOST), "the NCBI policy row");
-  return must(policy.retry, "the NCBI row's retry budget");
+  return shippedBudget(NCBI_HOST);
 }
 
 /**
@@ -481,29 +486,38 @@ function createCountingTransport(
 const UA =
   "research_helper/9.9.9 (https://example.test; mailto:x@example.test)";
 
-describe("docs/07 §7.3's retry budget on the shipped policy row", () => {
-  it("transcribes §7.3's three columns, read from the document itself", () => {
+describe("docs/07 §7.3's retry budget on the shipped policy rows", () => {
+  it("transcribes §7.3's three columns for every shipped row, read from the document itself", () => {
+    // `P1-T28` wrote this for the NCBI row alone; `P2-T32` widened it to every
+    // row `HOST_POLICIES` carries, because the owner filled the remaining
+    // retry cells on 2026-10-14 and a row whose budget is checked only for
+    // presence could carry any three numbers. The loop is over the shipped
+    // table, so a row added without the document saying what it should hold
+    // fails in `section73Cell` rather than passing by omission.
     const table = readSection73Table();
-    const budget = shippedNcbiBudget();
+    expect(HOST_POLICIES.length).toBeGreaterThan(1);
 
-    expect(budget.baseMs).toBe(
-      millisecondsIn(
-        section73Cell(table, NCBI_HOST, "Retry base"),
-        "NCBI retry base",
-      ),
-    );
-    expect(budget.capMs).toBe(
-      millisecondsIn(
-        section73Cell(table, NCBI_HOST, "Retry cap"),
-        "NCBI retry cap",
-      ),
-    );
-    expect(budget.maxAttempts).toBe(
-      countIn(
-        section73Cell(table, NCBI_HOST, "Attempt cap"),
-        "NCBI attempt cap",
-      ),
-    );
+    for (const { host } of HOST_POLICIES) {
+      const budget = shippedBudget(host);
+      expect(budget.baseMs, `${host} retry base`).toBe(
+        millisecondsIn(
+          section73Cell(table, host, "Retry base"),
+          `${host} retry base`,
+        ),
+      );
+      expect(budget.capMs, `${host} retry cap`).toBe(
+        millisecondsIn(
+          section73Cell(table, host, "Retry cap"),
+          `${host} retry cap`,
+        ),
+      );
+      expect(budget.maxAttempts, `${host} attempt cap`).toBe(
+        countIn(
+          section73Cell(table, host, "Attempt cap"),
+          `${host} attempt cap`,
+        ),
+      );
+    }
   });
 
   it("names every shipped host in §7.3's table, so no row is read from nowhere", () => {

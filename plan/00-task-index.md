@@ -1102,16 +1102,16 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.24 Raised by `P2-T03`, 2026-10-14 — two carded under rule 9 (`P2-T32`, `P2-T33`), the rest recorded
 
-124. ~~**Europe PMC is built but not constructed by the product.**~~ **CARDED 2026-10-14 as `P2-T32`** —
+124. ~~**Europe PMC is built but not constructed by the product.**~~ **CARDED 2026-10-14 as `P2-T32`, DONE the same day** —
     `installServices` in `src/bootstrap/container.ts` was outside `P2-T03`'s list; rule 10's check saw
     `registerSources.ts` and stopped. The check now reads: the file that **constructs** the thing, not only
     the one that registers it. The four remaining adapter cards carry a dated Files note.
 
-125. ~~**The display-name id has no home.**~~ **CARDED into `P2-T32`** — `research-helper-source-europepmc` in
+125. ~~**The display-name id has no home.**~~ **CARDED into `P2-T32`, DONE 2026-10-14** — `research-helper-source-europepmc` in
     both `mainWindow.ftl` bundles and `src/i18n/keys.ts`; the card had named `searchDialog.ftl`.
 
 126. ~~**Three Phase 1 tests pin `HOST_POLICIES` at one host or demand a retry budget §7.3 lacks.**~~
-    **CARDED into `P2-T32`; the owner decided 2026-10-14 and all five rows are filled** (was gated on the owner filling §7.3's retry cells for `www.ebi.ac.uk` (proposal:
+    **CARDED into `P2-T32`, DONE 2026-10-14; the owner decided that day and all five rows are filled** (was gated on the owner filling §7.3's retry cells for `www.ebi.ac.uk` (proposal:
     base 1000 ms, cap 30 000 ms, 3 attempts) and making the Host cell the bare host. **The unit suite is red
     on these four tests until then.** The same cells should be filled for every remaining v1 host before
     `P2-T04`–`P2-T07` launch, or each will stop at the same wall.
@@ -1174,6 +1174,27 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 140. **Stale prose:** `test/support/fixtureIo.ts` and `test/support/fixtureReplay.ts` still name
     `fixtureIo.node.ts`. Fix when either file is next in a card's list.
+
+### 6.27 Raised by `P2-T32`, 2026-10-14 — recorded under rule 9, none carded
+
+141. **`SourceAdapters.europepmc` stays optional on the interface**; the requirement is the
+    `ShippedSourceAdapters = Required<SourceAdapters>` alias that `installServices`' literal satisfies. Making
+    the member required means rewriting three literals in `test/unit/sources/registry.test.ts` and the
+    "still registers pubmed alone" test in `europepmc.test.ts` — the next card that owns those files. Each
+    new adapter is added to the alias's source interface, so the compile-time guard grows with it.
+
+142. **No spec paints the string "Europe PMC" in the Databases row.** `l10n.spec.ts` proves the id resolves and
+    the bundles hold the string; the `P1-T35` block already has the real registry with both ids, so one
+    rendered-text assertion there would close it (`P2-T14` edits that window).
+
+143. **A single-locale `.ftl` omission is invisible to the type layer.** `typings/i10n.d.ts` is the union over
+    locales and `npx zotero-plugin build` warns only for ids missing from ko-KR; dropping the en-US line
+    survived build, typecheck and the unit suite and was caught only by `l10n.spec.ts` inside Zotero.
+    Recorded in `plan/README.md` §6 the same day.
+
+144. **For the adapter cards:** each new `HOST_POLICIES` row needs one entry in `tokenBucket.test.ts`'s shipped
+    host list and one in `container.test.ts`'s `hosts` and `sources` expectations; `backoff.test.ts` reads the
+    document and needs nothing. Both test files are already in the adapter cards' Files notes.
 
 ## 7. Regenerating this file
 

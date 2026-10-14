@@ -4347,6 +4347,19 @@ condition needs seven sources in the product; this is the second.
 - `docs/07` §7.3 as the owner left it (the gate above), `docs/01` §9.3 (one declaration per id).
 
 **Do.**
+> **Corrected 2026-10-14 after the executing agent measured (report):** step 1's "make `SourceAdapters.europepmc`
+> required" breaks typecheck in `test/unit/sources/registry.test.ts` (three literals) and one Europe PMC test
+> outside this list, so the requirement lives at the construction site — `installServices`' literal
+> `satisfies ShippedSourceAdapters = Required<SourceAdapters>`, a compile error when a shipped adapter is
+> missing — and the interface member stays optional (`plan/00` §6 item 141). Step 1's
+> `createEuropePmcRecordMapper({ clock })` omitted `keepRaw` and `logger`, which the mapper documents as the
+> composition root's to resolve; both are passed, as PubMed's are. Step 4's "every §7.3 row and no other" is
+> read as "every **shipped** row": §7.3 has six host rows and `HOST_POLICIES` two, the other four being their
+> adapter cards'. Criterion 1's "the window shows Europe PMC" has no spec that paints the string; the id
+> resolves in `l10n.spec.ts` and its only declaration is `= Europe PMC` (item 142). The one test that kept
+> the unit suite red — `europepmc.test.ts`'s pin that the §7.3 cells read `—` — went red at the owner's
+> commit that filled them and was inverted by the coordinator on landing to read the cells, as
+> `backoff.test.ts` does.
 1. In `installServices`, construct `createEuropePmcSource({ http, clock, mapRecords:
    createEuropePmcRecordMapper({ clock }) })` beside PubMed and pass it to `registerSources`; make
    `SourceAdapters.europepmc` required.
@@ -4384,6 +4397,24 @@ document does not carry. Do not declare the id in `searchDialog.ftl`.
 npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
 ```
 
+
+**Findings, 2026-10-14 — done; the product registers two sources and the unit suite is green again; full report at `plan/reports/P2-T32.md`.**
+Verified by the coordinator on the live tree: typecheck 0, the card's three test files with `i18n/keys`,
+`sources/registry` and the Europe PMC file **243 passed after the coordinator inverted the one stale pin** (it
+asserted §7.3's retry cells read `—`; they were filled that evening), both bundles declare
+`research-helper-source-europepmc = Europe PMC` exactly once and stay BOM-less, `typings/i10n.d.ts` moved
+`52123160` → `82bb91ab` by one union member, the `www.ebi.ac.uk` row carries `retry: { baseMs: 1000, capMs:
+30_000, maxAttempts: 3 }` copied from the document, and no `MUTANT` marker remains. The agent's two
+integration runs passed (128, then 129 with `P2-T31`'s new spec) and both show the real registry holding
+`pubmed,europepmc`. `installServices` constructs Europe PMC beside PubMed with `keepRaw` and `logger`;
+`backoff.test.ts` now reads every shipped row's three cells from `docs/07` itself, `tokenBucket.test.ts` pins
+the shipped hosts to exactly the two, `container.test.ts` lists both hosts and both display-name ids. Ten
+mutants: eight killed, one compile-time guard classified (the `Required<>` alias has nothing to reject while
+both adapters are constructed — its compound with the construction removed is killed), and one that
+**survived the build, typecheck and the unit suite** — removing the en-US bundle line — killed only by
+`l10n.spec.ts` inside Zotero, because the typings union all locales and the build warns only for ko-KR
+(now a `plan/README.md` §6 note). Three deviations are dated above. The next adapter card adds one entry
+each to the `tokenBucket` and `container` expectations; `backoff.test.ts` needs nothing.
 ---
 
 ### P2-T33 — Make the fixture recorder run again and take a per-source plan, before four more adapters record by hand

@@ -276,6 +276,12 @@ When Claude Code is handed a task card:
   was not. With several agents in one tree the typings hash can also move with no
   build of one's own, so hash immediately before and after each step.
 
+**A single-locale `.ftl` omission does not move the typings** (measured 2026-10-14, `P2-T32` mutant M8):
+`typings/i10n.d.ts` is the union of every locale's ids and `npx zotero-plugin build` warns only for ids
+missing from ko-KR, so a message id dropped from the en-US bundle alone passes the build, typecheck and the
+unit suite and is caught only by `test/integration/l10n.spec.ts` inside Zotero. Run that spec after any
+bundle edit; do not trust the typings hash to prove both locales are complete.
+
 ## 7. Estimates
 
 Effort figures are **rough estimates for one experienced developer** new to

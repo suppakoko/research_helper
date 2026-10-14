@@ -211,6 +211,8 @@ import type { SecretStore } from "../core/secretStore";
 import type { PipelineRegistry } from "../pipeline/registry";
 import type { PipelineContext, PipelineId } from "../pipeline/types";
 import { getPref, setPrefStore } from "../prefs";
+import { createEuropePmcSource } from "../sources/europepmc/europepmcSource";
+import { createEuropePmcRecordMapper } from "../sources/europepmc/mapper";
 import { createPubmedRecordMapper } from "../sources/pubmed/mapper";
 import {
   createPubmedSource,
@@ -233,7 +235,7 @@ import {
   createZoteroSearchImportWriter,
   registerPipelines,
 } from "./registerPipelines";
-import { registerSources } from "./registerSources";
+import { registerSources, type ShippedSourceAdapters } from "./registerSources";
 
 // ===========================================================================
 // 1. The teardown registry — `P0-T07`
@@ -1375,8 +1377,9 @@ export async function installServices(
     progress.disposeAll();
   });
 
-  // 6. The adapters (`P1-T09`, `P1-T10`) and the registry `registerSources()`
-  //    has been waiting for since `P1-T07`.
+  // 6. The adapters (`P1-T09`, `P1-T10`; Europe PMC `P2-T03`, wired here by
+  //    `P2-T32`) and the registry `registerSources()` has been waiting for
+  //    since `P1-T07`.
   //
   //    **`keepRaw` is the whole reason the mapper is built here.** `docs/07`
   //    §5.1's `SourceRecord.raw` is "retained past that point only when
@@ -1392,12 +1395,12 @@ export async function installServices(
   //    so it is reported rather than done. The safe direction is the default:
   //    `getPref` falls back to §8.5's `false`, so a missing or malformed
   //    preference keeps nothing.
-  const mapRecords = createPubmedRecordMapper({
-    clock,
-    keepRaw: getPref("logRequestBodies"),
-    logger,
-  });
+  const keepRaw = getPref("logRequestBodies");
+  const mapRecords = createPubmedRecordMapper({ clock, keepRaw, logger });
   const sources = createSourceRegistry();
+  // `satisfies ShippedSourceAdapters`: every slot the registry knows must be
+  // constructed here, so a dropped adapter is a compile error at this literal
+  // rather than a database row missing from the search dialog (`P2-T32`).
   registerSources(sources, {
     pubmed: createPubmedSource({
       http,
@@ -1410,7 +1413,16 @@ export async function installServices(
       ...(secrets !== undefined && { secrets }),
       logger,
     }),
-  });
+    // Europe PMC has no key (`docs/02` §4.1), so no `secrets`. The mapper takes
+    // the same resolved `keepRaw` as PubMed's for the same §5.1 reason: the
+    // composition root is the only place the preference may be read.
+    europepmc: createEuropePmcSource({
+      http,
+      clock,
+      mapRecords: createEuropePmcRecordMapper({ clock, keepRaw, logger }),
+      logger,
+    }),
+  } satisfies ShippedSourceAdapters);
 
   // 7. The pipelines (`P1-T16`) and the per-job context factory.
   const pipelines = registerPipelines({

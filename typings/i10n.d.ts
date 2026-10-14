@@ -108,6 +108,7 @@ export type FluentMessageId =
   | 'research-helper-search-years-label'
   | 'research-helper-search-years-span'
   | 'research-helper-search-years-to'
+  | 'research-helper-source-europepmc'
   | 'research-helper-source-pubmed'
   | 'rh-error-auth'
   | 'rh-error-bad-request'

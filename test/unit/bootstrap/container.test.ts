@@ -38,6 +38,7 @@ import {
 } from "../../../src/core/jobQueue/progress";
 import { LOG_PREFIX, type LogSink } from "../../../src/core/logger";
 import {
+  EBI_HOST,
   NCBI_HOST,
   NCBI_KEY_PRESENT_PREF,
   peekHostLimiters,
@@ -394,9 +395,21 @@ describe("installServices wires the graph Phase 1 built", () => {
     expect(getPrefStore()).toBe(h.prefs);
     expect(peekHostLimiters()).toBe(graph.limiters);
     expect(getHttpClient()).toBe(graph.http);
-    // `docs/07` §7.3's one row Phase 1 ships.
-    expect(graph.limiters.hosts).toEqual([NCBI_HOST]);
+    // `docs/07` §7.3's rows for the hosts the registered adapters talk to:
+    // NCBI (`P1-T04`) and Europe PMC (`P2-T03`, wired by `P2-T32`). Phase 1
+    // pinned this at one host; the pin went with the second adapter.
+    expect(graph.limiters.hosts).toEqual([NCBI_HOST, EBI_HOST]);
     expect(graph.limiters.limiterFor(NCBI_HOST)).toBeDefined();
+    expect(graph.limiters.limiterFor(EBI_HOST)).toBeDefined();
+    // `registerSources()` was handed both adapters, in `SOURCE_IDS` order —
+    // the order the search dialog's Databases row renders (`docs/08` §4.2).
+    expect(graph.sources.list().map((source) => source.id)).toEqual([
+      "pubmed",
+      "europepmc",
+    ]);
+    expect(graph.sources.list().map((source) => source.displayNameKey)).toEqual(
+      ["research-helper-source-pubmed", "research-helper-source-europepmc"],
+    );
     // Every disposable is in the scope, not merely constructed.
     expect(h.scope.size).toBeGreaterThan(0);
 

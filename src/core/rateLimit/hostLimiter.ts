@@ -206,17 +206,15 @@ export const EBI_HOST = "www.ebi.ac.uk";
  * budget is half of it. It is not raised without asking the Europe PMC team
  * (`docs/02` §4.1, `docs/09` §5.5). Europe PMC has no API key at all
  * (`docs/02` §4.1, "None required, none available"), so the row has no
- * `withKey` and no `keyPresencePref`. **It has no `retry` either, and that
- * is a transcription, not an omission:** §7.3's three retry cells for this host
- * read `—`, §7.3 says every non-NCBI row keeps `—` "until the card that adds
- * that host supplies its own three values with its own sources", and
+ * `withKey` and no `keyPresencePref`. **Its `retry` budget is §7.3's three
+ * cells as the owner filled them on 2026-10-14** (`P2-T32`; the dated note
+ * under §7.3's table gives the derivation: base 1000 ms as the smallest round
+ * value above the host's 200 ms pacing interval, cap 30 000 ms below §8.5's
+ * 60 s timeout, three attempts by the `P0-T21` argument). `P2-T03` shipped the
+ * row without a budget because those cells then read `—` and
  * `plan/README.md` §5 rule 4 forbids writing a number here that the document
- * does not carry. The consequence is documented behaviour — one attempt, no
- * retry (`src/core/http/client.ts` on an absent `RetryPolicy`) — and
- * `test/unit/core/backoff.test.ts`'s "gives every shipped policy row a retry
- * budget" fails by design until §7.3's cells are filled; `P2-T03`'s report
- * proposes the three values and their sources for the owner to enter in §7.3
- * first, after which the `retry` member is added here.
+ * does not carry; `test/unit/core/backoff.test.ts` reads the cells back from
+ * the document and compares them to this row, so the two cannot drift apart.
  */
 export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
   {
@@ -228,9 +226,11 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
   },
   {
     // `docs/07` §7.3, `www.ebi.ac.uk` (Europe PMC): 5/s, burst 5, max
-    // concurrent 3; retry cells `—`. See the header's "Europe PMC" paragraph.
+    // concurrent 3; retry 1000 ms / 30 000 ms / 3. See the header's "Europe
+    // PMC" paragraph.
     host: EBI_HOST,
     withoutKey: { ratePerSecond: 5, burst: 5, maxConcurrent: 3 },
+    retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
   },
 ];
 

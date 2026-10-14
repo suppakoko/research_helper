@@ -104,14 +104,17 @@ research-helper-menu-spike-create-item =
 
 ## Literature source display names — `LiteratureSource.displayNameKey`
 ##
-## Phase 1 registers one source. The other six arrive with their adapters in
+## Phase 1 registered one source. The others arrive with their adapters in
 ## Phase 2 (`docs/07` §11.1 step 11: a source appears in the UI by
-## registration alone), and each brings its own entry here.
+## registration alone), and each brings its own entry here — Europe PMC's
+## landed with `P2-T32`. One declaration per id, in this bundle only
+## (`docs/01` §9.3).
 ##
 ## **Never translated** (`docs/08` §10.3: database names are not translated),
 ## so the ko-KR bundle carries these verbatim rather than awaiting review.
 
 research-helper-source-pubmed = PubMed
+research-helper-source-europepmc = Europe PMC
 
 
 ## Search provenance (FR-8, P1-T17)
