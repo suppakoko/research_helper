@@ -1,0 +1,7 @@
+{
+  "status": 500,
+  "headers": {
+    "content-type": "text/html"
+  },
+  "body": "<!-- synthetic fixture: docs/02 §7 records no arXiv 5xx body shape; a server error cannot be provoked on demand. Status is the assertable part. -->\n<html><body><h1>Internal Server Error</h1></body></html>\n"
+}

@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "headers": {
+    "accept-ranges": "bytes",
+    "age": "39",
+    "connection": "keep-alive",
+    "content-length": "3333",
+    "content-type": "application/atom+xml; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 16:35:55 GMT",
+    "server": "Google Frontend",
+    "strict-transport-security": "max-age=300",
+    "via": "1.1 google, 1.1 varnish, 1.1 varnish, 1.1 varnish",
+    "x-cache": "MISS, MISS, HIT",
+    "x-cache-hits": "0, 0, 1",
+    "x-cloud-trace-context": "[redacted:32]",
+    "x-served-by": "cache-lga-kjfk8660079-LGA, cache-lga-kjfk8660079-LGA, cache-lga-kjfk8660023-LGA, cache-icn1450045-ICN",
+    "x-timer": "S1791995756.820857,VS0,VE1"
+  },
+  "body": "<?xml version='1.0' encoding='UTF-8'?>\n<feed xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\" xmlns:arxiv=\"http://arxiv.org/schemas/atom\" xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://arxiv.org/api/2v0xBvF2zUHgWdaJ2gWzbEv+wvk</id>\n  <title>arXiv Query: search_query=(all:\"deep learning\" AND all:protein) AND submittedDate:\"202301010000 TO 202303312359\"&amp;id_list=&amp;start=0&amp;max_results=1</title>\n  <updated>2026-10-14T16:35:16Z</updated>\n  <link href=\"https://arxiv.org/api/query?search_query=(all:%22deep+learning%22+AND+all:protein)+AND+submittedDate:%22202301010000+TO+202303312359%22&amp;start=0&amp;max_results=1&amp;id_list=\" type=\"application/atom+xml\"/>\n  <opensearch:itemsPerPage>1</opensearch:itemsPerPage>\n  <opensearch:totalResults>26</opensearch:totalResults>\n  <opensearch:startIndex>0</opensearch:startIndex>\n  <entry>\n    <id>http://arxiv.org/abs/2302.03294v2</id>\n    <title>Linear-scaling kernels for protein sequences and small molecules outperform deep learning while providing uncertainty quantitation and improved interpretability</title>\n    <updated>2023-06-23T17:06:14Z</updated>\n    <link href=\"https://arxiv.org/abs/2302.03294v2\" rel=\"alternate\" type=\"text/html\"/>\n    <link href=\"https://arxiv.org/pdf/2302.03294v2\" rel=\"related\" type=\"application/pdf\" title=\"pdf\"/>\n    <summary>Gaussian process (GP) is a Bayesian model which provides several advantages for regression tasks in machine learning such as reliable quantitation of uncertainty and improved interpretability. Their adoption has been precluded by their excessive computational cost and by the difficulty in adapting them for analyzing sequences (e.g. amino acid and nucleotide sequences) and graphs (e.g. ones representing small molecules). In this study, we develop efficient and scalable approaches for fitting GP models as well as fast convolution kernels which scale linearly with graph or sequence size. We implement these improvements by building an open-source Python library called xGPR. We compare the performance of xGPR with the reported performance of various deep learning models on 20 benchmarks, including small molecule, protein sequence and tabular data. We show that xGRP achieves highly competitive performance with much shorter training time. Furthermore, we also develop new kernels for sequence and graph data and show that xGPR generally outperforms convolutional neural networks on predicting key properties of proteins and small molecules. Importantly, xGPR provides uncertainty information not available from typical deep learning models. Additionally, xGPR provides a representation of the input data that can be used for clustering and data visualization. These results demonstrate that xGPR provides a powerful and generic tool that can be broadly useful in protein engineering and drug discovery.</summary>\n    <category term=\"cs.LG\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <category term=\"q-bio.QM\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <published>2023-02-07T07:06:02Z</published>\n    <arxiv:comment>This is a revised version of the original manuscript with additional experiments</arxiv:comment>\n    <arxiv:primary_category term=\"cs.LG\"/>\n    <author>\n      <name>Jonathan Parkinson</name>\n    </author>\n    <author>\n      <name>Wei Wang</name>\n    </author>\n  </entry>\n</feed>\n"
+}

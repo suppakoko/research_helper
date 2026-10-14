@@ -117,6 +117,7 @@ research-helper-menu-spike-create-item =
 research-helper-source-pubmed = PubMed
 research-helper-source-europepmc = Europe PMC
 research-helper-source-crossref = Crossref
+research-helper-source-arxiv = arXiv
 
 
 ## Search provenance (FR-8, P1-T17)

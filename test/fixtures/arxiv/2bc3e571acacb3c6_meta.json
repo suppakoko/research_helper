@@ -1,0 +1,13 @@
+{
+  "scenario": "record-sparse",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-14T16:36:26.997Z",
+  "endpoint": "https://export.arxiv.org/api/query",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "scrubbed header x-cloud-trace-context",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

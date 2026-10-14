@@ -18,6 +18,7 @@
  * npm run fixtures:record -- --dry-run                       # PubMed: prints the plan only
  * npm run fixtures:record -- --source europepmc --dry-run    # Europe PMC: prints the plan only
  * npm run fixtures:record -- --source crossref --dry-run     # Crossref: prints the plan only
+ * npm run fixtures:record -- --source arxiv --dry-run        # arXiv: prints the plan only
  * FIXTURE_MODE=record npm run fixtures:record -- --source europepmc   # live
  * FIXTURE_MODE=synthetic npm run fixtures:record                      # rewrites the
  *                                                  # hand-written fixtures, no network
@@ -125,6 +126,7 @@ import {
 } from "../src/core/http/client";
 import { buildUserAgent, MAINTAINER_EMAIL } from "../src/core/http/userAgent";
 import {
+  ARXIV_HOST,
   CROSSREF_HOST,
   EBI_HOST,
   HOST_POLICIES,
@@ -149,6 +151,23 @@ import {
   type FixtureMeta,
   type RecordedExchange,
 } from "../test/contract/_transport";
+import {
+  ARXIV_PAGE_2_START,
+  ARXIV_QUERY_EMPTY,
+  ARXIV_QUERY_ERROR_FEED,
+  ARXIV_QUERY_PAGINATED,
+  ARXIV_QUERY_PAIR,
+  ARXIV_QUERY_PREPRINT,
+  ARXIV_QUERY_RICH,
+  ARXIV_QUERY_SPARSE,
+  ARXIV_QUERY_SYNTHETIC_429,
+  ARXIV_QUERY_SYNTHETIC_500,
+  ARXIV_QUERY_SYNTHETIC_MALFORMED,
+  ARXIV_QUERY_TYPICAL,
+  ARXIV_QUERY_UNICODE,
+  ARXIV_QUERY_WRAPPED,
+  recordedArxivRequest,
+} from "../test/support/arxivRecordedRequests";
 import {
   CROSSREF_QUERY_DOI_STRING,
   CROSSREF_QUERY_EMPTY,
@@ -191,7 +210,12 @@ import {
 // ---------------------------------------------------------------------------
 
 /** The sources this recorder has a plan for. One directory per id (`docs/07` §2.2). */
-export const RECORDABLE_SOURCES = ["pubmed", "europepmc", "crossref"] as const;
+export const RECORDABLE_SOURCES = [
+  "pubmed",
+  "europepmc",
+  "crossref",
+  "arxiv",
+] as const;
 export type RecordableSourceId = (typeof RECORDABLE_SOURCES)[number];
 
 function isRecordableSource(value: string): value is RecordableSourceId {
@@ -1657,7 +1681,196 @@ function crossrefSyntheticPlan(
   return out;
 }
 
-// --- 7d. The registry -------------------------------------------------------
+// --- 7d. arXiv ----------------------------------------------------------------
+
+/**
+ * An arXiv `/api/query` request for the plan, exactly as the shipped adapter
+ * builds it (`recordedArxivRequest`): clamped `max_results`, `start` from the
+ * cursor or 0, `sortBy=relevance&sortOrder=descending`. No contact parameter
+ * and no key exist for this host (`docs/02` §7.1, §2.2).
+ */
+function arxivQuery(
+  scenario: string,
+  purpose: string,
+  query: SourceQuery,
+  cursor?: string,
+): PlannedRequest {
+  const built = recordedArxivRequest(query, cursor);
+  return {
+    scenario,
+    purpose,
+    method: built.method,
+    url: built.url,
+    endpoint: built.endpointBaseUrl,
+  };
+}
+
+/**
+ * arXiv's scenarios, every one known up front: `docs/13` §3.1's thirteen
+ * names less the three synthetic ones, plus `search-error-feed` (the card's
+ * "arXiv error-feed scenario", `docs/02` §7.5 note 6). Both paginated pages
+ * are independent because `start` is an offset, not a server cursor. The
+ * queries are `test/support/arxivRecordedRequests.ts`'s.
+ *
+ * **Twelve requests at one every three seconds** (`docs/02` §7.1, the ToU) —
+ * `spacingMsFor(ARXIV_HOST)` reads §7.3's row and gives 3031 ms. `docs/02`
+ * §7.1 also records that this network drew HTTP 429 from arXiv on every one
+ * of seven requests on 2026-09-15; a run that meets that again records
+ * nothing and says so per scenario.
+ */
+export function arxivIndependentPlan(): readonly PlannedRequest[] {
+  return [
+    arxivQuery(
+      "search-typical",
+      '§3.1: ~20 results for a stable query, date filter applied (all:"deep learning" AND all:protein, Q1 2023)',
+      ARXIV_QUERY_TYPICAL,
+    ),
+    arxivQuery(
+      "search-empty",
+      "§3.1 / docs/02 §7.5 note 7: zero results — totalResults 0, no entries",
+      ARXIV_QUERY_EMPTY,
+    ),
+    arxivQuery(
+      "search-single",
+      "§3.1: one result — off-by-one and not-an-array bugs (max_results 1)",
+      { ...ARXIV_QUERY_TYPICAL, limit: 1 },
+    ),
+    arxivQuery(
+      "record-rich",
+      "§3.1: every optional element populated (SciPy 1.0: arxiv:doi, journal_ref, comment, many authors)",
+      ARXIV_QUERY_RICH,
+    ),
+    arxivQuery(
+      "record-sparse",
+      "§3.1: nothing beyond the mandatory elements (docs/02 §7.4's own VizIt entry)",
+      ARXIV_QUERY_SPARSE,
+    ),
+    arxivQuery(
+      "record-unicode",
+      "§3.1: diacritics in titles and author names (Schrödinger cat)",
+      ARXIV_QUERY_UNICODE,
+    ),
+    arxivQuery(
+      "record-jats-abstract",
+      "§3.1's row, arXiv's analogue: a hard-wrapped <summary> with LaTeX (docs/02 §7.5 note 2)",
+      ARXIV_QUERY_WRAPPED,
+    ),
+    arxivQuery(
+      "record-preprint",
+      "§3.1: a preprint with a linked published DOI (<arxiv:doi>)",
+      ARXIV_QUERY_PREPRINT,
+    ),
+    arxivQuery(
+      "dedup-pair-set",
+      "§3.1: a paper also in PubMed, Crossref and Europe PMC (SciPy 1.0, by subtitle)",
+      ARXIV_QUERY_PAIR,
+    ),
+    arxivQuery(
+      "paginated-page-1",
+      "§3.1: page 1 of the typical query at max_results 3, start 0",
+      ARXIV_QUERY_PAGINATED,
+    ),
+    arxivQuery(
+      "paginated-page-2",
+      "§3.1: page 2, start 3 — an offset, so independent of page 1's answer",
+      ARXIV_QUERY_PAGINATED,
+      ARXIV_PAGE_2_START,
+    ),
+    arxivQuery(
+      "search-error-feed",
+      "docs/02 §7.5 note 6: the HTTP-200 error feed, provoked by a malformed raw.id_list",
+      ARXIV_QUERY_ERROR_FEED,
+    ),
+  ];
+}
+
+/**
+ * `error-429`'s arXiv body — **the measured shape** (`docs/02` §7.1,
+ * `P0-T21`, 2026-09-15): `HTTP/1.1 429 Unknown Error` from `server: Google
+ * Frontend`, `content-type: text/html`, a 14-byte body `Rate exceeded.` and
+ * **no `Retry-After`**. `docs/13` §3.1's row asks for a 429 "including
+ * `Retry-After`"; this host has never been observed to send one, and a
+ * fixture that invented the header would test a path arXiv does not take.
+ */
+const ARXIV_MEASURED_429_BODY = "Rate exceeded.";
+
+/** `error-500`'s arXiv body: a placeholder that says so. */
+const ARXIV_SYNTHETIC_500_BODY =
+  "<!-- synthetic fixture: docs/02 §7 records no arXiv 5xx body shape; a " +
+  "server error cannot be provoked on demand. Status is the assertable " +
+  "part. -->\n<html><body><h1>Internal Server Error</h1></body></html>\n";
+
+/**
+ * arXiv's three written fixtures: `error-429` (the measured shape, written
+ * rather than provoked — the ToU limit is not to be tripped on purpose),
+ * `error-500` and `error-malformed`.
+ *
+ * @param richBody - the recorded `record-rich` body, for `error-malformed`;
+ *   `undefined` skips that fixture
+ */
+function arxivSyntheticPlan(
+  richBody: string | undefined,
+): readonly SyntheticFixture[] {
+  const out: SyntheticFixture[] = [
+    {
+      planned: arxivQuery(
+        "error-429",
+        "§3.1: rate-limit response — arXiv's measured shape: text/html, 'Rate exceeded.', no Retry-After",
+        ARXIV_QUERY_SYNTHETIC_429,
+      ),
+      exchange: {
+        status: 429,
+        headers: {
+          "content-type": "text/html",
+          server: "Google Frontend",
+        },
+        body: ARXIV_MEASURED_429_BODY,
+      },
+      reason:
+        "Written from docs/02 §7.1's measurement of 2026-09-15 (P0-T21): " +
+        "every one of seven paced requests answered HTTP 429, " +
+        "content-type text/html, body 'Rate exceeded.', no Retry-After. " +
+        "Not provoked here — the three-second rule is a ToU obligation, and " +
+        "tripping it on purpose is not acceptable.",
+    },
+    {
+      planned: arxivQuery(
+        "error-500",
+        "§3.1: server error",
+        ARXIV_QUERY_SYNTHETIC_500,
+      ),
+      exchange: {
+        status: 500,
+        headers: { "content-type": "text/html" },
+        body: ARXIV_SYNTHETIC_500_BODY,
+      },
+      reason:
+        "Hand-written. A 5xx cannot be provoked on demand and docs/02 §7 " +
+        "records no arXiv 5xx body; the body is a placeholder.",
+    },
+  ];
+  if (richBody !== undefined) {
+    out.push({
+      planned: arxivQuery(
+        "error-malformed",
+        "§3.1: truncated/invalid body",
+        ARXIV_QUERY_SYNTHETIC_MALFORMED,
+      ),
+      exchange: {
+        status: 200,
+        headers: { "content-type": "application/atom+xml; charset=UTF-8" },
+        body: richBody.slice(0, MALFORMED_PREFIX_BYTES),
+      },
+      reason:
+        `Derived, not recorded: the first ${String(MALFORMED_PREFIX_BYTES)} ` +
+        `bytes of the recorded record-rich body, cut inside the XML. arXiv ` +
+        `has no documented way to ask for a truncated body.`,
+    });
+  }
+  return out;
+}
+
+// --- 7e. The registry -------------------------------------------------------
 
 /** The `record-rich` body a plan's `error-malformed` is cut from. */
 async function recordedRichBody(
@@ -1731,6 +1944,21 @@ export function planFor(source: RecordableSourceId): SourcePlan {
             await recordedRichBody(answer, crossrefIndependentPlan()),
           ),
         opaqueTokens: crossrefOpaqueTokens,
+      };
+    case "arxiv":
+      return {
+        source,
+        host: ARXIV_HOST,
+        fixtureDir: fixtureDirFor("arxiv"),
+        independent: arxivIndependentPlan,
+        // `start` is an offset, so page 2 is in the independent plan and
+        // nothing here depends on an earlier answer.
+        dependent: () => Promise.resolve([]),
+        syntheticRequests: () => arxivSyntheticPlan("").map((s) => s.planned),
+        syntheticFixtures: async (answer) =>
+          arxivSyntheticPlan(
+            await recordedRichBody(answer, arxivIndependentPlan()),
+          ),
       };
   }
 }

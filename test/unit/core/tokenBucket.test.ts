@@ -6,6 +6,7 @@ import { createMemoryPrefStore } from "../../../src/core/config";
 import { OperationCancelledError } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import {
+  ARXIV_HOST,
   createHostLimiterRegistry,
   CROSSREF_HOST,
   EBI_HOST,
@@ -1100,13 +1101,13 @@ describe("hostLimiter policy table", () => {
   it("carries docs/07 §7.3's NCBI row exactly, and serves every shipped row and no other", () => {
     // Phase 1 pinned this table at one row ("only that row in Phase 1").
     // `P2-T32` retired the pin: the table carries one row per host the shipped
-    // adapters talk to — NCBI (`P1-T04`), Europe PMC (`P2-T03`) and Crossref
-    // (`P2-T04`) — and the registry serves exactly those, in table order, each
+    // adapters talk to — NCBI (`P1-T04`), Europe PMC (`P2-T03`), Crossref
+    // (`P2-T04`) and arXiv (`P2-T06`) — and the registry serves exactly those, in table order, each
     // from §7.3. That every row here is a §7.3 row, with §7.3's own retry
     // cells, is asserted against the document itself in `backoff.test.ts`, so
     // this test names the hosts and leaves the numbers to the one place that
     // reads them off the page.
-    const shippedHosts = [NCBI_HOST, EBI_HOST, CROSSREF_HOST];
+    const shippedHosts = [NCBI_HOST, EBI_HOST, CROSSREF_HOST, ARXIV_HOST];
     expect(HOST_POLICIES.map((policy) => policy.host)).toEqual(shippedHosts);
     const clock = createManualClock();
     const registry = createHostLimiterRegistry({ clock });

@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "headers": {
+    "accept-ranges": "bytes",
+    "age": "0",
+    "connection": "keep-alive",
+    "content-length": "2606",
+    "content-type": "application/atom+xml; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 16:36:02 GMT",
+    "server": "Google Frontend",
+    "strict-transport-security": "max-age=300",
+    "via": "1.1 google, 1.1 varnish, 1.1 varnish, 1.1 varnish",
+    "x-cache": "MISS, MISS, MISS",
+    "x-cache-hits": "0, 0, 0",
+    "x-cloud-trace-context": "[redacted:32]",
+    "x-served-by": "cache-lga-kjfk8660046-LGA, cache-lga-kjfk8660046-LGA, cache-lga-kjfk8660046-LGA, cache-icn1450045-ICN",
+    "x-timer": "S1791995762.300240,VS0,VE276"
+  },
+  "body": "<?xml version='1.0' encoding='UTF-8'?>\n<feed xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\" xmlns:arxiv=\"http://arxiv.org/schemas/atom\" xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://arxiv.org/api/FCZHKGoObPXJcSkclNCbqbGCKTw</id>\n  <title>arXiv Query: search_query=ti:VizIt&amp;id_list=&amp;start=0&amp;max_results=5</title>\n  <updated>2026-10-14T16:36:02Z</updated>\n  <link href=\"https://arxiv.org/api/query?search_query=ti:VizIt&amp;start=0&amp;max_results=5&amp;id_list=\" type=\"application/atom+xml\"/>\n  <opensearch:itemsPerPage>5</opensearch:itemsPerPage>\n  <opensearch:totalResults>1</opensearch:totalResults>\n  <opensearch:startIndex>0</opensearch:startIndex>\n  <entry>\n    <id>http://arxiv.org/abs/2609.04658v1</id>\n    <title>VizIt: A multi-view framework for exploring single-cell, spatial, and genetic data online</title>\n    <updated>2026-09-04T02:40:47Z</updated>\n    <link href=\"https://arxiv.org/abs/2609.04658v1\" rel=\"alternate\" type=\"text/html\"/>\n    <link href=\"https://arxiv.org/pdf/2609.04658v1\" rel=\"related\" type=\"application/pdf\" title=\"pdf\"/>\n    <summary>Multi-omic studies increasingly require data to be examined from complementary biological perspectives, yet interactive exploration remains fragmented across modalities and tools. We present VizIt, an open-source framework for multi-view exploration of single-cell and spatial transcriptomic, epigenomic and genetic data. VizIt connects gene-, cell type-, condition-, spatial-, genomic region- and variant-centered views, enabling seamless navigation across biological perspectives. We demonstrate VizIt through the Parkinson's Cell Atlas, a customizable interactive multi-omic resource.</summary>\n    <category term=\"cs.IR\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <category term=\"q-bio.GN\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <published>2026-09-04T02:40:47Z</published>\n    <arxiv:primary_category term=\"cs.IR\"/>\n    <author>\n      <name>Chenhang Christopher Zhang</name>\n    </author>\n    <author>\n      <name>Yanqing Lou</name>\n    </author>\n    <author>\n      <name>Jie Yuan</name>\n    </author>\n    <author>\n      <name>Mingming Lu</name>\n    </author>\n    <author>\n      <name>Jacob Parker</name>\n    </author>\n    <author>\n      <name>Himanshu Chintalapudi</name>\n    </author>\n    <author>\n      <name>Zechuan Lin</name>\n    </author>\n    <author>\n      <name>Clemens R. Scherzer</name>\n    </author>\n    <author>\n      <name>Yuxuan Hu</name>\n    </author>\n    <author>\n      <name>Ruifeng Hu</name>\n    </author>\n    <author>\n      <name>Xianjun Dong</name>\n    </author>\n  </entry>\n</feed>\n"
+}

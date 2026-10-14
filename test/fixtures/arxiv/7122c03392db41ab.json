@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/atom+xml; charset=UTF-8"
+  },
+  "body": "<?xml version='1.0' encoding='UTF-8'?>\n<feed xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\" xmlns:arxiv=\"http://arxiv.org/schemas/atom\" xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://arxiv.org/api/5+3U/13C5KhMLFboGQqdqLUEvgM</id>\n  <title>arXiv Query: search_query=(ti:SciPy AND au:Virtanen)&amp;id_list=&amp;start=0&amp;max_results=5</title>\n  <updated>2026-10-14T16:35:59Z</updated>\n  <link href=\"https://arxiv.org/api/query?search_query=ti:SciPy+AND+au:Virtanen&amp;start=0&amp;max_results=5&amp;id_list=\" type=\"application/atom+xml\"/>\n  <opensearch:itemsPerPage>5</opensearch:itemsPerPage>\n  <opensearch:totalResults>1</opensearch:totalResults>\n  <opensearch:startIndex>0</opensearch:startIndex>\n  <entry>\n    <id>http://arxiv.org/abs/1907.10121v1</id>\n    <title>SciPy 1.0--Fundamental Algorithms for Scientific Computing in Python</title>\n    <updated>2019-07-23T20:31:36Z</updated>\n    <link href=\"https://arxiv.org/abs/1907.10121v1\" rel=\"alternate\" type=\"text/html\"/>\n    <link href=\"https://arxiv.org/p"
+}

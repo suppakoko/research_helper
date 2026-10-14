@@ -931,6 +931,19 @@ hard one-request-per-three-seconds Terms of Use obligation.
 - create `test/fixtures/arxiv/` (the `docs/13` §3.1 set, plus an arXiv error-feed scenario)
 
 **Do.**
+> **Corrected 2026-10-15 after the executing agent measured on the live API (report):** `docs/02` §7.5's error feed
+> arrives with HTTP **400** and an `https` entry id carrying a fragment, not the documented 200 and
+> `http://arxiv.org/api/errors` — the adapter handles both shapes, but on the measured path the shipped HTTP
+> client classifies the 400 before the body reaches the adapter, so arXiv's own sentence is lost (`plan/00` §6
+> item 159). §12.2's arXiv rendering splits unfielded terms between `abs:` and `all:` with no rule and writes no
+> parentheses while §7.2 states no precedence; the renderer uses `all:` for every unfielded term and groups
+> explicitly (item 160). Done-when 4's `archiveID` value is spelled (`arxivArchiveId`) and carried as `nativeId`,
+> but **nothing writes it into a Zotero item**: `toZoteroMapping` has no `preprint` arm by Phase 1 design, and
+> `src/zotero/itemMapper.ts` is outside this list (item 161). `docs/13` §3.1's `error-429` "including
+> `Retry-After`" does not match arXiv's measured 429 (no header); `record-jats-abstract` has no arXiv analogue
+> (plain text); `dedup-pair-set` cannot be a ≥ 3-source set from inside one adapter — `P2-T08`'s. The one test
+> that then kept the unit suite red — the Crossref file's three-host pin, outside this list — was loosened by
+> the coordinator on landing; the arXiv test deliberately pins no whole list.
 1. Implement `query.ts`: render `QueryNode` into `search_query` with `ti:`/`au:`/`abs:`/`all:`
    prefixes, `AND`/`OR`/`ANDNOT`, and the `submittedDate` range in `YYYYMMDDTTTT` GMT form,
    percent-encoding `(`→`%28`, `)`→`%29`, `"`→`%22`, `[`→`%5B`, `]`→`%5D`, spaces→`+`.
@@ -995,6 +1008,25 @@ part of this card — but it is the natural mitigation if `P2-T16`'s NFR-2 measu
 30 s. `docs/02` §7.3 also notes `submittedDate` excludes a 2022 paper revised in 2025; exposing
 `lastUpdatedDate` as an option is a post-v1 nicety, not Phase 2 scope.
 
+
+**Findings, 2026-10-15 — done; the product registers four sources; 13 live requests, 15 fixtures, one probe then one recording; full report at `plan/reports/P2-T06.md`.**
+Verified by the coordinator on the live tree: 15 fixture pairs under `test/fixtures/arxiv/` with the contact
+address absent in both spellings, no `MUTANT` marker, `typings/i10n.d.ts` moved `30bae1a7` → `73bccf22` by one
+member, both bundles declare `research-helper-source-arxiv = arXiv` once, typecheck 0, `lint:check` 0, the
+OpenAlex guard exit 0, the recorder dry run printing the 15 committed keys, and the whole unit suite **1,955
+passed with one failure** — `crossref.test.ts`'s three-host pin, the class `P2-T32` and `P2-T04` met before,
+loosened by the coordinator to assert only Crossref's place after Europe PMC (90 passed after). The agent's
+integration runs: 129 passed twice on the final tree, one earlier run failing an unrelated preferences-pane
+badge case once that did not recur. `createArxivSource` renders `ti:`/`abs:`/`au:`/`jr:` with `all:` for
+unfielded terms, `ANDNOT` for exclusions, explicit grouping, `submittedDate:[…0000 TO …2359]`, §12.2's
+percent-encoding, `start`/`max_results` paging with the 30,000 ceiling, and parses the Atom feed by
+`(namespaceURI, localName)` only — never `getElementsByTagName`; the versioned id is `nativeId`, the
+version-stripped id `ids.arxivId`, the DataCite DOI `ids.doi`, and `<arxiv:doi>` becomes
+`relatedVersionIds.doi` and never `ids.doi`; two consecutive searches on the real `TokenBucket` are 3,031 ms
+apart. `installServices` constructs it; 94 tests; **82 mutants, 81 killed, one that exposed a missing
+assertion and was then killed**. Thirteen corpus or card statements were wrong or incomplete and are dated
+above; the document edits are items 159–163 for the owner's review page. Live-request discipline held: one
+probe, one recording, no discards; today's 13 requests met no 429.
 ---
 
 ### P2-T07 — bioRxiv / medRxiv adapter (ID lookup and cross-walk only)

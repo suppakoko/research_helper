@@ -1,0 +1,13 @@
+{
+  "scenario": "error-malformed",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-14T16:36:27.007Z",
+  "endpoint": "https://export.arxiv.org/api/query",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Derived, not recorded: the first 1024 bytes of the recorded record-rich body, cut inside the XML. arXiv has no documented way to ask for a truncated body.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

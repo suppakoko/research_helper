@@ -161,6 +161,15 @@ export const EBI_HOST = "www.ebi.ac.uk";
 export const CROSSREF_HOST = "api.crossref.org";
 
 /**
+ * The host `P2-T06`'s arXiv adapter talks to — the authority of
+ * `https://export.arxiv.org/api/query` (`docs/02` §7.1; `https://` only, the
+ * plain scheme answers 301 with an empty body). Imported by
+ * `src/sources/arxiv/` rather than respelled, for the reason {@link EBI_HOST}
+ * gives.
+ */
+export const ARXIV_HOST = "export.arxiv.org";
+
+/**
  * `docs/07` §7.3's policy table, as far as Phase 1 needs it.
  *
  * **NCBI, the one row that ships now.** 2.5/s without a key and 8/s with one,
@@ -209,9 +218,9 @@ export const CROSSREF_HOST = "api.crossref.org";
  * **The five rows Phase 2 adds**, each from §7.3 verbatim and each with the card
  * that adds it: `www.ebi.ac.uk` (Europe PMC, `P2-T03` — **shipped below**),
  * `api.crossref.org` (Crossref, `P2-T04` — **shipped below**),
- * `api.semanticscholar.org`, `export.arxiv.org` — which
- * needs `minIntervalMs: 3000` and `maxConcurrent: 1`, aggregated across every
- * machine under our control — and `api.biorxiv.org`. `api.openalex.org` gets
+ * `api.semanticscholar.org`, `export.arxiv.org` (arXiv, `P2-T06` — **shipped
+ * below**, with `minIntervalMs: 3000` and `maxConcurrent: 1`, aggregated across
+ * every machine under our control) and `api.biorxiv.org`. `api.openalex.org` gets
  * **no** row: decision D2 puts OpenAlex out of v1 and one of `plan/03`'s cards
  * greps this file to prove it. The LLM and TTS hosts are Phase 3's and Phase 5's
  * and are driven from provider prefs rather than from a static row. **Each of
@@ -276,6 +285,25 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
     withoutKey: { ratePerSecond: 2, burst: 2, maxConcurrent: 3 },
     retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
     headerDriven: true,
+  },
+  {
+    // `docs/07` §7.3, `export.arxiv.org` (arXiv, `P2-T06`, 2026-10-15): 0.33/s,
+    // burst 1, max concurrent **1**, "enforced via `minIntervalMs: 3000` and
+    // `maxConcurrent: 1`"; retry 3000 ms / 30 000 ms / 3 (the cells the owner
+    // filled on 2026-10-14). The basis is a hard ToU obligation, not advice:
+    // "no more than one request every three seconds, and … a single
+    // connection at a time", aggregated across "all of the machines under
+    // your control as a whole" (`docs/09` §5.4). No key exists and no contact
+    // parameter is required (`docs/02` §7.1, §2.2), so no `withKey`, no
+    // `keyPresencePref`, and the `User-Agent` is good citizenship only.
+    host: ARXIV_HOST,
+    withoutKey: {
+      ratePerSecond: 0.33,
+      burst: 1,
+      maxConcurrent: 1,
+      minIntervalMs: 3000,
+    },
+    retry: { baseMs: 3000, capMs: 30_000, maxAttempts: 3 },
   },
 ];
 

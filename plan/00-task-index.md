@@ -950,7 +950,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     returns `null` for anything else; §11.3.1's `normPmid` strips every non-digit. One is wrong; the
     owner picks, then either `src/model/ids.ts` (with `test/unit/model/ids.test.ts`) or the document moves.
 
-91. **§11.3.1's old-style arXiv regex rejects real identifiers** such as `cond-mat.mes-hall/0309136`
+91. **§11.3.1's old-style arXiv regex rejects real identifiers** such as `cond-mat.mes-hall/0309136` *(2026-10-15, `P2-T06`: the 44 recorded entries held two old-style ids, both accepted; no dotted-class id occurred; the mapper keeps such a record keyed by its DataCite DOI with `ids.arxivId` absent and warned — a document decision only.)*
     (the class has a dotted subject). `normalizeArxivId` transcribes it verbatim; a document decision.
 
 92. **Two internal disagreements in `docs/02` §11:** the §11.3 tier table's Tier 6 band "MATCH (0.80–0.94)"
@@ -1257,6 +1257,37 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 158. **`P2-T21`'s report was never saved** — it predates the §6 convention; its measurements exist only in its
     Findings block. Nothing to recover; noted so no card goes looking for `plan/reports/P2-T21.md`.
+
+### 6.31 Raised by `P2-T06`, 2026-10-15 — recorded under rule 9, none carded
+
+159. **arXiv's error feed arrives as HTTP 400** (measured; `docs/02` §7.5 says 200) and the shipped HTTP client
+    turns any 4xx into `BadRequestError` before the adapter sees the body, so arXiv's own sentence
+    (`<summary>incorrect id format…</summary>`) is lost on the path arXiv takes. Decide whether
+    `src/core/http/client.ts` hands a 4xx body to the adapter for hosts whose error bodies are feeds; `docs/02`
+    §7.5 note 6 needs the measured status and the `https`-plus-fragment id either way.
+
+160. **(owner's document edits, `docs/02`)** §12.2's arXiv block: state the `abs:`/`all:` rule for unfielded terms
+    (the renderer uses `all:` for all) and the grouping it assumes (§7.2 states no precedence; the renderer
+    parenthesises); §7.4: `<published>` follows the `<category>` elements in the live feed; §7.1: the
+    2026-09-15 blanket 429 did not reproduce (13 of 13 answered); §10.2's `language` constant `"en"` is a
+    simplification arXiv's non-English e-prints contradict. Added to the owner review page as group 나.
+
+161. **Nothing writes `archiveID` into a Zotero item.** `toZoteroMapping` throws on `type: "preprint"` by Phase 1
+    design; `docs/07` §6.2's `archiveID` cell is reached by no code. The `preprint` arm (`archiveID` from
+    `arxivArchiveId(nativeId)`, `repository` from `containerTitle`) is `P2-T08`'s — its card already owns the
+    `preprint` item-type mapping; confirm its Files include `src/zotero/itemMapper.ts` before launch (rule 10).
+
+162. **(owner's document edit, `docs/13` §3.1)** arXiv's `error-429` carries no `Retry-After` (measured
+    2026-09-15 and reproduced in the synthetic fixture) and `record-jats-abstract` has no arXiv analogue;
+    the per-source scenario table should say which rows are source-specific.
+
+163. **`<arxiv:journal_ref>` and `<arxiv:comment>` have no `docs/07` §5.1 slot**; `journal_ref` is §11.4's
+    0.90 text-only signal and is present in 12 of 20 typical entries. `P2-T11` decides whether it wants it.
+
+164. **For `P2-T08`:** the SciPy 1.0 paper (arXiv `1907.10121`, PMID 32015543, DOI `10.1038/s41592-019-0686-2`)
+    is on all four shipped sources; recording it on the other three (three requests) gives a real four-way
+    `dedup-pair-set`. **For `P2-T12`:** arXiv lookups go through `id_list` (`lookupById: ["arxivId"]`), which
+    `raw` deliberately leaves unreserved today.
 
 ## 7. Regenerating this file
 

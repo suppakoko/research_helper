@@ -1,0 +1,13 @@
+{
+  "scenario": "error-429",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-14T16:36:27.005Z",
+  "endpoint": "https://export.arxiv.org/api/query",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Written from docs/02 §7.1's measurement of 2026-09-15 (P0-T21): every one of seven paced requests answered HTTP 429, content-type text/html, body 'Rate exceeded.', no Retry-After. Not provoked here — the three-second rule is a ToU obligation, and tripping it on purpose is not acceptable.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

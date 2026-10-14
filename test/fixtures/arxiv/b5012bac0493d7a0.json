@@ -1,0 +1,19 @@
+{
+  "status": 400,
+  "headers": {
+    "accept-ranges": "bytes",
+    "connection": "keep-alive",
+    "content-length": "878",
+    "content-type": "application/atom+xml; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 16:36:27 GMT",
+    "server": "Google Frontend",
+    "strict-transport-security": "max-age=300",
+    "via": "1.1 google, 1.1 varnish, 1.1 varnish, 1.1 varnish",
+    "x-cache": "MISS, MISS, MISS",
+    "x-cache-hits": "0, 0, 0",
+    "x-cloud-trace-context": "[redacted:32]",
+    "x-served-by": "cache-lga-kjfk8660030-LGA, cache-lga-kjfk8660030-LGA, cache-lga-kjfk8660030-LGA, cache-icn1450045-ICN",
+    "x-timer": "S1791995787.824994,VS0,VE272"
+  },
+  "body": "<?xml version='1.0' encoding='UTF-8'?>\n<feed xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\" xmlns:arxiv=\"http://arxiv.org/schemas/atom\" xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://arxiv.org/</id>\n  <title>arXiv Search Results</title>\n  <updated>2026-10-14T16:36:26Z</updated>\n  <opensearch:itemsPerPage>1</opensearch:itemsPerPage>\n  <opensearch:totalResults>1</opensearch:totalResults>\n  <opensearch:startIndex>0</opensearch:startIndex>\n  <entry>\n    <id>https://arxiv.org/api/errors#incorrect_id_format_for_not-an-arxiv-id</id>\n    <title>Error</title>\n    <updated>2026-10-14T16:36:26Z</updated>\n    <link href=\"https://arxiv.org/api/errors#incorrect_id_format_for_not-an-arxiv-id\" rel=\"alternate\" type=\"text/html\"/>\n    <summary>incorrect id format for not-an-arxiv-id</summary>\n    <author>\n      <name>arXiv api core</name>\n    </author>\n  </entry>\n</feed>\n"
+}

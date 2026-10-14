@@ -1113,7 +1113,13 @@ describe("hostLimiter: the api.crossref.org row", () => {
     const registry = createHostLimiterRegistry({
       clock: createManualClock(NOW),
     });
-    expect(registry.hosts).toEqual([NCBI_HOST, EBI_HOST, CROSSREF_HOST]);
+    // Until 2026-10-15 this pinned the whole host list to three; P2-T06's
+    // arXiv row made it stale. tokenBucket.test.ts owns the full shipped-host
+    // list; here only this row's place after Europe PMC is asserted.
+    expect(registry.hosts).toContain(CROSSREF_HOST);
+    expect(registry.hosts.indexOf(CROSSREF_HOST)).toBeGreaterThan(
+      registry.hosts.indexOf(EBI_HOST),
+    );
     expect(registry.limiterFor(CROSSREF_HOST)).toBeDefined();
     expect(registry.limiterFor(CROSSREF_HOST)).not.toBe(
       registry.limiterFor(EBI_HOST),

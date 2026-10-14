@@ -4,7 +4,7 @@
  * **Scope.** `P1-T07` step 5: register `pubmed` and nothing else; `P2-T03`
  * adds the `europepmc` slot (see {@link SourceAdapters}) and `P2-T32` makes
  * the composition root fill it (see {@link ShippedSourceAdapters}); `P2-T04`
- * adds `crossref` and fills it in the same card.
+ * adds `crossref` and `P2-T06` adds `arxiv`, each filled in the same card.
  * `docs/07` §11.1 step 8 makes this file the *only* place a new source is wired
  * in — that is what lets step 11 claim "the source appears automatically in the
  * search dialog because it is rendered from the registry", and what keeps
@@ -71,6 +71,12 @@ export interface SourceAdapters {
    * {@link ShippedSourceAdapters}.
    */
   readonly crossref?: LiteratureSource;
+  /**
+   * `P2-T06`'s adapter, constructed by `installServices` in the same card.
+   * Optional on this interface for the reason `europepmc` is; required on
+   * {@link ShippedSourceAdapters}.
+   */
+  readonly arxiv?: LiteratureSource;
 }
 
 /**

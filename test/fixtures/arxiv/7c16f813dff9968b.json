@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "headers": {
+    "accept-ranges": "bytes",
+    "age": "0",
+    "connection": "keep-alive",
+    "content-length": "810",
+    "content-type": "application/atom+xml; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 16:35:52 GMT",
+    "server": "Google Frontend",
+    "strict-transport-security": "max-age=300",
+    "via": "1.1 google, 1.1 varnish, 1.1 varnish, 1.1 varnish",
+    "x-cache": "MISS, MISS, MISS",
+    "x-cache-hits": "0, 0, 0",
+    "x-cloud-trace-context": "[redacted:32]",
+    "x-served-by": "cache-lga-kjfk8660077-LGA, cache-lga-kjfk8660077-LGA, cache-lga-kjfk8660077-LGA, cache-icn1450045-ICN",
+    "x-timer": "S1791995752.468494,VS0,VE293"
+  },
+  "body": "<?xml version='1.0' encoding='UTF-8'?>\n<feed xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\" xmlns:arxiv=\"http://arxiv.org/schemas/atom\" xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://arxiv.org/api/EJpseb69IS8xFQyEDBC1cEHzB8E</id>\n  <title>arXiv Query: search_query=all:zqxjkwvqpzmbt AND submittedDate:\"202301010000 TO 202303312359\"&amp;id_list=&amp;start=0&amp;max_results=20</title>\n  <updated>2026-10-14T16:35:52Z</updated>\n  <link href=\"https://arxiv.org/api/query?search_query=all:zqxjkwvqpzmbt+AND+submittedDate:%22202301010000+TO+202303312359%22&amp;start=0&amp;max_results=20&amp;id_list=\" type=\"application/atom+xml\"/>\n  <opensearch:itemsPerPage>20</opensearch:itemsPerPage>\n  <opensearch:totalResults>0</opensearch:totalResults>\n  <opensearch:startIndex>0</opensearch:startIndex>\n</feed>\n"
+}

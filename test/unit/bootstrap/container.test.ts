@@ -39,6 +39,7 @@ import {
 } from "../../../src/core/jobQueue/progress";
 import { LOG_PREFIX, type LogSink } from "../../../src/core/logger";
 import {
+  ARXIV_HOST,
   CROSSREF_HOST,
   EBI_HOST,
   NCBI_HOST,
@@ -398,27 +399,38 @@ describe("installServices wires the graph Phase 1 built", () => {
     expect(peekHostLimiters()).toBe(graph.limiters);
     expect(getHttpClient()).toBe(graph.http);
     // `docs/07` §7.3's rows for the hosts the registered adapters talk to:
-    // NCBI (`P1-T04`), Europe PMC (`P2-T03`, wired by `P2-T32`) and Crossref
-    // (`P2-T04`). Phase 1 pinned this at one host; the pin went with the
-    // second adapter.
-    expect(graph.limiters.hosts).toEqual([NCBI_HOST, EBI_HOST, CROSSREF_HOST]);
+    // NCBI (`P1-T04`), Europe PMC (`P2-T03`, wired by `P2-T32`), Crossref
+    // (`P2-T04`) and arXiv (`P2-T06`). Phase 1 pinned this at one host; the
+    // pin went with the second adapter.
+    expect(graph.limiters.hosts).toEqual([
+      NCBI_HOST,
+      EBI_HOST,
+      CROSSREF_HOST,
+      ARXIV_HOST,
+    ]);
     expect(graph.limiters.limiterFor(NCBI_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(EBI_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(CROSSREF_HOST)).toBeDefined();
+    expect(graph.limiters.limiterFor(ARXIV_HOST)).toBeDefined();
     // `registerSources()` was handed every adapter, in `SOURCE_IDS` order —
     // the order the search dialog's Databases row renders (`docs/08` §4.2).
     expect(graph.sources.list().map((source) => source.id)).toEqual([
       "pubmed",
       "europepmc",
       "crossref",
+      "arxiv",
     ]);
     expect(graph.sources.list().map((source) => source.displayNameKey)).toEqual(
       [
         "research-helper-source-pubmed",
         "research-helper-source-europepmc",
         "research-helper-source-crossref",
+        "research-helper-source-arxiv",
       ],
     );
+    // The arXiv adapter paces on §7.3's `export.arxiv.org` bucket through the
+    // client, which is the one place the three-second rule is enforced.
+    expect(graph.sources.get("arxiv")?.rateLimitKey).toBe(ARXIV_HOST);
     // The Crossref adapter paces on the same bucket the client does, so its
     // header-driven `reconfigure()` lands on the limiter that actually paces.
     expect(graph.sources.get("crossref")?.rateLimitKey).toBe(CROSSREF_HOST);

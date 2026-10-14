@@ -212,6 +212,8 @@ import type { SecretStore } from "../core/secretStore";
 import type { PipelineRegistry } from "../pipeline/registry";
 import type { PipelineContext, PipelineId } from "../pipeline/types";
 import { getPref, setPrefStore } from "../prefs";
+import { createArxivSource } from "../sources/arxiv/arxivSource";
+import { createArxivRecordMapper } from "../sources/arxiv/mapper";
 import { createCrossrefSource } from "../sources/crossref/crossrefSource";
 import { createCrossrefRecordMapper } from "../sources/crossref/mapper";
 import { createEuropePmcSource } from "../sources/europepmc/europepmcSource";
@@ -1442,6 +1444,18 @@ export async function installServices(
       mapRecords: createCrossrefRecordMapper({ clock, keepRaw, logger }),
       userContactEmail: () => getPref("contactEmail"),
       ...(crossrefLimiter !== undefined && { limiter: crossrefLimiter }),
+      logger,
+    }),
+    // arXiv (`P2-T06`). No key and no contact parameter exist (`docs/02`
+    // §7.1, §2.2). The three-second rule is the client's: `limiterFor` above
+    // resolves §7.3's `export.arxiv.org` bucket for every request to that
+    // host, so the adapter needs nothing beyond the client, the clock and
+    // the mapper (same resolved `keepRaw`, same §5.1 reason). `DOMParser` is
+    // the sandbox's own and the adapter's default.
+    arxiv: createArxivSource({
+      http,
+      clock,
+      mapRecords: createArxivRecordMapper({ clock, keepRaw, logger }),
       logger,
     }),
   } satisfies ShippedSourceAdapters);

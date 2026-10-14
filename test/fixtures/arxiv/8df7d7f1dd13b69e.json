@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "headers": {
+    "accept-ranges": "bytes",
+    "age": "0",
+    "connection": "keep-alive",
+    "content-length": "2490",
+    "content-type": "application/atom+xml; charset=utf-8",
+    "date": "Wed, 14 Oct 2026 16:36:10 GMT",
+    "server": "Google Frontend",
+    "strict-transport-security": "max-age=300",
+    "via": "1.1 google, 1.1 varnish, 1.1 varnish, 1.1 varnish",
+    "x-cache": "MISS, MISS, MISS",
+    "x-cache-hits": "0, 0, 0",
+    "x-cloud-trace-context": "[redacted:32]",
+    "x-served-by": "cache-lga-kjfk8660052-LGA, cache-lga-kjfk8660052-LGA, cache-lga-kjfk8660052-LGA, cache-icn1450045-ICN",
+    "x-timer": "S1791995770.613143,VS0,VE461"
+  },
+  "body": "<?xml version='1.0' encoding='UTF-8'?>\n<feed xmlns:opensearch=\"http://a9.com/-/spec/opensearch/1.1/\" xmlns:arxiv=\"http://arxiv.org/schemas/atom\" xmlns=\"http://www.w3.org/2005/Atom\">\n  <id>https://arxiv.org/api/RGFGBgAFn05ujbMguKJOgP/BJKg</id>\n  <title>arXiv Query: search_query=ti:\"Riemann hypothesis\"&amp;id_list=&amp;start=0&amp;max_results=2</title>\n  <updated>2026-10-14T16:36:09Z</updated>\n  <link href=\"https://arxiv.org/api/query?search_query=ti:%22Riemann+hypothesis%22&amp;start=0&amp;max_results=2&amp;id_list=\" type=\"application/atom+xml\"/>\n  <opensearch:itemsPerPage>2</opensearch:itemsPerPage>\n  <opensearch:totalResults>392</opensearch:totalResults>\n  <opensearch:startIndex>0</opensearch:startIndex>\n  <entry>\n    <id>http://arxiv.org/abs/math/9909153v1</id>\n    <title>Riemann Hypothesis</title>\n    <updated>1999-09-25T04:05:53Z</updated>\n    <link href=\"https://arxiv.org/abs/math/9909153v1\" rel=\"alternate\" type=\"text/html\"/>\n    <link href=\"https://arxiv.org/pdf/math/9909153v1\" rel=\"related\" type=\"application/pdf\" title=\"pdf\"/>\n    <summary>  Through an equivalent condition on the Farey series set forth by Franel and Landau, we prove Riemann Hypothesis for the Riemann zeta-function and the Dirichlet L-function.</summary>\n    <category term=\"math.GM\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <published>1999-09-25T04:05:53Z</published>\n    <arxiv:comment>7 pages</arxiv:comment>\n    <arxiv:primary_category term=\"math.GM\"/>\n    <author>\n      <name>Chengyan Liu</name>\n    </author>\n  </entry>\n  <entry>\n    <id>http://arxiv.org/abs/1711.11416v31</id>\n    <title>Riemann hypothesis</title>\n    <updated>2023-06-01T03:35:04Z</updated>\n    <link href=\"https://arxiv.org/abs/1711.11416v31\" rel=\"alternate\" type=\"text/html\"/>\n    <link href=\"https://arxiv.org/pdf/1711.11416v31\" rel=\"related\" type=\"application/pdf\" title=\"pdf\"/>\n    <summary>This work is dedicated to the promotion of the results Hadamard, Landau E., Walvis A., Estarmann T and Paul R. Chernoff for pseudo zeta functions. The properties of zeta functions are studied, these properties can lead to new regularities of zeta functions.</summary>\n    <category term=\"math.GM\" scheme=\"http://arxiv.org/schemas/atom\"/>\n    <published>2017-11-29T11:56:49Z</published>\n    <arxiv:comment>6 pages. arXiv admin note: substantial text overlap with arXiv:1605.06018</arxiv:comment>\n    <arxiv:primary_category term=\"math.GM\"/>\n    <author>\n      <name>A. Durmagambetov</name>\n    </author>\n  </entry>\n</feed>\n"
+}
