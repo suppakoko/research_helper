@@ -3388,6 +3388,8 @@ observation is pre-existing and already recorded by `P1-T26`: the **upward** hal
 is deliberately unimplemented and therefore unasserted, and `hostLimiter.ts`'s own comment says that
 question belongs with Phase 2's Crossref row.
 
+---
+
 ### P2-T24 — Correct the three statements `P2-T21` made false, including one in the authority document
 
 | Field | Value |
