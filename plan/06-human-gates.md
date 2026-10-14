@@ -151,6 +151,11 @@ confirmed.
 
 ### G-03 — Apply for the Semantic Scholar API key
 
+> **Status 2026-10-14 (owner): applied for, not yet received.** `P2-T05` builds the unauthenticated path as
+> the default and leaves the keyed path's live test for the day the key arrives; the key then goes in through
+> the runtime dialog only, never a file or a chat message. Until it arrives this gate stays open and `G-26`
+> cannot start.
+
 > **The record of this gate rests on one sentence and nothing else — flagged 2026-10-08 so it is not
 > mistaken for a confirmed fact.** The status log below reads "Submitted" because **the owner reported on
 > 2026-09-15 that the application had been submitted**. No agent submitted it and no agent could: this is a

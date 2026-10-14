@@ -573,6 +573,11 @@ in the polite pool, with its Boolean lossiness handled explicitly rather than si
 - create `test/fixtures/crossref/` (the `docs/13` §3.1 set)
 
 **Do.**
+> **Coordinator note 2026-10-14.** Order decided by the owner: the four adapters run one at a time because they
+> share five files — Crossref first, then arXiv (`P2-T06`), Semantic Scholar (`P2-T05`), bioRxiv/medRxiv
+> (`P2-T07`); `P2-T24` runs beside Crossref since its files differ. Record fixtures through
+> `npm run fixtures:record -- --source crossref` (`P2-T33`), and read `docs/07` §7.3's Crossref row, now
+> filled (1000 ms / 30 000 ms / 3; `Retry-After` and the rate-limit headers override the base).
 1. Implement `query.ts` per `docs/02` §12.2: bag-of-words into `query.bibliographic`, `title:` terms
    into `query.title`, `author:` into `query.author`, date window into
    `filter=from-pub-date:…,until-pub-date:…`, and return the dropped NOT terms as a client-side
@@ -720,6 +725,10 @@ are thin.
 - create `test/fixtures/semanticscholar/` (the `docs/13` §3.1 set, plus an unauthenticated-429 scenario)
 
 **Do.**
+> **Coordinator note 2026-10-14.** The owner confirmed the Semantic Scholar key is applied for and not yet
+> received (`G-03`). Build and test the unauthenticated path fully; implement the keyed path against the
+> documented contract but mark its live test as waiting on the key, and say so in the report. Do not ask for
+> the key, do not stub a key value anywhere.
 1. Implement `query.ts` with **two** renderings (`docs/02` §12.2): the bulk-endpoint form with
    `+`/`|`/`-`/quotes/parentheses, and the plain-text form for `/paper/search`. Normalise hyphens
    inside terms to spaces **first**, then apply `-` as NOT.
