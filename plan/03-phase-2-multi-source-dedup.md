@@ -1512,7 +1512,7 @@ complete list of preferences and a new one has to be added there first.
 |---|---|
 | **ID** | `P2-T12` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29` |
+| **Depends on** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29`, `P2-T30` |
 | **Blocks** | `P2-T16`, `P2-T18` |
 | **Retires** | part of `R-17` |
 | **Implements** | `FR-50`, part of `NFR-6` |
@@ -1701,7 +1701,7 @@ so expect to move them, and expect the report diff to be the evidence.
 |---|---|
 | **ID** | `P2-T14` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29` |
+| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31` |
 | **Blocks** | `P2-T16`, `P2-T17` |
 | **Retires** | part of `R-2`, part of `R-18` |
 | **Implements** | `FR-2`, `FR-5`, `FR-9`, `FR-50`, `FR-53` |
@@ -2454,7 +2454,7 @@ decision record's section 5 today; whether the run-time half is worth a card is 
 |---|---|
 | **ID** | `P2-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29` |
+| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31` |
 | **Blocks** | none |
 | **Retires** | `R-2`, `R-18` (closes them), `R-3` (fallback proven) |
 | **Implements** | `FR-9`, `FR-50`, `FR-51`, `NFR-2`, `NFR-6` |
@@ -3968,7 +3968,7 @@ renders or stay at §12.3's four. Adapter cards now fill `capabilities.query` fr
 | **ID** | `P2-T29` |
 | **State** | `TODO` |
 | **Depends on** | `P2-T10`, `P2-T27` |
-| **Blocks** | `P2-T12`, `P2-T14`, `P2-T16` |
+| **Blocks** | `P2-T12`, `P2-T14`, `P2-T16`, `P2-T30`, `P2-T31` |
 | **Retires** | `plan/00` §6 item 98 |
 | **Implements** | `FR-50`, `FR-51` in the shipped product (`P2-T09` and `P2-T10` built them in functions nothing calls) |
 | **Estimate** | 0.5 d |
@@ -3994,6 +3994,16 @@ finishing condition (a cross-indexed paper appears exactly once) cannot be met b
   (`CanonicalWork`); `docs/10` FR-50 scenario 2, FR-51.
 
 **Do.**
+> **Corrected 2026-10-14 after the executing agent delivered (report):** step 2's `flags`/`links` are **optional**
+> members, not required — two unit-test fixtures in `test/unit/ui/` construct `SearchImportOutput` literals
+> and are outside this list (`P2-T31` closes it, the same shape as `P2-T27`'s `pool?`). Step 1 needed
+> `RunState.perSource` to become reassignable, since `attributeDeduplicatedAway` returns a new array. One
+> Phase 1 test asserted the opposite of this Goal (`P1-T16`'s "Deduping removes nothing in Phase 1") and is
+> now inverted with its reason. **And criterion 4 cannot pass on this tree:** `P1-T23`'s NFR-1/NFR-3 case
+> fails four runs out of four with a 246–274 ms main-thread stall (budget 100 ms; Phase 1 measured 38–79 ms)
+> because `dedupeRecords` is synchronous and the fixtures fall into one block of 4,851 comparisons — `P2-T30`
+> (yield between blocks) is created under rule 9. The import half also re-merges the representative alone,
+> so the written item is narrower than the preview — `P2-T31`.
 1. In `run`, replace the `liftToCanonicalWorks` call for fetched runs with `dedupeAndMerge`:
    `state.records = result.records`, `state.works = result.works`, then
    `state.perSource = attributeDeduplicatedAway(…)` so each source's `recordsDeduplicatedAway` is no
@@ -4025,6 +4035,167 @@ finishing condition (a cross-indexed paper appears exactly once) cannot be met b
 - modify `src/pipeline/searchImport/searchImportPipeline.ts`
 - modify `src/pipeline/searchImport/types.ts`
 - modify `test/unit/pipeline/searchImport.test.ts`
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+
+**Findings, 2026-10-14 — wired, tested, mutation-clean inside the three files; the product now dedups and merges on every search; one Phase 1 timing test regressed (`P2-T30`) and the import half is narrower than the preview (`P2-T31`); full report at `plan/reports/P2-T29.md`.**
+Verified by the coordinator on the live tree: the three md5 hashes equal the agent's (`9fc4ec6e`, `9eb6c235`,
+`b709fd1a`) and `stages.ts` unchanged, `liftToCanonicalWorks` survives only in two comments, no `MUTANT`
+marker, typecheck 0, the pipeline test files **91 passed**, and one integration run reproduced the agent's
+three: **127 passed, 1 failed, 2 pending**, the failure being `P1-T23`'s NFR-3 half with a **252 ms** stall
+(agent: 274 / 246 / 269) — four of four, a regression by the three-run rule, not noise. `run`'s `Merging`
+calls `dedupeAndMerge` and `Deduping` calls `attributeDeduplicatedAway`; two sources returning the same DOI
+yield one work with both in `seenIn` and the fold charged to the non-representative source; a preprint and
+its published version yield two linked works and one `links` entry; a flagged pair two works and one
+`flags` entry; the `selectedWorks` and `seenIn[0]` positional contracts hold on the merged shape. Nine
+mutants, nine killed (including `liftToCanonicalWorks` kept in place, the attribution skipped, each output
+member dropped, and `works` misaligned with `records`). Three facts change what comes next: the cascade
+runs on the main thread and the fixtures (and real same-topic result sets) fall into one block, so NFR-3's
+own prescription — chunk with yields — becomes `P2-T30`; the window's import path passes representatives
+back and `run` re-merges them as singletons, so the written item has one source where the preview had two
+— `P2-T31`; and `P2-T03`'s in-flight limiter row reds four Phase 1 unit tests that pin the table at one host,
+to be handled when that card lands. The whole-chain `Verify with` could not run as one command on the
+shared tree; each leg's count is stated with its run.
+---
+
+### P2-T30 — Make the dedup cascade yield, so `Merging` stops stalling the main thread past NFR-3
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T30` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T29` |
+| **Blocks** | `P2-T12`, `P2-T14`, `P2-T16`, `P2-T31` |
+| **Retires** | `plan/00` §6 item 119 |
+| **Implements** | `NFR-3` on the `Merging` stage |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** A 100-record import keeps every main-thread stall under 100 ms again, with the dedup cascade
+still running on every record.
+
+**Why this is a card (rule 9).** `P2-T29` wired `dedupeAndMerge` into `run` and `P1-T23`'s
+"§2 criterion 2 / NFR-1" case began failing its NFR-3 half **four runs out of four**: the longest
+main-thread stall during the 100-record import was 274 / 246 / 269 / 252 ms against the 100 ms budget,
+where Phase 1 measured 38–79 ms with no gap. `dedupeRecords` in `src/sources/shared/dedupe.ts` is
+synchronous; the fixtures' titles all share their longest words, so its blocking step puts all 100
+records in one block and compares 4,851 pairs (33–45 ms in Node, several times that under Zotero with
+the toolbox attached). Real result sets for one query also share topical words. NFR-3 is a Phase 2
+finishing condition and its own text says how: "long parsing/normalization work is chunked with yields".
+
+**Read first.**
+- `plan/reports/P2-T29.md` — Contradictions item 2 and the Node timing; `docs/10` NFR-3.
+- `dedupeRecords`, `blockingSignature`, `DedupCounter` in `src/sources/shared/dedupe.ts`; `dedupeAndMerge`
+  in `src/pipeline/searchImport/stages.ts`; the `Merging` call in `run`
+  (`src/pipeline/searchImport/searchImportPipeline.ts`); how `P1-T14`'s chunked write in
+  `src/zotero/importer.ts` yields (the project's existing pattern) and what clock/yield primitive
+  `src/core/` offers.
+- `P1-T23`'s NFR-1/NFR-3 case in `test/integration/phase1-dod.spec.ts` — the assertion to make green
+  without changing it.
+
+**Do.**
+1. Give `dedupeRecords` an asynchronous form that yields to the event loop between blocks (and inside a
+   block every N comparisons, N a named exported constant), without changing a single verdict: the
+   synchronous result and the asynchronous result must be deep-equal on every existing test fixture.
+   Keep the synchronous function if unit tests or `matchAgainstLibrary` still need it; say which.
+2. Make `dedupeAndMerge` asynchronous over it and `run`'s `Merging` await it, keeping the cancellation
+   token checked at every yield so Cancel still aborts within FR-10's budget.
+3. Re-measure `P1-T23`'s case: three runs, each stall figure in the report. Record the figures in
+   `plan/00` §5's NFR-3 row through the Findings.
+
+**Do NOT.** Do not change any dedup verdict, threshold or tier. Do not skip the merge for one-source
+runs. Do not widen the blocking signature to make fewer pairs. Do not move work to a worker thread
+(Zotero's sandbox has none the corpus documents).
+
+**Criteria.**
+- [ ] The asynchronous cascade returns a result deep-equal to the synchronous one on every fixture in
+      `test/unit/sources/dedupe.test.ts`, asserted.
+- [ ] A cancellation during the cascade stops it at the next yield, asserted.
+- [ ] `P1-T23`'s NFR-1/NFR-3 case passes **three runs out of three** with every stall ≤ 100 ms; the
+      figures are in the Findings.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
+
+**Files.**
+- modify `src/sources/shared/dedupe.ts`
+- modify `src/pipeline/searchImport/stages.ts`
+- modify `src/pipeline/searchImport/searchImportPipeline.ts`
+- modify `test/unit/sources/dedupe.test.ts`
+- modify `test/unit/pipeline/searchImport.test.ts`
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+---
+
+### P2-T31 — Give the import half the merged work the preview showed, and make `flags`/`links` required
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T31` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T29`, `P2-T30` |
+| **Blocks** | `P2-T14`, `P2-T16` |
+| **Retires** | `plan/00` §6 items 118 and 120 |
+| **Implements** | `FR-50` scenario 2 and `FR-8` on the written item (the preview already has them) |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** The item written into Zotero is the same merged work the results table showed — every
+contributing source in `seenIn`, every field the other sources won — not a one-source re-merge of the
+representative record.
+
+**Why this is a card (rule 9).** After `P2-T29`, the search window's import path in
+`src/ui/viewModels/searchImportViewModel.ts` passes `output.records` (now one representative per work)
+back through `toPipelineInput` as `SearchImportInput.records`, and `run` merges each as a singleton: the
+written `CanonicalWork` has one source and loses the fields the other contributors won in the preview.
+Phase 2's first finishing condition wants the cross-indexed paper once **with all contributing sources
+listed**; today that is true on screen and false in the library. The same card closes the `flags?` /
+`links?` optionality `P2-T29` had to leave, because the two unit-test fixtures that forced it are in this
+card's list.
+
+**Read first.**
+- `plan/reports/P2-T29.md` — Contradictions item 3 and Follow-ups 1 and 3.
+- `DedupeMergeResult` (its `merged` groups) and `MergedWork` in `src/pipeline/searchImport/stages.ts`;
+  `SearchImportInput`, `SearchImportOutput` in `src/pipeline/searchImport/types.ts`; `toPipelineInput` and
+  the import path in `src/ui/viewModels/searchImportViewModel.ts`; `selectedWorks` and `run`'s
+  supplied-records path in `src/pipeline/searchImport/searchImportPipeline.ts`.
+
+**Do.**
+1. Choose the simpler of two and say why: (a) `SearchImportOutput` carries every fetched record
+   (or the `merged` groups) and the view model passes **all contributing records** of the checked works
+   back, so `run`'s merge reproduces the preview; or (b) `SearchImportInput` accepts the preview's
+   `works` and `run` skips `Merging` for a supplied work list. Either way the written work must
+   deep-equal the previewed one, asserted.
+2. Make `SearchImportOutput.flags` and `links` required; add `flags: [], links: []` to the fixtures in
+   `test/unit/ui/searchImportViewModel-export.test.ts` and `test/unit/ui/searchImportViewModel.test.ts`.
+3. Refresh the stale prose `P2-T29` left outside its list: `stages.ts`'s "Deduping and Merging" header
+   paragraph and `attributeDeduplicatedAway`'s doc; the `liftToCanonicalWorks` mention in
+   `src/zotero/itemMapper.ts`.
+
+**Do NOT.** Do not change `merge` or `dedupeRecords`. Do not render anything new in the window
+(`P2-T14`). Do not touch the adapters.
+
+**Criteria.**
+- [ ] A two-source same-DOI preview followed by an import of that work writes a `CanonicalWork` whose
+      `seenIn` and `fieldOrigin` equal the preview's, asserted at pipeline level and once in the
+      window's integration spec.
+- [ ] `SearchImportOutput.flags` and `links` are required members.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
+
+**Files.**
+- modify `src/pipeline/searchImport/searchImportPipeline.ts`
+- modify `src/pipeline/searchImport/types.ts`
+- modify `src/pipeline/searchImport/stages.ts` (prose only)
+- modify `src/ui/viewModels/searchImportViewModel.ts`
+- modify `src/zotero/itemMapper.ts` (prose only)
+- modify `test/unit/pipeline/searchImport.test.ts`, `test/unit/ui/searchImportViewModel.test.ts`,
+  `test/unit/ui/searchImportViewModel-export.test.ts`, `test/integration/searchDialog-flow.spec.ts`
 
 **Verify with.**
 ```bash
@@ -4067,7 +4238,9 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 | `P2-T27` | Wire `fanOut` into the running pipeline | 0.50 |
 | `P2-T28` | The per-source query dialect's home in `SourceCapabilities` | 0.25 |
 | `P2-T29` | Wire `dedupeAndMerge` into the running pipeline | 0.50 |
-| **Total** | **29 tasks** | **29.00 d** |
+| `P2-T30` | Make the dedup cascade yield (NFR-3 on `Merging`) | 0.50 |
+| `P2-T31` | The import half gets the merged work; `flags`/`links` required | 0.50 |
+| **Total** | **31 tasks** | **30.00 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather

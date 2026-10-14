@@ -24,12 +24,20 @@
  *    conflict `C7`, which `plan/02` §4 resolves exactly that way. So the write
  *    half is batched, a cancel between batches keeps every earlier batch, and
  *    the outcome carries the count.
- * 3. **`Merging` and `Deduping` are honest no-ops.** `P1-T16` step 3 asks for
- *    them as *named* stages so Phase 2 has the seam, and the `Do NOT` forbids
- *    `Deduping` merging anything in Phase 1 — `R-18` makes a false merge the
- *    expensive error and Phase 2 owns the cascade with its labelled corpus.
- *    `Merging` does do one thing, and it is not a merge: see
- *    {@link liftToCanonicalWorks}.
+ * 3. **`Merging` and `Deduping` are one body, `./stages.ts`'s
+ *    {@link dedupeAndMerge}** (`P2-T10`, wired here by `P2-T29`). Phase 1 ran
+ *    both stages as named no-ops — `P1-T16`'s `Do NOT` forbade `Deduping`
+ *    merging anything because `R-18` makes a false merge the expensive error
+ *    — and lifted records to `CanonicalWork` one-for-one. Phase 2 owns the
+ *    cascade with its labelled corpus (`P2-T09`), so the run now folds the
+ *    records that are the same work into **one** `CanonicalWork` with every
+ *    contributing source in `seenIn`, keeps a preprint and its published
+ *    version as two linked works (gate `G-16`), passes possible duplicates
+ *    through as `flags` for review (FR-50 scenario 4), and stamps each
+ *    source's `recordsDeduplicatedAway` through `attributeDeduplicatedAway`.
+ *    `records` and `works` stay positionally aligned: `records[i]` is the
+ *    representative of the group `works[i]` was merged from, which is the
+ *    contract {@link selectedWorks} reads.
  *
  * ## What this file does not do
  *
@@ -58,9 +66,10 @@ import {
 } from "../../core/errors";
 import type { ProgressReporter } from "../../core/jobQueue/progress";
 import type { CanonicalWork } from "../../model/canonicalWork";
-import { buildWorkKey, type SourceId } from "../../model/ids";
+import type { SourceId } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
 import { PREFS } from "../../prefs/schema";
+import type { DedupPair } from "../../sources/shared/dedupe";
 import type { LiteratureSource } from "../../sources/types";
 import {
   stageSlices,
@@ -71,12 +80,15 @@ import {
   type ValidationResult,
 } from "../types";
 import {
+  attributeDeduplicatedAway,
+  dedupeAndMerge,
   fanOut,
   fetchStateFromReports,
   SEARCH_IMPORT_DISPLAY_NAME_KEY,
   SEARCH_IMPORT_STAGES,
   serialize,
   type SearchImportStageKey,
+  type VersionLink,
 } from "./stages";
 import type {
   SearchImportBatchResult,
@@ -170,9 +182,18 @@ export interface SearchImportDeps {
 /** Everything one `run()` accumulates, so one `catch` can build the output. */
 interface RunState {
   stageReached: SearchImportStageKey;
+  /** One representative per work after `Merging`; the fetch output before. */
   records: readonly SourceRecord[];
   works: readonly CanonicalWork[];
-  readonly perSource: SearchImportSourceReport[];
+  /** FR-50 scenario 4's possible duplicates, kept apart for review. */
+  flags: readonly DedupPair[];
+  /** Pairs kept as two linked works — preprint ↔ published (gate `G-16`). */
+  links: readonly VersionLink[];
+  /**
+   * Reassigned once, by `Deduping`, when `attributeDeduplicatedAway` re-stamps
+   * every report; pushed to by `Planning` and `Fetching` before that.
+   */
+  perSource: SearchImportSourceReport[];
   readonly warnings: string[];
   session: SearchImportWriteSession | undefined;
   created: number;
@@ -188,6 +209,8 @@ function freshState(): RunState {
     stageReached: "planning",
     records: [],
     works: [],
+    flags: [],
+    links: [],
     perSource: [],
     warnings: [],
     session: undefined,
@@ -204,60 +227,13 @@ function freshState(): RunState {
 // 4. Pure helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Lift records to `CanonicalWork` — `Merging`'s whole Phase 1 job.
- *
- * **This is not a merge, and the distinction is the point.** `docs/07` §5.1
- * types `SourceRecord.work` as `CanonicalWork` minus `workKey`, `provenance` and
- * `normalizedAtEpochMs`, so **nothing in the corpus converts the one into the
- * other** — grepped 2026-10-07: no function anywhere takes a `SourceRecord` and
- * returns a `CanonicalWork`, while `src/zotero/importer.ts`'s `importWorks()`
- * requires the latter. Minting those three fields is the minimum a one-source
- * run needs, and §12.1 puts it in `Merging`.
- *
- * With two or more sources this function is **replaced**, not extended: Phase 2's
- * cascade (`docs/02` §11.3, `P2-T09`) decides which records are the same work
- * and which source wins each field, and `fieldOrigin` stops being empty.
- *
- * - `workKey` comes from `src/model/ids.ts`'s `buildWorkKey`, which is §5.1's
- *   declared algorithm and the same function `docs/07` §6.6 uses to derive the
- *   key again when an item is read back out of Zotero. Deriving it any other way
- *   here would make that re-read produce a different key.
- * - `provenance.recordIds` is this one record and `seenIn` its one source;
- *   `fieldOrigin` is **empty**, because §5.1 defines it as "which source won for
- *   each contested field" and with one source nothing is contested. Filling it
- *   with `pubmed` for every field would assert a contest that never happened.
- * - `normalizedAtEpochMs` is now — §5.1: "ms since epoch when this canonical
- *   record was last rebuilt". Deliberately not `record.retrievedAtEpochMs`,
- *   which is when the *source* answered.
- *
- * @param records - one run's records, in fetch order
- * @param normalizedAtEpochMs - `ctx.clock.now()`
- * @returns the works, **positionally aligned with `records`**
- */
-export function liftToCanonicalWorks(
-  records: readonly SourceRecord[],
-  normalizedAtEpochMs: number,
-): readonly CanonicalWork[] {
-  return records.map((record) => {
-    const { work } = record;
-    return {
-      ...work,
-      workKey: buildWorkKey(
-        work.ids,
-        work.title,
-        work.publishedDate?.year,
-        work.authors[0]?.family,
-      ),
-      provenance: {
-        recordIds: [record.id],
-        fieldOrigin: {},
-        seenIn: [record.sourceId],
-      },
-      normalizedAtEpochMs,
-    };
-  });
-}
+// `liftToCanonicalWorks` — Phase 1's one-record-one-work lift — lived here
+// until `P2-T29` and was deleted rather than kept: `./stages.ts`'s
+// `dedupeAndMerge` is the one route from `SourceRecord`s to `CanonicalWork`s,
+// and a singleton group through `src/model/merge.ts`'s `merge()` mints the same
+// `workKey` (`buildWorkKey`), the same one-entry `recordIds`/`seenIn` and the
+// same empty `fieldOrigin` the lift did. Nothing in `src/` called it; the one
+// remaining mention is a doc comment in `src/zotero/itemMapper.ts`.
 
 /** Split into runs of at most `size`. */
 function batches<T>(items: readonly T[], size: number): readonly T[][] {
@@ -418,6 +394,11 @@ export function createSearchImportPipeline(
       // §7.4 check point 1: one potential network call per work, so one check
       // per work.
       ctx.token.throwIfCancelled();
+      // `seenIn[0]` is the group's highest-precedence source: `merge()` writes
+      // `seenIn` in `canonicalOrder` (`docs/02` §10.4's `title` row, then
+      // `DEFAULT_PRECEDENCE`), so a Crossref + PubMed work asks Crossref. A
+      // singleton's one source is trivially first. `P2-T12` owns asking the
+      // *other* contributors when the first has nothing.
       const sourceId = work.provenance.seenIn[0];
       const source =
         sourceId === undefined ? undefined : ctx.sources.get(sourceId);
@@ -464,10 +445,12 @@ export function createSearchImportPipeline(
   ): readonly CanonicalWork[] {
     if (selectedRecordIds === undefined) return state.works;
     const wanted = new Set(selectedRecordIds);
-    // Indexed by position: `works[i]` was lifted from `records[i]`, which is the
-    // ordering contract `liftToCanonicalWorks` keeps. Matching on `workKey`
-    // instead would conflate two records that share a DOI, which is exactly the
-    // dedup decision Phase 1 is forbidden to make.
+    // Indexed by position: `works[i]` was merged from the group whose
+    // **representative** is `records[i]` — `DedupeMergeResult`'s contract,
+    // one record per work in fetch order. The table renders exactly those
+    // representatives, so a checked row's id is always a representative's; an
+    // id belonging to a record that was folded into another work selects
+    // nothing, because that record is no row.
     return state.works.filter((_work, index) => {
       const record = state.records[index];
       return record !== undefined && wanted.has(record.id);
@@ -592,6 +575,8 @@ export function createSearchImportPipeline(
       stageReached: state.stageReached,
       records: state.records,
       works: state.works,
+      flags: state.flags,
+      links: state.links,
       perSource: state.perSource,
       write,
       warnings: state.warnings,
@@ -744,20 +729,39 @@ export function createSearchImportPipeline(
 
         // ---- Merging ------------------------------------------------------
         const merging = await enterStage(state, ctx, "merging");
-        // A named no-op as far as *merging* goes (`P1-T16` step 3): with one
-        // source there is nothing to reconcile. What it does do is lift the
-        // records to `CanonicalWork`, which has to happen somewhere and which
-        // §12.1 puts here. See {@link liftToCanonicalWorks}.
-        state.works = liftToCanonicalWorks(state.records, ctx.clock.now());
+        // `P2-T29`: `dedupeAndMerge` is both stages' body — `P2-T09`'s cascade
+        // once over the fetch output, then `P2-T10`'s `merge()` once per group
+        // — so it runs here, where the works have to exist, and `Deduping`
+        // below does the per-source bookkeeping. `records` becomes one
+        // representative per work, aligned with `works` (see `selectedWorks`).
+        // Applied to a supplied `input.records` too: that path is the write
+        // half of a preview the caller already saw, and the lift is the same
+        // function either way.
+        //
+        // Flags and links never reach `merge()`: a flagged pair stays two
+        // works for review (FR-50 scenario 4), a linked pair stays two works
+        // each carrying the other's ids in `relatedVersionIds` (gate `G-16`).
+        // `P2-T14` renders both; `P2-T11` writes the Zotero relation and tag.
+        const merged = dedupeAndMerge(state.records, ctx.clock.now());
+        state.records = merged.records;
+        state.works = merged.works;
+        state.flags = merged.flags;
+        state.links = merged.links;
         merging.done("succeeded");
 
         // ---- Deduping -----------------------------------------------------
         const deduping = await enterStage(state, ctx, "deduping");
-        // A true no-op, and it must stay one in Phase 1: `P1-T16`'s `Do NOT`
-        // and `R-18` — a false merge is the expensive error, and Phase 2 owns
-        // the cascade with its labelled corpus. The *library* duplicate check
-        // is a different mechanism and happens inside the writer
-        // (`src/zotero/importer.ts`'s dedup pass, `FR-51`).
+        // The cascade has already run inside `dedupeAndMerge`; what is left
+        // for this stage is `docs/07` §5.3's per-source figure. `fetchOne`
+        // writes `recordsDeduplicatedAway: 0` because dedup is cross-source
+        // and has not happened when a source's report is built; this is the
+        // one place the figure becomes true, each folded record charged to
+        // its own source and `Planning`'s adapter-less rows left at `0`. The
+        // *library* duplicate check is a different mechanism and happens
+        // inside the writer (`src/zotero/importer.ts`'s dedup pass, `FR-51`).
+        state.perSource = [
+          ...attributeDeduplicatedAway(state.perSource, merged),
+        ];
         deduping.done("succeeded");
 
         // ---- BackfillingAbstracts -----------------------------------------

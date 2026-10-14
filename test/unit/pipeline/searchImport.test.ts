@@ -30,10 +30,11 @@ import {
   type ProgressSnapshot,
 } from "../../../src/core/jobQueue/progress";
 import { createLogger, NULL_LOG_SINK } from "../../../src/core/logger";
-import type { CanonicalWork } from "../../../src/model/canonicalWork";
+import type { CanonicalWork, WorkType } from "../../../src/model/canonicalWork";
 import {
   normalizeDoi,
   normalizePmid,
+  type ExternalIds,
   type SourceId,
 } from "../../../src/model/ids";
 import type { SourceRecord } from "../../../src/model/sourceRecord";
@@ -43,7 +44,6 @@ import {
 } from "../../../src/pipeline/registry";
 import {
   createSearchImportPipeline,
-  liftToCanonicalWorks,
   PARTIAL_IMPORT_NOTE_PREFIX,
   SEARCH_IMPORT_VALIDATION_KEYS,
   validateSearchImportInput,
@@ -225,8 +225,15 @@ function record(
     readonly abstract?: string;
     readonly year?: number;
     readonly doi?: string;
+    /** Defaults to `Title ${nativeId}`; the dedup fixtures share one. */
+    readonly title?: string;
+    readonly type?: WorkType;
+    /** `CanonicalWork.relatedVersionIds` — a preprint that knows its paper. */
+    readonly related?: ExternalIds;
   } = {},
 ): SourceRecord {
+  // A non-numeric `nativeId` yields no PMID, which is how the dedup fixtures
+  // below get a record with no identifier at all.
   const pmid = normalizePmid(nativeId);
   const doi = overrides.doi === undefined ? null : normalizeDoi(overrides.doi);
   return {
@@ -238,10 +245,13 @@ function record(
         ...(doi !== null && { doi }),
         ...(pmid !== null && { pmid }),
       },
-      type: "journal-article",
-      title: `Title ${nativeId}`,
+      type: overrides.type ?? "journal-article",
+      title: overrides.title ?? `Title ${nativeId}`,
       authors: [{ family: "Lee", given: "A" }],
       ...(overrides.abstract !== undefined && { abstract: overrides.abstract }),
+      ...(overrides.related !== undefined && {
+        relatedVersionIds: overrides.related,
+      }),
       ...(overrides.year !== undefined && {
         publishedDate: {
           year: overrides.year,
@@ -1415,24 +1425,43 @@ describe("the progress tree", () => {
 // ===========================================================================
 
 describe("Merging lifts records to CanonicalWork", () => {
-  it("mints workKey from docs/07 §5.1's algorithm and nothing else", () => {
-    const works = liftToCanonicalWorks(
-      [
-        record("pubmed", "123", { year: 2024 }),
-        record("pubmed", "456", { doi: "10.1234/x", year: 2023 }),
+  // Phase 1's `liftToCanonicalWorks` was deleted by `P2-T29`; the same two
+  // properties are now asserted through the pipeline, whose one lift is
+  // `dedupeAndMerge` → `merge()` over a singleton group.
+  it("mints workKey from docs/07 §5.1's algorithm and stamps the clock", async () => {
+    const h = harness({
+      sources: [
+        stubSource({
+          id: "pubmed",
+          pages: [
+            [
+              record("pubmed", "123", { year: 2024 }),
+              record("pubmed", "456", { doi: "10.1234/x", year: 2023 }),
+            ],
+          ],
+        }),
       ],
-      7_777,
-    );
+    });
+    const out = await h.pipeline.run(BASE_INPUT, h.ctx);
     // `pmid:` when there is no DOI, `doi:` when there is — `buildWorkKey`'s
-    // declared precedence, asserted through this function rather than restated.
-    expect(works[0]?.workKey).toBe("pmid:123");
-    expect(works[1]?.workKey).toBe("doi:10.1234/x");
-    expect(works.map((w) => w.normalizedAtEpochMs)).toEqual([7_777, 7_777]);
+    // declared precedence, asserted through the pipeline rather than restated.
+    expect(out.works.map((w) => w.workKey)).toEqual([
+      "pmid:123",
+      "doi:10.1234/x",
+    ]);
+    // `ctx.clock.now()` at `Merging`, not `record.retrievedAtEpochMs` (1).
+    expect(out.works.map((w) => w.normalizedAtEpochMs)).toEqual([
+      h.clock.now(),
+      h.clock.now(),
+    ]);
   });
 
-  it("records one source and claims no contested field", () => {
-    const works = liftToCanonicalWorks([record("pubmed", "1")], 1);
-    expect(works[0]?.provenance).toEqual({
+  it("records one source and claims no contested field", async () => {
+    const h = harness({
+      sources: [stubSource({ id: "pubmed", pages: [[record("pubmed", "1")]] })],
+    });
+    const out = await h.pipeline.run(BASE_INPUT, h.ctx);
+    expect(out.works[0]?.provenance).toEqual({
       recordIds: ["pubmed:1"],
       // Empty on purpose: §5.1 defines it as "which source won for each
       // contested field", and with one source nothing was contested.
@@ -1455,19 +1484,319 @@ describe("Merging lifts records to CanonicalWork", () => {
     expect(out.records.map((r) => r.nativeId)).toEqual(["1", "2"]);
   });
 
-  it("Deduping removes nothing in Phase 1 and records 0 (docs/07 §5.3)", async () => {
-    // Two records for the same work. Phase 1 must keep both — `P1-T16`'s
-    // `Do NOT` and `R-18`: a false merge is the expensive error.
+  it("Deduping folds two same-DOI records from one source into one work and charges that source (docs/07 §5.3)", async () => {
+    // Until `P2-T29` this test asserted the opposite — Phase 1 kept both,
+    // under `P1-T16`'s `Do NOT`. Phase 2's cascade (`P2-T09`) now owns the
+    // decision, and a DOI match is its first and surest tier.
     const same = [
-      record("pubmed", "1", { doi: "10.1234/dup" }),
-      record("pubmed", "2", { doi: "10.1234/dup" }),
+      record("pubmed", "1", { doi: "10.1234/dup", title: "One work" }),
+      record("pubmed", "2", { doi: "10.1234/dup", title: "One work" }),
     ];
     const h = harness({
       sources: [stubSource({ id: "pubmed", pages: [same] })],
     });
     const out = await h.pipeline.run(BASE_INPUT, h.ctx);
-    expect(out.records).toHaveLength(2);
-    expect(out.perSource[0]?.recordsDeduplicatedAway).toBe(0);
+    expect(out.records.map((r) => r.id)).toEqual(["pubmed:1"]);
+    expect(out.works).toHaveLength(1);
+    expect(out.works[0]?.provenance.recordIds).toEqual([
+      "pubmed:1",
+      "pubmed:2",
+    ]);
+    expect(out.perSource[0]?.recordsDeduplicatedAway).toBe(1);
+  });
+});
+
+// ===========================================================================
+// 6b. The dedup and merge wiring — P2-T29
+// ===========================================================================
+
+describe("the dedup and merge wiring (P2-T29)", () => {
+  const sharedTitle =
+    "Adenine base editors convert A to G in genomic DNA without cleavage";
+  const twoSources: SearchImportInput = {
+    ...BASE_INPUT,
+    sourceIds: ["pubmed", "crossref"],
+  };
+
+  /** The same DOI from PubMed (asked first) and Crossref. */
+  function sameDoiPair(): {
+    readonly pubmed: SourceRecord;
+    readonly crossref: SourceRecord;
+  } {
+    return {
+      pubmed: record("pubmed", "40", {
+        doi: "10.1000/one",
+        title: sharedTitle,
+        year: 2024,
+        // Both supply one, so the field is *contested* and `fieldOrigin`
+        // records the winner; `docs/07` §5.1's abstract rule prefers the
+        // longer.
+        abstract: "short",
+      }),
+      crossref: record("crossref", "c40", {
+        doi: "10.1000/one",
+        title: sharedTitle,
+        year: 2024,
+        abstract: "Crossref's abstract",
+      }),
+    };
+  }
+
+  it("two sources returning the same DOI yield one work with both in seenIn, charged to the non-representative source (FR-50)", async () => {
+    const pair = sameDoiPair();
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[pair.pubmed]] }),
+        stubSource({ id: "crossref", pages: [[pair.crossref]] }),
+      ],
+    });
+    const out = await h.pipeline.run(twoSources, h.ctx);
+
+    expect(out.outcome).toBe("succeeded");
+    // One row, and it is the group's first record in fetch order.
+    expect(out.records).toEqual([pair.pubmed]);
+    expect(out.works).toHaveLength(1);
+    const work = out.works[0];
+    expect(work?.workKey).toBe("doi:10.1000/one");
+    expect(new Set(work?.provenance.seenIn)).toEqual(
+      new Set(["pubmed", "crossref"]),
+    );
+    expect(new Set(work?.provenance.recordIds)).toEqual(
+      new Set([pair.pubmed.id, pair.crossref.id]),
+    );
+    // A contested field was won by someone — the merge happened, not a lift.
+    expect(work?.abstract).toBe("Crossref's abstract");
+    expect(work?.provenance.fieldOrigin["abstract"]).toBe("crossref");
+
+    // `attributeDeduplicatedAway`: the folded record is charged to **its own**
+    // source, the representative's source stays at 0, every other member of
+    // the report is untouched.
+    const bySource = Object.fromEntries(
+      out.perSource.map((r) => [r.sourceId, r.recordsDeduplicatedAway]),
+    );
+    expect(bySource).toEqual({ pubmed: 0, crossref: 1 });
+    expect(out.perSource.map((r) => r.recordsRetrieved)).toEqual([1, 1]);
+    expect(out.perSource.map((r) => r.error)).toEqual([undefined, undefined]);
+
+    expect(out.flags).toEqual([]);
+    expect(out.links).toEqual([]);
+  });
+
+  it("a preprint and its published version yield two works, each in the other's relatedVersionIds, and one link (G-16)", async () => {
+    const published = record("crossref", "pub", {
+      doi: "10.1038/s41586-024-07000-0",
+      title: sharedTitle,
+      year: 2024,
+    });
+    const preprintDoi = normalizeDoi("10.1101/2023.12.01.569000");
+    const publishedDoi = normalizeDoi("10.1038/s41586-024-07000-0");
+    if (preprintDoi === null || publishedDoi === null) {
+      throw new Error("fixture DOIs must normalize");
+    }
+    const preprint = record("biorxiv", "pre", {
+      doi: "10.1101/2023.12.01.569000",
+      title: sharedTitle,
+      type: "preprint",
+      year: 2023,
+      related: { doi: publishedDoi },
+    });
+    const h = harness({
+      sources: [
+        stubSource({ id: "crossref", pages: [[published]] }),
+        stubSource({ id: "biorxiv", pages: [[preprint]] }),
+      ],
+    });
+    const out = await h.pipeline.run(
+      { ...BASE_INPUT, sourceIds: ["crossref", "biorxiv"] },
+      h.ctx,
+    );
+
+    expect(out.works).toHaveLength(2);
+    expect(out.records).toEqual([published, preprint]);
+    const pub = out.works.find((w) => w.workKey === `doi:${publishedDoi}`);
+    const pre = out.works.find((w) => w.workKey === `doi:${preprintDoi}`);
+    expect(pub?.relatedVersionIds?.doi).toBe(preprintDoi);
+    expect(pre?.relatedVersionIds?.doi).toBe(publishedDoi);
+    // Neither absorbed the other.
+    expect(pub?.provenance.recordIds).toEqual([published.id]);
+    expect(pre?.provenance.recordIds).toEqual([preprint.id]);
+
+    expect(out.links).toHaveLength(1);
+    const link = out.links?.[0];
+    expect(link?.preprintWorkKey).toBe(`doi:${preprintDoi}`);
+    expect(new Set([link?.aWorkKey, link?.bWorkKey])).toEqual(
+      new Set([`doi:${publishedDoi}`, `doi:${preprintDoi}`]),
+    );
+    expect(link?.decision.verdict).toBe("link");
+    expect(out.flags).toEqual([]);
+    expect(out.perSource.map((r) => r.recordsDeduplicatedAway)).toEqual([0, 0]);
+  });
+
+  it("a flagged pair yields two works and one flag, nothing merged (FR-50 scenario 4)", async () => {
+    // Same title, same year, no identifier on either side, one a preprint:
+    // the cascade's title tier flags it and `docs/02` §11.4's last row says
+    // never merge and never link.
+    const article = record("pubmed", "art", { title: sharedTitle, year: 2024 });
+    const preprint = record("arxiv", "arx", {
+      title: sharedTitle,
+      type: "preprint",
+      year: 2024,
+    });
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[article]] }),
+        stubSource({ id: "arxiv", pages: [[preprint]] }),
+      ],
+    });
+    const out = await h.pipeline.run(
+      { ...BASE_INPUT, sourceIds: ["pubmed", "arxiv"] },
+      h.ctx,
+    );
+
+    expect(out.works).toHaveLength(2);
+    expect(out.records).toEqual([article, preprint]);
+    expect(out.works.every((w) => w.provenance.recordIds.length === 1)).toBe(
+      true,
+    );
+    expect(out.flags).toHaveLength(1);
+    const flag = out.flags?.[0];
+    expect(flag?.decision.verdict).toBe("flag");
+    expect(new Set([flag?.a.id, flag?.b.id])).toEqual(
+      new Set([article.id, preprint.id]),
+    );
+    expect(out.links).toEqual([]);
+    expect(out.perSource.map((r) => r.recordsDeduplicatedAway)).toEqual([0, 0]);
+  });
+
+  it("selectedWorks' positional contract holds on the merged shape: the representative's id selects the merged work, a folded record's id selects nothing", async () => {
+    const pair = sameDoiPair();
+    const other = record("pubmed", "41", { title: "A different paper" });
+    const writer = stubWriter();
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[pair.pubmed, other]] }),
+        stubSource({ id: "crossref", pages: [[pair.crossref]] }),
+      ],
+      writer: writer.writer,
+    });
+
+    // The representative is a row; checking it writes the **merged** work.
+    const out = await h.pipeline.run(
+      {
+        ...twoSources,
+        target: { collectionName: "C", selectedRecordIds: [pair.pubmed.id] },
+      },
+      h.ctx,
+    );
+    expect(out.records.map((r) => r.id)).toEqual([pair.pubmed.id, other.id]);
+    expect(out.works.map((w) => w.workKey)).toEqual([
+      "doi:10.1000/one",
+      "pmid:41",
+    ]);
+    const written = writer.log.batches.flat();
+    expect(written.map((w) => w.workKey)).toEqual(["doi:10.1000/one"]);
+    expect(new Set(written[0]?.provenance.seenIn)).toEqual(
+      new Set(["pubmed", "crossref"]),
+    );
+
+    // The folded record is no row, so its id is "an id no record carries".
+    const h2 = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[pair.pubmed, other]] }),
+        stubSource({ id: "crossref", pages: [[pair.crossref]] }),
+      ],
+      writer: writer.writer,
+    });
+    const out2 = await h2.pipeline.run(
+      {
+        ...twoSources,
+        target: { collectionName: "C", selectedRecordIds: [pair.crossref.id] },
+      },
+      h2.ctx,
+    );
+    expect(out2.write?.created).toBe(0);
+    expect(writer.log.batches.flat()).toHaveLength(1);
+  });
+
+  it("backfillAbstracts asks seenIn[0] — the group's highest-precedence source — and no other contributor", async () => {
+    const pubmed = record("pubmed", "50", {
+      doi: "10.1000/fifty",
+      title: sharedTitle,
+    });
+    const crossref = record("crossref", "c50", {
+      doi: "10.1000/fifty",
+      title: sharedTitle,
+    });
+    const asked: SourceId[] = [];
+    const withBackfill = (
+      base: LiteratureSource,
+      answer: string | undefined,
+    ): LiteratureSource => ({
+      ...base,
+      fetchAbstract(): Promise<string | undefined> {
+        asked.push(base.id);
+        return Promise.resolve(answer);
+      },
+    });
+    const h = harness({
+      sources: [
+        withBackfill(
+          stubSource({ id: "pubmed", pages: [[pubmed]] }),
+          "PubMed's abstract",
+        ),
+        withBackfill(
+          stubSource({ id: "crossref", pages: [[crossref]] }),
+          "Crossref's abstract",
+        ),
+      ],
+    });
+    const out = await h.pipeline.run(twoSources, h.ctx);
+
+    // `merge()` writes `seenIn` in canonical order — `docs/02` §10.4's title
+    // row puts Crossref before PubMed — so the first entry is not the fetch
+    // order's first source.
+    expect(out.works[0]?.provenance.seenIn).toEqual(["crossref", "pubmed"]);
+    expect(asked).toEqual(["crossref"]);
+    expect(out.works[0]?.abstract).toBe("Crossref's abstract");
+  });
+
+  it("supplied records go through the same merge, so the write half of a preview dedups too", async () => {
+    const pair = sameDoiPair();
+    const writer = stubWriter();
+    const h = harness({ sources: [], writer: writer.writer });
+    const out = await h.pipeline.run(
+      {
+        ...BASE_INPUT,
+        query: "",
+        sourceIds: [],
+        records: [pair.pubmed, pair.crossref],
+        target: { collectionName: "C" },
+      },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    expect(out.records).toEqual([pair.pubmed]);
+    expect(out.write?.created).toBe(1);
+    expect(writer.log.batches.flat().map((w) => w.workKey)).toEqual([
+      "doi:10.1000/one",
+    ]);
+    // No source was asked, so there is no report to stamp.
+    expect(out.perSource).toEqual([]);
+  });
+
+  it("an all-sources failure returns before Merging with empty flags and links, and the fetch's 0", async () => {
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[]], throwOnPage: 0 }),
+        stubSource({ id: "crossref", pages: [[]], throwOnPage: 0 }),
+      ],
+    });
+    const out = await h.pipeline.run(twoSources, h.ctx);
+    expect(out.outcome).toBe("failed");
+    expect(out.stageReached).toBe("fetching");
+    expect(out.flags).toEqual([]);
+    expect(out.links).toEqual([]);
+    expect(out.perSource.map((r) => r.recordsDeduplicatedAway)).toEqual([0, 0]);
   });
 });
 

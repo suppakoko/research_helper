@@ -44,9 +44,10 @@ import type { SerializedError } from "../../core/errors";
 import type { CanonicalWork } from "../../model/canonicalWork";
 import type { SourceId } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
+import type { DedupPair } from "../../sources/shared/dedupe";
 import type { RecencyWindow } from "../../sources/shared/recency";
 import type { DuplicatePolicy } from "../../zotero/importer";
-import type { SearchImportStageKey } from "./stages";
+import type { SearchImportStageKey, VersionLink } from "./stages";
 
 /**
  * Re-exported so `src/ui/**` can name the importer's policy vocabulary without
@@ -141,6 +142,16 @@ export interface SearchImportInput {
   /**
    * Records from an earlier run of this same pipeline, to write without
    * re-fetching. Omitted fetches.
+   *
+   * These go through `Merging`'s `dedupeAndMerge` exactly as a fetch output
+   * does (`P2-T29`), so what is passed here decides what is written: the
+   * earlier run's {@link SearchImportOutput.records} holds **one
+   * representative per work**, and a representative merged alone is a
+   * singleton — one source in `seenIn`, the other contributors' fields gone.
+   * A caller that wants the merged work written as the preview showed it
+   * must pass every contributing record, which the output does not yet carry
+   * (`DedupeMergeResult.merged` has them; surfacing it is a follow-up on
+   * `P2-T29`'s report).
    */
   readonly records?: readonly SourceRecord[];
 }
@@ -219,11 +230,12 @@ export interface SearchImportSourceReport {
    * field says "`0`, not absent".
    *
    * `fetchOne` writes `0`, because dedup is cross-source and runs only after
-   * every source has answered; `stages.ts`'s `attributeDeduplicatedAway`
-   * (`P2-T10`) re-stamps the figure from the dedup result, charging each
-   * folded record to its own source. Until the pipeline's `run()` calls it,
-   * the value stays `0` — as it was through Phase 1, when `P1-T16`'s `Do NOT`
-   * forbade `Deduping` merging anything.
+   * every source has answered; the pipeline's `Deduping` stage then calls
+   * `stages.ts`'s `attributeDeduplicatedAway` (`P2-T10`, wired by `P2-T29`),
+   * which re-stamps the figure from the dedup result, charging each folded
+   * record to its own source. A run that ends before `Deduping` — an
+   * all-sources failure, a cancel during `Fetching` — reports the `0` the
+   * fetch wrote, as does a `Planning` row for a source with no adapter.
    */
   readonly recordsDeduplicatedAway: number;
   /**
@@ -325,18 +337,51 @@ export interface SearchImportOutput {
    */
   readonly stageReached: SearchImportStageKey;
   /**
-   * The records the run produced, after the client recency filter and after
-   * `Deduping`'s identity pass, in fetch order.
+   * **One row per work, not per record** (`P2-T29`): for each distinct work
+   * the run found, the first record of its dedup group in fetch order — the
+   * group's *representative* — so a paper two sources both returned appears
+   * once (FR-50). Rows are in fetch order of their representatives. A run that
+   * ended before `Merging` carries the fetch output instead, every record,
+   * after the client recency filter.
    *
-   * This is what `docs/08` §4.6's table renders.
+   * This is what `docs/08` §4.6's table renders, and a checked row's
+   * `SourceRecord.id` is what {@link SearchImportTarget.selectedRecordIds}
+   * names. The other members of each group are not here; they are on
+   * `DedupeMergeResult.merged`, which the output does not yet carry.
    */
   readonly records: readonly SourceRecord[];
   /**
-   * The same records lifted to `CanonicalWork`, in the same order — the shape
-   * the write half consumes. Empty on a preview run.
+   * One `CanonicalWork` per work, **positionally aligned with
+   * {@link records}**: `works[i]` was merged from the group whose
+   * representative is `records[i]`, with every contributing source in
+   * `provenance.seenIn`, every contributing record in `recordIds` and each
+   * contested field's winner in `fieldOrigin` (`docs/07` §5.1). The shape the
+   * write half consumes. Empty before `Merging` has run.
    */
   readonly works: readonly CanonicalWork[];
-  /** One entry per source that was **asked**, in `input.sourceIds` order. */
+  /**
+   * Possible duplicates the cascade would not merge — FR-50 scenario 4's
+   * "flagged for user review". Both records of each pair are separate rows in
+   * {@link records}; `P2-T14` renders the badge. Empty before `Merging`.
+   *
+   * Optional only because two `test/unit/ui/*` fixtures construct this type
+   * outside `P2-T29`'s `Files`; the pipeline sets it on every output. Make it
+   * required the next time those fixtures are in a card's list.
+   */
+  readonly flags?: readonly DedupPair[];
+  /**
+   * Pairs kept as two linked works — a preprint and its published version
+   * (gate `G-16`), or a title match with conflicting identifiers (`docs/02`
+   * §11.5 rule 1). Each side's `CanonicalWork` carries the other's ids in
+   * `relatedVersionIds`; `P2-T11` writes the Zotero *Related* relation and
+   * tags the side `VersionLink.preprintWorkKey` names. Empty before
+   * `Merging`. Optional for the same reason as {@link flags}.
+   */
+  readonly links?: readonly VersionLink[];
+  /**
+   * One entry per source that was **asked**, in `input.sourceIds` order, with
+   * `recordsDeduplicatedAway` stamped once `Deduping` has run.
+   */
   readonly perSource: readonly SearchImportSourceReport[];
   /** Absent when the write half did not run (a preview, or a cancel before it). */
   readonly write: SearchImportWriteReport | undefined;

@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-14 · **141 tasks: 91 `DONE`, 50 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **13 of 29**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 141, so 43 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-14 · **143 tasks: 91 `DONE`, 52 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **13 of 31**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 143, so 45 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -22,9 +22,9 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
-| 2 — Multi-source + dedup | 29 | 29.00 d | 29.00–41 d | 12–16 d (+81%) |
+| 2 — Multi-source + dedup | 31 | 30.00 d | 30.00–42 d | 12–16 d (+88%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **141** | **99.50 d** | **99.50–140 d** | 39–52 d (+91% over the top of the band) |
+| **Phases 0–3** | **143** | **100.50 d** | **100.50–141 d** | 39–52 d (+93% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -222,13 +222,13 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
 | ✅ `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
 | `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09` | 1.0 d | 🔒 |
-| `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29` | 0.75 d |  |
+| `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29`, `P2-T30` | 0.75 d |  |
 | `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11` | 2.0 d | 🔒 |
-| `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29` | 1.5 d |  |
+| `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31` | 1.5 d |  |
 | `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
 | `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
 | ✅ `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
-| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29` | 1.0 d |  |
+| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31` | 1.0 d |  |
 | ✅ `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
 | `P2-T20` | Render `languages`, `openAccessOnly` and `raw` across the… | `P1-T08` | 0.5 d |  |
 | ✅ `P2-T21` | Make the concurrency cap resizable, so a tightened header… | `P1-T27`, `P1-T26` | 0.5 d |  |
@@ -240,6 +240,8 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T27` | Wire `fanOut` into the running pipeline, which still fetches… | `P2-T01`, `P2-T02` | 0.5 d |  |
 | ✅ `P2-T28` | Give the per-source query dialect its home in… | `P2-T01`, `P2-T26`, `P2-T27` | 0.25 d |  |
 | `P2-T29` | Wire `dedupeAndMerge` into the running pipeline, which still… | `P2-T10`, `P2-T27` | 0.5 d |  |
+| `P2-T30` | Make the dedup cascade yield, so `Merging` stops stalling the… | `P2-T29` | 0.5 d |  |
+| `P2-T31` | Give the import half the merged work the preview showed, and… | `P2-T29`, `P2-T30` | 0.5 d |  |
 
 ### Phase 3
 
@@ -979,7 +981,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 
 ### 6.20 Raised by `P2-T10`, 2026-10-14 — one carded under rule 9 (`P2-T29`), the rest recorded
 
-98. ~~**`dedupeAndMerge` is built and tested but nothing calls it.**~~ **CARDED 2026-10-14 as `P2-T29`** — `run` in
+98. ~~**`dedupeAndMerge` is built and tested but nothing calls it.**~~ **CARDED 2026-10-14 as `P2-T29`, DONE the same day** — `run` in
     `searchImportPipeline.ts` still calls `liftToCanonicalWorks`; the gap blocks Phase 2's first finishing
     condition. Second time this shape has appeared (`P2-T02`/`P2-T27`); see the process note under §6.20.
 
@@ -1070,6 +1072,31 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 117. **Refuse or degrade?** PubMed throws on an unrenderable filter; a warning on `SourcePage.warnings` with
     the filter dropped is the alternative. The owner's product call; today's choice is the conservative one.
+
+### 6.23 Raised by `P2-T29`, 2026-10-14 — two carded under rule 9 (`P2-T30`, `P2-T31`), the rest recorded
+
+118. ~~**The import half re-merges representatives alone.**~~ **CARDED 2026-10-14 as `P2-T31`** — the window's import
+    path passes `output.records` (one representative per work) back as `SearchImportInput.records`, so the
+    written item has one source where the preview had two. Blocks Phase 2's first finishing condition on the
+    library side.
+
+119. ~~**`Merging` stalls the main thread 246–274 ms on a 100-record import** (NFR-3 budget 100 ms).~~
+    **CARDED 2026-10-14 as `P2-T30`** — `dedupeRecords` is synchronous and same-topic titles fall into one
+    block (4,851 comparisons, 33–45 ms in Node, several times that under Zotero with the toolbox attached).
+    Four runs of four; `plan/00` §5's NFR-3 row carries the figures. NFR-3's own text prescribes yields.
+
+120. ~~**`SearchImportOutput.flags` and `links` are optional.**~~ **CARDED 2026-10-14 into `P2-T31`** — forced by two
+    `test/unit/ui/` fixtures outside `P2-T29`'s list.
+
+121. **Stale prose outside `P2-T29`'s list:** `stages.ts`'s "Deduping and Merging" paragraph and
+    `attributeDeduplicatedAway`'s doc still say `run` has yet to call them; `src/zotero/itemMapper.ts` still
+    names `liftToCanonicalWorks`. `P2-T31` step 3.
+
+122. **For `P2-T12`:** `backfillAbstracts` asks `seenIn[0]` only; with merged works it should fall through
+    to the other contributors when the first has no abstract.
+
+123. **Scratchpad hygiene for parallel agents:** two agents overwrote each other's `mutate.mjs` mid-sweep
+    (no file damage — the hash check held). Briefs now say: card-prefixed file names in the scratchpad.
 
 ## 7. Regenerating this file
 
