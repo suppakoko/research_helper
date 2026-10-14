@@ -1107,7 +1107,7 @@ prefixes) is the mitigation; implement it as the secondary key in `P2-T09`.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T09` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14; the engine is built and proven, the stage hookup is `P2-T10`'s. Report at `plan/reports/P2-T09.md`. |
 | **Depends on** | `P1-T01`, `P1-T13` |
 | **Blocks** | `P2-T10`, `P2-T11`, `P2-T13`, `P2-T14`, `P2-T16`, `P2-T19` |
 | **Retires** | `R-18` (with `P2-T10`, `P2-T11`, `P2-T13`) |
@@ -1298,6 +1298,15 @@ order, and every contested field records which source won.
   merging" is a mitigation this precedence order carries.
 
 **Files.**
+> **Coordinator note 2026-10-14.** Three things are settled before this card starts. (1) Gate `G-16` is
+> decided: preprint and published versions are **kept as two items, linked** through Zotero *Related*, the
+> preprint tagged `research_helper/superseded-by-published` — the `docs/10` §5 default; build that and
+> nothing else. (2) `P2-T09`'s engine exists but nothing calls it; read `plan/reports/P2-T09.md` §"What the
+> stage hookup will need" before touching `stages.ts`. (3) While this card is in `stages.ts` anyway, do
+> `plan/00` §6 items 79 and 80: add `export` to its `serialize` and delete the pipeline's copy in
+> `src/pipeline/searchImport/searchImportPipeline.ts` (that file joins the list for this one edit), and
+> refresh the stale prose about the loop and `outcomeFromReports` in `stages.ts` and
+> `src/pipeline/searchImport/types.ts`.
 - modify `src/model/merge.ts`
 - modify `src/model/sourceRecord.ts` (guards only)
 - modify `src/pipeline/searchImport/stages.ts`
@@ -3566,7 +3575,7 @@ in `pubmedSource.ts` pages at `min(limit − emitted, 200)`, so a replayed `limi
 | Field | Value |
 |---|---|
 | **ID** | `P2-T26` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14; `replaceForTest` is the seam, both specs stub `pubmed` in place. Report at `plan/reports/P2-T26.md`. |
 | **Depends on** | `P2-T25` |
 | **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T28` |
 | **Retires** | `plan/00` §6 item 27 |
@@ -3646,7 +3655,7 @@ register under a spare id (item 87).
 | Field | Value |
 |---|---|
 | **ID** | `P2-T27` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14; the shipped pipeline fetches through `fanOut`, and the owner confirmed the kept state reading (`plan/00` §6 item 81). Report at `plan/reports/P2-T27.md`. |
 | **Depends on** | `P2-T01`, `P2-T02` |
 | **Blocks** | `P2-T14`, `P2-T16`, `P2-T28` |
 | **Retires** | `plan/00` §6 item 66 |

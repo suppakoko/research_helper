@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-13 · **140 tasks: 85 `DONE`, 55 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **7 of 28**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 140, so 42 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-14 · **140 tasks: 88 `DONE`, 52 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **10 of 28**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 140, so 42 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -219,7 +219,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P2-T06` | arXiv adapter | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28` | 1.25 d |  |
 | `P2-T07` | bioRxiv / medRxiv adapter (ID lookup and cross-walk only) | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28` | 1.5 d |  |
 | `P2-T08` | `preprint` item-type mapping and server attribution | `P2-T03`, `P2-T06`, `P2-T07` | 1.0 d |  |
-| `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
+| ✅ `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
 | `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
 | `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09` | 1.0 d | 🔒 |
 | `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10` | 0.75 d |  |
@@ -236,8 +236,8 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T23` | Give `hostLimiter.ts` the test file two cards already invoke | `P1-T26` | 0.25 d |  |
 | `P2-T24` | Correct the three statements `P2-T21` made false, including… | `P2-T21` | 0.25 d |  |
 | ✅ `P2-T25` | Make the fixture replay harness usable inside Zotero, so six… | `P1-T11` | 0.75 d |  |
-| `P2-T26` | Give the source registry a test-only removal, before two… | `P2-T25` | 0.25 d |  |
-| `P2-T27` | Wire `fanOut` into the running pipeline, which still fetches… | `P2-T01`, `P2-T02` | 0.5 d |  |
+| ✅ `P2-T26` | Give the source registry a test-only removal, before two… | `P2-T25` | 0.25 d |  |
+| ✅ `P2-T27` | Wire `fanOut` into the running pipeline, which still fetches… | `P2-T01`, `P2-T02` | 0.5 d |  |
 | `P2-T28` | Give the per-source query dialect its home in… | `P2-T01`, `P2-T26`, `P2-T27` | 0.25 d |  |
 
 ### Phase 3
@@ -892,7 +892,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     Folded into `P2-T28` step 5 (same files): pass a pool there, make the member required, delete the
     fallback; the equivalent mutant becomes killable.
 
-79. **The pipeline still has its own `serialize`.** Three callers (`backfillAbstracts`, `notePartial`, `run`'s
+79. **The pipeline still has its own `serialize`.** *(2026-10-14: folded into `P2-T10` by coordinator note, with item 80.)* Three callers (`backfillAbstracts`, `notePartial`, `run`'s
     final `catch`); `stages.ts`'s copy is not exported. One `export` keyword in `stages.ts` and one deletion
     in the pipeline, the next time either file is in a card's list (`P2-T10` edits `stages.ts`).
 
@@ -900,7 +900,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     "What is still the caller's", `fetchStateFromReports`'s and `serialize`'s docs; `types.ts`'s
     `SearchImportFetchState` doc). Refresh with item 79.
 
-81. **(owner's confirmation)** With `fetchStateFromReports` kept, a run where one source errors and the
+81. ~~**(owner's confirmation)**~~ **CONFIRMED by the owner 2026-10-14 — the new behaviour stands.** With `fetchStateFromReports` kept, a run where one source errors and the
     other healthy source finds nothing is `partial`, continues to `Merging` and creates an **empty
     collection** (FR-6) with a banner naming the failed source; it previously ended `failed` with no
     collection. `docs/07` §12.1 supports the new reading; whether an empty collection is wanted is the
