@@ -5,7 +5,10 @@ import {
   buildEsearchRequest,
   explainPubmedQuery,
   PUBMED_ESEARCH_BASE_URL,
+  PUBMED_QUERY_FILTER_SUPPORT,
+  renderPubmedSearchTerm,
   renderPubmedTerm,
+  RESERVED_RAW_PARAMS,
 } from "../../../src/sources/pubmed/query";
 import { parseUserQuery } from "../../../src/sources/shared/queryParse";
 import { recencyWindow } from "../../../src/sources/shared/recency";
@@ -17,7 +20,9 @@ import type { QueryNode, SourceQuery } from "../../../src/sources/types";
  *
  * The rows `docs/13` §2.1 requires of a query builder are all here: boolean
  * translation, parenthesis balancing, date-range rendering, URL encoding, and
- * key redaction in the recorded URL.
+ * key redaction in the recorded URL. The last three blocks are `P2-T20`'s:
+ * the `languages`, `openAccessOnly` and `raw` members of `SourceQuery`, each
+ * either rendered or refused by name, never dropped.
  */
 
 /** §12.2's worked example, as the user types it. */
@@ -508,5 +513,295 @@ describe("buildEsearchRequest — key redaction", () => {
 
     expect(request.queryString).not.toContain("api_key");
     expect(request.transmittedUrl).toBe(request.url);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The three optional filters — `P2-T20`
+// ---------------------------------------------------------------------------
+
+/** `term=` as it would be read back by the server. */
+function termParam(source: SourceQuery): string | null {
+  return new URLSearchParams(
+    buildEsearchRequest({ query: source, retmax: 10 }).queryString,
+  ).get("term");
+}
+
+describe("languages — rendered as [la] clauses", () => {
+  it("renders languages: ['eng'] as eng[la] on the wire and in the preview", () => {
+    const source: SourceQuery = {
+      ...query("CRISPR", false),
+      languages: ["eng"],
+    };
+
+    // docs/12's PubMed syntax rules: "[la] (language)". Joined with AND, the
+    // term stays what renderPubmedTerm produced.
+    expect(termParam(source)).toBe("CRISPR[All Fields] AND eng[la]");
+    expect(explainPubmedQuery(source)).toBe("CRISPR[All Fields] AND eng[la]");
+    expect(renderPubmedSearchTerm(source)).toBe(termParam(source));
+  });
+
+  it("renders several languages as one OR group, before the date clause", () => {
+    const source: SourceQuery = {
+      ...query(EXAMPLE_INPUT),
+      languages: ["eng", "fre"],
+    };
+
+    expect(termParam(source)).toBe(
+      `${renderPubmedTerm(source.terms)} AND (eng[la] OR fre[la])`,
+    );
+    expect(squash(explainPubmedQuery(source))).toBe(
+      squash(
+        `${renderPubmedTerm(source.terms)} AND (eng[la] OR fre[la])` +
+          ' AND ("2024/01/01"[EDAT] : "2026/12/31"[EDAT])',
+      ),
+    );
+  });
+
+  it("renders no clause for an absent or empty list, byte-identically", () => {
+    const plain = query("CRISPR", false);
+    const empty: SourceQuery = { ...plain, languages: [] };
+
+    expect(termParam(empty)).toBe("CRISPR[All Fields]");
+    expect(buildEsearchRequest({ query: empty, retmax: 10 }).url).toBe(
+      buildEsearchRequest({ query: plain, retmax: 10 }).url,
+    );
+    expect(explainPubmedQuery(empty)).toBe(explainPubmedQuery(plain));
+  });
+
+  it("is the whole term when the tree renders to nothing", () => {
+    const source: SourceQuery = {
+      terms: { kind: "and", children: [] },
+      limit: 10,
+      languages: ["eng"],
+    };
+
+    expect(termParam(source)).toBe("eng[la]");
+    expect(explainPubmedQuery(source)).toBe("eng[la]");
+  });
+
+  it("cleans Entrez syntax out of a value and quotes a non-bare one", () => {
+    const source: SourceQuery = {
+      ...query("CRISPR", false),
+      languages: ['(eng)"', "middle english"],
+    };
+
+    expect(termParam(source)).toBe(
+      'CRISPR[All Fields] AND (eng[la] OR "middle english"[la])',
+    );
+  });
+
+  it("refuses a list that cleans to nothing rather than dropping the filter", () => {
+    const source: SourceQuery = {
+      ...query("CRISPR", false),
+      languages: ["()", '"[]"'],
+    };
+
+    // Emitting no clause would silently widen the search to every language —
+    // the exact symptom P2-T20 exists to remove.
+    expect(() => buildEsearchRequest({ query: source, retmax: 10 })).toThrow(
+      /SourceQuery\.languages/u,
+    );
+    expect(() => explainPubmedQuery(source)).toThrow(/every language/u);
+  });
+});
+
+describe("openAccessOnly — a declared, refused gap", () => {
+  it("declares the support flags a caller reads before setting a member", () => {
+    expect(PUBMED_QUERY_FILTER_SUPPORT).toEqual({
+      languages: true,
+      openAccessOnly: false,
+      raw: true,
+    });
+  });
+
+  it("refuses openAccessOnly: true by name on the wire and in the preview", () => {
+    const source: SourceQuery = {
+      ...query("CRISPR", false),
+      openAccessOnly: true,
+    };
+
+    // docs/02 §12.2 / §12.3 document no PubMed form (§4.3's OPEN_ACCESS:y is
+    // Europe PMC's); the card forbids inventing a tag, so the member is
+    // reported, never swallowed into a quietly smaller result set.
+    expect(() => buildEsearchRequest({ query: source, retmax: 10 })).toThrow(
+      /SourceQuery\.openAccessOnly/u,
+    );
+    expect(() => explainPubmedQuery(source)).toThrow(
+      /PUBMED_QUERY_FILTER_SUPPORT\.openAccessOnly is false/u,
+    );
+  });
+
+  it("treats openAccessOnly: false as asking for nothing", () => {
+    const plain = query("CRISPR", false);
+    const source: SourceQuery = { ...plain, openAccessOnly: false };
+
+    expect(buildEsearchRequest({ query: source, retmax: 10 }).url).toBe(
+      buildEsearchRequest({ query: plain, retmax: 10 }).url,
+    );
+    expect(explainPubmedQuery(source)).toBe("CRISPR[All Fields]");
+  });
+});
+
+describe("raw — appended esearch parameters that never touch term", () => {
+  it("appends raw pairs after maxdate, sorted by key, with term untouched", () => {
+    const source: SourceQuery = {
+      ...query(EXAMPLE_INPUT),
+      raw: { sort: "pub_date", field: "title" },
+    };
+    const request = buildEsearchRequest({ query: source, retmax: 100 });
+    const params = new URLSearchParams(request.queryString);
+
+    // Direction one: a parsed query plus raw transmits both, independently.
+    expect(params.get("term")).toBe(renderPubmedTerm(source.terms));
+    expect(params.get("sort")).toBe("pub_date");
+    expect(params.get("field")).toBe("title");
+    expect(request.queryString.split("&").map((p) => p.split("=")[0])).toEqual([
+      "db",
+      "term",
+      "retmode",
+      "retmax",
+      "retstart",
+      "datetype",
+      "mindate",
+      "maxdate",
+      "field",
+      "sort",
+      "tool",
+      "email",
+    ]);
+    // The preview is the term alone; raw is visible in the transmitted query.
+    expect(explainPubmedQuery(source)).not.toContain("pub_date");
+    expect(request.transmittedQuery).toContain("sort=pub_date");
+  });
+
+  it("keeps the identification last when there is no window", () => {
+    const source: SourceQuery = {
+      ...query("CRISPR", false),
+      raw: { sort: "pub_date" },
+    };
+    const names = buildEsearchRequest({ query: source, retmax: 10 })
+      .queryString.split("&")
+      .map((p) => p.split("=")[0]);
+
+    expect(names).toEqual([
+      "db",
+      "term",
+      "retmode",
+      "retmax",
+      "retstart",
+      "sort",
+      "tool",
+      "email",
+    ]);
+  });
+
+  it("refuses raw.term — raw neither replaces nor extends the parsed query", () => {
+    // Direction two: the escape hatch cannot reach `term` at all, so there is
+    // no "both present" ambiguity to resolve — the parser's output is the term.
+    for (const raw of [{ term: "mouse" }, { term: "" }]) {
+      expect(() =>
+        buildEsearchRequest({ query: { ...query("CRISPR"), raw }, retmax: 10 }),
+      ).toThrow(/raw may not set the PubMed esearch parameter "term"/u);
+    }
+  });
+
+  it("refuses every parameter the adapter emits itself, and reldate", () => {
+    for (const name of [
+      "db",
+      "retmode",
+      "retmax",
+      "retstart",
+      "datetype",
+      "mindate",
+      "maxdate",
+      "api_key",
+      "tool",
+      "email",
+      "reldate",
+    ]) {
+      expect(RESERVED_RAW_PARAMS.has(name)).toBe(true);
+      expect(() =>
+        buildEsearchRequest({
+          query: { ...query("CRISPR"), raw: { [name]: "x" } },
+          retmax: 10,
+        }),
+      ).toThrow(new RegExp(`raw may not set .*${name}`, "u"));
+    }
+    expect(() =>
+      buildEsearchRequest({
+        query: { ...query("CRISPR"), raw: { "": "x" } },
+        retmax: 10,
+      }),
+    ).toThrow(/raw may not set/u);
+  });
+
+  it("cannot displace the D10 identification parameters", () => {
+    // A reserved name throws before anything is built; the only way tool and
+    // email reach the URL is from ncbiIdentityParams().
+    expect(() =>
+      buildEsearchRequest({
+        query: { ...query("CRISPR"), raw: { email: "someone@example.org" } },
+        retmax: 10,
+      }),
+    ).toThrow(RangeError);
+    const params = new URLSearchParams(
+      buildEsearchRequest({
+        query: { ...query("CRISPR"), raw: { sort: "pub_date" } },
+        retmax: 10,
+      }).queryString,
+    );
+    expect(params.get("tool")).toBe(TOOL_NAME);
+    expect(params.get("email")).toBe(MAINTAINER_EMAIL);
+    expect(params.getAll("tool")).toHaveLength(1);
+    expect(params.getAll("email")).toHaveLength(1);
+  });
+
+  it("encodes every raw key and value and stringifies numbers and booleans", () => {
+    const source: SourceQuery = {
+      ...query("CRISPR", false),
+      raw: { "odd key": "a&b=c d", usehistory: true, count: 7 },
+    };
+    const request = buildEsearchRequest({ query: source, retmax: 10 });
+
+    // Never unescaped into the URL: the separators are encoded…
+    expect(request.queryString).toContain("odd%20key=a%26b%3Dc%20d");
+    expect(request.queryString).not.toContain("a&b=c");
+    // …and read back whole through a real URL parse.
+    const parsed = new URL(request.url).searchParams;
+    expect(parsed.get("odd key")).toBe("a&b=c d");
+    expect(parsed.get("usehistory")).toBe("true");
+    expect(parsed.get("count")).toBe("7");
+    expect(parsed.get("term")).toBe("CRISPR[All Fields]");
+  });
+
+  it("transmits a raw-only request with an empty term", () => {
+    const source: SourceQuery = {
+      terms: { kind: "and", children: [] },
+      limit: 10,
+      raw: { sort: "pub_date" },
+    };
+    const params = new URLSearchParams(
+      buildEsearchRequest({ query: source, retmax: 10 }).queryString,
+    );
+
+    expect(params.get("term")).toBe("");
+    expect(params.get("sort")).toBe("pub_date");
+  });
+
+  it("is a no-op when empty, and still redacts a credential-shaped raw name", () => {
+    const plain = query("CRISPR", false);
+    expect(
+      buildEsearchRequest({ query: { ...plain, raw: {} }, retmax: 10 }).url,
+    ).toBe(buildEsearchRequest({ query: plain, retmax: 10 }).url);
+
+    // `redactUrl`'s backstop still applies to whatever raw carries.
+    const request = buildEsearchRequest({
+      query: { ...plain, raw: { token: "s3cret-value" } },
+      retmax: 10,
+    });
+    expect(request.url).toContain("token=s3cret-value");
+    expect(request.transmittedUrl).not.toContain("s3cret-value");
+    expect(request.transmittedQuery).not.toContain("token");
   });
 });

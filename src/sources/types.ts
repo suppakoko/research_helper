@@ -25,6 +25,16 @@
  * mechanically; see `P1-T07`'s reported findings for the `zotero/` half, which
  * that config does not yet cover.
  *
+ * **Where `SourceQuery`'s optional filters are honoured (`P2-T20`).**
+ * `languages`, `openAccessOnly` and `raw` are declared "where supported" and
+ * "documented per adapter", and §4.2 carries no `SourceCapabilities` member
+ * saying which adapter supports which — so each adapter's `query.ts` states
+ * it: PubMed's `PUBMED_QUERY_FILTER_SUPPORT` (`./pubmed/query.ts`) is the flag
+ * a caller reads, and that module refuses an unsupported member with
+ * `RangeError` rather than dropping it. Moving the flag onto
+ * `SourceCapabilities`, beside `dateFilter`, is a `docs/07` §4.2 change first
+ * (§11.1, as `P2-T28` did for `query`), and nothing is added here ahead of it.
+ *
  * ## Two transcription notes
  *
  * 1. **`ExternalIds` is imported from `model/ids`, not from

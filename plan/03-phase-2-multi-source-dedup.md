@@ -2697,6 +2697,16 @@ module header so it is visible at the call site rather than at the result.
 - modify `test/unit/sources/pubmed-query.test.ts`
 
 **Do.**
+> **Corrected 2026-10-14 after the executing agent measured (report):** the corpus documents **no** PubMed form for
+> `openAccessOnly` — `docs/02` §12.2/§12.3 carry no row and `free full text[sb]` appears only in `plan/`
+> — so, as this card's own Do NOT requires, PubMed refuses it by name (`RangeError`, flag
+> `PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly: false`) rather than rendering an invented tag
+> (`plan/00` §6 item 112). The language tag is `[la]` (`docs/12`), not this card's `[Language]`. Steps 3
+> and 4 ask for a flag on `SourceCapabilities`, which `docs/07` §4.2 owns and this card's list does not
+> include, so the flag is adapter-level (`PUBMED_QUERY_FILTER_SUPPORT` in `src/sources/pubmed/query.ts`;
+> item 113). Steps 1 and 3 say "for each source" while the list names only PubMed's renderer; Europe PMC's
+> documented `OPEN_ACCESS:y` is `P2-T03`'s (item 115). The "Why" paragraph's claim that the module header
+> listed the three members as unrendered was false — the header did not mention them.
 1. Render `languages` and `openAccessOnly` for each source that can express them, from the documented
    tag for that source.
 2. Decide what `raw` means and where it is allowed. **It is an escape hatch that bypasses the parser,**
@@ -2721,6 +2731,25 @@ module header so it is visible at the call site rather than at the result.
 - [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` all exit 0.
 
 **Verify with.** `npm run typecheck && npm run test:unit -- query`
+
+
+**Findings, 2026-10-14 — done for PubMed; `languages` and `raw` render, `openAccessOnly` is refused by name because the corpus documents no PubMed form; full report at `plan/reports/P2-T20.md`.**
+Verified by the coordinator on the live tree: the three hashes equal the agent's (`query.ts` ac8be0bb,
+`types.ts` 61f4af01, test 16e7e0c3), `src/sources/types.ts` changed by ten header-comment lines only (the
+seven `docs/07` §4.2 blocks untouched), typecheck 0, eslint clean, the two `query` test files **85 passed**
+(68 + 17 new). `languages: ["eng"]` renders `CRISPR[All Fields] AND eng[la]` on the wire and in the preview,
+several values as an `OR` group, an empty list as absent, and a list that cleans to nothing throws rather
+than silently widening; `raw` is a sorted, encoded bag of extra `esearch` parameters placed after `maxdate`
+and before the identification and credential parameters, with `term`, every name the module emits and
+`reldate` refused, so it can neither replace the parsed query nor displace the credential; `openAccessOnly:
+true` throws a `RangeError` naming the member, which `fetchOne` already turns into that source's own error
+row. Fifteen mutants, fifteen killed. Nothing in `src/` sets any of the three members yet, so no product
+behaviour changes until a caller does. The whole unit suite showed four failures in `P2-T03`'s in-flight
+`HOST_POLICIES` edit (Phase 1 tests pin the table at one row — that card will meet them), none here. Three
+corpus gaps for the owner: PubMed's language and open-access rows missing from `docs/02` §12 (item 112), a
+`SourceCapabilities` home for per-filter support (item 113), and `languages` typed ISO-639-1 while PubMed
+takes three-letter codes (item 114).
+---
 
 ### P2-T21 — Make the concurrency cap resizable, so a tightened header lands at once
 

@@ -1045,6 +1045,32 @@ the caller of what the card builds; if it does not, the caller is added with a d
 111. **Every integration spec declares its own `MochaContext` / `assert` typings** (`P1-T13` noted it too). One
     shared typing under `test/support/` the next time a spec is created.
 
+### 6.22 Raised by `P2-T20`, 2026-10-14 — recorded under rule 9, none carded
+
+112. **(owner's document edit)** `docs/02` §12.2 and §12.3 have no PubMed row for language (`[la]`, alias
+    `[Language]`) or for open access. Once they do — and `free full text[sb]` has been verified live — flip
+    `PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly` and add the tag constant in `src/sources/pubmed/query.ts`;
+    until then PubMed refuses `openAccessOnly` by name.
+
+113. **(owner's document decision)** Per-filter support has no home on `SourceCapabilities` (`docs/07` §4.2);
+    `P2-T20` left it adapter-level. Adding members beside `dateFilter` (names illustrative: `languageFilter`,
+    `openAccessFilter`) is a §4.2 change first, then `src/sources/types.ts` and `PUBMED_CAPABILITIES`.
+
+114. **`SourceQuery.languages` is typed ISO-639-1 in `docs/07` §4.2; PubMed's `[la]` takes three-letter
+    MEDLINE codes** (`eng`). Values pass through untranslated today. Settle the code set before any surface
+    sets the member.
+
+115. **For `P2-T03`:** Europe PMC documents `OPEN_ACCESS:y` (`docs/02` §4.3) — render it for `openAccessOnly`,
+    and report `languages` as a gap unless a field is documented; follow `PUBMED_QUERY_FILTER_SUPPORT`'s
+    pattern. Sent to the running agent 2026-10-14.
+
+116. **`P1-T08`'s Findings in `plan/02` claim the PubMed renderer's header listed `languages`, `openAccessOnly`
+    and `raw` as unrendered.** It did not mention them. A dated correction there the next time that file
+    is edited.
+
+117. **Refuse or degrade?** PubMed throws on an unrenderable filter; a warning on `SourcePage.warnings` with
+    the filter dropped is the alternative. The owner's product call; today's choice is the conservative one.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

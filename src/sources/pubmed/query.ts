@@ -41,6 +41,50 @@
  *   form `docs/02` §12.2 prints for this exact example query. It is the same
  *   filter in a different mechanism, not a different filter.
  *
+ * ## The three optional `SourceQuery` filters (`P2-T20`)
+ *
+ * `docs/07` §4.2 declares `languages`, `openAccessOnly` and `raw` on
+ * `SourceQuery`; `P1-T08` rendered none of them, so a caller that set one had
+ * it dropped and saw only a quietly wrong result count. Each now has one
+ * stated fate, and {@link PUBMED_QUERY_FILTER_SUPPORT} is the flag a caller
+ * reads before relying on it:
+ *
+ * - **`languages` is rendered**, in the `term`, as `eng[la]` — or
+ *   `(eng[la] OR fre[la])` for several — joined to the Boolean term with
+ *   `AND`. `[la]` is the language tag the corpus documents for PubMed
+ *   (`docs/12`'s query-generation system prompt, "`[la]` (language)");
+ *   `[Language]` is Entrez's long spelling of the same field and is what the
+ *   card names. Values are passed through as given: §4.2 types the member as
+ *   ISO-639-1, while PubMed's language field takes its three-letter MEDLINE
+ *   codes (`eng`, the card's own example) and the full names — a mismatch the
+ *   corpus has not settled, so nothing here translates one into the other.
+ *   A list whose every value cleans to nothing is refused with `RangeError`,
+ *   because emitting no clause would silently widen the query to all
+ *   languages.
+ * - **`openAccessOnly` is refused**, with a `RangeError` naming the member,
+ *   from both {@link buildEsearchRequest} and {@link explainPubmedQuery}.
+ *   `docs/02` §12.2 / §12.3 document no PubMed form for it — §4.3's
+ *   `OPEN_ACCESS:y` is Europe PMC's — and the card's "Do NOT" forbids
+ *   inventing one (the plan's `free full text[sb]` is a card claim, not a
+ *   corpus row). Refusing is `docs/07` §11.1 step 2's "do not fake it" in the
+ *   shape `resolveDateFilterMode` gives it: the pipeline turns the throw into
+ *   that source's `report.error` (`stages.ts`, `fetchOne`), which is the
+ *   opposite of the silent symptom this card exists to remove. When §12.2
+ *   gains the row, the change is one tag constant and one flag.
+ * - **`raw` is a bag of extra `esearch` parameters, appended; it never touches
+ *   `term`.** The parser is not bypassed by it: `raw.term` — and every other
+ *   key this module emits itself, plus `reldate` — is reserved and refused
+ *   with `RangeError` ({@link RESERVED_RAW_PARAMS}), so `raw` can neither
+ *   replace nor extend the rendered Boolean term, and cannot displace the D10
+ *   identification parameters or the credential. When `raw` and a parsed query
+ *   are both present, both are transmitted, independently: `term` is exactly
+ *   {@link renderPubmedTerm}'s output and the raw pairs follow `maxdate`,
+ *   sorted by key for byte stability. Every key and value is
+ *   `encodeURIComponent`-ed; a value is `String(value)`, so a caller wanting
+ *   Entrez's `y`/`n` passes the string, not a boolean. `raw` does not appear in
+ *   {@link explainPubmedQuery}, which renders the `term` alone; it is visible
+ *   in {@link PubmedEsearchRequest.transmittedQuery}.
+ *
  * ## Layering
  *
  * `sources/` may import `core/` and `model/` and must not import `pipeline/`,
@@ -121,6 +165,44 @@ const ENTREZ_SYNTAX_CHARS = /["()[\]]/gu;
 const BARE_VALUE = /^[\p{L}\p{N}_-]+$/u;
 
 /**
+ * PubMed's language field tag, as the corpus spells it (`docs/12`'s PubMed
+ * syntax rules: "`[la]` (language)"). Entrez also accepts the long form
+ * `[Language]`; the two name one field.
+ */
+const LANGUAGE_TAG = "[la]";
+
+/**
+ * The optional `SourceQuery` members that are filters rather than the query
+ * itself — `docs/07` §4.2's `languages`, `openAccessOnly` and `raw`. Derived
+ * from the contract, not re-declared, so a member renamed there fails here.
+ */
+export type PubmedQueryFilter = keyof Pick<
+  SourceQuery,
+  "languages" | "openAccessOnly" | "raw"
+>;
+
+/**
+ * Which of the three optional filters this adapter really expresses — the
+ * flag a caller reads before setting one, in the shape `resolveDateFilterMode`
+ * reads `SourceCapabilities.dateFilter` (`docs/07` §11.1 step 2: declare
+ * honestly, "do not fake it"). A member whose flag is `false` is **refused**
+ * with `RangeError` by {@link buildEsearchRequest} and
+ * {@link explainPubmedQuery} when set, never dropped.
+ *
+ * It lives here rather than on `SourceCapabilities` because `docs/07` §4.2
+ * declares no such member yet and that document is the sole authority for the
+ * type (`plan/README.md` §5 rule 3); the module header says why
+ * `openAccessOnly` is `false`.
+ */
+export const PUBMED_QUERY_FILTER_SUPPORT: Readonly<
+  Record<PubmedQueryFilter, boolean>
+> = {
+  languages: true,
+  openAccessOnly: false,
+  raw: true,
+};
+
+/**
  * Render a query tree into an Entrez `term`.
  *
  * @param node - the tree, from `parseUserQuery` or from anything else that
@@ -183,12 +265,84 @@ function renderTerm(
   field: QueryField | undefined,
   phrase: boolean,
 ): string {
+  return renderAtom(value, FIELD_TAGS[field ?? "any"], phrase);
+}
+
+/**
+ * One `value[tag]` atom for any Entrez tag: syntax characters stripped,
+ * whitespace collapsed, quoted when the value is not a bare word or is a
+ * phrase. `""` when nothing renderable is left.
+ */
+function renderAtom(value: string, tag: string, phrase: boolean): string {
   const cleaned = value.replace(ENTREZ_SYNTAX_CHARS, " ").trim();
   if (cleaned === "") return "";
   const collapsed = cleaned.replace(/\s+/gu, " ");
-  const tag = FIELD_TAGS[field ?? "any"];
   const quoted = phrase || !BARE_VALUE.test(collapsed);
   return quoted ? `"${collapsed}"${tag}` : `${collapsed}${tag}`;
+}
+
+/**
+ * The `languages` filter as an Entrez clause: `eng[la]`, or
+ * `(eng[la] OR fre[la])` for several — a list of languages is a disjunction,
+ * "any of these". `""` when the member is absent or the list is empty.
+ *
+ * @throws RangeError when the list is non-empty but no value survives
+ *   {@link renderAtom}'s cleaning — emitting nothing would silently drop the
+ *   filter, the exact failure this module exists to make visible
+ */
+function renderLanguageClause(languages: readonly string[]): string {
+  if (languages.length === 0) return "";
+  const atoms = languages
+    .map((language) => renderAtom(language, LANGUAGE_TAG, false))
+    .filter((atom) => atom !== "");
+  if (atoms.length === 0) {
+    throw new RangeError(
+      `[research-helper] PubMed cannot render SourceQuery.languages=` +
+        `${JSON.stringify(languages)}: no value is left after removing ` +
+        `Entrez syntax characters, and dropping the filter would silently ` +
+        `widen the query to every language.`,
+    );
+  }
+  if (atoms.length === 1) return firstPart(atoms);
+  return `(${atoms.join(" OR ")})`;
+}
+
+/**
+ * Refuse every optional filter this adapter cannot express
+ * ({@link PUBMED_QUERY_FILTER_SUPPORT}), by name, so the drop is an error at
+ * the call site and never a quietly smaller result set.
+ *
+ * `openAccessOnly: false` is not a filter — it asks for nothing — and passes.
+ */
+function assertExpressible(query: SourceQuery): void {
+  if (
+    query.openAccessOnly === true &&
+    !PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly
+  ) {
+    throw new RangeError(
+      `[research-helper] PubMed cannot express SourceQuery.openAccessOnly: ` +
+        `docs/02 §12.2 / §12.3 document no PubMed open-access filter form, ` +
+        `and the member would otherwise be silently dropped. ` +
+        `PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly is false.`,
+    );
+  }
+}
+
+/**
+ * The `term` this adapter transmits for a query: {@link renderPubmedTerm}'s
+ * rendering of `terms`, then the `languages` clause joined with `AND`. The
+ * one place the two are combined, so {@link explainPubmedQuery} and
+ * {@link buildEsearchRequest} cannot drift.
+ *
+ * @throws RangeError for an unexpressible filter ({@link assertExpressible})
+ *   or an unrenderable `languages` list ({@link renderLanguageClause})
+ */
+export function renderPubmedSearchTerm(query: SourceQuery): string {
+  assertExpressible(query);
+  const term = renderPubmedTerm(query.terms);
+  const languages = renderLanguageClause(query.languages ?? []);
+  if (languages === "") return term;
+  return term === "" ? languages : `${term} AND ${languages}`;
 }
 
 /** `noUncheckedIndexedAccess` makes `parts[0]` optional; the caller checked. */
@@ -207,16 +361,21 @@ function firstPart(parts: readonly string[]): string {
  * `mindate`/`maxdate` — {@link buildEsearchRequest} — which §3.3 calls an
  * interchangeable expression of the same filter.
  *
+ * The `languages` clause is part of the term and so is shown; `raw` is not a
+ * term and is not (module header). An unexpressible filter throws here as it
+ * does on the wire, so the preview fails where the search would.
+ *
  * @param query - the normalized query
  * @param datetype - which date PubMed should match; `"edat"` per §3.3
  * @returns the term, followed by ` AND ("YYYY/MM/DD"[EDAT] : "YYYY/MM/DD"[EDAT])`
  *   when the query carries both bounds
+ * @throws RangeError for an unexpressible filter ({@link renderPubmedSearchTerm})
  */
 export function explainPubmedQuery(
   query: SourceQuery,
   datetype: PubmedDateType = "edat",
 ): string {
-  const term = renderPubmedTerm(query.terms);
+  const term = renderPubmedSearchTerm(query);
   const window = resolveWindow(query);
   if (window === undefined) return term;
 
@@ -227,7 +386,10 @@ export function explainPubmedQuery(
 
 /** What {@link buildEsearchRequest} is told, beyond the query itself. */
 export interface PubmedEsearchOptions {
-  /** The normalized query. `terms`, `fromDate` and `toDate` are read. */
+  /**
+   * The normalized query. `terms`, `fromDate`, `toDate`, `languages`,
+   * `openAccessOnly` and `raw` are read (module header for the last three).
+   */
   readonly query: SourceQuery;
   /** `retmax`; `docs/02` §3.3 caps it at 10 000. `P1-T09` chooses it. */
   readonly retmax: number;
@@ -286,6 +448,55 @@ const PARAM_ORDER = [
   "email",
 ] as const;
 
+type ParamName = (typeof PARAM_ORDER)[number];
+
+/**
+ * Where `SourceQuery.raw`'s pairs go: after this parameter and before the
+ * next one in {@link PARAM_ORDER}. After the window and before the credential
+ * and the D10 identification — so the fixed prefix of the query string is
+ * what it was before `raw` existed and the identification stays last.
+ */
+const RAW_PARAMS_AFTER: ParamName = "maxdate";
+
+/**
+ * `esearch` parameter names `SourceQuery.raw` may not carry.
+ *
+ * Every name this module emits itself, so `raw` cannot replace or extend the
+ * rendered `term` (the parser is not bypassed), displace `tool` / `email`
+ * (D10, `docs/02` §3.1 "on **every** request") or smuggle a credential past
+ * {@link PubmedEsearchOptions.apiKey}'s redaction path; and `reldate`, because
+ * the window is calendar years (conflict C10, module header) and a rolling
+ * `reldate` would make the label lie about the same search.
+ */
+export const RESERVED_RAW_PARAMS: ReadonlySet<string> = new Set<string>([
+  ...PARAM_ORDER,
+  "reldate",
+]);
+
+/**
+ * `SourceQuery.raw` as `name=value` pairs, sorted by key, both halves
+ * `encodeURIComponent`-ed. Empty when the member is absent or empty.
+ *
+ * @throws RangeError for a reserved name ({@link RESERVED_RAW_PARAMS}) or an
+ *   empty name, which is not a parameter at all
+ */
+function renderRawParams(raw: SourceQuery["raw"]): readonly string[] {
+  if (raw === undefined) return [];
+  const names = Object.keys(raw).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return names.map((name) => {
+    if (name === "" || RESERVED_RAW_PARAMS.has(name)) {
+      throw new RangeError(
+        `[research-helper] SourceQuery.raw may not set the PubMed esearch ` +
+          `parameter ${JSON.stringify(name)}: it is one this adapter emits ` +
+          `itself (term, the D10 tool/email identification, the credential, ` +
+          `the date window) and raw never replaces or extends them.`,
+      );
+    }
+    const value = raw[name];
+    return `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`;
+  });
+}
+
 /**
  * Build the full `esearch` parameter set.
  *
@@ -300,16 +511,19 @@ const PARAM_ORDER = [
  *   inventing the missing bound would silently change the window the user was
  *   shown
  * @throws RangeError when a bound is not `YYYY`, `YYYY-MM` or `YYYY-MM-DD`
+ * @throws RangeError for an unexpressible filter, an unrenderable `languages`
+ *   list, or a reserved `raw` parameter name (module header)
  */
 export function buildEsearchRequest(
   options: PubmedEsearchOptions,
 ): PubmedEsearchRequest {
   const identity = ncbiIdentityParams();
   const window = resolveWindow(options.query);
+  const rawPairs = renderRawParams(options.query.raw);
 
-  const values: Partial<Record<(typeof PARAM_ORDER)[number], string>> = {
+  const values: Partial<Record<ParamName, string>> = {
     db: "pubmed",
-    term: renderPubmedTerm(options.query.terms),
+    term: renderPubmedSearchTerm(options.query),
     retmode: options.retmode ?? "json",
     retmax: String(options.retmax),
     retstart: String(options.retstart ?? 0),
@@ -328,7 +542,9 @@ export function buildEsearchRequest(
 
   const queryString = PARAM_ORDER.flatMap((name) => {
     const value = values[name];
-    return value === undefined ? [] : [`${name}=${encodeURIComponent(value)}`];
+    const pair =
+      value === undefined ? [] : [`${name}=${encodeURIComponent(value)}`];
+    return name === RAW_PARAMS_AFTER ? [...pair, ...rawPairs] : pair;
   }).join("&");
 
   const url = `${PUBMED_ESEARCH_BASE_URL}?${queryString}`;
