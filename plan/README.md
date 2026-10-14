@@ -232,6 +232,17 @@ When Claude Code is handed a task card:
    premise. The same applies to a `Files` row: a row written as a guess is a
    guess the agent cannot see, so mark it as one.
 
+10. **Before a card is launched, the coordinator checks that its `Files` list names the
+    caller of what the card builds.** If the card adds a function, a stage body or an
+    adapter, the file that will call it (or register it) must be in the list; if it is
+    not, the coordinator adds it with a dated note before launch, or states on the card
+    which later card owns the call. Added 2026-10-14, after the same gap appeared twice in
+    Phase 2: `P2-T02` built `fanOut` and `P2-T10` built `dedupeAndMerge`, each in
+    `stages.ts`, while the caller — `run` in `searchImportPipeline.ts` — was outside
+    both lists, so the product kept its old behaviour until a wiring card (`P2-T27`,
+    `P2-T29`) was created for each. The cards were written before the pipeline existed;
+    the check costs one grep per launch.
+
 ## 6. Conventions
 
 - **Repository.** Not yet initialised. `P0-T01` creates it. Default branch

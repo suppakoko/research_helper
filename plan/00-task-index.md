@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-14 · **141 tasks: 88 `DONE`, 53 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **10 of 29**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 141, so 43 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-14 · **141 tasks: 91 `DONE`, 50 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **13 of 29**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 141, so 43 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -220,7 +220,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P2-T07` | bioRxiv / medRxiv adapter (ID lookup and cross-walk only) | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28` | 1.5 d |  |
 | `P2-T08` | `preprint` item-type mapping and server attribution | `P2-T03`, `P2-T06`, `P2-T07` | 1.0 d |  |
 | ✅ `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
-| `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
+| ✅ `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
 | `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09` | 1.0 d | 🔒 |
 | `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29` | 0.75 d |  |
 | `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11` | 2.0 d | 🔒 |
@@ -229,7 +229,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
 | ✅ `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
 | `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29` | 1.0 d |  |
-| `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
+| ✅ `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
 | `P2-T20` | Render `languages`, `openAccessOnly` and `raw` across the… | `P1-T08` | 0.5 d |  |
 | ✅ `P2-T21` | Make the concurrency cap resizable, so a tightened header… | `P1-T27`, `P1-T26` | 0.5 d |  |
 | ✅ `P2-T22` | Declare the menu-context member `docs/08` mandates and… | `P1-T19` | 0.25 d |  |
@@ -238,7 +238,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T25` | Make the fixture replay harness usable inside Zotero, so six… | `P1-T11` | 0.75 d |  |
 | ✅ `P2-T26` | Give the source registry a test-only removal, before two… | `P2-T25` | 0.25 d |  |
 | ✅ `P2-T27` | Wire `fanOut` into the running pipeline, which still fetches… | `P2-T01`, `P2-T02` | 0.5 d |  |
-| `P2-T28` | Give the per-source query dialect its home in… | `P2-T01`, `P2-T26`, `P2-T27` | 0.25 d |  |
+| ✅ `P2-T28` | Give the per-source query dialect its home in… | `P2-T01`, `P2-T26`, `P2-T27` | 0.25 d |  |
 | `P2-T29` | Wire `dedupeAndMerge` into the running pipeline, which still… | `P2-T10`, `P2-T27` | 0.5 d |  |
 
 ### Phase 3
@@ -967,7 +967,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 
 ### 6.19 Raised by `P2-T28`, 2026-10-14 — recorded under rule 9, none carded
 
-96. **(owner's decision)** `PUBMED_CAPABILITIES.query.fields` lists `docs/02` §12.3's PubMed rows plus
+96. ~~**(owner's decision)**~~ **DECIDED 2026-10-14 — stays at §12.3's four (title, abstract, author, journal).** `PUBMED_CAPABILITIES.query.fields` lists `docs/02` §12.3's PubMed rows plus
     `journal` (four), while `FIELD_TAGS` in `src/sources/pubmed/query.ts` renders all eight `QueryField`
     members. If `fields` means "what the source renders" (`docs/07` §11.1 step 2), add `titleOrAbstract`,
     `affiliation`, `meshTerm` and `any`; the unit test "takes the adapter's own declaration" pins whichever
@@ -1008,8 +1008,8 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 
 **Process note, 2026-10-14.** Twice now a Phase 2 card built a stage body in `stages.ts` whose caller lives in
 `searchImportPipeline.ts`'s `run`, and the card's `Files` list did not name the caller (`P2-T02` → `P2-T27`,
-`P2-T10` → `P2-T29`). The cards were written before the pipeline existed. Proposed as `plan/README.md` §5
-rule 10, pending the owner: *before a card is launched, the coordinator checks that its `Files` list names
+`P2-T10` → `P2-T29`). The cards were written before the pipeline existed. **Adopted by the owner 2026-10-14 as `plan/README.md` §5
+rule 10:** *before a card is launched, the coordinator checks that its `Files` list names
 the caller of what the card builds; if it does not, the caller is added with a dated note before launch.*
 
 ### 6.21 Raised by `P2-T19`, 2026-10-14 — recorded under rule 9, none carded

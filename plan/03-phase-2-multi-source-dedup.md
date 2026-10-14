@@ -1258,7 +1258,7 @@ flag; one-sided preprint is a 0.75 flag; short titles come out `distinct`). Foll
 | Field | Value |
 |---|---|
 | **ID** | `P2-T10` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14; the merge policy and `dedupeAndMerge` are built and proven, their wiring is `P2-T29`. Report at `plan/reports/P2-T10.md`. |
 | **Depends on** | `P2-T09` |
 | **Blocks** | `P2-T12`, `P2-T13`, `P2-T14`, `P2-T16`, `P2-T29` |
 | **Retires** | part of `R-18`, part of `R-17` |
@@ -2543,7 +2543,7 @@ a new `P2-T17`+ card per `README.md` §3, not a silent fix inside this one.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T19` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14; four-arm library index and `fromZoteroItem`. Report at `plan/reports/P2-T19.md`. |
 | **Depends on** | `P1-T13`, `P2-T09` |
 | **Blocks** | none |
 | **Retires** | none |
@@ -3823,7 +3823,7 @@ their transient states, none a defect here. Not checked: NFR-2's wall clock and 
 | Field | Value |
 |---|---|
 | **ID** | `P2-T28` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-14; `SourceCapabilities.query` exists in `docs/07` §4.2 and the code; the owner kept PubMed's `fields` at §12.3's four (`plan/00` §6 item 96). Report at `plan/reports/P2-T28.md`. |
 | **Depends on** | `P2-T01`, `P2-T26`, `P2-T27` |
 | **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07` |
 | **Retires** | `plan/00` §6 item 61 |
