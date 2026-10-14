@@ -560,6 +560,14 @@ in the polite pool, with its Boolean lossiness handled explicitly rather than si
 > `src/model/merge.ts` already carries this source's precedence entries (`P2-T10`); measure before editing.
 > Record fixtures through `npm run fixtures:record -- --source <id>` once `P2-T33` lands. If `docs/07` §7.3's
 > retry cells for this host read `—`, stop and report — rule 4 forbids inventing them.
+> *(added 2026-10-14 after `P2-T33` and `P2-T32` landed)* Also in the list: `scripts/record-fixtures.ts` (one
+> `case` in `planFor`, a `crossrefIndependentPlan` and, if needed, dependent/synthetic plans; `RECORDABLE_SOURCES`
+> gains the id) and `test/support/crossrefRecordedRequests.ts` (the scenario constants, node-free, imported by
+> both the recorder and the unit test — the layout `pubmedRecordedRequests.ts` prescribes); and the two test
+> expectations that grow by one entry per shipped host: `test/unit/core/tokenBucket.test.ts`'s shipped-host
+> list and `test/unit/bootstrap/container.test.ts`'s `hosts`/`sources`. `backoff.test.ts` reads `docs/07`
+> §7.3 and needs nothing — this host's retry cells are filled (2026-10-14). The adapter joins
+> `ShippedSourceAdapters` through `installServices`' literal (`P2-T32`), which is a compile error until it does.
 - create `src/sources/crossref/crossrefSource.ts`
 - create `src/sources/crossref/mapper.ts`
 - create `src/sources/crossref/query.ts`
@@ -712,6 +720,14 @@ are thin.
 > `src/model/merge.ts` already carries this source's precedence entries (`P2-T10`); measure before editing.
 > Record fixtures through `npm run fixtures:record -- --source <id>` once `P2-T33` lands. If `docs/07` §7.3's
 > retry cells for this host read `—`, stop and report — rule 4 forbids inventing them.
+> *(added 2026-10-14 after `P2-T33` and `P2-T32` landed)* Also in the list: `scripts/record-fixtures.ts` (one
+> `case` in `planFor`, a `semanticscholarIndependentPlan` and, if needed, dependent/synthetic plans; `RECORDABLE_SOURCES`
+> gains the id) and `test/support/semanticscholarRecordedRequests.ts` (the scenario constants, node-free, imported by
+> both the recorder and the unit test — the layout `pubmedRecordedRequests.ts` prescribes); and the two test
+> expectations that grow by one entry per shipped host: `test/unit/core/tokenBucket.test.ts`'s shipped-host
+> list and `test/unit/bootstrap/container.test.ts`'s `hosts`/`sources`. `backoff.test.ts` reads `docs/07`
+> §7.3 and needs nothing — this host's retry cells are filled (2026-10-14). The adapter joins
+> `ShippedSourceAdapters` through `installServices`' literal (`P2-T32`), which is a compile error until it does.
 - create `src/sources/semanticscholar/semanticscholarSource.ts`
 - create `src/sources/semanticscholar/mapper.ts`
 - create `src/sources/semanticscholar/query.ts`
@@ -853,6 +869,14 @@ hard one-request-per-three-seconds Terms of Use obligation.
 > `src/model/merge.ts` already carries this source's precedence entries (`P2-T10`); measure before editing.
 > Record fixtures through `npm run fixtures:record -- --source <id>` once `P2-T33` lands. If `docs/07` §7.3's
 > retry cells for this host read `—`, stop and report — rule 4 forbids inventing them.
+> *(added 2026-10-14 after `P2-T33` and `P2-T32` landed)* Also in the list: `scripts/record-fixtures.ts` (one
+> `case` in `planFor`, a `arxivIndependentPlan` and, if needed, dependent/synthetic plans; `RECORDABLE_SOURCES`
+> gains the id) and `test/support/arxivRecordedRequests.ts` (the scenario constants, node-free, imported by
+> both the recorder and the unit test — the layout `pubmedRecordedRequests.ts` prescribes); and the two test
+> expectations that grow by one entry per shipped host: `test/unit/core/tokenBucket.test.ts`'s shipped-host
+> list and `test/unit/bootstrap/container.test.ts`'s `hosts`/`sources`. `backoff.test.ts` reads `docs/07`
+> §7.3 and needs nothing — this host's retry cells are filled (2026-10-14). The adapter joins
+> `ShippedSourceAdapters` through `installServices`' literal (`P2-T32`), which is a compile error until it does.
 - create `src/sources/arxiv/arxivSource.ts`
 - create `src/sources/arxiv/mapper.ts`
 - create `src/sources/arxiv/query.ts`
@@ -981,6 +1005,14 @@ through Europe PMC instead.
 > `src/model/merge.ts` already carries this source's precedence entries (`P2-T10`); measure before editing.
 > Record fixtures through `npm run fixtures:record -- --source <id>` once `P2-T33` lands. If `docs/07` §7.3's
 > retry cells for this host read `—`, stop and report — rule 4 forbids inventing them.
+> *(added 2026-10-14 after `P2-T33` and `P2-T32` landed)* Also in the list: `scripts/record-fixtures.ts` (one
+> `case` in `planFor`, a `biorxivIndependentPlan` and, if needed, dependent/synthetic plans; `RECORDABLE_SOURCES`
+> gains the id) and `test/support/biorxivRecordedRequests.ts` (the scenario constants, node-free, imported by
+> both the recorder and the unit test — the layout `pubmedRecordedRequests.ts` prescribes); and the two test
+> expectations that grow by one entry per shipped host: `test/unit/core/tokenBucket.test.ts`'s shipped-host
+> list and `test/unit/bootstrap/container.test.ts`'s `hosts`/`sources`. `backoff.test.ts` reads `docs/07`
+> §7.3 and needs nothing — this host's retry cells are filled (2026-10-14). The adapter joins
+> `ShippedSourceAdapters` through `installServices`' literal (`P2-T32`), which is a compile error until it does.
 - create `src/sources/biorxiv/biorxivSource.ts`
 - create `src/sources/biorxiv/mapper.ts`
 - create `src/sources/biorxiv/query.ts`
