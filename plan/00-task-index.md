@@ -1244,6 +1244,20 @@ the caller of what the card builds; if it does not, the caller is added with a d
 155. **No test pins Crossref's dependent page to disk** (the same gap as items 136 and 60); the dry-run
     `diff` is the only guard. Fold into the pin item 136 describes.
 
+### 6.30 Raised by `P2-T24`, 2026-10-15 — recorded under rule 9, none carded
+
+156. **Stale prose in `src/core/rateLimit/tokenBucket.ts`:** `applyWantedConcurrency`'s JSDoc says advertised
+    limits are adopted "only downwards"; since `P2-T04`'s `adoptHeaderDrivenLimits` a header can raise the
+    cap on `api.crossref.org`. And the module header's "requests in flight are never more than
+    `maxConcurrent`" is true against the old cap only during a tightening drain. Two sentences, the next
+    time that file is in a card's list.
+
+157. **`docs/07` §13's to-do "wire provider rate-limit response headers into `limiter.reconfigure()`"** is done
+    for NCBI (`P1-T26`) and Crossref (`P2-T04`); a stale checklist line, the owner's document edit.
+
+158. **`P2-T21`'s report was never saved** — it predates the §6 convention; its measurements exist only in its
+    Findings block. Nothing to recover; noted so no card goes looking for `plan/reports/P2-T21.md`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

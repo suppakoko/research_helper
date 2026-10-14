@@ -717,8 +717,20 @@ export interface RateLimiterConfig {
 export interface RateLimiterStats {
   readonly available: number;
   /**
-   * Slots currently held by a `run` call — never more than `maxConcurrent`. A
-   * bare `acquire` is not counted: it has no end that could decrement this.
+   * Slots currently held by a `run` call — never more than `maxConcurrent`,
+   * with one bounded exception. Immediately after `reconfigure()` *lowers* the
+   * cap this may read above the new `maxConcurrent`, by at most the calls
+   * already admitted under the old cap; it is non-increasing from that instant
+   * until it reaches the new cap, because nothing is admitted while it is above
+   * it, and it never exceeds the new cap again afterwards. Against the old cap,
+   * and at every instant where no cap change is draining, the first sentence
+   * holds exactly. The exception comes from `Semaphore.resize`'s draining
+   * shrink — see the `P2-T24` correction below this block — and it is the only
+   * way a tightening can land without revoking a permit from a request already
+   * on the wire. A bare `acquire` is not counted: it has no end that could
+   * decrement this. (Narrowed 2026-10-15, `P2-T24`; the shipped comment on
+   * `src/core/rateLimit/tokenBucket.ts`'s `RateLimiterStats.inFlight` says the
+   * same thing and is the measurement.)
    */
   readonly inFlight: number;
   readonly queued: number;
@@ -775,15 +787,37 @@ export interface RateLimiterStats {
 > not consumers, and `src/core/rateLimit/hostLimiter.ts` and
 > `src/bootstrap/container.ts` only consume it.
 >
-> **One limitation, recorded rather than hidden.** `Semaphore`'s permit count is
-> fixed at construction, deliberately — resizing it from outside is exactly the
-> "hand out or revoke a permit behind a holder's back" its invariant forbids — so
-> `reconfigure()` adopts a changed `maxConcurrent` when the host **next goes
-> idle**, not immediately. Rate, burst and spacing still change at once. §7.3's one
-> shipped row, NCBI, is `maxConcurrent: 3` in both key modes, so Phase 1 never
-> reaches it; §7.3 does anticipate a live change, through Crossref's
-> `x-concurrency-limit`, and making it immediate needs a resizable gate in
-> `src/core/concurrency.ts` and a card of its own.
+> **Corrected 2026-10-15 (`P2-T24`): a changed `maxConcurrent` lands at once,
+> through `Semaphore.resize`.** Until `P2-T21` (2026-10-06) this paragraph recorded
+> a limitation: that `Semaphore`'s permit count was fixed at construction
+> "deliberately — resizing it from outside is exactly the 'hand out or revoke a
+> permit behind a holder's back' its invariant forbids", and that `reconfigure()`
+> therefore adopted a changed `maxConcurrent` only when the host **next went idle**.
+> The second half was true of the shipped code until that card; the first half was
+> a conflation even before it. The invariant recorded at `Semaphore`'s `handOver`
+> forbids changing *who holds a permit now* — settling a parked waiter or
+> interrupting a holder behind its back. A resize changes *how many permits will be
+> handed out next*, which that invariant does not reach. `P2-T21` showed the two
+> apart rather than arguing it: the revoking alternative is a one-line change to
+> `resize`, and six tests catch it.
+>
+> **What the code does, as `src/core/concurrency.ts`'s `resize`, `serveWaiters`
+> and `handOver` implement it.** `TokenBucket.reconfigure()` resizes its one gate
+> in place, synchronously, so rate, burst, spacing and the slot cap all take effect
+> in that call. A **shrink drains and never revokes**: every outstanding holder
+> keeps its permit and releases normally, every parked waiter stays parked, and the
+> gate's `free` count goes negative by the overshoot — the identity
+> `free === permits − held` holds throughout, which is what makes the deficit
+> representable. The next `acquire` parks immediately, so the new cap binds
+> admissions from the instant of the change; the deficit then drains by attrition,
+> each release being absorbed rather than handed to a waiter until the outstanding
+> count has fallen to the new cap, and only then is a waiter served again. A
+> **growth credits the difference** and serves that many parked waiters at once, in
+> FIFO order, through the same `handOver` the release path uses; a growth that
+> merely cancels an undrained shrink serves nobody. `RateLimiterStats.inFlight`'s
+> bounded exception, above, is the observable face of the drain. Whether a
+> *generous* advertised header may raise a cap above §7.3's figure is a separate,
+> uncarded owner decision; `resize` takes no view on where its number came from.
 
 ```ts
 // src/core/cache/cache.ts

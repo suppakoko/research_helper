@@ -3587,6 +3587,10 @@ supplied wording for each rather than editing files outside its `Files`.
    and that is a known gap." A live source comment in the module that owns the policy table.
 
 **Read first.**
+> **Corrected 2026-10-15 (report):** this list cites "§6 of the report `P2-T21` records" — no `plan/reports/P2-T21.md`
+> exists; that card predates the §6 convention and its measurements live only in its Findings block, which the
+> agent used as a check. The `hostLimiter.ts` line numbers quoted below had drifted (rule 8); every statement
+> was located by content. No `docs/07` §7.3 cell needed a change — the Crossref cell is accurate as written.
 - `P2-T21`'s `Findings` in this file, and §6 of the report it records — the executing agent wrote
   proposed replacement wording for all three, verified against the shipped code. **Use it as a draft
   to check, not as text to paste**: `plan/README.md` §5 rule 8 applies to this card too, and the
@@ -3648,6 +3652,20 @@ changes one prose block and one comment, and the behaviour they describe is alre
 artefact rather than the behaviour — the defect `P1-T14` reported about its own criterion 6. The
 `unchanged unit count` criterion is the check that this card added no behaviour.
 
+
+**Findings, 2026-10-15 — done; three stale statements replaced with dated corrections, no code or number changed; full report at `plan/reports/P2-T24.md`.**
+Verified by the coordinator on the live tree: exactly two files changed, the `hostLimiter.ts` diff is comment
+lines only (one `adoptAdvertisedLimits` JSDoc paragraph), `docs/07` §4.1's `inFlight` doc and the 2026-10-01
+blockquote are replaced by dated corrections, and `grep -rn 'next goes idle\|lands late' docs/ src/` returns
+nothing while `fixed at construction` survives only in three past-tense, dated sentences. The agent's runs:
+`lint:check` 0, typecheck 0, `concurrency`+`tokenBucket` 117 passed, `tokenBucket`+`backoff`+`hostLimiter` 89
+passed (so `backoff.test.ts`'s §7.3 reader is untouched by a §4.1 edit), and the whole suite 1,862 unit + 40
+contract. The corrected prose now states what `Semaphore.resize` does — a tightened cap binds the next
+acquisition at once, already-admitted calls drain rather than being revoked, `inFlight` may read above a
+newly lowered cap by at most the drained calls and never increases while it does — and keeps the reachability
+facts (NCBI sends no concurrency header; Crossref advertises 3 polite / 1 public against a row of 3, so a pool
+demotion is a live 3 → 1, which is why `P2-T21` blocked `P2-T04`). Two sweeps found no fourth live copy of the
+old claim; two borderline sentences in `tokenBucket.ts`, outside the list, are items 156 and 157.
 ---
 
 ### P2-T25 — Make the fixture replay harness usable inside Zotero, so six source cards stop hand-rolling a double each

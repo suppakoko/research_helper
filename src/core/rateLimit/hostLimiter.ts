@@ -646,16 +646,23 @@ export interface AdvertisedLimitTarget {
  *    a hundred responses must not pay for that a hundred times, and a caller that
  *    sees `undefined` knows nothing moved.
  *
- * **A tightened `maxConcurrent` lands late, and that is a known gap.**
- * {@link TokenBucket.reconfigure} adopts a changed cap only when the host next
- * goes idle, because `Semaphore`'s permit count is fixed at construction — so
- * under continuous traffic the old, larger cap stays in force until a gap
- * appears. Phase 1 cannot reach it: NCBI sends no `x-concurrency-limit` at all
- * (`docs/02` §3.1's verified response carries only the two `X-Ratelimit-*`
- * headers) and its row is `maxConcurrent: 3` in both key modes. Crossref's
- * measured 3 → 1 makes it reachable the moment Phase 2 registers that row, and
- * closing it needs a resizable gate in `src/core/concurrency.ts` — outside this
- * card's `Files`, and its own card.
+ * **A tightened `maxConcurrent` lands at once.** Until `P2-T21` (2026-10-06)
+ * this paragraph recorded a known gap: {@link TokenBucket.reconfigure} adopted
+ * a changed cap only when the host next went idle, because `Semaphore`'s permit
+ * count was fixed at construction, so under continuous traffic the old, larger
+ * cap stayed in force until a gap appeared. `Semaphore.resize` closed it: the
+ * gate is resized in place, the new cap binds the next slot acquisition, and
+ * the calls already admitted under the old cap drain by attrition rather than
+ * being revoked — `docs/07` §4.1's dated correction under `RateLimiterStats`
+ * states the semantics. The reachability facts are unchanged and are why
+ * `P2-T21` blocked `P2-T04`: Phase 1 could never reach the gap, because NCBI
+ * sends no `x-concurrency-limit` at all (`docs/02` §3.1's verified response
+ * carries only the two `X-Ratelimit-*` headers) and its row is
+ * `maxConcurrent: 3` in both key modes; Phase 2 can, because Crossref
+ * advertises `x-concurrency-limit: 3` on the polite pool and `1` on the public
+ * one (`docs/02` §5.1) against §7.3's `api.crossref.org` row of
+ * `maxConcurrent: 3`, so a pool demotion is a live 3 → 1 — and `P2-T04`
+ * registered that row. Corrected 2026-10-15 (`P2-T24`).
  *
  * @param limiter - the host's limiter; one that publishes no config is a no-op
  * @param header - case-insensitive lookup over the response's headers
