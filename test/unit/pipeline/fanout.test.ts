@@ -70,6 +70,12 @@ import type {
 
 const CAPABILITIES: SourceCapabilities = {
   keywordSearch: true,
+  query: {
+    or: true,
+    not: true,
+    phrase: true,
+    fields: ["title", "abstract", "author"],
+  },
   relatedByWork: false,
   lookupById: [],
   abstractsInSearch: true,

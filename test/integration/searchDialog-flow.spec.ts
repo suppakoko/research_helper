@@ -265,6 +265,7 @@ import type { PluginApi } from "../../src/addon";
 import { createScope } from "../../src/bootstrap/container";
 import { createZoteroSearchImportWriter } from "../../src/bootstrap/registerPipelines";
 import { createSystemClock } from "../../src/core/clock";
+import { Semaphore } from "../../src/core/concurrency";
 import {
   OfflineError,
   RateLimitError,
@@ -280,6 +281,7 @@ import { NCBI_HOST } from "../../src/core/rateLimit/hostLimiter";
 import { normalizeDoi, type SourceId } from "../../src/model/ids";
 import type { SourceRecord } from "../../src/model/sourceRecord";
 import { createSearchImportPipeline } from "../../src/pipeline/searchImport/searchImportPipeline";
+import { NETWORK_METADATA_POOL_SIZE } from "../../src/pipeline/searchImport/stages";
 import type { PipelineContext } from "../../src/pipeline/types";
 import { createPubmedRecordMapper } from "../../src/sources/pubmed/mapper";
 import {
@@ -461,6 +463,12 @@ function stubSource(
     rateLimitKey: `${id}.invalid`,
     capabilities: {
       keywordSearch: true,
+      query: {
+        or: true,
+        not: true,
+        phrase: true,
+        fields: ["title", "abstract", "author"],
+      },
       relatedByWork: false,
       lookupById: ["doi"],
       abstractsInSearch: true,
@@ -3019,6 +3027,10 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
     const pipeline = createSearchImportPipeline({
       writer: createZoteroSearchImportWriter({ logger }),
       writeBatchSize: DEFAULT_CHUNK_SIZE,
+      // This block builds its pipeline directly rather than through
+      // `buildPipelineSet`, so it supplies the `network-metadata` pool the
+      // composition root would (`P2-T28`; the figure is `docs/07` §7.2's).
+      pool: new Semaphore(NETWORK_METADATA_POOL_SIZE),
     });
     await refreshIndex();
 

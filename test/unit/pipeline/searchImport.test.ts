@@ -1,3 +1,7 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { buildPipelineSet } from "../../../src/bootstrap/registerPipelines";
@@ -189,6 +193,12 @@ function createContext(options: {
 
 const CAPABILITIES: SourceCapabilities = {
   keywordSearch: true,
+  query: {
+    or: true,
+    not: true,
+    phrase: true,
+    fields: ["title", "abstract", "author"],
+  },
   relatedByWork: false,
   lookupById: [],
   abstractsInSearch: true,
@@ -429,7 +439,10 @@ function harness(options: {
   readonly sources: readonly LiteratureSource[];
   readonly writer?: SearchImportWriter;
   readonly writeBatchSize?: number;
-  /** The `network-metadata` pool; omitted, the pipeline builds its own. */
+  /**
+   * The `network-metadata` pool. Omitted, the harness builds one at §7.2's
+   * size — the pipeline itself takes no default since `P2-T28`.
+   */
   readonly pool?: Semaphore;
 }): {
   readonly pipeline: ReturnType<typeof createSearchImportPipeline>;
@@ -448,9 +461,7 @@ function harness(options: {
   const pipeline = createSearchImportPipeline({
     writer: options.writer ?? stubWriter().writer,
     writeBatchSize: options.writeBatchSize ?? 50,
-    // Spread, not `pool: options.pool`: `exactOptionalPropertyTypes` rejects
-    // an explicit `undefined`.
-    ...(options.pool !== undefined && { pool: options.pool }),
+    pool: options.pool ?? new Semaphore(NETWORK_METADATA_POOL_SIZE),
   });
   return {
     pipeline,
@@ -824,6 +835,21 @@ describe("all sources failing (criterion 2)", () => {
 // 3b. The fan-out wiring (P2-T27): concurrency, the pool, the zero-hit case
 // ===========================================================================
 
+const SRC_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../src",
+);
+
+/** Every `.ts` file under `src/` whose text contains `needle`, repository-relative. */
+function sourceFilesContaining(needle: string): string[] {
+  return readdirSync(SRC_DIR, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+    .map((entry) => resolve(entry.parentPath, entry.name))
+    .filter((file) => readFileSync(file, "utf8").includes(needle))
+    .map((file) => relative(SRC_DIR, file).replaceAll("\\", "/"))
+    .sort((a, b) => a.localeCompare(b));
+}
+
 describe("the fan-out wiring (P2-T27)", () => {
   /**
    * Sources that each yield one record, then hold — permit held, in flight —
@@ -993,6 +1019,26 @@ describe("the fan-out wiring (P2-T27)", () => {
     const outs = await Promise.all(runs);
     expect(outs.map((o) => o.outcome)).toEqual(["succeeded", "succeeded"]);
     expect(held.started.reduce((sum, n) => sum + n, 0)).toBe(8);
+  });
+
+  it("the pipeline builds no pool of its own: `src/` constructs the network-metadata pool once, in registerPipelines.ts (P2-T28)", () => {
+    // `P2-T27` left `createSearchImportPipeline` a per-instance fallback pool
+    // because the flow spec constructed the pipeline without one, which made
+    // "omit `pool` in `buildPipelineSet`" an equivalent mutant. `P2-T28` made
+    // `SearchImportDeps.pool` required and deleted the fallback: the omission
+    // is now a type error, the test above fails at run time (no permit is
+    // ever granted), and this pins the other half — the composition root is
+    // the one place under `src/` that writes the pool. `tokenBucket.ts`'s
+    // `new Semaphore(` is a different pool (docs/07 §7.3's per-host gate).
+    expect(
+      sourceFilesContaining("new Semaphore(NETWORK_METADATA_POOL_SIZE)"),
+    ).toEqual(["bootstrap/registerPipelines.ts"]);
+    expect(
+      readFileSync(
+        resolve(SRC_DIR, "pipeline/searchImport/searchImportPipeline.ts"),
+        "utf8",
+      ),
+    ).not.toContain("new Semaphore(");
   });
 
   it("one source errored beside a healthy source with zero hits is `partial`, not `failed` (docs/07 §12.1)", async () => {
@@ -1530,6 +1576,7 @@ describe("the write half", () => {
     const pipeline = createSearchImportPipeline({
       writer: writer.writer,
       writeBatchSize: 50,
+      pool: new Semaphore(NETWORK_METADATA_POOL_SIZE),
     });
     const out = await pipeline.run(
       {
@@ -1675,6 +1722,7 @@ describe("the pipeline registry", () => {
     const pipeline = createSearchImportPipeline({
       writer: stubWriter().writer,
       writeBatchSize: 50,
+      pool: new Semaphore(NETWORK_METADATA_POOL_SIZE),
     });
     const registry = createPipelineRegistry();
     registerPipelines(registry, { searchImport: pipeline });
@@ -1690,6 +1738,7 @@ describe("the pipeline registry", () => {
     const pipeline = createSearchImportPipeline({
       writer: stubWriter().writer,
       writeBatchSize: 50,
+      pool: new Semaphore(NETWORK_METADATA_POOL_SIZE),
     });
     const registry = createPipelineRegistry();
     expect(() =>
@@ -1703,6 +1752,7 @@ describe("the pipeline registry", () => {
     const pipeline = createSearchImportPipeline({
       writer: stubWriter().writer,
       writeBatchSize: 50,
+      pool: new Semaphore(NETWORK_METADATA_POOL_SIZE),
     });
     expect(pipeline.resumable).toBe(false);
     // `compensate` is deliberately absent: §7.4 has nothing to compensate for.
@@ -1899,6 +1949,7 @@ describe("end to end over the real PubMed adapter, mapper and HTTP client", () =
     const pipeline = createSearchImportPipeline({
       writer: writer.writer,
       writeBatchSize: 50,
+      pool: new Semaphore(NETWORK_METADATA_POOL_SIZE),
     });
     const ctx = createContext({
       clock,
@@ -2013,6 +2064,7 @@ describe("end to end over the real PubMed adapter, mapper and HTTP client", () =
     const out = await createSearchImportPipeline({
       writer: writer.writer,
       writeBatchSize: 50,
+      pool: new Semaphore(NETWORK_METADATA_POOL_SIZE),
     }).run(
       {
         query: "crispr",

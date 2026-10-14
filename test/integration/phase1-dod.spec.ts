@@ -309,6 +309,12 @@ function stubSource(): LiteratureSource {
     rateLimitKey: `${STUB_SOURCE}.invalid`,
     capabilities: {
       keywordSearch: true,
+      query: {
+        or: true,
+        not: true,
+        phrase: true,
+        fields: ["title", "abstract", "author"],
+      },
       relatedByWork: false,
       lookupById: ["doi"],
       abstractsInSearch: true,

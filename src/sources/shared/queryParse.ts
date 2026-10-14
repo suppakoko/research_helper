@@ -140,16 +140,14 @@ export function parseUserQuery(input: string): QueryNode {
  * results are approximate" notice `docs/02` §12.2 requires — instead of
  * dropping the user's Boolean intent in silence.
  *
- * **What the second argument is.** `keywordSearch` is `docs/07` §4.2's own
- * `SourceCapabilities` flag, taken by `Pick` in the shape
- * `resolveDateFilterMode` (`recency.ts`) already uses, so an adapter passes its
- * declared capabilities through. The four other members are that adapter's
- * §12.3 column — the rows `docs/07` §4.2 does not model. They are typed inline
- * on purpose: `P2-T01` allows no new type declaration under
- * `src/sources/shared/`, and the honest home for a per-source query dialect is
- * `SourceCapabilities` itself, as a documented extension to `docs/07` §4.2
- * (§11.1's rule for anything the interface cannot say). Until that happens the
- * shape lives here and nowhere else.
+ * **What the second argument is.** The source's own declaration — `docs/07`
+ * §4.2's `SourceCapabilities`, taken by `Pick` in the shape
+ * `resolveDateFilterMode` (`recency.ts`) already uses, so an adapter passes
+ * its `capabilities` through. `keywordSearch` is the gate; `query` is that
+ * adapter's §12.3 column (`or`, `not`, `phrase`, and the `QueryField` members
+ * it renders), which `P2-T28` moved into `SourceCapabilities` from the inline
+ * parameter type `P2-T01` had to use before `docs/07` §4.2 carried it. Nothing
+ * is declared here; the shape has one home.
  *
  * **Rules, in the order they are applied.**
  *
@@ -174,37 +172,30 @@ export function parseUserQuery(input: string): QueryNode {
  *
  * @param node - the tree, from {@link parseUserQuery} or any other builder of a
  *   `docs/07` §4.2 `QueryNode`
- * @param capabilities - the source's `keywordSearch` flag plus its §12.3 column:
- *   `or`, `not` and `phrase` say whether that row's cell is a real operator for
- *   this source; `fields` lists the `QueryField` members it renders (`"any"`
- *   need not be listed)
+ * @param capabilities - the source's declared `SourceCapabilities`, of which
+ *   `keywordSearch` and `query` are read: `query.or`, `query.not` and
+ *   `query.phrase` say whether that §12.3 row's cell is a real operator for
+ *   this source; `query.fields` lists the `QueryField` members it renders
+ *   (`"any"` is never listed)
  * @returns the unexpressible nodes in pre-order, empty when the source can
  *   render the whole tree
  */
 export function normalizeForSource(
   node: QueryNode,
-  capabilities: Pick<SourceCapabilities, "keywordSearch"> & {
-    /** §12.3 "OR" row: a real disjunction, not a flattened bag of words. */
-    readonly or: boolean;
-    /** §12.3 "NOT" row: a real exclusion, not a client-side afterthought. */
-    readonly not: boolean;
-    /** §12.3 "Phrase" row: quotes keep adjacent words together. */
-    readonly phrase: boolean;
-    /** §12.3 field rows: the `QueryField` members this source renders. */
-    readonly fields: readonly QueryField[];
-  },
+  capabilities: Pick<SourceCapabilities, "keywordSearch" | "query">,
 ): readonly QueryNode[] {
   if (!capabilities.keywordSearch) return [node];
 
+  const { query } = capabilities;
   const unexpressible: QueryNode[] = [];
   const visit = (current: QueryNode): void => {
     switch (current.kind) {
       case "term":
         if (
-          (current.phrase === true && !capabilities.phrase) ||
+          (current.phrase === true && !query.phrase) ||
           (current.field !== undefined &&
             current.field !== "any" &&
-            !capabilities.fields.includes(current.field))
+            !query.fields.includes(current.field))
         ) {
           unexpressible.push(current);
         }
@@ -213,11 +204,11 @@ export function normalizeForSource(
         for (const child of current.children) visit(child);
         return;
       case "or":
-        if (!capabilities.or) unexpressible.push(current);
+        if (!query.or) unexpressible.push(current);
         for (const child of current.children) visit(child);
         return;
       case "not":
-        if (!capabilities.not) unexpressible.push(current);
+        if (!query.not) unexpressible.push(current);
         visit(current.child);
         return;
     }

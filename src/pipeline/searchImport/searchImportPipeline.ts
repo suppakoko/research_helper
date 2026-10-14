@@ -51,10 +51,9 @@
  *   in the schema, so re-typing `10` and `200` here is the thing to avoid.
  */
 
-import { Semaphore } from "../../core/concurrency";
+import type { Semaphore } from "../../core/concurrency";
 import {
   OperationCancelledError,
-  ResearchHelperError,
   type SerializedError,
 } from "../../core/errors";
 import type { ProgressReporter } from "../../core/jobQueue/progress";
@@ -74,9 +73,9 @@ import {
 import {
   fanOut,
   fetchStateFromReports,
-  NETWORK_METADATA_POOL_SIZE,
   SEARCH_IMPORT_DISPLAY_NAME_KEY,
   SEARCH_IMPORT_STAGES,
+  serialize,
   type SearchImportStageKey,
 } from "./stages";
 import type {
@@ -150,24 +149,18 @@ export interface SearchImportDeps {
   readonly writeBatchSize: number;
   /**
    * The process-wide `network-metadata` pool that `fanOut` runs the sources
-   * under — `docs/07` §7.2: one pool of {@link NETWORK_METADATA_POOL_SIZE},
-   * not configurable, shared by every run so that two concurrent searches
-   * cannot hold eight sockets between them.
+   * under — `docs/07` §7.2: one pool of `NETWORK_METADATA_POOL_SIZE`
+   * (`./stages.ts`), not configurable, shared by every run so that two
+   * concurrent searches cannot hold eight sockets between them.
    *
    * **Built once, in `src/bootstrap/registerPipelines.ts`, and passed in**
-   * (`P2-T27` step 2). The product never omits it.
-   *
-   * **Optional for one reason only.** `test/integration/searchDialog-flow.spec.ts`
-   * constructs this pipeline directly without a pool, and that file is outside
-   * `P2-T27`'s `Files`; a required member would fail the type check on a file
-   * the card may not edit. When omitted, {@link createSearchImportPipeline}
-   * builds **one pool per pipeline instance** — never one per run — so a
-   * directly-constructed pipeline still bounds its own fan-out at §7.2's
-   * figure. Make this required, and delete that fallback, once that spec
-   * passes one; until then the "exactly one pool" rule is enforced at the
-   * composition root rather than by the type.
+   * (`P2-T27` step 2). Required: this file constructs no pool of its own, so
+   * "exactly one pool" is enforced by the type. `P2-T27` had left it optional
+   * with a per-instance fallback only because
+   * `test/integration/searchDialog-flow.spec.ts` constructed the pipeline
+   * without one; `P2-T28` passed that spec a pool and deleted the fallback.
    */
-  readonly pool?: Semaphore;
+  readonly pool: Semaphore;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,32 +203,6 @@ function freshState(): RunState {
 // ---------------------------------------------------------------------------
 // 4. Pure helpers
 // ---------------------------------------------------------------------------
-
-/**
- * `SerializedError` for anything, including a throw that is not one of ours.
- *
- * `docs/07` §10.1 declares no class for "something untyped threw", and inventing
- * one would be a new error code in a file that may not declare one. The *shape*
- * is §10.1's `SerializedError`; the `code` says plainly that the throw was not
- * typed, and `detail` carries the error's **name** rather than its message,
- * because an arbitrary message has not been through `redact()`.
- *
- * **Still here after `P2-T27`, deliberately.** The card asked for this copy to
- * go with the fetch loop, on the premise that only the loop used it; it has
- * three other callers — `backfillAbstracts`, `notePartial` and `run()`'s final
- * `catch` — and `./stages.ts`'s copy is module-private, so removing this one
- * needs an `export` there, which the card's `Files` row for `stages.ts` did
- * not license. One `export` keyword is the whole of the follow-up.
- */
-function serialize(error: unknown): SerializedError {
-  if (error instanceof ResearchHelperError) return error.toSerialized();
-  return {
-    code: "UNTYPED",
-    messageKey: "rh-error-source",
-    detail: error instanceof Error ? error.name : "non-Error throw",
-    retryable: false,
-  };
-}
 
 /**
  * Lift records to `CanonicalWork` — `Merging`'s whole Phase 1 job.
@@ -373,11 +340,6 @@ export function createSearchImportPipeline(
   // declaration alone, and `stageSlices` is also what rejects a weight list
   // that does not sum to 1.
   const slices: readonly StageSlice[] = stageSlices(SEARCH_IMPORT_STAGES);
-
-  // See `SearchImportDeps.pool` for why the fallback exists and why it is one
-  // per pipeline instance rather than one per run.
-  const pool: Semaphore =
-    deps.pool ?? new Semaphore(NETWORK_METADATA_POOL_SIZE);
 
   const sliceFor = (key: SearchImportStageKey): StageSlice => {
     const slice = slices.find((s) => s.stage.key === key);
@@ -743,7 +705,7 @@ export function createSearchImportPipeline(
             clock: ctx.clock,
             progress: fetching,
             logger: ctx.logger,
-            pool,
+            pool: deps.pool,
           });
           state.perSource.push(...fetched.perSource);
           // The FR-9 banners only — `fanOut` has already raised each one on

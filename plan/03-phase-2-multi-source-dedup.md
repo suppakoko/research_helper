@@ -1260,7 +1260,7 @@ flag; one-sided preprint is a 0.75 flag; short titles come out `distinct`). Foll
 | **ID** | `P2-T10` |
 | **State** | `TODO` |
 | **Depends on** | `P2-T09` |
-| **Blocks** | `P2-T12`, `P2-T13`, `P2-T14`, `P2-T16` |
+| **Blocks** | `P2-T12`, `P2-T13`, `P2-T14`, `P2-T16`, `P2-T29` |
 | **Retires** | part of `R-18`, part of `R-17` |
 | **Implements** | `FR-50`, `FR-8` |
 | **Estimate** | 1.5 d |
@@ -1314,6 +1314,17 @@ order, and every contested field records which source won.
 - create `test/unit/model/precedence.test.ts`
 
 **Do.**
+> **Corrected 2026-10-14 after the executing agent measured (report):** the `Files` row says modify
+> `src/model/merge.ts` — it did not exist and was created. The Read first and Do NOT say OpenAlex appears in
+> "four" of `docs/02` §10.4's orderings — the table has it in **seven** of ten rows. Step 2's `merge(records)`
+> is `merge(records, normalizedAtEpochMs)` because `CanonicalWork.normalizedAtEpochMs` is required and a pure
+> function reads no clock. Step 6's "write the merge decision into the search provenance record" cannot be
+> done: `docs/07` §5.3's `SearchProvenance` has no field for a per-work decision and `src/core/provenance.ts`
+> is outside the list, so the decision rides on `MergedWork.decisions` (`plan/00` §6 item 99). **And the
+> card's list cannot deliver the Goal**: `stages.ts` holds stage descriptors, the `Deduping`/`Merging` bodies
+> run inside `run` in `searchImportPipeline.ts`, which still calls `liftToCanonicalWorks` one record at a
+> time. `dedupeAndMerge` is built and proven and **nothing calls it** — the same gap `P2-T02` left and
+> `P2-T27` closed. Wiring is `P2-T29`, created under rule 9.
 1. Export a single `PRECEDENCE` constant capturing the per-field source order, taken from
    `docs/02` §10.4 — the owner of that ordering — with each field's *combination* rule taken from
    `docs/07` §5.1. Drop nothing and reorder nothing to account for OpenAlex: skip the inert entry in
@@ -1374,6 +1385,26 @@ says so in its lead-in, and §10.4 declares its OpenAlex entries inert rather th
 There is nothing left to reconcile — but record in a comment on `PRECEDENCE` which document each
 half came from, so the next reader does not re-derive it.
 
+
+**Findings, 2026-10-14 — done inside the card's files and all five criteria pass; the merge stage is built and proven but not yet called by the running pipeline (`P2-T29`); full report at `plan/reports/P2-T10.md`.**
+Verified by the coordinator on the live tree: the three hashes equal the agent's (`merge.ts` e4fd6460,
+`stages.ts` 9039ab8c, `sourceRecord.ts` ab55133c), `serialize` is exported from `stages.ts` and imported by
+the pipeline with its private copy gone (items 79 and 80 done), `run` still calls `liftToCanonicalWorks`,
+the OpenAlex CI guard prints its pass line and exits 0 with the seven inert §10.4 entries in `src/model/`
+(item 58 confirmed), typecheck 0, `lint:check` 0, **1,601 unit in 35 files**. `src/model/merge.ts` (841
+lines) carries `PRECEDENCE` row for row from §10.4, a pure `merge` applying `docs/07` §5.1's combination
+rules with the §10.4 ordering as tie-break, `IdConflict` instead of overwriting a conflicting identifier,
+`WorkProvenance`, and `workKey` through `buildWorkKey` (`doi:<lowercased doi>` exactly); `CanonicalWork` is
+byte-identical over all 24 permutations of a four-record set. `stages.ts` gained `dedupeAndMerge` (one
+`dedupeRecords` call, `merge` per group, flags and links never reach the merge, a preprint and its published
+version stay two works with mutual `relatedVersionIds` — gate `G-16` as decided), `attributeDeduplicatedAway`
+and `SUPERSEDED_BY_PUBLISHED_TAG`. 98 tests; **28 mutants, 28 killed** (every §10.4 row, the identifier
+overwrite, the link and flag paths, the attribution). Five corpus disagreements are recorded for the owner's
+document edits (items 100–103): §10.4 says "four" OpenAlex orderings, has a `tldr` row with no
+`CanonicalWork` field, and an `openAccess` row that omits the Crossref `docs/07` §5.1 calls authoritative;
+neither document orders the conflicting-identifier winner or the fields §10.4 does not cover, so
+`DEFAULT_PRECEDENCE` is a documented choice awaiting an owner. Not checked: the integration suite (unit-level
+card) and any end-to-end run, since nothing calls the new stage body yet.
 ---
 
 ### P2-T11 — Preprint ↔ published-version linking
@@ -1481,7 +1512,7 @@ complete list of preferences and a new one has to be added there first.
 |---|---|
 | **ID** | `P2-T12` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10` |
+| **Depends on** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29` |
 | **Blocks** | `P2-T16`, `P2-T18` |
 | **Retires** | part of `R-17` |
 | **Implements** | `FR-50`, part of `NFR-6` |
@@ -1670,7 +1701,7 @@ so expect to move them, and expect the report diff to be the evidence.
 |---|---|
 | **ID** | `P2-T14` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10` |
+| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29` |
 | **Blocks** | `P2-T16`, `P2-T17` |
 | **Retires** | part of `R-2`, part of `R-18` |
 | **Implements** | `FR-2`, `FR-5`, `FR-9`, `FR-50`, `FR-53` |
@@ -2423,7 +2454,7 @@ decision record's section 5 today; whether the run-time half is worth a card is 
 |---|---|
 | **ID** | `P2-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18` |
+| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29` |
 | **Blocks** | none |
 | **Retires** | `R-2`, `R-18` (closes them), `R-3` (fallback proven) |
 | **Implements** | `FR-9`, `FR-50`, `FR-51`, `NFR-2`, `NFR-6` |
@@ -3657,7 +3688,7 @@ register under a spare id (item 87).
 | **ID** | `P2-T27` |
 | **State** | `DONE` — approved 2026-10-14; the shipped pipeline fetches through `fanOut`, and the owner confirmed the kept state reading (`plan/00` §6 item 81). Report at `plan/reports/P2-T27.md`. |
 | **Depends on** | `P2-T01`, `P2-T02` |
-| **Blocks** | `P2-T14`, `P2-T16`, `P2-T28` |
+| **Blocks** | `P2-T14`, `P2-T16`, `P2-T28`, `P2-T29` |
 | **Retires** | `plan/00` §6 item 66 |
 | **Implements** | `FR-9`, `FR-10`, `NFR-2` in the shipped product (`P2-T02` implemented them in a function nothing calls) |
 | **Estimate** | 0.5 d |
@@ -3790,6 +3821,16 @@ because the test fakes those cards edit also construct a `SourceCapabilities`.
   comment, which already names this card's outcome.
 
 **Do.**
+> **Noted 2026-10-14 after the executing agent delivered (report):** step 3's `fields` list is `docs/02` §12.3's
+> PubMed column plus `journal` — four members — while `FIELD_TAGS` in `src/sources/pubmed/query.ts` renders all
+> eight `QueryField` members (`titleOrAbstract`, `affiliation`, `meshTerm`, `any` as well). The card was
+> followed; nothing in `src/` calls `normalizeForSource` yet and `USER_FIELD_PREFIXES` can only produce the
+> four §12.1 prefixes, so nothing observable changes today, but whether `fields` means "renders" (`docs/07`
+> §11.1 step 2, declare capabilities honestly) or "§12.3's rows" is the owner's — `plan/00` §6 item 96.
+> Step 4's list was short for step 5: making `pool` required also broke seven constructions in
+> `test/unit/pipeline/searchImport.test.ts` (same file, fixed in scope). Step 5's "assertion that makes the
+> mutant killable" was already satisfied by typecheck once the fallback went; the agent added the
+> complementary half (exactly one construction site in `src/`, none in the pipeline file).
 1. In `docs/07` §4.2, extend `SourceCapabilities` with one member, `query`, an object with
    `or: boolean`, `not: boolean`, `phrase: boolean`, `fields: readonly QueryField[]` (the members the
    source renders; `"any"` is never listed because it is the absence of a field). Doc-comment each
@@ -3841,6 +3882,93 @@ declaration.
 npm run typecheck && npm run lint:check && npm run test
 ```
 
+
+**Findings, 2026-10-14 — done; all four criteria pass; full report at `plan/reports/P2-T28.md`.**
+Verified by the coordinator on the live tree: every file hash equals the agent's (ten files), the `docs/07`
+diff is two hunks inside §4.2 (a dated header line and the 21-line `query` member), `src/sources/types.ts`
+carries the identical block, `normalizeForSource`'s second parameter is `Pick<SourceCapabilities,
+"keywordSearch" | "query">` with no inline object type, `SearchImportDeps.pool` is `readonly pool: Semaphore`
+with no `new Semaphore(` in the pipeline file, typecheck 0, and the two test files 102 passed. The agent's
+chain: typecheck 0 twice, `lint:check` clean, **1,601 unit in 35 files** and 40 contract (the extra file
+pair is `P2-T10`'s), one optional integration run 127 passed with one failure in `P2-T19`'s in-progress
+spec. Ten mutants, ten killed, two of them (`not` and phrase reading the wrong member) only by a test the
+agent added after noticing that no §12.3 column separates the three operators — the gap is closed, not
+classified. `P2-T27`'s equivalent mutant now dies in typecheck and at run time. One decision is left
+open for the owner (item 96): whether PubMed's `query.fields` should list the eight members `FIELD_TAGS`
+renders or stay at §12.3's four. Adapter cards now fill `capabilities.query` from their own §12.3 column
+(item 97). Item 61 is retired.
+---
+
+### P2-T29 — Wire `dedupeAndMerge` into the running pipeline, which still lifts records one-for-one
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T29` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T10`, `P2-T27` |
+| **Blocks** | `P2-T12`, `P2-T14`, `P2-T16` |
+| **Retires** | `plan/00` §6 item 98 |
+| **Implements** | `FR-50`, `FR-51` in the shipped product (`P2-T09` and `P2-T10` built them in functions nothing calls) |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** A search that returns the same work from two sources shows it **once** in the results, with
+both sources listed, and a preprint and its published version stay two linked works — in the product,
+not only in unit tests.
+
+**Why this is a card (rule 9).** `P2-T10` built the stage body `dedupeAndMerge` and the per-source
+attribution `attributeDeduplicatedAway` in `src/pipeline/searchImport/stages.ts`, but the `Deduping`
+and `Merging` stage bodies that the product runs are inside `run` in
+`src/pipeline/searchImport/searchImportPipeline.ts`, which still calls `liftToCanonicalWorks` — one
+work per record, no dedup. That file was outside `P2-T10`'s list except for one unrelated edit, the
+same shape of gap `P2-T27` closed for `fanOut`. Until `run` calls `dedupeAndMerge`, Phase 2's first
+finishing condition (a cross-indexed paper appears exactly once) cannot be met by the shipped build.
+
+**Read first.**
+- `plan/reports/P2-T10.md` — its "Follow-ups" first bullet is this card's exact recipe; its
+  Contradictions explain why `stages.ts` holds descriptors and the bodies live in `run`.
+- `plan/reports/P2-T09.md` §"What the stage hookup will need".
+- `docs/07-architecture-and-data-model.md` §12.1 (`Deduping`, `Merging` states) and §5.1
+  (`CanonicalWork`); `docs/10` FR-50 scenario 2, FR-51.
+
+**Do.**
+1. In `run`, replace the `liftToCanonicalWorks` call for fetched runs with `dedupeAndMerge`:
+   `state.records = result.records`, `state.works = result.works`, then
+   `state.perSource = attributeDeduplicatedAway(…)` so each source's `recordsDeduplicatedAway` is no
+   longer `0`. Keep `liftToCanonicalWorks` only if a code path still needs it (say which); otherwise
+   delete it.
+2. Carry `result.flags` (possible duplicates for review) and `result.links` (preprint ↔ published
+   pairs) onto `SearchImportOutput` so `P2-T14` can render them and `P2-T11` can write the Zotero
+   relation and tag. Refresh the `records`/`works` docs in `src/pipeline/searchImport/types.ts`: one
+   row per work, not per record.
+3. Check the two positional contracts `P2-T10`'s report names — `selectedWorks` and
+   `backfillAbstracts`' `seenIn[0]` — still hold on the representative shape, and assert both.
+4. Add the pipeline-level tests: two stub sources returning the same DOI yield **one** work with both
+   sources in `seenIn` and `recordsDeduplicatedAway` charged to the non-representative source; a
+   preprint/published pair yields two works, each in the other's `relatedVersionIds`, and one `links`
+   entry; a flagged pair yields two works and one `flags` entry.
+
+**Do NOT.** Do not change `dedupeAndMerge`, `merge` or `dedupeRecords`. Do not write the Zotero
+*Related* relation or the tag here (`P2-T11`). Do not render anything (`P2-T14`).
+
+**Criteria.**
+- [ ] `run` calls `dedupeAndMerge` and `attributeDeduplicatedAway`; `liftToCanonicalWorks` is deleted
+      or its remaining caller is named in the Findings.
+- [ ] The three pipeline-level tests in step 4 pass.
+- [ ] `SearchImportOutput` carries `flags` and `links`, and `types.ts` documents one row per work.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0;
+      `P1-T16`'s and `P1-T23`'s specs still pass.
+
+**Files.**
+- modify `src/pipeline/searchImport/searchImportPipeline.ts`
+- modify `src/pipeline/searchImport/types.ts`
+- modify `test/unit/pipeline/searchImport.test.ts`
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
 ---
 
 ---
@@ -3876,7 +4004,8 @@ npm run typecheck && npm run lint:check && npm run test
 | `P2-T26` | A test-only removal on the source registry, before the adapters | 0.25 |
 | `P2-T27` | Wire `fanOut` into the running pipeline | 0.50 |
 | `P2-T28` | The per-source query dialect's home in `SourceCapabilities` | 0.25 |
-| **Total** | **28 tasks** | **28.50 d** |
+| `P2-T29` | Wire `dedupeAndMerge` into the running pipeline | 0.50 |
+| **Total** | **29 tasks** | **29.00 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather

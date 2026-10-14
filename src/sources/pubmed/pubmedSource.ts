@@ -199,6 +199,16 @@ export const PUBMED_HEALTH_FAILED_MESSAGE_KEY = "rh-error-source";
  */
 export const PUBMED_CAPABILITIES: SourceCapabilities = {
   keywordSearch: true,
+  // `docs/02` §12.3's PubMed column has no n/a cell: `OR`, `NOT`, `"…"`,
+  // `[Title]`, `[Title/Abstract]`, `[Author]`. `journal` is listed because
+  // `FIELD_TAGS` (`./query.ts`) renders `[Journal]`, a row §12.3 does not yet
+  // carry (`plan/00` §6 item 63). `P2-T28`.
+  query: {
+    or: true,
+    not: true,
+    phrase: true,
+    fields: ["title", "abstract", "author", "journal"],
+  },
   relatedByWork: false,
   lookupById: [],
   abstractsInSearch: false,

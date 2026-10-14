@@ -50,6 +50,12 @@ function sourceFilesNaming(member: string): string[] {
 
 const FULL_CAPABILITIES: SourceCapabilities = {
   keywordSearch: true,
+  query: {
+    or: true,
+    not: true,
+    phrase: true,
+    fields: ["title", "abstract", "author"],
+  },
   relatedByWork: false,
   lookupById: ["doi", "pmid"],
   abstractsInSearch: false,

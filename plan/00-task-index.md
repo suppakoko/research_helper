@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-14 · **140 tasks: 88 `DONE`, 52 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **10 of 28**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 140, so 42 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-14 · **141 tasks: 88 `DONE`, 53 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **10 of 29**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 141, so 43 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -22,9 +22,9 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
-| 2 — Multi-source + dedup | 28 | 28.50 d | 28.50–40 d | 12–16 d (+78%) |
+| 2 — Multi-source + dedup | 29 | 29.00 d | 29.00–41 d | 12–16 d (+81%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **140** | **99.00 d** | **99.00–139 d** | 39–52 d (+90% over the top of the band) |
+| **Phases 0–3** | **141** | **99.50 d** | **99.50–140 d** | 39–52 d (+91% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -222,13 +222,13 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
 | `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
 | `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09` | 1.0 d | 🔒 |
-| `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10` | 0.75 d |  |
+| `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29` | 0.75 d |  |
 | `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11` | 2.0 d | 🔒 |
-| `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10` | 1.5 d |  |
+| `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29` | 1.5 d |  |
 | `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
 | `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
 | ✅ `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
-| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18` | 1.0 d |  |
+| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29` | 1.0 d |  |
 | `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
 | `P2-T20` | Render `languages`, `openAccessOnly` and `raw` across the… | `P1-T08` | 0.5 d |  |
 | ✅ `P2-T21` | Make the concurrency cap resizable, so a tightened header… | `P1-T27`, `P1-T26` | 0.5 d |  |
@@ -239,6 +239,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T26` | Give the source registry a test-only removal, before two… | `P2-T25` | 0.25 d |  |
 | ✅ `P2-T27` | Wire `fanOut` into the running pipeline, which still fetches… | `P2-T01`, `P2-T02` | 0.5 d |  |
 | `P2-T28` | Give the per-source query dialect its home in… | `P2-T01`, `P2-T26`, `P2-T27` | 0.25 d |  |
+| `P2-T29` | Wire `dedupeAndMerge` into the running pipeline, which still… | `P2-T10`, `P2-T27` | 0.5 d |  |
 
 ### Phase 3
 
@@ -801,7 +802,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 
 ### 6.13 Raised by `P2-T01`, 2026-10-13 — recorded under rule 9, none carded
 
-61. ~~**The per-source query dialect has no home in `docs/07` §4.2.**~~ **CARDED 2026-10-13 as `P2-T28`** — the owner authorised the §4.2 extension when approving `P2-T01`. `SourceCapabilities` carries
+61. ~~**The per-source query dialect has no home in `docs/07` §4.2.**~~ **CARDED 2026-10-13 as `P2-T28`** — the owner authorised the §4.2 extension when approving `P2-T01`. **RETIRED 2026-10-14:** `SourceCapabilities.query` exists in `docs/07` §4.2 and the code; `normalizeForSource` reads it. `SourceCapabilities` carries
     `keywordSearch` but nothing about whether a source renders OR, NOT, phrases or which `QueryField`
     members — the very column `docs/02` §12.3 tabulates and `P2-T04`'s lossiness notice needs.
     `normalizeForSource` in `src/sources/shared/queryParse.ts` takes it as an inline object shape for now,
@@ -892,11 +893,11 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     Folded into `P2-T28` step 5 (same files): pass a pool there, make the member required, delete the
     fallback; the equivalent mutant becomes killable.
 
-79. **The pipeline still has its own `serialize`.** *(2026-10-14: folded into `P2-T10` by coordinator note, with item 80.)* Three callers (`backfillAbstracts`, `notePartial`, `run`'s
+79. ~~**The pipeline still has its own `serialize`.**~~ **DONE 2026-10-14 by `P2-T10`** (exported from `stages.ts`, pipeline copy deleted). Three callers (`backfillAbstracts`, `notePartial`, `run`'s
     final `catch`); `stages.ts`'s copy is not exported. One `export` keyword in `stages.ts` and one deletion
     in the pipeline, the next time either file is in a card's list (`P2-T10` edits `stages.ts`).
 
-80. **Stale prose in `stages.ts` and `types.ts`** about the loop and `outcomeFromReports` (`stages.ts` header
+80. ~~**Stale prose in `stages.ts` and `types.ts`**~~ **DONE 2026-10-14 by `P2-T10`** — about the loop and `outcomeFromReports` (`stages.ts` header
     "What is still the caller's", `fetchStateFromReports`'s and `serialize`'s docs; `types.ts`'s
     `SearchImportFetchState` doc). Refresh with item 79.
 
@@ -963,6 +964,53 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     `dedupeRecords` once over the fan-out output; `SourceFetchReport.recordsDeduplicatedAway` is hard-coded
     `0` at two sites in `stages.ts` and needs an attribution rule; `flags` feed `P2-T14`, `links` feed
     `P2-T11`; FR-51 belongs to the `zotero/` layer. `P2-T10` and `P2-T11` read it before starting.
+
+### 6.19 Raised by `P2-T28`, 2026-10-14 — recorded under rule 9, none carded
+
+96. **(owner's decision)** `PUBMED_CAPABILITIES.query.fields` lists `docs/02` §12.3's PubMed rows plus
+    `journal` (four), while `FIELD_TAGS` in `src/sources/pubmed/query.ts` renders all eight `QueryField`
+    members. If `fields` means "what the source renders" (`docs/07` §11.1 step 2), add `titleOrAbstract`,
+    `affiliation`, `meshTerm` and `any`; the unit test "takes the adapter's own declaration" pins whichever
+    is chosen. Nothing observable depends on it today.
+
+97. **For the adapter cards `P2-T03` to `P2-T07`:** fill `capabilities.query` from the adapter's own §12.3
+    column; `test/unit/sources/queryParse.test.ts`'s transcribed columns can then be replaced by the
+    adapters' declarations, one card at a time.
+
+### 6.20 Raised by `P2-T10`, 2026-10-14 — one carded under rule 9 (`P2-T29`), the rest recorded
+
+98. ~~**`dedupeAndMerge` is built and tested but nothing calls it.**~~ **CARDED 2026-10-14 as `P2-T29`** — `run` in
+    `searchImportPipeline.ts` still calls `liftToCanonicalWorks`; the gap blocks Phase 2's first finishing
+    condition. Second time this shape has appeared (`P2-T02`/`P2-T27`); see the process note under §6.20.
+
+99. **(owner's document decision)** FR-50 scenario 2's per-work merge decision has no field in `docs/07` §5.3's
+    `SearchProvenance`. It rides on `MergedWork.decisions` for now; adding a field means `docs/07` §5.3, then
+    `src/core/provenance.ts` and `schema/provenance.schema.json`.
+
+100. **`docs/02` §10.4 says OpenAlex appears in "four of the orderings"; the table has seven.** A one-word
+    document edit; `P2-T10`'s Read first and Do NOT carried the same count (dated on the card).
+
+101. **`docs/02` §10.4's `tldr` row names a field `CanonicalWork` does not have.** Add the field to `docs/07`
+    §5.1 or drop the row — the owner's.
+
+102. **`docs/02` §10.4's `openAccess` row and `docs/07` §5.1's `openAccess` rule disagree** (the row omits
+    Crossref, which §5.1 calls authoritative). Implemented as "license-bearing first, then the row"; one
+    document should move.
+
+103. **`DEFAULT_PRECEDENCE` has no owner in the corpus.** `docs/07` §5.1's `ids` rule names no ordering and
+    §10.4's `ids.*` row is an unordered union, and neither covers `type`, `language`, `keywords`, `url`,
+    `onlineDate`, `referenceCount`, `influentialCitationCount`. The code's choice (the `title` row, then
+    declaration order) is documented as a choice; `docs/02` §10.4 or `docs/07` §5.1 should state it.
+
+104. **For `P2-T11`:** apply `SUPERSEDED_BY_PUBLISHED_TAG` and the Zotero *Related* relation from
+    `DedupeMergeResult.links` (`preprintWorkKey`), and `Published DOI:` / `Preprint DOI:` in `extra` when only
+    one side is imported. `P2-T29` carries `links` onto the pipeline output first.
+
+**Process note, 2026-10-14.** Twice now a Phase 2 card built a stage body in `stages.ts` whose caller lives in
+`searchImportPipeline.ts`'s `run`, and the card's `Files` list did not name the caller (`P2-T02` → `P2-T27`,
+`P2-T10` → `P2-T29`). The cards were written before the pipeline existed. Proposed as `plan/README.md` §5
+rule 10, pending the owner: *before a card is launched, the coordinator checks that its `Files` list names
+the caller of what the card builds; if it does not, the caller is added with a dated note before launch.*
 
 ## 7. Regenerating this file
 

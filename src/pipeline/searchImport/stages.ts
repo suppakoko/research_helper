@@ -103,7 +103,8 @@
  *   `cancellerReceiver`** (`docs/07` §7.4), and the source is reported with a
  *   §10.1 `TimeoutError`. The records it had already yielded are **kept**: a
  *   source that returned two pages and hung on the third is degraded, not
- *   failed — the same reading `outcomeFromReports` gives a page-2 throw.
+ *   failed — the same reading {@link fetchStateFromReports} gives a page-2
+ *   throw.
  *   The fan-out stops *waiting* for that source at the deadline even if the
  *   adapter ignores its token, and **its pool permit is released at the
  *   deadline** — the `TimeoutError` is thrown inside `Semaphore.run`, whose
@@ -125,11 +126,20 @@
  *
  * **What is still the caller's.** The `Fetching` stage's `enterStage`,
  * `done()`, and the `Fetching → Failed` early return are
- * `searchImportPipeline.ts`'s, which `P2-T02`'s `Files` list does not name;
- * that file's serial `for (const source of resolved)` loop is what this
- * function replaces, and the replacement is reported rather than made here
- * (`plan/README.md` §5 rule 2). Until it is wired, `fanOut` is exercised by
- * `test/unit/pipeline/fanout.test.ts` alone.
+ * `searchImportPipeline.ts`'s. `P2-T27` wired {@link fanOut} in there in place
+ * of the serial per-source loop, so the pipeline's `run()` now calls it and
+ * `fetchStateFromReports` (through the pipeline's `fetchOutcome`) is the one
+ * function that decides the `Fetching →` edge.
+ *
+ * ## Deduping and Merging (`P2-T10`) — the same shape, one card later
+ *
+ * Section 6 is the body of the `Deduping` and `Merging` stages for a
+ * multi-source run, as {@link fanOut} is `Fetching`'s: {@link dedupeAndMerge}
+ * runs `P2-T09`'s cascade once over the fan-out output and `P2-T10`'s
+ * `merge()` once per group, and {@link attributeDeduplicatedAway} turns the
+ * cross-source count into the per-source figure `docs/07` §5.3 asks for.
+ * Wiring it into the pipeline's `run()` is reported rather than made by
+ * `P2-T10`, whose `Files` row for the pipeline licenses one deletion only.
  */
 
 import type { Clock } from "../../core/clock";
@@ -145,7 +155,17 @@ import {
 } from "../../core/jobQueue/cancellation";
 import type { ProgressReporter } from "../../core/jobQueue/progress";
 import type { Logger } from "../../core/logger";
+import type { CanonicalWork } from "../../model/canonicalWork";
+import type { ExternalIds, SourceId } from "../../model/ids";
+import { merge, type IdConflict } from "../../model/merge";
 import type { SourceRecord } from "../../model/sourceRecord";
+import {
+  dedupeRecords,
+  isPreprintDoi,
+  type DedupDecision,
+  type DedupPair,
+  type DedupResult,
+} from "../../sources/shared/dedupe";
 import { parseUserQuery } from "../../sources/shared/queryParse";
 import {
   applyClientRecencyFilter,
@@ -386,21 +406,19 @@ export async function fanOut(
  *
  * - **`"failed"`** — `Fetching --> Failed : all sources failed`. Every source
  *   errored **and none yielded a record**. A source that threw after yielding
- *   is degraded, not failed — `P1-T16`'s first criterion keeps its page 1 and
- *   `searchImportPipeline.ts`'s `outcomeFromReports` documents why — so one
- *   such source alone is `"partial"`, not `"failed"`.
+ *   is degraded, not failed — `P1-T16`'s first criterion keeps its page 1 —
+ *   so one such source alone is `"partial"`, not `"failed"`.
  * - **`"partial"`** — `Fetching --> PartialFetch : some sources failed, some
  *   succeeded`. At least one report carries an `error` and the run is not
- *   `"failed"`. **Note the one reading that differs from
- *   `outcomeFromReports`:** a healthy source that found *nothing* still
- *   succeeded. One source erroring beside one that returned an empty result
- *   set is `"partial"` here, where `outcomeFromReports` — which keys on
- *   productivity alone — says `"failed"`. §12.1's edge is "all sources
- *   failed", and an empty result is not a failure; reconcile the two when the
- *   pipeline is wired to this function.
+ *   `"failed"`. A healthy source that found *nothing* still succeeded: one
+ *   source erroring beside one that returned an empty result set is
+ *   `"partial"`, because §12.1's edge is "all sources failed" and an empty
+ *   result is not a failure. (The pipeline's earlier `outcomeFromReports`
+ *   keyed on productivity and called that run `"failed"`; `P2-T27` deleted it
+ *   and the owner confirmed this reading on 2026-10-14 — `plan/00` §6 item 81.)
  * - **`"succeeded"`** — no report carries an `error`. An empty `reports` list
- *   is `"succeeded"` for the reason `fetchOutcome` gives: nothing was asked, so
- *   nothing failed.
+ *   is `"succeeded"` for the reason the pipeline's `fetchOutcome` gives:
+ *   nothing was asked, so nothing failed.
  *
  * @param reports - one per source asked
  * @returns the state `Fetching` ends in
@@ -547,7 +565,9 @@ async function fetchOne(
       recordsRetrieved,
       droppedOutOfWindow,
       keptWithoutDate,
-      // Nothing is merged in `Fetching`; `Deduping` (`P2-T09`) owns the count.
+      // Nothing is merged in `Fetching`. Dedup is cross-source and runs after
+      // every source has answered, so this cannot be known here; `Deduping`
+      // re-stamps it through {@link attributeDeduplicatedAway}.
       recordsDeduplicatedAway: 0,
       error,
       warnings,
@@ -680,11 +700,12 @@ function capturingReporter(
  * typed, and `detail` carries the error's **name** rather than its message,
  * because an arbitrary message has not been through `redact()`.
  *
- * The same function as `searchImportPipeline.ts`'s private `serialize`, which
- * this file cannot import without a cycle; the pipeline's copy goes when its
- * fetch loop is replaced by {@link fanOut}.
+ * Exported since `P2-T10` (`plan/00` §6 item 79): `searchImportPipeline.ts`
+ * kept a private copy for its three other callers (`backfillAbstracts`,
+ * `notePartial`, `run()`'s final `catch`) because this one was module-private;
+ * it now imports this one, and the copy is gone.
  */
-function serialize(error: unknown): SerializedError {
+export function serialize(error: unknown): SerializedError {
   if (error instanceof ResearchHelperError) return error.toSerialized();
   return {
     code: "UNTYPED",
@@ -713,9 +734,239 @@ function unexpectedFetch(
       recordsRetrieved: 0,
       droppedOutOfWindow: 0,
       keptWithoutDate: 0,
+      // Nothing retrieved, so nothing to deduplicate; stays `0` through
+      // {@link attributeDeduplicatedAway} as well.
       recordsDeduplicatedAway: 0,
       error,
       warnings: [banner],
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// 6. Deduping and Merging — P2-T10
+// ---------------------------------------------------------------------------
+
+/**
+ * The tag the preprint carries once its published version is in the library
+ * — `docs/10` §5 question 2's default, decided at gate `G-16` on 2026-10-14:
+ * the two stay **two items**, related through Zotero *Related*, and the
+ * preprint is tagged so that its date survives for trend analysis.
+ *
+ * Declared here, beside the {@link VersionLink} list that tells the `zotero/`
+ * layer which item to tag, because no other module names it yet; the writer
+ * that applies it is `P2-T11`'s and `P2-T19`'s.
+ */
+export const SUPERSEDED_BY_PUBLISHED_TAG =
+  "research_helper/superseded-by-published";
+
+/** One merged work with the evidence behind it — FR-50 scenario 2's record. */
+export interface MergedWork {
+  readonly work: CanonicalWork;
+  /** The dedup group, in fetch order. Kept, never discarded (`docs/07` §8.3). */
+  readonly records: readonly SourceRecord[];
+  /**
+   * The `"match"` decisions that joined the group — tier fired, confidence,
+   * evidence — empty for a singleton. `docs/07` §5.3's `SearchProvenance` has
+   * no field for this yet; it is carried here so the record FR-8 requires can
+   * take it when that field exists.
+   */
+  readonly decisions: readonly DedupDecision[];
+  /** Identifier conflicts `merge()` found inside the group (`docs/02` §11.5 rule 1). */
+  readonly conflicts: readonly IdConflict[];
+}
+
+/**
+ * A preprint ↔ published pair (or any other `"link"` verdict: a title match
+ * with conflicting ids, a same-title different-venue pair). Both works are in
+ * the output, **unmerged**; the `zotero/` layer relates the two items and tags
+ * the preprint {@link SUPERSEDED_BY_PUBLISHED_TAG}.
+ */
+export interface VersionLink {
+  readonly aWorkKey: string;
+  readonly bWorkKey: string;
+  /**
+   * Which of the two is the preprint, when exactly one side is — by `type`
+   * or by a preprint-server DOI prefix. `undefined` when the roles cannot be
+   * told apart, in which case the pair is related but nothing is tagged.
+   */
+  readonly preprintWorkKey: string | undefined;
+  readonly decision: DedupDecision;
+}
+
+/** What {@link dedupeAndMerge} hands the pipeline at the end of `Merging`. */
+export interface DedupeMergeResult {
+  /**
+   * One record per work — each group's first record in fetch order — so that
+   * `SearchImportOutput.records` keeps its positional contract with `works`:
+   * `works[i]` was merged from the group whose representative is `records[i]`.
+   */
+  readonly records: readonly SourceRecord[];
+  /** One `CanonicalWork` per group, aligned with {@link records}. */
+  readonly works: readonly CanonicalWork[];
+  /** The same works with their groups, decisions and conflicts. */
+  readonly merged: readonly MergedWork[];
+  /** Possible duplicates for review. Never merged (FR-50 scenario 4). */
+  readonly flags: readonly DedupPair[];
+  /** Pairs kept as two linked works (`docs/02` §11.4, §11.5 rule 1). */
+  readonly links: readonly VersionLink[];
+  /** Pairs the cascade compared. */
+  readonly comparisons: number;
+  /** `DedupResult.recordsDeduplicatedAway`: the whole-run figure. */
+  readonly recordsDeduplicatedAway: number;
+  /**
+   * The whole-run figure attributed per source: every record that is not its
+   * group's representative is charged to **its own** `sourceId`. Sources with
+   * nothing charged are absent.
+   */
+  readonly deduplicatedAwayBySource: Readonly<
+    Partial<Record<SourceId, number>>
+  >;
+}
+
+/**
+ * The `Deduping` and `Merging` bodies for a multi-source run.
+ *
+ * Calls `dedupeRecords` once over `records` and `merge()` once per group, so
+ * the output has one `CanonicalWork` per distinct work with `fieldOrigin`
+ * filled, `recordIds` listing every contributor and `seenIn` every source. The
+ * two things the cascade reports as *pairs* are passed through as pairs and
+ * never reach `merge()`:
+ *
+ * - a **flag** (`"flag"`) is FR-50 scenario 4's "possible duplicate" and both
+ *   records stay separate works;
+ * - a **link** (`"link"`) is `docs/02` §11.4's preprint ↔ published relation
+ *   or §11.5 rule 1's title-match-with-conflicting-ids, and both works stay,
+ *   each carrying the other's identifiers in `relatedVersionIds` so the
+ *   `zotero/` layer can relate the two items (gate `G-16`'s decision).
+ *
+ * Pure apart from the `normalizedAtEpochMs` the caller supplies: no clock, no
+ * network, no Zotero.
+ *
+ * @param records - the fan-out output, in fetch order
+ * @param normalizedAtEpochMs - `ctx.clock.now()`, stamped on every work
+ */
+export function dedupeAndMerge(
+  records: readonly SourceRecord[],
+  normalizedAtEpochMs: number,
+): DedupeMergeResult {
+  const dedup: DedupResult = dedupeRecords(records);
+
+  const merged: MergedWork[] = dedup.groups.map((group) => {
+    const { work, conflicts } = merge(group.records, normalizedAtEpochMs);
+    return {
+      work,
+      records: group.records,
+      decisions: group.decisions,
+      conflicts,
+    };
+  });
+
+  // Which merged work each record ended up in, for the pair lists.
+  const indexByRecordId = new Map<string, number>();
+  merged.forEach((entry, index) => {
+    for (const record of entry.records) indexByRecordId.set(record.id, index);
+  });
+  const indexOf = (record: SourceRecord): number => {
+    const index = indexByRecordId.get(record.id);
+    if (index === undefined) {
+      throw new RangeError(
+        `[research-helper] dedupeAndMerge: record ${record.id} is in no group`,
+      );
+    }
+    return index;
+  };
+
+  // Links: both works stay; each learns the other's identifiers.
+  const links: VersionLink[] = [];
+  for (const pair of dedup.links) {
+    const ai = indexOf(pair.a);
+    const bi = indexOf(pair.b);
+    const a = merged[ai];
+    const b = merged[bi];
+    if (a === undefined || b === undefined || ai === bi) continue;
+    merged[ai] = relate(a, b.work.ids);
+    merged[bi] = relate(b, a.work.ids);
+    links.push({
+      aWorkKey: a.work.workKey,
+      bWorkKey: b.work.workKey,
+      preprintWorkKey: preprintSide(a.work, b.work),
+      decision: pair.decision,
+    });
+  }
+
+  const deduplicatedAwayBySource: Partial<Record<SourceId, number>> = {};
+  for (const entry of merged) {
+    for (const record of entry.records.slice(1)) {
+      deduplicatedAwayBySource[record.sourceId] =
+        (deduplicatedAwayBySource[record.sourceId] ?? 0) + 1;
+    }
+  }
+
+  const representatives: SourceRecord[] = [];
+  for (const entry of merged) {
+    const first = entry.records[0];
+    if (first === undefined) {
+      throw new RangeError("[research-helper] dedupeAndMerge: empty group");
+    }
+    representatives.push(first);
+  }
+
+  return {
+    records: representatives,
+    works: merged.map((entry) => entry.work),
+    merged,
+    flags: dedup.flags,
+    links,
+    comparisons: dedup.comparisons,
+    recordsDeduplicatedAway: dedup.recordsDeduplicatedAway,
+    deduplicatedAwayBySource,
+  };
+}
+
+/** `entry` with `other`'s identifiers added to its work's `relatedVersionIds`. */
+function relate(entry: MergedWork, other: ExternalIds): MergedWork {
+  const related: Record<string, string> = {
+    ...(entry.work.relatedVersionIds as Record<string, string> | undefined),
+  };
+  for (const [key, value] of Object.entries(other)) {
+    if (typeof value === "string" && related[key] === undefined) {
+      related[key] = value;
+    }
+  }
+  return {
+    ...entry,
+    work: { ...entry.work, relatedVersionIds: related as ExternalIds },
+  };
+}
+
+/** Exactly one side a preprint (by type or DOI prefix) → its key; else undefined. */
+function preprintSide(a: CanonicalWork, b: CanonicalWork): string | undefined {
+  const isPreprint = (w: CanonicalWork): boolean =>
+    w.type === "preprint" ||
+    (w.ids.doi !== undefined && isPreprintDoi(w.ids.doi));
+  const pa = isPreprint(a);
+  const pb = isPreprint(b);
+  if (pa === pb) return undefined;
+  return pa ? a.workKey : b.workKey;
+}
+
+/**
+ * Re-stamp each source's `recordsDeduplicatedAway` from
+ * {@link DedupeMergeResult.deduplicatedAwayBySource}.
+ *
+ * `fetchOne` writes `0` because dedup is cross-source and has not run yet when
+ * the fetch report is built; this is the one place the figure becomes true.
+ * Reports are returned in the order given, every other member untouched, and
+ * a source with nothing charged keeps `0` — `docs/07` §5.3: "`0`, not absent".
+ */
+export function attributeDeduplicatedAway(
+  reports: readonly SearchImportSourceReport[],
+  result: Pick<DedupeMergeResult, "deduplicatedAwayBySource">,
+): readonly SearchImportSourceReport[] {
+  return reports.map((report) => ({
+    ...report,
+    recordsDeduplicatedAway:
+      result.deduplicatedAwayBySource[report.sourceId] ?? 0,
+  }));
 }

@@ -79,6 +79,27 @@ export { parseUserQuery } from "./shared/queryParse";
 export interface SourceCapabilities {
   /** Free-text/boolean keyword search. */
   readonly keywordSearch: boolean;
+  /**
+   * The query dialect this source really renders: its column of
+   * `02-literature-database-apis.md` §12.3, one member per row. Read by
+   * `normalizeForSource` (`src/sources/shared/queryParse.ts`) to name the
+   * `QueryNode`s a rendering would lose, so an adapter degrades visibly.
+   * Meaningful only when `keywordSearch` is true.
+   */
+  readonly query: {
+    /** §12.3 "OR" row: a real disjunction, not a flattened bag of words. */
+    readonly or: boolean;
+    /** §12.3 "NOT" row: a real exclusion, not a client-side afterthought. */
+    readonly not: boolean;
+    /** §12.3 "Phrase" row: quotes keep adjacent words together. */
+    readonly phrase: boolean;
+    /**
+     * §12.3's field rows (Title field, Abstract, Author): the `QueryField`
+     * members this source renders. `"any"` is never listed — it is the
+     * absence of a field restriction, which every source renders.
+     */
+    readonly fields: readonly QueryField[];
+  };
   /** "More like this" from an identifier or a work. */
   readonly relatedByWork: boolean;
   /** Fetch a work by DOI / PMID / arXiv ID. */

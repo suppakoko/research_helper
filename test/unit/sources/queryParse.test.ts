@@ -4,10 +4,12 @@ import {
   normalizeForSource,
   parseUserQuery,
 } from "../../../src/sources/shared/queryParse";
+import { PUBMED_CAPABILITIES } from "../../../src/sources/pubmed/pubmedSource";
 import {
   parseUserQuery as parseUserQueryViaTypes,
   type QueryField,
   type QueryNode,
+  type SourceCapabilities,
   type SourceQuery,
 } from "../../../src/sources/types";
 
@@ -386,58 +388,102 @@ describe("parseUserQuery — P2-T01 criterion 2 and the re-export", () => {
 
 /**
  * `P2-T01` step 4. The columns below are `docs/02` §12.3's, transcribed row by
- * row: a cell reading *n/a* or *client-side* is `false` / absent, a cell with a
- * real operator or prefix is `true` / present. `keywordSearch` is the
- * `docs/07` §4.2 flag; bioRxiv's is `false` (`docs/02` §8.4).
+ * row into the `SourceCapabilities.query` member `P2-T28` gave them: a cell
+ * reading *n/a* or *client-side* is `false` / absent, a cell with a real
+ * operator or prefix is `true` / present. `keywordSearch` is the `docs/07` §4.2
+ * flag; bioRxiv's is `false` (`docs/02` §8.4).
  */
 describe("normalizeForSource — docs/02 §12.3 columns", () => {
+  /** What `normalizeForSource` reads off a `SourceCapabilities`. */
+  type Column = Pick<SourceCapabilities, "keywordSearch" | "query">;
   const ALL_FIELDS: readonly QueryField[] = ["title", "abstract", "author"];
 
   /** AND, OR, NOT, phrase, TITLE:, ABSTRACT:, AUTH: — every cell is real. */
-  const EUROPE_PMC = {
+  const EUROPE_PMC: Column = {
     keywordSearch: true,
-    or: true,
-    not: true,
-    phrase: true,
-    fields: ALL_FIELDS,
+    query: { or: true, not: true, phrase: true, fields: ALL_FIELDS },
   };
   /** AND implicit (scored), OR n/a, NOT client-side, phrase n/a, no abstract. */
-  const CROSSREF = {
+  const CROSSREF: Column = {
     keywordSearch: true,
-    or: false,
-    not: false,
-    phrase: false,
-    fields: ["title", "author"] as const,
+    query: {
+      or: false,
+      not: false,
+      phrase: false,
+      fields: ["title", "author"],
+    },
   };
   /** `+` `|` `-` and quotes are real; every field cell is n/a. */
-  const S2_BULK = {
+  const S2_BULK: Column = {
     keywordSearch: true,
-    or: true,
-    not: true,
-    phrase: true,
-    fields: [] as const,
+    query: { or: true, not: true, phrase: true, fields: [] },
   };
   /** AND, OR, ANDNOT, %22…%22, ti:, abs:, au: — every cell is real. */
-  const ARXIV = {
+  const ARXIV: Column = {
     keywordSearch: true,
-    or: true,
-    not: true,
-    phrase: true,
-    fields: ALL_FIELDS,
+    query: { or: true, not: true, phrase: true, fields: ALL_FIELDS },
   };
   /** No keyword search at all. */
-  const BIORXIV = {
+  const BIORXIV: Column = {
     keywordSearch: false,
-    or: false,
-    not: false,
-    phrase: false,
-    fields: [] as const,
+    query: { or: false, not: false, phrase: false, fields: [] },
   };
 
   it("reports nothing for a source whose column has no n/a cell", () => {
     const tree = parseUserQuery(EXAMPLE);
     expect(normalizeForSource(tree, EUROPE_PMC)).toEqual([]);
     expect(normalizeForSource(tree, ARXIV)).toEqual([]);
+  });
+
+  it("takes the adapter's own declaration: PubMed's is §12.3's column plus `journal` (P2-T28)", () => {
+    // Every PubMed cell in §12.3 is real, and `FIELD_TAGS`
+    // (`src/sources/pubmed/query.ts`) renders `[Journal]`, a row the table does
+    // not yet carry (`plan/00` §6 item 63). Passing the whole
+    // `SourceCapabilities` is the point: no inline column, no copy of the
+    // table on the caller's side.
+    expect(PUBMED_CAPABILITIES.query).toEqual<SourceCapabilities["query"]>({
+      or: true,
+      not: true,
+      phrase: true,
+      fields: ["title", "abstract", "author", "journal"],
+    });
+    expect(
+      normalizeForSource(parseUserQuery(EXAMPLE), PUBMED_CAPABILITIES),
+    ).toEqual([]);
+    expect(
+      normalizeForSource(parseUserQuery("journal:Nature"), PUBMED_CAPABILITIES),
+    ).toEqual([]);
+  });
+
+  it("reads each §12.3 row off its own `query` member — one cell false at a time", () => {
+    // No real column in §12.3 separates OR, NOT and phrase (Crossref's three
+    // are all n/a), so a mutant reading a neighbouring member — `query.or`
+    // where `query.not` is meant — survives the columns above. These synthetic
+    // columns turn one cell off at a time; the example has one of each node.
+    const tree = parseUserQuery(EXAMPLE);
+    const allBut = (off: "or" | "not" | "phrase"): Column => ({
+      keywordSearch: true,
+      query: {
+        or: off !== "or",
+        not: off !== "not",
+        phrase: off !== "phrase",
+        fields: ALL_FIELDS,
+      },
+    });
+    const kinds = (column: Column): string[] =>
+      normalizeForSource(tree, column).map((n) => n.kind);
+
+    expect(kinds(allBut("or"))).toEqual(["or"]);
+    expect(kinds(allBut("not"))).toEqual(["not"]);
+    expect(kinds(allBut("phrase"))).toEqual(["term", "term"]);
+    expect(
+      normalizeForSource(tree, {
+        keywordSearch: true,
+        query: { or: true, not: true, phrase: true, fields: ["author"] },
+      }),
+    ).toEqual<readonly QueryNode[]>([
+      { kind: "term", value: "CRISPR", field: "title" },
+    ]);
   });
 
   it("reports Crossref's four losses on the §12.2 example, in document order, by reference", () => {

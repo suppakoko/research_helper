@@ -214,9 +214,16 @@ export interface SearchImportSourceReport {
    */
   readonly keptWithoutDate: number;
   /**
-   * `0` in Phase 1, always, and present rather than omitted. `docs/07` §5.3's
-   * own comment on the field says "`0`, not absent", and `P1-T16`'s `Do NOT`
-   * forbids `Deduping` merging anything this phase.
+   * Records from this source that `Deduping` folded into another record's
+   * work. Present rather than omitted — `docs/07` §5.3's own comment on the
+   * field says "`0`, not absent".
+   *
+   * `fetchOne` writes `0`, because dedup is cross-source and runs only after
+   * every source has answered; `stages.ts`'s `attributeDeduplicatedAway`
+   * (`P2-T10`) re-stamps the figure from the dedup result, charging each
+   * folded record to its own source. Until the pipeline's `run()` calls it,
+   * the value stays `0` — as it was through Phase 1, when `P1-T16`'s `Do NOT`
+   * forbade `Deduping` merging anything.
    */
   readonly recordsDeduplicatedAway: number;
   /**
@@ -245,8 +252,9 @@ export interface SearchImportSourceReport {
  *
  * A subset of {@link SearchImportOutcome}: the fetch half cannot be
  * `"cancelled"`, because a cancel is thrown out of the stage rather than
- * reported from it. `stages.ts`'s `fetchStateFromReports` derives it, and
- * documents the one case where its reading and `outcomeFromReports`' differ.
+ * reported from it. `stages.ts`'s `fetchStateFromReports` derives it and is,
+ * since `P2-T27`, the only function that does — the pipeline's
+ * `fetchOutcome` applies it over the whole per-source list.
  */
 export type SearchImportFetchState = Exclude<SearchImportOutcome, "cancelled">;
 
