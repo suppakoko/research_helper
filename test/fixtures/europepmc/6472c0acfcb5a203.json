@@ -1,0 +1,7 @@
+{
+  "status": 503,
+  "headers": {
+    "content-type": "text/plain"
+  },
+  "body": "This API is temporarily unavailable due to maintenance."
+}

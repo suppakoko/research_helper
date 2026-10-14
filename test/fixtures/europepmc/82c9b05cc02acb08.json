@@ -1,0 +1,8 @@
+{
+  "status": 429,
+  "headers": {
+    "content-type": "text/plain",
+    "retry-after": "2"
+  },
+  "body": "synthetic fixture: Europe PMC publishes no 429 body shape (docs/02 §4.1, §4.9); the limit was not provoked. Status and Retry-After are the assertable parts.\n"
+}

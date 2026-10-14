@@ -1,0 +1,14 @@
+{
+  "scenario": "search-post-long-query",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-14T05:27:43.312Z",
+  "endpoint": "https://www.ebi.ac.uk/europepmc/webservices/rest/searchPOST",
+  "method": "POST",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "dropped header set-cookie",
+    "scrubbed body",
+    "request URL withheld: it carries the contact parameter"
+  ]
+}

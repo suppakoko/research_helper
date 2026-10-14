@@ -1,7 +1,8 @@
 /**
  * The single wiring point for literature sources.
  *
- * **Scope.** `P1-T07` step 5: register `pubmed` and nothing else.
+ * **Scope.** `P1-T07` step 5: register `pubmed` and nothing else; `P2-T03`
+ * adds the `europepmc` slot (see {@link SourceAdapters}).
  * `docs/07` §11.1 step 8 makes this file the *only* place a new source is wired
  * in — that is what lets step 11 claim "the source appears automatically in the
  * search dialog because it is rendered from the registry", and what keeps
@@ -36,10 +37,25 @@ import type { LiteratureSource } from "../sources/types";
  *
  * Phase 2 adds `europepmc`, `crossref`, `semanticscholar`, `arxiv`, `biorxiv`
  * and `medrxiv` here as its adapter cards land.
+ *
+ * **`europepmc` is optional, and that is a compatibility decision rather than
+ * a design one (`P2-T03`, 2026-10-14).** The member should be required for the
+ * reason the paragraph above gives, but the one caller —
+ * `src/bootstrap/container.ts`, which constructs the adapters and calls
+ * {@link registerSources} — is outside `P2-T03`'s `Files`, and a required
+ * member would break its typecheck from a file the card may not touch
+ * (`plan/README.md` §4: extend rather than break an importer outside the
+ * list). The consequence is documented: until the container constructs
+ * `createEuropePmcSource` (`src/sources/europepmc/europepmcSource.ts`) and
+ * passes it here, the shipped plugin registers PubMed alone and Europe PMC is
+ * reachable only from tests. Reported with the card under rule 10; the member
+ * becomes required in the same change that wires the container.
  */
 export interface SourceAdapters {
   /** Phase 1's only adapter. `P1-T09` builds it. */
   readonly pubmed: LiteratureSource;
+  /** `P2-T03`'s adapter. Optional only until the container constructs it. */
+  readonly europepmc?: LiteratureSource;
 }
 
 /**

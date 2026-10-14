@@ -1,0 +1,13 @@
+{
+  "scenario": "error-500",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-14T05:27:43.318Z",
+  "endpoint": "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written from docs/02 §4.7's measured /references outage: HTTP 503, Content-Type text/plain, that exact body. A 5xx cannot be provoked on demand.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

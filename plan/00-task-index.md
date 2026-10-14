@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-14 · **143 tasks: 91 `DONE`, 52 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **13 of 31**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 143, so 45 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-14 · **145 tasks: 91 `DONE`, 54 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **13 of 33**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 145, so 47 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -22,9 +22,9 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
-| 2 — Multi-source + dedup | 31 | 30.00 d | 30.00–42 d | 12–16 d (+88%) |
+| 2 — Multi-source + dedup | 33 | 30.75 d | 30.75–43 d | 12–16 d (+92%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **143** | **100.50 d** | **100.50–141 d** | 39–52 d (+93% over the top of the band) |
+| **Phases 0–3** | **145** | **101.25 d** | **101.25–142 d** | 39–52 d (+95% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -214,10 +214,10 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T01` | Ship the user-query parser and per-source render contract | `P1-T07`, `P1-T08` | 1.0 d |  |
 | ✅ `P2-T02` | Parallel fan-out: per-source timeouts, failure isolation | `P1-T04`, `P1-T07`, `P1-T16`, `P2-T01` | 1.25 d |  |
 | `P2-T03` | Europe PMC adapter | `P2-T01`, `P2-T23`, `P2-T25`, `P2-T26`, `P2-T28` | 2.0 d |  |
-| `P2-T04` | Crossref adapter | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26`, `P2-T28` | 1.5 d |  |
-| `P2-T05` | Semantic Scholar adapter with unauthenticated degradation | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28` | 2.0 d | 🔒 |
-| `P2-T06` | arXiv adapter | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28` | 1.25 d |  |
-| `P2-T07` | bioRxiv / medRxiv adapter (ID lookup and cross-walk only) | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28` | 1.5 d |  |
+| `P2-T04` | Crossref adapter | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T32`, `P2-T33` | 1.5 d |  |
+| `P2-T05` | Semantic Scholar adapter with unauthenticated degradation | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 2.0 d | 🔒 |
+| `P2-T06` | arXiv adapter | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 1.25 d |  |
+| `P2-T07` | bioRxiv / medRxiv adapter (ID lookup and cross-walk only) | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 1.5 d |  |
 | `P2-T08` | `preprint` item-type mapping and server attribution | `P2-T03`, `P2-T06`, `P2-T07` | 1.0 d |  |
 | ✅ `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
 | ✅ `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
@@ -242,6 +242,8 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P2-T29` | Wire `dedupeAndMerge` into the running pipeline, which still… | `P2-T10`, `P2-T27` | 0.5 d |  |
 | `P2-T30` | Make the dedup cascade yield, so `Merging` stops stalling the… | `P2-T29` | 0.5 d |  |
 | `P2-T31` | Give the import half the merged work the preview showed, and… | `P2-T29`, `P2-T30` | 0.5 d |  |
+| `P2-T32` | Register Europe PMC in the composition root, name it in both… | `P2-T03` | 0.5 d |  |
+| `P2-T33` | Make the fixture recorder run again and take a per-source… | `P2-T03`, `P2-T25` | 0.25 d |  |
 
 ### Phase 3
 
@@ -1097,6 +1099,46 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 123. **Scratchpad hygiene for parallel agents:** two agents overwrote each other's `mutate.mjs` mid-sweep
     (no file damage — the hash check held). Briefs now say: card-prefixed file names in the scratchpad.
+
+### 6.24 Raised by `P2-T03`, 2026-10-14 — two carded under rule 9 (`P2-T32`, `P2-T33`), the rest recorded
+
+124. ~~**Europe PMC is built but not constructed by the product.**~~ **CARDED 2026-10-14 as `P2-T32`** —
+    `installServices` in `src/bootstrap/container.ts` was outside `P2-T03`'s list; rule 10's check saw
+    `registerSources.ts` and stopped. The check now reads: the file that **constructs** the thing, not only
+    the one that registers it. The four remaining adapter cards carry a dated Files note.
+
+125. ~~**The display-name id has no home.**~~ **CARDED into `P2-T32`** — `research-helper-source-europepmc` in
+    both `mainWindow.ftl` bundles and `src/i18n/keys.ts`; the card had named `searchDialog.ftl`.
+
+126. ~~**Three Phase 1 tests pin `HOST_POLICIES` at one host or demand a retry budget §7.3 lacks.**~~
+    **CARDED into `P2-T32`**, gated on the owner filling §7.3's retry cells for `www.ebi.ac.uk` (proposal:
+    base 1000 ms, cap 30 000 ms, 3 attempts) and making the Host cell the bare host. **The unit suite is red
+    on these four tests until then.** The same cells should be filled for every remaining v1 host before
+    `P2-T04`–`P2-T07` launch, or each will stop at the same wall.
+
+127. ~~**`npm run fixtures:record` has been broken since `P2-T25`** (tsx reads `.node` as an extension) and is
+    PubMed-only.~~ **CARDED 2026-10-14 as `P2-T33`** — `P2-T03` recorded from an uncommitted scratch script.
+
+128. **(owner's document edits, `docs/02`)** §4.6: the measured termination shapes (a short page with a fresh
+    cursor; an empty page with no cursor member; never a repeated cursor); §4.4: `request.email` and
+    `nextPageUrl` echo the contact address (percent-encoded in the latter), and titles carry markup in two
+    spellings (raw `<b>` and entity-escaped `&lt;i&gt;`); §4.3: whether a language field exists; §10.2:
+    `commentCorrectionList` → `relatedVersionIds`, and `ids.epmc` → `SourceRecord.nativeId`.
+
+129. **(owner's document edit, `docs/13`)** §3.2's redaction list should name the percent-encoded contact
+    address (`P2-T33` writes the one line); §3.1 should note that a CJK title is not obtainable from Europe
+    PMC's `title` field for MED records — the `record-unicode` scenario pins diacritics and markup instead.
+
+130. **`docs/07` §5.1 has no `ExternalIds` member for a Europe PMC `PPR` id**, so the "Preprint in" link on a
+    MED record (pointing at a `PPR`) is not mapped; the "Preprint of" direction (PMID) is. Decide whether
+    `ExternalIds` gains an `epmcId`.
+
+131. **`citationGraph` semantics.** Europe PMC declares `citationGraph: true` because the service has
+    `/citations` and `/references`, while the adapter exposes no `findRelated` (`relatedByWork: false`). Decide
+    whether the flag means "the service can" or "this adapter does" before `P2-T07` and `P2-T13` plan around it.
+
+132. **For `P2-T12`:** Europe PMC's `lookup()` (`EXT_ID:`, `DOI:`, `PMCID:`) is not implemented and
+    `lookupById` is empty; the backfill card decides whether it needs it.
 
 ## 7. Regenerating this file
 

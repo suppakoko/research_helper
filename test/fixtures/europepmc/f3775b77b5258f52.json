@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "headers": {
+    "connection": "keep-alive",
+    "content-encoding": "gzip",
+    "content-type": "application/json",
+    "date": "Wed, 14 Oct 2026 05:27:39 GMT",
+    "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "vary": "origin,access-control-request-method,access-control-request-headers,accept-encoding"
+  },
+  "body": "{\"errCode\":404,\"errMsg\":\"No search criteria provided. Please provide a search criteria which is less than 1500 characters.\"}"
+}

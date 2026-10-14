@@ -348,7 +348,7 @@ the integration suite. Follow-ups are `plan/00` §6.14; the wiring is carded.
 | **ID** | `P2-T03` |
 | **State** | `TODO` |
 | **Depends on** | `P2-T01`, `P2-T23`, `P2-T25`, `P2-T26`, `P2-T28` |
-| **Blocks** | `P2-T07`, `P2-T08`, `P2-T12` |
+| **Blocks** | `P2-T07`, `P2-T08`, `P2-T12`, `P2-T32`, `P2-T33` |
 | **Retires** | part of `R-2`, part of `R-17` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
 | **Estimate** | 2.0 d |
@@ -389,6 +389,15 @@ source — returning inline abstracts in one round trip, with cursor pagination 
 - `docs/13-testing-build-and-release.md` §3.1 — the thirteen fixtures required per literature source.
 
 **Files.**
+> **Corrected 2026-10-14 after the executing agent measured (report):** four rows of this list were wrong and one
+> was missing. `src/model/merge.ts` already existed with every `europepmc` precedence entry (`P2-T10`), so
+> step 10 was already done; the two `searchDialog.ftl` bundles are the **wrong bundle** — source display
+> names live in `research-helper-mainWindow.ftl` and their ids in `src/i18n/keys.ts` (`docs/01` §9.3, one
+> declaration per id); `plan/README.md` is named by no step; and `src/bootstrap/container.ts`, whose
+> `installServices` constructs the adapters, is **missing** — the rule-10 check before launch saw
+> `registerSources.ts` in the list and stopped there. Consequence: the adapter is complete and proven but
+> the product still registers PubMed alone, and `SourceAdapters.europepmc` had to be optional. Registration,
+> display name and the three Phase 1 one-host test pins are `P2-T32`; the recorder is `P2-T33`.
 - create `src/sources/europepmc/europepmcSource.ts`
 - create `src/sources/europepmc/mapper.ts`
 - create `src/sources/europepmc/query.ts`
@@ -401,6 +410,14 @@ source — returning inline abstracts in one round trip, with cursor pagination 
 - create `test/fixtures/europepmc/` (the `docs/13` §3.1 set)
 
 **Do.**
+> **Noted 2026-10-14 (report):** step 1's `FIRST_PDATE` and the Read first's `PUB_YEAR` name two renderings — step
+> 1 and `docs/02` §12.2's worked example were followed. Step 6's `citationGraph: true` describes the service,
+> not an exposed method (`relatedByWork` is false; `plan/00` §6 item 131). Step 10 was already satisfied.
+> `docs/02` §4.6's "stop when the cursor repeats" was never observed live: page 2 of a 5-hit set returned
+> 2 records **and** a fresh cursor, page 3 an empty page with no cursor member — the adapter stops on any of
+> four conditions (item 129). The `record-unicode` criterion is met in part: Europe PMC's `title` for MED
+> records is the translated English title, so a CJK title is not obtainable live and the byte-identity is
+> pinned on a hand-built record through the real mapper — the owner confirms the reading.
 1. Implement `query.ts`: render `QueryNode` into Europe PMC syntax per `docs/02` §4.3/§12.2, append
    `AND (FIRST_PDATE:[<from> TO <to>])` when a window is set, and implement `explainQuery`.
 2. Switch to `POST /searchPOST` with an `application/x-www-form-urlencoded` body when the rendered
@@ -473,6 +490,26 @@ and says to make it the default; every downstream card (preprint search `P2-T07`
 "Search → Europe PMC + Crossref") assumes it works. Build it first among the adapters.
 `docs/02` §2.4 marks `email=` as accepted-but-not-enforced here — send it anyway per `docs/02` §2.2.
 
+
+**Findings, 2026-10-14 — the adapter is done and proven; it is not yet constructed by the product (`P2-T32`), and the recorder it needed is broken (`P2-T33`); full report at `plan/reports/P2-T03.md`.**
+Verified by the coordinator on the live tree: 19 fixture pairs under `test/fixtures/europepmc/` (38 files), the
+maintainer address absent from every fixture and its percent-encoded form replaced in 16, no `MUTANT` marker,
+typecheck 0, the Europe PMC and host-limiter test files **110 passed**, the OpenAlex guard exit 0, and the
+four known failures reproduced exactly — `tokenBucket.test.ts`'s "only that row in Phase 1",
+`backoff.test.ts`'s two §7.3 tests and `container.test.ts`'s host list — all one fact, a second
+`HOST_POLICIES` row, which `P2-T32` retires once the owner fills §7.3's retry cells. The agent made **16 live
+unauthenticated requests** to `www.ebi.ac.uk`, paced ≥ 1 s apart with the plugin's `User-Agent` and the
+approved contact address, and its two integration runs passed 128. `createEuropePmcSource` renders the
+`docs/02` §12.3 column (`TITLE:`, `ABSTRACT:`, `AUTH:`, `FIRST_PDATE:[a TO b]`, `AND`/`OR`/`NOT`, quoted
+phrases), switches to `POST /searchPOST` past 1,500 characters (recorded with a 3,085-character query),
+pages by `cursorMark`, maps `abstractText` through entity decoding, tag stripping and `<h4>` headings into
+`Label:` paragraphs, classifies `PPR` records as preprints with `relatedVersionIds.pmid` from
+`commentCorrectionList`, typed `errCode` bodies under HTTP 200 as `SourceError`, and declares
+`capabilities.query` from its column plus `EUROPEPMC_QUERY_FILTER_SUPPORT` (`openAccessOnly` rendered as
+`OPEN_ACCESS:y`, `languages` refused — no field is documented). 103 tests; **34 mutants, 33 killed, one
+equivalent** (the empty-page stop is subsumed by the short-page stop). Facts for the owner's documents
+(items 128–132): §4.6's termination shapes, the echoed contact address, title markup in two spellings,
+`ids.epmc` as `nativeId`, `citationGraph`'s meaning. Not checked: in-Zotero replay of these fixtures.
 ---
 
 ### P2-T04 — Crossref adapter
@@ -481,7 +518,7 @@ and says to make it the default; every downstream card (preprint search `P2-T07`
 |---|---|
 | **ID** | `P2-T04` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26`, `P2-T28` |
+| **Depends on** | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T32`, `P2-T33` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -515,6 +552,14 @@ in the polite pool, with its Boolean lossiness handled explicitly rather than si
 - `docs/07-architecture-and-data-model.md` §11.1 — the add-a-source checklist.
 
 **Files.**
+> **Added 2026-10-14 under rule 10, after `P2-T03` landed with its adapter unconstructed:** this list must also
+> include `src/bootstrap/container.ts` (`installServices` constructs the adapters — `registerSources.ts` alone
+> does not make a source reachable), `test/unit/bootstrap/container.test.ts` (its host list), both
+> `addon/locale/*/research-helper-mainWindow.ftl` bundles and `src/i18n/keys.ts` for the display-name id
+> (**not** `searchDialog.ftl`, which the bullets below name by mistake), and `test/fixtures/<source>/`.
+> `src/model/merge.ts` already carries this source's precedence entries (`P2-T10`); measure before editing.
+> Record fixtures through `npm run fixtures:record -- --source <id>` once `P2-T33` lands. If `docs/07` §7.3's
+> retry cells for this host read `—`, stop and report — rule 4 forbids inventing them.
 - create `src/sources/crossref/crossrefSource.ts`
 - create `src/sources/crossref/mapper.ts`
 - create `src/sources/crossref/query.ts`
@@ -606,7 +651,7 @@ added to `docs/09` §1.7 first.
 |---|---|
 | **ID** | `P2-T05` |
 | **State** | `TODO` |
-| **Depends on** | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28` |
+| **Depends on** | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | `R-3` (fallback proven — full retirement is Phase 5 per `docs/11` §3.1) |
 | **Implements** | `FR-2`, `FR-4`, `FR-11`, open question 8 in `docs/10` §5 |
@@ -654,6 +699,14 @@ are thin.
   Semantic Scholar, do not use the API as a bulk channel.
 
 **Files.**
+> **Added 2026-10-14 under rule 10, after `P2-T03` landed with its adapter unconstructed:** this list must also
+> include `src/bootstrap/container.ts` (`installServices` constructs the adapters — `registerSources.ts` alone
+> does not make a source reachable), `test/unit/bootstrap/container.test.ts` (its host list), both
+> `addon/locale/*/research-helper-mainWindow.ftl` bundles and `src/i18n/keys.ts` for the display-name id
+> (**not** `searchDialog.ftl`, which the bullets below name by mistake), and `test/fixtures/<source>/`.
+> `src/model/merge.ts` already carries this source's precedence entries (`P2-T10`); measure before editing.
+> Record fixtures through `npm run fixtures:record -- --source <id>` once `P2-T33` lands. If `docs/07` §7.3's
+> retry cells for this host read `—`, stop and report — rule 4 forbids inventing them.
 - create `src/sources/semanticscholar/semanticscholarSource.ts`
 - create `src/sources/semanticscholar/mapper.ts`
 - create `src/sources/semanticscholar/query.ts`
@@ -750,7 +803,7 @@ precisely the R-3 outcome the design is built to survive. Record the state in `0
 |---|---|
 | **ID** | `P2-T06` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28` |
+| **Depends on** | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` |
 | **Blocks** | `P2-T08`, `P2-T11` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -783,6 +836,14 @@ hard one-request-per-three-seconds Terms of Use obligation.
   re-hosted.
 
 **Files.**
+> **Added 2026-10-14 under rule 10, after `P2-T03` landed with its adapter unconstructed:** this list must also
+> include `src/bootstrap/container.ts` (`installServices` constructs the adapters — `registerSources.ts` alone
+> does not make a source reachable), `test/unit/bootstrap/container.test.ts` (its host list), both
+> `addon/locale/*/research-helper-mainWindow.ftl` bundles and `src/i18n/keys.ts` for the display-name id
+> (**not** `searchDialog.ftl`, which the bullets below name by mistake), and `test/fixtures/<source>/`.
+> `src/model/merge.ts` already carries this source's precedence entries (`P2-T10`); measure before editing.
+> Record fixtures through `npm run fixtures:record -- --source <id>` once `P2-T33` lands. If `docs/07` §7.3's
+> retry cells for this host read `—`, stop and report — rule 4 forbids inventing them.
 - create `src/sources/arxiv/arxivSource.ts`
 - create `src/sources/arxiv/mapper.ts`
 - create `src/sources/arxiv/query.ts`
@@ -867,7 +928,7 @@ part of this card — but it is the natural mitigation if `P2-T16`'s NFR-2 measu
 |---|---|
 | **ID** | `P2-T07` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28` |
+| **Depends on** | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` |
 | **Blocks** | `P2-T08`, `P2-T11` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
@@ -903,6 +964,14 @@ through Europe PMC instead.
   per-preprint author-selected license must be read per record, never assumed.
 
 **Files.**
+> **Added 2026-10-14 under rule 10, after `P2-T03` landed with its adapter unconstructed:** this list must also
+> include `src/bootstrap/container.ts` (`installServices` constructs the adapters — `registerSources.ts` alone
+> does not make a source reachable), `test/unit/bootstrap/container.test.ts` (its host list), both
+> `addon/locale/*/research-helper-mainWindow.ftl` bundles and `src/i18n/keys.ts` for the display-name id
+> (**not** `searchDialog.ftl`, which the bullets below name by mistake), and `test/fixtures/<source>/`.
+> `src/model/merge.ts` already carries this source's precedence entries (`P2-T10`); measure before editing.
+> Record fixtures through `npm run fixtures:record -- --source <id>` once `P2-T33` lands. If `docs/07` §7.3's
+> retry cells for this host read `—`, stop and report — rule 4 forbids inventing them.
 - create `src/sources/biorxiv/biorxivSource.ts`
 - create `src/sources/biorxiv/mapper.ts`
 - create `src/sources/biorxiv/query.ts`
@@ -3505,7 +3574,7 @@ artefact rather than the behaviour — the defect `P1-T14` reported about its ow
 | **ID** | `P2-T25` |
 | **State** | `DONE` — approved 2026-10-13 with criterion 4 met in part (the window blocks keep their stub until a matching fixture is recorded, `plan/00` §6 item 74). Report at `plan/reports/P2-T25.md`. |
 | **Depends on** | `P1-T11` |
-| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T26` |
+| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T26`, `P2-T33` |
 | **Retires** | none |
 | **Implements** | part of `docs/13` §2.2's harness |
 | **Estimate** | 0.75 d |
@@ -4204,6 +4273,146 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 
 ---
 
+### P2-T32 — Register Europe PMC in the composition root, name it in both bundles, and retire the one-host pins
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T32` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T03` |
+| **Blocks** | `P2-T04`, `P2-T14`, `P2-T16` |
+| **Retires** | `plan/00` §6 items 124, 125, 126 |
+| **Implements** | `FR-2` for the second source in the shipped product (`P2-T03` built the adapter in files nothing constructs) |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** A search in the shipped plugin can select Europe PMC, shows its name in both languages, and the
+rate-limit registry serves its host row with a retry budget the document states.
+
+**Prerequisite (owner, before launch).** `docs/07` §7.3's three retry cells for `www.ebi.ac.uk` are filled
+(proposal in `plan/reports/P2-T03.md` Contradictions 3: base 1000 ms, cap 30 000 ms, 3 attempts) and the
+Host cell is the bare `` `www.ebi.ac.uk` `` like every other row. The coordinator confirms this before launch.
+
+**Why this is a card (rule 9).** `P2-T03`'s `Files` list named `registerSources.ts` but not
+`installServices` in `src/bootstrap/container.ts`, which constructs the adapters — so
+`SourceAdapters.europepmc` is optional and the product still registers PubMed alone (rule 10 missed it:
+the registration file was in the list, the construction site was not). Its display-name id has no home
+because the card named the wrong bundle. And the `www.ebi.ac.uk` row fails three Phase 1 tests that pin
+`HOST_POLICIES` at one host or demand a retry budget §7.3 does not yet state. Phase 2's first finishing
+condition needs seven sources in the product; this is the second.
+
+**Read first.**
+- `plan/reports/P2-T03.md` — Contradictions 1, 2, 3 and the four failure texts under Runs.
+- `installServices` and `ServiceGraph` in `src/bootstrap/container.ts`; `registerSources` and
+  `SourceAdapters` in `src/bootstrap/registerSources.ts`; `createEuropePmcSource`,
+  `createEuropePmcRecordMapper`, `EUROPEPMC_DISPLAY_NAME_KEY` in `src/sources/europepmc/`; how PubMed's
+  display name reaches `research-helper-mainWindow.ftl` and `MAIN_WINDOW_MESSAGE_IDS` / `KO_PRESENT` in
+  `src/i18n/keys.ts`; `section73Cell` in `test/unit/core/backoff.test.ts`.
+- `docs/07` §7.3 as the owner left it (the gate above), `docs/01` §9.3 (one declaration per id).
+
+**Do.**
+1. In `installServices`, construct `createEuropePmcSource({ http, clock, mapRecords:
+   createEuropePmcRecordMapper({ clock }) })` beside PubMed and pass it to `registerSources`; make
+   `SourceAdapters.europepmc` required.
+2. Declare `research-helper-source-europepmc = Europe PMC` in both `research-helper-mainWindow.ftl`
+   bundles (byte-safe tools; BOM-less UTF-8) and append the id to `MAIN_WINDOW_MESSAGE_IDS` and
+   `KO_PRESENT` in `src/i18n/keys.ts`; regenerate `typings/i10n.d.ts` with `npx zotero-plugin build`.
+3. Add the `retry` object to the `www.ebi.ac.uk` row in `src/core/rateLimit/hostLimiter.ts` **from the
+   cells the owner wrote**, nothing else.
+4. Retire the Phase 1 pins: `tokenBucket.test.ts`'s "only that row in Phase 1" becomes "every §7.3 row
+   and no other"; `container.test.ts`'s `hosts` expectation lists both hosts; `backoff.test.ts`'s two
+   tests pass against the filled cells (if `section73Cell` still rejects a parenthetical, the gate
+   asked the owner to remove it — report, do not widen the parser).
+
+**Do NOT.** Do not touch the adapter's behaviour or its fixtures. Do not write retry numbers the
+document does not carry. Do not declare the id in `searchDialog.ftl`.
+
+**Criteria.**
+- [ ] `installServices` registers two sources; the integration spec that lists the registry (whichever
+      `P1-T35`/`P1-T23` block reads it) sees `europepmc` and the window shows "Europe PMC".
+- [ ] The i18n unit test passes with the new id in both bundles; `typings/i10n.d.ts` regenerated.
+- [ ] `HOST_POLICIES` has two rows, both with a retry budget equal to §7.3's cells, asserted.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0 —
+      the unit suite is green again.
+
+**Files.**
+- modify `src/bootstrap/container.ts`, `src/bootstrap/registerSources.ts`
+- modify `src/core/rateLimit/hostLimiter.ts`
+- modify `src/i18n/keys.ts`, `addon/locale/en-US/research-helper-mainWindow.ftl`,
+  `addon/locale/ko-KR/research-helper-mainWindow.ftl`
+- modify `test/unit/core/tokenBucket.test.ts`, `test/unit/core/backoff.test.ts`,
+  `test/unit/bootstrap/container.test.ts`
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+---
+
+### P2-T33 — Make the fixture recorder run again and take a per-source plan, before four more adapters record by hand
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T33` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T03`, `P2-T25` |
+| **Blocks** | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07` |
+| **Retires** | `plan/00` §6 item 127 |
+| **Implements** | `docs/07` §11.1 step 5's `--source <newsource>` recording path; `docs/13` §3.2's redaction list |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** `npm run fixtures:record -- --source europepmc --dry-run` runs, and a new adapter card records
+its `docs/13` §3.1 scenarios through the committed recorder instead of a scratch script.
+
+**Why this is a card (rule 9).** `npm run fixtures:record` has been broken since `P2-T25` renamed the
+port: under the installed `tsx`, `test/contract/_transport.ts`'s import of `../support/fixtureIo.node`
+fails with `ERR_MODULE_NOT_FOUND` (tsx reads `.node` as a file extension; vitest's resolver does not), and
+`scripts/record-fixtures.ts` is PubMed-only (`FIXTURE_DIR`, `independentPlan`) with no `--source` flag
+although `docs/07` §11.1 step 5 names one. `P2-T03` therefore recorded Europe PMC from an uncommitted
+scratch script. Four adapter cards are next; each would repeat that, and the recordings would not be
+reproducible from the repository — which Phase 2's dedup-corpus condition (`P2-T13`) depends on.
+
+**Read first.**
+- `plan/reports/P2-T03.md` Contradictions 5 and 12 (the scratch recorder's shape, the percent-encoded
+  contact address in `request.email` and `nextPageUrl`); `plan/reports/P2-T25.md` for the port.
+- `scripts/record-fixtures.ts` (`independentPlan`, `redactExchange`, `assertClean`, `FIXTURE_DIR`);
+  `test/contract/_transport.ts`; `test/support/fixtureIo.node.ts`; the scenario constants in
+  `test/unit/sources/europepmc.test.ts`; `docs/13` §3.1–3.2.
+
+**Do.**
+1. Fix the resolution: import `../support/fixtureIo.node.ts` with its extension, or rename the file so
+   no resolver reads a false extension; prove `npm run fixtures:record -- --dry-run` exits 0 under tsx.
+2. Add `--source <id>` to the recorder: the plan and the fixture directory come from the source; PubMed's
+   plan stays as is; Europe PMC's plan is the scenario list already pinned as constants in its unit
+   test (import them — do not copy). The dry run of `--source europepmc` must print the 19 keys the
+   committed fixtures carry, byte-identical.
+3. Extend the redaction pass so the maintainer address is scrubbed in its percent-encoded form too, and
+   write the rule into `docs/13` §3.2's list (that document section is in `Files` for this one line).
+
+**Do NOT.** Do not re-record any fixture. Do not make a live request (dry runs only). Do not change the
+fixture key function.
+
+**Criteria.**
+- [ ] `npm run fixtures:record -- --dry-run` and `-- --source europepmc --dry-run` both exit 0 under tsx
+      and print the committed fixtures' keys.
+- [ ] A unit test asserts the percent-encoded address is redacted.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:contract` exit 0.
+
+**Files.**
+- modify `scripts/record-fixtures.ts`, `test/contract/_transport.ts` (or rename
+  `test/support/fixtureIo.node.ts`)
+- modify `docs/13-testing-build-and-release.md` (§3.2, one line)
+- create or modify a unit test for the redaction (`test/unit/` — name it for what it checks)
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run fixtures:record -- --dry-run && npm run fixtures:record -- --source europepmc --dry-run
+```
+
+---
+
 ---
 ## Estimate roll-up
 
@@ -4240,7 +4449,9 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 | `P2-T29` | Wire `dedupeAndMerge` into the running pipeline | 0.50 |
 | `P2-T30` | Make the dedup cascade yield (NFR-3 on `Merging`) | 0.50 |
 | `P2-T31` | The import half gets the merged work; `flags`/`links` required | 0.50 |
-| **Total** | **31 tasks** | **30.00 d** |
+| `P2-T32` | Register Europe PMC in the composition root; display name; one-host pins | 0.50 |
+| `P2-T33` | The fixture recorder runs again and takes a per-source plan | 0.25 |
+| **Total** | **33 tasks** | **30.75 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather

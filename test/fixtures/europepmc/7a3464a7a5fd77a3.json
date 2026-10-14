@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json;charset=UTF-8"
+  },
+  "body": "{\"version\":\"6.9\",\"hitCount\":1,\"request\":{\"queryString\":\"TITLE:\\\"Transfer learning enables predictions in network biology\\\"\",\"resultType\":\"core\",\"cursorMark\":\"*\",\"pageSize\":5,\"sort\":\"\",\"synonym\":false,\"email\":\"[redacted:maintainer-address]\"},\"resultList\":{\"result\":[{\"id\":\"37258680\",\"source\":\"MED\",\"pmid\":\"37258680\",\"pmcid\":\"PMC10949956\",\"fullTextIdList\":{\"fullTextId\":[\"PMC10949956\"]},\"doi\":\"10.1038/s41586-023-06139-9\",\"title\":\"Transfer learning enables predictions in network biology.\",\"authorString\":\"Theodoris CV, Xiao L, Chopra A, Chaffin MD, Al Sayed ZR, Hill MC, Mantineo H, Brydon EM, Zeng Z, Liu XS, Ellinor PT.\",\"authorList\":{\"author\":[{\"fullName\":\"Theodoris CV\",\"lastName\":\"Theodoris\",\"firstName\":\"Christina V\",\"initials\":\"CV\",\"authorId\":{\"type\":\"ORCID\",\"value\":\"0000-0003-1658-1447\"},\"authorAffiliationDetailsList\":{\"authorAffiliation\":[{\"affiliation\":\"Department of Data Science, Dana-Farber Cancer Institute, Boston, MA, USA. christina.theodoris@gladstone.ucsf.edu.\"},{\"affiliation\":\"Cardiovascular Disease Ini"
+}

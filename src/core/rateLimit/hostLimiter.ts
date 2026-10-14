@@ -133,6 +133,15 @@ export const NCBI_HOST = "eutils.ncbi.nlm.nih.gov";
 export const NCBI_KEY_PRESENT_PREF = "ncbi.keyPresent";
 
 /**
+ * The host `P2-T03`'s Europe PMC adapter talks to — the authority of
+ * `https://www.ebi.ac.uk/europepmc/webservices/rest/` (`docs/02` §4.1).
+ * Imported by `src/sources/europepmc/` rather than respelled, as
+ * {@link NCBI_HOST} is by the PubMed adapter, so §7.3's one-bucket-per-host
+ * rule stays mechanical.
+ */
+export const EBI_HOST = "www.ebi.ac.uk";
+
+/**
  * `docs/07` §7.3's policy table, as far as Phase 1 needs it.
  *
  * **NCBI, the one row that ships now.** 2.5/s without a key and 8/s with one,
@@ -179,16 +188,35 @@ export const NCBI_KEY_PRESENT_PREF = "ncbi.keyPresent";
  * *count* cannot become a rate.
  *
  * **The five rows Phase 2 adds**, each from §7.3 verbatim and each with the card
- * that adds it: `www.ebi.ac.uk` (Europe PMC, `P2-T03`), `api.crossref.org`,
- * `api.semanticscholar.org`, `export.arxiv.org` — which needs
- * `minIntervalMs: 3000` and `maxConcurrent: 1`, aggregated across every machine
- * under our control — and `api.biorxiv.org`. `api.openalex.org` gets **no** row:
- * decision D2 puts OpenAlex out of v1 and one of `plan/03`'s cards greps this
- * file to prove it. The LLM and TTS hosts are Phase 3's and Phase 5's and are driven from
- * provider prefs rather than from a static row. **Each of those five rows needs
- * its own `retry` budget with its own named sources in §7.3** — the NCBI numbers
- * are that host's and not a global default, which §7.3 states and
- * `test/unit/core/backoff.test.ts` enforces.
+ * that adds it: `www.ebi.ac.uk` (Europe PMC, `P2-T03` — **shipped below**),
+ * `api.crossref.org`, `api.semanticscholar.org`, `export.arxiv.org` — which
+ * needs `minIntervalMs: 3000` and `maxConcurrent: 1`, aggregated across every
+ * machine under our control — and `api.biorxiv.org`. `api.openalex.org` gets
+ * **no** row: decision D2 puts OpenAlex out of v1 and one of `plan/03`'s cards
+ * greps this file to prove it. The LLM and TTS hosts are Phase 3's and Phase 5's
+ * and are driven from provider prefs rather than from a static row. **Each of
+ * those five rows needs its own `retry` budget with its own named sources in
+ * §7.3** — the NCBI numbers are that host's and not a global default, which §7.3
+ * states and `test/unit/core/backoff.test.ts` enforces.
+ *
+ * **Europe PMC, `P2-T03` (2026-10-14).** 5/s, burst 5, max concurrent 3, no key
+ * mode — §7.3's `www.ebi.ac.uk` row, whose own basis is the **Unverified**
+ * note under the table: the 10 req/s figure comes from an EBI mailing-list
+ * thread, the team confirmed per-IP scoping but not the number, and the shipped
+ * budget is half of it. It is not raised without asking the Europe PMC team
+ * (`docs/02` §4.1, `docs/09` §5.5). Europe PMC has no API key at all
+ * (`docs/02` §4.1, "None required, none available"), so the row has no
+ * `withKey` and no `keyPresencePref`. **It has no `retry` either, and that
+ * is a transcription, not an omission:** §7.3's three retry cells for this host
+ * read `—`, §7.3 says every non-NCBI row keeps `—` "until the card that adds
+ * that host supplies its own three values with its own sources", and
+ * `plan/README.md` §5 rule 4 forbids writing a number here that the document
+ * does not carry. The consequence is documented behaviour — one attempt, no
+ * retry (`src/core/http/client.ts` on an absent `RetryPolicy`) — and
+ * `test/unit/core/backoff.test.ts`'s "gives every shipped policy row a retry
+ * budget" fails by design until §7.3's cells are filled; `P2-T03`'s report
+ * proposes the three values and their sources for the owner to enter in §7.3
+ * first, after which the `retry` member is added here.
  */
 export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
   {
@@ -197,6 +225,12 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
     withKey: { ratePerSecond: 8, burst: 1, maxConcurrent: 3 },
     keyPresencePref: NCBI_KEY_PRESENT_PREF,
     retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
+  },
+  {
+    // `docs/07` §7.3, `www.ebi.ac.uk` (Europe PMC): 5/s, burst 5, max
+    // concurrent 3; retry cells `—`. See the header's "Europe PMC" paragraph.
+    host: EBI_HOST,
+    withoutKey: { ratePerSecond: 5, burst: 5, maxConcurrent: 3 },
   },
 ];
 
