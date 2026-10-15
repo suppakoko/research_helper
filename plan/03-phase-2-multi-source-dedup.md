@@ -4783,6 +4783,18 @@ relation (`P2-T11`).
 - [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
 
 **Files.**
+> **Added 2026-10-15 under rule 10, before launch:** the list below names the type authority but not every file that
+> *builds* or *shows* what changes. Also in the list: `src/ui/viewModels/searchImportViewModel.ts` (`buildProvenance`
+> constructs `SearchProvenance`) with `test/unit/ui/searchImportViewModel.test.ts`,
+> `test/unit/ui/searchImportViewModel-export.test.ts` and `test/unit/core/provenance.test.ts`; `src/zotero/notes.ts`
+> (`renderProvenanceNoteHtml` — "the provenance note shows it"); `src/pipeline/searchImport/stages.ts` (`MergedWork.decisions`
+> is declared there); `src/zotero/extraField.ts` and `test/unit/zotero/extraField.test.ts`,
+> `test/unit/zotero/itemMapper.test.ts` (the new `extra` line); `src/sources/biorxiv/biorxivSource.ts` and
+> `test/unit/sources/biorxiv.test.ts` (`P2-T07` landed after this card was written — its capabilities gain `filters` too);
+> and every test that builds a `SourceCapabilities` literal, should `filters` be required: `test/unit/pipeline/fanout.test.ts`,
+> `test/unit/pipeline/searchImport.test.ts`, `test/unit/sources/{queryParse,registry}.test.ts`,
+> `test/integration/phase1-dod.spec.ts`. `docs/02` §10.4's `abstract` row gained `medrxiv` the same day (item 179) —
+> keep it when step 7 rewrites the `openAccess` row.
 - *(added 2026-10-15)* modify `src/model/merge.ts`, `test/unit/model/precedence.test.ts`, `test/unit/model/ids.test.ts`,
   `src/i18n/keys.ts`, `addon/locale/en-US/research-helper-mainWindow.ftl`, `addon/locale/ko-KR/research-helper-mainWindow.ftl`,
   `typings/i10n.d.ts` (regenerated)
