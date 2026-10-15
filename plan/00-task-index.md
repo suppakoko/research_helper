@@ -761,12 +761,12 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 49. **(before release, `G-41`)** `ko-KR` commented stubs for the 35 new pane ids, and the owner's wording for
     the status-row sentences and especially `backend-indeterminate`.
 
-50. **(owner decision)** The badge vocabulary in `docs/09` §1.9 item 3 and `docs/08` §7.5 rule 7 has **no state
+50. **(owner decision — APPROVED 2026-10-15, wording chosen; document pass)** The badge vocabulary in `docs/09` §1.9 item 3 and `docs/08` §7.5 rule 7 has **no state
     for "the probe passed but the tier cannot be told"** — which, after `P1-T41`'s finding, is every Linux
     machine without a keyring library. `P1-T44` added `indeterminate` rather than claim a tier. Either
     the two documents gain the state, or item 55's library-presence check lands and retires it.
 
-51. **(owner decision)** `docs/08` §7.3 and §10.1 put the pane's strings in a **fourth bundle**,
+51. **(owner decision — APPROVED 2026-10-15: the main-window bundle stays; document pass)** `docs/08` §7.3 and §10.1 put the pane's strings in a **fourth bundle**,
     `research-helper-preferences.ftl`; the card put them in the main-window bundle and `P1-T44` followed the
     card, recording the divergence in the bundle header, `keys.ts` and the module. Either `docs/08` is
     corrected or a fourth surface is added to `SHIPPED_SURFACES` and the localization spec.
@@ -1186,7 +1186,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     "still registers pubmed alone" test in `europepmc.test.ts` — the next card that owns those files. Each
     new adapter is added to the alias's source interface, so the compile-time guard grows with it.
 
-142. **No spec paints the string "Europe PMC" in the Databases row.** `l10n.spec.ts` proves the id resolves and
+142. **No spec paints the string "Europe PMC" in the Databases row.** *(APPROVED 2026-10-15: one assertion in `P2-T14`.)* `l10n.spec.ts` proves the id resolves and
     the bundles hold the string; the `P1-T35` block already has the real registry with both ids, so one
     rendered-text assertion there would close it (`P2-T14` edits that window).
 

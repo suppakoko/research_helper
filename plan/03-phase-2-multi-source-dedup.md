@@ -1939,6 +1939,11 @@ without merging them, and reports per-source progress and failure as separate li
 - create `test/unit/ui/searchImportViewModel.test.ts`
 
 **Do.**
+> **Added 2026-10-15 (owner's decision, review page row 142):** one assertion in the window's integration spec that
+> the Databases row **paints** each registered source's display name — "Europe PMC", "Crossref", "arXiv",
+> "Semantic Scholar" — not only that the ids resolve (`l10n.spec.ts` already proves that). The `P1-T35` block
+> holds the real registry with every shipped id; put it there. Also note items 146 (render the preview's
+> `flags`/`links`, not the import's) and 148 of `plan/00` §6.
 1. Render the database checkbox row from the source registry, not a hardcoded list
    (`docs/07` §11.1 step 11), reading and writing the `sources` pref as the enable flag.
 2. Render **source chips** per result row from `provenance.seenIn`, so a work found by three sources
