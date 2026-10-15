@@ -2291,6 +2291,20 @@ import reports "already present: N" instead of duplicating what is already there
   *before* a provenance record is stored, which is why `transmittedUrl` cannot be replayed.
 
 **Files.**
+> **Added 2026-10-15 under rule 10, before launch.** Measured on the tree at `127dba7`:
+> - **The window itself is missing from the list:** `addon/content/searchDialog.xhtml`, `addon/content/searchDialog.js`
+>   and `addon/content/style/searchDialog.css` (the mode chip, the §4.6 banner, the date radio pair), with
+>   `test/unit/ui/searchDialog.test.ts` and `test/unit/ui/searchImportViewModel.test.ts`.
+> - **Who constructs and calls the new store:** the provenance note is written today through the view model's
+>   `writeProvenanceNote` port, bound in `src/bootstrap/registerUI.ts` to `src/zotero/notes.ts` — so the row writer
+>   (step 4) is bound there too, and `src/bootstrap/container.ts` (or `src/addon.ts`) must run `migrations.ts` at
+>   startup and tear the connection down on shutdown. All four are in scope; measure, edit only what is needed.
+> - `src/pipeline/searchImport/stages.ts` may need nothing: the record is built by `buildProvenance` in the view
+>   model. Measure before editing; `P2-T18` edits `stages.ts` at the same time.
+> - Step 9: the summary already counts `Linked` and `Skipped … duplicates` (`research-helper-import-summary` in
+>   `research-helper-mainWindow.ftl`). Measure what "already present" adds before declaring a new string; strings
+>   go through `src/i18n/keys.ts` and the regenerated `typings/i10n.d.ts` (both in scope).
+> - `docs/07` §8.3's `search_provenance` DDL is the only table; copy it column for column.
 - create `src/zotero/db.ts`
 - create `src/bootstrap/migrations.ts`
 - modify `src/core/provenance.ts`
@@ -2515,6 +2529,21 @@ with hand-mapping as the per-record fallback — and everyone else keeps the fas
   card must honour: keep the Zotero API surface behind `src/zotero/*` so breakage is localized.
 
 **Files.**
+> **Added 2026-10-15 under rule 10, before launch.** Measured on the tree at `127dba7`:
+> - **Do not create `research-helper-preferences.ftl`.** `docs/08` §10.1 was corrected on 2026-10-15 (owner review
+>   row 51): the preferences pane has no bundle of its own; its strings live in `research-helper-mainWindow.ftl`
+>   (both locales) with ids on `MAIN_WINDOW_MESSAGE_IDS` in `src/i18n/keys.ts`. Those, and the regenerated
+>   `typings/i10n.d.ts`, replace the two `create …preferences.ftl` bullets.
+> - `useTranslators` already reads `false` in `src/prefs/schema.ts` and `addon/prefs.js` — step 1 is a measurement.
+> - **The writer is not in `stages.ts`:** `createZoteroSearchImportWriter` (`src/bootstrap/registerPipelines.ts`, built
+>   in `src/bootstrap/container.ts`) drives `src/zotero/importer.ts`, which also holds the abstract repair after
+>   `fromJSON` (`docs/01` §6.3 step 4). Those three files, `test/integration/zotero/importer.spec.ts` and
+>   `test/unit/pipeline/searchImport.test.ts` are in scope; measure where the strategy is read before editing.
+>   `P2-T17` may edit `stages.ts` at the same time.
+> - Step 6: Europe PMC's `lookup` is DOI-only since `P2-T12` (`lookupById: ["doi"]`). A PMCID route needs
+>   `src/sources/europepmc/{query,europepmcSource}.ts` and `test/unit/sources/europepmc.test.ts` — in scope.
+> - **Live requests:** Strategy B's translators fetch over the network. Tests drive a fake `Zotero.Translate.Search`
+>   seam; any real translator run sits behind an opt-in environment variable that stays unset, like `RH_DOD_LIVE`.
 - create `src/zotero/translatorImport.ts`
 - modify `src/pipeline/searchImport/stages.ts`
 - modify `src/prefs/schema.ts`
