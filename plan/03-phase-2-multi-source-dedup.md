@@ -1960,6 +1960,15 @@ record pairs, a reproducible report, and a CI gate that fails if precision drops
 - modify `.github/workflows/ci.yml`
 
 **Do.**
+> **Split 2026-10-16 by the coordinator, at the owner's request "P2-T13 판정 준비":** the card runs in two parts.
+> **Part A (now, an agent):** the corpus tooling — `scripts/build-dedup-corpus.ts` assembling every candidate pair the
+> blocking step would compare **from the committed recorded fixtures of all seven sources**, an *unlabelled* candidate
+> file, `scripts/dedup-report.ts`, the `dedup:report` script, the corpus-shape check of step 3 — and a report of which
+> step-3 families the committed fixtures cannot supply. **No live request** in Part A: step 1's live queries need an
+> owner-approved request budget first. No label is written by code or by a model (Do NOT). **Part B (after the owner
+> labels):** the labels, the accuracy test as a blocking CI gate, threshold tuning (step 6), and the G-17 sign-off.
+> Files added for Part A: `test/support/*RecordedRequests.ts` and `test/fixtures/<source>/` (read only), and
+> `test/unit/sources/dedupeCorpus.test.ts` (the shape check).
 1. Build the corpus from real recorded fixtures across the seven sources — run 4–6 realistic
    biomedical and CS queries, capture the raw `SourceRecord`s, and emit every candidate pair the
    blocking step would compare.
