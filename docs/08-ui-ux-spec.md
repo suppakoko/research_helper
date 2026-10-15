@@ -1550,6 +1550,15 @@ Fluent goes in a XUL `<linkset>`, and each `<groupbox>` should carry `aria-label
 </groupbox>
 ```
 
+> **Corrected 2026-10-15 (owner review of 2026-10-14, row 51; shipped by `P1-T44`).** The `<linkset>`
+> below named `research-helper-preferences.ftl`, a fourth bundle. The pane's strings ship in the
+> **main-window bundle**, `research-helper-mainWindow.ftl`, with their ids declared on
+> `MAIN_WINDOW_MESSAGE_IDS` in `src/i18n/keys.ts` (35 ids, `PREFERENCES_L10N … satisfies Record<string,
+> MainWindowMessageId>`). The reason `P1-T44` gives: the pane is a **fragment inside a window Zotero
+> owns** (`zotero:pref`), which is that bundle's first job under §10.1's surface rule — a surface earns
+> its own file only when it owns a window — and a fourth bundle would need a `SHIPPED_SURFACES` entry and
+> the l10n integration spec to learn it. §10.1 is corrected the same way.
+
 ```xml
 <!-- content/preferences.xhtml — a FRAGMENT: no <!DOCTYPE>, no <html> wrapper -->
 <vbox
@@ -1557,7 +1566,8 @@ Fluent goes in a XUL `<linkset>`, and each `<groupbox>` should carry `aria-label
     xmlns:html="http://www.w3.org/1999/xhtml">
 
   <linkset>
-    <html:link rel="localization" href="research-helper-preferences.ftl"/>
+    <!-- the main-window bundle, not a fourth file — see the note above (2026-10-15) -->
+    <html:link rel="localization" href="research-helper-mainWindow.ftl"/>
   </linkset>
 
   <!-- ============ LLM providers ============ -->
@@ -1960,7 +1970,7 @@ The authoritative requirements are `09-security-privacy-and-api-keys.md` §1.9; 
 4. Show only the active provider's block; keep the others' stored keys.
 5. Never write a key into `Zotero.debug()` output, an error message, or a saved note. Never place a key on the clipboard; there is no "copy key" affordance.
 6. ⛔ **The key field carries no `preference` attribute and no key is ever written to `Zotero.Prefs`** (decision D5; doc 09 §1.7 tier 4 is explicitly not implemented). Keys go through `Zotero.OSKeyStore.encrypt()` → `Services.logins`. Only the non-secret trio lives in prefs — `research-helper.<provider>.keyPresent`, `.lastValidatedAt` and `.lastValidationResult`, one set for each of the six credential IDs (`07-architecture-and-data-model.md` §8.5).
-7. A **storage-backend badge** next to the key fields names the active tier — "Protected by Windows Credential Manager" / "macOS Keychain" / "System keyring", or a warning-coloured "Not saved between sessions" / "Protected by your passphrase" in degraded tiers.
+7. A **storage-backend badge** next to the key fields names the active tier — "Protected by Windows Credential Manager" / "macOS Keychain" / "System keyring", or a warning-coloured "Not saved between sessions" / "Protected by your passphrase" in degraded tiers, or doc 09 §1.9's fourth state "Stored in Zotero's database — protected only by your primary password". **Added 2026-10-15 (owner review row 50): a warning-coloured *indeterminate* state** — en-US "Indeterminate — this operating system does not reveal the key-storage tier", ko-KR 「확인 불가 — 이 운영체제에서는 열쇠 보관 등급을 판별할 수 없습니다」 — shown when the probe succeeded but its answer cannot be classified, which on Linux is always, because a missing keyring library does not make `encrypt()` fail (`P1-T41`; doc 09 §1.9 item 3 is the authority, this line restates it). The badge never claims a tier the probe cannot tell apart; `G-09`'s library-presence check retires the state.
 8. The residual-risk statement of doc 09 §1.8 appears in the pane **verbatim and visible** (not behind a "Learn more" link), including the sentence that other Zotero plugins can read the keys.
 9. A **Remove all stored keys** button clears every `SecretId` and reports how many were removed.
 10. On an empty-key state after a data-directory restore, explain *why*: keys live in this computer's credential store and do not travel with the Zotero data folder.
@@ -2156,14 +2166,25 @@ locale/
 ├── en-US/
 │   ├── research-helper-mainWindow.ftl      (menus, item-pane section, and every dialog raised from them)
 │   ├── research-helper-searchDialog.ftl    (searchDialog.xhtml, and the Related Papers reuse of it — §5)
-│   ├── research-helper-reportWindow.ftl    (reportWindow.xhtml — trend report viewer + audio player; Phase 3)
-│   └── research-helper-preferences.ftl     (preferences.xhtml; Phase 3)
+│   └── research-helper-reportWindow.ftl    (reportWindow.xhtml — trend report viewer + audio player; Phase 3)
+│                                           (preferences.xhtml has NO file of its own: its strings are in
+│                                            research-helper-mainWindow.ftl — corrected 2026-10-15, see below)
 └── ko-KR/
     ├── research-helper-mainWindow.ftl
     ├── research-helper-searchDialog.ftl
-    ├── research-helper-reportWindow.ftl
-    └── research-helper-preferences.ftl
+    └── research-helper-reportWindow.ftl
 ```
+
+> **Corrected 2026-10-15 (owner review of 2026-10-14, row 51; shipped by `P1-T44`).** Until this date the
+> tree and the table below listed a fourth bundle, `research-helper-preferences.ftl`, for the preferences
+> pane. The shipped pane (`P1-T44`) keeps its 35 strings in **`research-helper-mainWindow.ftl`**, with the
+> ids declared on `MAIN_WINDOW_MESSAGE_IDS` in `src/i18n/keys.ts`, and the owner chose to bring this
+> document into line with the code. The reason `P1-T44` gives is the main-window rule this section already
+> states: a surface earns its own FTL file only when it **owns a window**, and the preferences pane does
+> not — it is a fragment inside Zotero's own `zotero:pref` window, exactly like the dialogs raised from the
+> main window. A fourth bundle would also have needed a `SHIPPED_SURFACES` entry and the l10n integration
+> spec to learn it. The surface *set* is still four surfaces (the pane keeps its XHTML fragment and its
+> name); the *bundle* set is three files.
 
 > **Tree corrected 2026-10-05 (`P1-T34`): flat directories, `research-helper-` prefixed filenames.** As printed until now this block showed a `locale/<locale>/research-helper/` **subdirectory** holding **unprefixed** filenames, which contradicted the table four lines below it — the one that says "FTL in `locale/<locale>/` (flat, `research-helper-` prefixed)" — and contradicted the paragraph between them, which claims this section's list wins over `07-architecture-and-data-model.md` §2.2's tree. A section cannot assert authority over a tree and then print that tree wrongly, and this is exactly the kind of block a later card types straight from. The layout above is the one that ships: `find addon/locale -type f` reads `addon/locale/{en-US,ko-KR}/research-helper-{mainWindow,searchDialog}.ftl` (Phase 1's two surfaces; the two Phase 3 surfaces above have no file yet). The subdirectory form would not have worked at all: `01-zotero-plugin-platform.md` §9.1 records, read verbatim from Zotero 10.0.1's `xpcom/plugins.js` by `P0-T10`, that `registerLocales()` enumerates `locale/<locale>/` and skips every entry not ending `.ftl`, so a **directory** entry is silently dropped — and that registered hrefs are flat, which is why the filename must carry the plugin prefix. Found by `P1-T32`. The *layout* is `01-…` §9.1's to own (its listing agrees with the one above); the *surface set and its names* remain this section's, per the paragraph below.
 
@@ -2174,13 +2195,13 @@ locale/
 | Main window | **none** — it is Zotero's own window; the plugin injects menus and an item-pane section into it | `mainWindow.ftl` |
 | Search & Import | `searchDialog.xhtml` | `searchDialog.ftl` |
 | Report window | `reportWindow.xhtml` | `reportWindow.ftl` |
-| Preferences | `preferences.xhtml` | `preferences.ftl` |
+| Preferences | `preferences.xhtml` (a fragment in Zotero's `zotero:pref` window) | **`mainWindow.ftl`** — no file of its own *(corrected 2026-10-15, row 51; `P1-T44`)* |
 
 One name was reconciled here on 2026-09-09. **`reportViewer` and `reportWindow` were one surface under two names** — `07-architecture-and-data-model.md` §2.2's tree said `reportViewer.xhtml` while this list said `reportWindow.ftl`; the surface is **`reportWindow`** and the XHTML file has been renamed to match, because the FTL name is the one that appears in `insertFTLIfNeeded` calls and in every `data-l10n-id` lookup path.
 
 **`jobCenter` was removed from this list on 2026-09-09, and with it `jobCenter.xhtml` and `jobCenter.ftl`.** Earlier the same day the mismatch here was the opposite one — the surface had an XHTML file but no FTL, and one was added so that the durable job list would not ship as hard-coded English. The project owner then took the Job Center out of v1 altogether, deferring it to v1.1: `10-requirements-and-user-stories.md` §4 item 18 records the decision and its reasoning, and `07-architecture-and-data-model.md` §7.7.1 keeps the deferred design. The surface set above is therefore four surfaces, not five, and neither file exists in v1.
 
-**The main-window rule, for dialogs raised from menus and the item pane.** A modal or transient dialog that the user opens *from the main window* — the Phase 3 cost-confirmation dialog, the first-use egress disclosure (`09-security-privacy-and-api-keys.md` §3.6), the summarize dialog — is **not** a new localization surface. Its strings go in `mainWindow.ftl`, and it does not get an FTL file of its own. The reason is mechanical rather than stylistic: `mainWindow.ftl` is already inserted into that window by `insertFTLIfNeeded` before any DOM is touched, so a dialog opened from it resolves its ids with no second registration, no second removal on unload, and no window in which a string can fail to resolve because its file has not been inserted yet. A surface earns its own FTL file when it owns a **window** — one that is opened with its own document, carries its own `<linkset>`, and can be open while the main window is not. `searchDialog`, `reportWindow` and `preferences` each clear that bar; a cost-confirmation sheet does not. This is also what `plan/`'s Phase 3 cards already do, and this paragraph is the rule they were following without one written down.
+**The main-window rule, for dialogs raised from menus and the item pane.** A modal or transient dialog that the user opens *from the main window* — the Phase 3 cost-confirmation dialog, the first-use egress disclosure (`09-security-privacy-and-api-keys.md` §3.6), the summarize dialog — is **not** a new localization surface. Its strings go in `mainWindow.ftl`, and it does not get an FTL file of its own. The reason is mechanical rather than stylistic: `mainWindow.ftl` is already inserted into that window by `insertFTLIfNeeded` before any DOM is touched, so a dialog opened from it resolves its ids with no second registration, no second removal on unload, and no window in which a string can fail to resolve because its file has not been inserted yet. A surface earns its own FTL file when it owns a **window** — one that is opened with its own document, carries its own `<linkset>`, and can be open while the main window is not. `searchDialog` and `reportWindow` clear that bar; a cost-confirmation sheet does not, and **neither does `preferences`** — it is a fragment inside Zotero's `zotero:pref` window, so its strings live in `mainWindow.ftl` *(this sentence listed `preferences` among the window-owners until 2026-10-15; corrected per owner review row 51, `P1-T44`)*. This is also what `plan/`'s Phase 3 cards already do, and this paragraph is the rule they were following without one written down.
 
 > **The Job Center gap is closed by dropping the surface, not by writing the section.** A note here earlier on 2026-09-09 flagged that this document had no section specifying the Job Center: §§2–7 above specify the menus, the item-pane section, the search window, the related-papers flow, the report flow and the preferences pane, and stop there, so the surface's *name* and its localization home were settled here while its layout, states and accessibility notes were written nowhere — and `07-architecture-and-data-model.md` §7.7 is a behaviour spec rather than a UI one. That is no longer an open v1 gap, because the surface is no longer in v1: it is deferred to v1.1 (paragraph above; `10-requirements-and-user-stories.md` §4 item 18). **The section becomes owed again the moment the Job Center is pulled into a release** — it is a window of ours, so it needs a UI specification in this document before anyone builds it, and `07-architecture-and-data-model.md` §7.7.1 lists that as the second thing v1.1 must do.
 
@@ -2196,7 +2217,7 @@ How each surface gets its strings:
 |---|---|
 | Menus (`MenuManager`) | `l10nID` + `l10nArgs`; the FTL entry **must** set the `.label` attribute |
 | Item-pane section | `header.l10nID` / `sidenav.l10nID` — Zotero resolves them; nothing to insert |
-| Prefs pane fragment | `<linkset><html:link rel="localization" href="…"/></linkset>` |
+| Prefs pane fragment | `<linkset><html:link rel="localization" href="research-helper-mainWindow.ftl"/></linkset>` — the main-window bundle, not a file of its own *(2026-10-15, row 51)* |
 | Our own dialog windows (`searchDialog`, `reportWindow`) | `<linkset>` inside `<dialog>`, or `<html:link rel="localization">` — one per window, naming that window's own FTL file |
 | Dialogs raised from the main window (cost confirmation, egress disclosure, summarize) | **Nothing to insert.** They resolve against the already-inserted `mainWindow.ftl`; see the main-window rule above |
 | Main window (injected DOM) | `window.MozXULElement.insertFTLIfNeeded("research-helper-mainWindow.ftl")`, removed on unload |

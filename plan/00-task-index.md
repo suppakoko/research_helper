@@ -1255,7 +1255,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `maxConcurrent`" is true against the old cap only during a tightening drain. Two sentences, the next
     time that file is in a card's list.
 
-157. **`docs/07` §13's to-do "wire provider rate-limit response headers into `limiter.reconfigure()`"** is done
+157. ~~**`docs/07` §13's to-do "wire provider rate-limit response headers into `limiter.reconfigure()`"** is done~~ **WITHDRAWN 2026-10-15 — the citation was mine and wrong:** the sentence is `docs/07` §11.2 step 7, the *Adding an LLM provider* recipe, which is an instruction for a future provider adapter, not a literature-host checklist; nothing to mark done. (Original text: is done
     for NCBI (`P1-T26`) and Crossref (`P2-T04`); a stale checklist line, the owner's document edit.
 
 158. **`P2-T21`'s report was never saved** — it predates the §6 convention; its measurements exist only in its
@@ -1291,6 +1291,24 @@ the caller of what the card builds; if it does not, the caller is added with a d
     is on all four shipped sources; recording it on the other three (three requests) gives a real four-way
     `dedup-pair-set`. **For `P2-T12`:** arXiv lookups go through `id_list` (`lookupById: ["arxivId"]`), which
     `raw` deliberately leaves unreserved today.
+
+### 6.32 Raised by the documentation pass of 2026-10-15 — recorded, none carded (three folded into `P2-T34`)
+
+165. **`docs/02` §10.2 still maps `ids.s2PaperId` ← `paperId`** while `docs/07` §5.1's `ExternalIds` has only
+    `s2CorpusId` (row 92 fixed §11.3/§11.5 only). Decide whether S2's `corpusId` replaces the mapping row — the
+    `P2-T05` report will say what the adapter actually maps; then a one-cell document edit.
+
+166. **§12.3's new Journal row gives arXiv `jr:`** (documented in §7.2 and shipped by `P2-T06`), a deliberate
+    deviation from the review page's "rest n/a". Accepted by the coordinator: the document must not contradict
+    the shipped renderer. If the owner wants `journal:` dropped for arXiv, `ARXIV_RENDERED_FIELDS` changes.
+
+167. **Europe PMC's language field is unverified.** §4.3's new note says no field is documented and the adapter
+    refuses `languages` by name; one live request would settle whether the service accepts a language clause.
+    Fold into whichever card next records Europe PMC.
+
+168. **`docs/13` §3.1's `dedup-pair-set` row is source-specific too** (one adapter's fixtures cannot hold a
+    ≥ 3-source set; `P2-T08` assembles it from the SciPy 1.0 paper, item 164). A note (d) beside notes (a)–(c)
+    the next time §3.1 is edited.
 
 ## 7. Regenerating this file
 

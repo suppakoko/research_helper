@@ -699,6 +699,14 @@ Field-prefixed, Lucene-ish, with `AND` / `OR` / `NOT` and parentheses.
 Sort: `&sort=P_PDATE_D desc` or query-embedded `sort_date:y` / `sort_cited:y`.
 Synonym expansion: `&synonym=true` (off by default; expands via MeSH/UniProt vocabularies).
 
+> **Measured 2026-10-14 (`P2-T03`; recorded 2026-10-15, owner review row 128) — no language search
+> field.** This table documents no field for a language restriction and the adapter found none to
+> render, so `SourceQuery.languages` is refused by name for Europe PMC
+> (`EUROPEPMC_QUERY_FILTER_SUPPORT.languages = false`, `src/sources/europepmc/query.ts`), following the
+> PubMed pattern. The *response* does carry `language` (`"eng"` in §4.4's sample), so the value is
+> mappable but not filterable. Whether the service accepts a language clause at all is unverified; one
+> live request would settle it, and the flag flips only when a field is documented here.
+
 #### Date-range filtering — "last 3 years"
 
 Two options, and **they are not equivalent**:
@@ -788,6 +796,17 @@ Real trimmed `core` response (2026-09-08):
 majority of MED-source records, which makes it a single-round-trip source, unlike PubMed's
 search-then-fetch pattern.
 
+> **Measured 2026-10-14 (`P2-T03`; recorded 2026-10-15, owner review row 128) — two things the trimmed
+> response above omits.** **(1) The service echoes the contact address.** `request.email` carries the
+> `email=` parameter verbatim and `nextPageUrl` carries it percent-encoded (`suppakoko%40gmail.com`), so
+> a recorded body holds the address in two spellings; `docs/13` §3.2's redaction pass scrubs both and
+> aborts on either. **(2) Titles carry markup too, in two spellings**, not only abstracts: raw
+> `<b>-</b>` inside `MED/38044647`'s title and entity-escaped `&lt;i&gt;Zingiber cassumunar&lt;/i&gt;`
+> in `MED/39220605`'s; abstracts also carry `<h4>Section</h4>` headings and `<sup>`. Decode entities
+> first and strip tags second (the other order leaves `&lt;i&gt;` behind), and turn a heading into a
+> `Label: ` paragraph (`docs/07` §5.1's abstract rule) — `flattenMarkup` in
+> `src/sources/europepmc/mapper.ts` is the shipped shape.
+
 ### 4.5 Preprints via `SRC:PPR`
 
 Europe PMC indexes bioRxiv/medRxiv/Research Square/SSRN preprints. This is the **recommended route
@@ -834,10 +853,19 @@ Rules:
 - The response gives `nextCursorMark` and a ready-made `nextPageUrl` — using `nextPageUrl` verbatim
   is the least error-prone approach, but **URL-decode it first**: as seen above, Europe PMC returns
   it with *unencoded spaces* in the query string.
-- Termination: stop when `nextCursorMark` equals the cursor you sent, or when
-  `resultList.result` is empty.
+- Termination: stop on **any** of — no `nextCursorMark` member in the response, a `nextCursorMark`
+  equal to the cursor you sent, an empty `resultList.result`, or a short page (fewer records than
+  `pageSize`, which saves the empty follow-up request).
 - `page=` (1-based) works up to a depth limit and is fine for the first few pages; `cursorMark` is
   required for deep paging.
+
+> **Measured 2026-10-14 (`P2-T03`; recorded 2026-10-15, owner review row 128) — the termination
+> shapes.** On a 5-hit set at `pageSize=3`: page 1 returned 3 records and a cursor; page 2 returned
+> **2 records and a fresh `nextCursorMark`** (a short page does not mean the cursor stops); page 3
+> returned an empty `resultList.result` with **no `nextCursorMark` member at all**. The repeated-cursor
+> rule this list carried alone until this date was **never observed live**; it is kept as one of four
+> stop conditions, not the primary one. The shipped adapter (`nextCursorAfter` in
+> `src/sources/europepmc/europepmcSource.ts`) stops on all four.
 
 ### 4.7 `citations` and `references`
 
@@ -993,11 +1021,11 @@ governor — Crossref changes these and advertises the current values on every c
 | Param | Notes |
 |---|---|
 | `query` | free text across all fields |
-| `query.bibliographic` | **the one to use for keyword search** — titles, authors, ISSNs, years |
+| `query.bibliographic` | **the one to use for keyword search** — titles, authors, ISSNs, years. **Not a resolver:** a bare DOI string here returned three unrelated records (measured 2026-10-15, `P2-T04`, `search-doi-string` fixture); look a DOI up with `/works/{doi}` or `filter=doi:` *(row 149)* |
 | `query.title` | title only |
 | `query.author`, `query.container-title`, `query.affiliation`, `query.editor`, … | field-specific |
 | `filter` | comma-separated `name:value` pairs, AND-ed |
-| `select` | comma-separated field whitelist — **use it, responses are otherwise enormous** |
+| `select` | comma-separated field whitelist — **use it, responses are otherwise enormous**. **Measured 2026-10-15 (`P2-T04`, 11 live HTTP 400s, `validation-failure` / `select-not-available`, body committed as the `error-400` fixture):** `reference-count` must be spelled **`references-count`** in `select=`, and **`institution` and `language` are not selectable at all** — so §10.2's `venue.repository` and `language` cells cannot be served while `select=` is mandatory *(row 149)* |
 | `rows` | default 20, **max 1000** |
 | `offset` | shallow paging only, capped at 10,000 |
 | `cursor` | `*` for first page, then `next-cursor` — required for deep paging |
@@ -1101,6 +1129,16 @@ Elsevier historically did not). Measured on the live probe above (re-run 2026-09
 `<jats:boxed-text>`/`<jats:title>` decoration, decode entities. Parse with `DOMParser` in XML mode;
 regex stripping will mangle nested markup like the example above.
 
+> **Measured 2026-10-15 (`P2-T04`; owner review row 149) — `jats:` is not the only shape.** Across the
+> recorded corpus deposits also arrive **under another prefix** (`ns3:`, F1000), **as bare `<p>`** with
+> no namespace (OSF), and **with an entity-escaped HTML layer inside the JATS text** (SSRN:
+> `&lt;b&gt;French Abstract:&lt;/b&gt; … &lt;br&gt;&lt;br&gt; &lt;b&gt;English Abstract:&lt;/b&gt; …`,
+> which decodes to two paragraphs). Declare whatever prefix the deposit used on the wrapper root
+> before parsing (an undeclared prefix is a `<parsererror>` in Gecko), decode the escaped layer, and
+> split it on `<br><br>`; a `<jats:sec>` title becomes a `Label: ` prefix (`docs/07` §5.1). `jatsToText`
+> in `src/sources/crossref/mapper.ts` is the shipped shape. Coverage across the 63 recorded items was 18
+> (29 %) — Nature deposits none; Sage, F1000, bioRxiv and OUP do.
+
 **Consequence for architecture:** Crossref alone is not sufficient for features 1 and 3, which need
 abstracts. Use Crossref for DOI/venue authority and cross-disciplinary reach, then **backfill
 abstracts from Europe PMC or Semantic Scholar by DOI** (§10.4).
@@ -1109,13 +1147,22 @@ abstracts from Europe PMC or Semantic Scholar by DOI** (§10.4).
 
 ```
 # first
-GET /works?query.bibliographic=…&rows=100&cursor=*&mailto=…
+GET /works?query.bibliographic=…&rows=100&cursor=*&sort=score&order=desc&mailto=…
 # subsequent
-GET /works?query.bibliographic=…&rows=100&cursor=<next-cursor>&mailto=…
+GET /works?query.bibliographic=…&rows=100&cursor=<next-cursor>&sort=score&order=desc&mailto=…
 ```
 
 `message.next-cursor` is returned on every page. Stop when `message.items` is empty. `offset` is
 capped at 10,000 and is slow; use the cursor.
+
+> **Measured 2026-10-15 (`P2-T04`; owner review row 149) — a bare `cursor=*` discards relevance
+> ranking.** Three probes on §3.4's own title, one second apart: without a cursor the paper came first
+> at score 29.4; with `cursor=*` alone the page came back in **index order** (scores 3.9 / 4.5 / 4.4,
+> 1990s Elsevier records); with `cursor=*&sort=score&order=desc` the paper came first again at 29.4 —
+> **and the sorted call still returned a cursor** (68 characters). So `sort=score&order=desc` travels
+> with the cursor on every request, as the two lines above and §12.2 now show; the shipped adapter
+> sends both always. Also measured: `next-cursor` is 51–84 opaque base64 characters, which is why
+> `docs/13` §3.2 exempts it from the recorder's credential catch-all by name.
 
 ### 5.6 Errors and licensing
 
@@ -1410,6 +1457,14 @@ https://export.arxiv.org/api/query
 
 > **Measured 2026-09-15 (`P0-T21`): arXiv can answer HTTP 429, which this section did not document.** Every one of 7 requests over ~14 minutes, spaced at least 30 s apart and the first of the session, returned `HTTP/1.1 429 Unknown Error` from `server: Google Frontend` with `content-type: text/html`, a 14-byte body `Rate exceeded.`, and **no `Retry-After`**; some took up to 46 s to fail. The 3-second rule was obeyed. Whether the limit keyed on this network's shared address or is global could not be determined. The adapter needs a path for an HTML 429 with no `Retry-After` — distinct from the HTTP-200 error feeds described below — and the measurement should be repeated from another network before Phase 2 depends on arXiv volume.
 
+> **Re-measured 2026-10-15 (`P2-T06`; owner review row 160): the blanket 429 did not reproduce.** From
+> the same network, **13 of 13 requests were answered** — one probe and twelve recorded, paced
+> ≥ 3031 ms end-to-start, 28–918 ms each; 12 × HTTP 200 and 1 × HTTP 400 (the error feed, §7.5), none
+> 429. The 2026-09-15 refusal is therefore not this network's steady state. The no-`Retry-After` path
+> stays: the synthetic `error-429` fixture carries the measured shape (`text/html`, `Rate exceeded.`,
+> `server: Google Frontend`, no `Retry-After`) and the adapter raises `RateLimitError` with
+> `retryAfterMs: undefined`.
+
 The Terms of Use are explicit: make "no more than one request every three seconds, and limit
 requests to a single connection at a time," and this applies to "all of the machines under your
 control as a whole." ([arXiv API ToU](https://info.arxiv.org/help/api/tou.html))
@@ -1507,6 +1562,13 @@ Additional entry-level elements that appear when present:
 `<arxiv:comment>` (e.g. "12 pages, 5 figures"), `<arxiv:journal_ref>` (post-publication venue),
 `<arxiv:doi>` (the *published* DOI, not the arXiv DOI), `<link title="doi">`.
 
+> **Measured 2026-10-15 (`P2-T06`; owner review row 160) — element order differs from the sample.** In
+> the live feed `<published>` follows the `<category>` elements (every one of the 44 recorded entries),
+> not `<updated>` as the 2026-09-08 sample above shows. A namespaced lookup by `(namespaceURI,
+> localName)` is unaffected; a parser walking children in document order would be misled. Also present
+> and unmapped: `<arxiv:journal_ref>` in 12 of 20 `search-typical` entries (§11.4's 0.90 text-only
+> signal) — `docs/07` §5.1 has no slot for it or for `<arxiv:comment>`.
+
 ### 7.5 Atom parsing notes
 
 ```js
@@ -1528,8 +1590,17 @@ for (const e of doc.getElementsByTagNameNS(ATOM, 'entry')) { /* … */ }
    feed — construct it). If `<arxiv:doi>` is present it is the **journal** DOI, meaning the preprint
    has been published — this is a direct preprint↔published link (§11.4).
 6. **Error responses are also Atom feeds** with a single entry whose `<title>` is `Error` and whose
-   `<summary>` describes the problem — HTTP status stays 200. Check for
-   `entry/id == "http://arxiv.org/api/errors"`.
+   `<summary>` describes the problem. **Measured 2026-10-15 (`P2-T06`, `search-error-feed` fixture, a
+   malformed `id_list`): the status was HTTP 400, not the 200 this note claimed until that date, and
+   the entry id was `https://arxiv.org/api/errors#incorrect_id_format_for_not-an-arxiv-id`** —
+   `https`, with the problem repeated as a fragment — with `<summary>incorrect id format for
+   not-an-arxiv-id</summary>` and `content-type: application/atom+xml`. Detect the feed by **prefix**
+   on `entry/id` for `http://arxiv.org/api/errors` and `https://arxiv.org/api/errors`, with or without
+   a fragment, and handle both the documented 200 form and the measured 400. Note what the 400 costs
+   today: the shared HTTP client (`src/core/http/client.ts`) classifies a 4xx into `BadRequestError`
+   before the adapter sees the body, so arXiv's own sentence is lost on the path arXiv actually takes;
+   whether the client hands a 4xx body to the adapter is `plan/00` §6 item 159, a code decision, not
+   this note's *(corrected 2026-10-15, owner review row 159)*.
 7. `<opensearch:totalResults>` can be `0` with no `<entry>` elements — normal empty result.
 
 ### 7.6 Licensing
@@ -2009,18 +2080,19 @@ export interface CanonicalRecord {
 | `ids.pmcid` | `ArticleId[@IdType='pmc']` | `pmcid` | — | `externalIds.PubMedCentral` (add `PMC`) | — | — | `ids.pmcid` |
 | `ids.arxivId` | — | — | — | `externalIds.ArXiv` | parse `entry/id` | — | — |
 | `ids.s2PaperId` | — | — | — | `paperId` | — | — | — |
-| `ids.epmc` | — | `{id, source}` | — | — | — | — | — |
+| `ids.epmc` | — | `{id, source}` — carried as `SourceRecord.nativeId` (`MED/37258680`, `PPR/PPR657399`), **not** an `ExternalIds` member: `docs/07` §5.1 has none for it *(2026-10-14, `P2-T03`; row 128)* | — | — | — | — | — |
+| `relatedVersionIds` (`docs/07` §5.1; §11.4) | — | `commentCorrectionList.commentCorrection[]` with `type: "Preprint of"`, `source: "MED"` → `{ pmid: id }` on `PPR` records (2 of 3 recorded preprints); the reverse `"Preprint in"` link on MED records points at a `PPR` id no `ExternalIds` member can hold and is **not** mapped *(2026-10-14, `P2-T03`; row 128)* | `relation.has-preprint` (measured, `P2-T04`) / `is-preprint-of`, `is-published-in` (§11.4) | — | `arxiv:doi` → `{ doi }` (the journal DOI, §7.5 note 5; `P2-T06`) | `published` ≠ `"NA"` (§11.4) | — |
 | `venue.name` | `Journal/Title` | `journalInfo.journal.title` | `container-title[0]` | `journal.name` ‖ `venue` | — | — | `primary_location.source.display_name` |
 | `venue.abbreviation` | `Journal/ISOAbbreviation` | `.medlineAbbreviation` | `short-container-title[0]` | — | — | — | — |
 | `venue.issn` | `Journal/ISSN` | `.issn`, `.essn` | `ISSN[]` | — | — | — | `primary_location.source.issn` |
-| `venue.repository` | — | `bookOrReportDetails.publisher` | `institution[].name` | `venue` (= "bioRxiv") | `"arXiv"` | `server` | `primary_location.source.display_name` |
+| `venue.repository` | — | `bookOrReportDetails.publisher` | `institution[].name` — **not selectable** on `/works` with `select=` (HTTP 400, `P2-T04`), so a preprint falls back to `publisher` (`"openRxiv"`, `"Cold Spring Harbor Laboratory"`) *(2026-10-15, row 149)* | `venue` (= "bioRxiv") | `"arXiv"` | `server` | `primary_location.source.display_name` |
 | `dates.issued` | `PubMedPubDate[@PubStatus='pubmed']` → `ArticleDate` → `JournalIssue/PubDate` | `firstPublicationDate` ‖ `journalInfo.printPublicationDate` | `issued.date-parts` | `publicationDate` ‖ `year` | `entry/published` | `date` | `publication_date` |
 | `dates.indexed` | `PubMedPubDate[@PubStatus='entrez']` | `firstIndexDate` | `indexed.date-time` | — | — | — | `updated_date` |
 | `metrics.citationCount` | — | `citedByCount` | `is-referenced-by-count` | `citationCount` | — | — | `cited_by_count` |
-| `metrics.referenceCount` | — | — | `reference-count` | `referenceCount` | — | — | `referenced_works_count` |
+| `metrics.referenceCount` | — | — | `references-count` (plural — the only spelling `select=` accepts, measured HTTP 400 on `reference-count`; the item carries both, read the plural first) *(2026-10-15, `P2-T04`; row 149)* | `referenceCount` | — | — | `referenced_works_count` |
 | `metrics.influentialCitationCount` | — | — | — | `influentialCitationCount` | — | — | — |
 | `volume` / `issue` / `pages` | `JournalIssue/Volume`, `/Issue`, `Pagination/MedlinePgn` | `journalInfo.volume`, `.issue`, `pageInfo` | `volume`, `issue`, `page` | `journal.volume`, `journal.pages` | — | — | `biblio.volume`, `.issue`, `.first_page`-`.last_page` |
-| `language` | `Language` | `language` | `language` | — | `"en"` | — | `language` |
+| `language` | `Language` | `language` | `language` — **not selectable** on `/works` with `select=` (HTTP 400, `P2-T04`): unmapped while `select=` is mandatory (§5.2) *(2026-10-15, row 149)* | — | `"en"` — a constant, and a simplification: arXiv hosts non-English e-prints, so the cell is this document's choice, not a measured value *(2026-10-15, `P2-T06`; row 160)* | — | `language` |
 | `keywords` | `KeywordList/Keyword` | `keywordList.keyword` | — | — | — | — | `keywords[].display_name` |
 | `meshTerms` | `MeshHeadingList` | `meshHeadingList` | — | — | — | — | `mesh[]` |
 | `subjects` | `PublicationTypeList` | `pubTypeList` | `subject[]` | `fieldsOfStudy`, `s2FieldsOfStudy` | `category[@term]` | `category` | `topics[].display_name` |
@@ -2155,7 +2227,7 @@ normatively ("field precedence is the table in §10.4"), and
 `07-architecture-and-data-model.md` §5.1 defers to it rather than restating it — an earlier draft of
 that section carried a second, different ordering for `title`. Precedence ships as one exported
 constant in `src/model/merge.ts` (doc 07 §5.1) so it is tunable and unit-testable in one place.
-**OpenAlex appears in four of the orderings below and is inert in v1** — no adapter ships (§9.3), so
+**OpenAlex appears in seven of the orderings below and is inert in v1** *(2026-10-15, `P2-T10`: the table has seven, "four" was a miscount)* — no adapter ships (§9.3), so
 no record ever carries that source and the remaining sources keep their relative order; the entries
 are left in place because they are the ordering a v1.1 adoption would need.
 
@@ -2174,8 +2246,25 @@ explicit precedence rather than "first source wins":
 | `ids.*` | union of all, per §11 normalization | never overwrite a present ID with a conflicting one — flag instead |
 | `metrics.citationCount` | S2 → OpenAlex → Crossref → Europe PMC | S2 and OpenAlex count preprints; Crossref counts only Crossref-deposited references |
 | `meshTerms` | PubMed → Europe PMC | only these two have MeSH |
-| `tldr` | S2 only | |
-| `openAccess` | S2 `openAccessPdf` → OpenAlex `best_oa_location` → Europe PMC `fullTextUrlList` | |
+| `openAccess` | the source that supplies a `license` first → Europe PMC `fullTextUrlList` → Crossref `license[]`/`link[]` → S2 `openAccessPdf` → OpenAlex `best_oa_location` | `docs/07` §5.1: Europe PMC and Crossref are authoritative; a license-bearing source outranks the order |
+
+> **Corrected 2026-10-15 (owner review of 2026-10-14, rows 100–103; measured by `P2-T10`).** Three
+> changes to this table and one addition. **(1)** The paragraph above counted OpenAlex in "four"
+> orderings; the table has it in seven. **(2)** A `tldr` row ("S2 only") was removed: `CanonicalWork`
+> (`docs/07` §5.1) has no such field, and the one-paragraph summary is Stage 3's LLM work, not a merged
+> source field. **(3)** The `openAccess` row read `S2 openAccessPdf → OpenAlex best_oa_location → Europe
+> PMC fullTextUrlList`, which omitted Crossref although `docs/07` §5.1 names Europe PMC and Crossref
+> authoritative; it now reads "license-bearing source first → Europe PMC → Crossref → S2", which is how
+> `src/model/merge.ts` already resolves the field (a source with a `license` wins; the row is the
+> tie-break). OpenAlex is kept last so the v1.1 entry survives, as the paragraph above requires; the
+> code's `PRECEDENCE.openAccess` and `test/unit/model/precedence.test.ts` still carry the old order and
+> must follow this row. **(4) Default precedence for everything else.** Where a field has no row here
+> — `type`, `language`, `keywords`, `url`, `onlineDate`, `referenceCount`, `influentialCitationCount` —
+> and when two sources claim conflicting values for one identifier type (`ids.*` above; `docs/07` §5.1
+> says "keep the one from the higher-precedence source" without naming the order), **the `title` row's
+> order is the default precedence**, followed by the remaining `SourceId`s in declaration order. That is
+> `DEFAULT_PRECEDENCE` in `src/model/merge.ts`, which `P2-T10` shipped as an undocumented choice; this
+> paragraph is now its owner.
 
 **Backfill pass.** After dedup, any record still missing an abstract gets one targeted lookup, in
 this order, stopping at the first hit:
@@ -2291,17 +2380,28 @@ Tier 0  Exact normalized DOI                        → MATCH (confidence 1.00)
 Tier 1  Exact PMID                                  → MATCH (1.00)
 Tier 2  Exact PMCID                                 → MATCH (1.00)
 Tier 3  Exact arXiv ID (version-stripped)           → MATCH (0.99)
-Tier 4  Exact S2 paperId / CorpusId                 → MATCH (0.99)
+Tier 4  Exact S2 corpusId (`s2CorpusId`)            → MATCH (0.99)
 Tier 5  Normalized title exact + |Δyear| ≤ 1        → MATCH (0.95)
-Tier 6  Fuzzy title ≥ threshold + author + year     → MATCH (0.80–0.94), see §11.3.3
+Tier 6  Fuzzy title + corroborating evidence        → MATCH (0.80–0.94), see §11.3.3
+        Fuzzy title ≥ 0.80 and nothing else         → FLAG for user review, never a match
 Tier 7  Known preprint↔published link               → LINK, not merge (§11.4)
         otherwise                                    → DISTINCT
 ```
 
+> **Corrected 2026-10-15 (owner review of 2026-10-14, row 92).** Tier 6 read "Fuzzy title ≥ threshold +
+> author + year → MATCH (0.80–0.94)", which §11.3.3's own table contradicts: a `levSim ≥ 0.80` with
+> nothing else corroborating is a **flag**, and only the corroborated rows there are matches. The tier
+> now says so. Tier 4 and §11.5 named `s2PaperId`; `docs/07` §5.1's `ExternalIds` has only `s2CorpusId`
+> (`src/model/ids.ts`), so the tier and the key derivation now use that name. §10.2's `ids.s2PaperId`
+> mapping row (S2 `paperId`) is a different identifier and was left for a separate decision.
+
 #### 11.3.1 ID normalization
 
 ```ts
-const normPmid  = (s: string) => s.trim().replace(/^PMID:?\s*/i, '').replace(/\D/g, '') || null;
+const normPmid  = (s: string) => {
+  const p = s.trim().replace(/^pmid\s*:\s*/i, '').trim();   // a `PMID:` label is stripped …
+  return /^\d+$/.test(p) ? p : null;                         // … anything else non-numeric is refused
+};
 const normPmcid = (s: string) => {
   const n = s.trim().replace(/^PMCID:?\s*/i, '').replace(/^PMC/i, '').replace(/\D/g, '');
   return n ? `PMC${n}` : null;                       // S2 returns '10949956' bare; PubMed 'PMC10949956'
@@ -2311,12 +2411,24 @@ const normArxiv = (s: string) => {
                   .replace(/^https?:\/\/arxiv\.org\/(abs|pdf)\//i, '')
                   .replace(/\.pdf$/i, '');
   a = a.replace(/v\d+$/i, '');                       // strip version for matching
-  // new-style 2106.15928, old-style math.GT/0309136
-  return /^(\d{4}\.\d{4,5}|[a-z-]+(\.[A-Z]{2})?\/\d{7})$/.test(a) ? a : null;
+  // new-style 2106.15928; old-style math.GT/0309136 and cond-mat.mes-hall/0309136
+  // (the archive may carry a dotted subject class of any length, not only two capitals)
+  return /^(\d{4}\.\d{4,5}|[a-z-]+(\.[A-Za-z-]+)?\/\d{7})$/.test(a) ? a : null;
 };
 ```
 The `normPmcid` case is real: Semantic Scholar returns `"PubMedCentral": "10949956"` while PubMed
 returns `PMC10949956` for the same paper.
+
+> **Corrected 2026-10-15 (owner review of 2026-10-14, rows 90 and 91).** `normPmid` read
+> `.replace(/\D/g, '') || null` — strip every non-digit — while the shipped `normalizePmid`
+> (`src/model/ids.ts`, `test/unit/model/ids.test.ts`) strips only a `PMID:` label and returns `null`
+> for anything else; the owner chose the shipped, more conservative rule, and the sketch above now
+> states it. The old-style arXiv alternative read `[a-z-]+(\.[A-Z]{2})?\/\d{7}` and rejected real
+> identifiers whose subject class is dotted and lower-case, such as `cond-mat.mes-hall/0309136`; it is
+> widened above. `P2-T06` measured 2026-10-15 that the 44 recorded arXiv entries held two old-style ids
+> (`quant-ph/9509021`, `math/9909153`), both accepted, and no dotted-class id; the mapper keeps such a
+> record keyed by its DataCite DOI with `ids.arxivId` absent and warned. `ARXIV_SHAPE` in
+> `src/model/ids.ts` still carries the narrow form and must follow this line.
 
 #### 11.3.2 Title normalization
 
@@ -2330,7 +2442,7 @@ export function normalizeTitle(t: string): string {
     .replace(/&[a-z]+;|&#x?[0-9a-f]+;/gi, ' ')  // entities
     .replace(/[‐-―−]/g, '-')     // unicode dashes → hyphen
     .replace(/[‘’“”]/g, "'")// smart quotes
-    .replace(/[^a-z0-9]+/g, ' ')                // all punctuation → space
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')           // punctuation → space; letters and digits of EVERY script survive
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\.$/, '');                        // PubMed's trailing period
@@ -2339,6 +2451,20 @@ export function normalizeTitle(t: string): string {
 This makes `"Transfer learning enables predictions in network biology."` (PubMed) and
 `"Transfer learning enables predictions in network biology"` (Semantic Scholar) identical — a real
 case from the probes above.
+
+**Non-Latin scripts are preserved by Unicode category.** After NFKD and the combining-mark strip, a
+character is kept when it is a letter (`\p{L}`) or a number (`\p{N}`) in any script; only the rest
+becomes a space. A Korean title therefore tokenises into its words rather than collapsing to `""`
+(Hangul syllables decompose to conjoining jamo, which are letters, and the `U+0300–U+036F` strip does
+not touch them), and the same holds for CJK ideographs, Greek and Cyrillic.
+
+> **Corrected 2026-10-15 (owner review of 2026-10-14, row 88).** The punctuation pass read
+> `/[^a-z0-9]+/g`, which keeps ASCII letters and digits only, so every Korean or other CJK title
+> normalised to the empty string and such papers could be matched on identifiers alone (`P2-T09`'s
+> and `P2-T10`'s reports both record that non-Latin titles were never exercised). The owner chose to
+> compare Korean titles as titles; the rule above is the decision, and `P2-T13`'s labelled corpus
+> carries Korean titles so the path is measured. The shipped `normalizeTitle`
+> (`src/sources/shared/dedupe.ts`) still carries the ASCII form and must follow this line.
 
 #### 11.3.3 Fuzzy title matching
 
@@ -2363,7 +2489,9 @@ function jaccard(a: string, b: string): number {
 (a) publication year ±1 and (b) a 3-token signature of the longest words in the title. Only compare
 within a bucket.
 
-**Thresholds** (tune against a real user library before shipping):
+**Thresholds** (tune against a real user library before shipping; `P2-T13`'s labelled corpus includes
+Korean titles, so the non-Latin path §11.3.2 now preserves is measured rather than assumed —
+*2026-10-15, owner review row 88*):
 
 | Condition | Verdict |
 |---|---|
@@ -2446,10 +2574,12 @@ function merge(records: CanonicalRecord[]): { merged: CanonicalRecord; conflicts
   for (const field of PRECEDENCE_ORDER) {
     (out as Record<string, unknown>)[field] = pickByPrecedence(records, field);
   }
-  out.key = out.ids.doi ?? out.ids.pmid ?? out.ids.arxivId ?? out.ids.s2PaperId ?? hashTitleYear(out);
+  out.key = out.ids.doi ?? out.ids.pmid ?? out.ids.arxivId ?? out.ids.s2CorpusId ?? hashTitleYear(out);
   return { merged: out, conflicts };
 }
 ```
+*(`s2PaperId` → `s2CorpusId` in the key derivation, 2026-10-15, owner review row 92: `docs/07` §5.1's
+`ExternalIds` has only the corpus id, and §5.1's five-arm `workKey` rule names it.)*
 
 ### 11.6 Matching against the existing Zotero library
 
@@ -2467,7 +2597,9 @@ const index = {
 
 Populate from `item.getField('DOI')`, `item.getField('PMID')` (native in schema 42),
 `item.getField('archiveID')`, and `extra` lines. Then each candidate costs O(1) lookups plus a
-fuzzy pass only within its title bucket.
+fuzzy pass only within its title bucket. `byTitle` is keyed by §11.3.2's normalised title, so a
+Korean-titled library item gets a real bucket key rather than `""`; `P2-T13`'s labelled corpus includes
+Korean titles for exactly this index *(2026-10-15, owner review row 88)*.
 
 **Also index attachments and the trash?** No — check `item.deleted` and skip trashed items, so a
 paper the user deliberately deleted can be re-recommended (or, better, add it to a persistent
@@ -2545,6 +2677,15 @@ rendered *wider* than asked and a title hit satisfies it. That is a property of 
 and it matters to anyone comparing PubMed and Europe PMC result counts.
 Booleans **must be uppercase**. Date via `[EDAT]`/`[PDAT]` range or the `mindate`/`maxdate` params.
 
+**Language and open access (added 2026-10-15, owner review row 112).** `SourceQuery.languages`
+renders as **`[la]`** (alias `[Language]`) with MEDLINE's **three-letter** codes — `eng[la]`,
+`kor[la]`, several languages OR-ed in one group — and the adapter converts from the two-letter
+ISO-639-1 codes the pipeline carries (`docs/07` §4.2), refusing by name a code it cannot map.
+`SourceQuery.openAccessOnly` renders as **`free full text[sb]`** — *clause to be confirmed by one live
+request in `P2-T36` before the code renders it*; until that request lands, PubMed refuses
+`openAccessOnly` by name (`PUBMED_QUERY_FILTER_SUPPORT` in `src/sources/pubmed/query.ts`), and the
+confirmation flips the flag and adds the tag constant.
+
 **The *user's* Booleans are uppercase-only too (pinned 2026-09-30, `P1-T08`; §12.1 did not say).**
 Three reasons, and the last is the one that matters: it is PubMed's own rule, so the input and the
 output agree; §12.1's bare-words-default-to-AND rule makes a lowercase `and` cost only a stopword
@@ -2568,6 +2709,8 @@ Crossref has **no Boolean operator support** in `query.*`. Terms are scored, not
 query.bibliographic=base editing prime editing CRISPR
 &query.title=CRISPR
 &filter=from-pub-date:2024-01-01,until-pub-date:2026-12-31,type:journal-article
+&sort=score&order=desc        # always, with the cursor — §5.5 (measured 2026-10-15, P2-T04)
+&cursor=*
 ```
 Strategy: flatten OR-groups into the bag of words, promote `title:` terms into `query.title`, and
 **drop NOT clauses entirely — then filter the results client-side** against the NOT terms. Document
@@ -2593,14 +2736,31 @@ There is no field-specific syntax; `title:` prefixes are dropped.
 
 #### arXiv
 ```
-search_query=%28abs:%22base+editing%22+OR+abs:%22prime+editing%22%29
-             +AND+ti:CRISPR
-             +ANDNOT+all:mouse
+# unencoded, for reading
+(((all:"base editing" OR all:"prime editing") AND ti:CRISPR) ANDNOT all:mouse)
+  AND submittedDate:[202401010000 TO 202612312359]
+
+# on the wire
+search_query=%28%28%28all:%22base+editing%22+OR+all:%22prime+editing%22%29
+             +AND+ti:CRISPR%29
+             +ANDNOT+all:mouse%29
              +AND+submittedDate:%5B202401010000+TO+202612312359%5D
 ```
 `NOT` → **`ANDNOT`** (arXiv has no bare `NOT`). Encode `(`→`%28`, `)`→`%29`, `"`→`%22`,
-`[`→`%5B`, `]`→`%5D`, spaces→`+`. If the user's query has no obvious physics/CS relevance, consider
+`[`→`%5B`, `]`→`%5D`, spaces→`+`. **Two rules this block relies on (stated 2026-10-15, owner review
+row 160):** an **unfielded term is always `all:`** (§7.2 — there is no rule that would send one
+unfielded term to `abs:` and another to `all:`; the fielded forms are `ti:`, `abs:`, `au:`, `jr:` for
+`journal`, and `titleOrAbstract` renders as `(ti:x OR abs:x)`); and because §7.2 states **no operator
+precedence or associativity**, every `AND`/`OR` with more than one operand is **parenthesised
+explicitly**, `ANDNOT` is rendered binary with its left operand grouped, and the date window is
+`AND`-ed onto the grouped whole. If the user's query has no obvious physics/CS relevance, consider
 skipping arXiv entirely rather than spending a 3-second slot on it.
+
+> **Corrected 2026-10-15 (`P2-T06`; owner review row 160).** Until this date the block wrote the two
+> unfielded phrases as `abs:"…"` and the unfielded `mouse` as `all:mouse`, with no rule for the split,
+> and wrote `… AND ti:CRISPR ANDNOT all:mouse AND submittedDate:[…]` with no parentheses although §7.2
+> gives arXiv no precedence. The shipped renderer (`src/sources/arxiv/query.ts`) does what the block
+> now shows, and `test/unit/sources/arxiv.test.ts` asserts the grouped string exactly.
 
 #### OpenAlex (v1.1 research — no query is emitted in v1, §9.3)
 ```
@@ -2628,8 +2788,11 @@ all; route preprint search to Europe PMC `SRC:PPR`.
 | Title field | `[Title]` | `TITLE:` | `query.title` | *n/a* | `ti:` | `title.search:` |
 | Abstract | `[Title/Abstract]` | `ABSTRACT:` | *n/a* | *n/a* | `abs:` | `abstract.search:` |
 | Author | `[Author]` | `AUTH:` | `query.author` | *n/a* | `au:` | `raw_author_name.search:` |
+| Journal field *(row added 2026-10-15, owner review row 63)* | `[Journal]` | `JOURNAL:` | `query.container-title` | *n/a* | `jr:` (§7.2 journal reference; the shipped renderer uses it) | *n/a* |
 | Date range | `[EDAT]`/`mindate`+`maxdate` | `FIRST_PDATE:[a TO b]` | `filter=from-pub-date:` | `publicationDateOrYear=a:b` | `submittedDate:[a TO b]` | `from_publication_date:` |
-| Pagination | `retstart` (≤9998) | `cursorMark` | `cursor=*` | `token` | `start` | `cursor=*` |
+| Language *(row added 2026-10-15, owner review row 112)* | `[la]` (alias `[Language]`), MEDLINE three-letter codes: `eng[la]` | *n/a* — no field documented in §4.3; refused by name (`P2-T03`) | *n/a* — `language` is not selectable and §5.2 lists no language filter (`P2-T04`) | *n/a* | *n/a* — `language` is the constant `"en"` (§10.2); refused by name (`P2-T06`) | *not documented in §9* |
+| Open access *(row added 2026-10-15, owner review row 112)* | `free full text[sb]` — **unconfirmed**, one live request in `P2-T36` before the code renders it | `OPEN_ACCESS:y` (§4.3) | *n/a* — §5.2 documents no open-access filter (`has-license` is a licence presence, not access) | `openAccessPdf` flag on `/paper/search` (§6.5); bulk: *not documented* | *every e-print is free — no clause; `openAccessOnly` is accepted as a no-op* (`P2-T06`) | `is_oa` (§9.2) |
+| Pagination | `retstart` (≤9998) | `cursorMark` | `cursor=*` **with `sort=score&order=desc`** (§5.5) | `token` | `start` | `cursor=*` |
 
 ### 12.4 LLM-assisted query expansion (optional feature)
 

@@ -470,24 +470,34 @@ Registered in `vitest.config.ts` via `test.setupFiles`. The fake is intentionall
 - In record mode (`FIXTURE_MODE=record npm run fixtures:record`), the real transport runs, responses are written to `test/fixtures/`, and a redaction pass strips API keys, `Authorization` headers, and any `mailto` values before writing.
 - A missing fixture in replay mode is a **test failure with the exact command to record it**, never a silent network call.
 
+> **Corrected 2026-10-15 (owner review of 2026-10-14, row 72; shape from `P2-T25`).** Until this date
+> the block below showed `node:crypto`'s `createHash`, `node:fs/promises`' `readFile` and a one-argument
+> `replayTransport(dir)` living in `test/contract/_transport.ts`. The harness now lives in
+> `test/support/fixtureReplay.ts` with **no platform import**: it hashes with `test/support/sha256.ts`
+> (a plain-TypeScript SHA-256, byte-identical to `createHash`'s and asserted so against `node:crypto` by
+> `test/contract/replayHarness.test.ts`), because the Zotero sandbox has only the *asynchronous*
+> `crypto.subtle.digest` (measured 2026-10-13 on Zotero 10.0.3), and it takes a `(dir, io)` pair where
+> `io` is the `FixtureIo` port — `test/support/fixtureIoNode.ts` in Node, `test/support/fixtureIo.zotero.ts`
+> inside Zotero. `test/contract/_transport.ts` remains as the Node face that binds the port. The fixture
+> name's input string, `` `${method} ${redacted} ${body ?? ""}` ``, has not changed shape: every
+> committed fixture is named by it.
+
 ```ts
-// test/contract/_transport.ts
-import { readFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
+// test/support/fixtureReplay.ts — the core; test/contract/_transport.ts binds it to Node
+import type { FixtureIo } from "./fixtureIo";
+import { sha256Hex } from "./sha256";
 
 export function fixtureKey(req: { method: string; url: string; body?: string }) {
   const redacted = req.url.replace(/(api[_-]?key|key|token)=[^&]+/gi, "$1=REDACTED");
-  return createHash("sha256")
-    .update(`${req.method} ${redacted} ${req.body ?? ""}`)
-    .digest("hex")
-    .slice(0, 16);
+  return sha256Hex(`${req.method} ${redacted} ${req.body ?? ""}`).slice(0, 16);
 }
 
-export function replayTransport(dir: string) {
-  return async (req: { method: string; url: string; body?: string }) => {
-    const file = `${dir}/${fixtureKey(req)}.json`;
+export function replayTransport(dir: string, io: FixtureIo) {
+  return async (req: { method: string; url: string; body?: string }): Promise<RecordedExchange> => {
+    const name = `${fixtureKey(req)}.json`;
+    const file = `${dir}/${name}`;
     try {
-      return JSON.parse(await readFile(file, "utf8"));
+      return JSON.parse(await io.readText(dir, name)) as RecordedExchange;
     } catch {
       throw new Error(
         `Missing fixture ${file} for ${req.method} ${req.url}\n` +
@@ -597,14 +607,36 @@ See §8. Manual QA is where UI, accessibility, real network behaviour, real cost
 | `search-single` | one result (off-by-one and "not an array" bugs) |
 | `record-rich` | one record with every optional field populated |
 | `record-sparse` | one record with no abstract, no DOI, incomplete date |
-| `record-unicode` | CJK/Greek/diacritics in title and author names, and a title with subscripts/superscripts |
-| `record-jats-abstract` | an abstract with structured JATS/HTML markup |
+| `record-unicode` | CJK/Greek/diacritics in title and author names, and a title with subscripts/superscripts — *source-specific, see note (a)* |
+| `record-jats-abstract` | an abstract with structured JATS/HTML markup — *source-specific, see note (b)* |
 | `record-preprint` | a preprint with a linked published DOI |
-| `error-429` | rate-limit response including `Retry-After` |
+| `error-429` | rate-limit response, with `Retry-After` where the host sends one — *source-specific, see note (c)* |
 | `error-500` | server error |
 | `error-malformed` | truncated/invalid body |
 | `paginated` | a multi-page result set exercising the pagination loop |
 | `dedup-pair-set` | the same paper as returned by ≥3 different sources — the single most valuable fixture we own |
+
+> **Which rows are source-specific (added 2026-10-15, owner review rows 129 and 162).** The scenario
+> *names* are the same for every source — the adapters' unit tests expect the thirteen — but three rows
+> cannot mean the same thing on every host:
+>
+> **(a) `record-unicode` — a CJK title is not obtainable from Europe PMC for MED records** (measured
+> 2026-10-14, `P2-T03`). Europe PMC's `title` is the translated English title: the probe
+> `TITLE:"基因编辑"` (recorded as `record-unicode-cjk`, 11 hits) returned only Latin titles such as
+> `[Advancements in CRISPR-Cas9 for Fanconi anemia].`. The recorded Europe PMC fixture therefore pins
+> **diacritics** (`Aracı|Ayça`, `Aslan|Ummuhan Baş`), a raw `<b>-</b>` inside a title and
+> `(Withania somnifera)`, and CJK byte-identity is asserted on a hand-built result driven through the
+> real mapper. PubMed's CJK case is likewise synthesised from §3.4's sample (`P1-T10`).
+>
+> **(b) `record-jats-abstract` has no arXiv analogue** — arXiv abstracts are plain text (measured
+> 2026-10-15, `P2-T06`). The name is kept and the arXiv fixture pins the host's own markup problem
+> instead: a hard-wrapped `<summary>` carrying LaTeX, which must map to a single-spaced abstract.
+>
+> **(c) `error-429` carries no `Retry-After` on arXiv.** arXiv's measured 429 (`docs/02` §7.1,
+> 2026-09-15) is `text/html`, `Rate exceeded.`, `server: Google Frontend`, with **no `Retry-After`**;
+> the synthetic arXiv fixture reproduces that shape and the replay asserts `RateLimitError` with
+> `retryAfterMs: undefined` and no `penalize` call (`P2-T06`). "Including `Retry-After`" describes
+> Crossref and NCBI, the two hosts that send one.
 
 **LLM providers** — for each of OpenRouter, OpenAI, Gemini, Anthropic:
 
@@ -627,10 +659,17 @@ See §8. Manual QA is where UI, accessibility, real network behaviour, real cost
 
 `scripts/record-fixtures.ts` drives recording:
 
-- Reads real keys from `.env` (never committed).
+- Reads **no credential from any file**. Decision D5 and `docs/09` §1.7 allow no plaintext credential
+  tier, `.env.example` says in capitals that no key may be put there, and the recorder follows D5: the
+  scenarios run **unauthenticated** (NCBI unkeyed, which is also why a keyed replay would hash to a
+  different fixture name — see `test/support/fixtureReplay.ts`), and the process environment is read
+  only to build the redaction deny-list of key-shaped values described below. *(Corrected 2026-10-15,
+  owner review row 139: this line said "reads real keys from `.env`" since Phase 1 and contradicted D5
+  and the recorder's own header.)*
 - Runs a fixed, versioned list of scenarios so recordings are reproducible.
 - Applies a **mandatory redaction pass** before writing: strips `Authorization`, `x-api-key`, `api_key`/`key`/`token` query params, `mailto` values, `Set-Cookie`, and any string matching known key prefixes. A fixture that still matches a secret pattern after redaction causes the recorder to abort.
 - Scrubs the maintainer contact address in **both** its plain and its percent-encoded (`%40`) spellings, and aborts on either — Europe PMC echoes the request's `email=` back verbatim in `request.email` and percent-encoded in `nextPageUrl` (measured 2026-10-14, `P2-T03`; `P2-T33`).
+- Exempts **pagination tokens by name, per source** (`SourcePlan.opaqueTokens` in the recorder), and nothing else. `redact()`'s 40-character catch-all also matches an opaque cursor: Crossref's `message.next-cursor` is 51–84 base64 characters and was being scrubbed to `[redacted:NN]`, so no recorded page could drive a replayed paging loop and `assertClean` refused the truncated `error-malformed` body for the same reason (measured 2026-10-15, `P2-T04`, on every Crossref page). A plan names the tokens its bodies carry that are opaque but not secret; `scrub` shields exactly those and `assertClean` ignores exactly those. PubMed and Europe PMC carry no such token. *(Added 2026-10-15, owner review row 150.)*
 - Writes a sidecar `_meta.json` per fixture: recorded-at timestamp, endpoint, tool version, and the scenario name.
 - For LLM fixtures, records **response bodies only**; request bodies are asserted against committed snapshots generated by the adapters themselves, so a prompt change shows up as a reviewable snapshot diff.
 

@@ -4688,6 +4688,18 @@ move first and the code follow in the same change. Together they block `P2-T11` 
   `PUBMED_QUERY_FILTER_SUPPORT` and its siblings in each adapter's `query.ts`.
 
 **Do.**
+> **Added 2026-10-15 from the same day's documentation pass (`plan/reports/docs-pass-2026-10-15.md`, follow-ups
+> 1, 3, 5):** three more document-first facts whose code has not followed yet, same shape as the steps below —
+> **7.** `docs/02` §10.4's `openAccess` row is now "license-bearing first → Europe PMC → Crossref → S2 → OpenAlex";
+> `PRECEDENCE.openAccess` in `src/model/merge.ts` and `test/unit/model/precedence.test.ts` still carry the old
+> S2-first order. **8.** `docs/02` §11.3.1's arXiv shape is now `[a-z-]+(\.[A-Za-z-]+)?\/\d{7}`; `ARXIV_SHAPE`
+> in `src/model/ids.ts` still rejects a dotted class — one line plus a `cond-mat.mes-hall/0309136` case in
+> `test/unit/model/ids.test.ts`. **9.** The key-status badge's indeterminate state has the owner's wording in
+> `docs/09` §1.9 (en-US "Indeterminate — this operating system does not reveal the key-storage tier", ko-KR
+> 「확인 불가 — 이 운영체제에서는 열쇠 보관 등급을 판별할 수 없습니다」); the bundle id
+> `research-helper-prefs-backend-indeterminate` still carries `P1-T44`'s interim sentence — byte-safe edit of both
+> `research-helper-mainWindow.ftl` bundles (ko-KR line added to `KO_PRESENT` in `src/i18n/keys.ts` if it was
+> pending review) and one `npx zotero-plugin build`. Files added below accordingly.
 1. **99** — `docs/07` §5.3: `SearchProvenance` gains `mergeDecisions` (per work: `workKey`, `tier`,
    `confidence`, `evidence`), mirrored in `src/core/provenance.ts` and `schema/provenance.schema.json`;
    `run` writes `MergedWork.decisions` into it; the provenance note shows it.
@@ -4722,6 +4734,9 @@ relation (`P2-T11`).
 - [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
 
 **Files.**
+- *(added 2026-10-15)* modify `src/model/merge.ts`, `test/unit/model/precedence.test.ts`, `test/unit/model/ids.test.ts`,
+  `src/i18n/keys.ts`, `addon/locale/en-US/research-helper-mainWindow.ftl`, `addon/locale/ko-KR/research-helper-mainWindow.ftl`,
+  `typings/i10n.d.ts` (regenerated)
 - modify `docs/07-architecture-and-data-model.md` (§4.2, §5.1, §5.3, §6.2 only), `schema/provenance.schema.json`
 - modify `src/sources/types.ts`, `src/model/ids.ts`, `src/core/provenance.ts`,
   `src/pipeline/searchImport/searchImportPipeline.ts`, `src/pipeline/searchImport/types.ts`

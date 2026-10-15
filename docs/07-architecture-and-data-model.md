@@ -214,6 +214,9 @@ research_helper/
 │   │   │                             #   00-… §3; 10-… §4 item 10; 02-… §9.3)
 │   │   └── shared/
 │   │       ├── dedupe.ts             # cross-source deduplication
+│   │       ├── queryParse.ts         # user string → QueryNode (parseUserQuery), and
+│   │       │                         #   normalizeForSource against a source's capabilities
+│   │       │                         #   (P1-T08, P2-T01; line added 2026-10-15, review row 64)
 │   │       └── recency.ts            # "last 3 years" window computation
 │   │
 │   ├── llm/                          # one adapter per LLM provider
@@ -969,7 +972,13 @@ export interface SourceQuery {
   readonly limit: number;
   /** Opaque continuation from a previous page. */
   readonly cursor?: string;
-  /** ISO-639-1 language filter where supported. */
+  /**
+   * Language filter where supported, as two-letter ISO-639-1 codes (`en`, `ko`).
+   * The pipeline carries ONLY this code set; EACH ADAPTER CONVERTS to its own
+   * (PubMed's `[la]` takes MEDLINE three-letter codes — `eng`, `kor`) and refuses
+   * by name — a `RangeError` naming the code — any code it cannot map, rather than
+   * passing it through untranslated. Decided 2026-10-15 (owner review row 114).
+   */
   readonly languages?: readonly string[];
   /** Restrict to open-access / free-full-text where supported. */
   readonly openAccessOnly?: boolean;
@@ -2236,6 +2245,8 @@ The two headline workloads are hostile to naïve `Promise.all`:
 - **Summarize 200 papers**: 200 LLM calls, each 2-30 seconds, each costing money, against a provider with its own concurrency and TPM limits.
 
 A `Promise.all` over 200 LLM calls will trip rate limits, blow the user's budget with no confirmation, freeze the UI thread with progress churn, and lose everything if Zotero closes.
+
+Each source in a search fan-out is cut at **20 s** — the per-source timeout `10-requirements-and-user-stories.md` NFR-2 sets, which this document had not restated: `PER_SOURCE_TIMEOUT_MS` in `src/pipeline/searchImport/stages.ts` carries the figure and cites NFR-2, the deadline cancels only that source's token with `{ kind: "timeout" }`, the records it yielded before the cut are kept, and the other sources run on (`P2-T02`). *(Restated 2026-10-15, owner review row 69.)*
 
 ### 7.2 Worker pool sizing
 
