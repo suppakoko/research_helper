@@ -765,6 +765,10 @@ are thin.
 > list and `test/unit/bootstrap/container.test.ts`'s `hosts`/`sources`. `backoff.test.ts` reads `docs/07`
 > §7.3 and needs nothing — this host's retry cells are filled (2026-10-14). The adapter joins
 > `ShippedSourceAdapters` through `installServices`' literal (`P2-T32`), which is a compile error until it does.
+> *(added 2026-10-15 during the run, rule 10)* This card adds the `semanticscholar.keyPresent` row to
+> `src/prefs/schema.ts`, so **`addon/prefs.js`** (its `pref()` default line — `docs/07` §8.5 is the authority) and
+> **`test/unit/prefs/schema.test.ts`** (which pins the row count at Phase 1's twelve and checks every row has a
+> `pref()` line) are in the list too. Measured on the live tree: five unit failures mid-run, two of them these.
 - create `src/sources/semanticscholar/semanticscholarSource.ts`
 - create `src/sources/semanticscholar/mapper.ts`
 - create `src/sources/semanticscholar/query.ts`
