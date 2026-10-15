@@ -700,7 +700,7 @@ probe, 12 kept) — the next adapter dry-runs its `select` list against one requ
 | Field | Value |
 |---|---|
 | **ID** | `P2-T05` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; Semantic Scholar adapter, registered (five sources); the keyed path's live test is the owner's. Report at `plan/reports/P2-T05.md`. |
 | **Depends on** | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` |
 | **Blocks** | `P2-T11`, `P2-T12`, `P2-T34`, `P2-T36` |
 | **Retires** | `R-3` (fallback proven — full retirement is Phase 5 per `docs/11` §3.1) |
@@ -4786,7 +4786,7 @@ npm run typecheck && npm run lint:check && npm run test && npm run test:integrat
 | Field | Value |
 |---|---|
 | **ID** | `P2-T35` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; a 4xx body reaches the adapter, redacted. Report at `plan/reports/P2-T35.md`. |
 | **Depends on** | `P2-T06` |
 | **Blocks** | `P2-T16` |
 | **Retires** | `plan/00` §6 item 159 |
@@ -4858,7 +4858,7 @@ integration suite (unit-level card).
 | Field | Value |
 |---|---|
 | **ID** | `P2-T36` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; Korean titles, PubMed open-access and language filters, window fixtures. Report at `plan/reports/P2-T36.md`. |
 | **Depends on** | `P2-T05`, `P2-T30` |
 | **Blocks** | `P2-T13`, `P2-T16` |
 | **Retires** | `plan/00` §6 items 74, 88, 112, 114 |
