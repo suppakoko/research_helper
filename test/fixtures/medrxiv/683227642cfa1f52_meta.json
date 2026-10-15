@@ -1,0 +1,12 @@
+{
+  "scenario": "record-sparse",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T09:17:13.661Z",
+  "endpoint": "https://api.biorxiv.org/details/medrxiv",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

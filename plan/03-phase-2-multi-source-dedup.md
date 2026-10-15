@@ -1130,6 +1130,11 @@ through Europe PMC instead.
 - create `test/fixtures/biorxiv/` and `test/fixtures/medrxiv/` (the `docs/13` §3.1 set for each)
 
 **Do.**
+> **Corrected 2026-10-15 after the executing agent measured (report):** step 3's planner half — "add the `SRC:PPR`
+> clause to the Europe PMC query" — would *narrow* Europe PMC to preprints, because its default search already
+> returns them (`docs/02` §4.5, measured the same day). The adapter half is done; the planner half and Done-when 3
+> wait on the owner's routing decision (`plan/00` §6 item 177). `docs/02` §8.5's "check `status === "ok"`" is
+> refined there too: not-found answers are a third outcome, not errors.
 1. Register **two** `LiteratureSource` instances — `id: "biorxiv"` and `id: "medrxiv"` — from one
    implementation parameterised by `{server}`, both sharing the `api.biorxiv.org` limiter.
 2. Declare `capabilities.keywordSearch: false` on both, with `lookupById` covering `doi` only.
@@ -1205,6 +1210,20 @@ nothing to the *search* half of it — hence the empty page plus warning in step
 arxiv/ biorxiv/ medrxiv/` — "one directory per `SourceId`, per §11.1 step 5 — no abbreviations". It
 has a `medrxiv/` entry and no `s2/`, so both directories in **Files** are the tree's own names.
 
+
+**Findings, 2026-10-15 — done except Done-when 3 (a routing decision for the owner, item 177); 16 live requests; full report at `plan/reports/P2-T07.md`.**
+Verified by the coordinator on the agent's tree: no `MUTANT` marker, no key-shaped string and no `@` address in
+the 22 new fixture pairs, both bundles without a byte-order mark or carriage return, typecheck 0, `lint:check` 0,
+eslint 0, **unit 2,149/2,149**, contract 40/40, integration **131 passed**. `installServices` registers seven
+sources; `biorxiv` and `medrxiv` are two adapter objects from one implementation on the one `api.biorxiv.org`
+limiter (asserted by identity). Both declare `keywordSearch: false`; a free-text search through `fanOut` ends
+`succeeded` with the role notice on each and zero requests. The server comes from the record's own field, never
+the DOI prefix: two `10.64898/` records map to different sources, and a legacy `10.1101/` record maps on both
+servers. An HTTP-200 `status: "error"` body is a typed `SourceError`; an empty body is a retryable error; the two
+not-found answers are a third outcome. **65 mutants, all killed** (one after an added assertion). Done-when 3 is
+not met: `docs/02` §4.5's fixture shows Europe PMC already returns preprints, so the card's `AND SRC:PPR` would
+drop journal results. Not checked: the adapter inside Zotero, live error answers (written fixtures only). Open:
+items 177–183.
 ---
 
 ### P2-T08 — `preprint` item-type mapping and server attribution

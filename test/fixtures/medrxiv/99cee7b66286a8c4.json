@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"COVID-19 Antibody Seroprevalence in Santa Clara County, California\",\"authors\":\"Bendavid, E.; Mulaney, B.; Sood, N.; Shah, S.; Ling, E.; Bromley-Dulfano, R.; Lai, C.; Weissberg, Z.; Saavedra, R.; Tedrow, J.; Tversky, D.; Bogan, A.; Kupiec, T.; Eichner, D.; Gupta, R.; Ioannidis, J.; Bhattacharya, J.\",\"author_corresponding\":\"Eran Bendavid\",\"author_corresponding_institution\":\"Stanford University\",\"doi\":\"10.1101\\/2020.04.14.20062463\",\"date\":\"2020-04-17\",\"version\":\"1\",\"type\":\"PUBLISHAHEADOFPRINT\",\"license\":\"cc_by_nc_nd\",\"category\":\"epidemiology\",\"jatsxml\":\"https:\\/\\/www.medrxiv.org\\/content\\/early\\/2020\\/04\\/17\\/2020.04.14.20062463.source.xml\",\"abstract\":\"BackgroundAddressing COVID-19 is a pressing health and social concern. To date, many epidemic projections and policies addressing COVID-19 have been designed without seroprevalence data to inform epidemic parameters. We measured the seroprevalence of antibodies to SARS-CoV-2 in a community sam"
+}

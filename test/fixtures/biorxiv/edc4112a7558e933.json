@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Thu, 15 Oct 2026 09:16:54 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.26"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"Sound-shape correspondences in macaques reveal evolutionary roots of sound symbolism\",\"authors\":\"Loconsole, M.; Xue, C.; Garcia-Pelegrin, E.\",\"author_corresponding\":\"Maria Loconsole\",\"author_corresponding_institution\":\"University of Padova\",\"doi\":\"10.64898\\/2026.07.31.741992\",\"date\":\"2026-08-01\",\"version\":\"1\",\"type\":\"new results\",\"license\":\"cc_by_nc_nd\",\"category\":\"animal behavior and cognition\",\"jatsxml\":\"https:\\/\\/www.biorxiv.org\\/content\\/early\\/2026\\/08\\/01\\/2026.07.31.741992.source.xml\",\"abstract\":\"Humans reliably associate certain speech-like sounds with visual shapes, most notably in the Bouba-Kiki Effect, where rounded and spiky shapes are matched with the sounds Bouba and Kiki, respectively. Although often linked to language and culture, evidence from preverbal infants and domestic chickens suggests that sound-shape correspondences may reflect an experience-independent perceptual bias. However, studies on great apes failed to detect such bias, leaving open the question on its phylogenetic origin. Using a free-choice task, we showed the Bouba-Kiki effect in nine macaques, thus suggesting that such correspondences represent a conserved feature of vertebrate perception that may have provided a scaffold for the later emergence of symbolic communication systems in our species.\",\"published\":\"NA\",\"server\":\"bioRxiv\"}]}\r\n\r\n\r\n\r\n"
+}

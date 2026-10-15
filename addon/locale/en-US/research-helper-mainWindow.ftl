@@ -108,7 +108,8 @@ research-helper-menu-spike-create-item =
 ## Phase 2 (`docs/07` §11.1 step 11: a source appears in the UI by
 ## registration alone), and each brings its own entry here — Europe PMC's
 ## landed with `P2-T32`, Crossref's with `P2-T04`, arXiv's with `P2-T06`,
-## Semantic Scholar's with `P2-T05`. One declaration per id, in this bundle
+## Semantic Scholar's with `P2-T05`, bioRxiv's and medRxiv's with `P2-T07`
+## (two ids, one adapter). One declaration per id, in this bundle
 ## only (`docs/01` §9.3).
 ##
 ## **Never translated** (`docs/08` §10.3: database names are not translated),
@@ -119,6 +120,8 @@ research-helper-source-europepmc = Europe PMC
 research-helper-source-crossref = Crossref
 research-helper-source-arxiv = arXiv
 research-helper-source-semanticscholar = Semantic Scholar
+research-helper-source-biorxiv = bioRxiv
+research-helper-source-medrxiv = medRxiv
 
 
 ## Search provenance (FR-8, P1-T17)

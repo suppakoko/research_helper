@@ -1,0 +1,12 @@
+{
+  "scenario": "pubs-not-found",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T09:17:02.650Z",
+  "endpoint": "https://api.biorxiv.org/pubs/biorxiv",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

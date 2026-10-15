@@ -20,6 +20,8 @@
  * npm run fixtures:record -- --source crossref --dry-run     # Crossref: prints the plan only
  * npm run fixtures:record -- --source arxiv --dry-run        # arXiv: prints the plan only
  * npm run fixtures:record -- --source semanticscholar --dry-run   # Semantic Scholar, unkeyed
+ * npm run fixtures:record -- --source biorxiv --dry-run     # bioRxiv: DOI lookups only
+ * npm run fixtures:record -- --source medrxiv --dry-run     # medRxiv: DOI lookups only
  * FIXTURE_MODE=record npm run fixtures:record -- --source europepmc   # live
  * FIXTURE_MODE=synthetic npm run fixtures:record                      # rewrites the
  *                                                  # hand-written fixtures, no network
@@ -128,6 +130,7 @@ import {
 import { buildUserAgent, MAINTAINER_EMAIL } from "../src/core/http/userAgent";
 import {
   ARXIV_HOST,
+  BIORXIV_HOST,
   CROSSREF_HOST,
   EBI_HOST,
   HOST_POLICIES,
@@ -171,6 +174,26 @@ import {
   ARXIV_QUERY_WRAPPED,
   recordedArxivRequest,
 } from "../test/support/arxivRecordedRequests";
+import type {
+  BiorxivEndpoint,
+  BiorxivServer,
+} from "../src/sources/biorxiv/query";
+import {
+  BIORXIV_DOI_ABSENT,
+  BIORXIV_DOI_CROSS_SERVER,
+  BIORXIV_DOI_OLD_STYLE,
+  BIORXIV_DOI_RICH,
+  BIORXIV_DOI_SPARSE,
+  BIORXIV_DOI_SYNTHETIC_429,
+  BIORXIV_DOI_SYNTHETIC_500,
+  BIORXIV_DOI_SYNTHETIC_EMPTY_BODY,
+  BIORXIV_DOI_SYNTHETIC_MALFORMED,
+  BIORXIV_DOI_SYNTHETIC_STATUS_ERROR,
+  BIORXIV_DOI_UNICODE,
+  MEDRXIV_DOI_RICH,
+  MEDRXIV_DOI_SPARSE,
+  recordedBiorxivRequest,
+} from "../test/support/biorxivRecordedRequests";
 import {
   CROSSREF_QUERY_DOI_STRING,
   CROSSREF_QUERY_EMPTY,
@@ -243,6 +266,8 @@ export const RECORDABLE_SOURCES = [
   "crossref",
   "arxiv",
   "semanticscholar",
+  "biorxiv",
+  "medrxiv",
 ] as const;
 export type RecordableSourceId = (typeof RECORDABLE_SOURCES)[number];
 
@@ -2295,7 +2320,300 @@ function semanticscholarSyntheticPlan(
   return out;
 }
 
-// --- 7f. The registry -------------------------------------------------------
+// --- 7f. bioRxiv and medRxiv ------------------------------------------------
+
+/**
+ * A DOI-scoped `api.biorxiv.org` request for the plan, built by the shipped
+ * builder (`recordedBiorxivRequest` is `src/sources/biorxiv/query.ts`'s
+ * `buildBiorxivDetailsRequest` / `buildBiorxivPubsRequest`). No key and no
+ * contact parameter exist for this host (`docs/02` §8.1).
+ */
+function biorxivPlanned(
+  scenario: string,
+  purpose: string,
+  endpoint: BiorxivEndpoint,
+  server: BiorxivServer,
+  doi: string,
+): PlannedRequest {
+  const built = recordedBiorxivRequest(endpoint, server, doi);
+  return {
+    scenario,
+    purpose,
+    method: built.method,
+    url: built.url,
+    endpoint: built.endpointBaseUrl,
+  };
+}
+
+/**
+ * bioRxiv's scenarios (`P2-T07`), every one a DOI known up front, so nothing is
+ * dependent. The host has **no keyword search** (`docs/02` §8.4), so
+ * `docs/13` §3.1's `search-typical`, `search-single` and `paginated` rows have
+ * no request to record, and `dedup-pair-set` is `P2-T08`'s cross-source set
+ * (`plan/00` §6 item 168). `search-empty` keeps its name for the lookup that
+ * finds nothing. Three scenarios are this host's own: `pubs-not-found`
+ * (§8.5's free-text not-found message), `lookup-cross-server` (a medRxiv DOI
+ * asked of the bioRxiv server) and `pubs-old-style-doi` (a pre-2019, dateless
+ * `10.1101/` DOI on `/pubs/`). **`record-jats-abstract` has no row here**:
+ * it was first planned as that `/pubs/` call, which measured "not found" on
+ * 2026-10-15, and the host's own markup problem — section headings run into
+ * the prose (§8.5) — is carried by medRxiv's `record-rich` and
+ * `record-sparse` abstracts instead.
+ *
+ * **Eight requests at one per second** — `spacingMsFor(BIORXIV_HOST)` reads
+ * §7.3's `api.biorxiv.org` row (1/s) and gives 1000 ms.
+ */
+export function biorxivIndependentPlan(): readonly PlannedRequest[] {
+  return [
+    biorxivPlanned(
+      "record-rich",
+      "§3.1: every optional field — legacy 10.1101/ prefix, published != NA (YeastSAM, docs/02 §8.3)",
+      "details",
+      "biorxiv",
+      BIORXIV_DOI_RICH,
+    ),
+    biorxivPlanned(
+      "record-sparse",
+      "§3.1: nothing beyond the mandatory fields — current 10.64898/ prefix, published NA (docs/02 §8.3 sample)",
+      "details",
+      "biorxiv",
+      BIORXIV_DOI_SPARSE,
+    ),
+    biorxivPlanned(
+      "record-unicode",
+      "§3.1: diacritics and a typographic apostrophe in the title (Schrödinger’s Cat)",
+      "details",
+      "biorxiv",
+      BIORXIV_DOI_UNICODE,
+    ),
+    biorxivPlanned(
+      "record-preprint",
+      "§3.1: a preprint with a linked published DOI — the /pubs/ cross-walk (docs/02 §8.3)",
+      "pubs",
+      "biorxiv",
+      BIORXIV_DOI_RICH,
+    ),
+    biorxivPlanned(
+      "pubs-old-style-doi",
+      "a pre-2019, dateless 10.1101/ DOI on /pubs/ (LIGER, published in Cell): measured not found 2026-10-15",
+      "pubs",
+      "biorxiv",
+      BIORXIV_DOI_OLD_STYLE,
+    ),
+    biorxivPlanned(
+      "search-empty",
+      "§3.1 zero results, as a DOI lookup: a DOI dated 1999 that cannot resolve",
+      "details",
+      "biorxiv",
+      BIORXIV_DOI_ABSENT,
+    ),
+    biorxivPlanned(
+      "pubs-not-found",
+      "docs/02 §8.5: /pubs/ for an unpublished preprint — the free-text not-found message",
+      "pubs",
+      "biorxiv",
+      BIORXIV_DOI_SPARSE,
+    ),
+    biorxivPlanned(
+      "lookup-cross-server",
+      "card step 6: a medRxiv DOI asked of the bioRxiv server — does the host cross servers?",
+      "details",
+      "biorxiv",
+      BIORXIV_DOI_CROSS_SERVER,
+    ),
+  ];
+}
+
+/**
+ * medRxiv's scenarios (`P2-T07`): the same reasoning as
+ * {@link biorxivIndependentPlan}, four requests. `record-unicode` and
+ * `record-jats-abstract` are bioRxiv's only — the two servers share one
+ * mapper, so a second recording would test the same code — and no medRxiv DOI
+ * with a non-ASCII title is known without spending a request to find one.
+ */
+export function medrxivIndependentPlan(): readonly PlannedRequest[] {
+  return [
+    biorxivPlanned(
+      "record-rich",
+      "§3.1: every optional field — legacy 10.1101/ prefix, published != NA (Bendavid et al.)",
+      "details",
+      "medrxiv",
+      MEDRXIV_DOI_RICH,
+    ),
+    biorxivPlanned(
+      "record-sparse",
+      "§3.1: current 10.64898/ prefix on medRxiv (docs/02 §11.2: the prefix is shared)",
+      "details",
+      "medrxiv",
+      MEDRXIV_DOI_SPARSE,
+    ),
+    biorxivPlanned(
+      "record-preprint",
+      "§3.1: a preprint with a linked published DOI — the /pubs/ cross-walk",
+      "pubs",
+      "medrxiv",
+      MEDRXIV_DOI_RICH,
+    ),
+    biorxivPlanned(
+      "search-empty",
+      "§3.1 zero results, as a DOI lookup: a DOI dated 1999 that cannot resolve",
+      "details",
+      "medrxiv",
+      BIORXIV_DOI_ABSENT,
+    ),
+  ];
+}
+
+/**
+ * JSON member names in an `api.biorxiv.org` body that `redact()`'s
+ * 40-character catch-all mistakes for a credential. Measured 2026-10-15
+ * (`P2-T07`): the first recording of both `record-preprint` scenarios wrote
+ * `/pubs/`'s `preprint_author_corresponding_institution` (41 characters) as
+ * `"[redacted:41]"`, so the fixture no longer described the API. The name is
+ * a schema key, not a secret, and is exempted **by name** —
+ * `docs/13` §3.2's "by name, per source" rule, the mechanism Crossref's and
+ * Semantic Scholar's cursors use. Nothing else in these bodies is exempt.
+ */
+const BIORXIV_LONG_MEMBER_NAMES: readonly string[] = [
+  "preprint_author_corresponding_institution",
+];
+
+/** {@link SourcePlan.opaqueTokens} for both servers: the member names above, when present. */
+function biorxivOpaqueTokens(body: string): readonly string[] {
+  return BIORXIV_LONG_MEMBER_NAMES.filter((name) => body.includes(`"${name}"`));
+}
+
+/** `error-429`'s body: a placeholder — no 429 from this host is on record. */
+const BIORXIV_SYNTHETIC_429_BODY =
+  "<!-- synthetic fixture: docs/02 §8.5 — no rate limit is published and none " +
+  "was observed, so no 429 body shape is on record. Not provoked. -->\n" +
+  "<html><body><h1>Too Many Requests</h1></body></html>\n";
+
+/** `error-500`'s body: a placeholder. */
+const BIORXIV_SYNTHETIC_500_BODY =
+  "<!-- synthetic fixture: docs/02 §8 records no 5xx body shape for " +
+  "api.biorxiv.org; a server error cannot be provoked on demand. -->\n" +
+  "<html><body><h1>Internal Server Error</h1></body></html>\n";
+
+/**
+ * `error-status`'s body: `docs/02` §8.5's documented in-200 error,
+ * `{"messages":[{"status":"error", …}]}`, with the elided members left out.
+ */
+const BIORXIV_DOCUMENTED_STATUS_ERROR_BODY =
+  '{"messages":[{"status":"error"}],"collection":[]}';
+
+/**
+ * One server's written fixtures: `error-429`, `error-500`, `error-empty-body`
+ * (§8.5's measured 2026-09-15 outage shape: HTTP 200, `content-length: 0`),
+ * `error-status` (§8.5's documented in-200 error) and `error-malformed`.
+ *
+ * @param server - whose directory the fixtures are keyed for
+ * @param richBody - the recorded `record-rich` body, for `error-malformed`;
+ *   `undefined` skips that fixture
+ */
+function biorxivSyntheticPlan(
+  server: BiorxivServer,
+  richBody: string | undefined,
+): readonly SyntheticFixture[] {
+  const out: SyntheticFixture[] = [
+    {
+      planned: biorxivPlanned(
+        "error-429",
+        "§3.1: rate-limit response — placeholder, no Retry-After (none observed on this host)",
+        "details",
+        server,
+        BIORXIV_DOI_SYNTHETIC_429,
+      ),
+      exchange: {
+        status: 429,
+        headers: { "content-type": "text/html" },
+        body: BIORXIV_SYNTHETIC_429_BODY,
+      },
+      reason:
+        "Hand-written. docs/02 §8.1/§8.5: no rate limit is published and none " +
+        "was observed, so neither the body nor a Retry-After is on record; the " +
+        "self-imposed 1/s (docs/07 §7.3) is not tripped on purpose. Status is " +
+        "the assertable part.",
+    },
+    {
+      planned: biorxivPlanned(
+        "error-500",
+        "§3.1: server error",
+        "details",
+        server,
+        BIORXIV_DOI_SYNTHETIC_500,
+      ),
+      exchange: {
+        status: 500,
+        headers: { "content-type": "text/html" },
+        body: BIORXIV_SYNTHETIC_500_BODY,
+      },
+      reason:
+        "Hand-written. A 5xx cannot be provoked on demand and docs/02 §8 " +
+        "records no body; the body is a placeholder.",
+    },
+    {
+      planned: biorxivPlanned(
+        "error-empty-body",
+        "docs/02 §8.5: HTTP 200 with an empty body — the measured 2026-09-15 /details outage",
+        "details",
+        server,
+        BIORXIV_DOI_SYNTHETIC_EMPTY_BODY,
+      ),
+      exchange: {
+        status: 200,
+        headers: { "content-length": "0" },
+        body: "",
+      },
+      reason:
+        "Written from docs/02 §8.5's measurement of 2026-09-15 (P0-T21): every " +
+        "/details request returned HTTP 200 with content-length 0; re-measured " +
+        "working on 2026-09-30, so the shape is transient and cannot be " +
+        "provoked on demand.",
+    },
+    {
+      planned: biorxivPlanned(
+        "error-status",
+        "docs/02 §8.5: an error inside HTTP 200 — messages[0].status 'error'",
+        "details",
+        server,
+        BIORXIV_DOI_SYNTHETIC_STATUS_ERROR,
+      ),
+      exchange: {
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: BIORXIV_DOCUMENTED_STATUS_ERROR_BODY,
+      },
+      reason:
+        "Written from docs/02 §8.5's documented shape " +
+        '{"messages":[{"status":"error", ...}]} inside HTTP 200; the elided ' +
+        "members are left out. No request is known that provokes it.",
+    },
+  ];
+  if (richBody !== undefined) {
+    out.push({
+      planned: biorxivPlanned(
+        "error-malformed",
+        "§3.1: truncated/invalid body",
+        "details",
+        server,
+        BIORXIV_DOI_SYNTHETIC_MALFORMED,
+      ),
+      exchange: {
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: richBody.slice(0, MALFORMED_PREFIX_BYTES),
+      },
+      reason:
+        `Derived, not recorded: the first ${String(MALFORMED_PREFIX_BYTES)} ` +
+        `bytes of the recorded record-rich body, cut inside the JSON. The host ` +
+        `has no documented way to ask for a truncated body.`,
+    });
+  }
+  return out;
+}
+
+// --- 7g. The registry -------------------------------------------------------
 
 /** The `record-rich` body a plan's `error-malformed` is cut from. */
 async function recordedRichBody(
@@ -2406,6 +2724,29 @@ export function planFor(source: RecordableSourceId): SourcePlan {
           ),
         opaqueTokens: semanticscholarOpaqueTokens,
       };
+    case "biorxiv":
+    case "medrxiv": {
+      // `P2-T07`: two `SourceId`s, one host, one directory each (`docs/07`
+      // §2.2). Every scenario is a DOI known up front, so nothing depends on
+      // an earlier answer; the one exemption is a member name, not a token.
+      const independent =
+        source === "biorxiv" ? biorxivIndependentPlan : medrxivIndependentPlan;
+      return {
+        source,
+        host: BIORXIV_HOST,
+        fixtureDir: fixtureDirFor(source),
+        independent,
+        dependent: () => Promise.resolve([]),
+        syntheticRequests: () =>
+          biorxivSyntheticPlan(source, "").map((s) => s.planned),
+        syntheticFixtures: async (answer) =>
+          biorxivSyntheticPlan(
+            source,
+            await recordedRichBody(answer, independent()),
+          ),
+        opaqueTokens: biorxivOpaqueTokens,
+      };
+    }
   }
 }
 

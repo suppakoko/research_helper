@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Thu, 15 Oct 2026 09:16:55 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.11"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"Schro\\u0308dinger's Cat in Simulations in Genome-wide Association Studies\",\"authors\":\"Ozkaraca, M. I.; Tenesa, A.\",\"author_corresponding\":\"Albert Tenesa\",\"author_corresponding_institution\":\"University of Edinburgh\",\"doi\":\"10.1101\\/2023.03.22.533184\",\"date\":\"2023-03-23\",\"version\":\"1\",\"type\":\"new results\",\"license\":\"cc_by\",\"category\":\"genomics\",\"jatsxml\":\"https:\\/\\/www.biorxiv.org\\/content\\/early\\/2023\\/03\\/23\\/2023.03.22.533184.source.xml\",\"abstract\":\"Simulations are essential components for testing methods or assumptions in genome-wide association studies (GWAS). We show through theory and examples that markers can be both causal and non-causal simultaneously, resulting in a paradox, had simulation not being run properly. We developed a software (ParaPheSim - a paradoxical phenotype simulator) that allows users to create different traits whose genetic correlation is exactly 1 and yet they have no genetic overlap.\",\"published\":\"NA\",\"server\":\"bioRxiv\"}]}\r\n\r\n\r\n\r\n"
+}

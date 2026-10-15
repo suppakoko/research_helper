@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json",
+    "date": "Thu, 15 Oct 2026 09:19:14 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.26"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\"}], \"collection\":[{\"preprint_doi\":\"10.1101\\/2025.09.17.676679\",\"published_doi\":\"10.1091\\/mbc.E25-09-0454\",\"published_journal\":\"Molecular Biology of the Cell\",\"preprint_platform\":\"bioRxiv\",\"preprint_title\":\"YeastSAM: A Deep Learning Model for Accurate Segmentation of Budding Yeast Cells\",\"preprint_authors\":\"Zhao, Y.; Zhu, Z.; Yang, S.; Li, W.\",\"preprint_category\":\"cell biology\",\"preprint_date\":\"2025-09-20\",\"published_date\":\"2026-06-01\",\"preprint_abstract\":\"An essential step for quantitative image analysis is cell segmentation, which is the process of defining the outline of individual cells in microscopy images. Segmentation of budding yeast is challenging due to their asymmetric cell division and mother-bud morphology. As a result, a dividing cell is frequently misidentified as two separate cells, causing errors in downstream analysis. Here, we overcame this challenge by developing YeastSAM, a deep learning-based segmentation framework derived from {micro}SAM and optimized for budding yeast. YeastSAM achieves more than threefold higher accuracy in segmenting dividing cells compared to existing methods. When combined with single-molecule RNA imaging and organelle imaging, YeastSAM facilitates quantitative analysis of the spatial regulation of gene expression. This study offers an accessible, high-accuracy model for yeast cell segmentation, empowering researchers with minimal programming experience to perform quantitative image analysis.\",\"preprint_author_corresponding\":\"Weihan Li\",\"preprint_author_corresponding_institution\":\"The Department of Molecular Biology, Cell Biology & Biochemistry, Brown University, Providence, RI 02912, USA\"}]}\r\n\r\n\r\n\r\n"
+}

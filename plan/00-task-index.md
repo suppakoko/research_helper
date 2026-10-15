@@ -1332,7 +1332,8 @@ the caller of what the card builds; if it does not, the caller is added with a d
     can only match exactly. `P2-T13` measures how often.
 
 174. **The recorder's record mode rewrites synthetic fixtures even under `--only`** (in `main`, outside any
-    source's section). `P2-T36` restored three sidecars by hand. A guard in `main`.
+    source's section). `P2-T36` restored three sidecars by hand. A guard in `main`. **Recurred 2026-10-15 in `P2-T07`**
+    (four synthetic sidecars per server, restored by hand).
 
 175. **`P1-T44`'s preferences pane duplicates the `docs/09` §2.3 Test calls** that the Semantic Scholar adapter's
     `healthCheck` (and PubMed's) now implement. Move the pane to call the adapters (item 52 named it).
@@ -1340,6 +1341,39 @@ the caller of what the card builds; if it does not, the caller is added with a d
 176. **Intermittent integration failures, each seen once:** the P1-T44 badge rendered blank (a run during a bundle
     edit), a `P1-T23` stall of 125 ms against 100 ms, and the slow-Fluent doubling. Count before calling any of
     them a regression.
+
+### 6.34 Raised by `P2-T07`, 2026-10-15 — recorded under rule 9; item 177 waits on the owner
+
+177. **How preprint keyword search reaches Europe PMC (owner's decision).** `P2-T07` step 3 says to add `SRC:PPR`
+    to the Europe PMC query when bioRxiv or medRxiv is enabled, but Europe PMC's default search already returns
+    preprints (`docs/02` §4.5, measured 2026-10-15), so `AND SRC:PPR` would drop its journal results. Choices: no
+    change, with a test that the query carries no `SRC:` restriction; a second Europe PMC query for preprints
+    only; or excluding preprints (`NOT SRC:PPR`) when both preprint sources are switched off. The owners are
+    `queryFor` in `src/pipeline/searchImport/stages.ts` and `src/sources/europepmc/query.ts`.
+
+178. **The recorder's 40-character catch-all redacted a JSON member name** (`preprint_author_corresponding_institution`,
+    41 characters). `P2-T07` exempted that one name through `opaqueTokens` and re-recorded three scenarios, which is
+    outside `docs/13` §3.2's "pagination tokens by name … and nothing else", and the sidecar note then says
+    "preserved 1 opaque pagination token(s)". Make `redact()`'s catch-all skip JSON keys, or widen §3.2 by name.
+
+179. **`medrxiv` is in no `PRECEDENCE` row** (`src/model/merge.ts`); `abstract` lists `biorxiv`, following `docs/02`
+    §10.4's "bioRxiv". medRxiv abstracts therefore rank after every listed source, the inert `openalex` included.
+    A document decision: does `medrxiv` sit beside `biorxiv`?
+
+180. **The search estimate budgets requests for sources that make none.** The `estimate` in
+    `searchImportPipeline.ts` charges `ceil(limit / maxPageSize) * 2` requests to `biorxiv` and `medrxiv`, which send
+    nothing during a search. Skip sources whose `capabilities.keywordSearch` is `false`.
+
+181. **No caller exists for any adapter's `lookup()`, nor for `resolvePublished()`.** A DOI of unknown server needs
+    one lookup per server (the host does not answer across servers), and `/pubs/` costs one request per DOI at
+    1/s. `P2-T11` and `P2-T12` own the caller and must budget for both.
+
+182. **The bioRxiv/medRxiv "no keyword search" notice is English only** (`biorxivKeywordSearchNotice`), the same
+    gap as item 170. `P2-T14` renders the localized role row from the capability.
+
+183. **`docs/13` §3.1's fixture set does not fit a lookup-only host.** `search-typical`, `search-single`,
+    `paginated` and `dedup-pair-set` have nothing to record; `record-jats-abstract` became `pubs-old-style-doi`.
+    Note the exception in §3.1.
 
 ## 7. Regenerating this file
 

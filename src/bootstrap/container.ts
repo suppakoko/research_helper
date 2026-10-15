@@ -214,6 +214,8 @@ import type { PipelineContext, PipelineId } from "../pipeline/types";
 import { getPref, setPrefStore } from "../prefs";
 import { createArxivSource } from "../sources/arxiv/arxivSource";
 import { createArxivRecordMapper } from "../sources/arxiv/mapper";
+import { createBiorxivSource } from "../sources/biorxiv/biorxivSource";
+import { createBiorxivRecordMapper } from "../sources/biorxiv/mapper";
 import { createCrossrefSource } from "../sources/crossref/crossrefSource";
 import { createCrossrefRecordMapper } from "../sources/crossref/mapper";
 import { createEuropePmcSource } from "../sources/europepmc/europepmcSource";
@@ -1408,6 +1410,13 @@ export async function installServices(
   // The same bucket the client paces Crossref with (`limiterFor` above), so
   // the adapter's header-driven `reconfigure()` and the client's pacing agree.
   const crossrefLimiter = limiters.limiterFor(CROSSREF_HOST);
+  // bioRxiv and medRxiv (`P2-T07`) share one mapper: the server comes from
+  // each record's own `server` field, never from which adapter asked.
+  const biorxivMapRecords = createBiorxivRecordMapper({
+    clock,
+    keepRaw,
+    logger,
+  });
   // `satisfies ShippedSourceAdapters`: every slot the registry knows must be
   // constructed here, so a dropped adapter is a compile error at this literal
   // rather than a database row missing from the search dialog (`P2-T32`).
@@ -1474,6 +1483,26 @@ export async function installServices(
       clock,
       mapRecords: createSemanticScholarRecordMapper({ clock, keepRaw, logger }),
       ...(secrets !== undefined && { secrets }),
+      logger,
+    }),
+    // bioRxiv and medRxiv (`P2-T07`): two `SourceId`s, one implementation
+    // (`docs/07` §2.2), built once per server. No key and no contact
+    // parameter (`docs/02` §8.1). Both have `rateLimitKey` `api.biorxiv.org`,
+    // so `limiterFor` above resolves §7.3's one 1/s bucket for both. Neither
+    // searches (`docs/02` §8.4): `search()` returns an empty page that says
+    // keyword search of preprints runs through Europe PMC `SRC:PPR`.
+    biorxiv: createBiorxivSource({
+      server: "biorxiv",
+      http,
+      clock,
+      mapRecords: biorxivMapRecords,
+      logger,
+    }),
+    medrxiv: createBiorxivSource({
+      server: "medrxiv",
+      http,
+      clock,
+      mapRecords: biorxivMapRecords,
       logger,
     }),
   } satisfies ShippedSourceAdapters);

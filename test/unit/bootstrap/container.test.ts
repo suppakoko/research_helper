@@ -40,6 +40,7 @@ import {
 import { LOG_PREFIX, type LogSink } from "../../../src/core/logger";
 import {
   ARXIV_HOST,
+  BIORXIV_HOST,
   CROSSREF_HOST,
   EBI_HOST,
   NCBI_HOST,
@@ -401,20 +402,23 @@ describe("installServices wires the graph Phase 1 built", () => {
     expect(getHttpClient()).toBe(graph.http);
     // `docs/07` §7.3's rows for the hosts the registered adapters talk to:
     // NCBI (`P1-T04`), Europe PMC (`P2-T03`, wired by `P2-T32`), Crossref
-    // (`P2-T04`) and arXiv (`P2-T06`). Phase 1 pinned this at one host; the
-    // pin went with the second adapter.
+    // (`P2-T04`), arXiv (`P2-T06`), Semantic Scholar (`P2-T05`) and
+    // bioRxiv/medRxiv (`P2-T07`, one host). Phase 1 pinned this at one host;
+    // the pin went with the second adapter.
     expect(graph.limiters.hosts).toEqual([
       NCBI_HOST,
       EBI_HOST,
       CROSSREF_HOST,
       ARXIV_HOST,
       SEMANTICSCHOLAR_HOST,
+      BIORXIV_HOST,
     ]);
     expect(graph.limiters.limiterFor(NCBI_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(EBI_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(CROSSREF_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(ARXIV_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(SEMANTICSCHOLAR_HOST)).toBeDefined();
+    expect(graph.limiters.limiterFor(BIORXIV_HOST)).toBeDefined();
     // `registerSources()` was handed every adapter, in `SOURCE_IDS` order —
     // the order the search dialog's Databases row renders (`docs/08` §4.2).
     // Semantic Scholar (`P2-T05`) lands after arXiv in the host table but
@@ -425,6 +429,8 @@ describe("installServices wires the graph Phase 1 built", () => {
       "crossref",
       "semanticscholar",
       "arxiv",
+      "biorxiv",
+      "medrxiv",
     ]);
     expect(graph.sources.list().map((source) => source.displayNameKey)).toEqual(
       [
@@ -433,8 +439,21 @@ describe("installServices wires the graph Phase 1 built", () => {
         "research-helper-source-crossref",
         "research-helper-source-semanticscholar",
         "research-helper-source-arxiv",
+        "research-helper-source-biorxiv",
+        "research-helper-source-medrxiv",
       ],
     );
+    // bioRxiv and medRxiv (`P2-T07`) are two sources on one host: both name
+    // §7.3's `api.biorxiv.org` row, and the registry hands both the same
+    // bucket — identity, not equality, so together they stay under 1/s.
+    const biorxivKey = graph.sources.get("biorxiv")?.rateLimitKey;
+    const medrxivKey = graph.sources.get("medrxiv")?.rateLimitKey;
+    expect(biorxivKey).toBe(BIORXIV_HOST);
+    expect(medrxivKey).toBe(BIORXIV_HOST);
+    const biorxivBucket = graph.limiters.limiterFor(biorxivKey ?? "");
+    expect(biorxivBucket).toBeDefined();
+    expect(graph.limiters.limiterFor(medrxivKey ?? "")).toBe(biorxivBucket);
+    expect(graph.sources.get("biorxiv")).not.toBe(graph.sources.get("medrxiv"));
     // The Semantic Scholar adapter paces on §7.3's `api.semanticscholar.org`
     // bucket through the client — 0.9/s with or without a key.
     expect(graph.sources.get("semanticscholar")?.rateLimitKey).toBe(

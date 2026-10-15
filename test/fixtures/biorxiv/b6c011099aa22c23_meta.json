@@ -1,0 +1,13 @@
+{
+  "scenario": "error-empty-body",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T09:17:02.653Z",
+  "endpoint": "https://api.biorxiv.org/details/biorxiv",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Written from docs/02 §8.5's measurement of 2026-09-15 (P0-T21): every /details request returned HTTP 200 with content-length 0; re-measured working on 2026-09-30, so the shape is transient and cannot be provoked on demand.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

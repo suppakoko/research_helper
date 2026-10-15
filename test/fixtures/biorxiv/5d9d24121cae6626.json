@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"YeastSAM: A Deep Learning Model for Accurate Segmentation of Budding Yeast Cells\",\"authors\":\"Zhao, Y.; Zhu, Z.; Yang, S.; Li, W.\",\"author_corresponding\":\"Weihan Li\",\"author_corresponding_institution\":\"The Department of Molecular Biology, Cell Biology & Biochemistry, Brown University, Providence, RI 02912, USA\",\"doi\":\"10.1101\\/2025.09.17.676679\",\"date\":\"2025-09-20\",\"version\":\"1\",\"type\":\"new results\",\"license\":\"cc_by_nc\",\"category\":\"cell biology\",\"jatsxml\":\"https:\\/\\/www.biorxiv.org\\/content\\/early\\/2025\\/09\\/20\\/2025.09.17.676679.source.xml\",\"abstract\":\"An essential step for quantitative image analysis is cell segmentation, which is the process of defining the outline of individual cells in microscopy images. Segmentation of budding yeast is challenging due to their asymmetric cell division and mother-bud morphology. As a result, a dividing cell is frequently misidentified as two separate cells, causing errors in downstream analysis. Here,"
+}

@@ -7,6 +7,7 @@ import { OperationCancelledError } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import {
   ARXIV_HOST,
+  BIORXIV_HOST,
   createHostLimiterRegistry,
   CROSSREF_HOST,
   EBI_HOST,
@@ -1103,7 +1104,8 @@ describe("hostLimiter policy table", () => {
     // Phase 1 pinned this table at one row ("only that row in Phase 1").
     // `P2-T32` retired the pin: the table carries one row per host the shipped
     // adapters talk to — NCBI (`P1-T04`), Europe PMC (`P2-T03`), Crossref
-    // (`P2-T04`) and arXiv (`P2-T06`) — and the registry serves exactly those, in table order, each
+    // (`P2-T04`), arXiv (`P2-T06`), Semantic Scholar (`P2-T05`) and
+    // bioRxiv/medRxiv (`P2-T07`, one host for two sources) — and the registry serves exactly those, in table order, each
     // from §7.3. That every row here is a §7.3 row, with §7.3's own retry
     // cells, is asserted against the document itself in `backoff.test.ts`, so
     // this test names the hosts and leaves the numbers to the one place that
@@ -1114,6 +1116,7 @@ describe("hostLimiter policy table", () => {
       CROSSREF_HOST,
       ARXIV_HOST,
       SEMANTICSCHOLAR_HOST,
+      BIORXIV_HOST,
     ];
     expect(HOST_POLICIES.map((policy) => policy.host)).toEqual(shippedHosts);
     const clock = createManualClock();
@@ -1171,10 +1174,12 @@ describe("hostLimiter policy table", () => {
     expect(registry.limiterFor(NCBI_HOST)).toBe(first);
     expect(must(first, "the NCBI limiter").key).toBe(NCBI_HOST);
     // `api.crossref.org` was the unregistered example until `P2-T04` shipped
-    // its row, `api.semanticscholar.org` until `P2-T05` shipped its; bioRxiv's
-    // row is `P2-T07`'s to add and moves this example again.
-    expect(registry.limiterFor("api.biorxiv.org")).toBeUndefined();
-    expect(registry.policyFor("api.biorxiv.org")).toBeUndefined();
+    // its row, `api.semanticscholar.org` until `P2-T05` shipped its and
+    // `api.biorxiv.org` until `P2-T07` shipped its — the last of §7.3's
+    // literature rows. `example.invalid` (RFC 2606) can never be registered,
+    // so this example does not move again.
+    expect(registry.limiterFor("example.invalid")).toBeUndefined();
+    expect(registry.policyFor("example.invalid")).toBeUndefined();
   });
 
   it("refuses two rows for one host", () => {

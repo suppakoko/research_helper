@@ -1,0 +1,13 @@
+{
+  "scenario": "error-status",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T09:17:13.667Z",
+  "endpoint": "https://api.biorxiv.org/details/medrxiv",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Written from docs/02 §8.5's documented shape {\"messages\":[{\"status\":\"error\", ...}]} inside HTTP 200; the elided members are left out. No request is known that provokes it.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

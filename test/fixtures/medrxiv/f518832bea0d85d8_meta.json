@@ -1,0 +1,13 @@
+{
+  "scenario": "error-429",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T09:17:13.664Z",
+  "endpoint": "https://api.biorxiv.org/details/medrxiv",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written. docs/02 §8.1/§8.5: no rate limit is published and none was observed, so neither the body nor a Retry-After is on record; the self-imposed 1/s (docs/07 §7.3) is not tripped on purpose. Status is the assertable part.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

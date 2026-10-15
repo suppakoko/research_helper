@@ -1,0 +1,13 @@
+{
+  "scenario": "error-500",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T09:17:02.652Z",
+  "endpoint": "https://api.biorxiv.org/details/biorxiv",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written. A 5xx cannot be provoked on demand and docs/02 §8 records no body; the body is a placeholder.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

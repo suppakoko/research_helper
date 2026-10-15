@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Thu, 15 Oct 2026 09:17:12 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.26"
+  },
+  "body": "{\"messages\":[{\"status\":\"no posts found\"}], \"collection\":[]}\r\n\r\n\r\n\r\n"
+}

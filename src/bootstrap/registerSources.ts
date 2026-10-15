@@ -5,7 +5,8 @@
  * adds the `europepmc` slot (see {@link SourceAdapters}) and `P2-T32` makes
  * the composition root fill it (see {@link ShippedSourceAdapters}); `P2-T04`
  * adds `crossref`, `P2-T06` adds `arxiv` and `P2-T05` adds `semanticscholar`,
- * each filled in the same card.
+ * each filled in the same card; `P2-T07` adds `biorxiv` and `medrxiv` — two
+ * slots, one adapter implementation built twice (`docs/07` §2.2).
  * `docs/07` §11.1 step 8 makes this file the *only* place a new source is wired
  * in — that is what lets step 11 claim "the source appears automatically in the
  * search dialog because it is rendered from the registry", and what keeps
@@ -85,6 +86,19 @@ export interface SourceAdapters {
    * {@link ShippedSourceAdapters}.
    */
   readonly arxiv?: LiteratureSource;
+  /**
+   * `P2-T07`'s adapter for the bioRxiv server, constructed by
+   * `installServices` in the same card. Optional on this interface for the
+   * reason `europepmc` is; required on {@link ShippedSourceAdapters}.
+   */
+  readonly biorxiv?: LiteratureSource;
+  /**
+   * `P2-T07`'s adapter for the medRxiv server — the same implementation as
+   * `biorxiv`, built with `server: "medrxiv"`, so a distinct `SourceId` on
+   * the same `api.biorxiv.org` bucket. Optional here, required on
+   * {@link ShippedSourceAdapters}.
+   */
+  readonly medrxiv?: LiteratureSource;
 }
 
 /**

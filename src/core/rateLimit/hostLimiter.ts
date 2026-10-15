@@ -178,6 +178,17 @@ export const ARXIV_HOST = "export.arxiv.org";
 export const SEMANTICSCHOLAR_HOST = "api.semanticscholar.org";
 
 /**
+ * The host `P2-T07`'s bioRxiv / medRxiv adapter talks to — the authority of
+ * `https://api.biorxiv.org` (`docs/02` §8.1). **One host, two `SourceId`s**:
+ * `biorxiv` and `medrxiv` are two adapter objects over one implementation
+ * (`docs/07` §2.2, "bioRxiv + medRxiv share one adapter, two servers"), both
+ * with this `rateLimitKey`, so they draw on one bucket and together never
+ * exceed the row below. Imported by `src/sources/biorxiv/` rather than
+ * respelled, for the reason {@link EBI_HOST} gives.
+ */
+export const BIORXIV_HOST = "api.biorxiv.org";
+
+/**
  * `docs/07` §7.3's policy table, as far as Phase 1 needs it.
  *
  * **NCBI, the one row that ships now.** 2.5/s without a key and 8/s with one,
@@ -229,7 +240,8 @@ export const SEMANTICSCHOLAR_HOST = "api.semanticscholar.org";
  * `api.semanticscholar.org` (Semantic Scholar, `P2-T05` — **shipped below**),
  * `export.arxiv.org` (arXiv, `P2-T06` — **shipped
  * below**, with `minIntervalMs: 3000` and `maxConcurrent: 1`, aggregated across
- * every machine under our control) and `api.biorxiv.org`. `api.openalex.org` gets
+ * every machine under our control) and `api.biorxiv.org` (bioRxiv and medRxiv,
+ * `P2-T07` — **shipped below**). `api.openalex.org` gets
  * **no** row: decision D2 puts OpenAlex out of v1 and one of `plan/03`'s cards
  * greps this file to prove it. The LLM and TTS hosts are Phase 3's and Phase 5's
  * and are driven from provider prefs rather than from a static row. **Each of
@@ -284,6 +296,19 @@ export const SEMANTICSCHOLAR_HOST = "api.semanticscholar.org";
  * `withKey` comment names for this host: the adapter sends the `x-api-key`
  * header when the keystore holds a key and the bucket paces identically either
  * way. The key itself never comes near this module (D5).
+ *
+ * **bioRxiv / medRxiv, `P2-T07` (2026-10-15).** §7.3's `api.biorxiv.org`
+ * row: **1/s, burst 2, max concurrent 2**, retry 1000 ms / 30 000 ms / 3 (the
+ * cells the owner filled on 2026-10-14; base 1000 ms as the smallest round
+ * value above the host's 1 s pacing interval). The basis cell: "No published
+ * limit exists; this is a self-imposed conservative default" — and the
+ * **Unverified** note under §7.3's table calls the absence a genuine
+ * documentation gap, so the rate is not raised on the strength of nothing
+ * having been refused (`docs/02` §8.5: "absence of enforcement is not
+ * permission"). No key mechanism exists (`docs/02` §8.1, `docs/09` §5.6), so
+ * no `withKey` and no `keyPresencePref`. **Both preprint servers share this
+ * one row and one bucket**: the `biorxiv` and `medrxiv` sources are distinct
+ * `SourceId`s with the same `rateLimitKey`.
  */
 export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
   {
@@ -338,6 +363,16 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
     host: SEMANTICSCHOLAR_HOST,
     withoutKey: { ratePerSecond: 0.9, burst: 1, maxConcurrent: 1 },
     retry: { baseMs: 2000, capMs: 30_000, maxAttempts: 3 },
+  },
+  {
+    // `docs/07` §7.3, `api.biorxiv.org` (bioRxiv and medRxiv, `P2-T07`,
+    // 2026-10-15): 1/s, burst 2, max concurrent 2; retry 1000 ms / 30 000 ms
+    // / 3 (the cells the owner filled on 2026-10-14). Self-imposed: no limit
+    // is published. One row for both servers. See the header's "bioRxiv /
+    // medRxiv" paragraph.
+    host: BIORXIV_HOST,
+    withoutKey: { ratePerSecond: 1, burst: 2, maxConcurrent: 2 },
+    retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
   },
 ];
 

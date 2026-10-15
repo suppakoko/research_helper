@@ -812,6 +812,11 @@ search-then-fetch pattern.
 Europe PMC indexes bioRxiv/medRxiv/Research Square/SSRN preprints. This is the **recommended route
 to preprints** (see §8.4).
 
+> **Measured 2026-10-15 (`P2-T07`, from a committed fixture):** a search **without** any `SRC:` clause already
+> returns preprints — the recorded Europe PMC `paginated-page-1` answer holds one `"source":"PPR"` record beside
+> two `MED` records. So `SRC:PPR` *narrows* a query to preprints; it is not needed to *include* them, and adding
+> `AND SRC:PPR` to the one Europe PMC query would drop its journal results.
+
 ```
 /search?query=(SRC%3APPR)%20AND%20(base%20editing)%20AND%20(FIRST_PDATE%3A%5B2023-09-01%20TO%202026-09-08%5D)&resultType=lite&format=json&pageSize=2
 ```
@@ -1730,6 +1735,21 @@ available for text mining. **Unverified:** whether any rate limit is enforced �
 during testing, but absence of enforcement is not permission.
 
 > **Measured 2026-09-15 (`P0-T21`): a third error shape, and `/details` broken — **transiently**.** Every `/details` request — including §8.3's own documented URL `…/details/biorxiv/2026-08-01/2026-08-02/0/json` and a DOI lookup `…/details/biorxiv/10.64898/2026.07.31.741992/na/json` — returned **HTTP 200 with an empty body** (`content-length: 0`), while `/pubs/` worked with the same `User-Agent`. An adapter must treat an empty 200 body as a failure, not as "no results". `/pubs/`'s not-found message is free text (`"no articles found for published version of "`, with the DOI missing), not `status: "error"`. §8.2's `/pubs/{server}/{interval}/{cursor}` template omits the `/{format}` segment that §8.3's working example carries. Abstract text from `/pubs/` contains flattening tokens (`O_SCPCAP…C_SCPCAP`, `C_LIO_LI`, sometimes glued to a letter as in `AO_SCPCAPBSTRACT`) and section headings run into the prose ("BackgroundAs…"); the normalizer must strip both. Re-probe `/details` on another day before the v1 ID-lookup role relies on it. **Re-measured 2026-09-30 (`P0-T21`): `/details` works.** The same endpoint that returned an empty body on every request fifteen days earlier now answers normally — a 183,179-record window sample and five DOI lookups, all with abstracts. So the 2026-09-15 result was an outage, not a design fault, and the empty-200 shape is a **transient** failure an adapter must survive rather than a permanent one. Both readings lead to the same rule: treat an empty HTTP 200 body as a failure and retry, never as "no results".
+
+> **Measured 2026-10-15 (`P2-T07`, 16 unauthenticated requests, all HTTP 200, no 429):**
+> - **"Check `status === "ok"`" is not enough.** Not-found answers are neither `ok` nor `error`: `/details/` answers
+>   `"no posts found"`; `/pubs/` answers `"no articles found for published version of "` (the DOI is missing for a
+>   `10.64898/` DOI and present for `10.1101/459891`). The adapter sorts each answer into ok, not-found or error
+>   (`BIORXIV_NOT_FOUND_STATUSES` in `src/sources/biorxiv/biorxivSource.ts`).
+> - **The host does not answer across servers:** a medRxiv DOI asked of `/details/biorxiv/` returns `no posts found`.
+>   Since the `10.64898/` prefix cannot name the server (§11.2), a DOI of unknown server needs one lookup per server.
+> - The DOI form of `/pubs/` takes one DOI per call, so resolving published versions costs one request per DOI at 1/s.
+> - **Licence values seen:** `cc_by_nc` and `cc_no`, in addition to the list above.
+> - **Flattening tokens not seen:** none of 7 recorded abstracts holds `O_SCPCAP` or `C_LIO_LI`. Run-in section
+>   headings **were** seen, in medRxiv `/details/` abstracts as well as `/pubs/`; the mapper turns a heading into a
+>   `"Heading: "` prefix, the convention the PubMed and Europe PMC mappers use, rather than stripping it.
+> - The DOI-form `messages[0]` carries only `status` and `category` — no count or total. medRxiv's `type` reads
+>   `PUBLISHAHEADOFPRINT`, bioRxiv's `new results`; neither is mapped. No recorded record carries §8.3's `funder`.
 
 ---
 
