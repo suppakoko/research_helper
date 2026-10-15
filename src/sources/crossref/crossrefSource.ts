@@ -117,6 +117,7 @@ import type {
 import { CROSSREF_SOURCE_ID, type CrossrefRecordMapper } from "./mapper";
 import {
   buildCrossrefWorksRequest,
+  CROSSREF_FILTERS,
   CROSSREF_FIRST_CURSOR,
   CROSSREF_RENDERED_FIELDS,
   CROSSREF_ROWS_MAX,
@@ -179,6 +180,8 @@ export const CROSSREF_CAPABILITIES: SourceCapabilities = {
   abstractsInSearch: true,
   citationGraph: false,
   dateFilter: true,
+  // The renderer's own object (`P2-T34`): `./query.ts` refuses from it.
+  filters: CROSSREF_FILTERS,
   maxPageSize: CROSSREF_ROWS_MAX,
   maxTotalResults: undefined,
   benefitsFromApiKey: false,

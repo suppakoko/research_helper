@@ -70,6 +70,7 @@ import {
   buildCrossrefWorksRequest,
   CROSSREF_FIRST_CURSOR,
   CROSSREF_ORDER,
+  CROSSREF_FILTERS,
   CROSSREF_QUERY_FILTER_SUPPORT,
   CROSSREF_RENDERED_FIELDS,
   CROSSREF_ROWS_MAX,
@@ -692,11 +693,9 @@ describe("explainCrossrefQuery — the native rendering and the date filter", ()
   });
 
   it("refuses languages and openAccessOnly by name, and accepts their empty forms", () => {
-    expect(CROSSREF_QUERY_FILTER_SUPPORT).toEqual({
-      languages: false,
-      openAccessOnly: false,
-      raw: true,
-    });
+    // `P2-T34`: the two answers live on `SourceCapabilities.filters` now.
+    expect(CROSSREF_FILTERS).toEqual({ languages: false, openAccess: false });
+    expect(CROSSREF_QUERY_FILTER_SUPPORT).toEqual({ raw: true });
     expect(() =>
       explainCrossrefQuery({ terms: term("x"), languages: ["en"], limit: 1 }),
     ).toThrow(/SourceQuery\.languages/u);
@@ -938,6 +937,7 @@ describe("CROSSREF_CAPABILITIES", () => {
       abstractsInSearch: true,
       citationGraph: false,
       dateFilter: true,
+      filters: { languages: false, openAccess: false },
       maxPageSize: 1000,
       maxTotalResults: undefined,
       benefitsFromApiKey: false,
@@ -1752,6 +1752,25 @@ describe("createCrossrefSource — identity and requests", () => {
     expect(source.explainQuery({ terms: term("x"), limit: 1 })).toBe(
       "query.bibliographic=x",
     );
+  });
+
+  it("P2-T34: capabilities.filters is the renderer's own object, and equals what the renderer does", () => {
+    expect(CROSSREF_CAPABILITIES.filters).toBe(CROSSREF_FILTERS);
+    const source = createSource(
+      createStubHttp((i) => response(i.url, worksBody([]))).client,
+    );
+    const plain = { terms: term("x"), limit: 1 };
+    // Both false → both refused by name, never dropped.
+    expect(source.capabilities.filters).toEqual({
+      languages: false,
+      openAccess: false,
+    });
+    expect(() => source.explainQuery({ ...plain, languages: ["en"] })).toThrow(
+      /SourceQuery\.languages/u,
+    );
+    expect(() =>
+      source.explainQuery({ ...plain, openAccessOnly: true }),
+    ).toThrow(/SourceQuery\.openAccessOnly/u);
   });
 
   it("sends both polite-pool signals on every request, reading the contact preference each time", async () => {

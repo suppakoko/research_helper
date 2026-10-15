@@ -22,6 +22,9 @@
 #   `research-helper-source-medrxiv` — `docs/08` §10.3 forbids translating a
 #   database name, so the Korean bundle carries them unchanged. Not translations, and nothing for a reviewer to
 #   decide.
+# * `research-helper-prefs-backend-indeterminate` — taken verbatim from
+#   `docs/09` §1.9, which ships the owner's Korean for the key-storage
+#   badge's fifth state (decided 2026-10-15, owner review row 50; `P2-T34`).
 #
 # **Every other identifier in the en-US bundle is listed below as a comment,
 # with its English source, and needs a native speaker.** Until then a Korean UI
@@ -176,3 +179,13 @@ research-helper-source-medrxiv = medRxiv
 # Korean has a single plural category, so the Korean entry keeps the selector
 # with only `*[other]` (`docs/08` §10.2's note, §10.3).
 # rh-error-cancelled =
+
+
+## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)
+##
+## One string of the pane is owner-written: the indeterminate state's wording
+## is `docs/09` §1.9's, Korean included (owner, 2026-10-15, review row 50).
+## Every other `research-helper-prefs-*` id is still on `KO_PENDING_REVIEW` and
+## resolves from en-US until a native speaker reviews it.
+
+research-helper-prefs-backend-indeterminate = 확인 불가 — 이 운영체제에서는 열쇠 보관 등급을 판별할 수 없습니다

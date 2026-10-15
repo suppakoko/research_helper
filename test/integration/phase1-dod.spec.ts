@@ -320,6 +320,7 @@ function stubSource(): LiteratureSource {
       abstractsInSearch: true,
       citationGraph: false,
       dateFilter: false,
+      filters: { languages: false, openAccess: false },
       maxPageSize: 200,
       maxTotalResults: undefined,
       benefitsFromApiKey: false,

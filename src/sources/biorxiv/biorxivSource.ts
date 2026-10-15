@@ -147,7 +147,10 @@ export const BIORXIV_NOT_FOUND_STATUSES: readonly string[] = [
  * search, so the `query` dialect is empty; `lookupById` is `doi` only;
  * `maxPageSize` is `/details/`' **30** (`docs/02` §8.2) so no planner budgets
  * it as 100; no server-side date filter for a DOI lookup; abstracts are not
- * "in search results" because there are no search results.
+ * "in search results" because there are no search results. `filters` is both
+ * `false` (`P2-T34`, `docs/07` §4.2): `search()` sends no request, so
+ * neither `languages` nor `openAccessOnly` is ever rendered — §4.2's rule for
+ * an adapter with `keywordSearch: false`.
  */
 export const BIORXIV_CAPABILITIES: SourceCapabilities = {
   keywordSearch: false,
@@ -157,6 +160,7 @@ export const BIORXIV_CAPABILITIES: SourceCapabilities = {
   abstractsInSearch: false,
   citationGraph: false,
   dateFilter: false,
+  filters: { languages: false, openAccess: false },
   maxPageSize: BIORXIV_DETAILS_PAGE_SIZE,
   maxTotalResults: undefined,
   benefitsFromApiKey: false,

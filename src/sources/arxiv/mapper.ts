@@ -28,11 +28,11 @@
  *   `archiveID` — {@link arxivArchiveId} spells that value) and
  *   `ids.arxivId` **`2609.04658`** (the version stripped, for cross-source
  *   matching, through `normalizeArxivId`). {@link parseArxivEntryId} is the
- *   split. An id `normalizeArxivId` rejects — `plan/00` §6 item 91's
- *   `cond-mat.mes-hall/0309136`, whose archive has a dotted subject class
- *   §11.3.1's regex does not allow — still yields a record, keyed by its DOI,
- *   with `ids.arxivId` absent, listed in `missingFields` and warned about
- *   with the id, so the corpus can be measured.
+ *   split. An id `normalizeArxivId` rejects still yields a record, keyed by
+ *   its DOI, with `ids.arxivId` absent, listed in `missingFields` and warned
+ *   about with the id, so the corpus can be measured. (`plan/00` §6 item 91's
+ *   dotted subject class, `cond-mat.mes-hall/0309136`, is accepted since
+ *   2026-10-15: `docs/02` §11.3.1 widened the shape and `ARXIV_SHAPE` followed.)
  * - **Every arXiv paper has a DataCite DOI** `10.48550/arXiv.<id>` (note 5),
  *   not present in the feed: {@link arxivDataCiteDoi} constructs it from the
  *   version-stripped id and `normalizeDoi` lowercases it (`docs/02` §11.1).

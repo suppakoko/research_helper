@@ -53,7 +53,10 @@ import type { SerializedError } from "../../../src/core/errors";
 import type { CancellationToken } from "../../../src/core/jobQueue/cancellation";
 import type { ProgressSnapshot } from "../../../src/core/jobQueue/progress";
 import { createLogger } from "../../../src/core/logger";
-import type { SearchProvenance } from "../../../src/core/provenance";
+import type {
+  MergeDecision,
+  SearchProvenance,
+} from "../../../src/core/provenance";
 import type {
   Author,
   CanonicalWork,
@@ -117,6 +120,14 @@ const DOI = normalizeDoi("10.1056/nejmoa2300709");
 if (DOI === null) {
   throw new Error("test fixtures must normalize");
 }
+
+/** One DOI-tier merge, as `stages.ts`'s `mergeDecisionsOf` writes it (`P2-T34`). */
+const DOI_DECISION: MergeDecision = {
+  workKey: `doi:${DOI}`,
+  tier: "doi",
+  confidence: 1,
+  evidence: { doi: DOI },
+};
 
 /**
  * One `SerializedError`, as a pipeline outcome carries it.
@@ -230,6 +241,8 @@ function output(options: {
    * this file's fixtures are about (they are `stageReached: "fetching"`).
    */
   readonly works?: readonly CanonicalWork[];
+  /** `Merging`'s FR-50 scenario 2 record (`P2-T34`). Omitted, `[]`. */
+  readonly mergeDecisions?: readonly MergeDecision[];
   readonly perSource?: readonly SearchImportSourceReport[];
   readonly error?: SerializedError;
   readonly write?: SearchImportWriteReport;
@@ -243,6 +256,7 @@ function output(options: {
     // Required since `P2-T31`; a fixture that constructs the type names them.
     flags: [],
     links: [],
+    mergeDecisions: options.mergeDecisions ?? [],
     perSource: options.perSource ?? [],
     write,
     error,
@@ -924,6 +938,34 @@ describe("P1-T39 — toPipelineInput()", () => {
     expect(input.records).toBe(held);
     expect(input.works).toBe(works);
   });
+
+  it("P2-T34: passes the preview's merge decisions beside its works, and never without them", () => {
+    const first = record({ sourceId: "pubmed", nativeId: "1", title: "Held" });
+    const works = [mergedWork(first, "crossref")];
+    const decisions = [DOI_DECISION];
+    const target = {
+      collectionName: "RH P1-T39",
+      selectedRecordIds: ["pubmed:1"],
+    };
+    const withWorks = toPipelineInput(
+      query(),
+      target,
+      [first],
+      works,
+      decisions,
+    );
+    expect(withWorks.mergeDecisions).toBe(decisions);
+    // Without works the pipeline merges the records itself and records its own
+    // decisions, so handing back the preview's would describe a different run.
+    const without = toPipelineInput(
+      query(),
+      target,
+      [first],
+      undefined,
+      decisions,
+    );
+    expect("mergeDecisions" in without).toBe(false);
+  });
 });
 
 // ===========================================================================
@@ -986,6 +1028,33 @@ describe("P2-T31 — runImport() passes the preview's works back", () => {
       pubmed.id,
       other.id,
     ]);
+  });
+
+  it("P2-T34: hands the preview's merge decisions back with its works, so the import's provenance records them", async () => {
+    const works = [mergedWork(pubmed, "crossref"), mergedWork(other, "pubmed")];
+    const decisions = [DOI_DECISION];
+    const preview = output({
+      outcome: "succeeded",
+      records: [pubmed, other],
+      works,
+      mergeDecisions: decisions,
+      perSource: [report({ sourceId: "pubmed", recordsRetrieved: 2 })],
+    });
+    const h = harness({
+      runs: [
+        { output: preview },
+        {
+          output: output({
+            outcome: "succeeded",
+            write: writeReport({ created: 2 }),
+          }),
+        },
+      ],
+      sources: TWO_SOURCES,
+    });
+    await h.model.runSearch(query());
+    await importAll(h);
+    expect(h.inputs[1]?.mergeDecisions).toBe(decisions);
   });
 
   it("hands back no works when the search stopped before Merging and so published none aligned with its records", async () => {
@@ -1213,6 +1282,22 @@ describe("P1-T39 — buildProvenance()", () => {
     expect(provenance.userQuery).toBe("crispr delivery");
     expect(provenance.startedAt).toBe(META.startedAt);
     expect(provenance.finishedAt).toBe(META.finishedAt);
+  });
+
+  it("P2-T34: records the run's merge decisions — tier and confidence — as FR-50 scenario 2 asks", () => {
+    const provenance = buildProvenance(
+      output({ outcome: "succeeded", mergeDecisions: [DOI_DECISION] }),
+      importInput(),
+      META,
+    );
+    expect(provenance.mergeDecisions).toStrictEqual([DOI_DECISION]);
+    expect(provenance.mergeDecisions[0]?.tier).toBe("doi");
+    expect(provenance.mergeDecisions[0]?.confidence).toBe(1);
+    // And `[]`, not absent, for a run that merged nothing.
+    expect(
+      buildProvenance(output({ outcome: "succeeded" }), importInput(), META)
+        .mergeDecisions,
+    ).toStrictEqual([]);
   });
 
   it("records the resolved window as two ISO bounds", () => {

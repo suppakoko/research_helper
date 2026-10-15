@@ -7,8 +7,10 @@ import {
   isPluginKey,
   isPluginLine,
   parseExtra,
+  readS2CorpusId,
   readWorkKey,
   RH_PREFIX,
+  RH_S2_CORPUS_ID_KEY,
   RH_SOURCES_KEY,
   RH_WORK_KEY,
 } from "../../../src/zotero/extraField";
@@ -101,6 +103,20 @@ describe("namespace helpers", () => {
     expect(readWorkKey("x: y\nrh-work-key: doi:10.1/a")).toBe("doi:10.1/a");
     expect(readWorkKey("x: y")).toBeUndefined();
     expect(readWorkKey(undefined)).toBeUndefined();
+  });
+
+  it("P2-T34: reads rh-s2-corpus-id back out, trimmed, from any line ending", () => {
+    expect(RH_S2_CORPUS_ID_KEY).toBe("rh-s2-corpus-id");
+    expect(readS2CorpusId("x: y\nrh-s2-corpus-id: 215416146")).toBe(
+      "215416146",
+    );
+    // The CRLF trap P1-T12 measured, and a case-variant key (§6.3).
+    expect(readS2CorpusId("RH-S2-Corpus-Id:  215416146 \r\nx: y")).toBe(
+      "215416146",
+    );
+    expect(readS2CorpusId("rh-s2-corpus-id:")).toBeUndefined();
+    expect(readS2CorpusId("rh-work-key: s2:215416146")).toBeUndefined();
+    expect(readS2CorpusId(undefined)).toBeUndefined();
   });
 });
 

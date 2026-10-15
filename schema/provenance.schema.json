@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://research-helper.suppakoko.github.io/schema/provenance.schema.json",
   "title": "SearchProvenance",
-  "description": "One executed search run, as 07-architecture-and-data-model.md §5.3 declares it and 10-requirements-and-user-stories.md FR-8 requires it. Generated from src/core/provenance.ts: every property below is a field of that file's SearchProvenance or SourceProvenance interface, and test/unit/core/provenance.test.ts fails if the two drift apart. A field is in `required` exactly when the interface cannot hold `undefined` for it, because JSON.stringify omits an `undefined`-valued member.",
+  "description": "One executed search run, as 07-architecture-and-data-model.md §5.3 declares it and 10-requirements-and-user-stories.md FR-8 requires it. Generated from src/core/provenance.ts: every property below is a field of that file's SearchProvenance, SourceProvenance or MergeDecision interface, and test/unit/core/provenance.test.ts fails if the two drift apart. A field is in `required` exactly when the interface cannot hold `undefined` for it, because JSON.stringify omits an `undefined`-valued member.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,7 +16,8 @@
     "dateFilter",
     "targetLibraryId",
     "perSource",
-    "totals"
+    "totals",
+    "mergeDecisions"
   ],
   "properties": {
     "schemaVersion": {
@@ -67,6 +68,11 @@
         "deduplicatedAway": { "type": "integer", "minimum": 0 },
         "imported": { "type": "integer", "minimum": 0 }
       }
+    },
+    "mergeDecisions": {
+      "description": "FR-50 scenario 2 (07-architecture-and-data-model.md §5.3, added 2026-10-15): one entry per merge the dedup cascade made. An empty array, not absent, when nothing merged.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/MergeDecision" }
     }
   },
   "$defs": {
@@ -135,6 +141,39 @@
         "sourceExtras": {
           "description": "Source-specific extras keyed by the source's own field names — e.g. PubMed's count, querytranslation and translationset (02-literature-database-apis.md §12.4). Never a credential, never a raw body, so the values are unconstrained but every string in them has been through §2.1's redaction.",
           "type": "object"
+        }
+      }
+    },
+    "MergeDecision": {
+      "title": "MergeDecision",
+      "description": "One \"match\" decision of 02-literature-database-apis.md §11.3's cascade (07-architecture-and-data-model.md §5.3).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workKey", "tier", "confidence", "evidence"],
+      "properties": {
+        "workKey": {
+          "description": "CanonicalWork.workKey of the merged work the decision folded a record into.",
+          "type": "string"
+        },
+        "tier": {
+          "description": "The tier that fired, by name: \"doi\", \"pmid\", …, \"title-fuzzy\" (DedupTierId, src/sources/shared/dedupe.ts).",
+          "type": "string"
+        },
+        "confidence": {
+          "description": "The tier's confidence, between 0 and 1.",
+          "type": "number",
+          "minimum": 0
+        },
+        "evidence": {
+          "description": "Flat facts behind the decision: the matched identifier, a similarity, the rule. Every string has been through §2.1's redaction.",
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
         }
       }
     },

@@ -127,6 +127,7 @@ function output(overrides: {
     // Required since `P2-T31`; a fixture that constructs the type names them.
     flags: [],
     links: [],
+    mergeDecisions: [],
     perSource: [
       {
         sourceId: "pubmed",
@@ -169,6 +170,7 @@ function previewOutput(): SearchImportOutput {
     // Required since `P2-T31`; a fixture that constructs the type names them.
     flags: [],
     links: [],
+    mergeDecisions: [],
     perSource: [],
     write: undefined,
     error: undefined,

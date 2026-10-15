@@ -68,8 +68,11 @@
  *
  * ## The three optional `SourceQuery` filters
  *
- * The shape `P2-T20` gave the PubMed renderer, {@link ARXIV_QUERY_FILTER_SUPPORT}
- * being the flag a caller reads:
+ * The shape `P2-T20` gave the PubMed renderer. The flag a caller reads for
+ * `languages` and `openAccessOnly` is `ARXIV_CAPABILITIES.filters` —
+ * {@link ARXIV_FILTERS}, the object this renderer refuses from (`P2-T34`,
+ * `docs/07` §4.2, 2026-10-15); `raw` stays in
+ * {@link ARXIV_QUERY_FILTER_SUPPORT}:
  *
  * - **`languages` is refused** with a `RangeError`: `docs/02` §7.2 documents
  *   no language field, and dropping the member would silently widen the query.
@@ -105,7 +108,12 @@
 import { redactUrl } from "../../core/errors";
 import type { HttpMethod } from "../../core/http/client";
 import { ARXIV_HOST } from "../../core/rateLimit/hostLimiter";
-import type { QueryField, QueryNode, SourceQuery } from "../types";
+import type {
+  QueryField,
+  QueryNode,
+  SourceCapabilities,
+  SourceQuery,
+} from "../types";
 
 /** `docs/02` §7.1's base URL, on {@link ARXIV_HOST}, `https://` only. */
 export const ARXIV_API_BASE_URL = `https://${ARXIV_HOST}`;
@@ -125,24 +133,30 @@ export const ARXIV_SORT_BY = "relevance";
 export const ARXIV_SORT_ORDER = "descending";
 
 /**
- * The optional `SourceQuery` members that are filters rather than the query
- * itself. Derived from the contract, not re-declared.
+ * arXiv's answer to `docs/07` §4.2's `SourceCapabilities.filters` — the
+ * module header says why each is what it is (`openAccess` is `true` because
+ * every arXiv record is open access, so the restriction adds no clause).
+ * **The object `ARXIV_CAPABILITIES.filters` is** (`arxivSource.ts` assigns
+ * this constant), and {@link assertExpressible} refuses from it, so the
+ * declaration and the renderer cannot drift (`P2-T34`). A member whose flag is
+ * `false` is **refused** with `RangeError` when set, never dropped.
  */
-export type ArxivQueryFilter = keyof Pick<
-  SourceQuery,
-  "languages" | "openAccessOnly" | "raw"
->;
+export const ARXIV_FILTERS: SourceCapabilities["filters"] = {
+  languages: false,
+  openAccess: true,
+};
 
 /**
- * Which of the three optional filters this adapter really expresses — the
- * module header says why each is what it is. A member whose flag is `false`
- * is **refused** with `RangeError` when set, never dropped.
+ * The optional `SourceQuery` member that stays adapter-level: `raw`.
+ * `languages` and `openAccessOnly` moved to {@link ARXIV_FILTERS} on
+ * 2026-10-15 (`P2-T34`).
  */
+export type ArxivQueryFilter = keyof Pick<SourceQuery, "raw">;
+
+/** Whether `raw` is honoured: `true` — the module header says how. */
 export const ARXIV_QUERY_FILTER_SUPPORT: Readonly<
   Record<ArxivQueryFilter, boolean>
 > = {
-  languages: false,
-  openAccessOnly: true,
   raw: true,
 };
 
@@ -350,22 +364,30 @@ function needsGrouping(rendered: string): boolean {
 }
 
 /**
- * Refuse every optional filter this adapter cannot express
- * ({@link ARXIV_QUERY_FILTER_SUPPORT}), by name, so the drop is an error at
- * the call site and never a quietly wider result set. An empty `languages`
- * list asks for nothing and passes; `openAccessOnly` is always expressible.
+ * Refuse every optional filter this adapter cannot express — read off
+ * {@link ARXIV_FILTERS}, the object `ARXIV_CAPABILITIES.filters` is — by name,
+ * so the drop is an error at the call site and never a quietly wider result
+ * set. An empty `languages` list and `openAccessOnly: false` ask for nothing
+ * and pass.
  */
 function assertExpressible(query: SourceQuery): void {
   if (
     query.languages !== undefined &&
     query.languages.length > 0 &&
-    !ARXIV_QUERY_FILTER_SUPPORT.languages
+    !ARXIV_FILTERS.languages
   ) {
     throw new RangeError(
       `[research-helper] arXiv cannot express SourceQuery.languages=` +
         `${JSON.stringify(query.languages)}: docs/02 §7.2 documents no ` +
         `language field, and the member would otherwise be silently ` +
-        `dropped. ARXIV_QUERY_FILTER_SUPPORT.languages is false.`,
+        `dropped. ARXIV_CAPABILITIES.filters.languages is false.`,
+    );
+  }
+  if (query.openAccessOnly === true && !ARXIV_FILTERS.openAccess) {
+    throw new RangeError(
+      `[research-helper] arXiv cannot express SourceQuery.openAccessOnly: ` +
+        `the member would otherwise be silently dropped. ` +
+        `ARXIV_CAPABILITIES.filters.openAccess is false.`,
     );
   }
 }

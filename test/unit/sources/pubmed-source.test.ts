@@ -46,6 +46,7 @@ import {
 import {
   explainPubmedQuery,
   PUBMED_ESEARCH_BASE_URL,
+  PUBMED_FILTERS,
 } from "../../../src/sources/pubmed/query";
 import { parseUserQuery } from "../../../src/sources/shared/queryParse";
 import { recencyWindow } from "../../../src/sources/shared/recency";
@@ -357,6 +358,23 @@ describe("PubMed adapter identity", () => {
     expect(pubmed.findRelated).toBeUndefined();
     expect(pubmed.lookup).toBeUndefined();
     expect(pubmed.fetchAbstract).toBeUndefined();
+  });
+
+  it("P2-T34: capabilities.filters is the renderer's own object, and equals what the renderer does", () => {
+    expect(PUBMED_CAPABILITIES.filters).toBe(PUBMED_FILTERS);
+    expect(PUBMED_CAPABILITIES.filters).toEqual({
+      languages: true,
+      openAccess: true,
+    });
+    const { pubmed } = source(twoStep([]));
+    const plain = query(10);
+    // Both true → both rendered into the term, so the preview changes.
+    const languages = pubmed.explainQuery({ ...plain, languages: ["en"] });
+    expect(languages).not.toBe(pubmed.explainQuery(plain));
+    expect(languages).toContain("eng[la]");
+    const open = pubmed.explainQuery({ ...plain, openAccessOnly: true });
+    expect(open).not.toBe(pubmed.explainQuery(plain));
+    expect(open).toContain("free full text[sb]");
   });
 
   it("derives the ceiling from the offset, rather than stating two numbers", () => {

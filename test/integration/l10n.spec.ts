@@ -820,6 +820,34 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
     );
   });
 
+  it("P2-T34: renders the key-storage badge's indeterminate state in docs/09 §1.9's words, in each bundle", async function () {
+    // The owner's wording, decided 2026-10-15 (review row 50), copied from
+    // docs/09 §1.9. Pinned to one locale each, so a fallback cannot answer for
+    // a bundle that lost the line.
+    const expected: readonly (readonly [string, string])[] = [
+      [
+        "en-US",
+        "Indeterminate — this operating system does not reveal the key-storage tier",
+      ],
+      [
+        "ko-KR",
+        "확인 불가 — 이 운영체제에서는 열쇠 보관 등급을 판별할 수 없습니다",
+      ],
+    ];
+    const id = "research-helper-prefs-backend-indeterminate";
+    for (const [locale, text] of expected) {
+      const [message] = await pinnedLocalization("mainWindow", [
+        locale,
+      ]).formatMessages([{ id }]);
+      log(`pinned ["${locale}"] ${id}: ${JSON.stringify(message?.value)}`);
+      assert.strictEqual(
+        message?.value,
+        text,
+        `${locale}: the badge says docs/09 §1.9's sentence`,
+      );
+    }
+  });
+
   /* ------------------------------------------- layer 3: per-message fallback */
 
   it("falls back to English per message along a ko-KR, en-US chain", async function () {

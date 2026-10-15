@@ -73,6 +73,7 @@ import {
   type SerializedError,
 } from "../../core/errors";
 import type { ProgressReporter } from "../../core/jobQueue/progress";
+import type { MergeDecision } from "../../core/provenance";
 import type { CanonicalWork } from "../../model/canonicalWork";
 import type { SourceId } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
@@ -92,6 +93,7 @@ import {
   dedupeAndMergeAsync,
   fanOut,
   fetchStateFromReports,
+  mergeDecisionsOf,
   SEARCH_IMPORT_DISPLAY_NAME_KEY,
   SEARCH_IMPORT_STAGES,
   serialize,
@@ -213,6 +215,8 @@ interface RunState {
   flags: readonly DedupPair[];
   /** Pairs kept as two linked works — preprint ↔ published (gate `G-16`). */
   links: readonly VersionLink[];
+  /** FR-50 scenario 2's record of every merge `Merging` made (`P2-T34`). */
+  mergeDecisions: readonly MergeDecision[];
   /**
    * Reassigned once, by `Deduping`, when `attributeDeduplicatedAway` re-stamps
    * every report; pushed to by `Planning` and `Fetching` before that.
@@ -235,6 +239,7 @@ function freshState(): RunState {
     works: [],
     flags: [],
     links: [],
+    mergeDecisions: [],
     perSource: [],
     warnings: [],
     session: undefined,
@@ -614,6 +619,7 @@ export function createSearchImportPipeline(
       works: state.works,
       flags: state.flags,
       links: state.links,
+      mergeDecisions: state.mergeDecisions,
       perSource: state.perSource,
       write,
       warnings: state.warnings,
@@ -794,6 +800,9 @@ export function createSearchImportPipeline(
         let merged: DedupeMergeResult | undefined;
         if (input.works !== undefined) {
           state.works = input.works;
+          // `P2-T34`: the preview's merges, handed back with its works, so
+          // the provenance this import writes records what the table showed.
+          state.mergeDecisions = input.mergeDecisions ?? [];
         } else {
           merged = await dedupeAndMergeAsync(state.records, ctx.clock.now(), {
             token: ctx.token,
@@ -805,6 +814,9 @@ export function createSearchImportPipeline(
           state.works = merged.works;
           state.flags = merged.flags;
           state.links = merged.links;
+          // FR-50 scenario 2: the decisions leave memory here, for
+          // `docs/07` §5.3's `SearchProvenance.mergeDecisions` (`P2-T34`).
+          state.mergeDecisions = mergeDecisionsOf(merged);
         }
         merging.done("succeeded");
 

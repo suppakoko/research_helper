@@ -79,6 +79,7 @@ import {
 import {
   ARXIV_MAX_RESULTS_MAX,
   ARXIV_MAX_TOTAL_RESULTS,
+  ARXIV_FILTERS,
   ARXIV_QUERY_FILTER_SUPPORT,
   ARXIV_QUERY_URL,
   ARXIV_RENDERED_FIELDS,
@@ -778,11 +779,9 @@ describe("explainArxivQuery — the native rendering and the submittedDate windo
   });
 
   it("refuses languages by name, accepts an empty list and openAccessOnly", () => {
-    expect(ARXIV_QUERY_FILTER_SUPPORT).toEqual({
-      languages: false,
-      openAccessOnly: true,
-      raw: true,
-    });
+    // `P2-T34`: the two answers live on `SourceCapabilities.filters` now.
+    expect(ARXIV_FILTERS).toEqual({ languages: false, openAccess: true });
+    expect(ARXIV_QUERY_FILTER_SUPPORT).toEqual({ raw: true });
     expect(() =>
       explainArxivQuery({ terms: term("x"), limit: 1, languages: ["en"] }),
     ).toThrow(/cannot express SourceQuery\.languages/u);
@@ -946,6 +945,7 @@ describe("ARXIV_CAPABILITIES", () => {
       abstractsInSearch: true,
       citationGraph: false,
       dateFilter: true,
+      filters: { languages: false, openAccess: true },
       maxPageSize: 2000,
       maxTotalResults: 30000,
       benefitsFromApiKey: false,
@@ -1326,7 +1326,7 @@ describe("mapper: hand-built edge cases", () => {
     expect(spy.lines.some((l) => l.includes("no usable <id>"))).toBe(true);
   });
 
-  it("ships a record for an old-style id §11.3.1's regex rejects, keyed by its DOI, with arxivId missing (plan/00 §6 item 91)", () => {
+  it("P2-T34: brands an old-style id with a dotted subject class, which §11.3.1 accepts since 2026-10-15 (plan/00 §6 item 91)", () => {
     const spy = createSpyLogger();
     const [record] = mapped(feed([entry("cond-mat.mes-hall/0309136v1")]), {
       logger: spy.logger,
@@ -1335,13 +1335,30 @@ describe("mapper: hand-built edge cases", () => {
     expect(r.nativeId).toBe("cond-mat.mes-hall/0309136v1");
     expect(r.work.ids).toEqual({
       doi: "10.48550/arxiv.cond-mat.mes-hall/0309136",
+      arxivId: "cond-mat.mes-hall/0309136",
     });
+    expect(r.missingFields).not.toContain("ids.arxivId");
+    expect(
+      spy.lines.some((l) => l.includes("not a docs/02 §11.3.1 arXiv id shape")),
+    ).toBe(false);
+  });
+
+  it("ships a record for an id §11.3.1's regex rejects, keyed by its DOI, with arxivId missing", () => {
+    // An upper-case archive is outside `[a-z-]+`, so the shape still refuses
+    // it — the branch the dotted subject class used to reach before P2-T34.
+    const spy = createSpyLogger();
+    const [record] = mapped(feed([entry("COND-MAT/0309136v1")]), {
+      logger: spy.logger,
+    });
+    const r = must(record, "record");
+    expect(r.nativeId).toBe("COND-MAT/0309136v1");
+    expect(r.work.ids.arxivId).toBeUndefined();
     expect(r.missingFields).toContain("ids.arxivId");
     expect(
       spy.lines.some(
         (l) =>
           l.includes("not a docs/02 §11.3.1 arXiv id shape") &&
-          l.includes("cond-mat.mes-hall/0309136"),
+          l.includes("COND-MAT/0309136"),
       ),
     ).toBe(true);
     // The shapes §11.3.1 does accept are branded as before.
@@ -1550,6 +1567,27 @@ describe("createArxivSource — identity and requests", () => {
     expect(source.capabilities).toBe(ARXIV_CAPABILITIES);
     expect(source.isConfigured()).toBe(true);
     expect(source.explainQuery({ terms: term("x"), limit: 1 })).toBe("all:x");
+  });
+
+  it("P2-T34: capabilities.filters is the renderer's own object, and equals what the renderer does", () => {
+    expect(ARXIV_CAPABILITIES.filters).toBe(ARXIV_FILTERS);
+    const source = createSource(
+      createStubHttp((i) => response(i.url, feed([]))).client,
+    );
+    const plain = { terms: term("x"), limit: 1 };
+    expect(source.capabilities.filters).toEqual({
+      languages: false,
+      openAccess: true,
+    });
+    // languages: false → refused by name.
+    expect(() => source.explainQuery({ ...plain, languages: ["en"] })).toThrow(
+      "cannot express SourceQuery.languages",
+    );
+    // openAccess: true → honoured, and with no clause: every arXiv record is
+    // open access, so the restriction narrows nothing (module header).
+    expect(source.explainQuery({ ...plain, openAccessOnly: true })).toBe(
+      source.explainQuery(plain),
+    );
   });
 
   it("sends GET /api/query with start, max_results and the sort, as text, with no contact parameter", async () => {

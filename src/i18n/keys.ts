@@ -652,7 +652,9 @@ export const KO_PENDING_REVIEW = [
   "research-helper-prefs-storage",
   "research-helper-prefs-backend-windows",
   "research-helper-prefs-backend-mac",
-  "research-helper-prefs-backend-indeterminate",
+  // `research-helper-prefs-backend-indeterminate` left this list on 2026-10-15
+  // (`P2-T34`): `docs/09` §1.9 ships the owner's Korean for it, so it is on
+  // KO_PRESENT.
   "research-helper-prefs-backend-unavailable",
   "research-helper-prefs-risk-1",
   "research-helper-prefs-risk-2",
@@ -769,8 +771,8 @@ export const KO_DELIBERATELY_ABSENT = [
 
 /**
  * The ids the `ko-KR` bundles are expected to contain today: everything an
- * owner supplied (`docs/08` §10.2) plus everything `docs/08` §10.3 forbids
- * translating.
+ * owner supplied (`docs/08` §10.2, and `docs/09` §1.9's badge wording since
+ * 2026-10-15) plus everything `docs/08` §10.3 forbids translating.
  */
 export const KO_PRESENT = [
   "research-helper-menu-root",
@@ -783,6 +785,9 @@ export const KO_PRESENT = [
   "research-helper-source-biorxiv",
   "research-helper-source-medrxiv",
   "research-helper-search-col-doi",
+  // The key-storage badge's fifth state: owner-written Korean in `docs/09`
+  // §1.9 (decided 2026-10-15, review row 50; `P2-T34`).
+  "research-helper-prefs-backend-indeterminate",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

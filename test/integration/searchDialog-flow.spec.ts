@@ -516,6 +516,7 @@ function stubSource(
       // recency filter, which is the branch that records
       // `dateFilterApplied: "client"` in the provenance record.
       dateFilter: false,
+      filters: { languages: false, openAccess: false },
       maxPageSize: 100,
       maxTotalResults: undefined,
       benefitsFromApiKey: false,
@@ -3786,6 +3787,73 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       `P2-T31 written seenIn: ${writtenWorks
         .map((work) => work.provenance.seenIn.join("+"))
         .join(", ")}`,
+    );
+  });
+
+  it("P2-T34: a two-source same-DOI preview, then its import, writes a provenance note whose merge decisions name the tier and confidence (FR-50 scenario 2)", async function () {
+    this.timeout(90_000);
+    setKeyword(KEYWORD);
+    selectSources([PUBMED, CROSSREF]);
+    const shared: StubBehaviour = {
+      records: 2,
+      withAbstract: true,
+      sharedWork: "p2t34",
+    };
+    await search({ pubmed: shared, crossref: shared });
+    assert.strictEqual(rows().length, 2, "one row per work, not per record");
+
+    const preview = pipelineOutputs[pipelineOutputs.length - 1];
+    if (preview === undefined) {
+      assert.fail("the tap saw no preview output");
+    }
+    // `run` wrote `MergedWork.decisions` onto the output: one DOI-tier merge
+    // per shared work, each naming its merged work.
+    assert.deepEqual(
+      preview.mergeDecisions.map((d) => [d.tier, d.confidence]),
+      [
+        ["doi", 1],
+        ["doi", 1],
+      ],
+      "two DOI-tier merges at confidence 1",
+    );
+    assert.deepEqual(
+      preview.mergeDecisions.map((d) => d.workKey),
+      preview.works.map((w) => w.workKey),
+      "each decision names the merged work it belongs to",
+    );
+
+    const name = `RH P2-T34 ${String(Date.now())}`;
+    controller.adoptNewCollection(name);
+    await runImport();
+
+    const imported = pipelineOutputs[pipelineOutputs.length - 1];
+    assert.strictEqual(imported?.outcome, "succeeded");
+    // The import ran no cascade; the window handed the preview's decisions back.
+    assert.deepEqual(imported?.mergeDecisions, preview.mergeDecisions);
+
+    const collection = collectionNamed(name);
+    createdCollections.push(collection.key);
+    const children = (await Zotero.Items.getAsync(
+      collection.getChildItems(true),
+    )) as { isNote(): boolean; getNote(): string }[];
+    const notes = children.filter((item) => item.isNote());
+    assert.strictEqual(notes.length, 1, "FR-8: exactly one provenance note");
+    const html = notes[0]?.getNote() ?? "";
+    log(
+      `P2-T34 note merge section: ${html.slice(
+        html.indexOf("Merge decisions"),
+        html.indexOf("Merge decisions") + 400,
+      )}`,
+    );
+    assert.include(html, "Merge decisions", "the note has the section");
+    for (const decision of preview.mergeDecisions) {
+      assert.include(html, decision.workKey, "the note names the merged work");
+    }
+    assert.include(html, "<code>doi</code>", "the note names the tier");
+    assert.include(
+      html,
+      "<strong>Confidence</strong>: 1",
+      "the note names the confidence",
     );
   });
 

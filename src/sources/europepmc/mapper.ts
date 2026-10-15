@@ -37,8 +37,9 @@
  * `source: "MED"` and the published PMID in `id`. That is exactly §5.1's
  * `relatedVersionIds` ("Set when this preprint has a published version"), so
  * it is mapped to `{ pmid }`. The reverse link (`type: "Preprint in"` on a
- * `MED` record, pointing at a `PPR` id) has no `ExternalIds` member and is
- * not mapped; reported.
+ * `MED` record, pointing at a `PPR` id) is mapped to `{ epmcId }` since
+ * 2026-10-15 (`P2-T34`), when `docs/07` §5.1 gained `ExternalIds.epmcId`
+ * (owner review row 130); until then it had no member and was not mapped.
  *
  * ## Inline markup — measured, and in two spellings
  *
@@ -97,7 +98,9 @@ import {
   normalizeDoi,
   normalizePmcid,
   normalizePmid,
+  type EpmcId,
   type ExternalIds,
+  type Pmid,
   type SourceId,
 } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
@@ -463,23 +466,46 @@ function readOpenAccess(result: Json): OpenAccessInfo | undefined {
 }
 
 /**
- * The published version a preprint points at: `commentCorrectionList`
- * entries of `type: "Preprint of"` whose `source` is `MED` carry the PMID in
- * `id` (measured 2026-10-14 on three `PPR` records). Returns `undefined` when
- * there is none, so `relatedVersionIds` stays absent.
+ * The other version of this record, from its `commentCorrectionList`:
+ *
+ * - a preprint's published version — entries of `type: "Preprint of"` whose
+ *   `source` is `MED` carry the PMID in `id` (measured 2026-10-14 on three
+ *   `PPR` records) → `{ pmid }`;
+ * - a published record's preprint — entries of `type: "Preprint in"` whose
+ *   `source` is `PPR` carry the preprint record's id (`"PPR1060015"`,
+ *   measured on three `MED` records of the recorded corpus) → `{ epmcId }`
+ *   (`P2-T34`, `docs/07` §5.1's `ExternalIds.epmcId`). The id is kept as
+ *   written, trimmed: the corpus defines no shape for it beyond that.
+ *
+ * The first usable entry of each kind wins. Returns `undefined` when there is
+ * neither, so `relatedVersionIds` stays absent.
  */
 function readRelatedVersionIds(result: Json): ExternalIds | undefined {
+  let pmid: Pmid | undefined;
+  let epmcId: EpmcId | undefined;
   for (const entry of asArray(
     at(result, "commentCorrectionList")?.commentCorrection,
   )) {
     const link = asRecord(entry);
     if (link === undefined) continue;
-    if (str(link.type) !== "Preprint of") continue;
-    if (str(link.source) !== "MED") continue;
-    const pmid = normalizePmid(str(link.id));
-    if (pmid !== null) return { pmid };
+    const type = str(link.type);
+    const source = str(link.source);
+    if (pmid === undefined && type === "Preprint of" && source === "MED") {
+      pmid = normalizePmid(str(link.id)) ?? undefined;
+    } else if (
+      epmcId === undefined &&
+      type === "Preprint in" &&
+      source === EUROPEPMC_PREPRINT_SOURCE
+    ) {
+      const id = str(link.id);
+      if (id !== undefined) epmcId = id as EpmcId;
+    }
   }
-  return undefined;
+  if (pmid === undefined && epmcId === undefined) return undefined;
+  return {
+    ...(pmid !== undefined && { pmid }),
+    ...(epmcId !== undefined && { epmcId }),
+  };
 }
 
 // ---------------------------------------------------------------------------

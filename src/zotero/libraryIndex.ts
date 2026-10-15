@@ -74,7 +74,12 @@ import {
   normalizeDoi,
   normalizePmid,
 } from "../model/ids";
-import { findExtraLine, parseExtra, readWorkKey } from "./extraField";
+import {
+  findExtraLine,
+  parseExtra,
+  readS2CorpusId,
+  readWorkKey,
+} from "./extraField";
 import { ECOSYSTEM_EXTRA_KEY } from "./itemMapper";
 
 // ---------------------------------------------------------------------------
@@ -174,7 +179,14 @@ export interface LibraryIndex {
   /**
    * Stored `rh-work-key` → `itemID`. Exactly the string `docs/07` §6.2 wrote
    * (`doi:…`, `pmid:…`, `arxiv:…`, `s2:…` or `hash:…`), read back through
-   * `extraField.ts`'s `readWorkKey`, never derived from the item's own fields.
+   * `extraField.ts`'s `readWorkKey`, never derived from the item's title.
+   *
+   * **Plus one derived key per item, since `P2-T34` (2026-10-15):** the
+   * `s2:<corpusId>` key of an item carrying §6.2's `rh-s2-corpus-id` line, so
+   * the S2 arm of {@link findExisting} reaches an item whose `rh-work-key` was
+   * lost — or whose stored key is another arm (`doi:…`) while a record names
+   * it by its corpus id alone. It is built by `buildWorkKey` from the
+   * identifier, never from a title, so it is no title matching.
    */
   readonly byWorkKey: ReadonlyMap<string, number>;
   readonly stats: LibraryIndexStats;
@@ -292,6 +304,21 @@ function workKeyOf(item: Zotero.Item): string | undefined {
 }
 
 /**
+ * The `s2:<corpusId>` key of an item carrying `docs/07` §6.2's
+ * `rh-s2-corpus-id` line (`P2-T34`), or `undefined` without one. Built by
+ * {@link buildWorkKey} from the corpus id alone — the one place the key's
+ * spelling is defined — so it is exactly the key the write path stores for an
+ * S2-only work and the key {@link identifierWorkKey} derives for a record
+ * whose only identifier is that corpus id.
+ */
+function s2WorkKeyOf(item: Zotero.Item): string | undefined {
+  const s2CorpusId = readS2CorpusId(item.getField(FIELD.extra));
+  return s2CorpusId === undefined
+    ? undefined
+    : buildWorkKey({ s2CorpusId }, "");
+}
+
+/**
  * First value wins.
  *
  * A library can hold two items with the same DOI — Zotero does not enforce
@@ -402,6 +429,8 @@ export async function buildLibraryIndex(
     }
     const workKey = workKeyOf(item);
     if (workKey !== undefined) keepFirst(maps.byWorkKey, workKey, itemID);
+    const s2Key = s2WorkKeyOf(item);
+    if (s2Key !== undefined) keepFirst(maps.byWorkKey, s2Key, itemID);
   }
 
   const stats: LibraryIndexStats = {

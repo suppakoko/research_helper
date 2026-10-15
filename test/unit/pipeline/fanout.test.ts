@@ -81,6 +81,7 @@ const CAPABILITIES: SourceCapabilities = {
   abstractsInSearch: true,
   citationGraph: false,
   dateFilter: true,
+  filters: { languages: false, openAccess: false },
   maxPageSize: 100,
   maxTotalResults: undefined,
   benefitsFromApiKey: false,

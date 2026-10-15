@@ -40,12 +40,12 @@
  * - **`rateLimitKey` is {@link EBI_HOST}**, imported, so `docs/07` §7.3's
  *   one-bucket-per-host rule is mechanical. The budget itself lives in
  *   `hostLimiter.ts` and nowhere else (`plan/README.md` §5 rule 4).
- * - **`citationGraph: true`** — the card's step 6 and `docs/02` §4.7: the
- *   service has `/citations` and `/references`. Neither is called by this
- *   file (`findRelated` is not declared here; `relatedByWork: false`), so the
- *   flag describes the service, not a method this adapter exposes yet. The
- *   tension with `docs/07` §4.2's "declare honestly" is recorded in the card
- *   report; the card asked for `true` in so many words.
+ * - **`citationGraph: false`** (`P2-T34`, 2026-10-15; owner review row 131).
+ *   `docs/07` §4.2 now defines the flag as "this adapter exposes
+ *   `findRelated`", and this file declares no `findRelated`. The service has
+ *   `/citations` and `/references` (`docs/02` §4.7), which is why `P2-T03`
+ *   had declared `true`; neither is called here, and the card that wires them
+ *   sets the flag back with the method.
  * - **`fullTextXML` is never called** (`docs/02` §4.8: 404 with an empty body
  *   for both "not OA here" and "no such id"; the card's Do NOT). The mapper
  *   carries `openAccess` so a later card can gate on it.
@@ -92,6 +92,7 @@ import type {
 import { EUROPEPMC_SOURCE_ID, type EuropePmcRecordMapper } from "./mapper";
 import {
   buildEuropePmcSearchRequest,
+  EUROPEPMC_FILTERS,
   EUROPEPMC_FIRST_CURSOR,
   EUROPEPMC_PAGE_SIZE_MAX,
   EUROPEPMC_PAGE_SIZE_MIN,
@@ -150,8 +151,12 @@ export const EUROPEPMC_CAPABILITIES: SourceCapabilities = {
   relatedByWork: false,
   lookupById: [],
   abstractsInSearch: true,
-  citationGraph: true,
+  // `docs/07` §4.2 since 2026-10-15: "this adapter exposes `findRelated`" —
+  // and this one does not (`P2-T34`, owner review row 131).
+  citationGraph: false,
   dateFilter: true,
+  // The renderer's own object (`P2-T34`): `./query.ts` refuses from it.
+  filters: EUROPEPMC_FILTERS,
   maxPageSize: EUROPEPMC_PAGE_SIZE_MAX,
   maxTotalResults: undefined,
   benefitsFromApiKey: false,

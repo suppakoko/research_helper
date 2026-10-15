@@ -30,7 +30,7 @@
  * positive beside it (`- mouse` alone has nothing to subtract from), a `NOT`
  * under an `OR` (the bulk grammar has no place for it), a tree that renders to
  * nothing, a malformed date bound, a `languages` filter (no Semantic Scholar
- * form exists in the corpus — {@link SEMANTICSCHOLAR_QUERY_FILTER_SUPPORT}),
+ * form exists in the corpus — {@link SEMANTICSCHOLAR_FILTERS}),
  * `openAccessOnly` on the bulk endpoint (`docs/02` §12.3: "bulk: *not
  * documented*"; `/paper/search` renders §6.5's `openAccessPdf` flag) and a
  * `raw` key that would displace an emitted parameter.
@@ -62,7 +62,12 @@
 
 import { redactUrl } from "../../core/errors";
 import { SEMANTICSCHOLAR_HOST } from "../../core/rateLimit/hostLimiter";
-import type { QueryField, QueryNode, SourceQuery } from "../types";
+import type {
+  QueryField,
+  QueryNode,
+  SourceCapabilities,
+  SourceQuery,
+} from "../types";
 
 // ---------------------------------------------------------------------------
 // 1. Endpoints and limits — docs/02 §6.1, §6.2, §6.5, §6.8
@@ -352,41 +357,52 @@ export function renderPlainQuery(node: QueryNode): PlainQueryRendering {
 // 3. The three optional SourceQuery filters — the P2-T20 pattern
 // ---------------------------------------------------------------------------
 
-/** The three optional `SourceQuery` members, as `docs/07` §4.2 names them. */
-export type SemanticScholarQueryFilter = keyof Pick<
-  SourceQuery,
-  "languages" | "openAccessOnly" | "raw"
->;
+/**
+ * Semantic Scholar's answer to `docs/07` §4.2's `SourceCapabilities.filters`,
+ * for the **default search path** — `/paper/search/bulk`, what `search()`,
+ * `searchAll()` and `explainQuery()` render — read off `docs/02` §12.3's S2
+ * bulk column. `languages`: the Language row is *n/a*, so a non-empty list is
+ * refused by name rather than dropped. `openAccess`: the Open-access row reads
+ * "`openAccessPdf` flag on `/paper/search` (§6.5); bulk: *not documented*"
+ * (row added 2026-10-15), so `openAccessOnly: true` is refused by name here
+ * rather than sent as an undocumented flag the bulk endpoint may ignore — the
+ * `P2-T20` rule. **The object `SEMANTICSCHOLAR_CAPABILITIES.filters` is**
+ * (`semanticscholarSource.ts` assigns this constant), and the bulk renderers
+ * refuse from it, so the declaration and the renderer cannot drift
+ * (`P2-T34`). The relevance endpoint's answers are
+ * {@link SEMANTICSCHOLAR_RELEVANCE_FILTERS}.
+ */
+export const SEMANTICSCHOLAR_FILTERS: SourceCapabilities["filters"] = {
+  languages: false,
+  openAccess: false,
+};
 
 /**
- * Which of the three the **default search path** — `/paper/search/bulk`,
- * what `search()`, `searchAll()` and `explainQuery()` render — supports, read
- * off `docs/02` §12.3's S2 bulk column. `languages`: the Language row is
- * *n/a*, so a non-empty list is refused by name rather than dropped.
- * `openAccessOnly`: the Open-access row reads "`openAccessPdf` flag on
- * `/paper/search` (§6.5); bulk: *not documented*" (row added 2026-10-15), so
- * `true` is refused by name here rather than sent as an undocumented flag the
- * bulk endpoint may ignore — the `P2-T20` rule. `raw`: extra parameters,
- * appended sorted by key. The relevance endpoint's flags are
- * {@link SEMANTICSCHOLAR_RELEVANCE_QUERY_FILTER_SUPPORT}.
+ * The same two for `/paper/search` (`searchByRelevance`), the one endpoint
+ * where §6.5 documents the valueless `openAccessPdf` flag. Adapter-level: the
+ * capabilities describe the default path, and this endpoint is an extra
+ * method of this adapter only.
+ */
+export const SEMANTICSCHOLAR_RELEVANCE_FILTERS: SourceCapabilities["filters"] =
+  {
+    languages: false,
+    openAccess: true,
+  };
+
+/**
+ * The optional `SourceQuery` member that stays adapter-level: `raw`.
+ * `languages` and `openAccessOnly` moved to {@link SEMANTICSCHOLAR_FILTERS} on
+ * 2026-10-15 (`P2-T34`).
+ */
+export type SemanticScholarQueryFilter = keyof Pick<SourceQuery, "raw">;
+
+/**
+ * Whether `raw` is honoured, on both endpoints: `true` — extra parameters,
+ * appended sorted by key, never one {@link RESERVED_RAW_PARAMS} names.
  */
 export const SEMANTICSCHOLAR_QUERY_FILTER_SUPPORT: Readonly<
   Record<SemanticScholarQueryFilter, boolean>
 > = {
-  languages: false,
-  openAccessOnly: false,
-  raw: true,
-};
-
-/**
- * The same three for `/paper/search` (`searchByRelevance`), the one endpoint
- * where §6.5 documents the valueless `openAccessPdf` flag.
- */
-export const SEMANTICSCHOLAR_RELEVANCE_QUERY_FILTER_SUPPORT: Readonly<
-  Record<SemanticScholarQueryFilter, boolean>
-> = {
-  languages: false,
-  openAccessOnly: true,
   raw: true,
 };
 
@@ -437,30 +453,32 @@ export function renderPublicationDateFilter(
 }
 
 /**
- * Refuse what the endpoint whose `support` flags are given cannot express.
+ * Refuse what the endpoint whose `filters` are given cannot express —
+ * {@link SEMANTICSCHOLAR_FILTERS} (the capabilities' own object) for bulk,
+ * {@link SEMANTICSCHOLAR_RELEVANCE_FILTERS} for `/paper/search`.
  * `languages` is refused on both endpoints; `openAccessOnly: true` on the
  * bulk endpoint only (`false` is the same as absent).
  */
 function assertExpressible(
   query: SourceQuery,
-  support: Readonly<Record<SemanticScholarQueryFilter, boolean>>,
+  filters: SourceCapabilities["filters"],
 ): void {
   if (
-    !support.languages &&
+    !filters.languages &&
     query.languages !== undefined &&
     query.languages.length > 0
   ) {
     throw new RangeError(
       "[research-helper] Semantic Scholar has no language filter " +
-        "(SEMANTICSCHOLAR_QUERY_FILTER_SUPPORT.languages is false); drop " +
+        "(SEMANTICSCHOLAR_CAPABILITIES.filters.languages is false); drop " +
         "`languages` for this source.",
     );
   }
-  if (!support.openAccessOnly && query.openAccessOnly === true) {
+  if (!filters.openAccess && query.openAccessOnly === true) {
     throw new RangeError(
       "[research-helper] Semantic Scholar's bulk search documents no " +
         "open-access filter (docs/02 §12.3; " +
-        "SEMANTICSCHOLAR_QUERY_FILTER_SUPPORT.openAccessOnly is false) — the " +
+        "SEMANTICSCHOLAR_CAPABILITIES.filters.openAccess is false) — the " +
         "openAccessPdf flag is /paper/search's (§6.5); drop `openAccessOnly` " +
         "for this source or use its relevance search.",
     );
@@ -562,7 +580,7 @@ export function buildBulkSearchRequest(
   options: BulkSearchOptions,
 ): SemanticScholarBulkRequest {
   const { query, limit, token } = options;
-  assertExpressible(query, SEMANTICSCHOLAR_QUERY_FILTER_SUPPORT);
+  assertExpressible(query, SEMANTICSCHOLAR_FILTERS);
   assertPageSize(limit);
   const rendered = renderBulkQuery(query.terms);
   if (rendered === "") {
@@ -615,7 +633,7 @@ export function buildRelevanceSearchRequest(
   options: RelevanceSearchOptions,
 ): SemanticScholarRelevanceRequest {
   const { query, limit, offset } = options;
-  assertExpressible(query, SEMANTICSCHOLAR_RELEVANCE_QUERY_FILTER_SUPPORT);
+  assertExpressible(query, SEMANTICSCHOLAR_RELEVANCE_FILTERS);
   assertPageSize(limit);
   if (
     !Number.isInteger(offset) ||
@@ -756,7 +774,7 @@ export function encodePaperId(paperId: string): string {
  *   unrenderable query is refused before any request
  */
 export function explainSemanticScholarQuery(query: SourceQuery): string {
-  assertExpressible(query, SEMANTICSCHOLAR_QUERY_FILTER_SUPPORT);
+  assertExpressible(query, SEMANTICSCHOLAR_FILTERS);
   const rendered = renderBulkQuery(query.terms);
   const window = renderPublicationDateFilter(query.fromDate, query.toDate);
   const parts = [`query=${rendered}`];

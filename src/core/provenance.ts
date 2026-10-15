@@ -64,6 +64,11 @@ import type { SourceId } from "../model/ids";
 // that backs it normalises whitespace and finds no other difference across all
 // 27 declarations (15 in `SearchProvenance`, counting the two nested object
 // literals' members, and 12 in `SourceProvenance`).
+//
+// Extended 2026-10-15 (`P2-T34`, owner review row 99): §5.3 gained
+// `SearchProvenance.mergeDecisions` and the `MergeDecision` interface the same
+// day, and both are transcribed below in §5.3's words — 32 declarations now
+// (16, 12 and 4).
 // ---------------------------------------------------------------------------
 
 /** One executed search run. Written once, when the run finishes or is cancelled. */
@@ -92,6 +97,23 @@ export interface SearchProvenance {
     readonly deduplicatedAway: number;
     readonly imported: number;
   };
+  /**
+   * FR-50 scenario 2: every merge the dedup cascade made — the rule that fired and
+   * its confidence. Empty, not absent, when nothing merged.
+   */
+  readonly mergeDecisions: readonly MergeDecision[];
+}
+
+/** One `"match"` decision of `02-literature-database-apis.md` §11.3's cascade. */
+export interface MergeDecision {
+  /** `CanonicalWork.workKey` of the merged work the decision folded a record into. */
+  readonly workKey: string;
+  /** The tier that fired, by name: `"doi"`, `"pmid"`, …, `"title-fuzzy"`. */
+  readonly tier: string;
+  /** The tier's confidence, between 0 and 1. */
+  readonly confidence: number;
+  /** Flat facts behind the decision: the matched identifier, a similarity, the rule. */
+  readonly evidence: Readonly<Record<string, string | number | boolean>>;
 }
 
 /** FR-8's per-source enumeration, one entry per source that was asked. */
@@ -340,6 +362,29 @@ export function redactSearchProvenance(
     ...provenance,
     userQuery: redactText(provenance.userQuery),
     perSource: provenance.perSource.map(redactSourceProvenance),
+    mergeDecisions: provenance.mergeDecisions.map(redactMergeDecision),
+  };
+}
+
+/**
+ * One {@link MergeDecision} with every string in its `evidence` put through
+ * {@link redactText}, by the same walk `sourceExtras` takes.
+ *
+ * The evidence holds identifiers and numbers the cascade compared, never the
+ * user's query or a request URL, so nothing in it should be a credential —
+ * but it is about to reach a note and a file, and NFR-16 makes the gate cover
+ * every string the record carries rather than the ones a caller vouches for.
+ *
+ * `workKey` and `tier` are left as they are, deliberately. `tier` is a closed
+ * set of names. `workKey` is `docs/07` §5.1's join key, and its `hash:` arm
+ * is a SHA-1 of public metadata — forty hexadecimal characters, which
+ * `KEY_PATTERNS`' hexadecimal rule would replace with `[redacted:40]`,
+ * destroying the one value that names the work the decision belongs to.
+ */
+function redactMergeDecision(decision: MergeDecision): MergeDecision {
+  return {
+    ...decision,
+    evidence: redactUnknown(decision.evidence) as MergeDecision["evidence"],
   };
 }
 

@@ -54,6 +54,7 @@ import {
 import {
   parseExtra,
   readWorkKey,
+  RH_S2_CORPUS_ID_KEY,
   RH_WORK_KEY,
 } from "../../../src/zotero/extraField";
 import {
@@ -1104,34 +1105,28 @@ describe("arXiv and work-key arms, and fromZoteroItem (P2-T19)", function () {
         `${arm}: seenIn from rh-sources`,
       );
 
+      assert.strictEqual(
+        back.ids.s2CorpusId,
+        work.ids.s2CorpusId,
+        `${arm}: ids.s2CorpusId from rh-s2-corpus-id (P2-T34)`,
+      );
+
       // The other half of §6.6: an item that has NO rh-work-key — a
-      // translator's — must *derive* the same key, on every arm that has a
-      // home on the item. The S2 arm has none (§6.2 writes s2CorpusId nowhere
-      // but rh-work-key), so there the derivation falls to the hash arm, and
-      // that is asserted too: it is the fact §6.6's correction is about.
+      // translator's — must *derive* the same key, on every arm. The S2 arm
+      // had no home on the item until P2-T34 (2026-10-15): the derivation fell
+      // to the hash arm. §6.2's rh-s2-corpus-id line is that home now, so all
+      // five arms derive the written key.
       const bare = await saveMapped(withoutWorkKeyLine(json));
       assert.isUndefined(
         readWorkKey(bare.getField("extra")),
         `${arm}: the derivation fixture must carry no rh-work-key`,
       );
       const derived = fromZoteroItem(bare, { nowEpochMs: AT });
-      if (arm === "s2") {
-        assert.notStrictEqual(
-          derived.workKey,
-          work.workKey,
-          "s2: without rh-work-key the key is NOT recoverable from the item",
-        );
-        assert.isTrue(
-          derived.workKey.startsWith("hash:"),
-          `s2: the derived key falls to the hash arm; got ${derived.workKey}`,
-        );
-      } else {
-        assert.strictEqual(
-          derived.workKey,
-          work.workKey,
-          `${arm}: fromZoteroItem must derive the written key with no rh-work-key`,
-        );
-      }
+      assert.strictEqual(
+        derived.workKey,
+        work.workKey,
+        `${arm}: fromZoteroItem must derive the written key with no rh-work-key`,
+      );
     }
 
     // And the preprint item type, read back from its native fields.
@@ -1149,6 +1144,60 @@ describe("arXiv and work-key arms, and fromZoteroItem (P2-T19)", function () {
     assert.isUndefined(
       back.publishedDate,
       "no date -> publishedDate undefined",
+    );
+  });
+
+  it("P2-T34: an S2-only work round-trips toZoteroMapping -> fromZoteroItem with ids.s2CorpusId recovered without rh-work-key, and the index finds it", async function () {
+    await Zotero.Schema.schemaUpdatePromise;
+
+    const s2 = "245190031" as S2CorpusId;
+    const work = workWith({ s2CorpusId: s2 }, "P2-T34 S2-only round trip");
+    assert.strictEqual(work.workKey, `s2:${s2}`, "the write path's key");
+    const json = toZoteroMapping(work, { accessedAtEpochMs: AT }).itemJSON;
+    assert.isTrue(
+      String(json["extra"] ?? "").includes(`${RH_S2_CORPUS_ID_KEY}: ${s2}`),
+      "§6.2's rh-s2-corpus-id line is written",
+    );
+    // The item as it would be after its rh-work-key line was lost.
+    const bare = await saveMapped(withoutWorkKeyLine(json));
+    assert.isUndefined(
+      readWorkKey(bare.getField("extra")),
+      "the fixture carries no rh-work-key",
+    );
+    const back = fromZoteroItem(bare, { nowEpochMs: AT });
+    debug(
+      `${LOG_PREFIX_T19} P2-T34 S2-only: extra=` +
+        `${JSON.stringify(bare.getField("extra"))}; ids=` +
+        `${JSON.stringify(back.ids)}; workKey=${back.workKey}`,
+    );
+    assert.strictEqual(back.ids.s2CorpusId, s2, "ids.s2CorpusId recovered");
+    assert.strictEqual(back.workKey, `s2:${s2}`, "the s2: key is derived");
+
+    // An item whose stored key is another arm, but which also carries the
+    // corpus id: a record naming it by the corpus id alone must find it.
+    const s2Beside = "245190032" as S2CorpusId;
+    const withDoi = workWith(
+      { doi: doiOrThrow("10.5555/rh-p2t34.beside"), s2CorpusId: s2Beside },
+      "P2-T34 DOI work with an S2 corpus id",
+    );
+    assert.isTrue(withDoi.workKey.startsWith("doi:"), "a doi: work key");
+    const besideItem = await saveMapped(
+      toZoteroMapping(withDoi, { accessedAtEpochMs: AT }).itemJSON,
+    );
+
+    const index = await buildLibraryIndex(Zotero.Libraries.userLibraryID);
+    assert.strictEqual(
+      index.byWorkKey.get(`s2:${s2}`),
+      bare.id,
+      "the s2: key is indexed from rh-s2-corpus-id, with no rh-work-key",
+    );
+    const hit = index.findExisting({ s2CorpusId: s2 });
+    assert.strictEqual(hit?.itemID, bare.id, "S2 arm of findExisting");
+    assert.strictEqual(hit?.matchedOn, "workKey");
+    assert.strictEqual(
+      index.findExisting({ s2CorpusId: s2Beside })?.itemID,
+      besideItem.id,
+      "an item keyed doi: is found by its corpus id alone",
     );
   });
 

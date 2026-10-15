@@ -158,9 +158,11 @@ export const PRECEDENCE: Readonly<
   citationCount: ["semanticscholar", "openalex", "crossref", "europepmc"],
   // §10.4's `meshTerms` row: only these two have MeSH. Rule: {@link unionSubjects}.
   subjects: ["pubmed", "europepmc"],
-  // S2 `openAccessPdf`, OpenAlex `best_oa_location`, Europe PMC
-  // `fullTextUrlList`. Rule: {@link pickOpenAccess}.
-  openAccess: ["semanticscholar", "openalex", "europepmc"],
+  // Europe PMC `fullTextUrlList`, Crossref `license[]`/`link[]`, S2
+  // `openAccessPdf`, OpenAlex `best_oa_location` — the row as corrected on
+  // 2026-10-15 (owner review rows 100–103), followed by `P2-T34`. A source
+  // that supplies a `license` outranks the order. Rule: {@link pickOpenAccess}.
+  openAccess: ["europepmc", "crossref", "semanticscholar", "openalex"],
 });
 
 /**
@@ -210,6 +212,10 @@ const ID_KEYS = [
   "arxivId",
   "s2CorpusId",
   "openAlexId",
+  // `docs/07` §5.1, 2026-10-15 (`P2-T34`): a Europe PMC preprint's id, which
+  // reaches a work through `relatedVersionIds`; listed so the union below
+  // carries it through a merge rather than dropping it.
+  "epmcId",
 ] as const satisfies readonly (keyof ExternalIds)[];
 
 type IdKey = (typeof ID_KEYS)[number];
@@ -420,9 +426,9 @@ function pickCitationCount(
 
 /**
  * `docs/07` §5.1 `openAccess`: "prefer the source that supplies a `license`";
- * then the §10.4 `openAccess` row. Crossref and Europe PMC, which §5.1 calls
- * authoritative, are not both in that row — reported in `P2-T10`, not
- * resolved here.
+ * then the §10.4 `openAccess` row, which since 2026-10-15 puts Europe PMC and
+ * Crossref — the two §5.1 calls authoritative — first (`P2-T10` reported the
+ * gap; `P2-T34` followed the corrected row).
  */
 function pickOpenAccess(
   ordered: readonly SourceRecord[],

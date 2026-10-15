@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWorkKey,
   isSourceId,
+  normalizeArxivId,
   normalizeDoi,
   normalizePmcid,
   normalizePmid,
@@ -216,6 +217,32 @@ describe("normalizePmcid", () => {
   it("returns null for null and undefined", () => {
     expect(normalizePmcid(null)).toBeNull();
     expect(normalizePmcid(undefined)).toBeNull();
+  });
+});
+
+describe("normalizeArxivId — the old-style shape (P2-T34)", () => {
+  // `docs/02` §11.3.1, corrected 2026-10-15 (owner review rows 90 and 91):
+  // the archive may carry a dotted subject class of any length and case.
+  it("accepts a dotted, lower-case, hyphenated subject class", () => {
+    expect(normalizeArxivId("cond-mat.mes-hall/0309136")).toBe(
+      "cond-mat.mes-hall/0309136",
+    );
+    expect(normalizeArxivId("arXiv:cond-mat.mes-hall/0309136v2")).toBe(
+      "cond-mat.mes-hall/0309136",
+    );
+  });
+
+  it("still accepts the two-capital class and a bare archive", () => {
+    expect(normalizeArxivId("math.GT/0309136")).toBe("math.GT/0309136");
+    expect(normalizeArxivId("quant-ph/9509021")).toBe("quant-ph/9509021");
+  });
+
+  it.each([
+    ["COND-MAT/0309136", "an upper-case archive"],
+    ["cond-mat./0309136", "an empty subject class"],
+    ["cond-mat.mes-hall/030913", "six digits"],
+  ])("still rejects %j (%s)", (input) => {
+    expect(normalizeArxivId(input)).toBeNull();
   });
 });
 

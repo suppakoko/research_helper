@@ -907,6 +907,11 @@ export interface CacheStats {
 // Extended 2026-10-13 (`P2-T28`, owner-authorised): `SourceCapabilities.query` added, for
 // `P2-T01`'s `normalizeForSource` — the per-source column of `02-literature-database-apis.md`
 // §12.3, which adapters had otherwise to pass inline.
+// Extended 2026-10-15 (`P2-T34`, owner-authorised, review of 2026-10-14 rows 113 and 131):
+// `SourceCapabilities.filters` added — which of `SourceQuery.languages` / `openAccessOnly` an
+// adapter really honours, until then an ad-hoc `*_QUERY_FILTER_SUPPORT` table in each adapter's
+// `query.ts` — and `citationGraph` given one meaning: "this adapter exposes `findRelated`", not
+// "the service has citation endpoints". Europe PMC's declaration became `false` on that day.
 import type { CanonicalWork } from "../model/canonicalWork";
 import type { ExternalIds, SourceId } from "../model/ids";
 import type { SourceRecord } from "../model/sourceRecord";
@@ -950,10 +955,30 @@ export interface SourceCapabilities {
   readonly lookupById: readonly (keyof ExternalIds)[];
   /** Returns abstracts in search results (vs. requiring a second call). */
   readonly abstractsInSearch: boolean;
-  /** Returns references / citations edges. */
+  /**
+   * This adapter exposes `findRelated` and returns references / citations edges
+   * through it. Describes the adapter, not the service: a database whose API has
+   * citation endpoints that this adapter does not call declares `false`.
+   */
   readonly citationGraph: boolean;
   /** Server-side date filtering (otherwise we filter client-side). */
   readonly dateFilter: boolean;
+  /**
+   * The two optional `SourceQuery` filters this adapter honours. A member that is
+   * `false` is refused by name — a `RangeError` — when a query this adapter
+   * renders sets it, never silently dropped; an adapter with `keywordSearch: false`
+   * renders no query and declares both `false`. `raw` is not here: it is
+   * documented per adapter.
+   */
+  readonly filters: {
+    /** `SourceQuery.languages` is rendered into the request. */
+    readonly languages: boolean;
+    /**
+     * `SourceQuery.openAccessOnly: true` is honoured: rendered into the request,
+     * or true of every record the source holds.
+     */
+    readonly openAccess: boolean;
+  };
   /** Max page size the API accepts. */
   readonly maxPageSize: number;
   /** Hard ceiling on total results the API will paginate through, if any. */
@@ -1473,6 +1498,11 @@ The canonical model is the plugin's internal lingua franca. Every literature sou
 
 ```ts
 // src/model/ids.ts
+// Extended 2026-10-15 (`P2-T34`, owner-authorised, review of 2026-10-14 row 130): `EpmcId` and
+// `ExternalIds.epmcId` added, so that Europe PMC's `"Preprint in"` link from a published record
+// to its preprint (a `PPR` record) has a place in `CanonicalWork.relatedVersionIds`. This is
+// not doc 02's `ids.epmc` working name, which carried every Europe PMC record's `{ id, source }`:
+// a record's own Europe PMC identity stays `SourceRecord.nativeId` (`"MED/37258680"`).
 
 /** Branded string types so a DOI can never be passed where a PMID is expected. */
 export type Doi = string & { readonly __brand: "Doi" };        // lowercase, no prefix
@@ -1481,6 +1511,7 @@ export type Pmcid = string & { readonly __brand: "Pmcid" };    // "PMC" + digits
 export type ArxivId = string & { readonly __brand: "ArxivId" };// "2401.01234" (no version)
 export type S2CorpusId = string & { readonly __brand: "S2CorpusId" };
 export type OpenAlexId = string & { readonly __brand: "OpenAlexId" };
+export type EpmcId = string & { readonly __brand: "EpmcId" };  // a PPR record's id: "PPR657399"
 
 /**
  * Adapter identity unions. They live here, not in `sources/types.ts` / `llm/types.ts`,
@@ -1514,6 +1545,11 @@ export interface ExternalIds {
   readonly arxivId?: ArxivId;
   readonly s2CorpusId?: S2CorpusId;
   readonly openAlexId?: OpenAlexId;
+  /**
+   * A Europe PMC preprint record's id — the `id` of a `source: "PPR"` record. Set in
+   * `CanonicalWork.relatedVersionIds` when a published record names its preprint.
+   */
+  readonly epmcId?: EpmcId;
   /** Fallback URL when no stable identifier exists. */
   readonly url?: string;
 }
@@ -2104,6 +2140,23 @@ export interface SearchProvenance {
     readonly deduplicatedAway: number;
     readonly imported: number;
   };
+  /**
+   * FR-50 scenario 2: every merge the dedup cascade made — the rule that fired and
+   * its confidence. Empty, not absent, when nothing merged.
+   */
+  readonly mergeDecisions: readonly MergeDecision[];
+}
+
+/** One `"match"` decision of `02-literature-database-apis.md` §11.3's cascade. */
+export interface MergeDecision {
+  /** `CanonicalWork.workKey` of the merged work the decision folded a record into. */
+  readonly workKey: string;
+  /** The tier that fired, by name: `"doi"`, `"pmid"`, …, `"title-fuzzy"`. */
+  readonly tier: string;
+  /** The tier's confidence, between 0 and 1. */
+  readonly confidence: number;
+  /** Flat facts behind the decision: the matched identifier, a similarity, the rule. */
+  readonly evidence: Readonly<Record<string, string | number | boolean>>;
 }
 
 /** FR-8's per-source enumeration, one entry per source that was asked. */
@@ -2136,6 +2189,17 @@ export interface SourceProvenance {
   readonly sourceExtras: Readonly<Record<string, unknown>> | undefined;
 }
 ```
+
+> **Extended 2026-10-15 (`P2-T34`, owner-authorised, review of 2026-10-14 row 99): `mergeDecisions`
+> and `MergeDecision`.** FR-50's second scenario requires "the merge decision (rule fired, similarity
+> score) is recorded in provenance", and until this day the decision existed only in memory, on the
+> pipeline's `MergedWork.decisions` (`src/pipeline/searchImport/stages.ts`). One entry per
+> `"match"` decision of the dedup cascade, keyed by the merged work's `workKey`; a flagged or linked
+> pair is not a merge and is not listed. `tier` is typed `string` here because `core/` may import
+> only `model/` (§2.3) and the tier names are declared in `sources/` (`DedupTierId`,
+> `src/sources/shared/dedupe.ts`). The note renders the list and `schema/provenance.schema.json`
+> declares it. The field is FR-50's, not FR-8's: FR-8's closing sentence ("a field in §5.3 that no
+> clause here requires … is a defect") predates it and names only its own clauses.
 
 **Where it lives.** The authoritative copy is a row in the SQLite `search_provenance` table (§8.3), keyed by `runId` and indexed by target collection so `10-requirements-and-user-stories.md` FR-12 ("re-run this search") can find the record for a collection. The standalone Zotero note FR-8 requires is a *projection* of that row, never the source of truth, so "Export provenance as JSON" serialises the stored object rather than re-parsing the note. Note creation and the HTML subset allowed in it are `01-zotero-plugin-platform.md` §5.7's.
 
@@ -2189,6 +2253,7 @@ export function toZoteroItemJSON(work: CanonicalWork): ZoteroItemJSON {
 | `ids.pmid` | `PMID` | `extra: PMID: <id>` | Preprint has no PMID field. |
 | `ids.pmcid` | `PMCID` | `extra: PMCID: <id>` | |
 | `ids.arxivId` | `extra: arXiv: <id>` | `archiveID` (`arXiv:2401.01234`) | |
+| `ids.s2CorpusId` | `extra: rh-s2-corpus-id: <id>` | same | **Added 2026-10-15 (`P2-T34`, owner-authorised, review of 2026-10-14 row 109).** No item type has a field for it, and the ecosystem has no standard `extra` spelling, so the line is namespaced (§6.3). Written whenever the work carries one, beside any other identifier. Until this row, an item whose only identifier was a Semantic Scholar corpus id kept it only inside `rh-work-key` (`s2:<id>`); with the line, §6.6's read-back recovers `ids.s2CorpusId` and the existing-item index derives the `s2:` key without `rh-work-key`. |
 | `url` | `url` | `url` | |
 | `language` | `language` | `language` | ISO-639-1. |
 | `openAccess.license` | `rights` | `rights` | License URL or SPDX ID. |

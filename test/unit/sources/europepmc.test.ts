@@ -51,6 +51,7 @@ import {
 } from "../../../src/sources/europepmc/mapper";
 import {
   buildEuropePmcSearchRequest,
+  EUROPEPMC_FILTERS,
   EUROPEPMC_FIRST_CURSOR,
   EUROPEPMC_PAGE_SIZE_MAX,
   EUROPEPMC_QUERY_DESIGN_BUDGET,
@@ -474,7 +475,7 @@ describe("explainEuropePmcQuery — date range, open access, languages", () => {
   });
 
   it("openAccessOnly renders §4.3's OPEN_ACCESS:y; false renders nothing", () => {
-    expect(EUROPEPMC_QUERY_FILTER_SUPPORT.openAccessOnly).toBe(true);
+    expect(EUROPEPMC_FILTERS.openAccess).toBe(true);
     expect(
       explainEuropePmcQuery({
         terms: term("x"),
@@ -502,7 +503,7 @@ describe("explainEuropePmcQuery — date range, open access, languages", () => {
   });
 
   it("languages is refused by name, never dropped; an empty list passes", () => {
-    expect(EUROPEPMC_QUERY_FILTER_SUPPORT.languages).toBe(false);
+    expect(EUROPEPMC_FILTERS.languages).toBe(false);
     const query: SourceQuery = {
       terms: term("x"),
       languages: ["eng"],
@@ -710,7 +711,8 @@ describe("EUROPEPMC_CAPABILITIES", () => {
       keywordSearch: true,
       abstractsInSearch: true,
       dateFilter: true,
-      citationGraph: true,
+      // `P2-T34` (owner review row 131): "this adapter exposes `findRelated`".
+      citationGraph: false,
       benefitsFromApiKey: false,
       maxPageSize: 1000,
       maxTotalResults: undefined,
@@ -718,6 +720,36 @@ describe("EUROPEPMC_CAPABILITIES", () => {
       lookupById: [],
     });
     expect(EUROPEPMC_PAGE_SIZE_MAX).toBe(1000);
+  });
+
+  it("P2-T34: citationGraph is false because this adapter exposes no findRelated (docs/07 §4.2)", () => {
+    const source = createSource(createStubHttp(() => response("", "")).client);
+    expect(source.findRelated).toBeUndefined();
+    expect(source.capabilities.citationGraph).toBe(false);
+    // The definition, applied: the flag is true exactly when the method exists.
+    expect(source.capabilities.citationGraph).toBe(
+      typeof source.findRelated === "function",
+    );
+  });
+
+  it("P2-T34: capabilities.filters is the renderer's own object, and equals what the renderer does", () => {
+    expect(EUROPEPMC_CAPABILITIES.filters).toBe(EUROPEPMC_FILTERS);
+    expect(EUROPEPMC_CAPABILITIES.filters).toEqual({
+      languages: false,
+      openAccess: true,
+    });
+    // `raw` stays adapter-level (docs/07 §4.2: "documented per adapter").
+    expect(EUROPEPMC_QUERY_FILTER_SUPPORT).toEqual({ raw: true });
+    const source = createSource(createStubHttp(() => response("", "")).client);
+    const plain: SourceQuery = { terms: term("x"), limit: 1 };
+    // languages: false → refused by name, never dropped.
+    expect(() => source.explainQuery({ ...plain, languages: ["en"] })).toThrow(
+      /SourceQuery\.languages/u,
+    );
+    // openAccess: true → rendered, so the request differs from the plain one.
+    const open = source.explainQuery({ ...plain, openAccessOnly: true });
+    expect(open).not.toBe(source.explainQuery(plain));
+    expect(open).toContain("(OPEN_ACCESS:y)");
   });
 
   it("fills capabilities.query from the renderer's own prefix table (item 97)", () => {
@@ -975,12 +1007,60 @@ describe("mapper: the preprint (record-preprint, SRC:PPR with a published versio
     expect(
       byNativeId(records, "PPR/PPR600375").work.relatedVersionIds,
     ).toBeUndefined();
+    // No `epmcId` on a preprint: "Preprint in" is the published record's side.
+    expect(
+      byNativeId(records, "PPR/PPR657399").work.relatedVersionIds?.epmcId,
+    ).toBeUndefined();
     expect(byNativeId(records, "PPR/PPR657399").work.ids).toEqual({
       doi: "10.1101/2023.05.08.539865",
     });
     expect(byNativeId(records, "PPR/PPR657399").work.publishedDate?.iso).toBe(
       "2023-05-10",
     );
+  });
+});
+
+describe("mapper: a published record names its preprint (search-typical, 'Preprint in' → epmcId; P2-T34)", () => {
+  it("maps commentCorrectionList 'Preprint in' / PPR to relatedVersionIds.epmcId, the PPR record's id", async () => {
+    const records = mapper()(await recordedResults("search-typical"));
+    // The two `MED` records of the recorded page that carry the link
+    // (measured 2026-10-15 on the committed fixture).
+    expect(byNativeId(records, "MED/36988873").work.relatedVersionIds).toEqual({
+      epmcId: "PPR578427",
+    });
+    expect(byNativeId(records, "MED/37003351").work.relatedVersionIds).toEqual({
+      epmcId: "PPR456423",
+    });
+    // Every other record of the page carries no epmcId.
+    const others = records.filter(
+      (r) => r.nativeId !== "MED/36988873" && r.nativeId !== "MED/37003351",
+    );
+    expect(others.length).toBeGreaterThan(0);
+    for (const r of others) {
+      expect(r.work.relatedVersionIds?.epmcId).toBeUndefined();
+    }
+  });
+
+  it("keeps both links when a record carries both, and ignores a 'Preprint in' that is not a PPR record", () => {
+    const [both] = mapper()([
+      {
+        id: "1",
+        source: "MED",
+        pmid: "1",
+        title: "T",
+        commentCorrectionList: {
+          commentCorrection: [
+            { source: "MED", id: "12345", type: "Preprint in" },
+            { source: "PPR", id: " PPR42 ", type: "Preprint in" },
+            { source: "MED", id: "777", type: "Preprint of" },
+          ],
+        },
+      },
+    ]);
+    expect(both?.work.relatedVersionIds).toEqual({
+      pmid: "777",
+      epmcId: "PPR42",
+    });
   });
 });
 

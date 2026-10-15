@@ -12,10 +12,16 @@ import {
   normalizePmcid,
   normalizePmid,
   SOURCE_IDS,
+  type S2CorpusId,
 } from "../../../src/model/ids";
-import { parseExtra, readWorkKey } from "../../../src/zotero/extraField";
+import {
+  parseExtra,
+  readS2CorpusId,
+  readWorkKey,
+} from "../../../src/zotero/extraField";
 import {
   AUTOMATIC_TAG_TYPE,
+  canonicalWorkFromSnapshot,
   NATIVE_ID_FIELDS_PRESENT,
   RESEARCH_HELPER_TAG,
   SOURCE_CATALOG_LABELS,
@@ -44,6 +50,9 @@ const PMCID = normalizePmcid("10949956");
 if (DOI === null || PMID === null || PMCID === null) {
   throw new Error("test fixtures must normalize");
 }
+
+/** A Semantic Scholar corpus id (`P2-T34`'s `rh-s2-corpus-id` line). */
+const S2 = "215416146" as S2CorpusId;
 
 /** 2026-03-07T04:05:06.789Z — fixed, so `accessDate` and `Citations:` are exact. */
 const AT = Date.UTC(2026, 2, 7, 4, 5, 6, 789);
@@ -360,6 +369,43 @@ describe("extra — §6.2's plugin lines and §6.3's contract", () => {
   it("omits extra entirely only when there is nothing to write", () => {
     // rh-work-key always applies, so `extra` is always present in practice.
     expect(extraOf(MINIMAL)).toContain("rh-work-key: pmid:1");
+  });
+
+  it("P2-T34: writes rh-s2-corpus-id whenever the work carries one, beside any other identifier (§6.2)", () => {
+    const withS2 = extraOf({ ...RICH, ids: { ...RICH.ids, s2CorpusId: S2 } });
+    expect(withS2).toContain(`rh-s2-corpus-id: ${S2}`);
+    expect(readS2CorpusId(withS2)).toBe(S2);
+    // The work key is still the DOI arm: the line is an identifier, not a key.
+    expect(readWorkKey(withS2)).toBe(RICH.workKey);
+    expect(extraOf(RICH)).not.toContain("rh-s2-corpus-id");
+  });
+
+  it("P2-T34: an S2-only work round-trips to ids.s2CorpusId and its s2: key without rh-work-key (§6.6)", () => {
+    const s2Only: CanonicalWork = {
+      ...MINIMAL,
+      workKey: buildWorkKey({ s2CorpusId: S2 }, "Short"),
+      ids: { s2CorpusId: S2 },
+    };
+    expect(s2Only.workKey).toBe(`s2:${S2}`);
+    const json = toZoteroItemJSON(s2Only, { accessedAtEpochMs: AT });
+    // The rh-work-key line removed, as a user or another plugin might.
+    const extra = String(json["extra"] ?? "")
+      .split("\n")
+      .filter((line) => !line.startsWith("rh-work-key:"))
+      .join("\n");
+    expect(readWorkKey(extra)).toBeUndefined();
+    const back = canonicalWorkFromSnapshot(
+      {
+        itemType: String(json["itemType"]),
+        fields: { title: String(json["title"] ?? ""), extra },
+        dateMultipart: "",
+        creators: [],
+        tags: [],
+      },
+      { nowEpochMs: AT },
+    );
+    expect(back.ids.s2CorpusId).toBe(S2);
+    expect(back.workKey).toBe(`s2:${S2}`);
   });
 });
 

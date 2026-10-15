@@ -59,8 +59,11 @@
  *
  * ## The three optional `SourceQuery` filters
  *
- * The shape `P2-T20` gave the PubMed renderer, {@link CROSSREF_QUERY_FILTER_SUPPORT}
- * being the flag a caller reads:
+ * The shape `P2-T20` gave the PubMed renderer. The flag a caller reads for
+ * `languages` and `openAccessOnly` is `CROSSREF_CAPABILITIES.filters` —
+ * {@link CROSSREF_FILTERS}, the object this renderer refuses from (`P2-T34`,
+ * `docs/07` §4.2, 2026-10-15); `raw` stays in
+ * {@link CROSSREF_QUERY_FILTER_SUPPORT}:
  *
  * - **`languages` is refused** with a `RangeError`: `docs/02` §5.2's filter
  *   table has no language filter, and dropping the member would silently widen
@@ -98,7 +101,12 @@ import { redactUrl } from "../../core/errors";
 import type { HttpMethod } from "../../core/http/client";
 import { crossrefContactParams } from "../../core/http/userAgent";
 import { CROSSREF_HOST } from "../../core/rateLimit/hostLimiter";
-import type { QueryField, QueryNode, SourceQuery } from "../types";
+import type {
+  QueryField,
+  QueryNode,
+  SourceCapabilities,
+  SourceQuery,
+} from "../types";
 
 /** `docs/02` §5.1's base URL, on {@link CROSSREF_HOST}. No trailing slash. */
 export const CROSSREF_API_BASE_URL = `https://${CROSSREF_HOST}`;
@@ -169,24 +177,29 @@ export const CROSSREF_SELECT_FIELDS: readonly string[] = [
 ];
 
 /**
- * The optional `SourceQuery` members that are filters rather than the query
- * itself. Derived from the contract, not re-declared.
+ * Crossref's answer to `docs/07` §4.2's `SourceCapabilities.filters` — the
+ * module header says why both are `false`. **The object
+ * `CROSSREF_CAPABILITIES.filters` is** (`crossrefSource.ts` assigns this
+ * constant), and {@link assertExpressible} refuses from it, so the declaration
+ * and the renderer cannot drift (`P2-T34`). A member whose flag is `false` is
+ * **refused** with `RangeError` when set, never dropped.
  */
-export type CrossrefQueryFilter = keyof Pick<
-  SourceQuery,
-  "languages" | "openAccessOnly" | "raw"
->;
+export const CROSSREF_FILTERS: SourceCapabilities["filters"] = {
+  languages: false,
+  openAccess: false,
+};
 
 /**
- * Which of the three optional filters this adapter really expresses — the
- * module header says why each is what it is. A member whose flag is `false`
- * is **refused** with `RangeError` when set, never dropped.
+ * The optional `SourceQuery` member that stays adapter-level: `raw`.
+ * `languages` and `openAccessOnly` moved to {@link CROSSREF_FILTERS} on
+ * 2026-10-15 (`P2-T34`).
  */
+export type CrossrefQueryFilter = keyof Pick<SourceQuery, "raw">;
+
+/** Whether `raw` is honoured: `true` — the module header says how. */
 export const CROSSREF_QUERY_FILTER_SUPPORT: Readonly<
   Record<CrossrefQueryFilter, boolean>
 > = {
-  languages: false,
-  openAccessOnly: false,
   raw: true,
 };
 
@@ -341,33 +354,31 @@ export function explainCrossrefQuery(query: SourceQuery): string {
 }
 
 /**
- * Refuse every optional filter this adapter cannot express
- * ({@link CROSSREF_QUERY_FILTER_SUPPORT}), by name, so the drop is an error at
- * the call site and never a quietly wider result set. An empty `languages`
+ * Refuse every optional filter this adapter cannot express — read off
+ * {@link CROSSREF_FILTERS}, the object `CROSSREF_CAPABILITIES.filters` is — by
+ * name, so the drop is an error at the call site and never a quietly wider
+ * result set. An empty `languages`
  * list asks for nothing and passes; `openAccessOnly: false` is the default.
  */
 function assertExpressible(query: SourceQuery): void {
   if (
     query.languages !== undefined &&
     query.languages.length > 0 &&
-    !CROSSREF_QUERY_FILTER_SUPPORT.languages
+    !CROSSREF_FILTERS.languages
   ) {
     throw new RangeError(
       `[research-helper] Crossref cannot express SourceQuery.languages=` +
         `${JSON.stringify(query.languages)}: docs/02 §5.2 documents no ` +
         `language filter for /works, and the member would otherwise be ` +
-        `silently dropped. CROSSREF_QUERY_FILTER_SUPPORT.languages is false.`,
+        `silently dropped. CROSSREF_CAPABILITIES.filters.languages is false.`,
     );
   }
-  if (
-    query.openAccessOnly === true &&
-    !CROSSREF_QUERY_FILTER_SUPPORT.openAccessOnly
-  ) {
+  if (query.openAccessOnly === true && !CROSSREF_FILTERS.openAccess) {
     throw new RangeError(
       `[research-helper] Crossref cannot express SourceQuery.openAccessOnly: ` +
         `docs/02 §5.2 documents has-license and has-full-text filters, ` +
         `neither of which means open access, and the member would otherwise ` +
-        `be silently dropped. CROSSREF_QUERY_FILTER_SUPPORT.openAccessOnly ` +
+        `be silently dropped. CROSSREF_CAPABILITIES.filters.openAccess ` +
         `is false.`,
     );
   }

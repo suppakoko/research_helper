@@ -133,6 +133,7 @@ import {
   type XmlParser,
 } from "./mapper";
 import {
+  ARXIV_FILTERS,
   ARXIV_MAX_RESULTS_MAX,
   ARXIV_MAX_RESULTS_MIN,
   ARXIV_MAX_TOTAL_RESULTS,
@@ -208,6 +209,8 @@ export const ARXIV_CAPABILITIES: SourceCapabilities = {
   abstractsInSearch: true,
   citationGraph: false,
   dateFilter: true,
+  // The renderer's own object (`P2-T34`): `./query.ts` refuses from it.
+  filters: ARXIV_FILTERS,
   maxPageSize: ARXIV_MAX_RESULTS_MAX,
   maxTotalResults: ARXIV_MAX_TOTAL_RESULTS,
   benefitsFromApiKey: false,

@@ -41,6 +41,7 @@
 
 import type { CancellationToken } from "../../core/jobQueue/cancellation";
 import type { SerializedError } from "../../core/errors";
+import type { MergeDecision } from "../../core/provenance";
 import type { CanonicalWork } from "../../model/canonicalWork";
 import type { SourceId } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
@@ -177,6 +178,16 @@ export interface SearchImportInput {
    * the pipeline's `selectedWorks` still reads the alignment.
    */
   readonly works?: readonly CanonicalWork[];
+  /**
+   * The earlier run's {@link SearchImportOutput.mergeDecisions}, handed back
+   * with {@link works} (`P2-T34`). A run handed its works runs no cascade, so
+   * without this the import of a preview — the run that writes the provenance
+   * note — would record no merge at all although the table showed merged
+   * works. Passed through to the output as given; ignored unless
+   * {@link works} is present, because a run that merges its records itself
+   * produces its own.
+   */
+  readonly mergeDecisions?: readonly MergeDecision[];
 }
 
 // ---------------------------------------------------------------------------
@@ -402,6 +413,14 @@ export interface SearchImportOutput {
    * `Merging` and on an import handed its works, as {@link flags} is.
    */
   readonly links: readonly VersionLink[];
+  /**
+   * FR-50 scenario 2: every merge `Merging` made, as `docs/07` §5.3's
+   * `MergeDecision` (`P2-T34`) — what `SearchProvenance.mergeDecisions`
+   * records. Empty before `Merging` and when nothing merged; on an import
+   * handed its works, the {@link SearchImportInput.mergeDecisions} it was
+   * handed.
+   */
+  readonly mergeDecisions: readonly MergeDecision[];
   /**
    * One entry per source that was **asked**, in `input.sourceIds` order, with
    * `recordsDeduplicatedAway` stamped once `Deduping` has run.

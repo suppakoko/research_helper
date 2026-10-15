@@ -89,9 +89,10 @@ import {
   SEMANTICSCHOLAR_HEALTH_PAPER_ID,
   SEMANTICSCHOLAR_OPEN_ACCESS_FLAG,
   SEMANTICSCHOLAR_PAGE_SIZE_MAX,
+  SEMANTICSCHOLAR_FILTERS,
   SEMANTICSCHOLAR_QUERY_FILTER_SUPPORT,
   SEMANTICSCHOLAR_RELEVANCE_DEPTH_MAX,
-  SEMANTICSCHOLAR_RELEVANCE_QUERY_FILTER_SUPPORT,
+  SEMANTICSCHOLAR_RELEVANCE_FILTERS,
   SEMANTICSCHOLAR_RELEVANCE_SEARCH_URL,
   SEMANTICSCHOLAR_RENDERED_FIELDS,
   SEMANTICSCHOLAR_SEARCH_FIELDS,
@@ -789,16 +790,17 @@ describe("buildBulkSearchRequest", () => {
       "offset",
       "openAccessPdf",
     ]);
-    expect(SEMANTICSCHOLAR_QUERY_FILTER_SUPPORT).toEqual({
+    // `P2-T34`: the two answers live on `SourceCapabilities.filters` now —
+    // the bulk path's on the capabilities, the relevance endpoint's beside them.
+    expect(SEMANTICSCHOLAR_FILTERS).toEqual({
       languages: false,
-      openAccessOnly: false,
-      raw: true,
+      openAccess: false,
     });
-    expect(SEMANTICSCHOLAR_RELEVANCE_QUERY_FILTER_SUPPORT).toEqual({
+    expect(SEMANTICSCHOLAR_RELEVANCE_FILTERS).toEqual({
       languages: false,
-      openAccessOnly: true,
-      raw: true,
+      openAccess: true,
     });
+    expect(SEMANTICSCHOLAR_QUERY_FILTER_SUPPORT).toEqual({ raw: true });
   });
 });
 
@@ -940,6 +942,7 @@ describe("SEMANTICSCHOLAR_CAPABILITIES", () => {
       abstractsInSearch: true,
       citationGraph: true,
       dateFilter: true,
+      filters: { languages: false, openAccess: false },
       maxPageSize: 100,
       maxTotalResults: undefined,
       benefitsFromApiKey: true,
@@ -1570,6 +1573,24 @@ describe("createSemanticScholarSource — identity", () => {
     expect(source.lookup).toBeDefined();
     expect(source.fetchAbstract).toBeDefined();
     expect(source.findRelated).toBeUndefined();
+  });
+
+  it("P2-T34: capabilities.filters is the bulk renderer's own object, and equals what it does", () => {
+    expect(SEMANTICSCHOLAR_CAPABILITIES.filters).toBe(SEMANTICSCHOLAR_FILTERS);
+    const source = createSource(
+      createStubHttp((i) => response(i.url, page([]))).client,
+    );
+    expect(source.capabilities.filters).toEqual({
+      languages: false,
+      openAccess: false,
+    });
+    // Both false on the default (bulk) path → both refused by name.
+    expect(() =>
+      source.explainQuery({ ...QUERY_TYPICAL, languages: ["en"] }),
+    ).toThrow("SEMANTICSCHOLAR_CAPABILITIES.filters.languages is false");
+    expect(() =>
+      source.explainQuery({ ...QUERY_TYPICAL, openAccessOnly: true }),
+    ).toThrow("SEMANTICSCHOLAR_CAPABILITIES.filters.openAccess is false");
   });
 
   it("reports key presence through the store's cheap has(), and false when the store throws", async () => {

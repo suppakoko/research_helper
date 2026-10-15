@@ -25,15 +25,21 @@
  * mechanically; see `P1-T07`'s reported findings for the `zotero/` half, which
  * that config does not yet cover.
  *
- * **Where `SourceQuery`'s optional filters are honoured (`P2-T20`).**
- * `languages`, `openAccessOnly` and `raw` are declared "where supported" and
- * "documented per adapter", and §4.2 carries no `SourceCapabilities` member
- * saying which adapter supports which — so each adapter's `query.ts` states
- * it: PubMed's `PUBMED_QUERY_FILTER_SUPPORT` (`./pubmed/query.ts`) is the flag
- * a caller reads, and that module refuses an unsupported member with
- * `RangeError` rather than dropping it. Moving the flag onto
- * `SourceCapabilities`, beside `dateFilter`, is a `docs/07` §4.2 change first
- * (§11.1, as `P2-T28` did for `query`), and nothing is added here ahead of it.
+ * **Where `SourceQuery`'s optional filters are honoured (`P2-T20`, moved by
+ * `P2-T34`).** `languages`, `openAccessOnly` and `raw` are declared "where
+ * supported" and "documented per adapter". Until 2026-10-15 §4.2 carried no
+ * `SourceCapabilities` member saying which adapter supports which, so each
+ * adapter's `query.ts` stated it in a `*_QUERY_FILTER_SUPPORT` table. The
+ * owner approved `SourceCapabilities.filters` that day (review row 113), §4.2
+ * was extended first, and the `languages` / `openAccessOnly` answers moved
+ * onto it, beside `dateFilter`: each adapter's `query.ts` declares a
+ * `*_FILTERS` object, its capabilities carry that very object as `filters`,
+ * and its renderer refuses a member whose flag is `false` by reading the same
+ * object — the pattern `query.fields` already uses, so the declaration and the
+ * renderer cannot drift. `raw` stays adapter-level, as §4.2 says.
+ *
+ * **`citationGraph` (`P2-T34`, review row 131)** means "this adapter exposes
+ * `findRelated`"; Europe PMC's declaration became `false` on that day.
  *
  * ## Two transcription notes
  *
@@ -116,10 +122,30 @@ export interface SourceCapabilities {
   readonly lookupById: readonly (keyof ExternalIds)[];
   /** Returns abstracts in search results (vs. requiring a second call). */
   readonly abstractsInSearch: boolean;
-  /** Returns references / citations edges. */
+  /**
+   * This adapter exposes `findRelated` and returns references / citations edges
+   * through it. Describes the adapter, not the service: a database whose API has
+   * citation endpoints that this adapter does not call declares `false`.
+   */
   readonly citationGraph: boolean;
   /** Server-side date filtering (otherwise we filter client-side). */
   readonly dateFilter: boolean;
+  /**
+   * The two optional `SourceQuery` filters this adapter honours. A member that is
+   * `false` is refused by name — a `RangeError` — when a query this adapter
+   * renders sets it, never silently dropped; an adapter with `keywordSearch: false`
+   * renders no query and declares both `false`. `raw` is not here: it is
+   * documented per adapter.
+   */
+  readonly filters: {
+    /** `SourceQuery.languages` is rendered into the request. */
+    readonly languages: boolean;
+    /**
+     * `SourceQuery.openAccessOnly: true` is honoured: rendered into the request,
+     * or true of every record the source holds.
+     */
+    readonly openAccess: boolean;
+  };
   /** Max page size the API accepts. */
   readonly maxPageSize: number;
   /** Hard ceiling on total results the API will paginate through, if any. */

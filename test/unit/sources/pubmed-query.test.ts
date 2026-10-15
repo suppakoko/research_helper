@@ -7,6 +7,7 @@ import {
   PUBMED_ESEARCH_BASE_URL,
   PUBMED_LANGUAGE_CODES,
   PUBMED_OPEN_ACCESS_CLAUSE,
+  PUBMED_FILTERS,
   PUBMED_QUERY_FILTER_SUPPORT,
   renderPubmedSearchTerm,
   renderPubmedTerm,
@@ -648,11 +649,10 @@ describe("languages — two-letter codes converted to MEDLINE's [la] codes", () 
 
 describe("openAccessOnly — rendered as docs/02 §12.2's free full text[sb]", () => {
   it("declares the support flags a caller reads before setting a member", () => {
-    expect(PUBMED_QUERY_FILTER_SUPPORT).toEqual({
-      languages: true,
-      openAccessOnly: true,
-      raw: true,
-    });
+    // `P2-T34`: `languages` and `openAccessOnly` moved onto
+    // `SourceCapabilities.filters` (PUBMED_FILTERS); `raw` stays here.
+    expect(PUBMED_FILTERS).toEqual({ languages: true, openAccess: true });
+    expect(PUBMED_QUERY_FILTER_SUPPORT).toEqual({ raw: true });
     expect(PUBMED_OPEN_ACCESS_CLAUSE).toBe("free full text[sb]");
   });
 

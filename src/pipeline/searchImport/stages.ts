@@ -164,6 +164,7 @@ import {
 } from "../../core/jobQueue/cancellation";
 import type { ProgressReporter } from "../../core/jobQueue/progress";
 import type { Logger } from "../../core/logger";
+import type { MergeDecision } from "../../core/provenance";
 import type { CanonicalWork } from "../../model/canonicalWork";
 import type { ExternalIds, SourceId } from "../../model/ids";
 import { merge, type IdConflict } from "../../model/merge";
@@ -778,9 +779,9 @@ export interface MergedWork {
   readonly records: readonly SourceRecord[];
   /**
    * The `"match"` decisions that joined the group — tier fired, confidence,
-   * evidence — empty for a singleton. `docs/07` §5.3's `SearchProvenance` has
-   * no field for this yet; it is carried here so the record FR-8 requires can
-   * take it when that field exists.
+   * evidence — empty for a singleton. Since `P2-T34` (2026-10-15) they reach
+   * `docs/07` §5.3's `SearchProvenance.mergeDecisions` through
+   * {@link mergeDecisionsOf}.
    */
   readonly decisions: readonly DedupDecision[];
   /** Identifier conflicts `merge()` found inside the group (`docs/02` §11.5 rule 1). */
@@ -984,6 +985,41 @@ function relate(entry: MergedWork, other: ExternalIds): MergedWork {
     ...entry,
     work: { ...entry.work, relatedVersionIds: related as ExternalIds },
   };
+}
+
+/**
+ * FR-50 scenario 2's record: every `"match"` decision of every merged work, as
+ * `docs/07` §5.3's {@link MergeDecision} — the work's `workKey`, the tier that
+ * fired, its confidence and its evidence — in the order of the works, then of
+ * the decisions inside each group. A singleton contributes nothing, so a run
+ * that merged nothing yields `[]` (§5.3: "empty, not absent").
+ *
+ * A decision whose `tier` is `null` is skipped: the cascade gives `null`
+ * only to a `"distinct"` verdict, which never joins a group, so the guard
+ * exists for the type and drops nothing a real run produces.
+ *
+ * Called by `run` in `searchImportPipeline.ts` on its `Merging` stage's
+ * result (`P2-T34`).
+ *
+ * @param result - what {@link dedupeAndMerge} / {@link dedupeAndMergeAsync} returned
+ * @returns one entry per merge, `[]` when nothing merged
+ */
+export function mergeDecisionsOf(
+  result: Pick<DedupeMergeResult, "merged">,
+): readonly MergeDecision[] {
+  const out: MergeDecision[] = [];
+  for (const entry of result.merged) {
+    for (const decision of entry.decisions) {
+      if (decision.tier === null) continue;
+      out.push({
+        workKey: entry.work.workKey,
+        tier: decision.tier,
+        confidence: decision.confidence,
+        evidence: decision.evidence,
+      });
+    }
+  }
+  return out;
 }
 
 /** Exactly one side a preprint (by type or DOI prefix) → its key; else undefined. */

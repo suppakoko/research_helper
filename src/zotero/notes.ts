@@ -44,6 +44,7 @@
 
 import {
   exportJson,
+  type MergeDecision,
   type ProvenanceFileWriter,
   type SearchProvenance,
   type SourceProvenance,
@@ -170,6 +171,32 @@ function renderSource(source: SourceProvenance): string {
   return `<h3>${escapeHtml(source.sourceId)}</h3><ul>${rows.join("")}</ul>`;
 }
 
+/**
+ * One {@link MergeDecision} — FR-50 scenario 2's "rule fired, similarity
+ * score" — as the merged work's key with its tier, confidence and evidence
+ * beneath it (`P2-T34`). The evidence is shown as the JSON object it is, the
+ * way `sourceExtras` values are, so no field of it is renamed or dropped.
+ */
+function renderMergeDecision(decision: MergeDecision): string {
+  const rows = [
+    item("Tier", code(decision.tier)),
+    item("Confidence", String(decision.confidence)),
+    item("Evidence", code(JSON.stringify(decision.evidence))),
+  ];
+  return `<li>${code(decision.workKey)}<ul>${rows.join("")}</ul></li>`;
+}
+
+/**
+ * `docs/07` §5.3's `mergeDecisions` as a list, or "none" when nothing merged —
+ * a heading over an empty list would read as a rendering failure.
+ */
+function renderMergeDecisions(provenance: SearchProvenance): string {
+  const decisions = provenance.mergeDecisions;
+  return decisions.length === 0
+    ? "<p>none</p>"
+    : `<ul>${decisions.map(renderMergeDecision).join("")}</ul>`;
+}
+
 /** `dateFilter` as prose. `"none"` is FR-3's "All years". */
 function renderDateFilter(provenance: SearchProvenance): string {
   const filter = provenance.dateFilter;
@@ -215,6 +242,8 @@ export function renderProvenanceNoteHtml(provenance: SearchProvenance): string {
     "</ul>",
     "<h2>Sources</h2>",
     provenance.perSource.map(renderSource).join(""),
+    "<h2>Merge decisions</h2>",
+    renderMergeDecisions(provenance),
     `<p><em>Schema version ${String(provenance.schemaVersion)}. `,
     "This note is a projection of the run's machine-readable record; ",
     "use Export provenance as JSON for the authoritative copy.</em></p>",

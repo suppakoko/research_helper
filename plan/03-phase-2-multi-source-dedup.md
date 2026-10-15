@@ -4813,6 +4813,21 @@ relation (`P2-T11`).
 npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
 ```
 
+
+**Findings, 2026-10-15 — done; no live request; full report at `plan/reports/P2-T34.md`.**
+Verified by the coordinator on the agent's tree: no `MUTANT` marker, both bundles without a byte-order mark or
+carriage return, typecheck 0, `lint:check` 0, eslint 0, **unit 2,189/2,189**, contract 40/40, integration **134
+passed**, no key-shaped string in the changed files. `docs/07` §4.2, §5.1, §5.3 and §6.2 moved first, dated, and
+the code copies match them (compared by script). Merge decisions now reach the provenance record, its schema and
+the note — asserted at pipeline level and through the real window, where the import hands back the preview's
+decisions (`SearchImportInput.mergeDecisions`), since an import of previewed works merges nothing itself. The
+`rh-s2-corpus-id` line round-trips inside Zotero and the library index finds an S2-only item by it. Each of the
+seven adapters declares `capabilities.filters` as the very object its renderer consults; Europe PMC's
+`citationGraph` is `false`; `epmcId` is mapped and survives the merge (`ID_KEYS` gained it — without that the
+merge dropped it). Steps 7–9 landed: the `openAccess` row, the dotted arXiv class, the owner's badge wording in
+both bundles. **31 mutants, all killed.** One file outside Files, `test/integration/l10n.spec.ts`, holds the
+badge test — the only place those mutants die. The coordinator closed the three stale document notes and the
+arXiv mapper comment the card could not reach. Open: items 184–187.
 ---
 
 ### P2-T35 — Let a 4xx response body reach the adapter for hosts whose errors are feeds

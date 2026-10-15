@@ -990,7 +990,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     `searchImportPipeline.ts` still calls `liftToCanonicalWorks`; the gap blocks Phase 2's first finishing
     condition. Second time this shape has appeared (`P2-T02`/`P2-T27`); see the process note under §6.20.
 
-99. **(owner's document decision — APPROVED 2026-10-15, `P2-T34`)** FR-50 scenario 2's per-work merge decision has no field in `docs/07` §5.3's
+99. ~~**(owner's document decision — APPROVED 2026-10-15, `P2-T34`)**~~ **DONE 2026-10-15 (`P2-T34`).** FR-50 scenario 2's per-work merge decision has no field in `docs/07` §5.3's
     `SearchProvenance`. It rides on `MergedWork.decisions` for now; adding a field means `docs/07` §5.3, then
     `src/core/provenance.ts` and `schema/provenance.schema.json`.
 
@@ -1042,7 +1042,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `identifierWorkKey`) and of the reader (`canonicalWorkFromSnapshot`, `partialDateFrom`). A
     `test/unit/zotero/` file the next time either source file is in a card's list.
 
-109. **(owner's document decision — APPROVED 2026-10-15, `P2-T34`)** `docs/07` §6.2 writes `s2CorpusId` to no Zotero field, so an S2-only
+109. ~~**(owner's document decision — APPROVED 2026-10-15, `P2-T34`)**~~ **DONE 2026-10-15 (`P2-T34`).** `docs/07` §6.2 writes `s2CorpusId` to no Zotero field, so an S2-only
     item's identity lives in its `rh-work-key` extra line alone. An `rh-s2-corpus-id` line would make the S2
     arm derivable; otherwise §6.6 should state the dependence.
 
@@ -1059,7 +1059,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly` and add the tag constant in `src/sources/pubmed/query.ts`;
     until then PubMed refuses `openAccessOnly` by name.
 
-113. **(owner's document decision — APPROVED 2026-10-15, `P2-T34`)** Per-filter support has no home on `SourceCapabilities` (`docs/07` §4.2);
+113. ~~**(owner's document decision — APPROVED 2026-10-15, `P2-T34`)**~~ **DONE 2026-10-15 (`P2-T34`).** Per-filter support has no home on `SourceCapabilities` (`docs/07` §4.2);
     `P2-T20` left it adapter-level. Adding members beside `dateFilter` (names illustrative: `languageFilter`,
     `openAccessFilter`) is a §4.2 change first, then `src/sources/types.ts` and `PUBMED_CAPABILITIES`.
 
@@ -1132,11 +1132,11 @@ the caller of what the card builds; if it does not, the caller is added with a d
     address (`P2-T33` writes the one line); §3.1 should note that a CJK title is not obtainable from Europe
     PMC's `title` field for MED records — the `record-unicode` scenario pins diacritics and markup instead.
 
-130. **`docs/07` §5.1 has no `ExternalIds` member for a Europe PMC `PPR` id** *(APPROVED 2026-10-15, `P2-T34`: `epmcId`)*, so the "Preprint in" link on a
+130. ~~**`docs/07` §5.1 has no `ExternalIds` member for a Europe PMC `PPR` id**~~ *(APPROVED 2026-10-15, `P2-T34`: `epmcId`)* **DONE 2026-10-15 (`P2-T34`).**, so the "Preprint in" link on a
     MED record (pointing at a `PPR`) is not mapped; the "Preprint of" direction (PMID) is. Decide whether
     `ExternalIds` gains an `epmcId`.
 
-131. **`citationGraph` semantics.** *(DECIDED 2026-10-15: "this adapter exposes `findRelated`"; `P2-T34`)* Europe PMC declares `citationGraph: true` because the service has
+131. ~~**`citationGraph` semantics.**~~ *(DECIDED 2026-10-15: "this adapter exposes `findRelated`"; `P2-T34`)* **DONE 2026-10-15 (`P2-T34`).** Europe PMC declares `citationGraph: true` because the service has
     `/citations` and `/references`, while the adapter exposes no `findRelated` (`relatedByWork: false`). Decide
     whether the flag means "the service can" or "this adapter does" before `P2-T07` and `P2-T13` plan around it.
 
@@ -1374,6 +1374,22 @@ the caller of what the card builds; if it does not, the caller is added with a d
 183. **`docs/13` §3.1's fixture set does not fit a lookup-only host.** `search-typical`, `search-single`,
     `paginated` and `dedup-pair-set` have nothing to record; `record-jats-abstract` became `pubs-old-style-doi`.
     Note the exception in §3.1.
+
+### 6.35 Raised by `P2-T34`, 2026-10-15 — recorded under rule 9, none carded
+
+184. **Semantic Scholar's `citationGraph: true` is untrue under the new meaning** ("this adapter exposes
+    `findRelated`", `docs/07` §4.2): the adapter has no `findRelated` yet. `P2-T11` adds it; until then the flag
+    claims a method that is not there. Either set it `false` now or make `P2-T11` own the flip.
+
+185. **`docs/10` FR-8's closing sentence** calls any §5.3 field no FR-8 clause requires "a defect"; `mergeDecisions`
+    is required by FR-50 scenario 2. Name FR-50 in that sentence.
+
+186. **The window's import writes a provenance record with an empty per-source list**: an import of previewed
+    works asks no source. Older than `P2-T34`, which handed back the preview's merge decisions but not its
+    per-source counts. The same hand-back would fix it.
+
+187. **`KO_PENDING_REVIEW`'s `mainWindow (21)` count comment** in `src/i18n/keys.ts` was wrong before `P2-T34` and is
+    one further off now. Derive or drop the count.
 
 ## 7. Regenerating this file
 

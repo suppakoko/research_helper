@@ -48,9 +48,11 @@
  *
  * `docs/07` §4.2 declares `languages`, `openAccessOnly` and `raw` "where
  * supported" / "documented per adapter". Each has one stated fate here, in
- * the shape `P2-T20` gave the PubMed renderer (`PUBMED_QUERY_FILTER_SUPPORT`
- * in `src/sources/pubmed/query.ts`), and {@link EUROPEPMC_QUERY_FILTER_SUPPORT}
- * is the flag a caller reads:
+ * the shape `P2-T20` gave the PubMed renderer. The flag a caller reads for
+ * `languages` and `openAccessOnly` is `EUROPEPMC_CAPABILITIES.filters` —
+ * {@link EUROPEPMC_FILTERS}, the object this renderer refuses from (`P2-T34`,
+ * `docs/07` §4.2, 2026-10-15); `raw` stays in
+ * {@link EUROPEPMC_QUERY_FILTER_SUPPORT}:
  *
  * - **`openAccessOnly` is rendered** as `AND (OPEN_ACCESS:y)` — `docs/02`
  *   §4.3's own row (`OPEN_ACCESS`, `y`/`n`). It is part of the query string,
@@ -100,7 +102,12 @@ import { redactUrl } from "../../core/errors";
 import type { HttpMethod } from "../../core/http/client";
 import { MAINTAINER_EMAIL } from "../../core/http/userAgent";
 import { EBI_HOST } from "../../core/rateLimit/hostLimiter";
-import type { QueryField, QueryNode, SourceQuery } from "../types";
+import type {
+  QueryField,
+  QueryNode,
+  SourceCapabilities,
+  SourceQuery,
+} from "../types";
 
 /** `docs/02` §4.1's base URL, on {@link EBI_HOST}. No trailing slash. */
 export const EUROPEPMC_REST_BASE_URL = `https://${EBI_HOST}/europepmc/webservices/rest`;
@@ -132,25 +139,29 @@ export const EUROPEPMC_FIRST_CURSOR = "*";
 export type EuropePmcResultType = "idlist" | "lite" | "core";
 
 /**
- * The optional `SourceQuery` members that are filters rather than the query
- * itself. Derived from the contract, not re-declared, so a member renamed
- * there fails here.
+ * Europe PMC's answer to `docs/07` §4.2's `SourceCapabilities.filters` — the
+ * module header says why each is what it is. **The object
+ * `EUROPEPMC_CAPABILITIES.filters` is** (`europepmcSource.ts` assigns this
+ * constant), and {@link assertExpressible} refuses from it, so the declaration
+ * and the renderer cannot drift (`P2-T34`). A member whose flag is `false` is
+ * **refused** with `RangeError` when set, never dropped.
  */
-export type EuropePmcQueryFilter = keyof Pick<
-  SourceQuery,
-  "languages" | "openAccessOnly" | "raw"
->;
+export const EUROPEPMC_FILTERS: SourceCapabilities["filters"] = {
+  languages: false,
+  openAccess: true,
+};
 
 /**
- * Which of the three optional filters this adapter really expresses — the
- * module header says why each is what it is. A member whose flag is `false`
- * is **refused** with `RangeError` when set, never dropped.
+ * The optional `SourceQuery` member that stays adapter-level: `raw`.
+ * `languages` and `openAccessOnly` moved to {@link EUROPEPMC_FILTERS} on
+ * 2026-10-15 (`P2-T34`).
  */
+export type EuropePmcQueryFilter = keyof Pick<SourceQuery, "raw">;
+
+/** Whether `raw` is honoured: `true` — the module header says how. */
 export const EUROPEPMC_QUERY_FILTER_SUPPORT: Readonly<
   Record<EuropePmcQueryFilter, boolean>
 > = {
-  languages: false,
-  openAccessOnly: true,
   raw: true,
 };
 
@@ -289,22 +300,30 @@ export function explainEuropePmcQuery(query: SourceQuery): string {
 }
 
 /**
- * Refuse every optional filter this adapter cannot express
- * ({@link EUROPEPMC_QUERY_FILTER_SUPPORT}), by name, so the drop is an error
- * at the call site and never a quietly wider result set. An empty
- * `languages` list asks for nothing and passes.
+ * Refuse every optional filter this adapter cannot express — read off
+ * {@link EUROPEPMC_FILTERS}, the object `EUROPEPMC_CAPABILITIES.filters` is —
+ * by name, so the drop is an error at the call site and never a quietly wider
+ * result set. An empty `languages` list and `openAccessOnly: false` ask for
+ * nothing and pass.
  */
 function assertExpressible(query: SourceQuery): void {
   if (
     query.languages !== undefined &&
     query.languages.length > 0 &&
-    !EUROPEPMC_QUERY_FILTER_SUPPORT.languages
+    !EUROPEPMC_FILTERS.languages
   ) {
     throw new RangeError(
       `[research-helper] Europe PMC cannot express SourceQuery.languages=` +
         `${JSON.stringify(query.languages)}: docs/02 §4.3 documents no ` +
         `language field for Europe PMC, and the member would otherwise be ` +
-        `silently dropped. EUROPEPMC_QUERY_FILTER_SUPPORT.languages is false.`,
+        `silently dropped. EUROPEPMC_CAPABILITIES.filters.languages is false.`,
+    );
+  }
+  if (query.openAccessOnly === true && !EUROPEPMC_FILTERS.openAccess) {
+    throw new RangeError(
+      `[research-helper] Europe PMC cannot express SourceQuery.openAccessOnly: ` +
+        `the member would otherwise be silently dropped. ` +
+        `EUROPEPMC_CAPABILITIES.filters.openAccess is false.`,
     );
   }
 }

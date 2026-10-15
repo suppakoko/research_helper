@@ -93,6 +93,7 @@ import type { ProgressSnapshot } from "../../core/jobQueue/progress";
 import {
   exportJson,
   redactSearchProvenance,
+  type MergeDecision,
   type ProvenanceFileWriter,
   type SearchProvenance,
   type SourceProvenance,
@@ -719,12 +720,19 @@ export function toWindowRecords(
  * omitted when the caller holds none aligned with the records — a run that
  * stopped before `Merging` — and the pipeline merges the records itself, as
  * it did before `P2-T31`.
+ *
+ * `mergeDecisions` is the preview's `SearchImportOutput.mergeDecisions`,
+ * handed back beside `works` and only with it (`P2-T34`): the import of a
+ * preview runs no cascade, and it is the run whose provenance note is written,
+ * so without them the note would record no merge for works the table showed
+ * merged (FR-50 scenario 2).
  */
 export function toPipelineInput(
   query: SearchWindowQuery,
   target: SearchImportTarget | undefined,
   records: readonly SourceRecord[] | undefined,
   works?: readonly CanonicalWork[],
+  mergeDecisions?: readonly MergeDecision[],
 ): SearchImportInput {
   const from = Math.min(query.fromYear, query.toYear);
   const to = Math.max(query.fromYear, query.toYear);
@@ -745,6 +753,8 @@ export function toPipelineInput(
     ...(target !== undefined && { target }),
     ...(records !== undefined && { records }),
     ...(works !== undefined && { works }),
+    ...(works !== undefined &&
+      mergeDecisions !== undefined && { mergeDecisions }),
   };
 }
 
@@ -913,6 +923,9 @@ export function buildProvenance(
       deduplicatedAway: 0,
       imported,
     },
+    // FR-50 scenario 2 (`P2-T34`): what `Merging` decided, or — on the import
+    // of a preview — what the preview decided and handed back.
+    mergeDecisions: output.mergeDecisions,
   };
 }
 
@@ -1037,6 +1050,12 @@ export function createSearchImportViewModel(
    * merges them, as it did before `P2-T31`.
    */
   let previewed: readonly CanonicalWork[] | undefined;
+  /**
+   * The preview's merge decisions, held beside {@link previewed} and handed
+   * back with it (`P2-T34`), so the provenance note the import writes records
+   * the merges the table showed. Meaningful only while {@link previewed} is.
+   */
+  let previewedDecisions: readonly MergeDecision[] = [];
   /** `sourceId` → localized display name, resolved once per connect. */
   let sourceNames: ReadonlyMap<string, string> = new Map();
   let revision = 0;
@@ -1445,6 +1464,7 @@ export function createSearchImportViewModel(
     // case this is, so the import never has to know the stage order.
     previewed =
       output.works.length === output.records.length ? output.works : undefined;
+    previewedDecisions = output.mergeDecisions;
     revision += 1;
     const records = toWindowRecords(
       output.records,
@@ -1779,6 +1799,8 @@ export function createSearchImportViewModel(
         // The preview's own works, so the item written is the merged work the
         // row showed — every contributing source, every won field (`P2-T31`).
         previewed,
+        // …and the merges behind them, for the provenance note (`P2-T34`).
+        previewedDecisions,
       );
       const running = await runJob(input, true);
       if (running === undefined) return;

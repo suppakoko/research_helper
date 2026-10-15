@@ -8,6 +8,7 @@ import type {
 import {
   normalizeDoi,
   type Doi,
+  type EpmcId,
   type ExternalIds,
   type Pmid,
   type SourceId,
@@ -20,6 +21,7 @@ import {
 import {
   attributeDeduplicatedAway,
   dedupeAndMerge,
+  mergeDecisionsOf,
   SUPERSEDED_BY_PUBLISHED_TAG,
 } from "../../../src/pipeline/searchImport/stages";
 import type { SearchImportSourceReport } from "../../../src/pipeline/searchImport/types";
@@ -411,6 +413,45 @@ function fiveSourceCorpus(): SourceRecord[] {
   ];
 }
 
+describe("relatedVersionIds.epmcId — carried through the merge (P2-T34)", () => {
+  // `docs/07` §5.1's `ExternalIds.epmcId`, 2026-10-15: Europe PMC's mapper
+  // sets it on a published record that names its preprint, and every work —
+  // a singleton included — passes through `merge()`, so a union that did not
+  // list the key would drop it before it reached the pipeline's output.
+  const epmcId = "PPR578427" as EpmcId;
+
+  it("keeps it on a singleton", () => {
+    const { work } = merge(
+      [record({ source: "europepmc", related: { epmcId } })],
+      AT,
+    );
+    expect(work.relatedVersionIds).toEqual({ epmcId });
+  });
+
+  it("unions it with another record's pointer in a group", () => {
+    const shared = doi("10.1000/p2t34");
+    const { work } = merge(
+      [
+        record({
+          source: "europepmc",
+          ids: { doi: shared },
+          related: { epmcId },
+        }),
+        record({
+          source: "crossref",
+          ids: { doi: shared },
+          related: { doi: doi("10.1101/2023.01.01.000001") },
+        }),
+      ],
+      AT,
+    );
+    expect(work.relatedVersionIds).toEqual({
+      doi: "10.1101/2023.01.01.000001",
+      epmcId,
+    });
+  });
+});
+
 describe("provenance", () => {
   it("fieldOrigin names a SourceId for title, abstract, authors, publishedDate and citationCount", () => {
     const { work } = merge(fiveSourceCorpus(), AT);
@@ -558,6 +599,41 @@ describe("isSourceRecord", () => {
 // ---------------------------------------------------------------------------
 // 3. The stage hookup — stages.ts's dedupeAndMerge
 // ---------------------------------------------------------------------------
+
+describe("mergeDecisionsOf — FR-50 scenario 2's record (P2-T34)", () => {
+  it("lists each match decision with its merged work's key, tier, confidence and evidence; a singleton adds none", () => {
+    const shared = doi("10.1000/p2t34-decisions");
+    const result = dedupeAndMerge(
+      [
+        record({ source: "pubmed", ids: { doi: shared } }),
+        record({ source: "crossref", ids: { doi: shared } }),
+        record({
+          source: "pubmed",
+          title: "A wholly different and unrelated paper about something else",
+          ids: { doi: doi("10.1000/p2t34-alone") },
+        }),
+      ],
+      AT,
+    );
+    expect(result.merged).toHaveLength(2);
+    expect(mergeDecisionsOf(result)).toStrictEqual([
+      {
+        workKey: `doi:${shared}`,
+        tier: "doi",
+        confidence: 1,
+        evidence: { doi: shared },
+      },
+    ]);
+  });
+
+  it("is [] when nothing merged", () => {
+    const result = dedupeAndMerge(
+      [record({ source: "pubmed", ids: { doi: doi("10.1000/p2t34-one") } })],
+      AT,
+    );
+    expect(mergeDecisionsOf(result)).toStrictEqual([]);
+  });
+});
 
 describe("dedupeAndMerge", () => {
   const sharedTitle =

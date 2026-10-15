@@ -2277,8 +2277,7 @@ explicit precedence rather than "first source wins":
 > authoritative; it now reads "license-bearing source first → Europe PMC → Crossref → S2", which is how
 > `src/model/merge.ts` already resolves the field (a source with a `license` wins; the row is the
 > tie-break). OpenAlex is kept last so the v1.1 entry survives, as the paragraph above requires; the
-> code's `PRECEDENCE.openAccess` and `test/unit/model/precedence.test.ts` still carry the old order and
-> must follow this row. **(4) Default precedence for everything else.** Where a field has no row here
+> code's `PRECEDENCE.openAccess` and `test/unit/model/precedence.test.ts` follow this row (`P2-T34`, 2026-10-15). **(4) Default precedence for everything else.** Where a field has no row here
 > — `type`, `language`, `keywords`, `url`, `onlineDate`, `referenceCount`, `influentialCitationCount` —
 > and when two sources claim conflicting values for one identifier type (`ids.*` above; `docs/07` §5.1
 > says "keep the one from the higher-precedence source" without naming the order), **the `title` row's
@@ -2448,7 +2447,7 @@ returns `PMC10949956` for the same paper.
 > widened above. `P2-T06` measured 2026-10-15 that the 44 recorded arXiv entries held two old-style ids
 > (`quant-ph/9509021`, `math/9909153`), both accepted, and no dotted-class id; the mapper keeps such a
 > record keyed by its DataCite DOI with `ids.arxivId` absent and warned. `ARXIV_SHAPE` in
-> `src/model/ids.ts` still carries the narrow form and must follow this line.
+> `src/model/ids.ts` follows this line (`P2-T34`, 2026-10-15).
 
 #### 11.3.2 Title normalization
 

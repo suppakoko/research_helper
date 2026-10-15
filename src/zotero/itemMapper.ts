@@ -69,7 +69,9 @@ import {
   applyExtraUpdate,
   findExtraLine,
   parseExtra,
+  readS2CorpusId,
   readWorkKey,
+  RH_S2_CORPUS_ID_KEY,
   RH_SOURCES_KEY,
   RH_WORK_KEY,
   type ExtraEntry,
@@ -404,6 +406,13 @@ export function toZoteroMapping(
     // `journalArticle` *has* a native `ISSN` field (holding issn[0]), and §6.3
     // permits a non-namespaced line only where there is no native field.
     pluginLines.push({ key: RH_ISSN_KEY, value: extraIssns.join(", ") });
+  }
+  if (work.ids.s2CorpusId !== undefined && work.ids.s2CorpusId !== "") {
+    // §6.2's `ids.s2CorpusId` row (`P2-T34`, 2026-10-15): no item type has a
+    // field for it, so it is a namespaced line, written beside any other
+    // identifier the work has. Without it an S2-only item kept its identity
+    // only inside `rh-work-key`.
+    pluginLines.push({ key: RH_S2_CORPUS_ID_KEY, value: work.ids.s2CorpusId });
   }
 
   // Non-namespaced ecosystem lines. Written only where there is no native
@@ -798,10 +807,11 @@ export interface FromZoteroItemOptions {
  * re-implementation of the order. Two consequences worth stating:
  *
  * - For a record whose only identifier is a Semantic Scholar corpus id the
- *   round trip rests on `rh-work-key` **alone**: §6.2 has no row that writes
- *   `s2CorpusId` into any field, so the derived key for such an item would be
- *   the hash arm. The trusted line is what keeps `s2:<corpusId>` stable, which
- *   is the exact case §6.6's 2026-09-30 correction describes.
+ *   round trip no longer rests on `rh-work-key` alone (`P2-T34`, 2026-10-15):
+ *   §6.2's `rh-s2-corpus-id` line gives `ids.s2CorpusId` back, so the
+ *   derived key is `s2:<corpusId>` — §6.6's 2026-09-30 correction — even on
+ *   an item whose `rh-work-key` line was lost. Before that row the derived key
+ *   for such an item was the hash arm.
  * - The hash arm hashes the title **verbatim**, as `buildWorkKey` does:
  *   `docs/07` §5.1's hash is pinned literal and `P2-T09` keys on it.
  *
@@ -900,14 +910,14 @@ function optional<K extends string>(
 }
 
 /**
- * The four identifiers §6.2 writes, each read from its native field first and
+ * The five identifiers §6.2 writes, each read from its native field first and
  * its ecosystem `extra` line second, normalized through `model/ids.ts` so the
  * value is the branded form `buildWorkKey` expects. `archiveID` is the
  * `preprint` field holding `arXiv:<id>`; {@link normalizeArxivId} strips that
  * prefix, which is what makes the native and the `extra` spelling one key.
  *
- * `s2CorpusId` has no home on the item (see {@link canonicalWorkFromSnapshot})
- * and is therefore never populated here.
+ * `s2CorpusId` has no native field on any item type; since `P2-T34`
+ * (2026-10-15) it is read from the `rh-s2-corpus-id` line §6.2 now writes.
  */
 function identifiersFrom(
   field: (name: ReadField) => string,
@@ -926,12 +936,14 @@ function identifiersFrom(
   const arxivId =
     normalizeArxivId(field("archiveID")) ??
     normalizeArxivId(line(ECOSYSTEM_EXTRA_KEY.arxiv));
+  const s2CorpusId = readS2CorpusId(field("extra"));
   const url = field("url");
   return {
     ...(doi === null ? {} : { doi }),
     ...(pmid === null ? {} : { pmid }),
     ...(pmcid === null ? {} : { pmcid }),
     ...(arxivId === null ? {} : { arxivId }),
+    ...(s2CorpusId === undefined ? {} : { s2CorpusId }),
     ...(url === "" ? {} : { url }),
   };
 }

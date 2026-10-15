@@ -414,6 +414,7 @@ describe("BIORXIV_CAPABILITIES", () => {
       abstractsInSearch: false,
       citationGraph: false,
       dateFilter: false,
+      filters: { languages: false, openAccess: false },
       maxPageSize: 30,
       maxTotalResults: undefined,
       benefitsFromApiKey: false,
@@ -428,6 +429,32 @@ describe("BIORXIV_CAPABILITIES", () => {
         false,
       );
     }
+  });
+
+  it("P2-T34: declares neither filter, because search() renders no query and sends no request", async () => {
+    const { client, issued } = createStubHttp(() => {
+      throw new Error("search() must make no request");
+    });
+    for (const server of ["biorxiv", "medrxiv"] as const) {
+      const source = createSource(server, client);
+      expect(source.capabilities.filters).toEqual({
+        languages: false,
+        openAccess: false,
+      });
+      const filtered: SourceQuery = {
+        ...ANY_QUERY,
+        languages: ["en"],
+        openAccessOnly: true,
+      };
+      // Nothing is rendered: the preview is the fixed notice either way…
+      expect(source.explainQuery(filtered)).toBe(
+        source.explainQuery(ANY_QUERY),
+      );
+      // …and the search is the same delegation, with or without the filters.
+      const page = await source.search(filtered, ctx());
+      expect(page.records).toEqual([]);
+    }
+    expect(issued).toEqual([]);
   });
 
   it("makes normalizeForSource report the whole query tree as lost", () => {

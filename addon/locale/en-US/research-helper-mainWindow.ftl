@@ -309,8 +309,9 @@ research-helper-prefs-storage = Stored API keys
 research-helper-prefs-backend-windows = Protected by Windows Credential Manager
 research-helper-prefs-backend-mac = Protected by the macOS Keychain
 # Linux, or an unrecognised platform: the probe passed, but which store answered
-# it cannot yet be determined. Deliberately not "System keyring".
-research-helper-prefs-backend-indeterminate = Encrypted by your operating system. Research Helper cannot yet tell whether this is your system keyring or Zotero's own database — read the third paragraph below before storing a key on this computer.
+# it cannot yet be determined. Deliberately not "System keyring". The wording is
+# the owner's, from docs/09 §1.9 (decided 2026-10-15, review row 50; P2-T34).
+research-helper-prefs-backend-indeterminate = Indeterminate — this operating system does not reveal the key-storage tier
 research-helper-prefs-backend-unavailable = No credential store is available on this computer. Keys cannot be stored here until one is.
 
 research-helper-prefs-risk-1 = Your API keys are encrypted using your operating system's credential store and stored in Zotero's login manager. The preferences pane names the store actually in use next to the key fields.

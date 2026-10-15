@@ -111,7 +111,11 @@ import type {
   SourcePage,
   SourceQuery,
 } from "../types";
-import { buildEsearchRequest, explainPubmedQuery } from "./query";
+import {
+  buildEsearchRequest,
+  explainPubmedQuery,
+  PUBMED_FILTERS,
+} from "./query";
 
 // ---------------------------------------------------------------------------
 // 1. The constants, each one a `docs/02` §3 figure
@@ -214,6 +218,9 @@ export const PUBMED_CAPABILITIES: SourceCapabilities = {
   abstractsInSearch: false,
   citationGraph: false,
   dateFilter: true,
+  // The renderer's own object, not a copy (`P2-T34`): what this declares is
+  // what `./query.ts` refuses from, so the two cannot drift.
+  filters: PUBMED_FILTERS,
   maxPageSize: PUBMED_RETMAX_MAX,
   maxTotalResults: PUBMED_MAX_TOTAL_RESULTS,
   benefitsFromApiKey: true,

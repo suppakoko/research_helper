@@ -46,8 +46,10 @@
  * `docs/07` §4.2 declares `languages`, `openAccessOnly` and `raw` on
  * `SourceQuery`; `P1-T08` rendered none of them, so a caller that set one had
  * it dropped and saw only a quietly wrong result count. Each now has one
- * stated fate, and {@link PUBMED_QUERY_FILTER_SUPPORT} is the flag a caller
- * reads before relying on it:
+ * stated fate. The flag a caller reads before relying on `languages` or
+ * `openAccessOnly` is `PUBMED_CAPABILITIES.filters` — {@link PUBMED_FILTERS},
+ * the object this renderer refuses from (`P2-T34`, `docs/07` §4.2, 2026-10-15);
+ * `raw` stays in {@link PUBMED_QUERY_FILTER_SUPPORT}:
  *
  * - **`languages` is rendered**, in the `term`, as `eng[la]` — or
  *   `(eng[la] OR kor[la])` for several — joined to the Boolean term with
@@ -66,7 +68,7 @@
  *   2026-10-15 (owner review row 112) and made one live request the condition
  *   for rendering it; that request was made by `P2-T36` and is recorded at
  *   the constant. Until then the member was refused by name, and
- *   {@link assertExpressible} still refuses it if the support flag is ever
+ *   {@link assertExpressible} still refuses it if {@link PUBMED_FILTERS} ever
  *   turned off again — refusing, not dropping, is `docs/07` §11.1 step 2's
  *   "do not fake it", and the pipeline turns such a throw into that source's
  *   `report.error` (`stages.ts`, `fetchOne`).
@@ -95,7 +97,12 @@
 
 import { redactUrl } from "../../core/errors";
 import { ncbiIdentityParams } from "../../core/http/userAgent";
-import type { QueryField, QueryNode, SourceQuery } from "../types";
+import type {
+  QueryField,
+  QueryNode,
+  SourceCapabilities,
+  SourceQuery,
+} from "../types";
 
 /** `esearch` endpoint, `docs/02` §3.1 + §3.2. No query string. */
 export const PUBMED_ESEARCH_BASE_URL =
@@ -207,33 +214,33 @@ export const PUBMED_LANGUAGE_CODES: Readonly<Record<string, string>> =
 export const PUBMED_OPEN_ACCESS_CLAUSE = "free full text[sb]";
 
 /**
- * The optional `SourceQuery` members that are filters rather than the query
- * itself — `docs/07` §4.2's `languages`, `openAccessOnly` and `raw`. Derived
- * from the contract, not re-declared, so a member renamed there fails here.
+ * PubMed's answer to `docs/07` §4.2's `SourceCapabilities.filters`: both
+ * `true` since `P2-T36` (2026-10-15); the module header says how each is
+ * rendered. **The object `PUBMED_CAPABILITIES.filters` is** — `pubmedSource.ts`
+ * assigns this constant rather than a copy — and {@link assertExpressible}
+ * refuses from it, so the declaration a caller reads and the renderer's
+ * behaviour cannot drift (`P2-T34`, the pattern `query.fields` uses). A
+ * member set to `false` is **refused** with `RangeError` by
+ * {@link buildEsearchRequest} and {@link explainPubmedQuery} when the query
+ * sets it, never dropped (`docs/07` §11.1 step 2: "do not fake it").
  */
-export type PubmedQueryFilter = keyof Pick<
-  SourceQuery,
-  "languages" | "openAccessOnly" | "raw"
->;
+export const PUBMED_FILTERS: SourceCapabilities["filters"] = {
+  languages: true,
+  openAccess: true,
+};
 
 /**
- * Which of the three optional filters this adapter really expresses — the
- * flag a caller reads before setting one, in the shape `resolveDateFilterMode`
- * reads `SourceCapabilities.dateFilter` (`docs/07` §11.1 step 2: declare
- * honestly, "do not fake it"). A member whose flag is `false` is **refused**
- * with `RangeError` by {@link buildEsearchRequest} and
- * {@link explainPubmedQuery} when set, never dropped.
- *
- * It lives here rather than on `SourceCapabilities` because `docs/07` §4.2
- * declares no such member yet and that document is the sole authority for the
- * type (`plan/README.md` §5 rule 3). All three are `true` since `P2-T36`
- * (2026-10-15); the module header says how each is rendered.
+ * The optional `SourceQuery` member that stays adapter-level — `raw`, which
+ * `docs/07` §4.2 leaves "documented per adapter". Derived from the contract,
+ * not re-declared, so a member renamed there fails here. `languages` and
+ * `openAccessOnly` moved to {@link PUBMED_FILTERS} on 2026-10-15 (`P2-T34`).
  */
+export type PubmedQueryFilter = keyof Pick<SourceQuery, "raw">;
+
+/** Whether `raw` is honoured: `true` — the module header says how. */
 export const PUBMED_QUERY_FILTER_SUPPORT: Readonly<
   Record<PubmedQueryFilter, boolean>
 > = {
-  languages: true,
-  openAccessOnly: true,
   raw: true,
 };
 
@@ -351,21 +358,31 @@ function renderLanguageClause(languages: readonly string[]): string {
 }
 
 /**
- * Refuse every optional filter this adapter cannot express
- * ({@link PUBMED_QUERY_FILTER_SUPPORT}), by name, so the drop is an error at
- * the call site and never a quietly smaller result set.
+ * Refuse every optional filter this adapter cannot express — read off
+ * {@link PUBMED_FILTERS}, the object `PUBMED_CAPABILITIES.filters` is — by
+ * name, so the drop is an error at the call site and never a quietly
+ * different result set.
  *
- * `openAccessOnly: false` is not a filter — it asks for nothing — and passes.
+ * An empty `languages` list and `openAccessOnly: false` ask for nothing and
+ * pass.
  */
 function assertExpressible(query: SourceQuery): void {
   if (
-    query.openAccessOnly === true &&
-    !PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly
+    query.languages !== undefined &&
+    query.languages.length > 0 &&
+    !PUBMED_FILTERS.languages
   ) {
+    throw new RangeError(
+      `[research-helper] PubMed cannot express SourceQuery.languages: ` +
+        `the member would otherwise be silently dropped. ` +
+        `PUBMED_CAPABILITIES.filters.languages is false.`,
+    );
+  }
+  if (query.openAccessOnly === true && !PUBMED_FILTERS.openAccess) {
     throw new RangeError(
       `[research-helper] PubMed cannot express SourceQuery.openAccessOnly: ` +
         `the member would otherwise be silently dropped. ` +
-        `PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly is false.`,
+        `PUBMED_CAPABILITIES.filters.openAccess is false.`,
     );
   }
 }

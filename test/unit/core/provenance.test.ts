@@ -12,6 +12,7 @@ import {
   redactSearchProvenance,
   redactSourceProvenance,
   serializeProvenance,
+  type MergeDecision,
   type ProvenanceFileWriter,
   type SearchProvenance,
   type SourceProvenance,
@@ -337,6 +338,35 @@ function minimalSource(): SourceProvenance {
   };
 }
 
+/**
+ * One FR-50 scenario 2 merge, as `stages.ts`'s `mergeDecisionsOf` builds it
+ * from a DOI-tier `"match"` (`P2-T34`).
+ */
+function doiMerge(): MergeDecision {
+  return {
+    workKey: "doi:10.1038/s41586-023-06139-9",
+    tier: "doi",
+    confidence: 1,
+    evidence: { doi: "10.1038/s41586-023-06139-9" },
+  };
+}
+
+/** A fuzzy-title merge, whose evidence mixes numbers, a boolean and a string. */
+function fuzzyMerge(): MergeDecision {
+  return {
+    workKey: "hash:5f2b9c0e8d1a4b7c3e6f9a2d5c8b1e4f7a0d3c6b",
+    tier: "title-fuzzy",
+    confidence: 0.92,
+    evidence: {
+      levSim: 0.97,
+      jaccard: 0.9,
+      yearDelta: 0,
+      firstAuthorMatches: true,
+      rule: "levenshtein",
+    },
+  };
+}
+
 /** A run with every §5.3 field populated. */
 function completeRun(): SearchProvenance {
   return {
@@ -352,6 +382,7 @@ function completeRun(): SearchProvenance {
     targetCollectionKey: "ABCD2345",
     perSource: [completeSource()],
     totals: { retrieved: 50, deduplicatedAway: 0, imported: 48 },
+    mergeDecisions: [doiMerge(), fuzzyMerge()],
   };
 }
 
@@ -370,6 +401,7 @@ function minimalRun(): SearchProvenance {
     targetCollectionKey: undefined,
     perSource: [minimalSource()],
     totals: { retrieved: 0, deduplicatedAway: 0, imported: 0 },
+    mergeDecisions: [],
   };
 }
 
@@ -439,7 +471,24 @@ describe("schema/provenance.schema.json", () => {
       "targetCollectionKey",
       "perSource",
       "totals",
+      // `P2-T34`, 2026-10-15: FR-50 scenario 2's field, appended by §5.3.
+      "mergeDecisions",
     ]);
+  });
+
+  it("declares docs/07 §5.3's MergeDecision field names, in §5.3's order, all required", () => {
+    const merge = resolveRef(SCHEMA, "#/$defs/MergeDecision");
+    const fields = ["workKey", "tier", "confidence", "evidence"];
+    expect(Object.keys(merge["properties"] as object)).toEqual(fields);
+    expect(merge["required"]).toEqual(fields);
+    expect(merge["additionalProperties"]).toBe(false);
+    expect(SCHEMA["properties"]).toMatchObject({
+      mergeDecisions: {
+        type: "array",
+        items: { $ref: "#/$defs/MergeDecision" },
+      },
+    });
+    expect(SCHEMA["required"]).toContain("mergeDecisions");
   });
 
   it("declares docs/07 §5.3's SourceProvenance field names, in §5.3's order", () => {
@@ -553,6 +602,18 @@ describe("a SearchProvenance object validates against the shipped schema", () =>
     );
   });
 
+  it("P2-T34: carries every merge decision — tier, confidence, evidence — and validates (FR-50 scenario 2)", () => {
+    const record = exported(completeRun()) as Record<string, unknown>;
+    expect(record["mergeDecisions"]).toEqual([doiMerge(), fuzzyMerge()]);
+    expect(validate(SCHEMA, record, SCHEMA)).toEqual([]);
+  });
+
+  it("P2-T34: records an empty mergeDecisions, not an absent one, when nothing merged", () => {
+    const record = exported(minimalRun()) as Record<string, unknown>;
+    expect(record["mergeDecisions"]).toEqual([]);
+    expect(serializeProvenance(minimalRun())).toContain('"mergeDecisions": []');
+  });
+
   it("startedAt and finishedAt are ISO 8601", () => {
     // `format` is annotation-only in draft 2020-12, so the shape is asserted
     // here instead of being assumed from the schema.
@@ -635,6 +696,43 @@ describe("the validator rejects what the schema forbids", () => {
       SCHEMA,
     );
     expect(errors.join("\n")).toContain("expected type integer");
+  });
+
+  it("P2-T34: rejects a merge decision with no tier", () => {
+    const errors = validate(
+      SCHEMA,
+      broken((r) => {
+        const merge = (r["mergeDecisions"] as Record<string, unknown>[])[0];
+        if (merge !== undefined) delete merge["tier"];
+      }),
+      SCHEMA,
+    );
+    expect(errors.join("\n")).toContain("missing required property tier");
+  });
+
+  it("P2-T34: rejects evidence that is not flat", () => {
+    const errors = validate(
+      SCHEMA,
+      broken((r) => {
+        const merge = (r["mergeDecisions"] as Record<string, unknown>[])[0];
+        if (merge !== undefined) merge["evidence"] = { doi: { nested: 1 } };
+      }),
+      SCHEMA,
+    );
+    expect(errors.join("\n")).toContain("$.mergeDecisions[0].evidence.doi");
+  });
+
+  it("P2-T34: rejects a record with no mergeDecisions at all", () => {
+    const errors = validate(
+      SCHEMA,
+      broken((r) => {
+        delete r["mergeDecisions"];
+      }),
+      SCHEMA,
+    );
+    expect(errors.join("\n")).toContain(
+      "missing required property mergeDecisions",
+    );
   });
 
   it("rejects a negative count", () => {
@@ -741,6 +839,28 @@ describe("no credential reaches either output", () => {
       },
     });
     expect(source.error?.stack).not.toContain(STUB_KEY);
+  });
+
+  it("P2-T34: redacts a key in a merge decision's evidence, and keeps the hash: work key whole", () => {
+    const run = redactSearchProvenance({
+      ...completeRun(),
+      mergeDecisions: [
+        {
+          ...fuzzyMerge(),
+          evidence: { ...fuzzyMerge().evidence, rule: `x ${STUB_KEY}` },
+        },
+      ],
+    });
+    const [merge] = run.mergeDecisions;
+    expect(merge?.evidence["rule"]).toBe("x [redacted:32]");
+    // Numbers and booleans pass through untouched.
+    expect(merge?.evidence["levSim"]).toBe(0.97);
+    expect(merge?.evidence["firstAuthorMatches"]).toBe(true);
+    // The work key is a SHA-1 of public metadata, 40 hexadecimal characters
+    // the hexadecimal rule would otherwise blank — and it names the work.
+    expect(merge?.workKey).toBe(fuzzyMerge().workKey);
+    expect(merge?.tier).toBe("title-fuzzy");
+    expect(serializeProvenance(run)).not.toContain(STUB_KEY);
   });
 
   it("is idempotent, so the export boundary can redact again for free", () => {
@@ -915,6 +1035,32 @@ describe("the provenance note", () => {
     }
     expect(html).toContain("<strong>Records deduplicated away</strong>: 0");
     expect(html).toContain("<strong>Records imported</strong>: 0");
+  });
+
+  it("P2-T34: shows every merge decision's work key, tier, confidence and evidence (FR-50 scenario 2)", () => {
+    const html = renderProvenanceNoteHtml(
+      redactSearchProvenance(completeRun()),
+    );
+    const section = html.slice(html.indexOf("<h2>Merge decisions</h2>"));
+    expect(section).not.toBe(html);
+    expect(section).toContain(
+      "<li><code>doi:10.1038/s41586-023-06139-9</code><ul>" +
+        "<li><strong>Tier</strong>: <code>doi</code></li>" +
+        "<li><strong>Confidence</strong>: 1</li>" +
+        "<li><strong>Evidence</strong>: " +
+        "<code>{&quot;doi&quot;:&quot;10.1038/s41586-023-06139-9&quot;}</code></li>" +
+        "</ul></li>",
+    );
+    expect(section).toContain(
+      "<strong>Tier</strong>: <code>title-fuzzy</code>",
+    );
+    expect(section).toContain("<strong>Confidence</strong>: 0.92");
+    expect(section).toContain("&quot;rule&quot;:&quot;levenshtein&quot;");
+  });
+
+  it("P2-T34: says none under Merge decisions when nothing merged", () => {
+    const html = renderProvenanceNoteHtml(redactSearchProvenance(minimalRun()));
+    expect(html).toContain("<h2>Merge decisions</h2><p>none</p>");
   });
 
   it("shows an em dash, not an empty <code>, for an empty query string", () => {

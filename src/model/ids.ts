@@ -12,6 +12,10 @@
  * deliberately divergent working-name sketches (`ids.s2PaperId`, `ids.epmc`)
  * under explicit "doc 07 wins" notes; they are not transcribed here, and
  * `P1-T01`'s **Do NOT** list names adding an `epmc` id as a defect.
+ * `ExternalIds.epmcId` below is not that: the owner approved it on 2026-10-15
+ * (review row 130), `docs/07` §5.1 declared it first, and it holds only a
+ * Europe PMC *preprint* (`PPR`) record's id, for `relatedVersionIds` —
+ * a record's own Europe PMC identity stays `SourceRecord.nativeId` (`P2-T34`).
  *
  * **Layering.** `model/` imports nothing but `model/` (docs/07 §2.3) and never
  * references `Zotero.*`; both are enforced by `eslint.config.js`. That rule is
@@ -33,6 +37,7 @@ export type Pmcid = string & { readonly __brand: "Pmcid" }; // "PMC" + digits
 export type ArxivId = string & { readonly __brand: "ArxivId" }; // "2401.01234" (no version)
 export type S2CorpusId = string & { readonly __brand: "S2CorpusId" };
 export type OpenAlexId = string & { readonly __brand: "OpenAlexId" };
+export type EpmcId = string & { readonly __brand: "EpmcId" }; // a PPR record's id: "PPR657399"
 
 /**
  * Adapter identity unions. They live here, not in `sources/types.ts` / `llm/types.ts`,
@@ -111,6 +116,11 @@ export interface ExternalIds {
   readonly arxivId?: ArxivId;
   readonly s2CorpusId?: S2CorpusId;
   readonly openAlexId?: OpenAlexId;
+  /**
+   * A Europe PMC preprint record's id — the `id` of a `source: "PPR"` record. Set in
+   * `CanonicalWork.relatedVersionIds` when a published record names its preprint.
+   */
+  readonly epmcId?: EpmcId;
   /** Fallback URL when no stable identifier exists. */
   readonly url?: string;
 }
@@ -222,10 +232,16 @@ export function normalizePmcid(raw: string | null | undefined): Pmcid | null {
 /**
  * The two arXiv identifier shapes `docs/02` §11.3.1 accepts once the version
  * suffix is gone: new-style `2106.15928` (four digits, a dot, four or five
- * digits) and old-style `math.GT/0309136` (an archive, an optional two-letter
- * subject class, a slash, seven digits).
+ * digits) and old-style `math.GT/0309136` or `cond-mat.mes-hall/0309136` (an
+ * archive, an optional dotted subject class of letters and hyphens in any
+ * case, a slash, seven digits).
+ *
+ * Widened 2026-10-15 (`P2-T34`), after `docs/02` §11.3.1 was corrected the
+ * same day (owner review rows 90 and 91): the old-style alternative read
+ * `[a-z-]+(\.[A-Z]{2})?` and rejected real identifiers whose subject class is
+ * dotted and lower-case, such as `cond-mat.mes-hall/0309136`.
  */
-const ARXIV_SHAPE = /^(\d{4}\.\d{4,5}|[a-z-]+(\.[A-Z]{2})?\/\d{7})$/;
+const ARXIV_SHAPE = /^(\d{4}\.\d{4,5}|[a-z-]+(\.[A-Za-z-]+)?\/\d{7})$/;
 
 /**
  * Normalize an arXiv identifier to the version-stripped form `docs/07` §5.1
@@ -241,7 +257,7 @@ const ARXIV_SHAPE = /^(\d{4}\.\d{4,5}|[a-z-]+(\.[A-Z]{2})?\/\d{7})$/;
  *
  * Added by `P2-T09`: `P1-T01` shipped the DOI, PMID and PMCID normalizers and
  * no arXiv adapter existed to need this one. The shape test is §11.3.1's
- * verbatim, including its case-sensitive two-letter subject class.
+ * verbatim — since 2026-10-15 its widened dotted subject class.
  *
  * @param raw - an arXiv id as some source or URL spelled it, or nothing
  * @returns the version-stripped arXiv id, or `null` if `raw` is not one

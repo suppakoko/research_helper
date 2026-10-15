@@ -30,6 +30,7 @@ import {
   type ProgressSnapshot,
 } from "../../../src/core/jobQueue/progress";
 import { createLogger, NULL_LOG_SINK } from "../../../src/core/logger";
+import { redactSearchProvenance } from "../../../src/core/provenance";
 import type { CanonicalWork, WorkType } from "../../../src/model/canonicalWork";
 import {
   normalizeDoi,
@@ -77,6 +78,7 @@ import { createSourceRegistry } from "../../../src/sources/registry";
 import {
   DEDUP_YIELD_EVERY_COMPARISONS,
   dedupeRecords,
+  TIER_CONFIDENCE,
 } from "../../../src/sources/shared/dedupe";
 import { recencyWindow } from "../../../src/sources/shared/recency";
 import type {
@@ -85,6 +87,8 @@ import type {
   SourceCapabilities,
   SourceQuery,
 } from "../../../src/sources/types";
+import { buildProvenance } from "../../../src/ui/viewModels/searchImportViewModel";
+import { renderProvenanceNoteHtml } from "../../../src/zotero/notes";
 
 /**
  * `P1-T16`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, **no network**.
@@ -210,6 +214,7 @@ const CAPABILITIES: SourceCapabilities = {
   abstractsInSearch: true,
   citationGraph: false,
   dateFilter: true,
+  filters: { languages: false, openAccess: false },
   maxPageSize: 2,
   maxTotalResults: undefined,
   benefitsFromApiKey: false,
@@ -2899,5 +2904,120 @@ describe("end to end over the real PubMed adapter, mapper and HTTP client", () =
     expect(out.outcome).toBe("cancelled");
     expect(out.perSource).toEqual([]);
     expect(writer.log.opened).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-T34 — FR-50 scenario 2's merge decision reaches the provenance note
+// ---------------------------------------------------------------------------
+
+describe("the merge decision reaches the provenance note (P2-T34, FR-50 scenario 2)", () => {
+  const sharedTitle =
+    "Adenine base editors convert A to G in genomic DNA without cleavage";
+  const sameDoi = {
+    pubmed: record("pubmed", "40", {
+      doi: "10.1000/one",
+      title: sharedTitle,
+      year: 2024,
+    }),
+    crossref: record("crossref", "c40", {
+      doi: "10.1000/one",
+      title: sharedTitle,
+      year: 2024,
+    }),
+  };
+  /** What `mergeDecisionsOf` writes for the DOI tier's match of the pair. */
+  const DOI_MERGE = {
+    workKey: "doi:10.1000/one",
+    tier: "doi",
+    confidence: TIER_CONFIDENCE.doi,
+    evidence: { doi: "10.1000/one" },
+  };
+
+  /** The provenance note the view model writes for `out`, through the gate. */
+  function noteFor(out: SearchImportOutput, input: SearchImportInput): string {
+    const provenance = redactSearchProvenance(
+      buildProvenance(out, input, {
+        runId: "run-p2t34",
+        pluginVersion: "0.0.2-test",
+        zoteroVersion: "10.0.3-test",
+        startedAt: "2026-10-15T00:00:00.000Z",
+        finishedAt: "2026-10-15T00:00:01.000Z",
+      }),
+    );
+    expect(provenance.mergeDecisions).toStrictEqual(out.mergeDecisions);
+    return renderProvenanceNoteHtml(provenance);
+  }
+
+  it("a two-source same-DOI search and import writes a provenance note whose mergeDecisions names the tier and confidence", async () => {
+    const writer = stubWriter();
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[sameDoi.pubmed]] }),
+        stubSource({ id: "crossref", pages: [[sameDoi.crossref]] }),
+      ],
+      writer: writer.writer,
+    });
+    const input: SearchImportInput = {
+      ...BASE_INPUT,
+      sourceIds: ["pubmed", "crossref"],
+      target: { collectionName: "C", selectedRecordIds: [sameDoi.pubmed.id] },
+    };
+    const out = await h.pipeline.run(input, h.ctx);
+
+    expect(out.outcome).toBe("succeeded");
+    expect(out.write?.created).toBe(1);
+    // `run` wrote `MergedWork.decisions` onto the output…
+    expect(out.mergeDecisions).toStrictEqual([DOI_MERGE]);
+    expect(out.mergeDecisions[0]?.confidence).toBe(1);
+    // …and the note names the work, the tier and the confidence.
+    const html = noteFor(out, input);
+    expect(html).toContain(
+      "<h2>Merge decisions</h2><ul><li><code>doi:10.1000/one</code><ul>" +
+        "<li><strong>Tier</strong>: <code>doi</code></li>" +
+        "<li><strong>Confidence</strong>: 1</li>",
+    );
+  });
+
+  it("the import of a preview carries the preview's decisions through, and a single-source run records none", async () => {
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[sameDoi.pubmed]] }),
+        stubSource({ id: "crossref", pages: [[sameDoi.crossref]] }),
+      ],
+    });
+    const previewed = await h.pipeline.run(
+      { ...BASE_INPUT, sourceIds: ["pubmed", "crossref"] },
+      h.ctx,
+    );
+    expect(previewed.mergeDecisions).toStrictEqual([DOI_MERGE]);
+
+    const importer = harness({ sources: [] });
+    const importInput: SearchImportInput = {
+      ...BASE_INPUT,
+      query: "",
+      sourceIds: [],
+      records: previewed.records,
+      works: previewed.works,
+      mergeDecisions: previewed.mergeDecisions,
+      target: { collectionName: "C", selectedRecordIds: [sameDoi.pubmed.id] },
+    };
+    const imported = await importer.pipeline.run(importInput, importer.ctx);
+    expect(imported.outcome).toBe("succeeded");
+    // No cascade ran on this path, so the decisions are the preview's, as given.
+    expect(imported.mergeDecisions).toBe(previewed.mergeDecisions);
+    expect(noteFor(imported, importInput)).toContain(
+      "<strong>Tier</strong>: <code>doi</code>",
+    );
+
+    // One source, nothing to merge: `[]`, not absent (§5.3).
+    const single = harness({
+      sources: [stubSource({ id: "pubmed", pages: [[sameDoi.pubmed]] })],
+    });
+    const alone = await single.pipeline.run(BASE_INPUT, single.ctx);
+    expect(alone.mergeDecisions).toStrictEqual([]);
+    expect(noteFor(alone, BASE_INPUT)).toContain(
+      "<h2>Merge decisions</h2><p>none</p>",
+    );
   });
 });

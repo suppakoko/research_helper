@@ -29,6 +29,8 @@
  * other — never rewritten, never migrated.
  */
 
+import type { S2CorpusId } from "../model/ids";
+
 // ---------------------------------------------------------------------------
 // 1. The contract's constants
 // ---------------------------------------------------------------------------
@@ -46,6 +48,14 @@ export const RH_WORK_KEY = "rh-work-key";
 
 /** `rh-sources` — which sources returned the work (§6.2, "debug aid; togglable"). */
 export const RH_SOURCES_KEY = "rh-sources";
+
+/**
+ * `rh-s2-corpus-id` — the Semantic Scholar corpus id, which no Zotero item type
+ * has a field for (§6.2's `ids.s2CorpusId` row, added 2026-10-15 by `P2-T34`).
+ * Declared beside {@link RH_WORK_KEY} because both the write path
+ * (`itemMapper.ts`) and the existing-item index (`libraryIndex.ts`) read it.
+ */
+export const RH_S2_CORPUS_ID_KEY = "rh-s2-corpus-id";
 
 /**
  * Maximum number of characters the plugin may **add** to `extra` (§6.3's
@@ -172,6 +182,22 @@ export function readWorkKey(
 ): string | undefined {
   const line = findExtraLine(parseExtra(extra), RH_WORK_KEY);
   return line === undefined || line.value === "" ? undefined : line.value;
+}
+
+/**
+ * Reads `rh-s2-corpus-id` back out of an `extra` field (`P2-T34`).
+ * `undefined` when the line is absent or empty.
+ *
+ * The value is taken as written, trimmed: `docs/02` §11.3.1 defines no
+ * normalizer for a corpus id and `docs/07` §5.1 brands `S2CorpusId` with no
+ * shape, which is the rule `src/sources/shared/dedupe.ts` applies too.
+ */
+export function readS2CorpusId(
+  extra: string | null | undefined,
+): S2CorpusId | undefined {
+  const line = findExtraLine(parseExtra(extra), RH_S2_CORPUS_ID_KEY);
+  const value = line?.value.trim() ?? "";
+  return value === "" ? undefined : (value as S2CorpusId);
 }
 
 // ---------------------------------------------------------------------------

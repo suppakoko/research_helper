@@ -140,6 +140,7 @@ import {
   explainSemanticScholarQuery,
   SEMANTICSCHOLAR_ABSTRACT_FIELDS,
   SEMANTICSCHOLAR_BATCH_IDS_WITH_ABSTRACT,
+  SEMANTICSCHOLAR_FILTERS,
   SEMANTICSCHOLAR_HEALTH_FIELDS,
   SEMANTICSCHOLAR_HEALTH_PAPER_ID,
   SEMANTICSCHOLAR_PAGE_SIZE_MAX,
@@ -222,6 +223,8 @@ export const SEMANTICSCHOLAR_CAPABILITIES: SourceCapabilities = {
   abstractsInSearch: true,
   citationGraph: true,
   dateFilter: true,
+  // The bulk renderer's own object (`P2-T34`): `./query.ts` refuses from it.
+  filters: SEMANTICSCHOLAR_FILTERS,
   maxPageSize: SEMANTICSCHOLAR_PAGE_SIZE_MAX,
   maxTotalResults: undefined,
   benefitsFromApiKey: true,

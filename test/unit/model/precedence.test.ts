@@ -253,7 +253,10 @@ describe("PRECEDENCE transcribes docs/02 §10.4", () => {
     ],
     ["citationCount", ["semanticscholar", "openalex", "crossref", "europepmc"]],
     ["subjects", ["pubmed", "europepmc"]],
-    ["openAccess", ["semanticscholar", "openalex", "europepmc"]],
+    // Corrected in `docs/02` §10.4 on 2026-10-15 (owner review rows 100–103):
+    // license-bearing first, then Europe PMC → Crossref → S2 → OpenAlex
+    // (`P2-T34` followed it).
+    ["openAccess", ["europepmc", "crossref", "semanticscholar", "openalex"]],
   ] as const)("row %s is §10.4's, verbatim and in order", (field, row) => {
     expect(PRECEDENCE[field]).toEqual(row);
   });
