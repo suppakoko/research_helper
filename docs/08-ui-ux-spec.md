@@ -1235,6 +1235,15 @@ Per-database status is essential: partial failure across seven sources is the *n
 │  │                                     [ Open Preferences… ]  [ Retry ]    │  │
 ```
 
+> **Decided 2026-10-16 (owner; `plan/00` §6 item 220): the buttons follow the failed sources, not the run.** Since item
+> 204 a run whose every searching source failed also carries a run-level `SOURCE` error. When at least one source
+> carries its own error, the panel skips that run-level error twice over: it adds no line to the details disclosure,
+> and it plays no part in choosing the buttons. Each button is drawn when at least one failed source's §8.3 row offers
+> it (`P1-T22`), so a run where every source failed only on a refused key shows **Open Preferences… alone**, and an
+> offline-only run shows **Retry alone**. The run-level error is used only when no source carries an error of its own —
+> for example a run that `Planning` rejected before any source was asked. The wireframe above shows a mixed run, which
+> draws both buttons.
+
 ---
 
 ## 5. Related Papers flow

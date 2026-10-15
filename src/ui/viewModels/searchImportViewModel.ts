@@ -2069,18 +2069,24 @@ export function createSearchImportViewModel(
       const actions = perSourceErrors.map(({ report, error }) =>
         errorView(error, nameOf(report.sourceId)),
       );
-      const runLevel =
-        output.error === undefined
-          ? []
-          : [
-              errorView(
-                output.error,
-                nameOf(output.perSource[0]?.sourceId ?? ""),
-              ),
-            ];
+      // Item 220 (owner, 2026-10-16; `docs/08` §4.6): decide from the
+      // per-source errors. Since item 204 an all-failed run also carries the
+      // pipeline's run-level `SOURCE` error, which has no `ERROR_ROWS` row,
+      // so its action would follow `retryable: true` and draw Retry even
+      // when every source failed only on a refused key. When any source
+      // carries its own error, the run-level error adds no details line and
+      // picks no button; it is used only when no source has an error of its
+      // own, such as a run `Planning` rejected before any source was asked.
+      const runLevelErrors =
+        output.error !== undefined && perSourceErrors.length === 0
+          ? [output.error]
+          : [];
+      const runLevel = runLevelErrors.map((error) =>
+        errorView(error, nameOf(output.perSource[0]?.sourceId ?? "")),
+      );
       const errors = [
         ...perSourceErrors.map(({ error }) => error),
-        ...(output.error === undefined ? [] : [output.error]),
+        ...runLevelErrors,
       ];
       publish({
         sources: lines,

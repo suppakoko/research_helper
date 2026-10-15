@@ -3036,6 +3036,142 @@ describe("item 204 — the pipeline's 'failed' reaches the panel and the progres
   });
 });
 
+describe("item 220 — the all-failed panel decides from the per-source errors", () => {
+  const SEARCHING: readonly SourceId[] = [
+    "pubmed",
+    "europepmc",
+    "crossref",
+    "semanticscholar",
+    "arxiv",
+  ];
+
+  /**
+   * The seven-source run `createSearchImportPipeline` returns since item 204
+   * when every searching source failed: `"failed"`, with the run-level
+   * `SOURCE` error whose `retryable: true` would draw Retry on its own.
+   */
+  function allFailed(
+    errorFor: (sourceId: SourceId) => SerializedError,
+  ): SearchImportOutput {
+    return output({
+      outcome: "failed",
+      error: failure("SOURCE", { retryable: true }),
+      perSource: SEVEN_IDS.map((sourceId) =>
+        SEARCHING.includes(sourceId)
+          ? report({ sourceId, error: errorFor(sourceId) })
+          : report({ sourceId }),
+      ),
+    });
+  }
+
+  it("shows Open Preferences and no Retry when every source failed only on a refused key", async () => {
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          output: allFailed(() =>
+            failure("AUTHORIZATION", { httpStatus: 403 }),
+          ),
+        },
+      ],
+    });
+    await h.model.runSearch(query({ sources: [...SEVEN_IDS] }));
+
+    expect(h.model.state.panel).toBe("error");
+    expect(h.model.state.error?.openPreferences).toBe(true);
+    expect(h.model.state.error?.retry).toBe(false);
+  });
+
+  it("shows Retry alone when every source failed only on being offline", async () => {
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          output: allFailed(() => failure("OFFLINE", { retryable: true })),
+        },
+      ],
+    });
+    await h.model.runSearch(query({ sources: [...SEVEN_IDS] }));
+
+    expect(h.model.state.panel).toBe("error");
+    expect(h.model.state.error?.retry).toBe(true);
+    expect(h.model.state.error?.openPreferences).toBe(false);
+  });
+
+  it("shows both buttons for a mixed run of refused keys and offline sources", async () => {
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          output: allFailed((sourceId) =>
+            sourceId === "semanticscholar"
+              ? failure("AUTHORIZATION", { httpStatus: 403 })
+              : failure("OFFLINE", { retryable: true }),
+          ),
+        },
+      ],
+    });
+    await h.model.runSearch(query({ sources: [...SEVEN_IDS] }));
+
+    expect(h.model.state.panel).toBe("error");
+    expect(h.model.state.error?.retry).toBe(true);
+    expect(h.model.state.error?.openPreferences).toBe(true);
+  });
+
+  it("still shows the run-level error's own action when no source carries an error", async () => {
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          // A run that failed before fetching: no source was asked, so the
+          // run-level error is the only one there is.
+          output: output({
+            outcome: "failed",
+            perSource: [],
+            error: failure("SOURCE", { retryable: true }),
+          }),
+        },
+      ],
+    });
+    await h.model.runSearch(query({ sources: [...SEVEN_IDS] }));
+
+    expect(h.model.state.panel).toBe("error");
+    // `SOURCE` has no `ERROR_ROWS` row, so its action is its own
+    // `retryable: true`.
+    expect(h.model.state.error?.retry).toBe(true);
+    expect(h.model.state.error?.openPreferences).toBe(false);
+    expect(h.model.state.error?.details).toStrictEqual(["SOURCE"]);
+  });
+
+  it("leaves the run-level error out of the panel's lines when per-source lines exist", async () => {
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          output: allFailed((sourceId) =>
+            sourceId === "semanticscholar"
+              ? failure("AUTHORIZATION", { httpStatus: 403 })
+              : failure("OFFLINE", { retryable: true }),
+          ),
+        },
+      ],
+    });
+    await h.model.runSearch(query({ sources: [...SEVEN_IDS] }));
+
+    const error = h.model.state.error;
+    expect(error?.lines.map((line) => line.sourceId)).toStrictEqual(SEARCHING);
+    // One machine code per failed source, in order, and no `SOURCE`.
+    expect(error?.details).toStrictEqual([
+      "OFFLINE",
+      "OFFLINE",
+      "OFFLINE",
+      "AUTHORIZATION",
+      "403",
+      "OFFLINE",
+    ]);
+  });
+});
+
 describe("item 212 — Strategy B's counts in the import summary", () => {
   const PATHS = {
     viaTranslators: 7,

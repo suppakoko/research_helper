@@ -1530,7 +1530,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 220. ~~**The all-failed panel now offers Retry beside Open Preferences (owner).**~~ **DECIDED 2026-10-16: decide from the
     per-source errors** — the window skips the run-level error when per-source errors exist (a refused key alone shows
-    Open Preferences only, as before). Since item 204 the pipeline returns
+    Open Preferences only, as before). **DONE 2026-10-16** (`plan/reports/item-220.md`; 3 mutants killed). Since item 204 the pipeline returns
     `failed` with its run-level `SOURCE` error, which has no `ERROR_ROWS` row, so Retry follows its `retryable: true` —
     also when every source failed only on a refused key. Either the window skips the run-level error when per-source
     errors exist, or `ERROR_ROWS` gains a `SOURCE` row. Related: item 205.
