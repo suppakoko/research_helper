@@ -1677,7 +1677,7 @@ card) and any end-to-end run, since nothing calls the new stage body yet.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T11` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; preprint and published version kept as two items, Related in Zotero, preprint tagged (G-16). Korean policy string pending review (item 199). Report at `plan/reports/P2-T11.md`. |
 | **Depends on** | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09`, `P2-T34` |
 | **Blocks** | `P2-T13`, `P2-T16` |
 | **Retires** | part of `R-18` |
@@ -2026,7 +2026,7 @@ so expect to move them, and expect the report diff to be the evidence.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T14` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; source chips, duplicate badge, per-source status, role row, no-key notice; two window defects fixed. Report at `plan/reports/P2-T14.md`. |
 | **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34` |
 | **Blocks** | `P2-T16`, `P2-T17` |
 | **Retires** | part of `R-2`, part of `R-18` |

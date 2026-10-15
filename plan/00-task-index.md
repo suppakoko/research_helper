@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-15 · **148 tasks: 108 `DONE`, 40 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **30 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-15 · **148 tasks: 110 `DONE`, 38 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **32 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -221,10 +221,10 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T08` | `preprint` item-type mapping and server attribution | `P2-T03`, `P2-T06`, `P2-T07` | 1.0 d |  |
 | ✅ `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
 | ✅ `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
-| `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09`, `P2-T34` | 1.0 d | 🔒 |
+| ✅ `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09`, `P2-T34` | 1.0 d | 🔒 |
 | ✅ `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29`, `P2-T30` | 0.75 d |  |
 | `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36` | 2.0 d | 🔒 |
-| `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34` | 1.5 d |  |
+| ✅ `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34` | 1.5 d |  |
 | `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
 | `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
 | ✅ `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
@@ -1443,7 +1443,9 @@ the caller of what the card builds; if it does not, the caller is added with a d
     research_helper/superseded-by-published.") and `P2-T14`'s five (`-s2-no-key`, `-s2-no-key-request`,
     `-row-duplicate`, `-row-linked`, `-source-role`) are commented stubs on `KO_PENDING_REVIEW`.
 
-200. **The identifier tiers can still merge a preprint into its published version (owner's decision).** Measured: an
+200. ~~**The identifier tiers can still merge a preprint into its published version (owner's decision).**~~ **DECIDED
+    2026-10-15: downgrade to a link** when the DOIs conflict and one record names the other as its other version —
+    `docs/02` §11.5 rule first, then the cascade. Measured: an
     arXiv record naming the journal DOI in `relatedVersionIds`, against a Semantic Scholar record carrying that journal
     DOI *and* the same arXiv id, gives `match` at the `arxiv` tier — before Tier 7 is reached. R-18 rates a false merge
     as the failure most feared. Downgrading needs a `docs/02` §11.5 rule first; `P2-T13`'s labelled pairs measure it.
