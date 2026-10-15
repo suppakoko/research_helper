@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"total\": 1, \"token\": null, \"data\": [{\"paperId\": \"[redacted:40]\", \"externalIds\": {\"PubMedCentral\": \"10949956\", \"DOI\": \"10.1038/s41586-023-06139-9\", \"CorpusId\": 259002047, \"PubMed\": \"37258680\"}, \"corpusId\": 259002047, \"publicationVenue\": {\"id\": \"6c24a0a0-b07d-4d7b-a19b-fd09a3ed453a\", \"name\": \"Nature\", \"type\": \"journal\", \"issn\": \"0028-0836\", \"url\": \"https://www.nature.com/\", \"alternate_urls\": [\"http://www.nature.com/nature/\", \"https://www.nature.com/nature/\", \"http://www.nature.com/nature/archive/index.html\"]}, \"url\": \"https://www.semanticscholar.org/paper/[redacted:40]\", \"title\": \"Transfer learning enables predictions in network biology\", \"venue\": \"Nature\", \"year\": 2023, \"referenceCount\": 159, \"citationCount\": 1312, \"influentialCitationCount\": 145, \"isOpenAccess\": true, \"openAccessPdf\": {\"url\": \"https://escholarship.org/content/qt8st2d5mx/qt8st2d5mx.pdf\", \"status\": \"GREEN\", \"license\": null, \"disclaimer\": \"Notice: Paper or abstract available at https://pmc.ncbi.nlm.nih.gov/articles/PMC10949956, which is subject"
+}

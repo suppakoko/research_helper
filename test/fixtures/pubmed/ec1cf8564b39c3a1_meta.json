@@ -1,0 +1,16 @@
+{
+  "scenario": "window-efetch",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T07:50:20.440Z",
+  "endpoint": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "dropped header ncbi-phid",
+    "dropped header ncbi-sid",
+    "dropped header set-cookie",
+    "scrubbed body",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

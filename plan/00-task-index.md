@@ -876,7 +876,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     today. Let the recorder import the support module and delete its copy when the recorder is next
     touched.
 
-74. **(owner's recording decision — APPROVED 2026-10-15, `P2-T36`)** A whole-year, `retmax ≥ 10` `esearch` with its matching `efetch` would
+74. ~~**(owner's recording decision — APPROVED 2026-10-15, `P2-T36`)**~~ **DONE 2026-10-15** A whole-year, `retmax ≥ 10` `esearch` with its matching `efetch` would
     let the search window itself replay through the real adapter instead of a stub. Recording means one
     more live NCBI request pair and a committed fixture; until then `P2-T25` criterion 4 stays met in part.
 
@@ -940,7 +940,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 
 ### 6.18 Raised by `P2-T09`, 2026-10-14 — recorded under rule 9, none carded
 
-88. **Korean and other CJK titles collapse to `""` in `normalizeTitle`** *(DECIDED 2026-10-15: preserve non-Latin letters — `P2-T36`)* (`docs/02` §11.3.2's `[^a-z0-9]+`
+88. ~~**Korean and other CJK titles collapse to `""` in `normalizeTitle`**~~ *(DECIDED 2026-10-15: preserve non-Latin letters — `P2-T36`, DONE the same day)* (`docs/02` §11.3.2's `[^a-z0-9]+`
     pass), so they can match on identifiers only. Decide how §11.3.2 treats non-Latin scripts and put
     Korean titles in `P2-T13`'s labelled corpus. A document decision first (`docs/02` is the owner's).
 
@@ -1054,7 +1054,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.22 Raised by `P2-T20`, 2026-10-14 — recorded under rule 9, none carded
 
-112. **(owner's document edit — APPROVED 2026-10-15; code flip in `P2-T36`)** `docs/02` §12.2 and §12.3 have no PubMed row for language (`[la]`, alias
+112. ~~**(owner's document edit — APPROVED 2026-10-15; code flip in `P2-T36`)**~~ **DONE 2026-10-15; confirmed live, count 611 vs 840** `docs/02` §12.2 and §12.3 have no PubMed row for language (`[la]`, alias
     `[Language]`) or for open access. Once they do — and `free full text[sb]` has been verified live — flip
     `PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly` and add the tag constant in `src/sources/pubmed/query.ts`;
     until then PubMed refuses `openAccessOnly` by name.
@@ -1063,7 +1063,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `P2-T20` left it adapter-level. Adding members beside `dateFilter` (names illustrative: `languageFilter`,
     `openAccessFilter`) is a §4.2 change first, then `src/sources/types.ts` and `PUBMED_CAPABILITIES`.
 
-114. **(DECIDED 2026-10-15: two-letter codes, adapters convert — `P2-T36`)** `SourceQuery.languages` is typed ISO-639-1 in `docs/07` §4.2; PubMed's `[la]` takes three-letter
+114. ~~**(DECIDED 2026-10-15: two-letter codes, adapters convert — `P2-T36`)**~~ **DONE 2026-10-15 for PubMed** `SourceQuery.languages` is typed ISO-639-1 in `docs/07` §4.2; PubMed's `[la]` takes three-letter
     MEDLINE codes** (`eng`). Values pass through untranslated today. Settle the code set before any surface
     sets the member.
 
@@ -1309,6 +1309,37 @@ the caller of what the card builds; if it does not, the caller is added with a d
 168. **`docs/13` §3.1's `dedup-pair-set` row is source-specific too** (one adapter's fixtures cannot hold a
     ≥ 3-source set; `P2-T08` assembles it from the SciPy 1.0 paper, item 164). A note (d) beside notes (a)–(c)
     the next time §3.1 is edited.
+
+### 6.33 Raised by `P2-T05` and `P2-T36`, 2026-10-15 — recorded under rule 9, none carded
+
+169. **`semanticscholar.keyPresent` never leaves `false`.** `KEY_PRESENCE_PREFS` in `src/zotero/keychain.ts` has no
+    `source.semanticscholar` entry, so storing the key through the preferences pane does not set the flag. The
+    adapter reads the store directly, so search works with a key; the flag only feeds the pane's badge. One
+    map entry — before the owner's live keyed test, or the badge will say no key.
+
+170. **The Semantic Scholar "add a free key" note is English only** (`SEMANTICSCHOLAR_UNKEYED_NOTE`); `sources/`
+    cannot import `i18n/`. Give it a Fluent id carried as a key on the warning and resolved by the window
+    (`P2-T14`, which renders per-source rows).
+
+171. **The recorder exempts every 40-hex run in a Semantic Scholar body by pattern** (`semanticscholarOpaqueTokens`),
+    broader than `docs/13` §3.2's "by name, per source, nothing else", and those runs also skip the
+    environment-secret deny-list. Narrow it to `paperId` values and the `token` field by name.
+
+172. **Hangul-only family names normalise to nothing** (`normalizeFamilyName` keeps `a–z`), so the fuzzy-title
+    rules that need author corroboration never fire for Korean authors. `P2-T13` measures it on real records.
+
+173. **Spaced Korean titles often have fewer than five tokens** and fall under `MIN_FUZZY_TITLE_TOKENS`, so they
+    can only match exactly. `P2-T13` measures how often.
+
+174. **The recorder's record mode rewrites synthetic fixtures even under `--only`** (in `main`, outside any
+    source's section). `P2-T36` restored three sidecars by hand. A guard in `main`.
+
+175. **`P1-T44`'s preferences pane duplicates the `docs/09` §2.3 Test calls** that the Semantic Scholar adapter's
+    `healthCheck` (and PubMed's) now implement. Move the pane to call the adapters (item 52 named it).
+
+176. **Intermittent integration failures, each seen once:** the P1-T44 badge rendered blank (a run during a bundle
+    edit), a `P1-T23` stall of 125 ms against 100 ms, and the slow-Fluent doubling. Count before calling any of
+    them a regression.
 
 ## 7. Regenerating this file
 

@@ -1,0 +1,7 @@
+{
+  "status": 500,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"message\": \"synthetic fixture: docs/02 §6.10 records no Semantic Scholar 5xx body shape; a server error cannot be provoked on demand. Status is the assertable part.\"}"
+}

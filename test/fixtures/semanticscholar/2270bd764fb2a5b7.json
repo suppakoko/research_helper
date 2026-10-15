@@ -1,0 +1,21 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "connection": "keep-alive",
+    "content-length": "56",
+    "content-type": "application/json",
+    "date": "Thu, 15 Oct 2026 02:25:11 GMT",
+    "via": "1.1 [redacted:32].cloudfront.net (CloudFront)",
+    "x-amz-apigw-id": "FQ3tRGLmPHcELzQ=",
+    "x-amz-cf-id": "[redacted:54]==",
+    "x-amz-cf-pop": "ICN57-P3",
+    "x-amzn-remapped-connection": "keep-alive",
+    "x-amzn-remapped-content-length": "56",
+    "x-amzn-remapped-date": "Thu, 15 Oct 2026 02:25:11 GMT",
+    "x-amzn-remapped-server": "gunicorn",
+    "x-amzn-requestid": "7ab39832-506f-4896-aa50-a1ecb057e608",
+    "x-cache": "Miss from cloudfront"
+  },
+  "body": "{\"paperId\": \"7d1e59ce254bea5228da634dbe7c5c4160df6f98\"}\n"
+}

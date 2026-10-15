@@ -25,7 +25,13 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { independentPlan, plannedRequest } from "../../scripts/record-fixtures";
+import {
+  type Answer,
+  independentPlan,
+  planFor,
+  plannedRequest,
+  type PlannedRequest,
+} from "../../scripts/record-fixtures";
 import { nodeFixtureIo } from "../support/fixtureIoNode";
 import {
   assertFixturesFresh as assertFixturesFreshWith,
@@ -70,6 +76,48 @@ function requestOf(scenario: string) {
     url: planned.url,
     ...(planned.body !== undefined && { body: planned.body }),
   };
+}
+
+/** A planned request's fixture name, as the recorder computes it. */
+function keyOfPlanned(p: PlannedRequest): string {
+  return fixtureKey({
+    method: p.method,
+    url: p.url,
+    ...(p.body !== undefined && { body: p.body }),
+  });
+}
+
+/**
+ * Every fixture name the recorder's PubMed plan names — independent,
+ * dependent and synthetic — with the dependent requests (pages' `efetch`es,
+ * `window-efetch`) resolved from the committed answers, which is exactly what
+ * `npm run fixtures:record -- --dry-run` prints.
+ *
+ * **Read from the plan, not written down (`P2-T36`, 2026-10-15).** These checks
+ * used to pin 17 fixtures and 34 files; `P2-T36`'s two window fixtures broke
+ * all three pins at once. A recording that adds a scenario to the plan now
+ * moves this set with it, and the equality below still fails on a fixture
+ * nobody planned or a planned one nobody recorded.
+ */
+async function plannedPubmedKeys(): Promise<ReadonlySet<string>> {
+  const plan = planFor("pubmed");
+  const fromDisk: Answer = async (planned) => {
+    try {
+      const text = await nodeFixtureIo.readText(
+        FIXTURE_DIR,
+        `${keyOfPlanned(planned)}.json`,
+      );
+      return JSON.parse(text) as Awaited<ReturnType<Answer>>;
+    } catch {
+      return undefined;
+    }
+  };
+  const all = [
+    ...plan.independent(),
+    ...(await plan.dependent(fromDisk)),
+    ...plan.syntheticRequests(),
+  ];
+  return new Set(all.map(keyOfPlanned));
 }
 
 /** `docs/13` §2.2's hash input, so the reference digest hashes the same bytes. */
@@ -128,7 +176,8 @@ describe("fixtureKey names the committed fixtures", () => {
         .filter((n) => n.endsWith(".json") && !n.endsWith(META_SUFFIX))
         .map((n) => n.slice(0, -".json".length)),
     );
-    expect(onDisk.size).toBe(17);
+    // The directory holds exactly what the recorder plans: no more, no fewer.
+    expect([...onDisk].sort()).toEqual([...(await plannedPubmedKeys())].sort());
 
     // Every planned request — the eleven independent ones plus the synthetic
     // set — must resolve to a committed file. The two `paginated-*-efetch`
@@ -255,7 +304,8 @@ describe("the Node face binds the core to the Node file system", () => {
     const viaFace = await listFixtureMeta(FIXTURE_DIR);
     const viaCore = await listFixtureMetaWith(FIXTURE_DIR, nodeFixtureIo);
     expect(viaFace).toEqual(viaCore);
-    expect(viaFace).toHaveLength(17);
+    const planned = (await plannedPubmedKeys()).size;
+    expect(viaFace).toHaveLength(planned);
 
     const now = Date.UTC(2026, 9, 13);
     const faceReport = await assertFixturesFresh(FIXTURE_DIR, now);
@@ -265,7 +315,7 @@ describe("the Node face binds the core to the Node file system", () => {
       nodeFixtureIo,
     );
     expect(faceReport).toEqual(coreReport);
-    expect(faceReport.checked).toBe(17);
+    expect(faceReport.checked).toBe(planned);
   });
 
   it("replays the same bytes either way, and reports a missing fixture by its command", async () => {
@@ -295,8 +345,11 @@ describe("the Node face binds the core to the Node file system", () => {
 
   it("reads directory names, not paths", async () => {
     const names = await nodeFixtureIo.listNames(FIXTURE_DIR);
-    // 17 fixtures and 17 sidecars; the directory's `.gitkeep` is not counted.
-    expect(names.filter((n) => n.endsWith(".json"))).toHaveLength(34);
+    // One fixture and one sidecar per planned scenario; the directory's
+    // `.gitkeep` is not counted.
+    expect(names.filter((n) => n.endsWith(".json"))).toHaveLength(
+      2 * (await plannedPubmedKeys()).size,
+    );
     for (const name of names) {
       expect(name).not.toMatch(/[/\\]/u);
     }

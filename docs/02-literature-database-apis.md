@@ -2681,10 +2681,13 @@ Booleans **must be uppercase**. Date via `[EDAT]`/`[PDAT]` range or the `mindate
 renders as **`[la]`** (alias `[Language]`) with MEDLINE's **three-letter** codes — `eng[la]`,
 `kor[la]`, several languages OR-ed in one group — and the adapter converts from the two-letter
 ISO-639-1 codes the pipeline carries (`docs/07` §4.2), refusing by name a code it cannot map.
-`SourceQuery.openAccessOnly` renders as **`free full text[sb]`** — *clause to be confirmed by one live
-request in `P2-T36` before the code renders it*; until that request lands, PubMed refuses
-`openAccessOnly` by name (`PUBMED_QUERY_FILTER_SUPPORT` in `src/sources/pubmed/query.ts`), and the
-confirmation flips the flag and adds the tag constant.
+`SourceQuery.openAccessOnly` renders as **`free full text[sb]`**, joined to the term with `AND`.
+
+> **Measured 2026-10-15 (`P2-T36`, one live `esearch`):** the clause is accepted — HTTP 200, no error or warning
+> list, `count` 611 against 840 for the same query and window without it (the committed `search-typical`
+> fixture), and the translation set maps it to `"loattrfree full text"[sb]`. The code renders it
+> (`PUBMED_OPEN_ACCESS_CLAUSE`, `PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly: true` in
+> `src/sources/pubmed/query.ts`). Live acceptance of `kor[la]` was not measured.
 
 **The *user's* Booleans are uppercase-only too (pinned 2026-09-30, `P1-T08`; §12.1 did not say).**
 Three reasons, and the last is the one that matters: it is PubMed's own rule, so the input and the
@@ -2791,7 +2794,7 @@ all; route preprint search to Europe PMC `SRC:PPR`.
 | Journal field *(row added 2026-10-15, owner review row 63)* | `[Journal]` | `JOURNAL:` | `query.container-title` | *n/a* | `jr:` (§7.2 journal reference; the shipped renderer uses it) | *n/a* |
 | Date range | `[EDAT]`/`mindate`+`maxdate` | `FIRST_PDATE:[a TO b]` | `filter=from-pub-date:` | `publicationDateOrYear=a:b` | `submittedDate:[a TO b]` | `from_publication_date:` |
 | Language *(row added 2026-10-15, owner review row 112)* | `[la]` (alias `[Language]`), MEDLINE three-letter codes: `eng[la]` | *n/a* — no field documented in §4.3; refused by name (`P2-T03`) | *n/a* — `language` is not selectable and §5.2 lists no language filter (`P2-T04`) | *n/a* | *n/a* — `language` is the constant `"en"` (§10.2); refused by name (`P2-T06`) | *not documented in §9* |
-| Open access *(row added 2026-10-15, owner review row 112)* | `free full text[sb]` — **unconfirmed**, one live request in `P2-T36` before the code renders it | `OPEN_ACCESS:y` (§4.3) | *n/a* — §5.2 documents no open-access filter (`has-license` is a licence presence, not access) | `openAccessPdf` flag on `/paper/search` (§6.5); bulk: *not documented* | *every e-print is free — no clause; `openAccessOnly` is accepted as a no-op* (`P2-T06`) | `is_oa` (§9.2) |
+| Open access *(row added 2026-10-15, owner review row 112)* | `free full text[sb]` — confirmed live 2026-10-15 (`P2-T36`: count 611 vs 840 without it) | `OPEN_ACCESS:y` (§4.3) | *n/a* — §5.2 documents no open-access filter (`has-license` is a licence presence, not access) | `openAccessPdf` flag on `/paper/search` (§6.5); bulk: *not documented* | *every e-print is free — no clause; `openAccessOnly` is accepted as a no-op* (`P2-T06`) | `is_oa` (§9.2) |
 | Pagination | `retstart` (≤9998) | `cursorMark` | `cursor=*` **with `sort=score&order=desc`** (§5.5) | `token` | `start` | `cursor=*` |
 
 ### 12.4 LLM-assisted query expansion (optional feature)

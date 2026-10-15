@@ -17,6 +17,7 @@ import {
   NCBI_KEY_PRESENT_PREF,
   peekHostLimiters,
   resetHostLimiters,
+  SEMANTICSCHOLAR_HOST,
 } from "../../../src/core/rateLimit/hostLimiter";
 import {
   TokenBucket,
@@ -1107,7 +1108,13 @@ describe("hostLimiter policy table", () => {
     // cells, is asserted against the document itself in `backoff.test.ts`, so
     // this test names the hosts and leaves the numbers to the one place that
     // reads them off the page.
-    const shippedHosts = [NCBI_HOST, EBI_HOST, CROSSREF_HOST, ARXIV_HOST];
+    const shippedHosts = [
+      NCBI_HOST,
+      EBI_HOST,
+      CROSSREF_HOST,
+      ARXIV_HOST,
+      SEMANTICSCHOLAR_HOST,
+    ];
     expect(HOST_POLICIES.map((policy) => policy.host)).toEqual(shippedHosts);
     const clock = createManualClock();
     const registry = createHostLimiterRegistry({ clock });
@@ -1164,9 +1171,10 @@ describe("hostLimiter policy table", () => {
     expect(registry.limiterFor(NCBI_HOST)).toBe(first);
     expect(must(first, "the NCBI limiter").key).toBe(NCBI_HOST);
     // `api.crossref.org` was the unregistered example until `P2-T04` shipped
-    // its row; Semantic Scholar's is still `P2-T05`'s to add.
-    expect(registry.limiterFor("api.semanticscholar.org")).toBeUndefined();
-    expect(registry.policyFor("api.semanticscholar.org")).toBeUndefined();
+    // its row, `api.semanticscholar.org` until `P2-T05` shipped its; bioRxiv's
+    // row is `P2-T07`'s to add and moves this example again.
+    expect(registry.limiterFor("api.biorxiv.org")).toBeUndefined();
+    expect(registry.policyFor("api.biorxiv.org")).toBeUndefined();
   });
 
   it("refuses two rows for one host", () => {

@@ -224,6 +224,8 @@ import {
   NCBI_SECRET_ID,
 } from "../sources/pubmed/pubmedSource";
 import { createSourceRegistry, type SourceRegistry } from "../sources/registry";
+import { createSemanticScholarRecordMapper } from "../sources/semanticscholar/mapper";
+import { createSemanticScholarSource } from "../sources/semanticscholar/semanticscholarSource";
 // `src/zotero/keychain.ts` is **not** imported statically. See
 // `installSecretStore`: it runs `Components.Constructor(...)` in its module
 // body, which is a `ReferenceError` in plain Node and would take down every
@@ -1456,6 +1458,22 @@ export async function installServices(
       http,
       clock,
       mapRecords: createArxivRecordMapper({ clock, keepRaw, logger }),
+      logger,
+    }),
+    // Semantic Scholar (`P2-T05`). The one keyed Phase 2 source: the adapter
+    // reads `source.semanticscholar` from the same `SecretStore` PubMed reads
+    // `source.ncbi` from, per request, and sends it as the `x-api-key` header
+    // (`docs/02` §6.4, `docs/09` §1.7); with no store — or no key in it —
+    // every request goes out unkeyed onto the shared anonymous pool and the
+    // page says so. Same conditional spread as PubMed's, for the same
+    // `exactOptionalPropertyTypes` reason. The budget is the client's:
+    // `limiterFor` above resolves §7.3's `api.semanticscholar.org` bucket,
+    // 0.9/s in both modes. Same resolved `keepRaw`, same §5.1 reason.
+    semanticscholar: createSemanticScholarSource({
+      http,
+      clock,
+      mapRecords: createSemanticScholarRecordMapper({ clock, keepRaw, logger }),
+      ...(secrets !== undefined && { secrets }),
       logger,
     }),
   } satisfies ShippedSourceAdapters);

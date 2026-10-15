@@ -1,0 +1,16 @@
+{
+  "scenario": "dedup-pair-set",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T02:32:45.286Z",
+  "endpoint": "https://api.semanticscholar.org/graph/v1/paper/search/bulk",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "scrubbed header via",
+    "scrubbed header x-amz-cf-id",
+    "scrubbed body",
+    "preserved 6 opaque pagination token(s) the source plan vouches for; they are not credentials",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

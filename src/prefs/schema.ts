@@ -255,6 +255,32 @@ export const PREFS = {
   },
 
   /**
+   * Whether a Semantic Scholar API key is in the keystore — **never the key**
+   * (`P2-T05`; `docs/07` §8.5's `semanticscholar.keyPresent` row, default
+   * `false`; `docs/09` §1.7 assigns the `source.semanticscholar` `SecretId`).
+   *
+   * A presence flag only. The adapter does not read it — it asks the
+   * `SecretStore` for the key at request time (`docs/02` §6.4's `x-api-key`)
+   * — and `docs/07` §7.3's `api.semanticscholar.org` row has no keyed mode to
+   * select, so nothing paces on it; it exists for the preferences pane's
+   * status row (`docs/08` §7.3).
+   *
+   * **The key string is spelled here rather than taken from `./keys.ts`**,
+   * against this file's own convention, because `src/prefs/keys.ts` is outside
+   * `P2-T05`'s `Files`; the row is `docs/07` §8.5's verbatim, and
+   * `addon/prefs.js` ships its `pref()` default line. Measured 2026-10-15: no
+   * writer exists for it yet — `src/zotero/keychain.ts`'s `KEY_PRESENCE_PREFS`
+   * has a row for `source.ncbi` only (outside the same `Files` list; reported
+   * with the card), so the flag stays at its default `false` until that row
+   * is added.
+   */
+  semanticscholarKeyPresent: {
+    key: "semanticscholar.keyPresent",
+    type: "boolean",
+    default: false,
+  },
+
+  /**
    * Which secret backend is live, for the prefs pane's storage badge.
    *
    * §8.5's spellings, which are **not** `docs/09` §1.7's `SecretBackend` union

@@ -5,6 +5,8 @@ import {
   buildEsearchRequest,
   explainPubmedQuery,
   PUBMED_ESEARCH_BASE_URL,
+  PUBMED_LANGUAGE_CODES,
+  PUBMED_OPEN_ACCESS_CLAUSE,
   PUBMED_QUERY_FILTER_SUPPORT,
   renderPubmedSearchTerm,
   renderPubmedTerm,
@@ -22,7 +24,11 @@ import type { QueryNode, SourceQuery } from "../../../src/sources/types";
  * translation, parenthesis balancing, date-range rendering, URL encoding, and
  * key redaction in the recorded URL. The last three blocks are `P2-T20`'s:
  * the `languages`, `openAccessOnly` and `raw` members of `SourceQuery`, each
- * either rendered or refused by name, never dropped.
+ * either rendered or refused by name, never dropped. `P2-T36` (2026-10-15)
+ * changed two of them: `languages` now takes two-letter ISO-639-1 codes and
+ * converts them through `PUBMED_LANGUAGE_CODES`, refusing an unknown code by
+ * name, and `openAccessOnly: true` renders `free full text[sb]` — the refusal
+ * test became a rendering test once one live request confirmed the clause.
  */
 
 /** §12.2's worked example, as the user types it. */
@@ -527,35 +533,62 @@ function termParam(source: SourceQuery): string | null {
   ).get("term");
 }
 
-describe("languages — rendered as [la] clauses", () => {
-  it("renders languages: ['eng'] as eng[la] on the wire and in the preview", () => {
+describe("languages — two-letter codes converted to MEDLINE's [la] codes", () => {
+  it("holds exactly the languages docs/02 §12.2 names, keyed by ISO-639-1", () => {
+    // docs/02 §12.2: "eng[la], kor[la]"; docs/07 §4.2: the pipeline carries
+    // two-letter codes and the adapter converts (owner review row 114).
+    expect(PUBMED_LANGUAGE_CODES).toEqual({ en: "eng", ko: "kor" });
+    expect(Object.isFrozen(PUBMED_LANGUAGE_CODES)).toBe(true);
+  });
+
+  it("renders languages: ['en'] as eng[la] on the wire and in the preview", () => {
     const source: SourceQuery = {
       ...query("CRISPR", false),
-      languages: ["eng"],
+      languages: ["en"],
     };
 
-    // docs/12's PubMed syntax rules: "[la] (language)". Joined with AND, the
-    // term stays what renderPubmedTerm produced.
     expect(termParam(source)).toBe("CRISPR[All Fields] AND eng[la]");
     expect(explainPubmedQuery(source)).toBe("CRISPR[All Fields] AND eng[la]");
     expect(renderPubmedSearchTerm(source)).toBe(termParam(source));
+    expect(buildEsearchRequest({ query: source, retmax: 10 }).url).toContain(
+      "AND%20eng%5Bla%5D",
+    );
+  });
+
+  it("renders languages: ['ko'] as kor[la]", () => {
+    const source: SourceQuery = {
+      ...query("CRISPR", false),
+      languages: ["ko"],
+    };
+
+    expect(termParam(source)).toBe("CRISPR[All Fields] AND kor[la]");
+    expect(explainPubmedQuery(source)).toBe("CRISPR[All Fields] AND kor[la]");
   });
 
   it("renders several languages as one OR group, before the date clause", () => {
     const source: SourceQuery = {
       ...query(EXAMPLE_INPUT),
-      languages: ["eng", "fre"],
+      languages: ["en", "ko"],
     };
 
     expect(termParam(source)).toBe(
-      `${renderPubmedTerm(source.terms)} AND (eng[la] OR fre[la])`,
+      `${renderPubmedTerm(source.terms)} AND (eng[la] OR kor[la])`,
     );
     expect(squash(explainPubmedQuery(source))).toBe(
       squash(
-        `${renderPubmedTerm(source.terms)} AND (eng[la] OR fre[la])` +
+        `${renderPubmedTerm(source.terms)} AND (eng[la] OR kor[la])` +
           ' AND ("2024/01/01"[EDAT] : "2026/12/31"[EDAT])',
       ),
     );
+  });
+
+  it("renders a code given twice once", () => {
+    const source: SourceQuery = {
+      ...query("CRISPR", false),
+      languages: ["ko", "ko"],
+    };
+
+    expect(termParam(source)).toBe("CRISPR[All Fields] AND kor[la]");
   });
 
   it("renders no clause for an absent or empty list, byte-identically", () => {
@@ -573,63 +606,125 @@ describe("languages — rendered as [la] clauses", () => {
     const source: SourceQuery = {
       terms: { kind: "and", children: [] },
       limit: 10,
-      languages: ["eng"],
+      languages: ["en"],
     };
 
     expect(termParam(source)).toBe("eng[la]");
     expect(explainPubmedQuery(source)).toBe("eng[la]");
   });
 
-  it("cleans Entrez syntax out of a value and quotes a non-bare one", () => {
+  it("refuses an unknown two-letter code by name, on the wire and in the preview", () => {
     const source: SourceQuery = {
       ...query("CRISPR", false),
-      languages: ['(eng)"', "middle english"],
+      languages: ["en", "fr"],
     };
 
-    expect(termParam(source)).toBe(
-      'CRISPR[All Fields] AND (eng[la] OR "middle english"[la])',
+    // Passing "fr" through would ask PubMed for a language code that does not
+    // exist and match nothing — a quietly empty result, never an error.
+    expect(() => buildEsearchRequest({ query: source, retmax: 10 })).toThrow(
+      RangeError,
+    );
+    expect(() => buildEsearchRequest({ query: source, retmax: 10 })).toThrow(
+      /SourceQuery\.languages code "fr"/u,
+    );
+    expect(() => explainPubmedQuery(source)).toThrow(
+      /PUBMED_LANGUAGE_CODES maps only en, ko/u,
     );
   });
 
-  it("refuses a list that cleans to nothing rather than dropping the filter", () => {
-    const source: SourceQuery = {
-      ...query("CRISPR", false),
-      languages: ["()", '"[]"'],
-    };
-
-    // Emitting no clause would silently widen the search to every language —
-    // the exact symptom P2-T20 exists to remove.
-    expect(() => buildEsearchRequest({ query: source, retmax: 10 })).toThrow(
-      /SourceQuery\.languages/u,
-    );
-    expect(() => explainPubmedQuery(source)).toThrow(/every language/u);
+  it("refuses what is not a lower-case ISO-639-1 key: a MEDLINE code, upper case, syntax, a prototype name", () => {
+    for (const code of ["eng", "EN", "(en)", "", "constructor", "toString"]) {
+      const source: SourceQuery = {
+        ...query("CRISPR", false),
+        languages: [code],
+      };
+      expect(
+        () => buildEsearchRequest({ query: source, retmax: 10 }),
+        code,
+      ).toThrow(`SourceQuery.languages code ${JSON.stringify(code)}`);
+    }
   });
 });
 
-describe("openAccessOnly — a declared, refused gap", () => {
+describe("openAccessOnly — rendered as docs/02 §12.2's free full text[sb]", () => {
   it("declares the support flags a caller reads before setting a member", () => {
     expect(PUBMED_QUERY_FILTER_SUPPORT).toEqual({
       languages: true,
-      openAccessOnly: false,
+      openAccessOnly: true,
       raw: true,
     });
+    expect(PUBMED_OPEN_ACCESS_CLAUSE).toBe("free full text[sb]");
   });
 
-  it("refuses openAccessOnly: true by name on the wire and in the preview", () => {
+  it("renders openAccessOnly: true as free full text[sb] on the wire and in the preview", () => {
     const source: SourceQuery = {
       ...query("CRISPR", false),
       openAccessOnly: true,
     };
 
-    // docs/02 §12.2 / §12.3 document no PubMed form (§4.3's OPEN_ACCESS:y is
-    // Europe PMC's); the card forbids inventing a tag, so the member is
-    // reported, never swallowed into a quietly smaller result set.
-    expect(() => buildEsearchRequest({ query: source, retmax: 10 })).toThrow(
-      /SourceQuery\.openAccessOnly/u,
+    expect(termParam(source)).toBe("CRISPR[All Fields] AND free full text[sb]");
+    expect(explainPubmedQuery(source)).toBe(
+      "CRISPR[All Fields] AND free full text[sb]",
     );
-    expect(() => explainPubmedQuery(source)).toThrow(
-      /PUBMED_QUERY_FILTER_SUPPORT\.openAccessOnly is false/u,
+    expect(buildEsearchRequest({ query: source, retmax: 10 }).url).toContain(
+      "AND%20free%20full%20text%5Bsb%5D",
     );
+  });
+
+  it("renders the exact term of the 2026-10-15 live confirmation request", () => {
+    // The request P2-T36 sent: the recorder's QUERY_TYPICAL with the flag set,
+    // retmax=0. PubMed answered 200, count "611", and translated the clause to
+    // "loattrfree full text"[sb] (recorded at PUBMED_OPEN_ACCESS_CLAUSE).
+    const source: SourceQuery = {
+      terms: {
+        kind: "and",
+        children: [
+          { kind: "term", value: "CRISPR" },
+          { kind: "term", value: "editing" },
+        ],
+      },
+      fromDate: "2023-01-01",
+      toDate: "2023-03-31",
+      limit: 20,
+      openAccessOnly: true,
+    };
+    const params = new URLSearchParams(
+      buildEsearchRequest({ query: source, retmax: 0, retmode: "json" })
+        .queryString,
+    );
+    expect(params.get("term")).toBe(
+      "(CRISPR[All Fields] AND editing[All Fields]) AND free full text[sb]",
+    );
+    expect(params.get("mindate")).toBe("2023/01/01");
+    expect(params.get("maxdate")).toBe("2023/03/31");
+  });
+
+  it("follows the language clause and precedes the date clause in the preview", () => {
+    const source: SourceQuery = {
+      ...query(EXAMPLE_INPUT),
+      languages: ["ko"],
+      openAccessOnly: true,
+    };
+
+    expect(termParam(source)).toBe(
+      `${renderPubmedTerm(source.terms)} AND kor[la] AND free full text[sb]`,
+    );
+    expect(squash(explainPubmedQuery(source))).toBe(
+      squash(
+        `${renderPubmedTerm(source.terms)} AND kor[la] AND free full text[sb]` +
+          ' AND ("2024/01/01"[EDAT] : "2026/12/31"[EDAT])',
+      ),
+    );
+  });
+
+  it("is the whole term when the tree renders to nothing", () => {
+    const source: SourceQuery = {
+      terms: { kind: "and", children: [] },
+      limit: 10,
+      openAccessOnly: true,
+    };
+
+    expect(termParam(source)).toBe("free full text[sb]");
   });
 
   it("treats openAccessOnly: false as asking for nothing", () => {

@@ -170,6 +170,14 @@ export const CROSSREF_HOST = "api.crossref.org";
 export const ARXIV_HOST = "export.arxiv.org";
 
 /**
+ * The host `P2-T05`'s Semantic Scholar adapter talks to — the authority of
+ * `https://api.semanticscholar.org/graph/v1` (`docs/02` §6.1). Imported by
+ * `src/sources/semanticscholar/` rather than respelled, for the reason
+ * {@link EBI_HOST} gives.
+ */
+export const SEMANTICSCHOLAR_HOST = "api.semanticscholar.org";
+
+/**
  * `docs/07` §7.3's policy table, as far as Phase 1 needs it.
  *
  * **NCBI, the one row that ships now.** 2.5/s without a key and 8/s with one,
@@ -218,7 +226,8 @@ export const ARXIV_HOST = "export.arxiv.org";
  * **The five rows Phase 2 adds**, each from §7.3 verbatim and each with the card
  * that adds it: `www.ebi.ac.uk` (Europe PMC, `P2-T03` — **shipped below**),
  * `api.crossref.org` (Crossref, `P2-T04` — **shipped below**),
- * `api.semanticscholar.org`, `export.arxiv.org` (arXiv, `P2-T06` — **shipped
+ * `api.semanticscholar.org` (Semantic Scholar, `P2-T05` — **shipped below**),
+ * `export.arxiv.org` (arXiv, `P2-T06` — **shipped
  * below**, with `minIntervalMs: 3000` and `maxConcurrent: 1`, aggregated across
  * every machine under our control) and `api.biorxiv.org`. `api.openalex.org` gets
  * **no** row: decision D2 puts OpenAlex out of v1 and one of `plan/03`'s cards
@@ -260,6 +269,21 @@ export const ARXIV_HOST = "export.arxiv.org";
  * is out of scope (`docs/02` §2.3), so no `withKey` and no `keyPresencePref`.
  * The polite pool is earned by a contact address, not a key, and that is
  * `src/core/http/userAgent.ts`'s and the adapter's business.
+ *
+ * **Semantic Scholar, `P2-T05` (2026-10-15).** §7.3's `api.semanticscholar.org`
+ * row: **0.9/s in both modes**, burst 1, max concurrent 1, retry 2000 ms /
+ * 30 000 ms / 3 (the cells the owner filled on 2026-10-14; base 2000 ms as the
+ * smallest round value above the host's 1.1 s pacing interval). The basis cell
+ * is the counter-intuitive one: an anonymous request draws on a *shared*
+ * 1000 RPS pool across every anonymous caller on the internet — measured
+ * returning HTTP 429 on every attempt during US business hours (`docs/02`
+ * §6.4) — while an introductory key grants a **guaranteed but lower 1 RPS**, so
+ * there is no mode in which going faster is safe and the key changes the
+ * guarantee, not the budget. The row therefore carries **no `withKey` and no
+ * `keyPresencePref`**, exactly the documented case {@link HostRateLimitPolicy}'s
+ * `withKey` comment names for this host: the adapter sends the `x-api-key`
+ * header when the keystore holds a key and the bucket paces identically either
+ * way. The key itself never comes near this module (D5).
  */
 export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
   {
@@ -304,6 +328,16 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
       minIntervalMs: 3000,
     },
     retry: { baseMs: 3000, capMs: 30_000, maxAttempts: 3 },
+  },
+  {
+    // `docs/07` §7.3, `api.semanticscholar.org` (Semantic Scholar, `P2-T05`,
+    // 2026-10-15): 0.9/s in both modes, burst 1, max concurrent 1; retry
+    // 2000 ms / 30 000 ms / 3 (the cells the owner filled on 2026-10-14). See
+    // the header's "Semantic Scholar" paragraph for why the row has no
+    // `withKey`: a key changes the guarantee behind the budget, not the budget.
+    host: SEMANTICSCHOLAR_HOST,
+    withoutKey: { ratePerSecond: 0.9, burst: 1, maxConcurrent: 1 },
+    retry: { baseMs: 2000, capMs: 30_000, maxAttempts: 3 },
   },
 ];
 

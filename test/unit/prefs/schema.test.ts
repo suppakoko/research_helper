@@ -176,6 +176,16 @@ const SECTION_8_5: readonly {
     max: null,
     values: null,
   },
+  // P2-T05, 2026-10-15: the thirteenth row, §8.5's `semanticscholar.keyPresent`.
+  {
+    name: "semanticscholarKeyPresent",
+    key: "semanticscholar.keyPresent",
+    type: "boolean",
+    default: false,
+    min: null,
+    max: null,
+    values: null,
+  },
   {
     name: "secretBackend",
     key: "secretBackend",
@@ -188,12 +198,45 @@ const SECTION_8_5: readonly {
 ];
 
 describe("PREFS transcribes docs/07 §8.5", () => {
-  it("declares exactly the twelve rows Phase 1 reads, and no others", () => {
+  it("declares exactly the thirteen §8.5 rows that ship — Phase 1's twelve plus P2-T05's semanticscholar.keyPresent — and no others", () => {
     // The card's Do NOT: "do not add a preference that docs/07 §8.5 does not
-    // declare". A thirteenth entry fails here, not in review.
+    // declare". A fourteenth entry fails here, not in review. Phase 1 pinned
+    // this at twelve; `P2-T05` grew it by the one row `docs/07` §8.5 and §11.1
+    // step 9 give a credential-holding source (2026-10-15).
+    expect(SECTION_8_5).toHaveLength(13);
     expect([...PREF_NAMES].sort()).toEqual(
       SECTION_8_5.map((row) => row.name).sort(),
     );
+  });
+
+  it("reads the semanticscholar.keyPresent row back from docs/07 §8.5 itself (P2-T05)", () => {
+    // The way `backoff.test.ts` reads §7.3: the document's own table row is
+    // the expectation, so the transcription above cannot drift from the page.
+    const lines = readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../docs/07-architecture-and-data-model.md",
+      ),
+      "utf8",
+    ).split("\n");
+    const start = lines.findIndex((l) => l.startsWith("### 8.5 "));
+    expect(start).toBeGreaterThan(0);
+    const row = lines
+      .slice(start)
+      .find((l) => l.startsWith("| `semanticscholar.keyPresent` |"));
+    if (row === undefined)
+      throw new Error("§8.5 has no semanticscholar.keyPresent row");
+    const cells = row
+      .split("|")
+      .slice(1, -1)
+      .map((c) => c.trim());
+    expect(cells[1]).toBe("boolean");
+    expect(cells[2]).toBe("`false`");
+    const def: PrefDef<unknown> = PREFS.semanticscholarKeyPresent;
+    expect(def.key).toBe("semanticscholar.keyPresent");
+    expect(def.type).toBe(cells[1]);
+    expect(def.default).toBe(false);
+    expect(def.secret).toBeUndefined();
   });
 
   for (const row of SECTION_8_5) {

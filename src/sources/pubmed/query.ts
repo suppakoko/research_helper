@@ -50,27 +50,26 @@
  * reads before relying on it:
  *
  * - **`languages` is rendered**, in the `term`, as `eng[la]` — or
- *   `(eng[la] OR fre[la])` for several — joined to the Boolean term with
- *   `AND`. `[la]` is the language tag the corpus documents for PubMed
- *   (`docs/12`'s query-generation system prompt, "`[la]` (language)");
- *   `[Language]` is Entrez's long spelling of the same field and is what the
- *   card names. Values are passed through as given: §4.2 types the member as
- *   ISO-639-1, while PubMed's language field takes its three-letter MEDLINE
- *   codes (`eng`, the card's own example) and the full names — a mismatch the
- *   corpus has not settled, so nothing here translates one into the other.
- *   A list whose every value cleans to nothing is refused with `RangeError`,
- *   because emitting no clause would silently widen the query to all
- *   languages.
- * - **`openAccessOnly` is refused**, with a `RangeError` naming the member,
- *   from both {@link buildEsearchRequest} and {@link explainPubmedQuery}.
- *   `docs/02` §12.2 / §12.3 document no PubMed form for it — §4.3's
- *   `OPEN_ACCESS:y` is Europe PMC's — and the card's "Do NOT" forbids
- *   inventing one (the plan's `free full text[sb]` is a card claim, not a
- *   corpus row). Refusing is `docs/07` §11.1 step 2's "do not fake it" in the
- *   shape `resolveDateFilterMode` gives it: the pipeline turns the throw into
- *   that source's `report.error` (`stages.ts`, `fetchOne`), which is the
- *   opposite of the silent symptom this card exists to remove. When §12.2
- *   gains the row, the change is one tag constant and one flag.
+ *   `(eng[la] OR kor[la])` for several — joined to the Boolean term with
+ *   `AND`. `[la]` is the tag `docs/02` §12.2/§12.3 document for PubMed;
+ *   `[Language]` is Entrez's long spelling of the same field. **The values
+ *   are converted (`P2-T36`, owner review row 114):** `docs/07` §4.2 makes the
+ *   pipeline carry two-letter ISO-639-1 codes only and each adapter convert,
+ *   so `en` becomes MEDLINE's `eng` through {@link PUBMED_LANGUAGE_CODES}, and
+ *   a code the table lacks is refused with a `RangeError` naming it — never
+ *   passed through, because an untranslated code matches nothing. (Until
+ *   2026-10-15 values were passed through verbatim, the code set being
+ *   unsettled.)
+ * - **`openAccessOnly: true` is rendered** as {@link PUBMED_OPEN_ACCESS_CLAUSE},
+ *   `free full text[sb]`, joined with `AND` after the language clause, on the
+ *   wire and in the preview. `docs/02` §12.2/§12.3 carry the row since
+ *   2026-10-15 (owner review row 112) and made one live request the condition
+ *   for rendering it; that request was made by `P2-T36` and is recorded at
+ *   the constant. Until then the member was refused by name, and
+ *   {@link assertExpressible} still refuses it if the support flag is ever
+ *   turned off again — refusing, not dropping, is `docs/07` §11.1 step 2's
+ *   "do not fake it", and the pipeline turns such a throw into that source's
+ *   `report.error` (`stages.ts`, `fetchOne`).
  * - **`raw` is a bag of extra `esearch` parameters, appended; it never touches
  *   `term`.** The parser is not bypassed by it: `raw.term` — and every other
  *   key this module emits itself, plus `reldate` — is reserved and refused
@@ -166,10 +165,46 @@ const BARE_VALUE = /^[\p{L}\p{N}_-]+$/u;
 
 /**
  * PubMed's language field tag, as the corpus spells it (`docs/12`'s PubMed
- * syntax rules: "`[la]` (language)"). Entrez also accepts the long form
- * `[Language]`; the two name one field.
+ * syntax rules: "`[la]` (language)"; `docs/02` §12.2/§12.3 since 2026-10-15).
+ * Entrez also accepts the long form `[Language]`; the two name one field.
  */
 const LANGUAGE_TAG = "[la]";
+
+/**
+ * Two-letter ISO-639-1 code → the three-letter MEDLINE code `[la]` takes
+ * (`P2-T36`, owner review of 2026-10-14 row 114).
+ *
+ * `docs/07` §4.2: the pipeline carries **only** two-letter codes and each
+ * adapter converts to its own set, refusing by name a code it cannot map.
+ * The table holds the languages `docs/02` §12.2 names for PubMed — `eng[la]`
+ * and `kor[la]` — and nothing more: a row added here is a claim about
+ * MEDLINE's code list, so it belongs in that section first. Keys are matched
+ * exactly (lower case, as ISO-639-1 writes them); anything else is refused by
+ * {@link renderPubmedSearchTerm} with a `RangeError` naming the code.
+ */
+export const PUBMED_LANGUAGE_CODES: Readonly<Record<string, string>> =
+  Object.freeze({
+    en: "eng",
+    ko: "kor",
+  });
+
+/**
+ * PubMed's open-access filter, `docs/02` §12.2/§12.3's **`free full
+ * text[sb]`** — a subset (`[sb]`) clause, joined to the term with `AND`.
+ *
+ * **Confirmed by one live request on 2026-10-15 (`P2-T36`)**, the condition
+ * §12.2 set before the code may render it. An unauthenticated `esearch`,
+ * built by {@link buildEsearchRequest} for the recorder's `QUERY_TYPICAL`
+ * (`CRISPR` AND `editing`, entry dates 2023-01-01 – 2023-03-31) with
+ * `openAccessOnly: true` and `retmax=0`, answered HTTP 200 with `count`
+ * `"611"`, no `ERROR`, no `errorlist` and no `warninglist`; its
+ * `translationset` maps `free full text[sb]` to `"loattrfree full text"[sb]`
+ * and its `querytranslation` ends `AND "loattrfree full text"[Filter] AND
+ * 2023/01/01:2023/03/31[Date - Entry]`. The same query without the clause
+ * is the committed `search-typical` fixture, `count` `"840"` (recorded
+ * 2026-10-07): the clause is recognised and narrows to a non-empty subset.
+ */
+export const PUBMED_OPEN_ACCESS_CLAUSE = "free full text[sb]";
 
 /**
  * The optional `SourceQuery` members that are filters rather than the query
@@ -191,14 +226,14 @@ export type PubmedQueryFilter = keyof Pick<
  *
  * It lives here rather than on `SourceCapabilities` because `docs/07` §4.2
  * declares no such member yet and that document is the sole authority for the
- * type (`plan/README.md` §5 rule 3); the module header says why
- * `openAccessOnly` is `false`.
+ * type (`plan/README.md` §5 rule 3). All three are `true` since `P2-T36`
+ * (2026-10-15); the module header says how each is rendered.
  */
 export const PUBMED_QUERY_FILTER_SUPPORT: Readonly<
   Record<PubmedQueryFilter, boolean>
 > = {
   languages: true,
-  openAccessOnly: false,
+  openAccessOnly: true,
   raw: true,
 };
 
@@ -282,27 +317,35 @@ function renderAtom(value: string, tag: string, phrase: boolean): string {
 }
 
 /**
- * The `languages` filter as an Entrez clause: `eng[la]`, or
- * `(eng[la] OR fre[la])` for several — a list of languages is a disjunction,
- * "any of these". `""` when the member is absent or the list is empty.
+ * The `languages` filter as an Entrez clause: each two-letter code converted
+ * through {@link PUBMED_LANGUAGE_CODES}, then `eng[la]`, or
+ * `(eng[la] OR kor[la])` for several — a list of languages is a disjunction,
+ * "any of these". A code given twice is rendered once. `""` when the member
+ * is absent or the list is empty.
  *
- * @throws RangeError when the list is non-empty but no value survives
- *   {@link renderAtom}'s cleaning — emitting nothing would silently drop the
- *   filter, the exact failure this module exists to make visible
+ * @throws RangeError naming the first code the table does not map — passing
+ *   it through untranslated would ask PubMed for a language that does not
+ *   exist and return a quietly empty or wrong result (`docs/07` §4.2)
  */
 function renderLanguageClause(languages: readonly string[]): string {
   if (languages.length === 0) return "";
-  const atoms = languages
-    .map((language) => renderAtom(language, LANGUAGE_TAG, false))
-    .filter((atom) => atom !== "");
-  if (atoms.length === 0) {
-    throw new RangeError(
-      `[research-helper] PubMed cannot render SourceQuery.languages=` +
-        `${JSON.stringify(languages)}: no value is left after removing ` +
-        `Entrez syntax characters, and dropping the filter would silently ` +
-        `widen the query to every language.`,
-    );
+  const codes: string[] = [];
+  for (const language of languages) {
+    const code = Object.hasOwn(PUBMED_LANGUAGE_CODES, language)
+      ? PUBMED_LANGUAGE_CODES[language]
+      : undefined;
+    if (code === undefined) {
+      throw new RangeError(
+        `[research-helper] PubMed cannot render SourceQuery.languages code ` +
+          `${JSON.stringify(language)}: PUBMED_LANGUAGE_CODES maps only ` +
+          `${Object.keys(PUBMED_LANGUAGE_CODES).join(", ")} (two-letter ` +
+          `ISO-639-1, docs/07 §4.2) to MEDLINE's three-letter codes, and an ` +
+          `untranslated code would silently match nothing.`,
+      );
+    }
+    if (!codes.includes(code)) codes.push(code);
   }
+  const atoms = codes.map((code) => renderAtom(code, LANGUAGE_TAG, false));
   if (atoms.length === 1) return firstPart(atoms);
   return `(${atoms.join(" OR ")})`;
 }
@@ -321,8 +364,7 @@ function assertExpressible(query: SourceQuery): void {
   ) {
     throw new RangeError(
       `[research-helper] PubMed cannot express SourceQuery.openAccessOnly: ` +
-        `docs/02 §12.2 / §12.3 document no PubMed open-access filter form, ` +
-        `and the member would otherwise be silently dropped. ` +
+        `the member would otherwise be silently dropped. ` +
         `PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly is false.`,
     );
   }
@@ -330,19 +372,22 @@ function assertExpressible(query: SourceQuery): void {
 
 /**
  * The `term` this adapter transmits for a query: {@link renderPubmedTerm}'s
- * rendering of `terms`, then the `languages` clause joined with `AND`. The
- * one place the two are combined, so {@link explainPubmedQuery} and
+ * rendering of `terms`, then the `languages` clause, then — for
+ * `openAccessOnly: true` — {@link PUBMED_OPEN_ACCESS_CLAUSE}, each joined with
+ * `AND`. The one place they are combined, so {@link explainPubmedQuery} and
  * {@link buildEsearchRequest} cannot drift.
  *
  * @throws RangeError for an unexpressible filter ({@link assertExpressible})
- *   or an unrenderable `languages` list ({@link renderLanguageClause})
+ *   or a `languages` code the table cannot map ({@link renderLanguageClause})
  */
 export function renderPubmedSearchTerm(query: SourceQuery): string {
   assertExpressible(query);
-  const term = renderPubmedTerm(query.terms);
-  const languages = renderLanguageClause(query.languages ?? []);
-  if (languages === "") return term;
-  return term === "" ? languages : `${term} AND ${languages}`;
+  const parts = [
+    renderPubmedTerm(query.terms),
+    renderLanguageClause(query.languages ?? []),
+    query.openAccessOnly === true ? PUBMED_OPEN_ACCESS_CLAUSE : "",
+  ].filter((part) => part !== "");
+  return parts.join(" AND ");
 }
 
 /** `noUncheckedIndexedAccess` makes `parts[0]` optional; the caller checked. */

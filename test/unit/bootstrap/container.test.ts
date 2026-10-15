@@ -43,6 +43,7 @@ import {
   CROSSREF_HOST,
   EBI_HOST,
   NCBI_HOST,
+  SEMANTICSCHOLAR_HOST,
   NCBI_KEY_PRESENT_PREF,
   peekHostLimiters,
   resetHostLimiters,
@@ -407,17 +408,22 @@ describe("installServices wires the graph Phase 1 built", () => {
       EBI_HOST,
       CROSSREF_HOST,
       ARXIV_HOST,
+      SEMANTICSCHOLAR_HOST,
     ]);
     expect(graph.limiters.limiterFor(NCBI_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(EBI_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(CROSSREF_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(ARXIV_HOST)).toBeDefined();
+    expect(graph.limiters.limiterFor(SEMANTICSCHOLAR_HOST)).toBeDefined();
     // `registerSources()` was handed every adapter, in `SOURCE_IDS` order —
     // the order the search dialog's Databases row renders (`docs/08` §4.2).
+    // Semantic Scholar (`P2-T05`) lands after arXiv in the host table but
+    // before it in `SOURCE_IDS`, which is the order that matters here.
     expect(graph.sources.list().map((source) => source.id)).toEqual([
       "pubmed",
       "europepmc",
       "crossref",
+      "semanticscholar",
       "arxiv",
     ]);
     expect(graph.sources.list().map((source) => source.displayNameKey)).toEqual(
@@ -425,8 +431,14 @@ describe("installServices wires the graph Phase 1 built", () => {
         "research-helper-source-pubmed",
         "research-helper-source-europepmc",
         "research-helper-source-crossref",
+        "research-helper-source-semanticscholar",
         "research-helper-source-arxiv",
       ],
+    );
+    // The Semantic Scholar adapter paces on §7.3's `api.semanticscholar.org`
+    // bucket through the client — 0.9/s with or without a key.
+    expect(graph.sources.get("semanticscholar")?.rateLimitKey).toBe(
+      SEMANTICSCHOLAR_HOST,
     );
     // The arXiv adapter paces on §7.3's `export.arxiv.org` bucket through the
     // client, which is the one place the three-second rule is enforced.

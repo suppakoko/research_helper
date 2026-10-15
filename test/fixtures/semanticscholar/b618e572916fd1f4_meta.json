@@ -1,0 +1,13 @@
+{
+  "scenario": "error-429",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T02:32:45.289Z",
+  "endpoint": "https://api.semanticscholar.org/graph/v1/paper/search/bulk",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Written from docs/02 §6.4's two measurements (2026-09-08, 2026-09-09): HTTP 429 with this exact 174-byte body on every unauthenticated attempt, x-amzn-ErrorType TooManyRequestsException, no Retry-After. Not provoked here — the anonymous pool is shared with every caller on the internet.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

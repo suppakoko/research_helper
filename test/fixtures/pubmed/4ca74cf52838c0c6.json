@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "X-RateLimit-Limit,X-RateLimit-Remaining",
+    "alt-svc": "clear",
+    "cache-control": "private",
+    "content-encoding": "gzip",
+    "content-security-policy": "upgrade-insecure-requests",
+    "content-type": "application/json; charset=UTF-8",
+    "date": "Thu, 15 Oct 2026 07:50:17 GMT",
+    "referrer-policy": "origin-when-cross-origin",
+    "server": "Finatra",
+    "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "via": "1.1 google",
+    "x-ratelimit-limit": "3",
+    "x-ratelimit-remaining": "2",
+    "x-ua-compatible": "IE=Edge",
+    "x-xss-protection": "1; mode=block"
+  },
+  "body": "{\"header\":{\"type\":\"esearch\",\"version\":\"0.3\"},\"esearchresult\":{\"count\":\"138\",\"retmax\":\"10\",\"retstart\":\"0\",\"idlist\":[\"38145557\",\"38144512\",\"38143330\",\"38118363\",\"38109533\",\"38106206\",\"38097823\",\"38078422\",\"38072809\",\"38065313\"],\"translationset\":[{\"from\":\"ionizable[All Fields]\",\"to\":\"\\\"ionisation\\\"[All Fields] OR \\\"ionisations\\\"[All Fields] OR \\\"ionise\\\"[All Fields] OR \\\"ionised\\\"[All Fields] OR \\\"ionizability\\\"[All Fields] OR \\\"ionizable\\\"[All Fields] OR \\\"ionization\\\"[All Fields] OR \\\"ionizations\\\"[All Fields] OR \\\"ionize\\\"[All Fields] OR \\\"ionized\\\"[All Fields] OR \\\"ionizer\\\"[All Fields] OR \\\"ionizers\\\"[All Fields] OR \\\"ionizes\\\"[All Fields]\"},{\"from\":\"lipid[All Fields]\",\"to\":\"\\\"lipid's\\\"[All Fields] OR \\\"lipidate\\\"[All Fields] OR \\\"lipidated\\\"[All Fields] OR \\\"lipidates\\\"[All Fields] OR \\\"lipidation\\\"[All Fields] OR \\\"lipidations\\\"[All Fields] OR \\\"lipide\\\"[All Fields] OR \\\"lipides\\\"[All Fields] OR \\\"lipidic\\\"[All Fields] OR \\\"lipids\\\"[Supplementary Concept] OR \\\"lipids\\\"[All Fields] OR \\\"lipid\\\"[All Fields] OR \\\"lipids\\\"[MeSH Terms]\"},{\"from\":\"nanoparticle[All Fields]\",\"to\":\"\\\"nanoparticle's\\\"[All Fields] OR \\\"nanoparticles\\\"[MeSH Terms] OR \\\"nanoparticles\\\"[All Fields] OR \\\"nanoparticle\\\"[All Fields]\"}],\"querytranslation\":\"(\\\"ionisation\\\"[All Fields] OR \\\"ionisations\\\"[All Fields] OR \\\"ionise\\\"[All Fields] OR \\\"ionised\\\"[All Fields] OR \\\"ionizability\\\"[All Fields] OR \\\"ionizable\\\"[All Fields] OR \\\"ionization\\\"[All Fields] OR \\\"ionizations\\\"[All Fields] OR \\\"ionize\\\"[All Fields] OR \\\"ionized\\\"[All Fields] OR \\\"ionizer\\\"[All Fields] OR \\\"ionizers\\\"[All Fields] OR \\\"ionizes\\\"[All Fields]) AND (\\\"lipid s\\\"[All Fields] OR \\\"lipidate\\\"[All Fields] OR \\\"lipidated\\\"[All Fields] OR \\\"lipidates\\\"[All Fields] OR \\\"lipidation\\\"[All Fields] OR \\\"lipidations\\\"[All Fields] OR \\\"lipide\\\"[All Fields] OR \\\"lipides\\\"[All Fields] OR \\\"lipidic\\\"[All Fields] OR \\\"lipids\\\"[Supplementary Concept] OR \\\"lipids\\\"[All Fields] OR \\\"lipid\\\"[All Fields] OR \\\"lipids\\\"[MeSH Terms]) AND (\\\"nanoparticle s\\\"[All Fields] OR \\\"nanoparticles\\\"[MeSH Terms] OR \\\"nanoparticles\\\"[All Fields] OR \\\"nanoparticle\\\"[All Fields]) AND 2023/01/01:2023/12/31[Date - Entry]\"}}\n"
+}

@@ -1,0 +1,262 @@
+/**
+ * The queries the committed Semantic Scholar fixtures were recorded under —
+ * the one declaration `scripts/record-fixtures.ts` and
+ * `test/unit/sources/semanticscholar.test.ts` both import (`P2-T05`, the
+ * layout `pubmedRecordedRequests.ts` prescribes and the Europe PMC, Crossref
+ * and arXiv files follow).
+ *
+ * A fixture is keyed on the exact method, URL and body (`fixtureKey` in
+ * `fixtureReplay.ts`), so every consumer must build the same request. The
+ * `recorded*Request` functions mirror the adapter: `limit` is the clamped
+ * `SourceQuery.limit`, the bulk `token` is the cursor, the relevance `offset`
+ * is the cursor read as a number, the batch body is `{"ids":[…]}`. **No
+ * request carries a credential**: the key is a header the recorder never
+ * sends (every recording is unauthenticated, on the shared anonymous pool),
+ * and the hash does not include headers. Change a query here and its fixture
+ * must be re-recorded; a drift shows up as "Missing fixture" in the unit test,
+ * never as a network call.
+ *
+ * **Every live scenario costs one 1.1-second slot** (`docs/07` §7.3's 0.9/s)
+ * and draws on the shared anonymous pool `docs/02` §6.4 measured answering 429
+ * on every attempt during US business hours, which is why the set is thirteen
+ * independent requests plus one dependent page and not more.
+ *
+ * No platform import, so an integration spec inside Zotero can read it too.
+ */
+
+import {
+  clampPageSize,
+  readOffsetCursor,
+} from "../../src/sources/semanticscholar/semanticscholarSource";
+import {
+  buildBatchRequest,
+  buildBulkSearchRequest,
+  buildPaperRequest,
+  buildRelevanceSearchRequest,
+  SEMANTICSCHOLAR_HEALTH_FIELDS,
+  SEMANTICSCHOLAR_HEALTH_PAPER_ID,
+  type SemanticScholarBatchRequest,
+  type SemanticScholarBulkRequest,
+  type SemanticScholarRelevanceRequest,
+  type SemanticScholarRequest,
+} from "../../src/sources/semanticscholar/query";
+import type {
+  QueryField,
+  QueryNode,
+  SourceQuery,
+} from "../../src/sources/types";
+
+const term = (
+  value: string,
+  field?: QueryField,
+  phrase?: boolean,
+): QueryNode => ({
+  kind: "term",
+  value,
+  ...(field !== undefined && { field }),
+  ...(phrase !== undefined && { phrase }),
+});
+const phrase = (value: string): QueryNode => term(value, undefined, true);
+const and = (...children: QueryNode[]): QueryNode => ({
+  kind: "and",
+  children,
+});
+const or = (...children: QueryNode[]): QueryNode => ({ kind: "or", children });
+const not = (child: QueryNode): QueryNode => ({ kind: "not", child });
+
+/** The closed historical year every windowed scenario uses. */
+export const SEMANTICSCHOLAR_Y2023 = {
+  fromDate: "2023-01-01",
+  toDate: "2023-12-31",
+} as const;
+
+/**
+ * `search-typical` (`limit` 20), `search-single` (`limit` 1) and
+ * `paginated-*` (`limit` 3): `docs/02` §12.2's own worked example —
+ * `("base editing" | "prime editing") + CRISPR - mouse` — so the recording
+ * exercises `|`, `+`, `-`, quotes and parentheses at once, over 2023.
+ */
+export const SEMANTICSCHOLAR_QUERY_TYPICAL: SourceQuery = {
+  terms: and(
+    or(phrase("base editing"), phrase("prime editing")),
+    term("CRISPR", "title"),
+    not(term("mouse")),
+  ),
+  ...SEMANTICSCHOLAR_Y2023,
+  limit: 20,
+};
+
+/** `search-empty`: one token chosen to match nothing. */
+export const SEMANTICSCHOLAR_QUERY_EMPTY: SourceQuery = {
+  terms: term("zqxjkwvqpzmbt"),
+  ...SEMANTICSCHOLAR_Y2023,
+  limit: 20,
+};
+
+/** The titles the `record-*` scenarios are looked up by, verbatim. */
+export const SEMANTICSCHOLAR_TITLE_RICH =
+  "Transfer learning enables predictions in network biology";
+export const SEMANTICSCHOLAR_TITLE_SPARSE =
+  "Cramming more components onto integrated circuits";
+export const SEMANTICSCHOLAR_TITLE_UNICODE_1 = "Schrödinger";
+export const SEMANTICSCHOLAR_TITLE_UNICODE_2 = "cat";
+export const SEMANTICSCHOLAR_TITLE_PREPRINT = "VizIt";
+export const SEMANTICSCHOLAR_TITLE_PAIR =
+  "SciPy 1.0: fundamental algorithms for scientific computing in Python";
+
+/**
+ * `record-rich`: `docs/02` §6.7's own worked example (Geneformer, Nature
+ * 2023) — `externalIds` with a **bare** `PubMedCentral`, `tldr`, `journal`,
+ * `openAccessPdf` with a `disclaimer`, a four-figure `citationCount`. The
+ * same paper the PubMed, Crossref and Europe PMC fixtures hold.
+ */
+export const SEMANTICSCHOLAR_QUERY_RICH: SourceQuery = {
+  terms: phrase(SEMANTICSCHOLAR_TITLE_RICH),
+  limit: 5,
+};
+/**
+ * `record-sparse`: Moore's 1965 *Electronics* note — a paper old enough that
+ * Semantic Scholar usually holds no abstract and no full publication date.
+ * What it lacks is asserted from the recording, not assumed.
+ */
+export const SEMANTICSCHOLAR_QUERY_SPARSE: SourceQuery = {
+  terms: phrase(SEMANTICSCHOLAR_TITLE_SPARSE),
+  limit: 3,
+};
+/**
+ * `record-unicode`: diacritics in titles (and, usually, author names). The
+ * 2023 window is load-bearing: **measured 2026-10-15, the bulk endpoint
+ * ignores `limit`** and returned 1000 records (1.98 MB) for the unwindowed
+ * query; windowed, the set is small enough to commit.
+ */
+export const SEMANTICSCHOLAR_QUERY_UNICODE: SourceQuery = {
+  terms: and(
+    term(SEMANTICSCHOLAR_TITLE_UNICODE_1),
+    term(SEMANTICSCHOLAR_TITLE_UNICODE_2),
+  ),
+  ...SEMANTICSCHOLAR_Y2023,
+  limit: 5,
+};
+/**
+ * `record-jats-abstract`: Semantic Scholar abstracts are plain text — there
+ * is no JATS — so `docs/13` §3.1's row was aimed at its analogue, a
+ * `/paper/batch` answer carrying both `abstract` and `tldr.text`, through
+ * the DataCite DOI of "Attention is all you need". **Measured 2026-10-15: the
+ * batch endpoint answers HTTP 400 `{"error":"No valid paper ids given"}` for
+ * a `10.48550/arXiv.…` DataCite DOI** — Semantic Scholar does not resolve
+ * arXiv's constructed DOIs as `DOI:` ids (`ARXIV:` is the form, §6.3). The
+ * fixture is kept as the measured 400 shape on this endpoint; the
+ * abstract-plus-TL;DR pairing is asserted on `batch-lookup` instead.
+ */
+export const SEMANTICSCHOLAR_BATCH_DATACITE_ID =
+  "DOI:10.48550/arXiv.1706.03762";
+/**
+ * `record-preprint`: the arXiv e-print `docs/02` §7.4 uses as its sample
+ * (VizIt, 2026), whose `venue` is `arXiv.org` — §10.2's preprint rule.
+ */
+export const SEMANTICSCHOLAR_QUERY_PREPRINT: SourceQuery = {
+  terms: and(term(SEMANTICSCHOLAR_TITLE_PREPRINT), phrase("multi-view")),
+  limit: 3,
+};
+/**
+ * `dedup-pair-set`: the SciPy 1.0 paper (arXiv 1907.10121, PMID 32015543,
+ * DOI 10.1038/s41592-019-0686-2), which the arXiv fixtures hold and which is
+ * in PubMed, Crossref and Europe PMC live — the four-way pair `P2-T06`'s
+ * report proposed.
+ */
+export const SEMANTICSCHOLAR_QUERY_PAIR: SourceQuery = {
+  terms: phrase(SEMANTICSCHOLAR_TITLE_PAIR),
+  limit: 3,
+};
+/** `paginated-page-1/2`: the typical query at three results a page. */
+export const SEMANTICSCHOLAR_QUERY_PAGINATED: SourceQuery = {
+  ...SEMANTICSCHOLAR_QUERY_TYPICAL,
+  limit: 3,
+};
+/**
+ * `relevance-search`: §12.2's example on `/paper/search` — plain text, the
+ * `NOT` term dropped — at `limit` 5.
+ */
+export const SEMANTICSCHOLAR_QUERY_RELEVANCE: SourceQuery = {
+  ...SEMANTICSCHOLAR_QUERY_TYPICAL,
+  limit: 5,
+};
+/**
+ * `batch-lookup`: `docs/02` §6.8's `/paper/batch` with four ids — the
+ * Geneformer paper by DOI and again by PMID (the same paper twice, §6.3's
+ * cross-id resolution), an id that resolves to nothing at **index 2** (the
+ * card's third criterion: a `null` there must not shift index 3), and §6.8's
+ * own `ARXIV:2106.15928`.
+ */
+export const SEMANTICSCHOLAR_BATCH_IDS: readonly string[] = [
+  "DOI:10.1038/s41586-023-06139-9",
+  "PMID:37258680",
+  "DOI:10.1234/research-helper-unknown-id",
+  "ARXIV:2106.15928",
+];
+/** The query the hand-written `error-429` fixture is keyed under. */
+export const SEMANTICSCHOLAR_QUERY_SYNTHETIC_429: SourceQuery = {
+  terms: term("synthetic rate limit fixture"),
+  limit: 20,
+};
+/** The query the hand-written `error-400` fixture is keyed under. */
+export const SEMANTICSCHOLAR_QUERY_SYNTHETIC_400: SourceQuery = {
+  terms: term("synthetic bad request fixture"),
+  limit: 20,
+};
+/** The query the hand-written `error-500` fixture is keyed under. */
+export const SEMANTICSCHOLAR_QUERY_SYNTHETIC_500: SourceQuery = {
+  terms: term("synthetic server error fixture"),
+  limit: 20,
+};
+/** The query the derived `error-malformed` fixture is keyed under. */
+export const SEMANTICSCHOLAR_QUERY_SYNTHETIC_MALFORMED: SourceQuery = {
+  terms: term("synthetic malformed body fixture"),
+  limit: 20,
+};
+
+/**
+ * One `/paper/search/bulk` request exactly as the shipped adapter issues it.
+ *
+ * @param query - one of the queries above, or a `limit`/`cursor` variant
+ * @param token - overrides `query.cursor`; page 2 passes page 1's `token`
+ * @returns the built request `fixtureKey` hashes (method, URL)
+ */
+export function recordedSemanticScholarBulkRequest(
+  query: SourceQuery,
+  token?: string,
+): SemanticScholarBulkRequest {
+  const cursor = token ?? query.cursor;
+  return buildBulkSearchRequest({
+    query,
+    limit: clampPageSize(query.limit),
+    ...(cursor !== undefined && { token: cursor }),
+  });
+}
+
+/** One `/paper/search` request exactly as `searchByRelevance` issues it. */
+export function recordedSemanticScholarRelevanceRequest(
+  query: SourceQuery,
+): SemanticScholarRelevanceRequest {
+  const offset = readOffsetCursor(query.cursor);
+  return buildRelevanceSearchRequest({
+    query,
+    limit: clampPageSize(query.limit, offset),
+    offset,
+  });
+}
+
+/** One `/paper/batch` POST exactly as `lookup` issues it for `ids`. */
+export function recordedSemanticScholarBatchRequest(
+  ids: readonly string[] = SEMANTICSCHOLAR_BATCH_IDS,
+): SemanticScholarBatchRequest {
+  return buildBatchRequest(ids);
+}
+
+/** `docs/09` §2.3's test call exactly as `healthCheck` issues it. */
+export function recordedSemanticScholarHealthRequest(): SemanticScholarRequest {
+  return buildPaperRequest(
+    SEMANTICSCHOLAR_HEALTH_PAPER_ID,
+    SEMANTICSCHOLAR_HEALTH_FIELDS,
+  );
+}

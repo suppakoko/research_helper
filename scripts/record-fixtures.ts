@@ -19,6 +19,7 @@
  * npm run fixtures:record -- --source europepmc --dry-run    # Europe PMC: prints the plan only
  * npm run fixtures:record -- --source crossref --dry-run     # Crossref: prints the plan only
  * npm run fixtures:record -- --source arxiv --dry-run        # arXiv: prints the plan only
+ * npm run fixtures:record -- --source semanticscholar --dry-run   # Semantic Scholar, unkeyed
  * FIXTURE_MODE=record npm run fixtures:record -- --source europepmc   # live
  * FIXTURE_MODE=synthetic npm run fixtures:record                      # rewrites the
  *                                                  # hand-written fixtures, no network
@@ -131,10 +132,12 @@ import {
   EBI_HOST,
   HOST_POLICIES,
   NCBI_HOST,
+  SEMANTICSCHOLAR_HOST,
 } from "../src/core/rateLimit/hostLimiter";
 import { createCancellationTokenSource } from "../src/core/jobQueue/cancellation";
 import { parseCrossrefWorksBody } from "../src/sources/crossref/crossrefSource";
 import { parseEuropePmcSearchBody } from "../src/sources/europepmc/europepmcSource";
+import { parseSearchBody as parseSemanticScholarSearchBody } from "../src/sources/semanticscholar/semanticscholarSource";
 import {
   buildEfetchRequest,
   parseEsearchBody,
@@ -204,6 +207,30 @@ import {
   EUROPEPMC_QUERY_UNICODE,
   recordedEuropePmcRequest,
 } from "../test/support/europepmcRecordedRequests";
+import {
+  PUBMED_WINDOW_MAX_RESULTS,
+  pubmedWindowQuery,
+} from "../test/support/pubmedRecordedRequests";
+import {
+  recordedSemanticScholarBatchRequest,
+  recordedSemanticScholarBulkRequest,
+  recordedSemanticScholarHealthRequest,
+  recordedSemanticScholarRelevanceRequest,
+  SEMANTICSCHOLAR_BATCH_DATACITE_ID,
+  SEMANTICSCHOLAR_QUERY_EMPTY,
+  SEMANTICSCHOLAR_QUERY_PAGINATED,
+  SEMANTICSCHOLAR_QUERY_PAIR,
+  SEMANTICSCHOLAR_QUERY_PREPRINT,
+  SEMANTICSCHOLAR_QUERY_RELEVANCE,
+  SEMANTICSCHOLAR_QUERY_RICH,
+  SEMANTICSCHOLAR_QUERY_SPARSE,
+  SEMANTICSCHOLAR_QUERY_SYNTHETIC_400,
+  SEMANTICSCHOLAR_QUERY_SYNTHETIC_429,
+  SEMANTICSCHOLAR_QUERY_SYNTHETIC_500,
+  SEMANTICSCHOLAR_QUERY_SYNTHETIC_MALFORMED,
+  SEMANTICSCHOLAR_QUERY_TYPICAL,
+  SEMANTICSCHOLAR_QUERY_UNICODE,
+} from "../test/support/semanticscholarRecordedRequests";
 
 // ---------------------------------------------------------------------------
 // 0. The command line
@@ -215,6 +242,7 @@ export const RECORDABLE_SOURCES = [
   "europepmc",
   "crossref",
   "arxiv",
+  "semanticscholar",
 ] as const;
 export type RecordableSourceId = (typeof RECORDABLE_SOURCES)[number];
 
@@ -227,14 +255,23 @@ export interface CliOptions {
   readonly source: RecordableSourceId;
   /** `--dry-run` was given. Wins over `FIXTURE_MODE`. */
   readonly dryRun: boolean;
+  /**
+   * `--only <scenario,…>`: restrict the *independent* requests to these
+   * scenarios (`P2-T05`, 2026-10-15). Added because Semantic Scholar's shared
+   * anonymous pool refused 7 of 13 requests on the first run and re-issuing
+   * all 13 to recover 7 would have doubled the spend on a pool `docs/02` §6.4
+   * says to treat gently. Dependent and synthetic fixtures are planned as
+   * usual from whatever this run captured. Absent means every scenario.
+   */
+  readonly only?: readonly string[];
 }
 
 /** A command-line mistake. Exit code 2, no plan printed. */
 export class UsageError extends Error {}
 
 const USAGE =
-  "usage: npm run fixtures:record -- [--source <id>] [--dry-run]   " +
-  `(sources: ${RECORDABLE_SOURCES.join(", ")})`;
+  "usage: npm run fixtures:record -- [--source <id>] [--only <scenario,…>] " +
+  `[--dry-run]   (sources: ${RECORDABLE_SOURCES.join(", ")})`;
 
 /**
  * Parse the arguments after the script path.
@@ -250,6 +287,7 @@ const USAGE =
 export function parseCliArgs(argv: readonly string[]): CliOptions {
   let source: RecordableSourceId = "pubmed";
   let dryRun = false;
+  let only: string[] | undefined;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === undefined) continue;
@@ -258,6 +296,23 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
       continue;
     }
     let value: string | undefined;
+    if (arg === "--only") {
+      i += 1;
+      value = argv[i];
+    } else if (arg.startsWith("--only=")) {
+      value = arg.slice("--only=".length);
+    }
+    if (arg === "--only" || arg.startsWith("--only=")) {
+      const names = (value ?? "")
+        .split(",")
+        .map((n) => n.trim())
+        .filter((n) => n !== "");
+      if (names.length === 0) {
+        throw new UsageError(`--only needs at least one scenario.\n${USAGE}`);
+      }
+      only = [...(only ?? []), ...names];
+      continue;
+    }
     if (arg === "--source") {
       i += 1;
       value = argv[i];
@@ -276,7 +331,28 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     }
     source = value;
   }
-  return { source, dryRun };
+  return { source, dryRun, ...(only !== undefined && { only }) };
+}
+
+/**
+ * The independent requests `--only` keeps, in plan order.
+ *
+ * @throws UsageError naming a scenario the plan does not have
+ */
+export function selectScenarios(
+  planned: readonly PlannedRequest[],
+  only: readonly string[] | undefined,
+): readonly PlannedRequest[] {
+  if (only === undefined) return planned;
+  const known = new Set(planned.map((p) => p.scenario));
+  const unknown = only.filter((name) => !known.has(name));
+  if (unknown.length > 0) {
+    throw new UsageError(
+      `--only names scenarios this plan does not have: ${unknown.join(", ")}. ` +
+        `Known: ${[...known].join(", ")}`,
+    );
+  }
+  return planned.filter((p) => only.includes(p.scenario));
 }
 
 // ---------------------------------------------------------------------------
@@ -936,6 +1012,13 @@ export interface PlannedRequest {
   readonly method: string;
   readonly url: string;
   readonly body?: string;
+  /**
+   * The body's `Content-Type`, on a POST. Defaults to
+   * `application/x-www-form-urlencoded` (Europe PMC's `searchPOST`); Semantic
+   * Scholar's `/paper/batch` is `application/json` (`P2-T05`). Not part of the
+   * fixture key.
+   */
+  readonly contentType?: string;
   readonly endpoint: string;
   readonly purpose: string;
 }
@@ -1166,6 +1249,56 @@ async function pubmedPageIds(
   } catch {
     return [];
   }
+}
+
+/**
+ * The search window's request (`P2-T36`): one whole calendar year at
+ * `retmax=10`, built from `test/support/pubmedRecordedRequests.ts`'s
+ * {@link pubmedWindowQuery} — the module the integration spec imports too, so
+ * the recorded request and the window's request have one definition.
+ *
+ * Kept out of {@link independentPlan} on purpose: that function is the
+ * Phase 1 inventory `test/contract/replayHarness.test.ts` imports by name and
+ * counts, and these two fixtures are the window's, not `docs/13` §3.1's.
+ * `planFor("pubmed")` plans both sets.
+ */
+export function pubmedWindowPlan(): readonly PlannedRequest[] {
+  return [
+    esearch(
+      "window-esearch",
+      "P2-T36: the search window's own request — one closed year, retmax=10 " +
+        "(PREFS.maxResults' minimum), so the window replays the real adapter",
+      pubmedWindowQuery(),
+      PUBMED_WINDOW_MAX_RESULTS,
+      0,
+    ),
+  ];
+}
+
+/** The `window-efetch` request, for the ids `window-esearch` resolved to. */
+async function pubmedWindowEfetchPlan(
+  answer: Answer,
+): Promise<readonly PlannedRequest[]> {
+  const planned = pubmedWindowPlan()[0];
+  if (planned === undefined) return [];
+  const got = await answer(planned);
+  if (got === undefined || got.status !== 200) return [];
+  let pmids: readonly string[];
+  try {
+    pmids = parseEsearchBody(got.body, planned.endpoint).pmids;
+  } catch {
+    return [];
+  }
+  // What the adapter's `search()` takes: never more ids than `retmax`.
+  const taken = pmids.slice(0, PUBMED_WINDOW_MAX_RESULTS);
+  if (taken.length === 0) return [];
+  return [
+    efetch(
+      "window-efetch",
+      "P2-T36: the records window-esearch resolved to, in NCBI's order",
+      taken,
+    ),
+  ];
 }
 
 // --- 7b. Europe PMC ---------------------------------------------------------
@@ -1870,7 +2003,299 @@ function arxivSyntheticPlan(
   return out;
 }
 
-// --- 7e. The registry -------------------------------------------------------
+// --- 7e. Semantic Scholar ---------------------------------------------------
+
+/** A planned request from one of the shipped Semantic Scholar builders. */
+function semanticscholarPlanned(
+  scenario: string,
+  purpose: string,
+  built: {
+    readonly method: string;
+    readonly url: string;
+    readonly endpointBaseUrl: string;
+    readonly body?: string;
+    readonly contentType?: string;
+  },
+): PlannedRequest {
+  return {
+    scenario,
+    purpose,
+    method: built.method,
+    url: built.url,
+    endpoint: built.endpointBaseUrl,
+    ...(built.body !== undefined && { body: built.body }),
+    ...(built.contentType !== undefined && { contentType: built.contentType }),
+  };
+}
+
+/**
+ * Semantic Scholar's scenarios known up front: `docs/13` §3.1's thirteen
+ * names less the three synthetic ones, plus `relevance-search` (the
+ * `/paper/search` rendering), `batch-lookup` (`/paper/batch` with a `null`
+ * at index 2) and `health-probe` (`docs/09` §2.3's test call). Page 2 is
+ * dependent (a server `token`). Every request is **unauthenticated**: the key
+ * is a header this recorder never sends, so the fixtures replay identically
+ * for the keyed and the unkeyed adapter. The queries are
+ * `test/support/semanticscholarRecordedRequests.ts`'s.
+ *
+ * **Thirteen requests at ≥ 1112 ms** — `spacingMsFor(SEMANTICSCHOLAR_HOST)`
+ * reads §7.3's 0.9/s row. `docs/02` §6.4 measured the shared anonymous pool
+ * answering HTTP 429 on every attempt during US business hours; a run that
+ * meets that records the 429 under whatever scenario drew it and says so.
+ */
+export function semanticscholarIndependentPlan(): readonly PlannedRequest[] {
+  return [
+    semanticscholarPlanned(
+      "search-typical",
+      "§3.1: ~20 results for docs/02 §12.2's own example on /paper/search/bulk, 2023 window",
+      recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_TYPICAL),
+    ),
+    semanticscholarPlanned(
+      "search-empty",
+      "§3.1: zero results — total 0, empty data, no token",
+      recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_EMPTY),
+    ),
+    semanticscholarPlanned(
+      "search-single",
+      "§3.1: one result — off-by-one and not-an-array bugs (limit 1)",
+      recordedSemanticScholarBulkRequest({
+        ...SEMANTICSCHOLAR_QUERY_TYPICAL,
+        limit: 1,
+      }),
+    ),
+    semanticscholarPlanned(
+      "record-rich",
+      "§3.1: every optional field populated (docs/02 §6.7's Geneformer example: bare PubMedCentral, journal, openAccessPdf.disclaimer)",
+      recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_RICH),
+    ),
+    semanticscholarPlanned(
+      "record-sparse",
+      "§3.1: a 1965 paper — usually no abstract, no full date (Moore, Electronics)",
+      recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_SPARSE),
+    ),
+    semanticscholarPlanned(
+      "record-unicode",
+      "§3.1: diacritics in titles and author names (Schrödinger cat)",
+      recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_UNICODE),
+    ),
+    semanticscholarPlanned(
+      "record-jats-abstract",
+      "§3.1's row has no Semantic Scholar analogue (abstracts are plain text); aimed at a /paper/batch answer with abstract + tldr by DataCite DOI, it measured HTTP 400 'No valid paper ids given' (2026-10-15) and is kept as that endpoint's 400 shape",
+      recordedSemanticScholarBatchRequest([SEMANTICSCHOLAR_BATCH_DATACITE_ID]),
+    ),
+    semanticscholarPlanned(
+      "record-preprint",
+      "§3.1: a preprint — venue arXiv.org (docs/02 §7.4's VizIt e-print, §10.2's preprint rule)",
+      recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_PREPRINT),
+    ),
+    semanticscholarPlanned(
+      "dedup-pair-set",
+      "§3.1: a paper also in arXiv's fixtures and in PubMed, Crossref and Europe PMC (SciPy 1.0)",
+      recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_PAIR),
+    ),
+    semanticscholarPlanned(
+      "paginated-page-1",
+      "§3.1: page 1 of the typical query at limit 3, no token",
+      recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_PAGINATED),
+    ),
+    semanticscholarPlanned(
+      "relevance-search",
+      "docs/02 §6.5 / §12.2: the example as plain text on /paper/search, NOT dropped, limit 5",
+      recordedSemanticScholarRelevanceRequest(SEMANTICSCHOLAR_QUERY_RELEVANCE),
+    ),
+    semanticscholarPlanned(
+      "batch-lookup",
+      "docs/02 §6.8: POST /paper/batch, four ids, an unknown one at index 2 → null, positionally aligned",
+      recordedSemanticScholarBatchRequest(),
+    ),
+    semanticscholarPlanned(
+      "health-probe",
+      "docs/09 §2.3's test call, unkeyed: GET /paper/DOI:…?fields=paperId",
+      recordedSemanticScholarHealthRequest(),
+    ),
+  ];
+}
+
+/**
+ * The opaque, non-secret runs a Semantic Scholar body carries that the
+ * redaction pass must keep ({@link SourcePlan.opaqueTokens}): every
+ * `paperId` — a 40-character hexadecimal SHA (`docs/02` §6.3), exactly the
+ * run `redact()`'s hexadecimal pattern catches — and the bulk continuation
+ * `token`. Without this every record's identity would come back
+ * `[redacted:40]` and no page 2 could be replayed. A paper SHA is a public
+ * identifier, not a credential; the plan vouches for it.
+ */
+function semanticscholarOpaqueTokens(body: string): readonly string[] {
+  const out = new Set<string>();
+  for (const match of body.matchAll(/\b[0-9a-f]{40}\b/gu)) out.add(match[0]);
+  try {
+    const token = parseSemanticScholarSearchBody(body, "").token;
+    if (token !== undefined) out.add(token);
+  } catch {
+    // Not a search page (a batch array, a single paper, an error): nothing
+    // more to vouch for.
+  }
+  return [...out];
+}
+
+/** The `token` a recorded bulk page offered, or `undefined`. */
+async function semanticscholarTokenAfter(
+  answer: Answer,
+  planned: PlannedRequest | undefined,
+): Promise<string | undefined> {
+  if (planned === undefined) return undefined;
+  const got = await answer(planned);
+  if (got === undefined || got.status !== 200) return undefined;
+  try {
+    return parseSemanticScholarSearchBody(got.body, planned.endpoint).token;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Page 2 of `paginated`, keyed under the `token` page 1 returned (`docs/02`
+ * §6.6). One dependent request.
+ */
+async function semanticscholarDependentPlan(
+  answer: Answer,
+): Promise<readonly PlannedRequest[]> {
+  const page1 = semanticscholarIndependentPlan().find(
+    (p) => p.scenario === "paginated-page-1",
+  );
+  const token2 = await semanticscholarTokenAfter(answer, page1);
+  if (token2 === undefined) return [];
+  return [
+    semanticscholarPlanned(
+      "paginated-page-2",
+      "§3.1: page 2, under page 1's token",
+      recordedSemanticScholarBulkRequest(
+        SEMANTICSCHOLAR_QUERY_PAGINATED,
+        token2,
+      ),
+    ),
+  ];
+}
+
+/**
+ * `error-429`'s body — **the measured shape**, byte for byte (`docs/02` §6.4,
+ * 2026-09-08 and 2026-09-09, `content-length: 174`): JSON with `message` and
+ * the *string* `"429"`, `x-amzn-ErrorType: TooManyRequestsException`, **no
+ * `Retry-After`**. `docs/13` §3.1's row asks for a 429 "including
+ * `Retry-After`"; this host has never been observed to send one.
+ */
+const SEMANTICSCHOLAR_MEASURED_429_BODY =
+  '{"message": "Too Many Requests. Please wait and try again or apply for a ' +
+  "key for higher rate limits. " +
+  'https://www.semanticscholar.org/product/api#api-key-form", "code": "429"}';
+
+/** `error-400`'s body: `docs/02` §6.10's shape, with the field the live probe drew it for. */
+const SEMANTICSCHOLAR_DOCUMENTED_400_BODY =
+  '{"error":"Unrecognized or unsupported fields: [tldr]"}';
+
+/** `error-500`'s body: a placeholder that says so. */
+const SEMANTICSCHOLAR_SYNTHETIC_500_BODY =
+  '{"message": "synthetic fixture: docs/02 §6.10 records no Semantic Scholar ' +
+  "5xx body shape; a server error cannot be provoked on demand. Status is " +
+  'the assertable part."}';
+
+/**
+ * Semantic Scholar's four written fixtures: `error-429` (the measured body,
+ * written rather than provoked — the pool is shared with every anonymous
+ * caller and tripping it on purpose is not acceptable; a run that meets it
+ * anyway records it under the scenario that drew it), `error-400` (the
+ * probe's measured body under a reproducible key), `error-500` and
+ * `error-malformed`.
+ *
+ * @param richBody - the recorded `record-rich` body, for `error-malformed`;
+ *   `undefined` skips that fixture
+ */
+function semanticscholarSyntheticPlan(
+  richBody: string | undefined,
+): readonly SyntheticFixture[] {
+  const out: SyntheticFixture[] = [
+    {
+      planned: semanticscholarPlanned(
+        "error-429",
+        '§3.1: rate-limit response — the measured anonymous-pool shape: JSON message, code "429" as a string, no Retry-After',
+        recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_SYNTHETIC_429),
+      ),
+      exchange: {
+        status: 429,
+        headers: {
+          "content-type": "application/json",
+          "content-length": "174",
+          "x-amzn-errortype": "TooManyRequestsException",
+        },
+        body: SEMANTICSCHOLAR_MEASURED_429_BODY,
+      },
+      reason:
+        "Written from docs/02 §6.4's two measurements (2026-09-08, " +
+        "2026-09-09): HTTP 429 with this exact 174-byte body on every " +
+        "unauthenticated attempt, x-amzn-ErrorType TooManyRequestsException, " +
+        "no Retry-After. Not provoked here — the anonymous pool is shared " +
+        "with every caller on the internet.",
+    },
+    {
+      planned: semanticscholarPlanned(
+        "error-400",
+        "docs/02 §6.10: 400 naming the unsupported field (measured 2026-10-15 for tldr on the bulk endpoint)",
+        recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_SYNTHETIC_400),
+      ),
+      exchange: {
+        status: 400,
+        headers: { "content-type": "application/json" },
+        body: SEMANTICSCHOLAR_DOCUMENTED_400_BODY,
+      },
+      reason:
+        "Measured live 2026-10-15 (P2-T05's one probe, status and body " +
+        "verbatim), then written under a reproducible key: the fields list " +
+        "that drew it is one the shipped bulk builder no longer sends.",
+    },
+    {
+      planned: semanticscholarPlanned(
+        "error-500",
+        "§3.1: server error",
+        recordedSemanticScholarBulkRequest(SEMANTICSCHOLAR_QUERY_SYNTHETIC_500),
+      ),
+      exchange: {
+        status: 500,
+        headers: { "content-type": "application/json" },
+        body: SEMANTICSCHOLAR_SYNTHETIC_500_BODY,
+      },
+      reason:
+        "Hand-written. A 5xx cannot be provoked on demand and docs/02 §6.10 " +
+        "records no Semantic Scholar 5xx body; the body is a placeholder.",
+    },
+  ];
+  if (richBody !== undefined) {
+    out.push({
+      planned: semanticscholarPlanned(
+        "error-malformed",
+        "§3.1: truncated/invalid body",
+        recordedSemanticScholarBulkRequest(
+          SEMANTICSCHOLAR_QUERY_SYNTHETIC_MALFORMED,
+        ),
+      ),
+      exchange: {
+        status: 200,
+        headers: { "content-type": "application/json" },
+        // `redact()` first, as Crossref's is: the truncated fixture is not a
+        // page anyone pages from or maps, so its paper SHAs and token are
+        // redacted rather than exempted.
+        body: redact(richBody).slice(0, MALFORMED_PREFIX_BYTES),
+      },
+      reason:
+        `Derived, not recorded: the first ${String(MALFORMED_PREFIX_BYTES)} ` +
+        `bytes of the recorded record-rich body after redaction, cut inside ` +
+        `the JSON. Semantic Scholar has no documented way to ask for a ` +
+        `truncated body.`,
+    });
+  }
+  return out;
+}
+
+// --- 7f. The registry -------------------------------------------------------
 
 /** The `record-rich` body a plan's `error-malformed` is cut from. */
 async function recordedRichBody(
@@ -1880,9 +2305,13 @@ async function recordedRichBody(
   const rich = plan.find((p) => p.scenario === "record-rich");
   if (rich === undefined) return undefined;
   const got = await answer(rich);
-  if (got === undefined) {
+  // `status !== 200` added by `P2-T05` (2026-10-15): the shared Semantic
+  // Scholar pool answered record-rich with a 429, and the first run cut
+  // error-malformed from that 174-byte error body — a fixture that parses as
+  // an error envelope, not as a truncated page.
+  if (got === undefined || got.status !== 200) {
     process.stderr.write(
-      `  record-rich is not available, so error-malformed is skipped ` +
+      `  record-rich is not available as a 200, so error-malformed is skipped ` +
         `(it is a truncation of that body).\n`,
     );
     return undefined;
@@ -1903,12 +2332,14 @@ export function planFor(source: RecordableSourceId): SourcePlan {
         source,
         host: NCBI_HOST,
         fixtureDir: fixtureDirFor("pubmed"),
-        independent: independentPlan,
-        dependent: async (answer) =>
-          paginatedEfetchPlan(
+        independent: () => [...independentPlan(), ...pubmedWindowPlan()],
+        dependent: async (answer) => [
+          ...paginatedEfetchPlan(
             await pubmedPageIds(answer, "paginated-page-1"),
             await pubmedPageIds(answer, "paginated-page-2"),
           ),
+          ...(await pubmedWindowEfetchPlan(answer)),
+        ],
         syntheticRequests: () => syntheticPlan("", "").map((s) => s.planned),
         syntheticFixtures: async (answer) =>
           syntheticPlan(
@@ -1959,6 +2390,21 @@ export function planFor(source: RecordableSourceId): SourcePlan {
           arxivSyntheticPlan(
             await recordedRichBody(answer, arxivIndependentPlan()),
           ),
+      };
+    case "semanticscholar":
+      return {
+        source,
+        host: SEMANTICSCHOLAR_HOST,
+        fixtureDir: fixtureDirFor("semanticscholar"),
+        independent: semanticscholarIndependentPlan,
+        dependent: semanticscholarDependentPlan,
+        syntheticRequests: () =>
+          semanticscholarSyntheticPlan("").map((s) => s.planned),
+        syntheticFixtures: async (answer) =>
+          semanticscholarSyntheticPlan(
+            await recordedRichBody(answer, semanticscholarIndependentPlan()),
+          ),
+        opaqueTokens: semanticscholarOpaqueTokens,
       };
   }
 }
@@ -2134,7 +2580,22 @@ async function main(argv: readonly string[]): Promise<number> {
   const spacingMs = spacingMsFor(plan.host);
   const fromDisk = committedAnswer(plan.fixtureDir);
 
-  const independent = plan.independent();
+  let independent: readonly PlannedRequest[];
+  try {
+    independent = selectScenarios(plan.independent(), cli.only);
+  } catch (error) {
+    if (error instanceof UsageError) {
+      process.stderr.write(`fixtures:record: ${error.message}\n`);
+      return 2;
+    }
+    throw error;
+  }
+  if (cli.only !== undefined) {
+    process.stderr.write(
+      `--only: ${String(independent.length)} of ` +
+        `${String(plan.independent().length)} independent scenarios selected.\n`,
+    );
+  }
   if (mode === "dry-run") {
     // Dependent requests are resolved from the committed fixtures, so a dry
     // run over a recorded source prints every key the directory holds.
@@ -2216,7 +2677,10 @@ async function main(argv: readonly string[]): Promise<number> {
         token,
         ...(p.body !== undefined && {
           body: p.body,
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          headers: {
+            "Content-Type":
+              p.contentType ?? "application/x-www-form-urlencoded",
+          },
         }),
       });
     } catch (error) {

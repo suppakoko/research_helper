@@ -1,0 +1,21 @@
+{
+  "status": 400,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "connection": "keep-alive",
+    "content-length": "37",
+    "content-type": "application/json",
+    "date": "Thu, 15 Oct 2026 02:32:41 GMT",
+    "via": "1.1 [redacted:32].cloudfront.net (CloudFront)",
+    "x-amz-apigw-id": "FQ4zmFStPHcEj3g=",
+    "x-amz-cf-id": "[redacted:54]==",
+    "x-amz-cf-pop": "ICN57-P3",
+    "x-amzn-remapped-connection": "keep-alive",
+    "x-amzn-remapped-content-length": "37",
+    "x-amzn-remapped-date": "Thu, 15 Oct 2026 02:32:41 GMT",
+    "x-amzn-remapped-server": "gunicorn",
+    "x-amzn-requestid": "334fddce-7739-4db4-b3fa-cbe3f569723e",
+    "x-cache": "Error from cloudfront"
+  },
+  "body": "{\"error\":\"No valid paper ids given\"}\n"
+}

@@ -15,9 +15,18 @@
  * Only what the `P2-T25` block needs is here. A Phase 2 adapter card that
  * records its own source adds its own file beside this one — a parameter, not
  * a copy of the harness.
+ *
+ * **The window's two fixtures are owned here, not copied (`P2-T36`).** The
+ * whole-year `esearch` at `retmax=10` and its `efetch`, which let the search
+ * window replay through the real PubMed adapter, are planned by
+ * `scripts/record-fixtures.ts` **from the constants below** — the recorder
+ * imports {@link pubmedWindowQuery}, as it already does for the other
+ * sources' `*RecordedRequests.ts` — so the request the recorder made and the
+ * request the window makes come from one definition and cannot drift.
  */
 
 import { buildEsearchRequest } from "../../src/sources/pubmed/query";
+import { parseUserQuery } from "../../src/sources/shared/queryParse";
 import type { SourceQuery } from "../../src/sources/types";
 
 /**
@@ -53,6 +62,45 @@ export const PUBMED_SYNTHETIC_500_QUERY: SourceQuery = {
   terms: { kind: "term", value: "synthetic server error fixture" },
   limit: 20,
 };
+
+/**
+ * What the search window is set to when it replays the recorded `window-*`
+ * fixtures (`P2-T36`): the keyword `P1-T22`'s block types, one **closed**
+ * calendar year, and `PREFS.maxResults`' minimum.
+ *
+ * Why these three and no others: `toPipelineInput` in
+ * `src/ui/viewModels/searchImportViewModel.ts` renders the two year
+ * menulists as whole years, and `PREFS.maxResults` in `src/prefs/schema.ts`
+ * has `min: 10`, enforced by `validate` in `searchImportPipeline.ts` — so the
+ * cheapest request the window can make is one year at `retmax=10`. A past
+ * year keeps the request byte-stable however long the fixture lives; the
+ * window's default span ends in the current year and would not.
+ */
+export const PUBMED_WINDOW_KEYWORD = "ionizable lipid nanoparticle";
+/** The one calendar year both year menulists are set to. */
+export const PUBMED_WINDOW_YEAR = 2023;
+/** `PREFS.maxResults`' minimum, which is the `limit` and so the `retmax`. */
+export const PUBMED_WINDOW_MAX_RESULTS = 10;
+
+/**
+ * The `SourceQuery` the pipeline hands the PubMed adapter when the window
+ * runs {@link PUBMED_WINDOW_KEYWORD} over {@link PUBMED_WINDOW_YEAR} at
+ * {@link PUBMED_WINDOW_MAX_RESULTS} — the same three steps the product takes:
+ * `parseUserQuery` on the keyword, `toPipelineInput`'s whole-year bounds, and
+ * `queryFor` in `stages.ts` passing them through because PubMed declares
+ * `dateFilter: true`.
+ *
+ * @returns a fresh query each call
+ */
+export function pubmedWindowQuery(): SourceQuery {
+  const year = String(PUBMED_WINDOW_YEAR);
+  return {
+    terms: parseUserQuery(PUBMED_WINDOW_KEYWORD),
+    limit: PUBMED_WINDOW_MAX_RESULTS,
+    fromDate: `${year}-01-01`,
+    toDate: `${year}-12-31`,
+  };
+}
 
 /**
  * One `esearch` request as the recorder planned it: the shipped builder, JSON

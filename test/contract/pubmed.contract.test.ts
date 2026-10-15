@@ -93,8 +93,10 @@ import {
 import { buildEsearchRequest } from "../../src/sources/pubmed/query";
 import type { SourceCallContext, SourceQuery } from "../../src/sources/types";
 import {
+  type Answer,
   ERROR_RETSTART,
   PAGE_SIZE,
+  planFor,
   plannedRequest,
   QUERY_EMPTY,
   QUERY_TYPICAL,
@@ -119,7 +121,14 @@ const FIXTURE_DIR = resolve(
   "../fixtures/pubmed",
 );
 
-/** Every scenario the recorder writes. Named here so a gap fails loudly. */
+/**
+ * `P1-T11`'s inventory — the `docs/13` §3.1 scenarios — named here so a gap
+ * fails loudly. **Since `P2-T36` (2026-10-15) this is a required subset, not
+ * the whole corpus:** the corpus is whatever the recorder's PubMed plan names
+ * ({@link plannedScenarios}), which now also holds the search window's two
+ * fixtures, and the checks below compare the directory against that plan
+ * rather than against a count written into this file.
+ */
 const EXPECTED_SCENARIOS: readonly string[] = [
   "error-429",
   "error-500",
@@ -139,6 +148,34 @@ const EXPECTED_SCENARIOS: readonly string[] = [
   "search-single",
   "search-typical",
 ];
+
+/**
+ * Every scenario the recorder's PubMed plan names — independent, dependent
+ * (resolved from the committed answers, as a dry run resolves them) and
+ * synthetic. The source of truth for how many fixtures the directory holds.
+ */
+async function plannedScenarios(): Promise<readonly string[]> {
+  const plan = planFor("pubmed");
+  const fromDisk: Answer = async (planned) => {
+    try {
+      const file = fixtureFileFor(FIXTURE_DIR, {
+        method: planned.method,
+        url: planned.url,
+        ...(planned.body !== undefined && { body: planned.body }),
+      });
+      return JSON.parse(await readFile(file, "utf8")) as Awaited<
+        ReturnType<Answer>
+      >;
+    } catch {
+      return undefined;
+    }
+  };
+  return [
+    ...plan.independent(),
+    ...(await plan.dependent(fromDisk)),
+    ...plan.syntheticRequests(),
+  ].map((p) => p.scenario);
+}
 
 function context(): SourceCallContext {
   return { token: createCancellationTokenSource().token };
@@ -410,14 +447,16 @@ describe("the recorded corpus", () => {
       .map((n) => n.slice(0, -META_SUFFIX.length))
       .sort();
     expect(fixtures).toEqual(sidecars);
-    expect(fixtures).toHaveLength(EXPECTED_SCENARIOS.length);
+    expect(fixtures).toHaveLength((await plannedScenarios()).length);
   });
 
   it("covers every scenario the card's §3.1 inventory names [ours]", async () => {
     const loaded = await listFixtureMeta(FIXTURE_DIR);
-    expect(loaded.map((l) => l.meta.scenario).sort()).toEqual(
-      [...EXPECTED_SCENARIOS].sort(),
-    );
+    const onDisk = loaded.map((l) => l.meta.scenario).sort();
+    // Exactly what the recorder plans — no unplanned file, no unrecorded plan —
+    // and the §3.1 inventory is still all there.
+    expect(onDisk).toEqual([...(await plannedScenarios())].sort());
+    expect(onDisk).toEqual(expect.arrayContaining([...EXPECTED_SCENARIOS]));
     // The three the card lets be hand-written, plus the one docs/02 §3.3 is the
     // only surviving source for, are marked as such; nothing else is.
     const synthetic = loaded
@@ -461,8 +500,9 @@ describe("the recorded corpus", () => {
   });
 
   it("is fresh, and says what to do when it is not [ours]", async () => {
+    const planned = (await plannedScenarios()).length;
     const report = await assertFixturesFresh(FIXTURE_DIR, Date.now());
-    expect(report.checked).toBe(EXPECTED_SCENARIOS.length);
+    expect(report.checked).toBe(planned);
     expect(report.oldestDays).toBeLessThanOrEqual(FIXTURE_STALE_WARN_DAYS);
     expect(report.warnings).toEqual([]);
 
@@ -471,7 +511,7 @@ describe("the recorded corpus", () => {
     const day = 86_400_000;
     const warnAt = Date.now() + (FIXTURE_STALE_WARN_DAYS + 2) * day;
     const warned = await assertFixturesFresh(FIXTURE_DIR, warnAt);
-    expect(warned.warnings.length).toBe(EXPECTED_SCENARIOS.length);
+    expect(warned.warnings.length).toBe(planned);
     expect(warned.warnings[0]).toContain(FIXTURE_RECORD_COMMAND);
 
     const failAt = Date.now() + (FIXTURE_STALE_FAIL_DAYS + 2) * day;

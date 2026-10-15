@@ -782,6 +782,14 @@ are thin.
 - create `test/fixtures/semanticscholar/` (the `docs/13` §3.1 set, plus an unauthenticated-429 scenario)
 
 **Do.**
+> **Corrected 2026-10-15 after the executing agents measured (report):** step 3's `isConfigured()` from key presence
+> would hide the source from every unkeyed user (`listConfigured()`), and the key is optional — the adapter returns
+> `true` and reports key presence through `hasApiKey()`. Step 4's localized "add a key" note is English
+> (`SEMANTICSCHOLAR_UNKEYED_NOTE`): `sources/` may not import `i18n/` and no Fluent id exists (`plan/00` §6 item 170).
+> The bulk endpoint ignores `limit` (27 records for limit 1 and 3, measured), so the short-page stop rule copied
+> from Crossref would drop records — paging follows the token alone. `docs/02` §12.3 documents the open-access
+> flag on `/paper/search` only, so the bulk (default) path now refuses `openAccessOnly` by name; it had been
+> sending an undocumented parameter.
 > **Coordinator note 2026-10-14.** The owner confirmed the Semantic Scholar key is applied for and not yet
 > received (`G-03`). Build and test the unauthenticated path fully; implement the keyed path against the
 > documented contract but mark its live test as waiting on the key, and say so in the report. Do not ask for
@@ -866,6 +874,25 @@ the adapter in unauthenticated-degraded mode, mark the card `DONE` for the degra
 follow-up card for the keyed acceptance criteria. Do **not** block Phase 2 on the key — that is
 precisely the R-3 outcome the design is built to survive. Record the state in `06-human-gates.md`.
 
+
+**Findings, 2026-10-15 — done; two agents (the first stopped by a usage limit with five tests red and no report, the second finished it); the keyed path's live test is the owner's; full report at `plan/reports/P2-T05.md`.**
+Verified by the coordinator on the combined tree with `P2-T36`: no `MUTANT` marker, no key-shaped string in the
+repository (the only `s2k-` hit is the report's own sentence naming the prefix), the 17 fixtures free of the
+contact address, both bundles BOM-less with `research-helper-source-semanticscholar` declared, typecheck 0,
+`lint:check` 0, **unit 2,089/2,089**, contract 40/40, integration **130 passed**, the recorder dry run printing
+exactly the 17 keys on disk, the OpenAlex guard exit 0. The first agent built the adapter and recorded 13 live
+unauthenticated responses (6 + 7, the first run meeting the shared pool's 429); the second made no live
+request and fixed the five red tests at their cause — three wrong tests (a default parameter that turned
+`fakeSecrets(undefined)` into a keyed store, twice; a `subjects` expectation missing `s2FieldsOfStudy`) and two
+wrong code paths (a short-page stop rule that would drop records, since the bulk endpoint ignores `limit`).
+With no key a search completes and the S2 row carries a 429 with the add-a-key note, asserted end to end
+through `fanOut`; with a key (fake store, placeholder value) `x-api-key` is sent on every request, read
+fresh each time, never logged, and refused from fixtures by the recorder's deny-list. `installServices`
+registers five sources; `semanticscholar.keyPresent` is the only new preference. **51 mutants, all
+killed.** The collision with `P2-T36` (one Zotero run killed by this card's agent under the 10-minute rule)
+was the coordinator's: its brief said no other agent was in the tree. Open: the keyed path live (the owner,
+through the preferences pane), `KEY_PRESENCE_PREFS` never writes the flag (item 169), and the recorder's
+pattern exemption for 40-hex paper ids is broader than `docs/13` §3.2's by-name rule (item 171).
 ---
 
 ### P2-T06 — arXiv adapter
@@ -4862,6 +4889,11 @@ separately by the coordinator's document pass of the same day; this card is the 
   the `P1-T22`/`P1-T35` blocks in `test/integration/searchDialog-flow.spec.ts`.
 
 **Do.**
+> **Corrected 2026-10-15 after the executing agent measured (report):** step 4's "switch the `P1-T22` block to the
+> real adapter, keeping every existing assertion" cannot be done with two fixtures — 16 of the block's cases
+> script record counts (2, 3, 4, 40), injected errors, a forced 429, delays and shared DOIs. The real adapter
+> drives **one new case** through `replaceForTest`; the other 16 keep the stub, assertions untouched. Step 3's
+> "languages `docs/02` names, plus `ko`" — §12.2 already names `kor`; the table has two rows (`en`, `ko`).
 1. **88** — `normalizeTitle` keeps letters of every script (`\p{L}\p{N}` with NFKD and the existing
    stripping), so a Korean title tokenises; `blockingSignature` follows. Add Korean-title fixtures to
    `test/unit/sources/dedupe.test.ts` (exact match, near match, and a Latin/Korean pair that must stay
@@ -4904,6 +4936,22 @@ carry — step 2 waits on the document row. Do not record more than three live r
 npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
 ```
 
+
+**Findings, 2026-10-15 — done; 3 live requests, the budget; full report at `plan/reports/P2-T36.md`.**
+Verified by the coordinator on the combined tree (figures under `P2-T05`'s Findings): the 34 existing PubMed
+fixtures unchanged, the 2 new ones free of the contact address and of `api_key`, the PubMed dry run printing
+exactly the 19 keys on disk. `normalizeTitle` keeps letters of every script (`/[^\p{L}\p{N}]+/gu`): a Korean
+exact pair matches on the title tier, a near pair (similarity 0.9538) on the fuzzy tier, a 0.9375 pair is a
+flag, and a Latin/Korean pair of one study stays distinct — while all 96 existing dedup tests pass unedited and
+sync/async equality holds on 14 sets. PubMed's `free full text[sb]` was **confirmed live** (count 611 against
+840 without it; now in `docs/02` §12.2/§12.3) and renders; `languages: ["en"]` renders `eng[la]`, `ko` →
+`kor[la]`, an unknown code is refused by name. The window's `P1-T22` block gains one case driving the real
+PubMed adapter over two new recorded fixtures (a whole-year `retmax=10` esearch and its efetch), passing four
+runs of four on the final spec; the contract tests now read the PubMed fixture count from the recorder's plan
+rather than a literal. **11 mutants, all killed**, including the normaliser reverted (only the Korean tests
+fail). Not checked: real Korean records (`P2-T13`'s corpus), live acceptance of `kor[la]`. Two Korean gaps
+remain for `P2-T13` to measure: Hangul-only family names normalise to nothing, and spaced Korean titles often
+fall under the five-token short-title guard (items 172, 173).
 ---
 
 ---

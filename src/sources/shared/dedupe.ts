@@ -187,6 +187,20 @@ export function biorxivAccession(doi: Doi | undefined): string | undefined {
  * before it has already removed every period: §11.3.2 is transcribed
  * verbatim, and the real case it names — PubMed's `"… network biology."`
  * against Semantic Scholar's `"… network biology"` — is pinned by a test.
+ *
+ * **Letters and digits of every script survive (`P2-T36`, owner review of
+ * 2026-10-14 row 88).** The punctuation pass keeps a character when it is a
+ * Unicode letter (`\p{L}`) or number (`\p{N}`) and turns everything else into
+ * a space, as §11.3.2 now specifies. It used to keep `a–z0–9` only, so every
+ * Korean or other CJK title normalised to `""` and such a paper could be
+ * matched on identifiers alone. After NFKD a Hangul syllable is a run of
+ * conjoining jamo — letters, untouched by the `U+0300–U+036F` strip — so a
+ * Korean title tokenises into its words; the comparison measures (`levSim`,
+ * `jaccard`) and {@link blockingSignature} then work on those tokens exactly
+ * as they do on Latin ones. For a title made only of `a–z0–9` after the
+ * earlier passes the two classes agree, so its normal form is unchanged; a
+ * letter NFKD does not reduce to `a–z` (`ø`, `ß`, Greek `α`) used to become a
+ * space and is now kept.
  */
 export function normalizeTitle(t: string): string {
   return t
@@ -197,7 +211,7 @@ export function normalizeTitle(t: string): string {
     .replace(/&[a-z]+;|&#x?[0-9a-f]+;/gi, " ") // entities
     .replace(/[‐-―−]/g, "-") // unicode dashes → hyphen
     .replace(/[‘’“”]/g, "'") // smart quotes
-    .replace(/[^a-z0-9]+/g, " ") // all punctuation → space
+    .replace(/[^\p{L}\p{N}]+/gu, " ") // punctuation → space; letters and digits of every script survive
     .replace(/\s+/g, " ")
     .trim()
     .replace(/\.$/, ""); // PubMed's trailing period

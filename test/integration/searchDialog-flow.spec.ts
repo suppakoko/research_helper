@@ -42,8 +42,10 @@
  * `document.l10n`.
  *
  * **Doubled:** the literature sources. Every record below comes from a stub
- * `LiteratureSource` declared in this file, so **no HTTP request is made by this
- * spec at all** — not to NCBI, not to anywhere. `docs/02` §3.1's usage policy
+ * `LiteratureSource` declared in this file — or, in the `P2-T25` block and
+ * `P1-T22`'s `P2-T36` case, from the real PubMed adapter over **recorded**
+ * responses — so **no HTTP request is made by this spec at all** — not to
+ * NCBI, not to anywhere. `docs/02` §3.1's usage policy
  * makes a repeated live search the wrong way to exercise a state machine, and
  * the one failure mode a live source could add (a real 429) is injected here as
  * the typed error the adapter would have thrown.
@@ -78,6 +80,20 @@
  * The real adapter and client are exercised in the `P2-T25` block up to the
  * `LiteratureSource` boundary — the same boundary the stub stands at — and the
  * window blocks exercise everything above it.
+ *
+ * **Changed 2026-10-15 (`P2-T36`, owner review of 2026-10-14 row 74): the
+ * window now replays the real adapter once.** The owner approved recording
+ * the two fixtures the window *can* ask for — `window-esearch`, one closed
+ * year (2023) at `retmax=10`, and `window-efetch`, its ten records — defined
+ * once in `test/support/pubmedRecordedRequests.ts` and recorded through the
+ * committed recorder. `P1-T22`'s last case swaps the real `createPubmedSource`
+ * over `createReplayHttpClient` into its registry's `pubmed` slot
+ * (`replaceForTest`), sets the window to that keyword, year and size, and
+ * asserts the window, the pipeline and the transport end to end. **Every other
+ * case in that block keeps the stub**, for the reason above, which two
+ * fixtures do not change: each scripts a count (2, 3, 4, 40), an error or a
+ * delay that one recorded answer of ten records cannot produce, so moving them
+ * would have meant rewriting their assertions — which the card forbids.
  *
  * **Written into a real library:** one collection per import test, its items, and
  * one provenance note. All of them are erased in `after()` — the discipline
@@ -355,6 +371,10 @@ import {
   PUBMED_SYNTHETIC_429_QUERY,
   PUBMED_SYNTHETIC_500_QUERY,
   PUBMED_TYPICAL_QUERY,
+  PUBMED_WINDOW_KEYWORD,
+  PUBMED_WINDOW_MAX_RESULTS,
+  PUBMED_WINDOW_YEAR,
+  pubmedWindowQuery,
   recordedEsearchRequest,
 } from "../support/pubmedRecordedRequests";
 import { sha256Hex, toHex } from "../support/sha256";
@@ -602,6 +622,12 @@ let win: FlowWindow | undefined;
 let doc: Document;
 let controller: FlowController;
 let savedApi: unknown;
+/**
+ * `P1-T22`'s private registry, held so `P2-T36`'s case can put the **real**
+ * PubMed adapter into the `pubmed` slot for one search and put the stub back
+ * (`SourceRegistry.replaceForTest`, `P2-T26`).
+ */
+let p1t22Sources: SourceRegistry | undefined;
 /** Per-source behaviour for the next search, rewritten by each test. */
 const behaviour = new Map<SourceId, StubBehaviour>();
 /**
@@ -1831,8 +1857,21 @@ const HOST_CONTRACT: readonly (keyof SearchWindowHostApi)[] = [
  */
 const PAGINATED_PAGE_1_KEY = "b68358327ce730cd";
 
-/** How many fixtures `test/fixtures/pubmed/` holds; one sidecar each. */
-const PUBMED_FIXTURE_COUNT = 17;
+/**
+ * How many fixtures `test/fixtures/pubmed/` holds; one sidecar each. 17 until
+ * `P2-T36` recorded the window's two (`window-esearch`, `window-efetch`).
+ */
+const PUBMED_FIXTURE_COUNT = 19;
+
+/**
+ * The two fixtures `P2-T36` recorded for the window, pinned by hand for the
+ * reason {@link PAGINATED_PAGE_1_KEY} is: `window-esearch` is
+ * `pubmedWindowQuery()` at `retmax=10`, `window-efetch` the ten ids it
+ * returned. Recorded 2026-10-15 with `npm run fixtures:record -- --only
+ * window-esearch`, two live requests.
+ */
+const WINDOW_ESEARCH_KEY = "4ca74cf52838c0c6";
+const WINDOW_EFETCH_KEY = "ec1cf8564b39c3a1";
 
 const LOG_PREFIX_T25 = "[P2-T25]";
 
@@ -3102,6 +3141,7 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
         () => behaviour.get(CROSSREF) ?? IDLE,
       ),
     ]);
+    p1t22Sources = sources;
     const pipeline = createSearchImportPipeline({
       // The real writer, tapped so `P2-T31`'s case can read the works that
       // reached it; every other case here is unchanged by the tap.
@@ -4025,5 +4065,170 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
         )
         .join(" ")}`,
     );
+  });
+
+  // =========================================================================
+  // 11. `P2-T36` — the window over the real PubMed adapter and two recorded
+  //     responses. Last on purpose: case 10 counts every run above it, and
+  //     this case moves the year and size controls, which it restores.
+  // =========================================================================
+
+  it("P2-T36: drives the real PubMed adapter over the two recorded window fixtures and fills the table", async function () {
+    this.timeout(60_000);
+    const registry = p1t22Sources;
+    if (registry === undefined) {
+      assert.fail("P1-T22's before() did not keep its registry");
+    }
+    const dir = await repositoryFixtureDir("pubmed");
+
+    // What the recording holds, read off disk through the port, so the
+    // assertions below compare the window against the fixture and not against
+    // a number copied into this file.
+    const windowRequest = recordedEsearchRequest(
+      pubmedWindowQuery(),
+      PUBMED_WINDOW_MAX_RESULTS,
+      0,
+    );
+    assert.strictEqual(fixtureKey(windowRequest), WINDOW_ESEARCH_KEY);
+    const recorded = JSON.parse(
+      await zoteroFixtureIo.readText(dir, `${WINDOW_ESEARCH_KEY}.json`),
+    ) as { body: string };
+    const recordedIds = parseEsearchBody(
+      recorded.body,
+      windowRequest.url,
+    ).pmids;
+    assert.strictEqual(recordedIds.length, PUBMED_WINDOW_MAX_RESULTS);
+
+    // The shipped adapter, mapper (Gecko's DOMParser) and HTTP client, over
+    // the replay transport — the composition root's parts, minus the network.
+    const replay = createReplayHttpClient({
+      dir,
+      host: NCBI_HOST,
+      io: zoteroFixtureIo,
+    });
+    const real = createPubmedSource({
+      http: replay.client,
+      clock: replay.clock,
+      mapRecords: createPubmedRecordMapper({ clock: replay.clock }),
+    });
+
+    const yearsFrom = el("rh-search-years-from") as unknown as {
+      value: string;
+    };
+    const yearsTo = el("rh-search-years-to") as unknown as { value: string };
+    const maxResults = el("rh-search-max-results") as HTMLInputElement;
+    const saved = {
+      from: yearsFrom.value,
+      to: yearsTo.value,
+      max: maxResults.value,
+    };
+    const displaced = registry.replaceForTest(real);
+    try {
+      assert.strictEqual(
+        registry.get(PUBMED),
+        real,
+        "the real adapter occupies the pubmed slot for this search",
+      );
+      setKeyword(PUBMED_WINDOW_KEYWORD);
+      yearsFrom.value = String(PUBMED_WINDOW_YEAR);
+      yearsTo.value = String(PUBMED_WINDOW_YEAR);
+      maxResults.value = String(PUBMED_WINDOW_MAX_RESULTS);
+      selectSources([PUBMED]);
+      const mark = markStates();
+      await search({});
+
+      assert.strictEqual(controller.state.panel, "results");
+      assert.strictEqual(
+        rows().length,
+        PUBMED_WINDOW_MAX_RESULTS,
+        "one row per recorded record",
+      );
+
+      // The request the window made is the recorded one, byte for byte: the
+      // replay transport resolved exactly the two pinned fixtures, in order.
+      const calls = replay.transport.calls.map((call) =>
+        fixtureKey({
+          method: call.method,
+          url: call.url,
+          ...(call.options.body !== undefined && { body: call.options.body }),
+        }),
+      );
+      assert.deepEqual(
+        calls,
+        [WINDOW_ESEARCH_KEY, WINDOW_EFETCH_KEY],
+        "one esearch and one efetch, both recorded",
+      );
+      assert.strictEqual(replay.transport.calls[0]?.url, windowRequest.url);
+
+      const preview = pipelineOutputs[pipelineOutputs.length - 1];
+      if (preview === undefined) {
+        assert.fail("the tap saw no preview output");
+      }
+      assert.deepEqual(
+        preview.records.map((record) => record.nativeId),
+        [...recordedIds],
+        "the records are the recorded idlist, in NCBI's order",
+      );
+      assert.isTrue(
+        preview.records.every(
+          (record) =>
+            record.sourceId === PUBMED && record.work.title.trim() !== "",
+        ),
+        "every record is the real adapter's, with a title from the parser",
+      );
+      const report = preview.perSource[0];
+      assert.strictEqual(report?.sourceId, PUBMED);
+      assert.strictEqual(report?.error, undefined);
+      assert.strictEqual(report?.recordsRetrieved, PUBMED_WINDOW_MAX_RESULTS);
+      assert.strictEqual(
+        report?.dateFilterApplied,
+        "server",
+        "the real adapter filters dates server-side, where the stub cannot",
+      );
+      assert.strictEqual(
+        report?.transmittedQuery,
+        real.explainQuery(pubmedWindowQuery()),
+      );
+
+      // docs/08 §4.6's line, as `P1-T46`'s three observations — what the
+      // model decided, what the document points at, what the bundle resolves
+      // — and **not** a wait on painted text. Measured on this case's first
+      // red run (2026-10-15, run 5): last in this block, it lands where the
+      // file header's slow mode has doubled the per-test cost to ~32 s, and a
+      // `rendered()` wait on this element timed out at 25 s reading "".
+      const countRef = message("research-helper-search-source-results", {
+        count: PUBMED_WINDOW_MAX_RESULTS,
+      });
+      const nameRef = message("research-helper-source-pubmed");
+      assertPublished(
+        mark,
+        (state) => state.sources.map((line) => line.detail),
+        countRef,
+        "the per-database count",
+      );
+      assert.strictEqual(
+        el("rh-search-source-status-pubmed").getAttribute("data-rh-outcome"),
+        "succeeded",
+      );
+      await pointedAt("rh-search-source-status-pubmed", nameRef);
+      await pointedAt("rh-search-source-status-pubmed", countRef);
+      const line = `${await resolved(nameRef)} ${await resolved(countRef)}`;
+      assert.include(line, "PubMed");
+      assert.include(line, `${String(PUBMED_WINDOW_MAX_RESULTS)} results`);
+      assert.strictEqual(
+        (rows()[0]?.children[4]?.textContent ?? "").trim(),
+        "PubMed",
+        "the Source cell names the real adapter's database",
+      );
+      log(
+        `P2-T36 window over the real adapter: ${String(rows().length)} rows ` +
+          `from ${calls.join(" + ")}; ${line}`,
+      );
+    } finally {
+      registry.replaceForTest(displaced);
+      yearsFrom.value = saved.from;
+      yearsTo.value = saved.to;
+      maxResults.value = saved.max;
+    }
   });
 });

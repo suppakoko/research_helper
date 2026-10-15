@@ -1,0 +1,15 @@
+{
+  "scenario": "batch-lookup",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T02:25:14.917Z",
+  "endpoint": "https://api.semanticscholar.org/graph/v1/paper/batch",
+  "method": "POST",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "scrubbed header via",
+    "scrubbed header x-amz-cf-id",
+    "preserved 2 opaque pagination token(s) the source plan vouches for; they are not credentials",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

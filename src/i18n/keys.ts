@@ -166,11 +166,13 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
 
   // LiteratureSource.displayNameKey (docs/07 §4.2). Never translated. One
   // per registered source, in SOURCE_IDS order (P2-T32 added Europe PMC,
-  // P2-T04 Crossref, P2-T06 arXiv).
+  // P2-T04 Crossref, P2-T06 arXiv, P2-T05 Semantic Scholar — listed after
+  // arXiv here in landing order; SOURCE_IDS puts it before).
   "research-helper-source-pubmed",
   "research-helper-source-europepmc",
   "research-helper-source-crossref",
   "research-helper-source-arxiv",
+  "research-helper-source-semanticscholar",
 
   // Search provenance (FR-8, P1-T17).
   "research-helper-provenance-note-title",
@@ -774,6 +776,7 @@ export const KO_PRESENT = [
   "research-helper-source-europepmc",
   "research-helper-source-crossref",
   "research-helper-source-arxiv",
+  "research-helper-source-semanticscholar",
   "research-helper-search-col-doi",
 ] as const satisfies readonly FluentMessageId[];
 

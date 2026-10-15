@@ -105,6 +105,11 @@ pref("logRequestBodies", false);
 // (docs/02 §3.1). A wrong or expired key does not error, it silently drops the
 // user back to 3 req/s, which is why the validation-result rows exist.
 pref("ncbi.keyPresent", false);
+// Whether a Semantic Scholar API key is in the keystore (P2-T05; docs/07 §8.5,
+// docs/01 §7.2). Never the key. The adapter reads the key itself from the
+// SecretStore at request time and docs/07 §7.3 paces this host at 0.9/s in
+// both modes, so this flag drives the prefs pane's status row only.
+pref("semanticscholar.keyPresent", false);
 // Which secret backend is live, for the prefs pane's storage badge:
 // "oskeystore" | "session" | "passphrase" | "" (unprobed). These are docs/07
 // §8.5's spellings, which are NOT docs/09 §1.7's SecretBackend union

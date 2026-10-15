@@ -1,0 +1,21 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "connection": "keep-alive",
+    "content-length": "2400",
+    "content-type": "application/json",
+    "date": "Thu, 15 Oct 2026 02:25:04 GMT",
+    "via": "1.1 [redacted:32].cloudfront.net (CloudFront)",
+    "x-amz-apigw-id": "FQ3sKGNLvHcEpMw=",
+    "x-amz-cf-id": "[redacted:54]==",
+    "x-amz-cf-pop": "ICN57-P3",
+    "x-amzn-remapped-connection": "keep-alive",
+    "x-amzn-remapped-content-length": "2400",
+    "x-amzn-remapped-date": "Thu, 15 Oct 2026 02:25:04 GMT",
+    "x-amzn-remapped-server": "gunicorn",
+    "x-amzn-requestid": "356351bb-d9e5-4aed-a9b5-bcbbbd638868",
+    "x-cache": "Miss from cloudfront"
+  },
+  "body": "{\"total\": 1, \"token\": null, \"data\": [{\"paperId\": \"bbb932b6b54a773300fc4333d0bd61581a97c35e\", \"externalIds\": {\"ArXiv\": \"2609.04658\", \"CorpusId\": 291767761}, \"corpusId\": 291767761, \"publicationVenue\": null, \"url\": \"https://www.semanticscholar.org/paper/bbb932b6b54a773300fc4333d0bd61581a97c35e\", \"title\": \"VizIt: A multi-view framework for exploring single-cell, spatial, and genetic data online\", \"venue\": \"\", \"year\": 2026, \"referenceCount\": 12, \"citationCount\": 0, \"influentialCitationCount\": 0, \"isOpenAccess\": false, \"openAccessPdf\": {\"url\": \"\", \"status\": null, \"license\": null, \"disclaimer\": \"Notice: Paper or abstract available at https://arxiv.org/abs/2609.04658, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use.\"}, \"fieldsOfStudy\": [\"Computer Science\", \"Biology\"], \"s2FieldsOfStudy\": [{\"category\": \"Computer Science\", \"source\": \"external\"}, {\"category\": \"Biology\", \"source\": \"external\"}, {\"category\": \"Computer Science\", \"source\": \"s2-fos-model\"}, {\"category\": \"Biology\", \"source\": \"s2-fos-model\"}], \"publicationTypes\": null, \"publicationDate\": \"2026-09-04\", \"journal\": null, \"authors\": [{\"authorId\": \"2478950010\", \"name\": \"Chen-Hong Zhang\"}, {\"authorId\": \"2487156564\", \"name\": \"Y. Lou\"}, {\"authorId\": \"2165227101\", \"name\": \"Jie Yuan\"}, {\"authorId\": \"2483906094\", \"name\": \"Ming-Ming Lu\"}, {\"authorId\": \"2114806984\", \"name\": \"Jacob Parker\"}, {\"authorId\": \"2006258306\", \"name\": \"H. Chintalapudi\"}, {\"authorId\": \"2308047609\", \"name\": \"Ze-Chuan Lin\"}, {\"authorId\": \"2398896605\", \"name\": \"Clemens R. Scherzer\"}, {\"authorId\": \"48483999\", \"name\": \"Yuxuan Hu\"}, {\"authorId\": \"2308242244\", \"name\": \"Rui-Feng Hu\"}, {\"authorId\": \"2256936131\", \"name\": \"Xian-Jun Dong\"}], \"abstract\": \"Multi-omic studies increasingly require data to be examined from complementary biological perspectives, yet interactive exploration remains fragmented across modalities and tools. We present VizIt, an open-source framework for multi-view exploration of single-cell and spatial transcriptomic, epigenomic and genetic data. VizIt connects gene-, cell type-, condition-, spatial-, genomic region- and variant-centered views, enabling seamless navigation across biological perspectives. We demonstrate VizIt through the Parkinson's Cell Atlas, a customizable interactive multi-omic resource.\"}]}\n"
+}

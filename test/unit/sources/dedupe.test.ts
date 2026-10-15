@@ -44,6 +44,7 @@ import {
   PREPRINT_DOI_PREFIXES,
   SIGNATURE_TOKEN_COUNT,
   TIER_CONFIDENCE,
+  titleTokens,
   toCandidate,
   type DedupDecision,
   type LibraryItemFields,
@@ -823,6 +824,129 @@ describe("§11.4 — a title match across the preprint boundary is a 0.75 flag",
 });
 
 // ---------------------------------------------------------------------------
+// Korean titles — docs/02 §11.3.2 as corrected 2026-10-15 (owner review of
+// 2026-10-14, row 88; `P2-T36`)
+// ---------------------------------------------------------------------------
+
+/**
+ * A Korean title of seven space-separated words — above the short-title floor
+ * ({@link MIN_FUZZY_TITLE_TOKENS}), so it reaches the title tiers. Under the
+ * old ASCII-only punctuation pass it normalised to `""`.
+ */
+const KO_TITLE = "한국 성인에서 비만과 대사증후군의 관련성에 대한 연구";
+/** The same title as PubMed prints it, with the trailing period. */
+const KO_TITLE_PUBMED = `${KO_TITLE}.`;
+/**
+ * One word changed (`대한` → `관한`, "about" in two spellings): three jamo of
+ * 65, measured `levSim` 0.9538, and the three longest words are untouched, so
+ * the pair shares a blocking signature.
+ */
+const KO_TITLE_NEAR = "한국 성인에서 비만과 대사증후군의 관련성에 관한 연구";
+/** One word changed inside a long word (`관련성` → `연관성`): `levSim` 0.9375. */
+const KO_TITLE_FLAG = "한국 성인에서 비만과 대사증후군의 연관성에 대한 연구";
+/** A different Korean study that shares only the frame `… 관련성에 대한 연구`. */
+const KO_TITLE_OTHER =
+  "한국 노인에서 수면 시간과 우울 증상의 관련성에 대한 연구";
+/** {@link KO_TITLE}'s English rendering, as a bilingual journal prints it. */
+const KO_TITLE_ENGLISH =
+  "Association between obesity and metabolic syndrome in Korean adults";
+
+describe("Korean titles are compared as titles (row 88)", () => {
+  it("keeps Hangul through normalizeTitle, as NFKD jamo, in words", () => {
+    const normalized = normalizeTitle(KO_TITLE);
+    expect(normalized).not.toBe("");
+    // No punctuation and nothing to lowercase: the normal form is the title
+    // itself, decomposed — what §11.3.2's NFKD step does to a syllable.
+    expect(normalized).toBe(KO_TITLE.normalize("NFKD"));
+    expect(titleTokens(normalized)).toHaveLength(7);
+    expect(blockingSignature(titleTokens(normalized))).toBeDefined();
+  });
+
+  it("treats precomposed and decomposed Hangul alike", () => {
+    expect(normalizeTitle(KO_TITLE.normalize("NFD"))).toBe(
+      normalizeTitle(KO_TITLE.normalize("NFC")),
+    );
+  });
+
+  it("still turns punctuation into a space in a mixed-script title", () => {
+    expect(normalizeTitle("COVID-19 대유행 기간: 한국 성인의 우울 증상")).toBe(
+      "covid 19 대유행 기간 한국 성인의 우울 증상".normalize("NFKD"),
+    );
+    // Fullwidth Latin folds to ASCII under NFKD, as it always did.
+    expect(normalizeTitle("ＣＯＶＩＤ－１９ 대유행")).toBe(
+      "covid 19 대유행".normalize("NFKD"),
+    );
+  });
+
+  it("exact match: PubMed's trailing period against the bare title is Tier 5", () => {
+    const a = record({ title: KO_TITLE_PUBMED, year: 2023, authors: ["Kim"] });
+    const b = record({
+      source: "semanticscholar",
+      title: KO_TITLE,
+      year: 2023,
+      authors: ["Kim"],
+    });
+    expect(compareRecords(a, b)).toMatchObject({
+      verdict: "match",
+      tier: "title-exact",
+      confidence: TIER_CONFIDENCE.titleExact,
+    });
+    const r = dedupeRecords([a, b]);
+    expect(r.groups).toHaveLength(1);
+    expect(r.recordsDeduplicatedAway).toBe(1);
+    expect(r.comparisons).toBe(1);
+  });
+
+  it("near match: levSim ≥ 0.95 within a year is Tier 6 row 1, and the pair shares a block", () => {
+    const a = record({ title: KO_TITLE, year: 2023, authors: ["Kim"] });
+    const b = record({ title: KO_TITLE_NEAR, year: 2024, authors: ["Lee"] });
+    const d = compareRecords(a, b);
+    expect(d.evidence["levSim"]).toBeGreaterThanOrEqual(
+      LEVSIM_DUPLICATE_THRESHOLD,
+    );
+    expect(d.evidence["levSim"]).toBeCloseTo(0.9538, 4);
+    expect(d).toMatchObject({
+      verdict: "match",
+      tier: "title-fuzzy",
+      confidence: TIER_CONFIDENCE.fuzzyLevenshtein,
+    });
+    expect(d.evidence["rule"]).toBe("levenshtein");
+    const r = dedupeRecords([a, b]);
+    expect(r.groups).toHaveLength(1);
+    expect(r.comparisons).toBe(1);
+  });
+
+  it("a Korean pair below 0.95 with nothing corroborating is a flag, never a merge", () => {
+    const a = record({ title: KO_TITLE, year: 2023, authors: ["Kim"] });
+    const b = record({ title: KO_TITLE_FLAG, year: 2023, authors: ["Kim"] });
+    const d = compareRecords(a, b);
+    expect(d.evidence["levSim"]).toBeCloseTo(0.9375, 4);
+    expect(d).toMatchObject({ verdict: "flag", tier: "title-fuzzy" });
+  });
+
+  it("a Latin/Korean pair of the same study stays distinct", () => {
+    const korean = record({ title: KO_TITLE, year: 2023, authors: ["Kim"] });
+    const english = record({
+      title: KO_TITLE_ENGLISH,
+      year: 2023,
+      authors: ["Kim"],
+    });
+    expect(compareRecords(korean, english).verdict).toBe("distinct");
+    const r = dedupeRecords([korean, english]);
+    expect(r.groups).toHaveLength(2);
+    expect(r.flags).toHaveLength(0);
+    expect(r.comparisons).toBe(0);
+  });
+
+  it("two different Korean studies stay distinct", () => {
+    const a = record({ title: KO_TITLE, year: 2023, authors: ["Kim"] });
+    const b = record({ title: KO_TITLE_OTHER, year: 2023, authors: ["Kim"] });
+    expect(compareRecords(a, b).verdict).toBe("distinct");
+    expect(dedupeRecords([a, b]).groups).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // dedupeRecords — grouping, blocking, and the flag-never-merges invariant
 // ---------------------------------------------------------------------------
 
@@ -1199,6 +1323,29 @@ describe("dedupeRecordsAsync (P2-T30)", () => {
           title: "Transfer learning enables prediction in protein biology",
           year: 2023,
         }),
+      ],
+    ],
+    [
+      "Korean exact pair (P2-T36)",
+      [
+        record({ title: KO_TITLE_PUBMED, year: 2023, authors: ["Kim"] }),
+        record({ title: KO_TITLE, year: 2023, authors: ["Kim"] }),
+      ],
+    ],
+    [
+      "Korean near pair and a Korean flag (P2-T36)",
+      [
+        record({ title: KO_TITLE, year: 2023, authors: ["Kim"] }),
+        record({ title: KO_TITLE_NEAR, year: 2024, authors: ["Lee"] }),
+        record({ title: KO_TITLE_FLAG, year: 2023, authors: ["Kim"] }),
+      ],
+    ],
+    [
+      "Latin/Korean pair and a second Korean study (P2-T36)",
+      [
+        record({ title: KO_TITLE, year: 2023, authors: ["Kim"] }),
+        record({ title: KO_TITLE_ENGLISH, year: 2023, authors: ["Kim"] }),
+        record({ title: KO_TITLE_OTHER, year: 2023, authors: ["Kim"] }),
       ],
     ],
     ["empty", []],

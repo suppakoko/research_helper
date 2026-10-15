@@ -1,0 +1,13 @@
+{
+  "scenario": "error-500",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T02:32:45.290Z",
+  "endpoint": "https://api.semanticscholar.org/graph/v1/paper/search/bulk",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written. A 5xx cannot be provoked on demand and docs/02 §6.10 records no Semantic Scholar 5xx body; the body is a placeholder.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

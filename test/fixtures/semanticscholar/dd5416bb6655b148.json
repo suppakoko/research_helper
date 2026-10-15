@@ -1,0 +1,17 @@
+{
+  "status": 429,
+  "headers": {
+    "connection": "keep-alive",
+    "content-length": "174",
+    "content-type": "application/json",
+    "date": "Thu, 15 Oct 2026 02:32:44 GMT",
+    "via": "1.1 [redacted:32].cloudfront.net (CloudFront)",
+    "x-amz-apigw-id": "FQ40FHmtPHcErsA=",
+    "x-amz-cf-id": "[redacted:54]==",
+    "x-amz-cf-pop": "ICN57-P3",
+    "x-amzn-errortype": "TooManyRequestsException",
+    "x-amzn-requestid": "11bdc4ad-ed05-49b4-bb2f-f2adb6f3c193",
+    "x-cache": "Error from cloudfront"
+  },
+  "body": "{\"message\": \"Too Many Requests. Please wait and try again or apply for a key for higher rate limits. https://www.semanticscholar.org/product/api#api-key-form\", \"code\": \"429\"}"
+}

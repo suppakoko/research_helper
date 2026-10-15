@@ -18,6 +18,7 @@ declare namespace _ZoteroTypes {
       "logLevel": string;
       "logRequestBodies": boolean;
       "ncbi.keyPresent": boolean;
+      "semanticscholar.keyPresent": boolean;
       "secretBackend": string;
     };
   }

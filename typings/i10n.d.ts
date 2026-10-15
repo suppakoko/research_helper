@@ -112,6 +112,7 @@ export type FluentMessageId =
   | 'research-helper-source-crossref'
   | 'research-helper-source-europepmc'
   | 'research-helper-source-pubmed'
+  | 'research-helper-source-semanticscholar'
   | 'rh-error-auth'
   | 'rh-error-bad-request'
   | 'rh-error-cancelled'
