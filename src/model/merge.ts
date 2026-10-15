@@ -652,7 +652,7 @@ export function merge(
   );
   const openAccess = pickOpenAccess(ordered);
   const url = pickFirst(ordered, DEFAULT_PRECEDENCE, (w) => nonEmpty(w.url));
-  const relatedVersionIds = unionRelatedVersionIds(ordered);
+  const relatedVersionIds = unionRelatedVersionIds(ordered, ids);
 
   won(
     "type",
@@ -821,9 +821,15 @@ export function merge(
  * holder wins per key, no conflict record — the field is a pointer to the
  * *other* version (`docs/02` §11.4), and the version link itself is decided by
  * the cascade's Tier 7, not here.
+ *
+ * A value equal to the merged work's own identifier of the same kind is
+ * dropped (`P2-T11`): it points at this work, not at another version, and
+ * kept it would make the `zotero/` layer write `Published DOI:` with the
+ * item's own DOI.
  */
 function unionRelatedVersionIds(
   ordered: readonly SourceRecord[],
+  own: ExternalIds,
 ): ExternalIds | undefined {
   const out: Record<string, string> = {};
   for (const record of ordered) {
@@ -831,10 +837,48 @@ function unionRelatedVersionIds(
     if (related === undefined) continue;
     for (const key of [...ID_KEYS, "url"] as const) {
       const value = related[key];
-      if (value !== undefined && out[key] === undefined) out[key] = value;
+      if (value === undefined || out[key] !== undefined) continue;
+      if (own[key] === value) continue;
+      out[key] = value;
     }
   }
   return Object.keys(out).length === 0 ? undefined : (out as ExternalIds);
+}
+
+// ---------------------------------------------------------------------------
+// 4. Version links — docs/02 §11.4, read off two merged works (P2-T11)
+// ---------------------------------------------------------------------------
+
+/**
+ * Does `a` name `b` as its other version, or `b` name `a`?
+ *
+ * Read off two **merged** works, after the cascade: `relatedVersionIds` on
+ * one side holds an identifier the other side carries in `ids`, for any of
+ * the identifier kinds ({@link ID_KEYS}). The cascade's `"link"` verdict has
+ * already put each side's ids into the other's `relatedVersionIds`
+ * (`stages.ts`'s `relate`), so this is true of every linked pair of one run —
+ * and it survives a preview's works being handed back for import, which a
+ * `VersionLink` list does not (`SearchImportInput.works`, `P2-T31`).
+ *
+ * The one rule both the write batching in
+ * `src/pipeline/searchImport/searchImportPipeline.ts` and the *Related*
+ * relation in `src/zotero/importer.ts` use (`docs/07` §6.2), so the two cannot
+ * disagree about which works are versions of each other. A work is never its
+ * own other version.
+ */
+export function areOtherVersions(a: CanonicalWork, b: CanonicalWork): boolean {
+  if (a === b || a.workKey === b.workKey) return false;
+  return names(a, b) || names(b, a);
+}
+
+/** `x.relatedVersionIds` holds an identifier `y.ids` carries. */
+function names(x: CanonicalWork, y: CanonicalWork): boolean {
+  const related = x.relatedVersionIds;
+  if (related === undefined) return false;
+  return ID_KEYS.some((key) => {
+    const value = related[key];
+    return value !== undefined && value === y.ids[key];
+  });
 }
 
 /** Order-preserving distinct. */

@@ -2,9 +2,12 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { config } from "../../../package.json";
+import { createMemoryPrefStore } from "../../../src/core/config";
+import { SOURCE_IDS } from "../../../src/model/ids";
+import { getPref, setPrefStore } from "../../../src/prefs";
 import { SEARCH_DIALOG_MESSAGE_IDS } from "../../../src/i18n/keys";
 import { PREF_KEYS } from "../../../src/prefs/keys";
 import { PREFS } from "../../../src/prefs/schema";
@@ -289,6 +292,24 @@ class FakeElement {
 
   public appendChild(child: FakeElement): void {
     this.children.push(child);
+    child.parentNode = this;
+  }
+
+  /**
+   * `P2-T14`: the controller inserts the all-failed panel's per-source lines
+   * before `#rh-state-error-detail` with `parentNode.insertBefore`, so the
+   * fake needs both for those lines to exist at all.
+   */
+  public parentNode: FakeElement | undefined;
+
+  public insertBefore(child: FakeElement, before: FakeElement | null): void {
+    const at = before === null ? -1 : this.children.indexOf(before);
+    if (at < 0) {
+      this.children.push(child);
+    } else {
+      this.children.splice(at, 0, child);
+    }
+    child.parentNode = this;
   }
 
   public removeChild(child: FakeElement): void {
@@ -333,6 +354,10 @@ interface TableRecord {
   typeLabel?: string;
   doi?: string;
   existing?: boolean;
+  // P2-T14: the view model's `SearchResultRow` additions.
+  sourceIds?: string[];
+  duplicate?: { withKeys: string[]; ref: { id: string; args?: unknown } };
+  linked?: { withKeys: string[]; ref: { id: string; args?: unknown } };
 }
 
 interface DisplayRow {
@@ -481,6 +506,8 @@ interface Harness {
    * `Zotero.Utilities.Internal.openPreferences`, in order (`P1-T44`).
    */
   readonly openPreferencesCalls: unknown[][];
+  /** Every URL the controller handed `Zotero.launchURL` (`P2-T14`). */
+  readonly launched: string[];
   readonly doc: {
     title: string;
     listeners: Map<string, ((event: unknown) => void)[]>;
@@ -508,6 +535,16 @@ interface HarnessOptions {
   ) => Promise<readonly FakeL10nMessage[]>;
 }
 
+/** Depth-first search of the live tree, for an element built after parsing. */
+function findBuilt(node: FakeElement, id: string): FakeElement | undefined {
+  for (const child of node.children) {
+    if (child.id === id) return child;
+    const found = findBuilt(child, id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 /** Mirror the parsed markup into {@link FakeElement}s. */
 function instantiate(node: Node, index: Map<string, FakeElement>): FakeElement {
   const element = new FakeElement(node.name, new Map(node.attrs));
@@ -528,7 +565,7 @@ function instantiate(node: Node, index: Map<string, FakeElement>): FakeElement {
  */
 function harness(options: HarnessOptions = {}): Harness {
   const index = new Map<string, FakeElement>();
-  instantiate(DOCUMENT, index);
+  const root = instantiate(DOCUMENT, index);
 
   const registerRootCalls: FakeElement[] = [];
   const prefReads: string[] = [];
@@ -538,7 +575,11 @@ function harness(options: HarnessOptions = {}): Harness {
   const doc = {
     title: "",
     listeners: docListeners,
-    getElementById: (id: string): FakeElement | null => index.get(id) ?? null,
+    // `P2-T14`: elements the controller *builds* (the error lines, the notice
+    // area) are not in the parsed markup's index, so they are found by walking
+    // the live tree, as a real `getElementById` would.
+    getElementById: (id: string): FakeElement | null =>
+      index.get(id) ?? findBuilt(root, id) ?? null,
     createXULElement: (name: string): FakeElement =>
       new FakeElement(name, new Map()),
     createElement: (name: string): FakeElement =>
@@ -577,7 +618,12 @@ function harness(options: HarnessOptions = {}): Harness {
 
   const prefs = options.prefs ?? {};
   const openPreferencesCalls: unknown[][] = [];
+  const launched: string[] = [];
   const zotero = {
+    // `P2-T14`: FR-2's key-request link opens through this, recorded.
+    launchURL: (url: string) => {
+      launched.push(url);
+    },
     // `P1-T45`: the document's only log channel, recorded so an assertion can
     // be made about what never reaches it.
     debug: (line: unknown) => {
@@ -632,11 +678,12 @@ function harness(options: HarnessOptions = {}): Harness {
   }
   return {
     controller,
-    byId: (id) => index.get(id),
+    byId: (id) => index.get(id) ?? findBuilt(root, id),
     registerRootCalls,
     prefReads,
     debugLines,
     openPreferencesCalls,
+    launched,
     doc,
   };
 }
@@ -803,16 +850,26 @@ describe("init() wires the real document", () => {
     );
   });
 
-  it("renders one checkbox per registered source, in registration order", () => {
+  it("renders one checkbox per registered source, in registration order", async () => {
     const h = harness({ host: { listSources: () => [PUBMED, CROSSREF] } });
     h.controller.init();
     const row = h.byId("rh-search-databases");
     expect(row?.children.map((box) => box.getAttribute("value"))).toStrictEqual(
       ["pubmed", "crossref"],
     );
+    // Corrected by `P2-T14` (owner's review row 142): the name is resolved
+    // from the source's own `displayNameKey` and painted as the checkbox's
+    // `label`. A `data-l10n-id` on the checkbox made Fluent write the bare
+    // value into `textContent`, which a XUL checkbox does not paint as its
+    // label — measured in Zotero 10.0.3, where every label read empty.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(row?.children.map((box) => box.getAttribute("label"))).toStrictEqual(
+      [`value:${PUBMED.displayNameKey}`, `value:${CROSSREF.displayNameKey}`],
+    );
     expect(
-      row?.children.map((box) => box.getAttribute("data-l10n-id")),
-    ).toStrictEqual([PUBMED.displayNameKey, CROSSREF.displayNameKey]);
+      row?.children.every((box) => box.getAttribute("data-l10n-id") === null),
+    ).toBe(true);
     expect(h.byId("rh-search-run")?.disabled).toBe(false);
     expect(h.byId("rh-search-databases-none")?.hidden).toBe(true);
   });
@@ -2730,5 +2787,502 @@ describe("P1-T44 — the Open Preferences action has a target", () => {
     // zero-argument form the file carried until 2026-10-13 is gone.
     expect(SCRIPT_CODE).toMatch(/openPreferences\(this\.preferencesPaneId\)/);
     expect(SCRIPT_CODE).not.toMatch(/openPreferences\(\)\s*;/);
+  });
+});
+
+// ===========================================================================
+// P2-T14 — the window's half of chips, badges, per-source status, the role
+// row and FR-2's notice. The view model's half is
+// `test/unit/ui/searchImportViewModel.test.ts`.
+// ===========================================================================
+
+/**
+ * `docs/10` FR-2's seven, in registry order. `SOURCE_IDS` also carries
+ * `openalex`, which no adapter registers (`docs/02` §9.3), so the list is
+ * written out and tied to §8.5's shipped default by the first test below.
+ */
+const SEVEN_IDS = [
+  "pubmed",
+  "europepmc",
+  "crossref",
+  "semanticscholar",
+  "arxiv",
+  "biorxiv",
+  "medrxiv",
+] as const;
+
+/** The seven registered sources as the host lists them, with the capability. */
+const SEVEN = SEVEN_IDS.map((id) => ({
+  id,
+  displayNameKey: `research-helper-source-${id}`,
+  keywordSearch: id !== "biorxiv" && id !== "medrxiv",
+  keyNotice: false,
+  keyRequestUrl: undefined as string | undefined,
+}));
+
+const REQUEST_URL = "https://example.invalid/request-a-key";
+
+/** The seven, with Semantic Scholar carrying FR-2's notice. */
+const SEVEN_UNKEYED = SEVEN.map((source) =>
+  source.id === "semanticscholar"
+    ? { ...source, keyNotice: true, keyRequestUrl: REQUEST_URL }
+    : source,
+);
+
+describe("P2-T14 — the Databases row on a clean profile", () => {
+  afterEach(() => {
+    setPrefStore(undefined);
+  });
+
+  it("renders all seven checkboxes checked, from docs/07 §8.5's sources default through a fake PrefStore", () => {
+    // A clean profile: the store holds nothing, so `getPref` answers §8.5's
+    // shipped default — the composition root's `getPrefs` binding, verbatim.
+    setPrefStore(createMemoryPrefStore({}));
+    expect(getPref("sources").split(",")).toStrictEqual([...SEVEN_IDS]);
+    expect(SEVEN_IDS.every((id) => SOURCE_IDS.includes(id))).toBe(true);
+    const h = harness({
+      host: {
+        listSources: () => SEVEN,
+        getPrefs: () => ({
+          sources: getPref("sources"),
+          searchYears: getPref("searchYears"),
+          maxResults: getPref("maxResults"),
+          hideExisting: getPref("hideExisting"),
+        }),
+      },
+    });
+    h.controller.init();
+    const boxes = h.byId("rh-search-databases")?.children ?? [];
+    expect(boxes.map((box) => box.getAttribute("value"))).toStrictEqual([
+      ...SEVEN_IDS,
+    ]);
+    expect(boxes).toHaveLength(7);
+    expect(boxes.every((box) => box.checked)).toBe(true);
+    expect(h.byId("rh-search-run")?.disabled).toBe(false);
+  });
+
+  it("follows the stored preference when it is not the default — the boxes read the pref", () => {
+    setPrefStore(createMemoryPrefStore({ sources: "pubmed,biorxiv" }));
+    const h = harness({
+      host: {
+        listSources: () => SEVEN,
+        getPrefs: () => ({ sources: getPref("sources") }),
+      },
+    });
+    h.controller.init();
+    const ticked = (h.byId("rh-search-databases")?.children ?? [])
+      .filter((box) => box.checked)
+      .map((box) => box.getAttribute("value"));
+    expect(ticked).toStrictEqual(["pubmed", "biorxiv"]);
+  });
+
+  it("disables Search and shows the inline message with every source unchecked (FR-2 scenario 2)", () => {
+    const h = harness({ host: { listSources: () => SEVEN } });
+    h.controller.init();
+    for (const box of h.byId("rh-search-databases")?.children ?? []) {
+      box.checked = false;
+      box.dispatch("command");
+    }
+    expect(h.byId("rh-search-run")?.disabled).toBe(true);
+    const none = h.byId("rh-search-databases-none");
+    expect(none?.hidden).toBe(false);
+    expect(none?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-databases-none",
+    );
+  });
+});
+
+describe("P2-T14 — FR-2's Semantic Scholar no-key notice (scenario 3)", () => {
+  function box(h: Harness, id: string): FakeElement {
+    const found = h
+      .byId("rh-search-databases")
+      ?.children.find((item) => item.getAttribute("value") === id);
+    if (!found) throw new Error(`no checkbox for ${id}`);
+    return found;
+  }
+
+  it("shows the notice and its link while Semantic Scholar is ticked and unkeyed", () => {
+    const h = harness({ host: { listSources: () => SEVEN_UNKEYED } });
+    h.controller.init();
+    expect(h.byId("rh-search-s2-notice")?.hidden).toBe(false);
+    expect(
+      h.byId("rh-search-s2-notice-text")?.getAttribute("data-l10n-id"),
+    ).toBe("research-helper-search-s2-no-key");
+    const link = h.byId("rh-search-s2-request");
+    expect(link?.hidden).toBe(false);
+    expect(link?.getAttribute("href")).toBe(REQUEST_URL);
+
+    // Unticking Semantic Scholar takes the notice away; ticking brings it back.
+    const s2 = box(h, "semanticscholar");
+    s2.checked = false;
+    s2.dispatch("command");
+    expect(h.byId("rh-search-s2-notice")?.hidden).toBe(true);
+    expect(h.byId("rh-search-s2-request")?.getAttribute("href")).toBeNull();
+    s2.checked = true;
+    s2.dispatch("command");
+    expect(h.byId("rh-search-s2-notice")?.hidden).toBe(false);
+  });
+
+  it("opens the key-request page through Zotero.launchURL, never by navigating", () => {
+    const h = harness({ host: { listSources: () => SEVEN_UNKEYED } });
+    h.controller.init();
+    let prevented = false;
+    h.byId("rh-search-s2-request")?.dispatch("click", {
+      preventDefault: () => {
+        prevented = true;
+      },
+    });
+    expect(prevented).toBe(true);
+    expect(h.launched).toStrictEqual([REQUEST_URL]);
+  });
+
+  it("shows nothing when a key is present", () => {
+    const h = harness({ host: { listSources: () => SEVEN } });
+    h.controller.init();
+    expect(h.byId("rh-search-s2-notice")?.hidden).toBe(true);
+    expect(h.byId("rh-search-s2-request")?.hidden).toBe(true);
+  });
+
+  it("names no URL in the markup: the link's target arrives from the host", () => {
+    expect(byId("rh-search-s2-request")?.attrs.has("href")).toBe(false);
+    expect(byId("rh-search-s2-notice")?.attrs.get("hidden")).toBe("true");
+  });
+});
+
+describe("P2-T14 — the status block's rows", () => {
+  function statusState(lines: unknown[]): unknown {
+    return {
+      panel: "searching",
+      running: true,
+      sources: lines,
+      records: undefined,
+      recordsRevision: 0,
+      warnings: [],
+      notices: [],
+      cancelVisible: true,
+    };
+  }
+
+  const roleLine = {
+    sourceId: "biorxiv",
+    nameId: "research-helper-source-biorxiv",
+    outcome: "role",
+    detail: { id: "research-helper-search-source-role" },
+  };
+
+  it("draws one row per line, and the ⊕ role row as an XHTML span on its own class", () => {
+    const h = harness({ host: { listSources: () => SEVEN } });
+    h.controller.init();
+    h.controller.render(
+      statusState([
+        {
+          sourceId: "pubmed",
+          nameId: "research-helper-source-pubmed",
+          outcome: "succeeded",
+          detail: {
+            id: "research-helper-search-source-results",
+            args: { count: 43 },
+          },
+        },
+        {
+          sourceId: "europepmc",
+          nameId: "research-helper-source-europepmc",
+          outcome: "searching",
+          detail: { id: "research-helper-search-source-searching" },
+        },
+        roleLine,
+        {
+          sourceId: "medrxiv",
+          nameId: "research-helper-source-medrxiv",
+          outcome: "failed",
+          detail: {
+            id: "rh-error-upstream",
+            args: { database: "medRxiv", status: 503 },
+          },
+        },
+      ]),
+    );
+    const rows = h.byId("rh-search-source-status")?.children ?? [];
+    expect(
+      rows.map((row) => row.getAttribute("data-rh-outcome")),
+    ).toStrictEqual(["succeeded", "searching", "role", "failed"]);
+    const role = rows[2]?.children[1];
+    expect(role?.name).toBe("span");
+    expect(role?.namespace).toBe("http://www.w3.org/1999/xhtml");
+    expect(role?.className).toBe("rh-source-role");
+    expect(role?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-source-role",
+    );
+    // A real failure on a lookup-only server is drawn as an error, never ⊕.
+    expect(rows[3]?.children[1]?.className).toBe("rh-inline-warning");
+    expect(rows[0]?.children[1]?.className).toBe("rh-hint");
+  });
+
+  it("reserves the ⊕ glyph to the role row's class, and keeps it out of every bundle", () => {
+    const rules = CSS_CODE.match(/[^{}]+\{[^{}]*\\2295[^{}]*\}/g) ?? [];
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.trim().startsWith(".rh-source-role::before")).toBe(true);
+    for (const locale of ["en-US", "ko-KR"]) {
+      const bundle = readFileSync(
+        resolve(addon, `locale/${locale}/research-helper-searchDialog.ftl`),
+        "utf8",
+      );
+      const messages = bundle
+        .split("\n")
+        .filter((line) => !line.startsWith("#"))
+        .join("\n");
+      expect(messages, locale).not.toContain("⊕");
+    }
+  });
+
+  it("names the database on every line of the all-failed panel", () => {
+    const h = harness({ host: { listSources: () => SEVEN } });
+    h.controller.init();
+    h.controller.render({
+      panel: "error",
+      running: false,
+      sources: [],
+      records: [],
+      recordsRevision: 1,
+      warnings: [],
+      notices: [],
+      cancelVisible: false,
+      error: {
+        headline: { id: "research-helper-search-state-error" },
+        lines: [
+          {
+            sourceId: "pubmed",
+            nameId: "research-helper-source-pubmed",
+            outcome: "failed",
+            detail: { id: "rh-error-offline" },
+          },
+          {
+            sourceId: "semanticscholar",
+            nameId: "research-helper-source-semanticscholar",
+            outcome: "failed",
+            detail: {
+              id: "rh-error-forbidden",
+              args: { provider: "Semantic Scholar", status: 403 },
+            },
+          },
+        ],
+        details: ["OFFLINE", "AUTHORIZATION", "403"],
+        retry: true,
+        openPreferences: true,
+      },
+    });
+    const lines = h.byId("rh-state-error-lines");
+    expect(lines?.hidden).toBe(false);
+    expect(
+      lines?.children.map((row) =>
+        row.children[0]?.getAttribute("data-l10n-id"),
+      ),
+    ).toStrictEqual([
+      "research-helper-source-pubmed",
+      "research-helper-source-semanticscholar",
+    ]);
+    expect(
+      lines?.children.map((row) =>
+        row.children[1]?.getAttribute("data-l10n-id"),
+      ),
+    ).toStrictEqual(["rh-error-offline", "rh-error-forbidden"]);
+    expect(h.byId("rh-state-error-open-preferences")?.hidden).toBe(false);
+    expect(h.byId("rh-state-error-retry")?.hidden).toBe(false);
+  });
+});
+
+describe("P2-T14 — chips and the duplicate badge in the table", () => {
+  const dupRef = {
+    id: "research-helper-search-row-duplicate",
+    args: { tier: "title-fuzzy", score: 87 },
+  };
+
+  function flaggedPair(): TableRecord[] {
+    return [
+      {
+        key: "pubmed:1",
+        title: "Lipid A",
+        sourceLabels: ["PubMed", "Crossref", "Europe PMC"],
+        sourceIds: ["pubmed", "crossref", "europepmc"],
+        duplicate: { withKeys: ["crossref:2"], ref: dupRef },
+      },
+      {
+        key: "crossref:2",
+        title: "Lipid A.",
+        sourceLabels: ["Crossref"],
+        sourceIds: ["crossref"],
+        duplicate: { withKeys: ["pubmed:1"], ref: dupRef },
+      },
+      {
+        key: "arxiv:3",
+        title: "Other",
+        sourceLabels: ["arXiv"],
+        sourceIds: ["arxiv"],
+      },
+    ];
+  }
+
+  it("draws one chip per contributing source, tagged with its id", () => {
+    const h = harness();
+    h.controller.init();
+    h.controller.setResults(flaggedPair());
+    const first = h.byId("rh-results-body")?.children[0];
+    const chips = first?.children[4]?.children ?? [];
+    expect(chips.map((chip) => chip.textContent)).toStrictEqual([
+      "PubMed",
+      "Crossref",
+      "Europe PMC",
+    ]);
+    expect(
+      chips.map((chip) => chip.getAttribute("data-rh-source")),
+    ).toStrictEqual(["pubmed", "crossref", "europepmc"]);
+    expect(chips.every((chip) => chip.className === "rh-source-line")).toBe(
+      true,
+    );
+  });
+
+  it("badges both flagged rows, distinct from the already-in-library marker, and keeps the title", () => {
+    const h = harness();
+    h.controller.init();
+    h.controller.setResults(flaggedPair());
+    const rows = h.byId("rh-results-body")?.children ?? [];
+    for (const row of rows.slice(0, 2)) {
+      expect(row.className).toBe("rh-row rh-row-duplicate");
+      const title = row.children[1];
+      const badge = title?.children[0];
+      expect(badge?.className).toBe("rh-duplicate-badge");
+      expect(badge?.getAttribute("data-l10n-id")).toBe(
+        "research-helper-search-row-duplicate",
+      );
+      expect(
+        JSON.parse(badge?.getAttribute("data-l10n-args") ?? "{}"),
+      ).toStrictEqual({ tier: "title-fuzzy", score: 87 });
+    }
+    expect(rows[0]?.children[1]?.textContent).toBe("Lipid A");
+    expect(rows[2]?.className).toBe("rh-row");
+    expect(rows[2]?.children[1]?.textContent).toBe("Other");
+    expect(h.controller.spec.rowClass.duplicateBadge).not.toBe(
+      h.controller.spec.rowClass.badge,
+    );
+  });
+
+  it("keeps both rows of a flagged pair independently selectable, and merges nothing", () => {
+    const h = harness();
+    h.controller.init();
+    h.controller.setResults(flaggedPair());
+    expect(h.controller.state.selection).toStrictEqual([
+      "pubmed:1",
+      "crossref:2",
+      "arxiv:3",
+    ]);
+    const [first, second] = h.controller.rowCheckboxes();
+    if (!first || !second) throw new Error("rows not drawn");
+    first.checked = false;
+    first.dispatch("change");
+    expect(second.checked).toBe(true);
+    const picked = (h.controller.collectImportRequest().records ??
+      []) as TableRecord[];
+    expect(picked.map((record) => record.key)).toStrictEqual([
+      "crossref:2",
+      "arxiv:3",
+    ]);
+    second.checked = false;
+    second.dispatch("change");
+    first.checked = true;
+    first.dispatch("change");
+    expect(
+      (
+        (h.controller.collectImportRequest().records ?? []) as TableRecord[]
+      ).map((record) => record.key),
+    ).toStrictEqual(["pubmed:1", "arxiv:3"]);
+  });
+
+  it("draws the linked badge for a linked pair", () => {
+    const h = harness();
+    h.controller.init();
+    h.controller.setResults([
+      {
+        key: "pubmed:1",
+        title: "Published",
+        linked: {
+          withKeys: ["biorxiv:2"],
+          ref: { id: "research-helper-search-row-linked" },
+        },
+      },
+    ]);
+    const badge =
+      h.byId("rh-results-body")?.children[0]?.children[1]?.children[0];
+    expect(badge?.className).toBe("rh-linked-badge");
+    expect(badge?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-row-linked",
+    );
+  });
+});
+
+describe("P2-T14 — gate G-16's preprint policy in the duplicate-handling area", () => {
+  it("places P2-T11's policy string inside the duplicates group, after the three radios", () => {
+    const group = byId("rh-search-duplicates-group");
+    const children = group?.children ?? [];
+    const policy = children.find(
+      (child) => child.attrs.get("id") === "rh-search-preprint-policy",
+    );
+    expect(policy?.attrs.get("data-l10n-id")).toBe(
+      "research-helper-search-preprint-policy",
+    );
+    expect(SEARCH_DIALOG_MESSAGE_IDS).toContain(
+      "research-helper-search-preprint-policy",
+    );
+    const at = (id: string): number =>
+      children.findIndex((child) => child.attrs.get("id") === id);
+    expect(at("rh-search-preprint-policy")).toBeGreaterThan(
+      at("rh-search-duplicates"),
+    );
+    // Plain text, always shown: nothing hides it and nothing passes arguments.
+    expect(policy?.attrs.has("hidden")).toBe(false);
+    expect(policy?.attrs.has("data-l10n-args")).toBe(false);
+  });
+});
+
+describe("P2-T14 — the Databases row paints names as labels (review row 142)", () => {
+  it("falls back to the source id, never an empty checkbox, when a name does not resolve", async () => {
+    const h = harness({
+      host: { listSources: () => [PUBMED, CROSSREF] },
+      formatMessages: (requests) =>
+        Promise.resolve(
+          requests.map((request) => ({
+            value: request.id === PUBMED.displayNameKey ? "PubMed" : null,
+            attributes: [],
+          })),
+        ),
+    });
+    h.controller.init();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(
+      h
+        .byId("rh-search-databases")
+        ?.children.map((box) => box.getAttribute("label")),
+    ).toStrictEqual(["PubMed", "crossref"]);
+  });
+});
+
+describe("P2-T14 — the Databases row writes the sources preference (step 1)", () => {
+  it("hands the host the ticked set on a user's toggle, and writes nothing on open", () => {
+    const writes: string[][] = [];
+    const h = harness({
+      host: {
+        listSources: () => [PUBMED, CROSSREF],
+        saveSources: (ids: string[]) => {
+          writes.push([...ids]);
+        },
+      },
+    });
+    h.controller.init();
+    expect(writes).toStrictEqual([]);
+    const crossref = h.byId("rh-search-databases")?.children[1];
+    if (!crossref) throw new Error("no Crossref checkbox");
+    crossref.checked = false;
+    crossref.dispatch("command");
+    expect(writes).toStrictEqual([["pubmed"]]);
   });
 });

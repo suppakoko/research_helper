@@ -90,7 +90,8 @@ import type {
 } from "../pipeline/searchImport/types";
 import type { Pipeline } from "../pipeline/types";
 import { httpRequest } from "../core/http/client";
-import { getPref } from "../prefs";
+import { getPref, setPref } from "../prefs";
+import { SEMANTICSCHOLAR_KEY_REQUEST_URL } from "../sources/semanticscholar/semanticscholarSource";
 import {
   SEARCH_WINDOW_API_PROPERTY,
   openSearchWindow,
@@ -359,6 +360,8 @@ async function refreshLibraryIndex(logger: Logger): Promise<void> {
  * | `listSources` | {@link ServiceGraph.sources}, the registry `registerSources()` filled |
  * | `listCollections` | `addon.platform.listCollections()` — `Zotero.Collections`, read in the one file allowed to name it |
  * | `getPrefs` | `src/prefs`' typed `getPref`, the four `docs/07` §8.5 window seeds |
+ * | `saveSources` | `setPref("sources", …)` — the Databases row is the preference's control (`P2-T14`) |
+ * | `semanticScholarKeyStatus` | `getPref("semanticscholarKeyPresent")` and `SEMANTICSCHOLAR_KEY_REQUEST_URL` — FR-2's notice (`P2-T14`) |
  * | `isExisting` | `P1-T13`'s `LibraryIndex.findExisting`, over {@link libraryIndex} |
  * | `writeProvenanceNote` | `src/zotero/notes.ts`'s `writeProvenanceNote`, `FR-8`'s note |
  * | `provenanceFiles` | `src/zotero/notes.ts`'s `provenanceFileWriter()`, `FR-8`'s JSON export |
@@ -397,6 +400,9 @@ function searchWindowDeps(
       graph.sources.list().map((source) => ({
         id: source.id,
         displayNameKey: source.displayNameKey,
+        // `P2-T14`: the window draws bioRxiv's and medRxiv's `⊕` role row
+        // from this capability, never from the adapters' English notice.
+        keywordSearch: source.capabilities.keywordSearch,
       })),
     listCollections: () => addon.platform.listCollections(),
     getPrefs: () => ({
@@ -405,6 +411,17 @@ function searchWindowDeps(
       maxResults: getPref("maxResults"),
       hideExisting: getPref("hideExisting"),
     }),
+    // FR-2's third scenario (`P2-T14`). The presence flag, never the key
+    // (decision D5); read per call so a key stored after startup is seen.
+    semanticScholarKeyStatus: () => ({
+      present: getPref("semanticscholarKeyPresent"),
+      requestUrl: SEMANTICSCHOLAR_KEY_REQUEST_URL,
+    }),
+    // `P2-T14` step 1: the window's checkboxes are the `sources` preference's
+    // control (`docs/07` §8.5's row), written through the typed accessor.
+    saveSources: (ids) => {
+      setPref("sources", ids.join(","));
+    },
     // `ExternalIds` in, boolean out: `findExisting` re-normalizes both
     // identifiers itself, so a record whose DOI is cased differently from the
     // stored one still matches.

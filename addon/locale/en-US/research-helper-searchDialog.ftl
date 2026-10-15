@@ -136,6 +136,13 @@ research-helper-search-databases-label =
 # states that at least one source must be selected.
 research-helper-search-databases-none = Select at least one database to search.
 
+# FR-2's third scenario (P2-T14): shown while Semantic Scholar is ticked and the
+# `semanticscholar.keyPresent` flag says no key is stored. The window only ever
+# knows whether a key is present, never the key. The link text opens the
+# key-request form `docs/08` §7.3 already links to.
+research-helper-search-s2-no-key = Semantic Scholar has no API key, so its requests share an anonymous pool that is heavily rate-limited.
+research-helper-search-s2-no-key-request = Request a free API key
+
 
 ## Client-side filtering (docs/08 §4.2, §4.5)
 
@@ -192,6 +199,19 @@ research-helper-search-row-existing = Already in library: { $title }
 research-helper-search-row-existing-badge =
     .aria-label = Already in my library
 
+# P2-T14 step 3: a pair the deduplication engine flagged as a possible duplicate
+# and did NOT merge (FR-50 scenario 4). Both rows carry the badge and both stay
+# selectable. `{ $tier }` is the deduplication tier's identifier
+# (`docs/02` §11.3), a token like a DOI; `{ $score }` is the similarity as a
+# whole percentage. The badge's glyph is the stylesheet's.
+research-helper-search-row-duplicate = Possible duplicate
+    .title = Possible duplicate of another row ({ $tier }, { $score }% similar). Nothing was merged: review both rows and untick the one you do not want.
+
+# P2-T14 (plan/00 §6 item 146): a pair kept as two linked works, such as a
+# preprint and its published version (gate G-16). Both rows are kept.
+research-helper-search-row-linked = Other version
+    .title = Another row is a different version of this work, such as its preprint. Both are kept; nothing was merged.
+
 
 ## Selection controls (docs/08 §4.5, FR-5)
 
@@ -233,6 +253,12 @@ research-helper-search-duplicates-link =
 
 research-helper-search-duplicates-import =
     .label = Import anyway
+
+# The preprint/published-version rule (docs/10 FR-50 scenario 3: "the default
+# is documented in the UI"), as decided at gate G-16 on 2026-10-14 and built by
+# P2-T11. Plain text; P2-T14 places it in the duplicate-handling area. The tag
+# name is data written into the library and stays verbatim in every locale.
+research-helper-search-preprint-policy = A preprint and its published version are kept as two items, linked as Related; the preprint is tagged research_helper/superseded-by-published.
 
 
 ## Window buttons (docs/08 §4.5, FR-1, NFR-13)
@@ -321,6 +347,14 @@ research-helper-search-progress-databases = { $done } of { $total } databases
 research-helper-search-status-searching = Searching { $database }…
 
 research-helper-search-status-importing = Importing { $done } of { $total }…
+
+# The reserved role row for a source with no keyword search — bioRxiv and
+# medRxiv (`docs/08` §4.2, decided 2026-09-09; P2-T14). Never a count, a
+# spinner or a zero result. The `⊕` glyph is the stylesheet's
+# (`.rh-source-role`) and is reserved for this row alone. `.title` is the
+# one-sentence hover §4.2 requires.
+research-helper-search-source-role = ID lookup · preprint matching
+    .title = This server has no keyword search, so it looks up identifiers and matches preprints to their published versions; keyword search of preprints happens through Europe PMC (SRC:PPR) and Crossref (type:posted-content).
 
 
 ## 3. EMPTY — why, plus concrete suggestions (docs/08 §4.6, §8.4)

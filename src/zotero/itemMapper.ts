@@ -162,6 +162,33 @@ export const UNCERTAIN_TYPE_TAG = "research_helper/uncertain-type";
 export const PREPRINT_GENRE = "Preprint";
 
 /**
+ * The tag a preprint carries once its published version is known — `docs/10`
+ * §5 question 2's default, decided at gate `G-16` on 2026-10-14: the two stay
+ * **two items**, related through Zotero *Related*, and the preprint is tagged
+ * so that its date survives for trend analysis. `docs/07` §6.2's
+ * superseded-preprint row (`P2-T11`, 2026-10-15) says when.
+ *
+ * Declared here, in the module that writes it, since `P2-T11`;
+ * `src/pipeline/searchImport/stages.ts` declared it first (`P2-T10`) and now
+ * re-exports this one, because `zotero/` may not import `pipeline/`
+ * (`docs/07` §2.3). Automatic, like every tag the plugin writes.
+ */
+export const SUPERSEDED_BY_PUBLISHED_TAG =
+  "research_helper/superseded-by-published";
+
+/**
+ * `docs/02` §11.4's two `extra` keys for the other version of a work, written
+ * when only one of the two is imported (`docs/07` §6.2's
+ * `relatedVersionIds.doi` row, `P2-T11`). Non-namespaced, in §11.4's spelling:
+ * no item type has a field for either. The key follows the item's own type —
+ * a `preprint` names its published version, anything else its preprint.
+ */
+export const VERSION_DOI_EXTRA_KEY = {
+  published: "Published DOI",
+  preprint: "Preprint DOI",
+} as const;
+
+/**
  * The non-namespaced `extra` keys this plugin writes (§6.2's rows, §6.3's
  * "standard, non-namespaced lines the ecosystem already understands") and
  * reads back (§6.6). One declaration for both directions, imported by
@@ -327,6 +354,21 @@ export interface ZoteroMappingOptions {
    * 1) regardless of what happens to `extra`.
    */
   readonly existingExtra?: string;
+  /**
+   * The {@link WorkType}s of the work's other versions that the **same
+   * import** creates — `docs/07` §6.2's `relatedVersionIds.doi` rows
+   * (`P2-T11`, gate `G-16`). The importer computes it, because only the
+   * importer sees the whole batch.
+   *
+   * - Empty or absent: no other version is created alongside this one, so a
+   *   `relatedVersionIds.doi` is written to `extra` as `Published DOI:` (on a
+   *   `preprint`) or `Preprint DOI:` (on anything else), and a `preprint` that
+   *   names a DOI there is tagged {@link SUPERSEDED_BY_PUBLISHED_TAG}.
+   * - Non-empty: the versions are related through Zotero *Related* by the
+   *   importer instead, so no `extra` line is written, and a `preprint` is
+   *   tagged when at least one of these is not itself a `preprint`.
+   */
+  readonly importedVersionTypes?: readonly WorkType[];
 }
 
 /**
@@ -471,6 +513,24 @@ export function toZoteroMapping(
       value: citationsValue(work, accessedAtEpochMs),
     });
   }
+  const versionDoi = otherVersionDoi(work);
+  const importedVersionTypes = options.importedVersionTypes ?? [];
+  if (versionDoi !== undefined && importedVersionTypes.length === 0) {
+    // `docs/07` §6.2's `relatedVersionIds.doi` row (`P2-T11`): only one of
+    // the two versions is imported, so the other is recorded here — named
+    // after this item's own type, in `docs/02` §11.4's spelling.
+    standardLines.push({
+      key: isPreprint
+        ? VERSION_DOI_EXTRA_KEY.published
+        : VERSION_DOI_EXTRA_KEY.preprint,
+      value: versionDoi,
+    });
+  }
+  const superseded =
+    isPreprint &&
+    (importedVersionTypes.length > 0
+      ? importedVersionTypes.some((type) => type !== "preprint")
+      : versionDoi !== undefined);
 
   const extra = applyExtraUpdate(options.existingExtra, {
     pluginLines,
@@ -481,7 +541,7 @@ export function toZoteroMapping(
     itemType,
     title: work.title,
     creators: work.authors.map(toCreatorJSON),
-    tags: tagsFor(work),
+    tags: tagsFor(work, superseded),
     accessDate: isoUtcSeconds(accessedAtEpochMs),
   };
 
@@ -600,7 +660,10 @@ function subjectTag(subject: Subject): string {
  * subjects, then keywords, then the run tag — stable, so a re-import diffs
  * cleanly.
  */
-function tagsFor(work: CanonicalWork): readonly ZoteroTagJSON[] {
+function tagsFor(
+  work: CanonicalWork,
+  superseded: boolean,
+): readonly ZoteroTagJSON[] {
   const seen = new Set<string>();
   const tags: ZoteroTagJSON[] = [];
   const add = (tag: string): void => {
@@ -614,8 +677,22 @@ function tagsFor(work: CanonicalWork): readonly ZoteroTagJSON[] {
   // FR-7 scenario 3: an undetermined type still imports (as journalArticle,
   // via zoteroItemTypeFor) but says so where the user can see and filter it.
   if (work.type === "other") add(UNCERTAIN_TYPE_TAG);
+  // Gate `G-16`: the preprint whose published version is known says so
+  // (`docs/07` §6.2's superseded-preprint row; the caller decides "known").
+  if (superseded) add(SUPERSEDED_BY_PUBLISHED_TAG);
   add(RESEARCH_HELPER_TAG);
   return tags;
+}
+
+/**
+ * The DOI `relatedVersionIds` names for the work's other version, or
+ * `undefined` — also when it names the work's own DOI, which is a pointer to
+ * itself rather than to another version (`docs/02` §11.4).
+ */
+function otherVersionDoi(work: CanonicalWork): string | undefined {
+  const doi = work.relatedVersionIds?.doi;
+  if (doi === undefined || doi === "" || doi === work.ids.doi) return undefined;
+  return doi;
 }
 
 /**
@@ -1114,8 +1191,13 @@ function tagsToSubjects(tags: readonly string[]): {
   const keywords: string[] = [];
   for (const raw of tags) {
     const tag = raw.trim();
-    // The plugin's own two tags describe the import, not the work.
-    if (tag === "" || tag === RESEARCH_HELPER_TAG || tag === UNCERTAIN_TYPE_TAG)
+    // The plugin's own three tags describe the import, not the work.
+    if (
+      tag === "" ||
+      tag === RESEARCH_HELPER_TAG ||
+      tag === UNCERTAIN_TYPE_TAG ||
+      tag === SUPERSEDED_BY_PUBLISHED_TAG
+    )
       continue;
     const match = SUBJECT_TAG.exec(tag);
     const scheme = match === null ? undefined : SUBJECT_SCHEMES[match[1] ?? ""];

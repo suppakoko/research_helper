@@ -175,7 +175,6 @@ import type { SourceRecord } from "../../model/sourceRecord";
 import {
   dedupeRecords,
   dedupeRecordsAsync,
-  isPreprintDoi,
   type DedupDecision,
   type DedupeAsyncOptions,
   type DedupPair,
@@ -187,6 +186,7 @@ import {
   resolveDateFilterMode,
 } from "../../sources/shared/recency";
 import type { LiteratureSource, SourceQuery } from "../../sources/types";
+import { SUPERSEDED_BY_PUBLISHED_TAG } from "../../zotero/itemMapper";
 import type { StageDescriptor } from "../types";
 import type {
   SearchImportFanOutResult,
@@ -763,17 +763,14 @@ function unexpectedFetch(
 // ---------------------------------------------------------------------------
 
 /**
- * The tag the preprint carries once its published version is in the library
- * — `docs/10` §5 question 2's default, decided at gate `G-16` on 2026-10-14:
- * the two stay **two items**, related through Zotero *Related*, and the
- * preprint is tagged so that its date survives for trend analysis.
- *
- * Declared here, beside the {@link VersionLink} list that tells the `zotero/`
- * layer which item to tag, because no other module names it yet; the writer
- * that applies it is `P2-T11`'s and `P2-T19`'s.
+ * The tag the preprint carries once its published version is known — gate
+ * `G-16`'s decision of 2026-10-14. Declared in `src/zotero/itemMapper.ts`,
+ * the module that writes it, since `P2-T11` (`zotero/` may not import
+ * `pipeline/`, `docs/07` §2.3), and re-exported here, where `P2-T10` first
+ * declared it beside the {@link VersionLink} list, so its importers are
+ * unchanged.
  */
-export const SUPERSEDED_BY_PUBLISHED_TAG =
-  "research_helper/superseded-by-published";
+export { SUPERSEDED_BY_PUBLISHED_TAG };
 
 /** One merged work with the evidence behind it — FR-50 scenario 2's record. */
 export interface MergedWork {
@@ -1025,13 +1022,17 @@ export function mergeDecisionsOf(
   return out;
 }
 
-/** Exactly one side a preprint (by type or DOI prefix) → its key; else undefined. */
+/**
+ * Exactly one side a preprint → its key; else undefined.
+ *
+ * By `type` alone since `P2-T11`: the card's **Do NOT** forbids naming the
+ * preprint side by DOI prefix (`docs/02` §11.2), and `P2-T08` made every
+ * preprint source map to `type: "preprint"`. The prefix set stays what
+ * `preprintServers.ts` calls it — a hint, never a role.
+ */
 function preprintSide(a: CanonicalWork, b: CanonicalWork): string | undefined {
-  const isPreprint = (w: CanonicalWork): boolean =>
-    w.type === "preprint" ||
-    (w.ids.doi !== undefined && isPreprintDoi(w.ids.doi));
-  const pa = isPreprint(a);
-  const pb = isPreprint(b);
+  const pa = a.type === "preprint";
+  const pb = b.type === "preprint";
   if (pa === pb) return undefined;
   return pa ? a.workKey : b.workKey;
 }

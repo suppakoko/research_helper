@@ -395,6 +395,11 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   // Database selection (FR-2).
   "research-helper-search-databases-label",
   "research-helper-search-databases-none",
+  // FR-2's third scenario: the Semantic Scholar no-key notice and its link
+  // (`P2-T14`; `plan/00` §6 item 170 — rendered from the
+  // `semanticscholar.keyPresent` flag, not from the adapter's English note).
+  "research-helper-search-s2-no-key",
+  "research-helper-search-s2-no-key-request",
 
   // Client-side filtering.
   "research-helper-search-filter-label",
@@ -414,6 +419,9 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   "research-helper-search-authors-overflow",
   "research-helper-search-row-existing",
   "research-helper-search-row-existing-badge",
+  // `P2-T14`: the flagged-duplicate badge and the linked-version badge.
+  "research-helper-search-row-duplicate",
+  "research-helper-search-row-linked",
 
   // Selection controls (FR-5).
   "research-helper-search-select-all",
@@ -429,6 +437,9 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   "research-helper-search-duplicates-skip",
   "research-helper-search-duplicates-link",
   "research-helper-search-duplicates-import",
+  // The preprint/published-version rule, gate G-16 (P2-T11). Declared here;
+  // P2-T14 places it in the duplicate-handling area.
+  "research-helper-search-preprint-policy",
 
   // Window buttons.
   "research-helper-search-close",
@@ -456,6 +467,10 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   "research-helper-search-progress-databases",
   "research-helper-search-status-searching",
   "research-helper-search-status-importing",
+  // `docs/08` §4.2's reserved `⊕` role row for bioRxiv and medRxiv
+  // (`P2-T14`; `plan/00` §6 item 182 — rendered from
+  // `capabilities.keywordSearch`, not from the adapter's English notice).
+  "research-helper-search-source-role",
 
   // EMPTY.
   "research-helper-search-state-empty",
@@ -687,7 +702,7 @@ export const KO_PENDING_REVIEW = [
   "research-helper-prefs-test-absent",
   "research-helper-prefs-test-unavailable",
 
-  // --- searchDialog (61) ---
+  // --- searchDialog (67) ---
   "research-helper-search-window-title",
   "research-helper-search-keyword-label",
   "research-helper-search-keyword-input",
@@ -727,6 +742,9 @@ export const KO_PENDING_REVIEW = [
   "research-helper-search-duplicates-skip",
   "research-helper-search-duplicates-link",
   "research-helper-search-duplicates-import",
+  // `P2-T11`. The `ko-KR` bundle carries it as a commented stub with its
+  // English source; nothing was machine-translated (`G-41`).
+  "research-helper-search-preprint-policy",
   "research-helper-search-close",
   "research-helper-search-cancel",
   "research-helper-search-import",
@@ -755,6 +773,14 @@ export const KO_PENDING_REVIEW = [
   "research-helper-search-state-error-retry",
   "research-helper-search-details-show",
   "research-helper-search-details-hide",
+  // `P2-T14`'s five. The `ko-KR` bundle carries each as a commented stub with
+  // its English source; `G-41` owns the translation and nothing here was
+  // machine-translated.
+  "research-helper-search-s2-no-key",
+  "research-helper-search-s2-no-key-request",
+  "research-helper-search-row-duplicate",
+  "research-helper-search-row-linked",
+  "research-helper-search-source-role",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -869,6 +895,9 @@ export interface FluentMessageArgsMap {
     failed: number;
     succeeded: number;
   };
+  // `P2-T14`: `$tier` is a deduplication tier's identifier (a token, not
+  // translated); `$score` the similarity as a whole percentage.
+  "research-helper-search-row-duplicate": { tier: string; score: number };
 }
 
 /**
@@ -920,7 +949,7 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-prefs-test-rejected",
   "research-helper-prefs-test-forbidden",
 
-  // searchDialog (14)
+  // searchDialog (15)
   "research-helper-search-years-span",
   "research-helper-search-result-count",
   "research-helper-search-authors-overflow",
@@ -935,6 +964,7 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-search-status-importing",
   "research-helper-search-state-empty",
   "research-helper-search-state-partial",
+  "research-helper-search-row-duplicate",
 ] as const satisfies readonly (keyof FluentMessageArgsMap)[];
 
 /**

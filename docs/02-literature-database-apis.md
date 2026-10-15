@@ -2582,6 +2582,25 @@ function linkVersions(a: CanonicalRecord, b: CanonicalRecord) {
 In Zotero, record the link with a **related item** relation (`dc:relation`) when both are imported,
 and add `Preprint DOI: <doi>` / `Published DOI: <doi>` to `extra` when only one is.
 
+> **Shipped 2026-10-15 (`P2-T11`).** The "keep the published version, suppress the preprint" default
+> above is **superseded by gate `G-16`** (decided 2026-10-14): both items are kept, related, and the
+> preprint is tagged `research_helper/superseded-by-published`; no merge is offered in v1. What the
+> code does with the table, row by row:
+> - **Harvested as `CanonicalWork.relatedVersionIds`** by the source mappers: bioRxiv/medRxiv
+>   `published` ≠ `"NA"`; Crossref `relation["is-preprint-of"]` and `relation["has-preprint"]`
+>   (`is-published-in` is not read: no recorded Crossref fixture carries it); arXiv `<arxiv:doi>`;
+>   and, beyond this table, Europe PMC's `commentCorrectionList` (`"Preprint of"` → the published
+>   PMID, `"Preprint in"` → the preprint's `PPR` id, `docs/07` §5.1 `epmcId`).
+> - **Not harvested:** `<arxiv:journal_ref>` (text only; nothing resolves it, and an unresolved
+>   reference is not a link), the shared S2 `paperId` (`docs/07` §5.1's `ExternalIds` carries no
+>   paper id — §11.3's 2026-10-15 note), and OpenAlex (out of v1, decision D2). No `/pubs/` call is
+>   made: the signals are read from the records the search already returned.
+> - **Matching** (`src/sources/shared/dedupe.ts`): a pair one of whose records names the other in
+>   `relatedVersionIds` is always compared, whatever its titles and years — the identifier pass
+>   indexes the named ids as well as each record's own — and Tier 7 returns `"link"`. The 0.75 row
+>   stays a **flag**.
+> - **Zotero side:** `docs/07` §6.2's `relatedVersionIds.doi` rows.
+
 ### 11.5 Merge precedence and conflict handling
 
 Field precedence is the table in §10.4. Two additional rules:

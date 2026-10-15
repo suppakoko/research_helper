@@ -23,9 +23,10 @@
 # on Zotero 10.0.1, not assumed (`docs/01` §9.1, `P0-T24`).
 #
 # **This is the single largest item the gate has to clear**, and it is reported
-# as such: 61 strings, listed here in the order a reviewer will meet them in
-# the window — 58 from `P1-T18` plus the three `P1-T45` added for FR-8's
-# provenance export. `src/i18n/keys.ts` exports the same list as
+# as such: 66 strings, listed here in the order a reviewer will meet them in
+# the window — 58 from `P1-T18`, the three `P1-T45` added for FR-8's
+# provenance export, and the five `P2-T14` added (2026-10-15) for the
+# Semantic Scholar no-key notice, the two row badges and the `⊕` role row. `src/i18n/keys.ts` exports the same list as
 # `KO_PENDING_REVIEW`
 # and `test/integration/l10n.spec.ts` asserts that the messages actually
 # missing from this file are exactly that list, so a new en-US string cannot be
@@ -108,6 +109,14 @@
 #
 # NEEDS REVIEW. en-US: "Select at least one database to search."
 # research-helper-search-databases-none =
+#
+# NEEDS REVIEW (P2-T14). en-US: "Semantic Scholar has no API key, so its
+# requests share an anonymous pool that is heavily rate-limited."
+# "Semantic Scholar" and "API" are not translated.
+# research-helper-search-s2-no-key =
+#
+# NEEDS REVIEW (P2-T14). en-US: "Request a free API key"
+# research-helper-search-s2-no-key-request =
 
 
 ## Client-side filtering (docs/08 §4.2, §4.5)
@@ -160,6 +169,17 @@ research-helper-search-col-doi =
 #
 # NEEDS REVIEW. en-US `.aria-label`: "Already in my library"
 # research-helper-search-row-existing-badge =
+#
+# NEEDS REVIEW (P2-T14). en-US: "Possible duplicate"; `.title`: "Possible
+# duplicate of another row ({ $tier }, { $score }% similar). Nothing was
+# merged: review both rows and untick the one you do not want." `{ $tier }`
+# is an identifier and is not translated.
+# research-helper-search-row-duplicate =
+#
+# NEEDS REVIEW (P2-T14). en-US: "Other version"; `.title`: "Another row is a
+# different version of this work, such as its preprint. Both are kept;
+# nothing was merged."
+# research-helper-search-row-linked =
 
 
 ## Selection controls (docs/08 §4.5, FR-5)
@@ -200,6 +220,11 @@ research-helper-search-col-doi =
 #
 # NEEDS REVIEW. en-US `.label`: "Import anyway"
 # research-helper-search-duplicates-import =
+#
+# NEEDS REVIEW (P2-T11). en-US value: "A preprint and its published version
+# are kept as two items, linked as Related; the preprint is tagged
+# research_helper/superseded-by-published." The tag name stays verbatim.
+# research-helper-search-preprint-policy =
 
 
 ## Window buttons (docs/08 §4.5, FR-1, NFR-13)
@@ -262,6 +287,13 @@ research-helper-search-col-doi =
 #
 # NEEDS REVIEW. en-US: "Importing { $done } of { $total }…"
 # research-helper-search-status-importing =
+#
+# NEEDS REVIEW (P2-T14). en-US: "ID lookup · preprint matching"; `.title`:
+# "This server has no keyword search, so it looks up identifiers and matches
+# preprints to their published versions; keyword search of preprints happens
+# through Europe PMC (SRC:PPR) and Crossref (type:posted-content)." "SRC:PPR"
+# and "type:posted-content" are query syntax and are not translated.
+# research-helper-search-source-role =
 
 
 ## 3. EMPTY (docs/08 §4.6, §8.4)

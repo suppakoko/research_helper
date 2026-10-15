@@ -13,7 +13,8 @@
  * {@link DedupResult} partition of records into same-work groups plus the
  * pairs flagged for review and the pairs linked as related versions. It does
  * **not** merge fields (`P2-T10`, `model/merge.ts`), does not harvest the
- * §11.4 version-link signals from adapters (`P2-T11`), and does not touch
+ * §11.4 version-link signals (the source mappers put them in
+ * `relatedVersionIds`; this module reads them — `P2-T11`), and does not touch
  * Zotero: the §11.6 library index is built from plain field values that the
  * `zotero/` layer extracts, because `sources/` may not import `zotero/`
  * (`docs/07` §2.3).
@@ -50,6 +51,10 @@ import {
   type S2CorpusId,
 } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
+import {
+  EUROPEPMC_PREPRINT_SOURCE,
+  EUROPEPMC_SOURCE_ID,
+} from "../europepmc/mapper";
 import { BIORXIV_ACCESSION_PREFIXES, doiPrefix } from "./preprintServers";
 
 // ---------------------------------------------------------------------------
@@ -347,6 +352,17 @@ export interface DedupCandidate {
   readonly type: WorkType | undefined;
   /** `CanonicalWork.relatedVersionIds`, normalized — Tier 7's input. */
   readonly relatedVersionIds: NormalizedIds | undefined;
+  /**
+   * This record's own Europe PMC preprint id (`"PPR657399"`) when it is a
+   * Europe PMC `PPR` record — the value a published record's
+   * `relatedVersionIds.epmcId` names (`docs/07` §5.1, `P2-T34`). Read off
+   * `SourceRecord.nativeId` (`"PPR/PPR657399"`), because `ExternalIds.epmcId`
+   * is never a record's own id. Not a matching key: Tier 7's input only
+   * (`P2-T11`).
+   */
+  readonly epmcId: string | undefined;
+  /** `relatedVersionIds.epmcId`, trimmed — the preprint a published record names. */
+  readonly relatedEpmcId: string | undefined;
 }
 
 /**
@@ -390,6 +406,15 @@ function hasAnyId(ids: NormalizedIds | undefined): boolean {
   return ids !== undefined && ID_KINDS.some((k) => ids[k] !== undefined);
 }
 
+/** `SourceRecord.nativeId`'s `PPR` id on a Europe PMC preprint record, else undefined. */
+function ownEpmcId(record: SourceRecord): string | undefined {
+  if (record.sourceId !== EUROPEPMC_SOURCE_ID) return undefined;
+  const prefix = `${EUROPEPMC_PREPRINT_SOURCE}/`;
+  if (!record.nativeId.startsWith(prefix)) return undefined;
+  const id = record.nativeId.slice(prefix.length).trim();
+  return id.length > 0 ? id : undefined;
+}
+
 /** Reduce a `SourceRecord` to its {@link DedupCandidate}. Pure; no mutation. */
 export function toCandidate(record: SourceRecord): DedupCandidate {
   const work = record.work;
@@ -416,7 +441,15 @@ export function toCandidate(record: SourceRecord): DedupCandidate {
     container,
     type: work.type,
     relatedVersionIds: hasAnyId(related) ? related : undefined,
+    epmcId: ownEpmcId(record),
+    relatedEpmcId: nonBlank(work.relatedVersionIds?.epmcId),
   };
+}
+
+/** Trimmed, or undefined when absent or blank. */
+function nonBlank(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
 }
 
 // ---------------------------------------------------------------------------
@@ -526,17 +559,25 @@ export function seriesMarkersDiffer(
   return sa.stem === sb.stem;
 }
 
-/** Tier 7's input: does either side name the other as a related version? */
+/**
+ * Tier 7's input: does either side name the other as a related version?
+ *
+ * An identifier of any {@link ID_KINDS} kind in one side's
+ * `relatedVersionIds` equal to the other side's own, or (`P2-T11`) a
+ * published Europe PMC record's `relatedVersionIds.epmcId` equal to a Europe
+ * PMC preprint record's own `PPR` id ({@link DedupCandidate.epmcId}).
+ */
 export function isKnownVersionLink(
   a: DedupCandidate,
   b: DedupCandidate,
 ): boolean {
   const names = (x: DedupCandidate, y: DedupCandidate): boolean =>
-    x.relatedVersionIds !== undefined &&
-    ID_KINDS.some((k) => {
-      const v = x.relatedVersionIds?.[k];
-      return v !== undefined && v === y.ids[k];
-    });
+    (x.relatedVersionIds !== undefined &&
+      ID_KINDS.some((k) => {
+        const v = x.relatedVersionIds?.[k];
+        return v !== undefined && v === y.ids[k];
+      })) ||
+    (x.relatedEpmcId !== undefined && x.relatedEpmcId === y.epmcId);
   return names(a, b) || names(b, a);
 }
 
@@ -1015,6 +1056,39 @@ function* dedupeCascade(
       }
     }
   }
+  // Version links (`P2-T11`, docs/02 §11.4): a record that names another in
+  // `relatedVersionIds` is compared with it here, whatever the two titles and
+  // years — a published title often differs from its preprint's, and the
+  // year gap can exceed the blocking pass's tolerance, so pass 2 alone would
+  // never put the pair through the cascade and Tier 7 would be unreachable.
+  // The cascade still decides, in tier order.
+  const byOwnId = new Map<string, number[]>();
+  candidates.forEach((c, i) => {
+    for (const kind of ID_KINDS) {
+      const v = c.ids[kind];
+      if (v !== undefined) pushInto(byOwnId, `${kind}:${v}`, i);
+    }
+    if (c.epmcId !== undefined) pushInto(byOwnId, `epmcId:${c.epmcId}`, i);
+  });
+  for (const [i, c] of candidates.entries()) {
+    const named: string[] = [];
+    for (const kind of ID_KINDS) {
+      const v = c.relatedVersionIds?.[kind];
+      if (v !== undefined) named.push(`${kind}:${v}`);
+    }
+    if (c.relatedEpmcId !== undefined) named.push(`epmcId:${c.relatedEpmcId}`);
+    for (const key of named) {
+      for (const j of byOwnId.get(key) ?? []) {
+        if (j !== i && consider(i, j)) {
+          sinceYield += 1;
+          if (sinceYield >= DEDUP_YIELD_EVERY_COMPARISONS) {
+            yield;
+            sinceYield = 0;
+          }
+        }
+      }
+    }
+  }
   // The identifier pass is one block for yielding purposes.
   if (sinceYield > 0) {
     yield;
@@ -1091,6 +1165,9 @@ function* dedupeCascade(
  * 1. **Identifier pass.** Every candidate is indexed by each id it carries
  *    (and by bioRxiv accession). Records sharing a key are compared with the
  *    first holder of that key — a cascade call that terminates at Tier 0–4.
+ *    Since `P2-T11` it also compares every record with each record its
+ *    `relatedVersionIds` names (§11.4), so a preprint and its published
+ *    version reach Tier 7 whatever their titles and years.
  * 2. **Blocking pass** (§11.3.3). Candidates with a comparable title are
  *    bucketed by {@link blockingSignature}; within a bucket, pairs within
  *    {@link MAX_YEAR_DELTA} of each other (or with an unknown year) are
@@ -1223,6 +1300,8 @@ export function candidateFromLibraryItem(
     container,
     type: item.isPreprint === true ? "preprint" : undefined,
     relatedVersionIds: undefined,
+    epmcId: undefined,
+    relatedEpmcId: undefined,
   };
 }
 

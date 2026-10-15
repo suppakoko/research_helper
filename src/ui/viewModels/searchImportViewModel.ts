@@ -187,9 +187,60 @@ export interface SourceStatusLine {
    * (`docs/07` §11.1 step 11).
    */
   readonly nameId: string;
-  readonly outcome: "searching" | "succeeded" | "failed";
-  /** `Searching…` / `N results` / `Failed — …`, as the bundle declares them. */
+  /**
+   * `"role"` is `docs/08` §4.2's reserved `⊕` state (`P2-T14`): a source
+   * whose `capabilities.keywordSearch` is `false` contributes identifier
+   * lookup and preprint matching, not search results, so it is never drawn as
+   * searching, as a count or as a zero. A real failure on it is still
+   * `"failed"`.
+   */
+  readonly outcome: "searching" | "succeeded" | "failed" | "role";
+  /**
+   * `Searching…` / `N results` / `Failed — …` / the role row, as the bundle
+   * declares them. The role row's message also carries `.title`, the hover
+   * sentence §4.2 requires.
+   */
   readonly detail: MessageRef;
+}
+
+/**
+ * A marker on one result row (`P2-T14` step 3 and `plan/00` §6 item 146).
+ *
+ * `withKeys` names the **other** rows of the pair, so a reader can find the
+ * partner; `ref` is the badge's own message — its value is the badge's words
+ * and its `.title` the tooltip.
+ */
+export interface RowMarker {
+  readonly withKeys: readonly string[];
+  readonly ref: MessageRef;
+}
+
+/**
+ * One result row as this module hands it to the document: `P1-T21`'s
+ * {@link SearchWindowRecord} plus the three things `P2-T14` adds.
+ *
+ * Declared here rather than by widening `SearchWindowRecord`, because that
+ * type is the document's input contract in `src/ui/dialogs/searchDialog.ts`
+ * and a row the *document* builds needs none of these.
+ */
+export interface SearchResultRow extends SearchWindowRecord {
+  /**
+   * Every source that returned this work — `provenance.seenIn` of the
+   * preview's merged work, in merge order — one chip each. `sourceLabels` is
+   * the same list as display names, which is what the chips draw.
+   */
+  readonly sourceIds: readonly string[];
+  /**
+   * The engine's `verdict: "flag"` on this row: a possible duplicate of
+   * another row, **never merged** (FR-50 scenario 4). Both rows carry it and
+   * both stay independently selectable.
+   */
+  readonly duplicate: RowMarker | undefined;
+  /**
+   * A `"link"` pair: another row is a different version of this work (a
+   * preprint and its published version, gate `G-16`). Both are kept.
+   */
+  readonly linked: RowMarker | undefined;
 }
 
 /** `docs/08` §4.6's "All databases failed" panel, as data. */
@@ -221,7 +272,7 @@ export interface SearchViewState {
   /** §4.6's per-database list. Empty before the first search. */
   readonly sources: readonly SourceStatusLine[];
   /** The table's rows, or `undefined` before any run completed. */
-  readonly records: readonly SearchWindowRecord[] | undefined;
+  readonly records: readonly SearchResultRow[] | undefined;
   /**
    * Bumped once per completed fetch.
    *
@@ -525,6 +576,77 @@ export interface SourceDescriptor {
   readonly id: string;
   /** The source's `displayNameKey`; never a display string. */
   readonly displayNameKey: string;
+  /**
+   * The source's `capabilities.keywordSearch` (`P2-T14`). `false` for bioRxiv
+   * and medRxiv (`P2-T07`), whose status row is `docs/08` §4.2's reserved
+   * `⊕` role row and never a count, a spinner or a zero. Absent is read as
+   * `true`, which is every source a Phase 1 fixture describes.
+   */
+  readonly keywordSearch?: boolean;
+}
+
+/**
+ * One source as the **window** receives it from the host (`P2-T14`).
+ *
+ * `keyNotice` is `docs/10` FR-2's third scenario, decided here rather than in
+ * the document: `true` only for Semantic Scholar, and only when the
+ * `semanticscholar.keyPresent` flag says no key is stored. The document shows
+ * the notice while that source's checkbox is ticked, with a link to
+ * `keyRequestUrl`. A presence flag only — decision D5: the window never sees
+ * a key, and nothing here could carry one.
+ *
+ * `keyRequestUrl` travels here rather than in the markup because
+ * `test/unit/ui/searchDialog.test.ts` holds the document to "no remote
+ * resource" (`docs/01` §8.3), and here rather than as a second copy of the
+ * string because `src/sources/semanticscholar/semanticscholarSource.ts`'s
+ * `SEMANTICSCHOLAR_KEY_REQUEST_URL` already names it — the composition root
+ * hands it over (`src/ui/` may not import `src/sources/`).
+ */
+export interface WindowSourceDescriptor extends SourceDescriptor {
+  readonly keyNotice: boolean;
+  /** Set exactly when {@link keyNotice} is `true`. */
+  readonly keyRequestUrl: string | undefined;
+}
+
+/**
+ * What the host reports about the Semantic Scholar key: whether one is
+ * present, and where a free one is requested. **Never the key** (decision D5).
+ */
+export interface KeyStatus {
+  readonly present: boolean;
+  readonly requestUrl: string;
+}
+
+/**
+ * The source FR-2's third scenario is about. Named once, here, because
+ * `src/ui/` may not import `src/sources/` (`docs/07` §2.3).
+ */
+export const KEY_NOTICE_SOURCE_ID: SourceId = "semanticscholar";
+
+/**
+ * The registry's sources as the window's Databases row draws them, with
+ * FR-2's notice decided per source.
+ *
+ * @param list - the registry's `list()`, mapped
+ * @param key - `semanticscholar.keyPresent` and the request page, or
+ *   `undefined` when no port reports them — in which case no notice is
+ *   drawn, because "no key" would be a claim nothing measured
+ */
+export function windowSources(
+  list: readonly SourceDescriptor[],
+  key: KeyStatus | undefined,
+): readonly WindowSourceDescriptor[] {
+  return list.map((descriptor) => {
+    const notice =
+      descriptor.id === KEY_NOTICE_SOURCE_ID &&
+      key !== undefined &&
+      !key.present;
+    return {
+      ...descriptor,
+      keyNotice: notice,
+      keyRequestUrl: notice ? key.requestUrl : undefined,
+    };
+  });
 }
 
 /** One collection the import can target. */
@@ -589,6 +711,24 @@ export interface SearchImportViewModelDeps {
   readonly listCollections?: () => readonly CollectionDescriptor[];
   /** `docs/07` §8.5's four window seeds, through the typed accessor. */
   readonly getPrefs?: () => Readonly<Record<string, unknown>>;
+  /**
+   * `docs/07` §8.5's `semanticscholar.keyPresent` through the typed accessor,
+   * plus the key-request page (`P2-T14`, FR-2's third scenario). **A presence
+   * flag, never the key** (decision D5). Read on every call, like
+   * {@link getPrefs}, so a key stored between two opens of the window is seen
+   * without a restart. Absent means the notice is never drawn — see
+   * {@link windowSources}.
+   */
+  readonly semanticScholarKeyStatus?: () => KeyStatus;
+  /**
+   * Write the `sources` preference (`P2-T14` step 1). `docs/07` §8.5's row
+   * for it names its control as "Search dialog source checkboxes … no control
+   * in the prefs pane", and membership in it *is* each source's enable flag
+   * (§11.1 step 9), so the window's ticked set is what is written — through
+   * the typed accessor, never a per-source boolean. Absent means the window's
+   * choice lasts for the open window only.
+   */
+  readonly saveSources?: (ids: readonly SourceId[]) => void;
   /**
    * `P1-T13`'s `LibraryIndex.findExisting`, reduced to a boolean. Absent means
    * no row is marked as already in the library and the hide-existing checkbox
@@ -669,18 +809,49 @@ export function initialViewState(): SearchViewState {
  * the other side, in `buildRow`'s Type column. A token is data, like a DOI;
  * minting English here would break `P1-T20`'s **Do NOT**. **Needs a card** in
  * `P1-T18`'s bundles.
+ *
+ * `review` is `P2-T14`'s: the preview's aligned works give each row its source
+ * chips (`provenance.seenIn`), and its `flags` and `links` give the duplicate
+ * and linked-version badges. Omitted, every row is one chip and no badge.
  */
 export function toWindowRecords(
   records: readonly SourceRecord[],
   sourceNames: ReadonlyMap<string, string>,
   isExisting: ((record: SourceRecord) => boolean) | undefined,
-): readonly SearchWindowRecord[] {
-  return records.map((record) => {
+  review: ReviewInput = NO_REVIEW,
+): readonly SearchResultRow[] {
+  // `works[i]` belongs to `records[i]` only when the run reached `Merging`;
+  // the same length test `renderSearchOutcome` uses for the import hand-back.
+  const works =
+    review.works.length === records.length ? review.works : undefined;
+  const rowOf = rowKeyByRecordId(records, works);
+  const flags = pairMarkers(
+    review.flags.map((pair) => ({
+      a: rowOf.get(pair.a.id),
+      b: rowOf.get(pair.b.id),
+      strength: pair.decision.confidence,
+      ref: message("research-helper-search-row-duplicate", {
+        tier: pair.decision.tier ?? "",
+        score: Math.round(pair.decision.confidence * 100),
+      }),
+    })),
+  );
+  const links = pairMarkers(
+    review.links.map((link) => ({
+      a: workRowKey(link.aWorkKey, records, works),
+      b: workRowKey(link.bWorkKey, records, works),
+      strength: link.decision.confidence,
+      ref: message("research-helper-search-row-linked"),
+    })),
+  );
+  return records.map((record, at) => {
     const { work } = record;
     const authors: readonly Author[] = work.authors;
-    // The source's own id is the fallback, never an empty cell: §4.5 draws the
-    // database on every row, and a registry token is data in the way a DOI is.
-    const label = sourceNames.get(record.sourceId) ?? record.sourceId;
+    // Step 2: one chip per contributing source, from the merged work's
+    // `seenIn`. The representative's own source is the fallback for a run that
+    // stopped before `Merging`, which published no aligned works.
+    const seen = works?.[at]?.provenance.seenIn ?? [record.sourceId];
+    const sourceIds = [...new Set<string>(seen)];
     return {
       key: record.id,
       title: work.title,
@@ -688,12 +859,107 @@ export function toWindowRecords(
       ...(work.publishedDate?.year !== undefined && {
         year: work.publishedDate.year,
       }),
-      sourceLabels: [label],
+      sourceIds,
+      // The source's own id is the fallback, never an empty cell: §4.5 draws
+      // the database on every row, and a registry token is data in the way a
+      // DOI is.
+      sourceLabels: sourceIds.map((id) => sourceNames.get(id) ?? id),
       typeLabel: work.type,
       doi: work.ids.doi ?? "",
       existing: isExisting === undefined ? false : isExisting(record),
+      duplicate: flags.get(record.id),
+      linked: links.get(record.id),
     };
   });
+}
+
+/**
+ * What `Merging` decided about the rows, as the preview published it
+ * (`P2-T14`). `plan/00` §6 item 146: only a **search** hands this in — the
+ * import of a preview carries empty `flags` and `links` by design, and the
+ * import never re-renders the table, so the badges the user reviewed stay
+ * drawn.
+ */
+export interface ReviewInput {
+  readonly works: readonly CanonicalWork[];
+  readonly flags: SearchImportOutput["flags"];
+  readonly links: SearchImportOutput["links"];
+}
+
+const NO_REVIEW: ReviewInput = { works: [], flags: [], links: [] };
+
+/**
+ * Every record id a row stands for → that row's key.
+ *
+ * A flagged record is not always a representative: it can be a member the
+ * cascade merged into another record's work, and then the row that shows it
+ * is the one whose work lists it in `provenance.recordIds`.
+ */
+function rowKeyByRecordId(
+  records: readonly SourceRecord[],
+  works: readonly CanonicalWork[] | undefined,
+): ReadonlyMap<string, string> {
+  const rows = new Map<string, string>();
+  records.forEach((record, at) => {
+    rows.set(record.id, record.id);
+    for (const id of works?.[at]?.provenance.recordIds ?? []) {
+      if (!rows.has(id)) rows.set(id, record.id);
+    }
+  });
+  return rows;
+}
+
+/** The row key whose merged work has `workKey`, if any row does. */
+function workRowKey(
+  workKey: string,
+  records: readonly SourceRecord[],
+  works: readonly CanonicalWork[] | undefined,
+): string | undefined {
+  const at = works?.findIndex((work) => work.workKey === workKey) ?? -1;
+  return at < 0 ? undefined : records[at]?.id;
+}
+
+/** One pair, both sides already resolved to row keys. */
+interface RowPair {
+  readonly a: string | undefined;
+  readonly b: string | undefined;
+  readonly strength: number;
+  readonly ref: MessageRef;
+}
+
+/**
+ * Fold pairs into one marker per row: every partner's key, and the message of
+ * the strongest pair touching the row.
+ *
+ * A pair with a side that has no row, or whose two sides land on the same row,
+ * is dropped — the second means the cascade already merged them through a
+ * third record, so there is nothing left to review.
+ */
+function pairMarkers(
+  pairs: readonly RowPair[],
+): ReadonlyMap<string, RowMarker> {
+  const best = new Map<string, { pair: RowPair; partners: Set<string> }>();
+  for (const pair of pairs) {
+    const { a, b } = pair;
+    if (a === undefined || b === undefined || a === b) continue;
+    for (const [self, other] of [
+      [a, b],
+      [b, a],
+    ] as const) {
+      const held = best.get(self);
+      if (held === undefined) {
+        best.set(self, { pair, partners: new Set([other]) });
+      } else {
+        held.partners.add(other);
+        if (pair.strength > held.pair.strength) held.pair = pair;
+      }
+    }
+  }
+  const markers = new Map<string, RowMarker>();
+  for (const [key, { pair, partners }] of best) {
+    markers.set(key, { withKeys: [...partners], ref: pair.ref });
+  }
+  return markers;
 }
 
 /**
@@ -802,6 +1068,59 @@ export function toDuplicatePolicy(
 }
 
 /**
+ * Whether a source contributes by lookup rather than by search — its
+ * `capabilities.keywordSearch` is `false` (`P2-T07`'s bioRxiv and medRxiv).
+ */
+export function isLookupOnly(
+  descriptor: SourceDescriptor | undefined,
+): boolean {
+  return descriptor?.keywordSearch === false;
+}
+
+/**
+ * Whether every source that **searches** failed outright: it errored and
+ * yielded nothing (`P2-T14`).
+ *
+ * `stages.ts`'s `fetchStateFromReports` calls a run `"failed"` only when
+ * *every* report errored, and a lookup-only source makes no keyword request,
+ * so it never errors on a keyword run — which would leave §4.6's "All
+ * databases failed" panel unreachable on the default seven-source run. The
+ * view model reads the run through the capability instead. `false` when no
+ * searching source was asked: nothing that searches can have failed.
+ */
+export function everySearchFailed(
+  perSource: readonly SearchImportSourceReport[],
+  sources: readonly SourceDescriptor[],
+): boolean {
+  const searched = perSource.filter(
+    (report) =>
+      !isLookupOnly(sources.find((source) => source.id === report.sourceId)),
+  );
+  return (
+    searched.length > 0 &&
+    searched.every(
+      (report) => report.error !== undefined && report.recordsRetrieved === 0,
+    )
+  );
+}
+
+/**
+ * `docs/08` §4.2's reserved row: `⊕ ID lookup · preprint matching`, with the
+ * hover sentence on the same message's `.title` (`P2-T14` step 4). Drawn from
+ * the capability, not from the adapter's English notice (`plan/00` §6 item
+ * 182). The `⊕` itself is the stylesheet's, so the bundle never carries it
+ * and no other row can borrow it by reusing a string.
+ */
+export function roleLine(sourceId: string, nameId: string): SourceStatusLine {
+  return {
+    sourceId,
+    nameId,
+    outcome: "role",
+    detail: message("research-helper-search-source-role"),
+  };
+}
+
+/**
  * The §4.6 status line for one finished source report.
  *
  * `failed` carries `research-helper-search-source-failed`, whose own bundle
@@ -820,12 +1139,18 @@ export function sourceStatusLine(
 ): SourceStatusLine {
   const nameId = descriptor?.displayNameKey ?? "";
   if (report.error !== undefined) {
+    // A real failure stays a failure on a lookup-only source too: `docs/08`
+    // §4.2 reserves `⊕` for "contributing, but not by searching", never for an
+    // error (`P2-T14`).
     return {
       sourceId: report.sourceId,
       nameId,
       outcome: "failed",
       detail: errorView(report.error, databaseName).ref,
     };
+  }
+  if (isLookupOnly(descriptor)) {
+    return roleLine(report.sourceId, nameId);
   }
   return {
     sourceId: report.sourceId,
@@ -997,7 +1322,7 @@ export interface SearchImportViewModel {
  * adding one cannot break a window running against an older host.
  */
 export interface SearchWindowHostApi {
-  listSources(): readonly SourceDescriptor[];
+  listSources(): readonly WindowSourceDescriptor[];
   listCollections(): readonly CollectionDescriptor[];
   getPrefs(): Readonly<Record<string, unknown>>;
   connect(view: SearchWindowView): () => void;
@@ -1010,6 +1335,12 @@ export interface SearchWindowHostApi {
    * running against an older host simply has nothing to press.
    */
   exportProvenance(path: string): Promise<ProvenanceExportOutcome>;
+  /**
+   * The Databases row's ticked set, written to the `sources` preference
+   * (`P2-T14` step 1). A value that is not a registered `SourceId` is
+   * dropped here: the document is untyped, and the preference holds ids only.
+   */
+  saveSources(ids: readonly string[]): void;
 }
 
 /** One running job: its surfaces, and the one call that closes them. */
@@ -1234,6 +1565,11 @@ export function createSearchImportViewModel(
     return descriptors()
       .filter((descriptor) => wanted.has(descriptor.id))
       .map((descriptor) => {
+        // `docs/08` §4.2: never a spinner and never a count for a source
+        // that does not search — its role, from the first frame (`P2-T14`).
+        if (isLookupOnly(descriptor)) {
+          return roleLine(descriptor.id, descriptor.displayNameKey);
+        }
         const count = latched.get(descriptor.id);
         if (descriptor.id === current || count === undefined) {
           return {
@@ -1466,11 +1802,25 @@ export function createSearchImportViewModel(
       output.works.length === output.records.length ? output.works : undefined;
     previewedDecisions = output.mergeDecisions;
     revision += 1;
+    // The preview's review — chips from `seenIn`, the flag and link badges.
+    // Only a search reaches here; the import of a preview, whose `flags` and
+    // `links` are empty by design, never re-renders the table (item 146).
     const records = toWindowRecords(
       output.records,
       sourceNames,
       deps.isExisting,
+      { works: output.works, flags: output.flags, links: output.links },
     );
+    // `P2-T14`: a run where every source that *searches* failed is the
+    // all-failed state, even though the pipeline calls it `"partial"` — a
+    // lookup-only source makes no keyword request on a keyword run, so it
+    // cannot fail one, and without this the default seven-source run could
+    // never reach §4.6's "All databases failed" panel.
+    const allFailed =
+      output.outcome === "failed" ||
+      (output.outcome === "partial" &&
+        output.records.length === 0 &&
+        everySearchFailed(output.perSource, descriptors()));
 
     if (output.outcome === "cancelled") {
       // §8.3's CANCELLED row, with the count of items already imported. A
@@ -1490,7 +1840,7 @@ export function createSearchImportViewModel(
       return;
     }
 
-    if (output.outcome === "failed") {
+    if (allFailed) {
       const failedReports = output.perSource.filter(
         (report) => report.error !== undefined,
       );
@@ -1557,12 +1907,21 @@ export function createSearchImportViewModel(
     const failed = output.perSource.filter(
       (report) => report.error !== undefined,
     ).length;
+    // "The results below come from the other N": only a source that searched
+    // and did not fail can be one of the N (`P2-T14`).
+    const succeeded = output.perSource.filter(
+      (report) =>
+        report.error === undefined &&
+        !isLookupOnly(
+          descriptors().find((descriptor) => descriptor.id === report.sourceId),
+        ),
+    ).length;
     const warnings: readonly MessageRef[] =
       output.outcome === "partial"
         ? [
             message("research-helper-search-state-partial", {
               failed,
-              succeeded: output.perSource.length - failed,
+              succeeded,
             }),
           ]
         : [];
@@ -1600,7 +1959,12 @@ export function createSearchImportViewModel(
   async function searchToast(
     output: SearchImportOutput,
   ): Promise<string | undefined> {
-    if (output.outcome === "failed") return undefined;
+    // `state.panel`, and not only the outcome: `renderSearchOutcome` also
+    // draws the error panel for a `"partial"` run whose every searching source
+    // failed (`P2-T14`), and that run has no result count to announce.
+    if (output.outcome === "failed" || state.panel === "error") {
+      return undefined;
+    }
     if (output.outcome === "cancelled") {
       return text(
         message("rh-error-cancelled", { imported: output.write?.created ?? 0 }),
@@ -1867,7 +2231,8 @@ export function createSearchImportViewModel(
 
     get host(): SearchWindowHostApi {
       return {
-        listSources: (): readonly SourceDescriptor[] => descriptors(),
+        listSources: (): readonly WindowSourceDescriptor[] =>
+          windowSources(descriptors(), deps.semanticScholarKeyStatus?.()),
         listCollections: (): readonly CollectionDescriptor[] =>
           deps.listCollections?.() ?? [],
         getPrefs: (): Readonly<Record<string, unknown>> =>
@@ -1882,6 +2247,17 @@ export function createSearchImportViewModel(
         },
         exportProvenance: (path: string): Promise<ProvenanceExportOutcome> =>
           model.exportProvenance(path),
+        saveSources: (ids: readonly string[]): void => {
+          const save = deps.saveSources;
+          if (save === undefined) return;
+          try {
+            save(ids.filter((id): id is SourceId => isSourceId(id)));
+          } catch {
+            // `setPref` throws only on a missing store or an unusable value;
+            // the ticked set still drives this run, so the window carries on.
+            deps.logger.warn("the sources preference could not be written");
+          }
+        },
       };
     },
   };

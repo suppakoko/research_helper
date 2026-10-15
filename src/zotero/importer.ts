@@ -68,7 +68,8 @@ import {
   ZoteroApiError,
 } from "../core/errors";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
-import type { CanonicalWork } from "../model/canonicalWork";
+import type { CanonicalWork, WorkType } from "../model/canonicalWork";
+import { areOtherVersions } from "../model/merge";
 import {
   addExistingItemsToCollection,
   type CollectionLookup,
@@ -321,6 +322,18 @@ export interface ImportReport {
   readonly linkedItemIDs: readonly number[];
   /** How each linked record matched (`"doi"` or `"pmid"`), in input order. */
   readonly linkedMatches: readonly ExistingItemMatch[];
+  /**
+   * Pairs of created items related to each other through Zotero *Related*
+   * because one is the other's preprint or published version (`P2-T11`, gate
+   * `G-16`, `docs/07` §6.2). Each pair once, as item IDs in input order.
+   */
+  readonly versionLinks: readonly (readonly [number, number])[];
+  /**
+   * Set when the *Related* write failed. The items stay created, without the
+   * relation, and {@link versionLinks} is empty; redacted and storable like
+   * {@link ImportFailure.error}.
+   */
+  readonly versionLinkError: SerializedError | undefined;
   readonly stats: ImportStats;
 }
 
@@ -381,10 +394,16 @@ export async function importWorks(
     clock,
   );
   const plan = planImport(request.works, index, policy);
+  // `P2-T11`: which other versions of each work this call creates — decided
+  // before any mapping, because it chooses between the `extra` line and the
+  // *Related* relation (`docs/07` §6.2's `relatedVersionIds.doi` rows).
+  const versionTypes = importedVersionTypes(plan.toCreate);
 
   // ---- write ----
   const failed: ImportFailure[] = [];
   const createdItemIDs: number[] = [];
+  /** Every item this call created, with its work — the relation pass's input. */
+  const createdEntries: BuiltItem[] = [];
   const chunkMs: number[] = [];
   let mappingMs = 0;
   let writeMs = 0;
@@ -422,7 +441,17 @@ export async function importWorks(
     const built: BuiltItem[] = [];
     for (const work of chunk) {
       try {
-        built.push(buildItem(work, libraryID, mapping, strict));
+        const types = versionTypes.get(work) ?? [];
+        built.push(
+          buildItem(
+            work,
+            libraryID,
+            types.length > 0
+              ? { ...mapping, importedVersionTypes: types }
+              : mapping,
+            strict,
+          ),
+        );
       } catch (error) {
         failed.push(toFailure(work, "mapping", error));
       }
@@ -466,6 +495,7 @@ export async function importWorks(
         );
         transactions += 1;
         createdItemIDs.push(...written.ids);
+        createdEntries.push(...built);
         backfilled += written.repaired;
         withAbstract += written.present;
       } catch (error) {
@@ -481,6 +511,47 @@ export async function importWorks(
     const chunkEndedAt = clock.now();
     chunkMs.push(chunkEndedAt - chunkStartedAt);
     writeMs += chunkEndedAt - tMapped;
+  }
+
+  // ---- relate the versions this call created (`P2-T11`, gate `G-16`) ----
+  // Two items, never one: each side gets `addRelatedItem(other)`, because
+  // Zotero stores the relation per item, and one `save()` per touched item,
+  // inside one transaction of its own. Only items created above are touched —
+  // an existing item is "added to a collection and nothing more" (`P1-T14`).
+  // A failure leaves the items as created, each without the relation, and is
+  // reported rather than thrown: the items are the import, the relation is
+  // what `docs/07` §6.2 adds to it.
+  const versionLinks: (readonly [number, number])[] = [];
+  let versionLinkError: SerializedError | undefined;
+  const pairs = versionPairs(createdEntries);
+  if (pairs.length > 0) {
+    const relateStartedAt = clock.now();
+    try {
+      await Zotero.DB.executeTransaction(async (): Promise<void> => {
+        const touched = new Set<Zotero.Item>();
+        for (const [a, b] of pairs) {
+          a.item.addRelatedItem(b.item);
+          b.item.addRelatedItem(a.item);
+          touched.add(a.item);
+          touched.add(b.item);
+        }
+        // save(), not saveTx(): `docs/01` §5.8 / §12 gotcha 12.
+        for (const item of touched) await item.save();
+      });
+      for (const [a, b] of pairs) versionLinks.push([a.item.id, b.item.id]);
+    } catch (error) {
+      versionLinkError = (
+        error instanceof ResearchHelperError
+          ? error
+          : new ZoteroApiError(
+              error instanceof Error ? error.message : String(error),
+              { phase: "relate-versions", pairs: pairs.length },
+              { cause: error },
+            )
+      ).toSerialized();
+    }
+    transactions += 1;
+    writeMs += clock.now() - relateStartedAt;
   }
 
   // ---- link the existing items (`P1-T14` step 5, `FR-51`) ----
@@ -554,6 +625,8 @@ export async function importWorks(
     createdItemIDs,
     linkedItemIDs,
     linkedMatches: plan.toLink.map((entry) => entry.match),
+    versionLinks,
+    versionLinkError,
     stats: {
       chunkSize,
       chunks: chunkMs.length,
@@ -714,6 +787,39 @@ function buildItem(
       ? work.abstract
       : undefined;
   return { work, item, abstract };
+}
+
+/**
+ * For each work to create, the {@link WorkType}s of the **other** works to
+ * create that are its preprint or published version ({@link areOtherVersions},
+ * `docs/02` §11.4). A work with none is absent. `toZoteroMapping` reads it as
+ * `importedVersionTypes` (`docs/07` §6.2, `P2-T11`).
+ */
+function importedVersionTypes(
+  works: readonly CanonicalWork[],
+): Map<CanonicalWork, WorkType[]> {
+  const out = new Map<CanonicalWork, WorkType[]>();
+  for (const [i, a] of works.entries()) {
+    for (const b of works.slice(i + 1)) {
+      if (!areOtherVersions(a, b)) continue;
+      out.set(a, [...(out.get(a) ?? []), b.type]);
+      out.set(b, [...(out.get(b) ?? []), a.type]);
+    }
+  }
+  return out;
+}
+
+/** Every pair of created items whose works are versions of each other, once each, in input order. */
+function versionPairs(
+  entries: readonly BuiltItem[],
+): (readonly [BuiltItem, BuiltItem])[] {
+  const out: (readonly [BuiltItem, BuiltItem])[] = [];
+  for (const [i, a] of entries.entries()) {
+    for (const b of entries.slice(i + 1)) {
+      if (areOtherVersions(a.work, b.work)) out.push([a, b]);
+    }
+  }
+  return out;
 }
 
 /** `[a,b,c,d]`, 2 → `[[a,b],[c,d]]`. Empty input yields nothing. */

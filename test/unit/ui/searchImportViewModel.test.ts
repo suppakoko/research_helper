@@ -82,16 +82,23 @@ import {
   createSearchImportViewModel,
   errorDetails,
   errorView,
+  everySearchFailed,
   initialViewState,
+  isLookupOnly,
   message,
+  roleLine,
   sourceStatusLine,
   toPipelineInput,
   toWindowRecords,
+  windowSources,
   EMPTY_HEADLINE_OMITTED,
   ERROR_DETAIL_FIELDS,
   ERROR_ROWS,
+  KEY_NOTICE_SOURCE_ID,
   UNRENDERABLE_ERROR_ROWS,
   type CollectionDescriptor,
+  type KeyStatus,
+  type SearchResultRow,
   type MessageRef,
   type SearchImportJobFactory,
   type SearchImportViewModel,
@@ -373,6 +380,8 @@ function harness(options: {
   readonly sources?: readonly SourceDescriptor[];
   readonly collections?: readonly CollectionDescriptor[];
   readonly isExisting?: (item: SourceRecord) => boolean;
+  /** FR-2's third scenario's port (`P2-T14`). Omitted, the port is unbound. */
+  readonly keyStatus?: () => KeyStatus;
 }): Harness {
   const states: SearchViewState[] = [];
   const lines: string[] = [];
@@ -446,7 +455,7 @@ function harness(options: {
     }),
   };
 
-  const { sources, collections, isExisting } = options;
+  const { sources, collections, isExisting, keyStatus } = options;
   const deps: SearchImportViewModelDeps = {
     pipeline,
     jobs,
@@ -467,6 +476,7 @@ function harness(options: {
       ? {}
       : { listCollections: () => collections }),
     ...(isExisting === undefined ? {} : { isExisting }),
+    ...(keyStatus === undefined ? {} : { semanticScholarKeyStatus: keyStatus }),
   };
 
   const model = createSearchImportViewModel(deps);
@@ -1906,5 +1916,605 @@ describe("P1-T39 — ERROR_DETAIL_FIELDS, as behaviour", () => {
     }
     // NFR-14 again: never a stack trace on the screen.
     expect(JSON.stringify(h.model.state)).not.toContain("stack");
+  });
+});
+
+// ===========================================================================
+// P2-T14 — chips, badges, per-source status, the role row and FR-2's notice
+//
+// Every assertion below is against a scripted pipeline output: the fan-out,
+// the cascade and the adapters are other cards' and are not run here. What is
+// asserted is what this view model *draws* from what they publish.
+// ===========================================================================
+
+/** `docs/07` §8.5's seven, in the registry's order, with `P2-T07`'s capability. */
+const SEVEN_SOURCES: readonly SourceDescriptor[] = [
+  { id: "pubmed", displayNameKey: "research-helper-source-pubmed" },
+  { id: "europepmc", displayNameKey: "research-helper-source-europepmc" },
+  { id: "crossref", displayNameKey: "research-helper-source-crossref" },
+  {
+    id: "semanticscholar",
+    displayNameKey: "research-helper-source-semanticscholar",
+  },
+  { id: "arxiv", displayNameKey: "research-helper-source-arxiv" },
+  {
+    id: "biorxiv",
+    displayNameKey: "research-helper-source-biorxiv",
+    keywordSearch: false,
+  },
+  {
+    id: "medrxiv",
+    displayNameKey: "research-helper-source-medrxiv",
+    keywordSearch: false,
+  },
+];
+
+const SEVEN_IDS: readonly SourceId[] = [
+  "pubmed",
+  "europepmc",
+  "crossref",
+  "semanticscholar",
+  "arxiv",
+  "biorxiv",
+  "medrxiv",
+];
+
+/** A merged work for `representative`, seen in `seenIn`, holding `recordIds`. */
+function workOf(
+  representative: SourceRecord,
+  seenIn: readonly SourceId[],
+  recordIds: readonly string[] = [representative.id],
+): CanonicalWork {
+  return {
+    workKey: `hash:${representative.id}`,
+    ids: representative.work.ids,
+    type: representative.work.type,
+    title: representative.work.title,
+    authors: representative.work.authors,
+    provenance: { recordIds, fieldOrigin: {}, seenIn },
+    normalizedAtEpochMs: NOW,
+  };
+}
+
+type FlagPair = SearchImportOutput["flags"][number];
+type LinkPair = SearchImportOutput["links"][number];
+
+function flag(
+  a: SourceRecord,
+  b: SourceRecord,
+  confidence: number,
+  tier: FlagPair["decision"]["tier"] = "title-fuzzy",
+): FlagPair {
+  return {
+    a,
+    b,
+    decision: { verdict: "flag", tier, confidence, evidence: {} },
+  };
+}
+
+/** The role row, as `roleLine` builds it, for one of the two servers. */
+function role(sourceId: "biorxiv" | "medrxiv"): unknown {
+  return {
+    sourceId,
+    nameId: `research-helper-source-${sourceId}`,
+    outcome: "role",
+    detail: { id: "research-helper-search-source-role", args: undefined },
+  };
+}
+
+describe("P2-T14 — source chips from provenance.seenIn (step 2)", () => {
+  it("renders one chip per contributing source: three sources, three chips", () => {
+    const representative = record({
+      sourceId: "pubmed",
+      nativeId: "1",
+      title: "Found three times",
+    });
+    const [row] = toWindowRecords(
+      [representative],
+      new Map([
+        ["pubmed", "PubMed"],
+        ["crossref", "Crossref"],
+        ["europepmc", "Europe PMC"],
+      ]),
+      undefined,
+      {
+        works: [workOf(representative, ["pubmed", "crossref", "europepmc"])],
+        flags: [],
+        links: [],
+      },
+    ) as [SearchResultRow];
+
+    expect(row.sourceIds).toStrictEqual(["pubmed", "crossref", "europepmc"]);
+    expect(row.sourceLabels).toStrictEqual([
+      "PubMed",
+      "Crossref",
+      "Europe PMC",
+    ]);
+  });
+
+  it("falls back to the representative's own source when no aligned works exist", () => {
+    const first = record({ sourceId: "pubmed", nativeId: "1", title: "A" });
+    const rows = toWindowRecords(
+      [first, record({ sourceId: "crossref", nativeId: "2", title: "B" })],
+      new Map(),
+      undefined,
+      // One work for two records: misaligned, so it is not read at all.
+      { works: [workOf(first, ["pubmed", "arxiv"])], flags: [], links: [] },
+    );
+    expect(rows.map((row) => row.sourceIds)).toStrictEqual([
+      ["pubmed"],
+      ["crossref"],
+    ]);
+  });
+
+  it("draws the preview's chips in the published table after a search", async () => {
+    const a = record({ sourceId: "pubmed", nativeId: "1", title: "A" });
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          output: output({
+            outcome: "succeeded",
+            records: [a],
+            works: [workOf(a, ["pubmed", "crossref", "semanticscholar"])],
+            perSource: [
+              report({ sourceId: "pubmed", recordsRetrieved: 1 }),
+              report({ sourceId: "crossref", recordsRetrieved: 1 }),
+              report({ sourceId: "semanticscholar", recordsRetrieved: 1 }),
+            ],
+          }),
+        },
+      ],
+    });
+    await h.model.runSearch(
+      query({ sources: ["pubmed", "crossref", "semanticscholar"] }),
+    );
+    const rows = h.model.state.records ?? [];
+    // No formatter is connected, so each label is the id (the documented
+    // fallback), one per contributing source.
+    expect(rows[0]?.sourceLabels).toStrictEqual([
+      "pubmed",
+      "crossref",
+      "semanticscholar",
+    ]);
+  });
+});
+
+describe("P2-T14 — the duplicate badge on a flagged pair (step 3)", () => {
+  const a = record({ sourceId: "pubmed", nativeId: "1", title: "Lipid A" });
+  const b = record({ sourceId: "crossref", nativeId: "2", title: "Lipid A." });
+  const c = record({ sourceId: "arxiv", nativeId: "3", title: "Other" });
+  const singles = (): readonly CanonicalWork[] => [
+    workOf(a, ["pubmed"]),
+    workOf(b, ["crossref"]),
+    workOf(c, ["arxiv"]),
+  ];
+
+  it("badges both rows of a flagged pair, naming the tier and the score, and keeps them two rows", () => {
+    const rows = toWindowRecords([a, b, c], new Map(), undefined, {
+      works: singles(),
+      flags: [flag(a, b, 0.873)],
+      links: [],
+    });
+
+    // Never pre-merged: three records in, three rows out, three keys.
+    expect(rows.map((row) => row.key)).toStrictEqual([a.id, b.id, c.id]);
+    const expected = {
+      id: "research-helper-search-row-duplicate",
+      args: { tier: "title-fuzzy", score: 87 },
+    };
+    expect(rows[0]?.duplicate).toStrictEqual({
+      withKeys: [b.id],
+      ref: expected,
+    });
+    expect(rows[1]?.duplicate).toStrictEqual({
+      withKeys: [a.id],
+      ref: expected,
+    });
+    expect(rows[2]?.duplicate).toBeUndefined();
+    // A flag is not a link.
+    expect(rows.every((row) => row.linked === undefined)).toBe(true);
+  });
+
+  it("finds the row of a flagged record the cascade merged into another work", () => {
+    // `b` was merged into `a`'s work, so `a`'s row stands for it: the pair
+    // (b, c) badges `a`'s row and `c`'s row, and the pair (a, b) lands on one
+    // row and is dropped — already merged, nothing to review.
+    const rows = toWindowRecords([a, c], new Map(), undefined, {
+      works: [
+        workOf(a, ["pubmed", "crossref"], [a.id, b.id]),
+        workOf(c, ["arxiv"]),
+      ],
+      flags: [flag(b, c, 0.75, "version-link"), flag(a, b, 0.9)],
+      links: [],
+    });
+    expect(rows[0]?.duplicate?.withKeys).toStrictEqual([c.id]);
+    expect(rows[1]?.duplicate?.withKeys).toStrictEqual([a.id]);
+    expect(rows[0]?.duplicate?.ref.args).toStrictEqual({
+      tier: "version-link",
+      score: 75,
+    });
+  });
+
+  it("keeps the strongest pair's tooltip when a row is flagged twice", () => {
+    const rows = toWindowRecords([a, b, c], new Map(), undefined, {
+      works: singles(),
+      flags: [flag(a, b, 0.86), flag(a, c, 0.97, "title-exact")],
+      links: [],
+    });
+    expect(rows[0]?.duplicate?.withKeys).toStrictEqual([b.id, c.id]);
+    expect(rows[0]?.duplicate?.ref.args).toStrictEqual({
+      tier: "title-exact",
+      score: 97,
+    });
+  });
+
+  it("marks a linked pair with the linked badge, by work key", () => {
+    const link: LinkPair = {
+      aWorkKey: `hash:${a.id}`,
+      bWorkKey: `hash:${c.id}`,
+      preprintWorkKey: `hash:${c.id}`,
+      decision: {
+        verdict: "link",
+        tier: "version-link",
+        confidence: 1,
+        evidence: {},
+      },
+    };
+    const rows = toWindowRecords([a, b, c], new Map(), undefined, {
+      works: singles(),
+      flags: [],
+      links: [link],
+    });
+    expect(rows[0]?.linked).toStrictEqual({
+      withKeys: [c.id],
+      ref: { id: "research-helper-search-row-linked", args: undefined },
+    });
+    expect(rows[2]?.linked?.withKeys).toStrictEqual([a.id]);
+    expect(rows[1]?.linked).toBeUndefined();
+  });
+
+  it("item 146: the import of a preview leaves the preview's badges drawn", async () => {
+    const works = [workOf(a, ["pubmed"]), workOf(b, ["crossref"])];
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          output: {
+            ...output({
+              outcome: "succeeded",
+              records: [a, b],
+              works,
+              perSource: [
+                report({ sourceId: "pubmed", recordsRetrieved: 1 }),
+                report({ sourceId: "crossref", recordsRetrieved: 1 }),
+              ],
+            }),
+            flags: [flag(a, b, 0.88)],
+          },
+        },
+        {
+          // The import's own output: `flags` and `links` empty by design.
+          output: output({
+            outcome: "succeeded",
+            records: [a, b],
+            works,
+            write: writeReport({ created: 2 }),
+          }),
+        },
+      ],
+    });
+    await h.model.runSearch(query());
+    const before = h.model.state.records;
+    expect(before?.filter((row) => row.duplicate !== undefined)).toHaveLength(
+      2,
+    );
+    const revision = h.model.state.recordsRevision;
+
+    await h.model.runImport({ ...query(), records: before ?? [] });
+
+    expect(h.inputs).toHaveLength(2);
+    expect(h.model.state.recordsRevision).toBe(revision);
+    expect(h.model.state.records).toBe(before);
+    expect(
+      h.model.state.records?.filter((row) => row.duplicate !== undefined),
+    ).toHaveLength(2);
+  });
+});
+
+describe("P2-T14 — the per-source status block and the ⊕ role row (step 4)", () => {
+  it("draws one line per selected source, and the two lookup-only servers as their role from the first frame", async () => {
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          snapshots: [
+            snapshot({ currentStageKey: "pubmed", completed: 43 }),
+            // A snapshot naming bioRxiv must not turn its role into a count.
+            snapshot({ currentStageKey: "biorxiv", completed: 0 }),
+            snapshot({ currentStageKey: "crossref", completed: 50 }),
+          ],
+          output: output({
+            outcome: "succeeded",
+            records: [
+              record({ sourceId: "pubmed", nativeId: "1", title: "A" }),
+            ],
+            perSource: SEVEN_IDS.map((sourceId) =>
+              report({
+                sourceId,
+                recordsRetrieved:
+                  sourceId === "biorxiv" || sourceId === "medrxiv" ? 0 : 3,
+              }),
+            ),
+          }),
+        },
+      ],
+    });
+
+    await h.model.runSearch(query({ sources: [...SEVEN_IDS] }));
+
+    const searching = h.states.filter((state) => state.panel === "searching");
+    expect(searching.length).toBeGreaterThan(1);
+    for (const state of searching) {
+      // One line per selected source, in registry order.
+      expect(state.sources.map((line) => line.sourceId)).toStrictEqual([
+        ...SEVEN_IDS,
+      ]);
+      expect(state.sources[5]).toStrictEqual(role("biorxiv"));
+      expect(state.sources[6]).toStrictEqual(role("medrxiv"));
+    }
+    // Independently: PubMed has latched its 43 while Crossref is in flight,
+    // and the other three are still searching.
+    const last = searching.at(-1);
+    expect(last?.sources.map((line) => line.outcome)).toStrictEqual([
+      "succeeded",
+      "searching",
+      "searching",
+      "searching",
+      "searching",
+      "role",
+      "role",
+    ]);
+    expect(last?.sources[0]?.detail.args).toStrictEqual({ count: 43 });
+
+    // The final block: five counts and two roles — never a zero for the two.
+    expect(h.model.state.sources.map((line) => line.outcome)).toStrictEqual([
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "role",
+      "role",
+    ]);
+    for (const state of h.states) {
+      for (const line of state.sources.filter((item) =>
+        ["biorxiv", "medrxiv"].includes(item.sourceId),
+      )) {
+        expect(line.outcome).toBe("role");
+        expect(line.detail.id).toBe("research-helper-search-source-role");
+        expect(line.detail.args).toBeUndefined();
+      }
+    }
+  });
+
+  it("draws a real failure on a lookup-only server as an error, not as its role", () => {
+    const biorxiv = SEVEN_SOURCES[5];
+    const line = sourceStatusLine(
+      report({
+        sourceId: "biorxiv",
+        error: failure("UPSTREAM_SERVER", { httpStatus: 503, retryable: true }),
+      }),
+      biorxiv,
+      "bioRxiv",
+    );
+    expect(line.outcome).toBe("failed");
+    expect(line.detail).toStrictEqual({
+      id: "rh-error-upstream",
+      args: { database: "bioRxiv", status: 503 },
+    });
+    // And a clean report on the same server is its role, not "0 results".
+    expect(
+      sourceStatusLine(report({ sourceId: "biorxiv" }), biorxiv, "bioRxiv"),
+    ).toStrictEqual(role("biorxiv"));
+    expect(roleLine("medrxiv", "research-helper-source-medrxiv")).toStrictEqual(
+      role("medrxiv"),
+    );
+    expect(isLookupOnly(SEVEN_SOURCES[0])).toBe(false);
+    expect(isLookupOnly(undefined)).toBe(false);
+  });
+
+  it("does not count the two servers among the sources results came from", async () => {
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          output: output({
+            outcome: "partial",
+            records: [
+              record({ sourceId: "pubmed", nativeId: "1", title: "A" }),
+            ],
+            perSource: [
+              report({ sourceId: "pubmed", recordsRetrieved: 1 }),
+              report({
+                sourceId: "crossref",
+                error: failure("OFFLINE", { retryable: true }),
+              }),
+              report({ sourceId: "biorxiv" }),
+              report({ sourceId: "medrxiv" }),
+            ],
+          }),
+        },
+      ],
+    });
+    await h.model.runSearch(
+      query({ sources: ["pubmed", "crossref", "biorxiv", "medrxiv"] }),
+    );
+    expect(h.model.state.panel).toBe("results");
+    expect(h.model.state.warnings).toStrictEqual([
+      {
+        id: "research-helper-search-state-partial",
+        args: { failed: 1, succeeded: 1 },
+      },
+    ]);
+  });
+});
+
+describe("P2-T14 — the all-failed state (step 5)", () => {
+  it("draws §4.6's all-failed panel when every searching source failed, although the two servers make the run 'partial'", async () => {
+    const searchingIds: readonly SourceId[] = SEVEN_IDS.filter(
+      (id) => id !== "biorxiv" && id !== "medrxiv",
+    );
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          output: output({
+            // `fetchStateFromReports`' verdict: two reports carry no error.
+            outcome: "partial",
+            perSource: SEVEN_IDS.map((sourceId) =>
+              searchingIds.includes(sourceId)
+                ? report({
+                    sourceId,
+                    error:
+                      sourceId === "semanticscholar"
+                        ? failure("AUTHORIZATION", { httpStatus: 403 })
+                        : failure("OFFLINE", { retryable: true }),
+                  })
+                : report({ sourceId }),
+            ),
+          }),
+        },
+      ],
+    });
+
+    await h.model.runSearch(query({ sources: [...SEVEN_IDS] }));
+
+    expect(h.model.state.panel).toBe("error");
+    const error = h.model.state.error;
+    expect(error?.headline.id).toBe("research-helper-search-state-error");
+    // One line per failed source, each carrying its database's name id.
+    expect(error?.lines.map((line) => line.sourceId)).toStrictEqual(
+      searchingIds,
+    );
+    expect(error?.lines.map((line) => line.nameId)).toStrictEqual(
+      searchingIds.map((id) => `research-helper-source-${id}`),
+    );
+    // §8.3's AUTHORIZATION row offers Open Preferences; OFFLINE offers Retry.
+    expect(error?.openPreferences).toBe(true);
+    expect(error?.retry).toBe(true);
+    expect(h.model.state.warnings).toStrictEqual([]);
+  });
+
+  it("decides 'every search failed' from the capability, never from the two servers", () => {
+    const failedPubmed = report({
+      sourceId: "pubmed",
+      error: failure("OFFLINE"),
+    });
+    const quietBiorxiv = report({ sourceId: "biorxiv" });
+    expect(everySearchFailed([failedPubmed, quietBiorxiv], SEVEN_SOURCES)).toBe(
+      true,
+    );
+    // Only the two servers asked: nothing that searches failed.
+    expect(everySearchFailed([quietBiorxiv], SEVEN_SOURCES)).toBe(false);
+    // A searching source that yielded before it failed is degraded, not failed.
+    expect(
+      everySearchFailed(
+        [
+          report({
+            sourceId: "pubmed",
+            recordsRetrieved: 2,
+            error: failure("OFFLINE"),
+          }),
+          quietBiorxiv,
+        ],
+        SEVEN_SOURCES,
+      ),
+    ).toBe(false);
+    expect(
+      everySearchFailed(
+        [failedPubmed, report({ sourceId: "crossref", recordsRetrieved: 1 })],
+        SEVEN_SOURCES,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("P2-T14 — FR-2's Semantic Scholar no-key notice (step 6)", () => {
+  const REQUEST_URL = "https://example.invalid/request-a-key";
+
+  it("marks Semantic Scholar, and only it, when no key is present", () => {
+    const listed = windowSources(SEVEN_SOURCES, {
+      present: false,
+      requestUrl: REQUEST_URL,
+    });
+    expect(
+      listed.filter((source) => source.keyNotice).map((source) => source.id),
+    ).toStrictEqual([KEY_NOTICE_SOURCE_ID]);
+    expect(
+      listed.find((source) => source.id === KEY_NOTICE_SOURCE_ID)
+        ?.keyRequestUrl,
+    ).toBe(REQUEST_URL);
+    expect(
+      listed.filter((source) => source.keyRequestUrl !== undefined),
+    ).toHaveLength(1);
+    // The capability travels with the list unchanged.
+    expect(listed.map((source) => source.keywordSearch)).toStrictEqual(
+      SEVEN_SOURCES.map((source) => source.keywordSearch),
+    );
+  });
+
+  it("draws no notice when a key is present, or when nothing reports either way", () => {
+    for (const key of [{ present: true, requestUrl: REQUEST_URL }, undefined]) {
+      expect(
+        windowSources(SEVEN_SOURCES, key).some((source) => source.keyNotice),
+      ).toBe(false);
+    }
+  });
+
+  it("hands the window the notice through the host, read on every call", () => {
+    let present = false;
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [],
+      keyStatus: () => ({ present, requestUrl: REQUEST_URL }),
+    });
+    const noticed = (): readonly string[] =>
+      h.model.host
+        .listSources()
+        .filter((source) => source.keyNotice)
+        .map((source) => source.id);
+    expect(noticed()).toStrictEqual(["semanticscholar"]);
+    present = true;
+    expect(noticed()).toStrictEqual([]);
+  });
+});
+
+describe("P2-T14 — the window's ticked set reaches the sources preference (step 1)", () => {
+  it("forwards registered ids only, through the port", () => {
+    const saved: (readonly SourceId[])[] = [];
+    const h = harness({ sources: SEVEN_SOURCES, runs: [] });
+    // The harness binds no write port: the host degrades to a no-op.
+    expect(() => {
+      h.model.host.saveSources(["pubmed"]);
+    }).not.toThrow();
+
+    const model = createSearchImportViewModel({
+      pipeline: {} as unknown as SearchImportViewModelDeps["pipeline"],
+      jobs: {} as unknown as SearchImportJobFactory,
+      logger: createLogger({
+        sink: { write: () => undefined },
+        clock: createSystemClock(),
+        level: "debug",
+      }),
+      pluginVersion: PLUGIN_VERSION,
+      zoteroVersion: ZOTERO_VERSION,
+      clock: { now: () => NOW },
+      saveSources: (ids) => {
+        saved.push(ids);
+      },
+    });
+    model.host.saveSources(["pubmed", "toString", "biorxiv", "openalex-ish"]);
+    expect(saved).toStrictEqual([["pubmed", "biorxiv"]]);
   });
 });

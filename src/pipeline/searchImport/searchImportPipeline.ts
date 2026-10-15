@@ -76,6 +76,7 @@ import type { ProgressReporter } from "../../core/jobQueue/progress";
 import type { MergeDecision } from "../../core/provenance";
 import type { CanonicalWork } from "../../model/canonicalWork";
 import type { SourceId } from "../../model/ids";
+import { areOtherVersions } from "../../model/merge";
 import type { SourceRecord } from "../../model/sourceRecord";
 import { PREFS } from "../../prefs/schema";
 import type { DedupPair } from "../../sources/shared/dedupe";
@@ -265,12 +266,63 @@ function freshState(): RunState {
 // same empty `fieldOrigin` the lift did. Nothing in `src/` called it; the one
 // remaining mention is a doc comment in `src/zotero/itemMapper.ts`.
 
-/** Split into runs of at most `size`. */
-function batches<T>(items: readonly T[], size: number): readonly T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) {
-    out.push(items.slice(i, i + size));
+/**
+ * Split the works to write into batches of `size`, **never separating two
+ * versions of one work** (`P2-T11`, gate `G-16`).
+ *
+ * The writer relates a preprint and its published version through Zotero
+ * *Related* only when one `writeBatch` creates both (`docs/07` §6.2's
+ * `relatedVersionIds.doi` rows; the library index is a snapshot from before
+ * the run, so a later batch cannot see an earlier batch's items). So the
+ * versions of a work — every work {@link areOtherVersions} connects to it,
+ * transitively — are placed together, at the position of the first of them,
+ * and a batch is closed once it reaches `size`. A batch can therefore exceed
+ * `size` by the members of one version group less one. With no versions
+ * among the works this is a plain split into runs of `size`, in order.
+ *
+ * Exported for the unit test.
+ *
+ * @param works - the selected works, in table order
+ * @param size - the pipeline's `writeBatchSize`
+ */
+export function versionAwareBatches(
+  works: readonly CanonicalWork[],
+  size: number,
+): readonly CanonicalWork[][] {
+  // Union–find over positions; only works that name another can start an edge.
+  const parent = works.map((_work, i) => i);
+  const find = (i: number): number => {
+    let x = i;
+    while ((parent[x] ?? x) !== x) x = parent[x] ?? x;
+    return x;
+  };
+  works.forEach((work, i) => {
+    if (work.relatedVersionIds === undefined) return;
+    works.forEach((other, j) => {
+      if (i === j || !areOtherVersions(work, other)) return;
+      const ri = find(i);
+      const rj = find(j);
+      if (ri !== rj) parent[Math.max(ri, rj)] = Math.min(ri, rj);
+    });
+  });
+  const groups = new Map<number, CanonicalWork[]>();
+  works.forEach((work, i) => {
+    const root = find(i);
+    const group = groups.get(root);
+    if (group === undefined) groups.set(root, [work]);
+    else group.push(work);
+  });
+
+  const out: CanonicalWork[][] = [];
+  let current: CanonicalWork[] = [];
+  for (const group of groups.values()) {
+    current.push(...group);
+    if (current.length >= size) {
+      out.push(current);
+      current = [];
+    }
   }
+  if (current.length > 0) out.push(current);
   return out;
 }
 
@@ -502,7 +554,7 @@ export function createSearchImportPipeline(
     const writing = await enterStage(state, ctx, "writingItems");
     writing.setProgress(0, selected.length);
 
-    for (const batch of batches(selected, deps.writeBatchSize)) {
+    for (const batch of versionAwareBatches(selected, deps.writeBatchSize)) {
       // §7.4's "each write batch". A cancel here keeps every earlier batch: the
       // counts are already on `state`, and `run()`'s `catch` turns them into a
       // `"cancelled"` outcome carrying a real number.

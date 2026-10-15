@@ -1788,6 +1788,19 @@ begins. If it is still open when the card is reached, implement the recommended 
 say so in the card's state — but do **not** invent a preference key for it; `docs/07` §8.5 is the
 complete list of preferences and a new one has to be added there first.
 
+
+**Findings, 2026-10-15 — done except the Korean half of Done-when 4 (gate G-41, item 199); no live request; full report at `plan/reports/P2-T11.md`.**
+Verified by the coordinator on the combined tree with `P2-T14` / `P2-T11` (the two agents worked side by side): no `MUTANT` marker, the four bundles without a byte-order mark or carriage return, typecheck 0, `lint:check` 0, eslint 0, **unit 2,312/2,312**, contract 40/40, integration **146 passed** (two runs).
+G-16's decided behaviour ships: a preprint and its published version stay two items, each Related to the other
+inside Zotero, the preprint tagged `research_helper/superseded-by-published`; when only one side is imported, a
+`Published DOI:` / `Preprint DOI:` line goes in `extra`; an existing library item is never modified. The mappers
+already harvested every buildable signal (bioRxiv `published`, arXiv `<arxiv:doi>`, Crossref `is-preprint-of` /
+`has-preprint`, Europe PMC `epmcId`); the gap was the cascade — a pair with different titles or more than a year
+apart was never compared. Pass 1 now compares each record with those its `relatedVersionIds` names; Tier 7 returns
+`link` at 1.00; a title match with conflicting DOIs becomes a link; the 0.75 signal stays a flag; the preprint is
+named by type, never by DOI prefix. Pairs stay in one write batch. **20 mutants, all killed** (one after an added
+test). Two signals cannot be built (no S2 paper id in `ExternalIds`; no `is-published-in` in any fixture). Open:
+items 199–203; item 148 is covered.
 ---
 
 ### P2-T12 — Batched abstract-backfill pass
@@ -2175,6 +2188,17 @@ The search-window file names were aligned upstream on 2026-09-09: `docs/08` §4.
 and the entry point stays `openSearchWindow` because the surface is a modeless window. Phase 1 built
 it that way (`P1-T18`–`P1-T22`); this card extends those files rather than adding new ones.
 
+
+**Findings, 2026-10-15 — done; the card's literal parity `diff` cannot pass under the Korean stub convention (it failed at the start too); no live request; full report at `plan/reports/P2-T14.md`.**
+Verified by the coordinator on the combined tree with `P2-T14` / `P2-T11` (the two agents worked side by side): no `MUTANT` marker, the four bundles without a byte-order mark or carriage return, typecheck 0, `lint:check` 0, eslint 0, **unit 2,312/2,312**, contract 40/40, integration **146 passed** (two runs).
+Two real defects found and fixed: the Databases checkboxes painted **no names** in Zotero (owner row 142 was right —
+a value-only Fluent message on a XUL checkbox wipes its label; now recorded in `docs/08` §10.1), and the
+all-failed panel was **unreachable** with the default seven ticked, because the pipeline calls such a run
+"partial" (bioRxiv/medRxiv cannot fail). The window now shows one chip per contributing source, a duplicate
+badge on both rows of a flagged pair (both still selectable, nothing merged), one status line per source, the
+`⊕` role row for the two lookup-only servers, Search disabled with nothing ticked, the Semantic Scholar no-key
+notice from the key-presence flag only, and `P2-T11`'s policy line in the duplicates area. Toggling a checkbox now
+writes the `sources` preference. **24 mutants, all killed.** Nothing outside Files. Open: items 204–207.
 ---
 
 ### P2-T17 — Re-run a search from its provenance record

@@ -265,8 +265,53 @@
 }
 
 /* §4.5 stacks a multi-source row's names ("PubMed" over "Crossref"). */
+/* P2-T14 step 2: one chip per contributing source, stacked the way
+   docs/08 §4.5's wireframe stacks "PubMed" over "Crossref". */
 .rh-source-line {
-  display: block;
+  /* A table box shrinks to its text and still takes its own line. */
+  display: table;
+  margin-block: 0.1em;
+  padding: 0 0.45em;
+  border: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.15));
+  border-radius: 0.8em;
+}
+
+/* P2-T14 step 3: a possible duplicate the engine flagged and did not merge.
+   Visually distinct from the already-in-library treatment above: a dashed
+   border instead of a solid one, an approximately-equal glyph instead of the
+   warning sign, and the words of research-helper-search-row-duplicate. */
+.rh-row-duplicate > td:first-child {
+  border-inline-start: 3px dashed var(--accent-orange, currentColor);
+}
+.rh-duplicate-badge {
+  margin-inline-end: 0.5em;
+  color: var(--accent-orange, inherit);
+}
+.rh-duplicate-badge::before {
+  content: "\2248";
+  margin-inline-end: 0.3em;
+}
+
+/* plan/00 §6 item 146: another row is a different version of this work. */
+.rh-linked-badge {
+  margin-inline-end: 0.5em;
+  color: var(--accent-blue, inherit);
+}
+.rh-linked-badge::before {
+  content: "\21c4";
+  margin-inline-end: 0.3em;
+}
+
+/* docs/08 §4.2's reserved role row for a source with no keyword search
+   (bioRxiv, medRxiv). The circled plus is drawn here and nowhere else, so it
+   cannot turn up on an error or an empty search (P2-T14). */
+.rh-source-role {
+  margin-inline-start: 1em;
+  color: var(--fill-secondary, inherit);
+}
+.rh-source-role::before {
+  content: "\2295";
+  margin-inline-end: 0.4em;
 }
 
 /* §4.5's [ Select all ] [ Select none ] [ Invert ]   28 selected */

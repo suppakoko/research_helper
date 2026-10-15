@@ -152,6 +152,25 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
         role="alert"
         data-l10n-id="research-helper-search-databases-none"
       />
+      <!-- FR-2's third scenario (P2-T14): Semantic Scholar is ticked and no key
+           is present. Hidden until the controller's refreshKeyNotice() shows
+           it; the link's href arrives from the host's source list, because
+           this document may name no remote resource (docs/01 §8.3), and the
+           script opens it through Zotero.launchURL. Only whether a key is
+           present ever reaches this window, never a key. -->
+      <hbox id="rh-search-s2-notice" align="center" hidden="true">
+        <description
+          id="rh-search-s2-notice-text"
+          class="rh-hint"
+          role="note"
+          data-l10n-id="research-helper-search-s2-no-key"
+        />
+        <html:a
+          id="rh-search-s2-request"
+          hidden="true"
+          data-l10n-id="research-helper-search-s2-no-key-request"
+        />
+      </hbox>
     </groupbox>
 
     <separator class="groove" />
@@ -410,6 +429,15 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
           data-l10n-id="research-helper-search-duplicates-import"
         />
       </radiogroup>
+      <!-- docs/10 FR-50 scenario 3: "the default is documented in the UI".
+           Gate G-16's preprint/published rule, written by P2-T11 and placed
+           here by P2-T14 — the duplicate-handling area — as plain text, the
+           same in every run. -->
+      <description
+        id="rh-search-preprint-policy"
+        class="rh-hint"
+        data-l10n-id="research-helper-search-preprint-policy"
+      />
     </groupbox>
 
     <!-- 8. Status bar — docs/08 §4.4: progress lives inside the window

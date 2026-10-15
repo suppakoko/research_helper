@@ -1788,6 +1788,9 @@ const VIEW_MODEL_DEPENDENCIES: Record<keyof SearchImportViewModelDeps, true> = {
   listSources: true,
   listCollections: true,
   getPrefs: true,
+  // `P2-T14`: FR-2's third scenario reads the presence flag through this port.
+  semanticScholarKeyStatus: true,
+  saveSources: true,
   isExisting: true,
   writeProvenanceNote: true,
   provenanceFiles: true,
@@ -1841,6 +1844,8 @@ const HOST_CONTRACT: readonly (keyof SearchWindowHostApi)[] = [
   "runImport",
   "cancel",
   "exportProvenance",
+  // `P2-T14`: the Databases row writes the `sources` preference.
+  "saveSources",
 ];
 
 // ---------------------------------------------------------------------------
@@ -2393,6 +2398,109 @@ describe("P1-T35: the host the composition root published", () => {
     );
     assert.isFalse(controller.state.exportAvailable);
     log35("export control hidden before any run");
+  });
+
+  // =========================================================================
+  // `P2-T14` — owner's decision, review page row 142: the Databases row
+  // **paints** each registered source's display name
+  //
+  // `l10n.spec.ts` proves every `displayNameKey` resolves in the bundle. This
+  // proves the user sees it: the text a XUL `<checkbox>` draws is its inner
+  // `.checkbox-label`, so that is what is read, not the id and not the
+  // checkbox's own `textContent`. Here because this block holds the real
+  // registry with every shipped id (the stub sits in PubMed's slot with the
+  // real adapter's key).
+  // =========================================================================
+
+  it("P2-T14 row 142: the Databases row paints every registered source's display name", async function () {
+    this.timeout(30_000);
+    const expected: Readonly<Record<string, string>> = {
+      pubmed: "PubMed",
+      europepmc: "Europe PMC",
+      crossref: "Crossref",
+      semanticscholar: "Semantic Scholar",
+      arxiv: "arXiv",
+      biorxiv: "bioRxiv",
+      medrxiv: "medRxiv",
+    };
+    const boxes = [
+      ...(el("rh-search-databases").children as unknown as Iterable<Element>),
+    ];
+    assert.deepEqual(
+      boxes.map((box) => box.getAttribute("value")),
+      Object.keys(expected),
+      "the row lists the seven registered sources, in registry order",
+    );
+    const painted = (box: Element): string => {
+      const inner = box.querySelector(".checkbox-label");
+      return (inner?.getAttribute("value") ?? inner?.textContent ?? "").trim();
+    };
+    // Measured on the first run of this test (2026-10-15), before the fix:
+    // with a `data-l10n-id` on each checkbox, Fluent wrote "PubMed" into the
+    // checkbox's `textContent`, the control lost its `.checkbox-label` and its
+    // check box, and every painted name read "". `addon/content/searchDialog.js`
+    // `applySourceNames` now sets the resolved name as `label`.
+    await waitUntil(
+      () =>
+        boxes.every(
+          (box) => painted(box) === expected[box.getAttribute("value") ?? ""],
+        ),
+      "every database checkbox to paint its display name (it reads " +
+        `${JSON.stringify(boxes.map(painted))})`,
+      15_000,
+    );
+    for (const box of boxes) {
+      const id = box.getAttribute("value") ?? "";
+      assert.strictEqual(painted(box), expected[id], `${id}'s checkbox`);
+      // And still a checkbox: the painted name did not replace the control.
+      assert.isTrue(
+        box.querySelector(".checkbox-check") !== null,
+        `${id}'s checkbox kept its check box`,
+      );
+    }
+    log35(`databases painted: ${boxes.map(painted).join(", ")}`);
+  });
+
+  it("P2-T14: bioRxiv draws its ⊕ role row on a keyword run, never a count", async function () {
+    this.timeout(60_000);
+    setKeyword(KEYWORD);
+    // bioRxiv's adapter makes no request on a keyword run (`P2-T07`), and the
+    // stub's records carry abstracts and `10.5555/` DOIs, so neither the
+    // backfill nor a preprint lookup has anything to ask: no network.
+    selectSources([PUBLISHED_STUB, "biorxiv"]);
+    behaviour.set(PUBLISHED_STUB, { records: 2, withAbstract: true });
+
+    controller.search();
+    await awaitPublishedRun("the search with bioRxiv ticked");
+
+    const row = el("rh-search-source-status-biorxiv");
+    assert.strictEqual(row.getAttribute("data-rh-outcome"), "role");
+    const detail = row.querySelector(".rh-source-role");
+    if (!detail) {
+      assert.fail("bioRxiv's row has no role detail");
+    }
+    await waitUntil(
+      () => (detail.textContent ?? "").includes("ID lookup"),
+      `Fluent to render the role row (it reads "${detail.textContent ?? ""}")`,
+    );
+    assert.strictEqual(
+      (detail.textContent ?? "").trim(),
+      "ID lookup · preprint matching",
+    );
+    const hover = detail.getAttribute("title") ?? "";
+    assert.include(hover, "Europe PMC (SRC:PPR)", "§4.2's hover sentence");
+    assert.include(hover, "Crossref (type:posted-content)");
+    assert.isFalse(
+      /\d+ results?|Searching/.test(row.textContent ?? ""),
+      "never a count and never a spinner",
+    );
+    assert.strictEqual(
+      el(`rh-search-source-status-${PUBLISHED_STUB}`).getAttribute(
+        "data-rh-outcome",
+      ),
+      "succeeded",
+    );
+    log35(`bioRxiv row: ${row.textContent ?? ""} | hover: ${hover}`);
   });
 
   // =========================================================================

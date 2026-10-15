@@ -1212,7 +1212,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     publishes a partial `works` of the same length (it does not today), switch the guard to `stageReached`.
     Noted on the declaration.
 
-148. **A `link` or `flag` member imported** is written as the preview had it (`relatedVersionIds` intact), but
+148. ~~**A `link` or `flag` member imported**~~ **DONE 2026-10-15 (`P2-T11`: `test/integration/zotero/versionLinking.spec.ts`).** is written as the preview had it (`relatedVersionIds` intact), but
     no test asserts the relation survives the writer — `P2-T11` writes and tests the Zotero relation.
 
 ### 6.29 Raised by `P2-T04`, 2026-10-15 — recorded under rule 9, none carded
@@ -1435,6 +1435,39 @@ the caller of what the card builds; if it does not, the caller is added with a d
 197. **Semantic Scholar's `fetchAbstract` has no caller left in `src/`.** Keep it (declared in §4.2) or retire it.
 
 198. **The backfill pass is outside `estimate()`, and a backfilled work keeps its old `normalizedAtEpochMs`.**
+
+### 6.37 Raised by `P2-T11` and `P2-T14`, 2026-10-15 — recorded under rule 9; items 199, 200 and 205 wait on the owner
+
+199. **Korean for the window's new strings (gate G-41, owner).** `research-helper-search-preprint-policy` (`P2-T11`;
+    en-US: "A preprint and its published version are kept as two items, linked as Related; the preprint is tagged
+    research_helper/superseded-by-published.") and `P2-T14`'s five (`-s2-no-key`, `-s2-no-key-request`,
+    `-row-duplicate`, `-row-linked`, `-source-role`) are commented stubs on `KO_PENDING_REVIEW`.
+
+200. **The identifier tiers can still merge a preprint into its published version (owner's decision).** Measured: an
+    arXiv record naming the journal DOI in `relatedVersionIds`, against a Semantic Scholar record carrying that journal
+    DOI *and* the same arXiv id, gives `match` at the `arxiv` tier — before Tier 7 is reached. R-18 rates a false merge
+    as the failure most feared. Downgrading needs a `docs/02` §11.5 rule first; `P2-T13`'s labelled pairs measure it.
+
+201. **The `Published DOI:` / `Preprint DOI:` line name follows the imported item's own type,** so a preprint linked
+    to another preprint, or a conference paper linked to a journal paper, gets a misleading name. A role on each
+    `relatedVersionIds` entry, or a neutral key.
+
+202. **`fromZoteroItem` does not read the `Published DOI:` / `Preprint DOI:` lines back** into `relatedVersionIds`.
+
+203. **A newly imported preprint is never related to its published version already in the library:** that would
+    modify an existing item, which `P1-T14` forbids.
+
+204. **The pipeline calls a run "partial" when every searching source failed** (`fetchStateFromReports` in
+    `src/pipeline/searchImport/stages.ts` counts bioRxiv/medRxiv, which cannot fail). The window now decides through
+    the capability; the outcome, the provenance record and the progress popup still say partial.
+
+205. **Should "Open Preferences…" always show in the all-failed state (owner)?** `P2-T14` step 5 says so; the window
+    follows `docs/08` §8.3's per-error action (`P1-T22`), so an offline-only failure shows Retry alone.
+
+206. **The duplicate tooltip names the tier by its identifier** (`title-fuzzy`): no bundle has a tier vocabulary.
+
+207. **Unticking every database writes `sources = ""`, which the next open reads as "all ticked".** Also: `P2-T14`'s
+    Verify-with `diff` cannot pass under the Korean stub convention — replace it with the `keys.test.ts` partition check.
 
 ## 7. Regenerating this file
 

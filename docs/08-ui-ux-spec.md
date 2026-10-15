@@ -2175,6 +2175,12 @@ locale/
     └── research-helper-reportWindow.ftl
 ```
 
+> **Measured 2026-10-15 in Zotero 10.0.3 (`P2-T14`): a value-only Fluent message on a XUL `<checkbox>` paints nothing.**
+> Fluent writes a message's *value* into the element's text content, which replaces the checkbox's own label and box
+> parts, so every Databases checkbox showed an empty label (owner review row 142). The window now resolves the name
+> and sets the checkbox's `label` attribute (`applySourceNames` in `addon/content/searchDialog.js`), falling back to the
+> source id. A message meant for a XUL control's label needs a `.label` attribute in the bundle, or a resolved `label`.
+
 > **Corrected 2026-10-15 (owner review of 2026-10-14, row 51; shipped by `P1-T44`).** Until this date the
 > tree and the table below listed a fourth bundle, `research-helper-preferences.ftl`, for the preferences
 > pane. The shipped pane (`P1-T44`) keeps its 35 strings in **`research-helper-mainWindow.ftl`**, with the

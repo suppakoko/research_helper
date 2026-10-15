@@ -102,6 +102,10 @@ var RHSearchWindow = {
     maxResults: "rh-search-max-results",
     databases: "rh-search-databases",
     databasesNone: "rh-search-databases-none",
+    // FR-2's third scenario (P2-T14): the Semantic Scholar no-key notice and
+    // its link, both in the markup and hidden until a ticked source needs them.
+    keyNotice: "rh-search-s2-notice",
+    keyRequest: "rh-search-s2-request",
     filter: "rh-search-filter",
     hideExisting: "rh-search-hide-existing",
     resultCount: "rh-search-result-count",
@@ -213,6 +217,24 @@ var RHSearchWindow = {
       select: "rh-row-select",
       badge: "rh-existing-badge",
       sourceLine: "rh-source-line",
+      // P2-T14 step 3 and plan/00 §6 item 146: the two review badges. Distinct
+      // classes, and distinct glyphs in the stylesheet, from the ⚠ above.
+      duplicateBadge: "rh-duplicate-badge",
+      linkedBadge: "rh-linked-badge",
+      duplicateRow: "rh-row-duplicate",
+    },
+
+    /**
+     * The status rows' detail classes, by outcome (P2-T14).
+     *
+     * `role` is docs/08 §4.2's reserved ⊕ row: the glyph is drawn by
+     * `.rh-source-role::before` and by nothing else, so it cannot turn up on an
+     * error or an empty search by reusing a string.
+     */
+    statusClass: {
+      failed: "rh-inline-warning",
+      role: "rh-source-role",
+      other: "rh-hint",
     },
 
     /**
@@ -427,6 +449,8 @@ var RHSearchWindow = {
   state: {
     running: false,
     selectedCount: 0,
+    /** The host's `listSources()`, as the Databases row drew it (P2-T14). */
+    sources: [],
     panel: "initial",
     results: [],
     rows: [],
@@ -780,6 +804,40 @@ var RHSearchWindow = {
       return registered.filter((id) => enabled.includes(id));
     },
 
+    /**
+     * The source whose FR-2 notice is due, or `null` (P2-T14).
+     *
+     * The view model decides *which* source carries a notice (`keyNotice` on
+     * the descriptor the host lists — Semantic Scholar with no key present);
+     * this decides only *when* it shows: while that source is ticked, because
+     * the scenario is "the user has enabled Semantic Scholar".
+     *
+     * @param {object[]} sources - the host's `listSources()`
+     * @param {string[]} selected - the ticked ids
+     * @returns {object|null}
+     */
+    keyNoticeSource(sources, selected) {
+      const ticked = new Set(selected || []);
+      for (const source of sources || []) {
+        if (source && source.keyNotice === true && ticked.has(source.id)) {
+          return source;
+        }
+      }
+      return null;
+    },
+
+    /**
+     * A row marker from the host (`{ withKeys, ref }`), reduced to the message
+     * reference the badge draws, or `null` (P2-T14).
+     *
+     * @param {unknown} marker
+     * @returns {{id: string, args?: object}|null}
+     */
+    markerRef(marker) {
+      const ref = marker && marker.ref;
+      return ref && typeof ref.id === "string" && ref.id !== "" ? ref : null;
+    },
+
     // -----------------------------------------------------------------------
     // 1b. The result table (P1-T21) — docs/08 §4.2's columns, §4.3's widget
     // -----------------------------------------------------------------------
@@ -959,6 +1017,14 @@ var RHSearchWindow = {
           : typeof source.sourceLabel === "string" && source.sourceLabel !== ""
             ? [source.sourceLabel]
             : [];
+        // P2-T14: the registry ids behind the chips, kept only when they line
+        // up one-for-one with the labels, so a chip is never tagged with the
+        // wrong source.
+        const sourceIds =
+          Array.isArray(source.sourceIds) &&
+          source.sourceIds.length === sourceLabels.length
+            ? source.sourceIds.map((id) => String(id))
+            : [];
         const row = {
           key,
           title: typeof source.title === "string" ? source.title : "",
@@ -966,10 +1032,15 @@ var RHSearchWindow = {
           authorOverflow: authors.overflow,
           year: this.yearText(source.year),
           sourceLabels,
+          sourceIds,
           typeLabel:
             typeof source.typeLabel === "string" ? source.typeLabel : "",
           doi: typeof source.doi === "string" ? source.doi : "",
           existing: Boolean(source.existing),
+          // P2-T14 step 3: drawn as badges, never acted on. A flagged pair is
+          // two rows, two keys and two checkboxes; nothing here merges them.
+          duplicate: this.markerRef(source.duplicate),
+          linked: this.markerRef(source.linked),
         };
         row.filterText = this.filterText(row);
         return row;
@@ -1522,6 +1593,8 @@ var RHSearchWindow = {
       typeof this.host.listSources === "function"
         ? this.host.listSources() || []
         : [];
+    // Held for FR-2's notice (P2-T14), which follows the ticked set.
+    this.state.sources = sources;
     const selected = this.logic.initialSelection(
       sources.map((source) => source.id),
       (this.prefs && this.prefs.sources) || [],
@@ -1532,11 +1605,64 @@ var RHSearchWindow = {
       box.id = "rh-search-db-" + source.id;
       box.className = "rh-source";
       box.setAttribute("value", source.id);
-      box.setAttribute("data-l10n-id", source.displayNameKey);
+      // **No `data-l10n-id` on the checkbox** (P2-T14, owner's review row
+      // 142). Measured in Zotero 10.0.3 on 2026-10-15: every display-name
+      // message is a bare value, and Fluent writes a value into
+      // `textContent` — which on a XUL `<checkbox>` replaces the control's own
+      // check box and label with a text node, leaving `label` empty. The name
+      // is resolved below and set as `label`, which is what a checkbox paints.
       box.checked = selected.includes(source.id);
-      box.addEventListener("command", () => this.refreshSearchGate());
+      box.addEventListener("command", () => {
+        this.refreshSearchGate();
+        this.saveSources();
+      });
       row.appendChild(box);
     }
+    this.applySourceNames(sources);
+  },
+
+  /**
+   * Paint each database checkbox's display name (P2-T14, review row 142).
+   *
+   * The names come from the sources' own `displayNameKey`s, resolved through
+   * this window's `document.l10n` — the main-window bundle
+   * {@link addMainWindowBundle} linked — and set as each checkbox's `label`.
+   * A name that does not resolve falls back to the source's id, a registry
+   * token, which is the view model's fallback for the same names
+   * (`resolveSourceNames`); an empty checkbox is never left behind.
+   *
+   * @param {object[]} sources - the host's `listSources()`
+   * @returns {Promise<void>|undefined}
+   */
+  applySourceNames(sources) {
+    const paint = (values) => {
+      sources.forEach((source, at) => {
+        const box = this.el("rh-search-db-" + source.id);
+        const value = values[at];
+        if (box) {
+          box.setAttribute(
+            "label",
+            typeof value === "string" && value !== "" ? value : source.id,
+          );
+        }
+      });
+    };
+    const l10n = document.l10n;
+    if (
+      sources.length === 0 ||
+      !l10n ||
+      typeof l10n.formatMessages !== "function"
+    ) {
+      paint([]);
+      return undefined;
+    }
+    return l10n
+      .formatMessages(sources.map((source) => ({ id: source.displayNameKey })))
+      .then(
+        (messages) =>
+          paint((messages || []).map((message) => message && message.value)),
+        () => paint([]),
+      );
   },
 
   /**
@@ -1612,6 +1738,11 @@ var RHSearchWindow = {
     this.on(this.spec.yearsFrom, "command", () => this.onYearChanged());
     this.on(this.spec.yearsTo, "command", () => this.onYearChanged());
 
+    // FR-2's third scenario: the notice's link (P2-T14).
+    this.on(this.spec.keyRequest, "click", (event) =>
+      this.openKeyRequest(event),
+    );
+
     // docs/08 §4.6's two actions on the all-failed panel.
     this.on(this.spec.errorRetry, "command", () => this.search());
     this.on(this.spec.errorPreferences, "command", () =>
@@ -1674,7 +1805,89 @@ var RHSearchWindow = {
         message.setAttribute("data-l10n-id", gate.messageId);
       }
     }
+    this.refreshKeyNotice();
     return gate;
+  },
+
+  /**
+   * FR-2's third scenario (P2-T14): show the Semantic Scholar no-key notice
+   * while that source is ticked and the host says no key is present.
+   *
+   * Called from {@link refreshSearchGate}, which every checkbox's `command`
+   * already calls, so the notice follows the ticked set with no listener of
+   * its own. The link's `href` is set here from the descriptor rather than
+   * written into the markup, which may name no remote resource
+   * (`docs/01` §8.3).
+   *
+   * @returns {boolean} whether the notice is showing
+   */
+  refreshKeyNotice() {
+    const due = this.logic.keyNoticeSource(
+      this.state.sources,
+      this.selectedSourceIds(),
+    );
+    const notice = this.el(this.spec.keyNotice);
+    if (notice) {
+      notice.hidden = due === null;
+    }
+    const link = this.el(this.spec.keyRequest);
+    if (link) {
+      if (due !== null && typeof due.keyRequestUrl === "string") {
+        link.setAttribute("href", due.keyRequestUrl);
+        link.hidden = false;
+      } else {
+        link.removeAttribute("href");
+        link.hidden = true;
+      }
+    }
+    return due !== null;
+  },
+
+  /**
+   * Write the ticked set to the `sources` preference (P2-T14 step 1).
+   *
+   * `docs/07` §8.5 names these checkboxes as that preference's only control,
+   * and membership in it is each source's enable flag, so a user's choice
+   * outlives the window. Only a user's own toggle calls this — a checkbox's
+   * `command` — never `init()`, so opening the window writes nothing.
+   *
+   * @returns {boolean} whether the host took the write
+   */
+  saveSources() {
+    if (typeof this.host.saveSources !== "function") {
+      return false;
+    }
+    this.host.saveSources(this.selectedSourceIds());
+    return true;
+  },
+
+  /**
+   * Open the key-request page in the user's browser — the pane's own
+   * `rh-s2-request` mechanism (`addon/content/preferences.js`), because a
+   * link followed inside a chrome window would navigate the window itself.
+   *
+   * @param {object} [event]
+   */
+  openKeyRequest(event) {
+    if (event && typeof event.preventDefault === "function") {
+      event.preventDefault();
+    }
+    const link = this.el(this.spec.keyRequest);
+    const href = link ? link.getAttribute("href") : null;
+    try {
+      if (href && typeof Zotero !== "undefined" && Zotero.launchURL) {
+        Zotero.launchURL(href);
+      }
+    } catch (error) {
+      try {
+        Zotero.debug(
+          "[research-helper] could not open the key-request page: " +
+            String(error && error.name ? error.name : error),
+        );
+      } catch {
+        /* see settle() */
+      }
+    }
   },
 
   /** Apply {@link logic.importEnabled} to the dialog's accept button. */
@@ -1838,32 +2051,55 @@ var RHSearchWindow = {
     }
     this.clear(host);
     for (const line of lines) {
-      const row = this.createXUL("hbox");
-      row.id = this.spec.sourceStatus + "-" + String(line.sourceId);
-      // No class on the row or the name: `P1-T21` established that "a class
-      // name with no rule behind it is dead weight", and
-      // `addon/content/style/searchDialog.css` is `P1-T20`'s file and not in
-      // this card's `Files` list, so there is no rule to point at. The outcome
-      // travels as a data attribute instead, which is both the selector a
-      // stylesheet would use and what the integration spec reads.
-      row.setAttribute("data-rh-outcome", String(line.outcome));
-
-      const name = this.createXUL("description");
-      if (line.nameId) {
-        name.setAttribute("data-l10n-id", line.nameId);
-      }
-      row.appendChild(name);
-
-      const detail = this.createXUL("description");
-      // NFR-13: a failed row carries the stylesheet's ⚠ glyph *and* its colour
-      // *and* the words of the §8.3 row, never colour alone.
-      detail.className =
-        line.outcome === "failed" ? "rh-inline-warning" : "rh-hint";
-      this.applyRef(detail, line.detail);
-      row.appendChild(detail);
-
-      host.appendChild(row);
+      host.appendChild(this.buildStatusRow(line, this.spec.sourceStatus));
     }
+  },
+
+  /**
+   * One status row: the database's name, then its state, as two elements each
+   * carrying its own Fluent id (`docs/08` §10.3 — never a name plus a
+   * fragment). Shared by §4.6's per-database list and, since `P2-T14`, by the
+   * all-failed panel, whose lines now name the database they are about.
+   *
+   * @param {object} line - the view model's `SourceStatusLine`
+   * @param {string} idPrefix - the row id is `<prefix>-<sourceId>`
+   * @returns {object}
+   */
+  buildStatusRow(line, idPrefix) {
+    const row = this.createXUL("hbox");
+    row.id = idPrefix + "-" + String(line.sourceId);
+    // No class on the row or the name: `P1-T21` established that "a class
+    // name with no rule behind it is dead weight". The outcome travels as a
+    // data attribute instead, which is both the selector a stylesheet would
+    // use and what the integration spec reads.
+    row.setAttribute("data-rh-outcome", String(line.outcome));
+
+    const name = this.createXUL("description");
+    if (line.nameId) {
+      name.setAttribute("data-l10n-id", line.nameId);
+    }
+    row.appendChild(name);
+
+    // The role row's detail is an XHTML span (P2-T14): its message carries a
+    // `.title`, the hover sentence docs/08 §4.2 requires, and `title` on an
+    // XHTML element is what this window's `html-tooltip` displays.
+    const classes = this.spec.statusClass;
+    const role = line.outcome === "role";
+    const detail = role
+      ? this.createHTML("span")
+      : this.createXUL("description");
+    // NFR-13: a failed row carries the stylesheet's ⚠ glyph *and* its colour
+    // *and* the words of the §8.3 row, never colour alone. The ⊕ of a role row
+    // is likewise the stylesheet's, on its own class.
+    detail.className =
+      line.outcome === "failed"
+        ? classes.failed
+        : role
+          ? classes.role
+          : classes.other;
+    this.applyRef(detail, line.detail);
+    row.appendChild(detail);
+    return row;
   },
 
   /**
@@ -1933,11 +2169,20 @@ var RHSearchWindow = {
       this.applyRef(headline, error.headline);
     }
 
-    this.renderMessageList(
-      this.spec.built.errorLines,
-      (error && error.lines ? error.lines : []).map((line) => line.detail),
-      "rh-inline-warning",
-    );
+    // One row per failed database, naming it (P2-T14 step 5): the same row
+    // the per-database list draws, so "PubMed" sits beside its §8.3 message
+    // rather than being left for the message to mention or not.
+    const lines = error && error.lines ? error.lines : [];
+    const linesHost = this.el(this.spec.built.errorLines);
+    if (linesHost) {
+      this.clear(linesHost);
+      linesHost.hidden = lines.length === 0;
+      for (const line of lines) {
+        linesHost.appendChild(
+          this.buildStatusRow(line, this.spec.built.errorLines),
+        );
+      }
+    }
 
     const list = this.el(this.spec.built.errorDetailsList);
     const toggle = this.el(this.spec.built.errorDetailsToggle);
@@ -2322,9 +2567,10 @@ var RHSearchWindow = {
     const titleId = this.spec.row.titleIdPrefix + String(index);
 
     const tr = this.createHTML("tr");
-    tr.className = row.existing
-      ? classes.row + " " + classes.existingRow
-      : classes.row;
+    tr.className =
+      classes.row +
+      (row.existing ? " " + classes.existingRow : "") +
+      (row.duplicate ? " " + classes.duplicateRow : "");
     tr.setAttribute(this.spec.row.keyAttribute, row.key);
     tr.setAttribute("aria-labelledby", titleId);
 
@@ -2352,6 +2598,20 @@ var RHSearchWindow = {
     const titleCell = this.createHTML("td");
     titleCell.id = titleId;
     titleCell.className = "rh-col-title";
+    // P2-T14: the two review badges first, each its own span carrying its own
+    // message — the words, and a `.title` tooltip naming why — so Fluent's
+    // `textContent` write on one cannot remove another.
+    for (const [ref, className] of [
+      [row.duplicate, classes.duplicateBadge],
+      [row.linked, classes.linkedBadge],
+    ]) {
+      if (ref) {
+        const marker = this.createHTML("span");
+        marker.className = className;
+        this.applyRef(marker, ref);
+        titleCell.appendChild(marker);
+      }
+    }
     if (row.existing) {
       const badge = this.createHTML("span");
       badge.className = classes.badge;
@@ -2364,6 +2624,12 @@ var RHSearchWindow = {
       // Id and arguments together, never separately — see applyYearRange.
       text.setAttribute("data-l10n-args", JSON.stringify({ title: row.title }));
       text.setAttribute("data-l10n-id", this.l10n.rowExisting);
+      titleCell.appendChild(text);
+    } else if (row.duplicate || row.linked) {
+      // A paper's title is data, not a translatable string — in a span of its
+      // own here, because `textContent` on the cell would remove the badges.
+      const text = this.createHTML("span");
+      text.textContent = row.title;
       titleCell.appendChild(text);
     } else {
       // A paper's title is data, not a translatable string.
@@ -2396,12 +2662,17 @@ var RHSearchWindow = {
     // over "Crossref". Already-localized display names from the host.
     const sourceCell = this.createHTML("td");
     sourceCell.className = "rh-col-source";
-    for (const label of row.sourceLabels) {
+    // P2-T14 step 2: one chip per contributing source, from the merged work's
+    // `seenIn`, so a work three databases returned shows three.
+    row.sourceLabels.forEach((label, at) => {
       const line = this.createHTML("div");
       line.className = classes.sourceLine;
+      if (row.sourceIds[at] !== undefined) {
+        line.setAttribute("data-rh-source", row.sourceIds[at]);
+      }
       line.textContent = label;
       sourceCell.appendChild(line);
-    }
+    });
     tr.appendChild(sourceCell);
 
     // 6. Type — likewise an already-localized label from the host. No bundle
