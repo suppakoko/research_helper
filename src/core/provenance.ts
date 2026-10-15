@@ -39,7 +39,12 @@
  * | the JSON export | {@link serializeProvenance} | `JSON.stringify` of the whole record — complete by construction |
  * | the standalone note | `src/zotero/notes.ts` | a hand-written HTML rendering of selected fields — **not** complete by construction |
  *
- * `P2-T17` adds the table and inherits this object unchanged.
+ * `P2-T17` adds the table and inherits this object unchanged. **Since
+ * `P2-T17` (2026-10-15) the row exists**: `src/zotero/db.ts` stores every
+ * run's record through {@link ProvenanceStore}, after the note, and FR-12's
+ * re-run reads it back through {@link toSearchParams} (section 4 below). The
+ * export still serialises the in-memory record the window holds — the same
+ * object the row was written from.
  *
  * ## Redaction is a gate, not a convention
  *
@@ -452,4 +457,281 @@ export async function exportJson(
   files: ProvenanceFileWriter,
 ): Promise<void> {
   await files.writeTextFile(path, serializeProvenance(provenance));
+}
+
+// ---------------------------------------------------------------------------
+// 4. The stored record, read back — FR-12's re-run (`P2-T17`)
+//
+// `docs/07` §5.3's "Where it lives": the authoritative copy is the SQLite
+// `search_provenance` row, "indexed by target collection so FR-12 can find the
+// record for a collection", and the note is a projection, "never the source of
+// truth". So the re-run reads the row, through the port below, and never the
+// note. `docs/07` §2.3: `core/` names no platform API, so the port is declared
+// here and `src/zotero/db.ts` implements it over `Zotero.DBConnection`.
+// ---------------------------------------------------------------------------
+
+/**
+ * The plugin-owned store of {@link SearchProvenance} rows, as a port
+ * (`docs/07` §2.3; §8.2 trap 3 is why it is a port: `Zotero.DBConnection`
+ * carries no stability guarantee).
+ *
+ * Exactly the two operations `P2-T17` step 1 names. Phase 3 widens the store
+ * (`P3-T15`, `P3-T29`); nothing here anticipates them.
+ */
+export interface ProvenanceStore {
+  /**
+   * Insert one run's row. **Never an update**: each run is "written once, when
+   * the run finishes or is cancelled" (§5.3), so a second write with the same
+   * `runId` is an error rather than an overwrite, and a re-run's record — which
+   * has its own `runId` — leaves the original row untouched.
+   *
+   * The implementation puts the record through {@link redactSearchProvenance}
+   * again, so a row can hold only what the gate lets through.
+   *
+   * @param record - the run's record
+   * @param libraryId - `search_provenance.library_id`
+   * @param collectionKey - `search_provenance.collection_key`; `undefined` is
+   *   stored as `NULL`
+   * @param noteKey - the FR-8 note's key, so the projection stays findable;
+   *   `undefined` (no note was written) is stored as `NULL`
+   */
+  putProvenance(
+    record: SearchProvenance,
+    libraryId: number,
+    collectionKey: string | undefined,
+    noteKey: string | undefined,
+  ): Promise<void>;
+  /**
+   * The most recent row for one collection — the greatest `finished_at` — or
+   * `undefined` when the collection has none.
+   */
+  findProvenanceByCollection(
+    libraryId: number,
+    collectionKey: string,
+  ): Promise<SearchProvenance | undefined>;
+}
+
+/**
+ * FR-3's "All years", as the re-run hands it to the window.
+ *
+ * A record stores the choice as `dateFilter: "none"` (§5.3: "`"none"` when the
+ * user chose 'All years'"); the window's parameter object names the choice the
+ * user made rather than the absence of a filter.
+ */
+export const RERUN_ALL_YEARS = "all-years";
+
+/** The date window a re-run starts from: two ISO bounds, or All years. */
+export type RerunDateWindow =
+  { readonly fromIso: string; readonly toIso: string } | typeof RERUN_ALL_YEARS;
+
+/**
+ * The search window's parameters, re-hydrated from a stored record
+ * (`P2-T17` step 3). §5.3's fields only — `userQuery`, the source ids, the
+ * requested limit and the date window — because "nothing else is a source of
+ * re-run parameters". `transmittedQuery` and `transmittedUrl` are not here: a
+ * stored URL had its keys removed before it was stored (`docs/09` §2.1), so it
+ * is not a runnable URL, and every request is rebuilt from `userQuery`.
+ */
+export interface SearchParams {
+  /** §5.3's `userQuery`, as stored — already through the redaction gate. */
+  readonly userQuery: string;
+  /** `perSource[].sourceId`, de-duplicated, in the record's order. */
+  readonly sourceIds: readonly SourceId[];
+  /**
+   * `perSource[].requestedLimit` when every entry agrees, which is every
+   * record this plugin's window writes (one "Max per database" for the run).
+   * `undefined` when the entries disagree or there are none: the window then
+   * keeps its own seed rather than this function choosing one of several.
+   */
+  readonly requestedLimit: number | undefined;
+  readonly dateWindow: RerunDateWindow;
+}
+
+/** What {@link toSearchParams} is asked to do with the date window. */
+export interface ToSearchParamsOptions {
+  /**
+   * `docs/08` §4.6 rule 2's "advance to today": move **only** the upper bound
+   * to today. The lower bound is kept, and §4.2's calendar-year window is
+   * **not** recomputed — that would move the lower bound too "and silently
+   * change what is being compared".
+   */
+  readonly advanceDateWindow: boolean;
+  /** Epoch milliseconds — `src/core/clock.ts`'s `Clock.now()`. */
+  readonly now: number;
+}
+
+/**
+ * Today's date as `YYYY-MM-DD`, in the local calendar.
+ *
+ * Local rather than UTC because the window's year menulists and `docs/08`
+ * §4.2's "Date defaults" read the local calendar (`new Date().getFullYear()`),
+ * and a re-run advanced at 08:00 in Seoul must not stop at yesterday's UTC
+ * date.
+ */
+function localIsoDate(now: number): string {
+  const date = new Date(now);
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return `${String(date.getFullYear())}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate(),
+  )}`;
+}
+
+/**
+ * A stored {@link SearchProvenance} as the search window's parameter object
+ * (`P2-T17` step 3; FR-12's first scenario).
+ *
+ * Pure: the record and the clock reading in, the parameters out.
+ *
+ * - `dateFilter: "none"` re-hydrates as {@link RERUN_ALL_YEARS} (FR-3), with or
+ *   without `advanceDateWindow` — an unbounded window has no upper bound to
+ *   move.
+ * - With `advanceDateWindow`, `fromIso` is kept **verbatim** and `toIso`
+ *   becomes today. Nothing else changes.
+ *
+ * @param record - a stored record, as {@link ProvenanceStore} returned it
+ * @param options - the date choice and the clock reading
+ * @returns the window's parameters
+ */
+export function toSearchParams(
+  record: SearchProvenance,
+  options: ToSearchParamsOptions,
+): SearchParams {
+  const sourceIds: SourceId[] = [];
+  for (const entry of record.perSource) {
+    if (!sourceIds.includes(entry.sourceId)) sourceIds.push(entry.sourceId);
+  }
+  const limits = new Set(record.perSource.map((entry) => entry.requestedLimit));
+  const [only] = [...limits];
+  const filter = record.dateFilter;
+  const dateWindow: RerunDateWindow =
+    filter === "none"
+      ? RERUN_ALL_YEARS
+      : {
+          fromIso: filter.fromIso,
+          toIso: options.advanceDateWindow
+            ? localIsoDate(options.now)
+            : filter.toIso,
+        };
+  return {
+    userQuery: record.userQuery,
+    sourceIds,
+    requestedLimit: limits.size === 1 ? only : undefined,
+    dateWindow,
+  };
+}
+
+/**
+ * A stored row's `json` column, parsed back into a record — or `undefined` when
+ * it is not one this build can read.
+ *
+ * The check is deliberately narrow: `schemaVersion` must be §5.3's literal `1`
+ * and the members a re-run reads must have their declared types. A row written
+ * by a later schema is refused rather than half-read, because a re-run seeded
+ * from a misread record would silently change what is searched.
+ *
+ * @param json - `search_provenance.json`
+ * @returns the record, or `undefined`
+ */
+export function parseStoredProvenance(
+  json: string,
+): SearchProvenance | undefined {
+  let value: unknown;
+  try {
+    value = JSON.parse(json);
+  } catch {
+    return undefined;
+  }
+  if (typeof value !== "object" || value === null) return undefined;
+  const candidate = value as Partial<Record<keyof SearchProvenance, unknown>>;
+  const filter = candidate.dateFilter;
+  const filterOk =
+    filter === "none" ||
+    (typeof filter === "object" &&
+      filter !== null &&
+      typeof (filter as { fromIso?: unknown }).fromIso === "string" &&
+      typeof (filter as { toIso?: unknown }).toIso === "string");
+  if (
+    candidate.schemaVersion !== PROVENANCE_SCHEMA_VERSION ||
+    typeof candidate.runId !== "string" ||
+    typeof candidate.userQuery !== "string" ||
+    !Array.isArray(candidate.perSource) ||
+    !filterOk
+  ) {
+    return undefined;
+  }
+  return value as SearchProvenance;
+}
+
+/**
+ * A {@link ProvenanceStore} that also answers "does this collection have a
+ * row?" **synchronously** from what it has already seen.
+ *
+ * ### Why a synchronous answer is needed, measured 2026-10-15
+ *
+ * `docs/08` §2.4 registers the re-run entry with
+ * `onShowing: … context.setVisible(RH.provenance.hasRunForCollection(…))` —
+ * a synchronous call. `Zotero.MenuManager`'s `onShowing` is typed
+ * `(event, context) => void` and is not awaited, and a SQLite read is
+ * asynchronous. Read out of the installed Zotero 10.0.3's `menuManager.js`
+ * (`_updateMenuEvents`): a submenu's children are built on the submenu
+ * popup's own `popupshowing`, each child's `onShowing` runs synchronously
+ * then, and `context.setVisible(v)` sets `hidden` on the live element through a
+ * `WeakRef` — so a *later* call still reaches the open menu.
+ *
+ * So the menu reads {@link ProvenanceIndex.known} synchronously, and when the
+ * answer is not yet known it hides the entry and asks
+ * {@link ProvenanceIndex.hasRun}, whose answer is applied when it arrives.
+ *
+ * ### Why the cache cannot go stale
+ *
+ * The plugin never deletes or rewrites a row (§5.3: "written once"), so a
+ * `true` stays true; and every row the plugin writes goes through
+ * {@link ProvenanceStore.putProvenance} on *this* object, which turns a cached
+ * `false` into `true`. A row written by anything else would need a second
+ * connection to the file, which Zotero's exclusive lock on the plugin's
+ * connection refuses.
+ */
+export interface ProvenanceIndex extends ProvenanceStore {
+  /** `true` / `false` when known, `undefined` when not yet asked. */
+  known(libraryId: number, collectionKey: string): boolean | undefined;
+  /** Ask the store, cache the answer, and resolve to it. */
+  hasRun(libraryId: number, collectionKey: string): Promise<boolean>;
+}
+
+/**
+ * Wrap a store in {@link ProvenanceIndex}'s cache.
+ *
+ * @param store - the store every read and write goes through
+ * @returns the store plus the synchronous answer
+ */
+export function createProvenanceIndex(store: ProvenanceStore): ProvenanceIndex {
+  const answers = new Map<string, boolean>();
+  const keyOf = (libraryId: number, collectionKey: string): string =>
+    `${String(libraryId)}/${collectionKey}`;
+  const find = async (
+    libraryId: number,
+    collectionKey: string,
+  ): Promise<SearchProvenance | undefined> => {
+    const found = await store.findProvenanceByCollection(
+      libraryId,
+      collectionKey,
+    );
+    answers.set(keyOf(libraryId, collectionKey), found !== undefined);
+    return found;
+  };
+  return {
+    async putProvenance(record, libraryId, collectionKey, noteKey) {
+      await store.putProvenance(record, libraryId, collectionKey, noteKey);
+      if (collectionKey !== undefined) {
+        answers.set(keyOf(libraryId, collectionKey), true);
+      }
+    },
+    findProvenanceByCollection: find,
+    known(libraryId, collectionKey) {
+      return answers.get(keyOf(libraryId, collectionKey));
+    },
+    async hasRun(libraryId, collectionKey) {
+      return (await find(libraryId, collectionKey)) !== undefined;
+    },
+  };
 }

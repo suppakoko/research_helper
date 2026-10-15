@@ -3757,6 +3757,13 @@ Shared conventions: every pipeline starts in `Queued` and ends in one of `Succee
 
 ### 12.1 Search → import (Feature 1)
 
+> **Measured 2026-10-15 (`P2-T17`): an import of previewed works records no sources.** When the window imports, the
+> pipeline is handed the works the preview already fetched, so `Planning` asks no source and the run's `perSource` is
+> empty — every record the window wrote before this date had `perSource: []` (FR-8's per-source section was blank, and a
+> re-run had no sources to read). The view model now carries the preview's per-source reports into the import's record
+> (`previewedReports` in `src/ui/viewModels/searchImportViewModel.ts`), as it already carries its merge decisions
+> (`P2-T34`). Records written earlier keep the empty list.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Queued

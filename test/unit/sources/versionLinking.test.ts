@@ -37,6 +37,7 @@ import { describe, expect, it } from "vitest";
 import { createManualClock } from "../../../src/core/clock";
 import type { CanonicalWork, WorkType } from "../../../src/model/canonicalWork";
 import {
+  normalizeArxivId,
   normalizeDoi,
   type Doi,
   type ExternalIds,
@@ -61,6 +62,7 @@ import { createEuropePmcRecordMapper } from "../../../src/sources/europepmc/mapp
 import {
   compareRecords,
   dedupeRecords,
+  dedupeRecordsAsync,
   TIER_CONFIDENCE,
 } from "../../../src/sources/shared/dedupe";
 import { parseExtra } from "../../../src/zotero/extraField";
@@ -518,6 +520,94 @@ describe("Tier 7 and §11.5 rule 1: link, never match", () => {
     });
     const result = dedupeAndMerge([a, b], AT);
     expect(only(result.links, "one link").preprintWorkKey).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4b. plan/00 §6 item 200 (owner, 2026-10-15): the identifier tiers
+// ---------------------------------------------------------------------------
+
+describe("item 200: a shared arXiv id across conflicting DOIs and a version naming is a link", () => {
+  const JOURNAL_DOI = "10.1038/s41592-019-0686-2";
+
+  /** `P2-T11`'s measured counterpart: the journal DOI *and* the preprint's arXiv id. */
+  function semanticScholarRecord(): SourceRecord {
+    const arxivId = normalizeArxivId("1907.10121");
+    if (arxivId === null) throw new Error("the arXiv id must normalize");
+    return synthetic({
+      source: "semanticscholar",
+      nativeId: "s2-item200",
+      title:
+        "SciPy 1.0: fundamental algorithms for scientific computing in Python",
+      year: 2020,
+      ids: { doi: doi(JOURNAL_DOI), arxivId },
+    });
+  }
+
+  it("the measured arXiv / Semantic Scholar pair gives 'link', not 'match' at the arxiv tier", () => {
+    const entry = arxivEntry({ journalDoi: JOURNAL_DOI });
+    const s2 = semanticScholarRecord();
+    for (const d of [compareRecords(entry, s2), compareRecords(s2, entry)]) {
+      expect(d.verdict).toBe("link");
+      expect(d.tier).toBe("version-link");
+      expect(d.confidence).toBe(TIER_CONFIDENCE.versionLink);
+      expect(d.evidence["arxivId"]).toBe("1907.10121");
+      expect(d.evidence["conflictingIds"]).toBe("doi");
+    }
+    const result = dedupeAndMerge([entry, s2], AT);
+    expect(result.works).toHaveLength(2);
+    expect(only(result.links, "one link").decision.verdict).toBe("link");
+  });
+
+  it("the sync and async drivers agree on the measured pair: two groups, one link", async () => {
+    const records = [
+      arxivEntry({ journalDoi: JOURNAL_DOI }),
+      semanticScholarRecord(),
+    ];
+    const sync = dedupeRecords(records);
+    expect(sync.groups).toHaveLength(2);
+    expect(sync.links).toHaveLength(1);
+    expect(await dedupeRecordsAsync(records)).toEqual(sync);
+  });
+
+  it("the same pair without the version naming (<arxiv:doi>) is still a match at the arxiv tier", async () => {
+    const entry = arxivEntry({ journalDoi: undefined });
+    expect(entry.work.relatedVersionIds).toBeUndefined();
+    const s2 = semanticScholarRecord();
+    const d = compareRecords(entry, s2);
+    expect(d.verdict).toBe("match");
+    expect(d.tier).toBe("arxiv");
+    const sync = dedupeRecords([entry, s2]);
+    expect(sync.groups).toHaveLength(1);
+    expect(sync.links).toEqual([]);
+    expect(await dedupeRecordsAsync([entry, s2])).toEqual(sync);
+  });
+
+  it("a same-arXiv-id pair with equal DOIs is still a match, even when one names the other", () => {
+    // Synthetic: a second record of the journal version, carrying the same
+    // DOI and arXiv id, whose relatedVersionIds names the Semantic Scholar
+    // record's PMID — a version naming with nothing in conflict.
+    const s2 = semanticScholarRecord();
+    const pmid = "31992000" as NonNullable<ExternalIds["pmid"]>;
+    const withPmid = synthetic({
+      source: "semanticscholar",
+      nativeId: "s2-item200",
+      title: s2.work.title,
+      year: 2020,
+      ids: { ...s2.work.ids, pmid },
+    });
+    const naming = synthetic({
+      source: "crossref",
+      nativeId: JOURNAL_DOI,
+      title: s2.work.title,
+      year: 2020,
+      ids: s2.work.ids,
+      related: { pmid },
+    });
+    const d = compareRecords(naming, withPmid);
+    expect(d.verdict).toBe("match");
+    expect(d.tier).toBe("doi");
+    expect(dedupeRecords([naming, withPmid]).groups).toHaveLength(1);
   });
 });
 

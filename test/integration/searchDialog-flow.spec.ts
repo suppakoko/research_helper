@@ -1794,6 +1794,10 @@ const VIEW_MODEL_DEPENDENCIES: Record<keyof SearchImportViewModelDeps, true> = {
   isExisting: true,
   writeProvenanceNote: true,
   provenanceFiles: true,
+  // `P2-T17`: FR-12's search_provenance store and the collection lookup a
+  // re-run is seeded through.
+  provenanceStore: true,
+  findCollection: true,
 };
 
 /**
@@ -2479,17 +2483,27 @@ describe("P1-T35: the host the composition root published", () => {
     if (!detail) {
       assert.fail("bioRxiv's row has no role detail");
     }
+    // Locale-independent (2026-10-16): the role row's Korean is owner-reviewed
+    // and live, and this window runs on the `ko-KR` chain `l10n.spec.ts`
+    // leaves behind, so the expected text is the bundle's own answer rather
+    // than the English literal.
+    const expectedText = await resolved({
+      id: "research-helper-search-source-role",
+      args: undefined,
+    });
+    const expectedHover = await resolvedAttribute(
+      "research-helper-search-source-role",
+      "title",
+    );
     await waitUntil(
-      () => (detail.textContent ?? "").includes("ID lookup"),
+      () => (detail.textContent ?? "").trim() === expectedText.trim(),
       `Fluent to render the role row (it reads "${detail.textContent ?? ""}")`,
     );
-    assert.strictEqual(
-      (detail.textContent ?? "").trim(),
-      "ID lookup · preprint matching",
-    );
     const hover = detail.getAttribute("title") ?? "";
-    assert.include(hover, "Europe PMC (SRC:PPR)", "§4.2's hover sentence");
-    assert.include(hover, "Crossref (type:posted-content)");
+    assert.strictEqual(hover, expectedHover, "§4.2's hover sentence");
+    // Query syntax is never translated, so these hold in every locale.
+    assert.include(hover, "SRC:PPR");
+    assert.include(hover, "type:posted-content");
     assert.isFalse(
       /\d+ results?|Searching/.test(row.textContent ?? ""),
       "never a count and never a spinner",

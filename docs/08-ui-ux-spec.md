@@ -449,6 +449,14 @@ export function unregisterMenus() {
 }
 ```
 
+> **Measured 2026-10-15 in Zotero 10.0.3 (`P2-T17`): `hasRunForCollection` cannot be synchronous.** The answer is a
+> SQLite read, which is asynchronous, and `menuManager.js` does not await `onShowing`. Submenu entries are built when
+> the submenu opens, and `setVisible` reaches the live element through a weak reference, so a late call still lands.
+> The shipped entry therefore reads a cache (`ProvenanceIndex` in `src/core/provenance.ts`): the parent submenu starts
+> the lookup early, and a late answer is applied only while the same single collection is still selected. The
+> separator §2.5 draws above the entry divides the AI jobs from the window-opening entries; none of those jobs is
+> registered yet, so no separator ships until one is.
+
 Register in `startup()` (app-scoped, not per-window) and unregister in `shutdown()`. Zotero 10 also removes plugin menu elements from all windows automatically when the plugin unregisters — the `_unregisterByPluginID` implementation in `menuManager.js` walks `Zotero.getMainWindows()` and every `zotero:reader` window and removes matching `.zotero-custom-menu-item` elements.
 
 ### 2.4.1 Why we do not hand-inject `<menuitem>` elements
@@ -1178,6 +1186,13 @@ Four rules this state must hold, all of them FR-12's:
 4. **Import reports "already present: N"** rather than counting duplicates as imports, using the same DOI/PMID dedup pass §4.4 already runs. The status line reads `Imported 9 · Already present 128 · 1 failed`.
 
 A collection with no provenance row cannot reach this state: §2.5 hides the menu entry rather than opening a window with nothing to pre-fill.
+
+> **Measured 2026-10-15 (`P2-T17`): "already present" means *in the library*, not *in this collection*.** The importer
+> reports only "matched an existing item in the library" (`linkedExisting`) and "skipped as a duplicate" (`skipped`, which
+> also counts a `workKey` repeated inside one run); it cannot tell whether a matched item was already in the target
+> collection. The shipped summary counts `linkedExisting + skipped`, and the banner says "in your library". A true
+> "already in this collection" count needs a per-record write report from the importer. The banner does not claim the
+> client-side filters were pre-filled: §5.3's record has no field for them.
 
 **Searching**
 

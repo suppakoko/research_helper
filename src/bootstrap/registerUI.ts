@@ -112,9 +112,22 @@ import {
 import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
 import { provenanceFileWriter, writeProvenanceNote } from "../zotero/notes";
 import {
+  createProvenanceIndex,
+  type ProvenanceIndex,
+  type ProvenanceStore,
+} from "../core/provenance";
+import {
+  createProvenanceStore,
+  openPluginDatabase,
+  pluginDatabasePath,
+  type SqlConnection,
+} from "../zotero/db";
+import { runMigrations } from "./migrations";
+import {
   COLLECTION_MENU_DESCRIPTION,
   collectionMenuOptions,
   withSearchImportEntry,
+  type CollectionRunLookup,
   type SearchMenuCommands,
 } from "../ui/menus/registerMenus";
 import {
@@ -166,7 +179,155 @@ export type WindowRegistration = (
 const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
   openSearchWindow,
   onError: reportError,
+  // FR-12's "Re-run This Search…" (`P2-T17`), answered from the plugin
+  // database once {@link openProvenanceStore} has opened it.
+  provenance: {
+    hasRunForCollection: (collectionID) => knownRun(collectionID),
+    lookupRunForCollection: (collectionID) => lookupRun(collectionID),
+  } satisfies CollectionRunLookup,
 };
+
+// ---------------------------------------------------------------------------
+// FR-12's provenance store (`P2-T17`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The plugin database's lifecycle state, held for the menu and the view model.
+ *
+ * `ready` is the startup open-and-migrate, **not awaited by startup**:
+ * `docs/10` NFR-10 allows the plugin 200 ms of startup and `P1-T23`'s
+ * measurement already runs close to it, so the SQLite open runs alongside the
+ * rest of startup and everything that needs the store awaits `ready` instead.
+ * It resolves to `undefined` — never rejects — when the database cannot be
+ * opened or migrated, which is `P2-T17`'s Notes' degradation: "Re-run This
+ * Search…" is absent, never broken.
+ */
+const provenanceState: {
+  index: ProvenanceIndex | undefined;
+  ready: Promise<ProvenanceIndex | undefined> | undefined;
+} = { index: undefined, ready: undefined };
+
+/**
+ * `docs/08` §2.4's `hasRunForCollection`, synchronously, over the index: the
+ * cached answer; `undefined` while it is not known yet — including while the
+ * database is still opening; `false` when no database was ever started or the
+ * id names no collection.
+ */
+function knownRun(collectionID: number): boolean | undefined {
+  const ref = addon.platform.collectionById(collectionID);
+  if (ref === undefined) return false;
+  const index = provenanceState.index;
+  if (index === undefined) {
+    return provenanceState.ready === undefined ? false : undefined;
+  }
+  return index.known(ref.libraryId, ref.key);
+}
+
+/** The asynchronous half: wait for the database, ask it, cache the answer. */
+async function lookupRun(collectionID: number): Promise<boolean> {
+  const ref = addon.platform.collectionById(collectionID);
+  const index = await provenanceState.ready;
+  if (index === undefined || ref === undefined) return false;
+  return index.hasRun(ref.libraryId, ref.key);
+}
+
+/**
+ * The view model's `provenanceStore`, bound before the database has finished
+ * opening: every call waits for {@link provenanceState}'s `ready`.
+ *
+ * A write with no database throws, so the view model logs the missing row
+ * rather than believing it was stored; a read with no database finds nothing,
+ * so the window opens unseeded.
+ */
+const DEFERRED_PROVENANCE_STORE: ProvenanceStore = {
+  async putProvenance(record, libraryId, collectionKey, noteKey) {
+    const index = await provenanceState.ready;
+    if (index === undefined) {
+      throw new Error(
+        "[research-helper] the plugin database is not available, so the " +
+          "run's search_provenance row cannot be written.",
+      );
+    }
+    await index.putProvenance(record, libraryId, collectionKey, noteKey);
+  },
+  async findProvenanceByCollection(libraryId, collectionKey) {
+    const index = await provenanceState.ready;
+    return index?.findProvenanceByCollection(libraryId, collectionKey);
+  },
+};
+
+/**
+ * Open the plugin database, bring it to the current schema, and build FR-12's
+ * store over it — and close the connection again on shutdown (`P2-T17`).
+ *
+ * `docs/07` §8.4: the file is `<Zotero.DataDirectory.dir>/research-helper.sqlite`,
+ * resolved by `Zotero.DBConnection` from the name, never a hard-coded path and
+ * never Zotero's own `zotero.sqlite`.
+ *
+ * **The close is not optional.** Zotero opens the file with
+ * `PRAGMA locking_mode=EXCLUSIVE` (read out of 10.0.3's `db.js`), so a
+ * connection left open across a disable/enable cycle would hold the lock
+ * against the fresh instance's own connection. `closeDatabase(true)` checkpoints
+ * the WAL and refuses any later re-open of the dead instance's object.
+ *
+ * Teardown waits for an open that is still in flight, so a shutdown during
+ * startup cannot leave a connection behind it.
+ */
+async function openProvenanceStore(
+  scope: Scope,
+  logger: Logger,
+): Promise<void> {
+  // Captured once, for the reason {@link publishServiceGraph} gives.
+  const api = addon.api;
+  let database: SqlConnection | undefined;
+  await scope.use({
+    description:
+      "the plugin database (research-helper.sqlite) and its provenance store",
+    register: () => {
+      const ready = (async (): Promise<ProvenanceIndex | undefined> => {
+        try {
+          database = openPluginDatabase();
+          const outcome = await runMigrations(database);
+          const index = createProvenanceIndex(createProvenanceStore(database));
+          provenanceState.index = index;
+          api.provenance = {
+            index,
+            database,
+            path: pluginDatabasePath(),
+            schemaVersion: outcome.to,
+          };
+          logger.info("the plugin database is open", {
+            schemaFrom: outcome.from,
+            schemaTo: outcome.to,
+          });
+          return index;
+        } catch (error) {
+          logger.error(
+            "the plugin database could not be opened or migrated; " +
+              "Re-run This Search… stays hidden until the next start",
+            { reason: error instanceof Error ? error.name : typeof error },
+          );
+          const opened = database;
+          database = undefined;
+          await opened?.closeDatabase(true).catch(() => undefined);
+          return undefined;
+        }
+      })();
+      provenanceState.ready = ready;
+      // Wrapped, so `scope.use` does not await the open: startup goes on.
+      return { ready };
+    },
+    unregister: async ({ ready }) => {
+      await ready;
+      delete api.provenance;
+      provenanceState.index = undefined;
+      provenanceState.ready = undefined;
+      const opened = database;
+      database = undefined;
+      await opened?.closeDatabase(true);
+    },
+  });
+}
 
 /**
  * Registered in `startup`, torn down in `shutdown`.
@@ -438,6 +599,17 @@ function searchWindowDeps(
     // serialisation and the one redaction gate stay in `core/` and the platform
     // contributes `Zotero.File.putContentsAsync` and nothing else.
     provenanceFiles: provenanceFileWriter(),
+    // FR-12 (`P2-T17`): the search_provenance store, which waits for the
+    // database {@link openProvenanceStore} opens, and the collection lookup a
+    // re-run is seeded through — `Zotero.Collections.get`, read by the one file
+    // allowed to name it (`src/addon.ts`).
+    provenanceStore: DEFERRED_PROVENANCE_STORE,
+    findCollection: (collectionID) => {
+      const ref = addon.platform.collectionById(collectionID);
+      return ref === undefined
+        ? undefined
+        : { libraryId: ref.libraryId, collectionKey: ref.key, name: ref.name };
+    },
   };
 }
 
@@ -720,6 +892,13 @@ export async function registerUI(scope: Scope): Promise<void> {
   });
 
   await publishServiceGraph(scope, graph);
+  // Before the host and the menus that read it (`P2-T17`), so teardown — last
+  // in, first out — removes both before the connection closes. The open itself
+  // runs in the background; see {@link provenanceState}.
+  await openProvenanceStore(
+    scope,
+    graph.logger.child({ surface: "provenanceStore" }),
+  );
   await publishSearchWindowHost(scope, graph);
   // Before `APP_REGISTRATIONS`, for the same reason the services are: the
   // pane registration below can make a `zotero:pref` window reload and load

@@ -53,9 +53,11 @@ import type { SerializedError } from "../../../src/core/errors";
 import type { CancellationToken } from "../../../src/core/jobQueue/cancellation";
 import type { ProgressSnapshot } from "../../../src/core/jobQueue/progress";
 import { createLogger } from "../../../src/core/logger";
-import type {
-  MergeDecision,
-  SearchProvenance,
+import {
+  toSearchParams,
+  type MergeDecision,
+  type ProvenanceStore,
+  type SearchProvenance,
 } from "../../../src/core/provenance";
 import type {
   Author,
@@ -80,6 +82,7 @@ import type {
 import {
   buildProvenance,
   createSearchImportViewModel,
+  importSummary,
   errorDetails,
   errorView,
   everySearchFailed,
@@ -97,6 +100,7 @@ import {
   KEY_NOTICE_SOURCE_ID,
   UNRENDERABLE_ERROR_ROWS,
   type CollectionDescriptor,
+  type RerunCollection,
   type KeyStatus,
   type SearchResultRow,
   type MessageRef,
@@ -382,6 +386,8 @@ function harness(options: {
   readonly isExisting?: (item: SourceRecord) => boolean;
   /** FR-2's third scenario's port (`P2-T14`). Omitted, the port is unbound. */
   readonly keyStatus?: () => KeyStatus;
+  /** Further ports, bound as given (`P2-T17`: the store and the lookup). */
+  readonly extra?: Partial<SearchImportViewModelDeps>;
 }): Harness {
   const states: SearchViewState[] = [];
   const lines: string[] = [];
@@ -477,6 +483,7 @@ function harness(options: {
       : { listCollections: () => collections }),
     ...(isExisting === undefined ? {} : { isExisting }),
     ...(keyStatus === undefined ? {} : { semanticScholarKeyStatus: keyStatus }),
+    ...options.extra,
   };
 
   const model = createSearchImportViewModel(deps);
@@ -2516,5 +2523,423 @@ describe("P2-T14 — the window's ticked set reaches the sources preference (ste
     });
     model.host.saveSources(["pubmed", "toString", "biorxiv", "openalex-ish"]);
     expect(saved).toStrictEqual([["pubmed", "biorxiv"]]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-T17 — FR-12's re-run: the row after the note, the seed, the summary
+// ---------------------------------------------------------------------------
+
+/** One `putProvenance` call, as the recording store saw it. */
+interface StoredRow {
+  readonly record: SearchProvenance;
+  readonly libraryId: number;
+  readonly collectionKey: string | undefined;
+  readonly noteKey: string | undefined;
+}
+
+/**
+ * A `ProvenanceStore` that records every write — and, through `events`, the
+ * order of note and row — and answers reads from what it holds, latest last.
+ */
+function recordingStore(events: string[] = []): ProvenanceStore & {
+  readonly rows: StoredRow[];
+} {
+  const rows: StoredRow[] = [];
+  return {
+    rows,
+    putProvenance(record, libraryId, collectionKey, noteKey) {
+      events.push(`row:${noteKey ?? "none"}`);
+      rows.push({ record, libraryId, collectionKey, noteKey });
+      return Promise.resolve();
+    },
+    findProvenanceByCollection(libraryId, collectionKey) {
+      const found = rows.filter(
+        (row) =>
+          row.libraryId === libraryId && row.collectionKey === collectionKey,
+      );
+      return Promise.resolve(found[found.length - 1]?.record);
+    },
+  };
+}
+
+/** The collection the menu was invoked on, as the composition root finds it. */
+const RERUN_COLLECTION: RerunCollection = {
+  libraryId: 1,
+  collectionKey: "AAAA1111",
+  name: "CRISPR delivery / 2026 screen",
+};
+
+/** A stored record whose window predates `currentYear − 2` (§4.6 rule 2). */
+const STORED: SearchProvenance = {
+  schemaVersion: 1,
+  runId: "1700000000000-1",
+  pluginVersion: PLUGIN_VERSION,
+  zoteroVersion: ZOTERO_VERSION,
+  startedAt: "2026-03-14T09:00:00.000Z",
+  finishedAt: "2026-03-14T09:00:30.000Z",
+  userQuery: "lipid nanoparticle CRISPR delivery",
+  dateFilter: { fromIso: "2019-01-01", toIso: "2021-12-31" },
+  targetLibraryId: 1,
+  targetCollectionKey: "AAAA1111",
+  perSource: [
+    {
+      sourceId: "pubmed",
+      endpointBaseUrl: "",
+      transmittedQuery: "term=x",
+      transmittedUrl: "",
+      dateFilterApplied: "server",
+      requestedLimit: 40,
+      rawHitCount: undefined,
+      recordsRetrieved: 40,
+      recordsDeduplicatedAway: 0,
+      recordsImported: 40,
+      error: undefined,
+      sourceExtras: undefined,
+    },
+  ],
+  totals: { retrieved: 142, deduplicatedAway: 0, imported: 37 },
+  mergeDecisions: [],
+};
+
+/** One fetched record, and the two outputs a search-then-import produces. */
+const RERUN_RECORD = record({
+  sourceId: "pubmed",
+  nativeId: "1",
+  title: "In vivo editing",
+  doi: DOI,
+});
+const FETCHED = output({
+  outcome: "succeeded",
+  records: [RERUN_RECORD],
+  perSource: [report({ sourceId: "pubmed", recordsRetrieved: 1 })],
+});
+const WRITTEN = output({
+  outcome: "succeeded",
+  write: writeReport({ created: 1 }),
+});
+
+/** Search, then import every row the search published. */
+async function searchThenImport(
+  h: Harness,
+  mode: "keyword" | "rerun" = "keyword",
+): Promise<void> {
+  await h.model.runSearch(query({ mode }));
+  await h.model.runImport({
+    ...query({ mode }),
+    records: h.model.state.records ?? [],
+  });
+}
+
+describe("P2-T17 — the run's search_provenance row (step 4)", () => {
+  it("writes the row after the note, carrying the note's key, once per import", async () => {
+    const events: string[] = [];
+    const store = recordingStore(events);
+    const h = harness({
+      runs: [{ output: FETCHED }, { output: WRITTEN }],
+      sources: TWO_SOURCES,
+      extra: {
+        provenanceStore: store,
+        writeProvenanceNote: () => {
+          events.push("note");
+          return Promise.resolve("NOTE7777");
+        },
+      },
+    });
+    await searchThenImport(h);
+
+    expect(events).toStrictEqual(["note", "row:NOTE7777"]);
+    expect(store.rows).toHaveLength(1);
+    const [row] = store.rows;
+    expect(row?.libraryId).toBe(1);
+    expect(row?.collectionKey).toBe("AAAA1111");
+    expect(row?.noteKey).toBe("NOTE7777");
+    expect(row?.record.targetCollectionKey).toBe("AAAA1111");
+    expect(row?.record.userQuery).toBe(query().keyword);
+  });
+
+  it("records the search's sources on the import's row, since an import run asks none", async () => {
+    // `WRITTEN` reports no source, exactly as the real pipeline does when it
+    // is handed records; the search before it asked PubMed.
+    expect(WRITTEN.perSource).toStrictEqual([]);
+    const store = recordingStore();
+    const h = harness({
+      runs: [{ output: FETCHED }, { output: WRITTEN }],
+      sources: TWO_SOURCES,
+      extra: { provenanceStore: store },
+    });
+    await searchThenImport(h);
+    const entries = store.rows[0]?.record.perSource ?? [];
+    expect(
+      entries.map((entry) => [
+        entry.sourceId,
+        entry.requestedLimit,
+        entry.recordsRetrieved,
+        entry.recordsImported,
+      ]),
+    ).toStrictEqual([["pubmed", 25, 1, 1]]);
+    // …which is what a re-run reads its databases and its limit from.
+    const params = toSearchParams(store.rows[0]!.record, {
+      advanceDateWindow: false,
+      now: NOW,
+    });
+    expect(params.sourceIds).toStrictEqual(["pubmed"]);
+    expect(params.requestedLimit).toBe(25);
+  });
+
+  it("still writes the row, with no note key, when the note fails", async () => {
+    const store = recordingStore();
+    const h = harness({
+      runs: [{ output: FETCHED }, { output: WRITTEN }],
+      sources: TWO_SOURCES,
+      extra: {
+        provenanceStore: store,
+        writeProvenanceNote: () => Promise.reject(new Error("note refused")),
+      },
+    });
+    await searchThenImport(h);
+    expect(store.rows.map((row) => row.noteKey)).toStrictEqual([undefined]);
+  });
+
+  it("keeps the summary when the row cannot be written, and says so in the log", async () => {
+    const h = harness({
+      runs: [{ output: FETCHED }, { output: WRITTEN }],
+      sources: TWO_SOURCES,
+      extra: {
+        provenanceStore: {
+          putProvenance: () => Promise.reject(new Error("locked")),
+          findProvenanceByCollection: () => Promise.resolve(undefined),
+        },
+      },
+    });
+    await searchThenImport(h);
+    expect(h.model.state.status?.id).toBe("research-helper-import-summary");
+    expect(h.lines.join("\n")).toContain("row could not be written");
+  });
+});
+
+describe("P2-T17 — loadRerun() seeds the window from the row (steps 3, 6, 7)", () => {
+  it("returns both date choices, the banner's facts and the recorded parameters", async () => {
+    const store = recordingStore();
+    await store.putProvenance(STORED, 1, "AAAA1111", "NOTE0001");
+    const asked: number[] = [];
+    const h = harness({
+      runs: [],
+      extra: {
+        provenanceStore: store,
+        findCollection: (id) => {
+          asked.push(id);
+          return RERUN_COLLECTION;
+        },
+      },
+    });
+
+    const seed = await h.model.host.loadRerun(4242);
+    expect(asked).toStrictEqual([4242]);
+    expect(seed).toStrictEqual({
+      collectionID: 4242,
+      collectionName: RERUN_COLLECTION.name,
+      recordedAt: STORED.finishedAt,
+      databases: 1,
+      retrieved: 142,
+      imported: 37,
+      asRecorded: toSearchParams(STORED, {
+        advanceDateWindow: false,
+        now: NOW,
+      }),
+      advanced: toSearchParams(STORED, { advanceDateWindow: true, now: NOW }),
+    });
+    expect(seed?.asRecorded.dateWindow).toStrictEqual({
+      fromIso: "2019-01-01",
+      toIso: "2021-12-31",
+    });
+    expect(seed?.advanced.dateWindow).toMatchObject({ fromIso: "2019-01-01" });
+  });
+
+  it("returns the view to INITIAL with an empty table, so the re-run panel is what shows", async () => {
+    const store = recordingStore();
+    await store.putProvenance(STORED, 1, "AAAA1111", undefined);
+    const h = harness({
+      runs: [{ output: FETCHED }, { output: WRITTEN }],
+      sources: TWO_SOURCES,
+      extra: {
+        provenanceStore: store,
+        findCollection: () => RERUN_COLLECTION,
+        provenanceFiles: { writeTextFile: () => Promise.resolve(undefined) },
+      },
+    });
+    await searchThenImport(h);
+    expect(h.model.state.panel).toBe("results");
+    const before = h.model.state.recordsRevision;
+
+    await h.model.loadRerun(4242);
+    expect(h.model.state.panel).toBe("initial");
+    expect(h.model.state.records).toStrictEqual([]);
+    expect(h.model.state.notices).toStrictEqual([]);
+    expect(h.model.state.recordsRevision).toBeGreaterThan(before);
+    expect(await h.model.exportProvenance("/tmp/x.json")).toBe("no-record");
+  });
+
+  it("returns nothing — and the window opens unseeded — with no row, no store or no collection", async () => {
+    const empty = harness({
+      runs: [],
+      extra: {
+        provenanceStore: recordingStore(),
+        findCollection: () => RERUN_COLLECTION,
+      },
+    });
+    expect(await empty.model.loadRerun(1)).toBeUndefined();
+
+    const noStore = harness({
+      runs: [],
+      extra: { findCollection: () => RERUN_COLLECTION },
+    });
+    expect(await noStore.model.loadRerun(1)).toBeUndefined();
+
+    const store = recordingStore();
+    await store.putProvenance(STORED, 1, "AAAA1111", undefined);
+    const noCollection = harness({
+      runs: [],
+      extra: { provenanceStore: store, findCollection: () => undefined },
+    });
+    expect(await noCollection.model.loadRerun(1)).toBeUndefined();
+  });
+});
+
+describe("P2-T17 — toPipelineInput() runs the re-run's exact window", () => {
+  it("sends the recorded bounds verbatim, not re-derived from the two years", () => {
+    const input = toPipelineInput(
+      query({
+        fromYear: 2019,
+        toYear: 2021,
+        dateWindow: { fromIso: "2019-01-01", toIso: "2021-12-31" },
+      }),
+      undefined,
+      undefined,
+    );
+    expect(input.dateFilter).toStrictEqual({
+      fromYear: 2019,
+      toYear: 2021,
+      fromDate: "2019-01-01",
+      toDate: "2021-12-31",
+      label: "2019 – 2021",
+    });
+  });
+
+  it("ends an advanced window on today, not on 31 December", () => {
+    const input = toPipelineInput(
+      query({ dateWindow: { fromIso: "2019-01-01", toIso: "2026-10-15" } }),
+      undefined,
+      undefined,
+    );
+    expect(input.dateFilter).toMatchObject({
+      fromDate: "2019-01-01",
+      toDate: "2026-10-15",
+    });
+  });
+
+  it('runs All years as dateFilter "none", and ignores a window it cannot read', () => {
+    expect(
+      toPipelineInput(query({ dateWindow: "all-years" }), undefined, undefined)
+        .dateFilter,
+    ).toBe("none");
+    expect(
+      toPipelineInput(
+        query({
+          fromYear: 2024,
+          toYear: 2026,
+          dateWindow: { fromIso: "2019", toIso: "2021-12-31" },
+        }),
+        undefined,
+        undefined,
+      ).dateFilter,
+    ).toMatchObject({ fromDate: "2024-01-01", toDate: "2026-12-31" });
+  });
+});
+
+describe("P2-T17 — the re-run's import summary (step 9, docs/08 §4.6 rule 4)", () => {
+  it("reads Imported 0 · Already present 40 · 0 failed when all 40 are still present", () => {
+    expect(
+      importSummary(writeReport({ created: 0, linkedExisting: 40 }), true),
+    ).toStrictEqual({
+      id: "research-helper-search-import-summary-rerun",
+      args: { imported: 0, present: 40, failed: 0 },
+    });
+  });
+
+  it("counts records skipped as duplicates as already present too", () => {
+    const write: SearchImportWriteReport = {
+      ...writeReport({ created: 9, linkedExisting: 100 }),
+      skipped: 28,
+      failed: 1,
+    };
+    expect(importSummary(write, true).args).toStrictEqual({
+      imported: 9,
+      present: 128,
+      failed: 1,
+    });
+  });
+
+  it("keeps FR-51's linked/skipped line for a keyword run", () => {
+    expect(
+      importSummary(writeReport({ created: 3, linkedExisting: 2 }), false),
+    ).toStrictEqual({
+      id: "research-helper-import-summary",
+      args: { imported: 3, linked: 2, skipped: 0, failed: 0 },
+    });
+  });
+
+  it("publishes the rule-4 line for an import made from the re-run state", async () => {
+    const h = harness({
+      runs: [
+        { output: FETCHED },
+        {
+          output: output({
+            outcome: "succeeded",
+            write: writeReport({ created: 0, linkedExisting: 40 }),
+          }),
+        },
+      ],
+      sources: TWO_SOURCES,
+    });
+    await searchThenImport(h, "rerun");
+    expect(h.model.state.status).toStrictEqual({
+      id: "research-helper-search-import-summary-rerun",
+      args: { imported: 0, present: 40, failed: 0 },
+    });
+  });
+});
+
+describe("P2-T17 — a re-run writes a new record and leaves the original alone (step 10)", () => {
+  it("adds a second row with a different runId; the first row's record is unchanged", async () => {
+    const store = recordingStore();
+    const h = harness({
+      runs: [
+        { output: FETCHED },
+        { output: WRITTEN },
+        { output: FETCHED },
+        {
+          output: output({
+            outcome: "succeeded",
+            write: writeReport({ created: 0, linkedExisting: 1 }),
+          }),
+        },
+      ],
+      sources: TWO_SOURCES,
+      extra: {
+        provenanceStore: store,
+        findCollection: () => RERUN_COLLECTION,
+      },
+    });
+    await searchThenImport(h);
+    const original = structuredClone(store.rows[0]?.record);
+
+    const seed = await h.model.loadRerun(4242);
+    expect(seed?.asRecorded.userQuery).toBe(query().keyword);
+    await searchThenImport(h, "rerun");
+
+    expect(store.rows).toHaveLength(2);
+    expect(store.rows[1]?.record.runId).not.toBe(store.rows[0]?.record.runId);
+    expect(store.rows[0]?.record).toStrictEqual(original);
   });
 });

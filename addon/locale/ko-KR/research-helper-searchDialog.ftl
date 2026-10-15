@@ -23,10 +23,12 @@
 # on Zotero 10.0.1, not assumed (`docs/01` §9.1, `P0-T24`).
 #
 # **This is the single largest item the gate has to clear**, and it is reported
-# as such: 66 strings, listed here in the order a reviewer will meet them in
+# as such: 70 strings, listed here in the order a reviewer will meet them in
 # the window — 58 from `P1-T18`, the three `P1-T45` added for FR-8's
-# provenance export, and the five `P2-T14` added (2026-10-15) for the
-# Semantic Scholar no-key notice, the two row badges and the `⊕` role row. `src/i18n/keys.ts` exports the same list as
+# provenance export, and the nine `P2-T17` added (2026-10-15) for FR-12's
+# re-run state. Six more — the five `P2-T14` added for the Semantic Scholar
+# no-key notice, the two row badges and the `⊕` role row, and `P2-T11`'s
+# preprint policy line — were reviewed by the owner on 2026-10-16 and are live. `src/i18n/keys.ts` exports the same list as
 # `KO_PENDING_REVIEW`
 # and `test/integration/l10n.spec.ts` asserts that the messages actually
 # missing from this file are exactly that list, so a new en-US string cannot be
@@ -71,6 +73,11 @@
 #
 # NEEDS REVIEW. en-US `.value`: "Keyword"  (the read-only mode chip)
 # research-helper-search-mode-keyword =
+#
+# NEEDS REVIEW (P2-T17). en-US `.value`: "Re-run: { $collection }"  (the
+# read-only mode chip for FR-12's re-run; `$collection` is the collection's
+# own name and is not translated)
+# research-helper-search-mode-rerun =
 
 
 ## Date range (docs/08 §4.2, FR-3)
@@ -110,13 +117,13 @@
 # NEEDS REVIEW. en-US: "Select at least one database to search."
 # research-helper-search-databases-none =
 #
-# NEEDS REVIEW (P2-T14). en-US: "Semantic Scholar has no API key, so its
+# (P2-T14) Reviewed by the owner 2026-10-16 (G-41). en-US: "Semantic Scholar has no API key, so its
 # requests share an anonymous pool that is heavily rate-limited."
 # "Semantic Scholar" and "API" are not translated.
-# research-helper-search-s2-no-key =
+research-helper-search-s2-no-key = Semantic Scholar에 API 키가 없어, 요청이 익명 공용 한도를 함께 쓰므로 제한이 심합니다.
 #
-# NEEDS REVIEW (P2-T14). en-US: "Request a free API key"
-# research-helper-search-s2-no-key-request =
+# (P2-T14) Reviewed by the owner 2026-10-16 (G-41). en-US: "Request a free API key"
+research-helper-search-s2-no-key-request = 무료 API 키 신청
 
 
 ## Client-side filtering (docs/08 §4.2, §4.5)
@@ -170,16 +177,18 @@ research-helper-search-col-doi =
 # NEEDS REVIEW. en-US `.aria-label`: "Already in my library"
 # research-helper-search-row-existing-badge =
 #
-# NEEDS REVIEW (P2-T14). en-US: "Possible duplicate"; `.title`: "Possible
+# (P2-T14) Reviewed by the owner 2026-10-16 (G-41). en-US: "Possible duplicate"; `.title`: "Possible
 # duplicate of another row ({ $tier }, { $score }% similar). Nothing was
 # merged: review both rows and untick the one you do not want." `{ $tier }`
 # is an identifier and is not translated.
-# research-helper-search-row-duplicate =
+research-helper-search-row-duplicate = 중복 가능성
+    .title = 다른 행과 중복일 수 있습니다({ $tier }, 유사도 { $score }%). 합친 것은 없습니다. 두 행을 확인하고 원하지 않는 행의 체크를 해제하세요.
 #
-# NEEDS REVIEW (P2-T14). en-US: "Other version"; `.title`: "Another row is a
+# (P2-T14) Reviewed by the owner 2026-10-16 (G-41). en-US: "Other version"; `.title`: "Another row is a
 # different version of this work, such as its preprint. Both are kept;
 # nothing was merged."
-# research-helper-search-row-linked =
+research-helper-search-row-linked = 다른 판본
+    .title = 다른 행이 이 논문의 다른 판본(예: 프리프린트)입니다. 둘 다 유지하며 합치지 않았습니다.
 
 
 ## Selection controls (docs/08 §4.5, FR-5)
@@ -221,10 +230,10 @@ research-helper-search-col-doi =
 # NEEDS REVIEW. en-US `.label`: "Import anyway"
 # research-helper-search-duplicates-import =
 #
-# NEEDS REVIEW (P2-T11). en-US value: "A preprint and its published version
+# (P2-T11) Reviewed by the owner 2026-10-16 (G-41). en-US value: "A preprint and its published version
 # are kept as two items, linked as Related; the preprint is tagged
 # research_helper/superseded-by-published." The tag name stays verbatim.
-# research-helper-search-preprint-policy =
+research-helper-search-preprint-policy = 프리프린트와 정식 출판본은 두 항목으로 유지되며 '관련 항목'으로 연결됩니다. 프리프린트에는 research_helper/superseded-by-published 태그가 붙습니다.
 
 
 ## Window buttons (docs/08 §4.5, FR-1, NFR-13)
@@ -265,6 +274,45 @@ research-helper-search-col-doi =
 # research-helper-search-state-initial =
 
 
+## 1a. Re-run, pre-filled from provenance (docs/08 §4.6, FR-12; P2-T17)
+##
+## `$collection` is the collection's own name and `$date` a date the window has
+## already formatted; neither is translated. Keep the `{ $databases }` selector
+## with only `*[other]`.
+# NEEDS REVIEW (P2-T17). en-US: "Re-run of the search that built
+# “{ $collection }”"
+# research-helper-search-rerun-heading =
+#
+# NEEDS REVIEW (P2-T17). en-US, a `{ $databases }` selector: "Recorded { $date }
+# · 1 database · { $retrieved } retrieved · { $imported } imported" /
+# "Recorded { $date } · { $databases } databases · { $retrieved } retrieved ·
+# { $imported } imported"
+# research-helper-search-rerun-recorded =
+#
+# NEEDS REVIEW (P2-T17). en-US `.label`: "as recorded"
+# research-helper-search-rerun-as-recorded =
+#
+# NEEDS REVIEW (P2-T17). en-US `.label`: "advance to today"
+# research-helper-search-rerun-advance =
+#
+# NEEDS REVIEW (P2-T17). en-US: "Keyword, sources and max-per-database are
+# pre-filled from the stored provenance record, and all stay editable."
+# research-helper-search-rerun-prefilled =
+#
+# NEEDS REVIEW (P2-T17). en-US: "Press Search to run it again. Unless Import
+# anyway is chosen below, items already in your library are counted as
+# “already present” and never imported twice."  ("Import anyway" is the label
+# of research-helper-search-duplicates-import; keep the two in step.)
+# research-helper-search-rerun-press-search =
+#
+# NEEDS REVIEW (P2-T17). en-US: "All years, as recorded"
+# research-helper-search-rerun-all-years =
+#
+# NEEDS REVIEW (P2-T17). en-US: "Imported { $imported } · Already present
+# { $present } · { $failed } failed"
+# research-helper-search-import-summary-rerun =
+
+
 ## 2. LOADING (docs/08 §4.6, §8.4)
 ##
 # NEEDS REVIEW. en-US: "Searching…"
@@ -288,12 +336,13 @@ research-helper-search-col-doi =
 # NEEDS REVIEW. en-US: "Importing { $done } of { $total }…"
 # research-helper-search-status-importing =
 #
-# NEEDS REVIEW (P2-T14). en-US: "ID lookup · preprint matching"; `.title`:
+# (P2-T14) Reviewed by the owner 2026-10-16 (G-41). en-US: "ID lookup · preprint matching"; `.title`:
 # "This server has no keyword search, so it looks up identifiers and matches
 # preprints to their published versions; keyword search of preprints happens
 # through Europe PMC (SRC:PPR) and Crossref (type:posted-content)." "SRC:PPR"
 # and "type:posted-content" are query syntax and are not translated.
-# research-helper-search-source-role =
+research-helper-search-source-role = ID 조회 · 프리프린트 대조
+    .title = 이 서버는 키워드 검색이 없어 식별번호를 조회하고 프리프린트를 정식 출판본과 대조합니다. 프리프린트의 키워드 검색은 Europe PMC(SRC:PPR)와 Crossref(type:posted-content)에서 이루어집니다.
 
 
 ## 3. EMPTY (docs/08 §4.6, §8.4)

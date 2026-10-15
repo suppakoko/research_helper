@@ -71,9 +71,10 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
         data-l10n-id="research-helper-search-keyword-input"
       />
       <button id="rh-search-run" data-l10n-id="research-helper-search-run" />
-      <!-- The read-only mode chip. §4.2 lists four `mode` values; Phase 1
-           registers no menu entry for the other three, so init() only ever
-           sets the `keyword` id. -->
+      <!-- The read-only mode chip. §4.2 lists four `mode` values. It reads
+           `keyword` until a re-run seed arrives (P2-T17), when the controller
+           sets the `rerun` id with the collection name as its argument; the
+           other two modes have no menu entry yet. -->
       <label
         id="rh-search-mode"
         class="rh-chip"
@@ -201,15 +202,46 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
     </hbox>
 
     <!-- 5. The results area and docs/08 §4.6's states as swappable panels.
-         Four of the five panels §4.6 draws are this card's; the fifth,
-         "Re-run (pre-filled from provenance)", is FR-12's and belongs to
-         P2-T17. docs/08 §8.4's PARTIAL banner is wired by P1-T22, and the
-         table inside rh-results-container is P1-T21's. -->
+         Four of the five panels §4.6 draws are P1-T20's; the fifth,
+         "Re-run (pre-filled from provenance)", is FR-12's and P2-T17's
+         (rh-state-rerun below). docs/08 §8.4's PARTIAL banner is wired by
+         P1-T22, and the table inside rh-results-container is P1-T21's. -->
     <vbox id="rh-results-area" flex="1">
       <vbox id="rh-state-initial" class="rh-state rh-placeholder">
         <!-- `research-helper-search-state-initial` takes `{ $years }`, so
              init() sets the id and the argument together. -->
         <description id="rh-state-initial-prose" />
+      </vbox>
+      <!-- docs/08 §4.6's fifth panel, "Re-run (pre-filled from provenance)",
+           FR-12's (P2-T17). The window's initial state when it is opened from
+           a collection's "Re-run This Search…" entry; the controller shows it
+           in place of rh-state-initial once the host's loadRerun() has seeded
+           the controls. The heading and the "Recorded …" line take arguments,
+           so their ids are set by script with the arguments. The radio pair
+           is §4.6 rule 2's: "as recorded" is selected by script, and "advance
+           to today" moves only the upper bound of the date window. It is
+           labelled by the Years caption, because it chooses the years. -->
+      <vbox id="rh-state-rerun" class="rh-state rh-rerun" hidden="true">
+        <description id="rh-rerun-heading" class="rh-rerun-heading" />
+        <description id="rh-rerun-recorded" class="rh-hint" />
+        <radiogroup
+          id="rh-rerun-dates"
+          orient="horizontal"
+          aria-labelledby="rh-search-years-label"
+        >
+          <radio
+            id="rh-rerun-as-recorded"
+            value="recorded"
+            data-l10n-id="research-helper-search-rerun-as-recorded"
+          />
+          <radio
+            id="rh-rerun-advance"
+            value="advance"
+            data-l10n-id="research-helper-search-rerun-advance"
+          />
+        </radiogroup>
+        <description data-l10n-id="research-helper-search-rerun-prefilled" />
+        <description data-l10n-id="research-helper-search-rerun-press-search" />
       </vbox>
 
       <vbox id="rh-state-searching" class="rh-state" hidden="true">

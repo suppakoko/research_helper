@@ -36,6 +36,8 @@
  * | the library-duplicate probe | `src/zotero/libraryIndex.ts` | {@link SearchImportViewModelDeps.isExisting} |
  * | `FR-8`'s provenance note | `src/zotero/notes.ts` | {@link SearchImportViewModelDeps.writeProvenanceNote} |
  * | `FR-8`'s JSON export, the file write | `src/zotero/notes.ts` | {@link SearchImportViewModelDeps.provenanceFiles} |
+ * | `FR-12`'s `search_provenance` store (`P2-T17`) | `src/zotero/db.ts` | {@link SearchImportViewModelDeps.provenanceStore} |
+ * | a collection's library, key and name (`P2-T17`) | `Zotero.Collections` | {@link SearchImportViewModelDeps.findCollection} |
  *
  * Every one of them is **optional**, and the window degrades rather than
  * breaking: no `listSources` means zero database checkboxes and a disabled
@@ -93,8 +95,12 @@ import type { ProgressSnapshot } from "../../core/jobQueue/progress";
 import {
   exportJson,
   redactSearchProvenance,
+  toSearchParams,
+  RERUN_ALL_YEARS,
   type MergeDecision,
   type ProvenanceFileWriter,
+  type ProvenanceStore,
+  type SearchParams,
   type SearchProvenance,
   type SourceProvenance,
 } from "../../core/provenance";
@@ -108,6 +114,7 @@ import type {
   SearchImportOutput,
   SearchImportSourceReport,
   SearchImportTarget,
+  SearchImportWriteReport,
 } from "../../pipeline/searchImport/types";
 import type { Pipeline, PipelineContext } from "../../pipeline/types";
 import type { FluentArgsParam, FluentMessageId } from "../../i18n/keys";
@@ -173,7 +180,10 @@ export function message<Id extends FluentMessageId>(
  * successful case, because FR-9 requires a partial run to show "results from
  * the other three … and a non-blocking banner", which is one panel plus a
  * banner rather than a panel of its own. §4.6's fifth drawn panel — Re-run,
- * pre-filled from provenance — is FR-12's and belongs to `P2-T17`.
+ * pre-filled from provenance (FR-12, `P2-T17`) — is **not** a member either:
+ * it is the `rerun` mode's INITIAL, so this module publishes `"initial"` and
+ * the document draws its re-run panel in that state once
+ * {@link SearchImportViewModel.loadRerun} has seeded it.
  */
 export type SearchPanel =
   "initial" | "searching" | "empty" | "error" | "results";
@@ -760,6 +770,59 @@ export interface SearchImportViewModelDeps {
    * {@link SearchImportViewModelDeps.writeProvenanceNote}.
    */
   readonly provenanceFiles?: ProvenanceFileWriter;
+  /**
+   * FR-12's store (`P2-T17`): `src/core/provenance.ts`'s `ProvenanceStore`,
+   * over `src/zotero/db.ts`'s `search_provenance` table — `docs/07` §5.3's
+   * authoritative copy of every run's record.
+   *
+   * Written **after** the note, with the note's key on the row so the
+   * projection stays findable (`P2-T17` step 4), and read by
+   * {@link SearchImportViewModel.loadRerun}. Absent means no row is written
+   * and no re-run can be seeded — the same degradation shape as
+   * {@link SearchImportViewModelDeps.writeProvenanceNote}, logged at `warn`.
+   */
+  readonly provenanceStore?: ProvenanceStore;
+  /**
+   * A collection id → the library, key and name a re-run needs (`P2-T17`).
+   * `Zotero.Collections.get`, read by the composition root: `ui/` may not name
+   * the `Zotero` global. Absent, or `undefined` for an id that names no
+   * collection, means the window opens unseeded.
+   */
+  readonly findCollection?: (
+    collectionID: number,
+  ) => RerunCollection | undefined;
+}
+
+/** The collection a re-run was invoked on (`P2-T17`). */
+export interface RerunCollection {
+  readonly libraryId: number;
+  readonly collectionKey: string;
+  /** The collection's own name — the user's data, not a translatable string. */
+  readonly name: string;
+}
+
+/**
+ * Everything the window needs to draw `docs/08` §4.6's **Re-run (pre-filled
+ * from provenance)** state (`P2-T17` steps 6–7).
+ *
+ * Both date choices are computed here, once, by `toSearchParams`, so the
+ * window's radio pair switches between two finished parameter objects and
+ * never does date arithmetic of its own — `docs/08` §4.6 rule 2's "moves only
+ * the upper bound" is decided in exactly one place, `src/core/provenance.ts`.
+ */
+export interface RerunSeed {
+  readonly collectionID: number;
+  readonly collectionName: string;
+  /** The recorded run's `finishedAt`, ISO 8601. The window formats it. */
+  readonly recordedAt: string;
+  /** How many databases the recorded run asked: `perSource.length`. */
+  readonly databases: number;
+  readonly retrieved: number;
+  readonly imported: number;
+  /** `docs/08` §4.6 rule 2's default, "as recorded". */
+  readonly asRecorded: SearchParams;
+  /** "advance to today": the same, with only `toIso` moved to today. */
+  readonly advanced: SearchParams;
 }
 
 /** What the document hands over when it connects. */
@@ -1003,24 +1066,63 @@ export function toPipelineInput(
   const from = Math.min(query.fromYear, query.toYear);
   const to = Math.max(query.fromYear, query.toYear);
   const years = Number.isInteger(from) && Number.isInteger(to);
+  const recorded = rerunDateFilter(query.dateWindow);
   return {
     query: query.keyword,
     sourceIds: query.sources.filter((id): id is SourceId => isSourceId(id)),
     limit: query.maxResults,
-    dateFilter: years
-      ? {
-          fromYear: from,
-          toYear: to,
-          fromDate: `${String(from)}-01-01`,
-          toDate: `${String(to)}-12-31`,
-          label: `${String(from)} – ${String(to)}`,
-        }
-      : "none",
+    dateFilter:
+      recorded ??
+      (years
+        ? {
+            fromYear: from,
+            toYear: to,
+            fromDate: `${String(from)}-01-01`,
+            toDate: `${String(to)}-12-31`,
+            label: `${String(from)} – ${String(to)}`,
+          }
+        : "none"),
     ...(target !== undefined && { target }),
     ...(records !== undefined && { records }),
     ...(works !== undefined && { works }),
     ...(works !== undefined &&
       mergeDecisions !== undefined && { mergeDecisions }),
+  };
+}
+
+/** `YYYY-MM-DD`, the precision `toSearchParams` hands the window. */
+const ISO_DATE = /^(\d{4})-\d{2}-\d{2}$/;
+
+/**
+ * A re-run's exact date window as the pipeline's `dateFilter`, or `undefined`
+ * when the query carries none (`P2-T17`).
+ *
+ * The window sends {@link SearchWindowQuery.dateWindow} only while the user
+ * has left the re-run's date untouched, so "as recorded" re-runs the recorded
+ * bounds **exactly** — `2019-01-01 … 2021-12-31` stays that, rather than being
+ * re-derived from two year menulists — and "advance to today" ends on today
+ * rather than on 31 December. Once the user picks a year, the menulists win,
+ * as for any keyword run (`docs/08` §4.6 rule 1: an adjusted re-run is a
+ * normal run).
+ *
+ * The value crosses the untyped document boundary, so a shape this does not
+ * recognise is ignored rather than trusted, and the years decide.
+ */
+function rerunDateFilter(
+  window: SearchWindowQuery["dateWindow"],
+): SearchImportInput["dateFilter"] | undefined {
+  if (window === undefined) return undefined;
+  if (window === RERUN_ALL_YEARS) return "none";
+  if (typeof window !== "object") return undefined;
+  const fromYear = ISO_DATE.exec(window.fromIso)?.[1];
+  const toYear = ISO_DATE.exec(window.toIso)?.[1];
+  if (fromYear === undefined || toYear === undefined) return undefined;
+  return {
+    fromYear: Number(fromYear),
+    toYear: Number(toYear),
+    fromDate: window.fromIso,
+    toDate: window.toIso,
+    label: `${fromYear} – ${toYear}`,
   };
 }
 
@@ -1160,6 +1262,48 @@ export function sourceStatusLine(
       count: report.recordsRetrieved,
     }),
   };
+}
+
+/**
+ * The import summary, in the shape the run asks for (`P2-T17` step 9).
+ *
+ * A keyword run keeps FR-51's `Imported · Linked · Skipped … duplicates ·
+ * failed`, which reports created and linked-existing separately. A re-run uses
+ * FR-12's `docs/08` §4.6 rule 4 shape, `Imported 9 · Already present 128 ·
+ * 1 failed`, where **already present** is every record that matched an item
+ * already in the library by DOI or PMID and so was not imported again:
+ * `linkedExisting` under "Add existing item to collection" plus `skipped`
+ * under "Skip". No second duplicate check is made — both counts are the ones
+ * `P1-T13`'s detector already produced inside the importer (`docs/07` §12.1).
+ *
+ * **What the count is not, measured 2026-10-15.** `src/zotero/importer.ts`
+ * counts a record as linked when it matched *a library item*, whether or not
+ * that item was already in the target collection, and its `skipped` also counts
+ * a `workKey` repeated inside one run. So the number is "already in your
+ * library", which is FR-12's "already present … by DOI/PMID match" read at the
+ * granularity the importer reports; telling "already in *this collection*"
+ * apart needs a per-record write report the importer does not publish.
+ *
+ * @param write - the run's write report
+ * @param rerun - whether the import was made from the re-run state
+ */
+export function importSummary(
+  write: SearchImportWriteReport,
+  rerun: boolean,
+): MessageRef {
+  return rerun
+    ? message("research-helper-search-import-summary-rerun", {
+        imported: write.created,
+        present: write.linkedExisting + write.skipped,
+        failed: write.failed,
+      })
+    : // FR-51: created and linked-existing are reported separately, never summed.
+      message("research-helper-import-summary", {
+        imported: write.created,
+        linked: write.linkedExisting,
+        skipped: write.skipped,
+        failed: write.failed,
+      });
 }
 
 /**
@@ -1308,6 +1452,22 @@ export interface SearchImportViewModel {
    * @returns which of {@link ProvenanceExportOutcome} happened
    */
   exportProvenance(path: string): Promise<ProvenanceExportOutcome>;
+  /**
+   * FR-12's first scenario (`P2-T17` step 6): read the collection's most
+   * recent `search_provenance` row — **never** its note (`docs/07` §5.3) — and
+   * return what the window's re-run state is seeded from.
+   *
+   * When no run is in flight this also returns the view to §8.4's INITIAL
+   * state, with an empty table and no retained record: the window opened in
+   * `rerun` mode starts from `docs/08` §4.6's re-run panel, not from whatever
+   * the previous run left on screen (the view model is application-scoped and
+   * otherwise survives a window reopen — see `retained`).
+   *
+   * @param collectionID - `Zotero.Collection.id`, from `window.arguments[0]`
+   * @returns the seed, or `undefined` when the collection has no row or no
+   *   store is bound — the window then opens as a keyword search
+   */
+  loadRerun(collectionID: number): Promise<RerunSeed | undefined>;
   /** The host object the document reads off `api.searchWindow`. */
   readonly host: SearchWindowHostApi;
 }
@@ -1341,6 +1501,11 @@ export interface SearchWindowHostApi {
    * dropped here: the document is untyped, and the preference holds ids only.
    */
   saveSources(ids: readonly string[]): void;
+  /**
+   * FR-12's seed for `mode: "rerun"` (`P2-T17`). The document tolerates it
+   * being absent, like every other member, and then opens unseeded.
+   */
+  loadRerun(collectionID: number): Promise<RerunSeed | undefined>;
 }
 
 /** One running job: its surfaces, and the one call that closes them. */
@@ -1387,6 +1552,21 @@ export function createSearchImportViewModel(
    * the merges the table showed. Meaningful only while {@link previewed} is.
    */
   let previewedDecisions: readonly MergeDecision[] = [];
+  /**
+   * The preview's per-source reports, held for the import's provenance record
+   * (`P2-T17`).
+   *
+   * **Measured 2026-10-15: an import run reports no sources.** When
+   * `SearchImportInput.records` is supplied, `searchImportPipeline.ts`'s
+   * `Planning` asks no adapter and pushes nothing onto `perSource` (`P2-T31`'s
+   * report records the same fact), so every record this module built for a
+   * window import had `perSource: []` — FR-8's per-source enumeration empty,
+   * and nothing for FR-12 to re-run: `toSearchParams` reads the source ids and
+   * the limit from exactly that array. The search that produced the rows *did*
+   * ask the sources, so its reports are the record's per-source entries; they
+   * are used only when the import run reported none.
+   */
+  let previewedReports: readonly SearchImportSourceReport[] = [];
   /** `sourceId` → localized display name, resolved once per connect. */
   let sourceNames: ReadonlyMap<string, string> = new Map();
   let revision = 0;
@@ -1801,6 +1981,7 @@ export function createSearchImportViewModel(
     previewed =
       output.works.length === output.records.length ? output.works : undefined;
     previewedDecisions = output.mergeDecisions;
+    previewedReports = output.perSource;
     revision += 1;
     // The preview's review — chips from `seenIn`, the flag and link badges.
     // Only a search reaches here; the import of a preview, whose `flags` and
@@ -1993,6 +2174,7 @@ export function createSearchImportViewModel(
     output: SearchImportOutput,
     input: SearchImportInput,
     startedAt: string,
+    rerun: boolean,
   ): Promise<string | undefined> {
     const write = output.write;
 
@@ -2023,13 +2205,8 @@ export function createSearchImportViewModel(
       return undefined;
     }
 
-    // FR-51: created and linked-existing are reported separately, never summed.
-    const summary = message("research-helper-import-summary", {
-      imported: write.created,
-      linked: write.linkedExisting,
-      skipped: write.skipped,
-      failed: write.failed,
-    });
+    // FR-51's line for a keyword run, FR-12's rule-4 line for a re-run.
+    const summary = importSummary(write, rerun);
     // `R-17`'s measurement, as a whole-number percentage of created items.
     const coverage = message("research-helper-import-abstract-coverage", {
       percent: write.abstractCoveragePercent,
@@ -2045,13 +2222,21 @@ export function createSearchImportViewModel(
     });
 
     const provenance = redactSearchProvenance(
-      buildProvenance(output, input, {
-        runId: `${String(deps.clock.now())}-${String(revision)}`,
-        pluginVersion: deps.pluginVersion,
-        zoteroVersion: deps.zoteroVersion,
-        startedAt,
-        finishedAt: new Date(deps.clock.now()).toISOString(),
-      }),
+      buildProvenance(
+        // The search's per-source reports when the import run has none — see
+        // {@link previewedReports}.
+        output.perSource.length > 0
+          ? output
+          : { ...output, perSource: previewedReports },
+        input,
+        {
+          runId: `${String(deps.clock.now())}-${String(revision)}`,
+          pluginVersion: deps.pluginVersion,
+          zoteroVersion: deps.zoteroVersion,
+          startedAt,
+          finishedAt: new Date(deps.clock.now()).toISOString(),
+        },
+      ),
     );
     // **`FR-8`'s third scenario needs this to still exist.** Before `P1-T36`
     // the next line was the last use of `provenance`: the record was handed to
@@ -2061,6 +2246,8 @@ export function createSearchImportViewModel(
     retained = provenance;
 
     const writeNote = deps.writeProvenanceNote;
+    /** The note's key, for the row (`P2-T17` step 4); `undefined` if none. */
+    let noteKey: string | undefined;
     if (writeNote === undefined) {
       deps.logger.warn(
         "FR-8's provenance note was composed and redacted but not written: " +
@@ -2070,8 +2257,8 @@ export function createSearchImportViewModel(
       );
     } else {
       try {
-        const key = await writeNote(provenance);
-        deps.logger.info("FR-8's provenance note written", { noteKey: key });
+        noteKey = await writeNote(provenance);
+        deps.logger.info("FR-8's provenance note written", { noteKey });
       } catch {
         // A failed note must not replace the summary the user is reading: the
         // items and the collection are written and kept (`docs/07` §7.4).
@@ -2079,7 +2266,52 @@ export function createSearchImportViewModel(
       }
     }
 
+    await storeProvenance(provenance, noteKey);
+
     return text(summary);
+  }
+
+  /**
+   * `docs/07` §5.3's authoritative copy: the run's `search_provenance` row
+   * (`P2-T17` step 4), written **after** the note so the note's key can be
+   * stored on it, and as a new row every time — a re-run has its own `runId`
+   * and the row it was seeded from is never touched (step 10).
+   *
+   * A note that failed does not stop the row: the row is the authority and
+   * the note its projection, so the row is written with `note_key` `NULL`. A
+   * row that fails is logged and does not replace the summary, for the reason
+   * the note's failure does not.
+   */
+  async function storeProvenance(
+    provenance: SearchProvenance,
+    noteKey: string | undefined,
+  ): Promise<void> {
+    const store = deps.provenanceStore;
+    if (store === undefined) {
+      deps.logger.warn(
+        "the run's search_provenance row was not written: no provenance " +
+          "store is bound, so this collection cannot be re-run (FR-12)",
+        { runId: provenance.runId },
+      );
+      return;
+    }
+    try {
+      await store.putProvenance(
+        provenance,
+        provenance.targetLibraryId,
+        provenance.targetCollectionKey,
+        noteKey,
+      );
+      deps.logger.info("the run's search_provenance row written", {
+        runId: provenance.runId,
+        noteKey: noteKey ?? "none",
+      });
+    } catch (error) {
+      deps.logger.warn("the run's search_provenance row could not be written", {
+        runId: provenance.runId,
+        reason: error instanceof Error ? error.name : typeof error,
+      });
+    }
   }
 
   const model: SearchImportViewModel = {
@@ -2168,8 +2400,90 @@ export function createSearchImportViewModel(
       );
       const running = await runJob(input, true);
       if (running === undefined) return;
-      const toast = await renderImportOutcome(running.output, input, startedAt);
+      const toast = await renderImportOutcome(
+        running.output,
+        input,
+        startedAt,
+        // FR-12: an import made from the re-run state reports §4.6 rule 4's
+        // "Already present" rather than FR-51's linked/skipped split.
+        request.mode === "rerun",
+      );
       running.finish(toast);
+    },
+
+    async loadRerun(collectionID: number): Promise<RerunSeed | undefined> {
+      const store = deps.provenanceStore;
+      const collection = deps.findCollection?.(collectionID);
+      if (store === undefined || collection === undefined) {
+        deps.logger.warn(
+          "a re-run was asked for, and no stored record can be reached: " +
+            "the window opens as a keyword search",
+          {
+            collectionID,
+            store: store !== undefined,
+            collection: collection !== undefined,
+          },
+        );
+        return undefined;
+      }
+      let record: SearchProvenance | undefined;
+      try {
+        // The row, never the note (`docs/07` §5.3): a note the user edited
+        // would otherwise silently change what is re-run.
+        record = await store.findProvenanceByCollection(
+          collection.libraryId,
+          collection.collectionKey,
+        );
+      } catch (error) {
+        deps.logger.warn(
+          "the collection's search_provenance row could not be read",
+          {
+            collectionID,
+            reason: error instanceof Error ? error.name : typeof error,
+          },
+        );
+        return undefined;
+      }
+      if (record === undefined) {
+        deps.logger.info("the collection has no search_provenance row", {
+          collectionID,
+        });
+        return undefined;
+      }
+      if (source === undefined) {
+        // §4.6's re-run panel is the window's *initial* state for this mode,
+        // so the previous run's table, record and banners are cleared — but
+        // never under a run that is still going.
+        retained = undefined;
+        fetched = [];
+        previewed = undefined;
+        previewedDecisions = [];
+        previewedReports = [];
+        asked = [];
+        latched.clear();
+        current = undefined;
+        revision += 1;
+        publish({
+          ...initialViewState(),
+          records: [],
+          recordsRevision: revision,
+        });
+      }
+      const now = deps.clock.now();
+      deps.logger.info("a re-run is seeded from the stored record", {
+        collectionID,
+        runId: record.runId,
+      });
+      return {
+        collectionID,
+        collectionName: collection.name,
+        recordedAt: record.finishedAt,
+        databases: record.perSource.length,
+        retrieved: record.totals.retrieved,
+        imported: record.totals.imported,
+        asRecorded: toSearchParams(record, { advanceDateWindow: false, now }),
+        advanced: toSearchParams(record, { advanceDateWindow: true, now }),
+      };
     },
 
     cancel(): void {
@@ -2258,6 +2572,8 @@ export function createSearchImportViewModel(
             deps.logger.warn("the sources preference could not be written");
           }
         },
+        loadRerun: (collectionID: number): Promise<RerunSeed | undefined> =>
+          model.loadRerun(collectionID),
       };
     },
   };

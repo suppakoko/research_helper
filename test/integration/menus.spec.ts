@@ -39,6 +39,7 @@
 import type Addon from "../../src/addon";
 import { config } from "../../package.json";
 import {
+  L10N_MENU_COLLECTION_RERUN,
   L10N_MENU_COLLECTION_SEARCH_IMPORT,
   L10N_MENU_ROOT,
   L10N_MENU_SEARCH_IMPORT,
@@ -563,12 +564,12 @@ describe("menu entry points and the window opener (P1-T19)", function () {
     );
     assert.deepEqual(
       [...shape.entries],
-      [L10N_MENU_COLLECTION_SEARCH_IMPORT],
-      "Phase 1 registers only the Search & Import entry; the report, " +
-        "summarize-all, re-run and recommend entries of docs/08 §2.4 are " +
-        "Phases 2-3 (P1-T19 Do NOT)",
+      [L10N_MENU_COLLECTION_SEARCH_IMPORT, L10N_MENU_COLLECTION_RERUN],
+      "Search & Import, then FR-12's Re-run This Search… (P2-T17); the " +
+        "report, summarize-all and recommend entries of docs/08 §2.4 are " +
+        "later cards'",
     );
-    assert.deepEqual([...shape.kinds], ["menuitem"]);
+    assert.deepEqual([...shape.kinds], ["menuitem", "menuitem"]);
 
     // The real `onShowing` ran, reading the live selection through
     // menuElem -> ownerDocument -> defaultView -> ZoteroPane. Whatever is

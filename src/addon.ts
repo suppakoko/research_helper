@@ -5,10 +5,12 @@ import {
   type Scope,
   type ServiceGraph,
 } from "./bootstrap/container";
+import type { ProvenanceIndex } from "./core/provenance";
 import type {
   SearchImportViewModelDeps,
   SearchWindowHostApi,
 } from "./ui/viewModels/searchImportViewModel";
+import type { SqlConnection } from "./zotero/db";
 
 /**
  * One collection the Search & Import window's target picker can offer.
@@ -70,6 +72,22 @@ export interface PlatformReads {
    * the picker and the writer disagree about what "that collection" means.
    */
   listCollections(): readonly LibraryCollection[];
+  /**
+   * One collection by `Zotero.Collection.id`, with the library and key FR-12's
+   * `search_provenance` lookup is keyed on (`P2-T17`; `docs/07` §8.3's
+   * `idx_provenance_collection` is `(library_id, collection_key)`), or
+   * `undefined` for an id that names no collection. Any library, any depth:
+   * the collection context menu can be opened on either.
+   */
+  collectionById(id: number): CollectionRef | undefined;
+}
+
+/** {@link PlatformReads.collectionById}'s answer. */
+export interface CollectionRef {
+  readonly id: number;
+  readonly libraryId: number;
+  readonly key: string;
+  readonly name: string;
 }
 
 /**
@@ -118,6 +136,29 @@ export interface PluginApi {
    * both halves can name.
    */
   searchWindowDeps?: Required<SearchImportViewModelDeps>;
+  /**
+   * FR-12's store and the plugin database under it (`P2-T17`), published by
+   * `src/bootstrap/registerUI.ts` once the database is open and migrated, and
+   * removed again — the connection closed — on shutdown.
+   *
+   * On the public surface for the reason {@link searchWindowDeps} is: Zotero
+   * holds the file under an exclusive lock, so an integration spec cannot open
+   * a second connection to read the schema back, and a module-private holder is
+   * invisible to a separately bundled spec.
+   */
+  provenance?: PluginProvenance;
+}
+
+/** {@link PluginApi.provenance}: the store, the index and the connection. */
+export interface PluginProvenance {
+  /** `createProvenanceIndex` over `src/zotero/db.ts`'s store. */
+  readonly index: ProvenanceIndex;
+  /** The plugin's own connection, for reading the schema back in a spec. */
+  readonly database: SqlConnection;
+  /** `<Zotero.DataDirectory.dir>/research-helper.sqlite`. */
+  readonly path: string;
+  /** The schema version `runMigrations` left the file at. */
+  readonly schemaVersion: number;
 }
 
 /**
@@ -212,6 +253,20 @@ class Addon {
         Zotero.Collections.getByLibrary(Zotero.Libraries.userLibraryID).map(
           (collection) => ({ id: collection.id, name: collection.name }),
         ),
+      collectionById: (id) => {
+        // `Zotero.Collections.get` returns `false` for an unknown id.
+        const collection: unknown = Zotero.Collections.get(id);
+        if (typeof collection !== "object" || collection === null) {
+          return undefined;
+        }
+        const found = collection as Zotero.Collection;
+        return {
+          id: found.id,
+          libraryId: found.libraryID,
+          key: found.key,
+          name: found.name,
+        };
+      },
     };
   }
 }

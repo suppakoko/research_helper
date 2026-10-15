@@ -151,6 +151,24 @@
   margin-block-start: 0.5em;
 }
 
+/* FR-12's re-run panel (P2-T17, docs/08 §4.6): a banner of four lines and the
+   date radio pair. The ⟳ is the wireframe's and is drawn here, so the
+   bundle never carries a glyph and no other line can borrow it. No fixed
+   height, for the reason .rh-placeholder gives. */
+.rh-rerun > description,
+.rh-rerun > radiogroup {
+  margin-block: 0.25em;
+}
+
+.rh-rerun-heading {
+  font-weight: 600;
+}
+
+.rh-rerun-heading::before {
+  content: "\27f3";
+  margin-inline-end: 0.4em;
+}
+
 /* ------------------------------------------------------- the result table
  *
  * docs/08 §4.3's decision for v1: a plain scrollable <html:table>, not

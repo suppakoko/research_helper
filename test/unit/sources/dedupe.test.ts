@@ -810,6 +810,171 @@ describe("§11.5 rule 1 — title match with conflicting ids is a link", () => {
   });
 });
 
+describe("§11.5 under rule 1 — a shared Tier 1–4 id across conflicting DOIs and a version naming is a link (plan/00 §6 item 200)", () => {
+  const PREPRINT_DOI = doi("10.1101/2024.02.02.000200");
+  const JOURNAL_DOI = doi("10.5555/rh-item200.journal");
+  const PMID_NAMED = pmid("40000200");
+
+  /** One identifier tier, the id kind it reads and a value both sides share. */
+  const identifierTiers: readonly [string, keyof ExternalIds, ExternalIds][] = [
+    ["pmid", "pmid", { pmid: pmid("39000200") }],
+    ["pmcid", "pmcid", { pmcid: pmcid("PMC11000200") }],
+    ["arxiv", "arxivId", { arxivId: arxiv("2402.00200") }],
+    ["s2", "s2CorpusId", { s2CorpusId: s2("267000200") }],
+  ];
+
+  it.each(identifierTiers)(
+    "Tier %s: conflicting DOIs and one side naming the other → 'link', never 'match'",
+    (_tier, kind, shared) => {
+      const pre = record({
+        type: "preprint",
+        title: "A preprint title, unlike the published one",
+        ids: { doi: PREPRINT_DOI, ...shared },
+        related: { doi: JOURNAL_DOI },
+      });
+      const pub = record({
+        source: "semanticscholar",
+        title: "The journal's final title, chosen after review",
+        ids: { doi: JOURNAL_DOI, ...shared },
+      });
+      for (const d of [compareRecords(pre, pub), compareRecords(pub, pre)]) {
+        expect(d).toMatchObject({
+          verdict: "link",
+          tier: "version-link",
+          confidence: TIER_CONFIDENCE.versionLink,
+        });
+        expect(d.evidence["knownVersionLink"]).toBe(true);
+        expect(d.evidence["conflictingIds"]).toBe("doi");
+        expect(d.evidence[kind]).toBeDefined();
+      }
+    },
+  );
+
+  it.each(identifierTiers)(
+    "Tier %s: the same pair with no version naming is still a match at that tier",
+    (tier, _kind, shared) => {
+      const a = record({
+        type: "preprint",
+        title: "A preprint title, unlike the published one",
+        ids: { doi: PREPRINT_DOI, ...shared },
+      });
+      const b = record({
+        source: "semanticscholar",
+        title: "The journal's final title, chosen after review",
+        ids: { doi: JOURNAL_DOI, ...shared },
+      });
+      expect(compareRecords(a, b)).toMatchObject({ verdict: "match", tier });
+    },
+  );
+
+  it.each(identifierTiers)(
+    "Tier %s: a version naming with no DOI on one side is no DOI conflict, so still a match",
+    (tier, _kind, shared) => {
+      const a = record({
+        type: "preprint",
+        title: "A preprint title, unlike the published one",
+        ids: { ...shared },
+        related: { doi: JOURNAL_DOI },
+      });
+      const b = record({
+        source: "semanticscholar",
+        title: "The journal's final title, chosen after review",
+        ids: { doi: JOURNAL_DOI, ...shared },
+      });
+      expect(compareRecords(a, b)).toMatchObject({ verdict: "match", tier });
+    },
+  );
+
+  it("only a DOI conflict triggers it: conflicting PMIDs, a shared PMCID and a naming stay a match", () => {
+    // The owner's rule names DOIs; any other verdict change is out of scope.
+    const a = record({
+      title: "A preprint title, unlike the published one",
+      ids: { pmid: pmid("39000201"), pmcid: pmcid("PMC11000201") },
+      related: { doi: JOURNAL_DOI },
+    });
+    const b = record({
+      source: "semanticscholar",
+      title: "The journal's final title, chosen after review",
+      ids: {
+        doi: JOURNAL_DOI,
+        pmid: pmid("39000202"),
+        pmcid: pmcid("PMC11000201"),
+      },
+    });
+    const d = compareRecords(a, b);
+    expect(d).toMatchObject({ verdict: "match", tier: "pmcid" });
+  });
+
+  it("equal DOIs and a version naming: the cascade matches at Tier 0", () => {
+    const a = record({
+      title: "One work under one DOI",
+      ids: { doi: JOURNAL_DOI, arxivId: arxiv("2402.00200") },
+      related: { pmid: PMID_NAMED },
+    });
+    const b = record({
+      source: "semanticscholar",
+      title: "One work under one DOI",
+      ids: { doi: JOURNAL_DOI, arxivId: arxiv("2402.00200"), pmid: PMID_NAMED },
+    });
+    expect(compareRecords(a, b)).toMatchObject({
+      verdict: "match",
+      tier: "doi",
+    });
+  });
+
+  it.each(identifierTiers)(
+    "Tier %s run on its own: equal DOIs and a version naming are still a match",
+    (tier, _kind, shared) => {
+      const run = DEDUP_TIERS.find((t) => t.id === tier);
+      if (run === undefined) throw new Error(`no tier ${tier}`);
+      // The naming goes through a kind other than the shared one, so it
+      // cannot be the shared value itself.
+      const related: ExternalIds =
+        tier === "pmid"
+          ? { arxivId: arxiv("2402.09999") }
+          : { pmid: PMID_NAMED };
+      const a = toCandidate(
+        record({
+          title: "One work under one DOI",
+          ids: { doi: JOURNAL_DOI, ...shared },
+          related,
+        }),
+      );
+      const b = toCandidate(
+        record({
+          source: "semanticscholar",
+          title: "One work under one DOI",
+          ids: { doi: JOURNAL_DOI, ...shared, ...related },
+        }),
+      );
+      // What Tier 0 leaves behind when the DOIs are equal: no conflict.
+      expect(run.run(a, b, { conflicts: [] })).toMatchObject({
+        verdict: "match",
+        tier,
+      });
+    },
+  );
+
+  it("dedupeRecords and dedupeRecordsAsync agree: two groups and one link", async () => {
+    const pre = record({
+      type: "preprint",
+      title: "A preprint title, unlike the published one",
+      ids: { doi: PREPRINT_DOI, arxivId: arxiv("2402.00200") },
+      related: { doi: JOURNAL_DOI },
+    });
+    const pub = record({
+      source: "semanticscholar",
+      title: "The journal's final title, chosen after review",
+      ids: { doi: JOURNAL_DOI, arxivId: arxiv("2402.00200") },
+    });
+    const sync = dedupeRecords([pre, pub]);
+    expect(sync.groups).toHaveLength(2);
+    expect(sync.links).toHaveLength(1);
+    expect(sync.links[0]?.decision.tier).toBe("version-link");
+    expect(await dedupeRecordsAsync([pre, pub])).toEqual(sync);
+  });
+});
+
 describe("§11.4 — a title match across the preprint boundary is a 0.75 flag", () => {
   it("flags rather than merges a preprint against a journal article", () => {
     const a = record({ type: "preprint", title: S2_TITLE, year: 2022 });

@@ -55,8 +55,18 @@
  *    `SearchImportSourceReport`'s doc comment lists the four it cannot and why.
  */
 
-import { DEFAULT_CHUNK_SIZE, importWorks } from "../zotero/importer";
+import {
+  DEFAULT_CHUNK_SIZE,
+  type ImportPathReport,
+  importWorks,
+} from "../zotero/importer";
 import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
+import {
+  TRANSLATOR_FALLBACK_REASONS,
+  type TranslatorFallbackReason,
+  type TranslatorImportOptions,
+} from "../zotero/translatorImport";
+import { getPref } from "../prefs";
 import { Semaphore } from "../core/concurrency";
 import type { Logger } from "../core/logger";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
@@ -105,6 +115,62 @@ export interface ZoteroSearchImportWriterDeps {
     libraryId: number,
     note: string,
   ) => Promise<void>;
+  /**
+   * Read `useTranslators` (`P2-T18`). Defaults to
+   * `getPref("useTranslators")` — the typed accessor of `docs/07` §8.5.1, never
+   * `Zotero.Prefs` — and is called **once per run**, on the run's first
+   * `writeBatch`, which is the first thing `WritingItems` does (`docs/07`
+   * §12.1: "reads `useTranslators` once on entry"). Not at startup, not per
+   * record, not per batch, so a mid-run change cannot split one import across
+   * two strategies. Injectable so a test can count the reads.
+   */
+  readonly readUseTranslators?: () => boolean;
+  /**
+   * Strategy B's seams, passed to the importer when the preference is on:
+   * the `Translate.Search` factory a test fakes, the PMCID route, and the
+   * per-record deadline. **Omitted in the product today**: the factory then
+   * defaults to the platform's own search object, no PMCID route exists yet (Europe
+   * PMC's `lookup` is DOI-only), and no document gives the deadline's value
+   * (`plan/README.md` §5 rule 4) — see `src/zotero/translatorImport.ts`.
+   */
+  readonly translatorLookup?: Omit<TranslatorImportOptions, "logger">;
+}
+
+/** {@link ImportPathReport} at zero, before a run's first batch. */
+function emptyPathTotals(): ImportPathReport {
+  const fallbackReasons = {} as Record<TranslatorFallbackReason, number>;
+  for (const reason of TRANSLATOR_FALLBACK_REASONS) fallbackReasons[reason] = 0;
+  return {
+    translatorsRequested: true,
+    viaTranslators: 0,
+    handMapped: 0,
+    fellBack: 0,
+    fallbackReasons,
+    searches: 0,
+  };
+}
+
+/**
+ * `a + b`, field by field — `P2-T18` step 10's per-run counts, summed over a
+ * run's batches.
+ */
+export function addPathTotals(
+  a: ImportPathReport,
+  b: ImportPathReport,
+): ImportPathReport {
+  const fallbackReasons = {} as Record<TranslatorFallbackReason, number>;
+  for (const reason of TRANSLATOR_FALLBACK_REASONS) {
+    fallbackReasons[reason] =
+      a.fallbackReasons[reason] + b.fallbackReasons[reason];
+  }
+  return {
+    translatorsRequested: a.translatorsRequested || b.translatorsRequested,
+    viaTranslators: a.viaTranslators + b.viaTranslators,
+    handMapped: a.handMapped + b.handMapped,
+    fellBack: a.fellBack + b.fellBack,
+    fallbackReasons,
+    searches: a.searches + b.searches,
+  };
 }
 
 /**
@@ -154,6 +220,10 @@ export function createZoteroSearchImportWriter(
       // Built on the first write rather than here: a run whose only batch is
       // empty (every row unchecked) then costs no search at all.
       let index: LibraryIndex | undefined;
+      // `P2-T18`: read on the first write — `WritingItems`' entry — and then
+      // never again for this run. See `readUseTranslators`.
+      let useTranslators: boolean | undefined;
+      let pathTotals = emptyPathTotals();
 
       return {
         libraryId,
@@ -165,6 +235,9 @@ export function createZoteroSearchImportWriter(
           batchToken: CancellationToken,
         ): Promise<SearchImportBatchResult> {
           index ??= await buildLibraryIndex(libraryId);
+          useTranslators ??= (
+            deps.readUseTranslators ?? (() => getPref("useTranslators"))
+          )();
           const report = await importWorks({
             works,
             collectionName: target.collectionName,
@@ -184,7 +257,28 @@ export function createZoteroSearchImportWriter(
             index,
             chunkSize: Math.max(1, works.length),
             token: batchToken,
+            // Off — the shipped default — passes nothing, so the importer
+            // runs the hand-mapped path exactly as it did before `P2-T18`.
+            ...(useTranslators && {
+              translatorLookup: {
+                ...deps.translatorLookup,
+                ...(deps.logger !== undefined && { logger: deps.logger }),
+              },
+            }),
           });
+          if (useTranslators) {
+            pathTotals = addPathTotals(pathTotals, report.importPaths);
+            // `P2-T18` step 10's per-run counts, cumulative over the run's
+            // batches. Logged, not rendered: `SearchImportBatchResult` has no
+            // field to carry them to the summary (see the card's report).
+            deps.logger?.info("searchImport: import paths so far", {
+              viaTranslators: pathTotals.viaTranslators,
+              handMapped: pathTotals.handMapped,
+              fellBack: pathTotals.fellBack,
+              ...pathTotals.fallbackReasons,
+              searches: pathTotals.searches,
+            });
+          }
           return {
             created: report.created,
             linkedExisting: report.linkedExisting,

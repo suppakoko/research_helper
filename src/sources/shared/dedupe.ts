@@ -6,7 +6,9 @@
  * on title + author + year where none does (Tiers 5–6, §11.3.2–§11.3.3), and
  * **flagged rather than merged** below the confidence threshold (`docs/10`
  * FR-50 scenario 4, `docs/11` §3 R-18). A known preprint ↔ published relation
- * is a **link**, never a merge (Tier 7, §11.4).
+ * is a **link**, never a merge (Tier 7, §11.4) — also when the two share a
+ * Tier 1–4 identifier but their DOIs conflict (§11.5 under rule 1, owner,
+ * 2026-10-15, `plan/00` §6 item 200).
  *
  * **What this module decides and what it does not.** It produces a
  * {@link DedupDecision} per compared pair and, over a result set, the
@@ -581,6 +583,35 @@ export function isKnownVersionLink(
   return names(a, b) || names(b, a);
 }
 
+/**
+ * A known version link's decision (§11.4): `"link"` at Tier 7's confidence,
+ * whichever tier found it. One shape for Tier 7 itself, the title tiers'
+ * guard and the identifier tiers' downgrade.
+ */
+function versionLinkDecision(evidence: DedupEvidence): DedupDecision {
+  return decide("link", "version-link", TIER_CONFIDENCE.versionLink, {
+    ...evidence,
+    knownVersionLink: true,
+  });
+}
+
+/**
+ * `docs/02` §11.5, under rule 1 (owner, 2026-10-15, `plan/00` §6 item 200):
+ * may a Tier 1–4 shared identifier be a match? Not when the two DOIs
+ * conflict — Tier 0, which always runs first, recorded `"doi"` in
+ * `ctx.conflicts` — **and** one record names the other as its other version
+ * ({@link isKnownVersionLink}). Then the pair is a preprint and its published
+ * version that a source happens to describe with the same identifier, and a
+ * merge would be the false merge gate `G-16` and `docs/11` R-18 rule out.
+ */
+function isVersionPairAcrossConflictingDois(
+  a: DedupCandidate,
+  b: DedupCandidate,
+  ctx: TierContext,
+): boolean {
+  return ctx.conflicts.includes("doi") && isKnownVersionLink(a, b);
+}
+
 /** §11.4's derived signal: exactly one side is a preprint. */
 export function isPreprintPair(a: DedupCandidate, b: DedupCandidate): boolean {
   return a.type !== b.type && (a.type === "preprint" || b.type === "preprint");
@@ -607,10 +638,7 @@ function guardTitleVerdict(
     });
   }
   if (isKnownVersionLink(a, b)) {
-    return decide("link", "version-link", TIER_CONFIDENCE.versionLink, {
-      ...evidence,
-      knownVersionLink: true,
-    });
+    return versionLinkDecision(evidence);
   }
   const delta = yearDelta(a, b);
   const yearDiffers = delta !== undefined && delta !== 0;
@@ -653,7 +681,12 @@ function guardTitleVerdict(
   return provisional;
 }
 
-/** Tiers 1–4: one exact-identifier tier. Equal → match; both present and unequal → conflict. */
+/**
+ * Tiers 1–4: one exact-identifier tier. Equal → match, unless the DOIs
+ * conflict and one record names the other as its other version, which is a
+ * link ({@link isVersionPairAcrossConflictingDois}); both present and
+ * unequal → conflict.
+ */
 function identifierTier(
   id: DedupTierId,
   docTier: number,
@@ -667,7 +700,15 @@ function identifierTier(
       const x = a.ids[kind];
       const y = b.ids[kind];
       if (x === undefined || y === undefined) return null;
-      if (x === y) return decide("match", id, confidence, { [kind]: x });
+      if (x === y) {
+        if (isVersionPairAcrossConflictingDois(a, b, ctx)) {
+          return versionLinkDecision({
+            [kind]: x,
+            conflictingIds: ctx.conflicts.join(","),
+          });
+        }
+        return decide("match", id, confidence, { [kind]: x });
+      }
       ctx.conflicts.push(kind);
       return null;
     },
@@ -777,9 +818,7 @@ const VERSION_LINK_TIER: DedupTier = {
   docTier: 7,
   run(a, b) {
     if (!isKnownVersionLink(a, b)) return null;
-    return decide("link", "version-link", TIER_CONFIDENCE.versionLink, {
-      knownVersionLink: true,
-    });
+    return versionLinkDecision({});
   },
 };
 

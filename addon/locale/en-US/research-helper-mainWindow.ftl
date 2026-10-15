@@ -95,6 +95,12 @@ research-helper-menu-search-import =
 research-helper-menu-collection-search-import =
     .label = Search & Import into This Collection…
 
+# FR-12's entry (P2-T17), verbatim from `docs/08` §10.2. Shown only when the
+# collection has a stored search_provenance row: absent, not disabled,
+# otherwise (`docs/08` §2.4, §2.5).
+research-helper-menu-collection-rerun =
+    .label = Re-run This Search…
+
 # `P0-T10`'s spike command. Kept deliberately: `src/ui/menus/toolsMenu.ts`
 # names this id, and it is the key the ko-KR fallback assertion is built on
 # (see the header). Removing it breaks both.
@@ -145,6 +151,25 @@ research-helper-import-summary = Imported { $imported } · Linked { $linked } ·
 
 # The abstract-coverage figure that measures risk R-17 (`P1-T22` step 3).
 research-helper-import-abstract-coverage = Abstracts present for { $percent }% of imported items
+
+# The import-path counts of a run with `useTranslators` on (`P2-T18` step 10;
+# `docs/01` §6.3 item 3). `$translated` items came through Zotero's own
+# identifier lookup; `$handMapped` were built from the search results, either
+# because the lookup could not resolve them or because they had no identifier.
+# Here, beside the import summary, because the same view model formats both.
+research-helper-import-paths = Through Zotero translators { $translated } · From search results { $handMapped }
+
+# Why records went to the search-results path while translators were on, one
+# line per reason class (`P2-T18` step 7). `$cause` is one of the five tokens
+# below and is never shown; `$count` is how many records.
+research-helper-import-fallback-reason =
+    { $cause ->
+        [lookup-error] Translator lookup failed: { $count }
+        [no-translators] No translator for the identifier: { $count }
+        [no-result] Translator lookup found nothing: { $count }
+        [timeout] Translator lookup timed out: { $count }
+       *[no-identifier] No DOI, PMID or arXiv ID: { $count }
+    }
 
 
 ## The progress popup's headline — `docs/07` §7.7, `docs/08` §8.2 (P1-T32)
@@ -375,3 +400,16 @@ research-helper-prefs-test-rejected = The service rejected this key (HTTP 401) �
 research-helper-prefs-test-forbidden = The service refused the request (HTTP 403) · checked { $time }
 research-helper-prefs-test-absent = Store a key before testing it.
 research-helper-prefs-test-unavailable = No credential store is available, so there is no key to test.
+
+
+## The import-path preference (P2-T18; docs/01 §6.3 item 3, docs/07 §8.5, §12.1)
+##
+## `docs/08` §7.3's markup binds this id on the Search group's checkbox; the
+## checkbox itself is `P3-T04`'s. A XUL `<checkbox>` needs `.label` rather than a
+## value (`docs/08` §10.1, measured 2026-10-15), and `docs/07` §12.1 requires the
+## tooltip to say the path is slower before a user turns it on. The label text is
+## `docs/01` §6.3 item 3's, verbatim.
+
+research-helper-prefs-use-translators =
+    .label = Fetch metadata through Zotero translators (slower, more accurate)
+    .tooltiptext = Each record is looked up through Zotero's translators over the network, one at a time, so an import takes longer. A record the lookup cannot resolve is imported from the search results instead.

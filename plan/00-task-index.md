@@ -1438,14 +1438,16 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.37 Raised by `P2-T11` and `P2-T14`, 2026-10-15 — recorded under rule 9; items 199, 200 and 205 wait on the owner
 
-199. **Korean for the window's new strings (gate G-41, owner).** `research-helper-search-preprint-policy` (`P2-T11`;
+199. ~~**Korean for the window's new strings (gate G-41, owner).**~~ **DONE 2026-10-16: the six drafted by the coordinator,
+    reviewed by the owner as drafted, now live and on `KO_PRESENT`.** `research-helper-search-preprint-policy` (`P2-T11`;
     en-US: "A preprint and its published version are kept as two items, linked as Related; the preprint is tagged
     research_helper/superseded-by-published.") and `P2-T14`'s five (`-s2-no-key`, `-s2-no-key-request`,
     `-row-duplicate`, `-row-linked`, `-source-role`) are commented stubs on `KO_PENDING_REVIEW`.
 
 200. ~~**The identifier tiers can still merge a preprint into its published version (owner's decision).**~~ **DECIDED
     2026-10-15: downgrade to a link** when the DOIs conflict and one record names the other as its other version —
-    `docs/02` §11.5 rule first, then the cascade. Measured: an
+    `docs/02` §11.5 rule first, then the cascade. **DONE 2026-10-16** (`plan/reports/item-200.md`; 5 mutants killed, no
+    existing test edited); the gap a third record opens is item 209. Measured: an
     arXiv record naming the journal DOI in `relatedVersionIds`, against a Semantic Scholar record carrying that journal
     DOI *and* the same arXiv id, gives `match` at the `arxiv` tier — before Tier 7 is reached. R-18 rates a false merge
     as the failure most feared. Downgrading needs a `docs/02` §11.5 rule first; `P2-T13`'s labelled pairs measure it.
@@ -1470,6 +1472,47 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 207. **Unticking every database writes `sources = ""`, which the next open reads as "all ticked".** Also: `P2-T14`'s
     Verify-with `diff` cannot pass under the Korean stub convention — replace it with the `keys.test.ts` partition check.
+
+### 6.38 Raised by `P2-T17`, `P2-T18` and the item-200 change, 2026-10-16 — recorded under rule 9; items 209, 213, 214 and 217 wait on the owner
+
+208. **Two live-request incidents, both against the brief.** (1) The `P2-T18` agent's integration mutant I1 sent every
+    import in the suite through Zotero's real `Translate.Search`; real metadata came back, uncounted, possibly several
+    hundred requests to the services Zotero's translators call. (2) The item-200 agent ran `npx vite-node`, which
+    downloaded `vite-node@6.0.0` from the npm registry. No key, user data or project file was involved. Fix: a
+    suite-wide stub of `Zotero.Translate.Search` in the integration setup, so a mutant that enables Strategy B fails
+    safely; briefs now name `tsx` as the only script runner.
+
+209. **A third record can still merge a preprint into its published version (owner's decision).** Measured: an arXiv
+    record naming the journal DOI, a second arXiv record with the same DOI and no naming, and the Semantic Scholar
+    record — the plain arXiv record matches each of the others, and the union puts all three in one group, in 2 of 3
+    input orders. Closing it needs a group-level check. Related: only a DOI conflict triggers item 200's rule, and a
+    side with no DOI stays a match.
+
+210. **`docs/02` §11.4's pseudo-code still shows the superseded "suppress the preprint" default** (G-16 decided keep both).
+
+211. **Strategy B items get neither the `research_helper` tag nor the superseded-preprint tag** that hand-mapped items
+    carry; and `saveAttachments: true` makes Strategy B download any open-access PDF (`docs/01` §6.2's reference).
+
+212. **Strategy B's per-run counts do not reach the visible import summary.** Computed, summed and logged; showing them
+    needs `SearchImportBatchResult` / `SearchImportWriteReport` counts, `searchImportPipeline.ts`'s `accumulate` /
+    `toOutput`, and the view model to format `research-helper-import-paths`.
+
+213. **The per-record translator timeout has no value (owner).** The mechanism is built with no default; `docs/07` §12.1
+    needs the number. A timed-out lookup that later finishes may save a second copy.
+
+214. **A PMCID-only record's route (owner):** no document gives a Europe PMC PMCID query form; the NCBI ID Converter
+    (`idtype=pmcid`, `docs/02` §3.7) is documented. Until chosen, such a record is hand-mapped.
+
+215. **Where the import path is persisted:** `docs/07` §5.1 types `fieldOrigin` values as `SourceId`, so the path lives
+    only in `ImportReport.createdVia`.
+
+216. **A true "already in this collection" count** needs a per-record write report from the importer (`docs/08` §4.6 note).
+
+217. **"Advance to today" when the recorded upper bound is later than today moves it backwards (owner):** the card says
+    "move `toIso` to today" literally; `max(recorded, today)` is the alternative.
+
+218. **Korean for the newest strings (gate G-41):** `P2-T17`'s nine window strings and `P2-T18`'s three
+    (`-import-paths`, `-import-fallback-reason`, `-prefs-use-translators`) are commented stubs on `KO_PENDING_REVIEW`.
 
 ## 7. Regenerating this file
 

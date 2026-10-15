@@ -3286,3 +3286,242 @@ describe("P2-T14 — the Databases row writes the sources preference (step 1)", 
     expect(writes).toStrictEqual([["pubmed"]]);
   });
 });
+
+// ===========================================================================
+// P2-T17 — FR-12's Re-run (pre-filled from provenance) state, docs/08 §4.6
+// ===========================================================================
+
+/** The host's `loadRerun()` answer, as the view model builds it. */
+const RERUN_SEED = {
+  collectionID: 4242,
+  collectionName: "CRISPR delivery / 2026 screen",
+  recordedAt: "2026-03-14T09:00:30.000Z",
+  databases: 2,
+  retrieved: 142,
+  imported: 37,
+  asRecorded: {
+    userQuery: "lipid nanoparticle CRISPR delivery",
+    sourceIds: ["crossref"],
+    requestedLimit: 40,
+    dateWindow: { fromIso: "2019-01-01", toIso: "2021-12-31" },
+  },
+  advanced: {
+    userQuery: "lipid nanoparticle CRISPR delivery",
+    sourceIds: ["crossref"],
+    requestedLimit: 40,
+    dateWindow: { fromIso: "2019-01-01", toIso: "2026-10-15" },
+  },
+};
+
+/** Let the controller's `loadRerun()` promise and its continuation run. */
+async function flush(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** Open the window the way the menu entry does, and wait for the seed. */
+async function openRerun(
+  options: {
+    readonly seed?: unknown;
+    readonly mode?: string;
+  } = {},
+): Promise<{ h: Harness; asked: number[] }> {
+  const asked: number[] = [];
+  const seed = "seed" in options ? options.seed : RERUN_SEED;
+  const h = harness({
+    nowEpochMs: localMidnight(2026, 10, 15),
+    args: { mode: options.mode ?? "rerun", collectionID: 4242 },
+    host: {
+      listSources: () => [PUBMED, CROSSREF],
+      listCollections: () => [{ id: 4242, name: RERUN_SEED.collectionName }],
+      loadRerun: (id: number) => {
+        asked.push(id);
+        return Promise.resolve(seed);
+      },
+    },
+  });
+  h.controller.init();
+  await flush();
+  return { h, asked };
+}
+
+function argsOf(element: FakeElement | undefined): unknown {
+  const raw = element?.getAttribute("data-l10n-args");
+  return raw === null || raw === undefined ? undefined : JSON.parse(raw);
+}
+
+describe('P2-T17 — the window opened with mode: "rerun" (steps 6–7)', () => {
+  it("asks the host for the invoked collection's record, once", async () => {
+    const { asked } = await openRerun();
+    expect(asked).toStrictEqual([4242]);
+  });
+
+  it("shows the Re-run chip, the §4.6 banner and the re-run panel in place of INITIAL", async () => {
+    const { h } = await openRerun();
+    const chip = h.byId("rh-search-mode");
+    expect(chip?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-mode-rerun",
+    );
+    expect(argsOf(chip)).toStrictEqual({
+      collection: "CRISPR delivery / 2026 screen",
+    });
+    const heading = h.byId("rh-rerun-heading");
+    expect(heading?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-rerun-heading",
+    );
+    expect(argsOf(heading)).toStrictEqual({
+      collection: "CRISPR delivery / 2026 screen",
+    });
+    expect(argsOf(h.byId("rh-rerun-recorded"))).toStrictEqual({
+      date: "2026-03-14",
+      databases: 2,
+      retrieved: 142,
+      imported: 37,
+    });
+    expect(h.byId("rh-state-rerun")?.hidden).toBe(false);
+    expect(h.byId("rh-state-initial")?.hidden).toBe(true);
+  });
+
+  it('selects "as recorded" and seeds every control from the record', async () => {
+    const { h } = await openRerun();
+    expect(h.byId("rh-rerun-dates")?.value).toBe("recorded");
+    expect(h.byId("rh-search-keyword")?.value).toBe(
+      "lipid nanoparticle CRISPR delivery",
+    );
+    expect(
+      h
+        .byId("rh-search-databases")
+        ?.children.map((box) => [box.getAttribute("value"), box.checked]),
+    ).toStrictEqual([
+      ["pubmed", false],
+      ["crossref", true],
+    ]);
+    expect(h.byId("rh-search-max-results")?.value).toBe("40");
+    // 2019 is outside the 20 years the menulists normally offer from 2026, and
+    // is offered anyway so the record can be shown as recorded.
+    expect(h.byId("rh-search-years-from")?.value).toBe("2019");
+    expect(h.byId("rh-search-years-to")?.value).toBe("2021");
+    // docs/08 §4.6 rule 3: the invoked collection, "New collection…" still there.
+    expect(h.byId("rh-search-target")?.value).toBe("4242");
+    expect(h.byId("rh-search-target-new-item")).toBeDefined();
+  });
+
+  it("leaves every seeded control editable (§4.6 rule 1)", async () => {
+    const { h } = await openRerun();
+    const seeded = [
+      h.byId("rh-search-keyword"),
+      h.byId("rh-search-max-results"),
+      h.byId("rh-search-years-from"),
+      h.byId("rh-search-years-to"),
+      h.byId("rh-rerun-dates"),
+      h.byId("rh-search-target"),
+      h.byId("rh-search-target-new"),
+      ...(h.byId("rh-search-databases")?.children ?? []),
+    ];
+    expect(seeded.every((element) => element !== undefined)).toBe(true);
+    for (const element of seeded) {
+      expect(element?.disabled, element?.id).toBe(false);
+      expect(element?.getAttribute("readonly"), element?.id).toBeNull();
+      expect(element?.getAttribute("disabled"), element?.id).toBeNull();
+    }
+    expect(h.byId("rh-search-run")?.disabled).toBe(false);
+  });
+
+  it('sends the recorded window exactly, and moves only the upper bound on "advance to today"', async () => {
+    const { h } = await openRerun();
+    expect(h.controller.collectQuery()).toMatchObject({
+      mode: "rerun",
+      keyword: "lipid nanoparticle CRISPR delivery",
+      sources: ["crossref"],
+      maxResults: 40,
+      dateWindow: { fromIso: "2019-01-01", toIso: "2021-12-31" },
+    });
+
+    const dates = h.byId("rh-rerun-dates");
+    if (!dates) throw new Error("no radio pair");
+    dates.value = "advance";
+    dates.dispatch("command");
+    expect(h.controller.collectQuery()["dateWindow"]).toStrictEqual({
+      fromIso: "2019-01-01",
+      toIso: "2026-10-15",
+    });
+    expect(h.byId("rh-search-years-from")?.value).toBe("2019");
+    expect(h.byId("rh-search-years-to")?.value).toBe("2026");
+
+    dates.value = "recorded";
+    dates.dispatch("command");
+    expect(h.controller.collectQuery()["dateWindow"]).toStrictEqual(
+      RERUN_SEED.asRecorded.dateWindow,
+    );
+  });
+
+  it("drops the recorded window once the user picks a year: an adjusted re-run is a normal run", async () => {
+    const { h } = await openRerun();
+    const from = h.byId("rh-search-years-from");
+    if (!from) throw new Error("no from-year menulist");
+    from.value = "2020";
+    from.dispatch("command");
+    const query = h.controller.collectQuery();
+    expect(query["dateWindow"]).toBeUndefined();
+    expect(query["fromYear"]).toBe(2020);
+  });
+
+  it("shows and sends a recorded All years (FR-3's dateFilter: none)", async () => {
+    const allYears = {
+      ...RERUN_SEED,
+      asRecorded: { ...RERUN_SEED.asRecorded, dateWindow: "all-years" },
+      advanced: { ...RERUN_SEED.advanced, dateWindow: "all-years" },
+    };
+    const { h } = await openRerun({ seed: allYears });
+    const span = h.byId("rh-search-years-span");
+    expect(span?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-rerun-all-years",
+    );
+    expect(span?.getAttribute("data-l10n-args")).toBeNull();
+    expect(h.controller.collectQuery()["dateWindow"]).toBe("all-years");
+  });
+
+  it("opens as a keyword search when the collection has no record", async () => {
+    const { h } = await openRerun({ seed: undefined });
+    expect(h.byId("rh-search-mode")?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-mode-keyword",
+    );
+    expect(h.byId("rh-state-initial")?.hidden).toBe(false);
+    expect(h.byId("rh-state-rerun")?.hidden).toBe(true);
+    expect(h.controller.collectQuery()["dateWindow"]).toBeUndefined();
+  });
+
+  it("never asks for a record in keyword mode, so a keyword query is unchanged", async () => {
+    const { h, asked } = await openRerun({ mode: "keyword" });
+    expect(asked).toStrictEqual([]);
+    expect("dateWindow" in h.controller.collectQuery()).toBe(false);
+  });
+
+  it("draws the view model's INITIAL as the re-run panel, and every other state as itself", async () => {
+    const { h } = await openRerun();
+    h.controller.render(exportState([], { panel: "initial" }));
+    expect(h.byId("rh-state-rerun")?.hidden).toBe(false);
+    expect(h.byId("rh-state-initial")?.hidden).toBe(true);
+    h.controller.render(exportState([], { panel: "searching" }));
+    expect(h.byId("rh-state-searching")?.hidden).toBe(false);
+    expect(h.byId("rh-state-rerun")?.hidden).toBe(true);
+  });
+
+  it("ships the panel hidden, its radio pair labelled by Years, with machine values", () => {
+    const panel = byId("rh-state-rerun");
+    expect(panel?.attrs.get("hidden")).toBe("true");
+    expect(panel?.parent?.attrs.get("id")).toBe("rh-results-area");
+    const group = byId("rh-rerun-dates");
+    expect(group?.name).toBe("radiogroup");
+    expect(group?.attrs.get("aria-labelledby")).toBe("rh-search-years-label");
+    expect(
+      group?.children.map((radio) => [
+        radio.name,
+        radio.attrs.get("value"),
+        radio.attrs.get("data-l10n-id"),
+      ]),
+    ).toStrictEqual([
+      ["radio", "recorded", "research-helper-search-rerun-as-recorded"],
+      ["radio", "advance", "research-helper-search-rerun-advance"],
+    ]);
+  });
+});

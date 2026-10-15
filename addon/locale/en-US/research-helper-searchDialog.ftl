@@ -54,12 +54,11 @@
 #
 # ## Phase scope
 #
-# Phase 1 ships the `keyword` mode only. `docs/08` §4.2's three other mode
-# chips (`related`, `recommend-from-collection`, `rerun`) and §4.6's **Re-run
-# (pre-filled from provenance)** panel are FR-12's and Phase 2's (`P2-T17`);
-# their strings arrive with that card, not here (`plan/README.md` §5 rule 2).
-# The `⊕ ID lookup · preprint matching` status row belongs to bioRxiv and
-# medRxiv, which Phase 1 does not register, for the same reason.
+# Phase 1 shipped the `keyword` mode only. `P2-T17` (2026-10-15) adds the
+# `rerun` mode chip and §4.6's **Re-run (pre-filled from provenance)** panel,
+# FR-12's; the `related` and `recommend-from-collection` chips are still later
+# cards'. The `⊕ ID lookup · preprint matching` status row arrived with
+# `P2-T14`.
 
 
 ## Window
@@ -80,9 +79,15 @@ research-helper-search-run =
     .label = Search
     .tooltiptext = Run the search across selected databases
 
-# The read-only mode chip. Phase 1 ships `keyword` only.
+# The read-only mode chip, one message per `mode` value `openSearchWindow`
+# accepts (docs/08 §4.2). `keyword` since Phase 1; `rerun` since P2-T17.
 research-helper-search-mode-keyword =
     .value = Keyword
+
+# FR-12 (P2-T17): `docs/08` §4.2's `Re-run: <collection name>`. `$collection`
+# is the collection's own name — the user's data, not a translatable string.
+research-helper-search-mode-rerun =
+    .value = Re-run: { $collection }
 
 
 ## Date range (docs/08 §4.2 "Date defaults", FR-3)
@@ -321,6 +326,53 @@ research-helper-search-export-failed = Could not export the provenance record. T
 ## 1. INITIAL — an instruction, not a spinner
 
 research-helper-search-state-initial = Enter a keyword and press Search to query the selected databases for papers from the last { $years } calendar years.
+
+
+## 1a. Re-run (pre-filled from provenance) — FR-12, docs/08 §4.6 (P2-T17)
+##
+## The window's initial state when it is opened from a collection's
+## "Re-run This Search…" entry. Every control is seeded from the collection's
+## stored search_provenance row and stays editable. `$collection` is the
+## collection's own name; `$date` the recorded run's finish date, already
+## formatted by the window; the three counts are the record's own totals.
+##
+## Two deliberate departures from §4.6's drawn panel, both reported with
+## P2-T17: the record stores no client-side filter (`docs/07` §5.3 has no
+## field for one), so the second line does not claim the filters are
+## pre-filled; and the importer can tell "already in the library" but not
+## "already in this collection", and it honours "Import anyway", so the third
+## line says what the count actually is.
+
+research-helper-search-rerun-heading = Re-run of the search that built “{ $collection }”
+
+research-helper-search-rerun-recorded =
+    { $databases ->
+        [one] Recorded { $date } · 1 database · { $retrieved } retrieved · { $imported } imported
+       *[other] Recorded { $date } · { $databases } databases · { $retrieved } retrieved · { $imported } imported
+    }
+
+# The date choice is a radio pair, "as recorded" selected by default
+# (docs/08 §4.6 rule 2). "advance to today" moves only the upper bound.
+research-helper-search-rerun-as-recorded =
+    .label = as recorded
+
+research-helper-search-rerun-advance =
+    .label = advance to today
+
+research-helper-search-rerun-prefilled = Keyword, sources and max-per-database are pre-filled from the stored provenance record, and all stay editable.
+
+research-helper-search-rerun-press-search = Press Search to run it again. Unless Import anyway is chosen below, items already in your library are counted as “already present” and never imported twice.
+
+# Replaces the year span while the re-run's window is the recorded
+# "All years" (FR-3: `dateFilter: none`), which the two year menulists cannot
+# show.
+research-helper-search-rerun-all-years = All years, as recorded
+
+# FR-12's second scenario, in docs/08 §4.6 rule 4's shape. Used instead of
+# research-helper-import-summary for an import made from the re-run state.
+# `$present` counts the records that matched an item already in the library
+# by DOI or PMID, which were therefore not imported again.
+research-helper-search-import-summary-rerun = Imported { $imported } · Already present { $present } · { $failed } failed
 
 
 ## 2. LOADING — per-source progress, cancellable

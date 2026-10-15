@@ -48,11 +48,13 @@ import { config } from "../../../package.json";
  * chip" row, which fixes the set as "one per `mode` value `openSearchWindow`
  * accepts (§4.1)").
  *
- * **Phase 1 ships `keyword` only.** `rerun` is `FR-12`'s and belongs to
- * `P2-T17`; `related` and `recommend-from-collection` are Phases 2–3. They are
- * named here because the union is the documented surface of this function and
- * transcribing three strings is not the same as building their menu entries —
- * `P1-T19`'s **Do NOT** forbids the entries, and this file registers none.
+ * **`keyword` since Phase 1, `rerun` since `P2-T17`** (FR-12: the collection
+ * context menu's "Re-run This Search…" opens the window with `mode: "rerun"`
+ * and the collection's id, and the document seeds itself from the
+ * collection's stored provenance row). `related` and
+ * `recommend-from-collection` are later cards'; they are named here because
+ * the union is the documented surface of this function, and this file
+ * registers no menu entry for either.
  */
 export type SearchWindowMode =
   "keyword" | "related" | "recommend-from-collection" | "rerun";
@@ -293,6 +295,19 @@ export interface SearchWindowQuery {
    * {@link NEW_COLLECTION_VALUE}, or `new:<name>`.
    */
   readonly collectionID: string;
+  /**
+   * A re-run's exact date window (`P2-T17`, FR-12), sent **only** while the
+   * window is in `rerun` mode and the user has not touched the two year
+   * menulists: the recorded `{ fromIso, toIso }`, the same with `toIso` moved
+   * to today ("advance to today"), or `"all-years"` for a record that stored
+   * FR-3's `dateFilter: "none"`. Absent on every other query, and then
+   * {@link fromYear} / {@link toYear} decide, as they always have.
+   *
+   * Structurally `src/core/provenance.ts`'s `RerunDateWindow`, written out so
+   * this file keeps importing nothing from `src/`.
+   */
+  readonly dateWindow?:
+    { readonly fromIso: string; readonly toIso: string } | "all-years";
 }
 
 /**

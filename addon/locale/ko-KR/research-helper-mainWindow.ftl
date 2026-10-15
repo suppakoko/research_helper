@@ -13,9 +13,10 @@
 # was machine-translated. What is present is only what an owner has already
 # supplied or what must not be translated at all:
 #
-# * `research-helper-menu-root` and `research-helper-menu-search-import` —
-#   taken verbatim from `docs/08` §10.2, which ships owner-written Korean for
-#   them. `"리서치 헬퍼"` is measured working on Zotero 10.0.1 (`P0-T24`).
+# * `research-helper-menu-root`, `research-helper-menu-search-import` and
+#   `research-helper-menu-collection-rerun` (`P2-T17`) — taken verbatim from
+#   `docs/08` §10.2, which ships owner-written Korean for them.
+#   `"리서치 헬퍼"` is measured working on Zotero 10.0.1 (`P0-T24`).
 # * `research-helper-source-pubmed`, `research-helper-source-europepmc`,
 #   `research-helper-source-crossref`, `research-helper-source-arxiv`,
 #   `research-helper-source-semanticscholar`, `research-helper-source-biorxiv` and
@@ -63,6 +64,11 @@ research-helper-menu-search-import =
 # research-helper-menu-collection-search-import =
 #     .label =
 
+# FR-12's entry (P2-T17), taken verbatim from `docs/08` §10.2, which ships the
+# owner's Korean for it beside the en-US "Re-run This Search…".
+research-helper-menu-collection-rerun =
+    .label = 이 검색 다시 실행…
+
 
 ## Literature source display names — never translated (docs/08 §10.3)
 
@@ -93,6 +99,18 @@ research-helper-source-medrxiv = medRxiv
 #
 # NEEDS REVIEW. en-US: "Abstracts present for { $percent }% of imported items"
 # research-helper-import-abstract-coverage =
+#
+# NEEDS REVIEW (P2-T18). en-US: "Through Zotero translators { $translated } ·
+# From search results { $handMapped }"
+# research-helper-import-paths =
+#
+# NEEDS REVIEW (P2-T18). en-US, a `{ $cause }` selector over five tokens, each
+# variant ending ": { $count }": [lookup-error] "Translator lookup failed",
+# [no-translators] "No translator for the identifier", [no-result] "Translator
+# lookup found nothing", [timeout] "Translator lookup timed out",
+# *[no-identifier] "No DOI, PMID or arXiv ID". "DOI", "PMID" and "arXiv" stay
+# as they are (`docs/08` §10.3).
+# research-helper-import-fallback-reason =
 
 
 ## The progress popup's headline (docs/07 §7.7, docs/08 §8.2 — P1-T32, P1-T33)
@@ -189,3 +207,16 @@ research-helper-source-medrxiv = medRxiv
 ## resolves from en-US until a native speaker reviews it.
 
 research-helper-prefs-backend-indeterminate = 확인 불가 — 이 운영체제에서는 열쇠 보관 등급을 판별할 수 없습니다
+
+
+## The import-path preference (P2-T18; docs/01 §6.3 item 3, docs/07 §8.5, §12.1)
+##
+## NEEDS REVIEW (P2-T18). en-US `.label`: "Fetch metadata through Zotero
+## translators (slower, more accurate)". en-US `.tooltiptext`: "Each record is
+## looked up through Zotero's translators over the network, one at a time, so an
+## import takes longer. A record the lookup cannot resolve is imported from the
+## search results instead." "Zotero" stays as it is (`docs/08` §10.3). Nothing
+## here was machine-translated; the id is on `KO_PENDING_REVIEW`.
+# research-helper-prefs-use-translators =
+#     .label =
+#     .tooltiptext =

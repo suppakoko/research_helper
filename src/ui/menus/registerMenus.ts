@@ -48,12 +48,26 @@
  * ### What is deliberately *not* here
  *
  * `docs/08` §2.4's collection block also carries `research-helper-menu-collection-report`,
- * `-summarize-all`, `-rerun` and `-recommend`. All four are Phases 2–3
- * (`docs/11` §1) and `P1-T19`'s **Do NOT** names the `-rerun` one specifically:
- * its `onShowing` guard reads the `search_provenance` table, which does not
- * exist until `P2-T17` creates it, so a Phase 1 copy would either throw or
- * register a permanently invisible entry. The item-context menu
- * (`main/library/item`) is likewise a later phase's and is not registered.
+ * `-summarize-all` and `-recommend`, which are Phases 2–3 (`docs/11` §1) and
+ * are not registered. The fourth, `-rerun`, is `P2-T17`'s and **is** here —
+ * see {@link rerunItem}. The item-context menu (`main/library/item`) is a
+ * later phase's and is not registered.
+ *
+ * ### Where the re-run entry sits, and why there is no separator above it
+ *
+ * `docs/08` §2.5 draws "Re-run This Search…" **below** a separator whose job
+ * is to divide the two LLM jobs above it (report, summarize-all) from the two
+ * entries that open the Search & Import window below it (re-run, recommend):
+ * "It is grouped with 'Recommend New Papers…' because both open the Search &
+ * Import window … the two entries above the separator are the LLM jobs."
+ * Neither LLM job is registered yet, and the one entry that is —
+ * `P1-T19`'s "Search & Import into This Collection…" — also opens the window,
+ * so it belongs to the re-run's group. A separator between two members of one
+ * group, with nothing on the other side of the line it draws, would contradict
+ * the reason §2.5 gives for it. So the submenu is
+ * `[Search & Import into This Collection…, Re-run This Search…]` with no
+ * separator, and the separator arrives with the first LLM job above it.
+ * Reported with `P2-T17` as a divergence from the card's step 5 wording.
  *
  * §2.4's block also sets `icon: "chrome://research-helper/content/icons/menu-16.svg"`
  * on every submenu. No such file exists under `addon/content/icons/` (only
@@ -65,6 +79,7 @@
 
 import { config } from "../../../package.json";
 import {
+  L10N_MENU_COLLECTION_RERUN,
   L10N_MENU_COLLECTION_SEARCH_IMPORT,
   L10N_MENU_ROOT,
   L10N_MENU_SEARCH_IMPORT,
@@ -117,6 +132,25 @@ export interface SearchMenuCommands {
   ) => unknown;
   /** Where a failure goes. Must not throw. */
   readonly onError: (message: string, error: unknown) => void;
+  /**
+   * Whether a collection has a stored `search_provenance` row (`P2-T17`,
+   * FR-12). Absent — no store, or a database that could not be opened — and
+   * the re-run entry is never shown: `docs/11` §0 principle 5's "incomplete
+   * work hides … never behind a broken menu item".
+   */
+  readonly provenance?: CollectionRunLookup;
+}
+
+/**
+ * `docs/08` §2.4's `RH.provenance.hasRunForCollection(id)`, split in two
+ * because a menu's `onShowing` is synchronous and a SQLite read is not — see
+ * `src/core/provenance.ts`'s `ProvenanceIndex`, which is what implements it.
+ */
+export interface CollectionRunLookup {
+  /** `true` / `false` when already known; `undefined` when not yet asked. */
+  hasRunForCollection(collectionID: number): boolean | undefined;
+  /** Ask the store, remember the answer, and resolve to it. */
+  lookupRunForCollection(collectionID: number): Promise<boolean>;
 }
 
 /** `ZoteroPane`'s Zotero 10 plural collection getter, narrowed to its id. */
@@ -288,6 +322,108 @@ export function withSearchImportEntry(
   };
 }
 
+/** The one selected collection's id, or `undefined` unless exactly one is. */
+function singleCollectionId(context: MenuElementContext): number | undefined {
+  const [collectionID, ...extra] = selectedCollectionIds(context);
+  return extra.length === 0 ? collectionID : undefined;
+}
+
+/**
+ * Start the store lookup for the selected collection, so the answer is there
+ * by the time the submenu opens (`P2-T17`).
+ *
+ * Called from the *submenu's* `onShowing`, which runs on the collection
+ * context menu's own `popupshowing`; the re-run entry's `onShowing` runs
+ * later, when the user moves into the submenu and its popup shows. One indexed
+ * read of the plugin database in between is normally enough, and when it is
+ * not, {@link rerunItem} applies the answer when it arrives.
+ */
+function primeRunLookup(
+  commands: SearchMenuCommands,
+  context: MenuElementContext,
+): void {
+  const lookup = commands.provenance;
+  const collectionID = singleCollectionId(context);
+  if (lookup === undefined || collectionID === undefined) return;
+  if (lookup.hasRunForCollection(collectionID) !== undefined) return;
+  lookup.lookupRunForCollection(collectionID).catch((error: unknown) => {
+    commands.onError("Re-run entry: the provenance lookup failed", error);
+  });
+}
+
+/**
+ * Right-click a collection ▸ Research Helper ▸ Re-run This Search… (`docs/08`
+ * §2.4, §2.5; `P2-T17`, FR-12).
+ *
+ * **Hidden, never merely disabled**, when the collection has no stored
+ * `SearchProvenance` row: §2.4 registers it with `context.setVisible`, and
+ * §2.5 makes it "the only entry in this submenu that can be *absent* rather
+ * than merely disabled" — a disabled entry would advertise a feature a
+ * hand-built collection can never reach.
+ *
+ * The answer is read synchronously from the store's index; when it is not yet
+ * known, the entry starts hidden and the lookup's answer is applied to the
+ * live element when it arrives — **only if the same single collection is still
+ * selected**, because Zotero re-uses the element for the next open and a late
+ * `true` for collection A must not show the entry on collection B.
+ */
+function rerunItem(
+  commands: SearchMenuCommands,
+): _ZoteroTypes.MenuManager.MenuData<_ZoteroTypes.MenuManager.LibraryMenuContext> {
+  return {
+    menuType: "menuitem",
+    l10nID: L10N_MENU_COLLECTION_RERUN,
+    onShowing: (_event, context) => {
+      try {
+        const lookup = commands.provenance;
+        const collectionID = singleCollectionId(context);
+        if (lookup === undefined || collectionID === undefined) {
+          context.setVisible(false);
+          return;
+        }
+        const known = lookup.hasRunForCollection(collectionID);
+        context.setVisible(known === true);
+        if (known !== undefined) return;
+        lookup.lookupRunForCollection(collectionID).then(
+          (hasRun) => {
+            if (singleCollectionId(context) === collectionID) {
+              context.setVisible(hasRun);
+            }
+          },
+          (error: unknown) => {
+            commands.onError(
+              "Re-run entry: the provenance lookup failed",
+              error,
+            );
+          },
+        );
+      } catch (error) {
+        commands.onError("Re-run entry visibility check failed", error);
+      }
+    },
+    onCommand: (_event, context) => {
+      const ids = selectedCollectionIds(context);
+      const [collectionID, ...extra] = ids;
+      // The same refusal as the Search & Import entry: the selection can change
+      // between `popupshowing` and the click.
+      if (collectionID === undefined || extra.length > 0) {
+        commands.onError(
+          "Re-run entry needs exactly one selected collection; the " +
+            `selection holds ${String(ids.length)}`,
+          new Error(
+            "[research-helper] ZoteroPane.getSelectedCollections() " +
+              `returned ${String(ids.length)} collection(s).`,
+          ),
+        );
+        return;
+      }
+      // `docs/08` §2.4: `openSearchWindow({ mode: "rerun", collectionID })`.
+      // The window loads the record itself (`P2-T17` step 6).
+      open(commands, context, { mode: "rerun", collectionID });
+    },
+  };
+}
+
 /**
  * Right-click a collection ▸ Research Helper ▸ Search & Import into This
  * Collection… (`docs/08` §2.4, §2.5; `P1-T19` Goal).
@@ -322,6 +458,9 @@ export function collectionMenuOptions(
         onShowing: (_event, context) => {
           try {
             context.setVisible(selectedCollectionIds(context).length === 1);
+            // FR-12 (`P2-T17`): ask about the re-run entry now, so the answer
+            // is ready when the submenu opens.
+            primeRunLookup(commands, context);
           } catch (error) {
             commands.onError(
               "Collection context-menu visibility check failed",
@@ -356,6 +495,8 @@ export function collectionMenuOptions(
               open(commands, context, { mode: "keyword", collectionID });
             },
           },
+          // FR-12 (`P2-T17`). No separator above it — see this file's header.
+          rerunItem(commands),
         ],
       },
     ],

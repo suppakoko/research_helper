@@ -11,8 +11,12 @@
  * `CanonicalWork` → item-JSON mapping and the `new Zotero.Item()` +
  * `fromJSON()` construction all happen **before** the chunk's transaction
  * opens. What is left inside it is `setCollections()` + `save()` per item —
- * pure DB work. No HTTP call is reachable from this module at all: it takes
- * already-fetched records, which is also what `NFR-1` measures.
+ * pure DB work. On the hand-mapped path — the shipped default and the one
+ * `NFR-1` measures — no HTTP call is reachable from this module: it takes
+ * already-fetched records. The one exception is opt-in and arrives as
+ * {@link ImportRequest.translatorLookup}: `P2-T18`'s Strategy B, whose
+ * identifier lookups are network round trips run by `./translatorImport.ts`,
+ * one at a time and outside every transaction.
  *
  * **One search for the whole run, then O(1) per candidate.** Existing-item
  * detection is {@link buildLibraryIndex}'s, called **once** here (`docs/02`
@@ -85,6 +89,14 @@ import {
   type ExistingItemMatch,
   type LibraryIndex,
 } from "./libraryIndex";
+import {
+  type ImportPath,
+  lookupThroughTranslators,
+  TRANSLATOR_FALLBACK_REASONS,
+  type TranslatedWork,
+  type TranslatorFallbackReason,
+  type TranslatorImportOptions,
+} from "./translatorImport";
 
 // ---------------------------------------------------------------------------
 // 1. What the caller chooses
@@ -187,6 +199,20 @@ export interface ImportRequest {
    * Injectable so a spec can count the yields instead of inferring them.
    */
   readonly yieldToUi?: () => Promise<void>;
+  /**
+   * Strategy B (`P2-T18`, `docs/01` §6.3 item 3): present only when the
+   * writer read `useTranslators` as on, once, at the entry to `WritingItems`
+   * (`docs/07` §12.1). **Absent, the import is exactly the hand-mapped path**
+   * — not one call, request or transaction differs — which is the shipped
+   * default and the path `NFR-1` measures.
+   *
+   * Present, every record to be created is first looked up through
+   * `Zotero.Translate.Search` (`./translatorImport.ts`); a record whose lookup
+   * fails, times out, finds no translator or returns nothing — or that has no
+   * usable identifier — is hand-mapped as if the option were absent, and is
+   * counted in {@link ImportReport.importPaths}.
+   */
+  readonly translatorLookup?: TranslatorImportOptions;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +310,29 @@ export interface ImportStats {
   readonly chunkMs: readonly number[];
 }
 
+/**
+ * `P2-T18` step 10: which path produced the created items, and why records
+ * that could have gone through Zotero's translators did not.
+ */
+export interface ImportPathReport {
+  /** True when {@link ImportRequest.translatorLookup} was supplied. */
+  readonly translatorsRequested: boolean;
+  /** Items created through Strategy B. Always 0 when not requested. */
+  readonly viaTranslators: number;
+  /** Items created by hand-mapping (Strategy A). */
+  readonly handMapped: number;
+  /**
+   * Records sent to Strategy A by the translator path — the sum of
+   * {@link fallbackReasons}. A record counted here can still fail to map;
+   * it is then also in {@link ImportReport.failed}.
+   */
+  readonly fellBack: number;
+  /** {@link fellBack}, by reason class. Every reason is present, 0 or more. */
+  readonly fallbackReasons: Readonly<Record<TranslatorFallbackReason, number>>;
+  /** `Translate.Search` objects constructed — one per lookup. */
+  readonly searches: number;
+}
+
 /** `P1-T14` step 7's report. */
 export interface ImportReport {
   readonly collection: Zotero.Collection;
@@ -318,6 +367,13 @@ export interface ImportReport {
   readonly abstractCoverage: AbstractCoverage;
   /** Created item IDs, in input order. */
   readonly createdItemIDs: readonly number[];
+  /**
+   * The path that produced each of {@link createdItemIDs}, aligned with it
+   * (`P2-T18` step 9: "record which path produced each item").
+   */
+  readonly createdVia: readonly ImportPath[];
+  /** `P2-T18` step 10's per-run counts. */
+  readonly importPaths: ImportPathReport;
   /** Linked existing item IDs, in input order. */
   readonly linkedItemIDs: readonly number[];
   /** How each linked record matched (`"doi"` or `"pmid"`), in input order. */
@@ -346,10 +402,12 @@ export interface ImportReport {
  *
  * The order is `docs/08` §4.4's: resolve the target collection, run the dedup
  * pass, write the new items, backfill abstracts, link the existing items,
- * report. §4.4's `Zotero.Translate.Search` branch is **not** here — Phase 1
- * ships the hand-mapped path only, `useTranslators` ships `false`
- * (`docs/07` §8.5) and `P2-T18` owns Strategy B — so this module neither reads
- * that preference nor imports `Zotero.Translate`.
+ * report. §4.4's `Zotero.Translate.Search` branch runs only when
+ * {@link ImportRequest.translatorLookup} is supplied (`P2-T18`), between the
+ * dedup pass and the hand-mapped write: its items get the same abstract
+ * repair, and its fallbacks become the hand-mapped write's input. This module
+ * never reads `useTranslators` (the writer does, once per run) and never names
+ * `Zotero.Translate` (`./translatorImport.ts` does).
  *
  * @param request - the records, the destination and the policies
  * @returns the counts, the IDs, the `R-17` coverage and the timings
@@ -423,7 +481,119 @@ export async function importWorks(
   };
 
   let firstChunk = true;
-  for (const chunk of chunksOf(plan.toCreate, chunkSize)) {
+
+  // ---- Strategy B (`P2-T18`): only when the writer read the pref on ----
+  // Absent, `handMapQueue` is `plan.toCreate` itself and nothing below this
+  // block runs differently from the shipped hand-mapped path.
+  const createdVia: ImportPath[] = [];
+  const fallbackReasons = emptyFallbackCounts();
+  let handMapQueue: readonly CanonicalWork[] = plan.toCreate;
+  let translatorSearches = 0;
+  if (request.translatorLookup !== undefined && plan.toCreate.length > 0) {
+    // `translate()` saves straight into the collection, so it must exist
+    // before the first lookup; resolved in a transaction of its own, before
+    // any network call, never inside one.
+    const target = await Zotero.DB.executeTransaction(() => ensureCollection());
+    transactions += 1;
+    const looked = await lookupThroughTranslators({
+      works: plan.toCreate,
+      libraryID,
+      collectionID: target.collection.id,
+      ...(request.token !== undefined && { token: request.token }),
+      options: request.translatorLookup,
+    });
+    translatorSearches = looked.searches;
+    for (const fallback of looked.fallbacks) {
+      fallbackReasons[fallback.reason] += 1;
+    }
+    handMapQueue = looked.fallbacks.map((fallback) => fallback.work);
+
+    for (const chunk of chunksOf(looked.translated, chunkSize)) {
+      if (!firstChunk) {
+        await yieldToUi();
+        request.token?.throwIfCancelled();
+      }
+      firstChunk = false;
+      const chunkStartedAt = clock.now();
+      // Decided outside the transaction, as the hand-mapped path decides
+      // its mapping outside it.
+      const planned = chunk.map((entry) => ({
+        ...entry,
+        abstract: nonEmptyAbstract(entry.work),
+        repository: preprintRepository(entry, mapping),
+      }));
+      const tMapped = clock.now();
+      mappingMs += tMapped - chunkStartedAt;
+      try {
+        const written = await Zotero.DB.executeTransaction(
+          async (): Promise<{ repaired: number; present: number }> => {
+            let repaired = 0;
+            let present = 0;
+            for (const entry of planned) {
+              let changed = false;
+              // `docs/01` §6.3 step 4 after **either** path: translators
+              // "frequently drop abstracts". `setField`, never `fromJSON`.
+              if (
+                entry.item.getField("abstractNote") === "" &&
+                entry.abstract !== undefined
+              ) {
+                entry.item.setField("abstractNote", entry.abstract);
+                repaired += 1;
+                changed = true;
+              }
+              // `P2-T08`'s server attribution, on the type the translator
+              // chose — never re-mapped — and only into an empty field: the
+              // user turned this path on for Zotero-canonical metadata.
+              if (entry.repository !== undefined) {
+                entry.item.setField("repository", entry.repository);
+                changed = true;
+              }
+              // save(), not saveTx(): `docs/01` §5.8 / §12 gotcha 12.
+              if (changed) await entry.item.save();
+              if (entry.item.getField("abstractNote") !== "") present += 1;
+            }
+            return { repaired, present };
+          },
+        );
+        backfilled += written.repaired;
+        withAbstract += written.present;
+      } catch (error) {
+        // The translator already saved these items, so they are created
+        // whatever happened here; only the repair is lost. Counted from the
+        // fields as they stand, and logged rather than thrown.
+        for (const entry of planned) {
+          if (entry.item.getField("abstractNote") !== "") withAbstract += 1;
+        }
+        request.translatorLookup.logger?.warn(
+          "searchImport: could not repair translator-imported items",
+          {
+            items: planned.length,
+            code: (error instanceof ResearchHelperError
+              ? error
+              : new ZoteroApiError(String(error), {
+                  phase: "translator-repair",
+                })
+            ).code,
+          },
+        );
+      }
+      transactions += 1;
+      for (const entry of chunk) {
+        createdItemIDs.push(entry.item.id);
+        createdVia.push("translator");
+        createdEntries.push({
+          work: entry.work,
+          item: entry.item,
+          abstract: nonEmptyAbstract(entry.work),
+        });
+      }
+      const chunkEndedAt = clock.now();
+      chunkMs.push(chunkEndedAt - chunkStartedAt);
+      writeMs += chunkEndedAt - tMapped;
+    }
+  }
+
+  for (const chunk of chunksOf(handMapQueue, chunkSize)) {
     if (!firstChunk) {
       // `docs/07` §7.2's inter-chunk yield, then `docs/07` §7.4's checkpoint.
       await yieldToUi();
@@ -495,6 +665,7 @@ export async function importWorks(
         );
         transactions += 1;
         createdItemIDs.push(...written.ids);
+        for (const _id of written.ids) createdVia.push("hand-map");
         createdEntries.push(...built);
         backfilled += written.repaired;
         withAbstract += written.present;
@@ -511,6 +682,18 @@ export async function importWorks(
     const chunkEndedAt = clock.now();
     chunkMs.push(chunkEndedAt - chunkStartedAt);
     writeMs += chunkEndedAt - tMapped;
+  }
+
+  // Strategy B wrote its items before the hand-mapped fallbacks; put both
+  // back in input order, which `createdItemIDs` promises and the relation
+  // pass below pairs in. A no-op on the hand-mapped path.
+  if (request.translatorLookup !== undefined) {
+    restoreInputOrder(
+      plan.toCreate,
+      createdEntries,
+      createdItemIDs,
+      createdVia,
+    );
   }
 
   // ---- relate the versions this call created (`P2-T11`, gate `G-16`) ----
@@ -623,6 +806,18 @@ export async function importWorks(
       backfilled,
     },
     createdItemIDs,
+    createdVia,
+    importPaths: {
+      translatorsRequested: request.translatorLookup !== undefined,
+      viaTranslators: createdVia.filter((via) => via === "translator").length,
+      handMapped: createdVia.filter((via) => via === "hand-map").length,
+      fellBack: TRANSLATOR_FALLBACK_REASONS.reduce(
+        (sum, reason) => sum + fallbackReasons[reason],
+        0,
+      ),
+      fallbackReasons,
+      searches: translatorSearches,
+    },
     linkedItemIDs,
     linkedMatches: plan.toLink.map((entry) => entry.match),
     versionLinks,
@@ -820,6 +1015,88 @@ function versionPairs(
     }
   }
   return out;
+}
+
+/** Every {@link TranslatorFallbackReason} at 0. */
+function emptyFallbackCounts(): Record<TranslatorFallbackReason, number> {
+  const out = {} as Record<TranslatorFallbackReason, number>;
+  for (const reason of TRANSLATOR_FALLBACK_REASONS) out[reason] = 0;
+  return out;
+}
+
+/** `work.abstract`, when non-empty — the abstract repair's source. */
+function nonEmptyAbstract(work: CanonicalWork): string | undefined {
+  return work.abstract !== undefined && work.abstract !== ""
+    ? work.abstract
+    : undefined;
+}
+
+/**
+ * `P2-T08`'s preprint-server attribution for an item a translator saved, or
+ * `undefined` when there is nothing to write (`P2-T18` step 9).
+ *
+ * The value is the hand-mapped path's own `repository`, taken from
+ * {@link toZoteroMapping} so there is one attribution rule, not two. It is
+ * written only when the work is a preprint, the item's type — whatever the
+ * translator chose, never re-mapped — has a `repository` field, and that field
+ * is empty: a user who turned translators on chose Zotero-canonical metadata,
+ * so a server the translator already named is kept. A work the mapper rejects
+ * gets no attribution rather than a failed import: the item already exists.
+ */
+function preprintRepository(
+  entry: TranslatedWork,
+  mapping: ZoteroMappingOptions,
+): string | undefined {
+  if (entry.work.type !== "preprint") return undefined;
+  let fieldID: unknown;
+  try {
+    fieldID = Zotero.ItemFields.getID("repository");
+  } catch {
+    return undefined;
+  }
+  if (typeof fieldID !== "number" || fieldID === 0) return undefined;
+  if (
+    Zotero.ItemFields.isValidForType(fieldID, entry.item.itemTypeID) !== true
+  ) {
+    return undefined;
+  }
+  if (entry.item.getField("repository") !== "") return undefined;
+  let repository: unknown;
+  try {
+    repository = toZoteroMapping(entry.work, mapping).itemJSON["repository"];
+  } catch {
+    return undefined;
+  }
+  return typeof repository === "string" && repository !== ""
+    ? repository
+    : undefined;
+}
+
+/**
+ * Sort the created entries, their IDs and their paths back into the order
+ * of `order` (the run's input), keeping the three arrays aligned.
+ */
+function restoreInputOrder(
+  order: readonly CanonicalWork[],
+  entries: BuiltItem[],
+  ids: number[],
+  via: ImportPath[],
+): void {
+  const rank = new Map<CanonicalWork, number>();
+  order.forEach((work, index) => rank.set(work, index));
+  const zipped = entries.map((entry, index) => ({
+    entry,
+    id: ids[index] ?? entry.item.id,
+    via: via[index] ?? "hand-map",
+  }));
+  zipped.sort(
+    (a, b) => (rank.get(a.entry.work) ?? 0) - (rank.get(b.entry.work) ?? 0),
+  );
+  zipped.forEach((row, index) => {
+    entries[index] = row.entry;
+    ids[index] = row.id;
+    via[index] = row.via;
+  });
 }
 
 /** `[a,b,c,d]`, 2 → `[[a,b],[c,d]]`. Empty input yields nothing. */

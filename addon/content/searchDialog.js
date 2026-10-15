@@ -128,6 +128,12 @@ var RHSearchWindow = {
     stateSearching: "rh-state-searching",
     stateEmpty: "rh-state-empty",
     stateError: "rh-state-error",
+    // FR-12's fifth §4.6 panel, "Re-run (pre-filled from provenance)"
+    // (P2-T17): the banner's two lines and the date radio pair.
+    stateRerun: "rh-state-rerun",
+    rerunHeading: "rh-rerun-heading",
+    rerunRecorded: "rh-rerun-recorded",
+    rerunDates: "rh-rerun-dates",
     initialProse: "rh-state-initial-prose",
     emptyHeadline: "rh-state-empty-headline",
 
@@ -335,6 +341,12 @@ var RHSearchWindow = {
     stateInitial: "research-helper-search-state-initial",
     databasesNone: "research-helper-search-databases-none",
     modeKeyword: "research-helper-search-mode-keyword",
+    // FR-12 (P2-T17): the re-run chip, the banner's two argument-taking lines
+    // and the span that replaces the years label for a recorded "All years".
+    modeRerun: "research-helper-search-mode-rerun",
+    rerunHeading: "research-helper-search-rerun-heading",
+    rerunRecorded: "research-helper-search-rerun-recorded",
+    rerunAllYears: "research-helper-search-rerun-all-years",
     resultCount: "research-helper-search-result-count",
     selectedCount: "research-helper-search-selected-count",
     authorsOverflow: "research-helper-search-authors-overflow",
@@ -459,6 +471,19 @@ var RHSearchWindow = {
     view: { filter: "", hideExisting: false },
     /** The count the in-flight Import-label request was made for. */
     importLabelCount: 0,
+
+    /**
+     * FR-12's re-run (P2-T17), or `null` in every other mode.
+     *
+     * - `seed` — the host's `loadRerun()` answer: the collection, the recorded
+     *   run's facts, and both date choices already computed by
+     *   `src/core/provenance.ts`'s `toSearchParams`.
+     * - `choice` — `"recorded"` (docs/08 §4.6 rule 2's default) or `"advance"`.
+     * - `dateTouched` — set once the user picks a year in either menulist.
+     *   Until then a query carries the chosen window's exact ISO bounds; after
+     *   it, the two years decide, as for any keyword run (§4.6 rule 1).
+     */
+    rerun: null,
 
     /**
      * The `recordsRevision` of the result set currently in the table (P1-T22).
@@ -689,6 +714,50 @@ var RHSearchWindow = {
       empty: "rh-state-empty",
       error: "rh-state-error",
       results: "rh-results-container",
+      // FR-12's panel (P2-T17). The view model publishes "initial" for it;
+      // render() draws this one instead while a re-run seed is loaded.
+      rerun: "rh-state-rerun",
+    },
+
+    /**
+     * The re-run's date window for the radio choice (P2-T17). Both windows
+     * were computed by the host; this only picks one.
+     *
+     * @param {object} seed - the host's `loadRerun()` answer
+     * @param {"recorded"|"advance"} choice
+     * @returns {object|string} `{ fromIso, toIso }` or `"all-years"`
+     */
+    rerunWindow(seed, choice) {
+      const params = choice === "advance" ? seed.advanced : seed.asRecorded;
+      return params.dateWindow;
+    },
+
+    /**
+     * The two calendar years a re-run window spans, for the year menulists,
+     * or `null` for `"all-years"` or a value that is not two ISO dates.
+     *
+     * @param {unknown} window
+     * @returns {{from: number, to: number}|null}
+     */
+    yearsOfWindow(window) {
+      if (!window || typeof window !== "object") {
+        return null;
+      }
+      const from = /^(\d{4})-\d{2}-\d{2}$/.exec(String(window.fromIso));
+      const to = /^(\d{4})-\d{2}-\d{2}$/.exec(String(window.toIso));
+      return from && to ? { from: Number(from[1]), to: Number(to[1]) } : null;
+    },
+
+    /**
+     * The recorded run's date, `YYYY-MM-DD`, as docs/08 §4.6's banner draws it
+     * ("Recorded 2026-03-14"). A date written as digits, as a year is — not
+     * prose, and not through a number formatter.
+     *
+     * @param {unknown} iso - the record's `finishedAt`
+     * @returns {string}
+     */
+    recordedDate(iso) {
+      return String(iso || "").slice(0, 10);
     },
 
     /**
@@ -1295,6 +1364,9 @@ var RHSearchWindow = {
     this.refreshSearchGate();
     this.refreshImportGate();
     this.focusKeyword();
+    // FR-12 (P2-T17): seed the controls from the collection's stored record.
+    // Asynchronous, and last, so the window is fully usable before it lands.
+    this.settle(this.loadRerun());
   },
 
   /**
@@ -1737,6 +1809,8 @@ var RHSearchWindow = {
     this.on(this.spec.targetNewItem, "command", () => this.newCollection());
     this.on(this.spec.yearsFrom, "command", () => this.onYearChanged());
     this.on(this.spec.yearsTo, "command", () => this.onYearChanged());
+    // FR-12's date radio pair (P2-T17).
+    this.on(this.spec.rerunDates, "command", () => this.onRerunDateChoice());
 
     // FR-2's third scenario: the notice's link (P2-T14).
     this.on(this.spec.keyRequest, "click", (event) =>
@@ -2028,7 +2102,9 @@ var RHSearchWindow = {
     // Last: `setResults()` shows the results panel when it has rows, and the
     // view model — not this document — decides which of docs/08 §8.4's five
     // states is current.
-    this.showPanel(state.panel || "initial");
+    // FR-12 (P2-T17): the re-run panel is this mode's INITIAL state.
+    const panel = state.panel || "initial";
+    this.showPanel(panel === "initial" && this.state.rerun ? "rerun" : panel);
     this.refreshImportGate();
   },
 
@@ -3273,6 +3349,10 @@ var RHSearchWindow = {
 
   /** Re-state the span when the user moves either year menulist. */
   onYearChanged() {
+    // FR-12 (P2-T17): a year the user picks replaces the re-run's exact window.
+    if (this.state.rerun) {
+      this.state.rerun.dateTouched = true;
+    }
     const from = Number(this.value(this.spec.yearsFrom));
     const to = Number(this.value(this.spec.yearsTo));
     if (!Number.isInteger(from) || !Number.isInteger(to)) {
@@ -3298,7 +3378,156 @@ var RHSearchWindow = {
       hideExisting: this.checked(this.spec.hideExisting),
       duplicates: this.value(this.spec.duplicates),
       collectionID: this.value(this.spec.target),
+      // FR-12 (P2-T17): the re-run's exact window, while the years are untouched.
+      ...this.rerunDateWindow(),
     };
+  },
+
+  // =========================================================================
+  // 4a. FR-12's re-run, pre-filled from provenance (P2-T17, docs/08 §4.6)
+  // =========================================================================
+
+  /**
+   * Ask the host for the collection's stored record and seed the window from
+   * it. A no-op outside `mode: "rerun"`, with a host that has no
+   * `loadRerun`, and when the collection has no record: the window then stays
+   * a keyword search, which is what the menu's hidden entry promised.
+   *
+   * The record is read from the plugin's `search_provenance` row by the host —
+   * never from the collection's note (docs/07 §5.3).
+   *
+   * @returns {Promise<object|null>} the seed applied, or `null`
+   */
+  async loadRerun() {
+    const id = this.io.collectionID;
+    if (
+      this.io.mode !== "rerun" ||
+      typeof this.host.loadRerun !== "function" ||
+      !Number.isInteger(id)
+    ) {
+      return null;
+    }
+    const seed = await this.host.loadRerun(id);
+    if (!seed || !seed.asRecorded || !seed.advanced) {
+      return null;
+    }
+    this.applyRerun(seed);
+    return seed;
+  },
+
+  /**
+   * docs/08 §4.6's **Re-run (pre-filled from provenance)** state.
+   *
+   * Every control is seeded from the record and **left editable** (rule 1):
+   * nothing here sets `disabled` or `readonly`. The target collection was
+   * already pre-selected by {@link RHSearchWindow.renderCollections} from
+   * `collectionID`, with "New collection…" still offered (rule 3). The date
+   * choice starts on "as recorded" (rule 2).
+   *
+   * @param {object} seed - the host's `loadRerun()` answer
+   */
+  applyRerun(seed) {
+    this.state.rerun = { seed, choice: "recorded", dateTouched: false };
+    const collection = JSON.stringify({ collection: seed.collectionName });
+    this.localize(this.spec.mode, this.l10n.modeRerun, collection);
+    this.localize(this.spec.rerunHeading, this.l10n.rerunHeading, collection);
+    this.localize(
+      this.spec.rerunRecorded,
+      this.l10n.rerunRecorded,
+      JSON.stringify({
+        date: this.logic.recordedDate(seed.recordedAt),
+        databases: seed.databases,
+        retrieved: seed.retrieved,
+        imported: seed.imported,
+      }),
+    );
+    const dates = this.el(this.spec.rerunDates);
+    if (dates) {
+      dates.value = "recorded";
+    }
+
+    const params = seed.asRecorded;
+    const keyword = this.el(this.spec.keyword);
+    if (keyword) {
+      keyword.value = params.userQuery;
+    }
+    const wanted = params.sourceIds || [];
+    for (const box of this.sourceBoxes()) {
+      box.checked = wanted.includes(box.getAttribute("value"));
+    }
+    const max = this.el(this.spec.maxResults);
+    if (max && Number.isInteger(params.requestedLimit)) {
+      max.value = String(params.requestedLimit);
+    }
+    this.applyRerunWindow(this.logic.rerunWindow(seed, "recorded"));
+
+    this.refreshSearchGate();
+    if (this.state.panel === "initial") {
+      this.showPanel("rerun");
+    }
+  },
+
+  /** The radio pair changed: show the chosen window, and send it from now on. */
+  onRerunDateChoice() {
+    const rerun = this.state.rerun;
+    if (!rerun) {
+      return;
+    }
+    rerun.choice =
+      this.value(this.spec.rerunDates) === "advance" ? "advance" : "recorded";
+    rerun.dateTouched = false;
+    this.applyRerunWindow(this.logic.rerunWindow(rerun.seed, rerun.choice));
+  },
+
+  /**
+   * Put a re-run window in the two year menulists and the span label.
+   *
+   * A recorded year older than the menulists offer is added to both, so "as
+   * recorded" can always be shown as recorded. `"all-years"` — FR-3's
+   * `dateFilter: none` — cannot be shown by two years at all, so the span
+   * label says so instead and the menulists keep their seeds until the user
+   * picks one.
+   *
+   * @param {object|string} window
+   */
+  applyRerunWindow(window) {
+    const years = this.logic.yearsOfWindow(window);
+    if (!years) {
+      const span = this.el(this.spec.yearsSpan);
+      if (span) {
+        span.removeAttribute("data-l10n-args");
+      }
+      this.localize(this.spec.yearsSpan, this.l10n.rerunAllYears);
+      return;
+    }
+    const now = new Date(this.clock.now()).getFullYear();
+    const newest = Math.max(now, years.to);
+    const options = this.logic.yearOptions(
+      newest,
+      Math.max(this.spec.prefBounds.searchYears.max, newest - years.from + 1),
+    );
+    this.fillYearMenulist(this.spec.yearsFrom, options, years.from);
+    this.fillYearMenulist(this.spec.yearsTo, options, years.to);
+    this.applyYearRange({
+      from: years.from,
+      to: years.to,
+      years: Math.max(1, years.to - years.from + 1),
+    });
+  },
+
+  /**
+   * `{ dateWindow }` for {@link RHSearchWindow.collectQuery} while a re-run's
+   * window still stands, `{}` otherwise — so a keyword query is exactly what
+   * it was before P2-T17.
+   *
+   * @returns {object}
+   */
+  rerunDateWindow() {
+    const rerun = this.state.rerun;
+    if (!rerun || rerun.dateTouched) {
+      return {};
+    }
+    return { dateWindow: this.logic.rerunWindow(rerun.seed, rerun.choice) };
   },
 
   // =========================================================================

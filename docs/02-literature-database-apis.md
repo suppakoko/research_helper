@@ -2438,6 +2438,11 @@ Tier 7  Known preprint↔published link               → LINK, not merge (§11.
 > (`src/model/ids.ts`), so the tier and the key derivation now use that name. §10.2's `ids.s2PaperId`
 > mapping row (S2 `paperId`) is a different identifier and was left for a separate decision.
 
+> **Added 2026-10-15 (owner, `plan/00` §6 item 200).** Tiers 1–4 return **LINK, not MATCH** when
+> the two records' DOIs conflict *and* one names the other in `relatedVersionIds`: the known
+> version link of Tier 7 outranks a shared identifier in that case. The rule and its measured case
+> are in §11.5 under rule 1.
+
 #### 11.3.1 ID normalization
 
 ```ts
@@ -2608,6 +2613,17 @@ Field precedence is the table in §10.4. Two additional rules:
 1. **IDs are unioned, never overwritten.** If two records claim conflicting DOIs but matched on
    title, that is *evidence they are not duplicates* (most likely preprint vs published). Downgrade
    to a link and log it.
+
+   *Added by the owner, 2026-10-15, `plan/00` §6 item 200.* The same holds for a match on a
+   **shared identifier** (Tiers 1–4 of §11.3: PMID, PMCID, arXiv id, S2 corpus id) when **both**
+   of these are true: the two records carry different DOIs, **and** one of them names the other
+   in `relatedVersionIds` (§11.4). The verdict is then a **link**, never a match. Measured case
+   (`P2-T11`): an arXiv record whose `<arxiv:doi>` names the journal DOI, against a Semantic
+   Scholar record carrying that journal DOI *and* the same arXiv id, matched on the arXiv id
+   before Tier 7 was reached — a false merge, which gate `G-16` and `docs/11` R-18 rule out. A
+   shared identifier with conflicting DOIs and **no** version naming stays a match, so a genuine
+   duplicate is not split; so does a shared identifier with equal DOIs (Tier 0 matches first), and
+   one where either record has no DOI (nothing conflicts).
 2. **`sources` accumulates**, and every merge records which source supplied each field in
    `raw`. This makes the "why did the plugin pick this title?" question answerable, which matters
    when a user reports a bad import.

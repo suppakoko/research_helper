@@ -162,6 +162,8 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-menu-root",
   "research-helper-menu-search-import",
   "research-helper-menu-collection-search-import",
+  // FR-12's "Re-run This Search…" (P2-T17), docs/08 §2.4 and §10.2.
+  "research-helper-menu-collection-rerun",
   "research-helper-menu-spike-create-item",
 
   // LiteratureSource.displayNameKey (docs/07 §4.2). Never translated. One
@@ -185,6 +187,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // §7.7's popup (P1-T33).
   "research-helper-import-summary",
   "research-helper-import-abstract-coverage",
+  // P2-T18 step 10: a run's import paths with `useTranslators` on.
+  "research-helper-import-paths",
+  "research-helper-import-fallback-reason",
 
   // The progress popup's headline (docs/07 §7.7, docs/08 §8.2; P1-T32 item 3,
   // P1-T33). JavaScript formats it and hands it to a surface that is not a
@@ -258,6 +263,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-prefs-test-forbidden",
   "research-helper-prefs-test-absent",
   "research-helper-prefs-test-unavailable",
+  // P2-T18 step 11: the `useTranslators` checkbox's label and slower-path
+  // tooltip, for `P3-T04`'s pane to bind (docs/08 §7.3).
+  "research-helper-prefs-use-translators",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -291,6 +299,15 @@ export const L10N_MENU_SEARCH_IMPORT = "research-helper-menu-search-import";
  */
 export const L10N_MENU_COLLECTION_SEARCH_IMPORT =
   "research-helper-menu-collection-search-import";
+
+/**
+ * Collection context menu ▸ Research Helper ▸ Re-run This Search… (`P2-T17`,
+ * FR-12). `docs/08` §2.4 registers it under this id and §10.2 ships its
+ * strings in both locales, so — unlike the entry above — it has a counterpart
+ * in the corpus and an owner-written Korean label.
+ */
+export const L10N_MENU_COLLECTION_RERUN =
+  "research-helper-menu-collection-rerun";
 
 /**
  * The headline of the `Zotero.ProgressWindow` every job raises (`docs/07`
@@ -380,6 +397,8 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   "research-helper-search-keyword-input",
   "research-helper-search-run",
   "research-helper-search-mode-keyword",
+  // FR-12's mode chip, `Re-run: <collection name>` (P2-T17).
+  "research-helper-search-mode-rerun",
 
   // Date range (FR-3; the years themselves are computed at window open).
   "research-helper-search-years-label",
@@ -459,6 +478,17 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
 
   // docs/08 §8.4's five states: INITIAL.
   "research-helper-search-state-initial",
+
+  // FR-12's Re-run (pre-filled from provenance) panel, docs/08 §4.6 (P2-T17):
+  // the banner, the date radio pair, the All-years span and rule 4's summary.
+  "research-helper-search-rerun-heading",
+  "research-helper-search-rerun-recorded",
+  "research-helper-search-rerun-as-recorded",
+  "research-helper-search-rerun-advance",
+  "research-helper-search-rerun-prefilled",
+  "research-helper-search-rerun-press-search",
+  "research-helper-search-rerun-all-years",
+  "research-helper-search-import-summary-rerun",
 
   // LOADING, including the per-database status list docs/08 §4.6 requires.
   "research-helper-search-source-searching",
@@ -701,8 +731,14 @@ export const KO_PENDING_REVIEW = [
   "research-helper-prefs-test-forbidden",
   "research-helper-prefs-test-absent",
   "research-helper-prefs-test-unavailable",
+  // `P2-T18`: the import-path counts and the `useTranslators` checkbox. The
+  // `ko-KR` bundle carries each as a commented NEEDS REVIEW stub with its
+  // English source; nothing was machine-translated.
+  "research-helper-import-paths",
+  "research-helper-import-fallback-reason",
+  "research-helper-prefs-use-translators",
 
-  // --- searchDialog (67) ---
+  // --- searchDialog (70) ---
   "research-helper-search-window-title",
   "research-helper-search-keyword-label",
   "research-helper-search-keyword-input",
@@ -742,9 +778,6 @@ export const KO_PENDING_REVIEW = [
   "research-helper-search-duplicates-skip",
   "research-helper-search-duplicates-link",
   "research-helper-search-duplicates-import",
-  // `P2-T11`. The `ko-KR` bundle carries it as a commented stub with its
-  // English source; nothing was machine-translated (`G-41`).
-  "research-helper-search-preprint-policy",
   "research-helper-search-close",
   "research-helper-search-cancel",
   "research-helper-search-import",
@@ -773,14 +806,19 @@ export const KO_PENDING_REVIEW = [
   "research-helper-search-state-error-retry",
   "research-helper-search-details-show",
   "research-helper-search-details-hide",
-  // `P2-T14`'s five. The `ko-KR` bundle carries each as a commented stub with
-  // its English source; `G-41` owns the translation and nothing here was
-  // machine-translated.
-  "research-helper-search-s2-no-key",
-  "research-helper-search-s2-no-key-request",
-  "research-helper-search-row-duplicate",
-  "research-helper-search-row-linked",
-  "research-helper-search-source-role",
+  // `P2-T17`'s nine, FR-12's re-run state. The `ko-KR` bundle carries each as a
+  // commented NEEDS REVIEW stub with its English source; `G-41` owns the
+  // translation and nothing here was machine-translated. The menu entry's
+  // Korean is `docs/08` §10.2's own and is on KO_PRESENT instead.
+  "research-helper-search-mode-rerun",
+  "research-helper-search-rerun-heading",
+  "research-helper-search-rerun-recorded",
+  "research-helper-search-rerun-as-recorded",
+  "research-helper-search-rerun-advance",
+  "research-helper-search-rerun-prefilled",
+  "research-helper-search-rerun-press-search",
+  "research-helper-search-rerun-all-years",
+  "research-helper-search-import-summary-rerun",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -803,6 +841,8 @@ export const KO_DELIBERATELY_ABSENT = [
 export const KO_PRESENT = [
   "research-helper-menu-root",
   "research-helper-menu-search-import",
+  // FR-12's entry: owner-written Korean in `docs/08` §10.2 (`P2-T17`).
+  "research-helper-menu-collection-rerun",
   "research-helper-source-pubmed",
   "research-helper-source-europepmc",
   "research-helper-source-crossref",
@@ -814,6 +854,14 @@ export const KO_PRESENT = [
   // The key-storage badge's fifth state: owner-written Korean in `docs/09`
   // §1.9 (decided 2026-10-15, review row 50; `P2-T34`).
   "research-helper-prefs-backend-indeterminate",
+  // `P2-T14`'s five and `P2-T11`'s policy line: Korean drafted by the
+  // coordinator and reviewed by the owner on 2026-10-16 (`G-41`).
+  "research-helper-search-s2-no-key",
+  "research-helper-search-s2-no-key-request",
+  "research-helper-search-row-duplicate",
+  "research-helper-search-row-linked",
+  "research-helper-search-source-role",
+  "research-helper-search-preprint-policy",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -844,6 +892,10 @@ export interface FluentMessageArgsMap {
     failed: number;
   };
   "research-helper-import-abstract-coverage": { percent: number };
+  // P2-T18. `$cause` is a fallback-reason token (`TRANSLATOR_FALLBACK_REASONS`
+  // in `src/zotero/translatorImport.ts`), selected on and never displayed.
+  "research-helper-import-paths": { translated: number; handMapped: number };
+  "research-helper-import-fallback-reason": { cause: string; count: number };
   "rh-error-missing-credential": { provider: string };
   "rh-error-network": { host: string };
   "rh-error-timeout": { host: string; seconds: number };
@@ -898,6 +950,23 @@ export interface FluentMessageArgsMap {
   // `P2-T14`: `$tier` is a deduplication tier's identifier (a token, not
   // translated); `$score` the similarity as a whole percentage.
   "research-helper-search-row-duplicate": { tier: string; score: number };
+  // `P2-T17`, FR-12. `$collection` is the collection's own name (data, not a
+  // translatable string); `$date` the recorded run's finish date, already
+  // formatted by the window. `$present` is `linkedExisting + skipped` — see
+  // `rerunSummary` in src/ui/viewModels/searchImportViewModel.ts.
+  "research-helper-search-mode-rerun": { collection: string };
+  "research-helper-search-rerun-heading": { collection: string };
+  "research-helper-search-rerun-recorded": {
+    date: string;
+    databases: number;
+    retrieved: number;
+    imported: number;
+  };
+  "research-helper-search-import-summary-rerun": {
+    imported: number;
+    present: number;
+    failed: number;
+  };
 }
 
 /**
@@ -926,10 +995,12 @@ export type UndeclaredArgumentMessageId = AssertNever<
  * from here.
  */
 export const ARGUMENT_MESSAGE_IDS = [
-  // mainWindow (15)
+  // mainWindow (17)
   "research-helper-provenance-note-title",
   "research-helper-import-summary",
   "research-helper-import-abstract-coverage",
+  "research-helper-import-paths",
+  "research-helper-import-fallback-reason",
   "rh-error-missing-credential",
   "rh-error-network",
   "rh-error-timeout",
@@ -949,7 +1020,7 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-prefs-test-rejected",
   "research-helper-prefs-test-forbidden",
 
-  // searchDialog (15)
+  // searchDialog (19)
   "research-helper-search-years-span",
   "research-helper-search-result-count",
   "research-helper-search-authors-overflow",
@@ -965,6 +1036,10 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-search-state-empty",
   "research-helper-search-state-partial",
   "research-helper-search-row-duplicate",
+  "research-helper-search-mode-rerun",
+  "research-helper-search-rerun-heading",
+  "research-helper-search-rerun-recorded",
+  "research-helper-search-import-summary-rerun",
 ] as const satisfies readonly (keyof FluentMessageArgsMap)[];
 
 /**

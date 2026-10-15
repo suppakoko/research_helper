@@ -2469,6 +2469,19 @@ now draws **Re-run This Search…** with the hidden-not-disabled rule, §2.4 reg
 **Re-run (pre-filled from provenance)** state with its four rules, §10.2 ships the FTL entries in
 both locales, and §11's States checklist carries the FR-12 line. Build what those sections say.
 
+
+**Findings, 2026-10-16 — done; the card's literal locale `diff` cannot pass while Korean waits on review; no live request; full report at `plan/reports/P2-T17.md`.**
+Verified by the coordinator on the combined tree with `P2-T17`, `P2-T18` and the item-200 change (three agents side by side): no `MUTANT` marker, the four bundles without a byte-order mark or carriage return, typecheck 0, `lint:check` 0, eslint 0, **unit 2,415/2,415**, contract 40/40, integration **158 passed** (after the coordinator made one window test locale-independent: the owner-reviewed Korean for the role row now renders, and the test had waited for the English text).
+The plugin's own `research-helper.sqlite` (under `Zotero.DataDirectory.dir`, never `zotero.sqlite`) is created at
+schema_version 1 with `docs/07` §8.3's `search_provenance` table copied column for column; each completed run writes
+one row after its note, carrying the note key, and a re-run adds a new row with its own `runId`. **Re-run This
+Search…** is hidden, not disabled, when a collection has no row — through a cache, because the SQLite read is
+asynchronous and Zotero does not await `onShowing` (now in `docs/08` §2.4). The window opens pre-filled, "as recorded"
+by default, "advance to today" moving only the upper bound; a re-run of 40 present items imported 0 and reported
+"Already present 40". **A real FR-8 defect fixed:** every import the window ever ran recorded `perSource: []`; the
+view model now carries the preview's reports (now in `docs/07` §12.1). "Already present" counts library matches, not
+collection membership (now in `docs/08` §4.6). **18 mutants, all killed.** Three files outside Files, each
+mechanical (`menus.spec.ts`, `searchDialog-flow.spec.ts`, `keys.test.ts`). Open: items 216–218.
 ---
 
 ### P2-T18 — Translator import path behind `useTranslators`
@@ -2681,6 +2694,19 @@ inside a directory that section does declare, following the same convention as
 `P2-T12`'s `src/pipeline/searchImport/backfill.ts`. Do not move the Zotero calls anywhere else
 to avoid adding a file.
 
+
+**Findings, 2026-10-16 — done except three parts stopped under rule 4 or scope (items 212–214); one mutation run made live requests (item 208); full report at `plan/reports/P2-T18.md`.**
+Verified by the coordinator on the combined tree with `P2-T17`, `P2-T18` and the item-200 change (three agents side by side): no `MUTANT` marker, the four bundles without a byte-order mark or carriage return, typecheck 0, `lint:check` 0, eslint 0, **unit 2,415/2,415**, contract 40/40, integration **158 passed** (after the coordinator made one window test locale-independent: the owner-reviewed Korean for the role row now renders, and the test had waited for the English text).
+With `useTranslators` on (it ships `false`, measured), the writer reads the preference once per run and imports
+through `Zotero.Translate.Search`: the whole translator list to `setTranslator`, PMID-only records 200 to a lookup,
+a per-record fallback to hand-mapping for each reason class (logged and counted), the abstract repair after either
+path, the preprint server written without re-mapping the translator's item type, and the path per item in
+`ImportReport.createdVia`. Off, 100 records construct zero `Translate.Search` objects in 0.5–0.6 s. Stopped: the counts
+do not reach the visible summary (pipeline and view-model files outside Files); no document gives a Europe PMC PMCID
+query form; no document gives the per-record timeout. `fieldOrigin` cannot name the path (`docs/07` §5.1 types it as
+`SourceId`). **20 mutants killed, one equivalent.** **Live requests: mutant I1 sent the whole integration suite
+through real translators** (real server metadata came back; not counted, possibly several hundred) — against the
+brief. Open: items 208–215.
 ---
 
 ### P2-T15 — Record and enforce the settled OpenAlex decision: out of v1
