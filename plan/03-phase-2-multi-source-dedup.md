@@ -517,7 +517,7 @@ equivalent** (the empty-page stop is subsumed by the short-page stop). Facts for
 | Field | Value |
 |---|---|
 | **ID** | `P2-T04` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; Crossref adapter, registered in the product (three sources then). Report at `plan/reports/P2-T04.md`. |
 | **Depends on** | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T32`, `P2-T33` |
 | **Blocks** | `P2-T11`, `P2-T12` |
 | **Retires** | part of `R-2` |
@@ -869,7 +869,7 @@ precisely the R-3 outcome the design is built to survive. Record the state in `0
 | Field | Value |
 |---|---|
 | **ID** | `P2-T06` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; arXiv adapter, registered in the product (four sources). Report at `plan/reports/P2-T06.md`. |
 | **Depends on** | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` |
 | **Blocks** | `P2-T08`, `P2-T11` |
 | **Retires** | part of `R-2` |
@@ -3579,7 +3579,7 @@ question belongs with Phase 2's Crossref row.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T24` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; three stale statements corrected, dated. Report at `plan/reports/P2-T24.md`. |
 | **Depends on** | `P2-T21` |
 | **Blocks** | none |
 | **Retires** | none |
@@ -4367,7 +4367,7 @@ figure says the 50-block set yields 50 times — wall time, not stall).
 | Field | Value |
 |---|---|
 | **ID** | `P2-T31` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; the import writes the merged work the preview showed; `flags`/`links` required. Report at `plan/reports/P2-T31.md`. |
 | **Depends on** | `P2-T29`, `P2-T30` |
 | **Blocks** | `P2-T14`, `P2-T16` |
 | **Retires** | `plan/00` §6 items 118 and 120 |

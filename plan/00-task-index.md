@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-14 · **145 tasks: 97 `DONE`, 48 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **19 of 33**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 145, so 47 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-15 · **145 tasks: 101 `DONE`, 44 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **23 of 33**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 145, so 47 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -214,9 +214,9 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T01` | Ship the user-query parser and per-source render contract | `P1-T07`, `P1-T08` | 1.0 d |  |
 | ✅ `P2-T02` | Parallel fan-out: per-source timeouts, failure isolation | `P1-T04`, `P1-T07`, `P1-T16`, `P2-T01` | 1.25 d |  |
 | ✅ `P2-T03` | Europe PMC adapter | `P2-T01`, `P2-T23`, `P2-T25`, `P2-T26`, `P2-T28` | 2.0 d |  |
-| `P2-T04` | Crossref adapter | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T32`, `P2-T33` | 1.5 d |  |
+| ✅ `P2-T04` | Crossref adapter | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T32`, `P2-T33` | 1.5 d |  |
 | `P2-T05` | Semantic Scholar adapter with unauthenticated degradation | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 2.0 d | 🔒 |
-| `P2-T06` | arXiv adapter | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 1.25 d |  |
+| ✅ `P2-T06` | arXiv adapter | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 1.25 d |  |
 | `P2-T07` | bioRxiv / medRxiv adapter (ID lookup and cross-walk only) | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 1.5 d |  |
 | `P2-T08` | `preprint` item-type mapping and server attribution | `P2-T03`, `P2-T06`, `P2-T07` | 1.0 d |  |
 | ✅ `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
@@ -234,14 +234,14 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T21` | Make the concurrency cap resizable, so a tightened header… | `P1-T27`, `P1-T26` | 0.5 d |  |
 | ✅ `P2-T22` | Declare the menu-context member `docs/08` mandates and… | `P1-T19` | 0.25 d |  |
 | ✅ `P2-T23` | Give `hostLimiter.ts` the test file two cards already invoke | `P1-T26` | 0.25 d |  |
-| `P2-T24` | Correct the three statements `P2-T21` made false, including… | `P2-T21` | 0.25 d |  |
+| ✅ `P2-T24` | Correct the three statements `P2-T21` made false, including… | `P2-T21` | 0.25 d |  |
 | ✅ `P2-T25` | Make the fixture replay harness usable inside Zotero, so six… | `P1-T11` | 0.75 d |  |
 | ✅ `P2-T26` | Give the source registry a test-only removal, before two… | `P2-T25` | 0.25 d |  |
 | ✅ `P2-T27` | Wire `fanOut` into the running pipeline, which still fetches… | `P2-T01`, `P2-T02` | 0.5 d |  |
 | ✅ `P2-T28` | Give the per-source query dialect its home in… | `P2-T01`, `P2-T26`, `P2-T27` | 0.25 d |  |
 | ✅ `P2-T29` | Wire `dedupeAndMerge` into the running pipeline, which still… | `P2-T10`, `P2-T27` | 0.5 d |  |
 | ✅ `P2-T30` | Make the dedup cascade yield, so `Merging` stops stalling the… | `P2-T29` | 0.5 d |  |
-| `P2-T31` | Give the import half the merged work the preview showed, and… | `P2-T29`, `P2-T30` | 0.5 d |  |
+| ✅ `P2-T31` | Give the import half the merged work the preview showed, and… | `P2-T29`, `P2-T30` | 0.5 d |  |
 | ✅ `P2-T32` | Register Europe PMC in the composition root, name it in both… | `P2-T03` | 0.5 d |  |
 | ✅ `P2-T33` | Make the fixture recorder run again and take a per-source… | `P2-T03`, `P2-T25` | 0.25 d |  |
 
