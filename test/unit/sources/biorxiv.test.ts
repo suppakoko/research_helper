@@ -78,6 +78,7 @@ import {
   explainBiorxivQuery,
   type BiorxivServer,
 } from "../../../src/sources/biorxiv/query";
+import { explainEuropePmcQuery } from "../../../src/sources/europepmc/query";
 import { createSourceRegistry } from "../../../src/sources/registry";
 import {
   normalizeForSource,
@@ -1113,6 +1114,57 @@ describe("a free-text search through fanOut: skipped, not failed (P2-T28's keywo
       expect(row.warnings).toEqual([biorxivKeywordSearchNotice(server)]);
       expect(row.transmittedQuery).toBe(explainBiorxivQuery(server));
     }
+  });
+
+  // Owner's decision of 2026-10-15 (`plan/00` §6 item 177): Europe PMC's
+  // default search already returns preprints (`docs/02` §4.5, measured from
+  // the recorded `paginated-page-1` answer), so enabling bioRxiv or medRxiv
+  // must leave the Europe PMC query exactly as it is. `AND SRC:PPR` would
+  // narrow it to preprints and drop its journal results.
+  it("leaves the Europe PMC query unrestricted when both preprint sources are enabled", async () => {
+    const clock = createManualClock(NOW);
+    const { client } = createStubHttp(() => {
+      throw new Error("a keyword search must not reach api.biorxiv.org");
+    });
+    const biorxiv = createSource("biorxiv", client);
+    const europepmc: LiteratureSource = {
+      ...biorxiv,
+      id: "europepmc",
+      displayNameKey: "research-helper-source-europepmc",
+      capabilities: { ...BIORXIV_CAPABILITIES, keywordSearch: true },
+      rateLimitKey: "www.ebi.ac.uk",
+      // The shipped renderer, so a planner that adds a clause through the
+      // query it hands the adapter shows up in the transmitted text.
+      explainQuery: explainEuropePmcQuery,
+      async *searchAll() {
+        // Nothing to yield: the transmitted query is what is under test.
+      },
+    };
+    const cancel = createCancellationTokenSource();
+    const root = new CompositeProgressReporter({
+      clock,
+      sinks: [],
+      throttleMs: 0,
+      token: cancel.token,
+    });
+    const query = "crispr base editing";
+    const result = await fanOut({
+      sources: [europepmc, biorxiv, createSource("medrxiv", client)],
+      input: { query, limit: 10, dateFilter: "none" },
+      token: cancel.token,
+      clock,
+      progress: root.child("fetching", 0.05, 0.5),
+      logger: createLogger({ sink: { write: () => undefined }, clock }),
+      pool: new Semaphore(NETWORK_METADATA_POOL_SIZE),
+    });
+    const row = must(
+      result.perSource.find((r) => r.sourceId === "europepmc"),
+      "the europepmc row",
+    );
+    expect(row.transmittedQuery).toBe(
+      explainEuropePmcQuery({ terms: parseUserQuery(query), limit: 10 }),
+    );
+    expect(row.transmittedQuery).not.toMatch(/\bSRC:/u);
   });
 });
 

@@ -2259,7 +2259,7 @@ explicit precedence rather than "first source wins":
 | Field | Precedence (best first) | Why |
 |---|---|---|
 | `title` | Crossref → PubMed → Europe PMC → OpenAlex → S2 → arXiv | Publisher-deposited; PubMed appends a trailing `.` to strip |
-| `abstract` | Europe PMC → PubMed → S2 → Crossref (JATS) → arXiv → bioRxiv → OpenAlex | Ordered by fidelity; OpenAlex last (reconstructed) |
+| `abstract` | Europe PMC → PubMed → S2 → Crossref (JATS) → arXiv → bioRxiv → medRxiv → OpenAlex | Ordered by fidelity; OpenAlex last (reconstructed). medRxiv added beside bioRxiv by the owner, 2026-10-15 (`plan/00` §6 item 179) |
 | `authors` | PubMed → Europe PMC → Crossref → OpenAlex → arXiv → S2 | S2 abbreviates given names |
 | `dates.issued` | Europe PMC `firstPublicationDate` → PubMed `pubmed` history date → Crossref `issued` → S2 → OpenAlex | Crossref cover dates can lead reality |
 | `venue.*` | Crossref → PubMed → Europe PMC → OpenAlex → S2 | |

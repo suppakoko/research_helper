@@ -118,7 +118,9 @@ export const PRECEDENCE: Readonly<
     "arxiv",
   ],
   // Ordered by fidelity; OpenAlex last because its abstracts are
-  // reconstructed from an inverted index (§9.2). Rule: {@link pickAbstract}.
+  // reconstructed from an inverted index (§9.2). medRxiv sits beside bioRxiv
+  // (owner, 2026-10-15, `plan/00` §6 item 179): one adapter, one abstract
+  // field. Rule: {@link pickAbstract}.
   abstract: [
     "europepmc",
     "pubmed",
@@ -126,6 +128,7 @@ export const PRECEDENCE: Readonly<
     "crossref",
     "arxiv",
     "biorxiv",
+    "medrxiv",
     "openalex",
   ],
   // Semantic Scholar abbreviates given names (§6.7), so it is last.

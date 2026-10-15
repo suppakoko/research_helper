@@ -1065,7 +1065,7 @@ probe, one recording, no discards; today's 13 requests met no 429.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T07` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; bioRxiv and medRxiv adapters, registered (seven sources); Done-when 3 settled by the owner's routing decision (item 177). Report at `plan/reports/P2-T07.md`. |
 | **Depends on** | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` |
 | **Blocks** | `P2-T08`, `P2-T11` |
 | **Retires** | part of `R-2` |
@@ -1185,6 +1185,9 @@ through Europe PMC instead.
 - [ ] `capabilities.keywordSearch` is `false` for both, asserted by a test.
 - [ ] Enabling bioRxiv or medRxiv in a search adds `SRC:PPR` to the Europe PMC query, asserted
       against `explainQuery` output.
+      *(Replaced 2026-10-15 by the owner, `plan/00` §6 item 177: enabling either leaves the Europe PMC query
+      unrestricted — it already returns preprints — asserted on the transmitted query through `fanOut` in
+      `biorxiv.test.ts`.)*
 - [ ] A `10.64898/…` record with `server: "medRxiv"` maps to `SourceId` `medrxiv`, and a
       `10.64898/…` record with `server: "bioRxiv"` maps to `biorxiv` — same prefix, different source.
 - [ ] A legacy `10.1101/…` record still maps correctly.

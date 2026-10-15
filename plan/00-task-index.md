@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-15 · **148 tasks: 104 `DONE`, 44 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **26 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-15 · **148 tasks: 105 `DONE`, 43 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **27 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -217,7 +217,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T04` | Crossref adapter | `P2-T01`, `P2-T21`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T32`, `P2-T33` | 1.5 d |  |
 | ✅ `P2-T05` | Semantic Scholar adapter with unauthenticated degradation | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 2.0 d | 🔒 |
 | ✅ `P2-T06` | arXiv adapter | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 1.25 d |  |
-| `P2-T07` | bioRxiv / medRxiv adapter (ID lookup and cross-walk only) | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 1.5 d |  |
+| ✅ `P2-T07` | bioRxiv / medRxiv adapter (ID lookup and cross-walk only) | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 1.5 d |  |
 | `P2-T08` | `preprint` item-type mapping and server attribution | `P2-T03`, `P2-T06`, `P2-T07` | 1.0 d |  |
 | ✅ `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
 | ✅ `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
@@ -1344,7 +1344,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.34 Raised by `P2-T07`, 2026-10-15 — recorded under rule 9; item 177 waits on the owner
 
-177. **How preprint keyword search reaches Europe PMC (owner's decision).** `P2-T07` step 3 says to add `SRC:PPR`
+177. ~~**How preprint keyword search reaches Europe PMC (owner's decision).**~~ **DECIDED and DONE 2026-10-15: no change; a test pins the Europe PMC query as unrestricted with both preprint sources on (`biorxiv.test.ts`), and `europepmc.test.ts` maps the recorded preprint.** `P2-T07` step 3 says to add `SRC:PPR`
     to the Europe PMC query when bioRxiv or medRxiv is enabled, but Europe PMC's default search already returns
     preprints (`docs/02` §4.5, measured 2026-10-15), so `AND SRC:PPR` would drop its journal results. Choices: no
     change, with a test that the query carries no `SRC:` restriction; a second Europe PMC query for preprints
@@ -1356,7 +1356,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     outside `docs/13` §3.2's "pagination tokens by name … and nothing else", and the sidecar note then says
     "preserved 1 opaque pagination token(s)". Make `redact()`'s catch-all skip JSON keys, or widen §3.2 by name.
 
-179. **`medrxiv` is in no `PRECEDENCE` row** (`src/model/merge.ts`); `abstract` lists `biorxiv`, following `docs/02`
+179. ~~**`medrxiv` is in no `PRECEDENCE` row**~~ **DECIDED and DONE 2026-10-15: medRxiv sits right after bioRxiv in `abstract` (`docs/02` §10.4, `merge.ts`, `precedence.test.ts`).** (`src/model/merge.ts`); `abstract` lists `biorxiv`, following `docs/02`
     §10.4's "bioRxiv". medRxiv abstracts therefore rank after every listed source, the inert `openalex` included.
     A document decision: does `medrxiv` sit beside `biorxiv`?
 

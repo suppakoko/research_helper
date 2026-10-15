@@ -984,6 +984,22 @@ describe("mapper: the preprint (record-preprint, SRC:PPR with a published versio
   });
 });
 
+// `plan/00` §6 item 177, owner's decision of 2026-10-15: no `SRC:PPR` clause
+// is added when bioRxiv or medRxiv is enabled, because an unrestricted query
+// already returns preprints. This is the measurement behind that decision
+// (`docs/02` §4.5); `biorxiv.test.ts` asserts the query stays unrestricted.
+describe("an unrestricted search already returns preprints (paginated-page-1)", () => {
+  it("renders no SRC: clause and maps a preprint beside journal articles", async () => {
+    expect(explainEuropePmcQuery(QUERY_PAGINATED)).not.toMatch(/\bSRC:/u);
+    const records = mapper()(await recordedResults("paginated-page-1"));
+    const preprints = records.filter((r) => r.nativeId.startsWith("PPR/"));
+    const journal = records.filter((r) => r.nativeId.startsWith("MED/"));
+    expect(preprints).toHaveLength(1);
+    expect(preprints[0]?.work.type).toBe("preprint");
+    expect(journal).toHaveLength(2);
+  });
+});
+
 describe("mapper: no abstract, no DOI (record-sparse, MED/60000)", () => {
   it("reports the gaps in missingFields and never invents a field", async () => {
     const records = mapper()(await recordedResults("record-sparse"));

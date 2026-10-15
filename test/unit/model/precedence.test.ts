@@ -40,7 +40,7 @@ import type { SourceRecord } from "../../../src/model/sourceRecord";
 
 const AT = 1_700_000_000_000;
 
-/** The five v1 sources `docs/02` §10.4 orders (bioRxiv appears in one row). */
+/** The v1 sources `docs/02` §10.4 orders (bioRxiv and medRxiv appear in one row). */
 const V1_SOURCES: readonly SourceId[] = [
   "pubmed",
   "europepmc",
@@ -48,6 +48,7 @@ const V1_SOURCES: readonly SourceId[] = [
   "semanticscholar",
   "arxiv",
   "biorxiv",
+  "medrxiv",
 ];
 
 interface Spec {
@@ -227,6 +228,7 @@ describe("PRECEDENCE transcribes docs/02 §10.4", () => {
         "crossref",
         "arxiv",
         "biorxiv",
+        "medrxiv",
         "openalex",
       ],
     ],

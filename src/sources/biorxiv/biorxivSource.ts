@@ -27,10 +27,11 @@
  *   through Europe PMC `SRC:PPR`. `searchAll()` yields nothing and raises the
  *   same notice once through `ctx.progress`. The signal `P2-T14` renders as
  *   `⊕ ID lookup · preprint matching` is the capability itself
- *   (`docs/08` §4.2, decided 2026-09-09). **Adding `SRC:PPR` to the Europe PMC
- *   query is the search planner's** (`src/pipeline/searchImport/stages.ts`'s
- *   `queryFor`, or `src/sources/europepmc/query.ts`) — neither file is in this
- *   card's `Files`; reported.
+ *   (`docs/08` §4.2, decided 2026-09-09). **No `SRC:PPR` clause is added to
+ *   the Europe PMC query** (owner, 2026-10-15, `plan/00` §6 item 177): its
+ *   default search already returns preprints (`docs/02` §4.5), and
+ *   `AND SRC:PPR` would drop its journal results. `biorxiv.test.ts` asserts
+ *   the Europe PMC query stays unrestricted with both preprint sources on.
  * - **`lookup()` is `/details/{server}/{DOI}/na/json`, one DOI per request**
  *   (card step 4; `docs/02` §8.2). Only DOIs with a bioRxiv/medRxiv registrant
  *   prefix are sent (`./query.ts`, `biorxivLookupDoi`); each request costs one
