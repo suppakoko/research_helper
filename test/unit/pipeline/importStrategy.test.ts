@@ -34,7 +34,7 @@ import {
 } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import type { Logger } from "../../../src/core/logger";
-import { KO_PENDING_REVIEW } from "../../../src/i18n/keys";
+import { KO_PENDING_REVIEW, KO_PRESENT } from "../../../src/i18n/keys";
 import type { CanonicalWork, WorkType } from "../../../src/model/canonicalWork";
 import type { ExternalIds } from "../../../src/model/ids";
 import { getPref, setPrefStore } from "../../../src/prefs";
@@ -568,6 +568,50 @@ describe("the writer reads useTranslators once, at WritingItems' entry (docs/07 
     });
   });
 
+  it("hands each batch's own path counts to the pipeline when the preference is on (item 212)", async () => {
+    importWorksMock.mockImplementation((request: { works: CanonicalWork[] }) =>
+      Promise.resolve(fakeReport(request.works, 7)),
+    );
+    const writer = createZoteroSearchImportWriter({
+      readUseTranslators: () => true,
+    });
+    const token = createCancellationTokenSource().token;
+    const session = await writer.openTarget({ collectionName: "C" }, token);
+    const works = Array.from({ length: 10 }, (_, i) =>
+      work(`b${String(i)}`, { doi: `10.1/b${String(i)}` }),
+    );
+    const first = await session.writeBatch(works, token);
+    const second = await session.writeBatch(works, token);
+    // Per batch, not cumulative: the pipeline's `accumulate` sums them.
+    for (const result of [first, second]) {
+      expect(result.importPaths).toStrictEqual({
+        viaTranslators: 7,
+        handMapped: 3,
+        fallbackReasons: {
+          "no-identifier": 3,
+          "lookup-error": 0,
+          "no-translators": 0,
+          "no-result": 0,
+          timeout: 0,
+        },
+      });
+    }
+  });
+
+  it("hands the pipeline no path counts at all when the preference is off (item 212)", async () => {
+    importWorksMock.mockImplementation((request: { works: CanonicalWork[] }) =>
+      Promise.resolve(fakeReport(request.works, 0)),
+    );
+    const writer = createZoteroSearchImportWriter({
+      readUseTranslators: () => false,
+    });
+    const token = createCancellationTokenSource().token;
+    const session = await writer.openTarget({ collectionName: "C" }, token);
+    const result = await session.writeBatch([work("off", {})], token);
+    expect(Object.keys(result)).not.toContain("importPaths");
+    expect(result.created).toBe(1);
+  });
+
   it("adds two path reports field by field", () => {
     const a = fakeReport([work("a", {}), work("b", {})], 1).importPaths;
     const sum = addPathTotals(a, a);
@@ -619,15 +663,18 @@ describe("the preference's strings (P2-T18 step 11; docs/01 §6.3 item 3)", () =
     }
   });
 
-  it("leaves every new id as a commented ko-KR stub on KO_PENDING_REVIEW, never machine-translated", () => {
+  it("carries every new id as a live, owner-reviewed ko-KR entry on KO_PRESENT (gate G-41, 2026-10-16)", () => {
+    // Until 2026-10-16 these were commented NEEDS REVIEW stubs on
+    // `KO_PENDING_REVIEW`; the owner reviewed the Korean that day and the
+    // coordinator made all three live (`plan/00` §6 item 218).
     for (const id of [
       "research-helper-import-paths",
       "research-helper-import-fallback-reason",
       "research-helper-prefs-use-translators",
     ] as const) {
-      expect(koKR).toContain(`# ${id} =`);
-      expect(koKR).not.toMatch(new RegExp(`^${id} =`, "mu"));
-      expect(KO_PENDING_REVIEW).toContain(id);
+      expect(koKR).toMatch(new RegExp(`^${id} =`, "mu"));
+      expect(KO_PRESENT).toContain(id);
+      expect(KO_PENDING_REVIEW).not.toContain(id);
     }
   });
 });

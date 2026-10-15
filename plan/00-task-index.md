@@ -1461,7 +1461,8 @@ the caller of what the card builds; if it does not, the caller is added with a d
 203. **A newly imported preprint is never related to its published version already in the library:** that would
     modify an existing item, which `P1-T14` forbids.
 
-204. **The pipeline calls a run "partial" when every searching source failed** (`fetchStateFromReports` in
+204. ~~**The pipeline calls a run "partial" when every searching source failed**~~ **DONE 2026-10-16** (`plan/reports/followups-204-212-217.md`;
+    lookup-only sources left out by capability; the run now ends `failed` and creates no collection) (`fetchStateFromReports` in
     `src/pipeline/searchImport/stages.ts` counts bioRxiv/medRxiv, which cannot fail). The window now decides through
     the capability; the outcome, the provenance record and the progress popup still say partial.
 
@@ -1484,7 +1485,8 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 209. ~~**A third record can still merge a preprint into its published version (owner's decision).**~~ **DECIDED
     2026-10-16: add a group-level check** — a group holding two records that name each other as other versions is
-    split and linked; `docs/02` §11.5 first. Measured: an arXiv
+    split and linked; `docs/02` §11.5 first. **DONE 2026-10-16** (`plan/reports/item-209.md`; tier-by-tier rebuild, the same
+    result in all six orders; 11 mutants killed; follow-ups are item 219). Measured: an arXiv
     record naming the journal DOI, a second arXiv record with the same DOI and no naming, and the Semantic Scholar
     record — the plain arXiv record matches each of the others, and the union puts all three in one group, in 2 of 3
     input orders. Closing it needs a group-level check. Related: only a DOI conflict triggers item 200's rule, and a
@@ -1495,7 +1497,8 @@ the caller of what the card builds; if it does not, the caller is added with a d
 211. **Strategy B items get neither the `research_helper` tag nor the superseded-preprint tag** that hand-mapped items
     carry; and `saveAttachments: true` makes Strategy B download any open-access PDF (`docs/01` §6.2's reference).
 
-212. **Strategy B's per-run counts do not reach the visible import summary.** Computed, summed and logged; showing them
+212. ~~**Strategy B's per-run counts do not reach the visible import summary.**~~ **DONE 2026-10-16** (shown only when
+    Strategy B ran; the default summary is byte-for-byte unchanged) Computed, summed and logged; showing them
     needs `SearchImportBatchResult` / `SearchImportWriteReport` counts, `searchImportPipeline.ts`'s `accumulate` /
     `toOutput`, and the view model to format `research-helper-import-paths`.
 
@@ -1511,11 +1514,33 @@ the caller of what the card builds; if it does not, the caller is added with a d
 216. **A true "already in this collection" count** needs a per-record write report from the importer (`docs/08` §4.6 note).
 
 217. ~~**"Advance to today" when the recorded upper bound is later than today moves it backwards (owner):**~~
-    **DECIDED 2026-10-16: keep the later of the two** (`max(recorded, today)`). the card says
+    **DECIDED 2026-10-16: keep the later of the two** (`max(recorded, today)`). **DONE 2026-10-16** (`toSearchParams`). the card says
     "move `toIso` to today" literally; `max(recorded, today)` is the alternative.
 
-218. **Korean for the newest strings (gate G-41):** `P2-T17`'s nine window strings and `P2-T18`'s three
+218. ~~**Korean for the newest strings (gate G-41):**~~ **DONE 2026-10-16: all twelve drafted by the coordinator, reviewed by
+    the owner as drafted, live on `KO_PRESENT`; "translator" follows Zotero's own Korean, 중계기.** `P2-T17`'s nine window strings and `P2-T18`'s three
     (`-import-paths`, `-import-fallback-reason`, `-prefs-use-translators`) are commented stubs on `KO_PENDING_REVIEW`.
+
+### 6.39 Raised by item 209, `P2-T13` Part A and the 204/212/217 follow-ups, 2026-10-16 — items 220 and 222 wait on the owner
+
+219. **Item 209's split leaves three choices to measure** (`P2-T13`'s labels will show whether any matters): a record
+    matching both versions at the same tier stays a work of its own with no flag; within a blocked tier every pair
+    of the would-be work is dropped, so an unrelated duplicate of one version can be missed; and only a version naming
+    triggers the split. The title-fuzzy tier also ranks by tier, not by its 0.80–0.94 confidence.
+
+220. **The all-failed panel now offers Retry beside Open Preferences (owner).** Since item 204 the pipeline returns
+    `failed` with its run-level `SOURCE` error, which has no `ERROR_ROWS` row, so Retry follows its `retryable: true` —
+    also when every source failed only on a refused key. Either the window skips the run-level error when per-source
+    errors exist, or `ERROR_ROWS` gains a `SOURCE` row. Related: item 205.
+
+221. **The series rule reads a bracketed year at a title's end as a series marker** (`docs/02` §11.3.3): "Cramming More
+    Components onto Integrated Circuits (1965)" and the same title without the year are forced apart. For `P2-T13`'s
+    threshold tuning.
+
+222. **`P2-T13` Part B needs a live-recording budget (owner).** The committed fixtures give 47 pairs; the card needs
+    ≥ 200 and five families are short (`10.64898/` has none). The Part A agent's plan: five shared queries plus
+    probes, ≈ 80–85 unkeyed requests across the seven sources, est. 150–400 pairs. Then the owner labels
+    `test/fixtures/dedup/pairs.csv`.
 
 ## 7. Regenerating this file
 

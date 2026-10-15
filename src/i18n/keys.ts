@@ -731,14 +731,8 @@ export const KO_PENDING_REVIEW = [
   "research-helper-prefs-test-forbidden",
   "research-helper-prefs-test-absent",
   "research-helper-prefs-test-unavailable",
-  // `P2-T18`: the import-path counts and the `useTranslators` checkbox. The
-  // `ko-KR` bundle carries each as a commented NEEDS REVIEW stub with its
-  // English source; nothing was machine-translated.
-  "research-helper-import-paths",
-  "research-helper-import-fallback-reason",
-  "research-helper-prefs-use-translators",
 
-  // --- searchDialog (70) ---
+  // --- searchDialog (61) ---
   "research-helper-search-window-title",
   "research-helper-search-keyword-label",
   "research-helper-search-keyword-input",
@@ -806,19 +800,6 @@ export const KO_PENDING_REVIEW = [
   "research-helper-search-state-error-retry",
   "research-helper-search-details-show",
   "research-helper-search-details-hide",
-  // `P2-T17`'s nine, FR-12's re-run state. The `ko-KR` bundle carries each as a
-  // commented NEEDS REVIEW stub with its English source; `G-41` owns the
-  // translation and nothing here was machine-translated. The menu entry's
-  // Korean is `docs/08` §10.2's own and is on KO_PRESENT instead.
-  "research-helper-search-mode-rerun",
-  "research-helper-search-rerun-heading",
-  "research-helper-search-rerun-recorded",
-  "research-helper-search-rerun-as-recorded",
-  "research-helper-search-rerun-advance",
-  "research-helper-search-rerun-prefilled",
-  "research-helper-search-rerun-press-search",
-  "research-helper-search-rerun-all-years",
-  "research-helper-search-import-summary-rerun",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -862,6 +843,22 @@ export const KO_PRESENT = [
   "research-helper-search-row-linked",
   "research-helper-search-source-role",
   "research-helper-search-preprint-policy",
+  // `P2-T17`'s nine (FR-12's re-run state) and `P2-T18`'s three (the import
+  // paths and the `useTranslators` checkbox): Korean drafted by the coordinator
+  // and reviewed by the owner on 2026-10-16 (`G-41`). "translator" follows
+  // Zotero's own Korean interface, which says 중계기.
+  "research-helper-search-mode-rerun",
+  "research-helper-search-rerun-heading",
+  "research-helper-search-rerun-recorded",
+  "research-helper-search-rerun-as-recorded",
+  "research-helper-search-rerun-advance",
+  "research-helper-search-rerun-prefilled",
+  "research-helper-search-rerun-press-search",
+  "research-helper-search-rerun-all-years",
+  "research-helper-search-import-summary-rerun",
+  "research-helper-import-paths",
+  "research-helper-import-fallback-reason",
+  "research-helper-prefs-use-translators",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

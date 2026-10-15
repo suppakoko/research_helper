@@ -1183,12 +1183,13 @@ export function isLookupOnly(
  * Whether every source that **searches** failed outright: it errored and
  * yielded nothing (`P2-T14`).
  *
- * `stages.ts`'s `fetchStateFromReports` calls a run `"failed"` only when
- * *every* report errored, and a lookup-only source makes no keyword request,
- * so it never errors on a keyword run — which would leave §4.6's "All
- * databases failed" panel unreachable on the default seven-source run. The
- * view model reads the run through the capability instead. `false` when no
- * searching source was asked: nothing that searches can have failed.
+ * A lookup-only source makes no keyword request, so it never errors on a
+ * keyword run; counting it would leave §4.6's "All databases failed" panel
+ * unreachable on the default seven-source run. The view model reads the run
+ * through the capability, and since item 204 (2026-10-16) `stages.ts`'s
+ * `fetchStateFromReports` does too, so the pipeline's `"failed"` and this
+ * agree. `false` when no searching source was asked: nothing that searches
+ * can have failed.
  */
 export function everySearchFailed(
   perSource: readonly SearchImportSourceReport[],
@@ -1304,6 +1305,40 @@ export function importSummary(
         skipped: write.skipped,
         failed: write.failed,
       });
+}
+
+/**
+ * Strategy B's lines for the import summary (`P2-T18` step 10; `plan/00` §6
+ * item 212): `research-helper-import-paths` with the two path counts, then one
+ * `research-helper-import-fallback-reason` per reason class that sent at least
+ * one record to hand-mapping, in the writer's reason order.
+ *
+ * **Empty unless Strategy B ran.** The write report carries `importPaths` only
+ * when the writer used translators, so with `useTranslators` off — the shipped
+ * default — this returns `[]` and the window's notices are exactly the summary
+ * and the coverage line they were before. A reason at zero is not drawn: the
+ * line would say "0" about a path nobody took.
+ *
+ * @param write - the run's write report
+ * @returns the lines to draw after the summary and the coverage line
+ */
+export function importPathLines(
+  write: SearchImportWriteReport,
+): readonly MessageRef[] {
+  const paths = write.importPaths;
+  if (paths === undefined) return [];
+  const reasons = Object.entries(paths.fallbackReasons)
+    .filter(([, count]) => count > 0)
+    .map(([cause, count]) =>
+      message("research-helper-import-fallback-reason", { cause, count }),
+    );
+  return [
+    message("research-helper-import-paths", {
+      translated: paths.viaTranslators,
+      handMapped: paths.handMapped,
+    }),
+    ...reasons,
+  ];
 }
 
 /**
@@ -1993,10 +2028,13 @@ export function createSearchImportViewModel(
       { works: output.works, flags: output.flags, links: output.links },
     );
     // `P2-T14`: a run where every source that *searches* failed is the
-    // all-failed state, even though the pipeline calls it `"partial"` — a
-    // lookup-only source makes no keyword request on a keyword run, so it
-    // cannot fail one, and without this the default seven-source run could
-    // never reach §4.6's "All databases failed" panel.
+    // all-failed state — a lookup-only source makes no keyword request on a
+    // keyword run, so it cannot fail one, and without this the default
+    // seven-source run could never reach §4.6's "All databases failed" panel.
+    // Since item 204 (2026-10-16) the pipeline's own `fetchStateFromReports`
+    // reads the run the same way and returns `"failed"`, so the second arm is
+    // a guard for a `"partial"` output from any other producer, not the path
+    // the shipped pipeline takes.
     const allFailed =
       output.outcome === "failed" ||
       (output.outcome === "partial" &&
@@ -2142,7 +2180,8 @@ export function createSearchImportViewModel(
   ): Promise<string | undefined> {
     // `state.panel`, and not only the outcome: `renderSearchOutcome` also
     // draws the error panel for a `"partial"` run whose every searching source
-    // failed (`P2-T14`), and that run has no result count to announce.
+    // failed (`P2-T14`; the shipped pipeline says `"failed"` for it since item
+    // 204), and that run has no result count to announce.
     if (output.outcome === "failed" || state.panel === "error") {
       return undefined;
     }
@@ -2216,7 +2255,8 @@ export function createSearchImportViewModel(
         ? [message("rh-error-cancelled", { imported: write.created })]
         : [];
     publish({
-      notices: [...cancelled, summary, coverage],
+      // Item 212: Strategy B's path counts follow, and only when it ran.
+      notices: [...cancelled, summary, coverage, ...importPathLines(write)],
       status: summary,
       progressPercent: undefined,
     });

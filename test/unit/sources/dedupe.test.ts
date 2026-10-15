@@ -975,6 +975,311 @@ describe("§11.5 under rule 1 — a shared Tier 1–4 id across conflicting DOIs
   });
 });
 
+describe("§11.5 under rule 1 — the group-level check: a third record never joins two versions into one work (plan/00 §6 item 209)", () => {
+  const PREPRINT_DOI = doi("10.48550/arxiv.2402.00209");
+  const JOURNAL_DOI = doi("10.5555/rh-item209.journal");
+  const ARXIV = arxiv("2402.00209");
+  const TITLE =
+    "Group level checks keep a preprint apart from its journal version";
+
+  /** The preprint that names the journal DOI as its other version. */
+  const naming = (): SourceRecord =>
+    record({
+      id: "naming",
+      source: "arxiv",
+      type: "preprint",
+      title: TITLE,
+      year: 2024,
+      ids: { doi: PREPRINT_DOI, arxivId: ARXIV },
+      related: { doi: JOURNAL_DOI },
+    });
+  /** A second copy of the preprint: same DOI and arXiv id, no naming. */
+  const plain = (id = "plain"): SourceRecord =>
+    record({
+      id,
+      source: "arxiv",
+      type: "preprint",
+      title: TITLE,
+      year: 2024,
+      ids: { doi: PREPRINT_DOI, arxivId: ARXIV },
+    });
+  /** The journal version: the journal DOI and the same arXiv id. */
+  const journal = (): SourceRecord =>
+    record({
+      id: "journal",
+      source: "semanticscholar",
+      title: TITLE,
+      year: 2025,
+      ids: { doi: JOURNAL_DOI, arxivId: ARXIV },
+    });
+
+  function orders<T>(items: readonly T[]): T[][] {
+    if (items.length <= 1) return [[...items]];
+    return items.flatMap((item, k) =>
+      orders([...items.slice(0, k), ...items.slice(k + 1)]).map((rest) => [
+        item,
+        ...rest,
+      ]),
+    );
+  }
+
+  /** Each group as its sorted record ids, the groups sorted: order removed. */
+  function membership(groups: readonly { records: readonly SourceRecord[] }[]) {
+    return groups
+      .map((g) => g.records.map((r) => r.id).sort())
+      .sort((x, y) => x.join().localeCompare(y.join()));
+  }
+
+  /** Each link as its sorted record ids plus its decision: order removed. */
+  function linkSet(
+    links: readonly {
+      a: SourceRecord;
+      b: SourceRecord;
+      decision: DedupDecision;
+    }[],
+  ) {
+    return links
+      .map((l) => ({ ids: [l.a.id, l.b.id].sort(), decision: l.decision }))
+      .sort((x, y) => x.ids.join().localeCompare(y.ids.join()));
+  }
+
+  it("the measured shape: the bridging copy matches each version, yet all six orders give two works and one link", () => {
+    const records = [naming(), plain(), journal()];
+    const [n, p, j] = records;
+    if (n === undefined || p === undefined || j === undefined) {
+      throw new Error("three records");
+    }
+    // The bridge, pair by pair: Tier 0 with the preprint, Tier 3 (DOIs in
+    // conflict, no naming) with the journal version; the versions: a link.
+    expect(compareRecords(p, n)).toMatchObject({
+      verdict: "match",
+      tier: "doi",
+    });
+    expect(compareRecords(p, j)).toMatchObject({
+      verdict: "match",
+      tier: "arxiv",
+    });
+    expect(compareRecords(n, j)).toMatchObject({
+      verdict: "link",
+      tier: "version-link",
+    });
+    const results = orders(records).map((o) => dedupeRecords(o));
+    expect(results).toHaveLength(6);
+    for (const result of results) {
+      expect(membership(result.groups)).toEqual([
+        ["arxiv:naming", "arxiv:plain"],
+        ["semanticscholar:journal"],
+      ]);
+      expect(result.links).toHaveLength(1);
+      expect(result.links[0]?.decision).toMatchObject({
+        verdict: "link",
+        tier: "version-link",
+        confidence: TIER_CONFIDENCE.versionLink,
+        evidence: { groupSplit: true, knownVersionLink: true },
+      });
+      expect(result.flags).toEqual([]);
+      expect(result.recordsDeduplicatedAway).toBe(1);
+      expect(linkSet(result.links)).toEqual(linkSet(results[0]?.links ?? []));
+    }
+  });
+
+  it("the bridging copy joins the version it matches at the earlier tier, and the split is in the group's decisions", () => {
+    for (const o of orders([naming(), plain(), journal()])) {
+      const result = dedupeRecords(o);
+      const preprint = result.groups.find((g) =>
+        g.records.some((r) => r.id === "arxiv:naming"),
+      );
+      const published = result.groups.find((g) =>
+        g.records.some((r) => r.id === "semanticscholar:journal"),
+      );
+      expect(preprint?.decisions.map((d) => d.tier)).toEqual(["doi"]);
+      expect(published?.records).toHaveLength(1);
+      expect(published?.decisions).toEqual([]);
+    }
+  });
+
+  it("a record matching both versions at the same tier joins neither, in every order", () => {
+    // No DOI, so nothing conflicts: Tier 3 matches it with both versions.
+    const bridge = record({
+      id: "bridge",
+      source: "arxiv",
+      type: "preprint",
+      title: TITLE,
+      year: 2024,
+      ids: { arxivId: ARXIV },
+    });
+    for (const o of orders([naming(), bridge, journal()])) {
+      const result = dedupeRecords(o);
+      expect(membership(result.groups)).toEqual([
+        ["arxiv:bridge"],
+        ["arxiv:naming"],
+        ["semanticscholar:journal"],
+      ]);
+      expect(linkSet(result.links).map((l) => l.ids)).toEqual([
+        ["arxiv:naming", "semanticscholar:journal"],
+      ]);
+    }
+  });
+
+  it("a genuine three-way duplicate with no version naming still merges into one, in every order", () => {
+    const a = record({
+      id: "a",
+      title: TITLE,
+      year: 2024,
+      ids: { doi: PREPRINT_DOI, arxivId: ARXIV },
+    });
+    const b = record({
+      id: "b",
+      title: TITLE,
+      year: 2024,
+      ids: { doi: PREPRINT_DOI, arxivId: ARXIV },
+    });
+    const c = record({
+      id: "c",
+      source: "semanticscholar",
+      title: TITLE,
+      year: 2025,
+      ids: { doi: JOURNAL_DOI, arxivId: ARXIV },
+    });
+    for (const o of orders([a, b, c])) {
+      const result = dedupeRecords(o);
+      expect(result.groups).toHaveLength(1);
+      expect(result.links).toEqual([]);
+    }
+  });
+
+  it("a duplicate joined through a chain, with one pair not a match and no version naming, still merges into one", () => {
+    // a–b share the DOI, b–c the PMID; a and c share nothing and their
+    // titles differ, so a–c is not a match — and must not split the group.
+    const a = record({
+      id: "a",
+      title: TITLE,
+      year: 2024,
+      ids: { doi: JOURNAL_DOI },
+    });
+    const b = record({
+      id: "b",
+      title: TITLE,
+      year: 2024,
+      ids: { doi: JOURNAL_DOI, pmid: pmid("40000209") },
+    });
+    const c = record({
+      id: "c",
+      title: "Entirely different words describing another thing",
+      year: 2024,
+      ids: { pmid: pmid("40000209") },
+    });
+    expect(compareRecords(a, c).verdict).not.toBe("match");
+    for (const o of orders([a, b, c])) {
+      const result = dedupeRecords(o);
+      expect(result.groups).toHaveLength(1);
+      expect(result.groups[0]?.records).toHaveLength(3);
+    }
+  });
+
+  it("only a version naming splits: a §11.5 rule 1 title link (conflicting DOIs, no naming) inside a chained group does not", () => {
+    // a–b share the PMID; b has no DOI, so b–c is a plain title match; a–c
+    // match on title across conflicting DOIs, which rule 1 makes a link —
+    // but neither names the other, so item 209's check leaves the group.
+    const a = record({
+      id: "a",
+      title: TITLE,
+      year: 2024,
+      ids: { doi: PREPRINT_DOI, pmid: pmid("40000210") },
+    });
+    const b = record({
+      id: "b",
+      title: TITLE,
+      year: 2024,
+      ids: { pmid: pmid("40000210") },
+    });
+    const c = record({
+      id: "c",
+      title: TITLE,
+      year: 2024,
+      ids: { doi: JOURNAL_DOI },
+    });
+    expect(compareRecords(a, c)).toMatchObject({
+      verdict: "link",
+      evidence: { conflictingIds: "doi" },
+    });
+    expect(compareRecords(a, c).evidence["knownVersionLink"]).toBeUndefined();
+    for (const o of orders([a, b, c])) {
+      expect(dedupeRecords(o).groups).toHaveLength(1);
+    }
+  });
+
+  it("a named pair the cascade calls distinct (series markers differ) is split too, and stays distinct: no link", () => {
+    // a names c; a–b share the DOI, b–c the PMID; a–c differ only in the
+    // trailing part number, so §11.3.3 guard 2 makes them distinct.
+    const SERIES = "Deep protein language models for structure prediction part";
+    const a = record({
+      id: "a",
+      title: `${SERIES} 1`,
+      year: 2024,
+      ids: { doi: PREPRINT_DOI },
+      related: { doi: JOURNAL_DOI },
+    });
+    const b = record({
+      id: "b",
+      title: `${SERIES} 1`,
+      year: 2024,
+      ids: { doi: PREPRINT_DOI, pmid: pmid("40000211") },
+    });
+    const c = record({
+      id: "c",
+      title: `${SERIES} 2`,
+      year: 2024,
+      ids: { doi: JOURNAL_DOI, pmid: pmid("40000211") },
+    });
+    expect(compareRecords(a, c)).toMatchObject({
+      verdict: "distinct",
+      evidence: { seriesMarkersDiffer: true },
+    });
+    for (const o of orders([a, b, c])) {
+      const result = dedupeRecords(o);
+      expect(membership(result.groups)).toEqual([
+        ["pubmed:a", "pubmed:b"],
+        ["pubmed:c"],
+      ]);
+      expect(result.links).toEqual([]);
+    }
+  });
+
+  it("dedupeRecords and dedupeRecordsAsync agree in all six orders", async () => {
+    for (const o of orders([naming(), plain(), journal()])) {
+      expect(await dedupeRecordsAsync(o)).toEqual(dedupeRecords(o));
+    }
+  });
+
+  it("a split of a large group still yields at most every DEDUP_YIELD_EVERY_COMPARISONS comparisons", async () => {
+    const copies = Array.from({ length: 30 }, (_, k) => plain(`plain${k}`));
+    const records = [naming(), ...copies, journal()];
+    const counter = { comparisons: 0 };
+    const marks: number[] = [];
+    const result = await dedupeRecordsAsync(records, {
+      counter,
+      yieldToEventLoop: () => {
+        marks.push(counter.comparisons);
+        return Promise.resolve();
+      },
+    });
+    // The check compares every pair of the 32-record group (496 pairs), so
+    // it spans more than one slice.
+    expect(counter.comparisons).toBe(496);
+    expect(counter.comparisons).toBeGreaterThan(DEDUP_YIELD_EVERY_COMPARISONS);
+    const slices = [...marks, counter.comparisons].map(
+      (m, k, all) => m - (k === 0 ? 0 : (all[k - 1] ?? 0)),
+    );
+    for (const slice of slices) {
+      expect(slice).toBeLessThanOrEqual(DEDUP_YIELD_EVERY_COMPARISONS);
+    }
+    expect(result.groups).toHaveLength(2);
+    expect(result.links).toHaveLength(1);
+    expect(result).toEqual(dedupeRecords(records));
+  });
+});
+
 describe("§11.4 — a title match across the preprint boundary is a 0.75 flag", () => {
   it("flags rather than merges a preprint against a journal article", () => {
     const a = record({ type: "preprint", title: S2_TITLE, year: 2022 });

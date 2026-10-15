@@ -543,6 +543,55 @@ describe("P2-T17 — toSearchParams", () => {
     ).toStrictEqual({ fromIso: "2019-01-01", toIso: "2026-12-31" });
   });
 
+  it("never moves the upper bound backwards: a recorded end after today is kept (item 217)", () => {
+    // Owner, 2026-10-16: the advanced upper bound is max(recorded, today).
+    // The lower bound is also after today here, so a `max` wrongly applied to
+    // it would leave it unchanged — the next test catches that instead.
+    const future = run({
+      dateFilter: { fromIso: "2026-11-01", toIso: "2027-06-30" },
+    });
+    expect(
+      toSearchParams(future, { advanceDateWindow: true, now: TODAY })
+        .dateWindow,
+    ).toStrictEqual({ fromIso: "2026-11-01", toIso: "2027-06-30" });
+    // A recorded end equal to today is today either way.
+    const endsToday = run({
+      dateFilter: { fromIso: "2019-01-01", toIso: "2026-10-15" },
+    });
+    expect(
+      toSearchParams(endsToday, { advanceDateWindow: true, now: TODAY })
+        .dateWindow,
+    ).toStrictEqual({ fromIso: "2019-01-01", toIso: "2026-10-15" });
+    // One day later than today still wins over today.
+    const endsTomorrow = run({
+      dateFilter: { fromIso: "2019-01-01", toIso: "2026-10-16" },
+    });
+    expect(
+      toSearchParams(endsTomorrow, { advanceDateWindow: true, now: TODAY })
+        .dateWindow,
+    ).toStrictEqual({ fromIso: "2019-01-01", toIso: "2026-10-16" });
+  });
+
+  it("applies the max to the upper bound only: a lower bound before today stays where it was recorded", () => {
+    // A `max(recorded, today)` applied to `fromIso` would read 2026-10-15
+    // here; a recorded end before today still advances to today.
+    const params = toSearchParams(
+      run({ dateFilter: { fromIso: "2025-03-01", toIso: "2025-09-30" } }),
+      { advanceDateWindow: true, now: TODAY },
+    );
+    expect(params.dateWindow).toStrictEqual({
+      fromIso: "2025-03-01",
+      toIso: "2026-10-15",
+    });
+    // "As recorded" never consults today at all.
+    expect(
+      toSearchParams(
+        run({ dateFilter: { fromIso: "2026-11-01", toIso: "2027-06-30" } }),
+        { advanceDateWindow: false, now: TODAY },
+      ).dateWindow,
+    ).toStrictEqual({ fromIso: "2026-11-01", toIso: "2027-06-30" });
+  });
+
   it('re-hydrates dateFilter "none" as All years, with or without the advance', () => {
     for (const advanceDateWindow of [false, true]) {
       expect(

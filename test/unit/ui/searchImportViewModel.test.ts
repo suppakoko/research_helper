@@ -82,6 +82,7 @@ import type {
 import {
   buildProvenance,
   createSearchImportViewModel,
+  importPathLines,
   importSummary,
   errorDetails,
   errorView,
@@ -369,6 +370,11 @@ interface Harness {
    * "pass the preview's works back" leaves at this layer.
    */
   readonly inputs: SearchImportInput[];
+  /**
+   * The outcome each job's progress reporter was closed with — what the
+   * progress popup is told (`docs/07` §7.7), in order (item 204).
+   */
+  readonly doneOutcomes: string[];
 }
 
 /**
@@ -393,6 +399,7 @@ function harness(options: {
   const lines: string[] = [];
   const tokens: CancellationToken[] = [];
   const inputs: SearchImportInput[] = [];
+  const doneOutcomes: string[] = [];
   const listeners: ((item: ProgressSnapshot) => void)[] = [];
   const queue = [...options.runs];
   /**
@@ -447,7 +454,11 @@ function harness(options: {
         return { token: job.token } as unknown as PipelineContext;
       })(),
       progress: {
-        reporter: { done: (): void => undefined },
+        reporter: {
+          done: (outcome: string): void => {
+            doneOutcomes.push(outcome);
+          },
+        },
         events: {
           subscribe: (listener: (item: ProgressSnapshot) => void) => {
             listeners.push(listener);
@@ -493,7 +504,7 @@ function harness(options: {
       states.push(state);
     },
   });
-  return { model, states, lines, detach, tokens, inputs };
+  return { model, states, lines, detach, tokens, inputs, doneOutcomes };
 }
 
 /** The two sources every state-machine test below asks. */
@@ -2941,5 +2952,178 @@ describe("P2-T17 — a re-run writes a new record and leaves the original alone 
     expect(store.rows).toHaveLength(2);
     expect(store.rows[1]?.record.runId).not.toBe(store.rows[0]?.record.runId);
     expect(store.rows[0]?.record).toStrictEqual(original);
+  });
+});
+
+// ===========================================================================
+// Follow-ups 204 and 212 (2026-10-16)
+// ===========================================================================
+
+describe("item 204 — the pipeline's 'failed' reaches the panel and the progress popup", () => {
+  const SEARCHING: readonly SourceId[] = [
+    "pubmed",
+    "europepmc",
+    "crossref",
+    "semanticscholar",
+    "arxiv",
+  ];
+
+  it("draws the all-failed panel and closes the job 'failed' when every searching source failed beside the two quiet servers", async () => {
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          // What `createSearchImportPipeline` returns for this run since item
+          // 204: `"failed"`, with its run-level SOURCE error.
+          output: output({
+            outcome: "failed",
+            error: failure("SOURCE", { retryable: true }),
+            perSource: SEVEN_IDS.map((sourceId) =>
+              SEARCHING.includes(sourceId)
+                ? report({ sourceId, error: failure("OFFLINE") })
+                : report({ sourceId }),
+            ),
+          }),
+        },
+      ],
+    });
+    await h.model.runSearch(query({ sources: [...SEVEN_IDS] }));
+
+    expect(h.model.state.panel).toBe("error");
+    expect(h.model.state.error?.headline.id).toBe(
+      "research-helper-search-state-error",
+    );
+    expect(h.model.state.error?.lines.map((line) => line.sourceId)).toEqual(
+      SEARCHING,
+    );
+    expect(h.model.state.warnings).toStrictEqual([]);
+    // The progress popup is told the run failed — `"partial"` would have
+    // been mapped to `"succeeded"` here.
+    expect(h.doneOutcomes).toStrictEqual(["failed"]);
+  });
+
+  it("still closes a run with one surviving searching source as 'succeeded', with the partial banner", async () => {
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          output: output({
+            outcome: "partial",
+            records: [
+              record({
+                sourceId: "crossref",
+                nativeId: "c1",
+                title: "Survivor",
+              }),
+            ],
+            perSource: SEVEN_IDS.map((sourceId) =>
+              sourceId === "crossref"
+                ? report({ sourceId, recordsRetrieved: 1 })
+                : SEARCHING.includes(sourceId)
+                  ? report({ sourceId, error: failure("OFFLINE") })
+                  : report({ sourceId }),
+            ),
+          }),
+        },
+      ],
+    });
+    await h.model.runSearch(query({ sources: [...SEVEN_IDS] }));
+    expect(h.model.state.panel).toBe("results");
+    expect(h.model.state.warnings.map((w) => w.id)).toStrictEqual([
+      "research-helper-search-state-partial",
+    ]);
+    expect(h.doneOutcomes).toStrictEqual(["succeeded"]);
+  });
+});
+
+describe("item 212 — Strategy B's counts in the import summary", () => {
+  const PATHS = {
+    viaTranslators: 7,
+    handMapped: 3,
+    fallbackReasons: {
+      "no-identifier": 2,
+      "lookup-error": 0,
+      "no-translators": 0,
+      "no-result": 1,
+      timeout: 0,
+    },
+  } as const;
+
+  it("adds nothing to the notices when Strategy B did not run — byte for byte the summary of before", async () => {
+    const h = harness({
+      runs: [{ output: FETCHED }, { output: WRITTEN }],
+      sources: TWO_SOURCES,
+    });
+    await searchThenImport(h);
+    expect(JSON.stringify(h.model.state.notices)).toBe(
+      JSON.stringify([
+        {
+          id: "research-helper-import-summary",
+          args: { imported: 1, linked: 0, skipped: 0, failed: 0 },
+        },
+        {
+          id: "research-helper-import-abstract-coverage",
+          args: { percent: 100 },
+        },
+      ]),
+    );
+    expect(importPathLines(writeReport({ created: 1 }))).toStrictEqual([]);
+  });
+
+  it("draws the path line and one line per reason that sent a record to hand-mapping, after the summary", async () => {
+    const h = harness({
+      runs: [
+        { output: FETCHED },
+        {
+          output: output({
+            outcome: "succeeded",
+            write: { ...writeReport({ created: 10 }), importPaths: PATHS },
+          }),
+        },
+      ],
+      sources: TWO_SOURCES,
+    });
+    await searchThenImport(h);
+    expect(h.model.state.notices).toStrictEqual([
+      message("research-helper-import-summary", {
+        imported: 10,
+        linked: 0,
+        skipped: 0,
+        failed: 0,
+      }),
+      message("research-helper-import-abstract-coverage", { percent: 100 }),
+      message("research-helper-import-paths", { translated: 7, handMapped: 3 }),
+      message("research-helper-import-fallback-reason", {
+        cause: "no-identifier",
+        count: 2,
+      }),
+      message("research-helper-import-fallback-reason", {
+        cause: "no-result",
+        count: 1,
+      }),
+    ]);
+    // The status line and the toast stay the summary alone.
+    expect(h.model.state.status?.id).toBe("research-helper-import-summary");
+  });
+
+  it("draws the path line alone when no record fell back", () => {
+    expect(
+      importPathLines({
+        ...writeReport({ created: 4 }),
+        importPaths: {
+          viaTranslators: 4,
+          handMapped: 0,
+          fallbackReasons: {
+            "no-identifier": 0,
+            "lookup-error": 0,
+            "no-translators": 0,
+            "no-result": 0,
+            timeout: 0,
+          },
+        },
+      }),
+    ).toStrictEqual([
+      message("research-helper-import-paths", { translated: 4, handMapped: 0 }),
+    ]);
   });
 });

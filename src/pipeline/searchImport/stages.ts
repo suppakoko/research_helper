@@ -412,17 +412,47 @@ export async function fanOut(
     records,
     perSource,
     warnings,
-    state: fetchStateFromReports(perSource),
+    state: fetchStateFromReports(perSource, lookupOnlySourceIds(sources)),
   };
+}
+
+/**
+ * The ids of the sources that contribute by lookup rather than by search —
+ * `capabilities.keywordSearch: false` (`P2-T07`'s bioRxiv and medRxiv).
+ *
+ * {@link fetchStateFromReports} leaves these out of "every source failed"
+ * (`plan/00` §6 item 204): such a source makes no request on a keyword run,
+ * so it cannot fail one. Read from the capability, never from a list of ids,
+ * so a later lookup-only adapter is covered without an edit here.
+ *
+ * @param sources - the resolved sources a run asked
+ * @returns their lookup-only ids
+ */
+export function lookupOnlySourceIds(
+  sources: readonly LiteratureSource[],
+): ReadonlySet<SourceId> {
+  return new Set(
+    sources
+      .filter((source) => !source.capabilities.keywordSearch)
+      .map((source) => source.id),
+  );
 }
 
 /**
  * Which of `docs/07` §12.1's three edges out of `Fetching` the reports imply.
  *
  * - **`"failed"`** — `Fetching --> Failed : all sources failed`. Every source
- *   errored **and none yielded a record**. A source that threw after yielding
- *   is degraded, not failed — `P1-T16`'s first criterion keeps its page 1 —
- *   so one such source alone is `"partial"`, not `"failed"`.
+ *   **that searches** errored **and no source yielded a record**. A source that
+ *   threw after yielding is degraded, not failed — `P1-T16`'s first criterion
+ *   keeps its page 1 — so one such source alone is `"partial"`, not
+ *   `"failed"`. A lookup-only source (`lookupOnly`, `keywordSearch: false`)
+ *   is left out of "every": it makes no request on a keyword run and so
+ *   cannot fail one, and counting it made the default seven-source run
+ *   `"partial"` when all five searching sources failed (`plan/00` §6 item
+ *   204; `docs/07` §12.1's 2026-10-16 note). The window decides the same way
+ *   (`everySearchFailed` in `src/ui/viewModels/searchImportViewModel.ts`). A
+ *   run that asked **only** lookup-only sources keeps the reading over every
+ *   report, so a real failure there is still `"failed"`.
  * - **`"partial"`** — `Fetching --> PartialFetch : some sources failed, some
  *   succeeded`. At least one report carries an `error` and the run is not
  *   `"failed"`. A healthy source that found *nothing* still succeeded: one
@@ -436,17 +466,25 @@ export async function fanOut(
  *   nothing was asked, so nothing failed.
  *
  * @param reports - one per source asked
+ * @param lookupOnly - the ids of the asked sources whose
+ *   `capabilities.keywordSearch` is `false` ({@link lookupOnlySourceIds});
+ *   omitted, every report counts as a searching source. A report whose
+ *   source had no adapter is not in it, and so counts as searching — as the
+ *   window counts a source it has no descriptor for.
  * @returns the state `Fetching` ends in
  */
 export function fetchStateFromReports(
   reports: readonly SearchImportSourceReport[],
+  lookupOnly: ReadonlySet<SourceId> = new Set(),
 ): SearchImportFetchState {
   if (reports.length === 0) return "succeeded";
   const errored = reports.filter((report) => report.error !== undefined);
   if (errored.length === 0) return "succeeded";
-  const allFailedOutright = reports.every(
-    (report) => report.error !== undefined && report.recordsRetrieved === 0,
-  );
+  const searched = reports.filter((report) => !lookupOnly.has(report.sourceId));
+  const basis = searched.length > 0 ? searched : reports;
+  const allFailedOutright =
+    basis.every((report) => report.error !== undefined) &&
+    reports.every((report) => report.recordsRetrieved === 0);
   return allFailedOutright ? "failed" : "partial";
 }
 

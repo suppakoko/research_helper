@@ -2028,6 +2028,18 @@ covers the tooling, the corpus assembly, the report and the CI wiring. `docs/11`
 thresholds under "build without verifying" precisely because this card is where they get verified —
 so expect to move them, and expect the report diff to be the evidence.
 
+
+**Part A, 2026-10-16 — done; Part B waits on the owner; full report at `plan/reports/P2-T13-partA.md`.**
+Verified by the coordinator on the combined tree (figures under item 209's commit): no `MUTANT` marker, no address or
+key-shaped string in `test/fixtures/dedup/`, `build-dedup-corpus.ts --check` up to date. The committed fixtures of all
+seven sources give **296 records and 47 candidate pairs** (40 the engine compares, 7 recall-only) — far below the
+200-pair floor, because each source was recorded with different queries. Families: 3 of 10 same-paper sets, 7 of 5
+preprint pairs, 3 of 5 short titles, 1 of 5 series titles, 1 of 5 same-title-other-year, **0 of 5 `10.64898/`**,
+0 Korean. No label was written; `npm run dedup:report` refuses the unlabelled file (exit 1). The labelling sheet is
+`test/fixtures/dedup/pairs.csv`, merged back by `--merge-labels`. One measured fact for tuning: the series rule reads
+a bracketed year at a title's end — "(1965)" — as a series marker. Part B needs an owner-approved live-recording
+budget (the agent proposes ≈ 80–85 requests across the seven sources) and then the owner's labels (item 222).
+
 ---
 
 ### P2-T14 — Search & Import window: chips, badges, per-source status

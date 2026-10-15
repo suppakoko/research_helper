@@ -551,7 +551,8 @@ export interface SearchParams {
 export interface ToSearchParamsOptions {
   /**
    * `docs/08` §4.6 rule 2's "advance to today": move **only** the upper bound
-   * to today. The lower bound is kept, and §4.2's calendar-year window is
+   * to today — or keep it, when the recorded one is already later (item 217:
+   * never backwards). The lower bound is kept, and §4.2's calendar-year window is
    * **not** recomputed — that would move the lower bound too "and silently
    * change what is being compared".
    */
@@ -577,6 +578,19 @@ function localIsoDate(now: number): string {
 }
 
 /**
+ * The later of two `YYYY-MM-DD` dates — `docs/08` §4.6 rule 2's
+ * `max(recorded, today)` for the re-run's upper bound (item 217).
+ *
+ * Compared as strings: zero-padded ISO calendar dates sort in date order, and
+ * both inputs are that shape (`toIso` is the window's own `toDate`, `today` is
+ * {@link localIsoDate}'s). On a tie the recorded string is returned, so a
+ * re-run advanced on its own end date hands back exactly what was stored.
+ */
+function laterIsoDate(recorded: string, today: string): string {
+  return recorded >= today ? recorded : today;
+}
+
+/**
  * A stored {@link SearchProvenance} as the search window's parameter object
  * (`P2-T17` step 3; FR-12's first scenario).
  *
@@ -586,7 +600,9 @@ function localIsoDate(now: number): string {
  *   without `advanceDateWindow` — an unbounded window has no upper bound to
  *   move.
  * - With `advanceDateWindow`, `fromIso` is kept **verbatim** and `toIso`
- *   becomes today. Nothing else changes.
+ *   becomes the later of the recorded `toIso` and today (owner, 2026-10-16,
+ *   `plan/00` §6 item 217; `docs/08` §4.6 rule 2's dated note): advancing
+ *   never moves the upper bound backwards. Nothing else changes.
  *
  * @param record - a stored record, as {@link ProvenanceStore} returned it
  * @param options - the date choice and the clock reading
@@ -609,7 +625,7 @@ export function toSearchParams(
       : {
           fromIso: filter.fromIso,
           toIso: options.advanceDateWindow
-            ? localIsoDate(options.now)
+            ? laterIsoDate(filter.toIso, localIsoDate(options.now))
             : filter.toIso,
         };
   return {

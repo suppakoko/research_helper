@@ -100,17 +100,24 @@ research-helper-source-medrxiv = medRxiv
 # NEEDS REVIEW. en-US: "Abstracts present for { $percent }% of imported items"
 # research-helper-import-abstract-coverage =
 #
-# NEEDS REVIEW (P2-T18). en-US: "Through Zotero translators { $translated } ·
+# (P2-T18) Reviewed by the owner 2026-10-16 (G-41). en-US: "Through Zotero translators { $translated } ·
 # From search results { $handMapped }"
-# research-helper-import-paths =
+research-helper-import-paths = Zotero 중계기로 { $translated } · 검색 결과에서 { $handMapped }
 #
-# NEEDS REVIEW (P2-T18). en-US, a `{ $cause }` selector over five tokens, each
+# (P2-T18) Reviewed by the owner 2026-10-16 (G-41). en-US, a `{ $cause }` selector over five tokens, each
 # variant ending ": { $count }": [lookup-error] "Translator lookup failed",
 # [no-translators] "No translator for the identifier", [no-result] "Translator
 # lookup found nothing", [timeout] "Translator lookup timed out",
 # *[no-identifier] "No DOI, PMID or arXiv ID". "DOI", "PMID" and "arXiv" stay
 # as they are (`docs/08` §10.3).
-# research-helper-import-fallback-reason =
+research-helper-import-fallback-reason =
+    { $cause ->
+        [lookup-error] 중계기 조회 실패: { $count }
+        [no-translators] 식별번호에 맞는 중계기 없음: { $count }
+        [no-result] 중계기 조회 결과 없음: { $count }
+        [timeout] 중계기 조회 시간 초과: { $count }
+       *[no-identifier] DOI, PMID, arXiv ID 없음: { $count }
+    }
 
 
 ## The progress popup's headline (docs/07 §7.7, docs/08 §8.2 — P1-T32, P1-T33)
@@ -211,12 +218,12 @@ research-helper-prefs-backend-indeterminate = 확인 불가 — 이 운영체제
 
 ## The import-path preference (P2-T18; docs/01 §6.3 item 3, docs/07 §8.5, §12.1)
 ##
-## NEEDS REVIEW (P2-T18). en-US `.label`: "Fetch metadata through Zotero
+## (P2-T18) Reviewed by the owner 2026-10-16 (G-41). en-US `.label`: "Fetch metadata through Zotero
 ## translators (slower, more accurate)". en-US `.tooltiptext`: "Each record is
 ## looked up through Zotero's translators over the network, one at a time, so an
 ## import takes longer. A record the lookup cannot resolve is imported from the
 ## search results instead." "Zotero" stays as it is (`docs/08` §10.3). Nothing
-## here was machine-translated; the id is on `KO_PENDING_REVIEW`.
-# research-helper-prefs-use-translators =
-#     .label =
-#     .tooltiptext =
+## here was machine-translated; the Korean below was reviewed by the owner on 2026-10-16.
+research-helper-prefs-use-translators =
+    .label = Zotero 중계기로 서지 정보 가져오기(느리지만 더 정확함)
+    .tooltiptext = 각 기록을 Zotero 중계기로 네트워크에서 하나씩 조회하므로 가져오기가 오래 걸립니다. 조회로 찾지 못한 기록은 검색 결과에서 가져옵니다.

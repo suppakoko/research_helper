@@ -612,6 +612,129 @@ describe("item 200: a shared arXiv id across conflicting DOIs and a version nami
 });
 
 // ---------------------------------------------------------------------------
+// 4c. plan/00 §6 item 209 (owner, 2026-10-16): the group-level check
+// ---------------------------------------------------------------------------
+
+describe("item 209: a third record never joins a preprint and its published version into one work", () => {
+  const JOURNAL_DOI = "10.1038/s41592-019-0686-2";
+
+  /** The Semantic Scholar record of item 200's measured pair. */
+  function semanticScholarRecord(): SourceRecord {
+    const arxivId = normalizeArxivId("1907.10121");
+    if (arxivId === null) throw new Error("the arXiv id must normalize");
+    return synthetic({
+      source: "semanticscholar",
+      nativeId: "s2-item209",
+      title:
+        "SciPy 1.0: fundamental algorithms for scientific computing in Python",
+      year: 2020,
+      ids: { doi: doi(JOURNAL_DOI), arxivId },
+    });
+  }
+
+  /**
+   * The measured triple: the arXiv record naming the journal DOI, a second
+   * arXiv record of the same paper (same arXiv DOI, no `<arxiv:doi>`), and
+   * the Semantic Scholar record.
+   */
+  function measuredTriple(): {
+    readonly naming: SourceRecord;
+    readonly plain: SourceRecord;
+    readonly s2: SourceRecord;
+  } {
+    const naming = arxivEntry({ journalDoi: JOURNAL_DOI });
+    const base = arxivEntry({ journalDoi: undefined });
+    const plain: SourceRecord = {
+      ...base,
+      id: "arxiv:1907.10121v2",
+      nativeId: "1907.10121v2",
+    };
+    return { naming, plain, s2: semanticScholarRecord() };
+  }
+
+  function orders<T>(items: readonly T[]): T[][] {
+    if (items.length <= 1) return [[...items]];
+    return items.flatMap((item, k) =>
+      orders([...items.slice(0, k), ...items.slice(k + 1)]).map((rest) => [
+        item,
+        ...rest,
+      ]),
+    );
+  }
+
+  /** Each group as its sorted record ids, the groups sorted: order removed. */
+  function membership(groups: readonly { records: readonly SourceRecord[] }[]) {
+    return groups
+      .map((g) => g.records.map((r) => r.id).sort())
+      .sort((x, y) => x.join().localeCompare(y.join()));
+  }
+
+  it("all six input orders give the same result: the two versions in different works, one link, no merge", () => {
+    const { naming, plain, s2 } = measuredTriple();
+    const all = orders([naming, plain, s2]);
+    expect(all).toHaveLength(6);
+    const linkDecisions = all.map((records) => {
+      const result = dedupeRecords(records);
+      expect(membership(result.groups)).toEqual([
+        [naming.id, plain.id].sort(),
+        [s2.id],
+      ]);
+      const link = only(result.links, "one link");
+      expect([link.a.id, link.b.id].sort()).toEqual([naming.id, s2.id].sort());
+      expect(link.decision).toMatchObject({
+        verdict: "link",
+        tier: "version-link",
+        confidence: TIER_CONFIDENCE.versionLink,
+      });
+      expect(link.decision.evidence["groupSplit"]).toBe(true);
+      expect(link.decision.evidence["knownVersionLink"]).toBe(true);
+      expect(result.flags).toEqual([]);
+      expect(result.recordsDeduplicatedAway).toBe(1);
+      return link.decision;
+    });
+    for (const d of linkDecisions) expect(d).toEqual(linkDecisions[0]);
+  });
+
+  it("the stage keeps two works in all six orders: the preprint (with its copy) and the journal version, one VersionLink", () => {
+    const { naming, plain, s2 } = measuredTriple();
+    for (const records of orders([naming, plain, s2])) {
+      const result = dedupeAndMerge(records, AT);
+      expect(result.works).toHaveLength(2);
+      const link = only(result.links, "one link");
+      const preprint = result.merged.find((m) =>
+        m.records.some((r) => r.id === naming.id),
+      );
+      expect(preprint?.records.map((r) => r.id).sort()).toEqual(
+        [naming.id, plain.id].sort(),
+      );
+      expect(link.preprintWorkKey).toBe(preprint?.work.workKey);
+      expect(preprint?.decisions.map((d) => d.tier)).toEqual(["doi"]);
+    }
+  });
+
+  it("the sync and async drivers agree in all six orders", async () => {
+    const { naming, plain, s2 } = measuredTriple();
+    for (const records of orders([naming, plain, s2])) {
+      expect(await dedupeRecordsAsync(records)).toEqual(dedupeRecords(records));
+    }
+  });
+
+  it("without the version naming the three are still one work (the item-200 rule does not fire)", () => {
+    const { plain, s2 } = measuredTriple();
+    const copy: SourceRecord = {
+      ...plain,
+      id: "arxiv:1907.10121v3",
+      nativeId: "1907.10121v3",
+    };
+    for (const records of orders([plain, copy, s2])) {
+      const result = dedupeRecords(records);
+      expect(result.groups).toHaveLength(1);
+      expect(result.links).toEqual([]);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. The write side's pure halves
 // ---------------------------------------------------------------------------
 

@@ -8,7 +8,9 @@
  * FR-50 scenario 4, `docs/11` §3 R-18). A known preprint ↔ published relation
  * is a **link**, never a merge (Tier 7, §11.4) — also when the two share a
  * Tier 1–4 identifier but their DOIs conflict (§11.5 under rule 1, owner,
- * 2026-10-15, `plan/00` §6 item 200).
+ * 2026-10-15, `plan/00` §6 item 200), and when a third record would join the
+ * two into one group through two separate matches: the group is split again
+ * (§11.5 under rule 1, owner, 2026-10-16, `plan/00` §6 item 209).
  *
  * **What this module decides and what it does not.** It produces a
  * {@link DedupDecision} per compared pair and, over a result set, the
@@ -931,6 +933,88 @@ function pushInto<K>(map: Map<K, number[]>, key: K, value: number): void {
   else list.push(value);
 }
 
+/** One `"match"` or `"link"` pair inside a group, by record index (`i < j`). */
+interface GroupEdge {
+  readonly i: number;
+  readonly j: number;
+  readonly decision: DedupDecision;
+}
+
+/** A tier's position in {@link DEDUP_TIERS}: `0` is the most certain. */
+function tierRank(tier: DedupTierId | null): number {
+  const rank = DEDUP_TIERS.findIndex((t) => t.id === tier);
+  return rank === -1 ? DEDUP_TIERS.length : rank;
+}
+
+/**
+ * `docs/02` §11.5 under rule 1, the group-level check (owner, 2026-10-16,
+ * `plan/00` §6 item 209): rebuild one group from its single records so that
+ * no `cannotJoin` pair — one record naming the other as its other version
+ * ({@link isKnownVersionLink}) while their own verdict is not a match —
+ * ends up in one work.
+ *
+ * The group's `"match"` pairs are added **one tier at a time, in
+ * {@link DEDUP_TIERS} order**: all the pairs of one tier together, except
+ * that where together they would join a `cannotJoin` pair, none of that
+ * tier's pairs inside that would-be part is added. A record bridging two
+ * versions therefore joins the one it matches at the earlier (more certain)
+ * tier, and one that matches both at the same tier joins neither.
+ *
+ * Nothing here reads input order: the result depends only on the set of
+ * pairs, so every input order of the same group gives the same parts.
+ *
+ * @param indices - the group's record indices, ascending
+ * @param matches - every `"match"` pair inside the group
+ * @param cannotJoin - the version-named, not-matching pairs inside the group
+ * @returns each index's part, named by the part's smallest index, and the
+ *   match pairs that joined the parts
+ */
+function partitionAtVersionLinks(
+  indices: readonly number[],
+  matches: readonly GroupEdge[],
+  cannotJoin: readonly GroupEdge[],
+): { readonly partOf: Map<number, number>; readonly joined: GroupEdge[] } {
+  const local = new Map<number, number>();
+  indices.forEach((index, k) => local.set(index, k));
+  const at = (index: number): number => {
+    const k = local.get(index);
+    if (k === undefined) {
+      throw new Error(`dedupeRecords: record ${index} is not in the group`);
+    }
+    return k;
+  };
+  const parts = new UnionFind(indices.length);
+  const joined: GroupEdge[] = [];
+  const ranks = [...new Set(matches.map((e) => tierRank(e.decision.tier)))];
+  ranks.sort((x, y) => x - y);
+  for (const rank of ranks) {
+    const batch = matches.filter(
+      (e) =>
+        tierRank(e.decision.tier) === rank &&
+        parts.find(at(e.i)) !== parts.find(at(e.j)),
+    );
+    // What the parts would be with the whole tier added.
+    const tentative = new UnionFind(indices.length);
+    indices.forEach((_, k) => tentative.union(k, parts.find(k)));
+    for (const e of batch) tentative.union(at(e.i), at(e.j));
+    const blocked = new Set<number>();
+    for (const { i, j } of cannotJoin) {
+      const root = tentative.find(at(i));
+      if (root === tentative.find(at(j))) blocked.add(root);
+    }
+    for (const e of batch) {
+      if (blocked.has(tentative.find(at(e.i)))) continue;
+      parts.union(at(e.i), at(e.j));
+      joined.push(e);
+    }
+  }
+  const partOf = new Map<number, number>();
+  for (const index of indices) {
+    partOf.set(index, indices[parts.find(at(index))] ?? index);
+  }
+  return { partOf, joined };
+}
+
 /** Could these two be the same work by year? Unknown years are compatible. */
 function yearsCompatible(a: DedupCandidate, b: DedupCandidate): boolean {
   const delta = yearDelta(a, b);
@@ -1013,6 +1097,10 @@ function* dedupeCascade(
   const matchPairs: { i: number; j: number; decision: DedupDecision }[] = [];
   const flags: DedupPair[] = [];
   const links: DedupPair[] = [];
+  /** Every decision made, by pair key, so the group-level check reuses it. */
+  const decided = new Map<string, DedupDecision>();
+  /** Where each pair's link sits in `links`, by pair key. */
+  const linkIndexByKey = new Map<string, number>();
   /** Comparisons since the last yield; the generator's only yield state. */
   let sinceYield = 0;
 
@@ -1038,12 +1126,14 @@ function* dedupeCascade(
     if (a === undefined || b === undefined) return false;
     counter.comparisons += 1;
     const decision = compareCandidates(a, b);
+    decided.set(pairKey, decision);
     switch (decision.verdict) {
       case "match":
         uf.union(lo, hi);
         matchPairs.push({ i: lo, j: hi, decision });
         break;
       case "link":
+        linkIndexByKey.set(pairKey, links.length);
         links.push(pair(lo, hi, decision));
         break;
       case "flag":
@@ -1164,12 +1254,114 @@ function* dedupeCascade(
     }
   }
 
+  // The group-level check (docs/02 §11.5 under rule 1, owner, 2026-10-16,
+  // plan/00 §6 item 209). Only a "match" unions, but it unions transitively:
+  // a third record matching each of two versions puts both in one group,
+  // although one names the other and their own comparison is not a match.
+  // Such a group is compared pair by pair (reusing the decisions above) and
+  // rebuilt tier by tier (`partitionAtVersionLinks`); a version pair whose
+  // own verdict is a link is reported as one, marked `groupSplit`. A pair
+  // whose own verdict is a match (docs/02 §11.5, item 200's equal-DOI and
+  // no-DOI cases) never splits a group.
+  /** One pair's decision: the one already made, or a counted new comparison. */
+  const decidePair = function* (
+    lo: number,
+    hi: number,
+  ): Generator<void, DedupDecision, void> {
+    const key = `${lo}:${hi}`;
+    const known = decided.get(key);
+    if (known !== undefined) return known;
+    const a = candidates[lo];
+    const b = candidates[hi];
+    if (a === undefined || b === undefined) {
+      throw new Error(`dedupeRecords: index out of range (${lo}, ${hi})`);
+    }
+    counter.comparisons += 1;
+    const decision = compareCandidates(a, b);
+    decided.set(key, decision);
+    sinceYield += 1;
+    if (sinceYield >= DEDUP_YIELD_EVERY_COMPARISONS) {
+      yield;
+      sinceYield = 0;
+    }
+    return decision;
+  };
+  const before = new Map<number, number[]>();
+  candidates.forEach((_, i) => pushInto(before, uf.find(i), i));
+  /** Each record's final group, named by the group's smallest index. */
+  const groupOf = candidates.map((_, i) => uf.find(i));
+  /** The match decisions of every part of a split group, by part. */
+  const decisionsByRoot = new Map<number, DedupDecision[]>();
+  const splitRoots = new Set<number>();
+  for (const [root, indices] of before) {
+    const cannotJoin: GroupEdge[] = [];
+    for (let x = 0; x < indices.length; x += 1) {
+      for (let y = x + 1; y < indices.length; y += 1) {
+        const i = indices[x];
+        const j = indices[y];
+        if (i === undefined || j === undefined) continue;
+        const a = candidates[i];
+        const b = candidates[j];
+        if (a === undefined || b === undefined) continue;
+        if (!isKnownVersionLink(a, b)) continue;
+        const decision = yield* decidePair(i, j);
+        if (decision.verdict !== "match") cannotJoin.push({ i, j, decision });
+      }
+    }
+    if (cannotJoin.length === 0) continue;
+    const matches: GroupEdge[] = [];
+    for (let x = 0; x < indices.length; x += 1) {
+      for (let y = x + 1; y < indices.length; y += 1) {
+        const i = indices[x];
+        const j = indices[y];
+        if (i === undefined || j === undefined) continue;
+        const decision = yield* decidePair(i, j);
+        if (decision.verdict === "match") matches.push({ i, j, decision });
+      }
+    }
+    const { partOf, joined } = partitionAtVersionLinks(
+      indices,
+      matches,
+      cannotJoin,
+    );
+    splitRoots.add(root);
+    for (const i of indices) groupOf[i] = partOf.get(i) ?? i;
+    for (const { i, decision } of joined) {
+      const part = partOf.get(i) ?? i;
+      const list = decisionsByRoot.get(part);
+      if (list === undefined) decisionsByRoot.set(part, [decision]);
+      else list.push(decision);
+    }
+    for (const { i, j, decision } of cannotJoin) {
+      // A pair the cascade calls "distinct" (§11.3.3 guard 2) stays so.
+      if (decision.verdict !== "link") continue;
+      const link = pair(
+        i,
+        j,
+        versionLinkDecision({ ...decision.evidence, groupSplit: true }),
+      );
+      const key = `${i}:${j}`;
+      const existing = linkIndexByKey.get(key);
+      if (existing === undefined) {
+        linkIndexByKey.set(key, links.length);
+        links.push(link);
+      } else {
+        links[existing] = link;
+      }
+    }
+  }
+  // The check is one block for yielding purposes.
+  if (sinceYield > 0) {
+    yield;
+    sinceYield = 0;
+  }
+
   // Assemble groups in order of first appearance.
   const members = new Map<number, number[]>();
-  candidates.forEach((_, i) => pushInto(members, uf.find(i), i));
-  const decisionsByRoot = new Map<number, DedupDecision[]>();
+  candidates.forEach((_, i) => pushInto(members, groupOf[i] ?? i, i));
   for (const { i, decision } of matchPairs) {
     const root = uf.find(i);
+    if (splitRoots.has(root)) continue;
     const list = decisionsByRoot.get(root);
     if (list === undefined) decisionsByRoot.set(root, [decision]);
     else list.push(decision);
@@ -1215,6 +1407,15 @@ function* dedupeCascade(
  * Only a `"match"` unions two records. A `"flag"` or `"link"` is reported as
  * a pair and both records stay in the output — there is no path from either
  * to a group merge, which is FR-50 scenario 4 and R-18's mitigation.
+ *
+ * **Group-level check** (`docs/02` §11.5 under rule 1, owner, 2026-10-16,
+ * `plan/00` §6 item 209). Unions are transitive, so a third record matching
+ * each of two known versions would put both in one group. After both passes,
+ * a group holding a pair of which one names the other as its other version,
+ * and whose own verdict is not a match, is split tier by tier (the version a
+ * bridging record matches at the earlier tier keeps it). A pair whose own
+ * verdict is a link is reported as a link with `groupSplit: true` in its
+ * evidence. The groups and links do not depend on input order.
  *
  * **Kept beside {@link dedupeRecordsAsync}** (`P2-T30`) for the callers that
  * have no event loop to yield to: the unit tests in

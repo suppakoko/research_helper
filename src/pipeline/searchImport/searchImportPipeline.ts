@@ -12,7 +12,8 @@
  *    are asked **concurrently** under the process-wide `network-metadata` pool,
  *    each in its own `try` with its own deadline, and a throw is **recorded on
  *    that source's report** while the others run on. Only an all-sources
- *    failure is `"failed"`; `fetchStateFromReports` is the one function that
+ *    failure — every source that *searches* (item 204) — is `"failed"`;
+ *    `fetchStateFromReports` is the one function that
  *    decides it, and {@link fetchOutcome} says why it is applied over the whole
  *    report list rather than to `fanOut`'s own verdict.
  * 2. **Cancellation is checked everywhere §7.4 names, and nothing is rolled
@@ -94,6 +95,7 @@ import {
   dedupeAndMergeAsync,
   fanOut,
   fetchStateFromReports,
+  lookupOnlySourceIds,
   mergeDecisionsOf,
   SEARCH_IMPORT_DISPLAY_NAME_KEY,
   SEARCH_IMPORT_STAGES,
@@ -108,6 +110,7 @@ import type {
   SearchImportInput,
   SearchImportOutcome,
   SearchImportOutput,
+  SearchImportPathCounts,
   SearchImportSourceReport,
   SearchImportWriteReport,
   SearchImportWriteSession,
@@ -224,6 +227,12 @@ interface RunState {
    * every report; pushed to by `Planning` and `Fetching` before that.
    */
   perSource: SearchImportSourceReport[];
+  /**
+   * The asked sources whose `capabilities.keywordSearch` is `false`, set by
+   * `Planning` — what {@link fetchOutcome} leaves out of "every source
+   * failed" (`plan/00` §6 item 204).
+   */
+  lookupOnly: ReadonlySet<SourceId>;
   readonly warnings: string[];
   session: SearchImportWriteSession | undefined;
   created: number;
@@ -231,6 +240,11 @@ interface RunState {
   skipped: number;
   failed: number;
   createdWithAbstract: number;
+  /**
+   * Strategy B's counts, summed over the batches that carried them; stays
+   * `undefined` while no batch did (item 212).
+   */
+  importPaths: SearchImportPathCounts | undefined;
   partialNoteRecorded: boolean;
 }
 
@@ -243,6 +257,7 @@ function freshState(): RunState {
     links: [],
     mergeDecisions: [],
     perSource: [],
+    lookupOnly: new Set(),
     warnings: [],
     session: undefined,
     created: 0,
@@ -250,7 +265,32 @@ function freshState(): RunState {
     skipped: 0,
     failed: 0,
     createdWithAbstract: 0,
+    importPaths: undefined,
     partialNoteRecorded: false,
+  };
+}
+
+/**
+ * `a + b`, field by field — Strategy B's counts over two batches (item 212).
+ * `a` is `undefined` before the first batch that carried any.
+ */
+function addPathCounts(
+  a: SearchImportPathCounts | undefined,
+  b: SearchImportPathCounts,
+): SearchImportPathCounts {
+  if (a === undefined) {
+    return { ...b, fallbackReasons: { ...b.fallbackReasons } };
+  }
+  const fallbackReasons = { ...a.fallbackReasons };
+  for (const reason of Object.keys(
+    b.fallbackReasons,
+  ) as (keyof typeof fallbackReasons)[]) {
+    fallbackReasons[reason] += b.fallbackReasons[reason];
+  }
+  return {
+    viaTranslators: a.viaTranslators + b.viaTranslators,
+    handMapped: a.handMapped + b.handMapped,
+    fallbackReasons,
   };
 }
 
@@ -524,6 +564,11 @@ export function createSearchImportPipeline(
     state.skipped += result.skipped;
     state.failed += result.failed;
     state.createdWithAbstract += result.createdWithAbstract;
+    // Only a batch Strategy B wrote carries counts, so a run with
+    // `useTranslators` off leaves this `undefined` and its summary unchanged.
+    if (result.importPaths !== undefined) {
+      state.importPaths = addPathCounts(state.importPaths, result.importPaths);
+    }
   }
 
   /** `CreatingCollection` then `WritingItems`. */
@@ -628,6 +673,9 @@ export function createSearchImportPipeline(
                 ? 0
                 : Math.round((state.createdWithAbstract / state.created) * 100),
             partialNoteRecorded: state.partialNoteRecorded,
+            ...(state.importPaths !== undefined && {
+              importPaths: state.importPaths,
+            }),
           };
 
     return {
@@ -735,6 +783,7 @@ export function createSearchImportPipeline(
             resolved.push(source);
           }
         }
+        state.lookupOnly = lookupOnlySourceIds(resolved);
         planning.done("succeeded");
 
         // ---- Fetching -----------------------------------------------------
@@ -779,9 +828,14 @@ export function createSearchImportPipeline(
             {
               code: "SOURCE",
               messageKey: "rh-error-source",
+              // The errored sources only: since item 204 a quiet lookup-only
+              // source can sit beside them, and it did not fail.
               detail:
                 "every selected database failed: " +
-                state.perSource.map((r) => r.sourceId).join(", "),
+                state.perSource
+                  .filter((r) => r.error !== undefined)
+                  .map((r) => r.sourceId)
+                  .join(", "),
               retryable: true,
             },
             undefined,
@@ -950,6 +1004,12 @@ function missingAdapterReport(
  *
  * A run that was handed its records did not ask any source, so it has no
  * per-source verdict to aggregate and is `"succeeded"` on that count.
+ *
+ * `Planning`'s lookup-only set is passed with the reports (`plan/00` §6 item
+ * 204): a source with `keywordSearch: false` makes no request on a keyword run
+ * and cannot fail one, so a run whose every *searching* source failed is
+ * `"failed"` — it stops here, creates no collection, and the window's job and
+ * progress popup are told `"failed"` — rather than `"partial"`.
  */
 function fetchOutcome(
   state: RunState,
@@ -958,5 +1018,5 @@ function fetchOutcome(
   if (input.records !== undefined || state.perSource.length === 0) {
     return "succeeded";
   }
-  return fetchStateFromReports(state.perSource);
+  return fetchStateFromReports(state.perSource, state.lookupOnly);
 }

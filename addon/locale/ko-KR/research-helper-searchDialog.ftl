@@ -23,12 +23,12 @@
 # on Zotero 10.0.1, not assumed (`docs/01` §9.1, `P0-T24`).
 #
 # **This is the single largest item the gate has to clear**, and it is reported
-# as such: 70 strings, listed here in the order a reviewer will meet them in
-# the window — 58 from `P1-T18`, the three `P1-T45` added for FR-8's
-# provenance export, and the nine `P2-T17` added (2026-10-15) for FR-12's
-# re-run state. Six more — the five `P2-T14` added for the Semantic Scholar
-# no-key notice, the two row badges and the `⊕` role row, and `P2-T11`'s
-# preprint policy line — were reviewed by the owner on 2026-10-16 and are live. `src/i18n/keys.ts` exports the same list as
+# as such: 61 strings, listed here in the order a reviewer will meet them in
+# the window — 58 from `P1-T18` and the three `P1-T45` added for FR-8's
+# provenance export. Fifteen more were reviewed by the owner on 2026-10-16 and
+# are live: the five `P2-T14` added for the Semantic Scholar no-key notice, the
+# two row badges and the `⊕` role row, `P2-T11`'s preprint policy line, and the
+# nine `P2-T17` added for FR-12's re-run state. `src/i18n/keys.ts` exports the same list as
 # `KO_PENDING_REVIEW`
 # and `test/integration/l10n.spec.ts` asserts that the messages actually
 # missing from this file are exactly that list, so a new en-US string cannot be
@@ -74,10 +74,11 @@
 # NEEDS REVIEW. en-US `.value`: "Keyword"  (the read-only mode chip)
 # research-helper-search-mode-keyword =
 #
-# NEEDS REVIEW (P2-T17). en-US `.value`: "Re-run: { $collection }"  (the
+# (P2-T17) Reviewed by the owner 2026-10-16 (G-41). en-US `.value`: "Re-run: { $collection }"  (the
 # read-only mode chip for FR-12's re-run; `$collection` is the collection's
 # own name and is not translated)
-# research-helper-search-mode-rerun =
+research-helper-search-mode-rerun =
+    .value = 다시 실행: { $collection }
 
 
 ## Date range (docs/08 §4.2, FR-3)
@@ -279,38 +280,40 @@ research-helper-search-preprint-policy = 프리프린트와 정식 출판본은 
 ## `$collection` is the collection's own name and `$date` a date the window has
 ## already formatted; neither is translated. Keep the `{ $databases }` selector
 ## with only `*[other]`.
-# NEEDS REVIEW (P2-T17). en-US: "Re-run of the search that built
+# (P2-T17) Reviewed by the owner 2026-10-16 (G-41). en-US: "Re-run of the search that built
 # “{ $collection }”"
-# research-helper-search-rerun-heading =
+research-helper-search-rerun-heading = “{ $collection }” 컬렉션을 만든 검색 다시 실행
 #
-# NEEDS REVIEW (P2-T17). en-US, a `{ $databases }` selector: "Recorded { $date }
+# (P2-T17) Reviewed by the owner 2026-10-16 (G-41). en-US, a `{ $databases }` selector: "Recorded { $date }
 # · 1 database · { $retrieved } retrieved · { $imported } imported" /
 # "Recorded { $date } · { $databases } databases · { $retrieved } retrieved ·
 # { $imported } imported"
-# research-helper-search-rerun-recorded =
+research-helper-search-rerun-recorded = { $date } 기록 · 데이터베이스 { $databases }개 · { $retrieved }건 받음 · { $imported }건 가져옴
 #
-# NEEDS REVIEW (P2-T17). en-US `.label`: "as recorded"
-# research-helper-search-rerun-as-recorded =
+# (P2-T17) Reviewed by the owner 2026-10-16 (G-41). en-US `.label`: "as recorded"
+research-helper-search-rerun-as-recorded =
+    .label = 기록된 그대로
 #
-# NEEDS REVIEW (P2-T17). en-US `.label`: "advance to today"
-# research-helper-search-rerun-advance =
+# (P2-T17) Reviewed by the owner 2026-10-16 (G-41). en-US `.label`: "advance to today"
+research-helper-search-rerun-advance =
+    .label = 오늘까지로 늘리기
 #
-# NEEDS REVIEW (P2-T17). en-US: "Keyword, sources and max-per-database are
+# (P2-T17) Reviewed by the owner 2026-10-16 (G-41). en-US: "Keyword, sources and max-per-database are
 # pre-filled from the stored provenance record, and all stay editable."
-# research-helper-search-rerun-prefilled =
+research-helper-search-rerun-prefilled = 키워드, 데이터베이스, 데이터베이스별 최대 건수는 저장된 검색 기록에서 채웠으며, 모두 고칠 수 있습니다.
 #
-# NEEDS REVIEW (P2-T17). en-US: "Press Search to run it again. Unless Import
+# (P2-T17) Reviewed by the owner 2026-10-16 (G-41). en-US: "Press Search to run it again. Unless Import
 # anyway is chosen below, items already in your library are counted as
 # “already present” and never imported twice."  ("Import anyway" is the label
 # of research-helper-search-duplicates-import; keep the two in step.)
-# research-helper-search-rerun-press-search =
+research-helper-search-rerun-press-search = '검색'을 누르면 다시 실행합니다. 아래에서 '그래도 가져오기'를 고르지 않으면, 이미 내 라이브러리에 있는 항목은 '이미 있음'으로 세고 두 번 가져오지 않습니다.
 #
-# NEEDS REVIEW (P2-T17). en-US: "All years, as recorded"
-# research-helper-search-rerun-all-years =
+# (P2-T17) Reviewed by the owner 2026-10-16 (G-41). en-US: "All years, as recorded"
+research-helper-search-rerun-all-years = 모든 연도, 기록된 그대로
 #
-# NEEDS REVIEW (P2-T17). en-US: "Imported { $imported } · Already present
+# (P2-T17) Reviewed by the owner 2026-10-16 (G-41). en-US: "Imported { $imported } · Already present
 # { $present } · { $failed } failed"
-# research-helper-search-import-summary-rerun =
+research-helper-search-import-summary-rerun = 가져옴 { $imported } · 이미 있음 { $present } · 실패 { $failed }
 
 
 ## 2. LOADING (docs/08 §4.6, §8.4)

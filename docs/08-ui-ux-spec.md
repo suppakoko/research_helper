@@ -1182,6 +1182,13 @@ Four rules this state must hold, all of them FR-12's:
 
 1. **Everything is editable.** The provenance record seeds the controls; it does not lock them. A re-run the user has adjusted is a normal run and writes its own new provenance record — it never overwrites the one it was seeded from.
 2. **The date choice is explicit, and "as recorded" is the default.** The "advance to today" radio moves only the *upper* bound to the current date, leaving the recorded lower bound alone, so the re-run returns what has appeared since. It does **not** recompute the window from §4.2's calendar-year rule — that would move the lower bound too and silently change what is being compared.
+
+   > **Decided 2026-10-16 (owner; `plan/00` §6 item 217): the upper bound never moves backwards.** "Advance to today"
+   > sets the upper bound to the **later** of the recorded upper bound and today — `max(recorded, today)`, compared as
+   > `YYYY-MM-DD` dates in the local calendar. A recorded window that already ends after today (a record written with a
+   > future end date, or read on a machine whose clock is behind) is kept as recorded rather than narrowed. The lower
+   > bound is never touched by this rule. Computed in one place, `toSearchParams` in `src/core/provenance.ts`; the
+   > window's `rerunWindow` only picks between the two windows the host computed.
 3. **The target collection is fixed to the collection the menu was invoked on**, with "New collection…" still available for a user who wants a side-by-side comparison rather than a top-up.
 4. **Import reports "already present: N"** rather than counting duplicates as imports, using the same DOI/PMID dedup pass §4.4 already runs. The status line reads `Imported 9 · Already present 128 · 1 failed`.
 

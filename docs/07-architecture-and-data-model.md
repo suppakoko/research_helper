@@ -3764,6 +3764,15 @@ Shared conventions: every pipeline starts in `Queued` and ends in one of `Succee
 > (`previewedReports` in `src/ui/viewModels/searchImportViewModel.ts`), as it already carries its merge decisions
 > (`P2-T34`). Records written earlier keep the empty list.
 
+> **Decided 2026-10-16 (`plan/00` §6 item 204): "all sources failed" counts only the sources that search.** A source
+> whose `capabilities.keywordSearch` is `false` (bioRxiv, medRxiv) makes no request on a keyword run, so it cannot fail
+> one; counted, it kept `Fetching --> Failed` unreachable whenever it was ticked, and the default seven-source run whose
+> five searching sources all failed ended `PartialFetch`, went on to create an empty collection, and told the progress
+> popup it had succeeded. The edge is now taken when every **searching** source failed outright (errored and yielded
+> nothing) and no other source yielded a record — the rule the window already applied (`everySearchFailed` in
+> `src/ui/viewModels/searchImportViewModel.ts`). A run that asked only lookup-only sources keeps the earlier reading over
+> every report. `fetchStateFromReports` in `src/pipeline/searchImport/stages.ts` is the one place it is decided.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Queued

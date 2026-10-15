@@ -48,6 +48,7 @@ import type { SourceRecord } from "../../model/sourceRecord";
 import type { DedupPair } from "../../sources/shared/dedupe";
 import type { RecencyWindow } from "../../sources/shared/recency";
 import type { DuplicatePolicy } from "../../zotero/importer";
+import type { TranslatorFallbackReason } from "../../zotero/translatorImport";
 import type { SearchImportStageKey, VersionLink } from "./stages";
 
 /**
@@ -294,7 +295,9 @@ export interface SearchImportSourceReport {
  *
  * - `"succeeded"` — `Fetching --> Merging : all sources exhausted or limit reached`
  * - `"partial"` — `Fetching --> PartialFetch : some sources failed, some succeeded`
- * - `"failed"` — `Fetching --> Failed : all sources failed`
+ * - `"failed"` — `Fetching --> Failed : all sources failed`, where "all" means
+ *   every source that searches: a `keywordSearch: false` source cannot fail a
+ *   keyword run and is left out (`plan/00` §6 item 204)
  *
  * A subset of {@link SearchImportOutcome}: the fetch half cannot be
  * `"cancelled"`, because a cancel is thrown out of the stage rather than
@@ -329,6 +332,29 @@ export interface SearchImportFanOutResult {
   readonly state: SearchImportFetchState;
 }
 
+/**
+ * Strategy B's import-path counts (`P2-T18` step 10), carried to the visible
+ * summary (`plan/00` §6 item 212).
+ *
+ * **Present only when Strategy B ran** — the writer read `useTranslators` as
+ * on and wrote at least one batch. With the preference off, the shipped
+ * default, the field is absent from every batch result and from the write
+ * report, so the summary the window draws is exactly what it was before.
+ * The writer copies these from `src/zotero/importer.ts`'s
+ * `ImportReport.importPaths`, one batch at a time; the pipeline sums them.
+ */
+export interface SearchImportPathCounts {
+  /** Items created through Zotero's translators (Strategy B). */
+  readonly viaTranslators: number;
+  /** Items created by hand-mapping (Strategy A), for whatever reason. */
+  readonly handMapped: number;
+  /**
+   * Records sent to hand-mapping by the translator path, by reason class.
+   * Every reason is present, 0 or more — the importer's own contract.
+   */
+  readonly fallbackReasons: Readonly<Record<TranslatorFallbackReason, number>>;
+}
+
 /** What the write half did. Absent when it did not run. */
 export interface SearchImportWriteReport {
   readonly libraryId: number;
@@ -358,6 +384,11 @@ export interface SearchImportWriteReport {
    * written.
    */
   readonly partialNoteRecorded: boolean;
+  /**
+   * Strategy B's counts, summed over the run's batches. Absent unless
+   * Strategy B ran — see {@link SearchImportPathCounts}.
+   */
+  readonly importPaths?: SearchImportPathCounts;
 }
 
 /** One `searchImport` run's result. */
@@ -457,6 +488,11 @@ export interface SearchImportBatchResult {
   readonly failed: number;
   /** Of {@link created}, how many carry a non-empty `abstractNote` (`R-17`). */
   readonly createdWithAbstract: number;
+  /**
+   * This batch's Strategy B counts. Absent when the writer did not use
+   * Strategy B — see {@link SearchImportPathCounts}.
+   */
+  readonly importPaths?: SearchImportPathCounts;
 }
 
 /**

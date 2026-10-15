@@ -2443,6 +2443,11 @@ Tier 7  Known preprint↔published link               → LINK, not merge (§11.
 > version link of Tier 7 outranks a shared identifier in that case. The rule and its measured case
 > are in §11.5 under rule 1.
 
+> **Added 2026-10-16 (owner, `plan/00` §6 item 209).** Only *match* joins records into one work,
+> but it joins them transitively. A group that ends up holding two records of which one names the
+> other as its other version, and which do not match each other, is split again, tier by tier, so
+> the two versions stay two works joined by a link. The rule is in §11.5 under rule 1.
+
 #### 11.3.1 ID normalization
 
 ```ts
@@ -2624,6 +2629,42 @@ Field precedence is the table in §10.4. Two additional rules:
    shared identifier with conflicting DOIs and **no** version naming stays a match, so a genuine
    duplicate is not split; so does a shared identifier with equal DOIs (Tier 0 matches first), and
    one where either record has no DOI (nothing conflicts).
+
+   *Added by the owner, 2026-10-16, `plan/00` §6 item 209.* The pairwise rule above is not enough
+   on its own, because the cascade joins records into one work through a **chain** of matches. A
+   third record that matches each version can put both versions in one work. Measured case: the
+   arXiv record naming the journal DOI, a second arXiv record with the same arXiv DOI and no
+   naming, and the Semantic Scholar record carrying the journal DOI and the same arXiv id. The
+   plain arXiv record matches the first at Tier 0 (same DOI) and the third at Tier 3 (same arXiv
+   id, DOIs in conflict, no naming), so all three became one work: in all six input orders when
+   the two titles are near-identical, in four of six when they share no title block. So a
+   **group-level check** runs once the matching is done. A group holding two records of which
+   one names the other as its other version (§11.4, the same test as Tier 7), and whose own
+   comparison is **not a match**, is not merged into one work. It is split:
+
+   1. Every pair of records in the group is compared (comparisons already made are reused).
+   2. The group is rebuilt from single records by adding its *match* pairs **one tier at a time,
+      in §11.3's order** (Tier 0 first). All the match pairs of one tier are added together; where
+      together they would put two linked versions into one work, **none** of that tier's pairs in
+      that would-be work is added. Later tiers then get their turn the same way.
+   3. Each such pair whose own comparison is a link, now in two works, is reported once as a
+      **link** with Tier 7's verdict and confidence; its evidence carries `groupSplit: true`, so
+      provenance shows the split. A pair whose own comparison is *distinct* (§11.3.3 guard 2:
+      series markers differ) stays distinct — two works, no link — as it would on its own.
+
+   **Which work a bridging record joins:** the version it matches at the **earlier tier**, because
+   §11.3 runs its tiers from most to least certain. In the measured case the plain arXiv record
+   shares the preprint's DOI (Tier 0) but only the arXiv id with the journal record (Tier 3, across
+   a DOI conflict, which this rule already treats as evidence against a duplicate), so it joins
+   the preprint. A record matching both versions **at the same tier** joins neither and stays a
+   work of its own: no evidence ranks one side above the other, and a missed duplicate is the
+   lesser failure (`docs/11` R-18). **Order independence:** steps 1–2 read only the set of records
+   in the group and their pairwise verdicts, never their input order, so a group gives the same
+   works and the same link in every input order. `groupSplit` records that the matching had joined
+   the two versions in that run; in an input order where it never joined them there is nothing to
+   split, and the key is absent. A pair whose own comparison is a *match* (the equal-DOI and
+   no-DOI cases above) never splits a group, and neither does a pair where neither record names
+   the other — for example a title match across conflicting DOIs, which rule 1 makes a link.
 2. **`sources` accumulates**, and every merge records which source supplied each field in
    `raw`. This makes the "why did the plugin pick this title?" question answerable, which matters
    when a user reports a bad import.

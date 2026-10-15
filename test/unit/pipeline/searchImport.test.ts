@@ -53,6 +53,7 @@ import {
   dedupeAndMerge,
   dedupeAndMergeAsync,
   fetchStateFromReports,
+  lookupOnlySourceIds,
   NETWORK_METADATA_POOL_SIZE,
   SEARCH_IMPORT_STAGE_KEYS,
   SEARCH_IMPORT_STAGES,
@@ -61,6 +62,7 @@ import type {
   SearchImportBatchResult,
   SearchImportInput,
   SearchImportOutput,
+  SearchImportPathCounts,
   SearchImportSourceReport,
   SearchImportTarget,
   SearchImportWriteSession,
@@ -299,6 +301,11 @@ interface StubSourceOptions {
    * way a real adapter does.
    */
   readonly onStart?: (ctx: SourceCallContext) => void;
+  /**
+   * `capabilities.keywordSearch`. `false` makes the stub a lookup-only source
+   * like bioRxiv and medRxiv (item 204). Omitted, `true`.
+   */
+  readonly keywordSearch?: boolean;
 }
 
 /** A `LiteratureSource` that can be made to fail on a chosen page. */
@@ -311,6 +318,9 @@ function stubSource(options: StubSourceOptions): LiteratureSource {
       ...CAPABILITIES,
       ...(options.dateFilter !== undefined && {
         dateFilter: options.dateFilter,
+      }),
+      ...(options.keywordSearch !== undefined && {
+        keywordSearch: options.keywordSearch,
       }),
     },
     rateLimitKey: `${options.id}.example.org`,
@@ -381,6 +391,12 @@ interface StubWriterOptions {
   /** Throw from `notePartialImport`. */
   readonly failNote?: Error;
   readonly collectionCreated?: boolean;
+  /**
+   * Strategy B's counts for batch `index` (item 212), as the real writer
+   * returns them when `useTranslators` is on. Omitted, or `undefined` for a
+   * batch, the result carries no `importPaths` — the shipped default.
+   */
+  readonly importPaths?: (index: number) => SearchImportPathCounts | undefined;
 }
 
 function stubWriter(options: StubWriterOptions = {}): {
@@ -410,7 +426,9 @@ function stubWriter(options: StubWriterOptions = {}): {
             throw new UpstreamServerError(500, "write failed");
           }
           (log.batches as CanonicalWork[][]).push([...works]);
-          const result = {
+          const paths = options.importPaths?.(batchIndex);
+          const result: SearchImportBatchResult = {
+            ...(paths !== undefined && { importPaths: paths }),
             created: works.length,
             linkedExisting: 0,
             skipped: 0,
@@ -738,6 +756,72 @@ describe("fetchStateFromReports — the one state function kept (P2-T27 step 3)"
       ]),
     ).toBe("partial");
   });
+
+  it("leaves lookup-only sources out of 'every source failed' (item 204)", () => {
+    const lookupOnly = new Set<SourceId>(["biorxiv", "medrxiv"]);
+    const quiet = [report("biorxiv", 0, false), report("medrxiv", 0, false)];
+    // The default seven: five searching sources failed, the two servers asked
+    // nothing. `failed`, as the window's `everySearchFailed` reads it.
+    const fiveFailed = (
+      ["pubmed", "europepmc", "crossref", "semanticscholar", "arxiv"] as const
+    ).map((id) => report(id, 0, true));
+    expect(fetchStateFromReports([...fiveFailed, ...quiet], lookupOnly)).toBe(
+      "failed",
+    );
+    // Without the set every report counts, which is the reading before item
+    // 204 — and still the reading for a caller that passes none.
+    expect(fetchStateFromReports([...fiveFailed, ...quiet])).toBe("partial");
+    // One searching source healthy, even with zero hits: still `partial`.
+    expect(
+      fetchStateFromReports(
+        [report("pubmed", 0, true), report("crossref", 0, false), ...quiet],
+        lookupOnly,
+      ),
+    ).toBe("partial");
+    // A searching source that yielded before failing is degraded, not failed.
+    expect(
+      fetchStateFromReports([report("pubmed", 2, true), ...quiet], lookupOnly),
+    ).toBe("partial");
+  });
+
+  it("still counts a lookup-only source that yielded, and keeps the old reading when only such sources were asked", () => {
+    const lookupOnly = new Set<SourceId>(["biorxiv"]);
+    // A record from a lookup-only source is a record: the run is not `failed`.
+    expect(
+      fetchStateFromReports(
+        [report("pubmed", 0, true), report("biorxiv", 1, false)],
+        lookupOnly,
+      ),
+    ).toBe("partial");
+    // A real failure on a lookup-only source beside failed searching ones.
+    expect(
+      fetchStateFromReports(
+        [report("pubmed", 0, true), report("biorxiv", 0, true)],
+        lookupOnly,
+      ),
+    ).toBe("failed");
+    // Only lookup-only sources asked: every report counts, as before.
+    expect(
+      fetchStateFromReports([report("biorxiv", 0, true)], lookupOnly),
+    ).toBe("failed");
+    expect(
+      fetchStateFromReports(
+        [report("biorxiv", 0, true), report("medrxiv", 0, false)],
+        new Set<SourceId>(["biorxiv", "medrxiv"]),
+      ),
+    ).toBe("partial");
+  });
+
+  it("reads lookup-only from the capability, never from the id", () => {
+    expect([
+      ...lookupOnlySourceIds([
+        stubSource({ id: "pubmed", pages: [] }),
+        stubSource({ id: "biorxiv", pages: [], keywordSearch: false }),
+        // An id that is usually lookup-only, declared as searching.
+        stubSource({ id: "medrxiv", pages: [], keywordSearch: true }),
+      ]),
+    ]).toStrictEqual(["biorxiv"]);
+  });
 });
 
 describe("partial failure across sources (criterion 1, FR-9)", () => {
@@ -842,6 +926,73 @@ describe("all sources failing (criterion 2)", () => {
     expect(out.write).toBeUndefined();
   });
 
+  it("is `failed`, and creates no collection, when every searching source failed beside the two quiet servers (item 204)", async () => {
+    const writer = stubWriter();
+    const searching = [
+      "pubmed",
+      "europepmc",
+      "crossref",
+      "semanticscholar",
+      "arxiv",
+    ] as const;
+    const h = harness({
+      sources: [
+        ...searching.map((id) =>
+          stubSource({
+            id,
+            pages: [[]],
+            throwOnPage: 0,
+            error: new UpstreamServerError(503, `${id} down`),
+          }),
+        ),
+        // bioRxiv and medRxiv as the shipped adapters behave on a keyword
+        // run: no request, no record, no error.
+        stubSource({ id: "biorxiv", pages: [], keywordSearch: false }),
+        stubSource({ id: "medrxiv", pages: [], keywordSearch: false }),
+      ],
+      writer: writer.writer,
+    });
+
+    const out = await h.pipeline.run(
+      {
+        ...BASE_INPUT,
+        sourceIds: [...searching, "biorxiv", "medrxiv"],
+        target: { collectionName: "Never created either" },
+      },
+      h.ctx,
+    );
+
+    expect(out.outcome).toBe("failed");
+    expect(out.stageReached).toBe("fetching");
+    expect(out.error?.code).toBe("SOURCE");
+    // The detail names the sources that failed, not the two that did not.
+    expect(out.error?.detail).toBe(
+      `every selected database failed: ${searching.join(", ")}`,
+    );
+    expect(
+      out.perSource.filter((r) => r.error === undefined).map((r) => r.sourceId),
+    ).toStrictEqual(["biorxiv", "medrxiv"]);
+    // Before item 204 this run was `partial` and went on to open the target.
+    expect(writer.log.opened).toEqual([]);
+    expect(out.write).toBeUndefined();
+  });
+
+  it("stays `partial` when one searching source survives beside the quiet servers", async () => {
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[]], throwOnPage: 0 }),
+        stubSource({ id: "crossref", pages: [[record("crossref", "5")]] }),
+        stubSource({ id: "biorxiv", pages: [], keywordSearch: false }),
+      ],
+    });
+    const out = await h.pipeline.run(
+      { ...BASE_INPUT, sourceIds: ["pubmed", "crossref", "biorxiv"] },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("partial");
+    expect(out.records.map((r) => r.sourceId)).toEqual(["crossref"]);
+  });
+
   it("reports a selected source with no adapter without failing the run", async () => {
     const h = harness({
       sources: [stubSource({ id: "pubmed", pages: [[record("pubmed", "1")]] })],
@@ -854,6 +1005,99 @@ describe("all sources failing (criterion 2)", () => {
     expect(out.warnings.some((w) => w.includes("arxiv"))).toBe(true);
     const arxiv = out.perSource.find((r) => r.sourceId === "arxiv");
     expect(arxiv?.error?.code).toBe("CONFIGURATION");
+  });
+});
+
+// ===========================================================================
+// 3a. Strategy B's counts reach the write report (item 212)
+// ===========================================================================
+
+describe("Strategy B's import-path counts (item 212)", () => {
+  /** One batch's counts, as the writer returns them with translators on. */
+  const paths = (
+    viaTranslators: number,
+    handMapped: number,
+    lookupError: number,
+  ): SearchImportPathCounts => ({
+    viaTranslators,
+    handMapped,
+    fallbackReasons: {
+      "no-identifier": handMapped - lookupError,
+      "lookup-error": lookupError,
+      "no-translators": 0,
+      "no-result": 0,
+      timeout: 0,
+    },
+  });
+
+  const threeBatches = (): readonly SourceRecord[][] => [
+    [record("pubmed", "1"), record("pubmed", "2")],
+    [record("pubmed", "3"), record("pubmed", "4")],
+    [record("pubmed", "5")],
+  ];
+
+  it("sums every batch's counts into the write report", async () => {
+    const counts = [paths(1, 1, 1), paths(2, 0, 0), paths(0, 1, 0)];
+    const writer = stubWriter({ importPaths: (index) => counts[index] });
+    const h = harness({
+      sources: [stubSource({ id: "pubmed", pages: threeBatches() })],
+      writer: writer.writer,
+      writeBatchSize: 2,
+    });
+    const out = await h.pipeline.run(
+      { ...BASE_INPUT, target: { collectionName: "Strategy B" } },
+      h.ctx,
+    );
+    expect(writer.log.batches).toHaveLength(3);
+    expect(out.write?.importPaths).toStrictEqual({
+      viaTranslators: 3,
+      handMapped: 2,
+      fallbackReasons: {
+        "no-identifier": 1,
+        "lookup-error": 1,
+        "no-translators": 0,
+        "no-result": 0,
+        timeout: 0,
+      },
+    });
+  });
+
+  it("carries no importPaths at all when no batch did — the shipped default", async () => {
+    const writer = stubWriter();
+    const h = harness({
+      sources: [stubSource({ id: "pubmed", pages: threeBatches() })],
+      writer: writer.writer,
+      writeBatchSize: 2,
+    });
+    const out = await h.pipeline.run(
+      { ...BASE_INPUT, target: { collectionName: "Strategy A" } },
+      h.ctx,
+    );
+    expect(out.write?.created).toBe(5);
+    expect(out.write).toBeDefined();
+    expect(Object.keys(out.write ?? {})).not.toContain("importPaths");
+  });
+
+  it("keeps the counts of the batches written before a cancel", async () => {
+    let cancel = (): void => undefined;
+    const writer = stubWriter({
+      importPaths: () => paths(2, 0, 0),
+      afterBatch: (index) => {
+        if (index === 0) cancel();
+      },
+    });
+    const h = harness({
+      sources: [stubSource({ id: "pubmed", pages: threeBatches() })],
+      writer: writer.writer,
+      writeBatchSize: 2,
+    });
+    cancel = () => h.source.cancel({ kind: "user" });
+    const out = await h.pipeline.run(
+      { ...BASE_INPUT, target: { collectionName: "Cancelled B" } },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("cancelled");
+    expect(out.write?.importPaths?.viaTranslators).toBe(2);
   });
 });
 

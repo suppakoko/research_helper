@@ -269,8 +269,9 @@ export function createZoteroSearchImportWriter(
           if (useTranslators) {
             pathTotals = addPathTotals(pathTotals, report.importPaths);
             // `P2-T18` step 10's per-run counts, cumulative over the run's
-            // batches. Logged, not rendered: `SearchImportBatchResult` has no
-            // field to carry them to the summary (see the card's report).
+            // batches, for the log. The summary gets this batch's own counts
+            // through `importPaths` below, and the pipeline sums those
+            // (`plan/00` §6 item 212).
             deps.logger?.info("searchImport: import paths so far", {
               viaTranslators: pathTotals.viaTranslators,
               handMapped: pathTotals.handMapped,
@@ -285,6 +286,16 @@ export function createZoteroSearchImportWriter(
             skipped: report.skipped,
             failed: report.failed.length,
             createdWithAbstract: report.abstractCoverage.withAbstract,
+            // Item 212: this batch's Strategy B counts, for the visible
+            // summary. Only when Strategy B ran — off, the shipped default,
+            // adds no field, so the summary is exactly what it was.
+            ...(useTranslators && {
+              importPaths: {
+                viaTranslators: report.importPaths.viaTranslators,
+                handMapped: report.importPaths.handMapped,
+                fallbackReasons: { ...report.importPaths.fallbackReasons },
+              },
+            }),
           };
         },
 

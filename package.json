@@ -34,6 +34,7 @@
     "test:integration": "zotero-plugin test",
     "test": "npm run test:unit && npm run test:contract",
     "fixtures:record": "tsx scripts/record-fixtures.ts",
+    "dedup:report": "tsx scripts/dedup-report.ts",
     "release": "zotero-plugin release",
     "index:derive": "tsx scripts/derive-task-index.ts"
   },

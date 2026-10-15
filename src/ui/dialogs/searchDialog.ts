@@ -299,7 +299,8 @@ export interface SearchWindowQuery {
    * A re-run's exact date window (`P2-T17`, FR-12), sent **only** while the
    * window is in `rerun` mode and the user has not touched the two year
    * menulists: the recorded `{ fromIso, toIso }`, the same with `toIso` moved
-   * to today ("advance to today"), or `"all-years"` for a record that stored
+   * to the later of the recorded end and today ("advance to today"; owner,
+   * 2026-10-16, `plan/00` §6 item 217), or `"all-years"` for a record that stored
    * FR-3's `dateFilter: "none"`. Absent on every other query, and then
    * {@link fromYear} / {@link toYear} decide, as they always have.
    *
