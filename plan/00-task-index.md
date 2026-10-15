@@ -1312,7 +1312,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.33 Raised by `P2-T05` and `P2-T36`, 2026-10-15 — recorded under rule 9, none carded
 
-169. **`semanticscholar.keyPresent` never leaves `false`.** `KEY_PRESENCE_PREFS` in `src/zotero/keychain.ts` has no
+169. ~~**`semanticscholar.keyPresent` never leaves `false`.**~~ **DONE 2026-10-15 by the coordinator at the owner's request** — the map entry, two corrected comments, and a round-trip test in `test/integration/zotero/keychain.spec.ts` (a dummy value, never a real key; removing the entry fails it). No startup refresh was added: `container.ts` was being edited by `P2-T07`, and no key had been stored before the fix. `KEY_PRESENCE_PREFS` in `src/zotero/keychain.ts` has no
     `source.semanticscholar` entry, so storing the key through the preferences pane does not set the flag. The
     adapter reads the store directly, so search works with a key; the flag only feeds the pane's badge. One
     map entry — before the owner's live keyed test, or the badge will say no key.

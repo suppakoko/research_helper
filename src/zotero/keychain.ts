@@ -161,11 +161,11 @@ export function loginRemovalMethod():
  * **nothing else may write them**." This table is that sentence's other half —
  * the only mapping from a credential to its flag in the product.
  *
- * **One row, because §8.5 only has one row this phase can write.** `docs/11` §1
- * scopes Phase 1 to "Tier-1 `SecretStore` for `source.ncbi` only" and `P1-T06`'s
- * **Do NOT** forbids storing any other secret here, so the other six `SecretId`s
- * map to nothing and {@link refreshKeyPresence} is a no-op for them. `P3-T02`
- * step 4 adds the remaining five flags — `tts.gemini` shares `gemini.keyPresent`
+ * **Two rows: one per literature-source key that ships.** Phase 1 had one —
+ * `docs/11` §1 scoped it to "Tier-1 `SecretStore` for `source.ncbi` only" — and
+ * Phase 2's Semantic Scholar adapter (`P2-T05`) added the second on 2026-10-15.
+ * The other five `SecretId`s map to nothing and {@link refreshKeyPresence} is a
+ * no-op for them. `P3-T02` step 4 adds the remaining four flags — `tts.gemini` shares `gemini.keyPresent`
  * with `llm.gemini`, which is why §8.5 lists six flags for seven ids and why
  * this is a table rather than a string transformation.
  *
@@ -177,6 +177,11 @@ export function loginRemovalMethod():
 export const KEY_PRESENCE_PREFS: Readonly<Partial<Record<SecretId, PrefName>>> =
   {
     "source.ncbi": "ncbiKeyPresent",
+    // Added 2026-10-15 (`plan/00` §6 item 169): `P2-T05` shipped the
+    // `semanticscholar.keyPresent` row and the adapter, but without this entry
+    // `setSecret`/`deleteSecret` re-derived nothing for `source.semanticscholar`
+    // and the pane's badge stayed at the default `false` with a key stored.
+    "source.semanticscholar": "semanticscholarKeyPresent",
   };
 
 /** The `*.keyPresent` preference for `id`, or `undefined` if it has none yet. */

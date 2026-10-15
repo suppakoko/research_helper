@@ -41,6 +41,7 @@ import {
   createHostLimiterRegistry,
 } from "../../../src/core/rateLimit/hostLimiter";
 import { PREF_KEYS, getPref, setPrefStore } from "../../../src/prefs";
+import { PREFS } from "../../../src/prefs/schema";
 import {
   LOGIN_ORIGIN,
   LOGIN_REALM,
@@ -276,6 +277,65 @@ describe("tier-1 SecretStore for the NCBI key (P1-T06)", function () {
       detachPrefs();
     }
 
+    for (const entry of saved) {
+      assert.strictEqual(
+        prefHasUserValue(entry.key),
+        entry.hadUserValue,
+        `${entry.key} restored`,
+      );
+    }
+  });
+
+  // Added 2026-10-15 (`plan/00` §6 item 169): `P2-T05` shipped the
+  // `semanticscholar.keyPresent` row without a `KEY_PRESENCE_PREFS` entry, so a
+  // stored Semantic Scholar key left the pane's flag at `false`. A dummy
+  // key-shaped value only — never a real key; refused if one is stored.
+  it("sets and clears semanticscholar.keyPresent with the Semantic Scholar key", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const S2_ID: SecretId = "source.semanticscholar";
+    // `PREF_KEYS` has no entry for it (`P2-T05` spelled the key in the schema
+    // row because `src/prefs/keys.ts` was outside its list); read it from there.
+    const S2_FLAG_KEY = PREFS.semanticscholarKeyPresent.key;
+    await refuseIfStored(S2_ID);
+
+    const detachPrefs = installPrefStore();
+    const saved = savePrefs([S2_FLAG_KEY]);
+    const store = createKeychainSecretStore();
+    let created = false;
+    try {
+      assert.strictEqual(
+        keyPresencePrefFor(S2_ID),
+        "semanticscholarKeyPresent",
+        "the Semantic Scholar key maps to its §8.5 flag",
+      );
+      await store.set(S2_ID, dummyKeyShapedValue());
+      created = true;
+      assert.isTrue(
+        getPref("semanticscholarKeyPresent"),
+        "semanticscholar.keyPresent is true after set()",
+      );
+      assert.strictEqual(
+        getRawPref(S2_FLAG_KEY),
+        true,
+        "and it is a real boolean under the branch",
+      );
+      await store.clear(S2_ID);
+      created = false;
+      assert.isFalse(
+        getPref("semanticscholarKeyPresent"),
+        "semanticscholar.keyPresent is false after clear()",
+      );
+      debug(
+        `${LOG_PREFIX} item 169: ${S2_FLAG_KEY} round-trip true -> false via ` +
+          `keyPresencePrefFor("${S2_ID}")=${String(keyPresencePrefFor(S2_ID))}`,
+      );
+    } finally {
+      if (created || (await ownLoginsFor(S2_ID)).length > 0) {
+        await store.clear(S2_ID);
+      }
+      restorePrefs(saved);
+      detachPrefs();
+    }
     for (const entry of saved) {
       assert.strictEqual(
         prefHasUserValue(entry.key),

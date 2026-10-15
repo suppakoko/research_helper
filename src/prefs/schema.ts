@@ -268,11 +268,10 @@ export const PREFS = {
    * **The key string is spelled here rather than taken from `./keys.ts`**,
    * against this file's own convention, because `src/prefs/keys.ts` is outside
    * `P2-T05`'s `Files`; the row is `docs/07` §8.5's verbatim, and
-   * `addon/prefs.js` ships its `pref()` default line. Measured 2026-10-15: no
-   * writer exists for it yet — `src/zotero/keychain.ts`'s `KEY_PRESENCE_PREFS`
-   * has a row for `source.ncbi` only (outside the same `Files` list; reported
-   * with the card), so the flag stays at its default `false` until that row
-   * is added.
+   * `addon/prefs.js` ships its `pref()` default line. Its writer is
+   * `src/zotero/keychain.ts`'s `KEY_PRESENCE_PREFS` row for
+   * `source.semanticscholar` (added 2026-10-15, `plan/00` §6 item 169): storing
+   * or clearing the key through the pane re-derives this flag.
    */
   semanticscholarKeyPresent: {
     key: "semanticscholar.keyPresent",
