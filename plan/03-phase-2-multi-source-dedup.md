@@ -1269,6 +1269,21 @@ populated, and no code anywhere identifies a preprint server by DOI prefix.
   `research_helper/uncertain-type` tag for undeterminable types.
 
 **Files.**
+> **Added 2026-10-15 under rule 10, before launch.** Measured on the tree at `99b4df1`: `toZoteroMapping` still
+> **throws** for `work.type === "preprint"` (Phase 1's loud gap), so today every arXiv, bioRxiv, medRxiv and Europe
+> PMC `PPR` record fails at import. Corrections and additions to the list below:
+> - The in-Zotero test is **`test/integration/zotero/preprintRoundTrip.spec.ts`** — the integration runner collects
+>   `*.spec.ts`; a `.test.ts` there would never run.
+> - The existing tests that pin the throw: `test/unit/zotero/itemMapper.test.ts` and
+>   `test/integration/zotero/itemMapper.spec.ts`.
+> - The caller: `src/zotero/importer.ts` (calls `toZoteroMapping`) — measure; edit only if the throw's removal needs it.
+> - The server name's source: each mapper that emits `type: "preprint"` — `src/sources/{arxiv,biorxiv,europepmc,
+>   crossref,semanticscholar}/mapper.ts` with their unit tests — **measure first**: which `CanonicalWork` member
+>   carries the server (`containerTitle` today on bioRxiv and Europe PMC), and whether each `docs/02` §10.2 trigger
+>   (Crossref `posted-content`, S2 venue) already yields `preprint`. Edit a mapper only for a missing trigger.
+> - `src/sources/shared/dedupe.ts` already declares `BIORXIV_ACCESSION_PREFIXES`; `preprintServers.ts`'s prefix
+>   set must not become a second, diverging copy of the bioRxiv half — one declaration, imported by the other.
+> - `docs/07` §6.2 / §6.3 and `docs/02` §10.2 / §10.3 if a measured fact contradicts them (rule 3).
 - modify `src/zotero/itemMapper.ts`
 - modify `src/zotero/extraField.ts`
 - create `src/sources/shared/preprintServers.ts`
@@ -1776,6 +1791,24 @@ lookup, so a 200-record import costs a handful of requests rather than 400.
   `LiteratureSource`, "kept separate so the planner can decide whether the extra call is worth it".
 
 **Files.**
+> **Added 2026-10-15 under rule 10, before launch.** Measured on the tree at `99b4df1`: the pass already exists as
+> `backfillAbstracts` in **`src/pipeline/searchImport/searchImportPipeline.ts`** (the `BackfillingAbstracts` stage of
+> `run`), and it asks **one `fetchAbstract` per record** — the very thing `docs/02` §10.4 forbids. Only Semantic
+> Scholar implements `fetchAbstract`. The import summary's coverage figure already exists
+> (`abstractCoveragePercent` in `src/pipeline/searchImport/types.ts`, `research-helper-import-abstract-coverage` in
+> the view model) — measure it; step 6 may be done. Additions to the list below:
+> - `src/pipeline/searchImport/searchImportPipeline.ts` and `src/pipeline/searchImport/types.ts` (the stage and its
+>   output), with `test/unit/pipeline/searchImport.test.ts`.
+> - A batched lookup is an interface change: `docs/07` §4.2 (the `LiteratureSource` block; `fetchAbstract` is per
+>   record) **first**, then `src/sources/types.ts` — or `backfill.ts` drives each adapter's own batched request
+>   builder. Decide by measuring; either way the document moves first (rule 3).
+> - The adapters' request builders: `src/sources/{europepmc,semanticscholar,crossref}/query.ts` with
+>   `test/unit/sources/{europepmc,semanticscholar,crossref}.test.ts`.
+> - The construction site: `src/bootstrap/registerPipelines.ts` (`createSearchImportPipeline` is built there with
+>   the sources) — measure; edit only if the pass needs something it does not yet hand over.
+> - Step 4's "only if it is a small remainder" names no number. If `docs/02` §10.4 or `docs/11` §4.3 V-13 gives
+>   none, **stop and report** (rule 4) rather than choose one.
+> - Live requests: none needed; use recorded fixtures and a counting fake transport.
 - create `src/pipeline/searchImport/backfill.ts`
 - modify `src/pipeline/searchImport/stages.ts`
 - modify `src/sources/europepmc/europepmcSource.ts`
