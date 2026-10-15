@@ -50,6 +50,7 @@ import {
   type S2CorpusId,
 } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
+import { BIORXIV_ACCESSION_PREFIXES, doiPrefix } from "./preprintServers";
 
 // ---------------------------------------------------------------------------
 // 1. Thresholds and confidences — docs/02 §11.3 and §11.3.3, every one named
@@ -117,48 +118,20 @@ export const SERIES_SUFFIX_PATTERN = /\b(part\s+)?([ivxlc]+|\d+)$/;
 // ---------------------------------------------------------------------------
 // 2. Preprint DOI prefixes — docs/02 §11.2
 //
-// Future home: `P2-T08`'s `src/sources/shared/preprintServers.ts`, which did
-// not exist when this card ran (`plan/README.md` §5 rule 2 forbids creating
-// it from here). When `P2-T08` lands, that module owns the set and this one
-// imports it. Until then the set is declared here, as a set, so that nothing
-// in the dedup path tests a single prefix: §11.2 — bioRxiv/medRxiv mint under
-// both `10.1101/` and `10.64898/`, and the prefix does not tell the servers
-// apart.
+// Declared in `./preprintServers.ts` (`P2-T08`), which owns the set, and
+// re-exported here so this module's importers — the dedup stage, the bioRxiv
+// adapter's `biorxivAccession` call, the unit tests — are unchanged. One
+// declaration, so the bioRxiv half used for Tier 0's secondary key cannot
+// diverge from the set: §11.2 — bioRxiv/medRxiv mint under both `10.1101/`
+// and `10.64898/`, and the prefix does not tell the servers apart.
 // ---------------------------------------------------------------------------
 
-/**
- * `docs/02` §11.2's prefix set: bioRxiv-legacy, bioRxiv/medRxiv-current,
- * arXiv, Research Square, SSRN. Membership is a weak corroborating signal
- * only; server detection is the publisher field's job (`P2-T08`).
- */
-export const PREPRINT_DOI_PREFIXES: ReadonlySet<string> = new Set([
-  "10.1101/",
-  "10.64898/",
-  "10.48550/",
-  "10.21203/",
-  "10.2139/",
-]);
-
-/**
- * The two prefixes under which bioRxiv and medRxiv mint the *same* accession
- * (`docs/02` §11.2 implication 2: the suffix is the stable accession across
- * both). A DOI pair sharing a suffix under these prefixes is the secondary
- * key of Tier 0.
- */
-export const BIORXIV_ACCESSION_PREFIXES: ReadonlySet<string> = new Set([
-  "10.1101/",
-  "10.64898/",
-]);
-
-/** The registrant prefix of a normalized DOI, slash included: `"10.1101/"`. */
-export function doiPrefix(doi: string): string {
-  return doi.slice(0, doi.indexOf("/") + 1);
-}
-
-/** Is `doi`'s prefix in the §11.2 preprint set? A hint, not a server id. */
-export function isPreprintDoi(doi: string): boolean {
-  return PREPRINT_DOI_PREFIXES.has(doiPrefix(doi));
-}
+export {
+  BIORXIV_ACCESSION_PREFIXES,
+  doiPrefix,
+  isPreprintDoi,
+  PREPRINT_DOI_PREFIXES,
+} from "./preprintServers";
 
 /**
  * The bioRxiv/medRxiv accession a DOI carries, or `undefined` when its prefix

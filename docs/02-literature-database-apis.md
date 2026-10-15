@@ -2181,9 +2181,9 @@ Available fields: `title`, `abstractNote`, `genre` (base `type`), `repository` (
 | Canonical | Zotero field |
 |---|---|
 | `venue.repository` | **`repository`** (`"bioRxiv"`, `"arXiv"`, `"medRxiv"`) |
-| `ids.arxivId` | **`archiveID`** — store as `"arXiv:2106.15928"` |
+| `ids.arxivId` | **`archiveID`** — store as `"arXiv:2106.15928v1"`, **with** the version (§7.5 note 4: "keep it for the Zotero `archiveID`"; corrected 2026-10-15, `P2-T08` — this cell showed the stripped form; `docs/07` §6.2 says where the version comes from) |
 | `ids.doi` | `DOI` |
-| `publicationTypes[0]` | `genre` (e.g. `"Preprint"`) |
+| `publicationTypes[0]` | `genre` (e.g. `"Preprint"`) — *2026-10-15, `P2-T08`: `docs/07` §5.1's `CanonicalWork` carries no publication-type list, so the shipped mapper writes the constant `"Preprint"` (`docs/07` §6.2)* |
 | `ids.pmid` / `ids.pmcid` | **no native field → `extra`** |
 | everything else | as `journalArticle` |
 
@@ -2294,6 +2294,27 @@ this order, stopping at the first hit:
 
 Batch these: never issue one lookup per record. A 200-record collection needs **2 Europe PMC calls
 and 2 S2 calls**, not 400 requests.
+
+> **How the pass ships — 2026-10-15 (`P2-T12`).** The pass is `src/pipeline/searchImport/backfill.ts`'s
+> `backfillAbstracts`, run in `docs/07` §12.1's `BackfillingAbstracts` state. It asks only records with
+> no abstract **and** a DOI, and it batches through `docs/07` §4.2's existing **`lookup`** member
+> ("Batch lookup by external identifier") — not the per-record `fetchAbstract`, which the pipeline no
+> longer calls — so no interface change was needed. **Step 1:** Europe PMC's `lookup` sends
+> `DOI:"…" OR DOI:"…"` (§4.3's `DOI` row) with `resultType=core`, **100 DOIs per request** — the
+> figure this section's own budget implies (200 records ÷ 2 calls) — at `pageSize=1000` (§4.1's
+> maximum, so one request holds every hit), and by `searchPOST` once the query passes §4.1's
+> 1500-character design budget, which 100 DOIs always do. **Step 2:** Semantic Scholar's `lookup`,
+> already `/paper/batch` in chunks of ~100 (§6.8). That request carries the adapter's full field list,
+> a superset of `abstract,tldr`; the request count is what this section budgets and §6.8's ~100-id
+> cap still holds, and the S2 mapper's TL;DR fallback for a missing abstract (§6.7) applies.
+> **Step 3 (Crossref) is not shipped:** `P2-T12` allows it "only if it is a small remainder", no
+> document gives that remainder a number (and `docs/spikes/phase-0.md` V-13 has no Crossref-backfill
+> figure), and `/works/{doi}` is one request per record — so it waits for that number. A record found
+> by a step leaves the ladder (stop at first hit); a record found with no abstract stays in it for the
+> next step. The winning source is written to `provenance.fieldOrigin.abstract`; nothing is written
+> when no step finds one (no fabricated abstract). A failed step is a run warning, never a failed
+> import. The import of a preview's own works (`P2-T31`) does not re-run the pass: the preview did.
+> R-17's coverage figure is the write report's `abstractCoveragePercent`, over created items.
 
 ---
 

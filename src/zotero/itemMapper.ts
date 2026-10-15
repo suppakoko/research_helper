@@ -66,6 +66,12 @@ import {
   type SourceId,
 } from "../model/ids";
 import {
+  ARXIV_SOURCE_ID,
+  arxivArchiveId,
+  parseArxivEntryId,
+} from "../sources/arxiv/mapper";
+import { detectServer } from "../sources/shared/preprintServers";
+import {
   applyExtraUpdate,
   findExtraLine,
   parseExtra,
@@ -137,6 +143,24 @@ export const AUTOMATIC_TAG_TYPE = 1;
 export const RESEARCH_HELPER_TAG = "research_helper";
 
 /**
+ * The tag on an item whose type no source could determine (`docs/10` FR-7
+ * scenario 3: "defaults to `journalArticle` and a
+ * `research_helper/uncertain-type` tag is applied"). `docs/07` §6.2's `type`
+ * row (2026-10-15, `P2-T08`) names `WorkType` `"other"` as that case: every
+ * source mapper falls back to it exactly when its record could not be
+ * classified, and `merge()` defaults to it. Automatic, like every tag the
+ * plugin writes.
+ */
+export const UNCERTAIN_TYPE_TAG = "research_helper/uncertain-type";
+
+/**
+ * `genre` on every `preprint` item — `docs/07` §6.2's `genre` row
+ * (2026-10-15, `P2-T08`), the value `docs/02` §10.3 gives. A constant because
+ * `CanonicalWork` carries no publication-type list to take it from.
+ */
+export const PREPRINT_GENRE = "Preprint";
+
+/**
  * The non-namespaced `extra` keys this plugin writes (§6.2's rows, §6.3's
  * "standard, non-namespaced lines the ecosystem already understands") and
  * reads back (§6.6). One declaration for both directions, imported by
@@ -171,8 +195,9 @@ export const RH_ISSN_KEY = "rh-issn";
 /**
  * The Zotero item type for a {@link WorkType}.
  *
- * **Phase 1 emits exactly two answers**: `preprint` for a preprint, and
- * `journalArticle` for everything else. That is the card's specification
+ * **Exactly two answers**: `preprint` for a preprint (mapped by
+ * {@link toZoteroMapping} since `P2-T08`; Phase 1 threw), and
+ * `journalArticle` for everything else. That is `P1-T12`'s specification
  * ("emitting `itemType: \"journalArticle\"` for everything Phase 1 sees") and
  * `plan/02-phase-1-pubmed.md` §2's deferral table states the same intent —
  * "`P1-T12` maps `journalArticle` and routes every other `WorkType` to
@@ -347,37 +372,26 @@ export interface ZoteroMapping {
 /**
  * Map a {@link CanonicalWork} to Zotero item JSON, per §6.2's table.
  *
- * `preprint` throws. `docs/07` §6.2 has a `preprint` column and Phase 2 owns
- * it (`plan/02-phase-1-pubmed.md` §2); this card's `Notes` are explicit that
- * the branch is to be "left unimplemented with an explicit throw rather than a
- * half-mapping, because Phase 2 owns preprints and a silent wrong mapping is
- * worse than a loud gap". Preprints need `repository`, `archiveID` and the
- * `PMID: ` extra fallback, none of which Phase 1 exercises or tests.
+ * **Two columns** (`P2-T08` replaced Phase 1's throw for `preprint`). A
+ * `preprint` is filled from §6.2's `preprint` column and nothing else: §6.1
+ * verifies that the type has **no** `publicationTitle`, `ISSN`, `PMID` or
+ * `PMCID`, and `repository` / `archiveID` are base-mapped onto `publisher` /
+ * `number`, so writing a `journalArticle` field there would be rejected in
+ * strict mode or silently land somewhere else. Its identifiers without a
+ * field — PMID, PMCID — go to `PMID:` / `PMCID:` `extra` lines whatever
+ * `nativeIdentifierFields` reports, because that detection is about
+ * `journalArticle`.
  *
  * @param work - the merged canonical record
  * @param options - clock, schema and catalogue facts the work does not carry
  * @returns the item JSON and any deferred `extra` payload
- * @throws Error when `work.type` is `"preprint"`
  */
 export function toZoteroMapping(
   work: CanonicalWork,
   options: ZoteroMappingOptions = {},
 ): ZoteroMapping {
   const itemType = zoteroItemTypeFor(work.type);
-  if (itemType !== "journalArticle") {
-    // TODO(P1-T02): this must become `new ZoteroApiError(...)` once
-    // `src/core/errors.ts` exists. `docs/07` §10.1 declares `ZoteroApiError`
-    // and `plan/02-phase-1-pubmed.md` puts it in `P1-T02`'s `Files`, which
-    // this card does not depend on — reported as a wrong dependency edge
-    // rather than reimplemented here, because a second error hierarchy is
-    // exactly what `plan/README.md` §5 rule 3 forbids.
-    throw new Error(
-      `research_helper: mapping CanonicalWork.type "${work.type}" to Zotero ` +
-        `item type "${itemType}" is not implemented — docs/07 §6.2's preprint ` +
-        `column is Phase 2's (plan/02-phase-1-pubmed.md §2). Refusing to ` +
-        `half-map work ${work.workKey}.`,
-    );
-  }
+  const isPreprint = itemType === "preprint";
 
   const accessedAtEpochMs = options.accessedAtEpochMs ?? Date.now();
   const native = options.nativeIdentifierFields ?? NATIVE_ID_FIELDS_PRESENT;
@@ -394,13 +408,16 @@ export function toZoteroMapping(
       value: work.provenance.seenIn.join(","),
     });
   }
-  if (work.type !== "journal-article") {
+  if (!isPreprint && work.type !== "journal-article") {
     // §6.2's "everything else → journalArticle with a note in extra". The note
     // is namespaced because §6.3 gives the plugin exactly one prefix, and it
-    // records the real type so §6.6's read-back is not lossy.
+    // records the real type so §6.6's read-back is not lossy. A `preprint`
+    // item's type *is* its WorkType, so it has nothing to record.
     pluginLines.push({ key: RH_WORK_TYPE_KEY, value: work.type });
   }
-  const extraIssns = work.issn?.slice(1) ?? [];
+  // A preprint carries no ISSN at all (§6.1; §6.2's `issn[1..]` row has no
+  // preprint column since 2026-10-15) — not the first, not the rest.
+  const extraIssns = isPreprint ? [] : (work.issn?.slice(1) ?? []);
   if (extraIssns.length > 0) {
     // §6.2: "Additional ISSNs → extra". Namespaced, not a bare `ISSN:` line:
     // `journalArticle` *has* a native `ISSN` field (holding issn[0]), and §6.3
@@ -418,19 +435,24 @@ export function toZoteroMapping(
   // Non-namespaced ecosystem lines. Written only where there is no native
   // field, and only when no such line already exists (§6.3) — the second half
   // is enforced by applyExtraUpdate().
+  // The native-field test is per item type: `nativeIdentifierFields` answers
+  // it for `journalArticle`, and §6.1 answers it for `preprint` — no PMID, no
+  // PMCID field, ever.
+  const pmidNative = !isPreprint && native.pmid;
+  const pmcidNative = !isPreprint && native.pmcid;
   const standardLines: ExtraEntry[] = [];
-  if (work.ids.pmid !== undefined && !native.pmid) {
+  if (work.ids.pmid !== undefined && !pmidNative) {
     standardLines.push({ key: ECOSYSTEM_EXTRA_KEY.pmid, value: work.ids.pmid });
   }
-  if (work.ids.pmcid !== undefined && !native.pmcid) {
+  if (work.ids.pmcid !== undefined && !pmcidNative) {
     standardLines.push({
       key: ECOSYSTEM_EXTRA_KEY.pmcid,
       value: work.ids.pmcid,
     });
   }
-  if (work.ids.arxivId !== undefined) {
+  if (work.ids.arxivId !== undefined && !isPreprint) {
     // No Zotero item type has a native arXiv-ID field (`docs/02` §10.3); on
-    // `preprint` it goes in `archiveID`, which this arm never reaches.
+    // `preprint` it goes in `archiveID` instead (§6.2), never in `extra`.
     standardLines.push({
       key: ECOSYSTEM_EXTRA_KEY.arxiv,
       value: work.ids.arxivId,
@@ -463,20 +485,28 @@ export function toZoteroMapping(
   };
 
   set(json, "abstractNote", work.abstract);
-  set(json, "publicationTitle", work.containerTitle);
-  set(json, "journalAbbreviation", work.containerAbbreviation);
-  set(json, "publisher", work.publisher);
-  set(json, "volume", work.volume);
-  set(json, "issue", work.issue);
-  set(json, "pages", work.pages);
-  set(json, "ISSN", work.issn?.[0]);
+  if (isPreprint) {
+    // §6.2's preprint column: the server is the repository, the server-native
+    // identifier the archiveID, and nothing journal-shaped is written.
+    set(json, "genre", PREPRINT_GENRE);
+    set(json, "repository", repositoryFor(work));
+    set(json, "archiveID", archiveIdFor(work));
+  } else {
+    set(json, "publicationTitle", work.containerTitle);
+    set(json, "journalAbbreviation", work.containerAbbreviation);
+    set(json, "publisher", work.publisher);
+    set(json, "volume", work.volume);
+    set(json, "issue", work.issue);
+    set(json, "pages", work.pages);
+    set(json, "ISSN", work.issn?.[0]);
+  }
   set(json, "date", work.publishedDate?.iso);
   // Bare, never a resolver URL (§6.2), and always `normalizeDoi()`'s lowercase
   // output — the only DOI spelling the plugin stores (`docs/02` §11.1, FR-6;
   // conflict C9 closed).
   set(json, "DOI", work.ids.doi);
-  if (native.pmid) set(json, "PMID", work.ids.pmid);
-  if (native.pmcid) set(json, "PMCID", work.ids.pmcid);
+  if (pmidNative) set(json, "PMID", work.ids.pmid);
+  if (pmcidNative) set(json, "PMCID", work.ids.pmcid);
   set(json, "url", work.url ?? work.ids.url);
   set(json, "language", work.language);
   set(json, "rights", work.openAccess?.license);
@@ -580,8 +610,52 @@ function tagsFor(work: CanonicalWork): readonly ZoteroTagJSON[] {
   };
   for (const subject of work.subjects ?? []) add(subjectTag(subject));
   for (const keyword of work.keywords ?? []) add(keyword);
+  // FR-7 scenario 3: an undetermined type still imports (as journalArticle,
+  // via zoteroItemTypeFor) but says so where the user can see and filter it.
+  if (work.type === "other") add(UNCERTAIN_TYPE_TAG);
   add(RESEARCH_HELPER_TAG);
   return tags;
+}
+
+/**
+ * A preprint's `repository` (§6.2's `containerTitle` row): the server
+ * {@link detectServer} finds in the work's server/publisher fields, in its
+ * canonical spelling, else `containerTitle` verbatim. The DOI is handed over
+ * for corroboration only; it can never name the server (`docs/02` §11.2).
+ */
+function repositoryFor(work: CanonicalWork): string | undefined {
+  const detected = detectServer({
+    serverFields: [work.containerTitle, work.publisher],
+    doi: work.ids.doi,
+  });
+  return detected?.server ?? work.containerTitle;
+}
+
+/**
+ * A preprint's `archiveID` (§6.2's `ids.arxivId` row): `arXiv:` and the id
+ * **with its version** (`docs/02` §7.5 note 4), spelled by the arXiv mapper's
+ * {@link arxivArchiveId}.
+ *
+ * `ids.arxivId` is version-stripped (§5.1), so the version comes from the
+ * arXiv `SourceRecord` that contributed to the work — its id is
+ * `arxiv:<versioned id>` in `provenance.recordIds` — and only when that
+ * record's id strips to the same `ids.arxivId`. A work whose arXiv id came
+ * from another source (Semantic Scholar's `externalIds.ArXiv`) has no version
+ * to give and gets `arXiv:<id>`. `undefined` without an arXiv id: §6.2 maps
+ * no other identifier to `archiveID`.
+ */
+function archiveIdFor(work: CanonicalWork): string | undefined {
+  const arxivId = work.ids.arxivId;
+  if (arxivId === undefined) return undefined;
+  const prefix = `${ARXIV_SOURCE_ID}:`;
+  for (const recordId of work.provenance.recordIds) {
+    if (!recordId.startsWith(prefix)) continue;
+    const entry = parseArxivEntryId(recordId.slice(prefix.length));
+    if (entry !== undefined && normalizeArxivId(entry.versioned) === arxivId) {
+      return arxivArchiveId(entry.versioned);
+    }
+  }
+  return arxivArchiveId(arxivId);
 }
 
 /**
@@ -1026,7 +1100,9 @@ function tagsToSubjects(tags: readonly string[]): {
   const keywords: string[] = [];
   for (const raw of tags) {
     const tag = raw.trim();
-    if (tag === "" || tag === RESEARCH_HELPER_TAG) continue;
+    // The plugin's own two tags describe the import, not the work.
+    if (tag === "" || tag === RESEARCH_HELPER_TAG || tag === UNCERTAIN_TYPE_TAG)
+      continue;
     const match = SUBJECT_TAG.exec(tag);
     const scheme = match === null ? undefined : SUBJECT_SCHEMES[match[1] ?? ""];
     if (match === null || scheme === undefined) {

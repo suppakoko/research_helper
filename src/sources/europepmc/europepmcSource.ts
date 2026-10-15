@@ -46,6 +46,12 @@
  *   `/citations` and `/references` (`docs/02` §4.7), which is why `P2-T03`
  *   had declared `true`; neither is called here, and the card that wires them
  *   sets the flag back with the method.
+ * - **`lookup()` is one `DOI:"…" OR DOI:"…"` search per 100 DOIs** (`P2-T12`,
+ *   `docs/02` §10.4's backfill step 1, `resultType=core`, `pageSize=1000`),
+ *   built by `./query.ts`'s `buildEuropePmcDoiLookupRequest` and sent through
+ *   the same `fetchPage` as `search`, so `errCode`, `searchPOST` and
+ *   cancellation behave identically. DOI is the only identifier it renders,
+ *   so `lookupById` is `["doi"]`.
  * - **`fullTextXML` is never called** (`docs/02` §4.8: 404 with an empty body
  *   for both "not OA here" and "no such id"; the card's Do NOT). The mapper
  *   carries `openAccess` so a later card can gate on it.
@@ -80,6 +86,7 @@ import {
 import type { HttpClient } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
 import { EBI_HOST } from "../../core/rateLimit/hostLimiter";
+import type { ExternalIds } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
 import type {
   LiteratureSource,
@@ -91,7 +98,9 @@ import type {
 } from "../types";
 import { EUROPEPMC_SOURCE_ID, type EuropePmcRecordMapper } from "./mapper";
 import {
+  buildEuropePmcDoiLookupRequest,
   buildEuropePmcSearchRequest,
+  EUROPEPMC_DOI_LOOKUP_BATCH,
   EUROPEPMC_FILTERS,
   EUROPEPMC_FIRST_CURSOR,
   EUROPEPMC_PAGE_SIZE_MAX,
@@ -149,7 +158,9 @@ export const EUROPEPMC_CAPABILITIES: SourceCapabilities = {
     fields: EUROPEPMC_RENDERED_FIELDS,
   },
   relatedByWork: false,
-  lookupById: [],
+  // `P2-T12`: `lookup` is the batched `DOI:"…" OR …` query of `docs/02`
+  // §10.4's backfill step 1, and DOI is the only identifier it renders.
+  lookupById: ["doi"],
   abstractsInSearch: true,
   // `docs/07` §4.2 since 2026-10-15: "this adapter exposes `findRelated`" —
   // and this one does not (`P2-T34`, owner review row 131).
@@ -181,12 +192,19 @@ export interface EuropePmcSearchPage extends SourcePage {
   readonly sourceExtras: EuropePmcSourceExtras;
 }
 
-/** The adapter, with `search`'s return narrowed to {@link EuropePmcSearchPage}. */
+/**
+ * The adapter, with `search`'s return narrowed to {@link EuropePmcSearchPage}
+ * and `lookup` declared present (`P2-T12`).
+ */
 export interface EuropePmcSource extends LiteratureSource {
   search(
     query: SourceQuery,
     ctx: SourceCallContext,
   ): Promise<EuropePmcSearchPage>;
+  lookup(
+    ids: readonly Partial<ExternalIds>[],
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]>;
 }
 
 /** A validated `search` body. */
@@ -448,6 +466,40 @@ export function createEuropePmcSource(
     }
   }
 
+  /**
+   * `docs/07` §4.2's batch lookup, by DOI only (`lookupById: ["doi"]`) —
+   * `docs/02` §10.4's backfill step 1. Distinct DOIs are sent
+   * {@link EUROPEPMC_DOI_LOOKUP_BATCH} to a request as one
+   * `DOI:"…" OR DOI:"…"` query with `resultType=core`; an entry with no DOI
+   * is not asked about. Records come back in the service's order, not the
+   * order asked (§4.2: "Order of results is not guaranteed"), and a DOI the
+   * service does not hold simply has no record. Cancellation is checked before
+   * every request (`fetchPage`); a failed request throws, as `search` does.
+   */
+  async function lookup(
+    ids: readonly Partial<ExternalIds>[],
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]> {
+    const dois: string[] = [];
+    for (const entry of ids) {
+      const doi = entry.doi;
+      if (doi !== undefined && !dois.includes(doi)) dois.push(doi);
+    }
+    const out: SourceRecord[] = [];
+    for (
+      let start = 0;
+      start < dois.length;
+      start += EUROPEPMC_DOI_LOOKUP_BATCH
+    ) {
+      const request = buildEuropePmcDoiLookupRequest(
+        dois.slice(start, start + EUROPEPMC_DOI_LOOKUP_BATCH),
+      );
+      const result = await fetchPage(request, ctx);
+      out.push(...mapRecords(result.results));
+    }
+    return out;
+  }
+
   /** One cheap `idlist` probe. Never throws except on cancellation. */
   async function healthCheck(ctx: SourceCallContext): Promise<SourceHealth> {
     const startedAtMs = clock.now();
@@ -487,6 +539,7 @@ export function createEuropePmcSource(
     healthCheck,
     search,
     searchAll,
+    lookup,
     explainQuery: (query) => explainEuropePmcQuery(query),
   };
 }

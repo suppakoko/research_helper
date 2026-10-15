@@ -50,7 +50,9 @@ import {
   readPartialDate,
 } from "../../../src/sources/europepmc/mapper";
 import {
+  buildEuropePmcDoiLookupRequest,
   buildEuropePmcSearchRequest,
+  EUROPEPMC_DOI_LOOKUP_BATCH,
   EUROPEPMC_FILTERS,
   EUROPEPMC_FIRST_CURSOR,
   EUROPEPMC_PAGE_SIZE_MAX,
@@ -60,6 +62,7 @@ import {
   EUROPEPMC_SEARCH_POST_URL,
   EUROPEPMC_SEARCH_URL,
   explainEuropePmcQuery,
+  renderEuropePmcDoiQuery,
   renderEuropePmcQuery,
   RESERVED_RAW_PARAMS,
 } from "../../../src/sources/europepmc/query";
@@ -717,7 +720,8 @@ describe("EUROPEPMC_CAPABILITIES", () => {
       maxPageSize: 1000,
       maxTotalResults: undefined,
       relatedByWork: false,
-      lookupById: [],
+      // `P2-T12`: `lookup` is the batched DOI query of docs/02 §10.4 step 1.
+      lookupById: ["doi"],
     });
     expect(EUROPEPMC_PAGE_SIZE_MAX).toBe(1000);
   });
@@ -1467,8 +1471,9 @@ describe("createEuropePmcSource — identity and requests", () => {
     );
     // Not declared, so nothing promises a method nobody implements.
     expect(source.findRelated).toBeUndefined();
-    expect(source.lookup).toBeUndefined();
     expect(source.fetchAbstract).toBeUndefined();
+    // `P2-T12`: declared and implemented — docs/02 §10.4's backfill step 1.
+    expect(typeof source.lookup).toBe("function");
   });
 
   it("issues GET /search with resultType=core, a clamped pageSize and cursorMark=*", async () => {
@@ -2152,5 +2157,163 @@ describe("registerSources with the europepmc slot", () => {
     registerSources(registry, { pubmed: stub("pubmed"), europepmc: real });
     expect(registry.get("europepmc")).toBe(real);
     expect(registry.listConfigured()).toContain(real);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-T12 — the batched DOI lookup of docs/02 §10.4's backfill step 1
+// ---------------------------------------------------------------------------
+
+/** `n` DOI-shaped strings, already in `normalizeDoi`'s lower-case form. */
+function doisOf(n: number, stem = "p2t12"): string[] {
+  return Array.from({ length: n }, (_, i) => `10.5555/${stem}-${String(i)}`);
+}
+
+describe("buildEuropePmcDoiLookupRequest — docs/02 §10.4 step 1, batched (P2-T12)", () => {
+  it("renders §4.3's DOI row joined by OR, quoted, with the phrase breakers removed", () => {
+    expect(renderEuropePmcDoiQuery(["10.1/a", "10.1/b"])).toBe(
+      'DOI:"10.1/a" OR DOI:"10.1/b"',
+    );
+    const quote = '"';
+    const backslash = String.fromCharCode(92);
+    expect(
+      renderEuropePmcDoiQuery([
+        `10.1/${quote}x${backslash}`,
+        `${quote}${backslash}`,
+      ]),
+    ).toBe('DOI:"10.1/x"');
+  });
+
+  it("asks resultType=core at the maximum pageSize, on GET for one DOI", () => {
+    const built = buildEuropePmcDoiLookupRequest([
+      "10.1038/s41586-023-06139-9",
+    ]);
+    expect(built.method).toBe("GET");
+    const params = new URLSearchParams(built.queryString);
+    expect(params.get("query")).toBe('DOI:"10.1038/s41586-023-06139-9"');
+    expect(params.get("resultType")).toBe("core");
+    expect(params.get("pageSize")).toBe(String(EUROPEPMC_PAGE_SIZE_MAX));
+    expect(params.get("cursorMark")).toBe(EUROPEPMC_FIRST_CURSOR);
+    expect(params.get("email")).toBe(MAINTAINER_EMAIL);
+    expect(built.url.startsWith(`${EUROPEPMC_SEARCH_URL}?`)).toBe(true);
+  });
+
+  it("takes 100 DOIs a request — 200 ÷ 2, §10.4's budget — and sends a full batch by searchPOST", () => {
+    expect(EUROPEPMC_DOI_LOOKUP_BATCH).toBe(100);
+    const built = buildEuropePmcDoiLookupRequest(
+      doisOf(EUROPEPMC_DOI_LOOKUP_BATCH),
+    );
+    expect(built.renderedQuery.length).toBeGreaterThan(
+      EUROPEPMC_QUERY_DESIGN_BUDGET,
+    );
+    expect(built.method).toBe("POST");
+    expect(built.url).toBe(EUROPEPMC_SEARCH_POST_URL);
+    const params = new URLSearchParams(built.body);
+    expect(params.get("resultType")).toBe("core");
+    expect(params.get("query")?.split(" OR ")).toHaveLength(
+      EUROPEPMC_DOI_LOOKUP_BATCH,
+    );
+  });
+
+  it("refuses an empty batch, one over 100, and one with nothing renderable", () => {
+    expect(() => buildEuropePmcDoiLookupRequest([])).toThrow(RangeError);
+    expect(() =>
+      buildEuropePmcDoiLookupRequest(doisOf(EUROPEPMC_DOI_LOOKUP_BATCH + 1)),
+    ).toThrow(/1 … 100 DOIs/u);
+    expect(() => buildEuropePmcDoiLookupRequest(['"'])).toThrow(RangeError);
+  });
+
+  it("leaves the search builder's bytes unchanged (the shared assembler)", () => {
+    const built = buildEuropePmcSearchRequest({
+      query: QUERY_TYPICAL,
+      pageSize: 25,
+    });
+    expect(built.queryString).toBe(
+      [
+        `query=${encodeURIComponent(explainEuropePmcQuery(QUERY_TYPICAL))}`,
+        "resultType=core",
+        "format=json",
+        "pageSize=25",
+        "cursorMark=*",
+        `email=${encodeURIComponent(MAINTAINER_EMAIL)}`,
+      ].join("&"),
+    );
+  });
+});
+
+describe("createEuropePmcSource — lookup (P2-T12)", () => {
+  /** A service-shaped stub: answers every asked DOI whose index is even. */
+  function doiStub() {
+    return createStubHttp((issued) => {
+      const query = paramsOf(issued).get("query") ?? "";
+      const asked = [...query.matchAll(/DOI:"([^"]+)"/gu)].map((m) => m[1]);
+      const results = asked
+        .filter((_doi, i) => i % 2 === 0)
+        .map((doi, i) =>
+          result(`${String(i)}${String(asked.length)}`, "MED", {
+            doi,
+            abstractText: `Abstract of ${String(doi)}.`,
+          }),
+        );
+      return response(
+        issued.url,
+        pageBody({ hitCount: results.length, resultList: { result: results } }),
+      );
+    });
+  }
+
+  it("sends distinct DOIs 100 to a request and ignores entries with no DOI", async () => {
+    const stub = doiStub();
+    const source = createSource(stub.client);
+    const dois = doisOf(250);
+    const ids = [
+      ...dois.map((doi) => ({ doi: doi as never })),
+      { doi: dois[0] as never },
+      { pmid: "37258680" as never },
+      {},
+    ];
+    const records = await source.lookup(ids, ctx());
+    expect(stub.issued).toHaveLength(3);
+    const perRequest = stub.issued.map(
+      (issued) =>
+        [...(paramsOf(issued).get("query") ?? "").matchAll(/DOI:"/gu)].length,
+    );
+    expect(perRequest).toEqual([100, 100, 50]);
+    for (const issued of stub.issued) {
+      expect(paramsOf(issued).get("resultType")).toBe("core");
+    }
+    // Half of each batch answered, mapped through the shipped mapper.
+    expect(records).toHaveLength(50 + 50 + 25);
+    expect(records[0]?.work.ids.doi).toBe(dois[0]);
+    expect(records[0]?.work.abstract).toBe(`Abstract of ${String(dois[0])}.`);
+  });
+
+  it("makes no request when nothing carries a DOI", async () => {
+    const stub = doiStub();
+    const source = createSource(stub.client);
+    expect(await source.lookup([{}, { pmid: "1" as never }], ctx())).toEqual(
+      [],
+    );
+    expect(stub.issued).toHaveLength(0);
+  });
+
+  it("honours cancellation before a request goes out", async () => {
+    const stub = doiStub();
+    const source = createSource(stub.client);
+    const cts = createCancellationTokenSource();
+    cts.cancel({ kind: "user" });
+    await expect(
+      source.lookup([{ doi: "10.1/a" as never }], { token: cts.token }),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+    expect(stub.issued).toHaveLength(0);
+  });
+
+  it("raises an errCode inside a 200 as a SourceError, as search does", async () => {
+    const stub = createStubHttp((issued) =>
+      response(issued.url, JSON.stringify({ errCode: 500, errMsg: "boom" })),
+    );
+    await expect(
+      createSource(stub.client).lookup([{ doi: "10.1/a" as never }], ctx()),
+    ).rejects.toBeInstanceOf(SourceError);
   });
 });

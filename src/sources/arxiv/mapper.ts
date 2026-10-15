@@ -335,8 +335,9 @@ export function parseArxivEntryId(
  * The value `docs/07` §6.2 writes into Zotero's `archiveID` on a `preprint`
  * item: `arXiv:` plus the **versioned** id (`docs/02` §7.5 note 4: "keep it
  * for the Zotero `archiveID`"). The item mapper that writes it is
- * `src/zotero/itemMapper.ts`, whose `preprint` arm is a later card's; this is
- * the one spelling it should use, and `normalizeArxivId` reads it back.
+ * `src/zotero/itemMapper.ts`'s `preprint` arm (`P2-T08`), which calls this
+ * with the version read back from the record's `arxiv:<nativeId>` id in
+ * `provenance.recordIds`; `normalizeArxivId` reads it back.
  *
  * @param versionedId - {@link ArxivEntryId.versioned}, or a record's `nativeId`
  * @returns `arXiv:2609.04658v1`

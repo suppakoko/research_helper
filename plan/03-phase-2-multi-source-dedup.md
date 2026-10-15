@@ -1352,6 +1352,19 @@ happening, the same preprint could carry two DOIs and `P2-T09`'s Tier 0 would tr
 `docs/02` §11.2's suffix-matching note (the accession `2026.08.20.745440` is stable across both
 prefixes) is the mitigation; implement it as the secondary key in `P2-T09`.
 
+
+**Findings, 2026-10-15 — done; no live request; full report at `plan/reports/P2-T08.md`.**
+Verified by the coordinator on the combined tree with `P2-T12` / `P2-T08` (both agents worked side by side): no `MUTANT` marker, typecheck 0, `lint:check` 0, eslint 0, **unit 2,245/2,245**, contract 40/40, integration **140 passed** on two runs of three (the third failed once in `P1-T23`'s startup test: Zotero's own `api.zotero.org/retractions/list` download fell inside the plugin's startup window — item 176).
+Before this card `toZoteroMapping` threw for every preprint, so no arXiv, bioRxiv, medRxiv or Europe PMC `PPR` record
+could be imported. Preprints now import as Zotero `preprint` with `repository`, `archiveID` (`arXiv:<id><version>`,
+the version from the arXiv record) and `genre: "Preprint"`; PMID/PMCID go to `extra` lines, never native fields;
+no ISSN, `rh-issn` or `publicationTitle`; foreign `extra` lines stay byte-identical. `detectServer` reads the
+record's server/publisher field (`containerTitle`, then `publisher`); the DOI prefix only corroborates. The prefix
+set has one declaration (`src/sources/shared/preprintServers.ts`; `dedupe.ts` re-exports it). An undetermined type
+(`other`) imports as `journalArticle` with `research_helper/uncertain-type`. Every mapper already fired its
+`docs/02` §10.2 trigger, so no mapper changed. Six in-Zotero tests; **17 mutants, all killed** (unit level).
+Three files outside Files, each mechanical: `dedupe.ts` (the one-declaration move), an arXiv mapper comment, and
+`importer.spec.ts`, whose failing-record fixture had been a preprint. Open: items 188–192.
 ---
 
 ### P2-T09 — Dedup engine: identifier-first cascade, fuzzy fallback
@@ -1857,6 +1870,17 @@ npm run typecheck && npm run test:unit -- backfill
 **Notes.** `docs/11` §4.3 V-13 measures abstract availability per source empirically in Phase 0; if
 that spike produced numbers, use them to decide whether step 3 (Crossref) is worth shipping at all.
 
+
+**Findings, 2026-10-15 — done except card step 4 (Crossref), stopped under rule 4 for the owner (item 193); no live request; full report at `plan/reports/P2-T12.md`.**
+Verified by the coordinator on the combined tree with `P2-T12` / `P2-T08` (both agents worked side by side): no `MUTANT` marker, typecheck 0, `lint:check` 0, eslint 0, **unit 2,245/2,245**, contract 40/40, integration **140 passed** on two runs of three (the third failed once in `P1-T23`'s startup test: Zotero's own `api.zotero.org/retractions/list` download fell inside the plugin's startup window — item 176).
+The per-record `fetchAbstract` loop in `searchImportPipeline.ts` is gone. `src/pipeline/searchImport/backfill.ts`
+runs `docs/02` §10.4's ladder through each adapter's batch `lookup` (already declared in `docs/07` §4.2 — no
+interface change): Europe PMC gains a DOI `lookup` (100 DOIs per `searchPOST`, `lookupById: ["doi"]`), then
+Semantic Scholar's existing batch of ~100. 200 records with 60 missing cost one Europe PMC and one S2 request;
+all 200 missing cost §10.4's 2 + 2. `fieldOrigin.abstract` names the supplier; a cancel ends `cancelled` with
+the merged works intact; a failed step is a warning; no abstract is invented; a checkpoint follows each step;
+the import of a preview's works does not ask again. The existing coverage figure now counts backfilled
+abstracts. **15 mutants, all killed.** Nothing outside Files. Open: items 193–198.
 ---
 
 ### P2-T13 — Dedup corpus and measured precision/recall report

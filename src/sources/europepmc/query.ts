@@ -5,7 +5,9 @@
  *
  * **Scope.** `P2-T03` steps 1 and 2. Rendering only — no HTTP, no response
  * handling, no paging policy. `europepmcSource.ts` owns `search()` and passes
- * `pageSize`, `cursorMark` and `resultType` in here.
+ * `pageSize`, `cursorMark` and `resultType` in here. `P2-T12` adds the
+ * batched DOI lookup of `docs/02` §10.4's backfill pass —
+ * {@link buildEuropePmcDoiLookupRequest} — through the same request assembler.
  *
  * ## The dialect, from `docs/02` §4.3 / §12.2 / §12.3
  *
@@ -424,15 +426,111 @@ export function buildEuropePmcSearchRequest(
   }
 
   const renderedQuery = explainEuropePmcQuery(options.query);
+  return assembleRequest(
+    renderedQuery,
+    {
+      resultType: options.resultType ?? "core",
+      pageSize,
+      cursor: options.cursor ?? EUROPEPMC_FIRST_CURSOR,
+    },
+    renderRawParams(options.query.raw),
+  );
+}
+
+/**
+ * DOIs per Europe PMC request in `docs/02` §10.4's backfill pass (step 1).
+ *
+ * **Derived, not chosen:** §10.4's own budget — "A 200-record collection needs
+ * **2 Europe PMC calls**" — is 200 ÷ 2 = 100 DOIs a request. At that size the
+ * rendered query is always past {@link EUROPEPMC_QUERY_DESIGN_BUDGET}, so the
+ * request travels by `searchPOST`, which is what §4.1 says the budget is for.
+ */
+export const EUROPEPMC_DOI_LOOKUP_BATCH = 100;
+
+/**
+ * `docs/02` §4.3's `DOI` row, batched: `DOI:"a" OR DOI:"b" …`.
+ *
+ * A DOI is quoted exactly as a term value is, so {@link PHRASE_BREAKERS} —
+ * the two characters that would end or escape the phrase — are removed; a DOI
+ * left empty by that is not rendered. The pass hands in DOIs that went
+ * through `normalizeDoi`, so in practice nothing is removed.
+ *
+ * @param dois - the DOIs to ask for, in the order given
+ * @returns the `query=` value, `""` when nothing is renderable
+ */
+export function renderEuropePmcDoiQuery(dois: readonly string[]): string {
+  return dois
+    .map((doi) => doi.replace(PHRASE_BREAKERS, "").trim())
+    .filter((doi) => doi !== "")
+    .map((doi) => `DOI:"${doi}"`)
+    .join(" OR ");
+}
+
+/**
+ * Build one batched DOI lookup — `docs/02` §10.4's backfill step 1:
+ * `search?query=DOI:"…" OR DOI:"…"&resultType=core`.
+ *
+ * `pageSize` is §4.1's maximum, 1000, so one request holds every hit for its
+ * at most {@link EUROPEPMC_DOI_LOOKUP_BATCH} DOIs even where a DOI matches
+ * more than one record; nothing pages after it. The rest of the request — the
+ * parameter order, `email=`, the GET / POST switch, redaction — is
+ * {@link buildEuropePmcSearchRequest}'s, through the same assembler.
+ *
+ * @param dois - 1 … {@link EUROPEPMC_DOI_LOOKUP_BATCH} DOIs
+ * @returns the transmitted and the storable forms of the request
+ * @throws RangeError for an empty batch, one over the batch size, or one in
+ *   which no DOI is renderable
+ */
+export function buildEuropePmcDoiLookupRequest(
+  dois: readonly string[],
+): EuropePmcSearchRequest {
+  if (dois.length === 0 || dois.length > EUROPEPMC_DOI_LOOKUP_BATCH) {
+    throw new RangeError(
+      `[research-helper] a Europe PMC DOI lookup takes 1 … ` +
+        `${String(EUROPEPMC_DOI_LOOKUP_BATCH)} DOIs (docs/02 §10.4); got ` +
+        `${String(dois.length)}.`,
+    );
+  }
+  const renderedQuery = renderEuropePmcDoiQuery(dois);
+  if (renderedQuery === "") {
+    throw new RangeError(
+      "[research-helper] a Europe PMC DOI lookup needs at least one " +
+        "renderable DOI.",
+    );
+  }
+  return assembleRequest(
+    renderedQuery,
+    {
+      resultType: "core",
+      pageSize: EUROPEPMC_PAGE_SIZE_MAX,
+      cursor: EUROPEPMC_FIRST_CURSOR,
+    },
+    [],
+  );
+}
+
+/**
+ * The shared tail of every request this module builds: the parameters in
+ * {@link PARAM_ORDER} with `raw` before `email`, then GET at or below the
+ * design budget and `searchPOST` above it.
+ */
+function assembleRequest(
+  renderedQuery: string,
+  params: {
+    readonly resultType: EuropePmcResultType;
+    readonly pageSize: number;
+    readonly cursor: string;
+  },
+  rawPairs: readonly string[],
+): EuropePmcSearchRequest {
   const values: Record<ParamName, string> = {
     query: renderedQuery,
-    resultType: options.resultType ?? "core",
+    resultType: params.resultType,
     format: "json",
-    pageSize: String(pageSize),
-    cursorMark: options.cursor ?? EUROPEPMC_FIRST_CURSOR,
+    pageSize: String(params.pageSize),
+    cursorMark: params.cursor,
     email: MAINTAINER_EMAIL,
   };
-  const rawPairs = renderRawParams(options.query.raw);
   const queryString = [
     ...PARAM_ORDER.filter((name) => name !== "email").map(
       (name) => `${name}=${encodeURIComponent(values[name])}`,

@@ -1340,7 +1340,9 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 176. **Intermittent integration failures, each seen once:** the P1-T44 badge rendered blank (a run during a bundle
     edit), a `P1-T23` stall of 125 ms against 100 ms, and the slow-Fluent doubling. Count before calling any of
-    them a regression.
+    them a regression. **Seen 2026-10-15 (`P2-T08`/`P2-T12` landing), one run of three:** `P1-T23`'s NFR-10 startup test
+    counted Zotero's own `api.zotero.org/retractions/list` download, which fell inside the plugin's startup window.
+    The host is Zotero's, not the plugin's; the test could exclude Zotero's own hosts by name.
 
 ### 6.34 Raised by `P2-T07`, 2026-10-15 — recorded under rule 9; item 177 waits on the owner
 
@@ -1391,6 +1393,43 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 187. **`KO_PENDING_REVIEW`'s `mainWindow (21)` count comment** in `src/i18n/keys.ts` was wrong before `P2-T34` and is
     one further off now. Derive or drop the count.
+
+### 6.36 Raised by `P2-T08` and `P2-T12`, 2026-10-15 — recorded under rule 9; items 188, 189, 193 and 194 wait on the owner
+
+188. **`archiveID` for bioRxiv and medRxiv items (owner's decision).** FR-7 asks for `archiveID` on every preprint,
+    but `docs/07` §6.2 maps only the arXiv id to it, so bioRxiv/medRxiv items get none. Candidate: the DOI suffix,
+    which `docs/02` §11.2 calls the stable accession (`2026.08.20.745440`).
+
+189. **`genre` is the constant `"Preprint"` (owner to confirm).** `docs/02` §10.3 maps a source's publication type to
+    `genre`, but `CanonicalWork` has no publication-type member. The alternative is a `docs/07` §5.1 member.
+
+190. **A preprint known only from Crossref gets the operator's name as `repository`** (`openRxiv`, `Research Square
+    Platform LLC`): Crossref's `institution` cannot be requested. `openRxiv` runs both bioRxiv and medRxiv, so the
+    name alone cannot pick one. A Semantic Scholar arXiv-only preprint with an empty venue gets no `repository`.
+
+191. **How `merge()` picks `type` when sources disagree** (`other` from one, `journal-article` from another) was not
+    measured; a wrong pick would tag a determined work `research_helper/uncertain-type`. `P2-T13`'s corpus can show it.
+
+192. **Preprint imports were tested in strict `fromJSON` mode only;** the shipped importer is non-strict. `P2-T16`'s
+    end-to-end run covers the shipped path.
+
+193. **Backfill step 3, Crossref (owner's decision).** The card allows it "only if it is a small remainder"; no
+    document gives the number, and Crossref costs one request per record. `P2-T12` shipped the ladder as Europe
+    PMC → Semantic Scholar. Give a number, or drop the step and amend `docs/02` §10.4.
+
+194. **The backfill asks Europe PMC and Semantic Scholar even when the user unticked them (owner's decision).** The
+    ladder is fixed by `docs/02` §10.4, so a user who unticked Semantic Scholar still sends it DOIs — and, unkeyed,
+    may see its 429 warnings. Ask only ticked databases, or keep the fixed ladder and say so in the window.
+
+195. **The backfill's Semantic Scholar request asks the adapter's full field list,** not §10.4's `abstract,tldr`;
+    the count and batch size match. A fields option on `lookup` would change `docs/07` §4.2.
+
+196. **The 100-DOI Europe PMC lookup by `searchPOST` has no recorded response;** its 100-per-call size is derived from
+    §10.4's budget, not documented. One live recording would confirm both.
+
+197. **Semantic Scholar's `fetchAbstract` has no caller left in `src/`.** Keep it (declared in §4.2) or retire it.
+
+198. **The backfill pass is outside `estimate()`, and a backfilled work keeps its old `normalizedAtEpochMs`.**
 
 ## 7. Regenerating this file
 

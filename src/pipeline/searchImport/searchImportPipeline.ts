@@ -101,6 +101,7 @@ import {
   type SearchImportStageKey,
   type VersionLink,
 } from "./stages";
+import { backfillAbstracts } from "./backfill";
 import type {
   SearchImportBatchResult,
   SearchImportInput,
@@ -404,80 +405,43 @@ export function createSearchImportPipeline(
   }
 
   /**
-   * `docs/07` §12.1's `BackfillingAbstracts`: ask each source for the abstracts
-   * its own search did not return.
+   * `docs/07` §12.1's `BackfillingAbstracts`: `./backfill.ts`'s batched pass
+   * (`P2-T12`, `docs/02` §10.4) over the merged works.
    *
-   * **On the Phase 1 path this does nothing, and that is a fact about the
-   * adapter rather than a stub.** §4.2 declares `fetchAbstract` optional and
-   * `src/sources/types.ts` records that all three optional members are
-   * "declared but implemented by nobody in Phase 1", so the check below is false
-   * for PubMed and no call is made. It is written anyway, because a Phase 2
-   * adapter that implements `fetchAbstract` then needs no change here — and
-   * because the *count* of works without an abstract is `R-17`'s subject and is
-   * worth logging even when nothing can be done about it.
+   * Until `P2-T12` this stage asked `seenIn[0]`'s `fetchAbstract` once per
+   * work — one request per record, which §10.4 forbids. It now runs §10.4's
+   * ladder of batched `lookup`s — a handful of requests at any import size —
+   * and the winning source lands in `provenance.fieldOrigin.abstract`. A
+   * failed step is a run warning; only a cancellation leaves by a throw, and
+   * then `state.works` is still exactly what `Merging` left.
+   *
+   * **Not run on the import of a preview's own works** (`input.works`,
+   * `P2-T31`): the preview run that produced them already went through this
+   * stage, so asking again would spend the same requests on the same DOIs —
+   * the reason `Merging` does not re-run the cascade on that path either. The
+   * stage is still entered and completed, so the bar behaves the same.
    *
    * `docs/01` §6.3 step 4's backfill is a **different** step with the same word
    * in it: that one repairs a Zotero field after `fromJSON()` dropped it, and it
    * lives inside the writer.
    */
-  async function backfillAbstracts(
+  async function backfillStage(
     state: RunState,
+    input: SearchImportInput,
     ctx: PipelineContext,
     stage: ProgressReporter,
   ): Promise<void> {
-    const missing = state.works.filter(
-      (work) => work.abstract === undefined || work.abstract === "",
-    );
-    if (missing.length === 0) return;
-
-    stage.setProgress(0, missing.length);
-    const repaired: CanonicalWork[] = [];
-    for (const work of missing) {
-      // §7.4 check point 1: one potential network call per work, so one check
-      // per work.
-      ctx.token.throwIfCancelled();
-      // `seenIn[0]` is the group's highest-precedence source: `merge()` writes
-      // `seenIn` in `canonicalOrder` (`docs/02` §10.4's `title` row, then
-      // `DEFAULT_PRECEDENCE`), so a Crossref + PubMed work asks Crossref. A
-      // singleton's one source is trivially first. `P2-T12` owns asking the
-      // *other* contributors when the first has nothing.
-      const sourceId = work.provenance.seenIn[0];
-      const source =
-        sourceId === undefined ? undefined : ctx.sources.get(sourceId);
-      const fetchAbstract = source?.fetchAbstract;
-      if (source === undefined || fetchAbstract === undefined) {
-        stage.increment();
-        continue;
-      }
-      try {
-        const abstract = await fetchAbstract.call(source, work.ids, {
-          token: ctx.token,
-          progress: stage,
-        });
-        if (abstract !== undefined && abstract !== "") {
-          repaired.push({ ...work, abstract });
-        }
-      } catch (caught) {
-        if (caught instanceof OperationCancelledError) throw caught;
-        // A missing abstract is a degraded record, never a failed run.
-        warn(
-          state,
-          stage,
-          `${source.id}: could not backfill an abstract ` +
-            `(${serialize(caught).code}).`,
-        );
-      }
-      stage.increment();
-    }
-
-    if (repaired.length > 0) {
-      const byKey = new Map(repaired.map((work) => [work.workKey, work]));
-      state.works = state.works.map((work) => byKey.get(work.workKey) ?? work);
-    }
-    ctx.logger.debug("searchImport: abstracts missing after fetch", {
-      missing: missing.length,
-      backfilled: repaired.length,
+    if (input.works !== undefined) return;
+    const result = await backfillAbstracts(state.works, {
+      sources: ctx.sources,
+      token: ctx.token,
+      progress: stage,
+      checkpoint: (checkpointState) => ctx.checkpoint(checkpointState),
+      logger: ctx.logger,
     });
+    state.works = result.works;
+    // Each line already reached `stage.warn` inside the pass.
+    state.warnings.push(...result.warnings);
   }
 
   /** The checked subset of `state.works`, in fetch order. */
@@ -845,7 +809,7 @@ export function createSearchImportPipeline(
           ctx,
           "backfillingAbstracts",
         );
-        await backfillAbstracts(state, ctx, backfilling);
+        await backfillStage(state, input, ctx, backfilling);
         backfilling.done("succeeded");
 
         // ---- CreatingCollection, WritingItems -----------------------------

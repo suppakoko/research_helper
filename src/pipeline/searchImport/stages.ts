@@ -48,6 +48,9 @@
  * - `backfillingAbstracts` gets a small slice rather than zero because
  *   `docs/01` §6.3 step 4 makes it a real step; on the PubMed path it is
  *   normally a no-op, because `efetch` returns the abstract with the record.
+ *   Its body is `./backfill.ts` (`P2-T12`): `docs/02` §10.4's batched pass, a
+ *   handful of requests at any import size — which is why the slice stays
+ *   small now that the stage does network work.
  * - `planning`, `merging`, `deduping` and `creatingCollection` are bookkeeping:
  *   a query parse, a lift, an identity pass and one collection write. They get
  *   the same small slice each so that a bar which stops in one of them still

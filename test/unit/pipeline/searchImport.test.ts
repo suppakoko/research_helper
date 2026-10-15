@@ -1734,7 +1734,7 @@ describe("the dedup and merge wiring (P2-T29)", () => {
     expect(writer.log.batches.flat()).toHaveLength(1);
   });
 
-  it("backfillAbstracts asks seenIn[0] — the group's highest-precedence source — and no other contributor", async () => {
+  it("BackfillingAbstracts runs docs/02 §10.4's batched ladder — one lookup per step, never fetchAbstract (P2-T12)", async () => {
     const pubmed = record("pubmed", "50", {
       doi: "10.1000/fifty",
       title: sharedTitle,
@@ -1743,39 +1743,72 @@ describe("the dedup and merge wiring (P2-T29)", () => {
       doi: "10.1000/fifty",
       title: sharedTitle,
     });
-    const asked: SourceId[] = [];
-    const withBackfill = (
-      base: LiteratureSource,
-      answer: string | undefined,
+    const lonely = record("pubmed", "51", { doi: "10.1000/fifty-one" });
+    const calls: { sourceId: SourceId; dois: (string | undefined)[] }[] = [];
+    // A ladder source: answers the DOIs in `answers`, records every call, and
+    // fails the test if the per-record `fetchAbstract` is ever reached.
+    const ladderSource = (
+      id: SourceId,
+      answers: ReadonlyMap<string, string>,
     ): LiteratureSource => ({
-      ...base,
+      ...stubSource({ id, pages: [] }),
+      lookup(ids): Promise<readonly SourceRecord[]> {
+        calls.push({ sourceId: id, dois: ids.map((entry) => entry.doi) });
+        return Promise.resolve(
+          ids.flatMap((entry) => {
+            const abstract =
+              entry.doi === undefined ? undefined : answers.get(entry.doi);
+            return abstract === undefined || entry.doi === undefined
+              ? []
+              : [
+                  record(id, `${id}-${entry.doi}`, {
+                    doi: entry.doi,
+                    abstract,
+                  }),
+                ];
+          }),
+        );
+      },
       fetchAbstract(): Promise<string | undefined> {
-        asked.push(base.id);
-        return Promise.resolve(answer);
+        throw new Error("fetchAbstract is one request per record (§10.4)");
       },
     });
     const h = harness({
       sources: [
-        withBackfill(
-          stubSource({ id: "pubmed", pages: [[pubmed]] }),
-          "PubMed's abstract",
+        stubSource({ id: "pubmed", pages: [[pubmed, lonely]] }),
+        stubSource({ id: "crossref", pages: [[crossref]] }),
+        ladderSource(
+          "europepmc",
+          new Map([["10.1000/fifty", "Europe PMC's abstract"]]),
         ),
-        withBackfill(
-          stubSource({ id: "crossref", pages: [[crossref]] }),
-          "Crossref's abstract",
+        ladderSource(
+          "semanticscholar",
+          new Map([
+            ["10.1000/fifty", "S2's — never used, Europe PMC answered first"],
+            ["10.1000/fifty-one", "S2's abstract"],
+          ]),
         ),
       ],
     });
     const out = await h.pipeline.run(twoSources, h.ctx);
 
-    // `merge()` writes `seenIn` in canonical order — `docs/02` §10.4's title
-    // row puts Crossref before PubMed — so the first entry is not the fetch
-    // order's first source.
-    expect(out.works[0]?.provenance.seenIn).toEqual(["crossref", "pubmed"]);
-    expect(asked).toEqual(["crossref"]);
-    expect(out.works[0]?.abstract).toBe("Crossref's abstract");
+    // One batched call per step, in the ladder's order; the second step is
+    // asked only about what the first did not answer.
+    expect(calls).toEqual([
+      {
+        sourceId: "europepmc",
+        dois: ["10.1000/fifty", "10.1000/fifty-one"],
+      },
+      { sourceId: "semanticscholar", dois: ["10.1000/fifty-one"] },
+    ]);
+    const merged = out.works.find((w) => w.ids.doi === "10.1000/fifty");
+    expect(merged?.provenance.seenIn).toEqual(["crossref", "pubmed"]);
+    expect(merged?.abstract).toBe("Europe PMC's abstract");
+    expect(merged?.provenance.fieldOrigin.abstract).toBe("europepmc");
+    const single = out.works.find((w) => w.ids.doi === "10.1000/fifty-one");
+    expect(single?.abstract).toBe("S2's abstract");
+    expect(single?.provenance.fieldOrigin.abstract).toBe("semanticscholar");
   });
-
   it("supplied records go through the same merge, so the write half of a preview dedups too", async () => {
     const pair = sameDoiPair();
     const writer = stubWriter();

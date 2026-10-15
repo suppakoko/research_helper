@@ -64,8 +64,11 @@
  *   prefixed form ({@link toSemanticScholarId}); the mapper skips a `null`
  *   without shifting its neighbours, and the count of unknown ids is logged.
  * - **`fetchAbstract()`** is one `/paper/batch` of one id with
- *   `fields=abstract,tldr` — `docs/02` §10.4's backfill step 2 — returning the
- *   abstract, or the TL;DR when the abstract is missing (§6.7).
+ *   `fields=abstract,tldr`, returning the abstract, or the TL;DR when the
+ *   abstract is missing (§6.7). **The backfill pass does not call it**
+ *   (`P2-T12`): one request per record is what `docs/02` §10.4 forbids, so
+ *   §10.4's step 2 is `lookup()` above, batched ~100 ids a request, read
+ *   by `src/pipeline/searchImport/backfill.ts`.
  * - **`healthCheck()` is `docs/09` §2.3's test call**, verbatim: `GET
  *   /graph/v1/paper/DOI:10.1038/s41586-023-06139-9?fields=paperId`, the
  *   `x-api-key` header when a key is present, `ok` when the body carries a

@@ -546,14 +546,15 @@ describe("tags — automatic, MeSH-prefixed, with the run tag", () => {
   });
 });
 
-describe("the preprint gap is loud, not silent (card Notes)", () => {
-  it("throws rather than half-mapping a preprint", () => {
-    expect(() =>
-      toZoteroItemJSON(
-        { ...RICH, type: "preprint" },
-        { accessedAtEpochMs: AT },
-      ),
-    ).toThrow(/preprint/i);
+describe("item types — preprint is its own column, everything else journalArticle", () => {
+  // `P1-T12` pinned a throw here ("the preprint gap is loud"); `P2-T08` maps
+  // the column, and `test/unit/zotero/preprintMapping.test.ts` asserts it.
+  it("maps a preprint to Zotero's preprint item type instead of throwing (P2-T08)", () => {
+    const json = toZoteroItemJSON(
+      { ...RICH, type: "preprint" },
+      { accessedAtEpochMs: AT },
+    );
+    expect(json["itemType"]).toBe("preprint");
   });
 
   it("maps every other WorkType without throwing", () => {

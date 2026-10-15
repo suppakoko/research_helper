@@ -382,19 +382,28 @@ describe("CanonicalWork → Zotero item JSON, validated by Zotero (P1-T12)", fun
     );
   });
 
-  it("refuses to half-map a preprint (card Notes)", async function () {
-    let threw = false;
-    try {
-      toZoteroItemJSON(
-        { ...RICH, type: "preprint" },
-        { accessedAtEpochMs: AT },
-      );
-    } catch {
-      threw = true;
-    }
-    assert.isTrue(
-      threw,
-      "docs/07 §6.2's preprint column is Phase 2's; the gap must be loud",
+  // `P1-T12` pinned a throw here ("refuses to half-map a preprint"); `P2-T08`
+  // maps §6.2's preprint column, so the claim to prove inside Zotero is now
+  // that strict mode accepts it even from a work carrying every
+  // journal-shaped field — the mapper must drop them, not hand them over.
+  it("maps a journal-shaped work typed preprint to a preprint strict mode accepts (P2-T08)", async function () {
+    await Zotero.Schema.schemaUpdatePromise;
+    const native = await detectNativeIdentifierFields();
+    const json = toZoteroItemJSON(
+      { ...RICH, type: "preprint" },
+      { accessedAtEpochMs: AT, nativeIdentifierFields: native },
     );
+    const item = await saveMapped(json);
+    assert.strictEqual(Zotero.ItemTypes.getName(item.itemTypeID), "preprint");
+    assert.strictEqual(
+      item.getField("repository"),
+      "New England Journal of Medicine",
+      "no field names a known server, so containerTitle is kept verbatim",
+    );
+    assert.strictEqual(item.getField("publicationTitle"), "");
+    assert.strictEqual(item.getField("ISSN"), "");
+    const lines = parseExtra(item.getField("extra")).map((l) => l.raw);
+    assert.include(lines, "PMID: 37258680");
+    assert.include(lines, "PMCID: PMC10949956");
   });
 });

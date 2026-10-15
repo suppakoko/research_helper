@@ -62,7 +62,7 @@
  * `console` — `Date.now()` is the clock and `debug()` is the log.
  */
 
-import type { CanonicalWork } from "../../../src/model/canonicalWork";
+import type { CanonicalWork, Subject } from "../../../src/model/canonicalWork";
 import { type Doi, normalizeDoi, normalizePmid } from "../../../src/model/ids";
 import { RESEARCH_HELPER_TAG } from "../../../src/zotero/itemMapper";
 import {
@@ -131,8 +131,13 @@ function pmidOrThrow(raw: string) {
 interface WorkOptions {
   /** Omit the abstract, so `abstractCoverage` has a denominator worth counting. */
   readonly withoutAbstract?: boolean;
-  /** `"preprint"` is the mapping `toZoteroMapping()` throws on (Phase 2 owns it). */
-  readonly type?: CanonicalWork["type"];
+  /**
+   * Carry a subject with no `scheme` — malformed data the real
+   * `toZoteroMapping()` throws a `TypeError` on when it renders the tag.
+   * Until `P2-T08` the fixture for "a mapping that throws" was a preprint,
+   * which the Phase 1 mapper refused; preprints now map.
+   */
+  readonly unmappable?: boolean;
   /** Identify by PMID instead of DOI, to exercise the index's second arm. */
   readonly byPmid?: boolean;
 }
@@ -150,7 +155,7 @@ function makeWork(slug: string, options: WorkOptions = {}): CanonicalWork {
   return {
     workKey: `doi:${doi}`,
     ids: options.byPmid === true ? { pmid } : { doi, pmid },
-    type: options.type ?? "journal-article",
+    type: "journal-article",
     title: `Research Helper importer fixture ${slug} (P1-T14)`,
     ...(options.withoutAbstract === true ? {} : { abstract: ABSTRACT }),
     authors: [{ family: "Hopper", given: "Grace" }],
@@ -159,6 +164,9 @@ function makeWork(slug: string, options: WorkOptions = {}): CanonicalWork {
     issue: "1",
     pages: "1-2",
     publishedDate: { year: 2026, month: 1, day: 1, iso: "2026-01-01" },
+    ...(options.unmappable === true
+      ? { subjects: [{ term: "no scheme" } as unknown as Subject] }
+      : {}),
     provenance: { recordIds: [], fieldOrigin: {}, seenIn: ["pubmed"] },
     normalizedAtEpochMs: Date.now(),
   };
@@ -395,13 +403,13 @@ describe("Batched importer (P1-T14, FR-6, FR-7, FR-51)", function () {
     this.timeout(TEST_TIMEOUT_MS);
     await Zotero.Schema.schemaUpdatePromise;
 
-    // `toZoteroMapping()` throws on a preprint — `docs/07` §6.2's preprint
-    // column is Phase 2's (`P1-T12` refuses to half-map it). That makes it the
-    // honest fixture for "a record whose mapping throws": a real, shipped
-    // throw from the real mapper, not an injected one.
+    // A subject with no `scheme` makes the real `toZoteroMapping()` throw
+    // (a `TypeError` while rendering its tag): a real throw from the shipped
+    // mapper, not an injected one. Until `P2-T08` this fixture was a
+    // preprint, which the Phase 1 mapper refused to half-map.
     const works = [
       makeWork("fail-a"),
-      makeWork("fail-b", { type: "preprint" }),
+      makeWork("fail-b", { unmappable: true }),
       makeWork("fail-c"),
       makeWork("fail-d"),
     ];
