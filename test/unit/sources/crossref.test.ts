@@ -36,7 +36,6 @@ import {
   CROSSREF_HOST,
   EBI_HOST,
   HOST_POLICIES,
-  NCBI_HOST,
 } from "../../../src/core/rateLimit/hostLimiter";
 import type { RateLimiterConfig } from "../../../src/core/rateLimit/tokenBucket";
 import { SOURCE_IDS } from "../../../src/model/ids";
