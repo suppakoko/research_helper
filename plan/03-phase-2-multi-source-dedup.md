@@ -4890,6 +4890,10 @@ carry — step 2 waits on the document row. Do not record more than three live r
 - [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
 
 **Files.**
+> *(added 2026-10-15 during the run, rule 10)* Recording two more PubMed fixtures breaks the pinned counts in
+> **`test/contract/replayHarness.test.ts`** (17 fixtures, 17 sidecars) and **`test/contract/pubmed.contract.test.ts`** — six
+> contract failures measured mid-run. Both files are in the list; read the count from the plan or the directory
+> rather than writing a new literal.
 - modify `src/sources/shared/dedupe.ts`, `test/unit/sources/dedupe.test.ts`
 - modify `src/sources/pubmed/query.ts`, `test/unit/sources/pubmed-query.test.ts`
 - modify `scripts/record-fixtures.ts`, `test/support/pubmedRecordedRequests.ts`, `test/fixtures/pubmed/`
