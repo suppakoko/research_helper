@@ -4710,7 +4710,7 @@ one plan and one `test/support/<source>RecordedRequests.ts`.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T34` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15, with the one test outside Files (`test/integration/l10n.spec.ts`, the badge wording inside Zotero). Report at `plan/reports/P2-T34.md`. |
 | **Depends on** | `P2-T05`, `P2-T28`, `P2-T31` |
 | **Blocks** | `P2-T11`, `P2-T14`, `P2-T16` |
 | **Retires** | `plan/00` §6 items 99, 109, 113, 130, 131 |

@@ -940,7 +940,7 @@ describe("SEMANTICSCHOLAR_CAPABILITIES", () => {
       relatedByWork: false,
       lookupById: ["doi", "pmid", "pmcid", "arxivId"],
       abstractsInSearch: true,
-      citationGraph: true,
+      citationGraph: false,
       dateFilter: true,
       filters: { languages: false, openAccess: false },
       maxPageSize: 100,

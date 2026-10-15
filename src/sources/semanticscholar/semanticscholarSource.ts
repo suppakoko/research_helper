@@ -74,9 +74,11 @@
  *   error's own message key and leaves the enum to the pane.
  * - **Capabilities** are the card's step 7: `benefitsFromApiKey: true`,
  *   `lookupById` DOI / PMID / PMCID / arXiv, `abstractsInSearch: true`,
- *   `citationGraph: true` (§6.2's `citations` / `references` endpoints exist;
- *   `findRelated` is `P2-T11`'s to wire), `maxPageSize: 100`, `dateFilter:
- *   true`, and `query` from `docs/02` §12.3's S2 bulk column: `+`, `|`, `-`
+ *   `citationGraph: false` — `docs/07` §4.2 (`P2-T34`): the flag means "this
+ *   adapter exposes `findRelated`", and it does not yet. §6.2's `citations` /
+ *   `references` endpoints exist, but no card in the plan wires `findRelated`
+ *   yet; the card that adds it flips the flag (owner, 2026-10-15, `plan/00` §6
+ *   item 184). Then `maxPageSize: 100`, `dateFilter: true`, and `query` from `docs/02` §12.3's S2 bulk column: `+`, `|`, `-`
  *   and quotes are real, every field cell is *n/a*.
  *
  * ## Errors
@@ -221,7 +223,8 @@ export const SEMANTICSCHOLAR_CAPABILITIES: SourceCapabilities = {
   relatedByWork: false,
   lookupById: ["doi", "pmid", "pmcid", "arxivId"],
   abstractsInSearch: true,
-  citationGraph: true,
+  // No `findRelated` yet (`plan/00` §6 item 184); whichever card adds it sets this `true`.
+  citationGraph: false,
   dateFilter: true,
   // The bulk renderer's own object (`P2-T34`): `./query.ts` refuses from it.
   filters: SEMANTICSCHOLAR_FILTERS,

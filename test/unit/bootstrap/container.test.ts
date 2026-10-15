@@ -471,6 +471,24 @@ describe("installServices wires the graph Phase 1 built", () => {
     await h.scope.unregisterAll();
   });
 
+  // `docs/07` §4.2 (`P2-T34`): `citationGraph` means "this adapter exposes
+  // `findRelated`". Owner, 2026-10-15 (`plan/00` §6 item 184): the flag says
+  // what the shipped adapter does, not what its service could do, so every
+  // registered source is held to it — a flag flips only by adding the method.
+  it("declares citationGraph exactly when the adapter exposes findRelated, for every registered source", async () => {
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+    const sources = graph.sources.list();
+    expect(sources).toHaveLength(7);
+    for (const source of sources) {
+      expect(
+        source.capabilities.citationGraph,
+        `${source.id}: citationGraph vs findRelated`,
+      ).toBe(typeof source.findRelated === "function");
+    }
+    await h.scope.unregisterAll();
+  });
+
   it("refuses a second graph rather than pacing a host twice as fast", async () => {
     const first = harness();
     await installServices(first.scope, first.options);

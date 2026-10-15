@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-15 · **148 tasks: 105 `DONE`, 43 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **27 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-15 · **148 tasks: 106 `DONE`, 42 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **28 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -244,7 +244,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T31` | Give the import half the merged work the preview showed, and… | `P2-T29`, `P2-T30` | 0.5 d |  |
 | ✅ `P2-T32` | Register Europe PMC in the composition root, name it in both… | `P2-T03` | 0.5 d |  |
 | ✅ `P2-T33` | Make the fixture recorder run again and take a per-source… | `P2-T03`, `P2-T25` | 0.25 d |  |
-| `P2-T34` | The six schema extensions the owner approved on 2026-10-15… | `P2-T05`, `P2-T28`, `P2-T31` | 1.0 d |  |
+| ✅ `P2-T34` | The six schema extensions the owner approved on 2026-10-15… | `P2-T05`, `P2-T28`, `P2-T31` | 1.0 d |  |
 | ✅ `P2-T35` | Let a 4xx response body reach the adapter for hosts whose… | `P2-T06` | 0.25 d |  |
 | ✅ `P2-T36` | The four behaviour changes the owner approved on 2026-10-15 | `P2-T05`, `P2-T30` | 0.75 d |  |
 
@@ -1377,9 +1377,10 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.35 Raised by `P2-T34`, 2026-10-15 — recorded under rule 9, none carded
 
-184. **Semantic Scholar's `citationGraph: true` is untrue under the new meaning** ("this adapter exposes
-    `findRelated`", `docs/07` §4.2): the adapter has no `findRelated` yet. `P2-T11` adds it; until then the flag
-    claims a method that is not there. Either set it `false` now or make `P2-T11` own the flip.
+184. ~~**Semantic Scholar's `citationGraph: true` is untrue under the new meaning**~~ **DECIDED and DONE 2026-10-15: set
+    `false`;** `container.test.ts` now holds every registered source to "flag true exactly when `findRelated`
+    exists". ("this adapter exposes `findRelated`", `docs/07` §4.2.) **No card in the plan wires `findRelated` for
+    any adapter** — the adapter comment that named `P2-T11` was wrong; that card links preprints, not citations.
 
 185. **`docs/10` FR-8's closing sentence** calls any §5.3 field no FR-8 clause requires "a defect"; `mergeDecisions`
     is required by FR-50 scenario 2. Name FR-50 in that sentence.
