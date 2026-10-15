@@ -1528,7 +1528,9 @@ the caller of what the card builds; if it does not, the caller is added with a d
     of the would-be work is dropped, so an unrelated duplicate of one version can be missed; and only a version naming
     triggers the split. The title-fuzzy tier also ranks by tier, not by its 0.80–0.94 confidence.
 
-220. **The all-failed panel now offers Retry beside Open Preferences (owner).** Since item 204 the pipeline returns
+220. ~~**The all-failed panel now offers Retry beside Open Preferences (owner).**~~ **DECIDED 2026-10-16: decide from the
+    per-source errors** — the window skips the run-level error when per-source errors exist (a refused key alone shows
+    Open Preferences only, as before). Since item 204 the pipeline returns
     `failed` with its run-level `SOURCE` error, which has no `ERROR_ROWS` row, so Retry follows its `retryable: true` —
     also when every source failed only on a refused key. Either the window skips the run-level error when per-source
     errors exist, or `ERROR_ROWS` gains a `SOURCE` row. Related: item 205.
@@ -1537,7 +1539,9 @@ the caller of what the card builds; if it does not, the caller is added with a d
     Components onto Integrated Circuits (1965)" and the same title without the year are forced apart. For `P2-T13`'s
     threshold tuning.
 
-222. **`P2-T13` Part B needs a live-recording budget (owner).** The committed fixtures give 47 pairs; the card needs
+222. ~~**`P2-T13` Part B needs a live-recording budget (owner).**~~ **APPROVED 2026-10-16: at most 85 live requests**, the
+    Part A plan, unkeyed, through the recorder at each host's policy rate; stop and report at the cap. Labelling through a
+    private web page the coordinator builds. The committed fixtures give 47 pairs; the card needs
     ≥ 200 and five families are short (`10.64898/` has none). The Part A agent's plan: five shared queries plus
     probes, ≈ 80–85 unkeyed requests across the seven sources, est. 150–400 pairs. Then the owner labels
     `test/fixtures/dedup/pairs.csv`.
