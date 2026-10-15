@@ -702,7 +702,7 @@ probe, 12 kept) — the next adapter dry-runs its `select` list against one requ
 | **ID** | `P2-T05` |
 | **State** | `TODO` |
 | **Depends on** | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` |
-| **Blocks** | `P2-T11`, `P2-T12` |
+| **Blocks** | `P2-T11`, `P2-T12`, `P2-T34`, `P2-T36` |
 | **Retires** | `R-3` (fallback proven — full retirement is Phase 5 per `docs/11` §3.1) |
 | **Implements** | `FR-2`, `FR-4`, `FR-11`, open question 8 in `docs/10` §5 |
 | **Estimate** | 2.0 d |
@@ -871,7 +871,7 @@ precisely the R-3 outcome the design is built to survive. Record the state in `0
 | **ID** | `P2-T06` |
 | **State** | `DONE` — approved 2026-10-15; arXiv adapter, registered in the product (four sources). Report at `plan/reports/P2-T06.md`. |
 | **Depends on** | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` |
-| **Blocks** | `P2-T08`, `P2-T11` |
+| **Blocks** | `P2-T08`, `P2-T11`, `P2-T35` |
 | **Retires** | part of `R-2` |
 | **Implements** | `FR-2`, `FR-4`, `FR-11` |
 | **Estimate** | 1.25 d |
@@ -1597,7 +1597,7 @@ card) and any end-to-end run, since nothing calls the new stage body yet.
 |---|---|
 | **ID** | `P2-T11` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09` |
+| **Depends on** | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09`, `P2-T34` |
 | **Blocks** | `P2-T13`, `P2-T16` |
 | **Retires** | part of `R-18` |
 | **Implements** | `FR-50` scenario 3 |
@@ -1779,7 +1779,7 @@ that spike produced numbers, use them to decide whether step 3 (Crossref) is wor
 |---|---|
 | **ID** | `P2-T13` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T09`, `P2-T10`, `P2-T11` |
+| **Depends on** | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36` |
 | **Blocks** | `P2-T16` |
 | **Retires** | `R-18` (this is the card that proves it) |
 | **Implements** | `FR-50` |
@@ -1885,7 +1885,7 @@ so expect to move them, and expect the report diff to be the evidence.
 |---|---|
 | **ID** | `P2-T14` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31` |
+| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34` |
 | **Blocks** | `P2-T16`, `P2-T17` |
 | **Retires** | part of `R-2`, part of `R-18` |
 | **Implements** | `FR-2`, `FR-5`, `FR-9`, `FR-50`, `FR-53` |
@@ -2638,7 +2638,7 @@ decision record's section 5 today; whether the run-time half is worth a card is 
 |---|---|
 | **ID** | `P2-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31` |
+| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36` |
 | **Blocks** | none |
 | **Retires** | `R-2`, `R-18` (closes them), `R-3` (fallback proven) |
 | **Implements** | `FR-9`, `FR-50`, `FR-51`, `NFR-2`, `NFR-6` |
@@ -4058,7 +4058,7 @@ their transient states, none a defect here. Not checked: NFR-2's wall clock and 
 | **ID** | `P2-T28` |
 | **State** | `DONE` — approved 2026-10-14; `SourceCapabilities.query` exists in `docs/07` §4.2 and the code; the owner kept PubMed's `fields` at §12.3's four (`plan/00` §6 item 96). Report at `plan/reports/P2-T28.md`. |
 | **Depends on** | `P2-T01`, `P2-T26`, `P2-T27` |
-| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07` |
+| **Blocks** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T34` |
 | **Retires** | `plan/00` §6 item 61 |
 | **Implements** | the `docs/07` §11.1 rule that a type changes in the document first, then in code |
 | **Estimate** | 0.25 d |
@@ -4271,7 +4271,7 @@ shared tree; each leg's count is stated with its run.
 | **ID** | `P2-T30` |
 | **State** | `DONE` — approved 2026-10-14; the cascade yields and the 100-record import stalls 43–57 ms. Report at `plan/reports/P2-T30.md`. |
 | **Depends on** | `P2-T29` |
-| **Blocks** | `P2-T12`, `P2-T14`, `P2-T16`, `P2-T31` |
+| **Blocks** | `P2-T12`, `P2-T14`, `P2-T16`, `P2-T31`, `P2-T36` |
 | **Retires** | `plan/00` §6 item 119 |
 | **Implements** | `NFR-3` on the `Merging` stage |
 | **Estimate** | 0.5 d |
@@ -4369,7 +4369,7 @@ figure says the 50-block set yields 50 times — wall time, not stall).
 | **ID** | `P2-T31` |
 | **State** | `DONE` — approved 2026-10-15; the import writes the merged work the preview showed; `flags`/`links` required. Report at `plan/reports/P2-T31.md`. |
 | **Depends on** | `P2-T29`, `P2-T30` |
-| **Blocks** | `P2-T14`, `P2-T16` |
+| **Blocks** | `P2-T14`, `P2-T16`, `P2-T34` |
 | **Retires** | `plan/00` §6 items 118 and 120 |
 | **Implements** | `FR-50` scenario 2 and `FR-8` on the written item (the preview already has them) |
 | **Estimate** | 0.5 d |
@@ -4647,6 +4647,223 @@ for line" is false in two sidecar strings (item 138). The four adapter cards eac
 one plan and one `test/support/<source>RecordedRequests.ts`.
 ---
 
+### P2-T34 — The six schema extensions the owner approved on 2026-10-15, document first, then code
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T34` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T05`, `P2-T28`, `P2-T31` |
+| **Blocks** | `P2-T11`, `P2-T14`, `P2-T16` |
+| **Retires** | `plan/00` §6 items 99, 109, 113, 130, 131 |
+| **Implements** | `FR-50` scenario 2 (the merge decision in the provenance record); `docs/07` §11.1's order for a type change |
+| **Estimate** | 1.0 d |
+| **Human gate** | none |
+
+**Goal.** Five facts the code already measures have a home in the type authority and are carried end to
+end: the merge decision in the provenance record, the Semantic Scholar identifier on a Zotero item, the
+per-filter support on `SourceCapabilities`, the Europe PMC preprint identifier in `ExternalIds`, and one
+meaning for `citationGraph`.
+
+**Why this is a card.** Each is an owner-authorised `docs/07` change (decided 2026-10-15 from
+`plan/decisions/owner-review-2026-10-14.md`, group 다), and `plan/README.md` §5 rule 3 makes the document
+move first and the code follow in the same change. Together they block `P2-T11` (needs the preprint id and
+`citationGraph`'s meaning), `P2-T14` (renders the merge decision) and the phase's end-to-end run.
+
+**Read first.**
+- `plan/decisions/owner-review-2026-10-14.md` group 다 rows 99, 109, 113, 130, 131 and the reports they
+  cite (`plan/reports/P2-T10.md`, `P2-T19.md`, `P2-T20.md`, `P2-T03.md`).
+- `docs/07` §4.2 (`SourceCapabilities`), §5.1 (`ExternalIds`, `CanonicalWork`), §5.3 (`SearchProvenance`),
+  §6.2 (item mapping, the `extra` lines), §11.1 (order of a type change); `schema/provenance.schema.json`;
+  `src/core/provenance.ts`; `MergedWork.decisions` in `src/pipeline/searchImport/stages.ts`;
+  `PUBMED_QUERY_FILTER_SUPPORT` and its siblings in each adapter's `query.ts`.
+
+**Do.**
+1. **99** — `docs/07` §5.3: `SearchProvenance` gains `mergeDecisions` (per work: `workKey`, `tier`,
+   `confidence`, `evidence`), mirrored in `src/core/provenance.ts` and `schema/provenance.schema.json`;
+   `run` writes `MergedWork.decisions` into it; the provenance note shows it.
+2. **109** — `docs/07` §6.2: a new `extra` line `rh-s2-corpus-id: <id>`; `toZoteroMapping` writes it,
+   `fromZoteroItem` and `libraryIndex.ts` read it so the S2 arm of `findExisting` is derivable without
+   `rh-work-key`.
+3. **113** — `docs/07` §4.2: `SourceCapabilities.filters: { languages: boolean; openAccess: boolean }`;
+   mirror in `src/sources/types.ts`; move each adapter's `*_QUERY_FILTER_SUPPORT` `languages`/`openAccessOnly`
+   answers onto its `capabilities.filters` and make the renderers read them from there (`raw` stays
+   adapter-level).
+4. **130** — `docs/07` §5.1: `ExternalIds.epmcId` (brand `EpmcId`), so Europe PMC's "Preprint in" link to a
+   `PPR` record can be mapped (`relatedVersionIds.epmcId`); the mapper maps it.
+5. **131** — `docs/07` §4.2: `citationGraph` means **"this adapter exposes `findRelated`"**; Europe PMC's
+   declaration becomes `false`; the doc comment says so.
+6. Every change dated in the document and mirrored byte-for-byte where the code transcribes a block
+   (`SourceCapabilities`, `ExternalIds`); the test that compares document blocks to code (if one exists
+   for the block) must pass.
+
+**Do NOT.** Do not change any merge verdict, dedup threshold or rate limit. Do not touch the adapters
+beyond the capability declarations and the Europe PMC mapper line. Do not write the Zotero *Related*
+relation (`P2-T11`).
+
+**Criteria.**
+- [ ] `docs/07` §4.2, §5.1, §5.3, §6.2 carry the five changes with dated notes; `src/sources/types.ts` and
+      `src/core/provenance.ts` mirror them; `schema/provenance.schema.json` validates a note carrying
+      `mergeDecisions`.
+- [ ] A two-source same-DOI search writes a provenance note whose `mergeDecisions` names the tier and
+      confidence, asserted at pipeline level.
+- [ ] An S2-only work round-trips through `toZoteroMapping` → `fromZoteroItem` with `ids.s2CorpusId`
+      recovered without `rh-work-key`, asserted in `test/integration/zotero/libraryIndex.spec.ts`.
+- [ ] Every adapter's `capabilities.filters` equals what its renderer does, asserted per adapter.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
+
+**Files.**
+- modify `docs/07-architecture-and-data-model.md` (§4.2, §5.1, §5.3, §6.2 only), `schema/provenance.schema.json`
+- modify `src/sources/types.ts`, `src/model/ids.ts`, `src/core/provenance.ts`,
+  `src/pipeline/searchImport/searchImportPipeline.ts`, `src/pipeline/searchImport/types.ts`
+- modify `src/zotero/itemMapper.ts`, `src/zotero/libraryIndex.ts`
+- modify `src/sources/pubmed/{query,pubmedSource}.ts`, `src/sources/europepmc/{query,mapper,europepmcSource}.ts`,
+  `src/sources/crossref/{query,crossrefSource}.ts`, `src/sources/arxiv/{query,arxivSource}.ts`,
+  `src/sources/semanticscholar/{query,semanticscholarSource}.ts`
+- modify the unit tests of each file above and `test/integration/zotero/libraryIndex.spec.ts`,
+  `test/integration/searchDialog-flow.spec.ts`
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+---
+
+### P2-T35 — Let a 4xx response body reach the adapter for hosts whose errors are feeds
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T35` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T06` |
+| **Blocks** | `P2-T16` |
+| **Retires** | `plan/00` §6 item 159 |
+| **Implements** | the owner's 2026-10-15 decision (review page, group 다, row 159) |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** When arXiv answers a malformed request with HTTP 400 and an Atom error feed, the user sees
+arXiv's own sentence ("incorrect id format for …"), not a bare "bad request".
+
+**Why this is a card.** `P2-T06` measured that arXiv's error feed arrives as **400** (`docs/02` §7.5 says
+200), and `createHttpClient` in `src/core/http/client.ts` classifies the status into `BadRequestError`
+before any body reaches the adapter, so `parseArxivFeedBody`'s error-feed branch is never reached on the
+path arXiv takes. The owner chose to extend the client.
+
+**Read first.**
+- `plan/reports/P2-T06.md` Contradiction 1 and the `search-error-feed` fixture under `test/fixtures/arxiv/`.
+- `createHttpClient`, the status classification and `BadRequestError` in `src/core/http/client.ts` and
+  `src/core/errors.ts`; `parseArxivFeedBody` and `isErrorFeedEntryId` in `src/sources/arxiv/arxivSource.ts`;
+  the redaction gate in `src/core/provenance.ts` (`docs/09` §2.1 — an error body may carry a URL with a
+  key parameter; it must pass through the gate before it is kept anywhere).
+
+**Do.**
+1. Give `BadRequestError` (or the 4xx classification) the response body, redacted through the single gate,
+   so an adapter can read it; keep the status classification itself unchanged for every other host.
+2. In the arXiv adapter, when a `BadRequestError` carries an Atom error feed, surface the feed's
+   `<summary>` as the `SourceError` message the parser already produces for the 200 shape — one code path
+   for both shapes.
+3. Assert on the recorded `search-error-feed` fixture, replayed through the shipped client, that the
+   `SourceError` carries `upstreamError: "incorrect id format for not-an-arxiv-id"`.
+
+**Do NOT.** Do not keep an unredacted body anywhere. Do not change how 5xx or 429 are classified. Do not
+touch other adapters.
+
+**Criteria.**
+- [ ] The replayed `search-error-feed` yields a `SourceError` with arXiv's sentence, through the shipped client.
+- [ ] A 4xx body containing a key-shaped query parameter is redacted before it is attached (asserted).
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` exit 0.
+
+**Files.**
+- modify `src/core/http/client.ts`, `src/core/errors.ts`
+- modify `src/sources/arxiv/arxivSource.ts`
+- modify `test/unit/core/http/client.test.ts` (or the client's existing unit test file — name it for
+  what exists), `test/unit/sources/arxiv.test.ts`
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test
+```
+
+---
+
+### P2-T36 — The four behaviour changes the owner approved on 2026-10-15
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T36` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T05`, `P2-T30` |
+| **Blocks** | `P2-T13`, `P2-T16` |
+| **Retires** | `plan/00` §6 items 74, 88, 112, 114 |
+| **Implements** | the owner's 2026-10-15 decisions (review page, group 가, rows 88, 112, 114, 74) |
+| **Estimate** | 0.75 d |
+| **Human gate** | none |
+
+**Goal.** Korean titles take part in title-based dedup; PubMed renders the open-access filter; the
+pipeline speaks two-letter language codes and each adapter converts; the search window's integration
+spec drives the real PubMed adapter instead of a stub.
+
+**Why this is a card.** Each item is a product behaviour the owner chose on
+`plan/decisions/owner-review-2026-10-14.md` group 가 after the executing agents measured the gap: `P2-T09`
+(Korean titles collapse to `""` in `normalizeTitle`), `P2-T20` (`openAccessOnly` refused for want of a
+documented PubMed form; `languages` typed ISO-639-1 while PubMed takes three-letter codes), `P2-T25` (the
+window cannot issue a request the PubMed corpus holds). The document edits that go with them are made
+separately by the coordinator's document pass of the same day; this card is the code.
+
+**Read first.**
+- `plan/decisions/owner-review-2026-10-14.md` rows 88, 112, 114, 74; `plan/reports/P2-T09.md`,
+  `plan/reports/P2-T20.md`, `plan/reports/P2-T25.md` (its Contradictions on the window's whole-year,
+  `retmax ≥ 10` requests).
+- `normalizeTitle`, `titleTokens`, `blockingSignature` in `src/sources/shared/dedupe.ts` and `docs/02`
+  §11.3.2 **as corrected the same day** (non-Latin letters preserved by Unicode category);
+  `LANGUAGE_TAG`, `PUBMED_QUERY_FILTER_SUPPORT`, `renderLanguageClause` in `src/sources/pubmed/query.ts`
+  and `docs/02` §12.2/§12.3's new PubMed rows; `SourceQuery.languages` in `docs/07` §4.2 (two-letter
+  ISO-639-1, as the document says); `scripts/record-fixtures.ts`'s PubMed plan and `test/support/pubmedRecordedRequests.ts`;
+  the `P1-T22`/`P1-T35` blocks in `test/integration/searchDialog-flow.spec.ts`.
+
+**Do.**
+1. **88** — `normalizeTitle` keeps letters of every script (`\p{L}\p{N}` with NFKD and the existing
+   stripping), so a Korean title tokenises; `blockingSignature` follows. Add Korean-title fixtures to
+   `test/unit/sources/dedupe.test.ts` (exact match, near match, and a Latin/Korean pair that must stay
+   distinct). No verdict for an existing Latin fixture may change — assert the whole existing suite.
+2. **112** — once `docs/02` §12.2/§12.3 carry the PubMed open-access row: **one live `esearch` with the
+   documented clause** (count it), then flip `PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly` to `true` and
+   render the clause; the refusal test becomes a rendering test.
+3. **114** — `SourceQuery.languages` stays two-letter; PubMed's renderer maps two-letter codes to its
+   three-letter MEDLINE codes through a small exported table (the languages `docs/02` names, plus `ko`),
+   refusing by name a code the table lacks; other adapters keep refusing `languages` until their documents
+   name a field.
+4. **74** — record **two** PubMed fixtures through the committed recorder (one `esearch` for a whole-year
+   window at `retmax=10` and its `efetch`), then switch the `P1-T22` block of
+   `test/integration/searchDialog-flow.spec.ts` from its stub to the real PubMed adapter over the replay
+   transport, keeping every existing assertion; the `P1-T35` block may keep its `replaceForTest` stub.
+
+**Do NOT.** Do not change any dedup threshold or tier. Do not invent a PubMed clause the document does not
+carry — step 2 waits on the document row. Do not record more than three live requests in total.
+
+**Criteria.**
+- [ ] A Korean title pair dedups on the title tier; the existing dedup suite is unchanged in every verdict.
+- [ ] `openAccessOnly: true` renders PubMed's documented clause, asserted on the wire and in the preview.
+- [ ] `languages: ["en"]` renders `eng[la]`; an unknown two-letter code is refused by name.
+- [ ] The `P1-T22` block drives the real PubMed adapter over two recorded fixtures and passes three runs
+      of three.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
+
+**Files.**
+- modify `src/sources/shared/dedupe.ts`, `test/unit/sources/dedupe.test.ts`
+- modify `src/sources/pubmed/query.ts`, `test/unit/sources/pubmed-query.test.ts`
+- modify `scripts/record-fixtures.ts`, `test/support/pubmedRecordedRequests.ts`, `test/fixtures/pubmed/`
+- modify `test/integration/searchDialog-flow.spec.ts`
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+---
+
 ---
 ## Estimate roll-up
 
@@ -4685,7 +4902,10 @@ one plan and one `test/support/<source>RecordedRequests.ts`.
 | `P2-T31` | The import half gets the merged work; `flags`/`links` required | 0.50 |
 | `P2-T32` | Register Europe PMC in the composition root; display name; one-host pins | 0.50 |
 | `P2-T33` | The fixture recorder runs again and takes a per-source plan | 0.25 |
-| **Total** | **33 tasks** | **30.75 d** |
+| `P2-T34` | Six owner-approved schema extensions, document first then code | 1.00 |
+| `P2-T35` | A 4xx body reaches the adapter for feed-bodied hosts | 0.25 |
+| `P2-T36` | Four owner-approved behaviour changes (CJK titles, PubMed filters, two-letter codes, window fixtures) | 0.75 |
+| **Total** | **36 tasks** | **32.75 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather

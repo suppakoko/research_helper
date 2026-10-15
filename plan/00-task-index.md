@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-15 · **145 tasks: 101 `DONE`, 44 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **23 of 33**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 145, so 47 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-15 · **148 tasks: 101 `DONE`, 47 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **23 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -22,9 +22,9 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
-| 2 — Multi-source + dedup | 33 | 30.75 d | 30.75–43 d | 12–16 d (+92%) |
+| 2 — Multi-source + dedup | 36 | 32.75 d | 32.75–46 d | 12–16 d (+105%) |
 | 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **145** | **101.25 d** | **101.25–142 d** | 39–52 d (+95% over the top of the band) |
+| **Phases 0–3** | **148** | **103.25 d** | **103.25–145 d** | 39–52 d (+99% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
@@ -221,14 +221,14 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P2-T08` | `preprint` item-type mapping and server attribution | `P2-T03`, `P2-T06`, `P2-T07` | 1.0 d |  |
 | ✅ `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
 | ✅ `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
-| `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09` | 1.0 d | 🔒 |
+| `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09`, `P2-T34` | 1.0 d | 🔒 |
 | `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29`, `P2-T30` | 0.75 d |  |
-| `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11` | 2.0 d | 🔒 |
-| `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31` | 1.5 d |  |
+| `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36` | 2.0 d | 🔒 |
+| `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34` | 1.5 d |  |
 | `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
 | `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
 | ✅ `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
-| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31` | 1.0 d |  |
+| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36` | 1.0 d |  |
 | ✅ `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
 | ✅ `P2-T20` | Render `languages`, `openAccessOnly` and `raw` across the… | `P1-T08` | 0.5 d |  |
 | ✅ `P2-T21` | Make the concurrency cap resizable, so a tightened header… | `P1-T27`, `P1-T26` | 0.5 d |  |
@@ -244,6 +244,9 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T31` | Give the import half the merged work the preview showed, and… | `P2-T29`, `P2-T30` | 0.5 d |  |
 | ✅ `P2-T32` | Register Europe PMC in the composition root, name it in both… | `P2-T03` | 0.5 d |  |
 | ✅ `P2-T33` | Make the fixture recorder run again and take a per-source… | `P2-T03`, `P2-T25` | 0.25 d |  |
+| `P2-T34` | The six schema extensions the owner approved on 2026-10-15… | `P2-T05`, `P2-T28`, `P2-T31` | 1.0 d |  |
+| `P2-T35` | Let a 4xx response body reach the adapter for hosts whose… | `P2-T06` | 0.25 d |  |
+| `P2-T36` | The four behaviour changes the owner approved on 2026-10-15 | `P2-T05`, `P2-T30` | 0.75 d |  |
 
 ### Phase 3
 
@@ -873,7 +876,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     today. Let the recorder import the support module and delete its copy when the recorder is next
     touched.
 
-74. **(owner's recording decision)** A whole-year, `retmax ≥ 10` `esearch` with its matching `efetch` would
+74. **(owner's recording decision — APPROVED 2026-10-15, `P2-T36`)** A whole-year, `retmax ≥ 10` `esearch` with its matching `efetch` would
     let the search window itself replay through the real adapter instead of a stub. Recording means one
     more live NCBI request pair and a committed fixture; until then `P2-T25` criterion 4 stays met in part.
 
@@ -937,7 +940,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
 
 ### 6.18 Raised by `P2-T09`, 2026-10-14 — recorded under rule 9, none carded
 
-88. **Korean and other CJK titles collapse to `""` in `normalizeTitle`** (`docs/02` §11.3.2's `[^a-z0-9]+`
+88. **Korean and other CJK titles collapse to `""` in `normalizeTitle`** *(DECIDED 2026-10-15: preserve non-Latin letters — `P2-T36`)* (`docs/02` §11.3.2's `[^a-z0-9]+`
     pass), so they can match on identifiers only. Decide how §11.3.2 treats non-Latin scripts and put
     Korean titles in `P2-T13`'s labelled corpus. A document decision first (`docs/02` is the owner's).
 
@@ -987,7 +990,7 @@ spent **4** HTTP requests on NCBI, two per search, against the shipped 2.5/s lim
     `searchImportPipeline.ts` still calls `liftToCanonicalWorks`; the gap blocks Phase 2's first finishing
     condition. Second time this shape has appeared (`P2-T02`/`P2-T27`); see the process note under §6.20.
 
-99. **(owner's document decision)** FR-50 scenario 2's per-work merge decision has no field in `docs/07` §5.3's
+99. **(owner's document decision — APPROVED 2026-10-15, `P2-T34`)** FR-50 scenario 2's per-work merge decision has no field in `docs/07` §5.3's
     `SearchProvenance`. It rides on `MergedWork.decisions` for now; adding a field means `docs/07` §5.3, then
     `src/core/provenance.ts` and `schema/provenance.schema.json`.
 
@@ -1039,7 +1042,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `identifierWorkKey`) and of the reader (`canonicalWorkFromSnapshot`, `partialDateFrom`). A
     `test/unit/zotero/` file the next time either source file is in a card's list.
 
-109. **(owner's document decision)** `docs/07` §6.2 writes `s2CorpusId` to no Zotero field, so an S2-only
+109. **(owner's document decision — APPROVED 2026-10-15, `P2-T34`)** `docs/07` §6.2 writes `s2CorpusId` to no Zotero field, so an S2-only
     item's identity lives in its `rh-work-key` extra line alone. An `rh-s2-corpus-id` line would make the S2
     arm derivable; otherwise §6.6 should state the dependence.
 
@@ -1051,16 +1054,16 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.22 Raised by `P2-T20`, 2026-10-14 — recorded under rule 9, none carded
 
-112. **(owner's document edit)** `docs/02` §12.2 and §12.3 have no PubMed row for language (`[la]`, alias
+112. **(owner's document edit — APPROVED 2026-10-15; code flip in `P2-T36`)** `docs/02` §12.2 and §12.3 have no PubMed row for language (`[la]`, alias
     `[Language]`) or for open access. Once they do — and `free full text[sb]` has been verified live — flip
     `PUBMED_QUERY_FILTER_SUPPORT.openAccessOnly` and add the tag constant in `src/sources/pubmed/query.ts`;
     until then PubMed refuses `openAccessOnly` by name.
 
-113. **(owner's document decision)** Per-filter support has no home on `SourceCapabilities` (`docs/07` §4.2);
+113. **(owner's document decision — APPROVED 2026-10-15, `P2-T34`)** Per-filter support has no home on `SourceCapabilities` (`docs/07` §4.2);
     `P2-T20` left it adapter-level. Adding members beside `dateFilter` (names illustrative: `languageFilter`,
     `openAccessFilter`) is a §4.2 change first, then `src/sources/types.ts` and `PUBMED_CAPABILITIES`.
 
-114. **`SourceQuery.languages` is typed ISO-639-1 in `docs/07` §4.2; PubMed's `[la]` takes three-letter
+114. **(DECIDED 2026-10-15: two-letter codes, adapters convert — `P2-T36`)** `SourceQuery.languages` is typed ISO-639-1 in `docs/07` §4.2; PubMed's `[la]` takes three-letter
     MEDLINE codes** (`eng`). Values pass through untranslated today. Settle the code set before any surface
     sets the member.
 
@@ -1072,7 +1075,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     and `raw` as unrendered.** It did not mention them. A dated correction there the next time that file
     is edited.
 
-117. **Refuse or degrade?** PubMed throws on an unrenderable filter; a warning on `SourcePage.warnings` with
+117. **Refuse or degrade?** *(DECIDED 2026-10-15: refuse stays.)* PubMed throws on an unrenderable filter; a warning on `SourcePage.warnings` with
     the filter dropped is the alternative. The owner's product call; today's choice is the conservative one.
 
 ### 6.23 Raised by `P2-T29`, 2026-10-14 — two carded under rule 9 (`P2-T30`, `P2-T31`), the rest recorded
@@ -1129,11 +1132,11 @@ the caller of what the card builds; if it does not, the caller is added with a d
     address (`P2-T33` writes the one line); §3.1 should note that a CJK title is not obtainable from Europe
     PMC's `title` field for MED records — the `record-unicode` scenario pins diacritics and markup instead.
 
-130. **`docs/07` §5.1 has no `ExternalIds` member for a Europe PMC `PPR` id**, so the "Preprint in" link on a
+130. **`docs/07` §5.1 has no `ExternalIds` member for a Europe PMC `PPR` id** *(APPROVED 2026-10-15, `P2-T34`: `epmcId`)*, so the "Preprint in" link on a
     MED record (pointing at a `PPR`) is not mapped; the "Preprint of" direction (PMID) is. Decide whether
     `ExternalIds` gains an `epmcId`.
 
-131. **`citationGraph` semantics.** Europe PMC declares `citationGraph: true` because the service has
+131. **`citationGraph` semantics.** *(DECIDED 2026-10-15: "this adapter exposes `findRelated`"; `P2-T34`)* Europe PMC declares `citationGraph: true` because the service has
     `/citations` and `/references`, while the adapter exposes no `findRelated` (`relatedByWork: false`). Decide
     whether the flag means "the service can" or "this adapter does" before `P2-T07` and `P2-T13` plan around it.
 
@@ -1260,7 +1263,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.31 Raised by `P2-T06`, 2026-10-15 — recorded under rule 9, none carded
 
-159. **arXiv's error feed arrives as HTTP 400** (measured; `docs/02` §7.5 says 200) and the shipped HTTP client
+159. **arXiv's error feed arrives as HTTP 400** *(DECIDED 2026-10-15: the client hands the body to the adapter — `P2-T35`)* (measured; `docs/02` §7.5 says 200) and the shipped HTTP client
     turns any 4xx into `BadRequestError` before the adapter sees the body, so arXiv's own sentence
     (`<summary>incorrect id format…</summary>`) is lost on the path arXiv takes. Decide whether
     `src/core/http/client.ts` hands a 4xx body to the adapter for hosts whose error bodies are feeds; `docs/02`
