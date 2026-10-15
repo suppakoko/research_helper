@@ -1442,6 +1442,21 @@ describe("parseArxivFeedBody", () => {
         upstreamTitle: "Error",
         url: "u",
       });
+      expect((error as SourceError).cause).toBeUndefined();
+    }
+    // P2-T35: the optional `cause` reaches the SourceError and nothing else.
+    const marker = new BadRequestError(400, "marker");
+    expect(() =>
+      parseArxivFeedBody(ERROR_FEED_200, parseXmlInNode, "u", {
+        cause: marker,
+      }),
+    ).toThrow(SourceError);
+    try {
+      parseArxivFeedBody(ERROR_FEED_200, parseXmlInNode, "u", {
+        cause: marker,
+      });
+    } catch (error) {
+      expect((error as SourceError).cause).toBe(marker);
     }
   });
 
@@ -1857,6 +1872,76 @@ describe("createArxivSource through createHttpClient", () => {
     });
   });
 
+  function clientOver(exchange: {
+    status: number;
+    body: string;
+    headers?: Record<string, string>;
+  }) {
+    const clock = createManualClock(NOW);
+    const transport = cannedTransport(clock, exchange);
+    return createHttpClient({
+      transport,
+      userAgent: buildUserAgent("0.0.2"),
+      clock,
+    });
+  }
+
+  it("P2-T35: an Atom error feed in an HTTP 400 is the parser's own SourceError, with the BadRequestError as cause", async () => {
+    const source = createSource(
+      clientOver({
+        status: 400,
+        body: ERROR_FEED_200,
+        headers: { "content-type": "application/atom+xml; charset=utf-8" },
+      }),
+    );
+    const failure = source.search({ terms: term("x"), limit: 1 }, ctx());
+    await expect(failure).rejects.toBeInstanceOf(SourceError);
+    await failure.catch((error: SourceError) => {
+      expect(error).not.toBeInstanceOf(ParseError);
+      expect(error.context.upstreamError).toBe(
+        "incorrect id format for not-an-arxiv-id",
+      );
+      expect(error.cause).toBeInstanceOf(BadRequestError);
+      expect((error.cause as BadRequestError).httpStatus).toBe(400);
+    });
+    // healthCheck reports the SourceError's key, not the 400's.
+    const health = await source.healthCheck(ctx());
+    expect(health.ok).toBe(false);
+    expect(health.messageKey).toBe("rh-error-source");
+  });
+
+  it("P2-T35: a 400 whose body is not an error feed stays a BadRequestError — an HTML page, a well-formed non-error feed, no body", async () => {
+    for (const body of [
+      "<html><body>400 Bad Request</body></html>",
+      feed([SAMPLE_ENTRY], { total: 1 }),
+      "",
+    ]) {
+      const source = createSource(clientOver({ status: 400, body }));
+      const failure = source.search({ terms: term("x"), limit: 1 }, ctx());
+      await expect(failure).rejects.toBeInstanceOf(BadRequestError);
+      await failure.catch((error: BadRequestError) => {
+        expect(error.httpStatus).toBe(400);
+        expect(error.body).toBe(body.length === 0 ? undefined : body);
+      });
+    }
+  });
+
+  it("P2-T35: a 404 with no body and a 500 with an error-feed body are untouched by the adapter", async () => {
+    await expect(
+      createSource(clientOver({ status: 404, body: "" })).search(
+        { terms: term("x"), limit: 1 },
+        ctx(),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestError);
+    const failure = createSource(
+      clientOver({ status: 500, body: ERROR_FEED_200 }),
+    ).search({ terms: term("x"), limit: 1 }, ctx());
+    await expect(failure).rejects.toBeInstanceOf(UpstreamServerError);
+    await failure.catch((error: UpstreamServerError) => {
+      expect(error.context).not.toHaveProperty("body");
+    });
+  });
+
   it("spaces two consecutive search() calls >= 3000 ms apart on §7.3's bucket under a fake clock (criterion 6)", async () => {
     const clock = createManualClock(NOW);
     const policy = must(
@@ -2127,16 +2212,36 @@ describe("replay: test/fixtures/arxiv through createHttpClient", () => {
     // `start` is asserted against stubs in section 7 instead.
   });
 
-  it("search-error-feed: arrives as HTTP 400 and is a BadRequestError from the client (measured; docs/02 §7.5 note 6 says 200)", async () => {
+  it("search-error-feed: arrives as HTTP 400 and, through the shipped client, is the SourceError carrying arXiv's sentence (P2-T35 criterion 1)", async () => {
     const exchange = await recordedExchange("search-error-feed");
     expect(exchange.status).toBe(400);
     expect(exchange.body).toContain("<title>Error</title>");
     expect(exchange.body).toContain(
       "https://arxiv.org/api/errors#incorrect_id_format_for_not-an-arxiv-id",
     );
-    await expect(
-      replaySource().source.search(QUERY_ERROR_FEED, ctx()),
-    ).rejects.toBeInstanceOf(BadRequestError);
+    const failure = replaySource().source.search(QUERY_ERROR_FEED, ctx());
+    await expect(failure).rejects.toBeInstanceOf(SourceError);
+    await failure.catch((error: SourceError) => {
+      expect(error).not.toBeInstanceOf(ParseError);
+      expect(error).not.toBeInstanceOf(BadRequestError);
+      expect(error.message).toContain(
+        "incorrect id format for not-an-arxiv-id",
+      );
+      expect(error.context).toMatchObject({
+        sourceId: "arxiv",
+        upstreamError: "incorrect id format for not-an-arxiv-id",
+        upstreamTitle: "Error",
+      });
+      // The client's classification is kept underneath, body included, so a
+      // debug bundle still sees the 400 and what arXiv sent.
+      expect(error.cause).toBeInstanceOf(BadRequestError);
+      const cause = error.cause as BadRequestError;
+      expect(cause.httpStatus).toBe(400);
+      expect(cause.body).toContain("<title>Error</title>");
+      expect(cause.body).toContain(
+        "<summary>incorrect id format for not-an-arxiv-id</summary>",
+      );
+    });
   });
 
   it("search-error-feed: the recorded body, served as the HTTP 200 the document describes, is a typed SourceError (criterion 2)", async () => {

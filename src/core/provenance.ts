@@ -221,8 +221,14 @@ const URL_IN_TEXT = /https?:\/\/[^\s"'<>]+/g;
  * NFR-16 names notes and provenance records explicitly, so this runs over every
  * free-text field the record carries: `userQuery`, `SerializedError.detail` and
  * `.stack`, and every string inside `sourceExtras`.
+ *
+ * Exported since `P2-T35` for one caller outside this module:
+ * `src/core/http/client.ts` puts a 4xx response body through it before the
+ * body is attached to `BadRequestError`, so the body — which may quote the
+ * failing request's URL, key parameter included — passes the same gate a
+ * provenance record does rather than a second rule.
  */
-function redactText(text: string): string {
+export function redactText(text: string): string {
   return redact(text.replace(URL_IN_TEXT, (url) => redactUrl(url)));
 }
 

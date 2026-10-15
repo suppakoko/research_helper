@@ -4810,6 +4810,20 @@ touch other adapters.
 npm run typecheck && npm run lint:check && npm run test
 ```
 
+
+**Findings, 2026-10-15 — done; the agent was stopped by a usage limit during its mutation sweep and its report was lost, so the coordinator finished the verification; record at `plan/reports/P2-T35.md`.**
+On the tree the agent left: no `MUTANT` marker, the 5xx line it was mutating back to `status >= 500`, the two
+test files **173 passed**, eslint and prettier clean on all six files, and the whole unit suite failing only in
+`P2-T05`'s unfinished file. A 4xx response now carries its body on `BadRequestError` — put through the existing
+gate's `redactText` before it is attached, read back through a `body` getter — and the arXiv adapter turns an
+Atom error feed in that body into the same `SourceError` its 200-shape parser produces, so the recorded
+`search-error-feed`, replayed through the shipped client, yields `upstreamError: "incorrect id format for
+not-an-arxiv-id"`. Classification is unchanged for every other status. One file outside the list:
+`src/core/provenance.ts`'s `redactText` became exported (one keyword) so the client reuses the single gate
+instead of writing a second rule — accepted. The coordinator ran the unfinished mutant (5xx boundary, killed
+by five tests including pre-existing ones) and re-ran the security-critical one (body attached unredacted,
+killed: the test sees the raw key); the agent's M1–M4 are known only from its last line. Not checked: the
+integration suite (unit-level card).
 ---
 
 ### P2-T36 — The four behaviour changes the owner approved on 2026-10-15

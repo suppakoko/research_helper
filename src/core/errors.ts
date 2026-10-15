@@ -428,6 +428,24 @@ export class BadRequestError extends UpstreamError {
   readonly messageKey: string = "rh-error-bad-request";
   readonly retryable: boolean = false;
   override readonly userFacing = false; // almost always our bug
+
+  /**
+   * The response body, **already redacted**, when the thrower attached one
+   * under `context.body`; `undefined` otherwise.
+   *
+   * `P2-T35`. Some hosts answer a malformed request with a 4xx whose body is
+   * their own structured error — arXiv's Atom error feed arrives as HTTP 400
+   * (`plan/reports/P2-T06.md`, Contradiction 1) — and the adapter is the only
+   * layer that can read it. The §10.1 constructor signature is kept verbatim:
+   * the body travels in `context`, which `ResearchHelperError` documents as
+   * "MUST already be redacted by the thrower", and `src/core/http/client.ts`
+   * puts it through the provenance gate's `redactText` before it is attached.
+   * A thrower that has not redacted the body must not attach it.
+   */
+  get body(): string | undefined {
+    const { body } = this.context;
+    return typeof body === "string" ? body : undefined;
+  }
 }
 
 /* ---- Adapter-level ---- */

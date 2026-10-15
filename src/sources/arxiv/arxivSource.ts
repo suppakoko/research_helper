@@ -32,13 +32,17 @@
  *   `<title>Error</title>` and the problem in `<summary>`.
  *   {@link parseArxivFeedBody} turns that into a {@link SourceError} carrying
  *   the summary. **Measured 2026-10-15 (`P2-T06`): the one error feed this
- *   card provoked (a malformed `id_list`) arrived with HTTP 400**, so the
- *   shipped client raised `BadRequestError` before the body got here; the
- *   parse is the path for the 200 form the document describes, and
+ *   card provoked (a malformed `id_list`) arrived with HTTP 400**, and
  *   {@link isErrorFeedEntryId} accepts the measured `https` + fragment id as
- *   well as the documented one. **`totalResults` of `0` with no entries is a
- *   normal empty result** (note 7; the fourth Do NOT) and returns an empty
- *   page.
+ *   well as the documented one. Since `P2-T35` the client attaches a 4xx
+ *   body — redacted — to `BadRequestError`, and `fetchFeed` runs that body
+ *   through the **same** `parseArxivFeedBody` call: an Atom error feed in a
+ *   400 becomes the same `SourceError` the 200 shape produces, with the
+ *   `BadRequestError` as its `cause`; any other 400 body (an HTML page, no
+ *   body at all) leaves the `BadRequestError` as it was. One code path for
+ *   both shapes, no second detector. **`totalResults` of `0` with no entries
+ *   is a normal empty result** (note 7; the fourth Do NOT) and returns an
+ *   empty page.
  * - **`start` is the cursor** (`docs/02` §12.3's Pagination cell): the
  *   0-based offset as a decimal string, the way the PubMed adapter spells
  *   `retstart`. `max_results` is `SourceQuery.limit` clamped to 1 … 2000
@@ -69,9 +73,12 @@
  *
  * ## Errors
  *
- * - The HTTP-200 error feed → {@link SourceError} with arXiv's own text.
+ * - The error feed → {@link SourceError} with arXiv's own text, whether it
+ *   arrived as the HTTP 200 the document describes or as the HTTP 400 that
+ *   was measured (`P2-T35`: read off `BadRequestError.body`).
  * - Not XML, a `<parsererror>` root, or a root that is not an Atom `<feed>`
- *   → {@link ParseError}.
+ *   → {@link ParseError}. A 400 whose body is one of those stays a
+ *   `BadRequestError`.
  * - **Transport-level failures propagate unwrapped**, as on the other
  *   adapters: `P1-T05`'s client throws `docs/07` §10.1's classes. **arXiv's
  *   429 is an HTML body (`Rate exceeded.`) with no `Retry-After`** —
@@ -93,6 +100,7 @@
 
 import type { Clock } from "../../core/clock";
 import {
+  BadRequestError,
   OperationCancelledError,
   ParseError,
   ResearchHelperError,
@@ -166,9 +174,8 @@ export const ARXIV_ERROR_FEED_ENTRY_ID = "http://arxiv.org/api/errors";
  * `https://arxiv.org/api/errors#incorrect_id_format_for_not-an-arxiv-id` —
  * `https`, with the problem repeated as a fragment — and with HTTP **400**,
  * not the 200 the note describes. So the check is a prefix match over both
- * schemes, and the 400 means the shipped client classifies the measured case
- * as `BadRequestError` before the body reaches this file; the parse below is
- * the path for the 200 form the document describes.
+ * schemes; the 400's body reaches {@link parseArxivFeedBody} through
+ * `BadRequestError.body` (`P2-T35`), so this one check serves both statuses.
  */
 export function isErrorFeedEntryId(id: string | undefined): boolean {
   if (id === undefined) return false;
@@ -261,12 +268,16 @@ function entryText(entry: XmlElementLike, local: string): string | undefined {
 /**
  * Parse and validate one `/api/query` body (`docs/02` §7.4's feed).
  *
- * @param body - the response text
+ * @param body - the response text — a 200's, or the **redacted** body the
+ *   client attached to a `BadRequestError` (`P2-T35`)
  * @param parseXml - the XML parser port
  * @param transmittedUrl - the **redacted** URL, for the thrown error's context
- * @throws SourceError for the error feed — HTTP 200, one entry whose `<id>`
- *   is {@link ARXIV_ERROR_FEED_ENTRY_ID} (§7.5 note 6); the message carries
- *   arXiv's `<summary>`
+ * @param options - `cause`: the `BadRequestError` the body was read off, so
+ *   the `SourceError` keeps the status and the redacted body for a debug bundle
+ * @throws SourceError for the error feed — one entry whose `<id>` is
+ *   {@link ARXIV_ERROR_FEED_ENTRY_ID} (§7.5 note 6); the message carries
+ *   arXiv's `<summary>`. The same throw serves the HTTP 200 shape the document
+ *   describes and the HTTP 400 that was measured
  * @throws ParseError when the body does not parse as XML, or its root is not
  *   an Atom `<feed>` — a truncated body (`error-malformed`), an HTML page
  */
@@ -274,6 +285,7 @@ export function parseArxivFeedBody(
   body: string,
   parseXml: XmlParser,
   transmittedUrl: string,
+  options: { readonly cause?: unknown } = {},
 ): ArxivFeedResult {
   const root = parseXml(body).documentElement;
   if (root === null || root.localName === PARSER_ERROR_TAG) {
@@ -311,6 +323,7 @@ export function parseArxivFeedBody(
         upstreamError: summary,
         upstreamTitle: entryText(only, "title"),
       },
+      options,
     );
   }
 
@@ -444,6 +457,27 @@ export function createArxivSource(deps: ArxivSourceDeps): ArxivSource {
   const { http, clock, mapRecords } = deps;
   const parseXml = deps.parseXml ?? domParserXml;
 
+  /**
+   * The `SourceError` an error feed inside a 4xx body yields, or `undefined`
+   * when the body is anything else. The detection is `parseArxivFeedBody`'s
+   * existing branch — nothing here looks at the body itself.
+   */
+  function errorFeedIn(
+    error: BadRequestError,
+    request: ArxivQueryRequest,
+  ): SourceError | undefined {
+    try {
+      parseArxivFeedBody(error.body ?? "", parseXml, request.transmittedUrl, {
+        cause: error,
+      });
+    } catch (parsed) {
+      if (parsed instanceof SourceError && !(parsed instanceof ParseError)) {
+        return parsed;
+      }
+    }
+    return undefined;
+  }
+
   /** One request and the feed check. */
   async function fetchFeed(
     request: ArxivQueryRequest,
@@ -452,10 +486,24 @@ export function createArxivSource(deps: ArxivSourceDeps): ArxivSource {
     ctx.token.throwIfCancelled();
     // `responseType: "text"` is not optional: `HttpResponse.body` is `""` for
     // every other value, and the feed is parsed from text here.
-    const response = await http.request(request.method, request.url, {
-      responseType: "text",
-      token: ctx.token,
-    });
+    let response: HttpResponse;
+    try {
+      response = await http.request(request.method, request.url, {
+        responseType: "text",
+        token: ctx.token,
+      });
+    } catch (error) {
+      // `P2-T35`: arXiv's error feed was measured arriving as HTTP 400, so
+      // the client has already classified it. Its body (redacted by the
+      // client) goes through the *same* parse as a 200 body: an error feed
+      // becomes the parser's own `SourceError`, with the `BadRequestError`
+      // as `cause`; anything else — a parse that succeeds, a `ParseError` for
+      // an HTML page — leaves the `BadRequestError` to propagate unchanged.
+      if (error instanceof BadRequestError && error.body !== undefined) {
+        throw errorFeedIn(error, request) ?? error;
+      }
+      throw error;
+    }
     deps.logger?.debug("arxiv query", {
       sourceId: ARXIV_SOURCE_ID,
       url: request.transmittedUrl,

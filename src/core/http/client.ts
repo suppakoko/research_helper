@@ -21,7 +21,12 @@
  *    `docs/07` §10.1 class: `AuthenticationError` 401, `AuthorizationError` 403,
  *    `RateLimitError` 429, `UpstreamServerError` 5xx, `BadRequestError` other
  *    4xx, `TimeoutError`, `OfflineError`, `NetworkError`,
- *    `OperationCancelledError`.
+ *    `OperationCancelledError`. **Only the `BadRequestError` carries the
+ *    response body** (`P2-T35`), redacted through `src/core/provenance.ts`'s
+ *    `redactText` before it is attached, because some hosts put their own
+ *    structured error in a 4xx body — arXiv's Atom error feed arrives as HTTP
+ *    400 — and the adapter is the only layer that can read it. The
+ *    classification itself is unchanged for every status and every host.
  * 3. **Retry**, through `./retry.ts`, over the retryable classes only, with the
  *    delay coming from `Retry-After` or from the host's injected jitter. The
  *    `Retry-After` parse is `src/core/rateLimit/backoff.ts`'s and is the only one
@@ -120,6 +125,7 @@ import {
 } from "../errors";
 import type { CancellationToken } from "../jobQueue/cancellation";
 import type { Logger } from "../logger";
+import { redactText } from "../provenance";
 import { parseRetryAfter } from "../rateLimit/backoff";
 import { adoptAdvertisedLimits } from "../rateLimit/hostLimiter";
 import type { RateLimiterConfig } from "../rateLimit/tokenBucket";
@@ -831,7 +837,17 @@ function classify(
       ...(retryAfterMs !== undefined && { retryAfterMs }),
     });
   }
-  throw new BadRequestError(status, `HTTP ${status} from ${host}`, { host });
+  // `P2-T35`: the body travels on this one class so an adapter whose host
+  // answers a malformed request with its own structured error (arXiv's Atom
+  // error feed, HTTP 400) can read it. It is put through the provenance gate's
+  // `redactText` — embedded URLs lose their key parameters by name, then the
+  // whole text goes through `KEY_PATTERNS` — *before* it is attached, because
+  // `ResearchHelperError.context` must already be redacted by the thrower
+  // (`docs/09` §2.1). An empty body is not attached at all.
+  throw new BadRequestError(status, `HTTP ${status} from ${host}`, {
+    host,
+    ...(response.body.length > 0 && { body: redactText(response.body) }),
+  });
 }
 
 /**

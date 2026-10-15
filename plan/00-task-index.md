@@ -1263,7 +1263,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.31 Raised by `P2-T06`, 2026-10-15 — recorded under rule 9, none carded
 
-159. **arXiv's error feed arrives as HTTP 400** *(DECIDED 2026-10-15: the client hands the body to the adapter — `P2-T35`)* (measured; `docs/02` §7.5 says 200) and the shipped HTTP client
+159. ~~**arXiv's error feed arrives as HTTP 400**~~ *(DECIDED 2026-10-15: the client hands the body to the adapter — `P2-T35`, DONE the same day)* (measured; `docs/02` §7.5 says 200) and the shipped HTTP client
     turns any 4xx into `BadRequestError` before the adapter sees the body, so arXiv's own sentence
     (`<summary>incorrect id format…</summary>`) is lost on the path arXiv takes. Decide whether
     `src/core/http/client.ts` hands a 4xx body to the adapter for hosts whose error bodies are feeds; `docs/02`

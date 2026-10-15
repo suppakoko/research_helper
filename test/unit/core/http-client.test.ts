@@ -43,6 +43,7 @@ import {
   type CancellationReason,
 } from "../../../src/core/jobQueue/cancellation";
 import { createLogger, type LogSink } from "../../../src/core/logger";
+import { redactText } from "../../../src/core/provenance";
 import { parseRetryAfter } from "../../../src/core/rateLimit/backoff";
 import {
   TokenBucket,
@@ -441,6 +442,95 @@ describe("status classification", () => {
       });
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// P2-T35: the 4xx body travels on BadRequestError, redacted, and nowhere else
+// ---------------------------------------------------------------------------
+
+describe("the 4xx body on BadRequestError (P2-T35)", () => {
+  // A key-shaped *parameter* whose value no `KEY_PATTERNS` shape catches: 11
+  // characters, not hexadecimal, no vendor prefix. Only `redactUrl`'s removal
+  // by name can take it out, so its absence proves the body went through the
+  // gate's URL-aware `redactText` and not through `redact()` alone.
+  const SHORT_KEY = "shortkey123";
+  const VENDOR_KEY = "sk-ant-abcdefghijklmnopqrstuvwxyz0123";
+  const BODY_WITH_KEYS =
+    `<feed><link href="https://example.test/api/query?q=x&api_key=${SHORT_KEY}"/>` +
+    `<summary>bad request; retry with ${VENDOR_KEY}</summary></feed>`;
+
+  it("attaches the body redacted through the provenance gate, in context and on .body", async () => {
+    const { client } = clientFor(
+      stubXhr({ status: 400, body: BODY_WITH_KEYS }),
+    );
+
+    const error = await client.request("GET", URL_OK).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestError);
+    const bad = error as BadRequestError;
+    expect(bad.httpStatus).toBe(400);
+    expect(bad.body).toBeDefined();
+    // The key-shaped query parameter is gone by name, the URL's path survives.
+    expect(bad.body).not.toContain(SHORT_KEY);
+    expect(bad.body).not.toContain("api_key");
+    expect(bad.body).toContain("https://example.test/api/query?q=x");
+    // The vendor-shaped run is gone by pattern.
+    expect(bad.body).not.toContain(VENDOR_KEY);
+    expect(bad.body).toContain(`[redacted:${VENDOR_KEY.length}]`);
+    // The feed's own text is intact, so an adapter can still parse it.
+    expect(bad.body).toContain("<summary>bad request; retry with ");
+    // It is exactly the gate's output — no second rule in between.
+    expect(bad.body).toBe(redactText(BODY_WITH_KEYS));
+    // `context` is what a serializer or a log walker would see: the same
+    // redacted string, never the raw one; the message carries no body.
+    expect(bad.context.body).toBe(bad.body);
+    expect(bad.message).toBe("HTTP 400 from example.test");
+    expect(JSON.stringify(bad.context)).not.toContain(SHORT_KEY);
+    expect(JSON.stringify(bad.context)).not.toContain(VENDOR_KEY);
+  });
+
+  it("attaches nothing for an empty 4xx body", async () => {
+    const { client } = clientFor(stubXhr({ status: 404 }));
+
+    const error = await client.request("GET", URL_OK).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BadRequestError);
+    expect((error as BadRequestError).body).toBeUndefined();
+    expect((error as BadRequestError).context).not.toHaveProperty("body");
+  });
+
+  it("reads .body only from a string in context", () => {
+    expect(new BadRequestError(400, "x").body).toBeUndefined();
+    expect(new BadRequestError(400, "x", { body: 7 }).body).toBeUndefined();
+    expect(new BadRequestError(400, "x", { body: "<feed/>" }).body).toBe(
+      "<feed/>",
+    );
+  });
+
+  it.each([
+    [401, AuthenticationError],
+    [403, AuthorizationError],
+    [429, RateLimitError],
+    [500, UpstreamServerError],
+    [503, UpstreamServerError],
+  ] as const)(
+    "does not attach the body to HTTP %i, whose classification is unchanged",
+    async (status, expected) => {
+      const { client } = clientFor(stubXhr({ status, body: BODY_WITH_KEYS }));
+
+      const error = await client
+        .request("GET", URL_OK)
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(expected);
+      expect(error).not.toBeInstanceOf(BadRequestError);
+      expect((error as InstanceType<typeof expected>).httpStatus).toBe(status);
+      expect(
+        (error as InstanceType<typeof expected>).context,
+      ).not.toHaveProperty("body");
+      expect(JSON.stringify((error as Error).message)).not.toContain(SHORT_KEY);
+    },
+  );
 });
 
 describe("transport-exception classification", () => {
