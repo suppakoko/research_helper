@@ -225,7 +225,8 @@ describe("preprint mapping round-trips through a live Zotero (P2-T08, FR-7)", fu
     const item = importedOrFail(BIORXIV);
     assert.strictEqual(Zotero.ItemTypes.getName(item.itemTypeID), "preprint");
     assert.strictEqual(item.getField("repository"), "bioRxiv");
-    assert.strictEqual(item.getField("archiveID"), "");
+    // The DOI suffix, owner 2026-10-15 (`plan/00` §6 item 188).
+    assert.strictEqual(item.getField("archiveID"), "2026.08.20.745440");
     const lines = extraLines(item);
     assert.include(lines, `PMID: ${PMID}`);
     assert.include(lines, `PMCID: ${PMCID}`);

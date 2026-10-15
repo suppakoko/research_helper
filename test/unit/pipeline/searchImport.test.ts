@@ -1790,7 +1790,14 @@ describe("the dedup and merge wiring (P2-T29)", () => {
         ),
       ],
     });
-    const out = await h.pipeline.run(twoSources, h.ctx);
+    // The ladder asks only ticked databases (owner, 2026-10-15, item 194).
+    const out = await h.pipeline.run(
+      {
+        ...twoSources,
+        sourceIds: [...twoSources.sourceIds, "europepmc", "semanticscholar"],
+      },
+      h.ctx,
+    );
 
     // One batched call per step, in the ladder's order; the second step is
     // asked only about what the first did not answer.

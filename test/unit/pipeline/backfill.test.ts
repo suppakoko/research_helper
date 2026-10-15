@@ -220,22 +220,42 @@ function createFakeHttp(
 }
 
 /** The two shipped ladder adapters over one fake transport, in a registry. */
-function ladderRegistry(client: HttpClient) {
+function ladderRegistry(
+  client: HttpClient,
+  options: { readonly silentSearch?: boolean } = {},
+) {
   const clock = createManualClock(1_000);
   const registry = createSourceRegistry();
+  // A run that ticks Europe PMC and Semantic Scholar (item 194) fans out to
+  // them; `silentSearch` keeps that fan-out off the fake transport, so every
+  // counted request is the backfill's own `lookup`.
+  const quiet = <T extends LiteratureSource>(source: T): T =>
+    options.silentSearch === true
+      ? {
+          ...source,
+          // eslint-disable-next-line require-yield
+          async *searchAll() {
+            return;
+          },
+        }
+      : source;
   registry.register(
-    createEuropePmcSource({
-      http: client,
-      clock,
-      mapRecords: createEuropePmcRecordMapper({ clock }),
-    }),
+    quiet(
+      createEuropePmcSource({
+        http: client,
+        clock,
+        mapRecords: createEuropePmcRecordMapper({ clock }),
+      }),
+    ),
   );
   registry.register(
-    createSemanticScholarSource({
-      http: client,
-      clock,
-      mapRecords: createSemanticScholarRecordMapper({ clock }),
-    }),
+    quiet(
+      createSemanticScholarSource({
+        http: client,
+        clock,
+        mapRecords: createSemanticScholarRecordMapper({ clock }),
+      }),
+    ),
   );
   return registry;
 }
@@ -469,6 +489,54 @@ describe("backfillAbstracts — the ladder", () => {
 // 3. No fabrication, no failed import, cancellation, checkpoints
 // ===========================================================================
 
+describe("backfillAbstracts — only ticked databases (owner, 2026-10-15, item 194)", () => {
+  it("skips a ladder step whose database the user did not tick, and sends it no DOI", async () => {
+    const fake = createFakeHttp({
+      europepmc: new Map([[doiOf(0), "EPMC zero."]]),
+      semanticscholar: new Map([[doiOf(1), "S2 one."]]),
+    });
+    const works = workSet(3, (n) => n < 2);
+    const result = await backfillAbstracts(works, {
+      sources: ladderRegistry(fake.client),
+      token: tokenSource().token,
+      selected: ["pubmed", "europepmc"],
+    });
+    expect(countOf(fake.issued, "semanticscholar")).toBe(0);
+    expect(countOf(fake.issued, "europepmc")).toBe(1);
+    expect(result.report.steps).toEqual([
+      { sourceId: "europepmc", status: "asked", asked: 2, found: 1 },
+      {
+        sourceId: "semanticscholar",
+        status: "not-selected",
+        asked: 0,
+        found: 0,
+      },
+    ]);
+    expect(result.works[1]?.abstract).toBeUndefined();
+  });
+
+  it("asks nothing at all when neither ladder database is ticked", async () => {
+    const fake = createFakeHttp({
+      europepmc: new Map([[doiOf(0), "EPMC zero."]]),
+      semanticscholar: new Map([[doiOf(0), "S2 zero."]]),
+    });
+    const result = await backfillAbstracts(
+      workSet(2, () => true),
+      {
+        sources: ladderRegistry(fake.client),
+        token: tokenSource().token,
+        selected: ["pubmed"],
+      },
+    );
+    expect(fake.issued).toEqual([]);
+    expect(result.report.backfilled).toBe(0);
+    expect(result.report.steps.map((step) => step.status)).toEqual([
+      "not-selected",
+      "not-selected",
+    ]);
+  });
+});
+
 describe("backfillAbstracts — what it never does", () => {
   it("never fabricates an abstract: a work no step answers keeps none, and no fieldOrigin.abstract", async () => {
     const fake = createFakeHttp({
@@ -658,7 +726,7 @@ function pipelineRun(options: {
 }) {
   const clock = createManualClock(1_000);
   const cts = options.cts ?? tokenSource();
-  const registry = ladderRegistry(options.client);
+  const registry = ladderRegistry(options.client, { silentSearch: true });
   registry.register(fetchSource("pubmed", options.records));
   const writer = countingWriter();
   const pipeline = createSearchImportPipeline({
@@ -691,9 +759,11 @@ function pipelineRun(options: {
 }
 
 describe("the BackfillingAbstracts stage of searchImport (P2-T12)", () => {
+  // The two ladder databases are ticked: the pass asks only ticked ones
+  // (owner, 2026-10-15, `plan/00` §6 item 194).
   const INPUT = {
     query: "crispr",
-    sourceIds: ["pubmed"] as SourceId[],
+    sourceIds: ["pubmed", "europepmc", "semanticscholar"] as SourceId[],
     limit: 200,
     dateFilter: "none" as const,
     target: { collectionName: "P2-T12" },
@@ -774,6 +844,25 @@ describe("the BackfillingAbstracts stage of searchImport (P2-T12)", () => {
       "europepmc: could not backfill abstracts (PARSE).",
     );
     expect(out.write?.created).toBe(2);
+    expect(out.write?.abstractCoveragePercent).toBe(50);
+  });
+
+  it("a run that ticks only PubMed sends the backfill ladder nothing (item 194)", async () => {
+    const fake = createFakeHttp({
+      europepmc: new Map([[doiOf(0), "EPMC zero."]]),
+      semanticscholar: new Map([[doiOf(0), "S2 zero."]]),
+    });
+    const run = pipelineRun({
+      records: [recordOf(0, false), recordOf(1, true)],
+      client: fake.client,
+    });
+    const out = await run.pipeline.run(
+      { ...INPUT, sourceIds: ["pubmed"] as SourceId[] },
+      run.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    expect(fake.issued).toEqual([]);
+    expect(out.works[0]?.abstract).toBeUndefined();
     expect(out.write?.abstractCoveragePercent).toBe(50);
   });
 

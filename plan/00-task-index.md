@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-15 · **148 tasks: 106 `DONE`, 42 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **28 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-15 · **148 tasks: 108 `DONE`, 40 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **30 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -218,11 +218,11 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T05` | Semantic Scholar adapter with unauthenticated degradation | `P1-T27`, `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 2.0 d | 🔒 |
 | ✅ `P2-T06` | arXiv adapter | `P2-T01`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 1.25 d |  |
 | ✅ `P2-T07` | bioRxiv / medRxiv adapter (ID lookup and cross-walk only) | `P2-T01`, `P2-T03`, `P2-T25`, `P2-T26`, `P2-T28`, `P2-T33` | 1.5 d |  |
-| `P2-T08` | `preprint` item-type mapping and server attribution | `P2-T03`, `P2-T06`, `P2-T07` | 1.0 d |  |
+| ✅ `P2-T08` | `preprint` item-type mapping and server attribution | `P2-T03`, `P2-T06`, `P2-T07` | 1.0 d |  |
 | ✅ `P2-T09` | Dedup engine: identifier-first cascade, fuzzy fallback | `P1-T01`, `P1-T13` | 2.0 d |  |
 | ✅ `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
 | `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09`, `P2-T34` | 1.0 d | 🔒 |
-| `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29`, `P2-T30` | 0.75 d |  |
+| ✅ `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29`, `P2-T30` | 0.75 d |  |
 | `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36` | 2.0 d | 🔒 |
 | `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34` | 1.5 d |  |
 | `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
@@ -1394,13 +1394,15 @@ the caller of what the card builds; if it does not, the caller is added with a d
 187. **`KO_PENDING_REVIEW`'s `mainWindow (21)` count comment** in `src/i18n/keys.ts` was wrong before `P2-T34` and is
     one further off now. Derive or drop the count.
 
-### 6.36 Raised by `P2-T08` and `P2-T12`, 2026-10-15 — recorded under rule 9; items 188, 189, 193 and 194 wait on the owner
+### 6.36 Raised by `P2-T08` and `P2-T12`, 2026-10-15 — recorded under rule 9; items 188, 189, 193 and 194 decided the same day
 
-188. **`archiveID` for bioRxiv and medRxiv items (owner's decision).** FR-7 asks for `archiveID` on every preprint,
+188. ~~**`archiveID` for bioRxiv and medRxiv items (owner's decision).**~~ **DECIDED and DONE 2026-10-15: the DOI suffix,
+    bare, only when the server field names bioRxiv or medRxiv** (`docs/07` §6.2's new row; `archiveIdFor` in
+    `src/zotero/itemMapper.ts`; checked in Zotero). FR-7 asks for `archiveID` on every preprint,
     but `docs/07` §6.2 maps only the arXiv id to it, so bioRxiv/medRxiv items get none. Candidate: the DOI suffix,
     which `docs/02` §11.2 calls the stable accession (`2026.08.20.745440`).
 
-189. **`genre` is the constant `"Preprint"` (owner to confirm).** `docs/02` §10.3 maps a source's publication type to
+189. ~~**`genre` is the constant `"Preprint"` (owner to confirm).**~~ **CONFIRMED 2026-10-15: the constant stays.** `docs/02` §10.3 maps a source's publication type to
     `genre`, but `CanonicalWork` has no publication-type member. The alternative is a `docs/07` §5.1 member.
 
 190. **A preprint known only from Crossref gets the operator's name as `repository`** (`openRxiv`, `Research Square
@@ -1413,11 +1415,14 @@ the caller of what the card builds; if it does not, the caller is added with a d
 192. **Preprint imports were tested in strict `fromJSON` mode only;** the shipped importer is non-strict. `P2-T16`'s
     end-to-end run covers the shipped path.
 
-193. **Backfill step 3, Crossref (owner's decision).** The card allows it "only if it is a small remainder"; no
+193. ~~**Backfill step 3, Crossref (owner's decision).**~~ **DECIDED and DONE 2026-10-15: dropped** (`docs/02` §10.4 step 3
+    struck through). The card allows it "only if it is a small remainder"; no
     document gives the number, and Crossref costs one request per record. `P2-T12` shipped the ladder as Europe
     PMC → Semantic Scholar. Give a number, or drop the step and amend `docs/02` §10.4.
 
-194. **The backfill asks Europe PMC and Semantic Scholar even when the user unticked them (owner's decision).** The
+194. ~~**The backfill asks Europe PMC and Semantic Scholar even when the user unticked them (owner's decision).**~~
+    **DECIDED and DONE 2026-10-15: only ticked databases are asked** (`AbstractBackfillDeps.selected`; a skipped step
+    reports `not-selected`). The
     ladder is fixed by `docs/02` §10.4, so a user who unticked Semantic Scholar still sends it DOIs — and, unkeyed,
     may see its 429 warnings. Ask only ticked databases, or keep the fixed ladder and say so in the window.
 

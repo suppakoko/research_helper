@@ -1234,7 +1234,7 @@ items 177–183.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T08` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; preprints import as Zotero `preprint` items; bioRxiv/medRxiv `archiveID` is the DOI suffix (owner, item 188). Report at `plan/reports/P2-T08.md`. |
 | **Depends on** | `P2-T03`, `P2-T06`, `P2-T07` |
 | **Blocks** | `P2-T14`, `P2-T16`, `P2-T18` |
 | **Retires** | part of `R-2` |
@@ -1776,7 +1776,7 @@ complete list of preferences and a new one has to be added there first.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T12` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-15; batched backfill, Europe PMC then Semantic Scholar, ticked databases only; Crossref step dropped by the owner (items 193, 194). Report at `plan/reports/P2-T12.md`. |
 | **Depends on** | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29`, `P2-T30` |
 | **Blocks** | `P2-T16`, `P2-T18` |
 | **Retires** | part of `R-17` |

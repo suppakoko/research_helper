@@ -20,11 +20,13 @@
  *   once per work, which is the thing §10.4 forbids.
  * - **The ladder is §10.4's order** — Europe PMC, then Semantic Scholar —
  *   {@link ABSTRACT_BACKFILL_LADDER}. **§10.4's step 3, Crossref, is not in
- *   it.** `P2-T12` step 4 allows Crossref "only if it is a small remainder",
- *   and no document gives that remainder a number (`plan/README.md` §5 rule 4:
- *   no invented value); Crossref's `/works/{doi}` is also one request per
- *   record, and the Crossref adapter declares no `lookup`. Reported with the
- *   card.
+ *   it**: the owner dropped it on 2026-10-15 (`plan/00` §6 item 193) — no
+ *   document gave its "small remainder" a number, and Crossref's
+ *   `/works/{doi}` is one request per record.
+ * - **Only ticked databases are asked** (owner, 2026-10-15, item 194). The run
+ *   hands its selection in {@link AbstractBackfillDeps.selected}; a ladder
+ *   step outside it is skipped with status `"not-selected"`, so a database
+ *   the user unticked receives no DOI.
  * - **Stop at the first hit.** A work a step answered with a non-empty
  *   abstract leaves the ladder; a work the step found *without* an abstract,
  *   or did not find, stays for the next step.
@@ -77,9 +79,10 @@ export interface AbstractBackfillStep {
   /**
    * `"asked"` — the adapter's `lookup` was called; `"no-adapter"` — the
    * registry holds no adapter for the source, or one without `lookup`;
-   * `"failed"` — `lookup` threw something other than a cancellation.
+   * `"failed"` — `lookup` threw something other than a cancellation;
+   * `"not-selected"` — the user did not tick this database for the run.
    */
-  readonly status: "asked" | "no-adapter" | "failed";
+  readonly status: "asked" | "no-adapter" | "failed" | "not-selected";
   /** Distinct DOIs sent in this step (0 when no adapter was asked). */
   readonly asked: number;
   /** Of {@link asked}, how many came back with a non-empty abstract. */
@@ -119,6 +122,12 @@ export interface AbstractBackfillDeps {
   readonly logger?: Logger;
   /** Defaults to {@link ABSTRACT_BACKFILL_LADDER}; a test seam only. */
   readonly ladder?: readonly SourceId[];
+  /**
+   * The databases the user ticked for this run (`SearchImportInput.sourceIds`).
+   * A ladder step outside it is skipped (item 194). Absent means no
+   * restriction — a test seam; the pipeline always passes it.
+   */
+  readonly selected?: readonly SourceId[];
 }
 
 /** True when a work has no usable abstract. */
@@ -174,6 +183,11 @@ export async function backfillAbstracts(
     // `docs/07` §7.4 check point 1: before a step's network call.
     deps.token.throwIfCancelled();
 
+    if (deps.selected !== undefined && !deps.selected.includes(sourceId)) {
+      steps.push({ sourceId, status: "not-selected", asked: 0, found: 0 });
+      deps.progress?.increment();
+      continue;
+    }
     const source = deps.sources.get(sourceId);
     const lookup = source?.lookup;
     const asked = pending.size;

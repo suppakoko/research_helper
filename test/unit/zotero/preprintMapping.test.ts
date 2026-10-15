@@ -234,8 +234,34 @@ describe("an arXiv record → a Zotero preprint (docs/07 §6.2's preprint column
     expect(map(other)["archiveID"]).toBe("arXiv:2609.04658v3");
   });
 
-  it("writes no archiveID for a preprint without an arXiv id", () => {
-    expect(Object.hasOwn(map(BIORXIV_WORK), "archiveID")).toBe(false);
+  // Owner, 2026-10-15 (`plan/00` §6 item 188): bioRxiv and medRxiv get the
+  // DOI suffix, the stable accession of `docs/02` §11.2.
+  it("writes a bioRxiv preprint's DOI suffix as archiveID", () => {
+    expect(map(BIORXIV_WORK)["archiveID"]).toBe("2026.08.20.745440");
+  });
+
+  it("writes a medRxiv preprint's DOI suffix as archiveID, the field naming the server", () => {
+    const work: CanonicalWork = {
+      ...BIORXIV_WORK,
+      ids: { doi: MEDRXIV_DOI },
+      containerTitle: "medRxiv",
+      publisher: "medRxiv",
+    };
+    expect(map(work)["archiveID"]).toBe(MEDRXIV_DOI.slice("10.64898/".length));
+  });
+
+  it("writes no archiveID when no field names bioRxiv or medRxiv, whatever the prefix", () => {
+    const work: CanonicalWork = {
+      ...BIORXIV_WORK,
+      containerTitle: "openRxiv",
+      publisher: "openRxiv",
+    };
+    expect(Object.hasOwn(map(work), "archiveID")).toBe(false);
+  });
+
+  it("writes no archiveID for a bioRxiv-named preprint whose DOI is not a bioRxiv DOI", () => {
+    const work: CanonicalWork = { ...BIORXIV_WORK, ids: { doi: ARXIV_DOI } };
+    expect(Object.hasOwn(map(work), "archiveID")).toBe(false);
   });
 });
 

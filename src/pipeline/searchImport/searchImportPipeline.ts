@@ -434,6 +434,8 @@ export function createSearchImportPipeline(
     if (input.works !== undefined) return;
     const result = await backfillAbstracts(state.works, {
       sources: ctx.sources,
+      // Only the databases the user ticked (owner, 2026-10-15, item 194).
+      selected: input.sourceIds,
       token: ctx.token,
       progress: stage,
       checkpoint: (checkpointState) => ctx.checkpoint(checkpointState),

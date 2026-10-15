@@ -2290,7 +2290,8 @@ this order, stopping at the first hit:
 
 1. Europe PMC `search?query=DOI:"<doi>"&resultType=core` — free, fast, no key.
 2. Semantic Scholar `/paper/batch` with `fields=abstract,tldr` — 100 DOIs per call, but 1 req/s.
-3. Crossref `/works/{doi}?select=abstract` — JATS, low hit rate.
+3. ~~Crossref `/works/{doi}?select=abstract` — JATS, low hit rate.~~ **Dropped by the owner, 2026-10-15**
+   (`plan/00` §6 item 193): one request per record and a low hit rate; the ladder is steps 1 and 2.
 
 Batch these: never issue one lookup per record. A 200-record collection needs **2 Europe PMC calls
 and 2 S2 calls**, not 400 requests.
@@ -2307,9 +2308,11 @@ and 2 S2 calls**, not 400 requests.
 > already `/paper/batch` in chunks of ~100 (§6.8). That request carries the adapter's full field list,
 > a superset of `abstract,tldr`; the request count is what this section budgets and §6.8's ~100-id
 > cap still holds, and the S2 mapper's TL;DR fallback for a missing abstract (§6.7) applies.
-> **Step 3 (Crossref) is not shipped:** `P2-T12` allows it "only if it is a small remainder", no
-> document gives that remainder a number (and `docs/spikes/phase-0.md` V-13 has no Crossref-backfill
-> figure), and `/works/{doi}` is one request per record — so it waits for that number. A record found
+> **Step 3 (Crossref) is not shipped:** `P2-T12` allowed it "only if it is a small remainder", no
+> document gave that remainder a number, and `/works/{doi}` is one request per record; the owner
+> dropped the step on 2026-10-15 (item 193). **Only databases the user ticked are asked** (owner,
+> 2026-10-15, item 194): a ladder step whose database is not in the run's selection is skipped and
+> reported as not selected, so an unticked database receives no DOI. A record found
 > by a step leaves the ladder (stop at first hit); a record found with no abstract stays in it for the
 > next step. The winning source is written to `provenance.fieldOrigin.abstract`; nothing is written
 > when no step finds one (no fabricated abstract). A failed step is a run warning, never a failed

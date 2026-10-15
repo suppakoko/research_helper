@@ -70,6 +70,7 @@ import {
   arxivArchiveId,
   parseArxivEntryId,
 } from "../sources/arxiv/mapper";
+import { biorxivAccession } from "../sources/shared/dedupe";
 import { detectServer } from "../sources/shared/preprintServers";
 import {
   applyExtraUpdate,
@@ -641,12 +642,25 @@ function repositoryFor(work: CanonicalWork): string | undefined {
  * `arxiv:<versioned id>` in `provenance.recordIds` — and only when that
  * record's id strips to the same `ids.arxivId`. A work whose arXiv id came
  * from another source (Semantic Scholar's `externalIds.ArXiv`) has no version
- * to give and gets `arXiv:<id>`. `undefined` without an arXiv id: §6.2 maps
- * no other identifier to `archiveID`.
+ * to give and gets `arXiv:<id>`.
+ *
+ * Without an arXiv id, a bioRxiv or medRxiv preprint gets its DOI suffix — the
+ * stable accession (§6.2's `ids.doi` suffix row, owner 2026-10-15, `plan/00` §6
+ * item 188) — and only when the server field names one of the two
+ * ({@link detectServer}; the prefix alone never decides). Otherwise
+ * `undefined`.
  */
 function archiveIdFor(work: CanonicalWork): string | undefined {
   const arxivId = work.ids.arxivId;
-  if (arxivId === undefined) return undefined;
+  if (arxivId === undefined) {
+    const server = detectServer({
+      serverFields: [work.containerTitle, work.publisher],
+      doi: work.ids.doi,
+    })?.server;
+    return server === "bioRxiv" || server === "medRxiv"
+      ? biorxivAccession(work.ids.doi)
+      : undefined;
+  }
   const prefix = `${ARXIV_SOURCE_ID}:`;
   for (const recordId of work.provenance.recordIds) {
     if (!recordId.startsWith(prefix)) continue;
