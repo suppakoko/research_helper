@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-15 · **148 tasks: 110 `DONE`, 38 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **32 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-15 · **148 tasks: 112 `DONE`, 36 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -225,8 +225,8 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29`, `P2-T30` | 0.75 d |  |
 | `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36` | 2.0 d | 🔒 |
 | ✅ `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34` | 1.5 d |  |
-| `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
-| `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
+| ✅ `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
+| ✅ `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
 | ✅ `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
 | `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36` | 1.0 d |  |
 | ✅ `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
@@ -1482,7 +1482,9 @@ the caller of what the card builds; if it does not, the caller is added with a d
     suite-wide stub of `Zotero.Translate.Search` in the integration setup, so a mutant that enables Strategy B fails
     safely; briefs now name `tsx` as the only script runner.
 
-209. **A third record can still merge a preprint into its published version (owner's decision).** Measured: an arXiv
+209. ~~**A third record can still merge a preprint into its published version (owner's decision).**~~ **DECIDED
+    2026-10-16: add a group-level check** — a group holding two records that name each other as other versions is
+    split and linked; `docs/02` §11.5 first. Measured: an arXiv
     record naming the journal DOI, a second arXiv record with the same DOI and no naming, and the Semantic Scholar
     record — the plain arXiv record matches each of the others, and the union puts all three in one group, in 2 of 3
     input orders. Closing it needs a group-level check. Related: only a DOI conflict triggers item 200's rule, and a
@@ -1508,7 +1510,8 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 216. **A true "already in this collection" count** needs a per-record write report from the importer (`docs/08` §4.6 note).
 
-217. **"Advance to today" when the recorded upper bound is later than today moves it backwards (owner):** the card says
+217. ~~**"Advance to today" when the recorded upper bound is later than today moves it backwards (owner):**~~
+    **DECIDED 2026-10-16: keep the later of the two** (`max(recorded, today)`). the card says
     "move `toIso` to today" literally; `max(recorded, today)` is the alternative.
 
 218. **Korean for the newest strings (gate G-41):** `P2-T17`'s nine window strings and `P2-T18`'s three

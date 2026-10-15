@@ -2206,7 +2206,7 @@ writes the `sources` preference. **24 mutants, all killed.** Nothing outside Fil
 | Field | Value |
 |---|---|
 | **ID** | `P2-T17` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-16; Re-run This Search… from the stored provenance row; FR-8 empty `perSource` fixed. Report at `plan/reports/P2-T17.md`. |
 | **Depends on** | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` |
 | **Blocks** | `P2-T16` |
 | **Retires** | none |
@@ -2489,7 +2489,7 @@ mechanical (`menus.spec.ts`, `searchDialog-flow.spec.ts`, `keys.test.ts`). Open:
 | Field | Value |
 |---|---|
 | **ID** | `P2-T18` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-10-16; Strategy B behind `useTranslators` (ships off); summary counts, PMCID route and timeout value open as items 212–214. Report at `plan/reports/P2-T18.md`. |
 | **Depends on** | `P1-T14`, `P2-T08`, `P2-T12` |
 | **Blocks** | `P2-T16` |
 | **Retires** | none |
