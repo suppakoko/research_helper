@@ -2040,6 +2040,17 @@ preprint pairs, 3 of 5 short titles, 1 of 5 series titles, 1 of 5 same-title-oth
 a bracketed year at a title's end — "(1965)" — as a series marker. Part B needs an owner-approved live-recording
 budget (the agent proposes ≈ 80–85 requests across the seven sources) and then the owner's labels (item 222).
 
+**Part B sampling, 2026-10-16 (owner's decision, `plan/00` §6 item 223).** Of the 231 pairs among the 22 Crossref
+"Enhanced Surveillance of COVID-19 in Scotland" reports, and of the 78 pairs of identical short Crossref titles, 20 of
+each stay in the label set; every other pair is labelled in full. `scripts/build-dedup-corpus.ts` (header and section
+4b) recognises the two clusters from record fields only — the shared title stem, and identical Crossref titles that
+pass Part A's short-title family check — never from an engine verdict, and keeps in each the 20 pairs with the
+smallest SHA-256 of `"P2-T13 label set 2026-10-16\n" + pairId`, so the choice does not depend on input order. Every
+pair stays in `pairs.jsonl` with `labelSet: true|false` and its `sampleCluster`; `pairs.csv` holds the label set only;
+`npm run dedup:report` measures labelled label-set pairs only and prints how many were sampled out. Measured: **169 of
+438 pairs** are in the label set (211 Scotland and 58 short-title pairs sampled out), which is below step 2's 200 —
+the owner foresaw this in item 223. Full report at `plan/reports/P2-T13-partB-sample.md`.
+
 ---
 
 ### P2-T14 — Search & Import window: chips, badges, per-source status

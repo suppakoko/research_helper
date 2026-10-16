@@ -10,6 +10,7 @@
     "dropped header set-cookie",
     "scrubbed body",
     "request URL withheld: it carries the contact parameter",
-    "scrubbed body: percent-encoded contact address in nextPageUrl"
+    "scrubbed body: percent-encoded contact address in nextPageUrl",
+    "re-scrubbed 2026-10-16 without a request (plan/00 item 224): scrubbed body: 12 email address(es)"
   ]
 }

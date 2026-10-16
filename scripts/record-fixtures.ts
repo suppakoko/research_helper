@@ -25,6 +25,8 @@
  * FIXTURE_MODE=record npm run fixtures:record -- --source europepmc   # live
  * FIXTURE_MODE=synthetic npm run fixtures:record                      # rewrites the
  *                                                  # hand-written fixtures, no network
+ * npm run fixtures:record -- --source pubmed --rescrub    # re-runs the redaction
+ *                                                  # pass over committed fixtures, no network
  * ```
  *
  * `FIXTURE_MODE` is `docs/13` §2.2's own spelling, and the default being a dry
@@ -103,6 +105,12 @@
  *    the tokens its bodies carry that are opaque but not secret
  *    ({@link SourcePlan.opaqueTokens}); {@link scrub} shields exactly those and
  *    {@link assertClean} ignores exactly those. Nothing else is exempt.
+ * 7. **Every email address goes, not only the maintainer's** (owner decision
+ *    of 2026-10-16, `plan/00` §6 item 224). Authors' published contact
+ *    addresses sit inside PubMed and Europe PMC affiliation fields; each
+ *    becomes `[redacted:email-address]` ({@link stripEmailAddresses}) and
+ *    {@link assertClean} refuses one that survives. `--rescrub` runs the same
+ *    pass over committed fixtures ({@link rescrubFixtures}).
  *
  * ## What is *not* read from `.env`, and the contradiction behind that
  *
@@ -114,7 +122,7 @@
  * redaction deny-list described above. Reported with the card.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -299,6 +307,13 @@ export interface CliOptions {
    * usual from whatever this run captured. Absent means every scenario.
    */
   readonly only?: readonly string[];
+  /**
+   * `--rescrub`: run the redaction pass again over the source's committed
+   * fixtures, with no network (owner decision of 2026-10-16, `plan/00` §6 item
+   * 224). See {@link rescrubFixtures}. Wins over `FIXTURE_MODE`; `--dry-run`
+   * wins over it.
+   */
+  readonly rescrub?: true;
 }
 
 /** A command-line mistake. Exit code 2, no plan printed. */
@@ -306,7 +321,7 @@ export class UsageError extends Error {}
 
 const USAGE =
   "usage: npm run fixtures:record -- [--source <id>] [--only <scenario,…>] " +
-  `[--dry-run]   (sources: ${RECORDABLE_SOURCES.join(", ")})`;
+  `[--dry-run] [--rescrub]   (sources: ${RECORDABLE_SOURCES.join(", ")})`;
 
 /**
  * Parse the arguments after the script path.
@@ -323,11 +338,16 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   let source: RecordableSourceId = "pubmed";
   let dryRun = false;
   let only: string[] | undefined;
+  let rescrub = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === undefined) continue;
     if (arg === "--dry-run") {
       dryRun = true;
+      continue;
+    }
+    if (arg === "--rescrub") {
+      rescrub = true;
       continue;
     }
     let value: string | undefined;
@@ -366,7 +386,12 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     }
     source = value;
   }
-  return { source, dryRun, ...(only !== undefined && { only }) };
+  return {
+    source,
+    dryRun,
+    ...(only !== undefined && { only }),
+    ...(rescrub && { rescrub: true as const }),
+  };
 }
 
 /**
@@ -715,13 +740,65 @@ export function literalDenyList(
 const EMAIL_PLACEHOLDER = "[redacted:maintainer-address]";
 const SECRET_PLACEHOLDER = "[redacted:env-secret]";
 
+/** What every other email address becomes; see {@link EMAIL_ADDRESS_SOURCE}. */
+export const ADDRESS_PLACEHOLDER = "[redacted:email-address]";
+
+/**
+ * Any email address, plain (`@`) or percent-encoded (`%40`). Owner decision of
+ * 2026-10-16 (`plan/00` §6 item 224, `docs/13` §3.2): the recorder strips
+ * **every** address from a fixture, not only the maintainer's. Recorded
+ * PubMed `<Affiliation>` and Europe PMC `affiliation` fields carry authors'
+ * published contact addresses.
+ *
+ * Three details, each measured on the committed fixtures:
+ *
+ * - **A match may start right after a JSON escape** (`\n`, `\t`, …) and never
+ *   takes the escape's letter with it. A body is scrubbed as received, and a
+ *   JSON body writes a newline as `\n`; a pattern that let the local part
+ *   begin at that `n` would leave a lone backslash in front of the placeholder
+ *   and the body would no longer parse.
+ * - **The domain is matched whole.** The last label may not be followed by a
+ *   letter, digit, hyphen, or a dot and a letter or digit, so a longer dotted
+ *   run is never cut short into an "address".
+ * - **The last label is lower case, upper case or Capitalised.** That keeps the
+ *   Java object identity strings some medRxiv abstracts carry
+ *   (`org.highwire.dtl.DTLVardef@ebf121org.highwire.dtl.DTLVardef`), which are
+ *   not addresses: `DTLVardef` is none of the three.
+ */
+const EMAIL_ADDRESS_SOURCE = [
+  String.raw`(?<=^|[^A-Za-z0-9._%+\-\\]|\\[nrtbf"/])`,
+  String.raw`[A-Za-z0-9._%+\-]+(?:@|%40)(?:[A-Za-z0-9\-]+\.)+`,
+  String.raw`(?:[a-z]{2,24}|[A-Z]{2,24}|[A-Z][a-z]{1,23})`,
+  String.raw`(?![A-Za-z0-9\-]|\.[A-Za-z0-9])`,
+].join("");
+
+/**
+ * Replace every email address in `text` with {@link ADDRESS_PLACEHOLDER}.
+ *
+ * @param text - a header value or body, after the literal deny-list ran, so
+ *   the maintainer address already reads `[redacted:maintainer-address]`
+ * @returns the scrubbed text and how many addresses were replaced
+ */
+export function stripEmailAddresses(text: string): {
+  readonly text: string;
+  readonly count: number;
+} {
+  let count = 0;
+  const out = text.replace(new RegExp(EMAIL_ADDRESS_SOURCE, "gu"), () => {
+    count += 1;
+    return ADDRESS_PLACEHOLDER;
+  });
+  return { text: out, count };
+}
+
 /** The stand-in an allowed opaque token wears while {@link scrub} runs. */
 function allowPlaceholder(index: number): string {
   return `\u0000RH_ALLOW_${String(index)}\u0000`;
 }
 
 /**
- * Scrub one string: `redact()` first, then the literal deny-list — with the
+ * Scrub one string: `redact()` first, then the literal deny-list, then every
+ * remaining email address ({@link stripEmailAddresses}) — with the
  * `allow` tokens shielded. Each allowed token is swapped for a placeholder
  * `redact()` cannot match before the pass and swapped back after it, so a
  * pagination cursor survives the 40-character catch-all that would otherwise
@@ -732,7 +809,7 @@ function scrub(
   value: string,
   deny: readonly string[],
   allow: readonly string[] = [],
-): string {
+): { readonly text: string; readonly addresses: number } {
   let working = value;
   const shielded: string[] = [];
   for (const token of allow) {
@@ -751,10 +828,17 @@ function scrub(
           : SECRET_PLACEHOLDER,
       );
   }
+  const stripped = stripEmailAddresses(out);
+  out = stripped.text;
   for (const [index, token] of shielded.entries()) {
     out = out.split(allowPlaceholder(index)).join(token);
   }
-  return out;
+  return { text: out, addresses: stripped.count };
+}
+
+/** The sidecar note for `count` email addresses removed from `where`. */
+function addressNote(where: string, count: number): string {
+  return `scrubbed ${where}: ${String(count)} email address(es)`;
 }
 
 /** What {@link redactExchange} removed, for the sidecar's `redactions` field. */
@@ -790,11 +874,18 @@ export function redactExchange(
       continue;
     }
     const scrubbed = scrub(value, deny, allow);
-    if (scrubbed !== value) notes.push(`scrubbed header ${lower}`);
-    headers[lower] = scrubbed;
+    if (scrubbed.text !== value) notes.push(`scrubbed header ${lower}`);
+    if (scrubbed.addresses > 0) {
+      notes.push(addressNote(`header ${lower}`, scrubbed.addresses));
+    }
+    headers[lower] = scrubbed.text;
   }
-  const body = scrub(raw.body, deny, allow);
+  const scrubbedBody = scrub(raw.body, deny, allow);
+  const body = scrubbedBody.text;
   if (body !== raw.body) notes.push("scrubbed body");
+  if (scrubbedBody.addresses > 0) {
+    notes.push(addressNote("body", scrubbedBody.addresses));
+  }
   const kept = allow.filter(
     (token) => token !== "" && raw.body.includes(token),
   );
@@ -838,6 +929,8 @@ const FORBIDDEN: readonly { readonly what: string; readonly re: RegExp }[] = [
   { what: "an Authorization header", re: /^authorization\s*:/im },
   { what: "a mailto value", re: /mailto[:=]\s*[^\s"'<>]+@/i },
   { what: "a Set-Cookie header", re: /^set-cookie\s*:/im },
+  // After the maintainer row on purpose, so that address keeps its own message.
+  { what: "an email address", re: new RegExp(EMAIL_ADDRESS_SOURCE, "u") },
 ];
 
 /**
@@ -941,6 +1034,108 @@ async function writeFixture(dir: string, req: WriteRequest): Promise<string> {
   await writeFile(`${dir}/${key}.json`, fixtureText, "utf8");
   await writeFile(`${dir}/${key}${META_SUFFIX}`, metaText, "utf8");
   return key;
+}
+
+/** What {@link rescrubFixtures} did to one directory. */
+export interface RescrubResult {
+  /** Fixture files read (sidecars excluded). */
+  readonly read: number;
+  /** Keys whose fixture and sidecar were rewritten. */
+  readonly changed: readonly string[];
+  /** Email addresses replaced, across every changed file. */
+  readonly addresses: number;
+}
+
+/**
+ * Run {@link redactExchange} again over every committed fixture in `dir`, with
+ * no network — the owner's decision of 2026-10-16 (`plan/00` §6 item 224) that
+ * the fixtures recorded before the address strip are re-scrubbed **by the same
+ * pass**, never by hand.
+ *
+ * What it guarantees:
+ *
+ * - **Keys do not move.** The file name is the request's key and is reused;
+ *   only the body and header values can change.
+ * - **Nothing but addresses changes.** A rewrite is refused unless the new
+ *   fixture equals the old one with {@link stripEmailAddresses} applied to the
+ *   body and each header value. A drift anywhere else in the pass (a new
+ *   `redact()` pattern, a lost pagination token) stops the run rather than
+ *   rewriting history quietly.
+ * - **The sidecar says so.** `recordedAt` and every other field are kept; one
+ *   note is appended to `redactions`, naming the date, the decision and the
+ *   count, in the same words a recording would use.
+ * - **Both files pass {@link assertClean}** before either is written.
+ *
+ * @param plan - the source's plan, for its directory and opaque tokens
+ * @param deny - {@link literalDenyList}'s output
+ * @param today - the `YYYY-MM-DD` the note carries
+ * @returns what was read and rewritten
+ * @throws Error when a re-scrub would change more than addresses
+ */
+export async function rescrubFixtures(
+  plan: Pick<SourcePlan, "fixtureDir" | "opaqueTokens">,
+  deny: readonly string[],
+  today: string,
+): Promise<RescrubResult> {
+  const names = (await readdir(plan.fixtureDir))
+    .filter((n) => n.endsWith(".json") && !n.endsWith(META_SUFFIX))
+    .sort();
+  const changed: string[] = [];
+  let addresses = 0;
+  for (const name of names) {
+    const key = name.slice(0, -".json".length);
+    const path = `${plan.fixtureDir}/${name}`;
+    const before = await readFile(path, "utf8");
+    const stored = JSON.parse(before) as RecordedExchange;
+    const allow = plan.opaqueTokens?.(stored.body) ?? [];
+    const { exchange, notes } = redactExchange(stored, deny, allow);
+    const after = toJson({
+      ...stored,
+      status: exchange.status,
+      headers: exchange.headers,
+      body: exchange.body,
+    });
+    if (after === before) continue;
+
+    const expectedHeaders: Record<string, string> = {};
+    for (const [n, v] of Object.entries(stored.headers)) {
+      expectedHeaders[n] = stripEmailAddresses(v).text;
+    }
+    const expected = toJson({
+      ...stored,
+      headers: expectedHeaders,
+      body: stripEmailAddresses(stored.body).text,
+    });
+    if (after !== expected) {
+      throw new Error(
+        `Refusing to re-scrub ${key}: the pass would change more than email ` +
+          `addresses. Re-record it instead (docs/13 §3.3 rule 4).`,
+      );
+    }
+    const addressNotes = notes.filter((n) => / email address\(es\)$/u.test(n));
+    const count = addressNotes.reduce(
+      (sum, n) => sum + Number(/: (\d+) email/u.exec(n)?.[1] ?? 0),
+      0,
+    );
+    const metaPath = `${plan.fixtureDir}/${key}${META_SUFFIX}`;
+    const meta = JSON.parse(await readFile(metaPath, "utf8")) as FixtureMeta;
+    const nextMeta: FixtureMeta = {
+      ...meta,
+      redactions: [
+        ...meta.redactions,
+        `re-scrubbed ${today} without a request (plan/00 item 224): ` +
+          addressNotes.join("; "),
+      ],
+    };
+    const metaText = toJson(nextMeta);
+    assertClean(meta.scenario, after, deny, allow);
+    assertClean(`${meta.scenario} (metadata)`, metaText, deny);
+    await writeFile(path, after, "utf8");
+    await writeFile(metaPath, metaText, "utf8");
+    changed.push(key);
+    addresses += count;
+  }
+  return { read: names.length, changed, addresses };
 }
 
 // ---------------------------------------------------------------------------
@@ -3131,6 +3326,22 @@ async function main(argv: readonly string[]): Promise<number> {
         `${String(plan.independent().length)} independent scenarios selected.\n`,
     );
   }
+  if (cli.rescrub === true && !cli.dryRun) {
+    const result = await rescrubFixtures(
+      plan,
+      deny,
+      new Date().toISOString().slice(0, 10),
+    );
+    process.stdout.write(
+      `fixtures:record — re-scrub of test/fixtures/${plan.source}/. Zero ` +
+        `live requests. ${String(result.read)} fixtures read, ` +
+        `${String(result.changed.length)} rewritten, ` +
+        `${String(result.addresses)} email address(es) replaced.\n` +
+        result.changed.map((k) => `  ${k}\n`).join(""),
+    );
+    return 0;
+  }
+
   if (mode === "dry-run") {
     // Dependent requests are resolved from the committed fixtures, so a dry
     // run over a recorded source prints every key the directory holds.

@@ -10,6 +10,7 @@
     "dropped header ncbi-phid",
     "dropped header ncbi-sid",
     "dropped header set-cookie",
-    "request URL withheld: it carries the contact and key parameters"
+    "request URL withheld: it carries the contact and key parameters",
+    "re-scrubbed 2026-10-16 without a request (plan/00 item 224): scrubbed body: 13 email address(es)"
   ]
 }

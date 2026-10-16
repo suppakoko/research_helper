@@ -1,7 +1,7 @@
 {
   "scenario": "corpus-q1",
   "scenarioVersion": 1,
-  "recordedAt": "2026-10-16T01:29:20.319Z",
+  "recordedAt": "2026-10-16T03:34:34.245Z",
   "endpoint": "https://api.semanticscholar.org/graph/v1/paper/search",
   "method": "GET",
   "toolVersion": "0.0.2",

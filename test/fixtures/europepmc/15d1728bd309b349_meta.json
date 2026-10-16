@@ -9,6 +9,7 @@
   "redactions": [
     "dropped header set-cookie",
     "scrubbed body",
-    "request URL withheld: it carries the contact parameter"
+    "request URL withheld: it carries the contact parameter",
+    "re-scrubbed 2026-10-16 without a request (plan/00 item 224): scrubbed body: 14 email address(es)"
   ]
 }

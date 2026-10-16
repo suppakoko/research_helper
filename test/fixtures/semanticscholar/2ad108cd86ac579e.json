@@ -4,13 +4,13 @@
     "connection": "keep-alive",
     "content-length": "174",
     "content-type": "application/json",
-    "date": "Fri, 16 Oct 2026 01:29:19 GMT",
+    "date": "Fri, 16 Oct 2026 03:34:33 GMT",
     "via": "1.1 [redacted:32].cloudfront.net (CloudFront)",
-    "x-amz-apigw-id": "FUCdbE8zvHcEYSg=",
-    "x-amz-cf-id": "-[redacted:53]==",
+    "x-amz-apigw-id": "FUUzfFMQPHcEPEw=",
+    "x-amz-cf-id": "[redacted:54]==",
     "x-amz-cf-pop": "ICN57-P3",
     "x-amzn-errortype": "TooManyRequestsException",
-    "x-amzn-requestid": "c2b80bfe-1ef5-4f3b-9f91-cd9c84a7e9b3",
+    "x-amzn-requestid": "f9611f11-c66c-45ba-a894-c10351abf199",
     "x-cache": "Error from cloudfront"
   },
   "body": "{\"message\": \"Too Many Requests. Please wait and try again or apply for a key for higher rate limits. https://www.semanticscholar.org/product/api#api-key-form\", \"code\": \"429\"}"

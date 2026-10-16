@@ -8,6 +8,7 @@
   "synthetic": true,
   "syntheticReason": "Derived, not recorded: the first 1024 bytes of the recorded record-rich body, cut inside the JSON. Europe PMC has no documented way to ask for a truncated body.",
   "redactions": [
-    "synthetic: nothing was received, nothing to redact"
+    "synthetic: nothing was received, nothing to redact",
+    "re-scrubbed 2026-10-16 without a request (plan/00 item 224): scrubbed body: 1 email address(es)"
   ]
 }

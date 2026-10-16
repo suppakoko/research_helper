@@ -1560,12 +1560,21 @@ the caller of what the card builds; if it does not, the caller is added with a d
     and a few lookups of known `10.64898/` DOIs (`docs/02` §11.2) for that family.
 
 224. ~~**Recorded responses keep authors' published contact addresses**~~ **DECIDED 2026-10-16: the recorder strips every
-    email address from fixtures, and the committed fixtures are re-scrubbed by the same pass (no network).** inside affiliation fields (277 occurrences in the
+    email address from fixtures, and the committed fixtures are re-scrubbed by the same pass (no network).** **DONE 2026-10-16**
+    (390 addresses from 29 fixtures; `plan/reports/P2-T13-partB-sample.md`). inside affiliation fields (277 occurrences in the
     new PubMed and Europe PMC fixtures; 15 earlier committed fixtures carry them too). They are public bibliographic
     metadata; the recorder strips only the maintainer address and secrets. Decide whether fixtures should strip them.
 
 225. **The recording agent skipped the integration suite** and a pinned PubMed fixture count (19) failed there; the
     coordinator now derives it from the corpus plan. Fixture-adding briefs must run integration too.
+
+### 6.41 Raised by the P2-T13 sampling run, 2026-10-16 — item 226 waits on the owner
+
+226. **The label set is 169 pairs, below the 200 floor, and four families are short (owner).** Semantic Scholar refused
+    7 unkeyed requests in a row over about six hours (50 of 85 requests used). No committed fixture of another source
+    holds a `10.64898/` DOI, so no bioRxiv/medRxiv lookup could form a pair; one Europe PMC `SRC:PPR` search over a 2026
+    window, then lookups of its DOIs, would. Series titles 1/5, same title other year 3/5, same-paper sets 5/10. Two
+    non-series titles sat in the short-title cluster and were sampled out ("Genome editing using CRISPR", "Psoroptic mange").
 
 ## 7. Regenerating this file
 

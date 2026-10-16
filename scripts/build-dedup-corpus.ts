@@ -37,7 +37,7 @@
  * - `pairs.jsonl` — the corpus. One pair per line, `label` and `reason` first
  *   so they sit at the start of each line. The file `scripts/dedup-report.ts`
  *   and `P2-T13` Part B's accuracy test read.
- * - `pairs.csv` — the same pairs as a labelling sheet: UTF-8 with a byte-order
+ * - `pairs.csv` — the label-set pairs as a labelling sheet: UTF-8 with a byte-order
  *   mark so a spreadsheet shows Korean and accented names, one row per pair,
  *   the `label` and `reason` columns second and third. Fill those two columns
  *   and run `--merge-labels`; the sheet is regenerated from `pairs.jsonl`.
@@ -45,6 +45,20 @@
  *   **derived** from the listed committed fixtures. Its `recordedAt` is the
  *   **oldest** input fixture's, so `docs/13` §3.3's staleness clock runs from
  *   the oldest data in the corpus.
+ *
+ * ## The label set (owner's decision, 2026-10-16)
+ *
+ * `plan/00` §6 item 223: of the 231 pairs among the 22 Crossref "Enhanced
+ * Surveillance of COVID-19 in Scotland" reports, and of the 78 pairs of
+ * identical short Crossref titles, **20 of each** are labelled; every other
+ * pair is labelled in full. The two clusters are recognised from record
+ * fields ({@link sampledClusterOf}), and the 20 are the smallest values of a
+ * fixed, salted SHA-256 of the pair id ({@link labelSetRank},
+ * {@link labelSetOf}) — deterministic, and independent of input order and of
+ * every engine verdict. Every pair stays in `pairs.jsonl`, marked
+ * `labelSet: true|false` with its `sampleCluster`; `pairs.csv` holds the label
+ * set only; `scripts/dedup-report.ts` measures the labelled label-set pairs
+ * only and prints how many were sampled out. Section 4b has the details.
  *
  * ## Redaction
  *
@@ -1178,6 +1192,131 @@ export function familyShortfalls(
 }
 
 // ---------------------------------------------------------------------------
+// 4b. The label set — the owner's sampling of two big clusters (2026-10-16)
+//
+// `plan/00` §6 item 223, decided by the owner on 2026-10-16: two clusters of
+// near-identical Crossref records would dominate the measured precision if
+// every pair in them were labelled, so **20 pairs of each** go to the
+// labeller and every other pair is labelled in full. Both clusters are
+// recognised from the records' own fields, never from an engine verdict:
+//
+// - `scotland-reports`: both records are Crossref records whose plain title
+//   starts with the stem "Enhanced Surveillance of COVID-19 in Scotland"
+//   (22 separate `report` records from Crossref Q5; 231 pairs when measured).
+// - `short-title-crossref`: both records are Crossref records with the same
+//   plain title, and Part A's own short-title family check
+//   ({@link pairFamilies}' `short-title`) holds for the pair ("Part III",
+//   "Part III Introduction", …; 78 pairs when measured).
+//
+// **Which 20.** Within each cluster, the 20 pairs with the smallest
+// `sha256("P2-T13 label set 2026-10-16\n" + pairId)`, ties broken by pair id.
+// The pair id is itself a hash of the two record ids, so the choice depends
+// on neither input order nor anything the engine decides, and a re-record
+// that returns the same records picks the same 20. Every pair stays in
+// `pairs.jsonl` with `labelSet: false` when sampled out; only label-set pairs
+// go to `pairs.csv`, and `scripts/dedup-report.ts` measures only them.
+// ---------------------------------------------------------------------------
+
+/** The clusters the owner sampled down, by name. */
+export const SAMPLED_CLUSTERS = [
+  "scotland-reports",
+  "short-title-crossref",
+] as const;
+export type SampledCluster = (typeof SAMPLED_CLUSTERS)[number];
+
+/** How many pairs of each sampled cluster stay in the label set. */
+export const LABEL_SET_PER_CLUSTER = 20;
+
+/** The Scotland reports' shared title stem, in {@link plainTitle}'s form. */
+const SCOTLAND_TITLE_STEM = "enhanced surveillance of covid 19 in scotland";
+
+/** The fixed salt of the selection hash; changing it changes the 20. */
+const LABEL_SET_SALT = "P2-T13 label set 2026-10-16";
+
+/**
+ * The sampled cluster a pair belongs to, read from the two records' fields.
+ *
+ * @returns the cluster, or `undefined` for a pair labelled in full
+ */
+export function sampledClusterOf(
+  a: SourceRecord,
+  b: SourceRecord,
+): SampledCluster | undefined {
+  if (a.sourceId !== "crossref" || b.sourceId !== "crossref") return undefined;
+  const ta = plainTitle(a.work.title);
+  const tb = plainTitle(b.work.title);
+  const scotland = (t: string): boolean =>
+    t === SCOTLAND_TITLE_STEM || t.startsWith(`${SCOTLAND_TITLE_STEM} `);
+  if (scotland(ta) && scotland(tb)) return "scotland-reports";
+  if (ta !== "" && ta === tb && pairFamilies(a, b).includes("short-title")) {
+    return "short-title-crossref";
+  }
+  return undefined;
+}
+
+/** The selection key of one pair: smaller keys are kept first. */
+export function labelSetRank(pairId: string): string {
+  return sha256Hex(`${LABEL_SET_SALT}\n${pairId}`);
+}
+
+/** Where one pair stands in the label set. */
+export interface LabelSetEntry {
+  readonly labelSet: boolean;
+  readonly cluster: SampledCluster | undefined;
+}
+
+/**
+ * The owner's label set over `pairs`, by pair id: every pair outside the two
+ * clusters, and the {@link LABEL_SET_PER_CLUSTER} smallest-ranked pairs
+ * ({@link labelSetRank}) of each cluster.
+ */
+export function labelSetOf(
+  pairs: readonly CandidatePair[],
+): ReadonlyMap<string, LabelSetEntry> {
+  const out = new Map<string, LabelSetEntry>();
+  const byCluster = new Map<SampledCluster, string[]>();
+  for (const p of pairs) {
+    const cluster = sampledClusterOf(p.a, p.b);
+    out.set(p.pairId, { labelSet: cluster === undefined, cluster });
+    if (cluster !== undefined) {
+      const list = byCluster.get(cluster);
+      if (list === undefined) byCluster.set(cluster, [p.pairId]);
+      else list.push(p.pairId);
+    }
+  }
+  for (const [cluster, ids] of byCluster) {
+    const kept = ids
+      .map((id) => ({ id, rank: labelSetRank(id) }))
+      .sort(
+        (x, y) => compareStrings(x.rank, y.rank) || compareStrings(x.id, y.id),
+      )
+      .slice(0, LABEL_SET_PER_CLUSTER);
+    for (const { id } of kept) out.set(id, { labelSet: true, cluster });
+  }
+  return out;
+}
+
+/** Per cluster: how many pairs it has and how many the label set keeps. */
+export type SampledOut = Readonly<
+  Record<SampledCluster, { readonly pairs: number; readonly kept: number }>
+>;
+
+/** Count {@link labelSetOf}'s result per cluster. */
+export function sampledOutOf(
+  entries: ReadonlyMap<string, LabelSetEntry>,
+): SampledOut {
+  const out = Object.fromEntries(
+    SAMPLED_CLUSTERS.map((c) => [c, { pairs: 0, kept: 0 }]),
+  ) as Record<SampledCluster, { pairs: number; kept: number }>;
+  for (const e of entries.values()) {
+    if (e.cluster === undefined) continue;
+    out[e.cluster].pairs += 1;
+    if (e.labelSet) out[e.cluster].kept += 1;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // 5. The file formats
 // ---------------------------------------------------------------------------
 
@@ -1206,6 +1345,14 @@ export interface PairRow {
   readonly pairId: string;
   readonly label: PairLabel | "";
   readonly reason: string;
+  /**
+   * `false` when the owner's sampling of 2026-10-16 left this pair out of
+   * the label set (section 4b): it stays in `pairs.jsonl`, is not in
+   * `pairs.csv`, and `scripts/dedup-report.ts` does not measure it.
+   */
+  readonly labelSet: boolean;
+  /** The sampled cluster the pair belongs to (section 4b), or `null`. */
+  readonly sampleCluster: SampledCluster | null;
   /** `false` when blocking never compares this pair (a recall-only pair). */
   readonly engineCompares: boolean;
   readonly origins: readonly PairOrigin[];
@@ -1286,7 +1433,9 @@ export function buildRows(
   const sets = sameWorkSets(pairs);
   const inSet = new Set<string>();
   for (const s of sets) for (const id of s.recordIds) inSet.add(id);
+  const sampling = labelSetOf(pairs);
   const rows = pairs.map((p): PairRow => {
+    const entry = sampling.get(p.pairId);
     const families = [...pairFamilies(p.a, p.b)];
     if (inSet.has(p.a.id) && inSet.has(p.b.id) && sameWorkEvidence(p.a, p.b)) {
       families.unshift("same-work-3-sources");
@@ -1296,6 +1445,8 @@ export function buildRows(
       pairId: p.pairId,
       label: given?.label ?? "",
       reason: given?.reason ?? "",
+      labelSet: entry?.labelSet ?? true,
+      sampleCluster: entry?.cluster ?? null,
       engineCompares: p.origins.some((o) => ENGINE_ORIGINS.has(o)),
       origins: p.origins,
       families,
@@ -1541,6 +1692,10 @@ export interface CorpusMeta extends FixtureMeta {
   readonly pairCount: number;
   readonly engineComparedPairCount: number;
   readonly labelledPairCount: number;
+  /** Pairs in the owner's label set (section 4b); the rest are sampled out. */
+  readonly labelSetPairCount: number;
+  /** Per sampled cluster: its pairs, and how many the label set keeps. */
+  readonly sampledOut: SampledOut;
   readonly familyCounts: Readonly<Record<FamilyId, number>>;
   readonly derivedFrom: readonly DerivedFrom[];
 }
@@ -1577,6 +1732,15 @@ export function buildMeta(
     pairCount: rows.length,
     engineComparedPairCount: rows.filter((r) => r.engineCompares).length,
     labelledPairCount: rows.filter((r) => r.label !== "").length,
+    labelSetPairCount: rows.filter((r) => r.labelSet).length,
+    sampledOut: sampledOutOf(
+      new Map(
+        rows.map((r) => [
+          r.pairId,
+          { labelSet: r.labelSet, cluster: r.sampleCluster ?? undefined },
+        ]),
+      ),
+    ),
     familyCounts: families.counts,
     derivedFrom: corpus.derivedFrom,
   };
@@ -1592,6 +1756,8 @@ export interface BuiltCorpus {
   readonly pairs: readonly CandidatePair[];
   readonly rows: readonly PairRow[];
   readonly families: FamilyCounts;
+  /** The same counts over the owner's label set only (section 4b). */
+  readonly labelSetFamilies: FamilyCounts;
   readonly files: Readonly<Record<string, string>>;
 }
 
@@ -1609,14 +1775,21 @@ export async function buildCorpus(
   const pairs = candidatePairs(pool);
   const rows = buildRows(pairs, seenIn, labels);
   const families = countFamilies(pairs);
+  const inLabelSet = new Set(
+    rows.filter((r) => r.labelSet).map((r) => r.pairId),
+  );
+  const labelSetFamilies = countFamilies(
+    pairs.filter((p) => inLabelSet.has(p.pairId)),
+  );
   const meta = buildMeta(corpus, rows, families);
   const files = {
     [PAIRS_FILE]: toJsonl(rows),
-    [SHEET_FILE]: toCsv(rows),
+    // The sheet holds the label set only (section 4b); pairs.jsonl holds all.
+    [SHEET_FILE]: toCsv(rows.filter((r) => r.labelSet)),
     [META_FILE]: `${JSON.stringify(meta, null, 2)}\n`,
   };
   for (const [name, text] of Object.entries(files)) assertWritable(name, text);
-  return { corpus, pairs, rows, families, files };
+  return { corpus, pairs, rows, families, labelSetFamilies, files };
 }
 
 /**
@@ -1666,6 +1839,27 @@ export function summarize(built: BuiltCorpus): string {
       `(${String(built.rows.filter((r) => r.engineCompares).length)} compared by the cascade, ` +
       `${String(built.rows.filter((r) => !r.engineCompares).length)} skipped by blocking)`,
   );
+  const inLabelSet = built.rows.filter((r) => r.labelSet);
+  lines.push(
+    `Label set (owner's sampling of 2026-10-16): ${String(inLabelSet.length)} ` +
+      `of ${String(built.rows.length)} pairs; sampled out ` +
+      `${String(built.rows.length - inLabelSet.length)}`,
+  );
+  const sampled = sampledOutOf(
+    new Map(
+      built.rows.map((r) => [
+        r.pairId,
+        { labelSet: r.labelSet, cluster: r.sampleCluster ?? undefined },
+      ]),
+    ),
+  );
+  for (const c of SAMPLED_CLUSTERS) {
+    lines.push(
+      `  cluster ${c.padEnd(22)} ${String(sampled[c].pairs)} pairs, ` +
+        `${String(sampled[c].kept)} kept, ` +
+        `${String(sampled[c].pairs - sampled[c].kept)} sampled out`,
+    );
+  }
   const byOrigin = new Map<string, number>();
   for (const p of built.pairs) {
     for (const o of p.origins) byOrigin.set(o, (byOrigin.get(o) ?? 0) + 1);
@@ -1676,12 +1870,14 @@ export function summarize(built: BuiltCorpus): string {
     lines.push(`  origin ${o.padEnd(24)} ${String(n)}`);
   }
   lines.push(
-    "Step-3 families (sets for same-work-3-sources, pairs otherwise):",
+    "Step-3 families (sets for same-work-3-sources, pairs otherwise; " +
+      "all candidate pairs, then the label set only):",
   );
   for (const f of FAMILY_IDS) {
     const need = STEP3_MINIMUMS[f];
     lines.push(
       `  ${f.padEnd(34)} ${String(built.families.counts[f]).padStart(4)}` +
+        ` ${String(built.labelSetFamilies.counts[f]).padStart(4)}` +
         (need === undefined ? "   (no minimum)" : `   need ≥ ${String(need)}`),
     );
   }
@@ -1700,9 +1896,9 @@ export function summarize(built: BuiltCorpus): string {
           )
           .join(", ")}`,
   );
-  const labelled = built.rows.filter((r) => r.label !== "").length;
+  const labelled = inLabelSet.filter((r) => r.label !== "").length;
   lines.push(
-    `Labelled pairs: ${String(labelled)} of ${String(built.rows.length)} ` +
+    `Labelled pairs: ${String(labelled)} of the ${String(inLabelSet.length)} in the label set ` +
       `(step 2 asks for ≥ ${String(MIN_LABELLED_PAIRS)})`,
   );
   return lines.join("\n");

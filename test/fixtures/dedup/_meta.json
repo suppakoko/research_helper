@@ -17,6 +17,17 @@
   "pairCount": 438,
   "engineComparedPairCount": 352,
   "labelledPairCount": 0,
+  "labelSetPairCount": 169,
+  "sampledOut": {
+    "scotland-reports": {
+      "pairs": 231,
+      "kept": 20
+    },
+    "short-title-crossref": {
+      "pairs": 78,
+      "kept": 20
+    }
+  },
   "familyCounts": {
     "same-work-3-sources": 5,
     "preprint-published": 9,
@@ -697,7 +708,7 @@
       "source": "semanticscholar",
       "key": "2ad108cd86ac579e",
       "scenario": "corpus-q1",
-      "recordedAt": "2026-10-16T01:29:20.319Z"
+      "recordedAt": "2026-10-16T03:34:34.245Z"
     },
     {
       "source": "semanticscholar",
@@ -721,7 +732,7 @@
       "source": "semanticscholar",
       "key": "62ed3f4b038ba6f5",
       "scenario": "corpus-batch",
-      "recordedAt": "2026-10-16T01:29:55.333Z"
+      "recordedAt": "2026-10-16T03:34:13.325Z"
     },
     {
       "source": "semanticscholar",

@@ -21,6 +21,9 @@
  * 4. **The report refuses unlabelled input.** `scripts/dedup-report.ts` exits
  *    non-zero on an unlabelled file, and its arithmetic keeps a merged
  *    linked-version pair a false positive and a link out of the numerator.
+ * 5. **The label set is the owner's sampling** (2026-10-16, `plan/00` §6
+ *    item 223): exactly 20 pairs of each of the two big Crossref clusters,
+ *    chosen independently of input order, and no other pair sampled out.
  *
  * Part B (after the owner labels) replaces the pinned shortfall list with an
  * assertion that every family meets its minimum, and adds
@@ -47,6 +50,9 @@ import {
   DEDUP_CORPUS_DIR,
   ENGINE_ORIGINS,
   familyShortfalls,
+  LABEL_SET_PER_CLUSTER,
+  labelSetOf,
+  labelSetRank,
   labelsFromSheet,
   labelsOf,
   META_FILE,
@@ -58,6 +64,9 @@ import {
   parseCsv,
   parseJsonl,
   parseXmlInNode,
+  SAMPLED_CLUSTERS,
+  sampledClusterOf,
+  sampledOutOf,
   SHEET_FILE,
   STEP3_MINIMUMS,
   toCsv,
@@ -68,7 +77,9 @@ import {
 } from "../../../scripts/build-dedup-corpus";
 import {
   computeMetrics,
+  inLabelSet,
   main as reportMain,
+  sampledOutLine,
 } from "../../../scripts/dedup-report";
 import { assertFixturesFresh } from "../../contract/_transport";
 
@@ -161,6 +172,24 @@ describe("the committed corpus is what the builder makes from the committed fixt
     expect(built.rows).toHaveLength(438);
     expect(built.rows.filter((r) => r.engineCompares)).toHaveLength(352);
     expect(committedRows).toHaveLength(438);
+  });
+
+  // Measured 2026-10-16 after the owner's sampling (plan/00 §6 item 223).
+  it("pins the label set: 169 of 438 pairs, 269 sampled out of the two clusters", () => {
+    expect(committedRows.filter((r) => r.labelSet)).toHaveLength(169);
+    expect(committedRows.filter((r) => !r.labelSet)).toHaveLength(269);
+    expect(
+      committedRows.filter((r) => r.labelSet && r.a.source !== r.b.source),
+    ).toHaveLength(80);
+    expect(built.labelSetFamilies.counts).toEqual({
+      "same-work-3-sources": 5,
+      "preprint-published": 9,
+      "short-title": 25,
+      "series-title": 1,
+      "same-title-diff-year-diff-venue": 3,
+      "prefix-10.64898": 0,
+      "korean-title": 0,
+    });
   });
 
   it("gives every pair a unique, order-independent id", () => {
@@ -478,6 +507,193 @@ describe("step 3's families", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 3b. The label set — the owner's sampling of two clusters (2026-10-16)
+// ---------------------------------------------------------------------------
+
+describe("the label set (plan/00 §6 item 223)", () => {
+  /** A deterministic shuffle: the order changes, the content does not. */
+  function shuffled<T>(items: readonly T[], seed: number): T[] {
+    const out = [...items];
+    let s = seed;
+    for (let i = out.length - 1; i > 0; i -= 1) {
+      s = (s * 1103515245 + 12345) % 2147483648;
+      const j = s % (i + 1);
+      const tmp = out[i] as T;
+      out[i] = out[j] as T;
+      out[j] = tmp;
+    }
+    return out;
+  }
+
+  it("keeps exactly 20 pairs of each cluster in the committed corpus", () => {
+    expect(LABEL_SET_PER_CLUSTER).toBe(20);
+    expect(SAMPLED_CLUSTERS).toEqual([
+      "scotland-reports",
+      "short-title-crossref",
+    ]);
+    expect(sampledOutOf(labelSetOf(built.pairs))).toEqual({
+      "scotland-reports": { pairs: 231, kept: 20 },
+      "short-title-crossref": { pairs: 78, kept: 20 },
+    });
+    for (const cluster of SAMPLED_CLUSTERS) {
+      const inCluster = committedRows.filter(
+        (r) => r.sampleCluster === cluster,
+      );
+      expect(
+        inCluster.filter((r) => r.labelSet),
+        cluster,
+      ).toHaveLength(20);
+    }
+  });
+
+  it("samples out no pair outside the two clusters", () => {
+    for (const r of committedRows) {
+      if (r.sampleCluster === null) expect(r.labelSet, r.pairId).toBe(true);
+      if (!r.labelSet) expect(r.sampleCluster, r.pairId).not.toBeNull();
+    }
+    const byId = new Map(built.pairs.map((p) => [p.pairId, p]));
+    for (const r of committedRows) {
+      const p = byId.get(r.pairId);
+      if (p === undefined) throw new Error(`no pair ${r.pairId}`);
+      expect(sampledClusterOf(p.a, p.b) ?? null, r.pairId).toBe(
+        r.sampleCluster,
+      );
+    }
+  });
+
+  it("keeps the 20 smallest salted hashes of the pair id in each cluster", () => {
+    for (const cluster of SAMPLED_CLUSTERS) {
+      const ids = committedRows
+        .filter((r) => r.sampleCluster === cluster)
+        .map((r) => r.pairId);
+      const expected = [...ids]
+        .sort((x, y) =>
+          labelSetRank(x) < labelSetRank(y)
+            ? -1
+            : labelSetRank(x) > labelSetRank(y)
+              ? 1
+              : 0,
+        )
+        .slice(0, 20)
+        .sort();
+      expect(
+        committedRows
+          .filter((r) => r.sampleCluster === cluster && r.labelSet)
+          .map((r) => r.pairId)
+          .sort(),
+        cluster,
+      ).toEqual(expected);
+    }
+  });
+
+  it("does not depend on input order: shuffled pairs and shuffled records give the same label set", () => {
+    const reference = labelSetOf(built.pairs);
+    for (const seed of [1, 7, 2026]) {
+      expect(labelSetOf(shuffled(built.pairs, seed))).toEqual(reference);
+    }
+    const pool = built.corpus.records.map((c) => c.record);
+    const fromShuffledRecords = labelSetOf(candidatePairs(shuffled(pool, 99)));
+    expect(fromShuffledRecords).toEqual(reference);
+  });
+
+  it("recognises the clusters from record fields, on hand-built records", () => {
+    const scot = (id: string, week: string) =>
+      rec(id, {
+        title: `Enhanced Surveillance of COVID-19 in Scotland - ${week}`,
+      });
+    expect(
+      sampledClusterOf(
+        scot("crossref:s1", "Week 1"),
+        scot("crossref:s2", "Week 2"),
+      ),
+    ).toBe("scotland-reports");
+    expect(
+      sampledClusterOf(
+        scot("crossref:s1", "Week 1"),
+        scot("pubmed:s2", "Week 2"),
+      ),
+    ).toBeUndefined();
+    expect(
+      sampledClusterOf(
+        rec("crossref:p1", { title: "Part III" }),
+        rec("crossref:p2", { title: "PART III." }),
+      ),
+    ).toBe("short-title-crossref");
+    expect(
+      sampledClusterOf(
+        rec("crossref:p1", { title: "Part II" }),
+        rec("crossref:p2", { title: "Part III" }),
+      ),
+    ).toBeUndefined();
+    const long = "Single-cell atlas of the developing human heart";
+    expect(
+      sampledClusterOf(
+        rec("crossref:l1", { title: long }),
+        rec("crossref:l2", { title: long }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("keeps 20 of a hand-built 28-pair cluster, the same 20 in any order, and every other pair", () => {
+    const parts = Array.from({ length: 8 }, (_, i) =>
+      rec(`crossref:part${String(i)}`, { title: "Part III" }),
+    );
+    const others = [
+      rec("crossref:o1", { title: "Retraction" }),
+      rec("pubmed:o2", { title: "Retraction" }),
+    ];
+    const pairs = candidatePairs([...parts, ...others]);
+    expect(pairs).toHaveLength(29);
+    const set = labelSetOf(pairs);
+    expect(sampledOutOf(set)).toEqual({
+      "scotland-reports": { pairs: 0, kept: 0 },
+      "short-title-crossref": { pairs: 28, kept: 20 },
+    });
+    expect(set.get(pairIdOf("crossref:o1", "pubmed:o2"))).toEqual({
+      labelSet: true,
+      cluster: undefined,
+    });
+    expect(labelSetOf(candidatePairs([...others, ...parts].reverse()))).toEqual(
+      set,
+    );
+  });
+
+  it("writes only label-set pairs to the labelling sheet, and every pair to pairs.jsonl", () => {
+    const sheet = parseCsv(built.files[SHEET_FILE] ?? "");
+    const idCol = sheet[0]?.indexOf("pair_id") ?? -1;
+    expect(
+      sheet
+        .slice(1)
+        .map((r) => r[idCol])
+        .sort(),
+    ).toEqual(
+      committedRows
+        .filter((r) => r.labelSet)
+        .map((r) => r.pairId)
+        .sort(),
+    );
+    expect(parseJsonl(built.files[PAIRS_FILE] ?? "")).toHaveLength(438);
+  });
+
+  it("the report counts a row without labelSet as in the set, and names what was sampled out", () => {
+    const [first, second] = committedRows;
+    if (first === undefined || second === undefined) throw new Error("empty");
+    const legacy: Record<string, unknown> = { ...first };
+    delete legacy["labelSet"];
+    expect(inLabelSet(legacy as unknown as PairRow)).toBe(true);
+    expect(inLabelSet({ ...first, labelSet: false })).toBe(false);
+    expect(
+      sampledOutLine([
+        { ...first, labelSet: false, sampleCluster: "scotland-reports" },
+        { ...second, labelSet: true, sampleCluster: null },
+      ]),
+    ).toBe(
+      "Sampled out of the label set (owner, 2026-10-16): 1 of 2 pairs, not measured (scotland-reports 1)",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 4. The labelling sheet and the report
 // ---------------------------------------------------------------------------
 
@@ -521,8 +737,11 @@ describe("scripts/dedup-report.ts", () => {
     try {
       const code = await reportMain([resolve(DEDUP_CORPUS_DIR, PAIRS_FILE)]);
       expect(code).toBe(1);
-      expect(String(err.mock.calls[0]?.[0])).toMatch(
-        /is unlabelled: 438 of 438 pairs/u,
+      const said = String(err.mock.calls[0]?.[0]);
+      expect(said).toMatch(/is unlabelled: 169 of 169 label-set pairs/u);
+      expect(said).toContain(
+        "Sampled out of the label set (owner, 2026-10-16): 269 of 438 pairs, " +
+          "not measured (scotland-reports 211, short-title-crossref 58)",
       );
     } finally {
       err.mockRestore();
@@ -582,6 +801,8 @@ describe("scripts/dedup-report.ts", () => {
       pairId: pairIdOf(x.id, y.id),
       label,
       reason: "test case",
+      labelSet: true,
+      sampleCluster: null,
       engineCompares: true,
       origins: ["block"],
       families: [],

@@ -180,9 +180,15 @@ export const DEDUP_CORPUS_SEARCHES = {
  * once — so the remaining five searches were not sent, to keep the 85-request
  * budget for nothing that could not land. `corpus-q1` and `corpus-batch` are
  * committed as those measured 429 answers, the way `relevance-search` was
- * (`P2-T05`). A later recording moves these into
- * {@link DEDUP_CORPUS_SEARCHES}' `semanticscholar` row and re-records
- * `corpus-q1` and `corpus-batch`.
+ * (`P2-T05`).
+ *
+ * **Tried again 2026-10-16, still refused.** The owner approved up to 7 more
+ * Semantic Scholar requests (`plan/00` §6 item 223), with the rule "two
+ * consecutive 429 answers stop Semantic Scholar". The five searches were moved
+ * into {@link DEDUP_CORPUS_SEARCHES}' row and one request was sent per run:
+ * `corpus-batch` at 03:34:07 UTC and `corpus-q1` at 03:34:28 UTC both
+ * answered 429, so the other five were not sent and are back here. The two
+ * re-recorded 429 answers are the committed `corpus-batch` and `corpus-q1`.
  */
 export const DEDUP_CORPUS_DEFERRED_SEMANTICSCHOLAR: readonly DedupCorpusSearch[] =
   [

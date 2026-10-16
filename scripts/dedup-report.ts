@@ -26,6 +26,14 @@
  * - a flagged pair is not merged (FR-50 scenario 4), so a flagged true
  *   duplicate is a false negative for recall, and is listed as such.
  *
+ * **It measures the label set only** (owner's decision of 2026-10-16,
+ * `plan/00` §6 item 223). A row with `labelSet: false` was sampled out of one
+ * of the two big Crossref clusters by `scripts/build-dedup-corpus.ts`
+ * (section 4b there): it is neither required to carry a label nor measured,
+ * even when it carries one, and the report prints how many rows were sampled
+ * out. A row with no `labelSet` member (a file written before the sampling)
+ * counts as in the label set.
+ *
  * The targets are `docs/11` §1's Phase 2 definition of done: precision ≥ 0.99,
  * recall ≥ 0.90. The report states whether they are met and exits 0 either way:
  * the blocking gate is `P2-T13` Part B's accuracy test, not this printer.
@@ -98,6 +106,29 @@ export interface DedupMetrics {
   readonly recall: number | null;
   readonly f1: number | null;
   readonly scored: readonly ScoredPair[];
+}
+
+/** Is this row in the owner's label set? A row from before the sampling is. */
+export function inLabelSet(row: PairRow): boolean {
+  return (row as { readonly labelSet?: boolean }).labelSet !== false;
+}
+
+/** One line naming how many rows were sampled out, per cluster. */
+export function sampledOutLine(rows: readonly PairRow[]): string {
+  const out = rows.filter((r) => !inLabelSet(r));
+  const byCluster = new Map<string, number>();
+  for (const r of out) {
+    const c = r.sampleCluster ?? "unnamed";
+    byCluster.set(c, (byCluster.get(c) ?? 0) + 1);
+  }
+  const parts = [...byCluster]
+    .sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0))
+    .map(([c, n]) => `${c} ${String(n)}`);
+  return (
+    `Sampled out of the label set (owner, 2026-10-16): ${String(out.length)} ` +
+    `of ${String(rows.length)} pairs, not measured` +
+    (parts.length > 0 ? ` (${parts.join(", ")})` : "")
+  );
 }
 
 /** The four-way pair key a `DedupPair` lands under. */
@@ -210,11 +241,17 @@ function describePair(s: ScoredPair): string {
 /** The printed report. */
 export function formatReport(
   metrics: DedupMetrics,
-  context: { readonly file: string; readonly partial: string | undefined },
+  context: {
+    readonly file: string;
+    readonly partial: string | undefined;
+    /** {@link sampledOutLine}'s text; absent when nothing was sampled out. */
+    readonly sampledOut?: string;
+  },
 ): string {
   const out: string[] = [];
   if (context.partial !== undefined) out.push(`PARTIAL: ${context.partial}`);
   out.push(`Dedup accuracy on ${context.file}`);
+  if (context.sampledOut !== undefined) out.push(context.sampledOut);
   out.push(
     `Thresholds (src/sources/shared/dedupe.ts): ` +
       `LEVSIM_DUPLICATE_THRESHOLD ${String(LEVSIM_DUPLICATE_THRESHOLD)}, ` +
@@ -304,15 +341,19 @@ export async function main(argv: readonly string[]): Promise<number> {
     process.stderr.write(`${file} holds no pairs.\n`);
     return 2;
   }
-  const labelled = rows.filter((r) => r.label !== "");
-  const unlabelled = rows.length - labelled.length;
+  const labelSet = rows.filter(inLabelSet);
+  const sampledOut =
+    labelSet.length === rows.length ? undefined : sampledOutLine(rows);
+  const labelled = labelSet.filter((r) => r.label !== "");
+  const unlabelled = labelSet.length - labelled.length;
   if (labelled.length === 0 || (unlabelled > 0 && !allowPartial)) {
     process.stderr.write(
       `${file} is ${labelled.length === 0 ? "unlabelled" : "not fully labelled"}: ` +
-        `${String(unlabelled)} of ${String(rows.length)} pairs have no label. ` +
+        `${String(unlabelled)} of ${String(labelSet.length)} label-set pairs have no label. ` +
         `No measurement is made on unlabelled pairs. Label them by hand ` +
         `(${PAIR_LABELS.join(" / ")}) in test/fixtures/dedup/pairs.csv, then run ` +
-        `npx tsx scripts/build-dedup-corpus.ts --merge-labels test/fixtures/dedup/pairs.csv.\n`,
+        `npx tsx scripts/build-dedup-corpus.ts --merge-labels test/fixtures/dedup/pairs.csv.\n` +
+        (sampledOut === undefined ? "" : `${sampledOut}.\n`),
     );
     return 1;
   }
@@ -335,8 +376,9 @@ export async function main(argv: readonly string[]): Promise<number> {
       file,
       partial:
         unlabelled > 0
-          ? `${String(unlabelled)} of ${String(rows.length)} pairs are unlabelled and not measured`
+          ? `${String(unlabelled)} of ${String(labelSet.length)} label-set pairs are unlabelled and not measured`
           : undefined,
+      ...(sampledOut !== undefined && { sampledOut }),
     })}\n`,
   );
   return 0;
