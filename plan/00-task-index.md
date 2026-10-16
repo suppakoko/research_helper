@@ -1552,12 +1552,15 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.40 Raised by the P2-T13 recording, 2026-10-16 — item 223 waits on the owner
 
-223. **How the 438 pairs are labelled (owner).** Labelling all of them lets one Crossref cluster (231 pairs of 22
+223. ~~**How the 438 pairs are labelled (owner).**~~ **DECIDED 2026-10-16:** sample the two big clusters to 20 pairs
+    each (deterministic, documented), label the rest in full; record Semantic Scholar's deferred searches and batch (≤ 7
+    requests) and look up known `10.64898/` DOIs (≤ 15), inside the remaining 37 of the 85-request budget. Labelling all of them lets one Crossref cluster (231 pairs of 22
     separate Scotland reports) and 78 identical short titles dominate precision; sampling them down leaves fewer than
     200. Also open: Semantic Scholar's five deferred searches and batch (≤ 7 of the 37 unused requests, at a quieter hour),
     and a few lookups of known `10.64898/` DOIs (`docs/02` §11.2) for that family.
 
-224. **Recorded responses keep authors' published contact addresses** inside affiliation fields (277 occurrences in the
+224. ~~**Recorded responses keep authors' published contact addresses**~~ **DECIDED 2026-10-16: the recorder strips every
+    email address from fixtures, and the committed fixtures are re-scrubbed by the same pass (no network).** inside affiliation fields (277 occurrences in the
     new PubMed and Europe PMC fixtures; 15 earlier committed fixtures carry them too). They are public bibliographic
     metadata; the recorder strips only the maintainer address and secrets. Decide whether fixtures should strip them.
 
