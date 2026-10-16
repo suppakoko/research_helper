@@ -106,6 +106,10 @@ import {
   EUROPEPMC_TITLE_RICH as T_RICH,
   EUROPEPMC_TITLE_UNICODE_1 as T_UNI_1,
 } from "../../support/europepmcRecordedRequests";
+import { DEDUP_CORPUS_SEARCHES } from "../../support/dedupCorpusRecordedRequests";
+
+/** `P2-T13` Part B's corpus searches, recorded beside the `docs/13` inventory. */
+const CORPUS_FIXTURES = DEDUP_CORPUS_SEARCHES.europepmc.length;
 
 /**
  * `P2-T03`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, **no network**.
@@ -1807,9 +1811,10 @@ describe("replay: test/fixtures/europepmc through createHttpClient", () => {
         "search-post-long-query",
         "record-many-authors",
         "record-unicode-cjk",
+        ...DEDUP_CORPUS_SEARCHES.europepmc.map((s) => s.scenario),
       ]),
     );
-    expect(loaded).toHaveLength(19);
+    expect(loaded).toHaveLength(19 + CORPUS_FIXTURES);
     const names = await readdir(FIXTURE_DIR);
     for (const { key } of loaded) {
       expect(names).toContain(`${key}.json`);
@@ -1837,7 +1842,7 @@ describe("replay: test/fixtures/europepmc through createHttpClient", () => {
       expect(text).not.toMatch(/suppakoko(@|%40)gmail/iu);
     }
     const report = await assertFixturesFresh(FIXTURE_DIR, Date.now());
-    expect(report.checked).toBe(19);
+    expect(report.checked).toBe(19 + CORPUS_FIXTURES);
   });
 
   it("search-typical: 20 records, each with an abstract where abstractText was present (criterion 1)", async () => {

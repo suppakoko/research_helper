@@ -1,0 +1,15 @@
+{
+  "scenario": "corpus-q4",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T20:13:16.073Z",
+  "endpoint": "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "dropped header set-cookie",
+    "scrubbed body",
+    "scrubbed body: percent-encoded contact address",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

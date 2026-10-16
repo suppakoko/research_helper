@@ -78,6 +78,45 @@ export const MEDRXIV_DOI_RICH = "10.1101/2020.04.14.20062463";
 export const MEDRXIV_DOI_SPARSE = "10.64898/2026.09.03.26361736";
 
 // ---------------------------------------------------------------------------
+// P2-T13 Part B: the deduplication corpus's lookups
+// ---------------------------------------------------------------------------
+
+/**
+ * Preprint DOIs the `P2-T13` Part B corpus searches returned
+ * (`dedupCorpusRecordedRequests.ts`), looked up on `/details/` so that each
+ * preprint is also in the corpus as bioRxiv or medRxiv itself returns it — a
+ * pair with every other source's record of it, and through the `published`
+ * field a link to its journal version. Read from the recorded search
+ * fixtures' DOIs on 2026-10-16, not chosen by hand.
+ *
+ * **Which server.** Europe PMC names it (`bookOrReportDetails.publisher`).
+ * Crossref names only `openRxiv` for both, so a Crossref-only DOI is assigned
+ * by its accession: medRxiv accessions carry eight digits after the date
+ * (`24314505`), bioRxiv's six (`599202`) — `docs/02` §11.2's own examples
+ * follow that rule. The prefix never decides it (§11.2).
+ */
+export const BIORXIV_CORPUS_DOIS: readonly string[] = [
+  "10.1101/2024.06.16.599202", // Crossref corpus-q2
+  "10.1101/2024.07.14.603469", // Crossref corpus-q2
+  "10.1101/2024.10.29.620871", // Europe PMC corpus-q2
+];
+
+/** As {@link BIORXIV_CORPUS_DOIS}, for medRxiv. */
+export const MEDRXIV_CORPUS_DOIS: readonly string[] = [
+  "10.1101/2021.10.19.21265219", // Europe PMC corpus-q5
+  "10.1101/2021.12.02.21266871", // Europe PMC corpus-q5
+  "10.1101/2021.12.28.21268451", // Europe PMC corpus-q5
+  "10.1101/2024.09.27.24314505", // Crossref corpus-q3
+  "10.1101/2024.10.31.24316386", // Crossref and Europe PMC corpus-q3
+  "10.1101/2024.12.10.24317471", // Europe PMC corpus-q2
+];
+
+/** A corpus lookup's scenario name: `corpus-doi-<accession>`. */
+export function corpusLookupScenario(doi: string): string {
+  return `corpus-doi-${doi.slice(doi.indexOf("/") + 1)}`;
+}
+
+// ---------------------------------------------------------------------------
 // Both
 // ---------------------------------------------------------------------------
 

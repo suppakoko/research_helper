@@ -1,0 +1,14 @@
+{
+  "scenario": "corpus-batch",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-16T01:29:55.333Z",
+  "endpoint": "https://api.semanticscholar.org/graph/v1/paper/batch",
+  "method": "POST",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "scrubbed header via",
+    "scrubbed header x-amz-cf-id",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

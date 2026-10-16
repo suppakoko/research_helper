@@ -168,6 +168,16 @@ import {
   SEMANTICSCHOLAR_QUERY_TYPICAL as QUERY_TYPICAL,
   SEMANTICSCHOLAR_QUERY_UNICODE as QUERY_UNICODE,
 } from "../../support/semanticscholarRecordedRequests";
+import { DEDUP_CORPUS_SEARCHES } from "../../support/dedupCorpusRecordedRequests";
+
+/**
+ * `P2-T13` Part B's corpus scenarios, recorded beside the `docs/13`
+ * inventory: one relevance search per corpus search, and `corpus-batch`.
+ */
+const CORPUS_SCENARIOS = [
+  ...DEDUP_CORPUS_SEARCHES.semanticscholar.map((s) => s.scenario),
+  "corpus-batch",
+];
 
 /**
  * `P2-T05`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, **no network,
@@ -2372,12 +2382,13 @@ describe("replay: test/fixtures/semanticscholar through createHttpClient", () =>
         "batch-lookup",
         "health-probe",
         "error-400",
+        ...CORPUS_SCENARIOS,
       ]),
     );
     // Page 1 of the typical query exhausted its 27-record set, so no token
     // and no page 2 were recorded (measured 2026-10-15).
     expect(scenarios).not.toContain("paginated-page-2");
-    expect(loaded).toHaveLength(17);
+    expect(loaded).toHaveLength(17 + CORPUS_SCENARIOS.length);
     const names = await readdir(FIXTURE_DIR);
     for (const { key } of loaded) {
       expect(names).toContain(`${key}.json`);
@@ -2390,7 +2401,9 @@ describe("replay: test/fixtures/semanticscholar through createHttpClient", () =>
         ),
       );
       expect(meta.method).toBe(
-        ["batch-lookup", "record-jats-abstract"].includes(meta.scenario)
+        ["batch-lookup", "record-jats-abstract", "corpus-batch"].includes(
+          meta.scenario,
+        )
           ? "POST"
           : "GET",
       );
@@ -2407,7 +2420,7 @@ describe("replay: test/fixtures/semanticscholar through createHttpClient", () =>
       expect(text).not.toMatch(/x-api-key/iu);
     }
     const report = await assertFixturesFresh(FIXTURE_DIR, Date.now());
-    expect(report.checked).toBe(17);
+    expect(report.checked).toBe(17 + CORPUS_SCENARIOS.length);
   });
 
   it("search-typical: 27 records of 27, 21 with abstracts, 4 bioRxiv preprints, no next page, both notices", async () => {
@@ -2807,7 +2820,7 @@ describe("scripts/record-fixtures.ts: the Semantic Scholar plan", () => {
     };
     expect(await plan.dependent(fromDisk)).toEqual([]);
     const planned = [...plan.independent(), ...plan.syntheticRequests()];
-    expect(plan.independent()).toHaveLength(13);
+    expect(plan.independent()).toHaveLength(13 + CORPUS_SCENARIOS.length);
     const onDisk = (await readdir(FIXTURE_DIR))
       .filter((n) => n.endsWith(".json") && !n.endsWith(META_SUFFIX))
       .map((n) => n.replace(/\.json$/u, ""));

@@ -48,6 +48,39 @@ export const PUBMED_TYPICAL_QUERY: SourceQuery = {
   limit: 20,
 };
 
+/**
+ * The 20 PMIDs the committed `search-typical` fixture resolved to, in NCBI's
+ * order, frozen here for `P2-T13` Part B's `search-typical-efetch` scenario.
+ * Phase 1 recorded that search's identifiers but never their records, so
+ * PubMed contributed none to the overlap with Europe PMC's and Crossref's
+ * `search-typical` (the same question over the same quarter). Read from
+ * `test/fixtures/pubmed/790a326635d71fbc.json`'s `idlist` on 2026-10-16, not
+ * re-searched; written down rather than planned from that answer because the
+ * recorder plans a dependent request only from what the same run captured.
+ */
+export const PUBMED_TYPICAL_PMIDS: readonly string[] = [
+  "39086673",
+  "36997768",
+  "36997683",
+  "36997680",
+  "36997536",
+  "36997524",
+  "36997438",
+  "36997428",
+  "36997024",
+  "36995680",
+  "36995678",
+  "36995675",
+  "36995672",
+  "36995671",
+  "36995669",
+  "36995667",
+  "36995665",
+  "36995664",
+  "36995662",
+  "36995636",
+];
+
 /** `scripts/record-fixtures.ts`'s `PAGE_SIZE`: three per page, two pages. */
 export const PUBMED_PAGE_SIZE = 3;
 

@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Thu, 15 Oct 2026 20:16:37 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.26"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"Evaluating large language model workflows in clinical decision support: referral, triage, and diagnosis\",\"authors\":\"Gaber, F.; shaik, M.; Franke, V.; Akalin, A.\",\"author_corresponding\":\"Altuna Akalin\",\"author_corresponding_institution\":\"Max Delbrueck Center\",\"doi\":\"10.1101\\/2024.09.27.24314505\",\"date\":\"2024-09-28\",\"version\":\"1\",\"type\":\"PUBLISHAHEADOFPRINT\",\"license\":\"cc_by_nc_nd\",\"category\":\"health informatics\",\"jatsxml\":\"https:\\/\\/www.medrxiv.org\\/content\\/early\\/2024\\/09\\/28\\/2024.09.27.24314505.source.xml\",\"abstract\":\"Accurate medical decision-making is critical for both patients and clinicians. Patients often struggle to interpret their symptoms, determine their severity, and select the right specialist. Simultaneously, clinicians face challenges in integrating complex patient data to make timely, accurate diagnoses. Recent advances in large language models (LLMs) offer the potential to bridge this gap by supporting decision-making for both patients and healthcare providers. In this study, we benchmark multiple LLM versions and an LLM-based workflow incorporating retrieval-augmented generation (RAG) on a curated dataset of 2,000 medical cases derived from the Medical Information Mart for Intensive Care database. Our findings show that these LLMs are capable of providing personalized insights into likely diagnoses, suggesting appropriate specialists, and assessing urgent care needs. These models may also support clinicians in refining diagnoses and decision-making, offering a promising approach to improving patient outcomes and streamlining healthcare delivery.\",\"published\":\"10.1038\\/s41746-025-01684-1\",\"server\":\"medRxiv\"}]}\r\n\r\n\r\n\r\n"
+}

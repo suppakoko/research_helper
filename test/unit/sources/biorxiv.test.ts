@@ -103,6 +103,7 @@ import {
   RECORDABLE_SOURCES,
 } from "../../../scripts/record-fixtures";
 import {
+  BIORXIV_CORPUS_DOIS,
   BIORXIV_DOI_ABSENT,
   BIORXIV_DOI_CROSS_SERVER,
   BIORXIV_DOI_OLD_STYLE,
@@ -114,6 +115,8 @@ import {
   BIORXIV_DOI_SYNTHETIC_MALFORMED,
   BIORXIV_DOI_SYNTHETIC_STATUS_ERROR,
   BIORXIV_DOI_UNICODE,
+  corpusLookupScenario,
+  MEDRXIV_CORPUS_DOIS,
   MEDRXIV_DOI_RICH,
   MEDRXIV_DOI_SPARSE,
   recordedBiorxivRequest,
@@ -1335,9 +1338,16 @@ function replaySource(server: BiorxivServer) {
 const ids = (doi: string) => [{ doi: doi as Doi }];
 
 describe("replay: the recorded fixture sets", () => {
+  // `P2-T13` Part B's corpus lookups sit beside the `docs/13` inventory.
   for (const [server, expected] of [
-    ["biorxiv", BIORXIV_SCENARIOS],
-    ["medrxiv", MEDRXIV_SCENARIOS],
+    [
+      "biorxiv",
+      [...BIORXIV_SCENARIOS, ...BIORXIV_CORPUS_DOIS.map(corpusLookupScenario)],
+    ],
+    [
+      "medrxiv",
+      [...MEDRXIV_SCENARIOS, ...MEDRXIV_CORPUS_DOIS.map(corpusLookupScenario)],
+    ],
   ] as const) {
     it(`${server}: holds exactly its scenarios, each with a sidecar, synthetic where written`, async () => {
       const loaded = await listFixtureMeta(FIXTURE_DIRS[server]);
@@ -1619,8 +1629,9 @@ describe("registerSources with the biorxiv and medrxiv slots", () => {
 
 describe("scripts/record-fixtures.ts: the bioRxiv and medRxiv plans", () => {
   for (const [server, independent] of [
-    ["biorxiv", 8],
-    ["medrxiv", 4],
+    // Plus `P2-T13` Part B's corpus lookups.
+    ["biorxiv", 8 + BIORXIV_CORPUS_DOIS.length],
+    ["medrxiv", 4 + MEDRXIV_CORPUS_DOIS.length],
   ] as const) {
     it(`${server}: plans every committed fixture under the key on disk, and nothing else`, async () => {
       const plan = planFor(server);

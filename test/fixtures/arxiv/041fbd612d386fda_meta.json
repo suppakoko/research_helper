@@ -1,0 +1,13 @@
+{
+  "scenario": "corpus-q3",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T20:14:12.853Z",
+  "endpoint": "https://export.arxiv.org/api/query",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "scrubbed header x-cloud-trace-context",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

@@ -194,6 +194,44 @@ export const SEMANTICSCHOLAR_BATCH_IDS: readonly string[] = [
   "DOI:10.1234/research-helper-unknown-id",
   "ARXIV:2106.15928",
 ];
+/**
+ * `corpus-batch` (`P2-T13` Part B): one `/paper/batch` POST, so that the
+ * deduplication corpus holds Semantic Scholar's record of every preprint the
+ * bioRxiv and medRxiv corpus lookups hold, and of each preprint's journal
+ * version. Three groups, all read from committed fixtures on 2026-10-16:
+ *
+ * 1. the preprint DOIs the corpus searches returned
+ *    (`biorxivRecordedRequests.ts`'s `BIORXIV_CORPUS_DOIS` and
+ *    `MEDRXIV_CORPUS_DOIS`);
+ * 2. the journal DOIs those lookups name in `published`;
+ * 3. the two current-prefix (`10.64898/`) DOIs the committed bioRxiv and
+ *    medRxiv `record-sparse` fixtures hold — no corpus search could return a
+ *    `10.64898/` DOI (every window predates the prefix), and `P2-T13` step 3
+ *    asks for such pairs on both servers.
+ *
+ * Recorded 2026-10-16 01:29 UTC as HTTP 429 (the anonymous pool refused it);
+ * the committed fixture is that answer and yields no record.
+ */
+export const SEMANTICSCHOLAR_CORPUS_BATCH_IDS: readonly string[] = [
+  "DOI:10.1101/2024.06.16.599202",
+  "DOI:10.1101/2024.07.14.603469",
+  "DOI:10.1101/2024.10.29.620871",
+  "DOI:10.1101/2021.10.19.21265219",
+  "DOI:10.1101/2021.12.02.21266871",
+  "DOI:10.1101/2021.12.28.21268451",
+  "DOI:10.1101/2024.09.27.24314505",
+  "DOI:10.1101/2024.10.31.24316386",
+  "DOI:10.1101/2024.12.10.24317471",
+  "DOI:10.7554/eLife.104978.3",
+  "DOI:10.1038/s41746-025-01684-1",
+  "DOI:10.7759/cureus.27428",
+  "DOI:10.1128/mSphere.00685-21",
+  "DOI:10.1016/j.jbi.2025.104830",
+  "DOI:10.1371/journal.pgph.0000647",
+  "DOI:10.64898/2026.07.31.741992",
+  "DOI:10.64898/2026.09.03.26361736",
+];
+
 /** The query the hand-written `error-429` fixture is keyed under. */
 export const SEMANTICSCHOLAR_QUERY_SYNTHETIC_429: SourceQuery = {
   terms: term("synthetic rate limit fixture"),

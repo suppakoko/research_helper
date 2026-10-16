@@ -1,0 +1,12 @@
+{
+  "scenario": "corpus-doi-2024.07.14.603469",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T20:16:31.145Z",
+  "endpoint": "https://api.biorxiv.org/details/biorxiv",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

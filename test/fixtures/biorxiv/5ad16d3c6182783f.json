@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Thu, 15 Oct 2026 20:16:27 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.26"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"The comparison of single-cell RNA sequencing platforms based droplets\",\"authors\":\"Zhong, Y.; Wang, L.\",\"author_corresponding\":\"Yulong Zhong\",\"author_corresponding_institution\":\"Southern Medical University\",\"doi\":\"10.1101\\/2024.06.16.599202\",\"date\":\"2024-06-17\",\"version\":\"1\",\"type\":\"new results\",\"license\":\"cc_no\",\"category\":\"cell biology\",\"jatsxml\":\"https:\\/\\/www.biorxiv.org\\/content\\/early\\/2024\\/06\\/17\\/2024.06.16.599202.source.xml\",\"abstract\":\"Single-cell sequencing enables to reveal cellular heterogeneity and discover new cellular subpopulations. In terms of the strategy of single-cell sequencing, the main methods are based with combinatorial index, microwell and microfluidic. Due to the simplicity, methods based droplets are widely used for single-cell sequencing for multi-omics. Therefore, in order to facilitate researchers to choose a suitable platform to meet their application scenarios, we compared several commercial platforms: the Chromium X platform of 10x Genomics, the MobiNova-100 platform of MobiDrop, the SeekOne platform of SeekGene, and the C4 platform of BGI. Based the comprehensive assessment of the data analysis, the Chromium X platform shows a excellent performance, closely followed by MobiNova-100 platform.\\n\\nOne-Sentence SummaryAs droplet-based single-cell sequencing platforms, Chromium X and MobiNova-100 have comparable data performance.\",\"published\":\"NA\",\"server\":\"bioRxiv\"}]}\r\n\r\n\r\n\r\n"
+}

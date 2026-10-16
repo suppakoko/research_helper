@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "X-RateLimit-Limit,X-RateLimit-Remaining",
+    "alt-svc": "clear",
+    "cache-control": "private",
+    "content-encoding": "gzip",
+    "content-security-policy": "upgrade-insecure-requests",
+    "content-type": "application/json; charset=UTF-8",
+    "date": "Thu, 15 Oct 2026 20:12:41 GMT",
+    "referrer-policy": "origin-when-cross-origin",
+    "server": "Finatra",
+    "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "via": "1.1 google",
+    "x-ratelimit-limit": "3",
+    "x-ratelimit-remaining": "1",
+    "x-ua-compatible": "IE=Edge",
+    "x-xss-protection": "1; mode=block"
+  },
+  "body": "{\"header\":{\"type\":\"esearch\",\"version\":\"0.3\"},\"esearchresult\":{\"count\":\"1462\",\"retmax\":\"25\",\"retstart\":\"0\",\"idlist\":[\"34968773\",\"34965480\",\"34964622\",\"34963873\",\"34963505\",\"34961672\",\"34960623\",\"34956206\",\"34955103\",\"34953474\",\"34949558\",\"34949273\",\"34946456\",\"34946093\",\"34943264\",\"34941968\",\"34936397\",\"34935000\",\"34933819\",\"34929358\",\"34921091\",\"34920109\",\"34919545\",\"34915969\",\"34909302\"],\"translationset\":[{\"from\":\"COVID-19[All Fields]\",\"to\":\"(\\\"COVID-19\\\" OR \\\"COVID19\\\" OR \\\"COVID-19\\\"[MeSH Terms] OR \\\"COVID-19 Vaccines\\\" OR \\\"COVID-19 Vaccines\\\"[MeSH Terms] OR \\\"COVID-19 serotherapy\\\" OR \\\"COVID-19 serotherapy\\\"[MeSH Terms] OR \\\"COVID-19 Nucleic Acid Testing\\\" OR \\\"covid-19 nucleic acid testing\\\"[MeSH Terms] OR \\\"COVID-19 Serological Testing\\\" OR \\\"covid-19 serological testing\\\"[MeSH Terms] OR \\\"COVID-19 Testing\\\" OR \\\"covid-19 testing\\\"[MeSH Terms] OR \\\"SARS-CoV-2\\\" OR \\\"SARSCoV2\\\" OR \\\"SARSCoV-2\\\" OR \\\"SARS-CoV2\\\" OR \\\"sars-cov-2\\\"[MeSH Terms] OR \\\"Severe Acute Respiratory Syndrome Coronavirus 2\\\" OR \\\"2019 NCOV\\\" OR ((\\\"coronavirus\\\"[MeSH Terms] OR \\\"coronavirus\\\" OR \\\"COV\\\" OR \\\"NCOV\\\") AND 2019/11/01[PDAT] : 3000/12/31[PDAT]))\"},{\"from\":\"seroprevalence[All Fields]\",\"to\":\"\\\"seroepidemiologic studies\\\"[MeSH Terms] OR (\\\"seroepidemiologic\\\"[All Fields] AND \\\"studies\\\"[All Fields]) OR \\\"seroepidemiologic studies\\\"[All Fields] OR \\\"seroprevalence\\\"[All Fields] OR \\\"seroprevalences\\\"[All Fields] OR \\\"seroprevalance\\\"[All Fields] OR \\\"seroprevalances\\\"[All Fields] OR \\\"seroprevalency\\\"[All Fields] OR \\\"seroprevalent\\\"[All Fields]\"}],\"querytranslation\":\"(\\\"covid 19\\\"[All Fields] OR \\\"covid19\\\"[All Fields] OR \\\"covid 19\\\"[MeSH Terms] OR \\\"covid 19 vaccines\\\"[All Fields] OR \\\"covid 19 vaccines\\\"[MeSH Terms] OR \\\"covid 19 serotherapy\\\"[All Fields] OR \\\"covid 19 serotherapy\\\"[MeSH Terms] OR \\\"covid 19 nucleic acid testing\\\"[All Fields] OR \\\"covid 19 nucleic acid testing\\\"[MeSH Terms] OR \\\"covid 19 serological testing\\\"[All Fields] OR \\\"covid 19 serological testing\\\"[MeSH Terms] OR \\\"covid 19 testing\\\"[All Fields] OR \\\"covid 19 testing\\\"[MeSH Terms] OR \\\"sars cov 2\\\"[All Fields] OR \\\"sarscov2\\\"[All Fields] OR \\\"sarscov 2\\\"[All Fields] OR \\\"sars cov2\\\"[All Fields] OR \\\"sars cov 2\\\"[MeSH Terms] OR \\\"severe acute respiratory syndrome coronavirus 2\\\"[All Fields] OR \\\"2019 ncov\\\"[All Fields] OR ((\\\"coronavirus\\\"[MeSH Terms] OR \\\"coronavirus\\\"[All Fields] OR \\\"cov\\\"[All Fields] OR \\\"ncov\\\"[All Fields]) AND 2019/11/01:3000/12/31[Date - Publication])) AND (\\\"seroepidemiologic studies\\\"[MeSH Terms] OR (\\\"seroepidemiologic\\\"[All Fields] AND \\\"studies\\\"[All Fields]) OR \\\"seroepidemiologic studies\\\"[All Fields] OR \\\"seroprevalence\\\"[All Fields] OR \\\"seroprevalences\\\"[All Fields] OR \\\"seroprevalance\\\"[All Fields] OR \\\"seroprevalances\\\"[All Fields] OR \\\"seroprevalency\\\"[All Fields] OR \\\"seroprevalent\\\"[All Fields]) AND 2020/01/01:2021/12/31[Date - Entry]\"}}\n"
+}

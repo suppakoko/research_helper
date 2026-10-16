@@ -13,20 +13,26 @@
   ],
   "derived": true,
   "generatedBy": "npx tsx scripts/build-dedup-corpus.ts",
-  "recordCount": 296,
-  "pairCount": 47,
-  "engineComparedPairCount": 40,
+  "recordCount": 898,
+  "pairCount": 438,
+  "engineComparedPairCount": 352,
   "labelledPairCount": 0,
   "familyCounts": {
-    "same-work-3-sources": 3,
-    "preprint-published": 7,
-    "short-title": 3,
+    "same-work-3-sources": 5,
+    "preprint-published": 9,
+    "short-title": 83,
     "series-title": 1,
-    "same-title-diff-year-diff-venue": 1,
+    "same-title-diff-year-diff-venue": 3,
     "prefix-10.64898": 0,
     "korean-title": 0
   },
   "derivedFrom": [
+    {
+      "source": "arxiv",
+      "key": "041fbd612d386fda",
+      "scenario": "corpus-q3",
+      "recordedAt": "2026-10-15T20:14:12.853Z"
+    },
     {
       "source": "arxiv",
       "key": "1a98f307bacd3669",
@@ -50,6 +56,12 @@
       "key": "4f50326ca73c022a",
       "scenario": "record-rich",
       "recordedAt": "2026-10-14T16:36:26.996Z"
+    },
+    {
+      "source": "arxiv",
+      "key": "7796353c43537d3f",
+      "scenario": "corpus-probe-series",
+      "recordedAt": "2026-10-15T20:14:12.858Z"
     },
     {
       "source": "arxiv",
@@ -95,6 +107,18 @@
     },
     {
       "source": "arxiv",
+      "key": "c289a0baf7022c73",
+      "scenario": "corpus-q4",
+      "recordedAt": "2026-10-15T20:14:12.855Z"
+    },
+    {
+      "source": "arxiv",
+      "key": "dcdc584ea6418942",
+      "scenario": "corpus-q2",
+      "recordedAt": "2026-10-15T20:14:12.849Z"
+    },
+    {
+      "source": "arxiv",
       "key": "f5e9774543f69d54",
       "scenario": "paginated-page-2",
       "recordedAt": "2026-10-14T16:36:27.003Z"
@@ -125,6 +149,12 @@
     },
     {
       "source": "biorxiv",
+      "key": "5ad16d3c6182783f",
+      "scenario": "corpus-doi-2024.06.16.599202",
+      "recordedAt": "2026-10-15T20:16:31.142Z"
+    },
+    {
+      "source": "biorxiv",
       "key": "7af6ed7d57310100",
       "scenario": "record-unicode",
       "recordedAt": "2026-10-15T09:17:02.646Z"
@@ -143,6 +173,18 @@
     },
     {
       "source": "biorxiv",
+      "key": "d4355451b8d7b918",
+      "scenario": "corpus-doi-2024.10.29.620871",
+      "recordedAt": "2026-10-15T20:16:31.146Z"
+    },
+    {
+      "source": "biorxiv",
+      "key": "ea02f2fc4047b71c",
+      "scenario": "corpus-doi-2024.07.14.603469",
+      "recordedAt": "2026-10-15T20:16:31.145Z"
+    },
+    {
+      "source": "biorxiv",
       "key": "edc4112a7558e933",
       "scenario": "record-sparse",
       "recordedAt": "2026-10-15T09:17:02.645Z"
@@ -155,9 +197,33 @@
     },
     {
       "source": "crossref",
+      "key": "27e7a2f351d68f9b",
+      "scenario": "corpus-probe-short-title",
+      "recordedAt": "2026-10-15T20:13:35.003Z"
+    },
+    {
+      "source": "crossref",
+      "key": "33ab8966e56a813d",
+      "scenario": "corpus-q3",
+      "recordedAt": "2026-10-15T20:13:34.997Z"
+    },
+    {
+      "source": "crossref",
+      "key": "4238211a020902bc",
+      "scenario": "corpus-q2",
+      "recordedAt": "2026-10-15T20:13:34.995Z"
+    },
+    {
+      "source": "crossref",
       "key": "4e9bb5e8eaab7ec8",
       "scenario": "record-preprint",
       "recordedAt": "2026-10-14T15:08:22.195Z"
+    },
+    {
+      "source": "crossref",
+      "key": "607099830f12c5c3",
+      "scenario": "corpus-q5",
+      "recordedAt": "2026-10-15T20:13:35.001Z"
     },
     {
       "source": "crossref",
@@ -170,6 +236,18 @@
       "key": "672da310bedeb5b3",
       "scenario": "paginated-page-1",
       "recordedAt": "2026-10-14T15:08:22.198Z"
+    },
+    {
+      "source": "crossref",
+      "key": "76001f8b617764b5",
+      "scenario": "corpus-probe-series",
+      "recordedAt": "2026-10-15T20:13:35.005Z"
+    },
+    {
+      "source": "crossref",
+      "key": "7fff42ec6832cac6",
+      "scenario": "corpus-q1",
+      "recordedAt": "2026-10-15T20:13:34.991Z"
     },
     {
       "source": "crossref",
@@ -209,6 +287,18 @@
     },
     {
       "source": "crossref",
+      "key": "dea3f54e65ec43c8",
+      "scenario": "corpus-q4",
+      "recordedAt": "2026-10-15T20:13:34.999Z"
+    },
+    {
+      "source": "crossref",
+      "key": "e44adae7d003ab29",
+      "scenario": "corpus-probe-korean",
+      "recordedAt": "2026-10-15T20:13:35.006Z"
+    },
+    {
+      "source": "crossref",
       "key": "eac03df49dafa501",
       "scenario": "record-jats-abstract",
       "recordedAt": "2026-10-14T15:08:22.194Z"
@@ -233,15 +323,39 @@
     },
     {
       "source": "europepmc",
+      "key": "1459a6edbe2d2fb5",
+      "scenario": "corpus-q5",
+      "recordedAt": "2026-10-15T20:13:16.081Z"
+    },
+    {
+      "source": "europepmc",
       "key": "15d1728bd309b349",
       "scenario": "record-many-authors",
       "recordedAt": "2026-10-14T05:27:43.306Z"
     },
     {
       "source": "europepmc",
+      "key": "163b1e1e41c3c0f5",
+      "scenario": "corpus-q1",
+      "recordedAt": "2026-10-15T20:13:16.054Z"
+    },
+    {
+      "source": "europepmc",
+      "key": "2ba75612f9fc86a5",
+      "scenario": "corpus-probe-short-title",
+      "recordedAt": "2026-10-15T20:13:16.084Z"
+    },
+    {
+      "source": "europepmc",
       "key": "2e8de1df7287b537",
       "scenario": "search-single",
       "recordedAt": "2026-10-14T05:27:43.298Z"
+    },
+    {
+      "source": "europepmc",
+      "key": "32c152229d1252cc",
+      "scenario": "corpus-q3",
+      "recordedAt": "2026-10-15T20:13:16.068Z"
     },
     {
       "source": "europepmc",
@@ -269,6 +383,18 @@
     },
     {
       "source": "europepmc",
+      "key": "686013fb7d10f1ae",
+      "scenario": "corpus-q2",
+      "recordedAt": "2026-10-15T20:13:16.062Z"
+    },
+    {
+      "source": "europepmc",
+      "key": "69f8d7b54c757aa4",
+      "scenario": "corpus-q4",
+      "recordedAt": "2026-10-15T20:13:16.073Z"
+    },
+    {
+      "source": "europepmc",
       "key": "7e14437802452b11",
       "scenario": "dedup-pair-set",
       "recordedAt": "2026-10-14T05:27:43.308Z"
@@ -290,6 +416,12 @@
       "key": "a691a040d8948ce2",
       "scenario": "search-empty",
       "recordedAt": "2026-10-14T05:27:43.297Z"
+    },
+    {
+      "source": "europepmc",
+      "key": "cf3a564c8481258a",
+      "scenario": "corpus-probe-series",
+      "recordedAt": "2026-10-15T20:13:16.088Z"
     },
     {
       "source": "europepmc",
@@ -317,6 +449,24 @@
     },
     {
       "source": "medrxiv",
+      "key": "0db03ebc25008eb3",
+      "scenario": "corpus-doi-2024.12.10.24317471",
+      "recordedAt": "2026-10-15T20:16:41.479Z"
+    },
+    {
+      "source": "medrxiv",
+      "key": "1647724675d23b4e",
+      "scenario": "corpus-doi-2024.09.27.24314505",
+      "recordedAt": "2026-10-15T20:16:41.477Z"
+    },
+    {
+      "source": "medrxiv",
+      "key": "3bc8e9d1a19109d4",
+      "scenario": "corpus-doi-2021.12.28.21268451",
+      "recordedAt": "2026-10-15T20:16:41.476Z"
+    },
+    {
+      "source": "medrxiv",
       "key": "511c4358e5e5251d",
       "scenario": "search-empty",
       "recordedAt": "2026-10-15T09:17:13.663Z"
@@ -329,9 +479,21 @@
     },
     {
       "source": "medrxiv",
+      "key": "74ec20aca04c685d",
+      "scenario": "corpus-doi-2021.10.19.21265219",
+      "recordedAt": "2026-10-15T20:16:41.472Z"
+    },
+    {
+      "source": "medrxiv",
       "key": "7fd440b491f8bde7",
       "scenario": "record-preprint",
       "recordedAt": "2026-10-15T09:19:23.720Z"
+    },
+    {
+      "source": "medrxiv",
+      "key": "d5b4037bdd0926dd",
+      "scenario": "corpus-doi-2024.10.31.24316386",
+      "recordedAt": "2026-10-15T20:16:41.478Z"
     },
     {
       "source": "medrxiv",
@@ -340,10 +502,22 @@
       "recordedAt": "2026-10-15T09:17:13.659Z"
     },
     {
+      "source": "medrxiv",
+      "key": "ebfc529ffee0f219",
+      "scenario": "corpus-doi-2021.12.02.21266871",
+      "recordedAt": "2026-10-15T20:16:41.475Z"
+    },
+    {
       "source": "pubmed",
       "key": "099a0fd88ff59782",
       "scenario": "record-rich",
       "recordedAt": "2026-10-07T09:11:48.632Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "174f2f4fadf55622",
+      "scenario": "corpus-probe-short-title-efetch",
+      "recordedAt": "2026-10-15T20:12:55.781Z"
     },
     {
       "source": "pubmed",
@@ -359,6 +533,18 @@
     },
     {
       "source": "pubmed",
+      "key": "223d5a52871ec946",
+      "scenario": "corpus-q1-esearch",
+      "recordedAt": "2026-10-15T20:12:55.699Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "22667a02f58080df",
+      "scenario": "corpus-q3-esearch",
+      "recordedAt": "2026-10-15T20:12:55.703Z"
+    },
+    {
+      "source": "pubmed",
       "key": "298cf4e4adcf80bd",
       "scenario": "search-single",
       "recordedAt": "2026-10-07T09:11:48.627Z"
@@ -371,15 +557,33 @@
     },
     {
       "source": "pubmed",
+      "key": "2f31c6efa9348baf",
+      "scenario": "corpus-q2-esearch",
+      "recordedAt": "2026-10-15T20:12:55.701Z"
+    },
+    {
+      "source": "pubmed",
       "key": "33ba93f543b543bc",
       "scenario": "record-jats-abstract",
       "recordedAt": "2026-10-07T09:11:48.637Z"
     },
     {
       "source": "pubmed",
+      "key": "465b88bf28b1a1d6",
+      "scenario": "corpus-q5-efetch",
+      "recordedAt": "2026-10-15T20:12:55.779Z"
+    },
+    {
+      "source": "pubmed",
       "key": "4ca74cf52838c0c6",
       "scenario": "window-esearch",
       "recordedAt": "2026-10-15T07:50:20.433Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "52582e9597b4ccbf",
+      "scenario": "corpus-probe-series-esearch",
+      "recordedAt": "2026-10-15T20:12:55.706Z"
     },
     {
       "source": "pubmed",
@@ -401,9 +605,39 @@
     },
     {
       "source": "pubmed",
+      "key": "7ba79dd2ba6d8b96",
+      "scenario": "corpus-q4-efetch",
+      "recordedAt": "2026-10-15T20:12:55.768Z"
+    },
+    {
+      "source": "pubmed",
       "key": "8052d2345b387c89",
       "scenario": "paginated-page-2-efetch",
       "recordedAt": "2026-10-07T09:11:48.645Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "8387066e54161ef3",
+      "scenario": "corpus-q4-esearch",
+      "recordedAt": "2026-10-15T20:12:55.704Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "9d1d01f24c6f82a3",
+      "scenario": "corpus-probe-series-efetch",
+      "recordedAt": "2026-10-15T20:12:55.794Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "b14cda3696061355",
+      "scenario": "corpus-q5-esearch",
+      "recordedAt": "2026-10-15T20:12:55.704Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "b3baa71673787d55",
+      "scenario": "corpus-q1-efetch",
+      "recordedAt": "2026-10-15T20:12:55.722Z"
     },
     {
       "source": "pubmed",
@@ -413,9 +647,33 @@
     },
     {
       "source": "pubmed",
+      "key": "bd340fe6edb40aaf",
+      "scenario": "corpus-q3-efetch",
+      "recordedAt": "2026-10-15T20:12:55.756Z"
+    },
+    {
+      "source": "pubmed",
       "key": "bfd131e7b8d021d9",
       "scenario": "search-empty",
       "recordedAt": "2026-10-07T09:11:48.627Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "c055e324817ad23d",
+      "scenario": "corpus-probe-short-title-esearch",
+      "recordedAt": "2026-10-15T20:12:55.705Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "d6ab9737d04e4065",
+      "scenario": "search-typical-efetch",
+      "recordedAt": "2026-10-15T20:12:55.696Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "df62c5de049361a2",
+      "scenario": "corpus-q2-efetch",
+      "recordedAt": "2026-10-15T20:12:55.742Z"
     },
     {
       "source": "pubmed",
@@ -437,6 +695,12 @@
     },
     {
       "source": "semanticscholar",
+      "key": "2ad108cd86ac579e",
+      "scenario": "corpus-q1",
+      "recordedAt": "2026-10-16T01:29:20.319Z"
+    },
+    {
+      "source": "semanticscholar",
       "key": "34cbfc77f5a69136",
       "scenario": "paginated-page-1",
       "recordedAt": "2026-10-15T02:25:14.915Z"
@@ -452,6 +716,12 @@
       "key": "62bbdefc213f5176",
       "scenario": "record-rich",
       "recordedAt": "2026-10-15T02:32:45.236Z"
+    },
+    {
+      "source": "semanticscholar",
+      "key": "62ed3f4b038ba6f5",
+      "scenario": "corpus-batch",
+      "recordedAt": "2026-10-16T01:29:55.333Z"
     },
     {
       "source": "semanticscholar",

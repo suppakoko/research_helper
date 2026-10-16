@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "X-RateLimit-Limit,X-RateLimit-Remaining",
+    "alt-svc": "clear",
+    "cache-control": "private",
+    "content-encoding": "gzip",
+    "content-security-policy": "upgrade-insecure-requests",
+    "content-type": "application/json; charset=UTF-8",
+    "date": "Thu, 15 Oct 2026 20:12:40 GMT",
+    "referrer-policy": "origin-when-cross-origin",
+    "server": "Finatra",
+    "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "via": "1.1 google",
+    "x-ratelimit-limit": "3",
+    "x-ratelimit-remaining": "2",
+    "x-ua-compatible": "IE=Edge",
+    "x-xss-protection": "1; mode=block"
+  },
+  "body": "{\"header\":{\"type\":\"esearch\",\"version\":\"0.3\"},\"esearchresult\":{\"count\":\"1704\",\"retmax\":\"25\",\"retstart\":\"0\",\"idlist\":[\"39738210\",\"39737451\",\"39735955\",\"39732434\",\"39731895\",\"39730573\",\"39730390\",\"39730224\",\"39730041\",\"39729971\",\"39729356\",\"39729119\",\"39728077\",\"39726986\",\"39726894\",\"39725798\",\"39725770\",\"39724913\",\"39723845\",\"39722251\",\"39722188\",\"39720417\",\"39718704\",\"39715916\",\"39715786\"],\"translationset\":[{\"from\":\"large[All Fields]\",\"to\":\"\\\"large\\\"[All Fields] OR \\\"largely\\\"[All Fields] OR \\\"larges\\\"[All Fields]\"},{\"from\":\"language[All Fields]\",\"to\":\"\\\"language\\\"[MeSH Terms] OR \\\"language\\\"[All Fields] OR \\\"languages\\\"[All Fields] OR \\\"language's\\\"[All Fields] OR \\\"programming languages\\\"[MeSH Terms] OR (\\\"programming\\\"[All Fields] AND \\\"languages\\\"[All Fields]) OR \\\"programming languages\\\"[All Fields]\"},{\"from\":\"model[All Fields]\",\"to\":\"\\\"model\\\"[All Fields] OR \\\"model's\\\"[All Fields] OR \\\"modeled\\\"[All Fields] OR \\\"modeler\\\"[All Fields] OR \\\"modeler's\\\"[All Fields] OR \\\"modelers\\\"[All Fields] OR \\\"modeling\\\"[All Fields] OR \\\"modelings\\\"[All Fields] OR \\\"modelization\\\"[All Fields] OR \\\"modelizations\\\"[All Fields] OR \\\"modelize\\\"[All Fields] OR \\\"modelized\\\"[All Fields] OR \\\"modelled\\\"[All Fields] OR \\\"modeller\\\"[All Fields] OR \\\"modellers\\\"[All Fields] OR \\\"modelling\\\"[All Fields] OR \\\"modellings\\\"[All Fields] OR \\\"models\\\"[All Fields]\"},{\"from\":\"clinical[All Fields]\",\"to\":\"\\\"ambulatory care facilities\\\"[MeSH Terms] OR (\\\"ambulatory\\\"[All Fields] AND \\\"care\\\"[All Fields] AND \\\"facilities\\\"[All Fields]) OR \\\"ambulatory care facilities\\\"[All Fields] OR \\\"clinic\\\"[All Fields] OR \\\"clinic's\\\"[All Fields] OR \\\"clinical\\\"[All Fields] OR \\\"clinically\\\"[All Fields] OR \\\"clinicals\\\"[All Fields] OR \\\"clinics\\\"[All Fields]\"}],\"querytranslation\":\"(\\\"large\\\"[All Fields] OR \\\"largely\\\"[All Fields] OR \\\"larges\\\"[All Fields]) AND (\\\"language\\\"[MeSH Terms] OR \\\"language\\\"[All Fields] OR \\\"languages\\\"[All Fields] OR \\\"language s\\\"[All Fields] OR \\\"programming languages\\\"[MeSH Terms] OR (\\\"programming\\\"[All Fields] AND \\\"languages\\\"[All Fields]) OR \\\"programming languages\\\"[All Fields]) AND (\\\"model\\\"[All Fields] OR \\\"model s\\\"[All Fields] OR \\\"modeled\\\"[All Fields] OR \\\"modeler\\\"[All Fields] OR \\\"modeler s\\\"[All Fields] OR \\\"modelers\\\"[All Fields] OR \\\"modeling\\\"[All Fields] OR \\\"modelings\\\"[All Fields] OR \\\"modelization\\\"[All Fields] OR \\\"modelizations\\\"[All Fields] OR \\\"modelize\\\"[All Fields] OR \\\"modelized\\\"[All Fields] OR \\\"modelled\\\"[All Fields] OR \\\"modeller\\\"[All Fields] OR \\\"modellers\\\"[All Fields] OR \\\"modelling\\\"[All Fields] OR \\\"modellings\\\"[All Fields] OR \\\"models\\\"[All Fields]) AND (\\\"ambulatory care facilities\\\"[MeSH Terms] OR (\\\"ambulatory\\\"[All Fields] AND \\\"care\\\"[All Fields] AND \\\"facilities\\\"[All Fields]) OR \\\"ambulatory care facilities\\\"[All Fields] OR \\\"clinic\\\"[All Fields] OR \\\"clinic s\\\"[All Fields] OR \\\"clinical\\\"[All Fields] OR \\\"clinically\\\"[All Fields] OR \\\"clinicals\\\"[All Fields] OR \\\"clinics\\\"[All Fields]) AND 2024/01/01:2024/12/31[Date - Entry]\"}}\n"
+}

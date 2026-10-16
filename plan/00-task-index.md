@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-15 · **148 tasks: 112 `DONE`, 36 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-16 · **148 tasks: 112 `DONE`, 36 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -1541,10 +1541,28 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 222. ~~**`P2-T13` Part B needs a live-recording budget (owner).**~~ **APPROVED 2026-10-16: at most 85 live requests**, the
     Part A plan, unkeyed, through the recorder at each host's policy rate; stop and report at the cap. Labelling through a
-    private web page the coordinator builds. The committed fixtures give 47 pairs; the card needs
+    private web page the coordinator builds. **Recorded 2026-10-16:** 48 live requests (43 × 200; Semantic Scholar 5 × 429,
+    its five other searches deferred); 898 records, **438 candidate pairs** — but 231 from one Crossref cluster of
+    22 Scotland COVID reports and 78 identical short Crossref titles; 80 cross-source pairs. Short: same-paper sets 5/10,
+    series 1/5, same-title-other-year 3/5, `10.64898/` 0/5 (`plan/reports/P2-T13-partB-recording.md`). Label page:
+    https://claude.ai/artifact/3A7oVpbh6do1FiuU4YZAwW (item 223). The committed fixtures give 47 pairs; the card needs
     ≥ 200 and five families are short (`10.64898/` has none). The Part A agent's plan: five shared queries plus
     probes, ≈ 80–85 unkeyed requests across the seven sources, est. 150–400 pairs. Then the owner labels
     `test/fixtures/dedup/pairs.csv`.
+
+### 6.40 Raised by the P2-T13 recording, 2026-10-16 — item 223 waits on the owner
+
+223. **How the 438 pairs are labelled (owner).** Labelling all of them lets one Crossref cluster (231 pairs of 22
+    separate Scotland reports) and 78 identical short titles dominate precision; sampling them down leaves fewer than
+    200. Also open: Semantic Scholar's five deferred searches and batch (≤ 7 of the 37 unused requests, at a quieter hour),
+    and a few lookups of known `10.64898/` DOIs (`docs/02` §11.2) for that family.
+
+224. **Recorded responses keep authors' published contact addresses** inside affiliation fields (277 occurrences in the
+    new PubMed and Europe PMC fixtures; 15 earlier committed fixtures carry them too). They are public bibliographic
+    metadata; the recorder strips only the maintainer address and secrets. Decide whether fixtures should strip them.
+
+225. **The recording agent skipped the integration suite** and a pinned PubMed fixture count (19) failed there; the
+    coordinator now derives it from the corpus plan. Fixture-adding briefs must run integration too.
 
 ## 7. Regenerating this file
 

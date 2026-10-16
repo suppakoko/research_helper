@@ -189,7 +189,10 @@ import {
   BIORXIV_DOI_SYNTHETIC_EMPTY_BODY,
   BIORXIV_DOI_SYNTHETIC_MALFORMED,
   BIORXIV_DOI_SYNTHETIC_STATUS_ERROR,
+  BIORXIV_CORPUS_DOIS,
   BIORXIV_DOI_UNICODE,
+  corpusLookupScenario,
+  MEDRXIV_CORPUS_DOIS,
   MEDRXIV_DOI_RICH,
   MEDRXIV_DOI_SPARSE,
   recordedBiorxivRequest,
@@ -231,6 +234,12 @@ import {
   recordedEuropePmcRequest,
 } from "../test/support/europepmcRecordedRequests";
 import {
+  DEDUP_CORPUS_SEARCHES,
+  dedupCorpusQuery,
+  type DedupCorpusSearch,
+} from "../test/support/dedupCorpusRecordedRequests";
+import {
+  PUBMED_TYPICAL_PMIDS,
   PUBMED_WINDOW_MAX_RESULTS,
   pubmedWindowQuery,
 } from "../test/support/pubmedRecordedRequests";
@@ -240,6 +249,7 @@ import {
   recordedSemanticScholarHealthRequest,
   recordedSemanticScholarRelevanceRequest,
   SEMANTICSCHOLAR_BATCH_DATACITE_ID,
+  SEMANTICSCHOLAR_CORPUS_BATCH_IDS,
   SEMANTICSCHOLAR_QUERY_EMPTY,
   SEMANTICSCHOLAR_QUERY_PAGINATED,
   SEMANTICSCHOLAR_QUERY_PAIR,
@@ -1326,6 +1336,79 @@ async function pubmedWindowEfetchPlan(
   ];
 }
 
+/**
+ * The purpose line of a `P2-T13` Part B corpus scenario: the text typed, the
+ * closed window and the page size.
+ */
+function corpusPurpose(search: DedupCorpusSearch, what = "search"): string {
+  return (
+    `P2-T13 Part B corpus ${what}: "${search.text}", ` +
+    `${search.fromDate}..${search.toDate}, limit ${String(search.limit)}`
+  );
+}
+
+/**
+ * PubMed's `P2-T13` Part B corpus requests known up front: one `esearch` per
+ * shared corpus search (`test/support/dedupCorpusRecordedRequests.ts`), and
+ * one `efetch` of the 20 PMIDs the committed `search-typical` resolved to
+ * ({@link PUBMED_TYPICAL_PMIDS}), which Phase 1 never fetched. Kept out of
+ * {@link independentPlan} for {@link pubmedWindowPlan}'s reason.
+ */
+export function pubmedCorpusPlan(): readonly PlannedRequest[] {
+  return [
+    efetch(
+      "search-typical-efetch",
+      "P2-T13 Part B corpus: the 20 records the committed search-typical " +
+        "resolved to (never fetched in Phase 1)",
+      PUBMED_TYPICAL_PMIDS,
+    ),
+    ...DEDUP_CORPUS_SEARCHES.pubmed.map((search) =>
+      esearch(
+        `${search.scenario}-esearch`,
+        corpusPurpose(search),
+        dedupCorpusQuery(search),
+        search.limit,
+        0,
+      ),
+    ),
+  ];
+}
+
+/**
+ * One `efetch` per corpus `esearch` that resolved to identifiers, for at most
+ * the page size of them — what the adapter's `search()` fetches.
+ */
+async function pubmedCorpusEfetchPlan(
+  answer: Answer,
+): Promise<readonly PlannedRequest[]> {
+  const out: PlannedRequest[] = [];
+  const planned = pubmedCorpusPlan();
+  for (const search of DEDUP_CORPUS_SEARCHES.pubmed) {
+    const page = planned.find(
+      (p) => p.scenario === `${search.scenario}-esearch`,
+    );
+    if (page === undefined) continue;
+    const got = await answer(page);
+    if (got === undefined || got.status !== 200) continue;
+    let pmids: readonly string[];
+    try {
+      pmids = parseEsearchBody(got.body, page.endpoint).pmids;
+    } catch {
+      continue;
+    }
+    const taken = pmids.slice(0, search.limit);
+    if (taken.length === 0) continue;
+    out.push(
+      efetch(
+        `${search.scenario}-efetch`,
+        corpusPurpose(search, "records"),
+        taken,
+      ),
+    );
+  }
+  return out;
+}
+
 // --- 7b. Europe PMC ---------------------------------------------------------
 
 /**
@@ -1426,6 +1509,20 @@ export function europepmcIndependentPlan(): readonly PlannedRequest[] {
       EUROPEPMC_QUERY_POST_LONG,
     ),
   ];
+}
+
+/**
+ * Europe PMC's `P2-T13` Part B corpus searches: the shared queries and two
+ * probes (`test/support/dedupCorpusRecordedRequests.ts`), first page only.
+ */
+export function europepmcCorpusPlan(): readonly PlannedRequest[] {
+  return DEDUP_CORPUS_SEARCHES.europepmc.map((search) =>
+    epmcSearch(
+      search.scenario,
+      corpusPurpose(search),
+      dedupCorpusQuery(search),
+    ),
+  );
 }
 
 /** The cursor a recorded Europe PMC page offered, or `undefined`. */
@@ -1644,6 +1741,20 @@ export function crossrefIndependentPlan(): readonly PlannedRequest[] {
       CROSSREF_QUERY_PAGINATED,
     ),
   ];
+}
+
+/**
+ * Crossref's `P2-T13` Part B corpus searches: the shared queries and three
+ * probes (`test/support/dedupCorpusRecordedRequests.ts`), first page only.
+ */
+export function crossrefCorpusPlan(): readonly PlannedRequest[] {
+  return DEDUP_CORPUS_SEARCHES.crossref.map((search) =>
+    crossrefWorks(
+      search.scenario,
+      corpusPurpose(search),
+      dedupCorpusQuery(search),
+    ),
+  );
 }
 
 /**
@@ -1943,6 +2054,21 @@ export function arxivIndependentPlan(): readonly PlannedRequest[] {
 }
 
 /**
+ * arXiv's `P2-T13` Part B corpus searches: Q2–Q4 and the series probe
+ * (`test/support/dedupCorpusRecordedRequests.ts`), at the host's one request
+ * every three seconds.
+ */
+export function arxivCorpusPlan(): readonly PlannedRequest[] {
+  return DEDUP_CORPUS_SEARCHES.arxiv.map((search) =>
+    arxivQuery(
+      search.scenario,
+      corpusPurpose(search),
+      dedupCorpusQuery(search),
+    ),
+  );
+}
+
+/**
  * `error-429`'s arXiv body — **the measured shape** (`docs/02` §7.1,
  * `P0-T21`, 2026-09-15): `HTTP/1.1 429 Unknown Error` from `server: Google
  * Frontend`, `content-type: text/html`, a 14-byte body `Rate exceeded.` and
@@ -2137,6 +2263,39 @@ export function semanticscholarIndependentPlan(): readonly PlannedRequest[] {
       "health-probe",
       "docs/09 §2.3's test call, unkeyed: GET /paper/DOI:…?fields=paperId",
       recordedSemanticScholarHealthRequest(),
+    ),
+  ];
+}
+
+/**
+ * Semantic Scholar's `P2-T13` Part B corpus searches: the shared queries and
+ * the Korean probe (`test/support/dedupCorpusRecordedRequests.ts`), on
+ * **`/paper/search`** (relevance), not the adapter's default bulk endpoint.
+ * Measured 2026-10-15: bulk ignores `limit` and answers up to 1000 records
+ * (`record-unicode`, 1.98 MB), in no relevance order — five such pages would
+ * swamp the corpus with records no other source returned. The relevance
+ * endpoint honours `limit` and ranks like the other sources' first pages; it
+ * is the adapter's own `searchByRelevance` request.
+ *
+ * **Recorded 2026-10-16 as two 429s.** The anonymous pool refused all five
+ * Semantic Scholar requests of `P2-T13` Part B, so only `corpus-q1` and
+ * `corpus-batch` are planned (each committed as its measured 429) and the
+ * other searches wait in `DEDUP_CORPUS_DEFERRED_SEMANTICSCHOLAR`.
+ */
+export function semanticscholarCorpusPlan(): readonly PlannedRequest[] {
+  return [
+    ...DEDUP_CORPUS_SEARCHES.semanticscholar.map((search) =>
+      semanticscholarPlanned(
+        search.scenario,
+        corpusPurpose(search, "relevance search"),
+        recordedSemanticScholarRelevanceRequest(dedupCorpusQuery(search)),
+      ),
+    ),
+    semanticscholarPlanned(
+      "corpus-batch",
+      "P2-T13 Part B corpus: POST /paper/batch for the corpus's preprint " +
+        "DOIs, their journal versions and two committed 10.64898/ DOIs",
+      recordedSemanticScholarBatchRequest(SEMANTICSCHOLAR_CORPUS_BATCH_IDS),
     ),
   ];
 }
@@ -2465,6 +2624,27 @@ export function medrxivIndependentPlan(): readonly PlannedRequest[] {
 }
 
 /**
+ * The `P2-T13` Part B corpus lookups for one server: one `/details/` call per
+ * preprint DOI the corpus searches returned
+ * (`test/support/biorxivRecordedRequests.ts`'s `*_CORPUS_DOIS`).
+ */
+export function biorxivCorpusPlan(
+  server: BiorxivServer,
+): readonly PlannedRequest[] {
+  const dois = server === "biorxiv" ? BIORXIV_CORPUS_DOIS : MEDRXIV_CORPUS_DOIS;
+  return dois.map((doi) =>
+    biorxivPlanned(
+      corpusLookupScenario(doi),
+      "P2-T13 Part B corpus: a preprint DOI the corpus searches returned, " +
+        "as this server returns it",
+      "details",
+      server,
+      doi,
+    ),
+  );
+}
+
+/**
  * JSON member names in an `api.biorxiv.org` body that `redact()`'s
  * 40-character catch-all mistakes for a credential. Measured 2026-10-15
  * (`P2-T07`): the first recording of both `record-preprint` scenarios wrote
@@ -2650,13 +2830,18 @@ export function planFor(source: RecordableSourceId): SourcePlan {
         source,
         host: NCBI_HOST,
         fixtureDir: fixtureDirFor("pubmed"),
-        independent: () => [...independentPlan(), ...pubmedWindowPlan()],
+        independent: () => [
+          ...independentPlan(),
+          ...pubmedWindowPlan(),
+          ...pubmedCorpusPlan(),
+        ],
         dependent: async (answer) => [
           ...paginatedEfetchPlan(
             await pubmedPageIds(answer, "paginated-page-1"),
             await pubmedPageIds(answer, "paginated-page-2"),
           ),
           ...(await pubmedWindowEfetchPlan(answer)),
+          ...(await pubmedCorpusEfetchPlan(answer)),
         ],
         syntheticRequests: () => syntheticPlan("", "").map((s) => s.planned),
         syntheticFixtures: async (answer) =>
@@ -2670,7 +2855,10 @@ export function planFor(source: RecordableSourceId): SourcePlan {
         source,
         host: EBI_HOST,
         fixtureDir: fixtureDirFor("europepmc"),
-        independent: europepmcIndependentPlan,
+        independent: () => [
+          ...europepmcIndependentPlan(),
+          ...europepmcCorpusPlan(),
+        ],
         dependent: europepmcDependentPlan,
         syntheticRequests: () =>
           europepmcSyntheticPlan("").map((s) => s.planned),
@@ -2684,7 +2872,10 @@ export function planFor(source: RecordableSourceId): SourcePlan {
         source,
         host: CROSSREF_HOST,
         fixtureDir: fixtureDirFor("crossref"),
-        independent: crossrefIndependentPlan,
+        independent: () => [
+          ...crossrefIndependentPlan(),
+          ...crossrefCorpusPlan(),
+        ],
         dependent: crossrefDependentPlan,
         syntheticRequests: () =>
           crossrefSyntheticPlan("").map((s) => s.planned),
@@ -2699,7 +2890,7 @@ export function planFor(source: RecordableSourceId): SourcePlan {
         source,
         host: ARXIV_HOST,
         fixtureDir: fixtureDirFor("arxiv"),
-        independent: arxivIndependentPlan,
+        independent: () => [...arxivIndependentPlan(), ...arxivCorpusPlan()],
         // `start` is an offset, so page 2 is in the independent plan and
         // nothing here depends on an earlier answer.
         dependent: () => Promise.resolve([]),
@@ -2714,7 +2905,10 @@ export function planFor(source: RecordableSourceId): SourcePlan {
         source,
         host: SEMANTICSCHOLAR_HOST,
         fixtureDir: fixtureDirFor("semanticscholar"),
-        independent: semanticscholarIndependentPlan,
+        independent: () => [
+          ...semanticscholarIndependentPlan(),
+          ...semanticscholarCorpusPlan(),
+        ],
         dependent: semanticscholarDependentPlan,
         syntheticRequests: () =>
           semanticscholarSyntheticPlan("").map((s) => s.planned),
@@ -2735,7 +2929,7 @@ export function planFor(source: RecordableSourceId): SourcePlan {
         source,
         host: BIORXIV_HOST,
         fixtureDir: fixtureDirFor(source),
-        independent,
+        independent: () => [...independent(), ...biorxivCorpusPlan(source)],
         dependent: () => Promise.resolve([]),
         syntheticRequests: () =>
           biorxivSyntheticPlan(source, "").map((s) => s.planned),

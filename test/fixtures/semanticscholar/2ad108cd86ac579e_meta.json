@@ -1,0 +1,14 @@
+{
+  "scenario": "corpus-q1",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-16T01:29:20.319Z",
+  "endpoint": "https://api.semanticscholar.org/graph/v1/paper/search",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "scrubbed header via",
+    "scrubbed header x-amz-cf-id",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

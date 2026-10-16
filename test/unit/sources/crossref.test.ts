@@ -130,6 +130,10 @@ import {
   CROSSREF_TITLE_RICH as T_RICH,
   recordedCrossrefRequest,
 } from "../../support/crossrefRecordedRequests";
+import { DEDUP_CORPUS_SEARCHES } from "../../support/dedupCorpusRecordedRequests";
+
+/** `P2-T13` Part B's corpus searches, recorded beside the `docs/13` inventory. */
+const CORPUS_FIXTURES = DEDUP_CORPUS_SEARCHES.crossref.length;
 
 /**
  * `P2-T04`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, **no network**.
@@ -2044,9 +2048,10 @@ describe("replay: test/fixtures/crossref through createHttpClient", () => {
         "paginated-page-2",
         "search-doi-string",
         "error-400",
+        ...DEDUP_CORPUS_SEARCHES.crossref.map((s) => s.scenario),
       ]),
     );
-    expect(loaded).toHaveLength(16);
+    expect(loaded).toHaveLength(16 + CORPUS_FIXTURES);
     const names = await readdir(FIXTURE_DIR);
     for (const { key } of loaded) {
       expect(names).toContain(`${key}.json`);
@@ -2073,7 +2078,7 @@ describe("replay: test/fixtures/crossref through createHttpClient", () => {
       expect(text).not.toMatch(/"next-cursor":"\[redacted/u);
     }
     const report = await assertFixturesFresh(FIXTURE_DIR, Date.now());
-    expect(report.checked).toBe(16);
+    expect(report.checked).toBe(16 + CORPUS_FIXTURES);
   });
 
   it("search-typical: 20 records from the polite pool, every request carrying mailto and the User-Agent", async () => {

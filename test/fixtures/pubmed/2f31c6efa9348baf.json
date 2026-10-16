@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "X-RateLimit-Limit,X-RateLimit-Remaining",
+    "alt-svc": "clear",
+    "cache-control": "private",
+    "content-encoding": "gzip",
+    "content-security-policy": "upgrade-insecure-requests",
+    "content-type": "application/json; charset=UTF-8",
+    "date": "Thu, 15 Oct 2026 20:12:39 GMT",
+    "referrer-policy": "origin-when-cross-origin",
+    "server": "Finatra",
+    "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "via": "1.1 google",
+    "x-ratelimit-limit": "3",
+    "x-ratelimit-remaining": "1",
+    "x-ua-compatible": "IE=Edge",
+    "x-xss-protection": "1; mode=block"
+  },
+  "body": "{\"header\":{\"type\":\"esearch\",\"version\":\"0.3\"},\"esearchresult\":{\"count\":\"602\",\"retmax\":\"25\",\"retstart\":\"0\",\"idlist\":[\"39734237\",\"39731913\",\"39729479\",\"39726326\",\"39722036\",\"39717507\",\"39714755\",\"39711562\",\"39705244\",\"39705183\",\"39703500\",\"39702546\",\"39702326\",\"39701979\",\"39698109\",\"39697754\",\"39697749\",\"39697729\",\"39697710\",\"39695834\",\"39695769\",\"39695426\",\"39695302\",\"39694081\",\"39692574\"],\"translationset\":[{\"from\":\"RNA[All Fields]\",\"to\":\"\\\"rna\\\"[Supplementary Concept] OR \\\"rna\\\"[All Fields] OR \\\"rna\\\"[MeSH Terms]\"},{\"from\":\"sequencing[All Fields]\",\"to\":\"\\\"base sequence\\\"[MeSH Terms] OR (\\\"base\\\"[All Fields] AND \\\"sequence\\\"[All Fields]) OR \\\"base sequence\\\"[All Fields] OR \\\"sequence\\\"[All Fields] OR \\\"sequences\\\"[All Fields] OR \\\"sequence analysis\\\"[MeSH Terms] OR (\\\"sequence\\\"[All Fields] AND \\\"analysis\\\"[All Fields]) OR \\\"sequence analysis\\\"[All Fields] OR \\\"sequencing\\\"[All Fields] OR \\\"sequence's\\\"[All Fields] OR \\\"sequenceable\\\"[All Fields] OR \\\"sequenced\\\"[All Fields] OR \\\"sequenceing\\\"[All Fields] OR \\\"sequencer\\\"[All Fields] OR \\\"sequencers\\\"[All Fields] OR \\\"sequencies\\\"[All Fields] OR \\\"sequencings\\\"[All Fields]\"},{\"from\":\"atlas[All Fields]\",\"to\":\"\\\"atlas\\\"[All Fields] OR \\\"atlas's\\\"[All Fields] OR \\\"atlases\\\"[All Fields] OR \\\"atlasing\\\"[All Fields]\"}],\"querytranslation\":\"\\\"single-cell\\\"[All Fields] AND (\\\"rna\\\"[Supplementary Concept] OR \\\"rna\\\"[All Fields] OR \\\"rna\\\"[MeSH Terms]) AND (\\\"base sequence\\\"[MeSH Terms] OR (\\\"base\\\"[All Fields] AND \\\"sequence\\\"[All Fields]) OR \\\"base sequence\\\"[All Fields] OR \\\"sequence\\\"[All Fields] OR \\\"sequences\\\"[All Fields] OR \\\"sequence analysis\\\"[MeSH Terms] OR (\\\"sequence\\\"[All Fields] AND \\\"analysis\\\"[All Fields]) OR \\\"sequence analysis\\\"[All Fields] OR \\\"sequencing\\\"[All Fields] OR \\\"sequence s\\\"[All Fields] OR \\\"sequenceable\\\"[All Fields] OR \\\"sequenced\\\"[All Fields] OR \\\"sequenceing\\\"[All Fields] OR \\\"sequencer\\\"[All Fields] OR \\\"sequencers\\\"[All Fields] OR \\\"sequencies\\\"[All Fields] OR \\\"sequencings\\\"[All Fields]) AND (\\\"atlas\\\"[All Fields] OR \\\"atlas s\\\"[All Fields] OR \\\"atlases\\\"[All Fields] OR \\\"atlasing\\\"[All Fields]) AND 2024/01/01:2024/12/31[Date - Entry]\"}}\n"
+}

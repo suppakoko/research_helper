@@ -1,0 +1,15 @@
+{
+  "scenario": "corpus-probe-short-title-efetch",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-15T20:12:55.781Z",
+  "endpoint": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "dropped header ncbi-phid",
+    "dropped header ncbi-sid",
+    "dropped header set-cookie",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

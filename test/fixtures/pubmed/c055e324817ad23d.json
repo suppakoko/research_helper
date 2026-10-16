@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "X-RateLimit-Limit,X-RateLimit-Remaining",
+    "alt-svc": "clear",
+    "cache-control": "private",
+    "content-encoding": "gzip",
+    "content-security-policy": "upgrade-insecure-requests",
+    "content-type": "application/json; charset=UTF-8",
+    "date": "Thu, 15 Oct 2026 20:12:43 GMT",
+    "referrer-policy": "origin-when-cross-origin",
+    "server": "Finatra",
+    "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "via": "1.1 google",
+    "x-ratelimit-limit": "3",
+    "x-ratelimit-remaining": "2",
+    "x-ua-compatible": "IE=Edge",
+    "x-xss-protection": "1; mode=block"
+  },
+  "body": "{\"header\":{\"type\":\"esearch\",\"version\":\"0.3\"},\"esearchresult\":{\"count\":\"16492\",\"retmax\":\"10\",\"retstart\":\"0\",\"idlist\":[\"42674953\",\"42674952\",\"42674951\",\"42674950\",\"42674949\",\"42674852\",\"42674729\",\"42674665\",\"42674578\",\"42674541\"],\"translationset\":[],\"querytranslation\":\"(\\\"Retraction\\\"[Title] OR \\\"Correction\\\"[Title]) AND 2026/01/01:2026/08/31[Date - Entry]\"}}\n"
+}

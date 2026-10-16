@@ -134,6 +134,10 @@ import {
   ARXIV_QUERY_WRAPPED as QUERY_WRAPPED,
   recordedArxivRequest,
 } from "../../support/arxivRecordedRequests";
+import { DEDUP_CORPUS_SEARCHES } from "../../support/dedupCorpusRecordedRequests";
+
+/** `P2-T13` Part B's corpus searches, recorded beside the `docs/13` inventory. */
+const CORPUS_FIXTURES = DEDUP_CORPUS_SEARCHES.arxiv.length;
 
 /**
  * `P2-T06`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, **no network**.
@@ -2049,9 +2053,13 @@ describe("replay: test/fixtures/arxiv through createHttpClient", () => {
     const scenarios = loaded.map((m) => m.meta.scenario);
     for (const name of DOCS_13_SCENARIOS) expect(scenarios).toContain(name);
     expect(scenarios).toEqual(
-      expect.arrayContaining(["paginated-page-2", "search-error-feed"]),
+      expect.arrayContaining([
+        "paginated-page-2",
+        "search-error-feed",
+        ...DEDUP_CORPUS_SEARCHES.arxiv.map((s) => s.scenario),
+      ]),
     );
-    expect(loaded).toHaveLength(15);
+    expect(loaded).toHaveLength(15 + CORPUS_FIXTURES);
     const names = await readdir(FIXTURE_DIR);
     for (const { key } of loaded) {
       expect(names).toContain(`${key}.json`);
@@ -2075,7 +2083,7 @@ describe("replay: test/fixtures/arxiv through createHttpClient", () => {
       expect(text).not.toMatch(/suppakoko(@|%40)gmail/iu);
     }
     const report = await assertFixturesFresh(FIXTURE_DIR, Date.now());
-    expect(report.checked).toBe(15);
+    expect(report.checked).toBe(15 + CORPUS_FIXTURES);
   });
 
   it("search-typical: 20 of 26 records, a next start of 20, affiliations and one published version among them", async () => {
@@ -2383,7 +2391,7 @@ describe("scripts/record-fixtures.ts: the arXiv plan", () => {
     expect(RECORDABLE_SOURCES).toContain("arxiv");
     expect(await plan.dependent(() => Promise.resolve(undefined))).toEqual([]);
     const planned = [...plan.independent(), ...plan.syntheticRequests()];
-    expect(plan.independent()).toHaveLength(12);
+    expect(plan.independent()).toHaveLength(12 + CORPUS_FIXTURES);
     const onDisk = (await readdir(FIXTURE_DIR))
       .filter((n) => n.endsWith(".json") && !n.endsWith(META_SUFFIX))
       .map((n) => n.replace(/\.json$/u, ""));

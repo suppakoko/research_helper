@@ -155,11 +155,12 @@ describe("the committed corpus is what the builder makes from the committed fixt
     }
   });
 
-  it("pins today's measured size: 296 records, 47 pairs, 40 of them compared by the cascade", () => {
-    expect(built.corpus.records).toHaveLength(296);
-    expect(built.rows).toHaveLength(47);
-    expect(built.rows.filter((r) => r.engineCompares)).toHaveLength(40);
-    expect(committedRows).toHaveLength(47);
+  // Measured 2026-10-16 after `P2-T13` Part B's recording (Part A: 296 / 47 / 40).
+  it("pins today's measured size: 898 records, 438 pairs, 352 of them compared by the cascade", () => {
+    expect(built.corpus.records).toHaveLength(898);
+    expect(built.rows).toHaveLength(438);
+    expect(built.rows.filter((r) => r.engineCompares)).toHaveLength(352);
+    expect(committedRows).toHaveLength(438);
   });
 
   it("gives every pair a unique, order-independent id", () => {
@@ -319,11 +320,11 @@ describe("step 3's families", () => {
 
   it("pins today's counts in the committed candidate set", () => {
     expect(built.families.counts).toEqual({
-      "same-work-3-sources": 3,
-      "preprint-published": 7,
-      "short-title": 3,
+      "same-work-3-sources": 5,
+      "preprint-published": 9,
+      "short-title": 83,
       "series-title": 1,
-      "same-title-diff-year-diff-venue": 1,
+      "same-title-diff-year-diff-venue": 3,
       "prefix-10.64898": 0,
       "korean-title": 0,
     });
@@ -331,15 +332,16 @@ describe("step 3's families", () => {
       biorxiv: 0,
       medrxiv: 0,
     });
-    expect(built.families.sets.map((s) => s.sources.length)).toEqual([3, 4, 3]);
+    expect(built.families.sets.map((s) => s.sources.length)).toEqual([
+      3, 3, 4, 3, 3,
+    ]);
   });
 
   it("records which families the committed fixtures cannot yet supply (Part B turns this into 'none')", () => {
     expect(familyShortfalls(built.families)).toEqual([
-      { family: "same-work-3-sources", have: 3, need: 10 },
-      { family: "short-title", have: 3, need: 5 },
+      { family: "same-work-3-sources", have: 5, need: 10 },
       { family: "series-title", have: 1, need: 5 },
-      { family: "same-title-diff-year-diff-venue", have: 1, need: 5 },
+      { family: "same-title-diff-year-diff-venue", have: 3, need: 5 },
       {
         family: "prefix-10.64898",
         have: 0,
@@ -347,7 +349,9 @@ describe("step 3's families", () => {
         note: "bioRxiv pairs 0, medRxiv pairs 0: not mixed",
       },
     ]);
-    expect(committedRows.length).toBeLessThan(MIN_LABELLED_PAIRS);
+    // Part B's recording took the candidate set past step 2's floor; the
+    // floor is on *labelled* pairs, and none is labelled yet.
+    expect(committedRows.length).toBeGreaterThanOrEqual(MIN_LABELLED_PAIRS);
   });
 
   it("reports no shortfall when every minimum is met and the prefix pairs mix both servers", () => {
@@ -518,7 +522,7 @@ describe("scripts/dedup-report.ts", () => {
       const code = await reportMain([resolve(DEDUP_CORPUS_DIR, PAIRS_FILE)]);
       expect(code).toBe(1);
       expect(String(err.mock.calls[0]?.[0])).toMatch(
-        /is unlabelled: 47 of 47 pairs/u,
+        /is unlabelled: 438 of 438 pairs/u,
       );
     } finally {
       err.mockRestore();

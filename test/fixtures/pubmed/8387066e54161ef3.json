@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "X-RateLimit-Limit,X-RateLimit-Remaining",
+    "alt-svc": "clear",
+    "cache-control": "private",
+    "content-encoding": "gzip",
+    "content-security-policy": "upgrade-insecure-requests",
+    "content-type": "application/json; charset=UTF-8",
+    "date": "Thu, 15 Oct 2026 20:12:41 GMT",
+    "referrer-policy": "origin-when-cross-origin",
+    "server": "Finatra",
+    "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "via": "1.1 google",
+    "x-ratelimit-limit": "3",
+    "x-ratelimit-remaining": "1",
+    "x-ua-compatible": "IE=Edge",
+    "x-xss-protection": "1; mode=block"
+  },
+  "body": "{\"header\":{\"type\":\"esearch\",\"version\":\"0.3\"},\"esearchresult\":{\"count\":\"166\",\"retmax\":\"25\",\"retstart\":\"0\",\"idlist\":[\"38069085\",\"38063153\",\"38048081\",\"38040204\",\"38033291\",\"38030692\",\"38019639\",\"38015981\",\"37993764\",\"37992551\",\"37990484\",\"37989998\",\"41675536\",\"37974508\",\"37974507\",\"37973879\",\"37966375\",\"37960886\",\"37956623\",\"37953530\",\"37934171\",\"37932352\",\"37927548\",\"37878431\",\"37875121\"],\"translationset\":[{\"from\":\"graph[All Fields]\",\"to\":\"\\\"graph\\\"[All Fields] OR \\\"graph's\\\"[All Fields] OR \\\"graphed\\\"[All Fields] OR \\\"graphing\\\"[All Fields] OR \\\"graphs\\\"[All Fields]\"},{\"from\":\"neural[All Fields]\",\"to\":\"\\\"neural\\\"[All Fields] OR \\\"neuralization\\\"[All Fields] OR \\\"neuralize\\\"[All Fields] OR \\\"neuralized\\\"[All Fields] OR \\\"neuralizes\\\"[All Fields] OR \\\"neuralizing\\\"[All Fields] OR \\\"neurally\\\"[All Fields]\"},{\"from\":\"network[All Fields]\",\"to\":\"\\\"network\\\"[All Fields] OR \\\"network's\\\"[All Fields] OR \\\"networked\\\"[All Fields] OR \\\"networker\\\"[All Fields] OR \\\"networkers\\\"[All Fields] OR \\\"networking\\\"[All Fields] OR \\\"networks\\\"[All Fields]\"},{\"from\":\"molecular[All Fields]\",\"to\":\"\\\"molecular\\\"[All Fields] OR \\\"moleculars\\\"[All Fields]\"},{\"from\":\"property[All Fields]\",\"to\":\"\\\"properties\\\"[All Fields] OR \\\"property\\\"[All Fields]\"}],\"querytranslation\":\"(\\\"graph\\\"[All Fields] OR \\\"graph s\\\"[All Fields] OR \\\"graphed\\\"[All Fields] OR \\\"graphing\\\"[All Fields] OR \\\"graphs\\\"[All Fields]) AND (\\\"neural\\\"[All Fields] OR \\\"neuralization\\\"[All Fields] OR \\\"neuralize\\\"[All Fields] OR \\\"neuralized\\\"[All Fields] OR \\\"neuralizes\\\"[All Fields] OR \\\"neuralizing\\\"[All Fields] OR \\\"neurally\\\"[All Fields]) AND (\\\"network\\\"[All Fields] OR \\\"network s\\\"[All Fields] OR \\\"networked\\\"[All Fields] OR \\\"networker\\\"[All Fields] OR \\\"networkers\\\"[All Fields] OR \\\"networking\\\"[All Fields] OR \\\"networks\\\"[All Fields]) AND (\\\"molecular\\\"[All Fields] OR \\\"moleculars\\\"[All Fields]) AND (\\\"properties\\\"[All Fields] OR \\\"property\\\"[All Fields]) AND 2022/01/01:2023/12/31[Date - Entry]\"}}\n"
+}
