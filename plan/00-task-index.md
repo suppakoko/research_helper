@@ -1573,7 +1573,9 @@ the caller of what the card builds; if it does not, the caller is added with a d
 226. ~~**The label set is 169 pairs, below the 200 floor, and four families are short (owner).**~~ **DECIDED 2026-10-16:
     targeted recording with the remaining 35 requests, Semantic Scholar left out** (a 2026 Europe PMC `SRC:PPR` search and
     bioRxiv/medRxiv lookups of its DOIs; series titles; same title in different years; one paper across ≥ 3 sources);
-    **and the two non-series pairs join the label set** ("Genome editing using CRISPR", "Psoroptic mange"). Semantic Scholar refused
+    **and the two non-series pairs join the label set** ("Genome editing using CRISPR", "Psoroptic mange"). **DONE 2026-10-16:**
+    27 live requests, all 200 (card total 77 of 85); 1,058 records, 534 pairs, **label set 267**, every step-3 family met
+    (`plan/reports/P2-T13-partB-targeted.md`). Three adapter facts went into `docs/02` §3.3, §4.5 and §5.2. Semantic Scholar refused
     7 unkeyed requests in a row over about six hours (50 of 85 requests used). No committed fixture of another source
     holds a `10.64898/` DOI, so no bioRxiv/medRxiv lookup could form a pair; one Europe PMC `SRC:PPR` search over a 2026
     window, then lookups of its DOIs, would. Series titles 1/5, same title other year 3/5, same-paper sets 5/10. Two

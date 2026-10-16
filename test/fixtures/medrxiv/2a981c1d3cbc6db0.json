@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Fri, 16 Oct 2026 04:19:20 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.11"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"Speech Timing Measures Are Not Interchangeable Across Elicitation Methods in Senior Living Residents\",\"authors\":\"Mekulu, K.; Etter, N.; Brearly, T.; Yang, H.\",\"author_corresponding\":\"Kevin Mekulu\",\"author_corresponding_institution\":\"Pennsylvania State University\",\"doi\":\"10.64898\\/2026.09.23.26363840\",\"date\":\"2026-09-25\",\"version\":\"1\",\"type\":\"PUBLISHAHEADOFPRINT\",\"license\":\"cc_by\",\"category\":\"neurology\",\"jatsxml\":\"https:\\/\\/www.medrxiv.org\\/content\\/early\\/2026\\/09\\/25\\/2026.09.23.26363840.source.xml\",\"abstract\":\"Speech-based cognitive monitoring for Alzheimers employs various tasks, but whether timing measures transfer across tasks is unclear. Twelve senior living residents completed four 60-second tasks: category fluency, two picture descriptions, and a self-generated narrative. Speech timing measures were calculated identically across tasks. Speech-rate correspondence among picture descriptions and narrative was substantial (mean {rho} = 0.72). Correspondence with category fluency increased from Cookie Theft to contemporary picture to narrative in terms of speech rate ({rho} = 0.36, 0.51, 0.64) and pause time ratio ({rho} = 0.14, 0.45, 0.71). Measures were not interchangeable; correspondence followed an ordering consistent with shared retrieval demand.\",\"published\":\"NA\",\"server\":\"medRxiv\"}]}\r\n\r\n\r\n\r\n"
+}

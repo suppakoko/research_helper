@@ -1,0 +1,15 @@
+{
+  "scenario": "corpus-ppr-biorxiv",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-16T04:17:51.178Z",
+  "endpoint": "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "dropped header set-cookie",
+    "scrubbed body",
+    "scrubbed body: percent-encoded contact address",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

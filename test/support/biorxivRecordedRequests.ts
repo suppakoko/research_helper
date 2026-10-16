@@ -99,6 +99,13 @@ export const BIORXIV_CORPUS_DOIS: readonly string[] = [
   "10.1101/2024.06.16.599202", // Crossref corpus-q2
   "10.1101/2024.07.14.603469", // Crossref corpus-q2
   "10.1101/2024.10.29.620871", // Europe PMC corpus-q2
+  // Targeted recording, 2026-10-16 (`plan/00` §6 item 226): the first four
+  // `PPR` records of Europe PMC `corpus-ppr-biorxiv`, in its answer's order,
+  // whose `bookOrReportDetails.publisher` is "bioRxiv" — the `10.64898/` family.
+  "10.64898/2026.08.03.742470", // Europe PMC corpus-ppr-biorxiv (withdrawn)
+  "10.64898/2026.09.21.753182", // Europe PMC corpus-ppr-biorxiv
+  "10.64898/2026.09.29.754885", // Europe PMC corpus-ppr-biorxiv
+  "10.64898/2026.09.24.754284", // Europe PMC corpus-ppr-biorxiv
 ];
 
 /** As {@link BIORXIV_CORPUS_DOIS}, for medRxiv. */
@@ -109,6 +116,12 @@ export const MEDRXIV_CORPUS_DOIS: readonly string[] = [
   "10.1101/2024.09.27.24314505", // Crossref corpus-q3
   "10.1101/2024.10.31.24316386", // Crossref and Europe PMC corpus-q3
   "10.1101/2024.12.10.24317471", // Europe PMC corpus-q2
+  // Targeted recording, 2026-10-16: the first four "medRxiv" `PPR` records of
+  // Europe PMC `corpus-ppr-medrxiv`, chosen by the same rule.
+  "10.64898/2026.09.06.26362399", // Europe PMC corpus-ppr-medrxiv
+  "10.64898/2026.09.07.26362451", // Europe PMC corpus-ppr-medrxiv
+  "10.64898/2026.09.27.26364122", // Europe PMC corpus-ppr-medrxiv
+  "10.64898/2026.09.23.26363840", // Europe PMC corpus-ppr-medrxiv
 ];
 
 /** A corpus lookup's scenario name: `corpus-doi-<accession>`. */

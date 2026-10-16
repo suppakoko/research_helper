@@ -401,6 +401,12 @@ esearch.fcgi?db=pubmed&term=CRISPR&usehistory=y&retmax=0&mindate=2023/09/08&maxd
 Then page with `efetch.fcgi?db=pubmed&WebEnv=MCID_...&query_key=1&retstart=0&retmax=200&retmode=xml`.
 WebEnv is transient — treat it as valid for a single session and re-issue `esearch` on failure.
 
+> **Measured 2026-10-16 (`P2-T13` targeted recording): long quoted title phrases are not searched as phrases.** Two
+> `esearch` requests for exact paper titles in double quotes answered `count: 0`, every phrase listed under
+> `quotedphrasesnotfound`, although Europe PMC returned the same papers with their PubMed ids. A search by the title's
+> words (unquoted) found them. Committed as `DEDUP_CORPUS_PUBMED_NO_RECORDS` in
+> `test/support/dedupCorpusRecordedRequests.ts`. A title lookup through E-utilities should not quote a long title.
+
 ### 3.4 `efetch` — records with abstracts and MeSH
 
 ```
@@ -846,6 +852,12 @@ to preprints** (see §8.4).
 Note `bookOrReportDetails.publisher` carries the preprint server name — map it to the Zotero
 `repository` field. **Note the `10.64898/` DOI prefix** — see §11.2.
 
+> **Measured 2026-10-16 (`P2-T13` targeted recording): the shipped adapter cannot send `SRC:PPR`.** The Europe PMC
+> renderer quotes every term value and has no `SRC` or `PUBLISHER` field, and the `raw` passthrough adds parameters but
+> never touches `query=`. The plain word "bioRxiv" returned 25 PubMed Central deposits (journal title "bioRxiv : the
+> preprint server for biology", no DOI); `"bioRxiv" NOT JOURNAL:"bioRxiv"` returned 25 `PPR` records, 24 with
+> `10.64898/` DOIs (medRxiv: 25 of 25). Default searches still return preprints (the 2026-10-15 note above).
+
 ### 4.6 Pagination: `cursorMark`
 
 ```
@@ -1068,6 +1080,12 @@ recency guarantee, add `from-created-date` as a secondary filter:
 ```
 &filter=from-pub-date:2023-09-08,from-created-date:2023-06-01
 ```
+
+> **Measured 2026-10-16 (`P2-T13` targeted recording): the secondary `from-created-date` bound drops early-registered
+> DOIs.** The adapter sends `from-created-date:<from>` beside `from-pub-date` (`src/sources/crossref/query.ts`). A
+> search for "UniProt: the universal protein knowledgebase in 2021" over the year 2021 missed it: its DOI was
+> registered in November 2020 for a 2021 issue. A strict recency bound and a cover-year window disagree for any article
+> registered before its cover year.
 
 ### 5.3 Real request and response
 

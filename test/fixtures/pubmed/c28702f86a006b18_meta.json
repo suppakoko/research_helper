@@ -1,0 +1,17 @@
+{
+  "scenario": "corpus-known-words-efetch",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-16T04:21:20.744Z",
+  "endpoint": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "dropped header ncbi-phid",
+    "dropped header ncbi-sid",
+    "dropped header set-cookie",
+    "scrubbed body",
+    "scrubbed body: 2 email address(es)",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

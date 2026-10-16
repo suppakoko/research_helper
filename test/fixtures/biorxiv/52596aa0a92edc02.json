@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Fri, 16 Oct 2026 04:18:49 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.11"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"Mitigating biases of rescaling in forward-in-time population genetic simulations\",\"authors\":\"Sakamoto, T.\",\"author_corresponding\":\"Takahiro Sakamoto\",\"author_corresponding_institution\":\"Kyushu Daigaku\",\"doi\":\"10.64898\\/2026.09.24.754284\",\"date\":\"2026-09-28\",\"version\":\"1\",\"type\":\"new results\",\"license\":\"cc_by_nc_nd\",\"category\":\"genetics\",\"jatsxml\":\"https:\\/\\/www.biorxiv.org\\/content\\/early\\/2026\\/09\\/28\\/2026.09.24.754284.source.xml\",\"abstract\":\"Forward-in-time population genetic simulations are widely used in evolutionary analyses, but simulating large populations and long genomic regions remains computationally demanding. To reduce this cost, parameter rescaling is widely employed, in which the original evolutionary process is approximated by one with a smaller population size and fewer generations. Recently, several studies using the SLiM simulator have raised concerns about the accuracy of this rescaling approach. In this study, we show that many of the biases reported in these studies can be mitigated by using a different simulation algorithm. These results reveal that the accuracy of parameter rescaling depends on how well the simulation algorithm preserves diffusion-limit properties under rescaling.\",\"published\":\"NA\",\"server\":\"bioRxiv\"}]}\r\n\r\n\r\n\r\n"
+}

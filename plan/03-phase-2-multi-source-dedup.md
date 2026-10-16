@@ -2051,6 +2051,23 @@ pair stays in `pairs.jsonl` with `labelSet: true|false` and its `sampleCluster`;
 438 pairs** are in the label set (211 Scotland and 58 short-title pairs sampled out), which is below step 2's 200 —
 the owner foresaw this in item 223. Full report at `plan/reports/P2-T13-partB-sample.md`.
 
+**Part B targeted recording, 2026-10-16 (owner's decision, `plan/00` §6 item 226).** 27 unkeyed live requests through
+the committed recorder, all HTTP 200, Semantic Scholar left out — **77 of the card's 85** used. Europe PMC 6, PubMed 6,
+Crossref 6, arXiv 1, `api.biorxiv.org` 8 (bioRxiv 4, medRxiv 4). The searches live in
+`test/support/dedupCorpusRecordedRequests.ts` (targeted section): two Europe PMC preprint searches over August–September
+2026, two known series (Hamilton 1964 "… I"/"… II"; UniProt "… in 2021"/"… in 2023"), four well-known papers by title,
+and one Crossref search per title. `SRC:PPR` cannot be sent through the adapter (every value is quoted, no `SRC` or
+`PUBLISHER` prefix, `raw` never touches `query=`); the bare word "bioRxiv"/"medRxiv" returned only PubMed Central
+deposits without a DOI, so `"bioRxiv" NOT JOURNAL:"bioRxiv"` was used, which returned `PPR` records with `10.64898/` DOIs;
+the first four of each server, by the record's own publisher field, were looked up on `/details/`. PubMed's E-utilities
+found none of the long quoted title phrases (`quotedphrasesnotfound`), so PubMed was asked again with title words. The
+short-title cluster now holds book-part headings only (`PART_HEADING` in `scripts/build-dedup-corpus.ts`), so "Genome
+editing using CRISPR" and "Psoroptic mange" are labelled in full; the cluster keeps the same 20 of its 76 pairs.
+Measured: **1058 records, 534 pairs, label set 267** (Scotland 211 and short-title 56 sampled out), 147 cross-source
+pairs; every step-3 family meets its minimum (sets 11/10, preprint 27/5, short titles 27/5, series 16/5,
+same-title-other-year 15/5, `10.64898/` 11/5 with bioRxiv 4 and medRxiv 4). No label written; no verdict looked at.
+Full report at `plan/reports/P2-T13-partB-targeted.md`.
+
 ---
 
 ### P2-T14 — Search & Import window: chips, badges, per-source status

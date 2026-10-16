@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Fri, 16 Oct 2026 04:18:47 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.26"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"Genetic background influences cocaine neuroplasticity in the accumbens shell of male mice\",\"authors\":\"Nwakama, C. A.; Chapp, A. D.\",\"author_corresponding\":\"Andrew D Chapp\",\"author_corresponding_institution\":\"University of Minnesota\",\"doi\":\"10.64898\\/2026.09.21.753182\",\"date\":\"2026-09-28\",\"version\":\"1\",\"type\":\"new results\",\"license\":\"cc_by_nd\",\"category\":\"neuroscience\",\"jatsxml\":\"https:\\/\\/www.biorxiv.org\\/content\\/early\\/2026\\/09\\/28\\/2026.09.21.753182.source.xml\",\"abstract\":\"Genetics shape cocaine behavior and abuse liability, but the underlying neurophysiological effects remain understudied. In male C57BL\\/6J, B6129SF2\\/J, and DO\\/J mice, we report conserved and divergent cocaine induced neuroplasticity in the accumbens shell following 5 days of cocaine and 10 to 14 days of abstinence.\",\"published\":\"NA\",\"server\":\"bioRxiv\"}]}\r\n\r\n\r\n\r\n"
+}

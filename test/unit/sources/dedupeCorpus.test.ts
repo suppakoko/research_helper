@@ -23,11 +23,16 @@
  *    linked-version pair a false positive and a link out of the numerator.
  * 5. **The label set is the owner's sampling** (2026-10-16, `plan/00` §6
  *    item 223): exactly 20 pairs of each of the two big Crossref clusters,
- *    chosen independently of input order, and no other pair sampled out.
+ *    chosen independently of input order, and no other pair sampled out. Since
+ *    the owner's decision of 2026-10-16 (`plan/00` §6 item 226), the
+ *    short-title cluster holds book-part headings only, so the two identical
+ *    Crossref titles that are not ("Genome editing using CRISPR", "Psoroptic
+ *    mange") are labelled in full.
  *
- * Part B (after the owner labels) replaces the pinned shortfall list with an
- * assertion that every family meets its minimum, and adds
- * `dedupeAccuracy.test.ts`.
+ * Since Part B's targeted recording of 2026-10-16 every step-3 family meets
+ * its minimum, in the candidate set and in the label set, and the shortfall
+ * list is asserted empty. Part B still adds `dedupeAccuracy.test.ts` once the
+ * owner has labelled.
  */
 
 import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
@@ -71,6 +76,7 @@ import {
   STEP3_MINIMUMS,
   toCsv,
   UTF8_BOM,
+  PART_HEADING,
   type BuiltCorpus,
   type CorpusMeta,
   type PairRow,
@@ -166,28 +172,33 @@ describe("the committed corpus is what the builder makes from the committed fixt
     }
   });
 
-  // Measured 2026-10-16 after `P2-T13` Part B's recording (Part A: 296 / 47 / 40).
-  it("pins today's measured size: 898 records, 438 pairs, 352 of them compared by the cascade", () => {
-    expect(built.corpus.records).toHaveLength(898);
-    expect(built.rows).toHaveLength(438);
-    expect(built.rows.filter((r) => r.engineCompares)).toHaveLength(352);
-    expect(committedRows).toHaveLength(438);
+  // Measured 2026-10-16 after `P2-T13` Part B's targeted recording (Part A:
+  // 296 / 47 / 40; Part B's first recording: 898 / 438 / 352).
+  it("pins today's measured size: 1058 records, 534 pairs, 430 of them compared by the cascade", () => {
+    expect(built.corpus.records).toHaveLength(1058);
+    expect(built.rows).toHaveLength(534);
+    expect(built.rows.filter((r) => r.engineCompares)).toHaveLength(430);
+    expect(committedRows).toHaveLength(534);
   });
 
-  // Measured 2026-10-16 after the owner's sampling (plan/00 §6 item 223).
-  it("pins the label set: 169 of 438 pairs, 269 sampled out of the two clusters", () => {
-    expect(committedRows.filter((r) => r.labelSet)).toHaveLength(169);
-    expect(committedRows.filter((r) => !r.labelSet)).toHaveLength(269);
+  // Measured 2026-10-16 after the targeted recording and the narrowed
+  // short-title cluster (plan/00 §6 items 223 and 226; before: 169 of 438).
+  it("pins the label set: 267 of 534 pairs, 267 sampled out of the two clusters", () => {
+    expect(committedRows.filter((r) => r.labelSet)).toHaveLength(267);
+    expect(committedRows.filter((r) => !r.labelSet)).toHaveLength(267);
     expect(
       committedRows.filter((r) => r.labelSet && r.a.source !== r.b.source),
-    ).toHaveLength(80);
+    ).toHaveLength(147);
+    expect(committedRows.filter((r) => r.a.source !== r.b.source)).toHaveLength(
+      147,
+    );
     expect(built.labelSetFamilies.counts).toEqual({
-      "same-work-3-sources": 5,
-      "preprint-published": 9,
-      "short-title": 25,
-      "series-title": 1,
-      "same-title-diff-year-diff-venue": 3,
-      "prefix-10.64898": 0,
+      "same-work-3-sources": 11,
+      "preprint-published": 27,
+      "short-title": 27,
+      "series-title": 16,
+      "same-title-diff-year-diff-venue": 15,
+      "prefix-10.64898": 11,
       "korean-title": 0,
     });
   });
@@ -349,38 +360,33 @@ describe("step 3's families", () => {
 
   it("pins today's counts in the committed candidate set", () => {
     expect(built.families.counts).toEqual({
-      "same-work-3-sources": 5,
-      "preprint-published": 9,
+      "same-work-3-sources": 11,
+      "preprint-published": 27,
       "short-title": 83,
-      "series-title": 1,
-      "same-title-diff-year-diff-venue": 3,
-      "prefix-10.64898": 0,
+      "series-title": 16,
+      "same-title-diff-year-diff-venue": 15,
+      "prefix-10.64898": 11,
       "korean-title": 0,
     });
     expect(built.families.prefix64898BySource).toEqual({
-      biorxiv: 0,
-      medrxiv: 0,
+      biorxiv: 4,
+      medrxiv: 4,
     });
     expect(built.families.sets.map((s) => s.sources.length)).toEqual([
-      3, 3, 4, 3, 3,
+      3, 3, 3, 3, 4, 3, 3, 3, 3, 3, 3,
     ]);
   });
 
-  it("records which families the committed fixtures cannot yet supply (Part B turns this into 'none')", () => {
-    expect(familyShortfalls(built.families)).toEqual([
-      { family: "same-work-3-sources", have: 5, need: 10 },
-      { family: "series-title", have: 1, need: 5 },
-      { family: "same-title-diff-year-diff-venue", have: 3, need: 5 },
-      {
-        family: "prefix-10.64898",
-        have: 0,
-        need: 5,
-        note: "bioRxiv pairs 0, medRxiv pairs 0: not mixed",
-      },
-    ]);
-    // Part B's recording took the candidate set past step 2's floor; the
-    // floor is on *labelled* pairs, and none is labelled yet.
-    expect(committedRows.length).toBeGreaterThanOrEqual(MIN_LABELLED_PAIRS);
+  // Was a pinned list of four short families until the targeted recording of
+  // 2026-10-16 (plan/00 §6 item 226).
+  it("finds no family short of step 3's minimum, in the candidate set or in the label set", () => {
+    expect(familyShortfalls(built.families)).toEqual([]);
+    expect(familyShortfalls(built.labelSetFamilies)).toEqual([]);
+    // The floor is on *labelled* pairs, and none is labelled yet; the label
+    // set the owner will label is now past it.
+    expect(
+      committedRows.filter((r) => r.labelSet).length,
+    ).toBeGreaterThanOrEqual(MIN_LABELLED_PAIRS);
   });
 
   it("reports no shortfall when every minimum is met and the prefix pairs mix both servers", () => {
@@ -533,7 +539,7 @@ describe("the label set (plan/00 §6 item 223)", () => {
     ]);
     expect(sampledOutOf(labelSetOf(built.pairs))).toEqual({
       "scotland-reports": { pairs: 231, kept: 20 },
-      "short-title-crossref": { pairs: 78, kept: 20 },
+      "short-title-crossref": { pairs: 76, kept: 20 },
     });
     for (const cluster of SAMPLED_CLUSTERS) {
       const inCluster = committedRows.filter(
@@ -544,6 +550,61 @@ describe("the label set (plan/00 §6 item 223)", () => {
         cluster,
       ).toHaveLength(20);
     }
+  });
+
+  // Owner, 2026-10-16 (plan/00 §6 item 226).
+  it("labels in full the two identical Crossref titles that are not book-part headings", () => {
+    const named = committedRows.filter(
+      (r) =>
+        r.a.source === "crossref" &&
+        r.b.source === "crossref" &&
+        ["genome editing using crispr", "psoroptic mange"].includes(
+          r.a.title.toLowerCase(),
+        ) &&
+        r.a.title.toLowerCase() === r.b.title.toLowerCase(),
+    );
+    expect(named.map((r) => r.a.title.toLowerCase()).sort()).toEqual([
+      "genome editing using crispr",
+      "psoroptic mange",
+    ]);
+    for (const r of named) {
+      expect(r.labelSet, r.pairId).toBe(true);
+      expect(r.sampleCluster, r.pairId).toBeNull();
+    }
+    // Every pair left in the short-title cluster is a book-part heading.
+    for (const r of committedRows) {
+      if (r.sampleCluster !== "short-title-crossref") continue;
+      expect(r.a.title, r.pairId).toMatch(/\bpart\s+[ivxlc\d]+\b/iu);
+    }
+  });
+
+  it("reads a book-part heading only as whole words: 'part' and a numeral", () => {
+    for (const yes of ["part ii", "part iii introduction", "x part 2 y"]) {
+      expect(PART_HEADING.test(yes), yes).toBe(true);
+    }
+    for (const no of [
+      "psoroptic mange",
+      "genome editing using crispr",
+      "counterpart ii",
+      "part iiia",
+      "partii",
+      "parts ii",
+    ]) {
+      expect(PART_HEADING.test(no), no).toBe(false);
+    }
+    const twin = (id: string, title: string) => rec(id, { title });
+    expect(
+      sampledClusterOf(
+        twin("crossref:m1", "Psoroptic Mange"),
+        twin("crossref:m2", "Psoroptic Mange"),
+      ),
+    ).toBeUndefined();
+    expect(
+      sampledClusterOf(
+        twin("crossref:h1", "[Part III Introduction]"),
+        twin("crossref:h2", "[Part III Introduction]"),
+      ),
+    ).toBe("short-title-crossref");
   });
 
   it("samples out no pair outside the two clusters", () => {
@@ -672,7 +733,7 @@ describe("the label set (plan/00 §6 item 223)", () => {
         .map((r) => r.pairId)
         .sort(),
     );
-    expect(parseJsonl(built.files[PAIRS_FILE] ?? "")).toHaveLength(438);
+    expect(parseJsonl(built.files[PAIRS_FILE] ?? "")).toHaveLength(534);
   });
 
   it("the report counts a row without labelSet as in the set, and names what was sampled out", () => {
@@ -738,10 +799,10 @@ describe("scripts/dedup-report.ts", () => {
       const code = await reportMain([resolve(DEDUP_CORPUS_DIR, PAIRS_FILE)]);
       expect(code).toBe(1);
       const said = String(err.mock.calls[0]?.[0]);
-      expect(said).toMatch(/is unlabelled: 169 of 169 label-set pairs/u);
+      expect(said).toMatch(/is unlabelled: 267 of 267 label-set pairs/u);
       expect(said).toContain(
-        "Sampled out of the label set (owner, 2026-10-16): 269 of 438 pairs, " +
-          "not measured (scotland-reports 211, short-title-crossref 58)",
+        "Sampled out of the label set (owner, 2026-10-16): 267 of 534 pairs, " +
+          "not measured (scotland-reports 211, short-title-crossref 56)",
       );
     } finally {
       err.mockRestore();

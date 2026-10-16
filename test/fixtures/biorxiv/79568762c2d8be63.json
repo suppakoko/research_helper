@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Fri, 16 Oct 2026 04:18:48 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.26"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"Awake sharp-wave ripples coincide with rhythmic cortical synchronization\",\"authors\":\"Lim, T. H.; Zhang, X.\",\"author_corresponding\":\"Xiaomin Zhang\",\"author_corresponding_institution\":\"University of Zurich\",\"doi\":\"10.64898\\/2026.09.29.754885\",\"date\":\"2026-09-30\",\"version\":\"1\",\"type\":\"new results\",\"license\":\"cc_by\",\"category\":\"neuroscience\",\"jatsxml\":\"https:\\/\\/www.biorxiv.org\\/content\\/early\\/2026\\/09\\/30\\/2026.09.29.754885.source.xml\",\"abstract\":\"Analysis of the Allen Institute Visual Coding Neuropixels dataset revealed a ~5 Hz synchronization of visual cortical activity in awake, immobile mice. During bouts of this rhythm, synchronized cortical bursts coincided with changes in the occurrence of sharp-wave ripples (SWRs) and dentate spikes and in SWR properties. Cortical synchronization, SWRs, and dentate spikes were also coordinated with slower pupil-size fluctuation, revealing that awake SWRs are embedded within nested brainwide rhythms.\",\"published\":\"NA\",\"server\":\"bioRxiv\"}]}\r\n\r\n\r\n\r\n"
+}

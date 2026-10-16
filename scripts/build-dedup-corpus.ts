@@ -60,6 +60,12 @@
  * set only; `scripts/dedup-report.ts` measures the labelled label-set pairs
  * only and prints how many were sampled out. Section 4b has the details.
  *
+ * **Narrowed 2026-10-16 (`plan/00` §6 item 226):** the short-title cluster
+ * holds only titles that carry a book-part heading — "Part II", "Part III
+ * Introduction" ({@link PART_HEADING}) — so that the two identical Crossref
+ * titles that are not series headings ("Genome editing using CRISPR",
+ * "Psoroptic mange") are labelled in full, as the owner decided.
+ *
  * ## Redaction
  *
  * Every value written is copied from a committed fixture that already passed
@@ -1204,9 +1210,14 @@ export function familyShortfalls(
 //   starts with the stem "Enhanced Surveillance of COVID-19 in Scotland"
 //   (22 separate `report` records from Crossref Q5; 231 pairs when measured).
 // - `short-title-crossref`: both records are Crossref records with the same
-//   plain title, and Part A's own short-title family check
-//   ({@link pairFamilies}' `short-title`) holds for the pair ("Part III",
-//   "Part III Introduction", …; 78 pairs when measured).
+//   plain title, Part A's own short-title family check
+//   ({@link pairFamilies}' `short-title`) holds for the pair, **and** the
+//   title carries a book-part heading ({@link PART_HEADING}: "Part III",
+//   "Part III Introduction", …). 78 pairs when first measured; the heading
+//   condition was added on 2026-10-16 (`plan/00` §6 item 226, owner) and
+//   moved the 2 pairs titled "Genome editing using CRISPR" and "Psoroptic
+//   mange" out of the cluster and into the label set, leaving 76 pairs of
+//   which 20 are kept, as before.
 //
 // **Which 20.** Within each cluster, the 20 pairs with the smallest
 // `sha256("P2-T13 label set 2026-10-16\n" + pairId)`, ties broken by pair id.
@@ -1230,6 +1241,14 @@ export const LABEL_SET_PER_CLUSTER = 20;
 /** The Scotland reports' shared title stem, in {@link plainTitle}'s form. */
 const SCOTLAND_TITLE_STEM = "enhanced surveillance of covid 19 in scotland";
 
+/**
+ * A book-part heading anywhere in a plain title: the word "part" followed by a
+ * roman numeral or a number, as whole words. Only a title carrying one joins
+ * the `short-title-crossref` cluster (owner, 2026-10-16, `plan/00` §6 item
+ * 226). Read from the title alone, never from an engine verdict.
+ */
+export const PART_HEADING = /(?:^| )part (?:[ivxlc]+|\d+)(?: |$)/;
+
 /** The fixed salt of the selection hash; changing it changes the 20. */
 const LABEL_SET_SALT = "P2-T13 label set 2026-10-16";
 
@@ -1248,7 +1267,12 @@ export function sampledClusterOf(
   const scotland = (t: string): boolean =>
     t === SCOTLAND_TITLE_STEM || t.startsWith(`${SCOTLAND_TITLE_STEM} `);
   if (scotland(ta) && scotland(tb)) return "scotland-reports";
-  if (ta !== "" && ta === tb && pairFamilies(a, b).includes("short-title")) {
+  if (
+    ta !== "" &&
+    ta === tb &&
+    PART_HEADING.test(ta) &&
+    pairFamilies(a, b).includes("short-title")
+  ) {
     return "short-title-crossref";
   }
   return undefined;

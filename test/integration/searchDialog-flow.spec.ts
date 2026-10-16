@@ -306,7 +306,10 @@ import type {
 } from "../../src/pipeline/searchImport/types";
 import type { Pipeline, PipelineContext } from "../../src/pipeline/types";
 import { createPubmedRecordMapper } from "../../src/sources/pubmed/mapper";
-import { DEDUP_CORPUS_SEARCHES } from "../support/dedupCorpusRecordedRequests";
+import {
+  DEDUP_CORPUS_PUBMED_NO_RECORDS,
+  DEDUP_CORPUS_SEARCHES,
+} from "../support/dedupCorpusRecordedRequests";
 import {
   createPubmedSource,
   parseEsearchBody,
@@ -1873,9 +1876,15 @@ const PAGINATED_PAGE_1_KEY = "b68358327ce730cd";
  * `P2-T36` recorded the window's two (`window-esearch`, `window-efetch`); since
  * `P2-T13` Part B (2026-10-16) also one `esearch` and one dependent `efetch` per
  * corpus search, plus `search-typical-efetch` — derived from the support plan,
- * not typed in, so the next corpus scenario cannot strand this pin.
+ * not typed in, so the next corpus scenario cannot strand this pin. A corpus
+ * search whose `esearch` found nothing has no `efetch`
+ * (`DEDUP_CORPUS_PUBMED_NO_RECORDS`, 2026-10-16).
  */
-const PUBMED_FIXTURE_COUNT = 19 + 2 * DEDUP_CORPUS_SEARCHES.pubmed.length + 1;
+const PUBMED_FIXTURE_COUNT =
+  19 +
+  2 * DEDUP_CORPUS_SEARCHES.pubmed.length -
+  DEDUP_CORPUS_PUBMED_NO_RECORDS.length +
+  1;
 
 /**
  * The two fixtures `P2-T36` recorded for the window, pinned by hand for the

@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Fri, 16 Oct 2026 04:19:19 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.26"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"Selection without Collider Stratification can Bias Instrumental Variable Analyses in the Presence of Causal Effect Heterogeneity\",\"authors\":\"Gkatzionis, A.; Hartwig, F. P.; Tilling, K.\",\"author_corresponding\":\"Apostolos Gkatzionis\",\"author_corresponding_institution\":\"University of Bristol\",\"doi\":\"10.64898\\/2026.09.27.26364122\",\"date\":\"2026-09-30\",\"version\":\"1\",\"type\":\"PUBLISHAHEADOFPRINT\",\"license\":\"cc_by_nc\",\"category\":\"epidemiology\",\"jatsxml\":\"https:\\/\\/www.medrxiv.org\\/content\\/early\\/2026\\/09\\/30\\/2026.09.27.26364122.source.xml\",\"abstract\":\"Selection bias is a common concern in causal inference. Two mechanisms can give rise to selection bias: collider bias or stratifying on an effect modifier of the exposure-outcome causal effect. Research into the impact of selection bias on instrumental variable (IV) analyses has focused primarily on collider bias. Here, we show that IV estimates can be biased if selection is an effect modifier (or caused by an effect modifier) of the exposure-outcome effect. In a simulation study, we investigate the size and direction of the bias when estimating effects on the mean difference or odds ratio scale. Bias can also occur due to heterogeneity in the instrument-exposure relationship, although its magnitude is typically smaller. Finally, we discuss methods to deal with this bias in practice, including inverse probability weighting (IPW).\",\"published\":\"NA\",\"server\":\"medRxiv\"}]}\r\n\r\n\r\n\r\n"
+}

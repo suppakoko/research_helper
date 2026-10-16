@@ -1,0 +1,13 @@
+{
+  "scenario": "corpus-known-papers",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-16T04:22:24.916Z",
+  "endpoint": "https://export.arxiv.org/api/query",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "scrubbed header x-cloud-trace-context",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

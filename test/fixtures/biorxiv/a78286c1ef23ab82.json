@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "headers": {
+    "access-control-allow-origin": "*",
+    "content-type": "application/json",
+    "date": "Fri, 16 Oct 2026 04:18:46 GMT",
+    "server": "Apache/2.4.62 (Red Hat Enterprise Linux) OpenSSL/3.5.8 mod_fcgid/2.3.9 mod_wsgi/4.7.1 Python/3.9",
+    "transfer-encoding": "chunked",
+    "x-powered-by": "PHP/8.2.26"
+  },
+  "body": "{\"messages\":[{\"status\":\"ok\",\"category\":\"all\"}], \"collection\":[{\"title\":\"A Temporal Atlas of the Nuclear Androgen Receptor Proximal Interactome\",\"authors\":\"Ptak, C. C.; Eng, J.; Radoshevich, L.; Wright, M. E.\",\"author_corresponding\":\"Michael E. Wright\",\"author_corresponding_institution\":\"University of Iowa\",\"doi\":\"10.64898\\/2026.08.03.742470\",\"date\":\"2026-08-06\",\"version\":\"1\",\"type\":\"new results\",\"license\":\"cc_by_nc_nd\",\"category\":\"systems biology\",\"jatsxml\":\"https:\\/\\/www.biorxiv.org\\/content\\/early\\/2026\\/08\\/06\\/2026.08.03.742470.source.xml\",\"abstract\":\"The authors have withdrawn this manuscript because this manuscript has been merged with another preprint (BIORXIV\\/2026\\/742469). Therefore, the authors do not wish this work to be cited as reference for the project. If you have any questions, please contact the corresponding author. The merged preprint can be found at doi: 10.64898\\/2026.08.03.742469\",\"published\":\"NA\",\"server\":\"bioRxiv\"},{\"title\":\"WITHDRAWN: A Temporal Atlas of the Nuclear Androgen Receptor Proximal Interactome\",\"authors\":\"Ptak, C. C.; Eng, J.; Radoshevich, L.; Wright, M. E.\",\"author_corresponding\":\"Michael E. Wright\",\"author_corresponding_institution\":\"University of Iowa\",\"doi\":\"10.64898\\/2026.08.03.742470\",\"date\":\"2026-08-28\",\"version\":\"2\",\"type\":\"withdrawn\",\"license\":\"cc_by_nc_nd\",\"category\":\"systems biology\",\"jatsxml\":\"https:\\/\\/www.biorxiv.org\\/content\\/early\\/2026\\/08\\/28\\/2026.08.03.742470.source.xml\",\"abstract\":\"The authors have withdrawn this manuscript because this manuscript has been merged with another preprint (BIORXIV\\/2026\\/742469). Therefore, the authors do not wish this work to be cited as reference for the project. If you have any questions, please contact the corresponding author. The merged preprint can be found at doi: 10.64898\\/2026.08.03.742469\",\"published\":\"NA\",\"server\":\"bioRxiv\"}]}\r\n\r\n\r\n\r\n"
+}

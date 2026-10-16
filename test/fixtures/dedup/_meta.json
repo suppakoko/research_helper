@@ -13,28 +13,28 @@
   ],
   "derived": true,
   "generatedBy": "npx tsx scripts/build-dedup-corpus.ts",
-  "recordCount": 898,
-  "pairCount": 438,
-  "engineComparedPairCount": 352,
+  "recordCount": 1058,
+  "pairCount": 534,
+  "engineComparedPairCount": 430,
   "labelledPairCount": 0,
-  "labelSetPairCount": 169,
+  "labelSetPairCount": 267,
   "sampledOut": {
     "scotland-reports": {
       "pairs": 231,
       "kept": 20
     },
     "short-title-crossref": {
-      "pairs": 78,
+      "pairs": 76,
       "kept": 20
     }
   },
   "familyCounts": {
-    "same-work-3-sources": 5,
-    "preprint-published": 9,
+    "same-work-3-sources": 11,
+    "preprint-published": 27,
     "short-title": 83,
-    "series-title": 1,
-    "same-title-diff-year-diff-venue": 3,
-    "prefix-10.64898": 0,
+    "series-title": 16,
+    "same-title-diff-year-diff-venue": 15,
+    "prefix-10.64898": 11,
     "korean-title": 0
   },
   "derivedFrom": [
@@ -61,6 +61,12 @@
       "key": "33b5393b539ac59b",
       "scenario": "search-single",
       "recordedAt": "2026-10-14T16:36:26.995Z"
+    },
+    {
+      "source": "arxiv",
+      "key": "47fc68dd3ed96dbb",
+      "scenario": "corpus-known-papers",
+      "recordedAt": "2026-10-16T04:22:24.916Z"
     },
     {
       "source": "arxiv",
@@ -154,15 +160,33 @@
     },
     {
       "source": "biorxiv",
+      "key": "37c36d03d85daebe",
+      "scenario": "corpus-doi-2026.09.21.753182",
+      "recordedAt": "2026-10-16T04:18:51.017Z"
+    },
+    {
+      "source": "biorxiv",
       "key": "4c951dec2aaf7c9d",
       "scenario": "record-rich",
       "recordedAt": "2026-10-15T09:17:02.641Z"
     },
     {
       "source": "biorxiv",
+      "key": "52596aa0a92edc02",
+      "scenario": "corpus-doi-2026.09.24.754284",
+      "recordedAt": "2026-10-16T04:18:51.019Z"
+    },
+    {
+      "source": "biorxiv",
       "key": "5ad16d3c6182783f",
       "scenario": "corpus-doi-2024.06.16.599202",
       "recordedAt": "2026-10-15T20:16:31.142Z"
+    },
+    {
+      "source": "biorxiv",
+      "key": "79568762c2d8be63",
+      "scenario": "corpus-doi-2026.09.29.754885",
+      "recordedAt": "2026-10-16T04:18:51.018Z"
     },
     {
       "source": "biorxiv",
@@ -175,6 +199,12 @@
       "key": "7f0a5500540175bf",
       "scenario": "search-empty",
       "recordedAt": "2026-10-15T09:17:02.649Z"
+    },
+    {
+      "source": "biorxiv",
+      "key": "a78286c1ef23ab82",
+      "scenario": "corpus-doi-2026.08.03.742470",
+      "recordedAt": "2026-10-16T04:18:51.015Z"
     },
     {
       "source": "biorxiv",
@@ -214,6 +244,12 @@
     },
     {
       "source": "crossref",
+      "key": "2948f6c4f602a510",
+      "scenario": "corpus-title-hamilton",
+      "recordedAt": "2026-10-16T04:21:42.887Z"
+    },
+    {
+      "source": "crossref",
       "key": "33ab8966e56a813d",
       "scenario": "corpus-q3",
       "recordedAt": "2026-10-15T20:13:34.997Z"
@@ -223,6 +259,12 @@
       "key": "4238211a020902bc",
       "scenario": "corpus-q2",
       "recordedAt": "2026-10-15T20:13:34.995Z"
+    },
+    {
+      "source": "crossref",
+      "key": "4ac9bde703f6a95e",
+      "scenario": "corpus-title-spp",
+      "recordedAt": "2026-10-16T04:21:42.893Z"
     },
     {
       "source": "crossref",
@@ -256,6 +298,12 @@
     },
     {
       "source": "crossref",
+      "key": "7b038b5a5408cb50",
+      "scenario": "corpus-title-deseq2",
+      "recordedAt": "2026-10-16T04:21:42.895Z"
+    },
+    {
+      "source": "crossref",
       "key": "7fff42ec6832cac6",
       "scenario": "corpus-q1",
       "recordedAt": "2026-10-15T20:13:34.991Z"
@@ -277,6 +325,18 @@
       "key": "91da36287bd39ed4",
       "scenario": "search-single",
       "recordedAt": "2026-10-14T15:08:22.189Z"
+    },
+    {
+      "source": "crossref",
+      "key": "9746311af66eae5d",
+      "scenario": "corpus-title-uniprot",
+      "recordedAt": "2026-10-16T04:21:42.890Z"
+    },
+    {
+      "source": "crossref",
+      "key": "c4f22ea78057efad",
+      "scenario": "corpus-title-focal-loss",
+      "recordedAt": "2026-10-16T04:21:42.892Z"
     },
     {
       "source": "crossref",
@@ -316,6 +376,12 @@
     },
     {
       "source": "crossref",
+      "key": "f9096770a1cfeb19",
+      "scenario": "corpus-title-alphafold",
+      "recordedAt": "2026-10-16T04:21:42.894Z"
+    },
+    {
+      "source": "crossref",
       "key": "f9636394c010be6a",
       "scenario": "record-sparse",
       "recordedAt": "2026-10-14T15:08:22.191Z"
@@ -352,6 +418,18 @@
     },
     {
       "source": "europepmc",
+      "key": "16e1bf06ccd16d32",
+      "scenario": "corpus-series-known",
+      "recordedAt": "2026-10-16T04:15:26.750Z"
+    },
+    {
+      "source": "europepmc",
+      "key": "2061005324eb0408",
+      "scenario": "corpus-ppr-medrxiv",
+      "recordedAt": "2026-10-16T04:17:26.618Z"
+    },
+    {
+      "source": "europepmc",
       "key": "2ba75612f9fc86a5",
       "scenario": "corpus-probe-short-title",
       "recordedAt": "2026-10-15T20:13:16.084Z"
@@ -367,6 +445,12 @@
       "key": "32c152229d1252cc",
       "scenario": "corpus-q3",
       "recordedAt": "2026-10-15T20:13:16.068Z"
+    },
+    {
+      "source": "europepmc",
+      "key": "390a96de6356c236",
+      "scenario": "corpus-ppr-biorxiv",
+      "recordedAt": "2026-10-16T04:17:51.178Z"
     },
     {
       "source": "europepmc",
@@ -412,9 +496,21 @@
     },
     {
       "source": "europepmc",
+      "key": "84041c35b7a68d30",
+      "scenario": "corpus-known-papers",
+      "recordedAt": "2026-10-16T04:15:26.752Z"
+    },
+    {
+      "source": "europepmc",
       "key": "953ba2229a19ea8c",
       "scenario": "search-post-long-query",
       "recordedAt": "2026-10-14T05:27:43.312Z"
+    },
+    {
+      "source": "europepmc",
+      "key": "a2f58f12707b25ae",
+      "scenario": "corpus-preprints-biorxiv",
+      "recordedAt": "2026-10-16T04:15:26.743Z"
     },
     {
       "source": "europepmc",
@@ -427,6 +523,12 @@
       "key": "a691a040d8948ce2",
       "scenario": "search-empty",
       "recordedAt": "2026-10-14T05:27:43.297Z"
+    },
+    {
+      "source": "europepmc",
+      "key": "c4331da527424f77",
+      "scenario": "corpus-preprints-medrxiv",
+      "recordedAt": "2026-10-16T04:15:26.747Z"
     },
     {
       "source": "europepmc",
@@ -466,9 +568,21 @@
     },
     {
       "source": "medrxiv",
+      "key": "0f1328e9ef088d7c",
+      "scenario": "corpus-doi-2026.09.07.26362451",
+      "recordedAt": "2026-10-16T04:19:21.460Z"
+    },
+    {
+      "source": "medrxiv",
       "key": "1647724675d23b4e",
       "scenario": "corpus-doi-2024.09.27.24314505",
       "recordedAt": "2026-10-15T20:16:41.477Z"
+    },
+    {
+      "source": "medrxiv",
+      "key": "2a981c1d3cbc6db0",
+      "scenario": "corpus-doi-2026.09.23.26363840",
+      "recordedAt": "2026-10-16T04:19:21.461Z"
     },
     {
       "source": "medrxiv",
@@ -502,6 +616,12 @@
     },
     {
       "source": "medrxiv",
+      "key": "9bc1d67f2ed7bb77",
+      "scenario": "corpus-doi-2026.09.27.26364122",
+      "recordedAt": "2026-10-16T04:19:21.461Z"
+    },
+    {
+      "source": "medrxiv",
       "key": "d5b4037bdd0926dd",
       "scenario": "corpus-doi-2024.10.31.24316386",
       "recordedAt": "2026-10-15T20:16:41.478Z"
@@ -514,6 +634,12 @@
     },
     {
       "source": "medrxiv",
+      "key": "e65aa3093ec7c8b2",
+      "scenario": "corpus-doi-2026.09.06.26362399",
+      "recordedAt": "2026-10-16T04:19:21.457Z"
+    },
+    {
+      "source": "medrxiv",
       "key": "ebfc529ffee0f219",
       "scenario": "corpus-doi-2021.12.02.21266871",
       "recordedAt": "2026-10-15T20:16:41.475Z"
@@ -523,6 +649,12 @@
       "key": "099a0fd88ff59782",
       "scenario": "record-rich",
       "recordedAt": "2026-10-07T09:11:48.632Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "0e176337e6f6bfb7",
+      "scenario": "corpus-known-papers-esearch",
+      "recordedAt": "2026-10-16T04:19:41.060Z"
     },
     {
       "source": "pubmed",
@@ -610,6 +742,12 @@
     },
     {
       "source": "pubmed",
+      "key": "723ad1b8d0dcf4b1",
+      "scenario": "corpus-series-words-efetch",
+      "recordedAt": "2026-10-16T04:21:20.740Z"
+    },
+    {
+      "source": "pubmed",
       "key": "790a326635d71fbc",
       "scenario": "search-typical",
       "recordedAt": "2026-10-07T09:11:48.624Z"
@@ -631,6 +769,12 @@
       "key": "8387066e54161ef3",
       "scenario": "corpus-q4-esearch",
       "recordedAt": "2026-10-15T20:12:55.704Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "87875ff9f353369f",
+      "scenario": "corpus-series-known-esearch",
+      "recordedAt": "2026-10-16T04:19:41.057Z"
     },
     {
       "source": "pubmed",
@@ -673,6 +817,24 @@
       "key": "c055e324817ad23d",
       "scenario": "corpus-probe-short-title-esearch",
       "recordedAt": "2026-10-15T20:12:55.705Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "c28702f86a006b18",
+      "scenario": "corpus-known-words-efetch",
+      "recordedAt": "2026-10-16T04:21:20.744Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "ca9737e947c74227",
+      "scenario": "corpus-series-words-esearch",
+      "recordedAt": "2026-10-16T04:21:20.733Z"
+    },
+    {
+      "source": "pubmed",
+      "key": "d1f4b20d28f5ab69",
+      "scenario": "corpus-known-words-esearch",
+      "recordedAt": "2026-10-16T04:21:20.736Z"
     },
     {
       "source": "pubmed",
