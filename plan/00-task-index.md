@@ -1362,7 +1362,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     §10.4's "bioRxiv". medRxiv abstracts therefore rank after every listed source, the inert `openalex` included.
     A document decision: does `medrxiv` sit beside `biorxiv`?
 
-180. **The search estimate budgets requests for sources that make none.** The `estimate` in
+180. ~~**The search estimate budgets requests for sources that make none.**~~ **DECIDED 2026-10-19: fix it, with item 198.** The `estimate` in
     `searchImportPipeline.ts` charges `ceil(limit / maxPageSize) * 2` requests to `biorxiv` and `medrxiv`, which send
     nothing during a search. Skip sources whose `capabilities.keywordSearch` is `false`.
 
@@ -1434,7 +1434,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 197. **Semantic Scholar's `fetchAbstract` has no caller left in `src/`.** Keep it (declared in §4.2) or retire it.
 
-198. **The backfill pass is outside `estimate()`, and a backfilled work keeps its old `normalizedAtEpochMs`.**
+198. ~~**The backfill pass is outside `estimate()`, and a backfilled work keeps its old `normalizedAtEpochMs`.**~~ **DECIDED 2026-10-19: fix it, with item 180.**
 
 ### 6.37 Raised by `P2-T11` and `P2-T14`, 2026-10-15 — recorded under rule 9; items 199, 200 and 205 wait on the owner
 
@@ -1466,12 +1466,13 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `src/pipeline/searchImport/stages.ts` counts bioRxiv/medRxiv, which cannot fail). The window now decides through
     the capability; the outcome, the provenance record and the progress popup still say partial.
 
-205. **Should "Open Preferences…" always show in the all-failed state (owner)?** `P2-T14` step 5 says so; the window
+205. ~~**Should "Open Preferences…" always show in the all-failed state (owner)?**~~ **DECIDED 2026-10-19: no — buttons follow each source's error (item 220's rule); `P2-T14` step 5 and `docs/08` §4.6 get a
+    dated note.** `P2-T14` step 5 says so; the window
     follows `docs/08` §8.3's per-error action (`P1-T22`), so an offline-only failure shows Retry alone.
 
-206. **The duplicate tooltip names the tier by its identifier** (`title-fuzzy`): no bundle has a tier vocabulary.
+206. ~~**The duplicate tooltip names the tier by its identifier**~~ **DECIDED 2026-10-19: give the tiers a vocabulary** (English strings; Korean drafted for owner review). (`title-fuzzy`): no bundle has a tier vocabulary.
 
-207. **Unticking every database writes `sources = ""`, which the next open reads as "all ticked".** Also: `P2-T14`'s
+207. ~~**Unticking every database writes `sources = ""`, which the next open reads as "all ticked".**~~ **DECIDED 2026-10-19: fix it.** Also: `P2-T14`'s
     Verify-with `diff` cannot pass under the Korean stub convention — replace it with the `keys.test.ts` partition check.
 
 ### 6.38 Raised by `P2-T17`, `P2-T18` and the item-200 change, 2026-10-16 — recorded under rule 9; items 209, 213, 214 and 217 wait on the owner
@@ -1502,10 +1503,12 @@ the caller of what the card builds; if it does not, the caller is added with a d
     needs `SearchImportBatchResult` / `SearchImportWriteReport` counts, `searchImportPipeline.ts`'s `accumulate` /
     `toOutput`, and the view model to format `research-helper-import-paths`.
 
-213. **The per-record translator timeout has no value (owner).** The mechanism is built with no default; `docs/07` §12.1
+213. ~~**The per-record translator timeout has no value (owner).**~~ **DECIDED 2026-10-19: 30 seconds per record**, then that record falls back to hand-mapping; `docs/07` §12.1 first. The mechanism is built with no default; `docs/07` §12.1
     needs the number. A timed-out lookup that later finishes may save a second copy.
 
-214. **A PMCID-only record's route (owner):** no document gives a Europe PMC PMCID query form; the NCBI ID Converter
+214. ~~**A PMCID-only record's route (owner):**~~ **DECIDED 2026-10-19: the NCBI ID Converter** (`docs/02` §3.7, `idtype=pmcid`, batched); its host
+    `pmc.ncbi.nlm.nih.gov` gets PubMed's unkeyed policy row (2.5/s, burst 1, 3 concurrent, retry 1000/30 000 ms, 3
+    attempts), never a key; `docs/07` §7.3 first. no document gives a Europe PMC PMCID query form; the NCBI ID Converter
     (`idtype=pmcid`, `docs/02` §3.7) is documented. Until chosen, such a record is hand-mapped.
 
 215. **Where the import path is persisted:** `docs/07` §5.1 types `fieldOrigin` values as `SourceId`, so the path lives
