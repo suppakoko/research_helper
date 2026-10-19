@@ -104,7 +104,7 @@ import {
   type SearchImportStageKey,
   type VersionLink,
 } from "./stages";
-import { backfillAbstracts } from "./backfill";
+import { abstractBackfillRequestBound, backfillAbstracts } from "./backfill";
 import type {
   SearchImportBatchResult,
   SearchImportInput,
@@ -528,6 +528,8 @@ export function createSearchImportPipeline(
       sources: ctx.sources,
       // Only the databases the user ticked (owner, 2026-10-15, item 194).
       selected: input.sourceIds,
+      // A backfilled work is rebuilt, so it is restamped (item 198).
+      now: () => ctx.clock.now(),
       token: ctx.token,
       progress: stage,
       checkpoint: (checkpointState) => ctx.checkpoint(checkpointState),
@@ -717,11 +719,28 @@ export function createSearchImportPipeline(
       // Per source: the pages `searchAll` will walk, each page costing two
       // round trips on the PubMed path (`docs/02` §3.3's `esearch` then §3.4's
       // `efetch`). Derived from each adapter's own declared page size rather
-      // than guessed.
-      const externalRequests = sources.reduce((total, source) => {
+      // than guessed. A source with `capabilities.keywordSearch: false`
+      // (bioRxiv, medRxiv) sends nothing during a search, so it is charged
+      // nothing (owner, 2026-10-19, `plan/00` §6 item 180).
+      const searching = sources.filter(
+        (source) => source.capabilities.keywordSearch,
+      );
+      const searchRequests = searching.reduce((total, source) => {
         const pageSize = Math.max(1, source.capabilities.maxPageSize);
         return total + Math.ceil(input.limit / pageSize) * 2;
       }, 0);
+      // `BackfillingAbstracts` (item 198): the batched ladder's worst case —
+      // one Europe PMC request and one Semantic Scholar request per 100
+      // works, for ticked ladder databases only. **An upper bound:** the pass
+      // asks only works that still have no abstract, and charging every work
+      // assumes none came with one. The run can hold at most `limit` works
+      // per searching source when the pass starts.
+      const backfillRequests = abstractBackfillRequestBound(
+        input.limit * searching.length,
+        input.sourceIds,
+        ctx.sources,
+      );
+      const externalRequests = searchRequests + backfillRequests;
       return Promise.resolve({
         itemCount: input.limit * sources.length,
         externalRequests,

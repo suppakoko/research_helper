@@ -181,7 +181,8 @@ research-helper-search-col-doi =
 # (P2-T14) Reviewed by the owner 2026-10-16 (G-41). en-US: "Possible duplicate"; `.title`: "Possible
 # duplicate of another row ({ $tier }, { $score }% similar). Nothing was
 # merged: review both rows and untick the one you do not want." `{ $tier }`
-# is an identifier and is not translated.
+# is not translated here: since 2026-10-19 (plan/00 §6 item 206) it is the
+# already-resolved `research-helper-search-tier-*` name below.
 research-helper-search-row-duplicate = 중복 가능성
     .title = 다른 행과 중복일 수 있습니다({ $tier }, 유사도 { $score }%). 합친 것은 없습니다. 두 행을 확인하고 원하지 않는 행의 체크를 해제하세요.
 #
@@ -190,6 +191,18 @@ research-helper-search-row-duplicate = 중복 가능성
 # nothing was merged."
 research-helper-search-row-linked = 다른 판본
     .title = 다른 행이 이 논문의 다른 판본(예: 프리프린트)입니다. 둘 다 유지하며 합치지 않았습니다.
+#
+# (item 206) The deduplication tier names, shown inside the duplicate
+# tooltip's `{ $tier }`; lower case, no full stop in en-US.
+#
+# Reviewed by the owner 2026-10-19 (G-41). en-US: "exact title match"
+research-helper-search-tier-title-exact = 제목 완전 일치
+#
+# Reviewed by the owner 2026-10-19 (G-41). en-US: "close title match"
+research-helper-search-tier-title-fuzzy = 제목 근사 일치
+#
+# Reviewed by the owner 2026-10-19 (G-41). en-US: "known preprint–published link"
+research-helper-search-tier-version-link = 알려진 프리프린트–출판본 연결
 
 
 ## Selection controls (docs/08 §4.5, FR-5)

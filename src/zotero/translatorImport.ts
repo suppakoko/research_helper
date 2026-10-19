@@ -41,15 +41,22 @@
  *   as `"no-result"`.
  * - **A PMCID never reaches `setIdentifier`.** `docs/01` §6.2: PMCID "is not
  *   recognised at all". A record whose only identifier is a PMCID is resolved
- *   first through {@link TranslatorImportOptions.resolvePmcids} (the Europe PMC
- *   route `docs/01` §6.2 names); one that still has no DOI, arXiv ID or PMID
- *   falls back as `"no-identifier"` without a lookup attempt.
- * - **The per-record deadline has no number.** `docs/07` §12.1 and `docs/01`
- *   §6.3 item 3 say a record falls back "on failure or timeout", and no
- *   document gives the timeout's value (`plan/README.md` §5 rule 4). So
- *   {@link TranslatorImportOptions.perRecordTimeoutMs} has **no default**:
- *   absent, a lookup runs until the translator settles. The mechanism is built
- *   and tested; choosing the figure is reported as an owner decision.
+ *   first through {@link TranslatorImportOptions.resolvePmcids} — the NCBI ID
+ *   Converter of `docs/02` §3.7 (`idtype=pmcid`, owner 2026-10-19, `plan/00`
+ *   §6 item 214), built in `src/sources/pubmed/idConverter.ts` and wired by
+ *   the writer; one that still has no DOI, arXiv ID or PMID falls back as
+ *   `"no-identifier"` without a lookup attempt.
+ * - **The per-record deadline is {@link TRANSLATOR_LOOKUP_TIMEOUT_MS}, 30 s**
+ *   (owner 2026-10-19, `plan/00` §6 item 213; `docs/07` §12.1's dated note).
+ *   The writer in `src/bootstrap/registerPipelines.ts` applies it; this
+ *   module's {@link TranslatorImportOptions.perRecordTimeoutMs} still has no
+ *   default of its own, so a caller that passes none gets no deadline.
+ * - **A deadline abandons a lookup; it does not stop it.** Nothing here can
+ *   cancel a running `translate()`, so a lookup that loses the race keeps
+ *   running, and when it settles its items are already saved into the
+ *   collection by Zotero, beside the record's hand-mapped copy. This module
+ *   ignores that late result — it is never counted, repaired or returned —
+ *   and the duplicate it leaves is reported as open (item 213).
  */
 
 import type { Logger } from "../core/logger";
@@ -73,6 +80,15 @@ export const PMID_LOOKUP_BATCH_SIZE = 200;
  * for the opt-in path is "Zotero-canonical metadata plus any OA PDF".
  */
 export const TRANSLATOR_SAVE_ATTACHMENTS = true;
+
+/**
+ * The per-record translator deadline, in ms: **30 seconds**. Owner,
+ * 2026-10-19 (`plan/00` §6 item 213), recorded first in `docs/07` §12.1. A
+ * lookup that has not settled by then falls back to hand-mapping as
+ * `"timeout"`. Applied by `createZoteroSearchImportWriter`, not here — see
+ * {@link TranslatorImportOptions.perRecordTimeoutMs}.
+ */
+export const TRANSLATOR_LOOKUP_TIMEOUT_MS = 30_000;
 
 /** Which path produced an item: Strategy B or Strategy A (`docs/01` §6.3). */
 export type ImportPath = "translator" | "hand-map";
@@ -126,7 +142,7 @@ export interface TranslatorSearch {
 /** Constructs one {@link TranslatorSearch} per lookup. */
 export type TranslatorSearchFactory = () => TranslatorSearch;
 
-/** A PMCID's other identifiers, as the Europe PMC route returns them. */
+/** A PMCID's other identifiers, as the PMCID route returns them. */
 export interface ResolvedPmcid {
   readonly doi?: string;
   readonly pmid?: string;
@@ -146,15 +162,18 @@ export interface TranslatorImportOptions {
   /** Defaults to {@link createZoteroTranslatorSearch}. Tests pass a fake. */
   readonly createSearch?: TranslatorSearchFactory;
   /**
-   * The Europe PMC route for PMCID-only records. Absent, such a record falls
-   * back as `"no-identifier"` without a lookup — which is the safe half of
-   * step 6 and never sends a PMCID to `setIdentifier`.
+   * The PMCID route for PMCID-only records: the NCBI ID Converter
+   * (`docs/02` §3.7, item 214), supplied by the writer. Absent, such a record
+   * falls back as `"no-identifier"` without a lookup, and so does a PMCID the
+   * route could not resolve — neither ever sends a PMCID to `setIdentifier`.
    */
   readonly resolvePmcids?: PmcidResolver;
   /**
    * The deadline for one lookup (one `getTranslators()` + `translate()`), in
-   * ms. **No default, deliberately** — see this file's header: no document
-   * gives the number. A PMID batch is one lookup and gets one deadline.
+   * ms. The product value is {@link TRANSLATOR_LOOKUP_TIMEOUT_MS}, applied by
+   * the writer; **absent here means no deadline**, so a direct caller of
+   * {@link lookupThroughTranslators} chooses its own. A PMID batch is one
+   * lookup and gets one deadline.
    */
   readonly perRecordTimeoutMs?: number;
   /** The timer the deadline waits on. Defaults to `Zotero.Promise.delay`. */
@@ -469,7 +488,11 @@ async function resolvePmcids(
   }
 }
 
-/** `promise`, or a {@link LookupDeadline} after `ms` when `ms` is set. */
+/**
+ * `promise`, or a {@link LookupDeadline} after `ms` when `ms` is set. The
+ * losing `promise` is abandoned, not stopped: it settles later, unobserved
+ * (see this file's header on the late save).
+ */
 async function withDeadline<T>(
   promise: Promise<T>,
   ms: number | undefined,

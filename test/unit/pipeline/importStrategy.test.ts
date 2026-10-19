@@ -39,10 +39,12 @@ import type { CanonicalWork, WorkType } from "../../../src/model/canonicalWork";
 import type { ExternalIds } from "../../../src/model/ids";
 import { getPref, setPrefStore } from "../../../src/prefs";
 import { PREFS } from "../../../src/prefs/schema";
+import { createPmcidConverter } from "../../../src/sources/pubmed/idConverter";
 import {
   identifierFor,
   lookupThroughTranslators,
   PMID_LOOKUP_BATCH_SIZE,
+  TRANSLATOR_LOOKUP_TIMEOUT_MS,
   type TranslateOptions,
   type TranslatorIdentifier,
   type TranslatorImportOptions,
@@ -410,6 +412,117 @@ describe("translatorImport — identifier lookup (docs/01 §6.2)", () => {
     ).rejects.toBeInstanceOf(OperationCancelledError);
   });
 
+  it("abandons a lookup that loses the deadline but cannot stop it: the late save still happens, uncounted (item 213's open risk)", async () => {
+    // Measures what P2-T18 left open: nothing cancels a `translate()` that
+    // lost the race, so its save lands after the record was handed to
+    // Strategy A. The fake's `saved` list stands in for Zotero's save.
+    const saved: number[] = [];
+    let finishLate: (() => void) | undefined;
+    const createSearch = (): TranslatorSearch => ({
+      setIdentifier: () => undefined,
+      getTranslators: () => Promise.resolve(["t1"]),
+      setTranslator: () => undefined,
+      translate: () =>
+        new Promise((done) => {
+          finishLate = () => {
+            saved.push(41);
+            done([fakeItem(41)]);
+          };
+        }),
+    });
+    const delay = vi.fn(() => Promise.resolve());
+    const result = await runLookup([work("late", { doi: "10.1/late" })], {
+      createSearch,
+      perRecordTimeoutMs: 30_000,
+      delay,
+    });
+    expect(delay).toHaveBeenCalledWith(30_000);
+    expect(result.translated).toEqual([]);
+    expect(result.fallbacks.map((f) => f.reason)).toEqual(["timeout"]);
+
+    // The abandoned lookup is still alive and finishes later.
+    expect(finishLate).toBeTypeOf("function");
+    finishLate?.();
+    await Promise.resolve();
+    expect(saved).toEqual([41]);
+    // …and nothing in the result changed: the late item is ignored.
+    expect(result.translated).toEqual([]);
+    expect(result.fallbacks).toHaveLength(1);
+  });
+
+  it("resolves a PMCID-only record through the NCBI ID Converter to one DOI lookup, and hand-maps the PMCID it could not resolve (item 214)", async () => {
+    // `docs/02` §3.7's documented record for PMC7605294; PMC9999999 is not
+    // in the answer, so it does not resolve. One converter request for both.
+    const converterCalls: string[] = [];
+    const http = {
+      request: vi.fn((_method: string, url: string) => {
+        converterCalls.push(url);
+        return Promise.resolve({
+          status: 200,
+          url,
+          body: '{"status":"ok","records":[{"doi":"10.4103/tcmj.tcmj_71_20","pmcid":"PMC7605294","pmid":33163378,"requested-id":"PMC7605294"}]}',
+          rawHeaders: "",
+          header: () => undefined,
+        });
+      }),
+    };
+    const { calls, createSearch } = fakeSearches(() => ({
+      items: [fakeItem(9)],
+    }));
+    const result = await runLookup(
+      [
+        work("resolves", { pmcid: "PMC7605294" }),
+        work("unresolved", { pmcid: "PMC9999999" }),
+      ],
+      { createSearch, resolvePmcids: createPmcidConverter({ http }) },
+    );
+
+    expect(converterCalls).toHaveLength(1);
+    const asked = new URL(converterCalls[0] ?? "").searchParams;
+    expect(asked.get("ids")).toBe("PMC7605294,PMC9999999");
+    expect(asked.get("idtype")).toBe("pmcid");
+    expect(calls.map((call) => call.identifier)).toEqual([
+      { DOI: "10.4103/tcmj.tcmj_71_20" },
+    ]);
+    expect(result.translated.map((t) => t.work.workKey)).toEqual([
+      "test:resolves",
+    ]);
+    expect(result.fallbacks.map((f) => [f.work.workKey, f.reason])).toEqual([
+      ["test:unresolved", "no-identifier"],
+    ]);
+  });
+
+  it("hand-maps every PMCID-only record, and logs once, when the ID Converter's answer cannot be read (item 214)", async () => {
+    const logger = fakeLogger();
+    const http = {
+      request: vi.fn((_method: string, url: string) =>
+        Promise.resolve({
+          status: 200,
+          url,
+          body: "<html>Service unavailable</html>",
+          rawHeaders: "",
+          header: () => undefined,
+        }),
+      ),
+    };
+    const { createSearch } = fakeSearches(() => ({ items: [fakeItem(1)] }));
+    const result = await runLookup(
+      [work("a", { pmcid: "PMC1" }), work("b", { pmcid: "PMC2" })],
+      { createSearch, logger, resolvePmcids: createPmcidConverter({ http }) },
+    );
+    expect(http.request).toHaveBeenCalledTimes(1);
+    expect(createSearch).not.toHaveBeenCalled();
+    expect(result.fallbacks.map((f) => f.reason)).toEqual([
+      "no-identifier",
+      "no-identifier",
+    ]);
+    const routeFailure = logger.warn.mock.calls.filter((call) =>
+      String(call[0]).includes("the PMCID route failed"),
+    );
+    expect(routeFailure).toHaveLength(1);
+    expect(routeFailure[0]?.[1]).toMatchObject({ pmcids: 2, code: "PARSE" });
+  });
+
   it("keeps every Zotero.Translate reference in code inside src/zotero/ (docs/07 §2.3, R-1)", () => {
     const outside: string[] = [];
     const walk = (dir: string): void => {
@@ -617,6 +730,111 @@ describe("the writer reads useTranslators once, at WritingItems' entry (docs/07 
     const sum = addPathTotals(a, a);
     expect(sum.viaTranslators).toBe(2);
     expect(sum.fallbackReasons["no-identifier"]).toBe(2);
+  });
+});
+
+/** A fake `HttpClient` for the writer's PMCID route; records every URL. */
+function recordingHttp(body: string) {
+  const urls: string[] = [];
+  const http = {
+    request: vi.fn((_method: string, url: string) => {
+      urls.push(url);
+      return Promise.resolve({
+        status: 200,
+        url,
+        body,
+        rawHeaders: "",
+        header: () => undefined,
+      });
+    }),
+  };
+  return { http, urls };
+}
+
+/** One Strategy B batch through the writer; the importer's request back. */
+async function oneTranslatorBatch(
+  deps: Parameters<typeof createZoteroSearchImportWriter>[0],
+) {
+  importWorksMock.mockImplementation((request: { works: CanonicalWork[] }) =>
+    Promise.resolve(fakeReport(request.works, 0)),
+  );
+  const writer = createZoteroSearchImportWriter(deps);
+  const token = createCancellationTokenSource().token;
+  const session = await writer.openTarget({ collectionName: "C" }, token);
+  await session.writeBatch([work("x", { pmcid: "PMC7605294" })], token);
+  const last = importWorksMock.mock.calls.at(-1)?.[0] as {
+    translatorLookup?: TranslatorImportOptions;
+  };
+  return last.translatorLookup;
+}
+
+describe("the writer's Strategy B defaults: item 213's deadline and item 214's PMCID route (owner, 2026-10-19)", () => {
+  afterEach(() => {
+    setPrefStore(undefined);
+    importWorksMock.mockReset();
+  });
+
+  it("gives every lookup the 30-second deadline docs/07 §12.1 records", async () => {
+    const lookup = await oneTranslatorBatch({ readUseTranslators: () => true });
+    expect(TRANSLATOR_LOOKUP_TIMEOUT_MS).toBe(30_000);
+    expect(lookup?.perRecordTimeoutMs).toBe(30_000);
+    // The document states the figure the code carries.
+    const doc = readFileSync(
+      resolve(repo, "docs/07-architecture-and-data-model.md"),
+      "utf8",
+    );
+    expect(doc).toContain(
+      "(owner, `plan/00` §6 item 213): the per-record translator timeout is 30 seconds.",
+    );
+  });
+
+  it("lets a deadline given in translatorLookup replace the default", async () => {
+    const lookup = await oneTranslatorBatch({
+      readUseTranslators: () => true,
+      translatorLookup: { perRecordTimeoutMs: 5 },
+    });
+    expect(lookup?.perRecordTimeoutMs).toBe(5);
+  });
+
+  it("wires the NCBI ID Converter over the injected client as resolvePmcids, and no route without a client", async () => {
+    const { http, urls } = recordingHttp(
+      '{"status":"ok","records":[{"doi":"10.4103/tcmj.tcmj_71_20","pmcid":"PMC7605294","pmid":33163378,"requested-id":"PMC7605294"}]}',
+    );
+    const lookup = await oneTranslatorBatch({
+      readUseTranslators: () => true,
+      http,
+    });
+    const resolvePmcids = lookup?.resolvePmcids;
+    expect(resolvePmcids).toBeTypeOf("function");
+    // Building the writer and writing a batch sent nothing by itself: the
+    // importer is mocked here, so only an explicit call reaches the client.
+    expect(urls).toEqual([]);
+    const resolved = await resolvePmcids?.(["PMC7605294"], undefined);
+    expect(resolved?.get("PMC7605294")).toEqual({
+      doi: "10.4103/tcmj.tcmj_71_20",
+      pmid: "33163378",
+    });
+    expect(urls).toHaveLength(1);
+    expect(new URL(urls[0] ?? "").host).toBe("pmc.ncbi.nlm.nih.gov");
+
+    const without = await oneTranslatorBatch({
+      readUseTranslators: () => true,
+    });
+    expect(without).toBeDefined();
+    expect(Object.keys(without ?? {})).not.toContain("resolvePmcids");
+  });
+
+  it("passes neither default, and calls no client, while the preference is off", async () => {
+    const { http, urls } = recordingHttp("{}");
+    const lookup = await oneTranslatorBatch({
+      readUseTranslators: () => false,
+      http,
+    });
+    expect(lookup).toBeUndefined();
+    for (const [request] of importWorksMock.mock.calls) {
+      expect(Object.keys(request as object)).not.toContain("translatorLookup");
+    }
+    expect(urls).toEqual([]);
   });
 });
 

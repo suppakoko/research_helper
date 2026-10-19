@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-16 · **148 tasks: 112 `DONE`, 36 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-19 · **148 tasks: 112 `DONE`, 36 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -1364,7 +1364,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 180. ~~**The search estimate budgets requests for sources that make none.**~~ **DECIDED 2026-10-19: fix it, with item 198.** The `estimate` in
     `searchImportPipeline.ts` charges `ceil(limit / maxPageSize) * 2` requests to `biorxiv` and `medrxiv`, which send
-    nothing during a search. Skip sources whose `capabilities.keywordSearch` is `false`.
+    nothing during a search. Skip sources whose `capabilities.keywordSearch` is `false`. **DONE 2026-10-19.**
 
 181. **No caller exists for any adapter's `lookup()`, nor for `resolvePublished()`.** A DOI of unknown server needs
     one lookup per server (the host does not answer across servers), and `/pubs/` costs one request per DOI at
@@ -1434,7 +1434,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 197. **Semantic Scholar's `fetchAbstract` has no caller left in `src/`.** Keep it (declared in §4.2) or retire it.
 
-198. ~~**The backfill pass is outside `estimate()`, and a backfilled work keeps its old `normalizedAtEpochMs`.**~~ **DECIDED 2026-10-19: fix it, with item 180.**
+198. ~~**The backfill pass is outside `estimate()`, and a backfilled work keeps its old `normalizedAtEpochMs`.**~~ **DECIDED 2026-10-19: fix it, with item 180.** **DONE 2026-10-19** (worst-case backfill in the estimate; backfilled works restamped).
 
 ### 6.37 Raised by `P2-T11` and `P2-T14`, 2026-10-15 — recorded under rule 9; items 199, 200 and 205 wait on the owner
 
@@ -1468,12 +1468,12 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 205. ~~**Should "Open Preferences…" always show in the all-failed state (owner)?**~~ **DECIDED 2026-10-19: no — buttons follow each source's error (item 220's rule); `P2-T14` step 5 and `docs/08` §4.6 get a
     dated note.** `P2-T14` step 5 says so; the window
-    follows `docs/08` §8.3's per-error action (`P1-T22`), so an offline-only failure shows Retry alone.
+    follows `docs/08` §8.3's per-error action (`P1-T22`), so an offline-only failure shows Retry alone. **DONE 2026-10-19** (`docs/08` §4.6 note; `plan/reports/items-180-198-205-206-207.md`).
 
-206. ~~**The duplicate tooltip names the tier by its identifier**~~ **DECIDED 2026-10-19: give the tiers a vocabulary** (English strings; Korean drafted for owner review). (`title-fuzzy`): no bundle has a tier vocabulary.
+206. ~~**The duplicate tooltip names the tier by its identifier**~~ **DECIDED 2026-10-19: give the tiers a vocabulary** (English strings; Korean drafted for owner review). (`title-fuzzy`): no bundle has a tier vocabulary. **DONE 2026-10-19;** Korean reviewed by the owner the same day.
 
 207. ~~**Unticking every database writes `sources = ""`, which the next open reads as "all ticked".**~~ **DECIDED 2026-10-19: fix it.** Also: `P2-T14`'s
-    Verify-with `diff` cannot pass under the Korean stub convention — replace it with the `keys.test.ts` partition check.
+    Verify-with `diff` cannot pass under the Korean stub convention — replace it with the `keys.test.ts` partition check. **DONE 2026-10-19** (an empty selection reopens empty).
 
 ### 6.38 Raised by `P2-T17`, `P2-T18` and the item-200 change, 2026-10-16 — recorded under rule 9; items 209, 213, 214 and 217 wait on the owner
 
@@ -1504,12 +1504,12 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `toOutput`, and the view model to format `research-helper-import-paths`.
 
 213. ~~**The per-record translator timeout has no value (owner).**~~ **DECIDED 2026-10-19: 30 seconds per record**, then that record falls back to hand-mapping; `docs/07` §12.1 first. The mechanism is built with no default; `docs/07` §12.1
-    needs the number. A timed-out lookup that later finishes may save a second copy.
+    needs the number. A timed-out lookup that later finishes may save a second copy. **DONE 2026-10-19** (`plan/reports/items-213-214.md`); a timed-out lookup still saves late (item 227).
 
 214. ~~**A PMCID-only record's route (owner):**~~ **DECIDED 2026-10-19: the NCBI ID Converter** (`docs/02` §3.7, `idtype=pmcid`, batched); its host
     `pmc.ncbi.nlm.nih.gov` gets PubMed's unkeyed policy row (2.5/s, burst 1, 3 concurrent, retry 1000/30 000 ms, 3
     attempts), never a key; `docs/07` §7.3 first. no document gives a Europe PMC PMCID query form; the NCBI ID Converter
-    (`idtype=pmcid`, `docs/02` §3.7) is documented. Until chosen, such a record is hand-mapped.
+    (`idtype=pmcid`, `docs/02` §3.7) is documented. Until chosen, such a record is hand-mapped. **DONE 2026-10-19** (`src/sources/pubmed/idConverter.ts`; no live request).
 
 215. **Where the import path is persisted:** `docs/07` §5.1 types `fieldOrigin` values as `SourceId`, so the path lives
     only in `ImportReport.createdVia`.
@@ -1583,6 +1583,21 @@ the caller of what the card builds; if it does not, the caller is added with a d
     holds a `10.64898/` DOI, so no bioRxiv/medRxiv lookup could form a pair; one Europe PMC `SRC:PPR` search over a 2026
     window, then lookups of its DOIs, would. Series titles 1/5, same title other year 3/5, same-paper sets 5/10. Two
     non-series titles sat in the short-title cluster and were sampled out ("Genome editing using CRISPR", "Psoroptic mange").
+
+### 6.42 Raised by items 180–214, 2026-10-19 — items 227 and 228 wait on the owner
+
+227. **A translator lookup that misses its 30-second deadline still saves its item later (owner).** Zotero's
+    `translate()` saves into the collection itself and cannot be cancelled, so a late answer leaves a second copy beside
+    the hand-mapped one (measured in Zotero 10.0.3). A PMID batch of up to 200 has one deadline, so a slow batch could
+    leave up to 200 copies. Accept, detect and report, or remove the late copy; and one deadline per batch or per record.
+
+228. **The HTTP client gets no retry policy:** `container.ts` supplies no `retryFor`, so every host makes one attempt and
+    `docs/07` §7.3's retry cells are unused (owner: wire them?).
+
+229. **Smaller follow-ups:** the D10 contact guard covers `eutils` only, not `pmc.ncbi.nlm.nih.gov`; item 208's suite-wide
+    `Zotero.Translate.Search` stub was never added; `docs/02` §2.4's copy of the rate table lacks the new row; the
+    estimate still counts lookup-only sources in `itemCount` and charges an import of previewed works (the owner chose
+    to fix both, 2026-10-19); one real converter response could be recorded for 1 request.
 
 ## 7. Regenerating this file
 

@@ -206,9 +206,11 @@ research-helper-search-row-existing-badge =
 
 # P2-T14 step 3: a pair the deduplication engine flagged as a possible duplicate
 # and did NOT merge (FR-50 scenario 4). Both rows carry the badge and both stay
-# selectable. `{ $tier }` is the deduplication tier's identifier
-# (`docs/02` §11.3), a token like a DOI; `{ $score }` is the similarity as a
-# whole percentage. The badge's glyph is the stylesheet's.
+# selectable. `{ $tier }` is the deciding tier's name, one of the
+# `research-helper-search-tier-*` messages below, already resolved (owner,
+# 2026-10-19, plan/00 §6 item 206; before that it was the tier's identifier,
+# such as `title-fuzzy`); `{ $score }` is the similarity as a whole
+# percentage. The badge's glyph is the stylesheet's.
 research-helper-search-row-duplicate = Possible duplicate
     .title = Possible duplicate of another row ({ $tier }, { $score }% similar). Nothing was merged: review both rows and untick the one you do not want.
 
@@ -216,6 +218,16 @@ research-helper-search-row-duplicate = Possible duplicate
 # preprint and its published version (gate G-16). Both rows are kept.
 research-helper-search-row-linked = Other version
     .title = Another row is a different version of this work, such as its preprint. Both are kept; nothing was merged.
+
+# Owner, 2026-10-19, plan/00 §6 item 206: the name of each deduplication tier
+# that can flag or link a pair, shown inside the duplicate badge's tooltip as
+# `{ $tier }`, so lower case and no full stop. Worded from `docs/02` §11.3's
+# own tier table: Tier 5 "Normalized title exact", Tier 6 "Fuzzy title",
+# Tier 7 "Known preprint↔published link". The identifier tiers (DOI, PMID,
+# PMCID, arXiv, Semantic Scholar) only ever merge, so they have no name here.
+research-helper-search-tier-title-exact = exact title match
+research-helper-search-tier-title-fuzzy = close title match
+research-helper-search-tier-version-link = known preprint–published link
 
 
 ## Selection controls (docs/08 §4.5, FR-5)

@@ -894,7 +894,9 @@ export function toWindowRecords(
       b: rowOf.get(pair.b.id),
       strength: pair.decision.confidence,
       ref: message("research-helper-search-row-duplicate", {
-        tier: pair.decision.tier ?? "",
+        // The tier's human name (item 206), never its identifier when a
+        // name was resolved; see {@link ReviewInput.tierNames}.
+        tier: tierLabel(pair.decision.tier, review.tierNames),
         score: Math.round(pair.decision.confidence * 100),
       }),
     })),
@@ -947,9 +949,55 @@ export interface ReviewInput {
   readonly works: readonly CanonicalWork[];
   readonly flags: SearchImportOutput["flags"];
   readonly links: SearchImportOutput["links"];
+  /**
+   * Tier id → its resolved human name, from {@link DEDUP_TIER_NAME_KEYS}
+   * (owner, 2026-10-19, `plan/00` §6 item 206). A tier with no entry falls
+   * back to its id — a token, like a source id without a formatter — so the
+   * tooltip is never empty.
+   */
+  readonly tierNames?: ReadonlyMap<string, string>;
 }
 
 const NO_REVIEW: ReviewInput = { works: [], flags: [], links: [] };
+
+/** A deduplication tier's identifier, as `Merging` reports it. */
+type DedupTierToken = NonNullable<
+  SearchImportOutput["flags"][number]["decision"]["tier"]
+>;
+
+/**
+ * The window's name for each deduplication tier that can raise a flag or a
+ * link (owner, 2026-10-19, `plan/00` §6 item 206), as a
+ * `research-helper-searchDialog.ftl` message id.
+ *
+ * The duplicate badge's tooltip (`research-helper-search-row-duplicate`'s
+ * `{ $tier }`) showed the identifier itself — `title-fuzzy` — because no
+ * bundle had a tier vocabulary. The flag and link tiers are `docs/02` §11.3's
+ * Tiers 5, 6 and 7: a flag comes from the two title tiers (`dedupe.ts`'s
+ * `TITLE_EXACT_TIER` and `TITLE_FUZZY_TIER`), and a link from those two and
+ * from `VERSION_LINK_TIER`. The identifier tiers (0–4) only ever match, so
+ * they have no row here and no message.
+ */
+export const DEDUP_TIER_NAME_KEYS = {
+  "title-exact": "research-helper-search-tier-title-exact",
+  "title-fuzzy": "research-helper-search-tier-title-fuzzy",
+  "version-link": "research-helper-search-tier-version-link",
+} as const satisfies Partial<Record<DedupTierToken, FluentMessageId>>;
+
+/**
+ * The text a tooltip's `{ $tier }` carries: the resolved name, else the id.
+ *
+ * @param tier - the deciding tier, `null` only on a `"distinct"` decision
+ * @param names - {@link ReviewInput.tierNames}
+ * @returns the name, the id when no name was resolved, or `""` for `null`
+ */
+export function tierLabel(
+  tier: string | null,
+  names: ReadonlyMap<string, string> | undefined,
+): string {
+  if (tier === null) return "";
+  return names?.get(tier) ?? tier;
+}
 
 /**
  * Every record id a row stands for → that row's key.
@@ -1604,6 +1652,11 @@ export function createSearchImportViewModel(
   let previewedReports: readonly SearchImportSourceReport[] = [];
   /** `sourceId` → localized display name, resolved once per connect. */
   let sourceNames: ReadonlyMap<string, string> = new Map();
+  /**
+   * Deduplication tier id → localized name (item 206), resolved with the
+   * source names. Empty means every tooltip falls back to the tier's id.
+   */
+  let tierNames: ReadonlyMap<string, string> = new Map();
   let revision = 0;
   /** Each source's last reported count, latched as the fetch moves on. */
   const latched = new Map<string, number>();
@@ -1702,6 +1755,7 @@ export function createSearchImportViewModel(
     if (formatter === undefined) {
       for (const descriptor of list) names.set(descriptor.id, descriptor.id);
       sourceNames = names;
+      tierNames = new Map();
       deps.logger.debug(
         "no Fluent formatter connected; source display names fall back to ids",
         { sources: list.length },
@@ -1732,6 +1786,40 @@ export function createSearchImportViewModel(
     deps.logger.debug("source display names resolved", {
       names: [...names.values()].join(","),
     });
+    tierNames = await resolveTierNames(formatter);
+  }
+
+  /**
+   * Resolve {@link DEDUP_TIER_NAME_KEYS} to text (item 206).
+   *
+   * A Fluent argument is a string or a number, never a message, so the
+   * duplicate tooltip's `{ $tier }` has to be handed the name as text — the
+   * same reason the Source column is. A name that does not resolve is left
+   * out, and {@link tierLabel} falls back to the id; a throwing lookup leaves
+   * every name out and is logged.
+   */
+  async function resolveTierNames(
+    formatter: MessageFormatter,
+  ): Promise<ReadonlyMap<string, string>> {
+    const entries = Object.entries(DEDUP_TIER_NAME_KEYS);
+    const names = new Map<string, string>();
+    try {
+      const resolved = await formatter.formatMessages(
+        entries.map(([, id]) => ({ id })),
+      );
+      entries.forEach(([tier], at) => {
+        const value = resolved[at]?.value;
+        if (value !== null && value !== undefined && value !== "") {
+          names.set(tier, value);
+        }
+      });
+    } catch {
+      names.clear();
+      deps.logger.warn(
+        "the Fluent lookup of the deduplication tier names threw; using ids",
+      );
+    }
+    return names;
   }
 
   /**
@@ -2025,7 +2113,12 @@ export function createSearchImportViewModel(
       output.records,
       sourceNames,
       deps.isExisting,
-      { works: output.works, flags: output.flags, links: output.links },
+      {
+        works: output.works,
+        flags: output.flags,
+        links: output.links,
+        tierNames,
+      },
     );
     // `P2-T14`: a run where every source that *searches* failed is the
     // all-failed state — a lookup-only source makes no keyword request on a

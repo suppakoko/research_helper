@@ -1009,6 +1009,15 @@ The `⊕` glyph is reserved for this state — *contributing, but not by searchi
 
 Hovering the row explains it in one sentence, and the sentence names where keyword discovery of preprints actually happens: Europe PMC `SRC:PPR` and Crossref `type:posted-content`.
 
+> **Decided 2026-10-19 (owner; `plan/00` §6 item 207): an empty selection reopens empty.** The Databases row is the
+> `sources` preference's only control (`07-architecture-and-data-model.md` §8.5), and each tick or untick writes the
+> ticked set back to it. Unticking every database writes `""`, and the window used to read that back on the next open
+> as "all ticked", silently undoing the user's choice. Membership in the preference is the enable flag, so a stored
+> list that names no source is an empty selection: the window reopens with every box unticked, Search disabled and
+> FR-2's inline "select at least one database" message showing, exactly as it was left. Only a preference that cannot
+> be read at all falls back to §8.5's all-seven default. No preference was added and the `sources` default is
+> unchanged. Decided in one place, `initialSelection` (with `normalizePrefs`) in `addon/content/searchDialog.js`.
+
 ### 4.3 Result table
 
 Zotero's table component lives at [`chrome/content/zotero/components/virtualized-table.jsx`](https://github.com/zotero/zotero/blob/main/chrome/content/zotero/components/virtualized-table.jsx) (2336 lines on `main`). Several things about it are easy to get wrong:
@@ -1243,6 +1252,14 @@ Per-database status is essential: partial failure across seven sources is the *n
 > offline-only run shows **Retry alone**. The run-level error is used only when no source carries an error of its own —
 > for example a run that `Planning` rejected before any source was asked. The wireframe above shows a mixed run, which
 > draws both buttons.
+
+> **Decided 2026-10-19 (owner; `plan/00` §6 item 205): "Open Preferences…" is not always shown.** `P2-T14` step 5
+> asked for the button in every all-failed panel. The owner kept item 220's rule instead: the buttons follow each
+> failed source's own error, through that error's §8.3 row (`P1-T22`). "Open Preferences…" is drawn when at least one
+> failed source's row offers it — today a missing, refused or forbidden key, a configuration error and an exhausted
+> quota (`ERROR_ROWS` in `src/ui/viewModels/searchImportViewModel.ts`) — because only then can Preferences help; a run
+> whose sources all failed offline shows **Retry alone**, and a button that could not fix anything is not drawn.
+> Behaviour unchanged by this note.
 
 ---
 

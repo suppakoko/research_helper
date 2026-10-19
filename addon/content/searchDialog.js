@@ -837,13 +837,24 @@ var RHSearchWindow = {
      *
      * @param {object} raw
      * @param {object} bounds - {@link RHSearchWindow.spec.prefBounds}
-     * @returns {{sources: string[], searchYears: number, maxResults: number,
-     *   hideExisting: boolean}}
+     * `sources` is `null` when no string came back — no host value, or a
+     * branch read that failed — and an array, **possibly empty**, when one
+     * did: `""` is what the window writes when every database is unticked, and
+     * it must read back as that empty selection (owner, 2026-10-19, `plan/00`
+     * §6 item 207), not as "all ticked".
+     *
+     * @param {object} raw
+     * @param {object} bounds - {@link RHSearchWindow.spec.prefBounds}
+     * @returns {{sources: string[] | null, searchYears: number,
+     *   maxResults: number, hideExisting: boolean}}
      */
     normalizePrefs(raw, bounds) {
       const source = raw || {};
       return {
-        sources: this.parseSourceIds(source.sources),
+        sources:
+          typeof source.sources === "string"
+            ? this.parseSourceIds(source.sources)
+            : null,
         searchYears: this.coerceInteger(source.searchYears, bounds.searchYears),
         maxResults: this.coerceInteger(source.maxResults, bounds.maxResults),
         hideExisting: this.coerceBoolean(
@@ -856,18 +867,24 @@ var RHSearchWindow = {
     /**
      * Which registered sources start checked.
      *
-     * Membership in the `sources` preference is the enable flag; a source the
-     * preference does not mention at all starts checked, because a registered
-     * adapter the user has never had the chance to deselect is not a source
-     * they disabled. With no registered source the answer is the empty list,
-     * which is what disables Search.
+     * Membership in the `sources` preference is the enable flag (`docs/07`
+     * §8.5), so a registered source starts checked exactly when the stored
+     * list names it. **An empty list is an empty selection** (owner,
+     * 2026-10-19, `plan/00` §6 item 207): the window writes `""` when every
+     * database is unticked, and reading that back as "all ticked" undid the
+     * user's choice on the next open. Search then stays disabled with FR-2's
+     * inline message, as it was when the window closed. Only `null` — no
+     * readable value at all — starts every registered source checked, which
+     * is §8.5's all-seven default. With no registered source the answer is
+     * the empty list, which is what disables Search.
      *
      * @param {string[]} registered
-     * @param {string[]} enabled - the `sources` preference, parsed
+     * @param {string[] | null} enabled - the `sources` preference, parsed;
+     *   `null` when none could be read
      * @returns {string[]}
      */
     initialSelection(registered, enabled) {
-      if (!enabled || enabled.length === 0) {
+      if (enabled === null || enabled === undefined) {
         return [...registered];
       }
       return registered.filter((id) => enabled.includes(id));
@@ -1669,7 +1686,7 @@ var RHSearchWindow = {
     this.state.sources = sources;
     const selected = this.logic.initialSelection(
       sources.map((source) => source.id),
-      (this.prefs && this.prefs.sources) || [],
+      this.prefs ? this.prefs.sources : null,
     );
 
     for (const source of sources) {

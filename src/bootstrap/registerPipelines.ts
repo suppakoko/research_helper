@@ -63,11 +63,15 @@ import {
 import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
 import {
   TRANSLATOR_FALLBACK_REASONS,
+  TRANSLATOR_LOOKUP_TIMEOUT_MS,
+  type PmcidResolver,
   type TranslatorFallbackReason,
   type TranslatorImportOptions,
 } from "../zotero/translatorImport";
+import { createPmcidConverter } from "../sources/pubmed/idConverter";
 import { getPref } from "../prefs";
 import { Semaphore } from "../core/concurrency";
+import type { HttpClient } from "../core/http/client";
 import type { Logger } from "../core/logger";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
 import type { CanonicalWork } from "../model/canonicalWork";
@@ -126,12 +130,25 @@ export interface ZoteroSearchImportWriterDeps {
    */
   readonly readUseTranslators?: () => boolean;
   /**
+   * The client Strategy B's PMCID route sends its requests through (owner,
+   * 2026-10-19, `plan/00` §6 item 214): the NCBI ID Converter of `docs/02`
+   * §3.7, built by `createPmcidConverter` in
+   * `src/sources/pubmed/idConverter.ts` and handed to the importer as
+   * `resolvePmcids`. The composition root passes the shipped client, so the
+   * `pmc.ncbi.nlm.nih.gov` bucket of `docs/07` §7.3 paces it. **Absent, there
+   * is no PMCID route** and a PMCID-only record is hand-mapped. Only used while
+   * `useTranslators` is on.
+   */
+  readonly http?: HttpClient;
+  /**
    * Strategy B's seams, passed to the importer when the preference is on:
    * the `Translate.Search` factory a test fakes, the PMCID route, and the
-   * per-record deadline. **Omitted in the product today**: the factory then
-   * defaults to the platform's own search object, no PMCID route exists yet (Europe
-   * PMC's `lookup` is DOI-only), and no document gives the deadline's value
-   * (`plan/README.md` §5 rule 4) — see `src/zotero/translatorImport.ts`.
+   * per-record deadline. **Omitted in the product**: the factory then
+   * defaults to the platform's own search object, the PMCID route is the
+   * converter over {@link http}, and the deadline is
+   * `TRANSLATOR_LOOKUP_TIMEOUT_MS` (30 s, owner 2026-10-19, item 213). A
+   * member given here replaces that default — which is how a test supplies a
+   * fake route or a short deadline.
    */
   readonly translatorLookup?: Omit<TranslatorImportOptions, "logger">;
 }
@@ -200,6 +217,15 @@ export function addPathTotals(
 export function createZoteroSearchImportWriter(
   deps: ZoteroSearchImportWriterDeps = {},
 ): SearchImportWriter {
+  // Item 214: the PMCID route over the shipped client. Built once per writer;
+  // it sends nothing until a PMCID-only record reaches Strategy B.
+  const resolvePmcids: PmcidResolver | undefined =
+    deps.http === undefined
+      ? undefined
+      : createPmcidConverter({
+          http: deps.http,
+          ...(deps.logger !== undefined && { logger: deps.logger }),
+        });
   return {
     async openTarget(
       target: SearchImportTarget,
@@ -259,8 +285,12 @@ export function createZoteroSearchImportWriter(
             token: batchToken,
             // Off — the shipped default — passes nothing, so the importer
             // runs the hand-mapped path exactly as it did before `P2-T18`.
+            // On: item 213's 30 s deadline and item 214's PMCID route are the
+            // defaults; anything in `deps.translatorLookup` replaces them.
             ...(useTranslators && {
               translatorLookup: {
+                perRecordTimeoutMs: TRANSLATOR_LOOKUP_TIMEOUT_MS,
+                ...(resolvePmcids !== undefined && { resolvePmcids }),
                 ...deps.translatorLookup,
                 ...(deps.logger !== undefined && { logger: deps.logger }),
               },

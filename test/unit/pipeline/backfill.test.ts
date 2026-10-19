@@ -28,6 +28,7 @@ import { normalizeDoi, type Doi, type SourceId } from "../../../src/model/ids";
 import type { SourceRecord } from "../../../src/model/sourceRecord";
 import {
   ABSTRACT_BACKFILL_LADDER,
+  abstractBackfillRequestBound,
   backfillAbstracts,
 } from "../../../src/pipeline/searchImport/backfill";
 import { createSearchImportPipeline } from "../../../src/pipeline/searchImport/searchImportPipeline";
@@ -534,6 +535,141 @@ describe("backfillAbstracts — only ticked databases (owner, 2026-10-15, item 1
       "not-selected",
       "not-selected",
     ]);
+  });
+});
+
+describe("abstractBackfillRequestBound — the pass's worst case for the estimate (items 180 and 198)", () => {
+  const BOTH: SourceId[] = ["pubmed", "europepmc", "semanticscholar"];
+
+  it("charges one Europe PMC request and one Semantic Scholar request per 100 works", () => {
+    const registry = ladderRegistry(
+      createFakeHttp({ europepmc: new Map(), semanticscholar: new Map() })
+        .client,
+    );
+    expect(abstractBackfillRequestBound(0, BOTH, registry)).toBe(0);
+    expect(abstractBackfillRequestBound(1, BOTH, registry)).toBe(2);
+    expect(abstractBackfillRequestBound(100, BOTH, registry)).toBe(2);
+    expect(abstractBackfillRequestBound(101, BOTH, registry)).toBe(4);
+    expect(abstractBackfillRequestBound(450, BOTH, registry)).toBe(10);
+  });
+
+  it("charges nothing for a ladder database the user did not tick (item 194)", () => {
+    const registry = ladderRegistry(
+      createFakeHttp({ europepmc: new Map(), semanticscholar: new Map() })
+        .client,
+    );
+    expect(
+      abstractBackfillRequestBound(200, ["pubmed", "europepmc"], registry),
+    ).toBe(2);
+    expect(
+      abstractBackfillRequestBound(
+        200,
+        ["pubmed", "semanticscholar"],
+        registry,
+      ),
+    ).toBe(2);
+    expect(abstractBackfillRequestBound(200, ["pubmed"], registry)).toBe(0);
+  });
+
+  it("charges nothing for a ticked ladder database with no adapter, or one without lookup", () => {
+    expect(
+      abstractBackfillRequestBound(200, BOTH, createSourceRegistry()),
+    ).toBe(0);
+    const registry = ladderRegistry(
+      createFakeHttp({ europepmc: new Map(), semanticscholar: new Map() })
+        .client,
+    );
+    const noLookup = {
+      get: (id: SourceId) => {
+        const source = registry.get(id);
+        if (source === undefined || id !== "semanticscholar") return source;
+        const { lookup: _lookup, ...rest } = source;
+        return rest;
+      },
+    };
+    expect(abstractBackfillRequestBound(200, BOTH, noLookup)).toBe(2);
+  });
+
+  it("is never below what the pass actually sends, and is an upper bound when some works have abstracts", async () => {
+    const all = createFakeHttp({
+      europepmc: new Map(),
+      semanticscholar: new Map(),
+    });
+    await backfillAbstracts(
+      workSet(200, () => true),
+      {
+        sources: ladderRegistry(all.client),
+        token: tokenSource().token,
+        selected: BOTH,
+      },
+    );
+    const bound = abstractBackfillRequestBound(
+      200,
+      BOTH,
+      ladderRegistry(all.client),
+    );
+    expect(all.issued.length).toBe(4);
+    expect(bound).toBe(4);
+
+    const some = createFakeHttp({
+      europepmc: new Map(),
+      semanticscholar: new Map(),
+    });
+    await backfillAbstracts(
+      workSet(200, (n) => n < 60),
+      {
+        sources: ladderRegistry(some.client),
+        token: tokenSource().token,
+        selected: BOTH,
+      },
+    );
+    expect(some.issued.length).toBe(2);
+    expect(some.issued.length).toBeLessThan(bound);
+  });
+});
+
+describe("backfillAbstracts — a backfilled work is restamped (owner, 2026-10-19, item 198)", () => {
+  it("stamps docs/07 §5.1's normalizedAtEpochMs on the works it changed, read once after the last step, and on no other", async () => {
+    const fake = createFakeHttp({
+      europepmc: new Map([[doiOf(0), "EPMC zero."]]),
+      semanticscholar: new Map(),
+    });
+    // 0: answered by Europe PMC; 1: asked, not answered; 2: has its own.
+    const works = workSet(3, (n) => n < 2);
+    let reads = 0;
+    const result = await backfillAbstracts(works, {
+      sources: ladderRegistry(fake.client),
+      token: tokenSource().token,
+      now: () => {
+        reads += 1;
+        return 5_000 + reads;
+      },
+    });
+    expect(result.works[0]?.abstract).toBe("EPMC zero.");
+    expect(result.works[0]?.normalizedAtEpochMs).toBe(5_001);
+    expect(reads).toBe(1);
+    expect(result.works[1]).toBe(works[1]);
+    expect(result.works[1]?.normalizedAtEpochMs).toBe(1);
+    expect(result.works[2]).toBe(works[2]);
+  });
+
+  it("reads no clock when nothing was backfilled", async () => {
+    const fake = createFakeHttp({
+      europepmc: new Map(),
+      semanticscholar: new Map(),
+    });
+    let reads = 0;
+    const works = workSet(2, () => true);
+    const result = await backfillAbstracts(works, {
+      sources: ladderRegistry(fake.client),
+      token: tokenSource().token,
+      now: () => {
+        reads += 1;
+        return 9_999;
+      },
+    });
+    expect(reads).toBe(0);
+    expect(result.works).toBe(works);
   });
 });
 

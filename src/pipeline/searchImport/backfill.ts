@@ -34,6 +34,15 @@
  *   `provenance.fieldOrigin.abstract`, so the merged record still answers
  *   "where did this abstract come from". `seenIn` and `recordIds` are left as
  *   `Merging` wrote them: the lookup's records are not merged into the work.
+ * - **A backfilled work is restamped** (owner, 2026-10-19, `plan/00` §6 item
+ *   198). `docs/07` §5.1 defines `normalizedAtEpochMs` as "ms since epoch when
+ *   this canonical record was last rebuilt", and filling the abstract rebuilds
+ *   it, so a work the pass changed gets {@link AbstractBackfillDeps.now}'s
+ *   reading, taken once after the last step. A work the pass left alone keeps
+ *   `Merging`'s stamp.
+ * - **What the pass can cost is budgeted up front** by
+ *   {@link abstractBackfillRequestBound}, which the pipeline's `estimate()`
+ *   adds to the search's own requests (`plan/00` §6 item 198).
  * - **No fabricated abstract** (`docs/11` R-6 / R-17, FR-21). A work no step
  *   answers keeps no abstract; the gap is the import summary's coverage
  *   figure, not an invented string. The one fallback is the source's own:
@@ -61,7 +70,9 @@ import type { ProgressReporter } from "../../core/jobQueue/progress";
 import type { Logger } from "../../core/logger";
 import type { CanonicalWork } from "../../model/canonicalWork";
 import type { SourceId } from "../../model/ids";
+import { EUROPEPMC_DOI_LOOKUP_BATCH } from "../../sources/europepmc/query";
 import type { SourceRegistry } from "../../sources/registry";
+import { SEMANTICSCHOLAR_BATCH_IDS_WITH_ABSTRACT } from "../../sources/semanticscholar/query";
 import { serialize } from "./stages";
 
 /**
@@ -72,6 +83,51 @@ export const ABSTRACT_BACKFILL_LADDER: readonly SourceId[] = [
   "europepmc",
   "semanticscholar",
 ];
+
+/**
+ * DOIs one request of each ladder step carries — the adapters' own batch
+ * sizes (Europe PMC: `EUROPEPMC_DOI_LOOKUP_BATCH`, one `DOI:"…" OR …` search
+ * per 100 DOIs; Semantic Scholar: `SEMANTICSCHOLAR_BATCH_IDS_WITH_ABSTRACT`,
+ * one `/paper/batch` per about 100 ids). A ladder source missing here is
+ * budgeted one DOI a request, the safe side of an estimate.
+ */
+const ABSTRACT_BACKFILL_BATCH: Readonly<Partial<Record<SourceId, number>>> = {
+  europepmc: EUROPEPMC_DOI_LOOKUP_BATCH,
+  semanticscholar: SEMANTICSCHOLAR_BATCH_IDS_WITH_ABSTRACT,
+};
+
+/**
+ * The most requests {@link backfillAbstracts} can send for `works` works
+ * (`plan/00` §6 items 180 and 198).
+ *
+ * **An upper bound, not a forecast.** The pass asks only works that reached it
+ * with no abstract and a DOI, and a later step only those an earlier step did
+ * not answer; this charges every ladder step for every work. Per step: one
+ * request per batch (Europe PMC 100 works, Semantic Scholar about 100), and
+ * only for a step the pass could actually ask — a database the user ticked
+ * (item 194) whose adapter is registered with a `lookup`. Nothing is charged
+ * for `works <= 0`.
+ *
+ * @param works - the most works the run can hold when the pass starts
+ * @param selected - the databases ticked for the run
+ * @param sources - the registry, to skip a step with no adapter or `lookup`
+ * @param ladder - defaults to {@link ABSTRACT_BACKFILL_LADDER}
+ * @returns the request count, 0 or more
+ */
+export function abstractBackfillRequestBound(
+  works: number,
+  selected: readonly SourceId[],
+  sources: Pick<SourceRegistry, "get">,
+  ladder: readonly SourceId[] = ABSTRACT_BACKFILL_LADDER,
+): number {
+  if (works <= 0) return 0;
+  return ladder.reduce((total, sourceId) => {
+    if (!selected.includes(sourceId)) return total;
+    if (sources.get(sourceId)?.lookup === undefined) return total;
+    const batch = Math.max(1, ABSTRACT_BACKFILL_BATCH[sourceId] ?? 1);
+    return total + Math.ceil(works / batch);
+  }, 0);
+}
 
 /** What one ladder step did. */
 export interface AbstractBackfillStep {
@@ -128,6 +184,12 @@ export interface AbstractBackfillDeps {
    * restriction — a test seam; the pipeline always passes it.
    */
   readonly selected?: readonly SourceId[];
+  /**
+   * `PipelineContext.clock.now`, read once after the last step and stamped on
+   * every work the pass changed as its `normalizedAtEpochMs` (item 198).
+   * Absent keeps the old stamp — a test seam; the pipeline always passes it.
+   */
+  readonly now?: () => number;
 }
 
 /** True when a work has no usable abstract. */
@@ -240,6 +302,9 @@ export async function backfillAbstracts(
     });
   }
 
+  // `docs/07` §5.1: "when this canonical record was last rebuilt" — one
+  // reading for the whole pass, taken after its last request.
+  const restampedAt = filled.size === 0 ? undefined : deps.now?.();
   const out =
     filled.size === 0
       ? works
@@ -249,6 +314,7 @@ export async function backfillAbstracts(
           return {
             ...work,
             abstract: hit.abstract,
+            normalizedAtEpochMs: restampedAt ?? work.normalizedAtEpochMs,
             provenance: {
               ...work.provenance,
               fieldOrigin: {

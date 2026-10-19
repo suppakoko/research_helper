@@ -189,6 +189,16 @@ export const SEMANTICSCHOLAR_HOST = "api.semanticscholar.org";
 export const BIORXIV_HOST = "api.biorxiv.org";
 
 /**
+ * The host of the NCBI ID Converter — the authority of
+ * `https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/` (`docs/02`
+ * §3.7), which resolves a PMCID-only record before Strategy B's lookup
+ * (owner, 2026-10-19, `plan/00` §6 item 214). Imported by
+ * `src/sources/pubmed/idConverter.ts` rather than respelled, for the reason
+ * {@link EBI_HOST} gives.
+ */
+export const PMC_IDCONV_HOST = "pmc.ncbi.nlm.nih.gov";
+
+/**
  * `docs/07` §7.3's policy table, as far as Phase 1 needs it.
  *
  * **NCBI, the one row that ships now.** 2.5/s without a key and 8/s with one,
@@ -309,6 +319,15 @@ export const BIORXIV_HOST = "api.biorxiv.org";
  * no `withKey` and no `keyPresencePref`. **Both preprint servers share this
  * one row and one bucket**: the `biorxiv` and `medrxiv` sources are distinct
  * `SourceId`s with the same `rateLimitKey`.
+ *
+ * **NCBI ID Converter, item 214 (2026-10-19).** §7.3's
+ * `pmc.ncbi.nlm.nih.gov` row, added by the owner's decision: the
+ * `eutils.ncbi.nlm.nih.gov` row's **unkeyed** values — 2.5/s, burst 1, max
+ * concurrent 3, retry 1000 ms / 30 000 ms / 3 — and **never keyed**, so the
+ * row has no `withKey` and no `keyPresencePref`, and an NCBI key on the
+ * keystore changes nothing here. A host of its own, so a bucket of its own:
+ * the converter does not draw on E-utilities' 2.5/s, and the two together may
+ * reach 5/s from one address (the dated note under §7.3's table says so).
  */
 export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
   {
@@ -372,6 +391,16 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
     // medRxiv" paragraph.
     host: BIORXIV_HOST,
     withoutKey: { ratePerSecond: 1, burst: 2, maxConcurrent: 2 },
+    retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
+  },
+  {
+    // `docs/07` §7.3, `pmc.ncbi.nlm.nih.gov` (the NCBI ID Converter, owner
+    // 2026-10-19, `plan/00` §6 item 214): 2.5/s, never keyed, burst 1, max
+    // concurrent 3; retry 1000 ms / 30 000 ms / 3 — E-utilities' unkeyed
+    // values. No `withKey`, no `keyPresencePref`: no key is ever sent. See
+    // the header's "NCBI ID Converter" paragraph.
+    host: PMC_IDCONV_HOST,
+    withoutKey: { ratePerSecond: 2.5, burst: 1, maxConcurrent: 3 },
     retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
   },
 ];

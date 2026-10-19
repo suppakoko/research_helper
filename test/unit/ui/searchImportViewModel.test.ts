@@ -46,6 +46,10 @@
  * measuring the gate; this one measures the omission.
  */
 
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { createSystemClock } from "../../../src/core/clock";
@@ -92,9 +96,11 @@ import {
   message,
   roleLine,
   sourceStatusLine,
+  tierLabel,
   toPipelineInput,
   toWindowRecords,
   windowSources,
+  DEDUP_TIER_NAME_KEYS,
   EMPTY_HEADLINE_OMITTED,
   ERROR_DETAIL_FIELDS,
   ERROR_ROWS,
@@ -103,6 +109,7 @@ import {
   type CollectionDescriptor,
   type RerunCollection,
   type KeyStatus,
+  type MessageFormatter,
   type SearchResultRow,
   type MessageRef,
   type SearchImportJobFactory,
@@ -394,6 +401,8 @@ function harness(options: {
   readonly keyStatus?: () => KeyStatus;
   /** Further ports, bound as given (`P2-T17`: the store and the lookup). */
   readonly extra?: Partial<SearchImportViewModelDeps>;
+  /** The document's `document.l10n`, handed over on connect (item 206). */
+  readonly formatter?: MessageFormatter;
 }): Harness {
   const states: SearchViewState[] = [];
   const lines: string[] = [];
@@ -503,6 +512,9 @@ function harness(options: {
     render: (state: SearchViewState) => {
       states.push(state);
     },
+    ...(options.formatter === undefined
+      ? {}
+      : { formatter: options.formatter }),
   });
   return { model, states, lines, detach, tokens, inputs, doneOutcomes };
 }
@@ -2167,6 +2179,75 @@ describe("P2-T14 — the duplicate badge on a flagged pair (step 3)", () => {
     });
   });
 
+  it("names the tier in words when its name was resolved, and falls back to the id only without one (item 206)", () => {
+    const rows = toWindowRecords([a, b, c], new Map(), undefined, {
+      works: singles(),
+      flags: [flag(a, b, 0.873)],
+      links: [],
+      tierNames: new Map([["title-fuzzy", "close title match"]]),
+    });
+    expect(rows[0]?.duplicate?.ref.args).toStrictEqual({
+      tier: "close title match",
+      score: 87,
+    });
+    expect(tierLabel("title-exact", new Map())).toBe("title-exact");
+    expect(tierLabel(null, undefined)).toBe("");
+  });
+
+  it("names every tier that can flag or link, each with a searchDialog bundle message (item 206)", () => {
+    expect(Object.keys(DEDUP_TIER_NAME_KEYS).sort()).toStrictEqual([
+      "title-exact",
+      "title-fuzzy",
+      "version-link",
+    ]);
+    const bundle = enUsSearchDialog();
+    for (const id of Object.values(DEDUP_TIER_NAME_KEYS)) {
+      expect(bundle.get(id)?.trim(), id).not.toBe("");
+      expect(bundle.get(id), id).toBeDefined();
+    }
+  });
+
+  it("hands the duplicate tooltip the bundle's tier name, resolved through the connected formatter (item 206)", async () => {
+    const bundle = enUsSearchDialog();
+    const formatter: MessageFormatter = {
+      formatMessages: (keys) =>
+        Promise.resolve(
+          keys.map((key) => {
+            const value = bundle.get(key.id);
+            return value === undefined ? undefined : { value };
+          }),
+        ),
+    };
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      formatter,
+      runs: [
+        {
+          output: {
+            ...output({
+              outcome: "succeeded",
+              records: [a, b, c],
+              works: singles(),
+              perSource: [report({ sourceId: "pubmed", recordsRetrieved: 3 })],
+            }),
+            flags: [flag(a, b, 0.873)],
+          },
+        },
+      ],
+    });
+    await h.model.runSearch(query({ sources: ["pubmed"] }));
+    const rows = h.model.state.records ?? [];
+    const name = bundle.get(DEDUP_TIER_NAME_KEYS["title-fuzzy"]);
+    expect(name).toBeDefined();
+    expect(rows[0]?.duplicate?.ref.args).toStrictEqual({
+      tier: name,
+      score: 87,
+    });
+    expect(rows[0]?.duplicate?.ref.args).not.toMatchObject({
+      tier: "title-fuzzy",
+    });
+  });
+
   it("marks a linked pair with the linked badge, by work key", () => {
     const link: LinkPair = {
       aWorkKey: `hash:${a.id}`,
@@ -3263,3 +3344,25 @@ describe("item 212 — Strategy B's counts in the import summary", () => {
     ]);
   });
 });
+
+/**
+ * The en-US search-window bundle's single-line messages, id → value, read
+ * from the shipped file so a test asserts the bundle's text rather than a
+ * literal retyped here.
+ */
+function enUsSearchDialog(): ReadonlyMap<string, string> {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const text = readFileSync(
+    resolve(
+      here,
+      "../../../addon/locale/en-US/research-helper-searchDialog.ftl",
+    ),
+    "utf8",
+  );
+  const values = new Map<string, string>();
+  for (const match of text.matchAll(/^([a-z][a-z0-9-]*) = (.+)$/gm)) {
+    const [, id, value] = match;
+    if (id !== undefined && value !== undefined) values.set(id, value);
+  }
+  return values;
+}

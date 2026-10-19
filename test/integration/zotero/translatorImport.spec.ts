@@ -20,9 +20,16 @@
  * still leaves an item made by hand-mapping, and that the writer reads the
  * preference as the shipped `false` on a profile where nobody set it.
  *
+ * Items 213 and 214 (owner, 2026-10-19) add two specs: the PMCID route runs
+ * the real NCBI ID Converter code over a **fake `HttpClient`**, so it sends
+ * nothing, and the late-save measurement uses a fake translator that saves
+ * after its own short deadline. Neither turns Strategy B on for any other
+ * spec: each passes its own writer or `translatorLookup`.
+ *
  * Fixtures are erased in `after()`, as `importer.spec.ts` erases its own.
  */
 
+import type { HttpClient } from "../../../src/core/http/client";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import type { Logger } from "../../../src/core/logger";
 import type { CanonicalWork, WorkType } from "../../../src/model/canonicalWork";
@@ -80,6 +87,8 @@ function makeWork(
     type?: WorkType;
     containerTitle?: string;
     pmcidOnly?: boolean;
+    /** The PMCID a `pmcidOnly` work carries; `PMC9100001` by default. */
+    pmcid?: string;
   } = {},
 ): CanonicalWork {
   const doi = doiOrThrow(`${DOI_PREFIX}${slug}`);
@@ -87,7 +96,7 @@ function makeWork(
     workKey: `doi:${doi}`,
     ids:
       options.pmcidOnly === true
-        ? ({ pmcid: "PMC9100001" } as CanonicalWork["ids"])
+        ? ({ pmcid: options.pmcid ?? "PMC9100001" } as CanonicalWork["ids"])
         : { doi },
     type: options.type ?? "journal-article",
     title: `Research Helper translator fixture ${slug} (P2-T18)`,
@@ -117,6 +126,13 @@ function record(report: ImportReport): ImportReport {
 function rememberCollection(libraryId: number, key: string): void {
   const collection = Zotero.Collections.getByLibraryAndKey(libraryId, key);
   if (collection) writtenCollectionIDs.add(collection.id);
+}
+
+/** The regular items in a collection, by id. */
+function collectionItemIDs(libraryId: number, key: string): number[] {
+  const collection = Zotero.Collections.getByLibraryAndKey(libraryId, key);
+  if (!collection) return [];
+  return collection.getChildItems(true) as unknown as number[];
 }
 
 function itemOrFail(itemID: number): Zotero.Item {
@@ -381,6 +397,142 @@ describe("Translator import path behind useTranslators (P2-T18)", function () {
     assert.strictEqual(lookups.length, 0);
     assert.deepEqual(report.createdVia, ["hand-map"]);
     assert.strictEqual(report.importPaths.fallbackReasons["no-identifier"], 1);
+  });
+
+  it("resolves a PMCID-only record through the NCBI ID Converter over a fake client, looks up its DOI, and hand-maps the PMCID it did not resolve (item 214)", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const token = createCancellationTokenSource().token;
+    const { lookups, createSearch } = savingSearches("journalArticle");
+    const resolvedDoi = doiOrThrow(`${DOI_PREFIX}pmc-resolved`);
+    // A fake client, so no request leaves Zotero: the real converter runs
+    // over it. The body has `docs/02` §3.7's documented record shape with a
+    // fixture DOI; PMC9100012 is absent from it, so it does not resolve.
+    const urls: string[] = [];
+    const http: HttpClient = {
+      request(_method, url) {
+        urls.push(url);
+        return Promise.resolve({
+          status: 200,
+          url,
+          body: JSON.stringify({
+            status: "ok",
+            records: [
+              {
+                doi: resolvedDoi,
+                pmcid: "PMC9100011",
+                pmid: 9100011,
+                "requested-id": "PMC9100011",
+              },
+            ],
+          }),
+          rawHeaders: "",
+          header: () => undefined,
+        });
+      },
+    };
+    const writer = createZoteroSearchImportWriter({
+      readUseTranslators: () => true,
+      http,
+      translatorLookup: { createSearch },
+    });
+    const session = await writer.openTarget(
+      {
+        collectionName: collectionName("pmcid-route"),
+        duplicatePolicy: "import-anyway",
+      },
+      token,
+    );
+    rememberCollection(session.libraryId, session.collectionKey);
+    const batch = await session.writeBatch(
+      [
+        makeWork("pmc-resolved", { pmcidOnly: true, pmcid: "PMC9100011" }),
+        makeWork("pmc-unresolved", { pmcidOnly: true, pmcid: "PMC9100012" }),
+      ],
+      token,
+    );
+    for (const id of collectionItemIDs(
+      session.libraryId,
+      session.collectionKey,
+    )) {
+      writtenItemIDs.add(id);
+    }
+
+    assert.strictEqual(urls.length, 1, "one converter request for both");
+    const asked = new URL(urls[0] ?? "").searchParams;
+    assert.strictEqual(asked.get("ids"), "PMC9100011,PMC9100012");
+    assert.strictEqual(asked.get("idtype"), "pmcid");
+    assert.strictEqual(lookups.length, 1, "one lookup, for the resolved DOI");
+    assert.deepEqual(lookups[0]?.identifier, { DOI: resolvedDoi });
+    assert.strictEqual(batch.created, 2);
+    assert.strictEqual(batch.importPaths?.viaTranslators, 1);
+    assert.strictEqual(batch.importPaths?.handMapped, 1);
+    assert.strictEqual(
+      batch.importPaths?.fallbackReasons["no-identifier"],
+      1,
+      "the unresolved PMCID is hand-mapped without a lookup",
+    );
+  });
+
+  it("measures item 213's open risk: a lookup that settles after its deadline still saves its item beside the hand-mapped copy", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    // Short figures of the test's own, so the measurement takes seconds; the
+    // shipped deadline is 30 s and the mechanism is the same.
+    const DEADLINE_MS = 50;
+    const LATE_MS = 2000;
+    let lateSaves = 0;
+    const createSearch = (): TranslatorSearch => ({
+      setIdentifier: () => undefined,
+      getTranslators: () => Promise.resolve(["fake-slow"]),
+      setTranslator: () => undefined,
+      async translate(options: TranslateOptions) {
+        await Zotero.Promise.delay(LATE_MS);
+        const item = new Zotero.Item("journalArticle");
+        item.libraryID = options.libraryID;
+        item.setField("title", "As the slow translator spelled it");
+        if (options.collections !== false) {
+          item.setCollections(options.collections);
+        }
+        await item.saveTx();
+        writtenItemIDs.add(item.id);
+        lateSaves += 1;
+        return [item];
+      },
+    });
+    const report = await runImport({
+      works: [makeWork("late-save")],
+      collectionName: collectionName("late-save"),
+      duplicatePolicy: "import-anyway",
+      translatorLookup: { createSearch, perRecordTimeoutMs: DEADLINE_MS },
+    });
+    const { libraryID, key } = report.collection;
+    const atReturn = collectionItemIDs(libraryID, key).length;
+    const savesAtReturn = lateSaves;
+    const waitedFrom = Date.now();
+    while (lateSaves === 0 && Date.now() - waitedFrom < 4 * LATE_MS) {
+      await Zotero.Promise.delay(100);
+    }
+    const later = collectionItemIDs(libraryID, key);
+    for (const id of later) writtenItemIDs.add(id);
+    debug(
+      `${LOG_PREFIX} item 213 late save: ${String(atReturn)} item(s) when the ` +
+        `import returned, ${String(later.length)} after the abandoned lookup ` +
+        `settled (${String(lateSaves)} late save)`,
+    );
+
+    assert.deepEqual(report.createdVia, ["hand-map"]);
+    assert.strictEqual(report.importPaths.fallbackReasons.timeout, 1);
+    assert.strictEqual(
+      savesAtReturn,
+      0,
+      "the import returned before the late save",
+    );
+    assert.strictEqual(atReturn, 1, "only the hand-mapped copy at return");
+    assert.strictEqual(lateSaves, 1, "the abandoned lookup was not stopped");
+    assert.strictEqual(
+      later.length,
+      2,
+      "the late save is a second copy in the collection (open, item 213)",
+    );
   });
 
   it("still finds the four Translate.Search calls Strategy B uses on this Zotero (R-1), without calling any", async function () {

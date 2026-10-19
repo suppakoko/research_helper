@@ -335,6 +335,7 @@ import {
   type SearchWindowRecord,
 } from "../../src/ui/dialogs/searchDialog";
 import {
+  DEDUP_TIER_NAME_KEYS,
   UNRENDERABLE_ERROR_ROWS,
   createSearchImportViewModel,
   message,
@@ -2476,6 +2477,19 @@ describe("P1-T35: the host the composition root published", () => {
       );
     }
     log35(`databases painted: ${boxes.map(painted).join(", ")}`);
+  });
+
+  it("item 206: every deduplication tier name resolves in this window to words, never to its id", async function () {
+    // The duplicate badge's `{ $tier }` is handed this text by the view
+    // model, which resolves it through this same `document.l10n`. The window
+    // runs on the `ko-KR` chain, where the names are commented stubs, so the
+    // answer is the en-US fallback — asserted as "some text that is not the
+    // id", never as an English literal.
+    for (const [tier, id] of Object.entries(DEDUP_TIER_NAME_KEYS)) {
+      const text = await resolved({ id, args: undefined });
+      assert.notStrictEqual(text.trim(), tier, `${id} resolves to its id`);
+      assert.notStrictEqual(text.trim(), id, `${id} resolves to itself`);
+    }
   });
 
   it("P2-T14: bioRxiv draws its ⊕ role row on a keyword run, never a count", async function () {

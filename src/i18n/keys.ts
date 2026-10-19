@@ -441,6 +441,12 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   // `P2-T14`: the flagged-duplicate badge and the linked-version badge.
   "research-helper-search-row-duplicate",
   "research-helper-search-row-linked",
+  // The deduplication tiers' names, resolved to text for the duplicate
+  // badge's `{ $tier }` (owner, 2026-10-19, `plan/00` §6 item 206;
+  // `DEDUP_TIER_NAME_KEYS` in src/ui/viewModels/searchImportViewModel.ts).
+  "research-helper-search-tier-title-exact",
+  "research-helper-search-tier-title-fuzzy",
+  "research-helper-search-tier-version-link",
 
   // Selection controls (FR-5).
   "research-helper-search-select-all",
@@ -859,6 +865,11 @@ export const KO_PRESENT = [
   "research-helper-import-paths",
   "research-helper-import-fallback-reason",
   "research-helper-prefs-use-translators",
+  // Item 206's three deduplication tier names: Korean drafted by the
+  // coordinator and reviewed by the owner on 2026-10-19 (`G-41`).
+  "research-helper-search-tier-title-exact",
+  "research-helper-search-tier-title-fuzzy",
+  "research-helper-search-tier-version-link",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -944,8 +955,10 @@ export interface FluentMessageArgsMap {
     failed: number;
     succeeded: number;
   };
-  // `P2-T14`: `$tier` is a deduplication tier's identifier (a token, not
-  // translated); `$score` the similarity as a whole percentage.
+  // `P2-T14`: `$tier` is the deciding deduplication tier's name, already
+  // resolved from a `research-helper-search-tier-*` message (item 206; its id
+  // only when no name resolved); `$score` the similarity as a whole
+  // percentage.
   "research-helper-search-row-duplicate": { tier: string; score: number };
   // `P2-T17`, FR-12. `$collection` is the collection's own name (data, not a
   // translatable string); `$date` the recorded run's finish date, already

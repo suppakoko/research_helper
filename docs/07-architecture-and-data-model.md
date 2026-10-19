@@ -204,7 +204,9 @@ research_helper/
 │   │   ├── pubmed/
 │   │   │   ├── pubmedSource.ts       # ESearch → EFetch/ESummary orchestration
 │   │   │   ├── mapper.ts             # PubMed XML/JSON → CanonicalWork
-│   │   │   └── query.ts              # query DSL → PubMed syntax
+│   │   │   ├── query.ts              # query DSL → PubMed syntax
+│   │   │   └── idConverter.ts        # PMCID → DOI/PMID via the NCBI ID Converter (02 §3.7;
+│   │   │                             #   Strategy B's PMCID route, plan/00 §6 item 214)
 │   │   ├── europepmc/
 │   │   ├── crossref/
 │   │   ├── semanticscholar/
@@ -2436,6 +2438,7 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 | `export.arxiv.org` | 0.33/s | 1 | **1** | 3000 ms | 30 000 ms | 3 | For the *legacy* APIs (OAI-PMH, RSS, the arXiv API — which is what we use) arXiv requires *"no more than one request every three seconds, and… a single connection at a time"*, explicitly aggregated across *"all of the machines under your control as a whole"*. Enforced via `minIntervalMs: 3000` and `maxConcurrent: 1`. |
 | `www.ebi.ac.uk` | 5/s | 5 | 3 | 1000 ms | 30 000 ms | 3 | See the unverified note below. |
 | `api.biorxiv.org` | 1/s | 2 | 2 | 1000 ms | 30 000 ms | 3 | No published limit exists; this is a self-imposed conservative default. |
+| `pmc.ncbi.nlm.nih.gov` | 2.5/s, never keyed | 1 | 3 | 1000 ms | 30 000 ms | 3 | The NCBI ID Converter (`02-literature-database-apis.md` §3.7), which resolves a PMCID-only record before Strategy B's lookup (§12.1). An NCBI service on a host of its own, so it gets a bucket of its own with the `eutils.ncbi.nlm.nih.gov` row's **unkeyed** values; **no API key is ever sent** to it. `tool` and `email` carry the maintainer address, as on E-utilities (`02-literature-database-apis.md` §2.2). See the dated note below. |
 | LLM/TTS hosts | from provider prefs | 1 | = `llm` pool size | — | — | — | Driven by `Retry-After` and provider rate-limit headers rather than a fixed guess. |
 
 > **Retry cells filled 2026-10-14 by the owner's decision (`P2-T03` report, `plan/00` §6 item 126).** Until this date the
@@ -2446,6 +2449,14 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 > attempts is the `P0-T21` argument — none of these budgets is verified against the host, so more attempts buy nothing.
 > A `Retry-After` header, where a host sends one (Crossref, NCBI), overrides the base delay as §7.4 already states.
 > The Europe PMC host cell lost its parenthetical so every Host cell is the bare host name that `backoff.test.ts` reads.
+
+> **`pmc.ncbi.nlm.nih.gov` row added 2026-10-19 by the owner's decision (`plan/00` §6 item 214).** A PMCID-only record
+> is resolved to a DOI or PMID through the NCBI ID Converter (`02-literature-database-apis.md` §3.7, `idtype=pmcid`,
+> batched) before Strategy B's lookup; a PMCID the converter does not resolve is hand-mapped. The owner gave the host
+> the `eutils.ncbi.nlm.nih.gov` row's **unkeyed** policy — 2.5/s, burst 1, 3 concurrent, retry 1000 ms / 30 000 ms /
+> 3 attempts — and ruled that no key is ever sent, so the row has no keyed rate and no key-presence flag. No document
+> publishes a limit for this host; the values are borrowed from E-utilities, not measured. The 2.5/s is per host, so
+> the converter and E-utilities each have their own bucket and together may reach 5/s from one address.
 
 > **Unverified:** Europe PMC does **not** publish rate limits on its developer pages. The commonly cited "10 requests/second (500/min), per IP" figure originates in a user's question on the [EBI epmc-webservices group](https://groups.google.com/a/ebi.ac.uk/g/epmc-webservices/c/cZLnV1JhCj8); the Europe PMC team confirmed the *per-IP scoping* in that thread but not the number itself. We default to half of it. Contact the Europe PMC team to confirm before raising it.
 
@@ -3820,6 +3831,23 @@ stateDiagram-v2
 Notes: `PartialFetch` is a first-class state, not an error. If PubMed is down but Crossref and arXiv are fine, the user gets results plus a clear warning — a total failure would be a worse outcome. Deduping runs before any Zotero write, and existing library items are checked by DOI/PMID so re-running a search does not create duplicates; matched items are added to the new collection instead.
 
 `WritingItems` is where the two import strategies of `01-zotero-plugin-platform.md` §6.3 are selected between. It reads `useTranslators` (§8.5) once on entry: **off** — the shipped default — means hand-mapping (Strategy A) for every record, which is the path `10-requirements-and-user-stories.md` NFR-1 measures; **on** means one `Zotero.Translate.Search` identifier lookup per record that has a DOI, PMID or arXiv ID, with hand-mapping as the per-record fallback on failure or timeout, and the abstract-backfill step of doc 01 §6.3 item 4 applied after either path. The per-record lookup is a network round trip, so a run with the preference on is outside NFR-1's budget by construction; the pref's tooltip must say the path is slower before a user turns it on. `WritingItems` also produces the FR-8 counts that §5.3's `SourceProvenance` records.
+
+> **Decided 2026-10-19 (owner, `plan/00` §6 item 213): the per-record translator timeout is 30 seconds.** A lookup —
+> one `getTranslators()` plus one `translate()` — that has not settled 30 s after it started falls back to hand-mapping
+> for that record, counted under the fallback reason `timeout`. The figure is `TRANSLATOR_LOOKUP_TIMEOUT_MS` in
+> `src/zotero/translatorImport.ts`, and `createZoteroSearchImportWriter` (`src/bootstrap/registerPipelines.ts`) is the
+> one place it is applied; `lookupThroughTranslators` itself still sets no deadline when none is passed. A PMID batch
+> (up to 200 PMIDs as one `{ PMID: [...] }` lookup, `01-zotero-plugin-platform.md` §6.2) is one lookup and, as built
+> by `P2-T18`, gets one 30 s deadline, not 30 s per member; whether a batch should get more is open (reported with
+> item 213's change, 2026-10-19).
+>
+> **Measured 2026-10-19: the deadline abandons a lookup; it does not stop it.** Nothing in the shipped code can cancel a
+> running `translate()`, and the timed-out lookup is ignored rather than cancelled: its late result is never counted,
+> repaired or returned. But `translate()` saves its items into the collection itself, so when the abandoned lookup
+> settles, its item lands **beside** the record's hand-mapped copy. Measured in Zotero 10.0.3 with a fake translator
+> that saves 2 s after a 50 ms deadline: 1 item in the collection when the import returned, 2 after the lookup settled
+> (`translatorImport.spec.ts`, "measures item 213's open risk"). A second copy is therefore possible whenever a real
+> lookup outlives 30 s, and for a PMID batch it is every member the batch's late answer saves. Open; not decided.
 
 ### 12.2 Find related (Feature 2)
 

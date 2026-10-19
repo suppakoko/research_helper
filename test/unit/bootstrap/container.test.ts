@@ -44,6 +44,7 @@ import {
   CROSSREF_HOST,
   EBI_HOST,
   NCBI_HOST,
+  PMC_IDCONV_HOST,
   SEMANTICSCHOLAR_HOST,
   NCBI_KEY_PRESENT_PREF,
   peekHostLimiters,
@@ -404,7 +405,9 @@ describe("installServices wires the graph Phase 1 built", () => {
     // NCBI (`P1-T04`), Europe PMC (`P2-T03`, wired by `P2-T32`), Crossref
     // (`P2-T04`), arXiv (`P2-T06`), Semantic Scholar (`P2-T05`) and
     // bioRxiv/medRxiv (`P2-T07`, one host). Phase 1 pinned this at one host;
-    // the pin went with the second adapter.
+    // the pin went with the second adapter. Last, the NCBI ID Converter's
+    // host (owner, 2026-10-19, `plan/00` §6 item 214), which the writer's
+    // PMCID route calls through this same client.
     expect(graph.limiters.hosts).toEqual([
       NCBI_HOST,
       EBI_HOST,
@@ -412,7 +415,9 @@ describe("installServices wires the graph Phase 1 built", () => {
       ARXIV_HOST,
       SEMANTICSCHOLAR_HOST,
       BIORXIV_HOST,
+      PMC_IDCONV_HOST,
     ]);
+    expect(graph.limiters.limiterFor(PMC_IDCONV_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(NCBI_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(EBI_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(CROSSREF_HOST)).toBeDefined();

@@ -17,6 +17,7 @@ import {
   NCBI_HOST,
   NCBI_KEY_PRESENT_PREF,
   peekHostLimiters,
+  PMC_IDCONV_HOST,
   resetHostLimiters,
   SEMANTICSCHOLAR_HOST,
 } from "../../../src/core/rateLimit/hostLimiter";
@@ -1109,7 +1110,9 @@ describe("hostLimiter policy table", () => {
     // from §7.3. That every row here is a §7.3 row, with §7.3's own retry
     // cells, is asserted against the document itself in `backoff.test.ts`, so
     // this test names the hosts and leaves the numbers to the one place that
-    // reads them off the page.
+    // reads them off the page. The NCBI ID Converter's host (owner,
+    // 2026-10-19, `plan/00` §6 item 214) is the seventh row: no adapter's
+    // `rateLimitKey`, but the client paces it by URL host all the same.
     const shippedHosts = [
       NCBI_HOST,
       EBI_HOST,
@@ -1117,6 +1120,7 @@ describe("hostLimiter policy table", () => {
       ARXIV_HOST,
       SEMANTICSCHOLAR_HOST,
       BIORXIV_HOST,
+      PMC_IDCONV_HOST,
     ];
     expect(HOST_POLICIES.map((policy) => policy.host)).toEqual(shippedHosts);
     const clock = createManualClock();

@@ -685,6 +685,71 @@ describe("estimate", () => {
     expect(estimate.estimatedCostUsd).toBeUndefined();
     expect(estimate.estimatedInputTokens).toBe(0);
   });
+
+  /** A ladder database that can answer the backfill's batched lookup. */
+  const withLookup = (id: SourceId): LiteratureSource => ({
+    ...stubSource({ id, pages: [] }),
+    lookup: () => Promise.resolve([]),
+  });
+
+  it("charges nothing to a lookup-only source, which sends no request during a search (item 180)", async () => {
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [] }),
+        stubSource({ id: "biorxiv", pages: [], keywordSearch: false }),
+        stubSource({ id: "medrxiv", pages: [], keywordSearch: false }),
+      ],
+    });
+    const estimate = await h.pipeline.estimate(
+      { ...BASE_INPUT, sourceIds: ["pubmed", "biorxiv", "medrxiv"] },
+      h.ctx,
+    );
+    // PubMed's 5 pages × 2; bioRxiv and medRxiv nothing.
+    expect(estimate.externalRequests).toBe(10);
+  });
+
+  it("adds the backfill's worst case — one request per 100 works per ticked ladder database (item 198)", async () => {
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [] }),
+        withLookup("europepmc"),
+        withLookup("semanticscholar"),
+        stubSource({ id: "biorxiv", pages: [], keywordSearch: false }),
+      ],
+    });
+    const estimate = await h.pipeline.estimate(
+      {
+        ...BASE_INPUT,
+        sourceIds: ["pubmed", "europepmc", "semanticscholar", "biorxiv"],
+        limit: 150,
+      },
+      h.ctx,
+    );
+    // Search: three searching sources × ceil(150 / 2) pages × 2 = 450.
+    // Backfill: at most 150 × 3 = 450 works → 5 Europe PMC + 5 S2 = 10.
+    expect(estimate.externalRequests).toBe(460);
+  });
+
+  it("charges no backfill to a ladder database the user did not tick (item 194)", async () => {
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [] }),
+        withLookup("europepmc"),
+        withLookup("semanticscholar"),
+      ],
+    });
+    const estimate = await h.pipeline.estimate(
+      { ...BASE_INPUT, sourceIds: ["pubmed"], limit: 150 },
+      h.ctx,
+    );
+    expect(estimate.externalRequests).toBe(150);
+    const one = await h.pipeline.estimate(
+      { ...BASE_INPUT, sourceIds: ["pubmed", "europepmc"], limit: 150 },
+      h.ctx,
+    );
+    // 2 × 150 search + ceil(300 / 100) Europe PMC.
+    expect(one.externalRequests).toBe(303);
+  });
 });
 
 // ===========================================================================
@@ -2059,6 +2124,48 @@ describe("the dedup and merge wiring (P2-T29)", () => {
     const single = out.works.find((w) => w.ids.doi === "10.1000/fifty-one");
     expect(single?.abstract).toBe("S2's abstract");
     expect(single?.provenance.fieldOrigin.abstract).toBe("semanticscholar");
+  });
+
+  it("restamps normalizedAtEpochMs on a work the backfill changed, and on no other (item 198)", async () => {
+    const answered = record("pubmed", "60", { doi: "10.1000/sixty" });
+    const unanswered = record("pubmed", "61", { doi: "10.1000/sixty-one" });
+    // A holder: the lookup closes over the harness that is built after it.
+    const built: { h?: ReturnType<typeof harness> } = {};
+    const europepmc: LiteratureSource = {
+      ...stubSource({ id: "europepmc", pages: [] }),
+      lookup(ids): Promise<readonly SourceRecord[]> {
+        // The pass's request takes time: the clock moves past `Merging`'s stamp.
+        built.h?.clock.advance(5_000);
+        return Promise.resolve(
+          ids
+            .filter((entry) => entry.doi === "10.1000/sixty")
+            .map(() =>
+              record("europepmc", "e60", {
+                doi: "10.1000/sixty",
+                abstract: "Europe PMC's abstract",
+              }),
+            ),
+        );
+      },
+    };
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [[answered, unanswered]] }),
+        europepmc,
+      ],
+    });
+    built.h = h;
+    const merged = h.clock.now();
+    const out = await h.pipeline.run(
+      { ...twoSources, sourceIds: ["pubmed", "europepmc"] },
+      h.ctx,
+    );
+    const filled = out.works.find((w) => w.ids.doi === "10.1000/sixty");
+    const left = out.works.find((w) => w.ids.doi === "10.1000/sixty-one");
+    expect(filled?.abstract).toBe("Europe PMC's abstract");
+    expect(left?.abstract).toBeUndefined();
+    expect(left?.normalizedAtEpochMs).toBe(merged);
+    expect(filled?.normalizedAtEpochMs).toBe(merged + 5_000);
   });
   it("supplied records go through the same merge, so the write half of a preview dedups too", async () => {
     const pair = sameDoiPair();

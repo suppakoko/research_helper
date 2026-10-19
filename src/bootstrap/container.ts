@@ -1509,7 +1509,11 @@ export async function installServices(
 
   // 7. The pipelines (`P1-T16`) and the per-job context factory.
   const pipelines = registerPipelines({
-    writer: createZoteroSearchImportWriter({ logger }),
+    // `http`: Strategy B's PMCID route (the NCBI ID Converter, owner
+    // 2026-10-19, `plan/00` §6 item 214) goes through the one client, so
+    // §7.3's `pmc.ncbi.nlm.nih.gov` bucket paces it. It is used only while
+    // `useTranslators` is on, which it ships off.
+    writer: createZoteroSearchImportWriter({ logger, http }),
   });
   const pipelineContext = createPipelineContextFactory({
     clock,

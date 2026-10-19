@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { config } from "../../../package.json";
 import { createMemoryPrefStore } from "../../../src/core/config";
 import { SOURCE_IDS } from "../../../src/model/ids";
-import { getPref, setPrefStore } from "../../../src/prefs";
+import { getPref, setPref, setPrefStore } from "../../../src/prefs";
 import { SEARCH_DIALOG_MESSAGE_IDS } from "../../../src/i18n/keys";
 import { PREF_KEYS } from "../../../src/prefs/keys";
 import { PREFS } from "../../../src/prefs/schema";
@@ -391,7 +391,14 @@ interface ControllerLogic {
     bounds: { min: number; max: number; default: number },
   ) => number;
   coerceBoolean: (raw: unknown, fallback: boolean) => boolean;
-  initialSelection: (registered: string[], enabled: string[]) => string[];
+  initialSelection: (
+    registered: string[],
+    enabled: string[] | null,
+  ) => string[];
+  normalizePrefs: (
+    raw: unknown,
+    bounds: unknown,
+  ) => { sources: string[] | null };
 
   // P1-T21's half.
   columns: { id: string; messageId: string; captioned: boolean }[];
@@ -1443,10 +1450,30 @@ describe("the controller's constants come from docs/07 §8.5", () => {
     expect(
       controller.logic.initialSelection(["pubmed", "crossref"], ["crossref"]),
     ).toStrictEqual(["crossref"]);
-    expect(controller.logic.initialSelection(["pubmed"], [])).toStrictEqual([
+    // Item 207 (owner, 2026-10-19): an empty list is an empty selection;
+    // only `null` — nothing readable — means §8.5's all-ticked default.
+    expect(controller.logic.initialSelection(["pubmed"], [])).toStrictEqual([]);
+    expect(controller.logic.initialSelection(["pubmed"], null)).toStrictEqual([
       "pubmed",
     ]);
     expect(controller.logic.initialSelection([], ["pubmed"])).toStrictEqual([]);
+  });
+
+  it("keeps a stored empty sources string apart from an unreadable one (item 207)", () => {
+    const bounds = controller.spec.prefBounds;
+    expect(
+      controller.logic.normalizePrefs({ sources: "" }, bounds).sources,
+    ).toStrictEqual([]);
+    expect(
+      controller.logic.normalizePrefs({ sources: " , " }, bounds).sources,
+    ).toStrictEqual([]);
+    expect(controller.logic.normalizePrefs({}, bounds).sources).toBeNull();
+    expect(
+      controller.logic.normalizePrefs({ sources: 7 }, bounds).sources,
+    ).toBeNull();
+    expect(
+      controller.logic.normalizePrefs(undefined, bounds).sources,
+    ).toBeNull();
   });
 
   it("names no literature source of its own (P1-T20 Do NOT)", () => {
@@ -3284,6 +3311,41 @@ describe("P2-T14 — the Databases row writes the sources preference (step 1)", 
     crossref.checked = false;
     crossref.dispatch("command");
     expect(writes).toStrictEqual([["pubmed"]]);
+  });
+
+  it("an empty selection survives a reopen as empty, so Search stays disabled with FR-2's message (item 207)", () => {
+    // The composition root's two bindings, verbatim (`registerUI.ts`).
+    setPrefStore(createMemoryPrefStore({}));
+    try {
+      const host = {
+        listSources: () => SEVEN,
+        getPrefs: () => ({ sources: getPref("sources") }),
+        saveSources: (ids: string[]) => {
+          setPref("sources", ids.join(","));
+        },
+      };
+      const first = harness({ host });
+      first.controller.init();
+      for (const box of first.byId("rh-search-databases")?.children ?? []) {
+        box.checked = false;
+        box.dispatch("command");
+      }
+      expect(getPref("sources")).toBe("");
+
+      const again = harness({ host });
+      again.controller.init();
+      const boxes = again.byId("rh-search-databases")?.children ?? [];
+      expect(boxes).toHaveLength(7);
+      expect(boxes.filter((box) => box.checked)).toStrictEqual([]);
+      expect(again.byId("rh-search-run")?.disabled).toBe(true);
+      const none = again.byId("rh-search-databases-none");
+      expect(none?.hidden).toBe(false);
+      expect(none?.getAttribute("data-l10n-id")).toBe(
+        "research-helper-search-databases-none",
+      );
+    } finally {
+      setPrefStore(undefined);
+    }
   });
 });
 
