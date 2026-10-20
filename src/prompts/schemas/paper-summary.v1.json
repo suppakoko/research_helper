@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://research-helper.local/schemas/paper-summary-v1.json",
+  "title": "PaperSummary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "itemKey",
+    "sourceTier",
+    "confidence",
+    "researchQuestion",
+    "studyDesign",
+    "population",
+    "methods",
+    "keyFindings",
+    "effectSizes",
+    "limitations",
+    "novelty",
+    "keywords",
+    "researchTheme",
+    "citationWorthiness"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "paper-summary-v1" },
+    "itemKey": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]{8}$",
+      "description": "Zotero item key. Echoed back by the model; the client MUST overwrite it with the true key and reject a mismatch."
+    },
+    "sourceTier": {
+      "type": "string",
+      "enum": ["abstract", "fulltext_pdf", "fulltext_epmc", "metadata_only"]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low", "none"],
+      "description": "Model's own confidence that the summary faithfully represents the paper given the text it saw."
+    },
+    "researchQuestion": {
+      "type": ["string", "null"],
+      "maxLength": 400,
+      "description": "One sentence: what the paper set out to answer or demonstrate. Null if the text does not state it."
+    },
+    "studyDesign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "detail"],
+      "properties": {
+        "label": {
+          "type": ["string", "null"],
+          "enum": [
+            "randomized_controlled_trial",
+            "non_randomized_trial",
+            "prospective_cohort",
+            "retrospective_cohort",
+            "case_control",
+            "cross_sectional",
+            "case_series",
+            "case_report",
+            "systematic_review",
+            "meta_analysis",
+            "scoping_review",
+            "narrative_review",
+            "in_vitro",
+            "in_vivo_animal",
+            "ex_vivo",
+            "computational_simulation",
+            "method_development",
+            "benchmark_study",
+            "retrospective_database_analysis",
+            "qualitative_study",
+            "protocol",
+            "editorial_or_commentary",
+            "other",
+            null
+          ]
+        },
+        "detail": { "type": ["string", "null"], "maxLength": 300 }
+      }
+    },
+    "population": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "description", "size"],
+      "properties": {
+        "kind": {
+          "type": ["string", "null"],
+          "enum": [
+            "human",
+            "animal",
+            "cell_line",
+            "tissue",
+            "microbial",
+            "dataset",
+            "corpus",
+            "simulation",
+            "mixed",
+            "not_applicable",
+            null
+          ]
+        },
+        "description": {
+          "type": ["string", "null"],
+          "maxLength": 400,
+          "description": "Who/what was studied, or which dataset(s) were used. Name datasets/cohorts/cell lines explicitly (e.g. 'UK Biobank', 'MIMIC-IV', 'TCGA-BRCA', 'HEK293T', 'C57BL/6J')."
+        },
+        "size": {
+          "type": ["string", "null"],
+          "maxLength": 120,
+          "description": "Verbatim sample size as reported, e.g. 'n = 1,204 (612 treatment / 592 control)'. Null if not stated. NEVER estimate."
+        }
+      }
+    },
+    "methods": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "type": "string", "maxLength": 220 },
+      "description": "Concrete techniques, assays, models, architectures, statistical approaches. Named entities preferred over categories."
+    },
+    "keyFindings": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "statement",
+          "direction",
+          "evidenceStrength",
+          "verbatimSupport"
+        ],
+        "properties": {
+          "statement": { "type": "string", "maxLength": 400 },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative",
+              "null_result",
+              "mixed",
+              "descriptive"
+            ]
+          },
+          "evidenceStrength": {
+            "type": "string",
+            "enum": ["strong", "moderate", "weak", "unclear"]
+          },
+          "verbatimSupport": {
+            "type": ["string", "null"],
+            "maxLength": 300,
+            "description": "A short quotation copied EXACTLY from the source text that supports this finding. Null only if no single span supports it. Used by the client for a substring-match grounding check."
+          }
+        }
+      }
+    },
+    "effectSizes": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["metric", "value"],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "e.g. 'hazard ratio', 'AUROC', 'Dice', 'accuracy', 'odds ratio', 'mean difference', 'F1'"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Verbatim as reported, e.g. '0.62 (95% CI 0.48-0.79)', '0.913'"
+          },
+          "comparison": { "type": ["string", "null"], "maxLength": 200 },
+          "pValue": { "type": ["string", "null"], "maxLength": 60 },
+          "unit": { "type": ["string", "null"], "maxLength": 60 }
+        }
+      },
+      "description": "Copy numbers EXACTLY as printed. Do not convert, round, or recompute."
+    },
+    "limitations": {
+      "type": "array",
+      "maxItems": 6,
+      "items": { "type": "string", "maxLength": 300 },
+      "description": "Prefer limitations the authors state. If inferring one, prefix with 'Not stated by authors: '."
+    },
+    "novelty": {
+      "type": ["string", "null"],
+      "maxLength": 400,
+      "description": "What this paper claims is new relative to prior work, in its own framing."
+    },
+    "keywords": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 12,
+      "items": { "type": "string", "maxLength": 60 },
+      "description": "Lowercase noun phrases. Prefer controlled vocabulary (MeSH terms, standard task names) when the text uses them."
+    },
+    "researchTheme": {
+      "type": ["string", "null"],
+      "maxLength": 80,
+      "description": "A single short theme label placing this paper in its subfield. Title Case, 2-6 words. This is a first-pass guess; THEME_CLUSTER may reassign it."
+    },
+    "citationWorthiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "reason"],
+      "properties": {
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "How likely this paper is to be worth citing in a review of this area, judged on contribution and rigor as evidenced IN THE TEXT. Not a proxy for citation count or journal prestige."
+        },
+        "reason": { "type": "string", "maxLength": 300 }
+      }
+    },
+    "openQuestions": {
+      "type": "array",
+      "maxItems": 5,
+      "items": { "type": "string", "maxLength": 250 },
+      "description": "Future work / unresolved questions the paper itself names."
+    },
+    "contradictsOrChallenges": {
+      "type": ["string", "null"],
+      "maxLength": 300,
+      "description": "If the paper explicitly positions itself against a prior finding or consensus, state it. Otherwise null."
+    },
+    "notEnoughInformation": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Names of schema fields the source text did not support. Populate this INSTEAD of guessing."
+    }
+  }
+}
