@@ -1697,6 +1697,28 @@ the caller of what the card builds; if it does not, the caller is added with a d
     This decision covers the `continue-on-error` flag and the Zotero pin only; it does not cover the unread
     `FIXTURE_MODE` or (a)–(d).
 
+### 6.47 Raised by P3-T01 and P3-T24, 2026-10-20 — 237 and 238 wait on the owner
+
+237. **How the prompt `.md` files reach the bundle (P3-T24's open line).** Measured (`plan/reports/P3-T24.md`): the
+    recommended esbuild `.md` text loader works for `npm run build` but **breaks the integration test bundle**, which the
+    scaffold builds with its own fixed esbuild options; Vitest imports `.md` in neither form. `import x from "./p.md" with
+    { type: "text" }` needs no loader in either esbuild build and type-checks with a `declare module "*.md"`. Until
+    decided, `createPromptRegistry` takes the text as `PromptSourceFile[]` and nothing in the bundle imports `src/prompts/`.
+
+238. **`paper-summary.v1.json` is Prettier-formatted, not byte-identical to `docs/06` §6.2.** `.prettierignore` excludes
+    only `*.md`; the test asserts the file equals Prettier's output of the docs block. Byte-identity needs one
+    `.prettierignore` line.
+
+239. **Recorded, not cards.** (a) P3-T26 must choose between the full version string and `cacheEpoch` for the cache key
+    (`docs/06` §11.2 and `docs/12` §17.4 against §17.2). (b) `docs/12` §17.3 gains a `variables` header field and
+    `maxTokensPerItem` (RELEVANCE_SCREEN is 100 × batch size). (c) `RELEVANCE_SCREEN` ships with `schema: none`; P3-T27 needs
+    a `RelevanceScreen` schema file. (d) `docs/12` §1.1 rule 3's single `<<<` replacement is incomplete; the code repeats
+    it. (e) `scripts/check-prompt-sync.mjs` (`docs/12` §1) does not exist; the unit test compares against `docs/12`. (f)
+    `lastReviewed` is 2026-09-09 for all five prompts. (g) P3-T01: `docs/09` §2.1's `Secret` tag getter returns `"Secret"`
+    (so `[object Secret]`), not the card's `[Secret]`; the `debug: true` rule cannot reach the one real call site
+    (`createZoteroHttpTransport` holds `Zotero.HTTP` in a local), which `HttpTransportOptions` closes by having no `debug`
+    member; the card's Verify line used a Vitest filter that matches nothing (corrected to `-- secrets errors`).
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

@@ -286,7 +286,7 @@ patterns), `KEYISH_FIELD`, the logger's redaction (`redactContext`), and the cli
 
 **Verify with.**
 ```bash
-npm run typecheck && npm run lint:check && npm run test:unit -- "secrets|errors"
+npm run typecheck && npm run lint:check && npm run test:unit -- secrets errors
 printf 'Zotero.HTTP.request("POST", u, { debug: true });\n' | npx eslint --stdin --stdin-filename src/zotero/probe.ts | grep -q "debug: true"
 printf 'Zotero.MenuManager.registerMenu(x);\n' | npx eslint --stdin --stdin-filename src/zotero/probe.ts | grep -q "menuRegistration"
 ```
