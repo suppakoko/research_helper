@@ -8,7 +8,7 @@
  * `docs/07` §4.3's `LLMRouter`. `installServices` in
  * `src/bootstrap/container.ts` is its only production caller.
  *
- * **No adapter is registered yet.** `P3-T07`–`P3-T10` each add one here,
+ * **Adapters.** `P3-T07`–`P3-T10` each add one here (OpenRouter's, `P3-T07`, is registered),
  * constructed with the `HttpClient`, the `SecretStore` and
  * {@link LLMServices.baseUrls}. Until then the router throws
  * `MissingCredentialError` (no key flag) or `ConfigurationError` (a key flag but
@@ -23,7 +23,11 @@
  * needs no restart.
  */
 
+import type { HttpClient } from "../core/http/client";
 import type { Logger } from "../core/logger";
+import type { SecretStore } from "../core/secretStore";
+import { createAnthropicProvider } from "../llm/anthropic/anthropicProvider";
+import { createGeminiProvider } from "../llm/gemini/geminiProvider";
 import {
   createBaseUrlResolver,
   type BaseUrlResolver,
@@ -33,6 +37,8 @@ import {
   type LLMProviderRegistry,
   type LLMSettings,
 } from "../llm/registry";
+import { createOpenAiProvider } from "../llm/openai/openAiProvider";
+import { createOpenRouterProvider } from "../llm/openrouter/openRouterProvider";
 import { createLLMRouter } from "../llm/router";
 import type { LLMRouter } from "../llm/types";
 import type { ProviderId } from "../model/ids";
@@ -118,6 +124,16 @@ export interface ProviderWiringDeps {
   readonly logger: Logger;
   /** Defaults to {@link createPrefLLMSettings}. A test may pass its own. */
   readonly settings?: LLMSettings;
+  /**
+   * The installed `SecretStore`, or `undefined` when there is no usable
+   * keystore. Each adapter reads its key from it. Absent means no store.
+   */
+  readonly secrets?: SecretStore | undefined;
+  /**
+   * The shared `HttpClient`. Absent, each adapter uses the installed one
+   * through `httpRequest` (`docs/13` §2.2's substitution point).
+   */
+  readonly http?: HttpClient | undefined;
 }
 
 /** The LLM layer, as `installServices` holds it. */
@@ -145,6 +161,42 @@ export function registerProviders(deps: ProviderWiringDeps): LLMServices {
   });
   // `P3-T07`–`P3-T10` register their adapters here, before the router is
   // handed out.
+  // OpenRouter (`P3-T07`): the default provider (D6).
+  registry.register(
+    createOpenRouterProvider({
+      secrets: deps.secrets,
+      baseUrls,
+      ...(deps.http !== undefined && { http: deps.http }),
+      logger: deps.logger,
+    }),
+  );
+  // Anthropic (`P3-T09`): the Messages API.
+  registry.register(
+    createAnthropicProvider({
+      secrets: deps.secrets,
+      baseUrls,
+      ...(deps.http !== undefined && { http: deps.http }),
+      logger: deps.logger,
+    }),
+  );
+  // OpenAI (`P3-T08`): the Responses API.
+  registry.register(
+    createOpenAiProvider({
+      secrets: deps.secrets,
+      baseUrls,
+      http: deps.http,
+      logger: deps.logger,
+    }),
+  );
+  // Gemini (`P3-T10`): the Interactions API, key in `x-goog-api-key` only.
+  registry.register(
+    createGeminiProvider({
+      secrets: deps.secrets,
+      baseUrls,
+      http: deps.http,
+      logger: deps.logger,
+    }),
+  );
   const router = createLLMRouter({ registry, settings });
   return { settings, registry, baseUrls, router };
 }

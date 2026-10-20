@@ -681,7 +681,8 @@ describe("installServices builds the LLM layer (P3-T06 step 7)", () => {
       },
     });
     try {
-      expect(graph.llm.registry.list()).toEqual([]);
+      // Each adapter card (`P3-T07`–`P3-T10`) registers one adapter here.
+      expect(graph.llm.registry.get("openai")?.id).toBe("openai");
       expect(graph.llm.router.activeProvider()).toBe("openrouter");
       expect(graph.llm.router.resolveModel("cheap").modelId).toBe("or/base");
 

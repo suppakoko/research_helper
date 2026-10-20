@@ -1854,6 +1854,24 @@ the caller of what the card builds; if it does not, the caller is added with a d
     recommendation (OpenRouter first). Shared files (`registerProviders.ts`, `HOST_POLICIES`, `docs/07` §7.3) take small
     exact-string edits only; no live provider call; recorded fixtures stay with `P3-T30`.
 
+### 6.54 Raised by the four adapters (P3-T07–P3-T10), 2026-10-21 — 260 waits on the owner
+
+260. **No `HOST_POLICIES` row for any LLM host, so in the product each LLM request makes one attempt with no pacing.** All
+    four adapters stopped at their row step: P3-T07's open line ("LLM rows carry no fixed rate") is undecided, `docs/07` §7.3
+    says "from provider prefs" and no such pref exists, and `TokenBucket` refuses a non-positive rate. Tests drive
+    `LLM_RETRY_BUDGET` directly. Needs an owner number per host (or one shared number) before the four rows can land.
+
+261. **Recorded, not cards.** (a) `ChatRequest` has no effort member, so OpenAI `reasoning`, Gemini `thinking_level` are never
+    sent and three adapters carry a local `Effort` copy (`docs/07` §4.3 decision). (b) Provider display-name strings do not
+    exist and the four adapters disagree on the id (`research-helper-provider-<id>` ×3, `research-helper-llm-provider-openai`);
+    provider names are not translated (`docs/08` §10.3), so they belong on `KO_PRESENT` verbatim — one coordinated edit, likely
+    with `P3-T04`. (c) OpenRouter's guardrail 404 has no user-facing message (`BadRequestError` is not user-facing). (d)
+    `ModelInfo` cannot say "unknown" (OpenAI uses 0). (e) Anthropic needs `maxOutputTokens` on every request or a fetched
+    model list. (f) Gemini's Interactions safety block, spend cap and model-list paging are undocumented; nothing invented.
+    (g) `docs/07` §2.3 says `llm/` imports only `core/`/`model/`, but `Secret` lives in `src/prefs/` (lint allows it).
+    (h) Stale "No adapter yet" comments in `registerProviders.ts` and `container.ts` step 6b. (i) `validateCredentials` is a
+    placeholder in three adapters and minimal in Anthropic's (`P3-T14`). (j) All fixtures are synthetic; recording is `P3-T30`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

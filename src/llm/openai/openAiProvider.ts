@@ -1,0 +1,302 @@
+/**
+ * The OpenAI adapter: `docs/07` §4.3's `LLMProvider` over the Responses API.
+ *
+ * **Scope.** `P3-T08`. OpenAI goes through the same internal path as every
+ * other provider — the router (`src/llm/router.ts`), the one HTTP client
+ * (`src/core/http/client.ts`), the one error map
+ * (`src/llm/shared/errorMap.ts`) — and differs only here. The wire shapes are
+ * `./mapper.ts`'s pure functions. Constructed and registered by
+ * `registerProviders` in `src/bootstrap/registerProviders.ts`, the single
+ * wiring point (`docs/07` §11.2 step 9).
+ *
+ * **Endpoints.** `POST {base}/responses` and `GET {base}/models`, where
+ * `{base}` comes from the base-URL resolver (`src/llm/shared/baseUrl.ts`). The
+ * documented base, `https://api.openai.com/v1`, already ends in `/v1`, so a
+ * path is appended as `/responses`, never `/v1/responses` (`P3-T06`
+ * contradiction 8); an override is a gateway's own base and is used as given.
+ *
+ * **Retries and waits (`P3-T38`, `plan/00` §6 item 244).** There is no retry
+ * loop here. Every request carries `mapErrorResponse`, which hands a 400-or-
+ * above answer to `mapProviderError` inside the client's attempt, so a spend
+ * cap (`insufficient_quota`) ends after one attempt as `QuotaExceededError`
+ * while an ordinary 429 is retried by the client's one `withRetry`. A 2xx is
+ * handed to `mapProviderError` here, outside the loop, for the refusal row.
+ * Every request waits up to `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240).
+ *
+ * **The key (D5, `docs/09` §2.1).** Read from the `SecretStore` on every call,
+ * wrapped in `Secret` at once, and exposed exactly once, in
+ * {@link authorizationHeaders}. A missing key is `MissingCredentialError` with
+ * no request sent. The only header record ever logged has been through
+ * `loggableHeaders` (`src/core/errors.ts`), the one redactor's header form.
+ *
+ * **`isConfigured()` is synchronous; the keystore is not.** `docs/07` §4.3
+ * makes `isConfigured()` return a plain boolean, and every `SecretStore`
+ * member returns a promise. So `isConfigured()` answers whether a keystore is
+ * installed at all (`installServices` passes `undefined` when the startup
+ * probe did not reach tier 1), and the key itself is looked up in that
+ * keystore by `chat()` and `listModels()` before any request — the router has
+ * already required `openai.keyPresent`. A cached presence answer was rejected:
+ * after a key is entered it would stay "absent" for one call.
+ */
+
+import type { Clock } from "../../core/clock";
+import { createSystemClock } from "../../core/clock";
+import {
+  ConfigurationError,
+  LLMError,
+  loggableHeaders,
+  MissingCredentialError,
+} from "../../core/errors";
+import {
+  type ErrorResponseMapper,
+  type HttpClient,
+  httpRequest,
+  type HttpResponse,
+} from "../../core/http/client";
+import type { Logger } from "../../core/logger";
+import { LLM_ATTEMPT_TIMEOUT_MS } from "../../core/rateLimit/hostLimiter";
+import type { SecretId, SecretStore } from "../../core/secretStore";
+import { Secret } from "../../prefs/secrets";
+import { type BaseUrlResolver, DEFAULT_BASE_URLS } from "../shared/baseUrl";
+import { mapProviderError } from "../shared/errorMap";
+import { estTokens } from "../shared/tokenEstimate";
+import type {
+  ChatRequest,
+  ChatResponse,
+  CredentialCheckResult,
+  LLMCallContext,
+  LLMProvider,
+  ModelInfo,
+} from "../types";
+
+import {
+  buildResponsesBody,
+  parseResponsesJson,
+  toChatResponse,
+  toModelInfos,
+} from "./mapper";
+
+/** This adapter's `ProviderId`. */
+export const OPENAI_PROVIDER_ID = "openai";
+
+/** The keystore id this adapter reads (`docs/09` §1.7's `SecretId`). */
+export const OPENAI_SECRET_ID: SecretId = "llm.openai";
+
+/** `POST /v1/responses`, relative to a base that already ends in `/v1` (`docs/03` §2.1). */
+export const RESPONSES_PATH = "/responses";
+
+/** `GET /v1/models`, relative to the same base (`docs/03` §9.1). */
+export const MODELS_PATH = "/models";
+
+/**
+ * The provider's display-name message id. **No bundle entry exists yet**: no
+ * surface renders a provider name until `P3-T04`'s pane blocks, which add the
+ * string under `plan/04` §0.2 item 1 (reported with `P3-T08`).
+ */
+export const OPENAI_DISPLAY_NAME_KEY = "research-helper-llm-provider-openai";
+
+/** The documented host, the `rateLimitKey` (`docs/03` §2.1). */
+export const OPENAI_RATE_LIMIT_KEY = new URL(DEFAULT_BASE_URLS.openai).host;
+
+/** What {@link createOpenAiProvider} needs. */
+export interface OpenAiProviderDeps {
+  /**
+   * The HTTP client. Defaults to the installed one, through `httpRequest` —
+   * `docs/13` §2.2's substitution point, which `P3-T30`'s replay transport
+   * replaces. A unit test injects one over a fake transport.
+   */
+  readonly http?: HttpClient | undefined;
+  /** The tier-1 keystore, or `undefined` when this build has none. */
+  readonly secrets: SecretStore | undefined;
+  /** `registerProviders`' resolver; asked on every request. */
+  readonly baseUrls: BaseUrlResolver;
+  /** For `latencyMs` and `mapProviderError`'s `Retry-After`. Defaults to the system clock. */
+  readonly clock?: Clock;
+  /** Debug lines; headers only through `loggableHeaders`. */
+  readonly logger?: Logger;
+}
+
+/**
+ * The request headers, with the key. **The one `expose()` call site** of this
+ * adapter (`docs/09` §2.1, `P3-T01`).
+ *
+ * @param key - the wrapped key
+ * @returns `Authorization` and, for a body, `Content-Type` (`docs/03` §2.2)
+ */
+export function authorizationHeaders(
+  key: Secret,
+  withBody: boolean,
+): Record<string, string> {
+  return {
+    Authorization: `Bearer ${key.expose()}`,
+    ...(withBody && { "Content-Type": "application/json" }),
+  };
+}
+
+/**
+ * Join a base URL and a path without a doubled slash or a doubled `/v1`.
+ *
+ * @param base - a resolved base URL, no trailing slash
+ * @param path - {@link RESPONSES_PATH} or {@link MODELS_PATH}
+ * @returns the request URL
+ */
+export function joinUrl(base: string, path: string): string {
+  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
+
+/**
+ * Build the OpenAI adapter.
+ *
+ * @param deps - see {@link OpenAiProviderDeps}
+ * @returns the `LLMProvider`
+ */
+export function createOpenAiProvider(deps: OpenAiProviderDeps): LLMProvider {
+  const clock = deps.clock ?? createSystemClock();
+  const http: HttpClient = deps.http ?? {
+    request: (method, url, options) => httpRequest({ ...options, method, url }),
+  };
+  /** The last `listModels()` answer, for `getModel()`; enrichment is `P3-T13`'s. */
+  let known = new Map<string, ModelInfo>();
+
+  /** Read the key from the keystore and wrap it; no request without one. */
+  async function readKey(): Promise<Secret> {
+    const store = deps.secrets;
+    if (store === undefined)
+      throw new MissingCredentialError(OPENAI_PROVIDER_ID);
+    const raw = await store.get(OPENAI_SECRET_ID);
+    if (raw === undefined || raw === "") {
+      throw new MissingCredentialError(OPENAI_PROVIDER_ID);
+    }
+    return new Secret(raw);
+  }
+
+  /** `P3-T38`'s hook: the error answer, read before the client classifies it. */
+  function errorHook(modelId: string): ErrorResponseMapper {
+    return (response, nowEpochMs) =>
+      mapProviderError(
+        OPENAI_PROVIDER_ID,
+        modelId,
+        response.status,
+        (name) => response.header(name),
+        response.body,
+        nowEpochMs,
+      );
+  }
+
+  /**
+   * The checks every returned answer gets, outside the retry loop: a refusal
+   * on a 2xx, a non-2xx the hook left alone, and a body that is not JSON.
+   */
+  function checkedBody(
+    response: HttpResponse,
+    modelId: string,
+  ): Record<string, unknown> {
+    const mapped = mapProviderError(
+      OPENAI_PROVIDER_ID,
+      modelId,
+      response.status,
+      (name) => response.header(name),
+      response.body,
+      clock.now(),
+    );
+    if (mapped !== undefined) throw mapped;
+    const parsed = parseResponsesJson(response.body);
+    if (parsed === undefined) {
+      throw new LLMError(
+        OPENAI_PROVIDER_ID,
+        modelId,
+        `HTTP ${response.status} from openai: the body is not a JSON object`,
+        { httpStatus: response.status },
+      );
+    }
+    return parsed;
+  }
+
+  async function send(
+    method: "GET" | "POST",
+    path: string,
+    modelId: string,
+    ctx: LLMCallContext,
+    body?: string,
+  ): Promise<HttpResponse> {
+    ctx.token.throwIfCancelled();
+    const key = await readKey();
+    const headers = authorizationHeaders(key, body !== undefined);
+    const url = joinUrl(deps.baseUrls.resolveBaseUrl(OPENAI_PROVIDER_ID), path);
+    deps.logger?.debug("openai request", {
+      method,
+      path,
+      model: modelId,
+      headers: loggableHeaders(headers),
+    });
+    return http.request(method, url, {
+      headers,
+      ...(body !== undefined && { body }),
+      timeoutMs: LLM_ATTEMPT_TIMEOUT_MS,
+      token: ctx.token,
+      mapErrorResponse: errorHook(modelId),
+    });
+  }
+
+  return {
+    id: OPENAI_PROVIDER_ID,
+    displayNameKey: OPENAI_DISPLAY_NAME_KEY,
+    rateLimitKey: OPENAI_RATE_LIMIT_KEY,
+
+    isConfigured(): boolean {
+      return deps.secrets !== undefined;
+    },
+
+    validateCredentials(): Promise<CredentialCheckResult> {
+      // `P3-T14` builds the Test-key path for all four adapters (its Files
+      // list this one). Until then nothing calls this, and it sends nothing.
+      return Promise.reject(
+        new ConfigurationError(
+          "validateCredentials() for openai is P3-T14's and not built yet",
+          { providerId: OPENAI_PROVIDER_ID },
+        ),
+      );
+    },
+
+    async listModels(ctx: LLMCallContext): Promise<readonly ModelInfo[]> {
+      const response = await send("GET", MODELS_PATH, "", ctx);
+      const models = toModelInfos(checkedBody(response, ""));
+      known = new Map(models.map((model) => [model.id, model]));
+      return models;
+    },
+
+    getModel(modelId: string): ModelInfo | undefined {
+      return known.get(modelId);
+    },
+
+    async chat(
+      request: ChatRequest,
+      ctx: LLMCallContext,
+    ): Promise<ChatResponse> {
+      const body = JSON.stringify(
+        buildResponsesBody(request, {
+          maxOutputTokensLimit: known.get(request.model)?.maxOutputTokens,
+        }),
+      );
+      const started = clock.now();
+      const response = await send(
+        "POST",
+        RESPONSES_PATH,
+        request.model,
+        ctx,
+        body,
+      );
+      const parsed = checkedBody(response, request.model);
+      return toChatResponse(parsed, {
+        request,
+        latencyMs: Math.max(0, clock.now() - started),
+      });
+    },
+
+    countTokens(text: string): number {
+      // `docs/03` §10.1: OpenAI has no counting endpoint. The one heuristic
+      // (`P3-T06`); every result is an estimate at the call site.
+      return estTokens(text);
+    },
+  };
+}

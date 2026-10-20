@@ -1613,7 +1613,7 @@ export async function installServices(
   // 6b. The LLM layer (`P3-T06`): settings over the typed prefs, the provider
   //     registry, the base-URL resolver and `docs/07` §4.3's router. No
   //     adapter yet — `P3-T07`–`P3-T10` add them inside `registerProviders`.
-  const llm = registerProviders({ logger });
+  const llm = registerProviders({ logger, http, secrets });
 
   // 6c. The plugin database, opened once here (`P3-T33`; `plan/00` §6 item
   //     249, owner, 2026-10-21), and `docs/07` §4.1's cache over it. The open
