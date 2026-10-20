@@ -2943,6 +2943,24 @@ exits non-zero on failure, and the phase can be signed off.
   this card's automation should reduce.
 
 **Files.**
+> **Split 2026-10-21 by the coordinator, at the owner's request ("P2-T16 준비"), and checked under rule 10 before launch.**
+> **Part A (now):** steps 2, 3, 4, 6 and 7 and the Done-when items they prove — everything that does not need
+> `P2-T13`'s human labels. **Part B (after the owner labels `P2-T13`'s 267 pairs):** step 5 (`npm run dedup:report`
+> ≥ 0.99 / ≥ 0.90), the gate inventory of Done-when 7, and the phase sign-off. Measured on the tree at `77b10f3`:
+> - The integration runner collects `*.spec.ts`; the new spec is **`test/integration/pipeline/searchImportMultiSource.spec.ts`**
+>   (the empty `test/integration/pipeline/` directory exists). `test/integration/_suite-guards.spec.ts` refuses real
+>   `Zotero.Translate.Search` suite-wide.
+> - **Step 1 needs no new recording:** `P2-T13`'s corpus already holds one query recorded across sources
+>   (`DEDUP_CORPUS_SEARCHES` in `test/support/dedupCorpusRecordedRequests.ts`) and same-paper sets from ≥ 3 sources
+>   (DESeq2, Hamilton I/II, UniProt 2023, …). Replay those; do not create `test/fixtures/dedup/cross-indexed-paper/`
+>   if a committed set serves. Semantic Scholar's `corpus-q1` is a recorded 429 — usable as step 3's 429 source. **No
+>   live request** in Part A; a recording would need the owner's budget.
+> - Files beyond the list: `test/support/*RecordedRequests.ts` (read), `test/contract/_transport.ts` /
+>   `test/support/fixtureReplay.ts` (replay with latency; the replay client now carries the §7.3 retry policy),
+>   `src/bootstrap/registerPipelines.ts` and `src/bootstrap/container.ts` (read, to drive the real pipeline), and
+>   `package.json` (`bench:search`). `.github/workflows/ci.yml` exists; its `integration` job is `continue-on-error`.
+> - Step 6's string: the window now reports "Already present N" on a re-run (`P2-T17`) and "Linked N" on a plain
+>   import; assert the shipped wording through the bundle, not an English literal (the test Zotero runs on ko-KR).
 - create `test/integration/pipeline/searchImportMultiSource.test.ts`
 - create `test/fixtures/dedup/cross-indexed-paper/` (one known paper as returned by ≥ 3 sources)
 - create `scripts/bench-search.ts`
