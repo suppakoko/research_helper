@@ -1621,6 +1621,18 @@ the caller of what the card builds; if it does not, the caller is added with a d
 233. **A slow refusal retried to the cap can take about 150 s per request.** **DECIDED 2026-10-21: a 90-second total budget per
     request, retries included;** past it the request ends with its last error. `docs/07` §7.3 first.
 
+### 6.45 Raised by the Phase 3 plan review, 2026-10-20 — waits on the owner
+
+234. **Phase 3's cards were written before Phases 1–2 landed, and no longer match the tree.** A read-only review
+    (`plan/reports/phase3-plan-review.md`) found: about 28 `docs/07` §8.5 preference rows that Phase 3 reads have no row in
+    `PREFS` and no card adds them; eleven paths are "modified" but created by no card (the whole `src/core/cache/` layer,
+    `registerProviders.ts`, the job queue, `checkpoint.ts`); no card lists `installServices`/`createPipelineContextFactory`
+    or the placeholder aliases in `src/pipeline/types.ts`; four cards rest on superseded decisions (G-10 tier 3 dropped,
+    `V-8b` outline, corrected D-06-4, `V-15` OCR threshold); T01, T04 and T05 are largely landed; and three card wordings
+    break security rules (P3-T30 reads keys from `.env` and has no spend gate; P3-T01 would fork the redactor). The review
+    lists 21 owner decisions and recommends P3-T01 (re-scoped), P3-T24 (without step 7) and a new preference-rows card
+    first. **No card is changed until the owner decides.**
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
