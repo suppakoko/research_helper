@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -15,6 +16,7 @@ import {
   KEYISH_FIELD,
   KEY_PATTERNS,
   LLMError,
+  loggableHeaders,
   MissingCredentialError,
   NetworkError,
   OfflineError,
@@ -569,6 +571,168 @@ describe("omitSecretFields (docs/09 §2.1, P1-T42)", () => {
     omitSecretFields(input);
     expect(input).toEqual(values());
     expect("api_key" in input).toBe(true);
+  });
+});
+
+/**
+ * `P3-T01` step 2: `docs/09` §2.1 level 3, "headers are structurally
+ * excluded". Every key below is synthetic and built at run time.
+ */
+describe("loggableHeaders (docs/09 §2.1 level 3, P3-T01)", () => {
+  it("redacts Authorization by name and leaves application/json unchanged", () => {
+    const out = loggableHeaders({
+      Authorization: "Bearer " + "x".repeat(40),
+      Accept: "application/json",
+    });
+    expect(out).toEqual({
+      Authorization: "[redacted:47]",
+      Accept: "application/json",
+    });
+  });
+
+  it.each(["x-api-key", "x-goog-api-key", "Authorization", "authorization"])(
+    "redacts a %s value too short for any KEY_PATTERNS shape",
+    (name) => {
+      // Ten characters: no vendor prefix, below the hexadecimal shape and the
+      // catch-all, so only the field-name rule can catch it.
+      const value = "k".repeat(10);
+      expect(redact(value)).toBe(value);
+      expect(loggableHeaders({ [name]: value })).toEqual({
+        [name]: "[redacted:10]",
+      });
+    },
+  );
+
+  it("runs every other value through redact(), the one redactor", () => {
+    const samples = [
+      "see sk-ant-" + "x".repeat(30) + " here",
+      "0123456789abcdef".repeat(2),
+      "z".repeat(40),
+      "f".repeat(31),
+      "text/event-stream",
+    ];
+    for (const value of samples) {
+      expect(loggableHeaders({ "X-Note": value })["X-Note"]).toBe(
+        redact(value),
+      );
+    }
+    expect(loggableHeaders({ "X-Note": samples[0] ?? "" })).toEqual({
+      "X-Note": "see [redacted:37] here",
+    });
+  });
+
+  it("keeps every header name, in order, and leaves the input untouched", () => {
+    const input = {
+      "Content-Type": "application/json",
+      "x-api-key": "k".repeat(12),
+      "User-Agent": "research-helper/0.0.2",
+    };
+    const before = { ...input };
+    const out = loggableHeaders(input);
+    expect(Object.keys(out)).toEqual(Object.keys(input));
+    expect(input).toEqual(before);
+    expect(out).not.toBe(input);
+  });
+});
+
+/**
+ * `P3-T01` **Done when**: "`KEY_PATTERNS` still has exactly eight entries and
+ * no new pattern exists anywhere in `src/`". `docs/09` §2.1 has one redactor;
+ * this asserts no second one grew beside it.
+ *
+ * Every `.ts` file under `src/` is parsed with the TypeScript compiler, and
+ * every regular-expression literal and every `RegExp(...)` argument outside
+ * `src/core/errors.ts` is checked for a credential fingerprint — a vendor
+ * prefix, a `Bearer` match, or one of `KEY_PATTERNS`' run lengths. Parsing,
+ * not grepping, because comments may legitimately quote a pattern (one in
+ * `src/ui/viewModels/searchImportViewModel.ts` does).
+ */
+describe("one redactor in src/ (docs/09 §2.1, P3-T01)", () => {
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+  const srcDir = resolve(repoRoot, "src");
+  const ERRORS = "src/core/errors.ts";
+
+  /** Every regex the tree declares, with the file it is in. */
+  const found: { readonly file: string; readonly text: string }[] = [];
+  /** Files declaring an identifier the redactor owns. */
+  const declarers: { readonly file: string; readonly name: string }[] = [];
+  const OWNED = new Set([
+    "KEY_PATTERNS",
+    "KEYISH_FIELD",
+    "redact",
+    "loggableHeaders",
+  ]);
+
+  for (const entry of readdirSync(srcDir, {
+    recursive: true,
+    withFileTypes: true,
+  })) {
+    if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
+    const path = join(entry.parentPath, entry.name);
+    const file = relative(repoRoot, path).replaceAll("\\", "/");
+    const sf = ts.createSourceFile(
+      path,
+      readFileSync(path, "utf8"),
+      ts.ScriptTarget.ES2022,
+      true,
+    );
+    const visit = (node: ts.Node): void => {
+      if (node.kind === ts.SyntaxKind.RegularExpressionLiteral) {
+        found.push({ file, text: node.getText(sf) });
+      } else if (
+        (ts.isNewExpression(node) || ts.isCallExpression(node)) &&
+        node.expression.getText(sf) === "RegExp"
+      ) {
+        found.push({ file, text: node.arguments?.[0]?.getText(sf) ?? "" });
+      } else if (
+        (ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node)) &&
+        node.name !== undefined &&
+        ts.isIdentifier(node.name) &&
+        OWNED.has(node.name.text)
+      ) {
+        declarers.push({ file, name: node.name.text });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+
+  /** `KEY_PATTERNS`' distinguishing pieces: prefixes and run lengths. */
+  const FINGERPRINTS = [
+    "sk-",
+    "AIza",
+    "Bearer",
+    "{20,}",
+    "{32,}",
+    "{35}",
+    "{40,}",
+  ];
+
+  it("keeps exactly eight KEY_PATTERNS entries", () => {
+    expect(KEY_PATTERNS).toHaveLength(8);
+  });
+
+  it("finds the eight patterns in src/core/errors.ts, so the scan is live", () => {
+    const own = found.filter((r) => r.file === ERRORS).map((r) => r.text);
+    for (const re of KEY_PATTERNS) {
+      expect(own).toContain(`/${re.source}/${re.flags}`);
+    }
+  });
+
+  it("declares no credential pattern anywhere else in src/", () => {
+    const sources = new Set(KEY_PATTERNS.map((re) => re.source));
+    const offenders = found.filter(
+      (r) =>
+        r.file !== ERRORS &&
+        (FINGERPRINTS.some((f) => r.text.includes(f)) ||
+          [...sources].some((s) => r.text.includes(s))),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it("declares KEY_PATTERNS, KEYISH_FIELD, redact and loggableHeaders only in src/core/errors.ts", () => {
+    expect(declarers.filter((d) => d.file !== ERRORS)).toEqual([]);
+    expect(declarers.map((d) => d.name).sort()).toEqual([...OWNED].sort());
   });
 });
 

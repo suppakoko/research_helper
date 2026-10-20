@@ -12,8 +12,8 @@
  * and `userFacing` values and constructor signatures are
  * `docs/07-architecture-and-data-model.md` §10.1's, verbatim.
  * {@link SerializedError} is §5.2's, verbatim. {@link KEYISH_FIELD},
- * {@link KEY_PATTERNS} and {@link redact} are
- * `docs/09-security-privacy-and-api-keys.md` §2.1's, verbatim.
+ * {@link KEY_PATTERNS}, {@link redact} and {@link loggableHeaders} (`P3-T01`)
+ * are `docs/09-security-privacy-and-api-keys.md` §2.1's, verbatim.
  *
  * ## Why the redaction primitives live in this file
  *
@@ -223,6 +223,40 @@ export function omitSecretFields<V>(
   const out: Record<string, V> = {};
   for (const [name, value] of Object.entries(values)) {
     if (!KEYISH_FIELD.test(name)) out[name] = value;
+  }
+  return out;
+}
+
+/**
+ * A header map's loggable summary — `docs/09` §2.1 level 3, "headers are
+ * structurally excluded", verbatim apart from the `export`.
+ *
+ * A header whose **name** {@link KEYISH_FIELD} matches (`Authorization`,
+ * `x-api-key`, `x-goog-api-key`, …) becomes `[redacted:<length>]` whatever its
+ * value looks like, so a key too short for any {@link KEY_PATTERNS} shape still
+ * cannot pass. Every other value goes through {@link redact}, the one redactor;
+ * this function adds no pattern of its own (`P3-T01` **Do NOT**).
+ *
+ * Unlike {@link omitSecretFields} the entry is **kept**, with its length: a
+ * header summary exists to answer "did this request carry a credential, and
+ * roughly what shape", and an absent `Authorization` line would answer the
+ * first half wrongly.
+ *
+ * The HTTP client (`logExchange` in `src/core/http/client.ts`) logs no header
+ * today, so this function has no caller yet; the four LLM adapters
+ * (`P3-T07`–`P3-T10`) are the first code that builds credential headers. A
+ * header object must never be logged other than through this function.
+ *
+ * @param h - request or response headers, as sent or received
+ * @returns a new map with the same names, each value redacted; `h` is not
+ *   touched
+ */
+export function loggableHeaders(
+  h: Record<string, string>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(h)) {
+    out[k] = KEYISH_FIELD.test(k) ? `[redacted:${v.length}]` : redact(v);
   }
   return out;
 }

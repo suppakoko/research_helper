@@ -104,6 +104,35 @@ function forbidUnscopedRegistration({ manager, method, via }) {
   };
 }
 
+/**
+ * A `no-restricted-syntax` entry banning `debug: true` in an object literal
+ * passed to `Zotero.HTTP.request` — `docs/09` §2.1: "The plugin must never pass
+ * `debug: true` … A lint rule forbids it." Zotero's `debug` option logs
+ * response text, and an LLM response carries the user's paper content (P3-T01).
+ *
+ * It is appended to the scoped-registration block's array rather than given a
+ * block of its own: under flat-config precedence a later block that sets
+ * `no-restricted-syntax` for the same files *replaces* the earlier array, which
+ * would silently drop the FR-56 selectors.
+ *
+ * The key may be an identifier or a string literal. `[value.value=true]` is
+ * esquery's string comparison, so it also catches `debug: "true"`. What it
+ * cannot see is an options object built elsewhere and passed by name; the one
+ * real call site, `createZoteroHttpTransport` in `src/zotero/zoteroApi.ts`,
+ * forwards `HttpTransportOptions` from `src/core/http/client.ts`, a type that
+ * declares no `debug` member, so the compiler closes that path instead.
+ */
+const FORBID_HTTP_DEBUG = {
+  selector:
+    `CallExpression[callee.object.object.name='Zotero']` +
+    `[callee.object.property.name='HTTP'][callee.property.name='request']` +
+    ` > ObjectExpression > Property` +
+    `:matches([key.name='debug'], [key.value='debug'])[value.value=true]`,
+  message:
+    "docs/09 §2.1: never pass `debug: true` to Zotero.HTTP.request; it logs " +
+    "response text, and LLM responses carry the user's paper content.",
+};
+
 export default zotero({
   overrides: [
     {
@@ -238,6 +267,7 @@ export default zotero({
         "no-restricted-syntax": [
           "error",
           ...REGISTRATION_APIS.map(forbidUnscopedRegistration),
+          FORBID_HTTP_DEBUG,
         ],
       },
     },
