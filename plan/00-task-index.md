@@ -1726,6 +1726,22 @@ the caller of what the card builds; if it does not, the caller is added with a d
     (`createZoteroHttpTransport` holds `Zotero.HTTP` in a local), which `HttpTransportOptions` closes by having no `debug`
     member; the card's Verify line used a Vitest filter that matches nothing (corrected to `-- secrets errors`).
 
+### 6.48 Owner decisions on the open lines of P3-T05, P3-T32 and P3-T36, 2026-10-20
+
+240. **P3-T05 (LLM retries and wait).** **DECIDED 2026-10-20 (owner):** LLM hosts use the shipped decorrelated jitter,
+    5 attempts, 1000 ms base, 60 s cap (`docs/03` §11.6 sketch numbers become the `docs/07` §7.3 LLM row); **one LLM
+    attempt may wait up to 3 minutes** (literature hosts keep the 60 s `timeoutSeconds`), because a long full-text
+    generation can exceed 60 s. The batch budget stays a pipeline-level limit for `P3-T17`.
+
+241. **P3-T32 (the three ⚠ preference names).** **DECIDED 2026-10-20 (owner):** `privacy.egressAcknowledged`,
+    `llm.tokenEstimateCalibration` and `cache.lastSeenPromptVersions` ship as written; `docs/07` §8.5 drops the ⚠ marks.
+
+242. **P3-T36 (scope of the redaction gate).** **DECIDED 2026-10-20 (owner):** the gate runs over every persisted record,
+    `StoredSummary` content included, and a record whose content the gate changed carries a visible "partly redacted"
+    mark, because `redact()`'s 40-character catch-all can also alter a gene or protein sequence quoted from a paper.
+
+    The three cards were started the same day.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
