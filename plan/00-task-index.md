@@ -1790,6 +1790,21 @@ the caller of what the card builds; if it does not, the caller is added with a d
     shapes are undocumented (`P3-T10`). Vitest filters are substrings: every Phase 3 card's `a|b` Verify filter matches
     nothing.
 
+### 6.50 Owner decisions on the open lines of P3-T06, P3-T33 and P3-T34, 2026-10-21
+
+248. **P3-T06 (`LLMRouter`).** **DECIDED 2026-10-21 (owner):** declare `LLMRouter` in `docs/07` §4.3/§4.5 as the card
+    recommends — one entry point that resolves the configured provider and the per-purpose model — before building it.
+
+249. **P3-T33 (where the plugin database opens).** **DECIDED 2026-10-21 (owner):** open it once in `installServices` at
+    startup and share the one connection (provenance, cache, summaries, jobs) instead of `openProvenanceStore` alone.
+
+250. **P3-T34 (unfinished jobs after a restart).** **DECIDED 2026-10-21 (owner): resume automatically** — against the
+    card's recommendation (no automatic restart). A resumed job must still pass every spend guard: the confirm threshold,
+    both ceilings (pause and ask, item 234), the privacy/egress acknowledgement, and a visible notice that it resumed;
+    already-cached items are skipped. `docs/07` §7.6 moves first.
+
+    Wave order (owner, same day): `P3-T06`, `P3-T18`, `P3-T34` first; then `P3-T33` and `P3-T02`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
