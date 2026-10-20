@@ -888,6 +888,8 @@ jobs:
 
 > **Unverified:** whether `zotero-plugin test` downloads a Zotero build itself in CI or requires one to be provisioned. The scaffold's docs state headless mode activates automatically on CI and supports Ubuntu 22.04/24.04, which implies it handles acquisition, but this must be confirmed in Phase 0 (spike V-5). If a Zotero build must be provisioned, add a step that downloads the Zotero Linux tarball and sets `ZOTERO_PLUGIN_ZOTERO_BIN_PATH` before running the tests. Until confirmed, mark the `integration` job `continue-on-error: true` so it does not block PRs on infrastructure uncertainty.
 
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 236(e)).** V-5 settled the question in Phase 0 (a pinned Zotero is provisioned and `ZOTERO_PLUGIN_ZOTERO_BIN_PATH` set), and after `P2-T37` the full suite is green (171 of 171 on 10.0.3). The `integration` job is therefore **no longer** `continue-on-error`: a red in-Zotero run blocks a pull request. The pinned release follows the developer machine, now **10.0.3**. The suite is load-sensitive and has an intermittent first-import hang (`plan/reports/P2-T16-partA.md`, `plan/reports/P2-T37.md`); a red run is re-run before it is called a regression. The beta-channel job below stays `continue-on-error`.
+
 ### 5.2 `.github/workflows/release.yml`
 
 ```yaml

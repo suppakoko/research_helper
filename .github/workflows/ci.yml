@@ -13,8 +13,9 @@
 # - The contract-test step and the localization-completeness step are
 #   commented placeholders (card steps 3 and 6): their inputs do not exist in
 #   Phase 0.
-# - The `integration` job is `continue-on-error: true` (docs/13 §5.1's own
-#   instruction until V-5 is settled), provisions a pinned Zotero release and
+# - The `integration` job blocks pull requests since 2026-10-20 (docs/13
+#   §5.1; it was `continue-on-error` until V-5 settled and P2-T37 made the
+#   suite green), provisions a pinned Zotero release and
 #   sets ZOTERO_PLUGIN_ZOTERO_BIN_PATH (card step 5, P0-T13 findings), runs on
 #   ubuntu-24.04 rather than ubuntu-latest, and carries a timeout. Reasons are
 #   next to each of those lines.
@@ -264,16 +265,18 @@ jobs:
     # Pinned so that a future ubuntu-latest image cannot silently skip them.
     runs-on: ubuntu-24.04
     needs: [build]
-    # docs/13 §5.1: must not block PRs until V-5 is settled.
-    continue-on-error: true
+    # docs/13 §5.1, decided 2026-10-20 (plan/00 §6 item 236(e)): V-5 is settled
+    # and the suite is green after P2-T37, so a red in-Zotero run now blocks a
+    # pull request. The suite is load-sensitive; re-run a red run once before
+    # treating it as a regression.
     # P0-T13 saw the scaffold miss Zotero's exit and hang for over five
     # minutes; without a limit a hang would hold the runner for six hours.
     timeout-minutes: 20
     env:
-      # Pinned to the Zotero release the developer machine runs (P0-T13:
-      # 10.0.2). Left unset, scaffold 0.9.2 downloads the latest *beta* build
-      # on every run instead.
-      ZOTERO_VERSION: "10.0.2"
+      # Pinned to the Zotero release the developer machine runs (P0-T13 found
+      # 10.0.2; the machine has run 10.0.3 since 2026-10-07). Left unset,
+      # scaffold 0.9.2 downloads the latest *beta* build on every run instead.
+      ZOTERO_VERSION: "10.0.3"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -313,16 +316,14 @@ jobs:
       # excluding semanticscholar) is an in-Zotero spec, collected by the
       # runner's `test.entries` like every other. Checked by name here so a
       # rename or deletion fails loudly rather than shrinking the run. While
-      # this job is `continue-on-error`, a red run of that spec does not block
-      # a pull request either.
+      # this job blocks pull requests (2026-10-20), a red run of that spec does
+      # too.
       - name: Assert the Phase 2 end-to-end spec is present (P2-T16)
         run: test -f test/integration/pipeline/searchImportMultiSource.spec.ts
 
       # Needs network: the runner fetches mocha.js from cdn.jsdelivr.net and
       # chai.js from www.chaijs.com, unpinned, at run time (P0-T13).
       - name: Run in-Zotero tests (headless)
-        env:
-          FIXTURE_MODE: replay
         run: npm run test:integration -- --exit-on-finish --abort-on-fail
 
       # Kept as docs/13 §5.1 lists it. Note (P0-T13): a test run inherits

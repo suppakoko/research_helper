@@ -1048,7 +1048,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `registerUI.ts`'s neighbours — fold it where it fits). Not a Phase 2 finishing condition.
     **DECIDED 2026-10-20 (owner, with item 235): retired by `P2-T37`**, which passes the work key at
     both call sites. Item 235 showed that this item does block a Phase 2 finishing condition (FR-51),
-    so the last sentence above no longer holds. Not yet done; `P2-T37` is `TODO`.
+    so the last sentence above no longer holds. **Done 2026-10-20 by `P2-T37`.**
 
 106. **Two library indexes over one library per run.** `src/sources/shared/dedupe.ts` (`buildLibraryIndex`,
     `matchAgainstLibrary`, keyed on `LibraryItemFields`, with title and signature buckets, no `byWorkKey`) and
@@ -1682,8 +1682,11 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `isExisting` (`src/bootstrap/registerUI.ts`) call `findExisting(work.ids)` without the work key — item 105 — and the
     library index has no PMCID lookup. **Item 105 now blocks a Phase 2 finishing condition (FR-51), so under rule 9 it
     needs a card.**
+    **DONE 2026-10-20** by `P2-T37` (`plan/reports/P2-T37.md`): both call sites pass the work key; `P2-T16` step 6 passes
+    (re-run 0 created, 98 of 98 linked); full suite 171 of 171. Left open: a merged group of two or more records with no
+    identifier can carry a key the window's single-record key differs from (`toWindowRecords`).
     **DECIDED 2026-10-20 (owner): fix it now, as card `P2-T37`** (0.5 d, ungated; depends on `P2-T36`, blocks
-    `P2-T16`). `P2-T37` also retires item 105. Not yet done; `P2-T37` is `TODO`.
+    `P2-T16`). `P2-T37` also retires item 105. **Done 2026-10-20** (`plan/reports/P2-T37.md`).
 
 236. **Observations from the same run, not cards.** (a) The window controller caches source display names resolved
     before a formatter is attached, so a window-less run shows ids; the real window always attaches one. (b) The
@@ -1693,7 +1696,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     Zotero 10.0.2 against the local 10.0.3, sets an unread `FIXTURE_MODE`, and its integration job is still
     `continue-on-error`.
     **(e) DECIDED 2026-10-20 (owner): remove `continue-on-error` from the CI integration job and pin Zotero 10.0.3,
-    once `P2-T37` has made the integration suite green.** Not yet done: the coordinator does it after `P2-T37` lands.
+    once `P2-T37` has made the integration suite green.** **Done 2026-10-20:** `continue-on-error` removed, Zotero pinned to 10.0.3, the unread `FIXTURE_MODE` dropped; `docs/13` §5.1 carries the dated decision.
     This decision covers the `continue-on-error` flag and the Zotero pin only; it does not cover the unread
     `FIXTURE_MODE` or (a)–(d).
 
