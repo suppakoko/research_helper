@@ -2194,9 +2194,14 @@ version strings are available for the cache key.
 - create `src/prompts/chunk-reduce.v1.0.0.md`
 - create `src/prompts/relevance-screen.v1.0.0.md`
 - create `src/prompts/schemas/paper-summary.v1.json`
-- modify `zotero-plugin.config.ts` (how the `.md` files reach the bundle — see the open line)
-- create `typings/prompts.d.ts` (a module declaration for `*.md`, if the open line chooses a loader)
+- ~~modify `zotero-plugin.config.ts` (how the `.md` files reach the bundle — see the open line)~~
+  **Corrected 2026-10-20:** not modified; the owner's decision below needs no build setting.
+- create `src/prompts/bundled.ts` (step 7's wiring module; added 2026-10-20; callers: `P3-T25`,
+  `P3-T26`, `P3-T27`)
+- create `typings/prompts.d.ts` (the `declare module "*.md"` typing)
 - create `test/unit/prompts/registry.test.ts`
+- create `test/integration/prompts.spec.ts` (step 7's proof; added 2026-10-20)
+- modify `docs/12-prompt-library.md` §17.3 (the decision note; added 2026-10-20)
 
 **Do.**
 1. Transcribe the five prompts from `docs/12` §3–§7 verbatim into versioned files with the §17.3
@@ -2205,17 +2210,26 @@ version strings are available for the cache key.
 3. The registry: parse front matter, expose `{ id, version, cacheEpoch, system, user, schema,
    defaultTemperature, defaultMaxTokens }`, render `{{PLACEHOLDER}}`s.
 4. Validate at load: a version, a positive integer `cacheEpoch`, every placeholder declared and
-   every declared variable used; a malformed file fails the build.
+   every declared variable used; ~~a malformed file fails the build.~~ **Corrected 2026-10-20:** a
+   malformed file fails `npm run test` and `test/integration/prompts.spec.ts`; `npm run build`
+   inlines the text without parsing it, so the build alone does not fail (`docs/12` §17.3).
 5. Temperatures and `max_tokens` from `docs/06` §11.1 and §5.2; `RELEVANCE_SCREEN` from `docs/12`
    §3 (`max_tokens` derived per call from the batch size).
-6. Export `PROMPT_VERSIONS` for `P3-T26`.
-7. Make the `.md` files reach the bundle per the open line, and prove it on the built artifact.
+6. Export `PROMPT_VERSIONS` for `P3-T26` (from `src/prompts/bundled.ts`).
+7. Make the `.md` files reach the bundle per the decision below, and prove it on a built bundle.
 
-> **Open — recommended:** add an esbuild text loader for `.md`
-> (`loader: { ".md": "text" }` in `zotero-plugin.config.ts`'s `esbuildOptions`) and a
-> `declare module "*.md"` typing, so prompts are imported as strings and bundled into the one
-> script — rather than adding `.md` to `assets`, which would also ship `addon/content/icons/README.md`
-> (the config's own comment). Changes `docs/12` §17.3. (Review §4 item 20.)
+> **Decided 2026-10-20 (owner, `plan/00` §6 items 237 and 238):** import attributes. One wiring
+> module, `src/prompts/bundled.ts`, imports the five `.md` files with
+> `import x from "./name.v1.0.0.md" with { type: "text" }`, builds the registry once through
+> `createPromptRegistry`, and exports `PROMPT_REGISTRY`, `PROMPT_VERSIONS` and
+> `PROMPT_SOURCE_FILES`; `typings/prompts.d.ts` declares `*.md`. No build setting changes: no
+> esbuild loader in `zotero-plugin.config.ts` (it would break the scaffold's separate test bundle)
+> and no `vitest.config.ts` change. Unit tests never import the wiring module; they pass the text
+> in. `paper-summary.v1.json` stays Prettier-formatted and is imported as JSON, which esbuild
+> handles natively. Recorded in `docs/12` §17.3. Until `P3-T25` imports the wiring module, nothing
+> reachable from `src/index.ts` does, so `npm run build`'s script holds no prompt text; the proof is
+> the in-Zotero spec, whose bundle the scaffold builds separately
+> (`plan/reports/P3-T24-step7.md`).
 
 **Do NOT.**
 - Do **not** scatter prompt text as string literals, mutate a released prompt file, or write
@@ -2228,15 +2242,20 @@ version strings are available for the cache key.
 **Done when.**
 - [ ] All five prompt files load; an undeclared placeholder, `cacheEpoch: 0` or a missing
       `version` fails.
-- [ ] `paper-summary.v1.json` is byte-identical to `docs/06` §6.2's block, asserted by a test.
+- [ ] ~~`paper-summary.v1.json` is byte-identical to `docs/06` §6.2's block, asserted by a test.~~
+      **Corrected 2026-10-20 (owner, `plan/00` §6 item 238):** `paper-summary.v1.json` equals
+      Prettier's output of `docs/06` §6.2's block, asserted by a test.
 - [ ] Rendering `PAPER_SUMMARY_ABSTRACT` with a fixture leaves no `{{`.
 - [ ] `npm run build` produces a bundle in which the registry loads all five prompts (asserted on
-      the built script or by an integration check).
+      the built script or by an integration check). *(2026-10-20: met by the integration check,
+      `test/integration/prompts.spec.ts`, on the scaffold's test bundle. The `npm run build`
+      script will hold the prompts once `P3-T25` imports `src/prompts/bundled.ts`.)*
 - [ ] `npm run typecheck` exits 0.
 
 **Verify with.**
 ```bash
 npm run typecheck && npm run test:unit -- prompts/registry && npm run build
+npm run test:integration -- --exit-on-finish --abort-on-fail   # includes prompts.spec.ts (§0.2 item 3)
 ```
 
 **Notes.** `docs/12` §17.6's "keep using cached summaries from the previous prompt version" opt-in

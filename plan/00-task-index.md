@@ -1707,7 +1707,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     scaffold builds with its own fixed esbuild options; Vitest imports `.md` in neither form. `import x from "./p.md" with
     { type: "text" }` needs no loader in either esbuild build and type-checks with a `declare module "*.md"`. Until
     decided, `createPromptRegistry` takes the text as `PromptSourceFile[]` and nothing in the bundle imports `src/prompts/`.
-    **DECIDED 2026-10-20 (owner): import attributes** — one small wiring module imports the `.md` files with
+    **DONE 2026-10-20** (`plan/reports/P3-T24-step7.md`; `src/prompts/bundled.ts`, in-Zotero spec 3 of 3). **DECIDED 2026-10-20 (owner): import attributes** — one small wiring module imports the `.md` files with
     `with { type: "text" }` and a `declare module "*.md"` typing; no build-setting change. `docs/12` §17.3 moves first. P3-T24
     step 7 is wired after `P2-T37` lands (the build and the test profile are then free).
 

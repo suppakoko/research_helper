@@ -22,8 +22,9 @@ import {
 
 /*
  * `P3-T24`. The registry is tested against the real prompt files, read from
- * disk and passed in as text. That is the bundling seam: how the files reach
- * the built script is the card's open line, so nothing here depends on it.
+ * disk and passed in as text. That is the bundling seam: the files reach the
+ * built script through `src/prompts/bundled.ts` (import attributes, decided
+ * 2026-10-20), which unit tests never import, so nothing here depends on it.
  */
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");

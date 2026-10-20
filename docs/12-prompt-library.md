@@ -1752,7 +1752,24 @@ lastReviewed: 2026-09-08
 ...
 ```
 
-The registry validates on load: every prompt has a version, `cacheEpoch` is a positive integer, every `{{PLACEHOLDER}}` in the text is declared, and every declared variable is used. A malformed prompt file fails the build, not the user's run.
+The registry validates on load: every prompt has a version, `cacheEpoch` is a positive integer, every `{{PLACEHOLDER}}` in the text is declared, and every declared variable is used. ~~A malformed prompt file fails the build, not the user's run.~~ **Corrected 2026-10-20** (`P3-T24`): a malformed prompt file fails the tests, not the user's run. The registry's unit test parses every shipped file, so `npm run test` fails, and the in-Zotero spec `test/integration/prompts.spec.ts` fails on the bundled copy. `npm run build` does **not** fail on its own: `tsc` sees each file only as a `string`, and esbuild inlines the text without reading it.
+
+> **Decided 2026-10-20 (owner; `plan/00` §6 items 237–239).** Three changes to the layout above, shipped by `P3-T24`:
+>
+> 1. **A `variables` header field.** The rule "every `{{PLACEHOLDER}}` is declared" needs a place to declare them, and the example header above has none. Every prompt file therefore carries `variables:`, a block list with one `  - NAME` line for each `{{NAME}}` its user text uses:
+>
+>    ```markdown
+>    variables:
+>      - ITEM_KEY
+>      - TITLE
+>      - ABSTRACT
+>    ```
+>
+>    The registry rejects a placeholder that is not declared, a declared name the user text never uses, a name declared twice, and any placeholder in the system text (§1.1 rule 2). A name the "Input variables" section lists but the text never uses is not declared.
+> 2. **`maxTokensPerItem`.** A prompt whose output grows with the number of items in one call carries `maxTokensPerItem` in place of `defaultMaxTokens`, and every file sets exactly one of the two. `RELEVANCE_SCREEN` has `maxTokensPerItem: 100`, so its `max_tokens` is 100 × the batch size (§3). `resolveMaxTokens` in `src/prompts/index.ts` does the multiplication on each call.
+> 3. **How the prompt files reach the bundle: import attributes in one wiring module.** No build setting changes: there is no esbuild loader for `.md`, and `.md` is not added to the build's `assets`. One small module beside `index.ts`, `src/prompts/bundled.ts`, imports each active prompt file with an import attribute, `import text from "./chunk-map.v1.0.0.md" with { type: "text" }`. esbuild then inlines the file as a string, both in the plugin build and in the scaffold's separate build of the in-Zotero tests, with no setting in either. `typings/prompts.d.ts` declares `*.md` modules as strings for `tsc`. The wiring module builds the registry once, through `createPromptRegistry`, and exports it with `PROMPT_VERSIONS`, the per-prompt version map §17.4 keys on. The unit tests never import the wiring module, because Vitest cannot import a `.md` file in either form; they read the files from disk and pass the text in. A new prompt version adds one import line there.
+>
+> The tree above therefore also holds `bundled.ts` beside `index.ts`. `paper-summary.v1.json` reaches the bundle as an ordinary JSON import, which esbuild handles natively; it is kept in the repository's Prettier formatting (`plan/00` §6 item 238).
 
 ### 17.4 The version in the cache key
 

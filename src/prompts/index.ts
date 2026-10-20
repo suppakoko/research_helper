@@ -46,15 +46,16 @@
  * future prompt that contains its own `## ` headings (the trend-report prompts
  * do) cannot be mistaken for a section boundary.
  *
- * ## The bundling seam — deliberately not wired
+ * ## The bundling seam
  *
- * How the `.md` files reach the built script is `P3-T24`'s open line, which
- * the owner has not ruled on. So nothing here imports a `.md` file. The seam is
- * {@link createPromptRegistry}: whichever approach is chosen supplies a
- * `PromptSourceFile[]` — one `{ fileName, text }` per file named in
- * {@link PROMPT_FILE_NAMES} — and calls it once. `P3-T26`'s `PROMPT_VERSIONS`
- * is then that registry's {@link PromptRegistry.versions}. Until then the unit
- * test reads the files from disk and passes their text in.
+ * Nothing here imports a `.md` file. The seam is {@link createPromptRegistry}:
+ * its caller supplies a `PromptSourceFile[]` — one `{ fileName, text }` per
+ * file, including every file named in {@link PROMPT_FILE_NAMES} — and calls it
+ * once. In the bundle that caller is `./bundled.ts`, which imports the files
+ * with `with { type: "text" }` and exports the registry and `PROMPT_VERSIONS`
+ * (decided 2026-10-20, `plan/00` §6 item 237). The unit tests never import
+ * `./bundled.ts`, because Vitest cannot import a `.md` file; they read the
+ * files from disk and pass their text in.
  *
  * The one schema file is imported as JSON, which esbuild, Vitest and `tsc`
  * all handle with no configuration (the tree already imports `package.json`
