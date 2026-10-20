@@ -1613,6 +1613,14 @@ the caller of what the card builds; if it does not, the caller is added with a d
     zero search requests whenever no search is sent.** **DONE 2026-10-20**, with the three stale comments. Also: stale comments in `hostLimiter.ts` (`HOST_POLICIES` header),
     `searchImportViewModel.ts` (`UNRENDERABLE_ERROR_ROWS`) and `docs/07` §7.3 ("every other row carries `—`").
 
+### 6.44 Raised by items 230–231, decided 2026-10-21
+
+232. **The `RATE_LIMIT` row's "Retrying in {n}s" is false since retries run inside the request.** **DECIDED 2026-10-21: show
+    "too many requests, refused · try again in a moment" with the database name** (a new string; Korean drafted for review).
+
+233. **A slow refusal retried to the cap can take about 150 s per request.** **DECIDED 2026-10-21: a 90-second total budget per
+    request, retries included;** past it the request ends with its last error. `docs/07` §7.3 first.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
