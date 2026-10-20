@@ -620,13 +620,15 @@ messages become reachable strings.
    is needed, stop and say so. No second `withRetry`.
 7. Move the four LLM message ids to `ERROR_MESSAGE_IDS` with strings, per §0.2 item 1.
 
-> **Open — recommended:** use the shipped decorrelated jitter for LLM hosts too (one jitter shape in
-> the tree) rather than `docs/03` §11.6's full jitter, take §11.6's sketch numbers (5 attempts,
-> 1000 ms base, 60 s cap) as the LLM row's retry cells, and keep the 90 s `REQUEST_BUDGET_MS` as the
-> per-request bound with §11.6's batch budget ("e.g. 30 min") as a pipeline-level limit
-> (`P3-T17`). Also state whether LLM calls use `timeoutSeconds` (60 s default) per attempt, since a
-> long full-text generation can exceed it. Changes `docs/03` §11.6 and `docs/07` §7.3 (LLM/TTS row).
-> (Review §4 item 6.)
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 240):** LLM hosts use the shipped decorrelated
+> jitter (`withRetry`), with 5 attempts, 1000 ms base and 60 s cap as the LLM row's retry cells.
+> **One LLM attempt may wait up to 3 minutes**; literature hosts keep the 60 s `timeoutSeconds`.
+> The 90 s `REQUEST_BUDGET_MS` stays as shipped: it limits when a retry may start and never cuts an
+> attempt short. Timeouts are not retried automatically (item 230). §11.6's batch budget
+> ("e.g. 30 min") stays a pipeline-level limit for `P3-T17`, not built here. The 3-minute wait is a
+> named constant beside the retry budget, not a preference row (only `P3-T32` adds rows). Written
+> into `docs/03` §11.6 and `docs/07` §7.3 (the LLM/TTS row and the dated note "LLM hosts' retry
+> budget") the same day. (Review §4 item 6.)
 
 **Do NOT.**
 - Do **not** write a second `withRetry`, a full-jitter helper outside `backoff.ts`, or a second
@@ -655,7 +657,7 @@ messages become reachable strings.
 npm run typecheck && npm run test:unit -- "errorMap|hostLimiter|keys" && npm run test:integration -- --exit-on-finish --abort-on-fail
 ```
 
-**Notes.** Step 6's numbers are an open decision; steps 1–5 and 7 do not depend on it.
+**Notes.** Step 6's numbers were decided on 2026-10-20 (item 240, above).
 
 ---
 
@@ -2912,10 +2914,10 @@ Phase 7. Only the owner changes a card's state to `DONE`.
    (not derived from `PREFS`) and update its length assertion.
 4. Ship every default as §8.5 states it today, including both spend ceilings at `0` (off).
 
-> **Open — recommended:** this card adds all the rows above in one pass, and the owner confirms the
-> three ⚠ names as written — `privacy.egressAcknowledged`, `llm.tokenEstimateCalibration`,
-> `cache.lastSeenPromptVersions` — before they reach a user's `prefs.js`. Changes `docs/07` §8.5
-> (removes the ⚠ marks). (Review §4 item 1.)
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 241):** this card adds all the rows above in one
+> pass, and the three ⚠ names ship as written — `privacy.egressAcknowledged`,
+> `llm.tokenEstimateCalibration`, `cache.lastSeenPromptVersions`. `docs/07` §8.5 no longer marks
+> them ⚠ and carries a dated note saying so. (Review §4 item 1.)
 
 **Do NOT.**
 - Do **not** add a row §8.5 does not declare, a `secret: true` row, or any `*.apiKey` key (D5).
@@ -3187,15 +3189,21 @@ gate built from the existing redactor, as search provenance already does.
 
 **Do.**
 1. Export one function that walks a JSON-shaped value, puts every string through `redactText` and
-   drops every field whose name matches `KEYISH_FIELD` (`omitSecretFields`).
+   drops every field whose name matches `KEYISH_FIELD` (`omitSecretFields`). *Corrected
+   2026-10-20 (`P3-T36`):* dropping every such field would delete `inputTokens` / `outputTokens`
+   from every usage record (`KEYISH_FIELD` matches `token`), so a key-named field holding a number,
+   a boolean or `null` is kept; and the caller may name identifier fields (`contentHash`,
+   `workKey`) whose strings are copied unchanged. Both rules are in `docs/09` §2.1 for the owner to
+   confirm.
 2. Make it idempotent, like `redactSourceProvenance`.
 3. Callers: `P3-T14`, `P3-T15`, `P3-T25`, `P3-T34`.
 
-> **Open — recommended:** run the gate over every persisted record, including `StoredSummary`
-> content, and record a warning on the row when the gate changed a content string — because
-> `redact()`'s 40-character catch-all can also match a long sequence quoted from a paper (a gene or
-> protein sequence) and alter it. Changes `docs/09` §2.1 (scope of the gate) and `docs/07` §5.2.
-> (New finding of this revision.)
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 242):** the gate runs over every persisted
+> record, `StoredSummary` content included, and a record whose content the gate changed carries a
+> visible "partly redacted" mark, because `redact()`'s 40-character catch-all can also alter a gene
+> or protein sequence quoted from a paper. The mark is data on the gate's result; persisting and
+> showing it belongs to `P3-T14`, `P3-T15`, `P3-T25` and `P3-T34`. Recorded in `docs/09` §2.1
+> ("Persisted records pass one gate") and `docs/07` §5.2 ("Redaction before storage").
 
 **Do NOT.**
 - Do **not** add a pattern, a second redactor or a second gate; this function only composes
@@ -3213,6 +3221,10 @@ gate built from the existing redactor, as search provenance already does.
 ```bash
 npm run typecheck && npm run test:unit -- "core/provenance|errors"
 ```
+
+*Corrected 2026-10-20 (`P3-T36`):* Vitest 5 treats the filter as a substring, not a regular
+expression, so the quoted filter above finds no test file and exits 1. The working command passes
+two filters: `npm run typecheck && npm run test:unit -- core/provenance core/errors`.
 
 **Notes.** Created 2026-10-20 from the review's security note: `P3-T15`, `P3-T25` and `P3-T29`
 stored new records without naming a gate.

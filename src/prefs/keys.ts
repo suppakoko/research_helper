@@ -9,11 +9,13 @@
  * compile error in exactly one place rather than a silently-absent pref at run
  * time.
  *
- * **Only the twelve keys Phase 1 reads are here.** `docs/07` §8.5 declares 59
- * rows across seven blocks; `P1-T03`'s **Read first** names the subset Phase 1
- * needs and its **Do NOT** forbids declaring a preference the phase does not
- * read. Adding a row means adding it to `docs/07` §8.5 first, then here, then
- * to `addon/prefs.js`, then to the pane — §8.5's own ordering rule.
+ * **Only the keys a shipped phase reads are here.** Phase 1's twelve came with
+ * `P1-T03`; `P3-T32` added the fifty §8.5 rows Phase 3 reads and the
+ * `semanticscholar.keyPresent` key `P2-T05` had spelled inline in the schema
+ * (`plan/04` §0.2 item 2 makes `P3-T32` the only Phase 3 card that adds a key).
+ * Rows for later phases (`reportLanguage`, `tts.*`, `background.enabled`, …)
+ * are not here. Adding a row means adding it to `docs/07` §8.5 first, then
+ * here, then to `addon/prefs.js`, then to the pane — §8.5's own ordering rule.
  *
  * ## The two call conventions
  *
@@ -76,8 +78,48 @@ export const PREF_KEYS = {
   hideExisting: "hideExisting",
   contactEmail: "contactEmail",
 
+  // LLM providers & models (docs/07 §8.5, "LLM providers & models"; P3-T32).
+  llmProvider: "llmProvider",
+  openrouterModel: "openrouter.model",
+  openaiModel: "openai.model",
+  geminiModel: "gemini.model",
+  anthropicModel: "anthropic.model",
+  openrouterBaseUrl: "openrouter.baseUrl",
+  openaiBaseUrl: "openai.baseUrl",
+  geminiBaseUrl: "gemini.baseUrl",
+  anthropicBaseUrl: "anthropic.baseUrl",
+  summaryModel: "summaryModel",
+  reportModel: "reportModel",
+  screeningModel: "screening.model",
+  privacyMode: "privacy.mode",
+  privacyEgressAcknowledged: "privacy.egressAcknowledged",
+  llmTokenEstimateCalibration: "llm.tokenEstimateCalibration",
+
+  // Summarization (docs/07 §8.5, "Summarization"; P3-T32).
+  summaryFullTextMode: "summary.fullTextMode",
+  summaryFullTextAutoMaxPapers: "summary.fullTextAutoMaxPapers",
+  summaryConfirmAboveUSD: "summary.confirmAboveUSD",
+  summaryMinAbstractChars: "summary.minAbstractChars",
+  fullTextPreferJATS: "fullText.preferJATS",
+  fullTextHardPageCap: "fullText.hardPageCap",
+  autoSummarize: "autoSummarize",
+  screeningThreshold: "screening.threshold",
+  screeningRetractionPolicy: "screening.retractionPolicy",
+  screeningNonEnglishPolicy: "screening.nonEnglishPolicy",
+  screeningDedupe: "screening.dedupe",
+  cacheEnabled: "cache.enabled",
+  cacheIgnoreModel: "cache.ignoreModel",
+  cacheLastSeenPromptVersions: "cache.lastSeenPromptVersions",
+  cacheMaxSizeMB: "cache.maxSizeMB",
+
+  // Report & audio (docs/07 §8.5, "Report & audio"; P3-T32 — this row only).
+  reportPerPaperNotes: "report.perPaperNotes",
+
   // Runtime & concurrency (docs/07 §8.5, "Runtime & concurrency").
+  concurrency: "concurrency",
   timeoutSeconds: "timeoutSeconds",
+  runMaxSpendUSD: "run.maxSpendUSD",
+  runMaxSessionSpendUSD: "run.maxSessionSpendUSD",
   prefsSchemaVersion: "prefsSchemaVersion",
 
   // Diagnostics (docs/07 §8.5, "Diagnostics").
@@ -85,8 +127,26 @@ export const PREF_KEYS = {
   logRequestBodies: "logRequestBodies",
 
   // Non-secret key-presence flags (docs/07 §8.5, last block). NEVER a key —
-  // only whether one is present, and which backend holds it (decision D5).
+  // only whether one is present, when it was last validated and with what
+  // outcome, and which backend holds it (decision D5).
+  openrouterKeyPresent: "openrouter.keyPresent",
+  openaiKeyPresent: "openai.keyPresent",
+  geminiKeyPresent: "gemini.keyPresent",
+  anthropicKeyPresent: "anthropic.keyPresent",
   ncbiKeyPresent: "ncbi.keyPresent",
+  semanticscholarKeyPresent: "semanticscholar.keyPresent",
+  openrouterLastValidatedAt: "openrouter.lastValidatedAt",
+  openaiLastValidatedAt: "openai.lastValidatedAt",
+  geminiLastValidatedAt: "gemini.lastValidatedAt",
+  anthropicLastValidatedAt: "anthropic.lastValidatedAt",
+  ncbiLastValidatedAt: "ncbi.lastValidatedAt",
+  semanticscholarLastValidatedAt: "semanticscholar.lastValidatedAt",
+  openrouterLastValidationResult: "openrouter.lastValidationResult",
+  openaiLastValidationResult: "openai.lastValidationResult",
+  geminiLastValidationResult: "gemini.lastValidationResult",
+  anthropicLastValidationResult: "anthropic.lastValidationResult",
+  ncbiLastValidationResult: "ncbi.lastValidationResult",
+  semanticscholarLastValidationResult: "semanticscholar.lastValidationResult",
   secretBackend: "secretBackend",
 } as const;
 

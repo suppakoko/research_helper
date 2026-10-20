@@ -19,13 +19,20 @@
 // preference to docs/07 §8.5 first, then to src/prefs/, then here, then to the
 // pane — that order is §8.5's own rule.
 //
-// Phase 1's twelve keys and no others (P1-T03 step 5). docs/01 §7.2 lists more
-// because it transcribes the whole of §8.5; those rows arrive with the phases
-// that read them. docs/01 §7.2 also notes that a row with no pane control needs
-// no pref() line at all, since the typed accessor falls back to the schema
-// default — the four such rows below (logRequestBodies, prefsSchemaVersion,
-// secretBackend, ncbi.keyPresent) are listed anyway because a setting the user
-// cannot find in about:config is a setting they cannot audit.
+// Phase 1's twelve keys (P1-T03 step 5), P2-T05's semanticscholar.keyPresent,
+// and the docs/01 §7.2 lines for the rows Phase 3 reads (P3-T32, 2026-10-20).
+// docs/01 §7.2 lists more (reportLanguage, tts.*) because it transcribes the
+// whole of §8.5; those rows arrive with the phases that read them. docs/01
+// §7.2 also notes that a row with no pane control needs no pref() line at all,
+// since the typed accessor falls back to the schema default — so the Phase 3
+// rows §7.2 gives no line (summaryModel, reportModel, screening.model,
+// privacy.egressAcknowledged, llm.tokenEstimateCalibration, the summary.*,
+// fullText.* and screening.* families, cache.enabled, cache.ignoreModel,
+// cache.lastSeenPromptVersions, report.perPaperNotes and every
+// *.lastValidatedAt) get none here. The four Phase 1 rows below that §7.2 does
+// not list (logRequestBodies, prefsSchemaVersion, secretBackend,
+// ncbi.keyPresent) are listed anyway because a setting the user cannot find in
+// about:config is a setting they cannot audit.
 //
 // NO CREDENTIAL EVER APPEARS HERE. Decision D5 (docs/00 §3): secrets go
 // through Zotero.OSKeyStore.encrypt() into Services.logins. Preferences hold
@@ -64,13 +71,62 @@ pref("hideExisting", true);
 pref("contactEmail", "");
 
 // ---------------------------------------------------------------------------
+// LLM providers & models — docs/07 §8.5, "LLM providers & models" (P3-T32)
+// ---------------------------------------------------------------------------
+
+// Model IDs are owned by docs/03 §§2.5, 3.5, 4.6, 5.5 and change on a scale of
+// weeks. These are seed defaults only — the picker is repopulated from each
+// provider's models endpoint at run time (docs/03 §9); never hardcode a model
+// ID anywhere else.
+pref("llmProvider", "openrouter");
+pref("openrouter.model", "anthropic/claude-sonnet-5");
+pref("openai.model", "gpt-5.6-terra");
+pref("gemini.model", "gemini-3.8-flash");
+pref("anthropic.model", "claude-sonnet-5");
+// Per-provider base-URL override (FR-29). EMPTY means "use the base URL docs/03
+// documents for that provider". Bound in docs/08 §7.3, so each needs a default
+// here or the field paints empty. Never a credential — a proxy that needs
+// authentication is out of scope.
+pref("openrouter.baseUrl", "");
+pref("openai.baseUrl", "");
+pref("gemini.baseUrl", "");
+pref("anthropic.baseUrl", "");
+// Global default privacy mode: "strict" | "balanced" | "full". Semantics owned
+// by docs/09 §3.5; per-collection overrides are NOT prefs (they live in the
+// collection_settings table, docs/07 §8.3). Bound in docs/08 §7.3.
+pref("privacy.mode", "balanced");
+
+// ---------------------------------------------------------------------------
+// Summarization — docs/07 §8.5, "Summarization" (P3-T32)
+// ---------------------------------------------------------------------------
+
+// MUST ship false: onAsyncRender fires on every selection change (docs/08
+// §3.3), so an unconditional LLM call there burns credits.
+pref("autoSummarize", false);
+// Global cache cap in MB, 100–5000 (docs/07 §8.5; cap semantics in docs/07
+// §9.2). Bound in the Advanced groupbox of docs/08 §7.3, so it needs a default
+// here or the field paints empty.
+pref("cache.maxSizeMB", 500);
+
+// ---------------------------------------------------------------------------
 // Runtime & concurrency — docs/07 §8.5, "Runtime & concurrency"
 // ---------------------------------------------------------------------------
+
+// The `llm` worker-pool size, 1–8 (docs/07 §7.2). Bound in docs/08 §7.3 →
+// Advanced (P3-T32).
+pref("concurrency", 3);
 
 // timeoutSeconds × 1000 is the `timeout` passed to Zotero.HTTP.request. 60
 // deliberately doubles Zotero's own 30 000 ms default because LLM calls are
 // long (docs/07 §7.3). Range 10–600. Bound in docs/08 §7.3 → Advanced.
 pref("timeoutSeconds", 60);
+// Spend ceilings, 0 = off (docs/07 §8.5; semantics in docs/06 §11.4):
+// run.maxSpendUSD is the per-run cap, run.maxSessionSpendUSD the
+// per-Zotero-session one. Neither is bound by a control; both are listed here
+// so they are visible in about:config. Changing either default is gate G-20
+// (P3-T32).
+pref("run.maxSpendUSD", 0);
+pref("run.maxSessionSpendUSD", 0);
 // How far the pref migrations of docs/07 §8.5.3 have got. 0 = none has run, and
 // no migration entry exists yet: §8.5.3 is explicit that renames applied
 // before first release need no entry, only document updates.
@@ -110,6 +166,24 @@ pref("ncbi.keyPresent", false);
 // SecretStore at request time and docs/07 §7.3 paces this host at 0.9/s in
 // both modes, so this flag drives the prefs pane's status row only.
 pref("semanticscholar.keyPresent", false);
+// The four LLM providers' presence flags (P3-T32). Never the key.
+pref("openrouter.keyPresent", false);
+pref("openai.keyPresent", false);
+pref("gemini.keyPresent", false);
+pref("anthropic.keyPresent", false);
+// Last key-validation outcome, one line per credential holder — the SAME SIX
+// ids as keyPresent above, not just the four LLM providers: "" (never
+// validated) | "ok" | "rejected" | "forbidden" | "inconclusive". Non-secret
+// status only, never any part of the key. Written by the validation flow and by
+// docs/09 §2.4 step 3; read by the prefs pane to paint the per-provider status
+// row on first paint. The *.lastValidatedAt
+// rows get no line: docs/01 §7.2 lists none (P3-T32).
+pref("openrouter.lastValidationResult", "");
+pref("openai.lastValidationResult", "");
+pref("gemini.lastValidationResult", "");
+pref("anthropic.lastValidationResult", "");
+pref("ncbi.lastValidationResult", "");
+pref("semanticscholar.lastValidationResult", "");
 // Which secret backend is live, for the prefs pane's storage badge:
 // "oskeystore" | "session" | "passphrase" | "" (unprobed). These are docs/07
 // §8.5's spellings, which are NOT docs/09 §1.7's SecretBackend union

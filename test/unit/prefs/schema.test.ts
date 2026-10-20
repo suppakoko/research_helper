@@ -19,6 +19,7 @@ import {
 import {
   PREF_BRANCH,
   PREF_BRANCH_ROOT,
+  PREF_KEYS,
   qualifiedPrefKey,
 } from "../../../src/prefs/keys";
 import {
@@ -56,15 +57,8 @@ afterEach(() => {
 // 1. docs/07 §8.5, transcribed independently of src/prefs/schema.ts
 // ---------------------------------------------------------------------------
 
-/**
- * One row per `docs/07` §8.5 row Phase 1 reads, typed out from that section
- * rather than derived from `PREFS`.
- *
- * Deriving it would assert only that the schema equals itself. `min` / `max` are
- * `null` where §8.5 gives no bound and `values` is `null` where it gives no
- * closed set, so an accidentally-added bound fails rather than passing silently.
- */
-const SECTION_8_5: readonly {
+/** One `docs/07` §8.5 row, as this test types it out. */
+interface Section85Row {
   readonly name: PrefName;
   readonly key: string;
   readonly type: PrefDef<unknown>["type"];
@@ -72,7 +66,46 @@ const SECTION_8_5: readonly {
   readonly min: number | null;
   readonly max: number | null;
   readonly values: readonly (boolean | number | string)[] | null;
-}[] = [
+}
+
+/**
+ * A compact {@link Section85Row}, for the fifty rows `P3-T32` added. The
+ * arguments are still typed out from §8.5 by hand: nothing here reads `PREFS`.
+ */
+function row(
+  name: PrefName,
+  key: string,
+  type: PrefDef<unknown>["type"],
+  value: boolean | number | string,
+  bounds: {
+    readonly min?: number;
+    readonly max?: number;
+    readonly values?: readonly (boolean | number | string)[];
+  } = {},
+): Section85Row {
+  return {
+    name,
+    key,
+    type,
+    default: value,
+    min: bounds.min ?? null,
+    max: bounds.max ?? null,
+    values: bounds.values ?? null,
+  };
+}
+
+/** §8.5's `<provider>.lastValidationResult` value set, typed out. */
+const VALIDATION_RESULTS = ["ok", "rejected", "forbidden", "inconclusive", ""];
+
+/**
+ * One row per `docs/07` §8.5 row a shipped phase reads, typed out from that
+ * section rather than derived from `PREFS`.
+ *
+ * Deriving it would assert only that the schema equals itself. `min` / `max` are
+ * `null` where §8.5 gives no bound and `values` is `null` where it gives no
+ * closed set, so an accidentally-added bound fails rather than passing silently.
+ */
+const SECTION_8_5: readonly Section85Row[] = [
   // Sources & search
   {
     name: "sources",
@@ -195,18 +228,323 @@ const SECTION_8_5: readonly {
     max: null,
     values: ["oskeystore", "session", "passphrase", ""],
   },
+
+  // P3-T32, 2026-10-20: the fifty rows Phase 3 reads.
+  // LLM providers & models
+  row("llmProvider", "llmProvider", "string", "openrouter", {
+    values: ["openrouter", "openai", "gemini", "anthropic"],
+  }),
+  row(
+    "openrouterModel",
+    "openrouter.model",
+    "string",
+    "anthropic/claude-sonnet-5",
+  ),
+  row("openaiModel", "openai.model", "string", "gpt-5.6-terra"),
+  row("geminiModel", "gemini.model", "string", "gemini-3.8-flash"),
+  row("anthropicModel", "anthropic.model", "string", "claude-sonnet-5"),
+  row("openrouterBaseUrl", "openrouter.baseUrl", "string", ""),
+  row("openaiBaseUrl", "openai.baseUrl", "string", ""),
+  row("geminiBaseUrl", "gemini.baseUrl", "string", ""),
+  row("anthropicBaseUrl", "anthropic.baseUrl", "string", ""),
+  row("summaryModel", "summaryModel", "string", ""),
+  row("reportModel", "reportModel", "string", ""),
+  row("screeningModel", "screening.model", "string", ""),
+  row("privacyMode", "privacy.mode", "string", "balanced", {
+    values: ["strict", "balanced", "full"],
+  }),
+  row(
+    "privacyEgressAcknowledged",
+    "privacy.egressAcknowledged",
+    "boolean",
+    false,
+  ),
+  row(
+    "llmTokenEstimateCalibration",
+    "llm.tokenEstimateCalibration",
+    "string",
+    "{}",
+  ),
+  // Summarization
+  row("summaryFullTextMode", "summary.fullTextMode", "string", "auto", {
+    values: ["never", "auto", "always"],
+  }),
+  row(
+    "summaryFullTextAutoMaxPapers",
+    "summary.fullTextAutoMaxPapers",
+    "integer",
+    25,
+    { min: 1 },
+  ),
+  row("summaryConfirmAboveUSD", "summary.confirmAboveUSD", "number", 2.0, {
+    min: 0,
+  }),
+  row("summaryMinAbstractChars", "summary.minAbstractChars", "integer", 250, {
+    min: 0,
+  }),
+  row("fullTextPreferJATS", "fullText.preferJATS", "boolean", true),
+  row("fullTextHardPageCap", "fullText.hardPageCap", "integer", 60, {
+    min: 1,
+  }),
+  row("autoSummarize", "autoSummarize", "boolean", false),
+  row("screeningThreshold", "screening.threshold", "integer", 60, {
+    min: 0,
+    max: 100,
+  }),
+  row(
+    "screeningRetractionPolicy",
+    "screening.retractionPolicy",
+    "string",
+    "exclude_from_synthesis",
+    { values: ["include", "exclude_from_synthesis", "exclude_entirely"] },
+  ),
+  row(
+    "screeningNonEnglishPolicy",
+    "screening.nonEnglishPolicy",
+    "string",
+    "translate_summary",
+    { values: ["skip", "translate_summary", "summarize_in_source_language"] },
+  ),
+  row("screeningDedupe", "screening.dedupe", "boolean", true),
+  row("cacheEnabled", "cache.enabled", "boolean", true),
+  row("cacheIgnoreModel", "cache.ignoreModel", "boolean", false),
+  row(
+    "cacheLastSeenPromptVersions",
+    "cache.lastSeenPromptVersions",
+    "string",
+    "{}",
+  ),
+  row("cacheMaxSizeMB", "cache.maxSizeMB", "integer", 500, {
+    min: 100,
+    max: 5000,
+  }),
+  // Report & audio (this row only)
+  row("reportPerPaperNotes", "report.perPaperNotes", "boolean", false),
+  // Runtime & concurrency
+  row("concurrency", "concurrency", "integer", 3, { min: 1, max: 8 }),
+  row("runMaxSpendUSD", "run.maxSpendUSD", "number", 0, { min: 0 }),
+  row("runMaxSessionSpendUSD", "run.maxSessionSpendUSD", "number", 0, {
+    min: 0,
+  }),
+  // Non-secret key-presence flags
+  row("openrouterKeyPresent", "openrouter.keyPresent", "boolean", false),
+  row("openaiKeyPresent", "openai.keyPresent", "boolean", false),
+  row("geminiKeyPresent", "gemini.keyPresent", "boolean", false),
+  row("anthropicKeyPresent", "anthropic.keyPresent", "boolean", false),
+  row("openrouterLastValidatedAt", "openrouter.lastValidatedAt", "string", ""),
+  row("openaiLastValidatedAt", "openai.lastValidatedAt", "string", ""),
+  row("geminiLastValidatedAt", "gemini.lastValidatedAt", "string", ""),
+  row("anthropicLastValidatedAt", "anthropic.lastValidatedAt", "string", ""),
+  row("ncbiLastValidatedAt", "ncbi.lastValidatedAt", "string", ""),
+  row(
+    "semanticscholarLastValidatedAt",
+    "semanticscholar.lastValidatedAt",
+    "string",
+    "",
+  ),
+  row(
+    "openrouterLastValidationResult",
+    "openrouter.lastValidationResult",
+    "string",
+    "",
+    { values: VALIDATION_RESULTS },
+  ),
+  row(
+    "openaiLastValidationResult",
+    "openai.lastValidationResult",
+    "string",
+    "",
+    { values: VALIDATION_RESULTS },
+  ),
+  row(
+    "geminiLastValidationResult",
+    "gemini.lastValidationResult",
+    "string",
+    "",
+    { values: VALIDATION_RESULTS },
+  ),
+  row(
+    "anthropicLastValidationResult",
+    "anthropic.lastValidationResult",
+    "string",
+    "",
+    { values: VALIDATION_RESULTS },
+  ),
+  row("ncbiLastValidationResult", "ncbi.lastValidationResult", "string", "", {
+    values: VALIDATION_RESULTS,
+  }),
+  row(
+    "semanticscholarLastValidationResult",
+    "semanticscholar.lastValidationResult",
+    "string",
+    "",
+    { values: VALIDATION_RESULTS },
+  ),
 ];
 
+/**
+ * The §8.5 rows `docs/01` §7.2 gives **no** `pref()` line, typed out from §7.2
+ * (`P3-T32` step 2: "rows §7.2 says have no `pref()` line get none"). §7.2's
+ * prose names the families and its listing omits these keys; every other row
+ * in {@link SECTION_8_5} ships a line.
+ */
+const NO_PREF_LINE: readonly string[] = [
+  "summaryModel",
+  "reportModel",
+  "screening.model",
+  "privacy.egressAcknowledged",
+  "llm.tokenEstimateCalibration",
+  "summary.fullTextMode",
+  "summary.fullTextAutoMaxPapers",
+  "summary.confirmAboveUSD",
+  "summary.minAbstractChars",
+  "fullText.preferJATS",
+  "fullText.hardPageCap",
+  "screening.threshold",
+  "screening.retractionPolicy",
+  "screening.nonEnglishPolicy",
+  "screening.dedupe",
+  "cache.enabled",
+  "cache.ignoreModel",
+  "cache.lastSeenPromptVersions",
+  "report.perPaperNotes",
+  "openrouter.lastValidatedAt",
+  "openai.lastValidatedAt",
+  "gemini.lastValidatedAt",
+  "anthropic.lastValidatedAt",
+  "ncbi.lastValidatedAt",
+  "semanticscholar.lastValidatedAt",
+];
+
+/** Read a file under the repository root, resolved from this test's path. */
+function readRepoFile(relative: string): string {
+  return readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), "../../..", relative),
+    "utf8",
+  );
+}
+
+/** One `docs/07` §8.5 table row, as the document prints it. */
+interface DocRow {
+  readonly key: string;
+  readonly marked: boolean;
+  readonly type: string;
+  readonly defaultCell: string;
+}
+
+/** The six credential-holding IDs §8.5's `<provider>.*` rows expand to. */
+const CREDENTIAL_IDS = [
+  "openrouter",
+  "openai",
+  "gemini",
+  "anthropic",
+  "ncbi",
+  "semanticscholar",
+];
+
+/**
+ * Every key-bearing table row between `### 8.5 ` and `#### 8.5.1`, read from
+ * `docs/07` itself. A `<provider>.x` row expands to one entry per
+ * {@link CREDENTIAL_IDS} member, as §8.5 says ("one key per provider ID, same
+ * set as `keyPresent`"). Cells split on unescaped pipes only, because value
+ * cells write `\|` between alternatives.
+ */
+function readSection85(): ReadonlyMap<string, DocRow> {
+  const lines = readRepoFile("docs/07-architecture-and-data-model.md").split(
+    "\n",
+  );
+  const start = lines.findIndex((l) => l.startsWith("### 8.5 "));
+  const end = lines.findIndex((l) => l.startsWith("#### 8.5.1 "));
+  if (start < 0 || end <= start) throw new Error("§8.5 not found in docs/07");
+  const rows = new Map<string, DocRow>();
+  for (const line of lines.slice(start, end)) {
+    if (!line.startsWith("| ")) continue;
+    const cells = line
+      .split(/(?<!\\)\|/)
+      .slice(1, -1)
+      .map((c) => c.trim());
+    const match = /^(⚠ )?`([^`]+)`$/.exec(cells[0] ?? "");
+    if (match === null) continue;
+    const [, mark, key] = match;
+    if (key === undefined) continue;
+    const entry = {
+      marked: mark !== undefined,
+      type: cells[1] ?? "",
+      defaultCell: cells[2] ?? "",
+    };
+    const keys = key.startsWith("<provider>.")
+      ? CREDENTIAL_IDS.map((id) => key.replace("<provider>", id))
+      : [key];
+    for (const k of keys) rows.set(k, { key: k, ...entry });
+  }
+  return rows;
+}
+
+/** The first backtick literal in a §8.5 default cell, parsed as JSON. */
+function parseDefaultCell(cell: string): unknown {
+  const literal = /`([^`]*)`/.exec(cell)?.[1];
+  if (literal === undefined) throw new Error(`no literal in "${cell}"`);
+  return JSON.parse(literal);
+}
+
 describe("PREFS transcribes docs/07 §8.5", () => {
-  it("declares exactly the thirteen §8.5 rows that ship — Phase 1's twelve plus P2-T05's semanticscholar.keyPresent — and no others", () => {
+  it("declares exactly the sixty-three §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent and P3-T32's fifty — and no others", () => {
     // The card's Do NOT: "do not add a preference that docs/07 §8.5 does not
-    // declare". A fourteenth entry fails here, not in review. Phase 1 pinned
-    // this at twelve; `P2-T05` grew it by the one row `docs/07` §8.5 and §11.1
-    // step 9 give a credential-holding source (2026-10-15).
-    expect(SECTION_8_5).toHaveLength(13);
+    // declare". An extra entry fails here, not in review. Phase 1 pinned this
+    // at twelve; `P2-T05` grew it by the one row `docs/07` §8.5 and §11.1
+    // step 9 give a credential-holding source (2026-10-15); `P3-T32` grew it by
+    // the fifty rows Phase 3 reads (2026-10-20).
+    expect(SECTION_8_5).toHaveLength(63);
+    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(63);
     expect([...PREF_NAMES].sort()).toEqual(
       SECTION_8_5.map((row) => row.name).sort(),
     );
+  });
+
+  it("names every entry by its key with the dots removed and the next letter capitalised (P3-T32 step 1)", () => {
+    for (const r of SECTION_8_5) {
+      const derived = r.key.replace(/\.(.)/g, (_, c: string) =>
+        c.toUpperCase(),
+      );
+      expect(r.name, r.key).toBe(derived);
+    }
+  });
+
+  it("matches every shipped row's type and default to docs/07 §8.5 as the document prints it (P3-T32)", () => {
+    // The transcription above is typed by hand; this reads the page, so a
+    // default edited in either place without the other fails here.
+    const doc = readSection85();
+    for (const r of SECTION_8_5) {
+      const printed = doc.get(r.key);
+      expect(printed, `§8.5 has no ${r.key} row`).toBeDefined();
+      if (printed === undefined) continue;
+      expect(printed.type.replace(/ \(JSON\)$/, ""), r.key).toBe(r.type);
+      expect(parseDefaultCell(printed.defaultCell), r.key).toBe(r.default);
+    }
+  });
+
+  it("ships no row §8.5 still marks ⚠ except the three Phase 1 already shipped, and none of item 241's three (P3-T32)", () => {
+    // `plan/00` §6 item 241 (owner, 2026-10-20): the three names ship as
+    // written and §8.5 drops their marks. `prefsSchemaVersion` and
+    // `secretBackend` shipped marked in Phase 1 and keep their marks: the
+    // second carries a recorded CONFLICT this card does not touch.
+    const doc = readSection85();
+    for (const key of [
+      "privacy.egressAcknowledged",
+      "llm.tokenEstimateCalibration",
+      "cache.lastSeenPromptVersions",
+    ]) {
+      expect(doc.get(key)?.marked, `${key} still marked ⚠`).toBe(false);
+    }
+    const marked = SECTION_8_5.filter((r) => doc.get(r.key)?.marked === true)
+      .map((r) => r.key)
+      .sort();
+    expect(marked).toEqual(["prefsSchemaVersion", "secretBackend"]);
+  });
+
+  it("ships both spend ceilings off at 0 (gate G-20)", () => {
+    expect(PREFS.runMaxSpendUSD.default).toBe(0);
+    expect(PREFS.runMaxSessionSpendUSD.default).toBe(0);
   });
 
   it("reads the semanticscholar.keyPresent row back from docs/07 §8.5 itself (P2-T05)", () => {
@@ -385,6 +723,86 @@ describe("getPref coerces and falls back", () => {
       setPrefStore(createMemoryPrefStore({ secretBackend: backend }));
       expect(getPref("secretBackend")).toBe(backend);
     }
+  });
+
+  it("reads a fractional number for a number row and refuses one for an integer row (P3-T32)", () => {
+    // `summary.confirmAboveUSD` and the two `run.*` ceilings are §8.5
+    // `number`s, so a dollar amount with cents is a legal value; the stringified
+    // form is the pane's `String(value)` foot-gun again.
+    setPrefStore(
+      createMemoryPrefStore({
+        "summary.confirmAboveUSD": "2.5",
+        "run.maxSpendUSD": 0.75,
+        "cache.maxSizeMB": "250.5",
+      }),
+    );
+    expect(getPref("summaryConfirmAboveUSD")).toBe(2.5);
+    expect(getPref("runMaxSpendUSD")).toBe(0.75);
+    expect(getPref("cacheMaxSizeMB")).toBe(500);
+  });
+
+  it("falls back to 0 (off) for a negative spend ceiling rather than reading it (P3-T32)", () => {
+    setPrefStore(
+      createMemoryPrefStore({
+        "run.maxSpendUSD": -1,
+        "run.maxSessionSpendUSD": "-5",
+      }),
+    );
+    expect(getPref("runMaxSpendUSD")).toBe(0);
+    expect(getPref("runMaxSessionSpendUSD")).toBe(0);
+  });
+
+  it("holds the two JSON rows as strings and leaves parsing to their readers (P3-T32)", () => {
+    // §8.5 types both "string (JSON)"; the schema stores the string. A stored
+    // number is the wrong type and falls back to "{}" rather than being
+    // stringified (the port carries scalars only, so an object cannot arrive).
+    const calibration = '{"anthropic/claude-sonnet-5":1.12}';
+    setPrefStore(
+      createMemoryPrefStore({
+        "llm.tokenEstimateCalibration": calibration,
+        "cache.lastSeenPromptVersions": 3,
+      }),
+    );
+    expect(getPref("llmTokenEstimateCalibration")).toBe(calibration);
+    expect(getPref("cacheLastSeenPromptVersions")).toBe("{}");
+  });
+
+  it("enforces the Phase 3 closed value sets (P3-T32)", () => {
+    setPrefStore(
+      createMemoryPrefStore({
+        llmProvider: "mistral",
+        "privacy.mode": "off",
+        "summary.fullTextMode": "sometimes",
+        "screening.retractionPolicy": "exclude",
+        "screening.nonEnglishPolicy": "translate",
+        "openai.lastValidationResult": "valid",
+      }),
+    );
+    expect(getPref("llmProvider")).toBe("openrouter");
+    expect(getPref("privacyMode")).toBe("balanced");
+    expect(getPref("summaryFullTextMode")).toBe("auto");
+    expect(getPref("screeningRetractionPolicy")).toBe("exclude_from_synthesis");
+    expect(getPref("screeningNonEnglishPolicy")).toBe("translate_summary");
+    expect(getPref("openaiLastValidationResult")).toBe("");
+    for (const result of VALIDATION_RESULTS) {
+      setPrefStore(
+        createMemoryPrefStore({ "ncbi.lastValidationResult": result }),
+      );
+      expect(getPref("ncbiLastValidationResult")).toBe(result);
+    }
+  });
+
+  it("refuses a screening threshold outside 0–100 and a concurrency outside 1–8 (P3-T32)", () => {
+    setPrefStore(
+      createMemoryPrefStore({ "screening.threshold": 101, concurrency: 9 }),
+    );
+    expect(getPref("screeningThreshold")).toBe(60);
+    expect(getPref("concurrency")).toBe(3);
+    setPrefStore(
+      createMemoryPrefStore({ "screening.threshold": "0", concurrency: "8" }),
+    );
+    expect(getPref("screeningThreshold")).toBe(0);
+    expect(getPref("concurrency")).toBe(8);
   });
 
   it("never throws: no store installed", () => {
@@ -675,14 +1093,72 @@ describe("addon/prefs.js agrees with PREFS", () => {
     });
   }
 
-  it("ships a pref() line for every Phase 1 key", () => {
-    // P1-T03 step 5: "for exactly the Phase 1 keys". docs/01 §7.2 permits a row
-    // with no pane control to be omitted, but lists the argument for including
-    // it: a setting the user cannot find in about:config cannot be audited.
+  it("ships a pref() line for every key except the rows docs/01 §7.2 gives none", () => {
+    // P1-T03 step 5 shipped a line for every Phase 1 key. docs/01 §7.2 permits a
+    // row with no pane control to be omitted, but lists the argument for
+    // including it: a setting the user cannot find in about:config cannot be
+    // audited. P3-T32 step 2 transcribes §7.2 instead, so the rows §7.2 gives
+    // no line (NO_PREF_LINE) get none — and the Phase 1 lines stay.
     const shipped = new Set(lines.map((line) => line.key));
+    const omitted = new Set(NO_PREF_LINE);
     for (const name of PREF_NAMES) {
       const def: PrefDef<unknown> = PREFS[name];
-      expect(shipped.has(def.key), `${def.key} has no pref() line`).toBe(true);
+      expect(
+        shipped.has(def.key),
+        omitted.has(def.key)
+          ? `${def.key} has a pref() line docs/01 §7.2 does not give it`
+          : `${def.key} has no pref() line`,
+      ).toBe(!omitted.has(def.key));
+    }
+  });
+
+  it("lists only real schema keys as having no pref() line", () => {
+    const keys = new Set(SECTION_8_5.map((r) => r.key));
+    expect(NO_PREF_LINE).toHaveLength(25);
+    for (const key of NO_PREF_LINE) expect(keys.has(key), key).toBe(true);
+  });
+
+  it("names a PREF_KEYS entry on every pref() line (P3-T32)", () => {
+    const known = new Set<string>(Object.values(PREF_KEYS));
+    for (const line of lines) {
+      expect(known.has(line.key), `${line.key} is not in PREF_KEYS`).toBe(true);
+    }
+  });
+
+  it("keeps PREF_KEYS and PREFS one-to-one, under the same names", () => {
+    expect(Object.keys(PREF_KEYS).sort()).toEqual([...PREF_NAMES].sort());
+    for (const name of PREF_NAMES) {
+      const def: PrefDef<unknown> = PREFS[name];
+      expect(def.key, name).toBe(PREF_KEYS[name as keyof typeof PREF_KEYS]);
+    }
+  });
+
+  it("transcribes docs/01 §7.2's pref() line, value included, for every schema key it lists (P3-T32 step 2)", () => {
+    // §7.2 writes fully qualified keys in one fenced block; read every
+    // `pref("extensions.zotero.research-helper.<key>", <value>);` line there.
+    const source = readRepoFile("docs/01-zotero-plugin-platform.md");
+    const section = source.slice(
+      source.indexOf("### 7.2 "),
+      source.indexOf("### 7.3 "),
+    );
+    const pattern =
+      /^pref\("extensions\.zotero\.research-helper\.([^"]+)",\s*("(?:[^"\\]|\\.)*"|true|false|-?\d+(?:\.\d+)?)\);$/gm;
+    const listed = new Map<string, unknown>();
+    for (const [, key, value] of section.matchAll(pattern)) {
+      if (key !== undefined && value !== undefined) {
+        listed.set(key, JSON.parse(value));
+      }
+    }
+    expect(listed.size).toBeGreaterThan(0);
+    const shipped = new Map(lines.map((line) => [line.key, line.value]));
+    const schemaKeys = new Set(SECTION_8_5.map((r) => r.key));
+    for (const [key, value] of listed) {
+      if (!schemaKeys.has(key)) continue; // a later phase's row
+      expect(shipped.has(key), `${key}: §7.2 lists it`).toBe(true);
+      expect(shipped.get(key), key).toBe(value);
+    }
+    for (const key of NO_PREF_LINE) {
+      expect(listed.has(key), `${key}: §7.2 does list it`).toBe(false);
     }
   });
 

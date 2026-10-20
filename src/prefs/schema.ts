@@ -8,13 +8,23 @@
  * and `docs/03` carry divergent working-name sketches of related types, each
  * carrying a "doc 07 wins" note.
  *
- * **Phase 1's twelve rows, and no others.** §8.5 declares 59 rows. `P1-T03`'s
- * **Read first** names the subset this phase reads — the whole "Sources & search"
- * block plus `timeoutSeconds`, `logLevel`, `logRequestBodies`, `ncbi.keyPresent`,
- * `secretBackend` and `prefsSchemaVersion` — and its **Do NOT** is explicit: "do
- * not add a preference that `docs/07` §8.5 does not declare, and do not change a
- * default". Later phases add their own rows; the ordering rule §8.5 states is
- * *§8.5 first, then `prefs.js`, then the pane*.
+ * **Only the rows a shipped phase reads.** Phase 1's twelve came with `P1-T03`
+ * — the whole "Sources & search" block plus `timeoutSeconds`, `logLevel`,
+ * `logRequestBodies`, `ncbi.keyPresent`, `secretBackend` and
+ * `prefsSchemaVersion`; `P2-T05` added `semanticscholar.keyPresent`; and
+ * `P3-T32` added the fifty rows Phase 3 reads (its **Do** step 1 lists them).
+ * `plan/04` §0.2 item 2 makes `P3-T32` the only Phase 3 card that adds a row:
+ * every other card reads through `getPref` / `setPref`. Rows for later phases
+ * (`reportLanguage`, `tts.*`, `background.enabled`, …) are not here. Every card
+ * that adds rows is bound by the same rule: "do not add a preference that
+ * `docs/07` §8.5 does not declare, and do not change a default". The ordering
+ * rule §8.5 states is *§8.5 first, then `prefs.js`, then the pane*.
+ *
+ * **Property names** follow one convention: the §8.5 key with its dots removed
+ * and the letter after each dot capitalised (`ncbi.keyPresent` →
+ * `ncbiKeyPresent`, `summary.fullTextMode` → `summaryFullTextMode`). §8.5.1's
+ * sketch writes `fullTextMode` for the latter; `P3-T32`'s step 1 fixes the
+ * convention instead, so the name can be derived from the key without a table.
  *
  * ## D5, and what the `secret` flag is for
  *
@@ -62,7 +72,19 @@ export interface PrefDef<T> {
 }
 
 /**
- * Every preference Phase 1 reads, one entry per `docs/07` §8.5 row.
+ * `docs/07` §8.5's value set for every `<provider>.lastValidationResult` row,
+ * in §8.5's order; `""` means never validated.
+ */
+const VALIDATION_RESULT_VALUES = [
+  "ok",
+  "rejected",
+  "forbidden",
+  "inconclusive",
+  "",
+] as const;
+
+/**
+ * Every preference Phases 1–3 read, one entry per `docs/07` §8.5 row.
  *
  * The property name is what plugin code passes to `getPref`; `key` is the
  * branch-relative preference, and the two differ inside a dotted family
@@ -159,8 +181,306 @@ export const PREFS = {
   },
 
   // -------------------------------------------------------------------------
+  // LLM providers & models — docs/07 §8.5, "LLM providers & models" (P3-T32)
+  //
+  // Model IDs are SEED DEFAULTS ONLY: §8.5 says the pickers are repopulated
+  // from each provider's models endpoint at run time, and plan/README.md §5
+  // rule 4 forbids hardcoding a model ID anywhere but these defaults.
+  // -------------------------------------------------------------------------
+
+  /** The active LLM provider (decision D6). §8.5: default `openrouter`. */
+  llmProvider: {
+    key: PREF_KEYS.llmProvider,
+    type: "string",
+    default: "openrouter",
+    values: ["openrouter", "openai", "gemini", "anthropic"],
+  },
+
+  /**
+   * OpenRouter's model ID. No `values`: §8.5 gives "any model ID from the
+   * provider's models endpoint", which is a live list, not a closed set.
+   */
+  openrouterModel: {
+    key: PREF_KEYS.openrouterModel,
+    type: "string",
+    default: "anthropic/claude-sonnet-5",
+  },
+
+  /** OpenAI's model ID, as `openrouterModel`. */
+  openaiModel: {
+    key: PREF_KEYS.openaiModel,
+    type: "string",
+    default: "gpt-5.6-terra",
+  },
+
+  /** Gemini's model ID, as `openrouterModel`. */
+  geminiModel: {
+    key: PREF_KEYS.geminiModel,
+    type: "string",
+    default: "gemini-3.8-flash",
+  },
+
+  /** Anthropic's model ID, as `openrouterModel`. */
+  anthropicModel: {
+    key: PREF_KEYS.anthropicModel,
+    type: "string",
+    default: "claude-sonnet-5",
+  },
+
+  /**
+   * Base-URL override (FR-29). Empty means the provider's documented base URL.
+   * No `values`: §8.5 gives a shape ("an absolute `https://` URL with no
+   * trailing slash, or empty"), which the reader validates, not this schema.
+   * Never a credential.
+   */
+  openrouterBaseUrl: {
+    key: PREF_KEYS.openrouterBaseUrl,
+    type: "string",
+    default: "",
+  },
+
+  /** OpenAI's base-URL override, as `openrouterBaseUrl`. */
+  openaiBaseUrl: {
+    key: PREF_KEYS.openaiBaseUrl,
+    type: "string",
+    default: "",
+  },
+
+  /** Gemini's base-URL override, as `openrouterBaseUrl`. */
+  geminiBaseUrl: {
+    key: PREF_KEYS.geminiBaseUrl,
+    type: "string",
+    default: "",
+  },
+
+  /** Anthropic's base-URL override, as `openrouterBaseUrl`. */
+  anthropicBaseUrl: {
+    key: PREF_KEYS.anthropicBaseUrl,
+    type: "string",
+    default: "",
+  },
+
+  /**
+   * The cheap map-pass model (`docs/03` §16). Empty means `<provider>.model`.
+   * Not in the pane and no `pref()` line (`docs/01` §7.2).
+   */
+  summaryModel: {
+    key: PREF_KEYS.summaryModel,
+    type: "string",
+    default: "",
+  },
+
+  /** The strong reduce-pass model, as `summaryModel`. */
+  reportModel: {
+    key: PREF_KEYS.reportModel,
+    type: "string",
+    default: "",
+  },
+
+  /**
+   * The relevance-screening model. Empty means `summaryModel`, then
+   * `<provider>.model`. §8.5: **not a third model tier**.
+   */
+  screeningModel: {
+    key: PREF_KEYS.screeningModel,
+    type: "string",
+    default: "",
+  },
+
+  /**
+   * The **global** privacy-mode default (`docs/09` §3.5). Per-collection
+   * overrides live in the `collection_settings` table and may only be stricter.
+   */
+  privacyMode: {
+    key: PREF_KEYS.privacyMode,
+    type: "string",
+    default: "balanced",
+    values: ["strict", "balanced", "full"],
+  },
+
+  /**
+   * The one-time data-egress acknowledgement FR-36 requires be recorded in
+   * prefs. Written once by the first-job confirmation dialog. **Not** a
+   * suppression switch for the per-job disclosure or for any of `docs/09`
+   * §3.6's non-suppressible warnings. Name confirmed by the owner 2026-10-20
+   * (`plan/00` §6 item 241).
+   */
+  privacyEgressAcknowledged: {
+    key: PREF_KEYS.privacyEgressAcknowledged,
+    type: "boolean",
+    default: false,
+  },
+
+  /**
+   * Per-model token-estimate correction factors, as a JSON object (model ID →
+   * positive number). §8.5's type is "string (JSON)", so the schema holds the
+   * string and the reader parses it; an absent or unparseable value means "no
+   * calibration yet". Written at most once per job. Name confirmed by the owner
+   * 2026-10-20 (`plan/00` §6 item 241).
+   */
+  llmTokenEstimateCalibration: {
+    key: PREF_KEYS.llmTokenEstimateCalibration,
+    type: "string",
+    default: "{}",
+  },
+
+  // -------------------------------------------------------------------------
+  // Summarization — docs/07 §8.5, "Summarization" (P3-T32)
+  // -------------------------------------------------------------------------
+
+  /** Full-text use (decision D7). `strict` privacy forces `never`. */
+  summaryFullTextMode: {
+    key: PREF_KEYS.summaryFullTextMode,
+    type: "string",
+    default: "auto",
+    values: ["never", "auto", "always"],
+  },
+
+  /** Paper count above which `auto` pre-selects abstract-only. §8.5: ≥ 1. */
+  summaryFullTextAutoMaxPapers: {
+    key: PREF_KEYS.summaryFullTextAutoMaxPapers,
+    type: "integer",
+    default: 25,
+    min: 1,
+  },
+
+  /**
+   * Estimated cost (USD) above which the confirmation dialog appears. §8.5: a
+   * `number`, ≥ 0, default `2.00`. Not a spend ceiling — those are the two
+   * `run.*` rows below.
+   */
+  summaryConfirmAboveUSD: {
+    key: PREF_KEYS.summaryConfirmAboveUSD,
+    type: "number",
+    default: 2,
+    min: 0,
+  },
+
+  /** Shortest abstract worth summarising, in characters. §8.5: ≥ 0. */
+  summaryMinAbstractChars: {
+    key: PREF_KEYS.summaryMinAbstractChars,
+    type: "integer",
+    default: 250,
+    min: 0,
+  },
+
+  /** Prefer JATS XML over PDF text (`docs/06` §3.1, D-06-1). */
+  fullTextPreferJATS: {
+    key: PREF_KEYS.fullTextPreferJATS,
+    type: "boolean",
+    default: true,
+  },
+
+  /** Hard page cap on full-text extraction (`docs/06` §3.3). §8.5: ≥ 1. */
+  fullTextHardPageCap: {
+    key: PREF_KEYS.fullTextHardPageCap,
+    type: "integer",
+    default: 60,
+    min: 1,
+  },
+
+  /**
+   * Summarise on item selection. **Must ship off**: `onAsyncRender` fires on
+   * every selection change, so an unconditional LLM call there burns credits.
+   */
+  autoSummarize: {
+    key: PREF_KEYS.autoSummarize,
+    type: "boolean",
+    default: false,
+  },
+
+  /** Seeded relevance-screening threshold. §8.5: 0–100; `0` filters nothing. */
+  screeningThreshold: {
+    key: PREF_KEYS.screeningThreshold,
+    type: "integer",
+    default: 60,
+    min: 0,
+    max: 100,
+  },
+
+  /** What a retracted paper does in a summary run (`docs/06` §13.3). */
+  screeningRetractionPolicy: {
+    key: PREF_KEYS.screeningRetractionPolicy,
+    type: "string",
+    default: "exclude_from_synthesis",
+    values: ["include", "exclude_from_synthesis", "exclude_entirely"],
+  },
+
+  /** What a non-English paper does in a summary run (`docs/06` §13.2). */
+  screeningNonEnglishPolicy: {
+    key: PREF_KEYS.screeningNonEnglishPolicy,
+    type: "string",
+    default: "translate_summary",
+    values: ["skip", "translate_summary", "summarize_in_source_language"],
+  },
+
+  /** Collapse duplicates before summarising (`docs/06` §13.4). */
+  screeningDedupe: {
+    key: PREF_KEYS.screeningDedupe,
+    type: "boolean",
+    default: true,
+  },
+
+  /** Use the summary cache (`docs/06` §11.3). */
+  cacheEnabled: {
+    key: PREF_KEYS.cacheEnabled,
+    type: "boolean",
+    default: true,
+  },
+
+  /** Reuse a cached summary made by another model (`docs/06` §11.2). */
+  cacheIgnoreModel: {
+    key: PREF_KEYS.cacheIgnoreModel,
+    type: "boolean",
+    default: false,
+  },
+
+  /**
+   * The last-seen prompt-version set `docs/07` §9.3 compares at startup, as a
+   * JSON object (prompt ID → version string). The reader parses it. Name
+   * confirmed by the owner 2026-10-20 (`plan/00` §6 item 241).
+   */
+  cacheLastSeenPromptVersions: {
+    key: PREF_KEYS.cacheLastSeenPromptVersions,
+    type: "string",
+    default: "{}",
+  },
+
+  /** The **global** cache cap in MB (`docs/07` §9.2). §8.5: 100–5000. */
+  cacheMaxSizeMB: {
+    key: PREF_KEYS.cacheMaxSizeMB,
+    type: "integer",
+    default: 500,
+    min: 100,
+    max: 5000,
+  },
+
+  // -------------------------------------------------------------------------
+  // Report & audio — docs/07 §8.5, "Report & audio" (P3-T32: this row only)
+  // -------------------------------------------------------------------------
+
+  /** Write one child note per paper (`docs/06` §14.2). Opt-in. */
+  reportPerPaperNotes: {
+    key: PREF_KEYS.reportPerPaperNotes,
+    type: "boolean",
+    default: false,
+  },
+
+  // -------------------------------------------------------------------------
   // Runtime & concurrency — docs/07 §8.5, "Runtime & concurrency"
   // -------------------------------------------------------------------------
+
+  /**
+   * The `llm` worker-pool size (`docs/07` §7.2), and the plugin's single
+   * concurrency setting. §8.5: 1–8, default 3 (P3-T32).
+   */
+  concurrency: {
+    key: PREF_KEYS.concurrency,
+    type: "integer",
+    default: 3,
+    min: 1,
+    max: 8,
+  },
 
   /**
    * HTTP timeout in seconds. §8.5: 10–600 (step 10 is the widget's), default 60.
@@ -175,6 +495,28 @@ export const PREFS = {
     default: 60,
     min: 10,
     max: 600,
+  },
+
+  /**
+   * Per-job spend ceiling in USD. **`0` means off, and it ships off**: §8.5's
+   * default, and changing it is gate `G-20`, not a card's choice (P3-T32).
+   */
+  runMaxSpendUSD: {
+    key: PREF_KEYS.runMaxSpendUSD,
+    type: "number",
+    default: 0,
+    min: 0,
+  },
+
+  /**
+   * Per-Zotero-session spend ceiling in USD (NFR-5). Ships off at `0`, as
+   * `runMaxSpendUSD`; the running total lives in memory and is never persisted.
+   */
+  runMaxSessionSpendUSD: {
+    key: PREF_KEYS.runMaxSessionSpendUSD,
+    type: "number",
+    default: 0,
+    min: 0,
   },
 
   /**
@@ -265,18 +607,149 @@ export const PREFS = {
    * select, so nothing paces on it; it exists for the preferences pane's
    * status row (`docs/08` §7.3).
    *
-   * **The key string is spelled here rather than taken from `./keys.ts`**,
-   * against this file's own convention, because `src/prefs/keys.ts` is outside
-   * `P2-T05`'s `Files`; the row is `docs/07` §8.5's verbatim, and
-   * `addon/prefs.js` ships its `pref()` default line. Its writer is
+   * `P2-T05` spelled the key string here because `src/prefs/keys.ts` was
+   * outside its `Files`; `P3-T32` moved it into `PREF_KEYS` (2026-10-20), so
+   * every `pref()` line in `addon/prefs.js` now names a `PREF_KEYS` entry. Its
+   * writer is
    * `src/zotero/keychain.ts`'s `KEY_PRESENCE_PREFS` row for
    * `source.semanticscholar` (added 2026-10-15, `plan/00` §6 item 169): storing
    * or clearing the key through the pane re-derives this flag.
    */
   semanticscholarKeyPresent: {
-    key: "semanticscholar.keyPresent",
+    key: PREF_KEYS.semanticscholarKeyPresent,
     type: "boolean",
     default: false,
+  },
+
+  /**
+   * Whether an OpenRouter key is in the keystore — **never the key** (P3-T32).
+   * Written by the `SecretStore` and read by the pane, like `ncbiKeyPresent`.
+   */
+  openrouterKeyPresent: {
+    key: PREF_KEYS.openrouterKeyPresent,
+    type: "boolean",
+    default: false,
+  },
+
+  /** Whether an OpenAI key is in the keystore, as `openrouterKeyPresent`. */
+  openaiKeyPresent: {
+    key: PREF_KEYS.openaiKeyPresent,
+    type: "boolean",
+    default: false,
+  },
+
+  /** Whether a Gemini key is in the keystore, as `openrouterKeyPresent`. */
+  geminiKeyPresent: {
+    key: PREF_KEYS.geminiKeyPresent,
+    type: "boolean",
+    default: false,
+  },
+
+  /** Whether an Anthropic key is in the keystore, as `openrouterKeyPresent`. */
+  anthropicKeyPresent: {
+    key: PREF_KEYS.anthropicKeyPresent,
+    type: "boolean",
+    default: false,
+  },
+
+  /**
+   * When the OpenRouter key was last validated: an ISO 8601 timestamp, or
+   * empty. No `values`: §8.5 gives a shape, not a closed set. One such row per
+   * credential-holding ID — the same six as `*.keyPresent` (P3-T32).
+   */
+  openrouterLastValidatedAt: {
+    key: PREF_KEYS.openrouterLastValidatedAt,
+    type: "string",
+    default: "",
+  },
+
+  /** As `openrouterLastValidatedAt`, for OpenAI. */
+  openaiLastValidatedAt: {
+    key: PREF_KEYS.openaiLastValidatedAt,
+    type: "string",
+    default: "",
+  },
+
+  /** As `openrouterLastValidatedAt`, for Gemini. */
+  geminiLastValidatedAt: {
+    key: PREF_KEYS.geminiLastValidatedAt,
+    type: "string",
+    default: "",
+  },
+
+  /** As `openrouterLastValidatedAt`, for Anthropic. */
+  anthropicLastValidatedAt: {
+    key: PREF_KEYS.anthropicLastValidatedAt,
+    type: "string",
+    default: "",
+  },
+
+  /** As `openrouterLastValidatedAt`, for NCBI. */
+  ncbiLastValidatedAt: {
+    key: PREF_KEYS.ncbiLastValidatedAt,
+    type: "string",
+    default: "",
+  },
+
+  /** As `openrouterLastValidatedAt`, for Semantic Scholar. */
+  semanticscholarLastValidatedAt: {
+    key: PREF_KEYS.semanticscholarLastValidatedAt,
+    type: "string",
+    default: "",
+  },
+
+  /**
+   * The OpenRouter key's last validation outcome — a **status**, never any part
+   * of the key. `""` means never validated. One such row per credential-holding
+   * ID, all six: the owner extended it from the four LLM providers on
+   * 2026-09-09 because a bad NCBI or Semantic Scholar key fails silently
+   * (P3-T32).
+   */
+  openrouterLastValidationResult: {
+    key: PREF_KEYS.openrouterLastValidationResult,
+    type: "string",
+    default: "",
+    values: VALIDATION_RESULT_VALUES,
+  },
+
+  /** As `openrouterLastValidationResult`, for OpenAI. */
+  openaiLastValidationResult: {
+    key: PREF_KEYS.openaiLastValidationResult,
+    type: "string",
+    default: "",
+    values: VALIDATION_RESULT_VALUES,
+  },
+
+  /** As `openrouterLastValidationResult`, for Gemini. */
+  geminiLastValidationResult: {
+    key: PREF_KEYS.geminiLastValidationResult,
+    type: "string",
+    default: "",
+    values: VALIDATION_RESULT_VALUES,
+  },
+
+  /** As `openrouterLastValidationResult`, for Anthropic. */
+  anthropicLastValidationResult: {
+    key: PREF_KEYS.anthropicLastValidationResult,
+    type: "string",
+    default: "",
+    values: VALIDATION_RESULT_VALUES,
+  },
+
+  /** As `openrouterLastValidationResult`, for NCBI. */
+  ncbiLastValidationResult: {
+    key: PREF_KEYS.ncbiLastValidationResult,
+    type: "string",
+    default: "",
+    values: VALIDATION_RESULT_VALUES,
+  },
+
+  /** As `openrouterLastValidationResult`, for Semantic Scholar. */
+  semanticscholarLastValidationResult: {
+    key: PREF_KEYS.semanticscholarLastValidationResult,
+    type: "string",
+    default: "",
+    values: VALIDATION_RESULT_VALUES,
   },
 
   /**

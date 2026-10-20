@@ -2108,6 +2108,18 @@ export interface SerializedError {
 }
 ```
 
+> **Redaction before storage. Decided 2026-10-20 (owner; `plan/00` §6 item 242).** Every record in
+> this section that the plugin persists — `StoredSummary` **with its `content` included**, and
+> `JobRecord`'s `input`, `progress`, `usage` and `error` — passes the one redaction gate,
+> `redactRecord` in `src/core/provenance.ts` (`09-security-privacy-and-api-keys.md` §2.1,
+> "Persisted records pass one gate"), before it is written. A row whose stored values the gate
+> changed carries a visible "partly redacted" mark, because the gate's 40-character catch-all can
+> also alter a gene or protein sequence quoted in `content`. The gate returns the mark as data
+> next to the record; **no member above holds it yet** — the card that stores the row adds that
+> member and updates this section (`P3-T25` for `StoredSummary`, `P3-T34` for `JobRecord`).
+> `contentHash` and `workKey` are identifiers that `KEY_PATTERNS` would replace, so the storing
+> card names them to the gate as fields to copy unchanged.
+
 ### 5.3 Search provenance
 
 **This section declares the provenance record and its JSON Schema.** `10-requirements-and-user-stories.md` FR-8 requires that "Export provenance as JSON" produce "a JSON file matching the documented schema"; this is that schema. FR-8 owns *what must be recorded* — its acceptance criteria are the field list — and this section owns the *shape*: the type name, the field names, the types, and the on-disk schema artefact. Where FR-8 names a quantity and this section names a field, they describe the same thing; adding a field here that FR-8 does not require, or dropping one it does, is a defect.
@@ -2439,7 +2451,7 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 | `www.ebi.ac.uk` | 5/s | 5 | 3 | 1000 ms | 30 000 ms | 3 | See the unverified note below. |
 | `api.biorxiv.org` | 1/s | 2 | 2 | 1000 ms | 30 000 ms | 3 | No published limit exists; this is a self-imposed conservative default. |
 | `pmc.ncbi.nlm.nih.gov` | 2.5/s, never keyed | 1 | 3 | 1000 ms | 30 000 ms | 3 | The NCBI ID Converter (`02-literature-database-apis.md` §3.7), which resolves a PMCID-only record before Strategy B's lookup (§12.1). An NCBI service on a host of its own, so it gets a bucket of its own with the `eutils.ncbi.nlm.nih.gov` row's **unkeyed** values; **no API key is ever sent** to it. `tool` and `email` carry the maintainer address, as on E-utilities (`02-literature-database-apis.md` §2.2). See the dated note below. |
-| LLM/TTS hosts | from provider prefs | 1 | = `llm` pool size | — | — | — | Driven by `Retry-After` and provider rate-limit headers rather than a fixed guess. |
+| LLM/TTS hosts | from provider prefs | 1 | = `llm` pool size | 1000 ms (LLM) | 60 000 ms (LLM) | 5 (LLM) | Driven by `Retry-After` and provider rate-limit headers rather than a fixed guess. The three retry cells are the **LLM** hosts' budget (`LLM_RETRY_BUDGET`), and one LLM attempt may wait up to 3 minutes; TTS hosts are not decided. See the dated note "LLM hosts' retry budget" below. *(Corrected 2026-10-20, `plan/00` §6 item 240: the three retry cells read `—`.)* |
 
 > **Retry cells filled 2026-10-14 by the owner's decision (`P2-T03` report, `plan/00` §6 item 126).** Until this date the
 > five non-NCBI rows carried `—` in the three retry columns, and `plan/README.md` §5 rule 4 forbids the code to carry a
@@ -2466,7 +2478,7 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 
 **429 / `Retry-After` handling.** Any 429 or 503 with `Retry-After` calls `limiter.penalize(now + retryAfterMs, ...)`, which parks *every* waiter on that host — so one job's throttling automatically slows all others. Retries use decorrelated jitter (`sleep = min(cap, random(base, prev*3))`) with a per-host attempt cap; after the cap the job fails with a retryable `RateLimitError` and the user is offered "Retry later".
 
-**The retry budget — `base`, `cap`, the attempt cap, and the source of each.** Settled by the owner on **2026-10-07** (`plan/02-phase-1-pubmed.md`, `P1-T28`) and entered in the three columns above. They are **per host and not global defaults**: each other literature row got its own three values on 2026-10-14 and `pmc.ncbi.nlm.nih.gov` on 2026-10-19, each with its own sources in the dated notes under the table *(corrected 2026-10-20, `plan/00` §6 item 231: this sentence used to say every other row carries `—`)*, and only the LLM/TTS row carries `—`, on purpose because `03-llm-provider-integration.md` §11.6 owns a *differently shaped* backoff for those hosts whose numbers are not transferable to this one (`05-related-work-discovery.md` §9.5's authority note forbids a second shape here). The three apply **only when the server sent no `Retry-After`** — one that is sent always wins, per the paragraph above.
+**The retry budget — `base`, `cap`, the attempt cap, and the source of each.** Settled by the owner on **2026-10-07** (`plan/02-phase-1-pubmed.md`, `P1-T28`) and entered in the three columns above. They are **per host and not global defaults**: each other literature row got its own three values on 2026-10-14 and `pmc.ncbi.nlm.nih.gov` on 2026-10-19, each with its own sources in the dated notes under the table *(corrected 2026-10-20, `plan/00` §6 item 231: this sentence used to say every other row carries `—`)*, and the LLM/TTS row carries the LLM hosts' own three values from 2026-10-20 *(corrected 2026-10-20, `plan/00` §6 item 240: this sentence used to say "only the LLM/TTS row carries `—`, on purpose because `03-llm-provider-integration.md` §11.6 owns a *differently shaped* backoff for those hosts whose numbers are not transferable to this one". The owner chose this table's decorrelated jitter for LLM hosts too, so there is one shape; §11.6's numbers — 5 attempts, 1000 ms, 60 s — are that row's cells. See the dated note "LLM hosts' retry budget" below)*. The three apply **only when the server sent no `Retry-After`** — one that is sent always wins, per the paragraph above.
 
 - **`base` = 1000 ms. Source: this table's own NCBI pacing row.** Unkeyed pacing is 2.5 requests/second, i.e. 400 ms between request *starts*, so a first backoff shorter than the pacing interval cannot change anything the host sees; 1000 ms is the smallest round value comfortably above it. It **coincides with `03-llm-provider-integration.md` §11.6's LLM `baseMs` and was not taken from it** — the derivation above is independent, and the coincidence is recorded rather than hidden because the next reader will notice it.
 - **`cap` = 30 000 ms. Sources: `P1-T26`'s `Retry-After: 120` case and §8.5's `timeoutSeconds` default of 60.** The longest delay the shipped code is specified to honour is a server's own: `P1-T26` carries a criterion fixing a 429's `Retry-After: 120` at exactly 120 000 ms, and `src/core/rateLimit/backoff.ts` deliberately does **not** clamp a server-supplied delay to `capMs`, because a host that says "come back in two minutes" outranks our ceiling. This cap governs only the **silent** case, and the silent case must not cost the user what the loudest explicit one does — two minutes in front of the Search window with nothing said. 30 s is a quarter of that and also sits below §8.5's 60 s default request timeout, so no single wait can outlast the request it is waiting to re-issue. **Note what this is not: no host in the corpus has ever been observed sending a `Retry-After` at all** — `02-literature-database-apis.md` §7.1 records arXiv's 429 arriving *without* one, which is the case this cap exists for. At an attempt cap of 3 the cap never binds (the longest possible wait is 3000 ms), so it guards a later raise of the attempt cap rather than a value the shipped path reaches.
@@ -2538,8 +2550,10 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 >   `timeoutSeconds`, 60 s by default). An attempt that started inside the budget runs to its answer or its timeout.
 > - **Cancellation still stops at once**, and it is checked before the budget. A cancelled request ends with
 >   `OperationCancelledError`, not with its last error.
-> - **A host with no retry policy** (the LLM/TTS row, or a host with no row) makes one attempt and has no budget. Its
->   one attempt is bounded by its timeout alone.
+> - **A host with no retry policy** (a host with no row, or a row with no retry cells) makes one attempt and has no
+>   budget. Its one attempt is bounded by its timeout alone. *(Corrected 2026-10-20, `plan/00` §6 item 240: the
+>   parenthesis used to begin "the LLM/TTS row". LLM hosts now have a retry budget and so this 90 s budget too; see
+>   the note "LLM hosts' retry budget" below.)*
 > - **The per-source 20-second search deadline** in `src/pipeline/searchImport/stages.ts` is separate and unchanged.
 >
 > **The worst case, corrected to the new bound.** The last retry starts before the 90 s mark and may then run to its
@@ -2549,6 +2563,35 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 > and the request ends with the second 429 — instead of three attempts and about 150 s. A `Retry-After` the budget
 > cannot fit, such as `P1-T26`'s 120 s, costs no wait at all. The host is still `penalize`d for the full 120 s, so
 > every other request to it waits, and the request that was refused ends at once with its `RateLimitError`.
+
+> **LLM hosts' retry budget. Decided 2026-10-20 (owner; `plan/00` §6 item 240).** Built by `P3-T05`.
+> - **One jitter shape.** LLM hosts use this table's decorrelated jitter, `min(cap, random(base, prev*3))`, through
+>   the one shipped retry loop (`withRetry` in `src/core/http/retry.ts`). `03-llm-provider-integration.md` §11.6's
+>   full jitter is not written anywhere.
+> - **The cells: base 1000 ms, cap 60 000 ms, attempt cap 5.** These are §11.6's sketch numbers, chosen by the owner.
+>   The attempt cap counts the first attempt, so it allows four retries. The code carries them once, as
+>   `LLM_RETRY_BUDGET` in `src/core/rateLimit/hostLimiter.ts`; each LLM row the adapter cards (`P3-T07`–`P3-T10`) add
+>   to `HOST_POLICIES` carries it as its `retry` member, and `createRetryFor` turns it into a policy unchanged.
+> - **What the cells cost in waiting.** Through `withRetry` the first wait is exactly 1 s and the next three are at
+>   most 3 s, 9 s and 27 s: **40 s** of silent waiting at the longest and 4 s at the shortest. The 60 s cap does not
+>   bind at 5 attempts. A sent `Retry-After` is the wait itself, as for every other row.
+> - **One LLM attempt may wait up to 3 minutes.** `LLM_ATTEMPT_TIMEOUT_MS` (180 000 ms) sits beside the budget in
+>   `hostLimiter.ts`, and the adapter passes it as the request's `timeoutMs`, because a long full-text generation can
+>   exceed 60 s. It is a named constant, not a preference. Literature hosts keep §8.5's `timeoutSeconds` (60 s).
+> - **A timeout is not retried automatically** (item 230, note above). A silent LLM host costs one 3-minute attempt.
+> - **The 90-second request budget is unchanged and now covers LLM requests too.** It decides only whether a retry may
+>   *start*; it never cuts an attempt short. Three consequences. An LLM attempt that fails after 90 s or more is not
+>   retried, so a long generation that ends in a 5xx gets one attempt. All five attempts happen only when the
+>   failures are quick — five 1-second 429s and the longest waits end at about 45 s. And the worst case is a retry
+>   started just inside 90 s that then runs its full 3 minutes: about **90 s + 180 s = 270 s** after the first attempt
+>   reached the wire, plus that retry's wait for the host's bucket.
+> - **Known gap, recorded by `P3-T05`.** `src/core/http/client.ts` turns every 429 into a `RateLimitError` without
+>   its body, inside the retry loop. So an Anthropic spend-cap 429 (`enforced_spend_limit_reached`, which
+>   `03-llm-provider-integration.md` §11.1 says must not be retried) is retried like a rate limit until the attempt cap
+>   or the budget ends it, and the adapter cannot tell it apart afterwards. `mapProviderError` in
+>   `src/llm/shared/errorMap.ts` maps that body correctly once a caller can hand it over.
+> - **Not part of this decision.** The batch budget (§11.6's "e.g. 30 min") is a pipeline-level limit for the `llm`
+>   worker pool card, `P3-T17`. TTS hosts share this table row but are not decided.
 
 ### 7.4 Cancellation
 
@@ -3146,6 +3189,8 @@ All keys below are **relative to the branch** `extensions.zotero.research-helper
 
 Rows marked **⚠** are settings the design uses but no document had declared as a preference at the time this table was consolidated, or whose shape had to be pinned down here. They are flagged so a human can confirm the key name and default before they are written into `prefs.js`.
 
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 241):** `privacy.egressAcknowledged`, `llm.tokenEstimateCalibration` and `cache.lastSeenPromptVersions` ship as written, with the types and defaults their rows give, and their ⚠ marks are removed. `P3-T32` adds them to `src/prefs/schema.ts`; none of the three gets a `pref()` line (`01-zotero-plugin-platform.md` §7.2).
+
 #### Sources & search
 
 | Key | Type | Default | Values | Semantics owned by | Surfaced in UI |
@@ -3180,8 +3225,8 @@ Rows marked **⚠** are settings the design uses but no document had declared as
 | `reportModel` | string | `""` (empty = use `<provider>.model`) | a model ID | `03-llm-provider-integration.md` §16 | as above; `04-audio-report-tts.md` §8.4 also refers to it for audio-script rewriting |
 | `screening.model` | string | `""` (empty = use `summaryModel`, and `<provider>.model` when that is also empty) | a model ID | `12-prompt-library.md` §3 | **Not in the pane.** **This is not a third model tier.** Doc 03 §16 sanctions exactly two tiers (`summaryModel` / `reportModel`); this key exists only so a user can point the cheap relevance-screening pass (doc 12 §3, `RELEVANCE_SCREEN` — the highest-volume call in the plugin) at an even cheaper model. Left empty, screening runs on `summaryModel` and no third model is in play. |
 | `privacy.mode` | string | `"balanced"` | `strict` \| `balanced` \| `full` | `09-security-privacy-and-api-keys.md` §3.5 | Prefs pane → Privacy (doc 08 §7.3). This row is the **global** default only; per-collection overrides live in the `collection_settings` table (§8.3), are surfaced in the collection context menu, and can only ever be *stricter* than this value (doc 09 §3.5). |
-| ⚠ `privacy.egressAcknowledged` | boolean | `false` | — | `09-security-privacy-and-api-keys.md` §3.6 | **Not in the pane.** The one-time data-egress acknowledgement `10-requirements-and-user-stories.md` FR-36 requires be "recorded in prefs". Written **once**, by the first-job confirmation dialog, when the user acknowledges the notice; read to decide whether to show that notice again. It is *not* a suppression switch for the per-job disclosure, which doc 09 §3.6 item 1 requires on every job that sends content, and it does not suppress any of the four non-suppressible warnings in doc 09 §3.6 items 2–3. No document named the key; the shape is pinned here. |
-| ⚠ `llm.tokenEstimateCalibration` | string (JSON) | `"{}"` | JSON object, model ID → correction factor (a positive number) | `03-llm-provider-integration.md` §10.2 | **Not user-visible.** The rolling per-model correction factor that `06-summarization-and-trend-report.md` §5.1 and `12-prompt-library.md` §11 ask be measured from the returned `usage` blocks and stored "in prefs" so the heuristic estimator becomes self-calibrating. This row is that store, and it is a **preference rather than a database table** because it is bounded (one entry per model the user actually runs), tiny, and read at estimate time by `src/llm/shared/tokenEstimate.ts` — the same reasoning that makes `cache.lastSeenPromptVersions` a pref. Write it at most **once per job**, on completion, never per call: §8.2's rule that prefs rewrite the whole file on every change still applies. An absent or unparseable value means "no calibration yet" and the raw heuristic is used. |
+| `privacy.egressAcknowledged` | boolean | `false` | — | `09-security-privacy-and-api-keys.md` §3.6 | **Not in the pane.** The one-time data-egress acknowledgement `10-requirements-and-user-stories.md` FR-36 requires be "recorded in prefs". Written **once**, by the first-job confirmation dialog, when the user acknowledges the notice; read to decide whether to show that notice again. It is *not* a suppression switch for the per-job disclosure, which doc 09 §3.6 item 1 requires on every job that sends content, and it does not suppress any of the four non-suppressible warnings in doc 09 §3.6 items 2–3. No document named the key; the shape is pinned here. |
+| `llm.tokenEstimateCalibration` | string (JSON) | `"{}"` | JSON object, model ID → correction factor (a positive number) | `03-llm-provider-integration.md` §10.2 | **Not user-visible.** The rolling per-model correction factor that `06-summarization-and-trend-report.md` §5.1 and `12-prompt-library.md` §11 ask be measured from the returned `usage` blocks and stored "in prefs" so the heuristic estimator becomes self-calibrating. This row is that store, and it is a **preference rather than a database table** because it is bounded (one entry per model the user actually runs), tiny, and read at estimate time by `src/llm/shared/tokenEstimate.ts` — the same reasoning that makes `cache.lastSeenPromptVersions` a pref. Write it at most **once per job**, on completion, never per call: §8.2's rule that prefs rewrite the whole file on every change still applies. An absent or unparseable value means "no calibration yet" and the raw heuristic is used. |
 
 Model IDs churn on a scale of weeks. These are **seed defaults only** — the pickers are repopulated from each provider's models endpoint at run time (`03-llm-provider-integration.md` §9). Never hardcode a model ID outside `prefs.js`.
 
@@ -3202,7 +3247,7 @@ Model IDs churn on a scale of weeks. These are **seed defaults only** — the pi
 | `screening.dedupe` | boolean | `true` | — | `06-summarization-and-trend-report.md` §13.4 | Not user-visible |
 | `cache.enabled` | boolean | `true` | — | `06-summarization-and-trend-report.md` §11.3 | "Clear cache" button in Prefs pane → Advanced; no on/off control yet |
 | `cache.ignoreModel` | boolean | `false` | — | `06-summarization-and-trend-report.md` §11.2 | Not user-visible; when on, the report warns that it mixes model generations |
-| ⚠ `cache.lastSeenPromptVersions` | string (JSON) | `"{}"` | JSON object, prompt ID → version string | `07-architecture-and-data-model.md` §9.3 | Not user-visible. §9.3 says the last-seen prompt-version set is "stored in prefs" but never names the key; this is that key. |
+| `cache.lastSeenPromptVersions` | string (JSON) | `"{}"` | JSON object, prompt ID → version string | `07-architecture-and-data-model.md` §9.3 | Not user-visible. §9.3 says the last-seen prompt-version set is "stored in prefs" but never names the key; this is that key. |
 | `cache.maxSizeMB` | integer | `500` | 100–5000 | `07-architecture-and-data-model.md` §9.2 | Prefs pane → Advanced, beside the "Clear cache" button (doc 08 §7.3). This row is the **global** cache cap that this document's §9.2 requires be "shown in preferences"; that section defers to this row for the number. The per-namespace caps in §9.2's table are fixed and are **not** preferences. |
 
 The allowed-value enumerations for `screening.retractionPolicy` and `screening.nonEnglishPolicy` are the states doc 06 §13.2–13.4 describes in prose; the string spellings are pinned here.
