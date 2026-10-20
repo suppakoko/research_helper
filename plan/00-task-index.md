@@ -1742,6 +1742,33 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
     The three cards were started the same day.
 
+### 6.49 Raised by P3-T05, P3-T32 and P3-T36, 2026-10-20 — 243 to 246 wait on the owner
+
+243. **Two rules P3-T36 added to the redaction gate** (`plan/reports/P3-T36.md`): (a) a key-named field is removed only
+    when its value can carry text, so `inputTokens`/`outputTokens`/`maxOutputTokens` numbers survive; (b) callers may list
+    identifier fields (`contentHash`, a `hash:` work key) as verbatim, because the 40-character catch-all would otherwise
+    erase every row's identity. Recorded in `docs/09` §2.1 as the card's choices, not the owner's.
+
+244. **The HTTP client hides an LLM spend cap.** `classify` in `src/core/http/client.ts` turns every 429 into a bodiless
+    `RateLimitError` inside the retry loop, so Anthropic's spend-cap 429 is retried and reaches the adapter unrecognisable;
+    `mapProviderError` reads it correctly only when given the body (`plan/reports/P3-T05.md` Contradiction 1). Also:
+    `isRetriedAutomatically` would retry a `StructuredOutputError` (`docs/03` §14.1 says it must not), and
+    `test/unit/core/backoff.test.ts` will fail on the first LLM `HOST_POLICIES` row unless §7.3 gains per-host rows.
+
+245. **Gecko preferences hold no fractional number.** `summary.confirmAboveUSD` (2.00) and the two spend ceilings are
+    `number` rows, but the preference store has only integer, boolean and string types (`setIntPref`). Writing 2.50 would
+    not round-trip. Nothing writes them yet; `P3-T16` is the first writer.
+
+246. **Korean for P3-T05's four LLM error strings** (`rh-error-llm`, `rh-error-context-length`, `rh-error-content-filter`,
+    `rh-error-structured-output`) waits on the owner (`G-41`); three of the English strings are the agent's own wording.
+
+247. **Recorded, not cards.** Stale comments: `src/core/rateLimit/backoff.ts` header (full jitter "P3-T05 step 7"),
+    `hostLimiter.ts` header (LLM hosts "driven from provider prefs"), `test/integration/zotero/keychain.spec.ts` (no
+    `PREF_KEYS` entry for semanticscholar), `docs/07` §8.5 `timeoutSeconds` ("because LLM calls are long"), `docs/07` §8.5.1
+    sketch names `fullTextMode` where the code ships `summaryFullTextMode`. Gemini spend-cap and Interactions-API refusal
+    shapes are undocumented (`P3-T10`). Vitest filters are substrings: every Phase 3 card's `a|b` Verify filter matches
+    nothing.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
