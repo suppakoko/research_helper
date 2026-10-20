@@ -6,7 +6,10 @@
 > *exactly what to do next*, as discrete task cards that can be handed to
 > Claude Code one at a time.
 >
-> **Last updated:** 2026-09-09 · **Status:** no code written yet; every task is `TODO`.
+> **Last updated:** 2026-10-20 · **Status:** live counts are in the header of
+> [`00-task-index.md`](00-task-index.md), which `npm run index:derive` regenerates from the
+> cards. *Corrected 2026-10-20: this line read "2026-09-09 · no code written yet; every task
+> is `TODO`", which stopped being true when `P0-T01` was done.*
 
 ---
 
@@ -297,6 +300,10 @@ card sums rather than the cards being shaved, and the bands it now publishes for
 Phases 0–3 are **derived from these cards**: low end = the phase's task sum,
 high end = that sum × 1.4 (`docs/11`'s own ±40% convention), rounded to the
 nearest whole day — e.g. Phase 2's 24.25 × 1.4 = 33.95 → the published 24.25–34.
+*Added 2026-10-20:* an exact half rounds up (Phase 2's 27.50 × 1.4 = 38.5 → 39 on 2026-10-07,
+Phase 3's 27.5 → 39 on 2026-10-20). The Phases 0–3 subtotal's high end is the sum of the rounded
+phase tops, not the subtotal × 1.4: `docs/11` §1 does it this way (25 + 41 + 47 + 39 = 152, where
+107.75 × 1.4 = 150.85 would give 151).
 So for Phases 0–3 the cards are the measurement and `docs/11` records it.
 
 **The propagation checklist — all five sites, because naming three of them is
@@ -310,8 +317,13 @@ this order:
    the card count, and the `**Total**` row;
 3. **`docs/11` §1's prose** — the whole-plan sum, the months arithmetic, the
    ×1.50 factor history, and the mermaid node for that phase;
-4. **`docs/11` §2's per-phase `**Effort.**` paragraph** for that phase, plus
-   §2's **critical path** and **Phase 5 float** bullets;
+4. **`docs/11` §1's per-phase `**Effort.**` paragraph** for that phase, plus
+   §2's **critical path** and **Phase 5 float** bullets, and the margin between the
+   Phase 2 and Phase 3 routes that §2's "Reading the graph" paragraph and its second
+   critical-path bullet quote. *Corrected 2026-10-20: this item said "§2's per-phase
+   `**Effort.**` paragraph", but those paragraphs sit in each phase's entry under
+   `docs/11` §1; §2 has none. The P2-versus-P3 margin was added the same day, after it
+   was found still quoting the 2026-09-09 figures.*
 5. **`plan/00-task-index.md` §1's table** — the phase row and the Phases 0–3
    total row, **including that table's last column**, whose percentage is the
    phase's low card-sum against the **top** of the superseded band (Phase 0's

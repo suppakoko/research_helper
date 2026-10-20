@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-20 · **148 tasks: 112 `DONE`, 36 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-20 · **155 tasks: 112 `DONE`, 43 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 37**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 155, so 57 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -22,10 +22,20 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
-| 2 — Multi-source + dedup | 36 | 32.75 d | 32.75–46 d | 12–16 d (+105%) |
-| 3 — LLM + summaries | 31 | 23.50 d | 23.5–33 d | 12–15 d (+57%) |
-| **Phases 0–3** | **148** | **103.25 d** | **103.25–145 d** | 39–52 d (+99% over the top of the band) |
+| 2 — Multi-source + dedup | 37 | 33.25 d | 33.25–47 d | 12–16 d (+108%) |
+| 3 — LLM + summaries | 37 | 27.50 d | 27.5–39 d | 12–15 d (+83%) |
+| **Phases 0–3** | **155** | **107.75 d** | **107.75–152 d** | 39–52 d (+107% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
+
+**2026-10-20: Phase 3 re-carded and `P2-T37` added.** Phase 3 went from 31 cards and 23.50 d to
+**37 cards and 27.50 d** when every card was rewritten against the tree (§6 item 234; `plan/04` §3
+has the per-card table). Phase 2 gained `P2-T37` (0.5 d), the re-run fix for item 235, and is
+**37 cards and 33.25 d**. Both sums were re-read from the cards' `Estimate` rows by script, not
+added by hand. The high ends are 33.25 × 1.4 = 46.55 → 47 and 27.5 × 1.4 = 38.5 → 39. The Phases
+0–3 high end is the sum of the rounded phase tops, 25 + 41 + 47 + 39 = 152, as `docs/11` §1 builds
+it. The project total is 181.25–254 d and the critical path P0 → P1 → P2 → P4 → P6 → P7 is
+132.75–186 d (it was 176.75–247 and 132.25–185); `docs/11` §1–§2 carry the rest. Record:
+`plan/reports/bookkeeping-2026-10-20.md`.
 
 **Two Phase 3 cards were re-estimated on 2026-09-09, after the roadmap correction below.**
 `P3-T04` moved from 1.0 d to **1.75 d** and `P3-T20` from 1.0 d to **1.75 d**. Both had been
@@ -87,7 +97,10 @@ queue is what gates Phase 5 months later (`docs/11` R-3).
 ## 3. Entry points and terminals
 
 **Tasks with no dependencies** (can start immediately, subject to their gate):
-`P0-T01`, `P0-T22`, `P1-T01`, `P2-T15`, `P3-T01`, `P3-T18`, `P3-T24`.
+`P0-T01`, `P0-T22`, `P1-T01`, `P2-T15`, `P3-T01`, ~~`P3-T18`~~, `P3-T24`.
+**Corrected 2026-10-20 for Phase 3** (re-read from the cards): Phase 3's entry points are now
+`P3-T01`, `P3-T05`, `P3-T24`, `P3-T32` and `P3-T36`; `P3-T18` depends on `P3-T32` since the
+re-carding. Phase 3's terminal is still `P3-T31`, which now also waits on `P3-T37`.
 
 **Phase terminals** (a phase is done when its terminal is `DONE`):
 `P0-T28`, `P1-T23`, `P2-T15`/`P2-T16`, `P3-T31`.
@@ -228,7 +241,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
 | ✅ `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
 | ✅ `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
-| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36` | 1.0 d |  |
+| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37` | 1.0 d |  |
 | ✅ `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
 | ✅ `P2-T20` | Render `languages`, `openAccessOnly` and `raw` across the… | `P1-T08` | 0.5 d |  |
 | ✅ `P2-T21` | Make the concurrency cap resizable, so a tightened header… | `P1-T27`, `P1-T26` | 0.5 d |  |
@@ -247,42 +260,49 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T34` | The six schema extensions the owner approved on 2026-10-15… | `P2-T05`, `P2-T28`, `P2-T31` | 1.0 d |  |
 | ✅ `P2-T35` | Let a 4xx response body reach the adapter for hosts whose… | `P2-T06` | 0.25 d |  |
 | ✅ `P2-T36` | The four behaviour changes the owner approved on 2026-10-15 | `P2-T05`, `P2-T30` | 0.75 d |  |
+| `P2-T37` | A re-run finds a record that has no DOI and no PMID | `P2-T36` | 0.5 d |  |
 
 ### Phase 3
 
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
-| `P3-T01` | Secret wrapper and unconditional log redaction | — | 0.5 d |  |
-| `P3-T02` | `SecretStore` tier 1 — OS keychain via `Services.logins` | `P3-T01`, `P1-T41` | 0.75 d |  |
-| `P3-T03` | Tier ladder — session-only and passphrase, no tier 4 | `P3-T02` | 0.75 d |  |
-| `P3-T04` | Prefs pane: key fields, backend badge, remove-all | `P3-T02`, `P3-T03` | 1.75 d | 🔒 |
-| `P3-T05` | LLM error taxonomy and the retry/backoff policy | `P3-T01` | 0.5 d |  |
-| `P3-T06` | `LLMProvider` contract, registry, router, mock harness | `P3-T05` | 0.75 d |  |
-| `P3-T07` | OpenRouter adapter (the default provider) | `P3-T02`, `P3-T05`, `P3-T06` | 1.0 d |  |
-| `P3-T08` | OpenAI adapter (Responses API) | `P3-T02`, `P3-T05`, `P3-T06` | 0.5 d |  |
-| `P3-T09` | Anthropic adapter (Messages API) | `P3-T02`, `P3-T05`, `P3-T06` | 0.5 d |  |
-| `P3-T10` | Gemini adapter (Interactions API) | `P3-T02`, `P3-T05`, `P3-T06` | 0.75 d |  |
-| `P3-T11` | SSE streaming across the four adapters | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` | 0.5 d |  |
+| `P3-T01` | `Secret` wrapper, `loggableHeaders`, `debug: true` lint | — | 0.25 d |  |
+| `P3-T02` | Tier-1 store: LLM presence flags and `clearAll` | `P1-T41`, `P3-T32` | 0.5 d |  |
+| `P3-T03` | Session-only fallback tier and the degradation dialog | `P3-T02` | 0.5 d |  |
+| `P3-T04` | Prefs pane: LLM provider blocks, model, base URL | `P3-T02`, `P3-T03`, `P3-T32` | 1.0 d | 🔒 |
+| `P3-T05` | LLM error mapping and the LLM retry policy | — | 0.5 d |  |
+| `P3-T06` | `LLMProvider` contract, registry, router, mock harness | `P3-T05`, `P3-T32` | 1.0 d |  |
+| `P3-T07` | OpenRouter adapter (the default provider) | `P3-T01`, `P3-T05`, `P3-T06` | 1.0 d |  |
+| `P3-T08` | OpenAI adapter (Responses API) | `P3-T01`, `P3-T05`, `P3-T06` | 0.5 d |  |
+| `P3-T09` | Anthropic adapter (Messages API) | `P3-T01`, `P3-T05`, `P3-T06` | 0.5 d |  |
+| `P3-T10` | Gemini adapter (Interactions API) | `P3-T01`, `P3-T05`, `P3-T06` | 0.75 d |  |
+| `P3-T11` | SSE streaming across the four adapters | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` | 0.75 d |  |
 | `P3-T12` | Structured output, validation, and the repair path | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` | 0.75 d |  |
-| `P3-T13` | Model catalogue, pricing table, token estimation | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` | 0.75 d |  |
-| `P3-T14` | `validateCredentials()` and the Test-key button | `P3-T04`, `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T13` | 0.5 d | 🔒 |
-| `P3-T15` | Privacy modes, egress disclosure, Gemini free-tier warning | `P3-T07`, `P3-T10`, `P3-T13` | 0.75 d |  |
-| `P3-T16` | Cost estimate, confirmation gate, `BudgetGuard`, usage | `P3-T13`, `P3-T15` | 1.0 d | 🔒 |
-| `P3-T17` | `llm` worker pool: concurrency, cancel, pause, resume | `P3-T05`, `P3-T06` | 0.75 d |  |
-| `P3-T18` | Text acquisition tiers 1–2 (abstract, attachment text) | — | 0.75 d |  |
-| `P3-T19` | Tiers 3–4, cleaning pass, OCR probe, language detection | `P3-T18` | 0.75 d |  |
+| `P3-T13` | Model catalogue, pricing table, token calibration | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T32`, `P3-T33` | 0.5 d |  |
+| `P3-T14` | `validateCredentials()` and the Test-key button | `P3-T04`, `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T13`, `P3-T32`, `P3-T34`, `P3-T36` | 0.75 d | 🔒 |
+| `P3-T15` | Privacy modes, egress disclosure, Gemini free-tier warning | `P3-T07`, `P3-T10`, `P3-T13`, `P3-T32`, `P3-T36` | 1.0 d |  |
+| `P3-T16` | Cost estimate, confirmation gate, `BudgetGuard`, usage | `P3-T13`, `P3-T15`, `P3-T32` | 1.25 d | 🔒 |
+| `P3-T17` | `llm` worker pool: concurrency, cancel, pause, resume | `P3-T05`, `P3-T06`, `P3-T32`, `P3-T34` | 0.75 d |  |
+| `P3-T18` | Text acquisition tiers 1–2 (abstract, attachment text) | `P3-T32` | 0.5 d |  |
+| `P3-T19` | Tiers 3–4, cleaning pass, OCR probe, language detection | `P3-T18`, `P3-T32` | 0.75 d |  |
 | `P3-T20` | The 40-PDF IMRaD fixture set with ground-truth labels | `P3-T19` | 1.75 d | 🔒 |
-| `P3-T21` | IMRaD section detector (JATS + PDF heading table) | `P3-T19` | 0.5 d |  |
+| `P3-T21` | IMRaD section detector | `P3-T19` | 0.5 d |  |
 | `P3-T22` | Detector accuracy harness, 85 % gate, degrade switch | `P3-T20`, `P3-T21` | 0.5 d | 🔒 |
 | `P3-T23` | Chunker: section-aware, flat, and single-shot paths | `P3-T13`, `P3-T21`, `P3-T22` | 0.75 d |  |
 | `P3-T24` | Prompt registry with versioned prompt files | — | 0.5 d |  |
-| `P3-T25` | Per-paper summarizer, DR-1, and the grounding check | `P3-T12`, `P3-T16`, `P3-T23`, `P3-T24`, `P3-T26` | 1.0 d |  |
-| `P3-T26` | Summary cache keyed per `docs/06` §11.2 | `P3-T19`, `P3-T24` | 0.5 d |  |
-| `P3-T27` | Screening: retractions, non-English, duplicates, relevance | `P3-T12`, `P3-T18`, `P3-T24` | 0.75 d |  |
-| `P3-T28` | Item-pane AI summary section | `P3-T25` | 0.5 d |  |
-| `P3-T29` | Summarize-collection pipeline, notes, remove-notes command | `P3-T16`, `P3-T17`, `P3-T25`, `P3-T27` | 1.0 d |  |
-| `P3-T30` | LLM fixtures and contract tests | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T11`, `P3-T12` | 0.75 d |  |
-| `P3-T31` | Phase-3 acceptance run against the definition of done | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30` | 0.75 d | 🔒 |
+| `P3-T25` | Per-paper summarizer, DR-1, and the grounding check | `P3-T12`, `P3-T16`, `P3-T23`, `P3-T24`, `P3-T26`, `P3-T32`, `P3-T36` | 1.25 d |  |
+| `P3-T26` | Summary cache keyed per `docs/06` §11.2 | `P3-T19`, `P3-T24`, `P3-T32`, `P3-T33` | 0.5 d |  |
+| `P3-T27` | Screening: retractions, non-English, duplicates, relevance | `P3-T12`, `P3-T18`, `P3-T24`, `P3-T32`, `P3-T35` | 1.0 d |  |
+| `P3-T28` | Item-pane AI summary section | `P3-T25`, `P3-T32`, `P3-T35` | 0.75 d |  |
+| `P3-T29` | Summarize-collection pipeline, notes, remove-notes command | `P3-T16`, `P3-T17`, `P3-T25`, `P3-T27`, `P3-T32`, `P3-T35` | 1.25 d |  |
+| `P3-T30` | LLM fixtures and contract tests | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T11`, `P3-T12` | 0.75 d | 🔒 |
+| `P3-T31` | Phase-3 acceptance run against the definition of done | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30`, `P3-T37` | 0.75 d | 🔒 |
+| `P3-T32` | Preference rows Phase 3 reads (`docs/07` §8.5) | — | 0.75 d |  |
+| `P3-T33` | Cache layer: interface, SQLite store, keys, migration | `P3-T32` | 1.0 d |  |
+| `P3-T34` | Job record, `job` table, queue and checkpoint | `P3-T36` | 1.0 d |  |
+| `P3-T35` | Wire the pipeline-context members | `P3-T06`, `P3-T15`, `P3-T16`, `P3-T33`, `P3-T34` | 0.5 d |  |
+| `P3-T36` | One redaction gate for new persisted records | — | 0.25 d |  |
+| `P3-T37` | Detect a keyring-less Linux backend (gate `G-09`) | `P3-T02`, `P3-T03` | 0.25 d | 🔒 |
 
 ---
 
@@ -1026,6 +1046,9 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `src/bootstrap/registerUI.ts` still call `findExisting(work.ids)`. One argument at each site, the next
     time either file is in a card's list (`P2-T11` touches `itemMapper.ts`, not these; `P2-T14` touches
     `registerUI.ts`'s neighbours — fold it where it fits). Not a Phase 2 finishing condition.
+    **DECIDED 2026-10-20 (owner, with item 235): retired by `P2-T37`**, which passes the work key at
+    both call sites. Item 235 showed that this item does block a Phase 2 finishing condition (FR-51),
+    so the last sentence above no longer holds. Not yet done; `P2-T37` is `TODO`.
 
 106. **Two library indexes over one library per run.** `src/sources/shared/dedupe.ts` (`buildLibraryIndex`,
     `matchAgainstLibrary`, keyed on `LibraryItemFields`, with title and signature buckets, no `byWorkKey`) and
@@ -1640,8 +1663,18 @@ the caller of what the card builds; if it does not, the caller is added with a d
     P3-T24 without step 7, once their cards are revised; (c) a run that reaches its spend ceiling **pauses and asks** whether
     to continue (as `docs/11` §1 and P3-T31 say), so `docs/06` §5.4 and P3-T16 change; (d) G-12 starts now with
     open-access papers only: a candidate list for the owner, and each download asked for separately.
+    **(c) DECIDED 2026-10-20 (owner), restated: pause and ask.** A run that reaches its spend ceiling pauses, shows
+    the amount spent, and asks whether to continue; summaries already made are kept. **Written into the documents
+    first, the same day:** `docs/06` §5.4 carries a dated decision note, and its old "refuses rather than prompting"
+    sentence and §11.4's two "abort" sentences are corrected in place, each marked "Corrected 2026-10-20". `P3-T16`
+    builds it and is `TODO`.
+    **(d) G-12 DECIDED 2026-10-20 (owner).** Candidates were gathered in `plan/reports/G-12-candidates/`: 57
+    candidates and 20 reserves. The coordinator recommends 40 of them on a page, and the owner confirms the 40 there.
+    bioRxiv licences that were confirmed only through `api.biorxiv.org` are **accepted**. Each licence is checked
+    again on the PDF's first page when that PDF is downloaded, and every download is asked for separately. Not yet
+    done: the page and the owner's confirmation come next, and no download is recorded here.
 
-### 6.46 Raised by P2-T16 Part A, 2026-10-20 — 235 waits on the owner
+### 6.46 Raised by P2-T16 Part A, 2026-10-20 — 235 decided the same day (carded as `P2-T37`)
 
 235. **A record with no DOI and no PMID is imported again on every repeated search (D1).** Measured by `P2-T16` step 6
     (`plan/reports/P2-T16-partA.md`): Europe PMC `PMC/PMC11693243` is created again on each re-run and not marked as already
@@ -1649,6 +1682,8 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `isExisting` (`src/bootstrap/registerUI.ts`) call `findExisting(work.ids)` without the work key — item 105 — and the
     library index has no PMCID lookup. **Item 105 now blocks a Phase 2 finishing condition (FR-51), so under rule 9 it
     needs a card.**
+    **DECIDED 2026-10-20 (owner): fix it now, as card `P2-T37`** (0.5 d, ungated; depends on `P2-T36`, blocks
+    `P2-T16`). `P2-T37` also retires item 105. Not yet done; `P2-T37` is `TODO`.
 
 236. **Observations from the same run, not cards.** (a) The window controller caches source display names resolved
     before a formatter is attached, so a window-less run shows ids; the real window always attaches one. (b) The
@@ -1657,6 +1692,10 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `/paper/search/bulk`); step 3 injects it. (d) No committed query returns one paper from three or more sources. (e) CI pins
     Zotero 10.0.2 against the local 10.0.3, sets an unread `FIXTURE_MODE`, and its integration job is still
     `continue-on-error`.
+    **(e) DECIDED 2026-10-20 (owner): remove `continue-on-error` from the CI integration job and pin Zotero 10.0.3,
+    once `P2-T37` has made the integration suite green.** Not yet done: the coordinator does it after `P2-T37` lands.
+    This decision covers the `continue-on-error` flag and the Zotero pin only; it does not cover the unread
+    `FIXTURE_MODE` or (a)–(d).
 
 ## 7. Regenerating this file
 

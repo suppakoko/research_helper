@@ -21,7 +21,7 @@ them; it adds adapters and the merge layer above them.
 
 ## Effort estimate
 
-`docs/11` §1 Phase 2 is now **26.75–37.45 d, published as 26.75–37 d** — a band *derived from* the
+`docs/11` §1 Phase 2 is now **33.25–46.55 d, published as 33.25–47 d** (37 cards; `P2-T37` added 2026-10-20) — a band *derived from* the
 task sum in this file (low = the sum, high = the sum × 1.4, rounded to whole days), not an
 independent guess. The figure it superseded on 2026-09-09 was **12–16 developer-days** ("six
 adapters at ~1.5 days each plus 4–6 days for dedup and its evaluation corpus"). The reconciliation
@@ -37,6 +37,12 @@ is at the end of this file.
 > `P1-T30` found stale in four files. The rule this file follows from here: the low end is read from
 > the roll-up's `**Total**` row, never incremented by hand, and the high end is recomputed as
 > sum × 1.4 at the same time.
+
+> **Corrected 2026-10-20 — it went stale again.** The paragraph above read "**26.75–37.45 d,
+> published as 26.75–37 d**" (the 2026-10-06 figure) while the roll-up had reached **32.75 d over 36
+> cards** and `docs/11` §1 published **32.75–46**: twelve cards (`P2-T25`–`P2-T36`, 6.0 d) were propagated
+> to the roll-up and to `docs/11` but not to this sentence. It now reads the roll-up's 33.25 d, after
+> `P2-T37` (0.5 d), and 33.25 × 1.4 = 46.55 → 47.
 
 ## Risks retired
 
@@ -5309,9 +5315,12 @@ no new item, and the window marks that row as already in the library.
 npm run typecheck && npm run lint:check && npx eslint . && npm run test
 npm run test:integration -- --exit-on-finish
 ```
----
+
+**Notes.** Owner decision 2026-10-20 (`plan/00` §6 item 235). Once this lands and the integration suite is
+green, the coordinator removes `continue-on-error` from the CI integration job and pins Zotero 10.0.3 (item 236(e)).
 
 ---
+
 ## Estimate roll-up
 
 | Task | Title | Estimate (d) |
@@ -5352,7 +5361,8 @@ npm run test:integration -- --exit-on-finish
 | `P2-T34` | Six owner-approved schema extensions, document first then code | 1.00 |
 | `P2-T35` | A 4xx body reaches the adapter for feed-bodied hosts | 0.25 |
 | `P2-T36` | Four owner-approved behaviour changes (CJK titles, PubMed filters, two-letter codes, window fixtures) | 0.75 |
-| **Total** | **36 tasks** | **32.75 d** |
+| `P2-T37` | A re-run finds a record that has no DOI and no PMID | 0.50 |
+| **Total** | **37 tasks** | **33.25 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather

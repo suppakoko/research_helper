@@ -65,10 +65,11 @@ promises tier 3; the open line on `P3-T03` covers the documents.)
 **Risks retired.** R-4, R-5, R-6 (partly), **R-9** (retired by design under D5), **R-19** (quality
 gate + cost preview), **R-19b** (detector validated, or `auto` degraded to whole-document chunking).
 
-**Effort.** **27.5 developer-days over 37 cards** (§3), so the published band becomes
-**27.5–38.5 d** (× 1.4; the coordinator applies the whole-day rounding). The previous figure was
-23.5 d over 31 cards. The coordinator propagates the new sum to the five places in
-`plan/README.md` §7 with `npm run index:derive`.
+**Effort.** **27.5 developer-days over 37 cards** (§3), so the published band is
+**27.5–39 d** (27.5 × 1.4 = 38.5, rounded up to the whole day as Phase 2's 27.50 → 39 was on
+2026-10-07). The previous figure was 23.5–33 d over 31 cards. Propagated on 2026-10-20 to the five
+places in `plan/README.md` §7, and `npm run index:derive` was run
+(`plan/reports/bookkeeping-2026-10-20.md`).
 
 ### Phase definition of done
 
@@ -3272,7 +3273,7 @@ so that the gate holds only this card and not the pane and adapters behind `P3-T
 |---|---|
 | Sum of the 37 task cards (2026-10-20) | **27.5** |
 | Previous sum (31 cards, 2026-09-09) | 23.5 |
-| `docs/11` §1 Phase 3 band to publish | **27.5–38.5** (× 1.4) |
+| `docs/11` §1 Phase 3 band, published 2026-10-20 | **27.5–39** (27.5 × 1.4 = 38.5 → 39) |
 
 **Re-estimated 2026-10-20, with the revision of every card** (`plan/00` §6 item 234). Three
 movements:
@@ -3293,7 +3294,9 @@ movements:
 at 0.5 d pending the owner's ruling on the outline-based detector, which would raise it.
 
 **Propagation is the coordinator's.** The five places in `plan/README.md` §7 move together through
-`npm run index:derive`; this file does not edit them. Human-gated cards rose from 6 to 8: `P3-T30`
+`npm run index:derive`; this file does not edit them. **Done 2026-10-20**
+(`plan/reports/bookkeeping-2026-10-20.md`): `docs/11` §1 and §2 and `plan/00` §1 now carry
+27.5–39 d over 37 cards. Human-gated cards rose from 6 to 8: `P3-T30`
 (its recording spend) and `P3-T37` (`G-09`) are new gates; the other six are unchanged.
 
 The estimates exclude review latency, waiting for key approvals, and the owner's time at gates
