@@ -302,8 +302,9 @@ high end = that sum × 1.4 (`docs/11`'s own ±40% convention), rounded to the
 nearest whole day — e.g. Phase 2's 24.25 × 1.4 = 33.95 → the published 24.25–34.
 *Added 2026-10-20:* an exact half rounds up (Phase 2's 27.50 × 1.4 = 38.5 → 39 on 2026-10-07,
 Phase 3's 27.5 → 39 on 2026-10-20). The Phases 0–3 subtotal's high end is the sum of the rounded
-phase tops, not the subtotal × 1.4: `docs/11` §1 does it this way (25 + 41 + 47 + 39 = 152, where
-107.75 × 1.4 = 150.85 would give 151).
+phase tops, not the subtotal × 1.4: `docs/11` §1 does it this way (25 + 41 + 47 + 40 = 153, where
+108.75 × 1.4 = 152.25 would give 152). *Updated 2026-10-20 for `P3-T38` and `P3-T39`: the example
+read 25 + 41 + 47 + 39 = 152 against 107.75 × 1.4 = 150.85 → 151.*
 So for Phases 0–3 the cards are the measurement and `docs/11` records it.
 
 **The propagation checklist — all five sites, because naming three of them is

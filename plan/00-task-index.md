@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-20 · **155 tasks: 112 `DONE`, 43 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 37**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 155, so 57 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-20 · **157 tasks: 112 `DONE`, 45 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 157, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -23,9 +23,16 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
 | 2 — Multi-source + dedup | 37 | 33.25 d | 33.25–47 d | 12–16 d (+108%) |
-| 3 — LLM + summaries | 37 | 27.50 d | 27.5–39 d | 12–15 d (+83%) |
-| **Phases 0–3** | **155** | **107.75 d** | **107.75–152 d** | 39–52 d (+107% over the top of the band) |
+| 3 — LLM + summaries | 39 | 28.50 d | 28.5–40 d | 12–15 d (+90%) |
+| **Phases 0–3** | **157** | **108.75 d** | **108.75–153 d** | 39–52 d (+109% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
+
+**2026-10-20, later: `P3-T38` and `P3-T39` added** (0.5 d each; §6 items 244 and 245). Phase 3 is
+**39 cards and 28.50 d**, re-read from the cards' `Estimate` rows by script; 28.5 × 1.4 = 39.9 → 40.
+The Phases 0–3 high end is 25 + 41 + 47 + 40 = 153, the project total 182.25–255 d, and the
+critical path P0 → P1 → P2 → P4 → P6 → P7 stays 132.75–186 d because it does not run through Phase
+3. The percentages are 28.5 ÷ 15 = 1.90 → +90% and 108.75 ÷ 52 = 2.09 → +109% (they read +83% and
++107%). Record: `plan/reports/cards-P3-T38-T39.md`.
 
 **2026-10-20: Phase 3 re-carded and `P2-T37` added.** Phase 3 went from 31 cards and 23.50 d to
 **37 cards and 27.50 d** when every card was rewritten against the tree (§6 item 234; `plan/04` §3
@@ -272,16 +279,16 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P3-T04` | Prefs pane: LLM provider blocks, model, base URL | `P3-T02`, `P3-T03`, `P3-T32` | 1.0 d | 🔒 |
 | `P3-T05` | LLM error mapping and the LLM retry policy | — | 0.5 d |  |
 | `P3-T06` | `LLMProvider` contract, registry, router, mock harness | `P3-T05`, `P3-T32` | 1.0 d |  |
-| `P3-T07` | OpenRouter adapter (the default provider) | `P3-T01`, `P3-T05`, `P3-T06` | 1.0 d |  |
-| `P3-T08` | OpenAI adapter (Responses API) | `P3-T01`, `P3-T05`, `P3-T06` | 0.5 d |  |
-| `P3-T09` | Anthropic adapter (Messages API) | `P3-T01`, `P3-T05`, `P3-T06` | 0.5 d |  |
-| `P3-T10` | Gemini adapter (Interactions API) | `P3-T01`, `P3-T05`, `P3-T06` | 0.75 d |  |
+| `P3-T07` | OpenRouter adapter (the default provider) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 1.0 d |  |
+| `P3-T08` | OpenAI adapter (Responses API) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 0.5 d |  |
+| `P3-T09` | Anthropic adapter (Messages API) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 0.5 d |  |
+| `P3-T10` | Gemini adapter (Interactions API) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 0.75 d |  |
 | `P3-T11` | SSE streaming across the four adapters | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` | 0.75 d |  |
 | `P3-T12` | Structured output, validation, and the repair path | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` | 0.75 d |  |
 | `P3-T13` | Model catalogue, pricing table, token calibration | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T32`, `P3-T33` | 0.5 d |  |
 | `P3-T14` | `validateCredentials()` and the Test-key button | `P3-T04`, `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T13`, `P3-T32`, `P3-T34`, `P3-T36` | 0.75 d | 🔒 |
 | `P3-T15` | Privacy modes, egress disclosure, Gemini free-tier warning | `P3-T07`, `P3-T10`, `P3-T13`, `P3-T32`, `P3-T36` | 1.0 d |  |
-| `P3-T16` | Cost estimate, confirmation gate, `BudgetGuard`, usage | `P3-T13`, `P3-T15`, `P3-T32` | 1.25 d | 🔒 |
+| `P3-T16` | Cost estimate, confirmation gate, `BudgetGuard`, usage | `P3-T13`, `P3-T15`, `P3-T32`, `P3-T39` | 1.25 d | 🔒 |
 | `P3-T17` | `llm` worker pool: concurrency, cancel, pause, resume | `P3-T05`, `P3-T06`, `P3-T32`, `P3-T34` | 0.75 d |  |
 | `P3-T18` | Text acquisition tiers 1–2 (abstract, attachment text) | `P3-T32` | 0.5 d |  |
 | `P3-T19` | Tiers 3–4, cleaning pass, OCR probe, language detection | `P3-T18`, `P3-T32` | 0.75 d |  |
@@ -303,6 +310,8 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P3-T35` | Wire the pipeline-context members | `P3-T06`, `P3-T15`, `P3-T16`, `P3-T33`, `P3-T34` | 0.5 d |  |
 | `P3-T36` | One redaction gate for new persisted records | — | 0.25 d |  |
 | `P3-T37` | Detect a keyring-less Linux backend (gate `G-09`) | `P3-T02`, `P3-T03` | 0.25 d | 🔒 |
+| `P3-T38` | Keep an LLM 429's body; never retry a parse failure | `P3-T05` | 0.5 d |  |
+| `P3-T39` | Store money preferences as whole cents | `P3-T32` | 0.5 d |  |
 
 ---
 
@@ -1742,25 +1751,37 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
     The three cards were started the same day.
 
-### 6.49 Raised by P3-T05, P3-T32 and P3-T36, 2026-10-20 — 243 to 246 wait on the owner
+### 6.49 Raised by P3-T05, P3-T32 and P3-T36, 2026-10-20 — 243 to 246 decided the same day
 
 243. **Two rules P3-T36 added to the redaction gate** (`plan/reports/P3-T36.md`): (a) a key-named field is removed only
     when its value can carry text, so `inputTokens`/`outputTokens`/`maxOutputTokens` numbers survive; (b) callers may list
     identifier fields (`contentHash`, a `hash:` work key) as verbatim, because the 40-character catch-all would otherwise
     erase every row's identity. Recorded in `docs/09` §2.1 as the card's choices, not the owner's.
+    **DECIDED 2026-10-20 (owner): both rules accepted** as `P3-T36` built them. `docs/09` §2.1 still says they are not
+    part of the owner's decision; its dated correction is the coordinator's.
 
 244. **The HTTP client hides an LLM spend cap.** `classify` in `src/core/http/client.ts` turns every 429 into a bodiless
     `RateLimitError` inside the retry loop, so Anthropic's spend-cap 429 is retried and reaches the adapter unrecognisable;
     `mapProviderError` reads it correctly only when given the body (`plan/reports/P3-T05.md` Contradiction 1). Also:
     `isRetriedAutomatically` would retry a `StructuredOutputError` (`docs/03` §14.1 says it must not), and
     `test/unit/core/backoff.test.ts` will fail on the first LLM `HOST_POLICIES` row unless §7.3 gains per-host rows.
+    **DECIDED 2026-10-20 (owner): fix now, as a new card — `P3-T38`** (0.5 d; depends on `P3-T05`, blocks `P3-T07`–`P3-T10`).
+    The card lets an LLM host's answer be read before classification so a spend-cap 429 becomes `QuotaExceededError` and is
+    not retried, leaves the design (a classification hook, or a redacted body on `RateLimitError`) to its executor, removes
+    `StructuredOutputError` from `isRetriedAutomatically`, and makes `backoff.test.ts` accept the shared LLM/TTS row. It
+    also takes item 247's two transport header comments (`backoff.ts`, `hostLimiter.ts`).
 
 245. **Gecko preferences hold no fractional number.** `summary.confirmAboveUSD` (2.00) and the two spend ceilings are
     `number` rows, but the preference store has only integer, boolean and string types (`setIntPref`). Writing 2.50 would
     not round-trip. Nothing writes them yet; `P3-T16` is the first writer.
+    **DECIDED 2026-10-20 (owner): store as integer cents — card `P3-T39`** (0.5 d; depends on `P3-T32`, blocks `P3-T16`). The
+    keys are renamed for the unit (`summary.confirmAboveCents` 200, `run.maxSpendCents` 0, `run.maxSessionSpendCents` 0),
+    `docs/07` §8.5 moves first, and every surface shows dollars. No migration: nothing reads the rows and nothing has shipped.
 
 246. **Korean for P3-T05's four LLM error strings** (`rh-error-llm`, `rh-error-context-length`, `rh-error-content-filter`,
     `rh-error-structured-output`) waits on the owner (`G-41`); three of the English strings are the agent's own wording.
+    **DECIDED 2026-10-20 (owner): the Korean is approved**, and the coordinator inserted it into the `ko-KR` bundle the same
+    day (the four ids moved from `KO_PENDING_REVIEW` to `KO_PRESENT` in `src/i18n/keys.ts`).
 
 247. **Recorded, not cards.** Stale comments: `src/core/rateLimit/backoff.ts` header (full jitter "P3-T05 step 7"),
     `hostLimiter.ts` header (LLM hosts "driven from provider prefs"), `test/integration/zotero/keychain.spec.ts` (no

@@ -65,11 +65,12 @@ promises tier 3; the open line on `P3-T03` covers the documents.)
 **Risks retired.** R-4, R-5, R-6 (partly), **R-9** (retired by design under D5), **R-19** (quality
 gate + cost preview), **R-19b** (detector validated, or `auto` degraded to whole-document chunking).
 
-**Effort.** **27.5 developer-days over 37 cards** (§3), so the published band is
-**27.5–39 d** (27.5 × 1.4 = 38.5, rounded up to the whole day as Phase 2's 27.50 → 39 was on
-2026-10-07). The previous figure was 23.5–33 d over 31 cards. Propagated on 2026-10-20 to the five
-places in `plan/README.md` §7, and `npm run index:derive` was run
-(`plan/reports/bookkeeping-2026-10-20.md`).
+**Effort.** **28.5 developer-days over 39 cards** (§3), so the published band is
+**28.5–40 d** (28.5 × 1.4 = 39.9 → 40). *Updated 2026-10-20:* `P3-T38` and `P3-T39` (0.5 d each,
+`plan/00` §6 items 244 and 245) moved it from 27.5–39 d over 37 cards; the figure before the
+re-carding was 23.5–33 d over 31 cards. Propagated the same day to the five places in
+`plan/README.md` §7, and `npm run index:derive` was run (`plan/reports/cards-P3-T38-T39.md`; the
+re-carding's own propagation is `plan/reports/bookkeeping-2026-10-20.md`).
 
 ### Phase definition of done
 
@@ -202,7 +203,9 @@ And two that `docs/11` states as deliverables but which gate the phase as hard:
 | `P3-T35` | Wire the pipeline-context members | 0.5 | none |
 | `P3-T36` | One redaction gate for new persisted records | 0.25 | none |
 | `P3-T37` | Detect a keyring-less Linux backend (gate `G-09`) | 0.25 | **Yes** |
-| | **Total** | **27.5** | 8 gates |
+| `P3-T38` | Keep an LLM 429's body; never retry a parse failure | 0.5 | none |
+| `P3-T39` | Store money preferences as whole cents | 0.5 | none |
+| | **Total** | **28.5** | 8 gates |
 
 **Entry points** (no `Depends on`): `P3-T01`, `P3-T05`, `P3-T24`, `P3-T32`, `P3-T36`. The owner
 chose `P3-T01` and `P3-T24` (without its old step 7) to start first; `P3-T32` is the next natural
@@ -567,7 +570,7 @@ source-credential blocks, the badge, the residual-risk text and remove-all.
 | **ID** | `P3-T05` |
 | **State** | `TODO` |
 | **Depends on** | none |
-| **Blocks** | `P3-T06`, `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T17` |
+| **Blocks** | `P3-T06`, `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T17`, `P3-T38` |
 | **Retires** | part of `R-4`, part of `R-6` |
 | **Implements** | `FR-34` |
 | **Estimate** | 0.5 d |
@@ -769,7 +772,7 @@ card that depends on them, and the card now creates `registerProviders.ts` and i
 |---|---|
 | **ID** | `P3-T07` |
 | **State** | `TODO` |
-| **Depends on** | `P3-T01`, `P3-T05`, `P3-T06` |
+| **Depends on** | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` |
 | **Blocks** | `P3-T11`, `P3-T12`, `P3-T13`, `P3-T14`, `P3-T15`, `P3-T30` |
 | **Retires** | part of `R-13` |
 | **Implements** | `FR-29` |
@@ -859,7 +862,7 @@ it as the price source for all four providers.
 |---|---|
 | **ID** | `P3-T08` |
 | **State** | `TODO` |
-| **Depends on** | `P3-T01`, `P3-T05`, `P3-T06` |
+| **Depends on** | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` |
 | **Blocks** | `P3-T11`, `P3-T12`, `P3-T13`, `P3-T14`, `P3-T30` |
 | **Retires** | part of `R-13` |
 | **Implements** | `FR-29` |
@@ -927,7 +930,7 @@ inexact at every call site (`docs/03` §10.2 authority note).
 |---|---|
 | **ID** | `P3-T09` |
 | **State** | `TODO` |
-| **Depends on** | `P3-T01`, `P3-T05`, `P3-T06` |
+| **Depends on** | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` |
 | **Blocks** | `P3-T11`, `P3-T12`, `P3-T13`, `P3-T14`, `P3-T30` |
 | **Retires** | part of `R-13` |
 | **Implements** | `FR-29` |
@@ -999,7 +1002,7 @@ before 2026-10-20 it pointed at `P3-T13`, which depends on this card.
 |---|---|
 | **ID** | `P3-T10` |
 | **State** | `TODO` |
-| **Depends on** | `P3-T01`, `P3-T05`, `P3-T06` |
+| **Depends on** | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` |
 | **Blocks** | `P3-T11`, `P3-T12`, `P3-T13`, `P3-T14`, `P3-T15`, `P3-T30` |
 | **Retires** | part of `R-13` |
 | **Implements** | `FR-29` |
@@ -1511,7 +1514,7 @@ moved to `pipeline/` because `ui/` cannot reach `resolveBaseUrl()` in `llm/`.
 |---|---|
 | **ID** | `P3-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P3-T13`, `P3-T15`, `P3-T32` |
+| **Depends on** | `P3-T13`, `P3-T15`, `P3-T32`, `P3-T39` |
 | **Blocks** | `P3-T25`, `P3-T29`, `P3-T35` |
 | **Retires** | `R-4` |
 | **Implements** | `FR-24`, `FR-35`, `NFR-5` |
@@ -2867,7 +2870,7 @@ Phase 7. Only the owner changes a card's state to `DONE`.
 | **ID** | `P3-T32` |
 | **State** | `TODO` |
 | **Depends on** | none |
-| **Blocks** | `P3-T02`, `P3-T04`, `P3-T06`, `P3-T13`, `P3-T14`, `P3-T15`, `P3-T16`, `P3-T17`, `P3-T18`, `P3-T19`, `P3-T25`, `P3-T26`, `P3-T27`, `P3-T28`, `P3-T29`, `P3-T33` |
+| **Blocks** | `P3-T02`, `P3-T04`, `P3-T06`, `P3-T13`, `P3-T14`, `P3-T15`, `P3-T16`, `P3-T17`, `P3-T18`, `P3-T19`, `P3-T25`, `P3-T26`, `P3-T27`, `P3-T28`, `P3-T29`, `P3-T33`, `P3-T39` |
 | **Retires** | none |
 | **Implements** | part of `FR-29`, `FR-32`, `FR-52` |
 | **Estimate** | 0.75 d |
@@ -3298,13 +3301,293 @@ so that the gate holds only this card and not the pane and adapters behind `P3-T
 
 ---
 
+### P3-T38 — Keep an LLM 429's body; never retry a parse failure
+
+| Field | Value |
+|---|---|
+| **ID** | `P3-T38` |
+| **State** | `TODO` |
+| **Depends on** | `P3-T05` |
+| **Blocks** | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` |
+| **Retires** | part of `R-4` |
+| **Implements** | part of `FR-34` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** An LLM host's error answer can be read before the shared HTTP client classifies it, so a
+spend-cap 429 reaches the adapter as `QuotaExceededError` after one attempt; every literature host
+behaves exactly as today; and the transport retry loop never re-sends a request because its answer
+failed to parse (`StructuredOutputError`).
+
+**Why this is a card.** Owner decision, 2026-10-20 (`plan/00` §6 item 244: "fix now as a new
+card"). Measured by `P3-T05` (`plan/reports/P3-T05.md`, Contradictions 1, 2 and 8): `classify` in
+`src/core/http/client.ts` throws a `RateLimitError` without the body for every 429, inside the
+retry loop, so Anthropic's spend-cap 429 — which `docs/03` §11.1 says must not be retried — is
+retried until the attempt cap or the 90 s budget ends it, and `mapProviderError` never sees the
+body that identifies it. OpenAI's `insufficient_quota` 429 has the same problem. The fix is in
+`src/core/http/`, which none of `P3-T07`–`P3-T10` lists, and all four would meet it; so it lands
+once, before them.
+
+**Read first.**
+- `docs/03-llm-provider-integration.md` §11.1 and §11.5 trap 3 — the spend cap that looks like a
+  rate limit, and why it must not be retried
+- `docs/03-llm-provider-integration.md` §14.1 authority note — `StructuredOutputError` is
+  `retryable = true` but deliberately outside the transport retry set
+- `docs/07-architecture-and-data-model.md` §7.3, dated note "LLM hosts' retry budget" — its bullet
+  "Known gap, recorded by `P3-T05`" is what this card closes
+- `src/core/http/client.ts` — `createHttpClient` and its inner `issueAndClassify`, `classify`,
+  `HttpClientDeps`, `HttpOptions`; `classify`'s `BadRequestError` branch already attaches a body
+  after `redactText` (`P2-T35`), which is the precedent for carrying a body safely
+- `src/core/errors.ts` — `ResearchHelperError.context` ("MUST already be redacted by the thrower"),
+  `RateLimitError`'s constructor, the `body` getter on `BadRequestError`
+- `src/llm/shared/errorMap.ts` — `mapProviderError` (six parameters, `modelId` and `nowEpochMs`
+  included) and the header paragraph "What the shipped HTTP client does first"
+- `src/core/http/retry.ts` — `isRetriedAutomatically`, `isRetryableError`, `withRetry`
+
+**Files.**
+- modify `docs/07-architecture-and-data-model.md` (§7.3 only)
+- modify `docs/03-llm-provider-integration.md` (§11.6 and §14.1 only)
+- modify `src/core/http/client.ts`
+- modify `src/core/http/retry.ts` (`isRetriedAutomatically`)
+- modify `src/core/rateLimit/hostLimiter.ts` (header comment; under option A, possibly the hook's
+  type on `HostRateLimitPolicy`)
+- modify `src/core/rateLimit/backoff.ts` (header comment only)
+- modify `src/core/errors.ts` (option B only: a `body` getter on `RateLimitError`) — a guess; drop
+  the row if option A is chosen
+- modify `src/bootstrap/container.ts` (`installServices`, only if the chosen design reaches the
+  client through `HttpClientDeps`) — a guess; drop the row otherwise
+- modify `src/llm/shared/errorMap.ts` (header paragraph only)
+- modify `test/unit/core/http-client.test.ts`
+- modify `test/unit/core/backoff.test.ts`
+- modify `test/unit/llm/errorMap.test.ts`
+
+**Do.**
+1. **Documents first.** Once step 2's design is chosen, write it into `docs/07` §7.3 as a dated
+   note citing `plan/00` §6 item 244 (owner, 2026-10-20), and mark the "Known gap" bullet of
+   "LLM hosts' retry budget" "Corrected 2026-10-20". Add a dated note to `docs/03` §11.6 (a spend
+   cap is classified before the retry decision and is not retried) and to §14.1's authority note
+   (`isRetriedAutomatically` now enforces the exclusion of `StructuredOutputError`).
+2. **Choose one design; the choice is yours.** Report which and why.
+   - **A — a hook that sees the response before `classify`.** Inside `issueAndClassify`, the
+     client asks a hook for the host (or for the request) first; an error the hook returns is
+     thrown in place of `classify`'s, so `withRetry` decides on it, and a `QuotaExceededError`
+     (`retryable: false`) ends the request after one attempt. Constraint: `HOST_POLICIES` is in
+     `src/core/`, which may import only `src/model/` (`research-helper/layering/core` in
+     `eslint.config.js`), so a row may declare the hook's type but cannot import
+     `mapProviderError`; the function has to come from outside `core/`, through `HttpClientDeps`
+     (built by `installServices`) or per request through `HttpOptions` (passed by the adapter).
+     `mapProviderError` also needs the request's `modelId`, which a per-host hook does not know:
+     check whether a per-request option fits better.
+   - **B — keep a redacted body on `RateLimitError`.** `classify` attaches
+     `redactText(response.body)` to the 429's `context`, as its `BadRequestError` branch does,
+     and the adapter hands it to `mapProviderError`. On its own this fixes recognition but not the
+     retry: `RateLimitError` is `retryable: true` and `withRetry` decides inside the loop, so the
+     spend cap is still retried up to four more times. B is complete only with a way to stop that
+     retry; name it if you choose B. `RateLimitError`'s constructor is `docs/07` §10.1's and does
+     not change; the body travels in `context`.
+
+   Both designs must keep: a literature host's 429 thrown as today (no body, retried under its
+   row's budget, `penalize` called from `Retry-After` before the throw); `adoptLimits` before
+   classification; `redactText` on every body before it is attached; one retry loop and one
+   `Retry-After` parser.
+3. Build the chosen design in `src/core/http/client.ts`. Callers: `issueAndClassify` inside
+   `createHttpClient` consults it, and `installServices` (`src/bootstrap/container.ts`)
+   constructs the client. The LLM side — the hook, or the code that reads the body — belongs to
+   the four adapters, `P3-T07`–`P3-T10`, constructed by `registerProviders` in
+   `src/bootstrap/registerProviders.ts` (created by `P3-T06`). This card ships no LLM row and no
+   adapter; its tests use a synthetic LLM host.
+4. In `src/core/http/retry.ts`, make `isRetriedAutomatically` return `false` for a
+   `StructuredOutputError`, by class, as it already does for `TimeoutError`. Leave the class's
+   `retryable` flag `true`.
+5. In `test/unit/core/backoff.test.ts`, check a `HOST_POLICIES` row whose `retry` is
+   `LLM_RETRY_BUDGET` (by identity) against `docs/07` §7.3's shared "LLM/TTS hosts" row; every
+   other row keeps its per-host match. Prove it with a synthetic policy list holding an
+   `api.anthropic.com` row that carries `LLM_RETRY_BUDGET`, because no LLM row ships yet. Do not
+   rename that row's Host cell: `llmRowCells` in `test/unit/core/hostLimiter.test.ts` finds the
+   row by the text "LLM/TTS hosts".
+6. Correct the two stale header comments `plan/00` §6 item 247 names: in
+   `src/core/rateLimit/backoff.ts`, the bullet saying `P3-T05` step 7 adds a full jitter (the
+   owner chose one jitter shape); in `src/core/rateLimit/hostLimiter.ts`, the sentence saying LLM
+   hosts are driven "from provider prefs rather than from a static row" (the adapters add static
+   rows carrying `LLM_RETRY_BUDGET`; how their request rate is set stays `P3-T07`'s open line).
+   Rewrite `src/llm/shared/errorMap.ts`'s header paragraph "What the shipped HTTP client does
+   first" for the shipped design.
+7. End the report with one paragraph naming the design, so the coordinator can add a dated line
+   to each of `P3-T07`–`P3-T10` saying how the adapter supplies the hook or reads the body.
+
+**Do NOT.**
+- Do **not** change what a literature host's 429, 401, 403, 5xx or other 4xx produces, or how
+  often it is retried.
+- Do **not** attach an unredacted body to any error, or put the provider's message text in one
+  (`docs/07` §10.2: never a raw provider message).
+- Do **not** import `src/llm/` from `src/core/`.
+- Do **not** write a second `withRetry`, a second `Retry-After` parser, or a retry loop in an
+  adapter.
+- Do **not** change `StructuredOutputError.retryable` or `RateLimitError`'s constructor signature.
+- Do **not** add an LLM row to `HOST_POLICIES`; `P3-T07`–`P3-T10` add them.
+
+**Done when.**
+- [ ] Through a real `createHttpClient` and a fake transport, a synthetic Anthropic 429 carrying
+      `enforced_spend_limit_reached` reaches the caller as `QuotaExceededError` after exactly one
+      transport call, and an ordinary Anthropic 429 is still retried as a `RateLimitError`.
+- [ ] A literature host's 429 still produces a `RateLimitError` with no body, is retried under its
+      row's budget, and calls `penalize` from `Retry-After`; every existing test in
+      `http-client.test.ts` and `backoff.test.ts` passes unchanged.
+- [ ] A synthetic key in an LLM 429 body does not appear in the resulting error.
+- [ ] `isRetriedAutomatically` is `false` for a `StructuredOutputError` while `isRetryableError`
+      stays `true`, and a `withRetry` whose attempt throws one calls the attempt once.
+- [ ] `backoff.test.ts` accepts a synthetic row carrying `LLM_RETRY_BUDGET` against §7.3's
+      LLM/TTS row and still rejects a row whose host §7.3 does not name.
+- [ ] `docs/07` §7.3 and `docs/03` §11.6 and §14.1 carry the dated notes.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npx eslint .` exit 0; the integration suite
+      passes.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test:unit -- http-client backoff errorMap hostLimiter && npm run test:contract && npm run test:integration -- --exit-on-finish --abort-on-fail
+```
+Vitest reads each filter as a substring, so the filters are separate arguments (`plan/00` §6 item
+247).
+
+**Notes.** Created 2026-10-20 from `plan/00` §6 item 244 and the transport parts of item 247; the
+rest of item 247 stays recorded there. **The `backoff.test.ts` change is this card's, not
+`P3-T07`'s,** because `P3-T07`–`P3-T10` have the same dependencies and can run in parallel:
+whichever added an LLM row first would fail the test, so the fix would be written up to four times
+or raced. This card already edits `docs/07` §7.3 and blocks all four. OpenRouter's spend cap is a
+402, which already arrives as a `BadRequestError` with its redacted body.
+
+---
+
+### P3-T39 — Store money preferences as whole cents
+
+| Field | Value |
+|---|---|
+| **ID** | `P3-T39` |
+| **State** | `TODO` |
+| **Depends on** | `P3-T32` |
+| **Blocks** | `P3-T16` |
+| **Retires** | none |
+| **Implements** | part of `FR-24`, part of `NFR-5` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** The three money preferences are integer rows holding US cents and named for that unit —
+`summary.confirmAboveCents` (default `200`), `run.maxSpendCents` (`0`, off) and
+`run.maxSessionSpendCents` (`0`, off) — in `docs/07` §8.5, in the code, and in every document and
+card that named the old keys, so every value a user can set survives Gecko's preference store.
+
+**Why this is a card.** Owner decision, 2026-10-20 (`plan/00` §6 item 245: store as integer
+cents). Gecko preferences hold only boolean, integer and string values (`docs/07` §8.2: `setBoolPref`,
+`setStringPref`, `setIntPref`), but `P3-T32` shipped `summary.confirmAboveUSD` (2.00),
+`run.maxSpendUSD` and `run.maxSessionSpendUSD` as `type: "number"` rows in `PREFS`, so a value such
+as $2.50 cannot round-trip. `P3-T16` is the first card that reads them, so the rename lands before
+it.
+
+**Read first.**
+- `docs/07-architecture-and-data-model.md` §8.5 — the sole authority; the
+  `summary.confirmAboveUSD` row (Summarization) and the two `run.*` rows (Runtime & concurrency)
+- `docs/07-architecture-and-data-model.md` §8.5.3 — renaming a pref needs a migration step, except
+  before first release, when every document is updated in the same change instead
+- `docs/01-zotero-plugin-platform.md` §7.2 — the `pref()` lines for the two ceilings; the
+  threshold has none
+- `test/unit/prefs/schema.test.ts` — `SECTION_8_5`, `NO_PREF_LINE`, and the tests "ships both
+  spend ceilings off at 0 (gate G-20)", "reads a fractional number for a number row and refuses one
+  for an integer row (P3-T32)" and "falls back to 0 (off) for a negative spend ceiling rather than
+  reading it (P3-T32)"
+- `plan/README.md` §6, "Reverting a Fluent-bundle mutation" — `npx zotero-plugin build` also
+  regenerates `typings/i10n.d.ts`; hash it before and after
+
+**Files.**
+- modify `docs/07-architecture-and-data-model.md` (§8.5's three rows; §8.3's "Concurrency, budget
+  caps" row; §8.5.3's sentence naming `run.maxSpendUSD`)
+- modify `docs/01-zotero-plugin-platform.md` (§7.2: the comment and the two `pref()` lines)
+- modify `docs/00-overview.md` (D7)
+- modify `docs/03-llm-provider-integration.md` (§12.3 item 3)
+- modify `docs/06-summarization-and-trend-report.md` (§5.4 including the sample dialog text,
+  §11.4, §15, §16 item 1)
+- modify `docs/10-requirements-and-user-stories.md` (NFR-5; §5 items 4 and 6)
+- modify `docs/11-implementation-roadmap.md` (§3, `R-4`)
+- modify `plan/04-phase-3-llm-summaries.md` (`P3-T16`: the decision block, Read first, step 2,
+  the open line, two Done-when lines; `P3-T31`: step 4 and its Done-when line; `P3-T32`: step 1)
+- modify `plan/06-human-gates.md` (`G-20`)
+- modify `src/prefs/schema.ts` (`PREFS`)
+- modify `src/prefs/keys.ts` (`PREF_KEYS`)
+- modify `addon/prefs.js`
+- modify `typings/prefs.d.ts` (regenerated by `npx zotero-plugin build`, never edited by hand)
+- modify `test/unit/prefs/schema.test.ts`
+
+**Do.**
+1. **`docs/07` §8.5 first.** Replace the three rows: `summary.confirmAboveCents`, integer, `200`,
+   ≥ 0; `run.maxSpendCents`, integer, `0` (off), ≥ 0; `run.maxSessionSpendCents`, integer, `0`
+   (off), ≥ 0. Each row says the value is US cents and that every surface shows and accepts
+   dollars, converting at the boundary. Mark each "Corrected 2026-10-20 (`plan/00` §6 item 245;
+   owner: store as integer cents)", and correct §8.3's row and §8.5.3's sentence the same way.
+2. Correct every other site under **Files** in place, with the same dated mark. First re-run
+   `grep -rnE "confirmAboveUSD|maxSpendUSD|maxSessionSpendUSD" docs plan src addon typings test`
+   and add any hit this list missed. Leave `plan/reports/` and the text of `plan/00` §6 item 245
+   as written: they record what was measured.
+3. In `PREFS` and `PREF_KEYS`, rename the three entries to `summaryConfirmAboveCents`,
+   `runMaxSpendCents` and `runMaxSessionSpendCents`, with `type: "integer"`, defaults `200`, `0`
+   and `0`, and `min: 0`. Rename the two `pref()` lines in `addon/prefs.js` by transcribing the
+   corrected `docs/01` §7.2; the threshold still gets no `pref()` line unless §7.2 now gives one.
+4. Regenerate `typings/prefs.d.ts` with `npx zotero-plugin build`, only when no other agent's build
+   or integration run is using `.scaffold/build`. `typings/i10n.d.ts` must hash the same before and
+   after.
+5. In `test/unit/prefs/schema.test.ts`: retype the three `SECTION_8_5` rows from the corrected
+   §8.5 (typed out, never derived from `PREFS`); rename the `NO_PREF_LINE` entry; keep the G-20
+   test asserting both ceilings ship at `0`; replace the fractional-dollar test with one showing a
+   stored `250` reads back as `250` and a stored `2.5` falls back to the default; move the
+   negative-ceiling test to the new names.
+
+**Do NOT.**
+- Do **not** add a pref migration or bump `prefsSchemaVersion`: the plugin is unreleased (§8.5.3).
+- Do **not** change what a default means: 200 cents is the same $2.00 and both ceilings stay off at
+  `0`. A ceiling's value is gate `G-20`.
+- Do **not** remove `"number"` from `PrefDef`'s `type` union, although no row will use it; say so
+  in the report.
+- Do **not** edit `typings/prefs.d.ts` by hand.
+- Do **not** add a preferences-pane control: §8.5 gives none for these rows, and `P3-T04` binds none
+  of them.
+
+**Done when.**
+- [ ] `grep -rnE "confirmAboveUSD|maxSpendUSD|maxSessionSpendUSD" src addon typings test` finds
+      nothing.
+- [ ] Every remaining hit in `docs/` and `plan/`, outside `plan/reports/` and `plan/00` §6 item 245,
+      is struck through or sits in a sentence marked "Corrected 2026-10-20".
+- [ ] `PREFS` holds the three rows as `integer` with defaults 200, 0 and 0; `SECTION_8_5` still has
+      63 rows.
+- [ ] A stored `250` for the threshold reads back as `250`; a stored `2.5` falls back to `200`.
+- [ ] `typings/prefs.d.ts` names the two ceilings under their new keys; `typings/i10n.d.ts` is
+      unchanged.
+- [ ] `npm run typecheck` and `npm run lint:check` exit 0; the integration suite passes.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test:unit -- prefs/schema && npm run test:integration -- --exit-on-finish --abort-on-fail
+```
+Then `grep -rnE "confirmAboveUSD|maxSpendUSD|maxSessionSpendUSD" src addon typings test` must exit
+1, and the `docs/` and `plan/` hits are checked by eye against the second Done-when line.
+
+**Notes.** Created 2026-10-20 from `plan/00` §6 item 245. **No migration is needed.** Nothing reads
+or writes these rows yet: outside `src/prefs/schema.ts`, `src/prefs/keys.ts`, `addon/prefs.js`,
+`typings/prefs.d.ts` and `test/unit/prefs/schema.test.ts`, no file in `src/`, `addon/` or `test/`
+names them (grep, 2026-10-20), and the plugin has never been released. **Callers (rule 10):** the
+rows are read through `getPref` in `src/prefs/index.ts`; the first readers are `P3-T16`'s
+`BudgetGuard` (`src/pipeline/shared/budget.ts`, wired into the pipeline context by `P3-T35` in
+`createPipelineContextFactory`, `src/bootstrap/container.ts`) and its estimator
+(`src/pipeline/shared/estimate.ts`, called by `P3-T29`'s pipeline). Those cards compare and display
+dollars; the conversion from cents is theirs.
+
+---
+
 ## 3. Estimate reconciliation
 
 | | Developer-days |
 |---|---|
-| Sum of the 37 task cards (2026-10-20) | **27.5** |
+| Sum of the 39 task cards (2026-10-20, after `P3-T38` and `P3-T39`) | **28.5** |
+| Sum of the 37 task cards (2026-10-20, the re-carding) | 27.5 |
 | Previous sum (31 cards, 2026-09-09) | 23.5 |
-| `docs/11` §1 Phase 3 band, published 2026-10-20 | **27.5–39** (27.5 × 1.4 = 38.5 → 39) |
+| `docs/11` §1 Phase 3 band, published 2026-10-20 | **28.5–40** (28.5 × 1.4 = 39.9 → 40; was 27.5–39 earlier that day) |
 
 **Re-estimated 2026-10-20, with the revision of every card** (`plan/00` §6 item 234). Three
 movements:
@@ -3329,6 +3612,13 @@ at 0.5 d pending the owner's ruling on the outline-based detector, which would r
 (`plan/reports/bookkeeping-2026-10-20.md`): `docs/11` §1 and §2 and `plan/00` §1 now carry
 27.5–39 d over 37 cards. Human-gated cards rose from 6 to 8: `P3-T30`
 (its recording spend) and `P3-T37` (`G-09`) are new gates; the other six are unchanged.
+
+**Two cards added 2026-10-20, after the re-carding:** `P3-T38` (0.5 d; `plan/00` §6 item 244, the
+HTTP client keeps an LLM 429's body and never retries a parse failure) and `P3-T39` (0.5 d; item
+245, money preferences stored as whole cents). 27.5 + 0.5 + 0.5 = **28.5 d** over 39 cards, re-read
+from the cards' `Estimate` rows by script. Both are ungated, so the gate count stays 8. New edges:
+`P3-T05` → `P3-T38` → `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`; `P3-T32` → `P3-T39` → `P3-T16`.
+Propagated the same day to the five places in `plan/README.md` §7 (`plan/reports/cards-P3-T38-T39.md`).
 
 The estimates exclude review latency, waiting for key approvals, and the owner's time at gates
 (`G-12`'s adjudication in particular), per `plan/README.md` §7.

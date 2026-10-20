@@ -510,8 +510,9 @@ paper; the catch-all is not weakened to spare content. The gate returns the mark
 (`partlyRedacted`, with the number of rewritten strings and of removed fields); the storing cards (`P3-T14`,
 `P3-T15`, `P3-T25`, `P3-T34`) persist it with the row and show it.
 
-Two further rules were set by `P3-T36` on 2026-10-20 while building the gate. They are **not** part of the
-owner's decision, and the owner may reverse either:
+Two further rules were set by `P3-T36` on 2026-10-20 while building the gate. ~~They are **not** part of the
+owner's decision, and the owner may reverse either:~~ **Corrected 2026-10-20: the owner accepted both the same day
+(`plan/00` §6 item 243).**
 
 - **A key-named field holding a number, a boolean or `null` is kept.** `KEYISH_FIELD` matches `token`, so
   `omitSecretFields()` applied to every field would delete `inputTokens` and `outputTokens` from every usage
