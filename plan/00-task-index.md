@@ -1641,6 +1641,23 @@ the caller of what the card builds; if it does not, the caller is added with a d
     to continue (as `docs/11` §1 and P3-T31 say), so `docs/06` §5.4 and P3-T16 change; (d) G-12 starts now with
     open-access papers only: a candidate list for the owner, and each download asked for separately.
 
+### 6.46 Raised by P2-T16 Part A, 2026-10-20 — 235 waits on the owner
+
+235. **A record with no DOI and no PMID is imported again on every repeated search (D1).** Measured by `P2-T16` step 6
+    (`plan/reports/P2-T16-partA.md`): Europe PMC `PMC/PMC11693243` is created again on each re-run and not marked as already
+    in the library, so a re-run reports 1 created and 97 of 98 linked. Cause: `planImport` (`src/zotero/importer.ts`) and
+    `isExisting` (`src/bootstrap/registerUI.ts`) call `findExisting(work.ids)` without the work key — item 105 — and the
+    library index has no PMCID lookup. **Item 105 now blocks a Phase 2 finishing condition (FR-51), so under rule 9 it
+    needs a card.**
+
+236. **Observations from the same run, not cards.** (a) The window controller caches source display names resolved
+    before a formatter is attached, so a window-less run shows ids; the real window always attaches one. (b) The
+    import-summary line shows English under ko-KR because `research-helper-import-summary` is still on `KO_PENDING_REVIEW`.
+    (c) Semantic Scholar's recorded `corpus-q1` 429 is on `/paper/search`, which a pipeline search never asks (it asks
+    `/paper/search/bulk`); step 3 injects it. (d) No committed query returns one paper from three or more sources. (e) CI pins
+    Zotero 10.0.2 against the local 10.0.3, sets an unread `FIXTURE_MODE`, and its integration job is still
+    `continue-on-error`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

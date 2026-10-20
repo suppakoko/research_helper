@@ -620,3 +620,289 @@ export async function assertFixturesFresh(
 
   return { checked: loaded.length, warnings, oldestDays };
 }
+
+// ---------------------------------------------------------------------------
+// 6. Several hosts behind one client (`P2-T16`)
+// ---------------------------------------------------------------------------
+
+/*
+ * `createReplayHttpClient` above serves one fixture directory under one host,
+ * which is what an adapter's contract test needs. A **pipeline** run hands one
+ * `HttpClient` to every adapter — `src/bootstrap/container.ts` builds exactly
+ * one — so an end-to-end run over replay needs one client whose transport
+ * routes each request to the directory of the host it names.
+ *
+ * Two seams, both for `P2-T16`, and neither able to reach the network:
+ *
+ * - {@link MultiHostReplayOptions.answerFor} replaces a host's fixtures with
+ *   one committed exchange. `P2-T16` step 3 uses it to make a source answer
+ *   its own committed `error-500` fixture for every request; the exchange is
+ *   read from disk, never written.
+ * - {@link MultiHostReplayOptions.latency} delays each answer. The
+ *   `npm run bench:search` script uses it for a per-host latency model;
+ *   nothing else should, because an integration spec measures behaviour, not
+ *   time.
+ */
+
+/** One host's fixture directories, tried in order until one holds the request. */
+export interface ReplayRoute {
+  /** The URL host, as `docs/07` §7.3 keys buckets — `new URL(url).host`. */
+  readonly host: string;
+  /**
+   * Fixture directories, in the order they are tried. bioRxiv and medRxiv
+   * share `api.biorxiv.org` and keep separate directories, so that host lists
+   * both.
+   */
+  readonly dirs: readonly string[];
+}
+
+/** Options for {@link createMultiHostReplayTransport}. */
+export interface MultiHostReplayOptions {
+  readonly routes: readonly ReplayRoute[];
+  /** How to read the directories on this platform. */
+  readonly io: FixtureIo;
+  /**
+   * An exchange to answer instead of the host's fixtures, or `undefined` to
+   * replay as usual. Called once per request.
+   */
+  readonly answerFor?: (
+    host: string,
+    request: { readonly method: string; readonly url: string },
+  ) => RecordedExchange | undefined;
+  /**
+   * Awaited before each answer, inside the client's limiter slot exactly
+   * where a real round trip would be. Omitted, answers are immediate.
+   */
+  readonly latency?: (
+    host: string,
+    request: { readonly method: string; readonly url: string },
+  ) => Promise<void>;
+}
+
+/** One request {@link createMultiHostReplayTransport} answered or refused. */
+export interface MultiHostReplayCall extends ReplayCall {
+  readonly host: string;
+  /** The status answered; `undefined` when no fixture held the request. */
+  readonly status: number | undefined;
+}
+
+/** A multi-host {@link HttpTransport} that records what it was asked. */
+export interface MultiHostReplayTransport extends HttpTransport {
+  readonly calls: readonly MultiHostReplayCall[];
+}
+
+/**
+ * Build a `Zotero.HTTP` stand-in that routes each request by host.
+ *
+ * A request to a host with no route, or one no listed directory holds, is
+ * refused with {@link replayTransport}'s "Missing fixture … Record it with"
+ * error — `docs/13` §2.2's rule that a missing fixture is a failure naming the
+ * record command, never a live call. The client surfaces that error unchanged
+ * (`src/core/http/client.ts` rethrows anything that is not a `Zotero.HTTP`
+ * exception), so the adapter fails and the pipeline records the failure on
+ * that source's report.
+ *
+ * @param options - see {@link MultiHostReplayOptions}
+ * @returns the transport, plus every call it saw
+ */
+export function createMultiHostReplayTransport(
+  options: MultiHostReplayOptions,
+): MultiHostReplayTransport {
+  const calls: MultiHostReplayCall[] = [];
+  const byHost = new Map(
+    options.routes.map((route) => [
+      route.host,
+      route.dirs.map((dir) => ({
+        dir,
+        replay: replayTransport(dir, options.io),
+      })),
+    ]),
+  );
+
+  async function answer(
+    host: string,
+    request: { method: string; url: string; body?: string },
+  ): Promise<{ exchange: RecordedExchange; fixture: string }> {
+    const injected = options.answerFor?.(host, request);
+    if (injected !== undefined) {
+      return { exchange: injected, fixture: `(injected for ${host})` };
+    }
+    let first: unknown;
+    for (const { dir, replay } of byHost.get(host) ?? []) {
+      try {
+        return {
+          exchange: await replay(request),
+          fixture: fixtureFileFor(dir, request),
+        };
+      } catch (error) {
+        first ??= error;
+      }
+    }
+    throw first instanceof Error
+      ? first
+      : new Error(
+          `Missing fixture: no route for host ${host} (${request.method} ` +
+            `${request.url})\nRecord it with: ${FIXTURE_RECORD_COMMAND}`,
+        );
+  }
+
+  return {
+    calls,
+    async request(method, url, transportOptions): Promise<HttpTransportXhr> {
+      const host = new URL(url).host;
+      const request = {
+        method,
+        url,
+        ...(transportOptions.body !== undefined && {
+          body: transportOptions.body,
+        }),
+      };
+      if (options.latency !== undefined) {
+        await options.latency(host, request);
+      }
+      let found: { exchange: RecordedExchange; fixture: string };
+      try {
+        found = await answer(host, request);
+      } catch (error) {
+        calls.push({
+          method,
+          url,
+          options: transportOptions,
+          fixture: "(missing)",
+          host,
+          status: undefined,
+        });
+        throw error;
+      }
+      calls.push({
+        method,
+        url,
+        options: transportOptions,
+        fixture: found.fixture,
+        host,
+        status: found.exchange.status,
+      });
+      const block = Object.entries(found.exchange.headers)
+        .map(([name, value]) => `${name}: ${value}`)
+        .join("\r\n");
+      return {
+        status: found.exchange.status,
+        responseText: found.exchange.body,
+        // The request URL, for the reason `createReplayTransport` gives.
+        responseURL: url,
+        getAllResponseHeaders: () => block,
+      };
+    },
+    UnexpectedStatusException:
+      ReplayUnexpectedStatusException as unknown as HttpExceptionClass<
+        Error & { readonly xmlhttp: HttpTransportXhr }
+      >,
+    TimeoutException: ReplayTimeoutException,
+    BrowserOfflineException: ReplayBrowserOfflineException,
+    SecurityException: ReplaySecurityException,
+    CancelledException: ReplayCancelledException,
+  };
+}
+
+/** Options for {@link createMultiHostReplayHttpClient}. */
+export interface MultiHostReplayHttpClientOptions extends MultiHostReplayOptions {
+  /** As {@link ReplayHttpClientOptions.version}. */
+  readonly version?: string;
+  /**
+   * The client's clock. Omitted: a clock frozen at {@link FROZEN_NOW_EPOCH_MS}
+   * whose `sleep` records and returns at once, as
+   * {@link createReplayHttpClient}'s does. The bench passes the system clock.
+   */
+  readonly clock?: Clock;
+  /**
+   * Each host's limiter. Omitted: one {@link createRecordingLimiter} per
+   * routed host, which grants at once. The bench passes the shipped
+   * `HOST_POLICIES` buckets, which pace for real.
+   */
+  readonly limiterFor?: (host: string) => RateLimiterPort | undefined;
+}
+
+/** What {@link createMultiHostReplayHttpClient} hands back. */
+export interface MultiHostReplayHttpClient {
+  readonly client: HttpClient;
+  readonly transport: MultiHostReplayTransport;
+  /** The recording limiters, by host; empty when `limiterFor` was supplied. */
+  readonly limiters: ReadonlyMap<string, RecordingLimiter>;
+  /** Waits the retry loop asked for, when the default clock is in use. */
+  readonly slept: readonly number[];
+}
+
+/**
+ * The shipped `createHttpClient` over {@link createMultiHostReplayTransport},
+ * with every host given the shipped §7.3 retry policy — the same
+ * `HOST_POLICIES` row and `retryPolicyFromBudget` the composition root reads
+ * (see {@link shippedRetryPolicy}).
+ *
+ * @param options - see {@link MultiHostReplayHttpClientOptions}
+ * @returns the client and the things a test asserts against
+ */
+export function createMultiHostReplayHttpClient(
+  options: MultiHostReplayHttpClientOptions,
+): MultiHostReplayHttpClient {
+  const transport = createMultiHostReplayTransport(options);
+  const slept: number[] = [];
+  const limiters = new Map<string, RecordingLimiter>();
+  if (options.limiterFor === undefined) {
+    for (const route of options.routes) {
+      limiters.set(route.host, createRecordingLimiter(route.host));
+    }
+  }
+  const frozen = createManualClock(FROZEN_NOW_EPOCH_MS);
+  const clock: Clock = options.clock ?? {
+    now: () => frozen.now(),
+    sleep: (ms, token) =>
+      new Promise<void>((resolve) => {
+        slept.push(ms);
+        token?.throwIfCancelled();
+        resolve();
+      }),
+  };
+  const policies = new Map<string, RetryPolicy | undefined>();
+  const client = createHttpClient({
+    transport,
+    userAgent: buildUserAgent(options.version ?? "0.0.2"),
+    clock,
+    limiterFor: options.limiterFor ?? ((host) => limiters.get(host)),
+    retryFor: (host) => {
+      if (!policies.has(host)) policies.set(host, shippedRetryPolicy(host));
+      return policies.get(host);
+    },
+  });
+  return { client, transport, limiters, slept };
+}
+
+/**
+ * The committed exchange of one scenario in one fixture directory, for
+ * {@link MultiHostReplayOptions.answerFor}. Found through the sidecars, so a
+ * caller names a scenario rather than a hash.
+ *
+ * @param dir - the fixture directory
+ * @param scenario - the sidecar's `scenario`, e.g. `"error-500"`
+ * @param io - how to read it on this platform
+ * @returns the exchange
+ * @throws Error unless exactly one sidecar names the scenario
+ */
+export async function readScenarioExchange(
+  dir: string,
+  scenario: string,
+  io: FixtureIo,
+): Promise<RecordedExchange> {
+  const matches = (await listFixtureMeta(dir, io)).filter(
+    (loaded) => loaded.meta.scenario === scenario,
+  );
+  const only = matches.length === 1 ? matches[0] : undefined;
+  if (only === undefined) {
+    throw new Error(
+      `${String(matches.length)} fixtures in ${dir} are named "${scenario}"; ` +
+        `expected exactly one`,
+    );
+  }
+  return JSON.parse(
+    await io.readText(dir, `${only.key}.json`),
+  ) as RecordedExchange;
+}

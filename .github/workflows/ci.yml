@@ -193,6 +193,18 @@ jobs:
       - name: Run contract tests (replay from fixtures, no network)
         run: npx vitest run --dir test/contract
 
+      # P2-T16 step 4 — docs/10 NFR-2: a 4-source search at 100 results a
+      # source completes in ≤ 30 s. scripts/bench-search.ts runs the shipped
+      # pipeline, adapters, client and §7.3 per-host buckets on the real clock
+      # over a replay transport that waits a per-host latency measured from the
+      # committed fixtures' response date headers (the model is in the
+      # script's header). It exits 1 over 30 s, and also when the latency
+      # model did not run — a zero-latency replay proves nothing about the
+      # budget. No network: every answer is built from committed fixtures and
+      # the global fetch is replaced by a function that throws.
+      - name: NFR-2 search bench (replay with modelled latency, no network)
+        run: npm run bench:search
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
@@ -295,6 +307,16 @@ jobs:
           fi
           echo "Zotero binary: $bin"
           echo "ZOTERO_PLUGIN_ZOTERO_BIN_PATH=$bin" >> "$GITHUB_ENV"
+
+      # P2-T16 Part A: Phase 2's end-to-end run (the seven-source search, the
+      # 500 + 429 partial fetch, FR-51's re-run, and a restart with `sources`
+      # excluding semanticscholar) is an in-Zotero spec, collected by the
+      # runner's `test.entries` like every other. Checked by name here so a
+      # rename or deletion fails loudly rather than shrinking the run. While
+      # this job is `continue-on-error`, a red run of that spec does not block
+      # a pull request either.
+      - name: Assert the Phase 2 end-to-end spec is present (P2-T16)
+        run: test -f test/integration/pipeline/searchImportMultiSource.spec.ts
 
       # Needs network: the runner fetches mocha.js from cdn.jsdelivr.net and
       # chai.js from www.chaijs.com, unpinned, at run time (P0-T13).
