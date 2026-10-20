@@ -2916,7 +2916,7 @@ decision record's section 5 today; whether the run-time half is worth a card is 
 |---|---|
 | **ID** | `P2-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36` |
+| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37` |
 | **Blocks** | none |
 | **Retires** | `R-2`, `R-18` (closes them), `R-3` (fallback proven) |
 | **Implements** | `FR-9`, `FR-50`, `FR-51`, `NFR-2`, `NFR-6` |
@@ -5147,7 +5147,7 @@ integration suite (unit-level card).
 | **ID** | `P2-T36` |
 | **State** | `DONE` — approved 2026-10-15; Korean titles, PubMed open-access and language filters, window fixtures. Report at `plan/reports/P2-T36.md`. |
 | **Depends on** | `P2-T05`, `P2-T30` |
-| **Blocks** | `P2-T13`, `P2-T16` |
+| **Blocks** | `P2-T13`, `P2-T16`, `P2-T37` |
 | **Retires** | `plan/00` §6 items 74, 88, 112, 114 |
 | **Implements** | the owner's 2026-10-15 decisions (review page, group 가, rows 88, 112, 114, 74) |
 | **Estimate** | 0.75 d |
@@ -5239,6 +5239,76 @@ rather than a literal. **11 mutants, all killed**, including the normaliser reve
 fail). Not checked: real Korean records (`P2-T13`'s corpus), live acceptance of `kor[la]`. Two Korean gaps
 remain for `P2-T13` to measure: Hangul-only family names normalise to nothing, and spaced Korean titles often
 fall under the five-token short-title guard (items 172, 173).
+---
+
+### P2-T37 — A re-run finds a record that has no DOI and no PMID
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T37` |
+| **State** | `TODO` |
+| **Depends on** | `P2-T36` |
+| **Blocks** | `P2-T16` |
+| **Retires** | `plan/00` §6 items 105 and 235 |
+| **Implements** | `FR-51` (a re-run creates zero new items) |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** Re-running a search whose results include a record with neither a DOI nor a PMID creates
+no new item, and the window marks that row as already in the library.
+
+**Why this is a card.** Rule 9: `P2-T16` Part A step 6 measured the defect (`plan/reports/P2-T16-partA.md`
+§6 D1): Europe PMC `PMC/PMC11693243` is created again on every re-run, so a re-run reports 1 created and
+97 of 98 linked. The owner chose on 2026-10-20 to fix it now.
+
+**Read first.**
+- `plan/reports/P2-T16-partA.md` §1 (step 6) and §6 (D1); `plan/00` §6 items 105 and 235.
+- `findExisting` and its `workKey` parameter in `src/zotero/libraryIndex.ts` (its doc comment explains
+  why a `hash:` key is matched only when the caller passes it) and `buildWorkKey` (the five-arm precedence).
+- `planImport` in `src/zotero/importer.ts` and `isExisting` in `src/bootstrap/registerUI.ts` — the two
+  callers, both calling `findExisting(work.ids)` today.
+- `ExternalIds.pmcid` in `src/model/ids.ts`, and how the index reads an item's identifiers (`doisOf` and
+  its neighbours in `libraryIndex.ts`).
+
+**Files.** (rule 10 — callers and the constructing file named)
+- modify `src/zotero/importer.ts` (`planImport`: pass the work's key)
+- modify `src/bootstrap/registerUI.ts` (`isExisting`: pass the work's key; this is also where the library
+  index is constructed for the window)
+- modify `src/zotero/libraryIndex.ts` only if step 2 shows the key alone does not find the item (for
+  example, a PMCID arm)
+- modify `test/integration/zotero/libraryIndex.spec.ts`, `test/integration/zotero/importer.spec.ts`
+- read `test/integration/pipeline/searchImportMultiSource.spec.ts` (step 6 is the acceptance test; do
+  not weaken it)
+
+**Do.**
+1. Pass the work key at both call sites: `findExisting(work.ids, work.workKey)`.
+2. Measure, in Zotero, whether an item written for a DOI-less, PMID-less work is then found by its key
+   alone. If it is not (for example because the item stores no key the index can read back, or the
+   stored key is computed from different fields), add the narrowest lookup that finds it — preferring
+   an identifier the item already carries, such as the PMCID, over a new stored field — and say in the
+   report which it was and why.
+3. Add a test in `libraryIndex.spec.ts` and one in `importer.spec.ts` for a work with only a PMCID or
+   only a `hash:` key: the second import plans `link`, not `create`.
+4. Run the full integration suite: `P2-T16` step 6 must pass (0 created on the re-run, every row marked
+   already present).
+
+**Do NOT.**
+- Do not change any dedup tier, threshold or the `buildWorkKey` precedence.
+- Do not match on title alone at the library level (a `hash:` collision must not merge two papers that
+  differ in year or first author).
+- Do not touch `test/integration/pipeline/searchImportMultiSource.spec.ts` except to read it.
+- No live request; no recording.
+
+**Done when.**
+- [ ] `P2-T16` step 6 passes in three integration runs: the re-run creates 0 items and links 98 of 98.
+- [ ] The two new tests fail with the call sites reverted (mutant) and pass with them.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npx eslint .`, `npm run test` exit 0.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npx eslint . && npm run test
+npm run test:integration -- --exit-on-finish
+```
 ---
 
 ---
