@@ -81,6 +81,7 @@ import {
   type Scope,
   type ServiceGraph,
 } from "./container";
+import type { JobQueue } from "../core/jobQueue/queue";
 import type { Logger } from "../core/logger";
 import { formatValue } from "../i18n/ftl";
 import { L10N_PROGRESS_HEADLINE } from "../i18n/keys";
@@ -119,6 +120,7 @@ import {
   type ProvenanceStore,
 } from "../core/provenance";
 import {
+  createJobStore,
   createProvenanceStore,
   openPluginDatabase,
   pluginDatabasePath,
@@ -278,10 +280,13 @@ const DEFERRED_PROVENANCE_STORE: ProvenanceStore = {
 async function openProvenanceStore(
   scope: Scope,
   logger: Logger,
+  jobs: JobQueue,
 ): Promise<void> {
   // Captured once, for the reason {@link publishServiceGraph} gives.
   const api = addon.api;
   let database: SqlConnection | undefined;
+  // `P3-T34`'s startup recovery over the job store; settles, never rejects.
+  let recovering: Promise<void> | undefined;
   await scope.use({
     description:
       "the plugin database (research-helper.sqlite) and its provenance store",
@@ -302,6 +307,29 @@ async function openProvenanceStore(
             schemaFrom: outcome.from,
             schemaTo: outcome.to,
           });
+          // The job queue's store, on this same connection (`P3-T34`;
+          // `docs/07` §8.2 allows one), then §7.6's startup recovery. Not
+          // awaited here, so the provenance store is ready without waiting on
+          // it; teardown awaits it before the connection closes. A failure is
+          // logged and closes nothing.
+          jobs.attachStore(createJobStore(database));
+          recovering = jobs.recover().then(
+            (recovery) => {
+              logger.info("job recovery done", {
+                interrupted: recovery.interrupted.length,
+                autoResumed: recovery.autoResumed.length,
+                waitingForGuards: recovery.waitingForGuards.length,
+                pausedByGuard: recovery.pausedByGuard.length,
+                awaitingUserDecision: recovery.awaitingUserDecision.length,
+                failed: recovery.failed.length,
+              });
+            },
+            (error: unknown) => {
+              logger.warn("job recovery failed", {
+                reason: error instanceof Error ? error.name : typeof error,
+              });
+            },
+          );
           return index;
         } catch (error) {
           logger.error(
@@ -324,6 +352,8 @@ async function openProvenanceStore(
       delete api.provenance;
       provenanceState.index = undefined;
       provenanceState.ready = undefined;
+      await recovering;
+      jobs.detachStore();
       const opened = database;
       database = undefined;
       await opened?.closeDatabase(true);
@@ -925,6 +955,7 @@ export async function registerUI(scope: Scope): Promise<void> {
   await openProvenanceStore(
     scope,
     graph.logger.child({ surface: "provenanceStore" }),
+    graph.jobs,
   );
   await publishSearchWindowHost(scope, graph);
   // Before `APP_REGISTRATIONS`, for the same reason the services are: the

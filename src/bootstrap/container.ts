@@ -187,6 +187,7 @@ import {
 import { retryPolicyFromBudget, type RetryPolicy } from "../core/http/retry";
 import { buildUserAgent } from "../core/http/userAgent";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
+import { createJobQueue, type JobQueue } from "../core/jobQueue/queue";
 import {
   CompositeProgressReporter,
   createObservableProgressSink,
@@ -211,7 +212,7 @@ import {
 } from "../core/rateLimit/hostLimiter";
 import type { SecretStore } from "../core/secretStore";
 import type { PipelineRegistry } from "../pipeline/registry";
-import type { PipelineContext, PipelineId } from "../pipeline/types";
+import type { LLMRouter, PipelineContext, PipelineId } from "../pipeline/types";
 import { getPref, setPrefStore } from "../prefs";
 import { createArxivSource } from "../sources/arxiv/arxivSource";
 import { createArxivRecordMapper } from "../sources/arxiv/mapper";
@@ -245,6 +246,7 @@ import {
   createZoteroSearchImportWriter,
   registerPipelines,
 } from "./registerPipelines";
+import { registerProviders, type LLMServices } from "./registerProviders";
 import { registerSources, type ShippedSourceAdapters } from "./registerSources";
 
 // ===========================================================================
@@ -840,6 +842,19 @@ export interface ServiceGraph {
    * reporter and report exactly one job per plugin lifetime.
    */
   readonly pipelineContext: PipelineContextFactory;
+  /**
+   * The LLM layer `registerProviders()` built (`P3-T06`): the settings port,
+   * the provider registry, the base-URL resolver and `docs/07` §4.3's
+   * `LLMRouter`, which every job's `PipelineContext.llm` carries.
+   */
+  readonly llm: LLMServices;
+  /**
+   * The job queue's persistent half (`P3-T34`, `docs/07` §7.6): job records,
+   * states, checkpoints and startup recovery. Built here with no store;
+   * `src/bootstrap/registerUI.ts` attaches the `job` table's store when the
+   * plugin database opens, and detaches it before the connection closes.
+   */
+  readonly jobs: JobQueue;
 }
 
 /** What {@link PipelineContextFactory.forJob} is asked for. */
@@ -1132,6 +1147,8 @@ interface PipelineContextDeps {
   readonly logger: Logger;
   readonly sources: SourceRegistry;
   readonly progress: JobProgressFactory;
+  /** The one router (`P3-T06`); every job's context carries the same instance. */
+  readonly llm: LLMRouter;
 }
 
 /**
@@ -1196,11 +1213,13 @@ function createPipelineContextFactory(
         logger: deps.logger.child({ jobId, pipelineId: options.pipelineId }),
         clock: deps.clock,
         sources: deps.sources,
-        // See this function's doc comment: seven members doc 07 declares and
-        // Phase 1 has no implementation for.
+        // `docs/07` §4.3's router (`P3-T06`, owner item 248): the one instance
+        // `registerProviders` built, shared by every job.
+        llm: deps.llm,
+        // See this function's doc comment: members doc 07 declares and no
+        // card has implemented yet (`llm` left this list in `P3-T06`).
         cache: undefined,
         budget: undefined,
-        llm: undefined,
         tts: undefined,
         zotero: undefined,
         config: undefined,
@@ -1559,6 +1578,11 @@ export async function installServices(
     }),
   } satisfies ShippedSourceAdapters);
 
+  // 6b. The LLM layer (`P3-T06`): settings over the typed prefs, the provider
+  //     registry, the base-URL resolver and `docs/07` §4.3's router. No
+  //     adapter yet — `P3-T07`–`P3-T10` add them inside `registerProviders`.
+  const llm = registerProviders({ logger });
+
   // 7. The pipelines (`P1-T16`) and the per-job context factory.
   const pipelines = registerPipelines({
     // `http`: Strategy B's PMCID route (the NCBI ID Converter, owner
@@ -1572,6 +1596,23 @@ export async function installServices(
     logger,
     sources,
     progress: progress.factory,
+    llm: llm.router,
+  });
+
+  // 8. The job queue's persistent half (`P3-T34`). Its store is attached by
+  //    `src/bootstrap/registerUI.ts` once the plugin database is open — the
+  //    one connection, opened after this function returns. No resume guard
+  //    and no notifier is passed yet, so `recover()` resumes nothing: every
+  //    resumable interrupted job waits for `P3-T15`, `P3-T16` and `P3-T33`
+  //    to fill `resumeGuards` here (`plan/00` §6 item 250).
+  const jobs = createJobQueue({
+    clock,
+    logger: logger.child({ surface: "jobQueue" }),
+    pluginVersion: options.version,
+    isResumable: (pipelineId) =>
+      pipelines
+        .list()
+        .some((pipeline) => pipeline.id === pipelineId && pipeline.resumable),
   });
 
   logger.info("services installed", {
@@ -1580,6 +1621,7 @@ export async function installServices(
     secretBackend: secrets?.backend ?? "none",
     sources: sources.list().length,
     pipelines: pipelines.list().length,
+    llmProviders: llm.registry.list().length,
   });
 
   return {
@@ -1593,6 +1635,8 @@ export async function installServices(
     sources,
     pipelines,
     pipelineContext,
+    llm,
+    jobs,
   };
 }
 

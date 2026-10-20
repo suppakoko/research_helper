@@ -104,6 +104,8 @@ const ID_CONSTANTS = {
   L10N_MENU_COLLECTION_RERUN: keys.L10N_MENU_COLLECTION_RERUN,
   L10N_MENU_SPIKE_CREATE_ITEM: keys.L10N_MENU_SPIKE_CREATE_ITEM,
   L10N_PROGRESS_HEADLINE: keys.L10N_PROGRESS_HEADLINE,
+  // `P3-T34`: the notice that interrupted jobs resumed (`docs/07` §7.6).
+  L10N_JOB_RESUMED: keys.L10N_JOB_RESUMED,
 } satisfies Record<string, string>;
 
 /** The exported `L10N_*` string constants that are not message identifiers. */

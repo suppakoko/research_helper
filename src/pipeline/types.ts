@@ -21,7 +21,7 @@
  * | `Cache` | yes — §4.1, under a `// src/core/cache/cache.ts` comment | `src/core/cache/cache.ts` |
  * | `BudgetGuard` | yes — §4.3 | `src/llm/budget.ts` |
  * | `TTSProvider` | yes — §4.4 | `src/tts/types.ts` |
- * | `LLMRouter` | **no** — one occurrence, this member | `src/llm/router.ts` (§2.2) |
+ * | `LLMRouter` | **no** — one occurrence, this member (declared in §4.3 on 2026-10-21, item 248; now imported, `P3-T06`) | `src/llm/types.ts`, built by `src/llm/router.ts` |
  * | `ZoteroFacade` | **no** — one occurrence, this member | `src/zotero/zoteroApi.ts` (§3.2) |
  * | `ConfigReader` | **no** — one occurrence, this member | — nothing names one |
  * | `PrivacyPolicy` | **no** — one occurrence, this member | — nothing names one |
@@ -57,13 +57,14 @@
  * **Layering.** `pipeline/` may import `core/`, `model/`, `sources/`, `llm/`,
  * `tts/` and `zotero/`, and may not import `ui/` (`docs/07` §2.3,
  * `eslint.config.js`'s `research-helper/layering/pipeline`). This file imports
- * only `core/`.
+ * `core/`, `sources/` and, since `P3-T06`, `llm/` (types only).
  */
 
 import type { Clock } from "../core/clock";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
 import type { ProgressReporter } from "../core/jobQueue/progress";
 import type { Logger } from "../core/logger";
+import type { LLMRouter } from "../llm/types";
 import type { SourceRegistry } from "../sources/registry";
 
 // ===========================================================================
@@ -182,7 +183,7 @@ export interface PipelineEstimate {
 }
 
 // ===========================================================================
-// 2. The seven forward aliases — see this file's header
+// 2. The forward aliases — see this file's header (six since P3-T06: LLMRouter is imported)
 // ===========================================================================
 
 /**
@@ -202,11 +203,12 @@ export type BudgetGuard = unknown;
 export type TTSProvider = unknown;
 
 /**
- * Named by §4.5 and **declared nowhere** — one occurrence in the whole corpus,
- * the `PipelineContext` member itself. §2.2's tree puts a `router.ts` under
- * `src/llm/`; the interface it would export does not exist yet.
+ * `docs/07` §4.3's `LLMRouter`, declared by the owner on 2026-10-21 (`plan/00`
+ * §6 item 248) and built by `src/llm/router.ts`'s `createLLMRouter`. No longer
+ * a forward alias (`P3-T06`): re-exported so `PipelineContext.llm` is the real
+ * router.
  */
-export type LLMRouter = unknown;
+export type { LLMRouter };
 
 /**
  * Named by §4.5 and **declared nowhere** — one occurrence in the whole corpus.

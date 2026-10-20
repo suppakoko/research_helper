@@ -364,6 +364,7 @@ import {
   repositoryFixtureDir,
   zoteroFixtureIo,
 } from "../support/fixtureIo.zotero";
+import { mockLLMRouter } from "../helpers/mockLLM";
 import {
   assertFixturesFresh,
   createReplayHttpClient,
@@ -1286,7 +1287,7 @@ function jobFactory(
         sources,
         cache: undefined,
         budget: undefined,
-        llm: undefined,
+        llm: mockLLMRouter(),
         tts: undefined,
         zotero: undefined,
         config: undefined,

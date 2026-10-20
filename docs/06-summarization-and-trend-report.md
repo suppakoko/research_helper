@@ -266,6 +266,8 @@ pref("extensions.zotero.fulltext.textMaxLength", 500000);
 `indexPDF` extracts only `fulltext.pdfMaxPages` pages unless `allPages` is true. For journal articles (typically ≤ 30 pages) the 100-page default is never binding, so `INDEX_STATE_PARTIAL` on a research article almost always means *something went wrong*, not *legitimate truncation*. For books, theses and long supplements it can be binding.
 
 > **Design decision D-06-3 (page-truncation policy).** Read `getIndexedState`. If it is `INDEX_STATE_PARTIAL`, read `Zotero.Fulltext.getPages(itemID)` (verified, `fulltext.js:2799`; returns an object exposing `indexedPages` and `total` — **a DB-row object, not a plain one**: `JSON.stringify` on it throws `DB column 'toJSON' not found`, so read the two properties explicitly; measured 2026-09-15, `P0-T18`). If `total > indexedPages` **and** `total <= FULLTEXT_HARD_PAGE_CAP` (default 60), bypass the cache and call `Zotero.PDFWorker.getFullText(attachment.id, null)` to get all pages. Otherwise accept the truncated cache and set `sourceTruncated: true` on the summary, which the report surfaces in §9.2 Scope & Method. Never silently summarize a truncated document as if it were complete.
+>
+> **Measured 2026-10-21 on Zotero 10.0.3 (`P3-T18`): `attachmentText` does not return the truncated cache in this state.** The getter reads `.zotero-ft-cache` only when `isFullyIndexed()` is true; on `INDEX_STATE_PARTIAL` it calls `Zotero.PDFWorker.getFullText(this.id)` with no page limit (read from the installed `omni.ja`, and observed: one call, `maxPages` undefined, all 5 pages of a 5-page file indexed to 2). So "accept the truncated cache" cannot be done by reading `attachmentText`, and the cache file may not be read directly. As built (`acquireSource`, `src/pipeline/summarize/acquire.ts`), the PARTIAL path skips `attachmentText`: at or under the cap it makes one `getFullText(id, null)` call; over the cap it makes one `getFullText(id, indexedPages)` call — the pages the cache holds, at the cost the indexer already paid — and sets `truncated: true`. The field is `truncated` on `AcquiredSource` (§3.6) and `StoredSummary` (`07` §5.2); `sourceTruncated` above is the older name.
 
 If `getIndexedState` is `INDEX_STATE_QUEUED` or `INDEX_STATE_UNINDEXED`, do **not** call `Zotero.Fulltext.indexItems([id])` to force indexing — that mutates the user's library and index as a side effect of running a report, which violates the plugin's "no surprise writes" principle (`09`). `attachmentText` will extract on demand without persisting anything, which is the behaviour we want.
 
@@ -1798,7 +1800,7 @@ async function sha256Hex(str) {
 }
 ```
 
-> **Unverified:** `crypto.subtle` availability in the Zotero 10 bootstrapped-plugin scope was not confirmed against source. It is a standard global in Gecko chrome contexts. **Fallback if unavailable:** `Zotero.Utilities.Internal.md5(str)` — collision risk is irrelevant here because the key is a cache lookup, not a security boundary.
+> **Measured 2026-10-21 on Zotero 10.0.3 (`P3-T18`), confirming `docs/01` §2.3's 2026-10-13 measurement:** `crypto.subtle.digest` is a function in the plugin sandbox and in the test-runner window, and `contentHash` computed through it equals an independent SHA-256 of the same text. `acquireSource` (`src/pipeline/summarize/acquire.ts`) probes the global once per module instance; the fallback, `Zotero.Utilities.Internal.md5(str)` (`md5Hex` in `src/zotero/fulltext.ts`), is kept for a scope without it and is written `md5:<hex>` with the warning `content_hash_md5`, so it cannot be mistaken for SHA-256 — collision risk is irrelevant here because the key is a cache lookup, not a security boundary.
 
 Also cache at coarser granularity, so re-running a report with an edited prompt does not redo the whole pipeline:
 
@@ -2021,7 +2023,7 @@ Detection, in order:
 | --- | --- |
 | PDF password-protected | `Zotero.PDFWorker.getFullText` throws. Catch, add `pdf_password_protected` to warnings, demote to Tier 1. |
 | PDF is a scanned image with no text layer | OCR probe (§4.1, step 8) fails or text is near-empty → demote to Tier 1. Never send ligature soup to a model. |
-| Attachment file missing (not synced locally) | `getFilePathAsync()` returns falsy → `attachmentText` returns `''`. Try Tier 3, then Tier 1. Do **not** trigger a file download as a side effect of running a report. |
+| Attachment file missing (not synced locally) | `getFilePathAsync()` returns falsy. `attachmentText` returns `''` only when the attachment has no content type; for a PDF with no cache it calls `PDFWorker.getFullText`, which **throws** (`Could not read 'false'`, measured 2026-10-21, Zotero 10.0.3, `P3-T18`). Catch, add `attachment_text_failed`, try Tier 3, then Tier 1. Do **not** trigger a file download as a side effect of running a report. |
 | LLM returns invalid JSON | One repair call (§6.4). Then one full retry at temperature 0. Then mark the paper failed. |
 | Rate limit (429) | Exponential backoff with jitter, honouring `Retry-After`. `Zotero.HTTP.request` has built-in 429/5xx retry via `errorDelayIntervals`; a `fetch`-based streaming path must implement it. Owned by `03`. |
 | Context-length error despite budgeting | Halve the chunk budget for that paper and retry once — this is the self-correcting safety net for token-estimator error. |

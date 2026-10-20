@@ -432,3 +432,15 @@ research-helper-prefs-test-unavailable = No credential store is available, so th
 research-helper-prefs-use-translators =
     .label = Fetch metadata through Zotero translators (slower, more accurate)
     .tooltiptext = Each record is looked up through Zotero's translators over the network, one at a time, so an import takes longer. A record the lookup cannot resolve is imported from the search results instead.
+
+
+## The job queue's resume notice (P3-T34; docs/07 §7.6, plan/00 §6 item 250)
+##
+## Shown once when jobs that the last quit of Zotero interrupted resume on their
+## own, after every spend guard has passed. `$count` is how many jobs resumed.
+
+research-helper-job-resumed =
+    { $count ->
+        [one] Research Helper resumed 1 background task that was interrupted when Zotero closed.
+       *[other] Research Helper resumed { $count } background tasks that were interrupted when Zotero closed.
+    }

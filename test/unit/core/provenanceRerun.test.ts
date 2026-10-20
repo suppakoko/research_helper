@@ -34,6 +34,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  JOB_DDL,
+  JOB_STATUS_INDEX_DDL,
   LATEST_SCHEMA_VERSION,
   MIGRATIONS,
   PROVENANCE_COLLECTION_INDEX_DDL,
@@ -248,24 +250,30 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
     );
   });
 
-  it("is one migration of exactly those two statements, and no other table", () => {
-    expect(LATEST_SCHEMA_VERSION).toBe(1);
+  // Moved with P3-T34, which appended version 2 (the `job` table; its own
+  // byte-for-byte checks are in test/unit/core/jobQueue.test.ts).
+  it("is version 1 of exactly those two statements, then P3-T34's job table as version 2", () => {
+    expect(LATEST_SCHEMA_VERSION).toBe(2);
     expect(MIGRATIONS).toStrictEqual([
       {
         version: 1,
         statements: [SEARCH_PROVENANCE_DDL, PROVENANCE_COLLECTION_INDEX_DDL],
       },
+      {
+        version: 2,
+        statements: [JOB_DDL, JOB_STATUS_INDEX_DDL],
+      },
     ]);
   });
 
-  it("brings a fresh file to schema_version 1 with §8.3's columns and index, read back", async () => {
+  it("brings a fresh file to schema_version 2 with §8.3's columns and index, read back", async () => {
     const connection = sqlite();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 1 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 2 });
     const { db } = connection;
 
     expect(
       db.prepare("SELECT version FROM schema_version").all().map(plain),
-    ).toStrictEqual([{ version: 1 }]);
+    ).toStrictEqual([{ version: 2 }]);
     expect(
       columns(db, "search_provenance").map(({ name, type, notnull, pk }) => [
         name,
@@ -299,7 +307,9 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
         .all()
         .map((row) => `${String(row.type)}:${String(row.name)}`),
     ).toStrictEqual([
+      "index:idx_job_status",
       "index:idx_provenance_collection",
+      "table:job",
       "table:schema_version",
       "table:search_provenance",
     ]);
@@ -307,7 +317,7 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
 
   it("is idempotent: a second run reads the version and changes nothing", async () => {
     const connection = await migrated();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 1, to: 1 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 2, to: 2 });
     expect(
       one(connection.db, "SELECT COUNT(*) AS n FROM schema_version"),
     ).toStrictEqual({ n: 1 });

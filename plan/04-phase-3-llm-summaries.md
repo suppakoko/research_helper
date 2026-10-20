@@ -729,9 +729,10 @@ keeps `src/llm/**` free of Zotero (`research-helper/zotero-global`), so the old 
    `ChatResponse` values or errors (retry-then-succeed, context-length, budget stop, cancel at
    87/200, schema violation).
 
-> **Open — recommended:** declare `LLMRouter` in `docs/07` §4.3 as the router's public surface
-> (`resolveModel(tier)`, `chat`, `chatStream`, `activeProvider()`), since `PipelineContext` names
-> the type and no document declares it. Changes `docs/07` §4.3 and §4.5. (Review §4 item 7.)
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 248):** `LLMRouter` is declared in `docs/07`
+> §4.3 (with `ModelTier`, `ModelPurpose`, `ResolvedModel`) and named from §4.5 — one entry point
+> that resolves the configured provider and the per-purpose model: `activeProvider()`,
+> `resolveModel(purpose)`, `chat`, `chatStream`. The docs moved before the code.
 
 **Do NOT.**
 - Do **not** type from `docs/03` §14.1's sketch names (`complete`, `stream`, `validateKey`, …).
@@ -3094,10 +3095,12 @@ queue owns job states including `paused` with a reason; and `checkpoint()` write
 5. Add the `job` table and index as the next migration (§0.2 item 4).
 6. Build the queue in `installServices`.
 
-> **Open — recommended:** v1 resumes a job only within the running session plus "skip what is
-> already cached" across a restart — the job row survives a quit for display and resume-by-skipping,
-> but no job restarts on its own at launch (FR-23 says job state need not survive a restart in v1).
-> Changes `docs/07` §7.6. (New finding of this revision.)
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 250): unfinished jobs resume automatically after
+> a restart**, against this card's earlier recommendation (no automatic restart). A resumed job
+> still passes every spend guard — cached items skipped, the egress acknowledgement, the confirm
+> threshold, both ceilings (pause and ask, item 234) — and the user sees a visible notice. Until a
+> guard exists, resumption waits behind the queue's `ResumeGuards` seam. Written into `docs/07` §7.6
+> first, the same day.
 
 **Do NOT.**
 - Do **not** write a job column without the gate, or add a redaction rule.

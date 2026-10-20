@@ -7,6 +7,7 @@ export type FluentMessageId =
   | 'research-helper-import-fallback-reason'
   | 'research-helper-import-paths'
   | 'research-helper-import-summary'
+  | 'research-helper-job-resumed'
   | 'research-helper-menu-collection-rerun'
   | 'research-helper-menu-collection-search-import'
   | 'research-helper-menu-root'

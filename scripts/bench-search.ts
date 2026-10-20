@@ -113,6 +113,7 @@ import { createPubmedRecordMapper } from "../src/sources/pubmed/mapper";
 import { createPubmedSource } from "../src/sources/pubmed/pubmedSource";
 import { createSourceRegistry } from "../src/sources/registry";
 import { toPipelineInput } from "../src/ui/viewModels/searchImportViewModel";
+import { mockLLMRouter } from "../test/helpers/mockLLM";
 import { DEDUP_CORPUS_Q3 } from "../test/support/dedupCorpusRecordedRequests";
 import { nodeFixtureIo } from "../test/support/fixtureIoNode";
 import {
@@ -587,7 +588,7 @@ async function main(): Promise<number> {
     sources,
     cache: undefined,
     budget: undefined,
-    llm: undefined,
+    llm: mockLLMRouter(),
     tts: undefined,
     zotero: undefined,
     config: undefined,

@@ -505,6 +505,23 @@ describe("installServices wires the graph Phase 1 built", () => {
     await h.scope.unregisterAll();
   });
 
+  // `P3-T34` (`plan/00` §6 item 250): the root builds the job queue with no
+  // store (registerUI.ts attaches it) and, until P3-T15/T16/T33 fill them, no
+  // resume guard and no notifier — so no interrupted job can resume.
+  it("builds the job queue storeless, with every resume prerequisite still missing", async () => {
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+    expect(graph.jobs.attached).toBe(false);
+    expect(graph.jobs.missingResumePrerequisites()).toStrictEqual([
+      "skipCached",
+      "egress",
+      "confirm",
+      "ceilings",
+      "notifier",
+    ]);
+    await h.scope.unregisterAll();
+  });
+
   it("refuses a second graph rather than pacing a host twice as fast", async () => {
     const first = harness();
     await installServices(first.scope, first.options);

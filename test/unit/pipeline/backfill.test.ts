@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { mockLLMRouter } from "../../helpers/mockLLM";
 import { createManualClock } from "../../../src/core/clock";
 import { Semaphore } from "../../../src/core/concurrency";
 import { OperationCancelledError } from "../../../src/core/errors";
@@ -883,7 +884,7 @@ function pipelineRun(options: {
     sources: registry,
     cache: undefined,
     budget: undefined,
-    llm: undefined,
+    llm: mockLLMRouter(),
     tts: undefined,
     zotero: undefined,
     config: undefined,

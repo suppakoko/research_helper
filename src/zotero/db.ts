@@ -27,6 +27,8 @@
  * - {@link createProvenanceStore} — `src/core/provenance.ts`'s
  *   `ProvenanceStore` port, with **exactly the two operations** `P2-T17` step 1
  *   names. Phase 3 widens it (`P3-T15`, `P3-T29`).
+ * - {@link createJobStore} — `src/core/jobQueue/queue.ts`'s `JobStore` port
+ *   over the `job` table (`P3-T34`), on the same connection.
  *
  * The schema is not here: `src/bootstrap/migrations.ts` owns it, as `docs/07`
  * §8.3 says ("migrations in `src/bootstrap/migrations.ts`, versioned in a
@@ -40,6 +42,12 @@
  * opened degrades to "Re-run This Search…" being absent rather than broken.
  */
 
+import {
+  JOB_COLUMNS,
+  type JobRow,
+  type JobStatus,
+} from "../core/jobQueue/jobRecord";
+import type { JobStore } from "../core/jobQueue/queue";
 import {
   parseStoredProvenance,
   serializeProvenance,
@@ -204,6 +212,101 @@ export function createProvenanceStore(db: SqlConnection): ProvenanceStore {
         QUIET,
       );
       return typeof json === "string" ? parseStoredProvenance(json) : undefined;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The job store (`P3-T34`)
+// ---------------------------------------------------------------------------
+
+/** `docs/07` §8.3's `job` columns, in the DDL's order. */
+const JOB_COLUMN_LIST = JOB_COLUMNS.join(", ");
+
+/**
+ * An upsert: a job row is written whole, on every change of its record.
+ * `ON CONFLICT … DO UPDATE` rather than `INSERT OR REPLACE`, which deletes and
+ * re-inserts and so gives the row a new `rowid` — the tie-break of
+ * {@link JOBS_ORDER}.
+ */
+const UPSERT_JOB =
+  `INSERT INTO job (${JOB_COLUMN_LIST}) ` +
+  `VALUES (${JOB_COLUMNS.map(() => "?").join(", ")}) ` +
+  `ON CONFLICT(id) DO UPDATE SET ${JOB_COLUMNS.filter(
+    (column) => column !== "id",
+  )
+    .map((column) => `${column} = excluded.${column}`)
+    .join(", ")}`;
+
+const SELECT_JOB = `SELECT ${JOB_COLUMN_LIST} FROM job WHERE id = ?`;
+
+/** Oldest first; `rowid` breaks a tie between two jobs made in one millisecond. */
+const SELECT_JOBS = `SELECT ${JOB_COLUMN_LIST} FROM job`;
+const JOBS_ORDER = " ORDER BY created_at, rowid";
+
+/**
+ * A `SELECT`'s rows. Anything that is not an array — `undefined`, or a
+ * `false` like `valueQueryAsync`'s no-row answer — is read as no rows.
+ */
+function resultRows(result: unknown): readonly unknown[] {
+  return Array.isArray(result) ? (result as unknown[]) : [];
+}
+
+/**
+ * A result row as {@link JobRow}. Zotero's rows answer a column name as a
+ * property (what `test/integration/zotero/provenanceStore.spec.ts` relies on);
+ * `node:sqlite`'s are plain objects. Either way each column is read by name,
+ * so the row is copied into a plain object rather than kept as the platform's
+ * proxy.
+ */
+function jobRowFrom(result: unknown): JobRow {
+  const source = result as Record<string, unknown>;
+  const row: Record<string, unknown> = {};
+  for (const column of JOB_COLUMNS) {
+    const value = source[column];
+    row[column] = value === undefined ? null : value;
+  }
+  return row as unknown as JobRow;
+}
+
+/**
+ * `src/core/jobQueue/queue.ts`'s `JobStore`, over the plugin's database.
+ *
+ * It takes and returns {@link JobRow}s only, and the one producer of a row is
+ * `toJobRow` in `src/core/jobQueue/jobRecord.ts`, which is where the redaction
+ * gate runs: this store cannot be handed an ungated `input_json`,
+ * `progress_json`, `usage_json`, `error_json` or `warnings_json`. Every
+ * statement is {@link QUIET}: a bound value is a whole job input.
+ *
+ * @param db - the connection {@link openPluginDatabase} returned, migrated
+ * @returns the store
+ */
+export function createJobStore(db: SqlConnection): JobStore {
+  return {
+    async put(row: JobRow): Promise<void> {
+      await db.queryAsync(
+        UPSERT_JOB,
+        JOB_COLUMNS.map((column) => row[column]),
+        QUIET,
+      );
+    },
+
+    async get(id: string): Promise<JobRow | undefined> {
+      const first = resultRows(await db.queryAsync(SELECT_JOB, [id], QUIET))[0];
+      return first === undefined ? undefined : jobRowFrom(first);
+    },
+
+    async list(statuses?: readonly JobStatus[]): Promise<readonly JobRow[]> {
+      if (statuses !== undefined && statuses.length === 0) return [];
+      const sql =
+        statuses === undefined
+          ? SELECT_JOBS + JOBS_ORDER
+          : `${SELECT_JOBS} WHERE status IN (${statuses
+              .map(() => "?")
+              .join(", ")})${JOBS_ORDER}`;
+      return resultRows(await db.queryAsync(sql, statuses ?? [], QUIET)).map(
+        jobRowFrom,
+      );
     },
   };
 }

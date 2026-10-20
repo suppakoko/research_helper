@@ -273,6 +273,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // P2-T18 step 11: the `useTranslators` checkbox's label and slower-path
   // tooltip, for `P3-T04`'s pane to bind (docs/08 §7.3).
   "research-helper-prefs-use-translators",
+  // P3-T34: the notice that interrupted jobs resumed (docs/07 §7.6,
+  // plan/00 §6 item 250). See L10N_JOB_RESUMED.
+  "research-helper-job-resumed",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -383,6 +386,14 @@ export const L10N_MENU_COLLECTION_RERUN =
  * the surface judgement above and not a mechanical fix.
  */
 export const L10N_PROGRESS_HEADLINE = "research-helper-progress-headline";
+
+/**
+ * The visible notice that jobs interrupted by the last quit resumed on their
+ * own (`P3-T34`; `docs/07` §7.6, `plan/00` §6 item 250). `$count` is how many.
+ * Shown by `src/core/jobQueue/queue.ts`'s `JobNotifier.resumed`, which no
+ * surface implements yet; until one does, the queue resumes nothing.
+ */
+export const L10N_JOB_RESUMED = "research-helper-job-resumed";
 
 /* ------------------------------------------------ searchDialog message ids */
 
@@ -755,6 +766,9 @@ export const KO_PENDING_REVIEW = [
   "research-helper-prefs-test-forbidden",
   "research-helper-prefs-test-absent",
   "research-helper-prefs-test-unavailable",
+  // P3-T34: the resume notice. `G-41` owns the translation; the `ko-KR`
+  // bundle carries a commented stub with the English source.
+  "research-helper-job-resumed",
 
   // --- searchDialog (62) ---
   "research-helper-search-window-title",
@@ -961,6 +975,8 @@ export interface FluentMessageArgsMap {
   "research-helper-prefs-test-inconclusive": { time: string };
   "research-helper-prefs-test-rejected": { time: string };
   "research-helper-prefs-test-forbidden": { time: string };
+  // P3-T34: how many interrupted jobs resumed.
+  "research-helper-job-resumed": { count: number };
 
   // searchDialog
   "research-helper-search-years-span": {
@@ -1067,6 +1083,8 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-prefs-test-inconclusive",
   "research-helper-prefs-test-rejected",
   "research-helper-prefs-test-forbidden",
+  // mainWindow — the job queue (1, P3-T34)
+  "research-helper-job-resumed",
 
   // searchDialog (20)
   "research-helper-search-years-span",

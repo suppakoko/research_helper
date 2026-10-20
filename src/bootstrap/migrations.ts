@@ -11,9 +11,9 @@
  * declare. So version 1 is §8.3's `search_provenance` DDL and its
  * `idx_provenance_collection`, **copied column for column**, and nothing else;
  * `test/unit/core/provenanceRerun.test.ts` reads §8.3 off disk and compares the
- * two statements to it. Phase 3 adds its tables as version 2 and later
- * (`P3-T15`, `P3-T29`), never by editing version 1: a migration that has run
- * on a user's machine is history.
+ * two statements to it. Phase 3 adds its tables as version 2 and later, never
+ * by editing version 1: a migration that has run on a user's machine is
+ * history. Version 2 is §8.3's `job` table and `idx_job_status` (`P3-T34`).
  *
  * ## The bookkeeping
  *
@@ -53,6 +53,42 @@ export const SEARCH_PROVENANCE_DDL = `CREATE TABLE search_provenance (
 export const PROVENANCE_COLLECTION_INDEX_DDL =
   "CREATE INDEX idx_provenance_collection ON search_provenance(library_id, collection_key)";
 
+/**
+ * `docs/07` §8.3's `job` table (`P3-T34`), column for column, as corrected
+ * 2026-10-21: §5.2's `JobRecord` stored whole, including the pause reason and
+ * the redaction marks. `src/core/jobQueue/jobRecord.ts`'s `JobRow` is the same
+ * columns in the same order.
+ */
+export const JOB_DDL = `CREATE TABLE job (
+  id            TEXT PRIMARY KEY,
+  pipeline_id   TEXT NOT NULL,
+  status        TEXT NOT NULL,
+  priority      TEXT NOT NULL,
+  exclusivity_key TEXT,
+  input_json    TEXT NOT NULL,
+  input_version INTEGER NOT NULL,
+  checkpoint_json TEXT,
+  checkpoint_at INTEGER,
+  progress_json TEXT NOT NULL,
+  usage_json    TEXT NOT NULL,
+  error_json    TEXT,
+  library_id    INTEGER,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  plugin_version TEXT NOT NULL,
+  created_at    INTEGER NOT NULL,
+  started_at    INTEGER,
+  finished_at   INTEGER,
+  pause_reason  TEXT,
+  warnings_json TEXT NOT NULL,
+  budget_usd    REAL,
+  result_ref_json TEXT,
+  redaction_json TEXT NOT NULL
+)`;
+
+/** `docs/07` §8.3's index for `recover()`'s reads by state (§7.6). */
+export const JOB_STATUS_INDEX_DDL =
+  "CREATE INDEX idx_job_status ON job(status)";
+
 /** One schema step. */
 export interface Migration {
   /** The version the file is at once this migration has run. */
@@ -66,6 +102,11 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
     statements: [SEARCH_PROVENANCE_DDL, PROVENANCE_COLLECTION_INDEX_DDL],
+  },
+  // `P3-T34`: the job queue's records (`docs/07` §7.6, §8.3).
+  {
+    version: 2,
+    statements: [JOB_DDL, JOB_STATUS_INDEX_DDL],
   },
 ];
 

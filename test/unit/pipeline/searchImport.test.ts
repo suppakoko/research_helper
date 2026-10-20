@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { mockLLMRouter } from "../../helpers/mockLLM";
 import { buildPipelineSet } from "../../../src/bootstrap/registerPipelines";
 import { createManualClock, type Clock } from "../../../src/core/clock";
 import { createDeferred, Semaphore } from "../../../src/core/concurrency";
@@ -190,7 +191,7 @@ function createContext(options: {
     sources: options.sources,
     cache: undefined,
     budget: undefined,
-    llm: undefined,
+    llm: mockLLMRouter(),
     tts: undefined,
     zotero: undefined,
     config: undefined,

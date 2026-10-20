@@ -233,7 +233,7 @@ research_helper/
 │   │   │   ├── tokenEstimate.ts      # pre-flight token/cost estimation
 │   │   │   ├── jsonMode.ts           # structured-output coercion + repair
 │   │   │   └── chunking.ts           # map/reduce chunking for long inputs
-│   │   └── router.ts                 # model selection, fallback chain, cost guard
+│   │   └── router.ts                 # LLMRouter (§4.3): active provider + per-purpose model chain; never another provider (Corrected 2026-10-21: was "model selection, fallback chain, cost guard")
 │   │
 │   ├── tts/
 │   │   ├── types.ts                  # TTSProvider, SynthesisRequest, AudioArtifact
@@ -527,7 +527,8 @@ ui/menus/collectionMenu.ts
       → zotero/collectionOps.getItems(collectionKey)
       → zotero/itemMapper.toCanonical(item)          [per item]
       → cache.get(summaryKey)                        [hit → skip LLM]
-      → llm/router.selectProvider() → LLMProvider.chat(...)   [miss]
+      → ctx.llm.resolveModel("standard"), ctx.llm.chat(...) → LLMProvider.chat(...)   [miss]
+        (Corrected 2026-10-21: was `llm/router.selectProvider()`; the router is §4.3's `LLMRouter`)
           → core/http/client.request()
               → rateLimit/hostLimiter.acquire('api.openai.com')
               → Zotero.HTTP.request(...)
@@ -1260,6 +1261,53 @@ export interface BudgetGuard {
 }
 ```
 
+> **`LLMRouter`, the one entry point. Decided 2026-10-21 (owner; `plan/00` §6 item 248).** §4.5's
+> `PipelineContext.llm` named an `LLMRouter` that no document declared. It is declared below, in
+> `src/llm/types.ts` beside the contract it dispatches to, and built by `createLLMRouter` in
+> `src/llm/router.ts` (`P3-T06`). It resolves the configured provider (`llmProvider`, §8.5) and
+> the per-purpose model, and sends the call to that provider. Three rules bind it:
+>
+> 1. **No silent failover.** `chat` and `chatStream` go to `activeProvider()` and nowhere else
+>    (`09-security-privacy-and-api-keys.md` §2.4 rule 6). When that provider has no key
+>    (`<provider>.keyPresent` false, or the adapter's own `isConfigured()` false) the router throws
+>    `MissingCredentialError` before any request is issued (FR-33).
+> 2. **Two model settings, not three.** `cheap` and `standard` resolve to `summaryModel`, then
+>    `<provider>.model`; `strong` to `reportModel`, then `<provider>.model`; `"screening"` (only
+>    `RELEVANCE_SCREEN`) to `screening.model`, then `summaryModel`, then `<provider>.model`
+>    (`12-prompt-library.md` §18.5 and §3). `"screening"` is a purpose, not a model tier. Every
+>    preference is read on each call, so a change needs no restart.
+> 3. **A missing `chatStream` falls back to `chat`**, as `LLMProvider.chatStream`'s comment says,
+>    so a caller never branches.
+
+```ts
+// src/llm/types.ts (continued) — the router's public surface
+
+/** 12-prompt-library.md §18.5's tiers: an assignment table mapped onto two model settings. */
+export type ModelTier = "cheap" | "standard" | "strong";
+
+/** What a call is for: a tier, or relevance screening (`cheap` plus the `screening.model` override). */
+export type ModelPurpose = ModelTier | "screening";
+
+export interface ResolvedModel {
+  readonly providerId: ProviderId;
+  /** Provider-native model ID, ready for `ChatRequest.model`. */
+  readonly modelId: string;
+  /** The §8.5 key that supplied it, e.g. "summaryModel" or "openrouter.model". */
+  readonly fromPref: string;
+}
+
+export interface LLMRouter {
+  /** The configured provider (`llmProvider`). Never a fallback to another provider. */
+  activeProvider(): ProviderId;
+  /** The model for one purpose, from the active provider's chain. Throws ConfigurationError if every link is empty. */
+  resolveModel(purpose: ModelPurpose): ResolvedModel;
+  /** Dispatch to `activeProvider()`. Throws MissingCredentialError, with zero requests, when it has no key. */
+  chat(request: ChatRequest, ctx: LLMCallContext): Promise<ChatResponse>;
+  /** As `chat`, streamed. Without a provider `chatStream`, yields one terminal chunk built from `chat`. */
+  chatStream(request: ChatRequest, ctx: LLMCallContext): AsyncIterable<ChatStreamChunk>;
+}
+```
+
 ### 4.4 `TTSProvider`
 
 ```ts
@@ -1331,6 +1379,12 @@ export interface TTSProvider {
 
 ### 4.5 `Pipeline`, `JobHandle`
 
+> **`PipelineContext.llm`. Decided 2026-10-21 (owner; `plan/00` §6 item 248).** The member's type
+> is §4.3's `LLMRouter`, imported from `src/llm/types.ts`; a pipeline asks it for a model by
+> purpose (`resolveModel`) and sends the call through it (`chat`, `chatStream`), and never holds an
+> `LLMProvider` itself. One router is built per plugin lifetime, by `registerProviders` called from
+> `installServices`, and every job's context carries that same router.
+
 ```ts
 // src/pipeline/types.ts
 
@@ -1348,6 +1402,7 @@ export interface PipelineContext {
   readonly clock: Clock;
   readonly budget: BudgetGuard;
   readonly sources: SourceRegistry;
+  /** §4.3's `LLMRouter` (Decided 2026-10-21, owner; `plan/00` §6 item 248). */
   readonly llm: LLMRouter;
   readonly tts: TTSProvider | undefined;
   readonly zotero: ZoteroFacade;
@@ -1487,8 +1542,19 @@ export interface RecoveryReport {
   readonly interrupted: readonly string[];
   readonly autoResumed: readonly string[];
   readonly awaitingUserDecision: readonly string[];
+  // Added 2026-10-21 (P3-T34; plan/00 §6 item 250, §7.6):
+  /** Resumable, but a spend guard or the resume notice does not exist yet. */
+  readonly waitingForGuards: readonly string[];
+  /** A spend guard said no; now "paused" with that guard's reason. */
+  readonly pausedByGuard: readonly string[];
+  /** Moved to "failed": a resume loop, or a pipeline that cannot resume. */
+  readonly failed: readonly string[];
 }
 ```
+
+> *Added 2026-10-21 (`P3-T34`):* `src/core/jobQueue/queue.ts` builds the persistent half of this
+> queue — records, states, checkpoints, `recover()` — and not yet the half that runs pipelines
+> (`JobHandle`, `result`, `cancelAll`, `drain`), which needs `P3-T17`, `P3-T35` and `P3-T29`.
 
 ---
 
@@ -2095,7 +2161,18 @@ export interface JobRecord {
   readonly libraryID: number | undefined;
   /** Plugin version that created the job; guards against cross-version resume. */
   readonly createdByPluginVersion: string;
+
+  // Added 2026-10-21 (P3-T34):
+  /** Why the job is paused; set exactly when `status` is "paused" (§7.5, §12.3). */
+  readonly pauseReason: PauseReason | undefined;
+  /** Per stored field, the gate's "partly redacted" mark when it changed that field. */
+  readonly redaction: { readonly [F in "input" | "progress" | "usage" | "error" | "warnings"]?: RedactionMark };
 }
+
+/** Added 2026-10-21 (P3-T34). `budget-stop` is §12.3's BudgetStop: paused, not failed. */
+export type PauseReason =
+  | "user" | "offline" | "credential-required" | "budget-stop"
+  | "awaiting-confirmation" | "egress-unacknowledged";
 
 export interface SerializedError {
   readonly code: string;
@@ -2115,8 +2192,12 @@ export interface SerializedError {
 > "Persisted records pass one gate"), before it is written. A row whose stored values the gate
 > changed carries a visible "partly redacted" mark, because the gate's 40-character catch-all can
 > also alter a gene or protein sequence quoted in `content`. The gate returns the mark as data
-> next to the record; **no member above holds it yet** — the card that stores the row adds that
+> next to the record; ~~**no member above holds it yet**~~ — the card that stores the row adds that
 > member and updates this section (`P3-T25` for `StoredSummary`, `P3-T34` for `JobRecord`).
+> *Corrected 2026-10-21 (`P3-T34`):* `JobRecord.redaction` now holds it, one mark per gated field,
+> and `warnings` passes the gate too. `pipelineId` is a `string` in `src/core/jobQueue/jobRecord.ts`
+> because `core/` may not import `PipelineId` from `pipeline/` (§2.3). `checkpoint` does not pass
+> the gate: it records work keys, and a `hash:` work key is one of the identifiers above.
 > `contentHash` and `workKey` are identifiers that `KEY_PATTERNS` would replace, so the storing
 > card names them to the gate as fields to copy unchanged.
 
@@ -2687,6 +2768,19 @@ Cancellation semantics per pipeline are declared, not implicit:
 
 This is the hardest requirement and the reason the queue is persistent.
 
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 250): unfinished jobs resume automatically after a restart.** A
+> resumed job still passes every spend guard before it spends anything: items already cached are skipped first, then
+> the privacy/egress acknowledgement (`privacy.egressAcknowledged`), the confirm threshold
+> (`summary.confirmAboveCents`), and both ceilings (`run.maxSpendCents`, `run.maxSessionSpendCents`), which pause
+> and ask rather than refuse (`plan/00` §6 item 234). A guard that does not pass leaves the job `paused` with that
+> guard's reason, asking the user. The user sees a visible notice naming the jobs that resumed. **Until every guard
+> and the notice exist, resumption waits:** the job stays `interrupted` and is looked at again on the next
+> `recover()`; it is never resumed past a missing guard. Built by `P3-T34` as `createJobQueue`'s `recover()` in
+> `src/core/jobQueue/queue.ts`, over its `ResumeGuards` seam (filled by `P3-T33` for cached items, `P3-T15` for the
+> egress acknowledgement, `P3-T16` for the confirm threshold and the ceilings) and its `JobNotifier` (the notice;
+> message `research-helper-job-resumed`). This reverses the recommendation `P3-T34`'s card carried and the
+> `autoResumeJobs` sentence below, which are corrected in place.
+
 **Checkpointing.** `ctx.checkpoint(state)` writes an opaque JSON blob into `JobRecord.checkpoint`, throttled to at most once per 2 seconds and always flushed at stage boundaries. Each pipeline defines its own checkpoint shape, for example:
 
 ```ts
@@ -2724,7 +2818,7 @@ The deadline must be short. Zotero's shutdown is not going to wait on a 30-secon
 
 | Condition | Action |
 |---|---|
-| `interrupted`, pipeline `resumable`, `attemptCount < 3`, same plugin version, checkpoint present | Offer resume. Auto-resume only if the user enabled `autoResumeJobs` (default **off** — auto-resuming a job that spends money without the user watching is unacceptable). |
+| `interrupted`, pipeline `resumable`, `attemptCount < 3`, same plugin version, checkpoint present | ~~Offer resume. Auto-resume only if the user enabled `autoResumeJobs` (default **off** — auto-resuming a job that spends money without the user watching is unacceptable).~~ Resume automatically once every spend guard passes (cached items skipped; egress acknowledgement; confirm threshold; both ceilings), with a visible notice; a guard that does not pass leaves the job `paused` with its reason; a guard that does not exist yet leaves it `interrupted`. No `autoResumeJobs` preference. *(Corrected 2026-10-21: owner decision, `plan/00` §6 item 250.)* |
 | `interrupted`, `attemptCount >= 3` | Mark `failed` with `code: "resume-loop"`. Something is crashing the app; do not keep retrying. |
 | `interrupted`, plugin version changed | Do not auto-resume. Offer "restart from beginning" only, since checkpoint shape may have changed. |
 | `interrupted`, pipeline not `resumable` | Mark `failed`; offer restart. |
@@ -2732,7 +2826,7 @@ The deadline must be short. Zotero's shutdown is not going to wait on a 30-secon
 | `paused` | Stay `paused`. |
 | Terminal states | Untouched; pruned after `jobRetentionDays` (default 30). |
 
-A notification bar on startup: *"3 background tasks were interrupted when Zotero closed. Resume them?"* — never a modal, never automatic spending. The bar carries the resume and discard actions itself, because v1 has no Job Center window to send the user to (§7.7.1).
+A notification bar on startup: ~~*"3 background tasks were interrupted when Zotero closed. Resume them?"* — never a modal, never automatic spending.~~ a notice that the interrupted jobs resumed, never a modal, and no spending that has not passed the guards above; jobs that were not resumed (version changed, no checkpoint, paused by a guard) are offered there instead. *(Corrected 2026-10-21: owner decision, `plan/00` §6 item 250.)* The bar carries the resume and discard actions itself, because v1 has no Job Center window to send the user to (§7.7.1).
 
 ### 7.7 Progress into Zotero's UI
 
@@ -3109,9 +3203,18 @@ CREATE TABLE job (
   plugin_version TEXT NOT NULL,
   created_at    INTEGER NOT NULL,
   started_at    INTEGER,
-  finished_at   INTEGER
+  finished_at   INTEGER,
+  pause_reason  TEXT,
+  warnings_json TEXT NOT NULL,
+  budget_usd    REAL,
+  result_ref_json TEXT,
+  redaction_json TEXT NOT NULL
 );
 CREATE INDEX idx_job_status ON job(status);
+-- Corrected 2026-10-21 (P3-T34): the last five columns were missing. §5.2's JobRecord has
+-- warnings, budgetUsd and resultRef, and P3-T34 added pauseReason and the redaction marks
+-- (plan/00 §6 item 242), so a row read back lost them. Migration version 2 in
+-- src/bootstrap/migrations.ts is this statement and this index, byte for byte.
 
 CREATE TABLE cache_entry (
   namespace    TEXT NOT NULL,
@@ -3903,7 +4006,7 @@ No change to `pipeline/`, `ui/`, or `model/` should be required. If one is, the 
 6. **Implement `validateCredentials`** with the cheapest authenticated call the API offers — ideally a model-list call, not a completion.
 7. **Add rate-limit defaults** and wire provider rate-limit response headers into `limiter.reconfigure()`.
 8. **Fixtures + tests**: success, 401, 429 with `Retry-After`, context-length error, malformed JSON in structured mode, streaming.
-9. **Register** in `src/bootstrap/registerProviders.ts` and add it to the router's fallback chain policy.
+9. **Register** in `src/bootstrap/registerProviders.ts`. ~~and add it to the router's fallback chain policy~~ *(Corrected 2026-10-21, `plan/00` §6 item 248: the router has no provider fallback chain — it sends every call to `llmProvider` and nowhere else, §4.3; its only chain is the per-purpose model chain.)*
 10. **i18n** strings; **docs**: `03-llm-provider-integration.md` and the retention table in `09-security-privacy-and-api-keys.md`.
 
 ### 11.3 Adding a pipeline

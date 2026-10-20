@@ -45,6 +45,7 @@
 import { config } from "../../../package.json";
 import schema from "../../../schema/provenance.schema.json";
 import type Addon from "../../../src/addon";
+import { JOB_COLUMNS } from "../../../src/core/jobQueue/jobRecord";
 import {
   serializeProvenance,
   type SearchProvenance,
@@ -453,7 +454,9 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
     );
   });
 
-  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 1, with docs/07 §8.3's table and index", async function () {
+  // Moved to schema_version 2 by P3-T34, which appended docs/07 §8.3's `job`
+  // table and `idx_job_status` as migration version 2.
+  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 2, with docs/07 §8.3's tables and indexes", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     const store = await provenance();
     const expected = PathUtils.join(
@@ -468,7 +471,7 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       "never Zotero's own database",
     );
     assert.isTrue(await IOUtils.exists(store.path), "the file exists");
-    assert.strictEqual(store.schemaVersion, 1);
+    assert.strictEqual(store.schemaVersion, 2);
 
     const { database } = store;
     assert.strictEqual(
@@ -477,8 +480,8 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
           "SELECT MAX(version) FROM schema_version",
         ),
       ),
-      1,
-      "schema_version reads 1",
+      2,
+      "schema_version reads 2",
     );
     assert.strictEqual(
       Number(
@@ -522,11 +525,22 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
     assert.deepEqual(
       objects.map((row) => `${String(row["type"])}:${String(row["name"])}`),
       [
+        "index:idx_job_status",
         "index:idx_provenance_collection",
+        "table:job",
         "table:schema_version",
         "table:search_provenance",
       ],
       "no table or index docs/07 §8.3 does not declare",
+    );
+    // P3-T34: the job table's columns, in the order `JobRow` writes them.
+    const jobColumns = (await database.queryAsync(
+      "SELECT name FROM pragma_table_info('job') ORDER BY cid",
+    )) as Record<string, unknown>[];
+    assert.deepEqual(
+      jobColumns.map((row) => String(row["name"])),
+      [...JOB_COLUMNS],
+      "docs/07 §8.3's job columns, read back",
     );
   });
 

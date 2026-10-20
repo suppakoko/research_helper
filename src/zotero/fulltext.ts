@@ -1,13 +1,21 @@
 /**
- * Read Zotero's own full text for an attachment (`P0-T19`, spike `V-15`).
+ * Read Zotero's own full text for an attachment (`P0-T19`, spike `V-15`;
+ * extended by `P3-T18`).
  *
  * This is the platform half of the summarizer's **Tier 2** text source
  * (`docs/06` §3.1). It is deliberately thin: it reads, it never writes, and it
  * contains no parsing, no cleaning, no chunking and no quality-gate policy.
- * The cleaning pass (`docs/06` §4.1), the language check (§4.2), the IMRaD
- * segmentation (§4.3), the chunker (§5) and R-19's gate all belong to Phase 3
- * and all sit *above* this file; `plan/README.md` §4 lists this path among the
- * spike files a later card rewrites.
+ * The tier ladder and D-06-3's page-cap decision live in
+ * `src/pipeline/summarize/acquire.ts` (`acquireSource`), which reaches this
+ * module through {@link zoteroFullTextPort}; the cleaning pass (`docs/06`
+ * §4.1), the language check (§4.2), the IMRaD segmentation (§4.3), the
+ * chunker (§5) and R-19's gate sit above that again.
+ *
+ * `P3-T18` added {@link pickTextAttachment} (`docs/06` §3.3.3),
+ * {@link getFullTextFirstPages} (D-06-3's over-the-cap path),
+ * {@link isPartialIndexState}, {@link md5Hex} (the `contentHash` fallback,
+ * here only because `Zotero.Utilities` may be named nowhere else) and the port
+ * object.
  *
  * ### What it may and may not call
  *
@@ -20,9 +28,14 @@
  * `zotero.sqlite`, and does not go near `semanticSplitter` (§3.3.6) or the
  * removed `fulltextWords` tables (§3.3.1).
  *
- * {@link getFullTextAllPages} is the one documented exception: `docs/06`
- * §3.3.4's **decision D-06-3** calls `Zotero.PDFWorker.getFullText` directly,
- * and only for the "the cache was truncated, extract every page" case.
+ * {@link getFullTextAllPages} and {@link getFullTextFirstPages} are the
+ * documented exception: `docs/06` §3.3.4's **decision D-06-3** calls
+ * `Zotero.PDFWorker.getFullText` directly, and only after
+ * `INDEX_STATE_PARTIAL`. They are needed because `attachmentText` does not
+ * return the truncated cache in that state: Zotero 10.0.3's `item.js` getter
+ * reads the cache file only when `isFullyIndexed()` is true, and otherwise
+ * calls `getFullText(this.id)` with no page limit (read from the installed
+ * `omni.ja`, 2026-10-21, `P3-T18`).
  *
  * ### Two typings holes are closed here, not in `typings/`
  *
@@ -50,11 +63,12 @@
 /**
  * `Zotero.PDFWorker.getFullText`'s resolved value.
  *
- * Verified in `docs/06` §3.3.5 against `xpcom/pdfWorker/manager.js:612`, whose
- * text-layout contract the rest of the pipeline depends on (**D-06-4**): `\f`
- * is a hard page boundary, `\n` a paragraph boundary, hard-wrapped lines are
- * joined into flowing paragraphs, and the whole string is `.trim()`ed and
- * NFC-normalized by the extractor.
+ * Verified in `docs/06` §3.3.5 against `xpcom/pdfWorker/manager.js`. The
+ * text-layout contract is the **corrected D-06-4** (`P0-T19`, 2026-09-16):
+ * `\f` is a guaranteed page boundary (`totalPages - 1` of them); `\n` is
+ * **not** a guaranteed paragraph boundary — some documents emit one per
+ * printed line — so nothing downstream may treat it as one. The whole string
+ * is `.trim()`ed and NFC-normalized by the extractor.
  */
 export interface PdfFullText {
   readonly text: string;
@@ -207,3 +221,83 @@ export function getFullTextAllPages(
 ): Promise<PdfFullText> {
   return pdfWorker().getFullText(attachmentID, null);
 }
+
+/**
+ * The first `maxPages` pages of a PDF attachment, bypassing the cache —
+ * D-06-3's over-the-cap path and nothing else (`P3-T18`).
+ *
+ * When an `INDEX_STATE_PARTIAL` document has more pages than
+ * `fullText.hardPageCap`, D-06-3 keeps the truncated cache. No sanctioned API
+ * returns the cache in that state (`attachmentText` extracts every page
+ * instead, see the module note, and reading `.zotero-ft-cache` directly is
+ * forbidden), so the caller passes `indexedPages` here and gets the same pages
+ * the cache holds, at the same bounded cost Zotero's own indexer paid. It
+ * writes nothing.
+ */
+export function getFullTextFirstPages(
+  attachmentID: number,
+  maxPages: number,
+): Promise<PdfFullText> {
+  return pdfWorker().getFullText(attachmentID, maxPages);
+}
+
+/** Whether `state` is `Zotero.Fulltext.INDEX_STATE_PARTIAL`. */
+export function isPartialIndexState(state: number): boolean {
+  return state === Zotero.Fulltext.INDEX_STATE_PARTIAL;
+}
+
+/**
+ * The attachment to read Tier-2 text from, or `null` — `docs/06` §3.3.3's
+ * `pickTextAttachment()`, gated on `Zotero.Fulltext.canIndex()`.
+ *
+ * `getBestAttachment()` first, kept only if it is a PDF Zotero can index;
+ * otherwise the first child attachment `canIndex()` accepts. `canIndex()` is
+ * the predicate Zotero itself uses: a non-linked-URL attachment whose content
+ * type is PDF, EPUB or text. Neither call downloads a file or touches the
+ * index. A regular item with no attachments, and an attachment passed in
+ * place of its parent, both yield `null`.
+ */
+export async function pickTextAttachment(
+  item: Zotero.Item,
+): Promise<Zotero.Item | null> {
+  if (!item.isRegularItem()) return null;
+  const best = await item.getBestAttachment();
+  if (best && best.isPDFAttachment() && Zotero.Fulltext.canIndex(best)) {
+    return best;
+  }
+  for (const id of item.getAttachments()) {
+    const attachment = await Zotero.Items.getAsync(id);
+    if (!attachment) continue;
+    if (
+      attachment.attachmentLinkMode === Zotero.Attachments.LINK_MODE_LINKED_URL
+    ) {
+      continue;
+    }
+    if (Zotero.Fulltext.canIndex(attachment)) return attachment;
+  }
+  return null;
+}
+
+/**
+ * Lower-case hex MD5 of `text` via `Zotero.Utilities.Internal.md5` — the
+ * `contentHash` fallback `docs/06` §11.2 names for a scope without
+ * `crypto.subtle`. A cache key, not a security boundary.
+ */
+export function md5Hex(text: string): string {
+  return Zotero.Utilities.Internal.md5(text, false).toLowerCase();
+}
+
+/**
+ * Everything `acquireSource` needs from the platform, as one object, so the
+ * pipeline module never names the `Zotero` global (`docs/07` §2.3).
+ */
+export const zoteroFullTextPort = {
+  pickTextAttachment,
+  getIndexedState,
+  isPartialIndexState,
+  getIndexedPageCounts,
+  getAttachmentText,
+  getFullTextAllPages,
+  getFullTextFirstPages,
+  md5Hex,
+} as const;

@@ -238,3 +238,16 @@ research-helper-prefs-backend-indeterminate = 확인 불가 — 이 운영체제
 research-helper-prefs-use-translators =
     .label = Zotero 중계기로 서지 정보 가져오기(느리지만 더 정확함)
     .tooltiptext = 각 기록을 Zotero 중계기로 네트워크에서 하나씩 조회하므로 가져오기가 오래 걸립니다. 조회로 찾지 못한 기록은 검색 결과에서 가져옵니다.
+
+
+## The job queue's resume notice (P3-T34; docs/07 §7.6, plan/00 §6 item 250)
+##
+## Not translated: the coordinator drafts the Korean and the owner reviews it
+## (G-41). Until then the message resolves from en-US. Nothing here was
+## machine-translated. On `KO_PENDING_REVIEW` in `src/i18n/keys.ts`.
+## en-US source:
+##   { $count ->
+##       [one] Research Helper resumed 1 background task that was interrupted when Zotero closed.
+##      *[other] Research Helper resumed { $count } background tasks that were interrupted when Zotero closed.
+##   }
+# research-helper-job-resumed =
