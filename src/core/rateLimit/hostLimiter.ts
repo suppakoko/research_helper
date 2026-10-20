@@ -408,6 +408,65 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
   },
 ];
 
+/**
+ * The one retry budget every LLM host shares: base 1000 ms, cap 60 000 ms,
+ * attempt cap 5 — `docs/07` §7.3's LLM/TTS row, whose three retry cells the
+ * owner filled on 2026-10-20 (`plan/00` §6 item 240; `P3-T05`).
+ *
+ * **One budget, carried by every LLM row.** The adapter cards (`P3-T07`–
+ * `P3-T10`) each add their host's row to {@link HOST_POLICIES} with
+ * `retry: LLM_RETRY_BUDGET`, so the numbers are written once. Nothing else is
+ * needed to make them work: `createRetryFor` in `src/bootstrap/container.ts`
+ * already turns any row's `retry` member into a policy for the one shipped
+ * `withRetry` (`src/core/http/retry.ts`), over the one shipped jitter shape,
+ * `decorrelatedJitter` in `./backoff.ts`.
+ *
+ * **Why decorrelated jitter, and why these numbers.** `docs/03` §11.6 sketched
+ * a full-jitter loop with `maxAttempts = 5, baseMs = 1000, capMs = 60_000`.
+ * The owner kept the numbers and dropped the shape, so the tree has one jitter
+ * and one loop. `maxAttempts` counts the first attempt
+ * ({@link ./backoff.RetryBudget.maxAttempts}), so this allows four retries.
+ * Through `withRetry`, which enters the first retry with `prevDelayMs = 0`, the
+ * waits are 1 s, then at most 3 s, 9 s and 27 s: 40 s of silent waiting at
+ * the longest. The 60 s cap therefore does not bind at five attempts; a sent
+ * `Retry-After` is the wait itself and is not capped, as on every row.
+ *
+ * **What it does not change.** A timeout is still not retried (item 230:
+ * `isRetriedAutomatically`), and `REQUEST_BUDGET_MS` (90 s, item 233) still
+ * decides whether a retry may start — see {@link LLM_ATTEMPT_TIMEOUT_MS} for
+ * how the two meet. The batch budget (§11.6's "e.g. 30 min") is not here: it
+ * is a pipeline-level limit for `P3-T17`.
+ */
+export const LLM_RETRY_BUDGET: RetryBudget = Object.freeze({
+  baseMs: 1000,
+  capMs: 60_000,
+  maxAttempts: 5,
+});
+
+/**
+ * How long one LLM attempt may wait for its answer: **3 minutes**
+ * (`plan/00` §6 item 240, owner, 2026-10-20; `docs/07` §7.3's dated note "LLM
+ * hosts' retry budget").
+ *
+ * A long full-text generation can take more than the 60 s `timeoutSeconds`
+ * that literature hosts keep (`docs/07` §8.5), so an LLM adapter passes this
+ * as the request's `timeoutMs` (`HttpOptions.timeoutMs` in
+ * `src/core/http/client.ts`) instead of leaving the preference's value in
+ * place. It is a named constant beside the retry budget rather than a
+ * preference: only `P3-T32` adds preference rows, and the owner asked for none.
+ *
+ * **How it meets the 90-second request budget.** `REQUEST_BUDGET_MS` limits
+ * when a retry may *start* and never cuts an attempt short, so:
+ *
+ * - an attempt that fails after 90 s or more is not retried at all;
+ * - a timeout is not retried either (item 230), so a silent host costs one
+ *   attempt of this length;
+ * - the worst case is a retry started just inside 90 s that then runs this
+ *   full timeout: about 90 s + 180 s = 270 s after the first attempt reached
+ *   the wire, plus that retry's wait for the host's bucket.
+ */
+export const LLM_ATTEMPT_TIMEOUT_MS = 180_000;
+
 // ---------------------------------------------------------------------------
 // 2. The registry
 // ---------------------------------------------------------------------------

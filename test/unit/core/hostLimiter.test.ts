@@ -1,8 +1,22 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
+import { createManualClock } from "../../../src/core/clock";
+import { UpstreamServerError } from "../../../src/core/errors";
 import { type RateLimiterPort } from "../../../src/core/http/client";
 import {
+  REQUEST_BUDGET_MS,
+  retryPolicyFromBudget,
+  withRetry,
+} from "../../../src/core/http/retry";
+import { createBackoff } from "../../../src/core/rateLimit/backoff";
+import {
   adoptAdvertisedLimits,
+  LLM_ATTEMPT_TIMEOUT_MS,
+  LLM_RETRY_BUDGET,
   parseAdvertisedLimits,
 } from "../../../src/core/rateLimit/hostLimiter";
 import { type RateLimiterConfig } from "../../../src/core/rateLimit/tokenBucket";
@@ -260,5 +274,144 @@ describe("the limits a host advertises", () => {
       ),
     ).toBeUndefined();
     expect(limiter.applied).toHaveLength(1);
+  });
+});
+
+/* ------------------------------------------------ the LLM hosts' budget */
+
+/**
+ * `P3-T05`. `docs/07` §7.3's LLM/TTS row, parsed out of the document, so the
+ * three cells and {@link LLM_RETRY_BUDGET} cannot drift apart — the same
+ * guarantee `test/unit/core/backoff.test.ts` gives every literature row. That
+ * file matches rows by a backticked host name, and the LLM row has none (its
+ * Host cell is "LLM/TTS hosts"), so it is read here by its own label.
+ */
+function llmRowCells(): Readonly<Record<string, string>> {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const doc = readFileSync(
+    resolve(here, "../../../docs/07-architecture-and-data-model.md"),
+    "utf8",
+  );
+  const lines = doc.split("\n");
+  const start = lines.findIndex((line) => line.startsWith("### 7.3 "));
+  const header = lines.findIndex(
+    (line, index) => index > start && line.startsWith("| Host |"),
+  );
+  const row = lines.find(
+    (line, index) => index > header && line.startsWith("| LLM/TTS hosts |"),
+  );
+  if (start < 0 || header < 0 || row === undefined) {
+    throw new Error("docs/07 §7.3 has no LLM/TTS row under its policy table");
+  }
+  const cellsOf = (line: string): string[] =>
+    line
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim());
+  const columns = cellsOf(lines[header] ?? "");
+  const cells = cellsOf(row);
+  if (cells.length !== columns.length) {
+    throw new Error(
+      `§7.3's LLM/TTS row has ${cells.length} cells against ${columns.length} columns`,
+    );
+  }
+  return Object.fromEntries(columns.map((name, i) => [name, cells[i] ?? ""]));
+}
+
+/** The leading figure of a cell such as `60 000 ms (LLM)` or `5 (LLM)`. */
+function leadingNumber(cell: string | undefined): number {
+  const match = /^([\d ]+)/.exec(cell ?? "");
+  if (match?.[1] === undefined) {
+    throw new Error(`not a number: ${JSON.stringify(cell)}`);
+  }
+  return Number(match[1].replace(/ /g, ""));
+}
+
+describe("the LLM hosts' retry budget and attempt timeout (P3-T05, item 240)", () => {
+  it("transcribes docs/07 §7.3's LLM/TTS row: base 1000 ms, cap 60 000 ms, 5 attempts", () => {
+    const cells = llmRowCells();
+    expect(cells["Retry base"]).toMatch(/ms \(LLM\)$/);
+    expect(cells["Retry cap"]).toMatch(/ms \(LLM\)$/);
+    expect(LLM_RETRY_BUDGET.baseMs).toBe(leadingNumber(cells["Retry base"]));
+    expect(LLM_RETRY_BUDGET.capMs).toBe(leadingNumber(cells["Retry cap"]));
+    expect(LLM_RETRY_BUDGET.maxAttempts).toBe(
+      leadingNumber(cells["Attempt cap"]),
+    );
+    expect(LLM_RETRY_BUDGET).toStrictEqual({
+      baseMs: 1000,
+      capMs: 60_000,
+      maxAttempts: 5,
+    });
+    expect(Object.isFrozen(LLM_RETRY_BUDGET)).toBe(true);
+  });
+
+  it("is accepted by the shipped shapes, and its 60 s cap does not bind at five attempts", () => {
+    expect(() => createBackoff(LLM_RETRY_BUDGET)).not.toThrow();
+    const walk = (random: () => number): number[] => {
+      const policy = retryPolicyFromBudget(LLM_RETRY_BUDGET, random);
+      const waits: number[] = [];
+      let prev = 0;
+      for (let attempt = 1; attempt < policy.maxAttempts; attempt += 1) {
+        prev = policy.nextDelayMs(prev, attempt);
+        waits.push(prev);
+      }
+      return waits;
+    };
+    // Through withRetry's seam (prevDelayMs = 0 first): four waits.
+    expect(walk(() => 1)).toEqual([1000, 3000, 9000, 27_000]);
+    expect(walk(() => 0)).toEqual([1000, 1000, 1000, 1000]);
+    expect(Math.max(...walk(() => 1))).toBeLessThan(LLM_RETRY_BUDGET.capMs);
+  });
+
+  it("lets one LLM attempt wait 3 minutes, three times the literature hosts' 60 s", () => {
+    expect(LLM_ATTEMPT_TIMEOUT_MS).toBe(180_000);
+    expect(LLM_ATTEMPT_TIMEOUT_MS).toBeGreaterThan(REQUEST_BUDGET_MS);
+  });
+
+  it("does not retry an LLM attempt that failed after the 90 s request budget", async () => {
+    // The budget limits when a retry may *start*; it never cuts an attempt.
+    // A 3-minute attempt that ends in a 503 after 100 s is therefore final.
+    const clock = createManualClock();
+    let attempts = 0;
+    const promise = withRetry(
+      () => {
+        attempts += 1;
+        clock.advance(100_000);
+        return Promise.reject(new UpstreamServerError(503, "slow refusal"));
+      },
+      {
+        policy: retryPolicyFromBudget(LLM_RETRY_BUDGET, () => 0),
+        clock,
+        budget: { totalMs: REQUEST_BUDGET_MS },
+      },
+    );
+    await expect(promise).rejects.toBeInstanceOf(UpstreamServerError);
+    expect(attempts).toBe(1);
+  });
+
+  it("uses all five attempts when the failures are quick, inside the 90 s budget", async () => {
+    const clock = createManualClock();
+    const startedAt: number[] = [];
+    const start = clock.now();
+    const promise = withRetry(
+      () => {
+        startedAt.push(clock.now() - start);
+        return Promise.reject(new UpstreamServerError(503, "quick refusal"));
+      },
+      {
+        policy: retryPolicyFromBudget(LLM_RETRY_BUDGET, () => 1),
+        clock,
+        budget: { totalMs: REQUEST_BUDGET_MS },
+      },
+    );
+    const settled = promise.catch((error: unknown) => error);
+    for (const wait of [1000, 3000, 9000, 27_000]) {
+      for (let i = 0; i < 5 && clock.pending === 0; i += 1) {
+        await Promise.resolve();
+      }
+      clock.advance(wait);
+    }
+    expect(await settled).toBeInstanceOf(UpstreamServerError);
+    expect(startedAt).toEqual([0, 1000, 4000, 13_000, 40_000]);
   });
 });

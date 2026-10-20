@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  BudgetExceededError,
+  ContentFilterError,
+  ContextLengthExceededError,
+  LLMError,
+  PolicyViolationError,
+  StructuredOutputError,
+  TTSError,
+} from "../../../src/core/errors";
 import * as keys from "../../../src/i18n/keys";
 
 /**
@@ -441,5 +450,56 @@ describe("src/i18n/keys.ts — the relations between its lists", () => {
         `from the ko-KR bundle, and it is the fixture the integration ` +
         `spec's fallback layer is built on`,
     ).toContain(keys.L10N_MENU_SPIKE_CREATE_ITEM);
+  });
+});
+
+describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
+  /**
+   * `P3-T05` step 7. The four LLM `messageKey`s are reachable since
+   * `mapProviderError` (`src/llm/shared/errorMap.ts`) can produce their
+   * classes, so they moved out of `DEFERRED_ERROR_MESSAGE_IDS`. Instances are
+   * built here so the ids come from `src/core/errors.ts` itself rather than
+   * from a second transcription.
+   */
+  const llmKeys = [
+    new LLMError("openai", "m", "x"),
+    new ContextLengthExceededError("openai", "m", "x"),
+    new ContentFilterError("openai", "m", "x"),
+    new StructuredOutputError("openai", "m", "x"),
+  ].map((error) => error.messageKey);
+
+  it("ships the four LLM messageKeys and defers only TTS, budget and policy", () => {
+    expect(llmKeys).toEqual([
+      "rh-error-llm",
+      "rh-error-context-length",
+      "rh-error-content-filter",
+      "rh-error-structured-output",
+    ]);
+    expect(notIn(llmKeys, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(llmKeys, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(llmKeys, read("DEFERRED_ERROR_MESSAGE_IDS"))).toEqual([]);
+    expect(sorted(read("DEFERRED_ERROR_MESSAGE_IDS"))).toEqual(
+      sorted([
+        new TTSError("x").messageKey,
+        new BudgetExceededError("x").messageKey,
+        new PolicyViolationError("x").messageKey,
+      ]),
+    );
+  });
+
+  it("puts all four on KO_PENDING_REVIEW: no Korean was written for them", () => {
+    expect(notIn(llmKeys, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(llmKeys, read("KO_PRESENT"))).toEqual([]);
+  });
+
+  it("lists the three that take a provider or model name as argument messages", () => {
+    const withArgs = llmKeys.filter((id) =>
+      read("ARGUMENT_MESSAGE_IDS").includes(id),
+    );
+    expect(withArgs).toEqual([
+      "rh-error-llm",
+      "rh-error-context-length",
+      "rh-error-structured-output",
+    ]);
   });
 });

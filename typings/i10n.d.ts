@@ -142,7 +142,10 @@ export type FluentMessageId =
   | 'rh-error-bad-request'
   | 'rh-error-cancelled'
   | 'rh-error-configuration'
+  | 'rh-error-content-filter'
+  | 'rh-error-context-length'
   | 'rh-error-forbidden'
+  | 'rh-error-llm'
   | 'rh-error-missing-credential'
   | 'rh-error-network'
   | 'rh-error-offline'
@@ -151,6 +154,7 @@ export type FluentMessageId =
   | 'rh-error-rate-limit'
   | 'rh-error-source'
   | 'rh-error-storage'
+  | 'rh-error-structured-output'
   | 'rh-error-timeout'
   | 'rh-error-upstream'
   | 'rh-error-zotero';

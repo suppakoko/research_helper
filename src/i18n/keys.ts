@@ -216,6 +216,13 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "rh-error-zotero",
   "rh-error-storage",
   "rh-error-cancelled",
+  // The four LLM messageKeys (`P3-T05`, 2026-10-20), moved here from
+  // DEFERRED_ERROR_MESSAGE_IDS when the LLM error mapping
+  // (`src/llm/shared/errorMap.ts`) made them reachable.
+  "rh-error-llm",
+  "rh-error-context-length",
+  "rh-error-content-filter",
+  "rh-error-structured-output",
 
   // The preference pane's literature-source credential blocks (docs/08 §7.3,
   // docs/09 §1.8–1.9; P1-T44). On *this* surface rather than a fourth
@@ -601,8 +608,9 @@ export function surfaceOfMessage(id: string): ShippedSurface | undefined {
 /* ------------------------------------------------------------ error message ids */
 
 /**
- * The `messageKey` of every error class Phase 1 can throw, transcribed from
- * `src/core/errors.ts` (`docs/07` §10.1). `test/integration/l10n.spec.ts`
+ * The `messageKey` of every error class the shipped code can throw,
+ * transcribed from `src/core/errors.ts` (`docs/07` §10.1): Phase 1's sixteen,
+ * and since `P3-T05` (2026-10-20) the four of the LLM subtree. `test/integration/l10n.spec.ts`
  * constructs one instance of each class and asserts its `messageKey` is in
  * this list *and* resolves in `en-US`, which is the only check that catches a
  * key renamed on one side.
@@ -624,13 +632,22 @@ export const ERROR_MESSAGE_IDS = [
   "rh-error-zotero",
   "rh-error-storage",
   "rh-error-cancelled",
+  // `P3-T05` (2026-10-20): the LLM subtree of `docs/07` §10.1, reachable
+  // through `mapProviderError` in `src/llm/shared/errorMap.ts`.
+  "rh-error-llm",
+  "rh-error-context-length",
+  "rh-error-content-filter",
+  "rh-error-structured-output",
 ] as const satisfies readonly MainWindowMessageId[];
 
 /**
- * The seven `messageKey`s `docs/07` §10.1 declares that Phase 1 deliberately
- * ships no message for, because no Phase 1 code path can throw them: they
- * belong to the LLM, TTS and budget subsystems Phase 3 builds, and to the
- * privacy-mode policy check that goes with them.
+ * The `messageKey`s `docs/07` §10.1 declares that the plugin deliberately
+ * ships no message for yet, because no shipped code path can throw them: they
+ * belong to the TTS and budget subsystems, and to the privacy-mode policy
+ * check that goes with them. Seven until 2026-10-20, when `P3-T05` moved the
+ * four LLM keys (`rh-error-llm`, `rh-error-context-length`,
+ * `rh-error-content-filter`, `rh-error-structured-output`) to
+ * {@link ERROR_MESSAGE_IDS} with their `en-US` strings; three since.
  *
  * Listed rather than ignored so the gap is asserted: `plan/README.md` §5 rule 2
  * forbids adding strings this card does not cover, and
@@ -640,10 +657,6 @@ export const ERROR_MESSAGE_IDS = [
  * that assertion instead of rendering a blank label.
  */
 export const DEFERRED_ERROR_MESSAGE_IDS = [
-  "rh-error-llm",
-  "rh-error-context-length",
-  "rh-error-content-filter",
-  "rh-error-structured-output",
   "rh-error-tts",
   "rh-error-budget",
   "rh-error-policy",
@@ -671,7 +684,7 @@ export const DEFERRED_ERROR_MESSAGE_IDS = [
  * either a Korean entry or an explicit admission here.
  */
 export const KO_PENDING_REVIEW = [
-  // --- mainWindow (21) ---
+  // --- mainWindow (25, then `P1-T44`'s pane strings) ---
   "research-helper-menu-collection-search-import",
   "research-helper-provenance-note-title",
   "research-helper-import-summary",
@@ -699,6 +712,13 @@ export const KO_PENDING_REVIEW = [
   "rh-error-zotero",
   "rh-error-storage",
   "rh-error-cancelled",
+  // `P3-T05`'s four LLM error strings (2026-10-20). `G-41` owns the
+  // translation; the `ko-KR` bundle carries each as a commented stub with its
+  // English source. Nothing was machine-translated.
+  "rh-error-llm",
+  "rh-error-context-length",
+  "rh-error-content-filter",
+  "rh-error-structured-output",
   // `P1-T44`'s preference-pane strings. `G-41` owns the translation; the
   // `ko-KR` bundle is outside that card's `Files` list, so it carries no
   // commented stubs for these yet (reported with the card). Nothing was
@@ -924,6 +944,12 @@ export interface FluentMessageArgsMap {
   "rh-error-source": { database: string };
   "rh-error-parse": { database: string };
   "rh-error-cancelled": { imported: number };
+  // `P3-T05`. `$provider` is the provider's display name and `$model` the
+  // model ID, both untranslated (`docs/08` §10.3). `rh-error-content-filter`
+  // takes no argument: it is `docs/07` §10.2's sentence as written.
+  "rh-error-llm": { provider: string };
+  "rh-error-context-length": { model: string };
+  "rh-error-structured-output": { provider: string };
   // The preference pane (P1-T44). `$count` is a plural selector; `$time` is a
   // clock time the pane script has already formatted with
   // `Intl.DateTimeFormat` over `Zotero.locale` (docs/08 §10.3). **No message
@@ -1015,7 +1041,7 @@ export type UndeclaredArgumentMessageId = AssertNever<
  * from here.
  */
 export const ARGUMENT_MESSAGE_IDS = [
-  // mainWindow (17)
+  // mainWindow (20)
   "research-helper-provenance-note-title",
   "research-helper-import-summary",
   "research-helper-import-abstract-coverage",
@@ -1033,6 +1059,9 @@ export const ARGUMENT_MESSAGE_IDS = [
   "rh-error-source",
   "rh-error-parse",
   "rh-error-cancelled",
+  "rh-error-llm",
+  "rh-error-context-length",
+  "rh-error-structured-output",
   // mainWindow — the preference pane (5, P1-T44)
   "research-helper-prefs-remove-all-done",
   "research-helper-prefs-test-ok",

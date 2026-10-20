@@ -237,11 +237,11 @@ research-helper-progress-headline = Research Helper
 ##
 ## ### What is deliberately absent
 ##
-## Seven of §10.1's 23 keys belong to subsystems Phase 1 does not contain, and
-## `plan/README.md` §5 rule 2 forbids adding them here on spec: `rh-error-llm`,
-## `rh-error-context-length`, `rh-error-content-filter`,
-## `rh-error-structured-output`, `rh-error-tts`, `rh-error-budget` and
-## `rh-error-policy` arrive with the Phase 3 cards that can throw them.
+## Three of §10.1's 23 keys belong to subsystems not built yet, and
+## `plan/README.md` §5 rule 2 forbids adding them here on spec: `rh-error-tts`,
+## `rh-error-budget` and `rh-error-policy` arrive with the cards that can throw
+## them. Until 2026-10-20 the list also held the four LLM keys, which `P3-T05`
+## added at the end of this block.
 ## `src/i18n/keys.ts` exports that list as `DEFERRED_ERROR_MESSAGE_IDS` and
 ## `test/integration/l10n.spec.ts` asserts it is exactly the set missing, so a
 ## new error class cannot be added without this file noticing.
@@ -296,6 +296,25 @@ rh-error-cancelled =
         [one] Cancelled. 1 item was already imported.
        *[other] Cancelled. { $imported } items were already imported.
     }
+
+# The LLM subtree of `docs/07` §10.1 (`P3-T05`, 2026-10-20), mapped from each
+# provider's failure by `mapProviderError` in `src/llm/shared/errorMap.ts`.
+# `docs/08` §8.3 has no rows for these yet, so only the content-filter
+# sentence is quoted (from `docs/07` §10.2); the other three are this card's
+# wording, written to NFR-14: what failed and which service. `$provider` and
+# `$model` are untranslated names (`docs/08` §10.3).
+
+# `LLMError` itself: a provider failure no narrower class describes.
+rh-error-llm = { $provider } could not complete the request.
+
+# `ContextLengthExceededError` is `userFacing = false`: the pipeline re-chunks
+# and retries before the user would see it.
+rh-error-context-length = The text is too long for { $model } to read in one request.
+
+# `docs/07` §10.2: the item is marked skipped and the job continues.
+rh-error-content-filter = The model declined to summarize this paper.
+
+rh-error-structured-output = { $provider } returned a summary Research Helper could not read.
 
 
 ## The preference pane — literature-source credentials (docs/08 §7.3–7.5,

@@ -144,7 +144,8 @@ research-helper-import-fallback-reason =
 
 ## User-facing error strings — `ResearchHelperError.messageKey`
 ##
-## All sixteen need a native speaker. Their ids are fixed by
+## All twenty need a native speaker (sixteen until `P3-T05` added the four
+## LLM strings on 2026-10-20). Their ids are fixed by
 ## `src/core/errors.ts` and carry the `rh-error-` prefix, not
 ## `research-helper-` — see the en-US bundle's note on that conflict.
 ##
@@ -204,6 +205,22 @@ research-helper-import-fallback-reason =
 # Korean has a single plural category, so the Korean entry keeps the selector
 # with only `*[other]` (`docs/08` §10.2's note, §10.3).
 # rh-error-cancelled =
+#
+# `P3-T05` (2026-10-20): the four LLM error strings. On `KO_PENDING_REVIEW`;
+# nothing here was machine-translated. Keep `{ $provider }` and `{ $model }`
+# untranslated (`docs/08` §10.3).
+#
+# NEEDS REVIEW. en-US: "{ $provider } could not complete the request."
+# rh-error-llm =
+#
+# NEEDS REVIEW. en-US: "The text is too long for { $model } to read in one request."
+# rh-error-context-length =
+#
+# NEEDS REVIEW. en-US: "The model declined to summarize this paper."
+# rh-error-content-filter =
+#
+# NEEDS REVIEW. en-US: "{ $provider } returned a summary Research Helper could not read."
+# rh-error-structured-output =
 
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)

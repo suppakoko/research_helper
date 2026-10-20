@@ -1009,6 +1009,28 @@ Three traps worth calling out:
 
 ### 11.6 Retry policy
 
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 240).** The sketch below is **not** the shipped policy; read it for the
+> taxonomy only. What ships (`P3-T05`):
+> - **One jitter shape in the tree.** LLM hosts use the shipped decorrelated jitter, `min(cap, random(base, prev*3))`
+>   (`decorrelatedJitter` in `src/core/rateLimit/backoff.ts`), through the one shipped retry loop (`withRetry` in
+>   `src/core/http/retry.ts`). The full jitter below is not written anywhere.
+> - **The numbers are this sketch's: 5 attempts, 1000 ms base, 60 s cap.** They become the LLM row's retry cells in
+>   `07-architecture-and-data-model.md` §7.3, and the code carries them as `LLM_RETRY_BUDGET` in
+>   `src/core/rateLimit/hostLimiter.ts`. "5 attempts" counts the first, so it allows four retries. Through `withRetry`
+>   the first wait is exactly 1000 ms and the longest silent waits are 1 s, 3 s, 9 s and 27 s (40 s in all), so the
+>   60 s cap does not bind at 5 attempts.
+> - **One LLM attempt may wait up to 3 minutes** (`LLM_ATTEMPT_TIMEOUT_MS` = 180 000 ms, beside the retry budget in
+>   `hostLimiter.ts`), because a long full-text generation can exceed 60 s. Literature hosts keep the 60 s
+>   `timeoutSeconds` (§8.5 of doc 07).
+> - **A timeout is not retried automatically** (`plan/00` §6 item 230), so a silent LLM host costs one 3-minute
+>   attempt, not five.
+> - **The 90-second per-request budget stays as shipped** (`REQUEST_BUDGET_MS`, `plan/00` §6 item 233). It decides
+>   only whether a retry may *start*; it never cuts an attempt short. So an attempt that fails after more than 90 s is
+>   not retried, and the worst case for one request is a retry started just inside 90 s that then runs its full
+>   3 minutes: about 90 s + 180 s = 270 s, plus that retry's wait for the host's bucket.
+> - **The batch budget below stays a pipeline-level limit**, for the `llm` worker pool card (`P3-T17`). It is not part
+>   of the per-request retry.
+
 ```ts
 const RETRYABLE = new Set(['rate_limit', 'overloaded', 'server', 'network']);
 
@@ -1043,12 +1065,12 @@ async function withRetry<T>(
 
 Policy notes:
 
-- **Full jitter, not "exponential + small random".** With a 100-paper batch and any concurrency, unjittered backoff synchronizes retries into a thundering herd against the same rate limit.
-- **`retry-after` always wins** when present. Anthropic and OpenAI both send it; retrying earlier is guaranteed to fail.
+- **Jitter, not "exponential + small random".** With a 100-paper batch and any concurrency, unjittered backoff synchronizes retries into a thundering herd against the same rate limit. *(Corrected 2026-10-20, `plan/00` §6 item 240: this bullet used to say "Full jitter". The shipped shape is the decorrelated jitter of doc 07 §7.3, which also draws each wait independently and so breaks the herd the same way; see the decision note above.)*
+- **`retry-after` always wins** when present. Anthropic and OpenAI both send it; retrying earlier is guaranteed to fail. *(Corrected 2026-10-20, `plan/00` §6 item 240: in the shipped loop a sent `Retry-After` is the wait itself rather than `max(serverDelay, jittered)`, and a wait that would end past the request's 90-second budget is not started — the request ends with its `RateLimitError` instead.)*
 - **Keep concurrency low and user-configurable.** Sequential is too slow for 100 papers; 20-way parallel guarantees 429s on any consumer tier. The `llm` worker pool's shipped size and its allowed range are owned by `07-architecture-and-data-model.md` §7.2 and the `concurrency` row of §8.5; do not restate a second figure here.
 - **Persist partial progress.** After each successful per-paper summary, write it to the Zotero item (as a child note or an extra-field payload). A run interrupted at paper 73 must resume at 74.
 - **Do not retry `context_length`.** Re-chunk and re-issue instead — a retry of the identical oversized request always fails.
-- **Total wall-clock budget.** Cap the whole batch (e.g. 30 min) and surface a "N of 100 completed, retry the rest?" state rather than retrying indefinitely.
+- **Total wall-clock budget.** Cap the whole batch (e.g. 30 min) and surface a "N of 100 completed, retry the rest?" state rather than retrying indefinitely. *(Corrected 2026-10-20, `plan/00` §6 item 240: this is a pipeline-level limit owned by the `llm` worker pool card, `P3-T17`, not part of the per-request retry. Each request has its own 90-second retry budget, doc 07 §7.3.)*
 
 ---
 
