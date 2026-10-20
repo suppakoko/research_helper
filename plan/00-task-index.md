@@ -1697,17 +1697,21 @@ the caller of what the card builds; if it does not, the caller is added with a d
     This decision covers the `continue-on-error` flag and the Zotero pin only; it does not cover the unread
     `FIXTURE_MODE` or (a)–(d).
 
-### 6.47 Raised by P3-T01 and P3-T24, 2026-10-20 — 237 and 238 wait on the owner
+### 6.47 Raised by P3-T01 and P3-T24, 2026-10-20 — 237 and 238 decided the same day
 
 237. **How the prompt `.md` files reach the bundle (P3-T24's open line).** Measured (`plan/reports/P3-T24.md`): the
     recommended esbuild `.md` text loader works for `npm run build` but **breaks the integration test bundle**, which the
     scaffold builds with its own fixed esbuild options; Vitest imports `.md` in neither form. `import x from "./p.md" with
     { type: "text" }` needs no loader in either esbuild build and type-checks with a `declare module "*.md"`. Until
     decided, `createPromptRegistry` takes the text as `PromptSourceFile[]` and nothing in the bundle imports `src/prompts/`.
+    **DECIDED 2026-10-20 (owner): import attributes** — one small wiring module imports the `.md` files with
+    `with { type: "text" }` and a `declare module "*.md"` typing; no build-setting change. `docs/12` §17.3 moves first. P3-T24
+    step 7 is wired after `P2-T37` lands (the build and the test profile are then free).
 
 238. **`paper-summary.v1.json` is Prettier-formatted, not byte-identical to `docs/06` §6.2.** `.prettierignore` excludes
     only `*.md`; the test asserts the file equals Prettier's output of the docs block. Byte-identity needs one
     `.prettierignore` line.
+    **DECIDED 2026-10-20 (owner): keep the formatted file**; the test already pins it to Prettier's output of the docs block.
 
 239. **Recorded, not cards.** (a) P3-T26 must choose between the full version string and `cacheEpoch` for the cache key
     (`docs/06` §11.2 and `docs/12` §17.4 against §17.2). (b) `docs/12` §17.3 gains a `variables` header field and
