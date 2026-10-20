@@ -1805,6 +1805,31 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
     Wave order (owner, same day): `P3-T06`, `P3-T18`, `P3-T34` first; then `P3-T33` and `P3-T02`.
 
+### 6.51 Owner decisions on the findings of P3-T06, P3-T18 and P3-T34, 2026-10-21
+
+251. **Who builds the resume notice (`JobNotifier`).** **DECIDED 2026-10-21 (owner):** `P3-T29` (collection
+    summarize, which first creates jobs that could be resumed). Recorded on the card.
+
+252. **Money inside job records.** **DECIDED 2026-10-21 (owner):** `JobRecord.budgetUsd` and `usage.costUsd` stay
+    fractional US dollars (SQLite `REAL` holds them, and provider costs come in fractions of a cent); conversion to
+    cents happens only when comparing against the cent-denominated preferences (item 245).
+
+253. **Partly indexed PDFs (D-06-3).** **DECIDED 2026-10-21 (owner):** accept `P3-T18`'s measured reading — under the
+    page cap one all-pages read, over it one read of the indexed pages only, marked `truncated` — because Zotero
+    10.0.3's `attachmentText` re-extracts every page of a partly indexed attachment. The card's Done-when line is
+    corrected; `docs/06` §3.3.4 already records the measurement.
+
+254. **Korean for the resume notice** (`research-helper-job-resumed`). **DECIDED 2026-10-21 (owner):** the draft as
+    written; inserted by the coordinator and moved to `KO_PRESENT`.
+
+255. **Recorded, not cards** (from the three reports). `docs/13` §2.2 still places the mock at `test/support/` with
+    old sketch names; `docs/03` §10.2 and `docs/06` §5.1 carry two different token estimators (the code follows
+    §5.1); nobody enforces `LLMCallContext.budget` yet (`P3-T16` decides); per-purpose model settings are not per
+    provider (§8.5 design); `P3-T35` should drop the router part of its step 1 (done by `P3-T06`);
+    `installSecretStore` reconciles only `ncbi.keyPresent` (`P3-T02`); `resume-loop`/`not-resumable` failures have no
+    message key yet; `drain()` and job retention pruning are not built; the `job` store's `ON CONFLICT` upsert and
+    `crypto.randomUUID` were not measured inside Zotero; `AcquiredSource` has no field for abstract keywords.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

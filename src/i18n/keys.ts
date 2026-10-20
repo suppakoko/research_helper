@@ -766,9 +766,6 @@ export const KO_PENDING_REVIEW = [
   "research-helper-prefs-test-forbidden",
   "research-helper-prefs-test-absent",
   "research-helper-prefs-test-unavailable",
-  // P3-T34: the resume notice. `G-41` owns the translation; the `ko-KR`
-  // bundle carries a commented stub with the English source.
-  "research-helper-job-resumed",
 
   // --- searchDialog (62) ---
   "research-helper-search-window-title",
@@ -911,6 +908,9 @@ export const KO_PRESENT = [
   "rh-error-context-length",
   "rh-error-content-filter",
   "rh-error-structured-output",
+  // P3-T34's resume notice: Korean drafted by the coordinator and reviewed
+  // by the owner on 2026-10-21 (`G-41`).
+  "research-helper-job-resumed",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

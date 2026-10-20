@@ -242,12 +242,11 @@ research-helper-prefs-use-translators =
 
 ## The job queue's resume notice (P3-T34; docs/07 §7.6, plan/00 §6 item 250)
 ##
-## Not translated: the coordinator drafts the Korean and the owner reviews it
-## (G-41). Until then the message resolves from en-US. Nothing here was
-## machine-translated. On `KO_PENDING_REVIEW` in `src/i18n/keys.ts`.
-## en-US source:
-##   { $count ->
-##       [one] Research Helper resumed 1 background task that was interrupted when Zotero closed.
-##      *[other] Research Helper resumed { $count } background tasks that were interrupted when Zotero closed.
-##   }
-# research-helper-job-resumed =
+## Drafted by the coordinator and reviewed by the owner on 2026-10-21 (G-41);
+## nothing here was machine-translated. Korean has a single plural category,
+## so the entry keeps the selector with only `*[other]` (`docs/08` §10.2).
+
+research-helper-job-resumed =
+    { $count ->
+       *[other] Zotero가 닫히면서 중단된 백그라운드 작업 { $count }개를 Research Helper가 다시 시작했습니다.
+    }

@@ -1761,8 +1761,11 @@ library.
 
 **Done when.**
 - [ ] A fully indexed PDF yields Tier 2 text with zero `PDFWorker` calls.
-- [ ] `INDEX_STATE_PARTIAL` under the cap triggers exactly one re-extraction; over it, none, and
-      `truncated` is `true`.
+- [ ] ~~`INDEX_STATE_PARTIAL` under the cap triggers exactly one re-extraction; over it, none, and
+      `truncated` is `true`.~~ **Corrected 2026-10-21 (owner; `plan/00` §6 item 253):** under the cap, exactly
+      one all-pages read; over it, exactly one read limited to the indexed pages, and `truncated` is `true`
+      (Zotero 10.0.3's `attachmentText` re-extracts every page of a partly indexed attachment, measured
+      by `P3-T18`).
 - [ ] A password-protected fixture demotes to Tier 1 without throwing out of the pipeline.
 - [ ] Normalization keeps `RESULTS:`, strips a trailing copyright line, rejects "No abstract
       available".
@@ -2706,6 +2709,11 @@ npm run typecheck && npm run test:unit -- "summarizePipeline|keys" && npm run te
 **Notes.** Re-estimated 1.0 → 1.25 d on 2026-10-20 for the `PipelineSet` member, the dialog's
 window, and the menu-count specs the card did not list. `collectionMenu.ts` is not created: the
 collection submenu exists in `registerMenus.ts`.
+
+> **2026-10-21 (owner; `plan/00` §6 item 251):** this card also builds the `JobNotifier` surface that
+> `createJobQueue` takes in `installServices` (`src/core/jobQueue/queue.ts`, `P3-T34`): the visible
+> `research-helper-job-resumed` notice (Korean reviewed 2026-10-21) and the pause notice. Until it exists,
+> automatic resumption waits (item 250).
 
 ---
 
