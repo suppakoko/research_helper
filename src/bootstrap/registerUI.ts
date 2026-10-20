@@ -84,6 +84,8 @@ import {
 import type { Logger } from "../core/logger";
 import { formatValue } from "../i18n/ftl";
 import { L10N_PROGRESS_HEADLINE } from "../i18n/keys";
+import { merge } from "../model/merge";
+import type { SourceRecord } from "../model/sourceRecord";
 import type {
   SearchImportInput,
   SearchImportOutput,
@@ -512,6 +514,29 @@ async function refreshLibraryIndex(logger: Logger): Promise<void> {
 }
 
 /**
+ * The `workKey` the pipeline mints for `record` as a group of one, for
+ * {@link SearchWindowDeps.isExisting} (`P2-T37`).
+ *
+ * The window's port hands over a `SourceRecord`, whose `work` carries no key,
+ * and `findExisting` without one cannot reach the `hash:` arm — so a row with
+ * no DOI, PMID, arXiv id or S2 corpus id was never marked as already in the
+ * library (`P2-T16` Part A, defect D1). `merge` of the one record is the same
+ * derivation the `Merging` stage applies to a singleton group, so the key is
+ * the one the importer wrote as `rh-work-key`, with no second copy of
+ * `buildWorkKey`'s inputs here.
+ *
+ * `undefined` if `merge` refuses the record, which leaves the lookup exactly
+ * as it was before this card: a badge is not worth breaking the table over.
+ */
+function singletonWorkKey(record: SourceRecord): string | undefined {
+  try {
+    return merge([record], record.retrievedAtEpochMs).work.workKey;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Everything the view model needs, with nothing left optional.
  *
  * Each platform member and where it comes from:
@@ -583,11 +608,13 @@ function searchWindowDeps(
     saveSources: (ids) => {
       setPref("sources", ids.join(","));
     },
-    // `ExternalIds` in, boolean out: `findExisting` re-normalizes both
-    // identifiers itself, so a record whose DOI is cased differently from the
-    // stored one still matches.
+    // `ExternalIds` and the work key in, boolean out: `findExisting`
+    // re-normalizes the identifiers itself, so a record whose DOI is cased
+    // differently from the stored one still matches. The key is what reaches a
+    // record with no DOI, PMID, arXiv id or S2 corpus id (`P2-T37`).
     isExisting: (record) =>
-      libraryIndex?.findExisting(record.work.ids) !== undefined,
+      libraryIndex?.findExisting(record.work.ids, singletonWorkKey(record)) !==
+      undefined,
     // The default `deps` argument builds `new Zotero.Item("note")`, which is
     // `docs/01` §5.7's standalone-note sequence. The record handed over has
     // already been through `src/core/provenance.ts`'s redaction gate — the

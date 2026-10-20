@@ -919,6 +919,13 @@ async function resolveIndex(
  * share a DOI are a different problem — cross-source identity — and `P2-T09`
  * owns it; this card must not grow a second dedup rule beside
  * {@link LibraryIndex}'s.
+ *
+ * **The work's own key is passed to the index** (`P2-T37`). Without it
+ * `findExisting` derives a key from the identifiers alone and so cannot reach
+ * the `hash:` arm: a work with no DOI, PMID, arXiv id or S2 corpus id — a
+ * PMCID-only Europe PMC record — was created again on every re-run
+ * (`P2-T16` Part A, defect D1). The key is still the last arm tried, so an
+ * identifier that names another item wins over it.
  */
 function planImport(
   works: readonly CanonicalWork[],
@@ -937,7 +944,7 @@ function planImport(
     }
     seenWorkKeys.add(work.workKey);
 
-    const match = index?.findExisting(work.ids);
+    const match = index?.findExisting(work.ids, work.workKey);
     if (match === undefined || policy === "import-anyway") {
       toCreate.push(work);
       continue;

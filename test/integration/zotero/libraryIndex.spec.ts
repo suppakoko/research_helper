@@ -45,6 +45,7 @@ import {
   buildWorkKey,
   normalizeArxivId,
   normalizeDoi,
+  normalizePmcid,
   normalizePmid,
   type ArxivId,
   type Doi,
@@ -102,6 +103,11 @@ declare function debug(line: string): void;
 
 const LOG_PREFIX = "[P1-T13]";
 const LOG_PREFIX_T19 = "[P2-T19]";
+const LOG_PREFIX_T37 = "[P2-T37]";
+
+/** `P2-T37`: a PMCID nothing else in the run carries, and its work's title. */
+const PMCID_ONLY = "PMC990037001";
+const PMCID_ONLY_TITLE = "P2-T37 PMCID-only work with no DOI and no PMID";
 
 /**
  * The automatic tag on every fixture this file writes, so leftovers can be
@@ -1334,5 +1340,80 @@ describe("arXiv and work-key arms, and fromZoteroItem (P2-T19)", function () {
     );
     assert.strictEqual(lookupSearches, 0, "findExisting issues no searches");
     assert.deepEqual(hits, { doi: 50, pmid: 50, arxiv: 50, workKey: 50 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The P2-T37 spec
+// ---------------------------------------------------------------------------
+
+describe("A work with no DOI and no PMID is found by its work key (P2-T37)", function () {
+  after(async function () {
+    await eraseFixtures(LOG_PREFIX_T37);
+  });
+
+  it("P2-T37: an item written for a PMCID-only work is found by the hash: key the write path stored, and by no title-only key", async function () {
+    await Zotero.Schema.schemaUpdatePromise;
+
+    // `P2-T16` Part A's D1 record has a PMCID and nothing else, so its key is
+    // the hash arm: `buildWorkKey` has no PMCID arm.
+    const pmcid = normalizePmcid(PMCID_ONLY);
+    if (pmcid === null)
+      assert.fail(`fixture PMCID must normalize: ${PMCID_ONLY}`);
+    const work = workWith({ pmcid }, PMCID_ONLY_TITLE);
+    assert.isTrue(
+      work.workKey.startsWith("hash:"),
+      `a PMCID-only work keys on the hash arm (got ${work.workKey})`,
+    );
+
+    const json = toZoteroMapping(work, { accessedAtEpochMs: AT }).itemJSON;
+    const item = await saveMapped(json);
+    const stored = readWorkKey(item.getField("extra"));
+    debug(
+      `${LOG_PREFIX_T37} PMCID-only item ${String(item.id)}: ` +
+        `PMCID field=${JSON.stringify(item.getField("PMCID"))}; ` +
+        `extra=${JSON.stringify(item.getField("extra"))}`,
+    );
+    assert.strictEqual(stored, work.workKey, "rh-work-key is the work's key");
+
+    const index = await buildLibraryIndex(Zotero.Libraries.userLibraryID);
+    assert.strictEqual(
+      index.byWorkKey.get(work.workKey),
+      item.id,
+      "the stored hash: key is indexed",
+    );
+
+    // Step 2's measurement: the key alone finds the item.
+    const byKeyAlone = index.findExisting({}, work.workKey);
+    assert.strictEqual(byKeyAlone?.itemID, item.id, "found by the key alone");
+    assert.strictEqual(byKeyAlone?.matchedOn, "workKey");
+    const byIdsAndKey = index.findExisting(work.ids, work.workKey);
+    assert.strictEqual(byIdsAndKey?.itemID, item.id, "found by ids + key");
+    assert.strictEqual(byIdsAndKey?.matchedOn, "workKey");
+
+    // Why the callers must pass the key: the identifiers alone do not reach a
+    // hash: key (`findExisting`'s doc comment), so a re-run created it again.
+    const byIdsAlone = index.findExisting(work.ids);
+    debug(
+      `${LOG_PREFIX_T37} key alone -> ${JSON.stringify(byKeyAlone)}; ` +
+        `ids alone -> ${JSON.stringify(byIdsAlone ?? null)}`,
+    );
+    assert.isUndefined(byIdsAlone, "the identifiers alone do not find it");
+
+    // `P2-T37`'s Do NOT: no title-only match. The same title with another
+    // year, or another first author, is another key and finds nothing.
+    for (const [what, key] of [
+      ["another year", buildWorkKey({ pmcid }, PMCID_ONLY_TITLE, 2024, "Park")],
+      [
+        "another first author",
+        buildWorkKey({ pmcid }, PMCID_ONLY_TITLE, 2023, "Kim"),
+      ],
+    ] as const) {
+      assert.notStrictEqual(key, work.workKey, `${what}: a different key`);
+      assert.isUndefined(
+        index.findExisting({ pmcid }, key),
+        `${what}: the same title does not match`,
+      );
+    }
   });
 });

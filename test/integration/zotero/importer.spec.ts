@@ -63,7 +63,14 @@
  */
 
 import type { CanonicalWork, Subject } from "../../../src/model/canonicalWork";
-import { type Doi, normalizeDoi, normalizePmid } from "../../../src/model/ids";
+import {
+  type Doi,
+  type ExternalIds,
+  buildWorkKey,
+  normalizeDoi,
+  normalizePmcid,
+  normalizePmid,
+} from "../../../src/model/ids";
 import { RESEARCH_HELPER_TAG } from "../../../src/zotero/itemMapper";
 import {
   type ImportReport,
@@ -168,6 +175,28 @@ function makeWork(slug: string, options: WorkOptions = {}): CanonicalWork {
       ? { subjects: [{ term: "no scheme" } as unknown as Subject] }
       : {}),
     provenance: { recordIds: [], fieldOrigin: {}, seenIn: ["pubmed"] },
+    normalizedAtEpochMs: Date.now(),
+  };
+}
+
+/**
+ * `P2-T37`: a work with no DOI and no PMID, keyed the way `merge` keys it —
+ * `buildWorkKey` over its ids, title, year and first author — so its key is
+ * the `hash:` arm. `P2-T16` Part A's D1 record is the PMCID-only shape.
+ */
+function makeHashKeyedWork(slug: string, ids: ExternalIds): CanonicalWork {
+  const title = `Research Helper importer fixture ${slug} (P2-T37)`;
+  const publishedDate = { year: 2025, month: 1, iso: "2025-01" };
+  const authors = [{ family: "Lovelace", given: "Ada" }];
+  return {
+    workKey: buildWorkKey(ids, title, publishedDate.year, authors[0]?.family),
+    ids,
+    type: "journal-article",
+    title,
+    authors,
+    containerTitle: "Journal of Synthetic Fixtures",
+    publishedDate,
+    provenance: { recordIds: [], fieldOrigin: {}, seenIn: ["europepmc"] },
     normalizedAtEpochMs: Date.now(),
   };
 }
@@ -535,6 +564,52 @@ describe("Batched importer (P1-T14, FR-6, FR-7, FR-51)", function () {
       first.collection.getChildItems(true).length,
       3,
       "the first collection still holds all three",
+    );
+  });
+
+  it("P2-T37: re-importing a work with only a PMCID, or with no identifier at all, links the item the first import created (FR-51)", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    await Zotero.Schema.schemaUpdatePromise;
+
+    const pmcid = normalizePmcid("PMC990037002");
+    if (pmcid === null) assert.fail("fixture PMCID must normalize");
+    const works = [
+      makeHashKeyedWork("pmcid-only", { pmcid }),
+      makeHashKeyedWork("no-identifier", {}),
+    ];
+    for (const work of works) {
+      assert.isTrue(
+        work.workKey.startsWith("hash:"),
+        `${work.title}: the hash arm (got ${work.workKey})`,
+      );
+    }
+
+    const first = await runImport({
+      works,
+      collectionName: collectionName("hash-first"),
+    });
+    assert.strictEqual(first.created, 2, "the first import creates both");
+
+    const second = await runImport({
+      works,
+      collectionName: collectionName("hash-second"),
+    });
+    debug(
+      `${LOG_PREFIX} P2-T37 re-import: created=${String(second.created)} ` +
+        `linked=${String(second.linkedExisting)} ` +
+        `matchedOn=[${second.linkedMatches.map((m) => m.matchedOn).join(", ")}]`,
+    );
+    assert.strictEqual(second.created, 0, "no new items (FR-51)");
+    assert.strictEqual(second.linkedExisting, 2, "both are linked");
+    assert.deepEqual(
+      [...second.linkedItemIDs].sort((a, b) => a - b),
+      [...first.createdItemIDs].sort((a, b) => a - b),
+      "the items the first import created",
+    );
+    assert.deepEqual(
+      second.linkedMatches.map((match) => match.matchedOn),
+      ["workKey", "workKey"],
+      "matched on the stored rh-work-key",
     );
   });
 
