@@ -754,6 +754,138 @@ describe("estimate", () => {
     expect(estimate.estimatedCostUsd).toBeUndefined();
   });
 
+  /**
+   * Sources that record what a run asks of them: `searchAll` entries for a
+   * searching source, `lookup` calls for a ladder database (item 231).
+   */
+  function countingSources(): {
+    readonly sources: LiteratureSource[];
+    readonly searches: SourceId[];
+    readonly lookups: SourceId[];
+  } {
+    const searches: SourceId[] = [];
+    const lookups: SourceId[] = [];
+    const searching = (id: SourceId): LiteratureSource =>
+      stubSource({ id, pages: [], onStart: () => searches.push(id) });
+    const ladder = (id: SourceId): LiteratureSource => ({
+      ...searching(id),
+      lookup: () => {
+        lookups.push(id);
+        return Promise.resolve([]);
+      },
+    });
+    return {
+      sources: [
+        searching("pubmed"),
+        ladder("europepmc"),
+        ladder("semanticscholar"),
+        stubSource({ id: "biorxiv", pages: [], keywordSearch: false }),
+        stubSource({ id: "medrxiv", pages: [], keywordSearch: false }),
+      ],
+      searches,
+      lookups,
+    };
+  }
+
+  it("charges no search to an import of supplied records without works, and still counts its backfill (item 231)", async () => {
+    const counted = countingSources();
+    const h = harness({ sources: counted.sources });
+    // DOIs and no abstracts, so the backfill pass really asks the ladder.
+    const records = [
+      record("pubmed", "1", { doi: "10.1000/a" }),
+      record("pubmed", "2", { doi: "10.1000/b" }),
+    ];
+    const sourceIds: SourceId[] = ["pubmed", "europepmc", "semanticscholar"];
+    const input: SearchImportInput = {
+      ...BASE_INPUT,
+      sourceIds,
+      limit: 150,
+      records,
+      target: { collectionName: "C" },
+    };
+
+    const estimate = await h.pipeline.estimate(input, h.ctx);
+    // No search: `Fetching` takes the records as given. The backfill does
+    // run on this path (only a preview's own `works` skip it), over at most
+    // one work per record: ceil(2 / 100) Europe PMC + ceil(2 / 100) S2 = 2.
+    // Before item 231 this read 460 — the same as searching 150 per source.
+    expect(estimate.externalRequests).toBe(2);
+    expect(estimate.itemCount).toBe(records.length);
+
+    // Measured, not only read: the run sends no search and does backfill,
+    // within the estimate.
+    const out = await h.pipeline.run(input, h.ctx);
+    expect(out.outcome).toBe("succeeded");
+    expect(counted.searches).toStrictEqual([]);
+    expect(counted.lookups.length).toBeGreaterThan(0);
+    expect(counted.lookups.length).toBeLessThanOrEqual(
+      estimate.externalRequests,
+    );
+
+    // With no ladder database ticked there is nothing to charge at all.
+    const plain = await h.pipeline.estimate(
+      { ...input, sourceIds: ["pubmed"] },
+      h.ctx,
+    );
+    expect(plain.externalRequests).toBe(0);
+  });
+
+  it("charges nothing to an input validate() rejects, which run() fails before any request (item 231)", async () => {
+    const invalid: readonly [string, SearchImportInput][] = [
+      ["empty query", { ...BASE_INPUT, query: "  " }],
+      ["limit out of range", { ...BASE_INPUT, limit: 201 }],
+      [
+        "works without records",
+        {
+          ...BASE_INPUT,
+          works: dedupeAndMerge([record("pubmed", "1")], 1).works,
+        },
+      ],
+      [
+        "records without a target",
+        { ...BASE_INPUT, records: [record("pubmed", "1")] },
+      ],
+    ];
+    for (const [name, base] of invalid) {
+      const counted = countingSources();
+      const h = harness({ sources: counted.sources });
+      const input: SearchImportInput = {
+        ...base,
+        sourceIds: ["pubmed", "europepmc", "semanticscholar"],
+      };
+      expect(validateSearchImportInput(input).ok, name).toBe(false);
+
+      const estimate = await h.pipeline.estimate(input, h.ctx);
+      expect(estimate.externalRequests, name).toBe(0);
+      expect(estimate.itemCount, name).toBe(0);
+
+      const out = await h.pipeline.run(input, h.ctx);
+      expect(out.outcome, name).toBe("failed");
+      expect(counted.searches, name).toStrictEqual([]);
+      expect(counted.lookups, name).toStrictEqual([]);
+    }
+  });
+
+  it("charges nothing when no ticked source can search: each lookup-only or without an adapter (item 231)", async () => {
+    const counted = countingSources();
+    const h = harness({ sources: counted.sources });
+    // bioRxiv and medRxiv are lookup-only; Crossref has no adapter here.
+    const input: SearchImportInput = {
+      ...BASE_INPUT,
+      sourceIds: ["biorxiv", "medrxiv", "crossref"],
+      limit: 150,
+    };
+    expect(validateSearchImportInput(input).ok).toBe(true);
+
+    const estimate = await h.pipeline.estimate(input, h.ctx);
+    expect(estimate.externalRequests).toBe(0);
+    expect(estimate.itemCount).toBe(0);
+
+    await h.pipeline.run(input, h.ctx);
+    expect(counted.searches).toStrictEqual([]);
+    expect(counted.lookups).toStrictEqual([]);
+  });
+
   it("adds the backfill's worst case — one request per 100 works per ticked ladder database (item 198)", async () => {
     const h = harness({
       sources: [

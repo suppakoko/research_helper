@@ -498,11 +498,15 @@ export const ERROR_ROWS: Readonly<Record<string, ErrorRow>> = {
  *
  * **`RATE_LIMIT` has a second, independent reason**, and it matters because it
  * is the one this card's `Done when` list names. "Retrying in {n}s" asserts an
- * automatic retry. `src/bootstrap/container.ts` supplies **no `retryFor`** —
- * `P1-T04` and `P1-T05` both declined to invent a per-host attempt cap and
- * `P1-T28` owns it behind a human gate — so `src/core/http/client.ts` makes
- * exactly one attempt and nothing is retrying. Rendering that row would
- * therefore be false even with a countdown in hand.
+ * automatic retry, and **none is pending when this view sees the error.**
+ * Since 2026-10-20 (`plan/00` §6 item 228) `src/bootstrap/container.ts`
+ * supplies a `retryFor`, so `src/core/http/client.ts` does retry a 429 — but
+ * inside the request, up to the host's `docs/07` §7.3 attempt cap, and the
+ * `RateLimitError` that reaches a pipeline outcome is the one thrown *after*
+ * the last attempt failed. By then every automatic retry has already happened
+ * and nothing is retrying. Rendering that row would therefore still be false
+ * even with a countdown in hand. (Until 2026-10-20 the reason was that no
+ * `retryFor` was supplied at all, so the client made exactly one attempt.)
  *
  * These codes fall through to {@link genericSourceError}, which names what
  * failed and which service (NFR-14's first two requirements) and offers Retry,

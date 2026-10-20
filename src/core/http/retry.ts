@@ -21,7 +21,9 @@
  *   {@link retryPolicyFromBudget} (`plan/00` §6 item 228, 2026-10-20).
  * - Which errors may be retried at all is {@link isRetryableError}, and it is
  *   `docs/07` §10.1's own `retryable` flag rather than a second opinion about
- *   status codes.
+ *   status codes. Which of those this loop retries **by itself** is
+ *   {@link isRetriedAutomatically}: every one except a `TimeoutError`
+ *   (`plan/00` §6 item 230, owner, 2026-10-20).
  *
  * ## `Retry-After` is parsed in `backoff.ts`, not here (`P1-T26`)
  *
@@ -50,6 +52,7 @@ import type { Clock } from "../clock";
 import {
   RateLimitError,
   ResearchHelperError,
+  TimeoutError,
   UpstreamServerError,
 } from "../errors";
 import type { CancellationToken } from "../jobQueue/cancellation";
@@ -82,6 +85,32 @@ import { decorrelatedJitter, type RetryBudget } from "../rateLimit/backoff";
  */
 export function isRetryableError(error: unknown): boolean {
   return error instanceof ResearchHelperError && error.retryable;
+}
+
+/**
+ * Whether {@link withRetry} tries again **on its own**, without the user.
+ *
+ * `plan/00` §6 item 230 (owner, 2026-10-20): **automatic retries skip
+ * timeouts.** Only a 429 (`RateLimitError`), a 5xx (`UpstreamServerError`)
+ * and an offline or network failure (`OfflineError`, `NetworkError`) are
+ * retried; a `TimeoutError` surfaces after the one attempt. Before that date
+ * a host that never answered cost up to the attempt cap of request timeouts
+ * (`docs/07` §8.5's 60 s each) before the job saw the error.
+ *
+ * The rule is the retry policy's, **not** the error's. `TimeoutError` stays
+ * `retryable: true` (`docs/07` §10.1), because that flag is also the
+ * user-facing verdict: `src/ui/viewModels/searchImportViewModel.ts`'s
+ * `errorView` offers the Retry button exactly when it is `true`, and a user
+ * may still retry a timeout by hand. So this function narrows
+ * {@link isRetryableError} and leaves the flag alone. `TimeoutError` is a
+ * subclass of `NetworkError`, which is why the exclusion is by class: the
+ * plain network failure it extends is still retried.
+ *
+ * @param error - whatever the attempt threw
+ * @returns `true` only for a retryable error that is not a timeout
+ */
+export function isRetriedAutomatically(error: unknown): boolean {
+  return isRetryableError(error) && !(error instanceof TimeoutError);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +211,8 @@ export interface RetryContext {
 }
 
 /**
- * Run `operation`, retrying while the error says it is worth retrying.
+ * Run `operation`, retrying while the error says it is worth retrying and is
+ * not a timeout ({@link isRetriedAutomatically}, item 230).
  *
  * The delay is `Retry-After` when the server named one — a
  * {@link RateLimitError} carries it as `retryAfterMs`, so a 429 waits exactly
@@ -213,7 +243,9 @@ export async function withRetry<T>(
     try {
       return await operation(attempt);
     } catch (error) {
-      if (attempt >= maxAttempts || !isRetryableError(error)) throw error;
+      if (attempt >= maxAttempts || !isRetriedAutomatically(error)) {
+        throw error;
+      }
       // A cancel that landed while the failed attempt was in flight stops the
       // loop here, before a wait is scheduled or a retry is logged (`docs/07`
       // §7.4; `plan/00` §6 item 228: "cancellation stops retrying at once").

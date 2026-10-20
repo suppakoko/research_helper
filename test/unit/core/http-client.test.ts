@@ -30,6 +30,7 @@ import {
   type RateLimiterPort,
 } from "../../../src/core/http/client";
 import {
+  isRetriedAutomatically,
   isRetryableError,
   retryPolicyFromBudget,
   withRetry,
@@ -978,6 +979,84 @@ describe("retry", () => {
       isRetryableError(new OperationCancelledError({ kind: "user" })),
     ).toBe(false);
     expect(isRetryableError(new TypeError("a bug"))).toBe(false);
+    // Item 230 changed the retry policy, not this flag: a timeout is still
+    // retryable in §10.1's sense, which is what the Retry button reads.
+    expect(isRetryableError(new TimeoutError(60_000, URL_OK))).toBe(true);
+  });
+
+  it("retries automatically every retryable class except a timeout (item 230)", () => {
+    expect(
+      isRetriedAutomatically(new RateLimitError(429, undefined, "h")),
+    ).toBe(true);
+    expect(isRetriedAutomatically(new UpstreamServerError(503, "x"))).toBe(
+      true,
+    );
+    expect(isRetriedAutomatically(new OfflineError("x"))).toBe(true);
+    expect(isRetriedAutomatically(new NetworkError("x"))).toBe(true);
+    // A `TimeoutError` is a `NetworkError`, so the exclusion has to be by
+    // class and must not take the plain network failure with it.
+    const timeout = new TimeoutError(60_000, URL_OK);
+    expect(timeout).toBeInstanceOf(NetworkError);
+    expect(isRetriedAutomatically(timeout)).toBe(false);
+    // Narrows the flag; never widens it.
+    expect(isRetriedAutomatically(new BadRequestError(404, "x"))).toBe(false);
+    expect(
+      isRetriedAutomatically(new OperationCancelledError({ kind: "user" })),
+    ).toBe(false);
+    expect(isRetriedAutomatically(new TypeError("a bug"))).toBe(false);
+  });
+
+  it("surfaces a transport timeout after one attempt, with retries allowed and nothing logged as a retry (item 230)", async () => {
+    const transport = createStubTransport(() =>
+      Promise.reject(new StubTimeoutException()),
+    );
+    const clock = createSystemClock();
+    const sink = createCapturingSink();
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      retryFor: () => immediatePolicy(5),
+      logger: createLogger({ sink, clock, level: "debug" }),
+    });
+
+    const error = (await client
+      .request("GET", URL_OK)
+      .catch((e: unknown) => e)) as TimeoutError;
+
+    expect(error).toBeInstanceOf(TimeoutError);
+    expect(error.retryable).toBe(true);
+    expect(transport.calls).toHaveLength(1);
+    // The failed attempt is logged; no retry is announced.
+    expect(sink.lines.some((l) => l.includes("http request failed"))).toBe(
+      true,
+    );
+    expect(sink.lines.filter((l) => l.includes("http retry"))).toStrictEqual(
+      [],
+    );
+  });
+
+  it("still retries a status-0 network failure and an offline failure to the cap (item 230)", async () => {
+    for (const [name, fail] of [
+      ["network", () => Promise.resolve(stubXhr({ status: 0 }))],
+      ["offline", () => Promise.reject(new StubBrowserOfflineException())],
+    ] as const) {
+      const transport = createStubTransport(fail);
+      const client = createHttpClient({
+        transport,
+        userAgent: UA,
+        clock: createSystemClock(),
+        retryFor: () => immediatePolicy(3),
+      });
+
+      const error = await client
+        .request("GET", URL_OK)
+        .catch((e: unknown) => e);
+
+      expect(error, name).toBeInstanceOf(NetworkError);
+      expect(error, name).not.toBeInstanceOf(TimeoutError);
+      expect(transport.calls, name).toHaveLength(3);
+    }
   });
 });
 

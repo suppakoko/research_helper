@@ -713,22 +713,43 @@ export function createSearchImportPipeline(
       // `P1-T16` step 1: "a trivial `estimate()` returning request counts and
       // zero cost — Phase 1 spends no money, but §11.3 requires the member to
       // exist."
-      // The import of a preview's own works (`input.works`, `P2-T31`) sends
-      // nothing: `Searching` and `Fetching` take the supplied records,
-      // `Merging` takes the supplied works, and `BackfillingAbstracts` returns
-      // at once. So it is charged no request, and its item count is the works
-      // handed back — an upper bound, since `selectedRecordIds` may write
-      // fewer (owner, 2026-10-19; `plan/00` §6 item 229).
-      if (input.works !== undefined) {
-        return Promise.resolve({
-          itemCount: input.works.length,
-          externalRequests: 0,
-          estimatedInputTokens: 0,
-          estimatedOutputTokens: 0,
-          estimatedCostUsd: undefined,
-          estimatedDurationSeconds: 0,
-          notesKeys: [],
-        });
+      //
+      // **Zero search requests whenever no search is sent** (owner,
+      // 2026-10-20, `plan/00` §6 item 231). Read off `run()` below, a run
+      // sends no search in exactly three cases:
+      // 1. `validate` rejects the input. `Planning` returns `failed` before
+      //    any stage that could send a request, so nothing at all is sent.
+      // 2. The input supplies `records`, with or without `works`. `Planning`
+      //    resolves no source and `Fetching` takes the records as given.
+      // 3. No ticked source can search: each is absent from the registry or
+      //    lookup-only (`keywordSearch: false`, item 180). `fanOut` asks
+      //    nothing that sends a request. This needs no branch: `searching`
+      //    below is empty, and so is the work count the backfill is charged.
+      if (!validateSearchImportInput(input).ok) {
+        return Promise.resolve(requestEstimate(0, 0));
+      }
+      if (input.records !== undefined) {
+        // `BackfillingAbstracts` still runs on supplied records **unless**
+        // `works` came with them: that pair is a preview's own output, and
+        // `backfillStage` returns at once (`P2-T31`; owner, 2026-10-19,
+        // `plan/00` §6 item 229). Without `works`, `Merging` folds the
+        // records into at most one work each, so the records are the bound.
+        // The item count is likewise an upper bound — `Merging` may fold and
+        // `selectedRecordIds` may write fewer.
+        const backfillRequests =
+          input.works === undefined
+            ? abstractBackfillRequestBound(
+                input.records.length,
+                input.sourceIds,
+                ctx.sources,
+              )
+            : 0;
+        return Promise.resolve(
+          requestEstimate(
+            input.works?.length ?? input.records.length,
+            backfillRequests,
+          ),
+        );
       }
       const sources = input.sourceIds
         .map((id) => ctx.sources.get(id))
@@ -757,22 +778,15 @@ export function createSearchImportPipeline(
         input.sourceIds,
         ctx.sources,
       );
-      const externalRequests = searchRequests + backfillRequests;
-      return Promise.resolve({
-        // Searching sources only: a lookup-only source yields no record on a
-        // keyword run, so it adds no item either (owner, 2026-10-19;
-        // `plan/00` §6 item 229).
-        itemCount: input.limit * searching.length,
-        externalRequests,
-        estimatedInputTokens: 0,
-        estimatedOutputTokens: 0,
-        // `undefined`, not `0`: §4.5 types it `number | undefined`, and "we do
-        // not know" is a different claim from "it is free". Phase 1 calls no
-        // priced API, so there is nothing to know.
-        estimatedCostUsd: undefined,
-        estimatedDurationSeconds: 0,
-        notesKeys: [],
-      });
+      return Promise.resolve(
+        requestEstimate(
+          // Searching sources only: a lookup-only source yields no record on
+          // a keyword run, so it adds no item either (owner, 2026-10-19;
+          // `plan/00` §6 item 229).
+          input.limit * searching.length,
+          searchRequests + backfillRequests,
+        ),
+      );
     },
 
     async run(
@@ -995,6 +1009,29 @@ export function createSearchImportPipeline(
         return toOutput(state, input, "failed", serialize(caught), undefined);
       }
     },
+  };
+}
+
+/**
+ * `estimate()`'s answer for an item count and a request count. Every other
+ * member is the same on every path: this pipeline calls no priced API and no
+ * model.
+ */
+function requestEstimate(
+  itemCount: number,
+  externalRequests: number,
+): PipelineEstimate {
+  return {
+    itemCount,
+    externalRequests,
+    estimatedInputTokens: 0,
+    estimatedOutputTokens: 0,
+    // `undefined`, not `0`: §4.5 types it `number | undefined`, and "we do
+    // not know" is a different claim from "it is free". Phase 1 calls no
+    // priced API, so there is nothing to know.
+    estimatedCostUsd: undefined,
+    estimatedDurationSeconds: 0,
+    notesKeys: [],
   };
 }
 

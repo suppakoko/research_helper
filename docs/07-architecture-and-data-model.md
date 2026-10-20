@@ -2466,7 +2466,7 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 
 **429 / `Retry-After` handling.** Any 429 or 503 with `Retry-After` calls `limiter.penalize(now + retryAfterMs, ...)`, which parks *every* waiter on that host — so one job's throttling automatically slows all others. Retries use decorrelated jitter (`sleep = min(cap, random(base, prev*3))`) with a per-host attempt cap; after the cap the job fails with a retryable `RateLimitError` and the user is offered "Retry later".
 
-**The retry budget — `base`, `cap`, the attempt cap, and the source of each.** Settled by the owner on **2026-10-07** (`plan/02-phase-1-pubmed.md`, `P1-T28`) and entered in the three columns above. They are **per host and not global defaults**: every other row carries `—` until the card that adds that host supplies its own three values with its own sources, and the LLM/TTS row stays empty on purpose because `03-llm-provider-integration.md` §11.6 owns a *differently shaped* backoff for those hosts whose numbers are not transferable to this one (`05-related-work-discovery.md` §9.5's authority note forbids a second shape here). The three apply **only when the server sent no `Retry-After`** — one that is sent always wins, per the paragraph above.
+**The retry budget — `base`, `cap`, the attempt cap, and the source of each.** Settled by the owner on **2026-10-07** (`plan/02-phase-1-pubmed.md`, `P1-T28`) and entered in the three columns above. They are **per host and not global defaults**: each other literature row got its own three values on 2026-10-14 and `pmc.ncbi.nlm.nih.gov` on 2026-10-19, each with its own sources in the dated notes under the table *(corrected 2026-10-20, `plan/00` §6 item 231: this sentence used to say every other row carries `—`)*, and only the LLM/TTS row carries `—`, on purpose because `03-llm-provider-integration.md` §11.6 owns a *differently shaped* backoff for those hosts whose numbers are not transferable to this one (`05-related-work-discovery.md` §9.5's authority note forbids a second shape here). The three apply **only when the server sent no `Retry-After`** — one that is sent always wins, per the paragraph above.
 
 - **`base` = 1000 ms. Source: this table's own NCBI pacing row.** Unkeyed pacing is 2.5 requests/second, i.e. 400 ms between request *starts*, so a first backoff shorter than the pacing interval cannot change anything the host sees; 1000 ms is the smallest round value comfortably above it. It **coincides with `03-llm-provider-integration.md` §11.6's LLM `baseMs` and was not taken from it** — the derivation above is independent, and the coincidence is recorded rather than hidden because the next reader will notice it.
 - **`cap` = 30 000 ms. Sources: `P1-T26`'s `Retry-After: 120` case and §8.5's `timeoutSeconds` default of 60.** The longest delay the shipped code is specified to honour is a server's own: `P1-T26` carries a criterion fixing a 429's `Retry-After: 120` at exactly 120 000 ms, and `src/core/rateLimit/backoff.ts` deliberately does **not** clamp a server-supplied delay to `capMs`, because a host that says "come back in two minutes" outranks our ceiling. This cap governs only the **silent** case, and the silent case must not cost the user what the loudest explicit one does — two minutes in front of the Search window with nothing said. 30 s is a quarter of that and also sits below §8.5's 60 s default request timeout, so no single wait can outlast the request it is waiting to re-issue. **Note what this is not: no host in the corpus has ever been observed sending a `Retry-After` at all** — `02-literature-database-apis.md` §7.1 records arXiv's 429 arriving *without* one, which is the case this cap exists for. At an attempt cap of 3 the cap never binds (the longest possible wait is 3000 ms), so it guards a later raise of the attempt cap rather than a value the shipped path reaches.
@@ -2487,15 +2487,37 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 > columns above were unused. The composition root now builds each host's policy from its row's cells
 > (`createRetryFor`, over `retryPolicyFromBudget` in `src/core/http/retry.ts`); a host with no row, or with no
 > limiter, still gets one attempt. Only §10.1's retryable classes are retried — `RateLimitError` (429),
-> `UpstreamServerError` (5xx), `TimeoutError`, `OfflineError`, `NetworkError` — never a 400/401/403/404 or a
-> cancellation. Every retry re-enters the host's bucket (`RateLimiter.run`), so it waits for a token and for any
+> `UpstreamServerError` (5xx), `OfflineError`, `NetworkError` — never a 400/401/403/404 or a cancellation, and,
+> since item 230 (note below), never a `TimeoutError` either. Every retry re-enters the host's bucket (`RateLimiter.run`), so it waits for a token and for any
 > `penalize()` deadline like a first attempt; a sent `Retry-After` on a 429 **or a 503** is the wait itself, not the
 > jitter. Measured in `test/unit/bootstrap/container.test.ts`: arXiv's first retry reached the wire at 3031 ms, not
 > its 3000 ms base, because a token at 0.33/s takes 3030 ms to refill. The longest silent wait per row is `base +
 > 3 × base`: **4 s** for the 1000 ms rows, **8 s** for Semantic Scholar, **12 s** for arXiv. Two costs the table above
-> does not show: a `Retry-After` is not clamped to `cap`, so a host that asks for 120 s costs two such waits; and a
-> `TimeoutError` is retryable, so a host that never answers costs up to three request timeouts (§8.5's 60 s each)
-> before the job sees the error.
+> does not show: a `Retry-After` is not clamped to `cap`, so a host that asks for 120 s costs two such waits; and each
+> attempt can itself take up to the request timeout (§8.5's 60 s). *(Corrected 2026-10-20, item 230: this sentence
+> used to end "a `TimeoutError` is retryable, so a host that never answers costs up to three request timeouts before
+> the job sees the error". A timeout is no longer retried, so a host that never answers costs one; the note below
+> gives the worst case that remains.)*
+
+> **Automatic retries skip timeouts, from 2026-10-20 (owner's decision, `plan/00` §6 item 230).** A request that
+> times out (§10.1's `TimeoutError`, after §8.5's `timeoutSeconds`, 60 s by default) is **not** retried by the HTTP
+> client: the error surfaces after that one attempt. The client retries only `RateLimitError` (429),
+> `UpstreamServerError` (5xx) and `OfflineError`/`NetworkError` (offline, or no HTTP response at all), up to each
+> row's attempt cap. The rule lives in the retry policy (`src/core/http/retry.ts`'s `isRetriedAutomatically`), **not**
+> in the error class: `TimeoutError` stays `retryable: true` in §10.1, because that flag also decides whether the
+> Search window offers its Retry button, and a user may still retry a timeout by hand. What the change does and does
+> not bound:
+> - **A host that never answers costs one timeout** — 60 s by default — instead of three plus the waits between them.
+> - **A timeout on a later attempt still ends the loop there.** A 503 followed by a timeout costs the 503, one wait
+>   and the timeout, then the error surfaces.
+> - **A slow refusal is not a timeout and is still retried.** A host that answers every attempt with a 429 or 5xx just
+>   before the timeout can still cost up to the attempt cap of such answers plus the waits. `P0-T21` measured arXiv
+>   429s taking up to 46 s to fail (`02-literature-database-apis.md` §7.1); three of those plus arXiv's longest
+>   silent waits (3 s + 9 s) is about 150 s.
+> - **A `Retry-After` is still not clamped to `cap`**, as the note above says.
+>
+> The note above is corrected in place on the same date: its list of retried classes and its last sentence described
+> the behaviour before this decision.
 
 ### 7.4 Cancellation
 

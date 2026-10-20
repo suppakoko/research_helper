@@ -1607,9 +1607,10 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 230. **A timeout is retried, so a silent host costs up to three 60 s timeouts.** **DECIDED 2026-10-20: automatic retries
     skip timeouts** — only 429 and 5xx (and offline/network) are retried; a timeout surfaces after one attempt.
+    **DONE 2026-10-20** (`plan/reports/items-230-231.md`).
 
 231. **An import of supplied records without works is still charged search requests.** **DECIDED 2026-10-20: estimate
-    zero search requests whenever no search is sent.** Also: stale comments in `hostLimiter.ts` (`HOST_POLICIES` header),
+    zero search requests whenever no search is sent.** **DONE 2026-10-20**, with the three stale comments. Also: stale comments in `hostLimiter.ts` (`HOST_POLICIES` header),
     `searchImportViewModel.ts` (`UNRENDERABLE_ERROR_ROWS`) and `docs/07` §7.3 ("every other row carries `—`").
 
 ## 7. Regenerating this file

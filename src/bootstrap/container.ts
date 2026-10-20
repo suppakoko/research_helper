@@ -1296,9 +1296,10 @@ export function createRetryFor(
  * {@link createRetryFor}: a host gets the policy its `HOST_POLICIES` row's
  * `retry` cells describe, and a host without a row — or without a limiter —
  * gets none and makes exactly one attempt. Only the error classes `docs/07`
- * §10.1 marks retryable are retried (`src/core/http/retry.ts`'s
- * `isRetryableError`), every retry re-enters the host's bucket, and a
- * cancelled token ends the loop at once.
+ * §10.1 marks retryable are retried, **except a timeout** (`plan/00` §6 item
+ * 230, owner, 2026-10-20: `src/core/http/retry.ts`'s `isRetriedAutomatically`
+ * — a `TimeoutError` surfaces after one attempt), every retry re-enters the
+ * host's bucket, and a cancelled token ends the loop at once.
  *
  * Teardown is registered in construction order and runs last-in-first-out, so
  * the graph comes apart in the reverse of the order it went together: the

@@ -27,7 +27,8 @@
  *    structured error in a 4xx body — arXiv's Atom error feed arrives as HTTP
  *    400 — and the adapter is the only layer that can read it. The
  *    classification itself is unchanged for every status and every host.
- * 3. **Retry**, through `./retry.ts`, over the retryable classes only, with the
+ * 3. **Retry**, through `./retry.ts`, over the retryable classes only and
+ *    never over a `TimeoutError` (`plan/00` §6 item 230, 2026-10-20), with the
  *    delay coming from `Retry-After` or from the host's injected jitter. The
  *    `Retry-After` parse is `src/core/rateLimit/backoff.ts`'s and is the only one
  *    in the codebase (`P1-T26`).

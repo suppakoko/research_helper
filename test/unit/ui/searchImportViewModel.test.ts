@@ -53,7 +53,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { createSystemClock } from "../../../src/core/clock";
-import type { SerializedError } from "../../../src/core/errors";
+import { TimeoutError, type SerializedError } from "../../../src/core/errors";
 import type { CancellationToken } from "../../../src/core/jobQueue/cancellation";
 import type { ProgressSnapshot } from "../../../src/core/jobQueue/progress";
 import { createLogger } from "../../../src/core/logger";
@@ -718,6 +718,26 @@ describe("P1-T39 — errorView() over docs/08 §8.3's table", () => {
       expect(view.prefs, code).toBe(false);
       expect(errorView(failure(code), DATABASE).retry, code).toBe(false);
     }
+  });
+
+  it("still offers Retry after a timeout, which the client no longer retries by itself (item 230)", () => {
+    // The real class, serialized the way a pipeline outcome carries it — not a
+    // hand-built `failure(...)` — so the verdict under test is §10.1's own
+    // `retryable` flag on `TimeoutError`. Item 230 (owner, 2026-10-20) moved
+    // the "no automatic retry" rule into the retry policy precisely so this
+    // flag, and the button it draws, stay as they were.
+    const serialized = new TimeoutError(
+      60_000,
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+    ).toSerialized();
+    expect(serialized.code).toBe("TIMEOUT");
+    expect(serialized.retryable).toBe(true);
+    const view = errorView(serialized, DATABASE);
+    expect(view.retry).toBe(true);
+    expect(view.ref).toStrictEqual({
+      id: "rh-error-source",
+      args: { database: DATABASE },
+    });
   });
 
   it("falls back to the generic row for a code the table never heard of", () => {

@@ -20,8 +20,11 @@ import {
 } from "../../../src/core/config";
 import {
   ConfigurationError,
+  NetworkError,
+  OfflineError,
   OperationCancelledError,
   RateLimitError,
+  TimeoutError,
   UpstreamServerError,
 } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
@@ -1468,10 +1471,14 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
    * A transport whose answer is chosen per call, by URL and by the call's
    * index among calls to that same URL. It reads the clock itself, so a gap
    * between two calls is an observation of when each reached the wire.
+   *
+   * An `Error` answer is thrown the way `Zotero.HTTP.request` throws one —
+   * a `StubTimeoutException` is what the client maps to `TimeoutError`
+   * (item 230).
    */
   function createScriptedTransport(
     clock: ManualClock,
-    answer: (url: string, nth: number) => ScriptedAnswer,
+    answer: (url: string, nth: number) => ScriptedAnswer | Error,
     onCall?: (url: string) => void,
   ): FakeTransport {
     const calls: RecordedCall[] = [];
@@ -1483,7 +1490,9 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
         const nth = perUrl.get(url) ?? 0;
         perUrl.set(url, nth + 1);
         onCall?.(url);
-        const { status, headers = {} } = answer(url, nth);
+        const scripted = answer(url, nth);
+        if (scripted instanceof Error) return Promise.reject(scripted);
+        const { status, headers = {} } = scripted;
         const xhr: HttpTransportXhr = {
           status,
           responseText: "",
@@ -1647,6 +1656,113 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
     expect(outcome.error).toBeInstanceOf(UpstreamServerError);
     expect(transport.calls).toHaveLength(1);
     await h.scope.unregisterAll();
+  });
+
+  it("attempts a timeout once and never retries it, on every HOST_POLICIES row (item 230)", async () => {
+    for (const row of HOST_POLICIES) {
+      const budget = must(row.retry, `${row.host}'s retry cells`);
+      // A row that allowed one attempt anyway would pass vacuously.
+      expect(budget.maxAttempts, row.host).toBeGreaterThan(1);
+      const clock = createManualClock();
+      const transport = createScriptedTransport(
+        clock,
+        () => new StubTimeoutException("timed out"),
+      );
+      const { h } = await installOver(clock, transport);
+
+      const outcome = await settle(
+        clock,
+        httpRequest({ method: "GET", url: `https://${row.host}/x` }),
+      );
+
+      expect(outcome.error, row.host).toBeInstanceOf(TimeoutError);
+      expect(transport.calls, row.host).toHaveLength(1);
+      expect(linesWith(h.sink, "http retry"), row.host).toEqual([]);
+      // The rule is the retry policy's, not the error's: §10.1's flag, which
+      // the Search window's Retry button reads, still says a retry could
+      // succeed — on the live error and on its serialized form.
+      const error = outcome.error as TimeoutError;
+      expect(error.retryable, row.host).toBe(true);
+      expect(error.toSerialized().retryable, row.host).toBe(true);
+      await h.scope.unregisterAll();
+    }
+  });
+
+  it("ends the loop at a timeout on a later attempt: a 503, one wait, the timeout (item 230)", async () => {
+    const clock = createManualClock();
+    const transport = createScriptedTransport(clock, (_url, nth) =>
+      nth === 0 ? { status: 503 } : new StubTimeoutException("timed out"),
+    );
+    const { h } = await installOver(clock, transport);
+
+    const outcome = await settle(
+      clock,
+      httpRequest({ method: "GET", url: ncbiUrl("esearch.fcgi") }),
+    );
+
+    expect(outcome.error).toBeInstanceOf(TimeoutError);
+    // NCBI's attempt cap is 3; the timeout on attempt 2 stops it there.
+    expect(transport.calls).toHaveLength(2);
+    expect(linesWith(h.sink, "http retry").map((line) => line.attempt)).toEqual(
+      [1],
+    );
+    await h.scope.unregisterAll();
+  });
+
+  it("still retries a 429, a 5xx, an offline and a network failure to every row's attempt cap (item 230)", async () => {
+    const cases: readonly {
+      readonly name: string;
+      readonly answer: () => ScriptedAnswer | Error;
+      readonly expected: abstract new (...args: never[]) => Error;
+    }[] = [
+      // No `Retry-After`, so the waits are the row's own jitter.
+      {
+        name: "429",
+        answer: () => ({ status: 429 }),
+        expected: RateLimitError,
+      },
+      {
+        name: "500",
+        answer: () => ({ status: 500 }),
+        expected: UpstreamServerError,
+      },
+      {
+        name: "offline",
+        answer: () => new StubBrowserOfflineException("offline"),
+        expected: OfflineError,
+      },
+      // Status 0 is "no HTTP response at all" (`client.ts`'s header).
+      {
+        name: "network",
+        answer: () => ({ status: 0 }),
+        expected: NetworkError,
+      },
+    ];
+    for (const row of HOST_POLICIES) {
+      const budget = must(row.retry, `${row.host}'s retry cells`);
+      for (const { name, answer, expected } of cases) {
+        const label = `${row.host} ${name}`;
+        const clock = createManualClock();
+        const transport = createScriptedTransport(clock, answer);
+        const { h } = await installOver(clock, transport);
+
+        const outcome = await settle(
+          clock,
+          httpRequest({ method: "GET", url: `https://${row.host}/x` }),
+        );
+
+        expect(outcome.error, label).toBeInstanceOf(expected);
+        expect(outcome.error, label).not.toBeInstanceOf(TimeoutError);
+        expect(transport.calls, label).toHaveLength(budget.maxAttempts);
+        expect(
+          linesWith(h.sink, "http retry").map((line) => line.attempt),
+          label,
+        ).toEqual(
+          Array.from({ length: budget.maxAttempts - 1 }, (_, i) => i + 1),
+        );
+        await h.scope.unregisterAll();
+      }
+    }
   });
 
   it("waits a 429's Retry-After rather than the jitter, and ends in RateLimitError", async () => {

@@ -219,11 +219,14 @@ export const PMC_IDCONV_HOST = "pmc.ncbi.nlm.nih.gov";
  * would give 3 s + 9 s = 12 s for the same row; §7.3 records that divergence and
  * no shipped code calls `createBackoff`.
  *
- * **Nothing consumes this field yet.** `src/core/http/client.ts` takes the policy
- * through `retryFor`, and `src/bootstrap/container.ts` does not supply one — so
- * the shipped client still makes exactly one attempt. Populating `retryFor` from
- * this row touches a file outside `P1-T28`'s `Files` list and is reported against
- * the card rather than done quietly (`plan/README.md` §5 rule 2).
+ * **The client consumes this field since 2026-10-20** (`plan/00` §6 item 228).
+ * `src/core/http/client.ts` takes the policy through `retryFor`, and
+ * `src/bootstrap/container.ts`'s `createRetryFor` builds it from every row's
+ * `retry` cells, for a host that also has a limiter; a host with no row makes
+ * one attempt. A 429, a 5xx and an offline or network failure are retried up to
+ * the row's attempt cap; **a timeout is not retried** (item 230, owner,
+ * 2026-10-20: `src/core/http/retry.ts`'s `isRetriedAutomatically`). Until
+ * 2026-10-20 nothing supplied `retryFor` and every host made exactly one attempt.
  *
  * **Off-peak scheduling, carried forward from §7.3 as `P1-T04`'s Notes require.**
  * NCBI's own guidance is that large jobs run "either weekends or between 9:00 PM
@@ -255,8 +258,8 @@ export const PMC_IDCONV_HOST = "pmc.ncbi.nlm.nih.gov";
  * **no** row: decision D2 puts OpenAlex out of v1 and one of `plan/03`'s cards
  * greps this file to prove it. The LLM and TTS hosts are Phase 3's and Phase 5's
  * and are driven from provider prefs rather than from a static row. **Each of
- * those five rows needs its own `retry` budget with its own named sources in
- * §7.3** — the NCBI numbers are that host's and not a global default, which §7.3
+ * those five rows has its own `retry` budget with its own named sources in
+ * §7.3** (filled 2026-10-14) — the NCBI numbers are that host's and not a global default, which §7.3
  * states and `test/unit/core/backoff.test.ts` enforces.
  *
  * **Europe PMC, `P2-T03` (2026-10-14).** 5/s, burst 5, max concurrent 3, no key
