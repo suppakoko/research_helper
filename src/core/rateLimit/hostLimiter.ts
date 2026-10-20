@@ -256,8 +256,13 @@ export const PMC_IDCONV_HOST = "pmc.ncbi.nlm.nih.gov";
  * every machine under our control) and `api.biorxiv.org` (bioRxiv and medRxiv,
  * `P2-T07` — **shipped below**). `api.openalex.org` gets
  * **no** row: decision D2 puts OpenAlex out of v1 and one of `plan/03`'s cards
- * greps this file to prove it. The LLM and TTS hosts are Phase 3's and Phase 5's
- * and are driven from provider prefs rather than from a static row. **Each of
+ * greps this file to prove it. The LLM and TTS hosts are Phase 3's and Phase 5's.
+ * Each LLM adapter card (`P3-T07`–`P3-T10`) adds a static row for its host
+ * carrying `retry: LLM_RETRY_BUDGET`, checked against §7.3's shared "LLM/TTS
+ * hosts" row; how such a row's request *rate* is set is still `P3-T07`'s open
+ * line *(corrected 2026-10-20, `P3-T38`, `plan/00` §6 item 247: this sentence
+ * said the LLM hosts "are driven from provider prefs rather than from a static
+ * row")*. TTS hosts are not decided. **Each of
  * those five rows has its own `retry` budget with its own named sources in
  * §7.3** (filled 2026-10-14) — the NCBI numbers are that host's and not a global default, which §7.3
  * states and `test/unit/core/backoff.test.ts` enforces.

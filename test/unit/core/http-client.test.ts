@@ -14,7 +14,10 @@ import {
   OfflineError,
   OperationCancelledError,
   PolicyViolationError,
+  QuotaExceededError,
   RateLimitError,
+  type ResearchHelperError,
+  StructuredOutputError,
   TimeoutError,
   UpstreamServerError,
 } from "../../../src/core/errors";
@@ -25,7 +28,9 @@ import {
   HttpError,
   httpRequest,
   setHttpClient,
+  type ErrorResponseMapper,
   type HttpClient,
+  type HttpResponse,
   type HttpExceptionClass,
   type HttpMethod,
   type HttpTransport,
@@ -1011,6 +1016,31 @@ describe("retry", () => {
     expect(isRetriedAutomatically(new TypeError("a bug"))).toBe(false);
   });
 
+  it("never re-sends a request whose answer failed to parse, though StructuredOutputError stays retryable (item 244)", async () => {
+    const parseFailure = new StructuredOutputError(
+      "anthropic",
+      "test-model",
+      "answer did not match the schema",
+    );
+    // §10.1's flag is untouched: the repair prompt still reads it.
+    expect(parseFailure.retryable).toBe(true);
+    expect(isRetryableError(parseFailure)).toBe(true);
+    // The loop skips it, by class, as it skips a timeout.
+    expect(isRetriedAutomatically(parseFailure)).toBe(false);
+
+    let attempts = 0;
+    const error = await withRetry(
+      () => {
+        attempts += 1;
+        return Promise.reject(parseFailure);
+      },
+      { policy: immediatePolicy(5), clock: createManualClock() },
+    ).catch((e: unknown) => e);
+
+    expect(error).toBe(parseFailure);
+    expect(attempts).toBe(1);
+  });
+
   it("surfaces a transport timeout after one attempt, with retries allowed and nothing logged as a retry (item 230)", async () => {
     const transport = createStubTransport(() =>
       Promise.reject(new StubTimeoutException()),
@@ -1980,5 +2010,247 @@ describe("httpRequest", () => {
     // read against. This assertion exists so the union is not widened silently.
     const methods: HttpMethod[] = ["GET", "POST", "HEAD"];
     expect(methods).toHaveLength(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P3-T38 — a request's own reading of an error answer, before classification
+// (`plan/00` §6 item 244, owner, 2026-10-20; docs/07 §7.3's dated note "An LLM
+// host's error answer is read before the retry decision")
+// ---------------------------------------------------------------------------
+
+describe("mapErrorResponse: an error answer read before the client classifies it (P3-T38, item 244)", () => {
+  // A synthetic LLM host: no LLM row ships yet (`P3-T07`–`P3-T10` add them),
+  // and nothing here may reach a real provider.
+  const LLM_URL = "https://llm.example.test/v1/messages";
+  const SPEND_CAP_MARKER = "synthetic_spend_cap";
+  const VENDOR_KEY = "sk-ant-abcdefghijklmnopqrstuvwxyz0123";
+
+  /** A clock that records each wait and waits none of it. */
+  function recordingClock(): ManualClock & { readonly slept: number[] } {
+    const base = createManualClock();
+    const slept: number[] = [];
+    return Object.assign(base, {
+      slept,
+      sleep: (ms: number) => {
+        slept.push(ms);
+        return Promise.resolve();
+      },
+    });
+  }
+
+  /** The adapter side, reduced to a test double: a spend cap is final. */
+  const spendCapHook: ErrorResponseMapper = (response) =>
+    response.status === 429 && response.body.includes(SPEND_CAP_MARKER)
+      ? new QuotaExceededError(429, "synthetic spend cap", {
+          host: "llm.example.test",
+        })
+      : undefined;
+
+  it("throws the hook's non-retryable error after exactly one transport call, with five attempts allowed", async () => {
+    const transport = createStubTransport(() =>
+      Promise.resolve(
+        stubXhr({ status: 429, body: `{"code":"${SPEND_CAP_MARKER}"}` }),
+      ),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock: recordingClock(),
+      limiterFor: () => createStubLimiter("llm.example.test"),
+      retryFor: () => immediatePolicy(5),
+    });
+
+    const error = await client
+      .request("POST", LLM_URL, { mapErrorResponse: spendCapHook })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(QuotaExceededError);
+    expect((error as QuotaExceededError).retryable).toBe(false);
+    expect(transport.calls).toHaveLength(1);
+  });
+
+  it("lets the loop retry a retryable class the hook returns, under the host's budget", async () => {
+    let asked = 0;
+    const transport = createStubTransport(() =>
+      Promise.resolve(stubXhr({ status: 429, body: '{"code":"busy"}' })),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock: recordingClock(),
+      limiterFor: () => createStubLimiter("llm.example.test"),
+      retryFor: () => immediatePolicy(5),
+    });
+
+    const error = await client
+      .request("POST", LLM_URL, {
+        mapErrorResponse: () => {
+          asked += 1;
+          return new RateLimitError(429, undefined, "synthetic-provider");
+        },
+      })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(RateLimitError);
+    // Exactly the hook's error: the provider name it chose, not the host.
+    expect((error as RateLimitError).context.host).toBe("synthetic-provider");
+    expect(transport.calls).toHaveLength(5);
+    expect(asked).toBe(5);
+  });
+
+  it("keeps the client's own class, with no body, when the hook returns nothing", async () => {
+    const transport = createStubTransport(() =>
+      Promise.resolve(stubXhr({ status: 429, body: '{"code":"busy"}' })),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock: recordingClock(),
+      retryFor: () => immediatePolicy(3),
+    });
+
+    const error = await client
+      .request("POST", LLM_URL, { mapErrorResponse: () => undefined })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect((error as RateLimitError).context).not.toHaveProperty("body");
+    expect(transport.calls).toHaveLength(3);
+  });
+
+  it("hands the hook the body through redactText, never the raw body, with status, URL and headers intact", async () => {
+    const clock = createManualClock(1_700_000_000_000);
+    const raw =
+      `{"error":{"message":"key ${VENDOR_KEY} is over its cap; see ` +
+      `https://llm.example.test/limits?api_key=shortkey123"}}`;
+    const seen: { response: HttpResponse; now: number }[] = [];
+    const { client } = clientFor(
+      stubXhr({
+        status: 429,
+        body: raw,
+        headers: { "X-Request-Id": "req-1" },
+        url: LLM_URL,
+      }),
+      { clock },
+    );
+
+    // A careless hook that copies the whole body into its error: still no key.
+    const error = await client
+      .request("POST", LLM_URL, {
+        mapErrorResponse: (response, now) => {
+          seen.push({ response, now });
+          return new QuotaExceededError(429, "cap", { body: response.body });
+        },
+      })
+      .catch((e: unknown) => e);
+
+    expect(seen).toHaveLength(1);
+    const { response, now } = seen[0]!;
+    expect(response.body).toBe(redactText(raw));
+    expect(response.body).not.toContain(VENDOR_KEY);
+    expect(response.body).not.toContain("shortkey123");
+    expect(response.status).toBe(429);
+    expect(response.url).toBe(LLM_URL);
+    expect(response.header("x-request-id")).toBe("req-1");
+    expect(now).toBe(clock.now());
+    const everything = `${(error as Error).message} ${JSON.stringify(
+      (error as ResearchHelperError).context,
+    )} ${(error as Error).stack ?? ""}`;
+    expect(everything).not.toContain(VENDOR_KEY);
+    expect(everything).not.toContain("shortkey123");
+  });
+
+  it("asks the hook after the host's limits are adopted and Retry-After has penalized it", async () => {
+    const clock = createManualClock();
+    const limiter = new TokenBucket("llm.example.test", NCBI_NO_KEY, clock);
+    const transport = createStubTransport(() =>
+      Promise.resolve(
+        stubXhr({
+          status: 429,
+          headers: { "X-Ratelimit-Limit": "1", "Retry-After": "120" },
+        }),
+      ),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      limiterFor: () => limiter,
+    });
+    const atHook: { rate: number; penalizedUntil: number | undefined }[] = [];
+
+    const error = await client
+      .request("POST", LLM_URL, {
+        mapErrorResponse: () => {
+          atHook.push({
+            rate: limiter.currentConfig.ratePerSecond,
+            penalizedUntil: limiter.stats.penalizedUntilEpochMs,
+          });
+          return new QuotaExceededError(429, "cap");
+        },
+      })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(QuotaExceededError);
+    expect(atHook).toStrictEqual([
+      { rate: 1, penalizedUntil: clock.now() + 120_000 },
+    ]);
+  });
+
+  it("never asks the hook about a 2xx or 3xx answer", async () => {
+    for (const status of [200, 204, 302]) {
+      let asked = 0;
+      const { client } = clientFor(stubXhr({ status, body: "{}" }));
+      await expect(
+        client.request("POST", LLM_URL, {
+          mapErrorResponse: () => {
+            asked += 1;
+            return new QuotaExceededError(status, "never");
+          },
+        }),
+      ).resolves.toMatchObject({ status });
+      expect(asked, `HTTP ${status}`).toBe(0);
+    }
+  });
+
+  it("leaves a literature host's 429 as today: no body, retried to its cap, penalized from Retry-After each time", async () => {
+    const clock = recordingClock();
+    const limiter = createStubLimiter();
+    const transport = createStubTransport(() =>
+      Promise.resolve(
+        stubXhr({
+          status: 429,
+          body: `<feed><summary>slow down ${VENDOR_KEY}</summary></feed>`,
+          headers: { "Retry-After": "1" },
+        }),
+      ),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      limiterFor: () => limiter,
+      retryFor: () => immediatePolicy(3),
+    });
+
+    // No `mapErrorResponse`: what every literature adapter sends.
+    const error = await client.request("GET", URL_OK).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect(error).not.toBeInstanceOf(QuotaExceededError);
+    const rateLimit = error as RateLimitError;
+    expect(rateLimit.retryAfterMs).toBe(1000);
+    expect(rateLimit.context).not.toHaveProperty("body");
+    expect(JSON.stringify(rateLimit.context)).not.toContain(VENDOR_KEY);
+    expect(transport.calls).toHaveLength(3);
+    expect(limiter.penalties).toHaveLength(3);
+    expect(limiter.penalties.map((p) => p.reason)).toStrictEqual([
+      "HTTP 429 Retry-After",
+      "HTTP 429 Retry-After",
+      "HTTP 429 Retry-After",
+    ]);
+    // The server's figure is the wait, twice: two waits for three attempts.
+    expect(clock.slept).toStrictEqual([1000, 1000]);
   });
 });

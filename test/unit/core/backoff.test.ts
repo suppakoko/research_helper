@@ -23,6 +23,8 @@ import {
 import {
   createHostLimiterRegistry,
   HOST_POLICIES,
+  type HostRateLimitPolicy,
+  LLM_RETRY_BUDGET,
   NCBI_HOST,
 } from "../../../src/core/rateLimit/hostLimiter";
 
@@ -388,6 +390,56 @@ function section73Cell(
   return must(row[index], `${host}'s "${column}" cell`);
 }
 
+/**
+ * §7.3's Host cell for the row every LLM host shares. Matched as written:
+ * `test/unit/core/hostLimiter.test.ts`'s `llmRowCells` finds the same row by
+ * the same text, so the cell is not renamed.
+ */
+const LLM_ROW_HOST_CELL = "LLM/TTS hosts";
+
+/** The marker §7.3 puts after each of that row's three retry figures. */
+const LLM_CELL_MARKER = /\s*\(LLM\)$/;
+
+/**
+ * One cell of the §7.3 row a `HOST_POLICIES` row is checked against
+ * (`P3-T38`, `plan/00` §6 item 244).
+ *
+ * A row whose `retry` **is** `LLM_RETRY_BUDGET` — the same object, not an
+ * equal copy — is an LLM adapter's row (`P3-T07`–`P3-T10` add them), and is
+ * checked against §7.3's shared "LLM/TTS hosts" row, whose retry cells read
+ * `1000 ms (LLM)` and so on; the `(LLM)` marker is required and removed. Every
+ * other row is checked against the row that names its own host, as before, so
+ * a host §7.3 does not name still fails in {@link section73Cell}.
+ */
+function section73CellFor(
+  table: Section73Table,
+  policy: HostRateLimitPolicy,
+  column: string,
+): string {
+  if (policy.retry !== LLM_RETRY_BUDGET) {
+    return section73Cell(table, policy.host, column);
+  }
+  const hostColumn = table.columns.indexOf("Host");
+  const index = table.columns.indexOf(column);
+  const row = table.rows.find(
+    (cells) => cells[hostColumn] === LLM_ROW_HOST_CELL,
+  );
+  if (hostColumn < 0 || index < 0 || row === undefined) {
+    throw new Error(
+      `§7.3's policy table has no "${column}" cell on its ` +
+        `"${LLM_ROW_HOST_CELL}" row, which ${policy.host}'s row is read against`,
+    );
+  }
+  const cell = must(row[index], `the LLM/TTS row's "${column}" cell`);
+  if (!LLM_CELL_MARKER.test(cell)) {
+    throw new Error(
+      `§7.3's LLM/TTS "${column}" cell carries no "(LLM)" marker: ` +
+        JSON.stringify(cell),
+    );
+  }
+  return cell.replace(LLM_CELL_MARKER, "");
+}
+
 /** `1000 ms`, `30 000 ms` — digits may be space-grouped, as §7.3 writes them. */
 function millisecondsIn(cell: string, what: string): number {
   const match = /^(\d+)ms$/.exec(cell.replace(/[\s*`]/g, ""));
@@ -410,11 +462,66 @@ function countIn(cell: string, what: string): number {
   return Number(match[1]);
 }
 
-/** A shipped row's retry budget, through the registry that serves it. */
-function shippedBudget(host: string): RetryBudget {
-  const registry = createHostLimiterRegistry({ clock: createManualClock() });
+/**
+ * A row's retry budget, through the registry that serves it. `policies`
+ * defaults to the shipped table; `P3-T38`'s tests pass a synthetic one.
+ */
+function shippedBudget(
+  host: string,
+  policies: readonly HostRateLimitPolicy[] = HOST_POLICIES,
+): RetryBudget {
+  const registry = createHostLimiterRegistry({
+    clock: createManualClock(),
+    policies,
+  });
   const policy = must(registry.policyFor(host), `the ${host} policy row`);
   return must(policy.retry, `the ${host} row's retry budget`);
+}
+
+/**
+ * The check "transcribes §7.3's three columns" makes, over any policy list:
+ * each row's base, cap and attempt cap equal the §7.3 row
+ * {@link section73CellFor} picks for it.
+ */
+function expectTranscribed(
+  table: Section73Table,
+  policies: readonly HostRateLimitPolicy[],
+): void {
+  for (const policy of policies) {
+    const { host } = policy;
+    const budget = shippedBudget(host, policies);
+    expect(budget.baseMs, `${host} retry base`).toBe(
+      millisecondsIn(
+        section73CellFor(table, policy, "Retry base"),
+        `${host} retry base`,
+      ),
+    );
+    expect(budget.capMs, `${host} retry cap`).toBe(
+      millisecondsIn(
+        section73CellFor(table, policy, "Retry cap"),
+        `${host} retry cap`,
+      ),
+    );
+    expect(budget.maxAttempts, `${host} attempt cap`).toBe(
+      countIn(
+        section73CellFor(table, policy, "Attempt cap"),
+        `${host} attempt cap`,
+      ),
+    );
+  }
+}
+
+/** The check "names every shipped host", over any policy list. */
+function expectNamed(
+  table: Section73Table,
+  policies: readonly HostRateLimitPolicy[],
+): void {
+  for (const policy of policies) {
+    // Throws rather than returns undefined when the host has no row, which is
+    // the guard that keeps the assertion above from matching a row §7.3 does
+    // not contain.
+    expect(section73CellFor(table, policy, "Attempt cap")).not.toBe("—");
+  }
 }
 
 /** The shipped NCBI row, through the registry that serves it. */
@@ -494,40 +601,15 @@ describe("docs/07 §7.3's retry budget on the shipped policy rows", () => {
     // presence could carry any three numbers. The loop is over the shipped
     // table, so a row added without the document saying what it should hold
     // fails in `section73Cell` rather than passing by omission.
+    // `P3-T38` moved the loop into `expectTranscribed` so an LLM row is read
+    // against §7.3's shared row; a literature row is read exactly as before.
     const table = readSection73Table();
     expect(HOST_POLICIES.length).toBeGreaterThan(1);
-
-    for (const { host } of HOST_POLICIES) {
-      const budget = shippedBudget(host);
-      expect(budget.baseMs, `${host} retry base`).toBe(
-        millisecondsIn(
-          section73Cell(table, host, "Retry base"),
-          `${host} retry base`,
-        ),
-      );
-      expect(budget.capMs, `${host} retry cap`).toBe(
-        millisecondsIn(
-          section73Cell(table, host, "Retry cap"),
-          `${host} retry cap`,
-        ),
-      );
-      expect(budget.maxAttempts, `${host} attempt cap`).toBe(
-        countIn(
-          section73Cell(table, host, "Attempt cap"),
-          `${host} attempt cap`,
-        ),
-      );
-    }
+    expectTranscribed(table, HOST_POLICIES);
   });
 
   it("names every shipped host in §7.3's table, so no row is read from nowhere", () => {
-    const table = readSection73Table();
-    for (const policy of HOST_POLICIES) {
-      // Throws rather than returns undefined when the host has no row, which is
-      // the guard that keeps the assertion above from matching a row §7.3 does
-      // not contain.
-      expect(section73Cell(table, policy.host, "Attempt cap")).not.toBe("—");
-    }
+    expectNamed(readSection73Table(), HOST_POLICIES);
   });
 
   it("gives every shipped policy row a retry budget", () => {
@@ -601,5 +683,91 @@ describe("docs/07 §7.3's retry budget on the shipped policy rows", () => {
     expect(transport.calls).toHaveLength(3);
     expect(clock.slept).toEqual([1000, 3000]);
     expect(clock.slept).toHaveLength(budget.maxAttempts - 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. LLM rows against §7.3's shared row — `P3-T38`, `plan/00` §6 item 244
+// ---------------------------------------------------------------------------
+
+describe("an LLM adapter's row is read against §7.3's shared LLM/TTS row (P3-T38, item 244)", () => {
+  // No LLM row ships yet: `P3-T07`–`P3-T10` add them, possibly in parallel,
+  // and the first would otherwise fail the two tests above. These rows are
+  // synthetic; their rate is a placeholder, because how an LLM row's rate is
+  // set is still `P3-T07`'s open line and nothing here reads it.
+  const PLACEHOLDER_RATE = { ratePerSecond: 1, burst: 1, maxConcurrent: 1 };
+  const anthropicRow: HostRateLimitPolicy = {
+    host: "api.anthropic.com",
+    withoutKey: PLACEHOLDER_RATE,
+    retry: LLM_RETRY_BUDGET,
+  };
+
+  it("accepts a synthetic api.anthropic.com row carrying LLM_RETRY_BUDGET, beside every shipped row", () => {
+    const table = readSection73Table();
+    const policies = [...HOST_POLICIES, anthropicRow];
+    expect(() => expectTranscribed(table, policies)).not.toThrow();
+    expect(() => expectNamed(table, policies)).not.toThrow();
+    // It was read against the shared row, not against a row of its own.
+    expect(() =>
+      section73Cell(table, anthropicRow.host, "Attempt cap"),
+    ).toThrow(/no row for `api\.anthropic\.com`/);
+    expect(section73CellFor(table, anthropicRow, "Attempt cap")).toBe("5");
+  });
+
+  it("still rejects a row whose host §7.3 does not name, even with a budget equal to the LLM one", () => {
+    const table = readSection73Table();
+    // Equal numbers, different object: not an LLM row, so it needs its own.
+    const lookalike: HostRateLimitPolicy = {
+      host: "llm.unnamed.test",
+      withoutKey: PLACEHOLDER_RATE,
+      retry: { ...LLM_RETRY_BUDGET },
+    };
+    const literatureShaped: HostRateLimitPolicy = {
+      host: "papers.unnamed.test",
+      withoutKey: PLACEHOLDER_RATE,
+      retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
+    };
+    for (const row of [lookalike, literatureShaped]) {
+      expect(() => expectNamed(table, [row]), row.host).toThrow(
+        /has no row for/,
+      );
+      expect(() => expectTranscribed(table, [row]), row.host).toThrow(
+        /has no row for/,
+      );
+    }
+  });
+
+  it("refuses an LLM/TTS cell that has lost its (LLM) marker, on a hand-built table", () => {
+    // The marker is what says a figure is the LLM hosts' and not a TTS one
+    // (TTS is undecided). The real §7.3 always carries it, so only a table
+    // built here can show the guard firing.
+    const columns = ["Host", "Retry base", "Retry cap", "Attempt cap"];
+    const marked: Section73Table = {
+      columns,
+      rows: [
+        [LLM_ROW_HOST_CELL, "1000 ms (LLM)", "60 000 ms (LLM)", "5 (LLM)"],
+      ],
+    };
+    const unmarked: Section73Table = {
+      columns,
+      rows: [[LLM_ROW_HOST_CELL, "1000 ms", "60 000 ms", "5"]],
+    };
+    expect(section73CellFor(marked, anthropicRow, "Attempt cap")).toBe("5");
+    expect(() =>
+      section73CellFor(unmarked, anthropicRow, "Attempt cap"),
+    ).toThrow(/no "\(LLM\)" marker/);
+  });
+
+  it("does not let an LLM row's budget stand in for a literature row's own cells", () => {
+    // Only the `LLM_RETRY_BUDGET` object routes a row to the shared row. A
+    // literature host carrying a copy of the LLM numbers is still read
+    // against its own §7.3 row, whose cells (1000 / 30 000 / 3) differ.
+    const table = readSection73Table();
+    const ncbiWithWrongBudget: HostRateLimitPolicy = {
+      host: NCBI_HOST,
+      withoutKey: PLACEHOLDER_RATE,
+      retry: { baseMs: 1000, capMs: 60_000, maxAttempts: 5 },
+    };
+    expect(() => expectTranscribed(table, [ncbiWithWrongBudget])).toThrow();
   });
 });

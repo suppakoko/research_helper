@@ -16,14 +16,16 @@
  *
  * ## Why there is exactly one backoff shape in this file
  *
- * Three different shapes appear in the corpus and only one of them is shipped
- * for source hosts:
+ * Three different shapes appear in the corpus and only one of them is shipped,
+ * for source hosts and LLM hosts alike:
  *
  * - §7.3's decorrelated jitter, `min(cap, random(base, prev*3))` — **this one**.
- * - `docs/03` §11.6's full jitter over `min(cap, base * 2**attempt)`, for LLM
- *   providers. `P3-T05` step 7 adds it, and its `Files` list modifies this
- *   module, so the two will sit side by side with the retryable *sets* keeping
- *   them apart. Nothing in Phase 1 may use it.
+ * - `docs/03` §11.6's full jitter over `min(cap, base * 2**attempt)`, once meant
+ *   for LLM providers. **Not written anywhere** *(corrected 2026-10-20,
+ *   `P3-T38`, `plan/00` §6 items 240 and 247: this bullet said `P3-T05` step 7
+ *   would add it here beside the decorrelated jitter; the owner chose one
+ *   shape, so LLM hosts use this one, with `LLM_RETRY_BUDGET` from
+ *   `./hostLimiter.ts`)*.
  * - `docs/05` §9.4's inline sketch, which that section itself rules out.
  *
  * ## The three numbers §7.3 does not give

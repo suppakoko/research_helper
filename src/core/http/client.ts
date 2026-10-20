@@ -26,7 +26,14 @@
  *    `redactText` before it is attached, because some hosts put their own
  *    structured error in a 4xx body — arXiv's Atom error feed arrives as HTTP
  *    400 — and the adapter is the only layer that can read it. The
- *    classification itself is unchanged for every status and every host.
+ *    classification itself is unchanged for every status and every host
+ *    **unless the request carries {@link HttpOptions.mapErrorResponse}**
+ *    (`P3-T38`, `plan/00` §6 item 244, owner, 2026-10-20): then, for a status
+ *    of 400 or above, that hook is asked first — with the body already through
+ *    `redactText` — and an error it returns is thrown in place of the class
+ *    above, *inside* the attempt, so the retry decision below is taken on it.
+ *    That is how an LLM adapter makes a spend-cap 429 a `QuotaExceededError`
+ *    that ends the request after one attempt. No literature adapter passes one.
  * 3. **Retry**, through `./retry.ts`, over the retryable classes only and
  *    never over a `TimeoutError` (`plan/00` §6 item 230, 2026-10-20), with the
  *    delay coming from `Retry-After` or from the host's injected jitter, and
@@ -124,6 +131,7 @@ import {
   PolicyViolationError,
   RateLimitError,
   redactUrl,
+  type ResearchHelperError,
   TimeoutError,
   UpstreamServerError,
 } from "../errors";
@@ -199,7 +207,49 @@ export interface HttpOptions {
    * {@link createHttpClient}).
    */
   readonly onCanceller?: (cancel: () => void) => void;
+  /**
+   * Reads an error answer **before** the client classifies it. `P3-T38`
+   * (`plan/00` §6 item 244, owner, 2026-10-20; `docs/07` §7.3's dated note
+   * "An LLM host's error answer is read before the retry decision").
+   *
+   * Absent — which is every literature adapter — the client classifies every
+   * status itself, exactly as before. Present, it is called once per attempt
+   * whose status is 400 or above, inside that attempt, **after** the host's
+   * advertised limits are adopted and after a 429/503 `Retry-After` has
+   * `penalize`d the host, and **before** the client picks a class. An error it
+   * returns is thrown instead of the client's own, so `withRetry` decides on
+   * it: a `retryable: false` class such as `QuotaExceededError` ends the
+   * request after one attempt. `undefined` leaves the client's class in place.
+   *
+   * Per request rather than per host, because the LLM adapters'
+   * `mapProviderError` (`src/llm/shared/errorMap.ts`) needs the request's
+   * model id, which a `HOST_POLICIES` row does not know — and a row in
+   * `src/core/` could not import that function anyway.
+   *
+   * The hook never sees the raw body: see {@link ErrorResponseMapper}.
+   */
+  readonly mapErrorResponse?: ErrorResponseMapper;
 }
+
+/**
+ * {@link HttpOptions.mapErrorResponse}'s shape.
+ *
+ * `response` is the answer as the client received it **except that its
+ * `body` has already been put through `src/core/provenance.ts`'s
+ * `redactText`** — the same gate `classify`'s `BadRequestError` body passes —
+ * so a hook cannot attach an unredacted body to anything it builds.
+ * `nowEpochMs` is the client's injected `clock.now()`, for an HTTP-date
+ * `Retry-After`. The `Retry-After` parse itself stays `parseRetryAfter` in
+ * `src/core/rateLimit/backoff.ts`; a hook that needs one calls that.
+ *
+ * Whatever the hook returns must already be redacted (`ResearchHelperError.
+ * context`'s rule). A hook that throws instead of returning has its error
+ * surface unchanged, which is not retried unless it is a retryable §10.1 class.
+ */
+export type ErrorResponseMapper = (
+  response: HttpResponse,
+  nowEpochMs: number,
+) => ResearchHelperError | undefined;
 
 /**
  * `P0-T15`'s name for {@link HttpOptions}, kept as an alias.
@@ -597,7 +647,14 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
         // too — the response that says most about the host's limits is the one
         // that refused us.
         adoptLimits(limiter, response, host, deps.logger);
-        return classify(response, host, limiter, clock.now(), options.token);
+        return classify(
+          response,
+          host,
+          limiter,
+          clock.now(),
+          options.token,
+          options.mapErrorResponse,
+        );
       };
 
       const attemptOnce = async (): Promise<HttpResponse> => {
@@ -833,6 +890,13 @@ function adoptLimits(
  * load-bearing here: without it `Date.parse` reads `"120.5"` as the year 120 and
  * this function would hand `penalize` a deadline two millennia in the past,
  * which clamps to "retry immediately" against a host that just asked us to stop.
+ *
+ * **The request's own mapping comes before the status branches** (`P3-T38`).
+ * When the request carries {@link HttpOptions.mapErrorResponse}, it is asked
+ * after the `penalize` above — a host that sent `Retry-After` is parked
+ * whichever class the answer becomes — and before any class is chosen. The
+ * hook gets the answer with its body through `redactText`, never the raw one.
+ * Without a hook nothing below changes.
  */
 function classify(
   response: HttpResponse,
@@ -840,6 +904,7 @@ function classify(
   limiter: RateLimiterPort | undefined,
   nowMs: number,
   token: CancellationToken | undefined,
+  mapErrorResponse: ErrorResponseMapper | undefined,
 ): HttpResponse {
   const { status } = response;
   if (status < 400) {
@@ -855,6 +920,23 @@ function classify(
       : undefined;
   if (retryAfterMs !== undefined) {
     limiter?.penalize(nowMs + retryAfterMs, `HTTP ${status} Retry-After`);
+  }
+
+  if (mapErrorResponse !== undefined) {
+    // `redactText` before the body leaves this module, so the hook — adapter
+    // code — cannot attach an unredacted body to the error it builds. Only
+    // `body` is replaced; status, URL and the header lookup are the response's.
+    const mapped = mapErrorResponse(
+      {
+        status: response.status,
+        url: response.url,
+        body: redactText(response.body),
+        rawHeaders: response.rawHeaders,
+        header: (name) => response.header(name),
+      },
+      nowMs,
+    );
+    if (mapped !== undefined) throw mapped;
   }
 
   if (status === 429) {

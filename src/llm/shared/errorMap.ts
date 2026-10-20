@@ -37,14 +37,28 @@
  *
  * ## What the shipped HTTP client does first — read before calling this
  *
- * `src/core/http/client.ts`'s `classify` already turns every status of 400
- * and above into a `docs/07` §10.1 class **inside** the retry loop, and only
- * its `BadRequestError` carries the (redacted) body. So an adapter that calls
- * through that client sees a 429 as a `RateLimitError` with no body, after
- * the retries, and cannot ask this function about the spend cap at all. That
- * gap is recorded in `docs/07` §7.3's dated note "LLM hosts' retry budget"
- * and in `P3-T05`'s report; this function is correct for any caller that can
- * hand it the status, the headers and the body.
+ * `src/core/http/client.ts`'s `classify` turns every status of 400 and above
+ * into a `docs/07` §10.1 class **inside** the retry loop — unless the request
+ * carries `mapErrorResponse` (`HttpOptions`, `P3-T38`, `plan/00` §6 item 244;
+ * `docs/07` §7.3's dated note "An LLM host's error answer is read before the
+ * retry decision"). Each adapter passes, with every request, a hook that
+ * calls this function:
+ *
+ * ```ts
+ * mapErrorResponse: (response, nowEpochMs) =>
+ *   mapProviderError(providerId, modelId, response.status,
+ *     (name) => response.header(name), response.body, nowEpochMs),
+ * ```
+ *
+ * The client asks the hook inside the attempt, after `penalize` and before it
+ * picks a class, and throws what it returns; so a spend cap comes back as
+ * `QuotaExceededError` and the loop stops after one attempt, while an ordinary
+ * 429 is a `RateLimitError` the loop still retries. The `body` the hook sees
+ * has already been through `redactText`; a body the redactor left unparseable
+ * as JSON is mapped by its status alone. A 2xx is never handed to the hook:
+ * the adapter calls this function on the returned response itself, outside
+ * the loop, for the refusal row. Correct for any other caller that can hand
+ * it the status, the headers and the body.
  *
  * ## Nothing from the body reaches the error unredacted
  *

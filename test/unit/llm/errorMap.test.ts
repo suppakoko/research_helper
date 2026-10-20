@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createManualClock } from "../../../src/core/clock";
+import { type Clock, createManualClock } from "../../../src/core/clock";
 import {
   AuthenticationError,
   AuthorizationError,
@@ -13,6 +13,13 @@ import {
   StructuredOutputError,
   UpstreamServerError,
 } from "../../../src/core/errors";
+import {
+  createHttpClient,
+  type ErrorResponseMapper,
+  type HttpExceptionClass,
+  type HttpTransport,
+  type HttpTransportXhr,
+} from "../../../src/core/http/client";
 import {
   isRetriedAutomatically,
   retryPolicyFromBudget,
@@ -714,5 +721,182 @@ describe("mapProviderError — docs/03 §11.5 onto docs/07 §10.1", () => {
     );
     expect(map("openai", 401, "")).toBeInstanceOf(AuthenticationError);
     expect(map("anthropic", 400, "not json")).toBeInstanceOf(BadRequestError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P3-T38 — the same function, reached through the shipped HTTP client
+// (`plan/00` §6 item 244, owner, 2026-10-20)
+// ---------------------------------------------------------------------------
+
+/** A synthetic LLM host: no LLM row ships yet, and no request leaves Node. */
+const LLM_URL = "https://llm.example.test/v1/messages";
+const UA =
+  "research_helper/9.9.9 (https://example.test; mailto:x@example.test)";
+
+class StubZoteroException extends Error {}
+
+/** A transport that answers call `i` with `answers[i]` (the last repeats). */
+function scriptedTransport(
+  answers: readonly { status: number; body?: string }[],
+): HttpTransport & { readonly calls: number[] } {
+  const calls: number[] = [];
+  return {
+    calls,
+    request() {
+      const answer = answers[Math.min(calls.length, answers.length - 1)];
+      calls.push(calls.length);
+      const xhr: HttpTransportXhr = {
+        status: answer?.status ?? 0,
+        responseText: answer?.body ?? "",
+        responseURL: LLM_URL,
+        getAllResponseHeaders: () => "",
+      };
+      return Promise.resolve(xhr);
+    },
+    UnexpectedStatusException:
+      StubZoteroException as unknown as HttpExceptionClass<
+        Error & { readonly xmlhttp: HttpTransportXhr }
+      >,
+    TimeoutException: StubZoteroException,
+    BrowserOfflineException: StubZoteroException,
+    SecurityException: StubZoteroException,
+    CancelledException: StubZoteroException,
+  };
+}
+
+/** A clock whose waits all return at once and are recorded. */
+function recordingClock(): Clock & { readonly slept: number[] } {
+  const slept: number[] = [];
+  return {
+    slept,
+    now: () => NOW,
+    sleep: (ms: number) => {
+      slept.push(ms);
+      return Promise.resolve();
+    },
+  };
+}
+
+/** The hook an adapter (`P3-T07`–`P3-T10`) passes with every request. */
+function adapterHook(providerId: ProviderId): ErrorResponseMapper {
+  return (response, nowEpochMs) =>
+    mapProviderError(
+      providerId,
+      MODEL,
+      response.status,
+      (name) => response.header(name),
+      response.body,
+      nowEpochMs,
+    );
+}
+
+/** A real `createHttpClient` with the LLM rows' budget for the synthetic host. */
+function llmClient(transport: HttpTransport, clock: Clock) {
+  return createHttpClient({
+    transport,
+    userAgent: UA,
+    clock,
+    retryFor: () => retryPolicyFromBudget(LLM_RETRY_BUDGET, () => 0),
+  });
+}
+
+describe("mapProviderError through the shipped HTTP client (P3-T38, item 244)", () => {
+  const SPEND_CAP_BODY = JSON.stringify(
+    anthropicError("rate_limit_error", "spend cap", {
+      error_code: "enforced_spend_limit_reached",
+    }),
+  );
+
+  it("turns Anthropic's spend-cap 429 into QuotaExceededError after exactly one transport call", async () => {
+    const transport = scriptedTransport([
+      { status: 429, body: SPEND_CAP_BODY },
+    ]);
+    const clock = recordingClock();
+
+    const error = await llmClient(transport, clock)
+      .request("POST", LLM_URL, { mapErrorResponse: adapterHook("anthropic") })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(QuotaExceededError);
+    expect((error as QuotaExceededError).messageKey).toBe("rh-error-quota");
+    expect(LLM_RETRY_BUDGET.maxAttempts).toBe(5);
+    expect(transport.calls).toHaveLength(1);
+    expect(clock.slept).toStrictEqual([]);
+  });
+
+  it("turns OpenAI's insufficient_quota 429 into QuotaExceededError after one call too", async () => {
+    const transport = scriptedTransport([
+      {
+        status: 429,
+        body: JSON.stringify(
+          openaiError("insufficient_quota", "insufficient_quota"),
+        ),
+      },
+    ]);
+
+    const error = await llmClient(transport, recordingClock())
+      .request("POST", LLM_URL, { mapErrorResponse: adapterHook("openai") })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(QuotaExceededError);
+    expect(transport.calls).toHaveLength(1);
+  });
+
+  it("still retries an ordinary Anthropic 429 as a RateLimitError", async () => {
+    const ordinary = JSON.stringify(anthropicError("rate_limit_error"));
+
+    // Recovers on the second attempt.
+    const recovering = scriptedTransport([
+      { status: 429, body: ordinary },
+      { status: 200, body: "{}" },
+    ]);
+    await expect(
+      llmClient(recovering, recordingClock()).request("POST", LLM_URL, {
+        mapErrorResponse: adapterHook("anthropic"),
+      }),
+    ).resolves.toMatchObject({ status: 200 });
+    expect(recovering.calls).toHaveLength(2);
+
+    // Never recovers: all five attempts, then the RateLimitError.
+    const refusing = scriptedTransport([{ status: 429, body: ordinary }]);
+    const clock = recordingClock();
+    const error = await llmClient(refusing, clock)
+      .request("POST", LLM_URL, { mapErrorResponse: adapterHook("anthropic") })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect(error).not.toBeInstanceOf(QuotaExceededError);
+    expect(refusing.calls).toHaveLength(LLM_RETRY_BUDGET.maxAttempts);
+    expect(clock.slept).toHaveLength(LLM_RETRY_BUDGET.maxAttempts - 1);
+  });
+
+  it("keeps a synthetic key in the 429 body out of the resulting error", async () => {
+    const key = "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef0123";
+    const body = JSON.stringify({
+      type: "error",
+      error: {
+        type: "rate_limit_error",
+        message: `spend cap reached for ${key}`,
+        details: { error_code: "enforced_spend_limit_reached", key },
+      },
+      request_id: key,
+    });
+    const transport = scriptedTransport([{ status: 429, body }]);
+
+    const error = (await llmClient(transport, recordingClock())
+      .request("POST", LLM_URL, { mapErrorResponse: adapterHook("anthropic") })
+      .catch((e: unknown) => e)) as ResearchHelperError;
+
+    // Still recognised: redaction left the JSON and the marker intact.
+    expect(error).toBeInstanceOf(QuotaExceededError);
+    expect(transport.calls).toHaveLength(1);
+    const everything = [
+      error.message,
+      JSON.stringify(error.context),
+      error.stack ?? "",
+      JSON.stringify(error.toSerialized()),
+    ].join(" ");
+    expect(everything).not.toContain(key);
+    expect(everything).not.toContain("sk-ant-api03");
   });
 });

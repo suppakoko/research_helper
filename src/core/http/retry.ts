@@ -23,7 +23,8 @@
  *   `docs/07` §10.1's own `retryable` flag rather than a second opinion about
  *   status codes. Which of those this loop retries **by itself** is
  *   {@link isRetriedAutomatically}: every one except a `TimeoutError`
- *   (`plan/00` §6 item 230, owner, 2026-10-20).
+ *   (`plan/00` §6 item 230, owner, 2026-10-20) and a `StructuredOutputError`
+ *   (`plan/00` §6 item 244, owner, 2026-10-20).
  * - How long the attempts and the waits between them may take **in total** is
  *   {@link REQUEST_BUDGET_MS}, a 90-second budget per request (`plan/00` §6
  *   item 233, owner, 2026-10-21; `docs/07` §7.3's dated note). Once it is
@@ -57,6 +58,7 @@ import type { Clock } from "../clock";
 import {
   RateLimitError,
   ResearchHelperError,
+  StructuredOutputError,
   TimeoutError,
   UpstreamServerError,
 } from "../errors";
@@ -111,11 +113,23 @@ export function isRetryableError(error: unknown): boolean {
  * subclass of `NetworkError`, which is why the exclusion is by class: the
  * plain network failure it extends is still retried.
  *
+ * **A `StructuredOutputError` is excluded the same way** (`P3-T38`, `plan/00`
+ * §6 item 244, owner, 2026-10-20). `docs/03` §14.1's authority note puts it
+ * outside the transport retry set: it is `retryable: true` because its retry
+ * is the one-shot repair prompt (`docs/12` §18.3), and re-sending the same
+ * request because its answer failed to parse would buy the same answer again.
+ * Its flag stays `true`; only this loop skips it.
+ *
  * @param error - whatever the attempt threw
- * @returns `true` only for a retryable error that is not a timeout
+ * @returns `true` only for a retryable error that is neither a timeout nor a
+ *   structured-output failure
  */
 export function isRetriedAutomatically(error: unknown): boolean {
-  return isRetryableError(error) && !(error instanceof TimeoutError);
+  return (
+    isRetryableError(error) &&
+    !(error instanceof TimeoutError) &&
+    !(error instanceof StructuredOutputError)
+  );
 }
 
 // ---------------------------------------------------------------------------
