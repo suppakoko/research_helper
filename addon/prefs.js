@@ -120,13 +120,14 @@ pref("concurrency", 3);
 // deliberately doubles Zotero's own 30 000 ms default because LLM calls are
 // long (docs/07 §7.3). Range 10–600. Bound in docs/08 §7.3 → Advanced.
 pref("timeoutSeconds", 60);
-// Spend ceilings, 0 = off (docs/07 §8.5; semantics in docs/06 §11.4):
-// run.maxSpendUSD is the per-run cap, run.maxSessionSpendUSD the
-// per-Zotero-session one. Neither is bound by a control; both are listed here
-// so they are visible in about:config. Changing either default is gate G-20
-// (P3-T32).
-pref("run.maxSpendUSD", 0);
-pref("run.maxSessionSpendUSD", 0);
+// Spend ceilings in whole US cents, 0 = off (docs/07 §8.5; semantics in
+// docs/06 §11.4): run.maxSpendCents is the per-run cap,
+// run.maxSessionSpendCents the per-Zotero-session one. Every surface shows and
+// accepts dollars. Neither is bound by a control; both are listed here so they
+// are visible in about:config. Changing either default is gate G-20 (P3-T32;
+// renamed from the USD keys by P3-T39, plan/00 §6 item 245).
+pref("run.maxSpendCents", 0);
+pref("run.maxSessionSpendCents", 0);
 // How far the pref migrations of docs/07 §8.5.3 have got. 0 = none has run, and
 // no migration entry exists yet: §8.5.3 is explicit that renames applied
 // before first release need no entry, only document updates.

@@ -1896,11 +1896,13 @@ pref("extensions.zotero.research-helper.logLevel", "warn");
 // Global cache cap in MB, 100–5000 (07-… §8.5; cap semantics in 07-… §9.2). Bound in the Advanced
 // groupbox of 08-ui-ux-spec.md §7.3, so it needs a default here or the field paints empty.
 pref("extensions.zotero.research-helper.cache.maxSizeMB", 500);
-// Spend ceilings, 0 = off (07-… §8.5; semantics in 06-… §11.4): run.maxSpendUSD is the
-// per-run cap, run.maxSessionSpendUSD the per-Zotero-session one. Neither is bound by a
-// control; both are listed here so they are visible in about:config.
-pref("extensions.zotero.research-helper.run.maxSpendUSD", 0);
-pref("extensions.zotero.research-helper.run.maxSessionSpendUSD", 0);
+// Spend ceilings in whole US cents, 0 = off (07-… §8.5; semantics in 06-… §11.4):
+// run.maxSpendCents is the per-run cap, run.maxSessionSpendCents the per-Zotero-session one.
+// Every surface shows and accepts dollars. Neither is bound by a control; both are listed
+// here so they are visible in about:config. Corrected 2026-10-20 (plan/00 §6 item 245;
+// owner: store as integer cents): these were run.maxSpendUSD and run.maxSessionSpendUSD.
+pref("extensions.zotero.research-helper.run.maxSpendCents", 0);
+pref("extensions.zotero.research-helper.run.maxSessionSpendCents", 0);
 // General contact address, NOT NCBI-specific: it is sent only as Crossref's `mailto`
 // parameter. NCBI always receives the maintainer address per NBK25497. See
 // 02-literature-database-apis.md §2.2.

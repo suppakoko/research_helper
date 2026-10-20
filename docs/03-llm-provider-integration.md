@@ -1031,6 +1031,15 @@ Three traps worth calling out:
 > - **The batch budget below stays a pipeline-level limit**, for the `llm` worker pool card (`P3-T17`). It is not part
 >   of the per-request retry.
 
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 244). A spend cap is classified before the retry decision and is not
+> retried.** Built by `P3-T38`. Each LLM adapter passes a hook, `mapErrorResponse`, with every request it sends through
+> `src/core/http/client.ts`. For an answer with status 400 or above the client asks the hook inside the attempt, before
+> it picks a class, and the hook answers with `mapProviderError` (`src/llm/shared/errorMap.ts`). So Anthropic's
+> `enforced_spend_limit_reached` 429 and OpenAI's `insufficient_quota` 429 (trap 3 in §11.5) become
+> `QuotaExceededError`, which is not retryable, and the request ends after one attempt. An ordinary 429 is still a
+> `RateLimitError` and is retried under the budget above. The hook only ever sees the body after `redactText`. The
+> details are in doc 07 §7.3's note "An LLM host's error answer is read before the retry decision".
+
 ```ts
 const RETRYABLE = new Set(['rate_limit', 'overloaded', 'server', 'network']);
 
@@ -1161,7 +1170,7 @@ So the OpenRouter surcharge is a **one-time ~5.5% on top-up**, not a per-call ta
 
 1. **Reasoning tokens.** At `high`/`xhigh` effort, output tokens can be 3–5× the visible text. Running the summarization pass at default effort instead of `low` can triple the output bill. **Default summarization to the lowest effort each provider allows.**
 2. **Long-context surcharge tiers.** `gpt-6-astra` doubles input price above 272,000 prompt tokens (from `pricing.overrides` in OpenRouter's catalogue). A "stuff all 100 abstracts into one call" design crosses this threshold and costs more than 100 small calls. Prefer per-paper calls.
-3. **Full-text vs. abstracts.** Full text is the **default** under D7 (`summary.fullTextMode: auto`), so price for it rather than treating it as an exception. Per-paper input goes from ~350 tokens (abstract) to ~6,000–8,000 (a typical journal article), and [06-summarization-and-trend-report.md](06-summarization-and-trend-report.md) §5.4 — the authority on this number — gives the whole-run multiplier as **~8× for a typical journal-article corpus** that fits the single-shot budget, rising to **~32×** once papers are long enough to be chunked. The bare per-paper token ratio (~20×) is *not* the run multiplier, because the abstract-mode run also pays for clustering, reduction, report and critique calls that full-text mode does not multiply. Budget against ~32×. The mandatory pre-run cost estimate and the `summary.confirmAboveUSD` confirmation gate are the controls; see §12.3.
+3. **Full-text vs. abstracts.** Full text is the **default** under D7 (`summary.fullTextMode: auto`), so price for it rather than treating it as an exception. Per-paper input goes from ~350 tokens (abstract) to ~6,000–8,000 (a typical journal article), and [06-summarization-and-trend-report.md](06-summarization-and-trend-report.md) §5.4 — the authority on this number — gives the whole-run multiplier as **~8× for a typical journal-article corpus** that fits the single-shot budget, rising to **~32×** once papers are long enough to be chunked. The bare per-paper token ratio (~20×) is *not* the run multiplier, because the abstract-mode run also pays for clustering, reduction, report and critique calls that full-text mode does not multiply. Budget against ~32×. The mandatory pre-run cost estimate and the `summary.confirmAboveCents` confirmation gate are the controls; see §12.3. *(Corrected 2026-10-20, `plan/00` §6 item 245; owner: store as integer cents. The key was ~~`summary.confirmAboveUSD`~~; the dialog still shows dollars.)*
 4. **Retries are billed.** A failed structured-output parse that triggers a retry doubles that call's cost. Validate cheaply and retry narrowly.
 
 ### 12.4 Cost estimator UI recommendation
@@ -1254,6 +1263,12 @@ x-goog-api-key: AIza...
 > prompt in `12-prompt-library.md` §18.3, which is a different mechanism at a different layer, and
 > putting it in the transport loop would re-send the same malformed request. Do not write a second
 > error class; construct doc 07's.
+>
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 244).** The exclusion above is now enforced in code:
+> `isRetriedAutomatically` in `src/core/http/retry.ts` returns `false` for a `StructuredOutputError`, by class, as it
+> already did for `TimeoutError`, so `withRetry` never re-sends a request because its answer failed to parse. The
+> class keeps `retryable = true`. Until this date the exclusion was a rule in this note only: the loop would have
+> retried the class had anything thrown it inside the loop (nothing did).
 
 ```ts
 // ── Model metadata ───────────────────────────────────────────────────────────

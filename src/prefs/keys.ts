@@ -98,7 +98,7 @@ export const PREF_KEYS = {
   // Summarization (docs/07 §8.5, "Summarization"; P3-T32).
   summaryFullTextMode: "summary.fullTextMode",
   summaryFullTextAutoMaxPapers: "summary.fullTextAutoMaxPapers",
-  summaryConfirmAboveUSD: "summary.confirmAboveUSD",
+  summaryConfirmAboveCents: "summary.confirmAboveCents",
   summaryMinAbstractChars: "summary.minAbstractChars",
   fullTextPreferJATS: "fullText.preferJATS",
   fullTextHardPageCap: "fullText.hardPageCap",
@@ -118,8 +118,8 @@ export const PREF_KEYS = {
   // Runtime & concurrency (docs/07 §8.5, "Runtime & concurrency").
   concurrency: "concurrency",
   timeoutSeconds: "timeoutSeconds",
-  runMaxSpendUSD: "run.maxSpendUSD",
-  runMaxSessionSpendUSD: "run.maxSessionSpendUSD",
+  runMaxSpendCents: "run.maxSpendCents",
+  runMaxSessionSpendCents: "run.maxSessionSpendCents",
   prefsSchemaVersion: "prefsSchemaVersion",
 
   // Diagnostics (docs/07 §8.5, "Diagnostics").

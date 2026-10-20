@@ -276,7 +276,7 @@ const SECTION_8_5: readonly Section85Row[] = [
     25,
     { min: 1 },
   ),
-  row("summaryConfirmAboveUSD", "summary.confirmAboveUSD", "number", 2.0, {
+  row("summaryConfirmAboveCents", "summary.confirmAboveCents", "integer", 200, {
     min: 0,
   }),
   row("summaryMinAbstractChars", "summary.minAbstractChars", "integer", 250, {
@@ -322,8 +322,8 @@ const SECTION_8_5: readonly Section85Row[] = [
   row("reportPerPaperNotes", "report.perPaperNotes", "boolean", false),
   // Runtime & concurrency
   row("concurrency", "concurrency", "integer", 3, { min: 1, max: 8 }),
-  row("runMaxSpendUSD", "run.maxSpendUSD", "number", 0, { min: 0 }),
-  row("runMaxSessionSpendUSD", "run.maxSessionSpendUSD", "number", 0, {
+  row("runMaxSpendCents", "run.maxSpendCents", "integer", 0, { min: 0 }),
+  row("runMaxSessionSpendCents", "run.maxSessionSpendCents", "integer", 0, {
     min: 0,
   }),
   // Non-secret key-presence flags
@@ -396,7 +396,7 @@ const NO_PREF_LINE: readonly string[] = [
   "llm.tokenEstimateCalibration",
   "summary.fullTextMode",
   "summary.fullTextAutoMaxPapers",
-  "summary.confirmAboveUSD",
+  "summary.confirmAboveCents",
   "summary.minAbstractChars",
   "fullText.preferJATS",
   "fullText.hardPageCap",
@@ -543,8 +543,21 @@ describe("PREFS transcribes docs/07 §8.5", () => {
   });
 
   it("ships both spend ceilings off at 0 (gate G-20)", () => {
-    expect(PREFS.runMaxSpendUSD.default).toBe(0);
-    expect(PREFS.runMaxSessionSpendUSD.default).toBe(0);
+    expect(PREFS.runMaxSpendCents.default).toBe(0);
+    expect(PREFS.runMaxSessionSpendCents.default).toBe(0);
+  });
+
+  it("declares no number row, because Gecko stores no fraction (P3-T39)", () => {
+    // `plan/00` §6 item 245: the preference store holds boolean, integer and
+    // string values only, so a `number` row could hold a value that does not
+    // round-trip. `PrefDef` keeps `"number"` in its union (§8.5.1's interface,
+    // verbatim); no shipped row may use it. Money is whole cents.
+    const numberRows = PREF_NAMES.filter((name) => {
+      const def: PrefDef<unknown> = PREFS[name];
+      return def.type === "number";
+    });
+    expect(numberRows).toEqual([]);
+    expect(PREFS.summaryConfirmAboveCents.default).toBe(200);
   });
 
   it("reads the semanticscholar.keyPresent row back from docs/07 §8.5 itself (P2-T05)", () => {
@@ -725,31 +738,39 @@ describe("getPref coerces and falls back", () => {
     }
   });
 
-  it("reads a fractional number for a number row and refuses one for an integer row (P3-T32)", () => {
-    // `summary.confirmAboveUSD` and the two `run.*` ceilings are §8.5
-    // `number`s, so a dollar amount with cents is a legal value; the stringified
-    // form is the pane's `String(value)` foot-gun again.
+  it("reads whole cents for a money row and refuses a fractional amount (P3-T39)", () => {
+    // `summary.confirmAboveCents` and the two `run.*` ceilings are §8.5
+    // integers holding US cents (`plan/00` §6 item 245), so $2.50 is stored as
+    // 250. A stored 2.5 — a dollar figure written into a cents row, or a value
+    // Gecko could not hold — is the wrong type and falls back to the default.
+    setPrefStore(createMemoryPrefStore({ "summary.confirmAboveCents": 250 }));
+    expect(getPref("summaryConfirmAboveCents")).toBe(250);
+    // The stringified form is the pane's `String(value)` foot-gun again.
+    setPrefStore(createMemoryPrefStore({ "summary.confirmAboveCents": "250" }));
+    expect(getPref("summaryConfirmAboveCents")).toBe(250);
+    setPrefStore(createMemoryPrefStore({ "summary.confirmAboveCents": 2.5 }));
+    expect(getPref("summaryConfirmAboveCents")).toBe(200);
     setPrefStore(
       createMemoryPrefStore({
-        "summary.confirmAboveUSD": "2.5",
-        "run.maxSpendUSD": 0.75,
-        "cache.maxSizeMB": "250.5",
+        "summary.confirmAboveCents": "2.5",
+        "run.maxSpendCents": 0.75,
+        "run.maxSessionSpendCents": "1.5",
       }),
     );
-    expect(getPref("summaryConfirmAboveUSD")).toBe(2.5);
-    expect(getPref("runMaxSpendUSD")).toBe(0.75);
-    expect(getPref("cacheMaxSizeMB")).toBe(500);
+    expect(getPref("summaryConfirmAboveCents")).toBe(200);
+    expect(getPref("runMaxSpendCents")).toBe(0);
+    expect(getPref("runMaxSessionSpendCents")).toBe(0);
   });
 
   it("falls back to 0 (off) for a negative spend ceiling rather than reading it (P3-T32)", () => {
     setPrefStore(
       createMemoryPrefStore({
-        "run.maxSpendUSD": -1,
-        "run.maxSessionSpendUSD": "-5",
+        "run.maxSpendCents": -1,
+        "run.maxSessionSpendCents": "-5",
       }),
     );
-    expect(getPref("runMaxSpendUSD")).toBe(0);
-    expect(getPref("runMaxSessionSpendUSD")).toBe(0);
+    expect(getPref("runMaxSpendCents")).toBe(0);
+    expect(getPref("runMaxSessionSpendCents")).toBe(0);
   });
 
   it("holds the two JSON rows as strings and leaves parsing to their readers (P3-T32)", () => {

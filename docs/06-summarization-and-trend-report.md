@@ -522,14 +522,14 @@ Default per-call budgets (tunable in prefs; `03-llm-provider-integration.md` own
 >
 > - Full text is used for every item that satisfies conditions 2 and 3.
 > - The mandatory cost preview (below) is computed for the whole run **before** any call is dispatched.
-> - If the estimate exceeds `summary.confirmAboveUSD` (default **$2.00**), the run requires an explicit confirmation that names the figure and offers a one-click "use abstracts instead" downgrade.
-> - ~~If `run.maxSpendUSD` is set and the estimate exceeds it, the run refuses rather than prompting.~~ **Corrected 2026-10-20** (see the decision note below): if `run.maxSpendUSD` or `run.maxSessionSpendUSD` (§11.4) is set and the estimate exceeds it, the run **pauses before its first call**, shows the amount spent so far, and asks whether to continue. It does not refuse.
+> - If the estimate exceeds `summary.confirmAboveCents` (default **200 cents, shown as $2.00**; *Corrected 2026-10-20, `plan/00` §6 item 245: the key was ~~`summary.confirmAboveUSD`~~*), the run requires an explicit confirmation that names the figure and offers a one-click "use abstracts instead" downgrade.
+> - ~~If `run.maxSpendUSD` is set and the estimate exceeds it, the run refuses rather than prompting.~~ **Corrected 2026-10-20** (see the decision note below): if `run.maxSpendCents` or `run.maxSessionSpendCents` (§11.4; *Corrected 2026-10-20, `plan/00` §6 item 245: named ~~`run.maxSpendUSD`~~ and ~~`run.maxSessionSpendUSD`~~ until the integer-cents rename*) is set and the estimate exceeds it, the run **pauses before its first call**, shows the amount spent so far, and asks whether to continue. It does not refuse.
 >
 > `summary.fullTextAutoMaxPapers` is retained but its meaning changes: above that size, `auto` **pre-selects the abstract-only downgrade in the confirmation dialog** rather than silently applying it. The user always sees what the expensive choice costs and is never quietly given the cheap one.
 >
 > **This puts the IMRaD section detector on the critical path.** It was previously shielded by `fullTextMode: never`. It is unvalidated (§4.3), so it must be spiked against a real PDF fixture set before Phase 3 ships — see [11-implementation-roadmap.md](11-implementation-roadmap.md) risks R-19 and R-19b. Until it passes, `auto` must degrade to whole-document chunking rather than mis-labelled sections; a wrong section label is worse than no section label, because the summary prompt trusts it.
 
-> **Decided 2026-10-20 (owner; `plan/00` §6 item 234).** A run that reaches its spend ceiling **pauses**; it is not refused. This applies to both ceilings in §11.4, `run.maxSpendUSD` (per run) and `run.maxSessionSpendUSD` (per Zotero session), and to both moments a ceiling can be reached: when the pre-run estimate already exceeds it, and when a call during the run would cross it. At the ceiling the run:
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 234).** A run that reaches its spend ceiling **pauses**; it is not refused. This applies to both ceilings in §11.4, `run.maxSpendCents` (per run) and `run.maxSessionSpendCents` (per Zotero session) *(Corrected 2026-10-20, `plan/00` §6 item 245: this note named them ~~`run.maxSpendUSD`~~ and ~~`run.maxSessionSpendUSD`~~ before the integer-cents rename)*, and to both moments a ceiling can be reached: when the pre-run estimate already exceeds it, and when a call during the run would cross it. At the ceiling the run:
 >
 > 1. pauses;
 > 2. shows the amount spent so far;
@@ -561,10 +561,12 @@ Estimated output   ~71,000 tokens
 Estimated cost         ~$2.90
 Estimated time         ~10 min
 
-Above your $2.00 confirmation threshold (summary.confirmAboveUSD).
+Above your $2.00 confirmation threshold (summary.confirmAboveCents).
 
         [Cancel]   [Use abstracts instead — ~$1.68]   [Run anyway]
 ```
+
+*Corrected 2026-10-20 (`plan/00` §6 item 245; owner: store as integer cents): the sample's last line named ~~`summary.confirmAboveUSD`~~. The preference holds `200` cents; the dialog shows it as $2.00.*
 
 The figures are worked from this document's own numbers so a reviewer can check them. **Input:** 38 single-shot full-text map calls at ~12 k each (system + scaffold + serialized schema + abstract + body) ≈ 456 k; 4 abstract-only calls at ~3.4 k ≈ 14 k; `THEME_CLUSTER` ~6 k; 5 `CLUSTER_REDUCE` calls at ~11 k ≈ 55 k; the report call ~19 k; `SELF_CRITIQUE` ~57 k. **Output:** the §5.2 `max_tokens` ceilings at typical fill ≈ 71 k. **Calls:** 42 + 1 + 5 + 1 + 1 = 50, at the default `llm` pool concurrency of 3 (`07-architecture-and-data-model.md` §7.2). **Dollars** assume $3 / M input and $15 / M output purely so the arithmetic is checkable; the real per-model numbers come from the live pricing table in `03-llm-provider-integration.md`, which is the reason OpenRouter is the default provider (D6). The abstract-only downgrade is the same pipeline at ~280 k input and ~56 k output.
 
@@ -1837,8 +1839,8 @@ Also cache at coarser granularity, so re-running a report with an edited prompt 
 ### 11.4 Cost control
 
 - **Estimate and confirm before every run** (§5.4). Never start a paid run without showing a number.
-- **Hard budget cap** per run (`run.maxSpendUSD`; key, type and default in `07-architecture-and-data-model.md` §8.5, which ships it off). ~~Abort with partial results preserved when exceeded.~~ **Corrected 2026-10-20** (owner decision; `plan/00` §6 item 234; see the decision note in §5.4): when the cap is reached, the run **pauses**, shows the amount spent so far, and asks whether to continue. Summaries already made are kept.
-- **Hard budget cap per session** (`run.maxSessionSpendUSD`; same schema section, also shipped off). Identical semantics to the per-run cap — the same `BudgetGuard` (`07-…` §4.3), the same `BudgetExceededError` (`07-…` §10.1), the same ~~abort-with-partial-results behaviour~~ pause-and-ask behaviour (**corrected 2026-10-20**, as in the bullet above; summaries already made are kept) — over a different counter. **This document owns the difference:** the per-run counter starts at zero for every job, while the session counter accumulates across every job in the same Zotero process and **resets only when Zotero restarts**. It is never persisted, because a spending ceiling that survives a restart is a monthly budget, which this is not, and because a persisted counter that drifts from the user's real provider bill is worse than no counter. Both ceilings are checked before each call and the *stricter* one wins; the confirmation dialog names whichever one it is about to hit. This is the per-session ceiling `10-requirements-and-user-stories.md` NFR-5 requires, distinct from the per-job one.
+- **Hard budget cap** per run (`run.maxSpendCents`, whole US cents, shown and entered as dollars; key, type and default in `07-architecture-and-data-model.md` §8.5, which ships it off; *Corrected 2026-10-20, `plan/00` §6 item 245: was ~~`run.maxSpendUSD`~~*). ~~Abort with partial results preserved when exceeded.~~ **Corrected 2026-10-20** (owner decision; `plan/00` §6 item 234; see the decision note in §5.4): when the cap is reached, the run **pauses**, shows the amount spent so far, and asks whether to continue. Summaries already made are kept.
+- **Hard budget cap per session** (`run.maxSessionSpendCents`, whole US cents like the per-run cap; same schema section, also shipped off; *Corrected 2026-10-20, `plan/00` §6 item 245: was ~~`run.maxSessionSpendUSD`~~*). Identical semantics to the per-run cap — the same `BudgetGuard` (`07-…` §4.3), the same `BudgetExceededError` (`07-…` §10.1), the same ~~abort-with-partial-results behaviour~~ pause-and-ask behaviour (**corrected 2026-10-20**, as in the bullet above; summaries already made are kept) — over a different counter. **This document owns the difference:** the per-run counter starts at zero for every job, while the session counter accumulates across every job in the same Zotero process and **resets only when Zotero restarts**. It is never persisted, because a spending ceiling that survives a restart is a monthly budget, which this is not, and because a persisted counter that drifts from the user's real provider bill is worse than no counter. Both ceilings are checked before each call and the *stricter* one wins; the confirmation dialog names whichever one it is about to hit. This is the per-session ceiling `10-requirements-and-user-stories.md` NFR-5 requires, distinct from the per-job one.
 - **Provider prompt caching:** the system prompt is identical across all N map calls. Anthropic and OpenAI both support prompt caching that can cut the repeated prefix cost substantially. Owned by `03-llm-provider-integration.md`; this pipeline must simply keep the system prompt **byte-identical across calls in a run** (no per-paper interpolation into the system message — which is already required by the injection boundary in §7).
 - **Record actual usage.** Every call's `usage` block goes into the run manifest. Show the real cost afterwards, not just the estimate, and use the delta to calibrate the token estimator (§5.1).
 
@@ -2155,7 +2157,7 @@ Preferences whose semantics this feature owns (all on the `extensions.zotero.res
 | --- | --- | --- |
 | `summary.fullTextMode` | **`auto`** | `never` \| `auto` \| `always` (DR-1, §5.4). Ships `auto` per the 2026-09-08 decision: full text whenever available, gated by the cost preview rather than by content triggers. |
 | `summary.fullTextAutoMaxPapers` | `25` | Above this collection size, the confirmation dialog **pre-selects** the abstract-only downgrade. It no longer applies the downgrade silently. |
-| `summary.confirmAboveUSD` | `2.00` | Estimated run cost above which explicit confirmation is required. |
+| `summary.confirmAboveCents` | `200` ($2.00) | Estimated run cost, in whole US cents, above which explicit confirmation is required; shown and entered as dollars. *Corrected 2026-10-20 (`plan/00` §6 item 245): was ~~`summary.confirmAboveUSD`, `2.00`~~.* |
 | `summary.minAbstractChars` | `250` | Below this, the abstract is treated as absent. |
 | `fullText.preferJATS` | `true` | D-06-1: prefer Europe PMC JATS over local PDF when both exist. |
 | `fullText.hardPageCap` | `60` | D-06-3: above this, accept truncated cached text. |
@@ -2172,14 +2174,14 @@ Preferences whose semantics this feature owns (all on the `extensions.zotero.res
 | `screening.retractionPolicy` | `exclude_from_synthesis` | |
 | `screening.nonEnglishPolicy` | `translate_summary` | |
 | `screening.dedupe` | `true` | |
-| `run.maxSpendUSD` | `0` (off) | Hard budget cap, per run. |
-| `run.maxSessionSpendUSD` | `0` (off) | Hard budget cap, per Zotero session; resets on restart and is never persisted (§11.4). |
+| `run.maxSpendCents` | `0` (off) | Hard budget cap, per run, in whole US cents; shown and entered as dollars. *Corrected 2026-10-20 (`plan/00` §6 item 245): was ~~`run.maxSpendUSD`~~.* |
+| `run.maxSessionSpendCents` | `0` (off) | Hard budget cap, per Zotero session, in whole US cents; resets on restart and is never persisted (§11.4). *Corrected 2026-10-20 (`plan/00` §6 item 245): was ~~`run.maxSessionSpendUSD`~~.* |
 
 ---
 
 ## 16. Open questions for the team
 
-1. ~~**Full-text default.**~~ **Resolved 2026-09-08: ships `fullTextMode: auto`**, meaning full text whenever available, with cost confirmation above `summary.confirmAboveUSD`. See the decision note in §5.4. The consequence is that the IMRaD detector is no longer optional — it must be validated in Phase 3, not deferred.
+1. ~~**Full-text default.**~~ **Resolved 2026-09-08: ships `fullTextMode: auto`**, meaning full text whenever available, with cost confirmation above `summary.confirmAboveCents` (*Corrected 2026-10-20, `plan/00` §6 item 245: was ~~`summary.confirmAboveUSD`~~*). See the decision note in §5.4. The consequence is that the IMRaD detector is no longer optional — it must be validated in Phase 3, not deferred.
 2. **`getStructuredDocumentText`.** Now a **required** spike, not an optional one (§3.3.5) — full-text mode ships on by default, so reliable IMRaD detection is on the critical path. If it exposes font geometry, section detection becomes reliable; if it does not, `auto` degrades to whole-document chunking and the summary prompt must stop claiming section provenance.
 3. **Bibliography formatting.** Needs the citeproc API confirmed (§10.3). Who owns that verification — this doc or `01`?
 4. **Better Notes integration.** Ship it, or keep the dependency surface at zero?

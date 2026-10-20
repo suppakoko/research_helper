@@ -1070,8 +1070,10 @@ be reproduced verbatim, not paraphrased — and ask for explicit acceptance.
 residual half is still open).
 
 **What the human must do.** Answer the question `docs/10` §5 question 6 actually
-leaves open: should `run.maxSpendUSD` or `run.maxSessionSpendUSD` ship non-zero,
-so a first run can stop itself rather than only warn? If yes, change the defaults
+leaves open: should `run.maxSpendCents` or `run.maxSessionSpendCents` ship non-zero,
+so a first run can stop itself rather than only warn? (Corrected 2026-10-20,
+`plan/00` §6 item 245: the keys were ~~`run.maxSpendUSD`~~ and
+~~`run.maxSessionSpendUSD`~~; a value is now whole US cents, so $5.00 is `500`.) If yes, change the defaults
 in `docs/07` §8.5 — the question says "and nowhere else". Thereafter, approve
 every change to a ceiling as its own act.
 
@@ -1082,8 +1084,9 @@ raising a ceiling is materially a spending authorization.
 
 **If it is not done.** The schema's current defaults ship, which `docs/10` §5
 question 6 states are both off — so nothing aborts on a limit the user did not
-set, and the mandatory pre-run estimate plus the `summary.confirmAboveUSD`
-confirmation are the only protection. That is a real degraded path, and it is the
+set, and the mandatory pre-run estimate plus the `summary.confirmAboveCents`
+confirmation are the only protection (Corrected 2026-10-20, item 245: was
+~~`summary.confirmAboveUSD`~~). That is a real degraded path, and it is the
 current design; it is also exactly the exposure `docs/11` R-4 calls
 reputationally fatal.
 

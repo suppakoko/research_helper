@@ -854,6 +854,8 @@ npm run typecheck && npm run test:unit -- "llm/openrouter|hostLimiter"
 none is recorded by this card. `GET /api/v1/models` needs no key, which is what lets `P3-T13` use
 it as the price source for all four providers.
 
+> **2026-10-20 (`P3-T38`, `plan/00` §6 item 244):** pass `mapErrorResponse: (response, nowEpochMs) => mapProviderError("openrouter", <modelId>, response.status, (name) => response.header(name), response.body, nowEpochMs)` in the `HttpOptions` of every request this adapter sends through `src/core/http/client.ts`. The client calls it for status 400 and above inside each attempt (after `penalize`, before classifying, body already through `redactText`) and throws what it returns, so a spend cap ends after one attempt as `QuotaExceededError` while an ordinary 429 is still retried. Call `mapProviderError` yourself on a 2xx answer for the refusal row, outside the loop. Write no retry loop and change nothing in `HttpClientDeps` or `installServices`. Give this adapter's `HOST_POLICIES` row `retry: LLM_RETRY_BUDGET` (the object itself), which `test/unit/core/backoff.test.ts` checks against `docs/07` §7.3's "LLM/TTS hosts" row. Pass `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240) as the request's `timeoutMs`.
+
 ---
 
 ### P3-T08 — OpenAI adapter (Responses API)
@@ -921,6 +923,8 @@ npm run typecheck && npm run test:unit -- "llm/openai|hostLimiter"
 
 **Notes.** `countTokens()` returns the shared heuristic, synchronous, a bare `number`; treat it as
 inexact at every call site (`docs/03` §10.2 authority note).
+
+> **2026-10-20 (`P3-T38`, `plan/00` §6 item 244):** pass `mapErrorResponse: (response, nowEpochMs) => mapProviderError("openai", <modelId>, response.status, (name) => response.header(name), response.body, nowEpochMs)` in the `HttpOptions` of every request this adapter sends through `src/core/http/client.ts`. The client calls it for status 400 and above inside each attempt (after `penalize`, before classifying, body already through `redactText`) and throws what it returns, so a spend cap ends after one attempt as `QuotaExceededError` while an ordinary 429 is still retried. Call `mapProviderError` yourself on a 2xx answer for the refusal row, outside the loop. Write no retry loop and change nothing in `HttpClientDeps` or `installServices`. Give this adapter's `HOST_POLICIES` row `retry: LLM_RETRY_BUDGET` (the object itself), which `test/unit/core/backoff.test.ts` checks against `docs/07` §7.3's "LLM/TTS hosts" row. Pass `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240) as the request's `timeoutMs`.
 
 ---
 
@@ -993,6 +997,8 @@ npm run typecheck && npm run test:unit -- "llm/anthropic|hostLimiter"
 **Notes.** `P3-T16`'s estimator may use the exact count to calibrate, never to gate (`docs/03`
 §10.2). The dependency on `tokenEstimate.ts` now points at `P3-T06`, which this card depends on;
 before 2026-10-20 it pointed at `P3-T13`, which depends on this card.
+
+> **2026-10-20 (`P3-T38`, `plan/00` §6 item 244):** pass `mapErrorResponse: (response, nowEpochMs) => mapProviderError("anthropic", <modelId>, response.status, (name) => response.header(name), response.body, nowEpochMs)` in the `HttpOptions` of every request this adapter sends through `src/core/http/client.ts`. The client calls it for status 400 and above inside each attempt (after `penalize`, before classifying, body already through `redactText`) and throws what it returns, so a spend cap ends after one attempt as `QuotaExceededError` while an ordinary 429 is still retried. Call `mapProviderError` yourself on a 2xx answer for the refusal row, outside the loop. Write no retry loop and change nothing in `HttpClientDeps` or `installServices`. Give this adapter's `HOST_POLICIES` row `retry: LLM_RETRY_BUDGET` (the object itself), which `test/unit/core/backoff.test.ts` checks against `docs/07` §7.3's "LLM/TTS hosts" row. Pass `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240) as the request's `timeoutMs`.
 
 ---
 
@@ -1069,6 +1075,8 @@ npm run typecheck && npm run test:unit -- "llm/gemini|hostLimiter"
 ```
 
 **Notes.** A live Gemini call on the free tier is governed by gate `G-06`; this card makes none.
+
+> **2026-10-20 (`P3-T38`, `plan/00` §6 item 244):** pass `mapErrorResponse: (response, nowEpochMs) => mapProviderError("gemini", <modelId>, response.status, (name) => response.header(name), response.body, nowEpochMs)` in the `HttpOptions` of every request this adapter sends through `src/core/http/client.ts`. The client calls it for status 400 and above inside each attempt (after `penalize`, before classifying, body already through `redactText`) and throws what it returns, so a spend cap ends after one attempt as `QuotaExceededError` while an ordinary 429 is still retried. Call `mapProviderError` yourself on a 2xx answer for the refusal row, outside the loop. Write no retry loop and change nothing in `HttpClientDeps` or `installServices`. Give this adapter's `HOST_POLICIES` row `retry: LLM_RETRY_BUDGET` (the object itself), which `test/unit/core/backoff.test.ts` checks against `docs/07` §7.3's "LLM/TTS hosts" row. Pass `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240) as the request's `timeoutMs`.
 
 ---
 
@@ -1525,16 +1533,19 @@ moved to `pipeline/` because `ui/` cannot reach `resolveBaseUrl()` in `llm/`.
 that reaches a spend ceiling **pauses and asks whether to continue**, keeping everything done so
 far.
 
-> **Decided 2026-10-20 (owner, `plan/00` §6 item 234 c):** reaching `run.maxSpendUSD` or
-> `run.maxSessionSpendUSD` **pauses the run and asks** whether to continue, as `docs/11` §1's
+> **Decided 2026-10-20 (owner, `plan/00` §6 item 234 c):** reaching `run.maxSpendCents` or
+> `run.maxSessionSpendCents` *(Corrected 2026-10-20, `plan/00` §6 item 245: this note named
+> ~~`run.maxSpendUSD`~~ and ~~`run.maxSessionSpendUSD`~~; the three money prefs are now whole US
+> cents, renamed by `P3-T39`, and this card converts to dollars for every comparison it shows and
+> every value it accepts)* **pauses the run and asks** whether to continue, as `docs/11` §1's
 > definition of done and `P3-T31` already say. `docs/06` §5.4 ("the run refuses rather than
 > prompting") — and the "abort" wording of §11.4 — **change first**; the coordinator edits
 > `docs/06`, not this card. Do not start this card's step 4 before that edit lands.
 
 **Read first.**
 - `docs/06-summarization-and-trend-report.md` §5.4 — DR-1, the cost model, the mandatory preview,
-  `summary.confirmAboveUSD`, the abstract-only downgrade (read the ceiling sentence as superseded
-  by the decision above)
+  `summary.confirmAboveCents` (Corrected 2026-10-20, item 245: was ~~`summary.confirmAboveUSD`~~),
+  the abstract-only downgrade (read the ceiling sentence as superseded by the decision above)
 - `docs/06-summarization-and-trend-report.md` §11.4 — two ceilings, checked before each call, the
   stricter binds, the session counter never persisted
 - `docs/07-architecture-and-data-model.md` §4.3 `BudgetGuard` and §12.3 — `Estimating →
@@ -1564,8 +1575,9 @@ far.
 1. `estimateRun()`: per item, resolve the input scope, estimate tokens with `estTokens`, add the
    `docs/06` §5.2 output ceilings, count calls, price through `pricing.ts` including overrides;
    produce the selected plan and the abstract-only downgrade.
-2. Confirmation: always show the dialog; above `summary.confirmAboveUSD` require a second explicit
-   acknowledgement; pre-select (never silently apply) the abstract-only downgrade above
+2. Confirmation: always show the dialog; above `summary.confirmAboveCents` (whole US cents; the
+   dialog shows dollars — Corrected 2026-10-20, item 245: was ~~`summary.confirmAboveUSD`~~)
+   require a second explicit acknowledgement; pre-select (never silently apply) the abstract-only downgrade above
    `summary.fullTextAutoMaxPapers`. Embed `P3-T15`'s disclosure block.
 3. `BudgetGuard` with a per-run counter and an in-memory session counter (reset on restart);
    check both before every call; the stricter binds; name it in the dialog.
@@ -1578,8 +1590,9 @@ far.
    in preferences.
 7. Strings per §0.2 item 1.
 
-> **Open — recommended:** ship `run.maxSessionSpendUSD` non-zero at a value the owner names, and
-> keep `run.maxSpendUSD` off, so a first run can stop itself without a per-run cap the user never
+> **Open — recommended:** ship `run.maxSessionSpendCents` non-zero at a value the owner names, and
+> keep `run.maxSpendCents` off (Corrected 2026-10-20, item 245: were ~~`run.maxSessionSpendUSD`~~
+> and ~~`run.maxSpendUSD`~~), so a first run can stop itself without a per-run cap the user never
 > set; until the owner answers `G-20`, `P3-T32` ships `docs/07`'s current defaults (both `0`, off).
 > Changes `docs/07` §8.5 (Runtime). (Review §4 item 10.)
 
@@ -1594,8 +1607,10 @@ far.
 **Done when.**
 - [ ] `estimateRun()` over `docs/06` §5.4's worked example reproduces its map-phase arithmetic
       within 10 % (42 calls; the 8 synthesis calls are Phase 4's).
-- [ ] Above `summary.confirmAboveUSD` the confirm button needs a second acknowledgement.
-- [ ] With `run.maxSpendUSD = 0.01` the job pauses before its first call and asks; answering
+- [ ] Above `summary.confirmAboveCents` the confirm button needs a second acknowledgement.
+      (Corrected 2026-10-20, item 245: was ~~`summary.confirmAboveUSD`~~.)
+- [ ] With `run.maxSpendCents = 1` ($0.01; Corrected 2026-10-20, item 245: was
+      ~~`run.maxSpendUSD = 0.01`~~) the job pauses before its first call and asks; answering
       "continue" proceeds, "stop" ends it with nothing lost.
 - [ ] A ceiling set mid-run pauses the job at the first call that would breach it, prior summaries
       retained.
@@ -2814,7 +2829,8 @@ the result is recorded.
 2. Run the same item through all four providers and show that only the adapter differs.
 3. State the 100-abstract job's estimate and stop for approval (`G-21`); then record wall-clock time
    against NFR-4 and actual usage against the estimate.
-4. Set `run.maxSpendUSD` to `0.01` and confirm the job pauses before the first item and asks.
+4. Set `run.maxSpendCents` to `1` ($0.01) and confirm the job pauses before the first item and
+   asks. (Corrected 2026-10-20, item 245: was ~~`run.maxSpendUSD` to `0.01`~~.)
 5. Run a 200-item job on the mock provider, cancel at item 87, confirm 86 are retained and the
    re-run resumes correctly.
 6. **Key-leak check, never by the agent holding key characters:** the owner runs
@@ -2845,7 +2861,8 @@ the result is recorded.
 - [ ] One item summarized by all four providers yields four `StoredSummary` rows differing only in
       `providerId`, `modelId` and `usage`.
 - [ ] The 100-abstract job's time and actual usage are recorded against NFR-4 and the estimate.
-- [ ] With `run.maxSpendUSD = 0.01` the job pauses before the first item and asks.
+- [ ] With `run.maxSpendCents = 1` ($0.01) the job pauses before the first item and asks.
+      (Corrected 2026-10-20, item 245: was ~~`run.maxSpendUSD = 0.01`~~.)
 - [ ] Cancel at 87/200 retains 86; the re-run dispatches 114.
 - [ ] The owner-run count script reports zero matches for every key.
 - [ ] The IMRaD outcome is recorded with its number and the resulting configuration.
@@ -2902,12 +2919,15 @@ Phase 7. Only the owner changes a card's state to `DONE`.
      `anthropic.baseUrl`; `summaryModel`, `reportModel`, `screening.model`; `privacy.mode`;
      ⚠ `privacy.egressAcknowledged`; ⚠ `llm.tokenEstimateCalibration`.
    - Summarization: `summary.fullTextMode`, `summary.fullTextAutoMaxPapers`,
-     `summary.confirmAboveUSD`, `summary.minAbstractChars`, `fullText.preferJATS`,
+     ~~`summary.confirmAboveUSD`~~ (now `summary.confirmAboveCents`; Corrected 2026-10-20,
+     item 245, renamed by `P3-T39`), `summary.minAbstractChars`, `fullText.preferJATS`,
      `fullText.hardPageCap`, `autoSummarize`, `screening.threshold`, `screening.retractionPolicy`,
      `screening.nonEnglishPolicy`, `screening.dedupe`, `cache.enabled`, `cache.ignoreModel`,
      ⚠ `cache.lastSeenPromptVersions`, `cache.maxSizeMB`.
    - Report: `report.perPaperNotes`.
-   - Runtime: `concurrency`, `run.maxSpendUSD`, `run.maxSessionSpendUSD`.
+   - Runtime: `concurrency`, ~~`run.maxSpendUSD`~~, ~~`run.maxSessionSpendUSD`~~ (now
+     `run.maxSpendCents`, `run.maxSessionSpendCents`; Corrected 2026-10-20, item 245, renamed by
+     `P3-T39`).
    - Key-presence: `openrouter.keyPresent`, `openai.keyPresent`, `gemini.keyPresent`,
      `anthropic.keyPresent`; `<id>.lastValidatedAt` and `<id>.lastValidationResult` for the six ids
      `openrouter`, `openai`, `gemini`, `anthropic`, `ncbi`, `semanticscholar`.

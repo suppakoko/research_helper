@@ -27,8 +27,8 @@ declare namespace _ZoteroTypes {
       "cache.maxSizeMB": number;
       "concurrency": number;
       "timeoutSeconds": number;
-      "run.maxSpendUSD": number;
-      "run.maxSessionSpendUSD": number;
+      "run.maxSpendCents": number;
+      "run.maxSessionSpendCents": number;
       "prefsSchemaVersion": number;
       "logLevel": string;
       "logRequestBodies": boolean;

@@ -345,14 +345,16 @@ export const PREFS = {
   },
 
   /**
-   * Estimated cost (USD) above which the confirmation dialog appears. §8.5: a
-   * `number`, ≥ 0, default `2.00`. Not a spend ceiling — those are the two
-   * `run.*` rows below.
+   * Estimated cost, in **whole US cents**, above which the confirmation dialog
+   * appears. §8.5: an `integer`, ≥ 0, default `200` ($2.00). Gecko holds no
+   * fractional preference (`plan/00` §6 item 245), so every money row is cents;
+   * the dialog shows and accepts dollars and converts at the boundary. Not a
+   * spend ceiling — those are the two `run.*` rows below.
    */
-  summaryConfirmAboveUSD: {
-    key: PREF_KEYS.summaryConfirmAboveUSD,
-    type: "number",
-    default: 2,
+  summaryConfirmAboveCents: {
+    key: PREF_KEYS.summaryConfirmAboveCents,
+    type: "integer",
+    default: 200,
     min: 0,
   },
 
@@ -498,23 +500,25 @@ export const PREFS = {
   },
 
   /**
-   * Per-job spend ceiling in USD. **`0` means off, and it ships off**: §8.5's
-   * default, and changing it is gate `G-20`, not a card's choice (P3-T32).
+   * Per-job spend ceiling in **whole US cents** (shown and accepted as dollars;
+   * P3-T39). **`0` means off, and it ships off**: §8.5's default, and changing
+   * it is gate `G-20`, not a card's choice (P3-T32).
    */
-  runMaxSpendUSD: {
-    key: PREF_KEYS.runMaxSpendUSD,
-    type: "number",
+  runMaxSpendCents: {
+    key: PREF_KEYS.runMaxSpendCents,
+    type: "integer",
     default: 0,
     min: 0,
   },
 
   /**
-   * Per-Zotero-session spend ceiling in USD (NFR-5). Ships off at `0`, as
-   * `runMaxSpendUSD`; the running total lives in memory and is never persisted.
+   * Per-Zotero-session spend ceiling in whole US cents (NFR-5). Ships off at
+   * `0`, as `runMaxSpendCents`; the running total lives in memory and is never
+   * persisted.
    */
-  runMaxSessionSpendUSD: {
-    key: PREF_KEYS.runMaxSessionSpendUSD,
-    type: "number",
+  runMaxSessionSpendCents: {
+    key: PREF_KEYS.runMaxSessionSpendCents,
+    type: "integer",
     default: 0,
     min: 0,
   },

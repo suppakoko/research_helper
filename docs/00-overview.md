@@ -133,8 +133,10 @@ request; the API's own default is `"allow"`.
 `summary.fullTextMode` ships as `auto`, meaning: use the PDF or JATS full text
 whenever it exists and materially exceeds the abstract, and fall back to the
 abstract otherwise. Cost is controlled by a mandatory pre-run estimate with a
-confirmation dialog above `summary.confirmAboveUSD` (default $2.00) — not by
-silently preferring the cheap path.
+confirmation dialog above `summary.confirmAboveCents` (default 200 cents, shown
+as $2.00) — not by silently preferring the cheap path. *(Corrected 2026-10-20,
+`plan/00` §6 item 245; owner: store as integer cents. The key was
+~~`summary.confirmAboveUSD`~~.)*
 
 **This decision has a cost.** Full-text runs cost roughly **8×** an abstract-only run for a
 typical journal-article corpus, and up to **~32×** when papers are long enough to require

@@ -2589,9 +2589,39 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 >   its body, inside the retry loop. So an Anthropic spend-cap 429 (`enforced_spend_limit_reached`, which
 >   `03-llm-provider-integration.md` §11.1 says must not be retried) is retried like a rate limit until the attempt cap
 >   or the budget ends it, and the adapter cannot tell it apart afterwards. `mapProviderError` in
->   `src/llm/shared/errorMap.ts` maps that body correctly once a caller can hand it over.
+>   `src/llm/shared/errorMap.ts` maps that body correctly once a caller can hand it over. *(Corrected 2026-10-20,
+>   `plan/00` §6 item 244: this gap is closed by `P3-T38`. An LLM request now hands the client its own error mapping,
+>   which the client asks before it picks a class, so a spend cap ends after one attempt. See the note "An LLM host's
+>   error answer is read before the retry decision" below.)*
 > - **Not part of this decision.** The batch budget (§11.6's "e.g. 30 min") is a pipeline-level limit for the `llm`
 >   worker pool card, `P3-T17`. TTS hosts share this table row but are not decided.
+
+> **An LLM host's error answer is read before the retry decision. Decided 2026-10-20 (owner; `plan/00` §6 item 244).**
+> Built by `P3-T38`; the owner left the design to that card, which chose a hook passed with each request.
+> - **The hook.** A request may carry `mapErrorResponse` in its `HttpOptions` (`src/core/http/client.ts`). For an
+>   answer with status 400 or above, the client calls it inside the attempt: after the host's advertised limits are
+>   adopted, after a 429 or 503 `Retry-After` has `penalize`d the host, and before the client picks a class. An error
+>   the hook returns is thrown in place of the client's own, so `withRetry` decides on it. A `QuotaExceededError`
+>   (`retryable: false`) therefore ends the request after one attempt; a `RateLimitError` or `UpstreamServerError` is
+>   retried under the row's budget as before. A hook that returns nothing leaves the client's own class in place.
+> - **Per request, not per host.** Each LLM adapter (`P3-T07`–`P3-T10`) passes a hook that calls `mapProviderError`
+>   (`src/llm/shared/errorMap.ts`) with its provider id, the request's model id, and the answer's status, headers and
+>   body, plus the clock reading the client hands it. A hook on a `HOST_POLICIES` row could not know the model, and
+>   `src/core/` may not import `src/llm/`. The composition root does not change.
+> - **The hook sees only a redacted body.** The client gives the hook the answer with its body already put through
+>   `redactText` (`src/core/provenance.ts`), the gate the `BadRequestError` body already passes, so no hook can attach
+>   an unredacted body. Measured limit: when the redactor's 40-character catch-all matches straight after a JSON escape
+>   such as `\n`, the body no longer parses as JSON, and `mapProviderError` maps it by status alone. Such a spend cap is
+>   then retried as a rate limit, which is the behaviour before this note, not a leak.
+> - **Literature hosts are unchanged.** They pass no hook, so their 429, 401, 403, 5xx and other 4xx produce the same
+>   classes as before, with a body only on `BadRequestError`, retried under each row's budget, and with `penalize`
+>   called from `Retry-After` before the error is thrown.
+> - **A parse failure is never re-sent by the retry loop.** `isRetriedAutomatically` in `src/core/http/retry.ts`
+>   returns `false` for a `StructuredOutputError`, by class, as it does for a `TimeoutError`. The class stays
+>   `retryable: true`, because its retry is the repair prompt (`03-llm-provider-integration.md` §14.1).
+> - **LLM rows are checked against the shared row.** `test/unit/core/backoff.test.ts` checks a `HOST_POLICIES` row whose
+>   `retry` is `LLM_RETRY_BUDGET` (the same object) against the "LLM/TTS hosts" row of the table above. Every other row
+>   is still checked against the row that names its host.
 
 ### 7.4 Cancellation
 
@@ -2986,7 +3016,7 @@ Zotero notes / attachments
 | Key *presence* flags & last-validation result | `Zotero.Prefs` | `...openai.keyPresent`, `...openai.lastValidatedAt`, `...openai.lastValidationResult` — the full set is in **§8.5** | Lets the prefs pane render without a keychain round-trip on every paint. Booleans, timestamps and one short status enum only — never any part of a key. |
 | Model / voice / language selections | `Zotero.Prefs` | `...<provider>.model`, `...tts.voice`, `...tts.language` | Small scalars. Exact keys, types and defaults: **§8.5**. |
 | Privacy mode, per-collection overrides | `Zotero.Prefs` (global) + SQLite (per-collection) | `...privacy.mode`; table `collection_settings` | Per-collection overrides are unbounded in number, so they need a table. |
-| Concurrency, budget caps | `Zotero.Prefs` | `...concurrency`, `...run.maxSpendUSD` | Exact keys, types and defaults: **§8.5**. |
+| Concurrency, budget caps | `Zotero.Prefs` | `...concurrency`, `...run.maxSpendCents` | Exact keys, types and defaults: **§8.5**. *(Corrected 2026-10-20 (`plan/00` §6 item 245; owner: store as integer cents): was ~~`...run.maxSpendUSD`~~.)* |
 | Cached raw source responses | SQLite `cache_entry` (+ blob file if > 256 KB) | `sha256(sourceId \| endpoint \| normalizedParams)` | High churn, needs TTL + eviction. |
 | `CanonicalWork` | SQLite `work` | PK `work_key` | Queried by ID and joined constantly. |
 | `SourceRecord` | SQLite `source_record` | PK `id`, FK `work_key` | Enables re-merge without refetch. |
@@ -3191,6 +3221,8 @@ Rows marked **⚠** are settings the design uses but no document had declared as
 
 > **Decided 2026-10-20 (owner; `plan/00` §6 item 241):** `privacy.egressAcknowledged`, `llm.tokenEstimateCalibration` and `cache.lastSeenPromptVersions` ship as written, with the types and defaults their rows give, and their ⚠ marks are removed. `P3-T32` adds them to `src/prefs/schema.ts`; none of the three gets a `pref()` line (`01-zotero-plugin-platform.md` §7.2).
 
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 245): money preferences are stored as whole US cents, and the unit is part of the key.** Gecko's preference store holds only booleans, integers and strings (§8.2: `setBoolPref`/`setStringPref`/`setIntPref`), so a fractional row such as $2.50 cannot round-trip. The three money rows are therefore `summary.confirmAboveCents` (integer, `200`, i.e. $2.00), `run.maxSpendCents` (integer, `0` = off) and `run.maxSessionSpendCents` (integer, `0` = off), each ≥ 0. Every surface shows and accepts **dollars** and converts at the boundary; only the stored value is in cents. They replace ~~`summary.confirmAboveUSD`~~, ~~`run.maxSpendUSD`~~ and ~~`run.maxSessionSpendUSD`~~ (`number` rows), which never shipped, so no migration entry is needed (§8.5.3). Defaults keep their meaning: 200 cents is the same $2.00, and both ceilings still ship off (gate `G-20`). `P3-T39` makes the change.
+
 #### Sources & search
 
 | Key | Type | Default | Values | Semantics owned by | Surfaced in UI |
@@ -3236,7 +3268,7 @@ Model IDs churn on a scale of weeks. These are **seed defaults only** — the pi
 |---|---|---|---|---|---|
 | `summary.fullTextMode` | string | `"auto"` | `never` \| `auto` \| `always` | `06-summarization-and-trend-report.md` §5.4 (decision D7) | Report/summarize dialog, per run; `strict` privacy mode forces `never` (doc 09 §3.5) |
 | `summary.fullTextAutoMaxPapers` | integer | `25` | ≥ 1 | `06-summarization-and-trend-report.md` §5.4 | Not user-visible; changes which option the cost dialog pre-selects |
-| `summary.confirmAboveUSD` | number | `2.00` | ≥ 0 | `06-summarization-and-trend-report.md` §5.4 | Cost-confirmation dialog names the figure; no prefs-pane control yet |
+| `summary.confirmAboveCents` | integer | `200` | ≥ 0 | `06-summarization-and-trend-report.md` §5.4 | Cost-confirmation dialog names the figure; no prefs-pane control yet. The value is **US cents** (`200` = $2.00); every surface shows and accepts dollars and converts at the boundary. *(Corrected 2026-10-20 (`plan/00` §6 item 245; owner: store as integer cents): was ~~`summary.confirmAboveUSD`, number, `2.00`~~.)* |
 | `summary.minAbstractChars` | integer | `250` | ≥ 0 | `06-summarization-and-trend-report.md` §5.4 | Not user-visible |
 | `fullText.preferJATS` | boolean | `true` | — | `06-summarization-and-trend-report.md` §3.1 (D-06-1) | Not user-visible |
 | `fullText.hardPageCap` | integer | `60` | ≥ 1 | `06-summarization-and-trend-report.md` §3.3 (D-06-3) | Not user-visible |
@@ -3281,8 +3313,8 @@ The allowed-value enumerations for `screening.retractionPolicy` and `screening.n
 |---|---|---|---|---|---|
 | `concurrency` | integer | `3` | **1–8** | `07-architecture-and-data-model.md` §7.2 | Prefs pane → Advanced |
 | `timeoutSeconds` | integer | `60` | 10–600, step 10 | `07-architecture-and-data-model.md` §7.3 | Prefs pane → Advanced |
-| `run.maxSpendUSD` | number | `0` (off) | ≥ 0 | `06-summarization-and-trend-report.md` §11.4 | Cost dialog; no prefs-pane control yet |
-| `run.maxSessionSpendUSD` | number | `0` (off) | ≥ 0 | `06-summarization-and-trend-report.md` §11.4 | Cost dialog; no prefs-pane control yet. Same semantics as `run.maxSpendUSD` — a hard ceiling that aborts with partial results preserved — but scoped to the **Zotero session** rather than to one job: the running total lives in memory and resets to zero when Zotero restarts, so it is never persisted. Required by `10-requirements-and-user-stories.md` NFR-5, which asks for a per-session ceiling distinct from the per-job one. |
+| `run.maxSpendCents` | integer | `0` (off) | ≥ 0 | `06-summarization-and-trend-report.md` §11.4 | Cost dialog; no prefs-pane control yet. The value is **US cents**; every surface shows and accepts dollars and converts at the boundary. *(Corrected 2026-10-20 (`plan/00` §6 item 245; owner: store as integer cents): was ~~`run.maxSpendUSD`, number~~.)* |
+| `run.maxSessionSpendCents` | integer | `0` (off) | ≥ 0 | `06-summarization-and-trend-report.md` §11.4 | Cost dialog; no prefs-pane control yet. The value is **US cents**, shown and accepted as dollars like `run.maxSpendCents`. *(Corrected 2026-10-20 (`plan/00` §6 item 245; owner: store as integer cents): was ~~`run.maxSessionSpendUSD`, number~~.)* Same semantics as `run.maxSpendCents` — ~~a hard ceiling that aborts with partial results preserved~~ a ceiling at which the run **pauses and asks** whether to continue, partial results kept *(Corrected 2026-10-20: owner decision, `plan/00` §6 item 234; `06-summarization-and-trend-report.md` §5.4)* — but scoped to the **Zotero session** rather than to one job: the running total lives in memory and resets to zero when Zotero restarts, so it is never persisted. Required by `10-requirements-and-user-stories.md` NFR-5, which asks for a per-session ceiling distinct from the per-job one. |
 | ⚠ `background.enabled` | boolean | `true` | — | `05-related-work-discovery.md` §9.6 | **Not in the pane.** §9.6 requires "a user preference to disable background network activity entirely (some institutions require this)" but names no key. |
 | ⚠ `prefsSchemaVersion` | integer | `0` | ≥ 0 | `07-architecture-and-data-model.md` §8.5.3 | Not user-visible. Bookkeeping for the pref migrations in §8.5.3; `0` means "no migration has run yet". No document declared it — it exists because the migration rule needs somewhere to record how far it has got. |
 
@@ -3441,7 +3473,7 @@ Zotero 10 loads a plugin's `prefs.js` on install, on enable, and on **every star
 2. **User-set values survive an upgrade** — they are `user_pref(...)` lines in the profile's own `prefs.js` and are untouched by plugin install/uninstall. A user who has set `concurrency` to 8 keeps 8 across upgrades and across an uninstall/reinstall cycle.
 3. **A removed pref leaves an orphan `user_pref` line** in the profile if the user had set it. It is inert, but the schema no longer describes it.
 
-**The rule: renaming or retyping a shipped preference requires a migration step.** Because the user's value lives under the old key and nothing will move it, a rename silently reverts that user to the default — which for a setting like `run.maxSpendUSD` is a spending-control regression, not a cosmetic one. Migrations go in `src/bootstrap/migrations.ts` alongside the SQLite ones, keyed off a `prefsSchemaVersion` integer pref, and run once at startup before any pref is read:
+**The rule: renaming or retyping a shipped preference requires a migration step.** Because the user's value lives under the old key and nothing will move it, a rename silently reverts that user to the default — which for a setting like `run.maxSpendCents` is a spending-control regression, not a cosmetic one. *(Corrected 2026-10-20 (`plan/00` §6 item 245; owner: store as integer cents): this sentence named ~~`run.maxSpendUSD`~~, renamed before first release, so with no migration entry.)* Migrations go in `src/bootstrap/migrations.ts` alongside the SQLite ones, keyed off a `prefsSchemaVersion` integer pref, and run once at startup before any pref is read:
 
 ```ts
 // src/bootstrap/migrations.ts
