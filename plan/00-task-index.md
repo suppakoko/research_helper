@@ -1586,15 +1586,18 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 ### 6.42 Raised by items 180–214, 2026-10-19 — items 227 and 228 wait on the owner
 
-227. **A translator lookup that misses its 30-second deadline still saves its item later (owner).** Zotero's
+227. ~~**A translator lookup that misses its 30-second deadline still saves its item later (owner).**~~ **DECIDED 2026-10-20:
+    a late-saved copy is moved to the Zotero trash when its lookup settles, and logged;** a PMID batch's deadline is
+    30 s + 1 s per PMID, at most 5 minutes; `docs/07` §12.1 first. Zotero's
     `translate()` saves into the collection itself and cannot be cancelled, so a late answer leaves a second copy beside
     the hand-mapped one (measured in Zotero 10.0.3). A PMID batch of up to 200 has one deadline, so a slow batch could
     leave up to 200 copies. Accept, detect and report, or remove the late copy; and one deadline per batch or per record.
 
-228. **The HTTP client gets no retry policy:** `container.ts` supplies no `retryFor`, so every host makes one attempt and
+228. ~~**The HTTP client gets no retry policy:**~~ **DECIDED 2026-10-20: wire `docs/07` §7.3's retry cells into the client.** `container.ts` supplies no `retryFor`, so every host makes one attempt and
     `docs/07` §7.3's retry cells are unused (owner: wire them?).
 
-229. **Smaller follow-ups:** the D10 contact guard covers `eutils` only, not `pmc.ncbi.nlm.nih.gov`; item 208's suite-wide
+229. **Smaller follow-ups** *(DECIDED 2026-10-20: do the estimate's two leftovers, the suite-wide `Translate.Search`
+    stub, and the D10 contact guard for `pmc.ncbi.nlm.nih.gov`; no converter recording):* the D10 contact guard covers `eutils` only, not `pmc.ncbi.nlm.nih.gov`; item 208's suite-wide
     `Zotero.Translate.Search` stub was never added; `docs/02` §2.4's copy of the rate table lacks the new row; the
     estimate still counts lookup-only sources in `itemCount` and charges an import of previewed works (the owner chose
     to fix both, 2026-10-19); one real converter response could be recorded for 1 request.
