@@ -712,13 +712,6 @@ export const KO_PENDING_REVIEW = [
   "rh-error-zotero",
   "rh-error-storage",
   "rh-error-cancelled",
-  // `P3-T05`'s four LLM error strings (2026-10-20). `G-41` owns the
-  // translation; the `ko-KR` bundle carries each as a commented stub with its
-  // English source. Nothing was machine-translated.
-  "rh-error-llm",
-  "rh-error-context-length",
-  "rh-error-content-filter",
-  "rh-error-structured-output",
   // `P1-T44`'s preference-pane strings. `G-41` owns the translation; the
   // `ko-KR` bundle is outside that card's `Files` list, so it carries no
   // commented stubs for these yet (reported with the card). Nothing was
@@ -898,6 +891,12 @@ export const KO_PRESENT = [
   // Item 232's refused-429 row: Korean drafted by the coordinator and
   // reviewed by the owner on 2026-10-20 (`G-41`).
   "research-helper-search-error-rate-limit",
+  // `P3-T05`'s four LLM error strings: Korean drafted by the coordinator and
+  // reviewed by the owner on 2026-10-20 (`G-41`).
+  "rh-error-llm",
+  "rh-error-context-length",
+  "rh-error-content-filter",
+  "rh-error-structured-output",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

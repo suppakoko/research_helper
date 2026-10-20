@@ -206,21 +206,15 @@ research-helper-import-fallback-reason =
 # with only `*[other]` (`docs/08` §10.2's note, §10.3).
 # rh-error-cancelled =
 #
-# `P3-T05` (2026-10-20): the four LLM error strings. On `KO_PENDING_REVIEW`;
-# nothing here was machine-translated. Keep `{ $provider }` and `{ $model }`
-# untranslated (`docs/08` §10.3).
-#
-# NEEDS REVIEW. en-US: "{ $provider } could not complete the request."
-# rh-error-llm =
-#
-# NEEDS REVIEW. en-US: "The text is too long for { $model } to read in one request."
-# rh-error-context-length =
-#
-# NEEDS REVIEW. en-US: "The model declined to summarize this paper."
-# rh-error-content-filter =
-#
-# NEEDS REVIEW. en-US: "{ $provider } returned a summary Research Helper could not read."
-# rh-error-structured-output =
+
+# `P3-T05` (2026-10-20): the four LLM error strings. Drafted by the
+# coordinator and reviewed by the owner on 2026-10-20 (G-41); nothing was
+# machine-translated. `{ $provider }` and `{ $model }` stay untranslated
+# (`docs/08` §10.3).
+rh-error-llm = { $provider }에서 요청을 처리하지 못했습니다.
+rh-error-context-length = 글이 너무 길어 { $model } 모델이 한 번에 읽을 수 없습니다.
+rh-error-content-filter = 모델이 이 논문의 요약을 거절했습니다.
+rh-error-structured-output = { $provider }에서 받은 요약을 Research Helper가 읽지 못했습니다.
 
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)

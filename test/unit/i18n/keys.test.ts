@@ -487,9 +487,9 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
     );
   });
 
-  it("puts all four on KO_PENDING_REVIEW: no Korean was written for them", () => {
-    expect(notIn(llmKeys, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(llmKeys, read("KO_PRESENT"))).toEqual([]);
+  it("puts all four on KO_PRESENT once the owner reviewed the Korean (2026-10-20, G-41)", () => {
+    expect(notIn(llmKeys, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(llmKeys, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 
   it("lists the three that take a provider or model name as argument messages", () => {
