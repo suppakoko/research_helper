@@ -1842,6 +1842,18 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `P3-T02`'s new `openrouter.keyPresent` flag broke (the spec bundle had no PrefStore); the flag is restored after the test.
     (g) `docs/07` §4.1/§9.2 TTL contradiction resolved in place by `P3-T33`.
 
+### 6.53 Owner decisions, 2026-10-21 (after wave 2)
+
+257. **Eviction numbers** (item 256(b)). **DECIDED 2026-10-21 (owner):** keep `P3-T33`'s values — 1 hour of recency per hit,
+    30 days of retention bonus for `summary` and `embedding`, 0 elsewhere; re-measure once real caches exist.
+
+258. **P3-T19's two open lines.** **DECIDED 2026-10-21 (owner):** de-hyphenation does nothing until a contiguous-occurrence
+    test is measured; the OCR probe only warns and never demotes until thresholds are measured on the G-12 set.
+
+259. **Wave 3.** **DECIDED 2026-10-21 (owner):** the four adapters `P3-T07`–`P3-T10` together, against the coordinator's
+    recommendation (OpenRouter first). Shared files (`registerProviders.ts`, `HOST_POLICIES`, `docs/07` §7.3) take small
+    exact-string edits only; no live provider call; recorded fixtures stay with `P3-T30`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
