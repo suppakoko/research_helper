@@ -31,6 +31,7 @@ import {
 } from "../../../src/core/http/client";
 import {
   isRetryableError,
+  retryPolicyFromBudget,
   withRetry,
   type RetryPolicy,
 } from "../../../src/core/http/retry";
@@ -45,10 +46,12 @@ import {
 import { createLogger, type LogSink } from "../../../src/core/logger";
 import { redactText } from "../../../src/core/provenance";
 import { parseRetryAfter } from "../../../src/core/rateLimit/backoff";
+import { PMC_IDCONV_HOST } from "../../../src/core/rateLimit/hostLimiter";
 import {
   TokenBucket,
   type RateLimiterConfig,
 } from "../../../src/core/rateLimit/tokenBucket";
+import { buildIdConverterUrl } from "../../../src/sources/pubmed/idConverter";
 
 /**
  * `P1-T05`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network — the
@@ -849,6 +852,52 @@ describe("retry", () => {
     expect(transport.calls).toHaveLength(2);
   });
 
+  it("builds a host's policy from its §7.3 cells: base first, never above cap (item 228)", () => {
+    const budget = { baseMs: 1000, capMs: 30_000, maxAttempts: 3 };
+    const high = retryPolicyFromBudget(budget, () => 1);
+    const low = retryPolicyFromBudget(budget, () => 0);
+    expect(high.maxAttempts).toBe(3);
+    // `withRetry` passes `prevDelayMs = 0` first, so the first wait is base.
+    expect(high.nextDelayMs(0, 1)).toBe(1000);
+    expect(low.nextDelayMs(0, 1)).toBe(1000);
+    expect(high.nextDelayMs(1000, 2)).toBe(3000);
+    expect(low.nextDelayMs(1000, 2)).toBe(1000);
+    // The cap binds once `3 × prev` passes it.
+    expect(high.nextDelayMs(20_000, 3)).toBe(30_000);
+    // A malformed row fails when the policy is built, not on first use.
+    expect(() =>
+      retryPolicyFromBudget({ baseMs: 0, capMs: 1, maxAttempts: 3 }),
+    ).toThrow(RangeError);
+  });
+
+  it("does not announce or schedule a retry once the token is cancelled (item 228)", async () => {
+    const clock = createManualClock();
+    const source = createCancellationTokenSource();
+    const retries: number[] = [];
+    let attempts = 0;
+
+    const error = await withRetry(
+      () => {
+        attempts += 1;
+        // The cancel lands while the attempt is in flight; the attempt then
+        // fails with a retryable class.
+        source.cancel({ kind: "user" });
+        return Promise.reject(new UpstreamServerError(503, "boom"));
+      },
+      {
+        policy: immediatePolicy(3),
+        clock,
+        token: source.token,
+        onRetry: (info) => retries.push(info.attempt),
+      },
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(OperationCancelledError);
+    expect(attempts).toBe(1);
+    expect(retries).toStrictEqual([]);
+    expect(clock.pending).toBe(0);
+  });
+
   it("makes exactly one attempt when no policy is registered for the host", async () => {
     const transport = createStubTransport(() =>
       Promise.resolve(stubXhr({ status: 503 })),
@@ -1351,6 +1400,67 @@ describe("D10: NCBI receives the maintainer address and no other", () => {
       "GET",
       "https://api.crossref.org/works?mailto=user@x.test",
     );
+
+    expect(transport.calls).toHaveLength(1);
+  });
+});
+
+describe("D10 on the NCBI ID Converter host (item 229, 2026-10-20)", () => {
+  // `docs/02` §2.2's final assignment table lists `pmc.ncbi.nlm.nih.gov`
+  // beside E-utilities since 2026-10-20, so the client's guard covers it too.
+  const idconv = (query: string): string =>
+    `https://${PMC_IDCONV_HOST}/tools/idconv/api/v1/articles/?${query}`;
+
+  it("refuses another email to the converter, before it is issued, without echoing it", async () => {
+    const { client, transport } = clientFor(stubXhr({ status: 200 }));
+
+    const error = await client
+      .request(
+        "GET",
+        idconv(
+          "ids=PMC7605294&idtype=pmcid&format=json&tool=research_helper&email=user@x.test",
+        ),
+      )
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(PolicyViolationError);
+    expect(transport.calls).toHaveLength(0);
+    expect((error as PolicyViolationError).message).toContain(PMC_IDCONV_HOST);
+    expect((error as PolicyViolationError).message).not.toContain(
+      "user@x.test",
+    );
+    expect(
+      JSON.stringify((error as PolicyViolationError).context),
+    ).not.toContain("user@x.test");
+  });
+
+  it("refuses another tool value to the converter", async () => {
+    const { client, transport } = clientFor(stubXhr({ status: 200 }));
+
+    await expect(
+      client.request("GET", idconv("ids=PMC7605294&tool=someone-else")),
+    ).rejects.toBeInstanceOf(PolicyViolationError);
+    expect(transport.calls).toHaveLength(0);
+  });
+
+  it("refuses an upper-case spelling of the converter host too", async () => {
+    const { client, transport } = clientFor(stubXhr({ status: 200 }));
+
+    await expect(
+      client.request(
+        "GET",
+        `https://PMC.NCBI.NLM.NIH.GOV/tools/idconv/api/v1/articles/?email=user@x.test`,
+      ),
+    ).rejects.toBeInstanceOf(PolicyViolationError);
+    expect(transport.calls).toHaveLength(0);
+  });
+
+  it("lets the shipped converter's own URL through", async () => {
+    const { client, transport } = clientFor(stubXhr({ status: 200 }));
+    const url = buildIdConverterUrl(["PMC7605294"]);
+    expect(new URL(url).searchParams.get("email")).toBe(MAINTAINER_EMAIL);
+
+    await client.request("GET", url);
 
     expect(transport.calls).toHaveLength(1);
   });

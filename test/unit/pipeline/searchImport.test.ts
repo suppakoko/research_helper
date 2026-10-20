@@ -706,6 +706,52 @@ describe("estimate", () => {
     );
     // PubMed's 5 pages × 2; bioRxiv and medRxiv nothing.
     expect(estimate.externalRequests).toBe(10);
+    // And no items either (item 229, owner 2026-10-19): a lookup-only source
+    // yields no record on a keyword run, so only PubMed's `limit` counts.
+    // Before the fix this read 30 — `limit × three ticked sources`.
+    expect(estimate.itemCount).toBe(BASE_INPUT.limit);
+    expect(estimate.itemCount).toBe(10);
+  });
+
+  it("charges nothing to the import of a preview's own works, which sends no request (item 229)", async () => {
+    const h = harness({
+      sources: [
+        stubSource({ id: "pubmed", pages: [] }),
+        withLookup("europepmc"),
+        withLookup("semanticscholar"),
+      ],
+    });
+    const records = [record("pubmed", "1"), record("pubmed", "2")];
+    const works = dedupeAndMerge(records, 1).works;
+    expect(works).toHaveLength(2);
+    // Exactly what `toPipelineInput` builds for the window's Import button
+    // after a preview: the ticked sources and `limit` are still there, and so
+    // are the preview's records and works.
+    const sourceIds: SourceId[] = ["pubmed", "europepmc", "semanticscholar"];
+    const fetched = await h.pipeline.estimate(
+      { ...BASE_INPUT, sourceIds, limit: 150 },
+      h.ctx,
+    );
+    // The same ticks without supplied works: three searches and a backfill.
+    expect(fetched.externalRequests).toBeGreaterThan(0);
+
+    const estimate = await h.pipeline.estimate(
+      {
+        ...BASE_INPUT,
+        sourceIds,
+        limit: 150,
+        records,
+        works,
+        target: { collectionName: "C" },
+      },
+      h.ctx,
+    );
+    // `Searching`, `Fetching` and `Merging` take what was supplied and
+    // `BackfillingAbstracts` returns at once on this path, so nothing is
+    // sent. Before the fix this charged the same as `fetched`.
+    expect(estimate.externalRequests).toBe(0);
+    expect(estimate.itemCount).toBe(works.length);
+    expect(estimate.estimatedCostUsd).toBeUndefined();
   });
 
   it("adds the backfill's worst case — one request per 100 works per ticked ladder database (item 198)", async () => {

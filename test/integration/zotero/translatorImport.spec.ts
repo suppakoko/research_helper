@@ -26,6 +26,13 @@
  * after its own short deadline. Neither turns Strategy B on for any other
  * spec: each passes its own writer or `translatorLookup`.
  *
+ * Item 227 (owner, 2026-10-20) turns the late-save measurement into an
+ * assertion — the late copy goes to the Zotero trash, and no other item is
+ * touched — and adds two PMID-batch specs for the scaled deadline. Item 229:
+ * the whole suite now runs against a refusing `Zotero.Translate.Search` stub
+ * (`../_suite-guards.spec.ts`); the R-1 check reaches the real constructor
+ * only through `withRealTranslateSearch`.
+ *
  * Fixtures are erased in `after()`, as `importer.spec.ts` erases its own.
  */
 
@@ -45,6 +52,7 @@ import type {
   TranslatorIdentifier,
   TranslatorSearch,
 } from "../../../src/zotero/translatorImport";
+import { withRealTranslateSearch } from "../support/translateSearchGuard";
 
 interface MochaContext {
   timeout(ms: number): void;
@@ -89,15 +97,19 @@ function makeWork(
     pmcidOnly?: boolean;
     /** The PMCID a `pmcidOnly` work carries; `PMC9100001` by default. */
     pmcid?: string;
+    /** Makes the work PMID-only, with this PMID (item 227's batch specs). */
+    pmidOnly?: string;
   } = {},
 ): CanonicalWork {
   const doi = doiOrThrow(`${DOI_PREFIX}${slug}`);
   return {
     workKey: `doi:${doi}`,
     ids:
-      options.pmcidOnly === true
-        ? ({ pmcid: options.pmcid ?? "PMC9100001" } as CanonicalWork["ids"])
-        : { doi },
+      options.pmidOnly !== undefined
+        ? ({ pmid: options.pmidOnly } as CanonicalWork["ids"])
+        : options.pmcidOnly === true
+          ? ({ pmcid: options.pmcid ?? "PMC9100001" } as CanonicalWork["ids"])
+          : { doi },
     type: options.type ?? "journal-article",
     title: `Research Helper translator fixture ${slug} (P2-T18)`,
     abstract: ABSTRACT,
@@ -206,20 +218,92 @@ async function countingTranslateSearch<T>(
   }
 }
 
-function recordingLogger(): Logger & { infos: Record<string, unknown>[] } {
+type RecordingLogger = Logger & {
+  infos: Record<string, unknown>[];
+  warns: { msg: string; ctx: Record<string, unknown> | undefined }[];
+};
+
+function recordingLogger(): RecordingLogger {
   const infos: Record<string, unknown>[] = [];
+  const warns: RecordingLogger["warns"] = [];
   const logger = {
     infos,
+    warns,
     child: () => logger,
     error: () => undefined,
-    warn: () => undefined,
+    warn: (msg: string, ctx?: Record<string, unknown>) => {
+      warns.push({ msg, ctx });
+    },
     info: (_msg: string, ctx?: Record<string, unknown>) => {
       if (ctx !== undefined) infos.push(ctx);
     },
     debug: () => undefined,
     time: <T>(_msg: string, fn: () => Promise<T>) => fn(),
   };
-  return logger as unknown as Logger & { infos: Record<string, unknown>[] };
+  return logger as unknown as RecordingLogger;
+}
+
+/** The warn line item 227's trash step logs, once it has run. */
+function trashLog(logger: RecordingLogger) {
+  return logger.warns.find((line) => line.msg.includes("Zotero trash"));
+}
+
+/** Poll until `done()` or `ms` pass; the platform's own timer. */
+async function waitFor(done: () => boolean, ms: number): Promise<void> {
+  const from = Date.now();
+  while (!done() && Date.now() - from < ms) {
+    await Zotero.Promise.delay(100);
+  }
+}
+
+/**
+ * A slow `Translate.Search` that saves, as `translate()` does, `delayMs`
+ * after it is asked: one item per DOI, or one per PMID of a batch (the PMID
+ * written as an `extra` line, which `pmidOfItem` reads). Every save is listed
+ * in `saved`.
+ */
+function slowSavingSearches(
+  delayMs: (identifier: TranslatorIdentifier) => number,
+) {
+  const saved: number[] = [];
+  const createSearch = (): TranslatorSearch => {
+    let asked: TranslatorIdentifier | undefined;
+    return {
+      setIdentifier(identifier) {
+        asked = identifier;
+      },
+      getTranslators: () => Promise.resolve(["fake-slow"]),
+      setTranslator: () => undefined,
+      async translate(options: TranslateOptions) {
+        const identifier = asked ?? { DOI: "" };
+        await Zotero.Promise.delay(delayMs(identifier));
+        const pmids =
+          "PMID" in identifier ? [identifier.PMID].flat() : [undefined];
+        const items: Zotero.Item[] = [];
+        for (const pmid of pmids) {
+          const item = new Zotero.Item("journalArticle");
+          item.libraryID = options.libraryID;
+          item.setField("title", "As the slow translator spelled it");
+          if (pmid !== undefined) item.setField("extra", `PMID: ${pmid}`);
+          if (options.collections !== false) {
+            item.setCollections(options.collections);
+          }
+          await item.saveTx();
+          writtenItemIDs.add(item.id);
+          saved.push(item.id);
+          items.push(item);
+        }
+        return items;
+      },
+    };
+  };
+  return { saved, createSearch };
+}
+
+/** True when the item exists and is in the trash — moved, not erased. */
+function inTrash(itemID: number): boolean {
+  const item = Zotero.Items.get(itemID);
+  return item !== false && item.deleted;
 }
 
 async function runImport(request: ImportRequest): Promise<ImportReport> {
@@ -473,80 +557,155 @@ describe("Translator import path behind useTranslators (P2-T18)", function () {
     );
   });
 
-  it("measures item 213's open risk: a lookup that settles after its deadline still saves its item beside the hand-mapped copy", async function () {
+  it("moves the copy a lookup saves after its deadline to the Zotero trash, and touches no other item (item 227; was item 213's open risk)", async function () {
     this.timeout(TEST_TIMEOUT_MS);
-    // Short figures of the test's own, so the measurement takes seconds; the
-    // shipped deadline is 30 s and the mechanism is the same.
-    const DEADLINE_MS = 50;
-    const LATE_MS = 2000;
-    let lateSaves = 0;
-    const createSearch = (): TranslatorSearch => ({
-      setIdentifier: () => undefined,
-      getTranslators: () => Promise.resolve(["fake-slow"]),
-      setTranslator: () => undefined,
-      async translate(options: TranslateOptions) {
-        await Zotero.Promise.delay(LATE_MS);
-        const item = new Zotero.Item("journalArticle");
-        item.libraryID = options.libraryID;
-        item.setField("title", "As the slow translator spelled it");
-        if (options.collections !== false) {
-          item.setCollections(options.collections);
-        }
-        await item.saveTx();
-        writtenItemIDs.add(item.id);
-        lateSaves += 1;
-        return [item];
-      },
-    });
-    const report = await runImport({
-      works: [makeWork("late-save")],
-      collectionName: collectionName("late-save"),
+    // Figures of the test's own, so the measurement takes seconds; the
+    // shipped deadline is 30 s and the mechanism is the same. The margin
+    // between the in-time save and the deadline is wide on purpose: the
+    // suite is load-sensitive, and a lookup that loses the race is trashed.
+    const DEADLINE_MS = 1000;
+    const LATE_MS = 3000;
+    const name = collectionName("late-save");
+    // An item already in the collection before the run, made by another
+    // path (the hand-mapped importer): it must stay untouched.
+    const before = await runImport({
+      works: [makeWork("late-existing")],
+      collectionName: name,
       duplicatePolicy: "import-anyway",
-      translatorLookup: { createSearch, perRecordTimeoutMs: DEADLINE_MS },
+    });
+    const existingID = before.createdItemIDs[0] ?? -1;
+
+    const lateDoi = doiOrThrow(`${DOI_PREFIX}late-save`);
+    const { saved, createSearch } = slowSavingSearches((identifier) =>
+      "DOI" in identifier && identifier.DOI === lateDoi ? LATE_MS : 0,
+    );
+    const logger = recordingLogger();
+    const report = await runImport({
+      works: [makeWork("late-in-time"), makeWork("late-save")],
+      collectionName: name,
+      duplicatePolicy: "import-anyway",
+      translatorLookup: {
+        createSearch,
+        perRecordTimeoutMs: DEADLINE_MS,
+        logger,
+      },
     });
     const { libraryID, key } = report.collection;
     const atReturn = collectionItemIDs(libraryID, key).length;
-    const savesAtReturn = lateSaves;
-    const waitedFrom = Date.now();
-    while (lateSaves === 0 && Date.now() - waitedFrom < 4 * LATE_MS) {
-      await Zotero.Promise.delay(100);
-    }
+    const savesAtReturn = saved.length;
+    const [inTimeID = -1, handMappedID = -1] = report.createdItemIDs;
+
+    await waitFor(() => trashLog(logger) !== undefined, 4 * LATE_MS);
+    const lateID = saved.find((id) => id !== inTimeID) ?? -1;
     const later = collectionItemIDs(libraryID, key);
-    for (const id of later) writtenItemIDs.add(id);
     debug(
-      `${LOG_PREFIX} item 213 late save: ${String(atReturn)} item(s) when the ` +
-        `import returned, ${String(later.length)} after the abandoned lookup ` +
-        `settled (${String(lateSaves)} late save)`,
+      `${LOG_PREFIX} item 227 late save: ${String(atReturn)} item(s) when the ` +
+        `import returned, ${String(saved.length - savesAtReturn)} late save, ` +
+        `${String(later.length)} outside the trash after it settled; late ` +
+        `item in trash: ${String(inTrash(lateID))}`,
     );
 
-    assert.deepEqual(report.createdVia, ["hand-map"]);
+    assert.deepEqual(report.createdVia, ["translator", "hand-map"]);
     assert.strictEqual(report.importPaths.fallbackReasons.timeout, 1);
-    assert.strictEqual(
-      savesAtReturn,
-      0,
-      "the import returned before the late save",
+    assert.strictEqual(savesAtReturn, 1, "only the in-time save at return");
+    assert.strictEqual(atReturn, 3, "existing + in-time + hand-mapped");
+    assert.strictEqual(saved.length, 2, "the abandoned lookup still saved");
+    // The late copy: moved to the trash, not erased.
+    assert.isTrue(Zotero.Items.get(lateID) !== false, "the late item exists");
+    assert.isTrue(inTrash(lateID), "the late item is in the trash");
+    // Nothing else touched.
+    for (const [label, id] of [
+      ["existing", existingID],
+      ["in-time translator item", inTimeID],
+      ["hand-mapped copy", handMappedID],
+    ] as const) {
+      assert.isTrue(
+        Zotero.Items.get(id) !== false && !inTrash(id),
+        `${label} stays out of the trash`,
+      );
+    }
+    assert.deepEqual(
+      [...later].sort((a, b) => a - b),
+      [existingID, inTimeID, handMappedID].sort((a, b) => a - b),
+      "the collection holds exactly what it held when the import returned",
     );
-    assert.strictEqual(atReturn, 1, "only the hand-mapped copy at return");
-    assert.strictEqual(lateSaves, 1, "the abandoned lookup was not stopped");
-    assert.strictEqual(
-      later.length,
-      2,
-      "the late save is a second copy in the collection (open, item 213)",
+    assert.deepEqual(trashLog(logger)?.ctx, { saved: 1, trashed: 1 });
+  });
+
+  it("gives a PMID batch 30 s + 1 s per PMID in the real platform: a two-PMID batch slower than the per-record deadline still lands (item 227)", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    // Per-record 500 ms; the batch of 2 gets 500 + 2 × 1000 = 2500 ms. The
+    // fake answers after 1200 ms: too slow for one record, in time for two.
+    const { saved, createSearch } = slowSavingSearches(() => 1200);
+    const report = await runImport({
+      works: [
+        makeWork("pmid-a", { pmidOnly: "91000001" }),
+        makeWork("pmid-b", { pmidOnly: "91000002" }),
+      ],
+      collectionName: collectionName("pmid-batch"),
+      duplicatePolicy: "import-anyway",
+      translatorLookup: { createSearch, perRecordTimeoutMs: 500 },
+    });
+    assert.strictEqual(report.importPaths.searches, 1, "one batch lookup");
+    assert.deepEqual(report.createdVia, ["translator", "translator"]);
+    assert.strictEqual(report.importPaths.fallbackReasons.timeout, 0);
+    assert.strictEqual(saved.length, 2);
+  });
+
+  it("moves every item a late PMID batch saved to the Zotero trash, and keeps both hand-mapped copies (item 227)", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    // Batch deadline 50 + 2 × 1000 = 2050 ms; the fake answers at 3000 ms.
+    const LATE_MS = 3000;
+    const { saved, createSearch } = slowSavingSearches(() => LATE_MS);
+    const logger = recordingLogger();
+    const report = await runImport({
+      works: [
+        makeWork("pmid-late-a", { pmidOnly: "91000011" }),
+        makeWork("pmid-late-b", { pmidOnly: "91000012" }),
+      ],
+      collectionName: collectionName("pmid-late"),
+      duplicatePolicy: "import-anyway",
+      translatorLookup: { createSearch, perRecordTimeoutMs: 50, logger },
+    });
+    assert.deepEqual(report.createdVia, ["hand-map", "hand-map"]);
+    assert.strictEqual(report.importPaths.fallbackReasons.timeout, 2);
+
+    await waitFor(() => trashLog(logger) !== undefined, 4 * LATE_MS);
+    const { libraryID, key } = report.collection;
+    assert.strictEqual(saved.length, 2, "the late batch saved two items");
+    for (const id of saved) {
+      assert.isTrue(Zotero.Items.get(id) !== false, "moved, not erased");
+      assert.isTrue(inTrash(id), "the late item is in the trash");
+    }
+    for (const id of report.createdItemIDs) {
+      assert.isTrue(!inTrash(id), "a hand-mapped copy stays");
+    }
+    assert.deepEqual(
+      [...collectionItemIDs(libraryID, key)].sort((a, b) => a - b),
+      [...report.createdItemIDs].sort((a, b) => a - b),
     );
+    assert.deepEqual(trashLog(logger)?.ctx, { saved: 2, trashed: 2 });
   });
 
   it("still finds the four Translate.Search calls Strategy B uses on this Zotero (R-1), without calling any", async function () {
     this.timeout(TEST_TIMEOUT_MS);
-    const Search = (Zotero.Translate as { Search: new () => object }).Search;
-    const search = new Search() as Record<string, unknown>;
-    for (const method of [
-      "setIdentifier",
-      "getTranslators",
-      "setTranslator",
-      "translate",
-    ]) {
-      assert.strictEqual(typeof search[method], "function", method);
+    // The suite guard (`../_suite-guards.spec.ts`) keeps the global a
+    // refusing stub; this check asks for the real constructor by name.
+    const types = withRealTranslateSearch(
+      "R-1 API-surface check: constructs one search object, calls nothing",
+      (RealSearch) => {
+        const search = new RealSearch() as Record<string, unknown>;
+        return Object.fromEntries(
+          ["setIdentifier", "getTranslators", "setTranslator", "translate"].map(
+            (method) => [method, typeof search[method]],
+          ),
+        );
+      },
+    );
+    for (const [method, type] of Object.entries(types)) {
+      assert.strictEqual(type, "function", method);
     }
+    assert.strictEqual(Object.keys(types).length, 4);
   });
 
   after(async function () {

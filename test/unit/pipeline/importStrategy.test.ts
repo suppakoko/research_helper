@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { FakeZotero } from "../../setup/zotero-global";
 import { createMemoryPrefStore } from "../../../src/core/config";
 import {
   OperationCancelledError,
@@ -43,7 +44,11 @@ import { createPmcidConverter } from "../../../src/sources/pubmed/idConverter";
 import {
   identifierFor,
   lookupThroughTranslators,
+  moveItemsToTrash,
+  PMID_BATCH_DEADLINE_CAP_MS,
+  PMID_BATCH_DEADLINE_PER_PMID_MS,
   PMID_LOOKUP_BATCH_SIZE,
+  pmidBatchDeadlineMs,
   TRANSLATOR_LOOKUP_TIMEOUT_MS,
   type TranslateOptions,
   type TranslatorIdentifier,
@@ -166,6 +171,11 @@ function fakeLogger(): Logger & { warn: ReturnType<typeof vi.fn> } {
 }
 
 const ready = () => Promise.resolve();
+
+/** Let detached promise chains (an abandoned lookup's late handling) run. */
+function settle(): Promise<void> {
+  return new Promise((done) => setTimeout(done, 0));
+}
 
 async function runLookup(
   works: readonly CanonicalWork[],
@@ -412,11 +422,10 @@ describe("translatorImport — identifier lookup (docs/01 §6.2)", () => {
     ).rejects.toBeInstanceOf(OperationCancelledError);
   });
 
-  it("abandons a lookup that loses the deadline but cannot stop it: the late save still happens, uncounted (item 213's open risk)", async () => {
-    // Measures what P2-T18 left open: nothing cancels a `translate()` that
-    // lost the race, so its save lands after the record was handed to
-    // Strategy A. The fake's `saved` list stands in for Zotero's save.
-    const saved: number[] = [];
+  it("moves the item an abandoned lookup saved late to the trash once it settles, and logs the count without the record (item 227)", async () => {
+    // Nothing cancels a `translate()` that lost the race, so its save lands
+    // after the record went to Strategy A. Owner, 2026-10-20: trash it.
+    const late = fakeItem(41);
     let finishLate: (() => void) | undefined;
     const createSearch = (): TranslatorSearch => ({
       setIdentifier: () => undefined,
@@ -424,30 +433,254 @@ describe("translatorImport — identifier lookup (docs/01 §6.2)", () => {
       setTranslator: () => undefined,
       translate: () =>
         new Promise((done) => {
-          finishLate = () => {
-            saved.push(41);
-            done([fakeItem(41)]);
-          };
+          finishLate = () => done([late]);
         }),
     });
+    const moveToTrash = vi.fn((items: readonly Zotero.Item[]) =>
+      Promise.resolve(items.length),
+    );
+    const logger = fakeLogger();
     const delay = vi.fn(() => Promise.resolve());
     const result = await runLookup([work("late", { doi: "10.1/late" })], {
       createSearch,
       perRecordTimeoutMs: 30_000,
       delay,
+      moveToTrash,
+      logger,
     });
     expect(delay).toHaveBeenCalledWith(30_000);
     expect(result.translated).toEqual([]);
     expect(result.fallbacks.map((f) => f.reason)).toEqual(["timeout"]);
+    // Not settled yet: nothing to trash.
+    await settle();
+    expect(moveToTrash).not.toHaveBeenCalled();
 
-    // The abandoned lookup is still alive and finishes later.
     expect(finishLate).toBeTypeOf("function");
     finishLate?.();
-    await Promise.resolve();
-    expect(saved).toEqual([41]);
-    // …and nothing in the result changed: the late item is ignored.
+    await settle();
+    expect(moveToTrash.mock.calls).toEqual([[[late]]]);
+    // The result is unchanged: the late item is never counted.
     expect(result.translated).toEqual([]);
     expect(result.fallbacks).toHaveLength(1);
+    // Logged at warn with the count, and nothing of the record.
+    const trashLog = logger.warn.mock.calls.find(([msg]) =>
+      String(msg).includes("trash"),
+    );
+    expect(trashLog?.[1]).toEqual({ saved: 1, trashed: 1 });
+    expect(JSON.stringify(trashLog)).not.toMatch(/10\.1\/late|test:late/u);
+  });
+
+  it("trashes only what the abandoned lookup saved, never an item another lookup in the run saved (item 227)", async () => {
+    const inTime = fakeItem(1);
+    const late = fakeItem(41);
+    const extraLate = fakeItem(42);
+    let finishLate: (() => void) | undefined;
+    const createSearch = (): TranslatorSearch => {
+      let doi = "";
+      return {
+        setIdentifier: (identifier) => {
+          doi = "DOI" in identifier ? identifier.DOI : "";
+        },
+        getTranslators: () => Promise.resolve(["t1"]),
+        setTranslator: () => undefined,
+        translate: () =>
+          doi === "10.1/late"
+            ? new Promise((done) => {
+                finishLate = () => done([late, extraLate]);
+              })
+            : Promise.resolve([inTime]),
+      };
+    };
+    const moveToTrash = vi.fn((items: readonly Zotero.Item[]) =>
+      Promise.resolve(items.length),
+    );
+    // The deadline's timer fires on the next macrotask, so only the lookup
+    // that never settles in time loses the race.
+    const delay = vi.fn(() => new Promise<void>((done) => setTimeout(done, 0)));
+    const result = await runLookup(
+      [work("ok", { doi: "10.1/ok" }), work("late", { doi: "10.1/late" })],
+      { createSearch, perRecordTimeoutMs: 1, delay, moveToTrash },
+    );
+    expect(result.translated.map((t) => t.item)).toEqual([inTime]);
+    finishLate?.();
+    await settle();
+    expect(moveToTrash.mock.calls).toEqual([[[late, extraLate]]]);
+  });
+
+  it("trashes what a lookup saved before it failed after its deadline, read from that lookup's own newItems (item 227)", async () => {
+    const savedBeforeFailure = fakeItem(52);
+    let failLate: (() => void) | undefined;
+    const search = {
+      newItems: [] as Zotero.Item[],
+      setIdentifier: () => undefined,
+      getTranslators: () => Promise.resolve(["t1"]),
+      setTranslator: () => undefined,
+      translate: () =>
+        new Promise<readonly Zotero.Item[]>((_done, fail) => {
+          failLate = () => {
+            search.newItems.push(savedBeforeFailure);
+            fail(new Error("translator failed after one save"));
+          };
+        }),
+    };
+    const moveToTrash = vi.fn((items: readonly Zotero.Item[]) =>
+      Promise.resolve(items.length),
+    );
+    const result = await runLookup([work("late", { doi: "10.1/late" })], {
+      createSearch: () => search,
+      perRecordTimeoutMs: 30_000,
+      delay: () => Promise.resolve(),
+      moveToTrash,
+    });
+    expect(result.fallbacks.map((f) => f.reason)).toEqual(["timeout"]);
+    failLate?.();
+    await settle();
+    expect(moveToTrash.mock.calls).toEqual([[[savedBeforeFailure]]]);
+  });
+
+  it("never starts translate() once the deadline has passed, so a lookup abandoned before saving saves nothing (item 227)", async () => {
+    let releaseTranslators: (() => void) | undefined;
+    const translate = vi.fn(() => Promise.resolve([fakeItem(9)]));
+    const setTranslator = vi.fn();
+    const createSearch = (): TranslatorSearch => ({
+      setIdentifier: () => undefined,
+      getTranslators: () =>
+        new Promise((done) => {
+          releaseTranslators = () => done(["t1"]);
+        }),
+      setTranslator,
+      translate,
+    });
+    const moveToTrash = vi.fn(() => Promise.resolve(0));
+    const result = await runLookup([work("slow", { doi: "10.1/slow" })], {
+      createSearch,
+      perRecordTimeoutMs: 30_000,
+      delay: () => Promise.resolve(),
+      moveToTrash,
+    });
+    expect(result.fallbacks.map((f) => f.reason)).toEqual(["timeout"]);
+    releaseTranslators?.();
+    await settle();
+    expect(setTranslator).not.toHaveBeenCalled();
+    expect(translate).not.toHaveBeenCalled();
+    expect(moveToTrash).not.toHaveBeenCalled();
+  });
+
+  it("logs, and never throws, when moving a late save to the trash fails (item 227)", async () => {
+    let finishLate: (() => void) | undefined;
+    const createSearch = (): TranslatorSearch => ({
+      setIdentifier: () => undefined,
+      getTranslators: () => Promise.resolve(["t1"]),
+      setTranslator: () => undefined,
+      translate: () =>
+        new Promise((done) => {
+          finishLate = () => done([fakeItem(41), fakeItem(43)]);
+        }),
+    });
+    const logger = fakeLogger();
+    await runLookup([work("late", { doi: "10.1/late" })], {
+      createSearch,
+      perRecordTimeoutMs: 30_000,
+      delay: () => Promise.resolve(),
+      moveToTrash: () => Promise.reject(new UpstreamServerError(500, "x")),
+      logger,
+    });
+    finishLate?.();
+    await settle();
+    const failed = logger.warn.mock.calls.find(([msg]) =>
+      String(msg).includes("failed"),
+    );
+    expect(failed?.[1]).toEqual({ saved: 2, code: "UPSTREAM_SERVER" });
+  });
+
+  it("gives a PMID batch 30 s + 1 s per PMID, and a single-record lookup 30 s (item 227)", async () => {
+    // A delay that never fires: only the figures it was asked for matter.
+    const delay = vi.fn((_ms: number) => new Promise<void>(() => undefined));
+    const { createSearch } = fakeSearches((identifier) =>
+      "PMID" in identifier
+        ? {
+            items: (identifier.PMID as readonly string[]).map((pmid) =>
+              fakeItem(Number(pmid), { PMID: pmid }),
+            ),
+          }
+        : { items: [fakeItem(1)] },
+    );
+    const pmids = Array.from({ length: 203 }, (_, i) =>
+      work(`p${String(i)}`, { pmid: String(5000 + i) }),
+    );
+    await runLookup([work("doi", { doi: "10.1/d" }), ...pmids], {
+      createSearch,
+      perRecordTimeoutMs: TRANSLATOR_LOOKUP_TIMEOUT_MS,
+      delay,
+    });
+    // DOI: 30 s. Batch of 200: 30 + 200 = 230 s. Batch of 3: 33 s.
+    expect(delay.mock.calls.map(([ms]) => ms)).toEqual([
+      30_000, 230_000, 33_000,
+    ]);
+
+    delay.mockClear();
+    await runLookup([work("lone", { pmid: "77" })], {
+      createSearch,
+      perRecordTimeoutMs: TRANSLATOR_LOOKUP_TIMEOUT_MS,
+      delay,
+    });
+    expect(delay.mock.calls.map(([ms]) => ms)).toEqual([30_000]);
+  });
+
+  it("moves items to the trash inside one transaction, once each, and skips an item already in the trash (item 227)", async () => {
+    const events: string[] = [];
+    const items = FakeZotero.Items as unknown as Record<string, unknown>;
+    const db = FakeZotero.DB as unknown as {
+      executeTransaction: ReturnType<typeof vi.fn>;
+    };
+    items["trash"] = vi.fn((ids: number[]) => {
+      events.push(`trash ${ids.join(",")}`);
+      return Promise.resolve();
+    });
+    db.executeTransaction.mockImplementationOnce(
+      async (fn: () => Promise<unknown>) => {
+        events.push("begin");
+        const value = await fn();
+        events.push("commit");
+        return value;
+      },
+    );
+    try {
+      const trashed = { ...fakeItem(3), deleted: true } as Zotero.Item;
+      const moved = await moveItemsToTrash([
+        fakeItem(1),
+        fakeItem(2),
+        fakeItem(1),
+        trashed,
+      ]);
+      expect(moved).toBe(2);
+      expect(events).toEqual(["begin", "trash 1,2", "commit"]);
+      // Nothing left to move: no transaction at all.
+      expect(await moveItemsToTrash([trashed])).toBe(0);
+      expect(events).toHaveLength(3);
+    } finally {
+      delete items["trash"];
+    }
+  });
+
+  it("caps a PMID batch's deadline at 5 minutes, and sets none without a per-record deadline (item 227)", () => {
+    expect(PMID_BATCH_DEADLINE_PER_PMID_MS).toBe(1_000);
+    expect(PMID_BATCH_DEADLINE_CAP_MS).toBe(300_000);
+    expect(pmidBatchDeadlineMs(1, 30_000)).toBe(30_000);
+    expect(pmidBatchDeadlineMs(2, 30_000)).toBe(32_000);
+    expect(pmidBatchDeadlineMs(PMID_LOOKUP_BATCH_SIZE, 30_000)).toBe(230_000);
+    expect(pmidBatchDeadlineMs(269, 30_000)).toBe(299_000);
+    expect(pmidBatchDeadlineMs(270, 30_000)).toBe(300_000);
+    expect(pmidBatchDeadlineMs(400, 30_000)).toBe(300_000);
+    expect(pmidBatchDeadlineMs(200, undefined)).toBeUndefined();
+    // The document states the rule the code carries.
+    const doc = readFileSync(
+      resolve(repo, "docs/07-architecture-and-data-model.md"),
+      "utf8",
+    );
+    expect(doc).toContain(
+      "**Decided 2026-10-20 (owner, `plan/00` §6 item 227): a PMID batch's deadline is 30 s + 1 s per PMID, at most 5\n> minutes;",
+    );
   });
 
   it("resolves a PMCID-only record through the NCBI ID Converter to one DOI lookup, and hand-maps the PMCID it could not resolve (item 214)", async () => {

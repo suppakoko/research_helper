@@ -51,12 +51,22 @@
  *   The writer in `src/bootstrap/registerPipelines.ts` applies it; this
  *   module's {@link TranslatorImportOptions.perRecordTimeoutMs} still has no
  *   default of its own, so a caller that passes none gets no deadline.
+ * - **A PMID batch's deadline grows with the batch** (owner 2026-10-20,
+ *   `plan/00` §6 item 227; `docs/07` §12.1's dated note): the per-record
+ *   deadline plus {@link PMID_BATCH_DEADLINE_PER_PMID_MS} per PMID, never
+ *   more than {@link PMID_BATCH_DEADLINE_CAP_MS} — see
+ *   {@link pmidBatchDeadlineMs}. A lookup for one record keeps the
+ *   per-record deadline.
  * - **A deadline abandons a lookup; it does not stop it.** Nothing here can
  *   cancel a running `translate()`, so a lookup that loses the race keeps
  *   running, and when it settles its items are already saved into the
- *   collection by Zotero, beside the record's hand-mapped copy. This module
- *   ignores that late result — it is never counted, repaired or returned —
- *   and the duplicate it leaves is reported as open (item 213).
+ *   collection by Zotero, beside the record's hand-mapped copy. The late
+ *   result is never counted, repaired or returned. **Item 227 (owner,
+ *   2026-10-20): those late items are moved to the Zotero trash** when the
+ *   lookup settles — the exact items that lookup's own `translate()` saved,
+ *   and nothing else ({@link moveItemsToTrash}) — and the count is logged at
+ *   `warn`. A lookup whose deadline passed before `translate()` started never
+ *   starts it.
  */
 
 import type { Logger } from "../core/logger";
@@ -89,6 +99,39 @@ export const TRANSLATOR_SAVE_ATTACHMENTS = true;
  * {@link TranslatorImportOptions.perRecordTimeoutMs}.
  */
 export const TRANSLATOR_LOOKUP_TIMEOUT_MS = 30_000;
+
+/**
+ * What a PMID batch adds to the per-record deadline for each PMID in it:
+ * **1 second**. Owner, 2026-10-20 (`plan/00` §6 item 227), recorded first in
+ * `docs/07` §12.1. See {@link pmidBatchDeadlineMs}.
+ */
+export const PMID_BATCH_DEADLINE_PER_PMID_MS = 1_000;
+
+/**
+ * The longest deadline a PMID batch can get: **5 minutes**. Owner,
+ * 2026-10-20 (`plan/00` §6 item 227). At {@link PMID_LOOKUP_BATCH_SIZE} = 200
+ * the formula reaches 230 s, so the cap binds only above 270 PMIDs.
+ */
+export const PMID_BATCH_DEADLINE_CAP_MS = 5 * 60_000;
+
+/**
+ * The deadline for one PMID lookup covering `pmidCount` records, given the
+ * per-record deadline `perRecordMs` (`docs/07` §12.1, item 227): `perRecordMs`
+ * for a single record, otherwise `perRecordMs` + {@link
+ * PMID_BATCH_DEADLINE_PER_PMID_MS} × `pmidCount`, never above {@link
+ * PMID_BATCH_DEADLINE_CAP_MS}. No per-record deadline means no deadline.
+ */
+export function pmidBatchDeadlineMs(
+  pmidCount: number,
+  perRecordMs: number | undefined,
+): number | undefined {
+  if (perRecordMs === undefined) return undefined;
+  if (pmidCount <= 1) return perRecordMs;
+  return Math.min(
+    PMID_BATCH_DEADLINE_CAP_MS,
+    perRecordMs + PMID_BATCH_DEADLINE_PER_PMID_MS * pmidCount,
+  );
+}
 
 /** Which path produced an item: Strategy B or Strategy A (`docs/01` §6.3). */
 export type ImportPath = "translator" | "hand-map";
@@ -136,7 +179,16 @@ export interface TranslatorSearch {
   setIdentifier(identifier: TranslatorIdentifier): void;
   getTranslators(): Promise<readonly unknown[]>;
   setTranslator(translators: readonly unknown[]): void;
+  /** Resolves with the items this call saved — Zotero's `newItems`. */
   translate(options: TranslateOptions): Promise<readonly Zotero.Item[]>;
+  /**
+   * The items this search object has saved so far. `Zotero.Translate`
+   * appends each save of its own here (and resolves `translate()` with this
+   * array), so after a `translate()` that rejected it still names exactly the
+   * items saved before the failure. Read only for an abandoned lookup
+   * (item 227); a fake may leave it out.
+   */
+  readonly newItems?: readonly Zotero.Item[];
 }
 
 /** Constructs one {@link TranslatorSearch} per lookup. */
@@ -173,11 +225,18 @@ export interface TranslatorImportOptions {
    * ms. The product value is {@link TRANSLATOR_LOOKUP_TIMEOUT_MS}, applied by
    * the writer; **absent here means no deadline**, so a direct caller of
    * {@link lookupThroughTranslators} chooses its own. A PMID batch is one
-   * lookup and gets one deadline.
+   * lookup and gets one deadline, scaled by {@link pmidBatchDeadlineMs}
+   * (item 227).
    */
   readonly perRecordTimeoutMs?: number;
   /** The timer the deadline waits on. Defaults to `Zotero.Promise.delay`. */
   readonly delay?: (ms: number) => Promise<void>;
+  /**
+   * Moves an abandoned lookup's late items to the Zotero trash and returns
+   * how many it moved (item 227). Defaults to {@link moveItemsToTrash}.
+   * Tests pass a fake.
+   */
+  readonly moveToTrash?: (items: readonly Zotero.Item[]) => Promise<number>;
   /**
    * Awaited before the first lookup. Defaults to
    * `Zotero.Schema.schemaUpdatePromise`, which `docs/01` §6.2's
@@ -374,19 +433,29 @@ export async function lookupThroughTranslators(
     }
   }
 
-  /** One lookup, with the optional deadline around both awaits. */
+  /**
+   * One lookup, with the deadline `deadlineMs` (none when `undefined`) around
+   * both awaits. A lookup that loses the race is handed to
+   * {@link trashLateSaves}, which waits for it to settle.
+   */
   const lookup = async (
     identifier: TranslatorIdentifier,
+    deadlineMs: number | undefined,
   ): Promise<LookupOutcome> => {
     token?.throwIfCancelled();
     searches += 1;
+    let search: TranslatorSearch | undefined;
+    let abandoned = false;
     const run = async (): Promise<LookupOutcome> => {
-      const search = createSearch();
+      search = createSearch();
       search.setIdentifier(identifier);
       const translators = await search.getTranslators();
       if (translators.length === 0) {
         return { kind: "fallback", reason: "no-translators" };
       }
+      // Item 227: the record has already gone to Strategy A, so a save
+      // started now could only make a second copy. Nothing is saved yet.
+      if (abandoned) return { kind: "fallback", reason: "timeout" };
       // The whole list — `docs/01` §6.2. Never `translators[0]`.
       search.setTranslator(translators);
       const items = await search.translate({
@@ -398,11 +467,14 @@ export async function lookupThroughTranslators(
         ? { kind: "fallback", reason: "no-result" }
         : { kind: "items", items };
     };
+    const running = run();
     try {
-      return await withDeadline(run(), options.perRecordTimeoutMs, delay);
+      return await withDeadline(running, deadlineMs, delay);
     } catch (error) {
       if (error instanceof OperationCancelledError) throw error;
       if (error instanceof LookupDeadline) {
+        abandoned = true;
+        trashLateSaves(running, () => search?.newItems, options);
         return { kind: "fallback", reason: "timeout" };
       }
       return { kind: "fallback", reason: "lookup-error", code: codeOf(error) };
@@ -411,7 +483,7 @@ export async function lookupThroughTranslators(
 
   // ---- DOI and arXiv: one lookup per record ----
   for (const { work, identifier } of singles) {
-    const outcome = await lookup(identifier);
+    const outcome = await lookup(identifier, options.perRecordTimeoutMs);
     if (outcome.kind === "fallback") {
       fallBack(work, outcome.reason, outcome.code);
       continue;
@@ -433,7 +505,10 @@ export async function lookupThroughTranslators(
 
   // ---- PMID: batched, `{ PMID: [...] }` ----
   for (const batch of batchesOf(byPmid, PMID_LOOKUP_BATCH_SIZE)) {
-    const outcome = await lookup({ PMID: batch.map((entry) => entry.pmid) });
+    const outcome = await lookup(
+      { PMID: batch.map((entry) => entry.pmid) },
+      pmidBatchDeadlineMs(batch.length, options.perRecordTimeoutMs),
+    );
     if (outcome.kind === "fallback") {
       for (const { work } of batch) {
         fallBack(work, outcome.reason, outcome.code);
@@ -489,9 +564,78 @@ async function resolvePmcids(
 }
 
 /**
+ * Item 227 (owner, 2026-10-20; `docs/07` §12.1): once an abandoned lookup
+ * settles, move the items **it** saved to the Zotero trash, and log the count.
+ *
+ * Which items is decided by the lookup's own `Translate` object, never by
+ * looking at the collection or the library: the array `translate()` resolves
+ * with, or, when the lookup rejects, that object's `newItems` (the items it
+ * saved before failing; `readNewItems`). Measured from Zotero 10.0.3's
+ * `translate.js`: `translate()` resolves with `newItems`, which only that
+ * object's own saves append to, and `Translate.Search` moves to its next
+ * translator only while `newItems` is empty — so the list is exactly this
+ * lookup's saves. An item another path created, or one already in the
+ * library, cannot be on it.
+ *
+ * Runs detached: the import has already returned when this settles, so a
+ * failure here is logged, never thrown. The log carries counts and an error
+ * code only — no identifier, title or other record content.
+ */
+function trashLateSaves(
+  running: Promise<LookupOutcome>,
+  readNewItems: () => readonly Zotero.Item[] | undefined,
+  options: TranslatorImportOptions,
+): void {
+  const moveToTrash = options.moveToTrash ?? moveItemsToTrash;
+  void running
+    .then(
+      (outcome): readonly Zotero.Item[] =>
+        outcome.kind === "items" ? outcome.items : [],
+      (): readonly Zotero.Item[] => readNewItems() ?? [],
+    )
+    .then(async (late) => {
+      if (late.length === 0) return;
+      try {
+        const trashed = await moveToTrash(late);
+        options.logger?.warn(
+          "searchImport: a translator lookup that missed its deadline saved " +
+            "items late; they were moved to the Zotero trash",
+          { saved: late.length, trashed },
+        );
+      } catch (error) {
+        options.logger?.warn(
+          "searchImport: a translator lookup that missed its deadline saved " +
+            "items late, and moving them to the Zotero trash failed",
+          { saved: late.length, code: codeOf(error) },
+        );
+      }
+    });
+}
+
+/**
+ * Move `items` to the Zotero trash, reversibly — never erased — and return
+ * how many were moved (item 227). One `Zotero.DB.executeTransaction` around
+ * `Zotero.Items.trash`, the importer's discipline (`docs/01` §5.8): DB work
+ * only inside the transaction, nothing slow. An item already in the trash is
+ * left as it is.
+ */
+export async function moveItemsToTrash(
+  items: readonly Zotero.Item[],
+): Promise<number> {
+  const ids = [
+    ...new Set(items.filter((item) => !item.deleted).map((item) => item.id)),
+  ];
+  if (ids.length === 0) return 0;
+  await Zotero.DB.executeTransaction(async () => {
+    await Zotero.Items.trash(ids);
+  });
+  return ids.length;
+}
+
+/**
  * `promise`, or a {@link LookupDeadline} after `ms` when `ms` is set. The
- * losing `promise` is abandoned, not stopped: it settles later, unobserved
- * (see this file's header on the late save).
+ * losing `promise` is abandoned, not stopped: it settles later, and
+ * {@link trashLateSaves} deals with what it saved.
  */
 async function withDeadline<T>(
   promise: Promise<T>,

@@ -184,6 +184,7 @@ import {
   type HttpClient,
   type HttpTransport,
 } from "../core/http/client";
+import { retryPolicyFromBudget, type RetryPolicy } from "../core/http/retry";
 import { buildUserAgent } from "../core/http/userAgent";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
 import {
@@ -1221,6 +1222,47 @@ function createPipelineContextFactory(
 }
 
 /**
+ * The HTTP client's `retryFor`, built from `docs/07` §7.3's retry cells.
+ *
+ * `plan/00` §6 item 228 (owner, 2026-10-20). The cells are the `retry` member
+ * of each `HOST_POLICIES` row, read through the registry's `policyFor` — the
+ * same rows the buckets were built from — and turned into a policy by
+ * `src/core/http/retry.ts`'s `retryPolicyFromBudget`, so no number is written
+ * here (`plan/README.md` §5 rule 4).
+ *
+ * **A host gets a policy only when it has a limiter as well.** Every
+ * `HOST_POLICIES` row has both today, so the condition changes nothing for a
+ * shipped host; it is what makes "a retry never bypasses the limiter" a
+ * property of this function rather than of the table's current contents.
+ * `src/core/http/client.ts` issues an attempt for a host with no limiter
+ * unpaced, and a retry of an unpaced request is exactly the retry `docs/07`
+ * §7.4 says the limiter must be able to see.
+ *
+ * Built once per host and cached: the jitter is stateless (`withRetry` carries
+ * the previous delay), so one policy object per host serves every request.
+ *
+ * @param limiters - the registry `installServices` built
+ * @param random - uniform `[0, 1)` source for the jitter; a test injects one
+ * @returns `(host) => RetryPolicy | undefined`
+ */
+export function createRetryFor(
+  limiters: Pick<HostLimiterRegistry, "limiterFor" | "policyFor">,
+  random: () => number = Math.random,
+): (host: string) => RetryPolicy | undefined {
+  const cache = new Map<string, RetryPolicy | undefined>();
+  return (host) => {
+    if (cache.has(host)) return cache.get(host);
+    const budget = limiters.policyFor(host)?.retry;
+    const policy =
+      budget === undefined || limiters.limiterFor(host) === undefined
+        ? undefined
+        : retryPolicyFromBudget(budget, random);
+    cache.set(host, policy);
+    return policy;
+  };
+}
+
+/**
  * Build the object graph once and bind every disposable to `scope`.
  *
  * Construction order is `P1-T25` step 1's, and it is a dependency order rather
@@ -1237,18 +1279,26 @@ function createPipelineContextFactory(
  *    a **timeout getter** reading `timeoutSeconds` (`core/` may not import
  *    `src/prefs/`, so the pref is read here and passed as a function, which is
  *    also what makes a live pref change take effect without a restart), the
- *    registry's `limiterFor`, the clock and the logger. Install it with
+ *    registry's `limiterFor`, {@link createRetryFor} over the same registry,
+ *    the clock and the logger. Install it with
  *    `setHttpClient()` so `docs/13` §2.2's `httpRequest()` has something to
  *    delegate to.
  * 4. Build the per-job progress factory and bind the jobs it hands out to the
  *    scope. **No sink is constructed at this level** — see §3 of this file's
  *    header.
  *
- * `retryFor` is deliberately **not** supplied: `docs/07` §7.3 names a per-host
- * attempt cap and publishes no number, `P1-T04` and `P1-T05` both refused to
- * invent one, and `P1-T28` owns it behind a human gate. Absent a policy the
- * client makes exactly one attempt, which is the documented behaviour and not
- * a silent default.
+ * **`retryFor` is supplied since 2026-10-20** (`plan/00` §6 item 228, the
+ * owner's decision). It used to be left out deliberately: `docs/07` §7.3 named
+ * a per-host attempt cap and published no number, `P1-T04` and `P1-T05` both
+ * refused to invent one, and `P1-T28` owned it behind a human gate. That gate
+ * was satisfied on 2026-10-07 for NCBI and §7.3's other retry cells were
+ * filled on 2026-10-14, so the cells now take effect through
+ * {@link createRetryFor}: a host gets the policy its `HOST_POLICIES` row's
+ * `retry` cells describe, and a host without a row — or without a limiter —
+ * gets none and makes exactly one attempt. Only the error classes `docs/07`
+ * §10.1 marks retryable are retried (`src/core/http/retry.ts`'s
+ * `isRetryableError`), every retry re-enters the host's bucket, and a
+ * cancelled token ends the loop at once.
  *
  * Teardown is registered in construction order and runs last-in-first-out, so
  * the graph comes apart in the reverse of the order it went together: the
@@ -1354,6 +1404,7 @@ export async function installServices(
     // pref change must not need a restart.
     timeoutMs: () => getPref("timeoutSeconds") * 1000,
     limiterFor: (host) => limiters.limiterFor(host),
+    retryFor: createRetryFor(limiters),
     clock,
     logger,
   });

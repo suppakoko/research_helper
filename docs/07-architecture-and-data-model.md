@@ -2482,6 +2482,21 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 
 4 s is tolerable inside an interactive search and 40 s is not, and that is the whole of the case for 3 over 5. **Two shipped seams disagree about the first wait, so quote these figures only against the one named above.** `createBackoff` in `src/core/rateLimit/backoff.ts` seeds its progression at `prev = base` rather than 0, so its longest waits are 3 s, 9 s, 27 s, 30 s (capped) — **12 s, 39 s and 69 s** for the same three attempt caps. No shipped code calls `createBackoff` today; `src/core/http/client.ts` goes through `withRetry`.
 
+> **The retry cells take effect from 2026-10-20 (`plan/00` §6 item 228, owner's decision).** Until this date
+> `src/bootstrap/container.ts` gave the HTTP client no `retryFor`, so every host made one attempt and the three
+> columns above were unused. The composition root now builds each host's policy from its row's cells
+> (`createRetryFor`, over `retryPolicyFromBudget` in `src/core/http/retry.ts`); a host with no row, or with no
+> limiter, still gets one attempt. Only §10.1's retryable classes are retried — `RateLimitError` (429),
+> `UpstreamServerError` (5xx), `TimeoutError`, `OfflineError`, `NetworkError` — never a 400/401/403/404 or a
+> cancellation. Every retry re-enters the host's bucket (`RateLimiter.run`), so it waits for a token and for any
+> `penalize()` deadline like a first attempt; a sent `Retry-After` on a 429 **or a 503** is the wait itself, not the
+> jitter. Measured in `test/unit/bootstrap/container.test.ts`: arXiv's first retry reached the wire at 3031 ms, not
+> its 3000 ms base, because a token at 0.33/s takes 3030 ms to refill. The longest silent wait per row is `base +
+> 3 × base`: **4 s** for the 1000 ms rows, **8 s** for Semantic Scholar, **12 s** for arXiv. Two costs the table above
+> does not show: a `Retry-After` is not clamped to `cap`, so a host that asks for 120 s costs two such waits; and a
+> `TimeoutError` is retryable, so a host that never answers costs up to three request timeouts (§8.5's 60 s each)
+> before the job sees the error.
+
 ### 7.4 Cancellation
 
 Cancellation is cooperative and checked at four places:
@@ -2490,6 +2505,11 @@ Cancellation is cooperative and checked at four places:
 2. Inside `RateLimiter.acquire` — a job waiting on a token bucket must not block cancellation.
 3. Passed into the HTTP layer as `Zotero.HTTP.request`'s **`cancellerReceiver`** — *not* an `AbortSignal`, which does not exist in the plugin sandbox (`docs/01` §2.3) — so in-flight requests are actually aborted rather than merely ignored. Measured 2026-09-30 (`P0-T17`): the request rejects with `Zotero.HTTP.CancelledException`, which `src/core/http/client.ts` maps to `HttpError` code `CANCELLED`.
 4. Between pipeline stages.
+
+> **Retries, 2026-10-20 (`plan/00` §6 item 228).** Now that §7.3's retry cells are in effect, a request may sit in a
+> retry wait. The token stops that loop at once at three points: the wait itself (`Clock.sleep` rejects when the token
+> fires), the check before each attempt, and a check after a failed attempt and before any wait is scheduled, so an
+> attempt that fails after its job was cancelled is neither retried nor announced as a retry.
 
 **Cancellation is genuinely supported by the HTTP layer.** `Zotero.HTTP.request(method, url, options)` accepts a **`cancellerReceiver`** callback that is handed a cancel function, alongside `requestObserver` (which receives the `XMLHttpRequest` after `open()`). `HttpClient` wires both:
 
@@ -3848,6 +3868,28 @@ Notes: `PartialFetch` is a first-class state, not an error. If PubMed is down bu
 > that saves 2 s after a 50 ms deadline: 1 item in the collection when the import returned, 2 after the lookup settled
 > (`translatorImport.spec.ts`, "measures item 213's open risk"). A second copy is therefore possible whenever a real
 > lookup outlives 30 s, and for a PMID batch it is every member the batch's late answer saves. Open; not decided.
+>
+> **Decided 2026-10-20 (owner, `plan/00` §6 item 227): a PMID batch's deadline is 30 s + 1 s per PMID, at most 5
+> minutes; a late-saved copy is moved to the Zotero trash and logged.** This settles the two questions left open above.
+> - **Deadline.** A lookup that covers several records — a PMID batch of up to 200 PMIDs sent as one
+>   `{ PMID: [...] }` lookup — gets the per-record 30 s plus 1 s for each PMID in it, and never more than 5 minutes
+>   (300 s). A lookup that covers one record (a DOI, an arXiv ID, or a lone PMID) keeps 30 s. The figures are
+>   `TRANSLATOR_LOOKUP_TIMEOUT_MS`, `PMID_BATCH_DEADLINE_PER_PMID_MS` and `PMID_BATCH_DEADLINE_CAP_MS` in
+>   `src/zotero/translatorImport.ts`, combined by `pmidBatchDeadlineMs`. At the shipped batch size of 200 the longest
+>   deadline is 230 s, so the 5-minute cap binds only for a batch above 270 PMIDs.
+> - **Late copy.** When an abandoned lookup settles, the items its own `translate()` call saved — the array that call
+>   resolves with, or, when it rejects after saving some, the same `Translate` object's `newItems` list — are moved to
+>   the Zotero trash (`Zotero.Items.trash`, inside one `Zotero.DB.executeTransaction`), which the user can undo; nothing
+>   is ever erased. The count is logged at `warn`, never the record's content. No other item is touched: not the
+>   record's hand-mapped copy, not an item already in the library, not an item another lookup saved. A lookup whose
+>   deadline passed before its `translate()` started never starts it, so it saves nothing.
+> - **Measured 2026-10-20 in Zotero 10.0.3**, with fake translators that save as `translate()` does
+>   (`translatorImport.spec.ts`, item 227's three specs; no real lookup): a DOI lookup that saved 3 s after a 1 s
+>   deadline left its item in the trash, not erased, while an item already in the collection, an in-time translator
+>   item from the same run and the record's hand-mapped copy all stayed out of it; the collection held the same 3 items
+>   before and after. A two-PMID batch answering after 3 s against its 2.05 s deadline had both late items trashed, and
+>   one answering after 1.2 s with a 0.5 s per-record deadline landed in time under its 2.5 s batch deadline. Same
+>   result in each of three integration runs.
 
 ### 12.2 Find related (Feature 2)
 

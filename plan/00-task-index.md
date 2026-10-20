@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-19 · **148 tasks: 112 `DONE`, 36 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-20 · **148 tasks: 112 `DONE`, 36 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 36**, Phase 3 **0 of 31**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 148, so 50 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -1588,19 +1588,29 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 227. ~~**A translator lookup that misses its 30-second deadline still saves its item later (owner).**~~ **DECIDED 2026-10-20:
     a late-saved copy is moved to the Zotero trash when its lookup settles, and logged;** a PMID batch's deadline is
-    30 s + 1 s per PMID, at most 5 minutes; `docs/07` §12.1 first. Zotero's
+    30 s + 1 s per PMID, at most 5 minutes; `docs/07` §12.1 first. **DONE 2026-10-20** (`plan/reports/items-227-229a.md`). Zotero's
     `translate()` saves into the collection itself and cannot be cancelled, so a late answer leaves a second copy beside
     the hand-mapped one (measured in Zotero 10.0.3). A PMID batch of up to 200 has one deadline, so a slow batch could
     leave up to 200 copies. Accept, detect and report, or remove the late copy; and one deadline per batch or per record.
 
-228. ~~**The HTTP client gets no retry policy:**~~ **DECIDED 2026-10-20: wire `docs/07` §7.3's retry cells into the client.** `container.ts` supplies no `retryFor`, so every host makes one attempt and
+228. ~~**The HTTP client gets no retry policy:**~~ **DECIDED 2026-10-20: wire `docs/07` §7.3's retry cells into the client.**
+    **DONE 2026-10-20** (`plan/reports/items-228-229b.md`). `container.ts` supplies no `retryFor`, so every host makes one attempt and
     `docs/07` §7.3's retry cells are unused (owner: wire them?).
 
 229. **Smaller follow-ups** *(DECIDED 2026-10-20: do the estimate's two leftovers, the suite-wide `Translate.Search`
-    stub, and the D10 contact guard for `pmc.ncbi.nlm.nih.gov`; no converter recording):* the D10 contact guard covers `eutils` only, not `pmc.ncbi.nlm.nih.gov`; item 208's suite-wide
+    stub, and the D10 contact guard for `pmc.ncbi.nlm.nih.gov`; no converter recording; all three DONE 2026-10-20):* the D10 contact guard covers `eutils` only, not `pmc.ncbi.nlm.nih.gov`; item 208's suite-wide
     `Zotero.Translate.Search` stub was never added; `docs/02` §2.4's copy of the rate table lacks the new row; the
     estimate still counts lookup-only sources in `itemCount` and charges an import of previewed works (the owner chose
     to fix both, 2026-10-19); one real converter response could be recorded for 1 request.
+
+### 6.43 Raised by items 227–229, 2026-10-20 — decided the same day
+
+230. **A timeout is retried, so a silent host costs up to three 60 s timeouts.** **DECIDED 2026-10-20: automatic retries
+    skip timeouts** — only 429 and 5xx (and offline/network) are retried; a timeout surfaces after one attempt.
+
+231. **An import of supplied records without works is still charged search requests.** **DECIDED 2026-10-20: estimate
+    zero search requests whenever no search is sent.** Also: stale comments in `hostLimiter.ts` (`HOST_POLICIES` header),
+    `searchImportViewModel.ts` (`UNRENDERABLE_ERROR_ROWS`) and `docs/07` §7.3 ("every other row carries `—`").
 
 ## 7. Regenerating this file
 

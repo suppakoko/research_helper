@@ -713,6 +713,23 @@ export function createSearchImportPipeline(
       // `P1-T16` step 1: "a trivial `estimate()` returning request counts and
       // zero cost — Phase 1 spends no money, but §11.3 requires the member to
       // exist."
+      // The import of a preview's own works (`input.works`, `P2-T31`) sends
+      // nothing: `Searching` and `Fetching` take the supplied records,
+      // `Merging` takes the supplied works, and `BackfillingAbstracts` returns
+      // at once. So it is charged no request, and its item count is the works
+      // handed back — an upper bound, since `selectedRecordIds` may write
+      // fewer (owner, 2026-10-19; `plan/00` §6 item 229).
+      if (input.works !== undefined) {
+        return Promise.resolve({
+          itemCount: input.works.length,
+          externalRequests: 0,
+          estimatedInputTokens: 0,
+          estimatedOutputTokens: 0,
+          estimatedCostUsd: undefined,
+          estimatedDurationSeconds: 0,
+          notesKeys: [],
+        });
+      }
       const sources = input.sourceIds
         .map((id) => ctx.sources.get(id))
         .filter((source): source is LiteratureSource => source !== undefined);
@@ -742,7 +759,10 @@ export function createSearchImportPipeline(
       );
       const externalRequests = searchRequests + backfillRequests;
       return Promise.resolve({
-        itemCount: input.limit * sources.length,
+        // Searching sources only: a lookup-only source yields no record on a
+        // keyword run, so it adds no item either (owner, 2026-10-19;
+        // `plan/00` §6 item 229).
+        itemCount: input.limit * searching.length,
         externalRequests,
         estimatedInputTokens: 0,
         estimatedOutputTokens: 0,

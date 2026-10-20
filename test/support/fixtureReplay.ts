@@ -81,7 +81,11 @@
  * which is run by hand and is not imported by any test.
  */
 
-import { createManualClock, type ManualClock } from "../../src/core/clock";
+import {
+  createManualClock,
+  type Clock,
+  type ManualClock,
+} from "../../src/core/clock";
 import {
   createHttpClient,
   type HttpClient,
@@ -91,7 +95,12 @@ import {
   type HttpTransportXhr,
   type RateLimiterPort,
 } from "../../src/core/http/client";
+import {
+  retryPolicyFromBudget,
+  type RetryPolicy,
+} from "../../src/core/http/retry";
 import { buildUserAgent } from "../../src/core/http/userAgent";
+import { HOST_POLICIES } from "../../src/core/rateLimit/hostLimiter";
 
 import type { FixtureIo } from "./fixtureIo";
 import { sha256Hex } from "./sha256";
@@ -386,6 +395,12 @@ export interface ReplayHttpClient {
   readonly limiter: RecordingLimiter;
   /** Frozen: `P1-T11`'s **Do NOT** forbids a live timestamp in a snapshot. */
   readonly clock: ManualClock;
+  /**
+   * Every wait the client's retry loop asked for, in order. The waits do not
+   * move {@link clock} and resolve at once, so a replayed 429 or 5xx finishes
+   * without real or simulated time passing; the list is how a test sees them.
+   */
+  readonly slept: readonly number[];
 }
 
 /** Options for {@link createReplayHttpClient}. */
@@ -407,17 +422,39 @@ export interface ReplayHttpClientOptions {
 }
 
 /**
+ * The retry policy the shipped composition root gives `host`, or `undefined`.
+ *
+ * The same two inputs `src/bootstrap/container.ts`'s `createRetryFor` reads —
+ * the host's `HOST_POLICIES` row and its `retry` cells, through
+ * `retryPolicyFromBudget` — without importing `src/bootstrap/`, which this
+ * platform-free file must not. `random` is pinned to the top of each draw so a
+ * test's recorded waits are one fixed sequence: `[base, min(cap, 3 × base)]`.
+ */
+function shippedRetryPolicy(host: string): RetryPolicy | undefined {
+  const budget = HOST_POLICIES.find((row) => row.host === host)?.retry;
+  return budget === undefined
+    ? undefined
+    : retryPolicyFromBudget(budget, () => 1);
+}
+
+/**
  * The shipped `createHttpClient`, wired to fixtures.
  *
- * **No retry policy is injected**, so each request is a single attempt. That is
- * what makes a 429 or 503 fixture observable at all: with a policy the client
- * would retry, and the second attempt would read the same fixture and see the
- * same status until the attempt cap, which asserts the retry loop (already
- * covered by `test/unit/core/http-client.test.ts`) rather than the service's
- * error shape.
+ * **The shipped retry policy is injected for {@link ReplayHttpClientOptions.host}
+ * since 2026-10-20** (`plan/00` §6 item 228). Until then no policy was
+ * injected, so each request was a single attempt — which matched the shipped
+ * client, because `src/bootstrap/container.ts` supplied no `retryFor` either.
+ * Now that it does, a replayed 429 or 5xx is retried exactly as in the
+ * product: the same fixture answers every attempt, so a 429 or 503 fixture is
+ * read `docs/07` §7.3's attempt-cap times and the last error is what the
+ * caller sees. The error shape a contract test asserts is unchanged; what
+ * changes is the number of reads and of `penalize` calls, which a test must
+ * now count at the attempt cap. The waits resolve at once and are recorded in
+ * {@link ReplayHttpClient.slept}, so no test waits for them. A host with no
+ * §7.3 row gets no policy, as in the product.
  *
  * @param options - see {@link ReplayHttpClientOptions}
- * @returns the client and the three things a test asserts against
+ * @returns the client and the things a test asserts against
  */
 export function createReplayHttpClient(
   options: ReplayHttpClientOptions,
@@ -425,13 +462,27 @@ export function createReplayHttpClient(
   const transport = createReplayTransport(options.dir, options.io);
   const limiter = createRecordingLimiter(options.host);
   const clock = createManualClock(options.nowEpochMs ?? FROZEN_NOW_EPOCH_MS);
+  const slept: number[] = [];
+  // `now()` is the frozen clock's; `sleep()` records and returns at once, and
+  // still rejects for a cancelled token as `Clock.sleep` must.
+  const retryClock: Clock = {
+    now: () => clock.now(),
+    sleep: (ms, token) =>
+      new Promise<void>((resolve) => {
+        slept.push(ms);
+        token?.throwIfCancelled();
+        resolve();
+      }),
+  };
+  const policy = shippedRetryPolicy(options.host);
   const client = createHttpClient({
     transport,
     userAgent: buildUserAgent(options.version ?? "0.0.2"),
-    clock,
+    clock: retryClock,
     limiterFor: (host) => (host === options.host ? limiter : undefined),
+    retryFor: (host) => (host === options.host ? policy : undefined),
   });
-  return { client, transport, limiter, clock };
+  return { client, transport, limiter, clock, slept };
 }
 
 /**

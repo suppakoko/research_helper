@@ -127,7 +127,10 @@ import type { CancellationToken } from "../jobQueue/cancellation";
 import type { Logger } from "../logger";
 import { redactText } from "../provenance";
 import { parseRetryAfter } from "../rateLimit/backoff";
-import { adoptAdvertisedLimits } from "../rateLimit/hostLimiter";
+import {
+  adoptAdvertisedLimits,
+  PMC_IDCONV_HOST,
+} from "../rateLimit/hostLimiter";
 import type { RateLimiterConfig } from "../rateLimit/tokenBucket";
 
 import { type RetryPolicy, withRetry } from "./retry";
@@ -485,6 +488,12 @@ export interface HttpClientDeps {
   /**
    * The host's retry policy: §7.3's per-host attempt cap and the jitter from
    * `src/core/rateLimit/backoff.ts`. Absent means a single attempt.
+   *
+   * `src/bootstrap/container.ts` supplies it since 2026-10-20 (`plan/00` §6
+   * item 228), from each `HOST_POLICIES` row's `retry` cells and only for a
+   * host that also has a limiter, so every retry is paced by that host's
+   * bucket: each attempt below re-enters `limiter.run`, waits for a token and
+   * for any `Retry-After` penalty, and is logged and classified like the first.
    */
   readonly retryFor?: (host: string) => RetryPolicy | undefined;
   /** Supplies `now()` for `Retry-After`/durations and `sleep()` for backoff. */
@@ -917,6 +926,17 @@ function toHttpResponse(
 // ---------------------------------------------------------------------------
 
 /**
+ * The NCBI hosts whose `tool`/`email` parameters must carry the maintainer's
+ * values (decision D10, `docs/02` §2.2's final assignment table). Both names
+ * are imported, not respelled: E-utilities' from `./userAgent`, the ID
+ * Converter's from §7.3's policy table in `src/core/rateLimit/hostLimiter.ts`.
+ */
+const D10_CONTACT_HOSTS: ReadonlySet<string> = new Set([
+  NCBI_EUTILS_HOST,
+  PMC_IDCONV_HOST,
+]);
+
+/**
  * Refuse a request that would send anything but the maintainer address to NCBI.
  *
  * Decision D10 (`docs/00` §3) and `docs/02` §2.2's final assignment table:
@@ -935,6 +955,13 @@ function toHttpResponse(
  * user's e-mail address, and an error message reaches `Zotero.debug` (`docs/09`
  * §2.1, NFR-16).
  *
+ * **Two NCBI hosts since 2026-10-20** ({@link D10_CONTACT_HOSTS}): the NCBI ID
+ * Converter on `pmc.ncbi.nlm.nih.gov` (`src/sources/pubmed/idConverter.ts`,
+ * added 2026-10-19) sends the same `tool` and `email`, and `docs/02` §2.2's
+ * final assignment table now lists it beside E-utilities (`plan/00` §6
+ * item 229). Before that date the converter's address was held only by its
+ * own tests.
+ *
  * @throws PolicyViolationError if `tool` or `email` carries anything else
  */
 function assertContactPolicy(url: string): void {
@@ -944,12 +971,13 @@ function assertContactPolicy(url: string): void {
   } catch {
     return; // an unparseable URL fails in the transport, with its own error
   }
-  if (parsed.host.toLowerCase() !== NCBI_EUTILS_HOST) return;
+  const host = parsed.host.toLowerCase();
+  if (!D10_CONTACT_HOSTS.has(host)) return;
 
   const email = parsed.searchParams.get("email");
   if (email !== null && email !== MAINTAINER_EMAIL) {
     throw new PolicyViolationError(
-      `D10: ${NCBI_EUTILS_HOST} may only receive the maintainer contact ` +
+      `D10: ${host} may only receive the maintainer contact ` +
         `address in email=; a different address was supplied`,
       { host: parsed.host, param: "email" },
     );
@@ -957,7 +985,7 @@ function assertContactPolicy(url: string): void {
   const tool = parsed.searchParams.get("tool");
   if (tool !== null && tool !== TOOL_NAME) {
     throw new PolicyViolationError(
-      `D10: ${NCBI_EUTILS_HOST} may only receive tool=${TOOL_NAME}`,
+      `D10: ${host} may only receive tool=${TOOL_NAME}`,
       { host: parsed.host, param: "tool" },
     );
   }

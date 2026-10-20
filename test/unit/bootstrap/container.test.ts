@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FakeZotero } from "../../setup/zotero-global";
 import {
   adoptPrefObserverHandle,
+  createRetryFor,
   createScope,
   createZoteroLogSink,
   installServices,
@@ -17,7 +18,12 @@ import {
   type PrefScalar,
   type PrefStore,
 } from "../../../src/core/config";
-import { ConfigurationError } from "../../../src/core/errors";
+import {
+  ConfigurationError,
+  OperationCancelledError,
+  RateLimitError,
+  UpstreamServerError,
+} from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import {
   getHttpClient,
@@ -41,8 +47,10 @@ import { LOG_PREFIX, type LogSink } from "../../../src/core/logger";
 import {
   ARXIV_HOST,
   BIORXIV_HOST,
+  createHostLimiterRegistry,
   CROSSREF_HOST,
   EBI_HOST,
+  HOST_POLICIES,
   NCBI_HOST,
   PMC_IDCONV_HOST,
   SEMANTICSCHOLAR_HOST,
@@ -1443,5 +1451,432 @@ describe("P2-T04: installServices hands Crossref the contact preference and the 
     ).toBe("suppakoko@gmail.com");
 
     await h.scope.unregisterAll();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Item 228: §7.3's retry cells reach the shipped client (owner, 2026-10-20)
+// ---------------------------------------------------------------------------
+
+describe("item 228: installServices supplies docs/07 §7.3's retry policy", () => {
+  interface ScriptedAnswer {
+    readonly status: number;
+    readonly headers?: Readonly<Record<string, string>>;
+  }
+
+  /**
+   * A transport whose answer is chosen per call, by URL and by the call's
+   * index among calls to that same URL. It reads the clock itself, so a gap
+   * between two calls is an observation of when each reached the wire.
+   */
+  function createScriptedTransport(
+    clock: ManualClock,
+    answer: (url: string, nth: number) => ScriptedAnswer,
+    onCall?: (url: string) => void,
+  ): FakeTransport {
+    const calls: RecordedCall[] = [];
+    const perUrl = new Map<string, number>();
+    return {
+      calls,
+      request(_method, url, options) {
+        calls.push({ url, options, atMs: clock.now() });
+        const nth = perUrl.get(url) ?? 0;
+        perUrl.set(url, nth + 1);
+        onCall?.(url);
+        const { status, headers = {} } = answer(url, nth);
+        const xhr: HttpTransportXhr = {
+          status,
+          responseText: "",
+          responseURL: "",
+          getAllResponseHeaders: () =>
+            Object.entries(headers)
+              .map(([name, value]) => `${name}: ${value}`)
+              .join("\r\n"),
+        };
+        return Promise.resolve(xhr);
+      },
+      UnexpectedStatusException:
+        StubUnexpectedStatusException as unknown as HttpExceptionClass<
+          Error & { readonly xmlhttp: HttpTransportXhr }
+        >,
+      TimeoutException: StubTimeoutException,
+      BrowserOfflineException: StubBrowserOfflineException,
+      SecurityException: StubSecurityException,
+      CancelledException: StubCancelledException,
+    };
+  }
+
+  /** Install a graph over `transport`, with every log line kept. */
+  async function installOver(
+    clock: ManualClock,
+    transport: FakeTransport,
+  ): Promise<{
+    h: Harness;
+    graph: Awaited<ReturnType<typeof installServices>>;
+  }> {
+    const h = harness({ transport, clock }, { logLevel: "debug" });
+    const graph = await installServices(h.scope, h.options);
+    return { h, graph };
+  }
+
+  /** Settle `promise` by stepping the clock, and hand back what it did. */
+  async function settle(
+    clock: ManualClock,
+    promise: Promise<unknown>,
+  ): Promise<{ value?: unknown; error?: unknown }> {
+    let outcome: { value?: unknown; error?: unknown } | undefined;
+    promise.then(
+      (value: unknown) => {
+        outcome = { value };
+      },
+      (error: unknown) => {
+        outcome = { error };
+      },
+    );
+    await runUntil(clock, () => outcome !== undefined, 40_000);
+    return must(outcome, "the request's outcome");
+  }
+
+  /** The JSON payloads of every sink line whose `msg` is `msg`. */
+  function linesWith(
+    sink: { readonly lines: readonly string[] },
+    msg: string,
+  ): Record<string, unknown>[] {
+    return sink.lines
+      .filter((line) => line.includes(`"msg":"${msg}"`))
+      .map(
+        (line) =>
+          JSON.parse(line.slice(line.indexOf("{"))) as Record<string, unknown>,
+      );
+  }
+
+  it("retries a 503 to each row's own attempt cap, first wait exactly its base (every HOST_POLICIES row)", async () => {
+    for (const row of HOST_POLICIES) {
+      const budget = must(row.retry, `${row.host}'s retry cells`);
+      const clock = createManualClock();
+      const transport = createScriptedTransport(clock, () => ({ status: 503 }));
+      const { h } = await installOver(clock, transport);
+
+      const outcome = await settle(
+        clock,
+        httpRequest({ method: "GET", url: `https://${row.host}/x` }),
+      );
+
+      expect(outcome.error, row.host).toBeInstanceOf(UpstreamServerError);
+      // §7.3's attempt cap counts the first attempt: 3 → 3 requests.
+      expect(transport.calls, row.host).toHaveLength(budget.maxAttempts);
+      expect(transport.calls).toHaveLength(3);
+      const at = transport.calls.map((call) => call.atMs);
+      const t0 = must(at[0], "the first call");
+      // `withRetry` enters the first retry with `prevDelayMs = 0`, so the
+      // first wait is exactly `base`; the second is a draw over
+      // `[base, min(cap, 3 × base)]` (§7.3's cost table). **And the retry
+      // still waits for the bucket**: measured on the first run, arXiv's
+      // first retry reached the wire at 3031 ms, not its 3000 ms base,
+      // because a token at 0.33/s takes 3030.3 ms to refill. So the first gap
+      // is the larger of the two, give or take the one-tick stepping.
+      const tokenMs = Math.ceil(1000 / row.withoutKey.ratePerSecond);
+      const firstGap = must(at[1], "the second call") - t0;
+      const expected = Math.max(budget.baseMs, tokenMs);
+      expect(firstGap, row.host).toBeGreaterThanOrEqual(expected);
+      expect(firstGap, row.host).toBeLessThanOrEqual(expected + 1);
+      const second = must(at[2], "the third call") - must(at[1], "call 2");
+      expect(second, row.host).toBeGreaterThanOrEqual(
+        Math.max(budget.baseMs, tokenMs),
+      );
+      expect(second, row.host).toBeLessThanOrEqual(
+        Math.max(Math.min(budget.capMs, budget.baseMs * 3), tokenMs) + 1,
+      );
+      // Two retries, each announced at `warn` with the wait it took.
+      expect(
+        linesWith(h.sink, "http retry").map((line) => line.attempt),
+        row.host,
+      ).toEqual([1, 2]);
+
+      await h.scope.unregisterAll();
+    }
+  });
+
+  it("stops retrying as soon as an attempt succeeds", async () => {
+    const clock = createManualClock();
+    const transport = createScriptedTransport(clock, (_url, nth) => ({
+      status: nth === 0 ? 502 : 200,
+    }));
+    const { h } = await installOver(clock, transport);
+
+    const outcome = await settle(
+      clock,
+      httpRequest({ method: "GET", url: ncbiUrl("esearch.fcgi") }),
+    );
+
+    expect(outcome.error).toBeUndefined();
+    expect(outcome.value).toMatchObject({ status: 200 });
+    expect(transport.calls).toHaveLength(2);
+    await h.scope.unregisterAll();
+  });
+
+  it("does not retry the classes docs/07 §10.1 marks non-retryable: 400, 401, 403, 404", async () => {
+    for (const status of [400, 401, 403, 404]) {
+      const clock = createManualClock();
+      const transport = createScriptedTransport(clock, () => ({ status }));
+      const { h } = await installOver(clock, transport);
+
+      const outcome = await settle(
+        clock,
+        httpRequest({ method: "GET", url: ncbiUrl("esearch.fcgi") }),
+      );
+
+      expect(outcome.error, String(status)).toBeDefined();
+      expect(transport.calls, String(status)).toHaveLength(1);
+      expect(linesWith(h.sink, "http retry"), String(status)).toEqual([]);
+      await h.scope.unregisterAll();
+    }
+  });
+
+  it("makes exactly one attempt to a host with no §7.3 row", async () => {
+    const clock = createManualClock();
+    const transport = createScriptedTransport(clock, () => ({ status: 503 }));
+    const { h, graph } = await installOver(clock, transport);
+    expect(graph.limiters.policyFor("example.test")).toBeUndefined();
+
+    const outcome = await settle(
+      clock,
+      httpRequest({ method: "GET", url: "https://example.test/a" }),
+    );
+
+    expect(outcome.error).toBeInstanceOf(UpstreamServerError);
+    expect(transport.calls).toHaveLength(1);
+    await h.scope.unregisterAll();
+  });
+
+  it("waits a 429's Retry-After rather than the jitter, and ends in RateLimitError", async () => {
+    const clock = createManualClock();
+    const transport = createScriptedTransport(clock, () => ({
+      status: 429,
+      headers: { "Retry-After": "5" },
+    }));
+    const { h } = await installOver(clock, transport);
+
+    const outcome = await settle(
+      clock,
+      httpRequest({ method: "GET", url: ncbiUrl("esearch.fcgi") }),
+    );
+
+    expect(outcome.error).toBeInstanceOf(RateLimitError);
+    expect(transport.calls).toHaveLength(3);
+    const at = transport.calls.map((call) => call.atMs);
+    // Never before the server's figure. The second gap measured 5001 ms on
+    // the first run: the penalty and the wait both end at the same instant
+    // and the bucket releases on the next tick, so the bound is a range
+    // narrower than the 400 ms pacing interval, not an equality.
+    for (const gap of [
+      must(at[1], "call 2") - must(at[0], "call 1"),
+      must(at[2], "call 3") - must(at[1], "call 2"),
+    ]) {
+      expect(gap).toBeGreaterThanOrEqual(5000);
+      expect(gap).toBeLessThan(5400);
+    }
+    // The wait the loop chose is the server's, not the 1000 ms base.
+    expect(linesWith(h.sink, "http retry").map((line) => line.delayMs)).toEqual(
+      [5000, 5000],
+    );
+    await h.scope.unregisterAll();
+  });
+
+  it("waits a 503's Retry-After rather than the jitter", async () => {
+    const clock = createManualClock();
+    const transport = createScriptedTransport(clock, (_url, nth) =>
+      nth === 0
+        ? { status: 503, headers: { "Retry-After": "7" } }
+        : { status: 200 },
+    );
+    const { h } = await installOver(clock, transport);
+
+    const outcome = await settle(
+      clock,
+      httpRequest({ method: "GET", url: ncbiUrl("esearch.fcgi") }),
+    );
+
+    expect(outcome.value).toMatchObject({ status: 200 });
+    const at = transport.calls.map((call) => call.atMs);
+    expect(must(at[1], "call 2") - must(at[0], "call 1")).toBe(7000);
+    expect(linesWith(h.sink, "http retry").map((line) => line.delayMs)).toEqual(
+      [7000],
+    );
+    await h.scope.unregisterAll();
+  });
+
+  it("sends every retry through the host's bucket: one run() per attempt", async () => {
+    const clock = createManualClock();
+    const transport = createScriptedTransport(clock, () => ({ status: 503 }));
+    const { h, graph } = await installOver(clock, transport);
+    const bucket = bucketOf(graph.limiters, NCBI_HOST);
+    const run = vi.spyOn(bucket, "run");
+
+    await settle(
+      clock,
+      httpRequest({ method: "GET", url: ncbiUrl("esearch.fcgi") }),
+    );
+
+    expect(transport.calls).toHaveLength(3);
+    expect(run).toHaveBeenCalledTimes(3);
+    run.mockRestore();
+    await h.scope.unregisterAll();
+  });
+
+  it("holds a retry behind another request's Retry-After penalty on the same host", async () => {
+    // Request A fails with a bare 503 and would retry after 1000 ms. Request
+    // B, paced 400 ms behind it, is refused with `429 Retry-After: 10`, which
+    // `penalize`s the whole host until B's answer + 10 s. A retry that went
+    // through the bucket waits for that; one that bypassed it would reach the
+    // wire at 1000 ms.
+    const clock = createManualClock();
+    const transport = createScriptedTransport(clock, (url, nth) => {
+      if (url.endsWith("a.fcgi")) return { status: nth === 0 ? 503 : 200 };
+      return nth === 0
+        ? { status: 429, headers: { "Retry-After": "10" } }
+        : { status: 200 };
+    });
+    const { h } = await installOver(clock, transport);
+    const t0 = clock.now();
+
+    const a = httpRequest({ method: "GET", url: ncbiUrl("a.fcgi") });
+    const b = httpRequest({ method: "GET", url: ncbiUrl("b.fcgi") });
+    const both = await settle(clock, Promise.all([a, b]));
+
+    expect(both.error).toBeUndefined();
+    const aCalls = transport.calls.filter((call) =>
+      call.url.endsWith("a.fcgi"),
+    );
+    const bCalls = transport.calls.filter((call) =>
+      call.url.endsWith("b.fcgi"),
+    );
+    expect(aCalls).toHaveLength(2);
+    expect(bCalls).toHaveLength(2);
+    const penaltyEnds = must(bCalls[0], "B's first call").atMs + 10_000;
+    expect(must(aCalls[0], "A's first call").atMs).toBe(t0);
+    expect(must(aCalls[1], "A's retry").atMs).toBeGreaterThanOrEqual(
+      penaltyEnds,
+    );
+    await h.scope.unregisterAll();
+  });
+
+  it("stops at once when the job is cancelled during a retry's wait", async () => {
+    const clock = createManualClock();
+    const transport = createScriptedTransport(clock, () => ({ status: 503 }));
+    const { h } = await installOver(clock, transport);
+    const source = createCancellationTokenSource();
+
+    let outcome: unknown;
+    const pending = httpRequest({
+      method: "GET",
+      url: ncbiUrl("esearch.fcgi"),
+      token: source.token,
+    }).catch((error: unknown) => {
+      outcome = error;
+    });
+    await flush();
+    // The first attempt failed and the loop is sleeping its 1000 ms.
+    expect(transport.calls).toHaveLength(1);
+    expect(outcome).toBeUndefined();
+
+    source.cancel({ kind: "user" });
+    await flush();
+
+    // Settled without the clock moving, and nothing more reached the wire.
+    expect(outcome).toBeInstanceOf(OperationCancelledError);
+    clock.advance(60_000);
+    await flush();
+    await pending;
+    expect(transport.calls).toHaveLength(1);
+    await h.scope.unregisterAll();
+  });
+
+  it("does not schedule a retry for an attempt that failed after the job was cancelled", async () => {
+    const clock = createManualClock();
+    const source = createCancellationTokenSource();
+    // The cancel lands while the attempt is on the wire, and the host then
+    // answers 503: a retryable class, but the job has already been stopped.
+    const transport = createScriptedTransport(
+      clock,
+      () => ({ status: 503 }),
+      () => {
+        source.cancel({ kind: "user" });
+      },
+    );
+    const { h } = await installOver(clock, transport);
+
+    let outcome: unknown;
+    const pending = httpRequest({
+      method: "GET",
+      url: ncbiUrl("esearch.fcgi"),
+      token: source.token,
+    }).catch((error: unknown) => {
+      outcome = error;
+    });
+    // Settles on its own: nothing waits on the clock.
+    await pending;
+
+    expect(outcome).toBeInstanceOf(OperationCancelledError);
+    expect(transport.calls).toHaveLength(1);
+    // No wait was scheduled, so no retry was announced either.
+    expect(linesWith(h.sink, "http retry")).toEqual([]);
+    expect(clock.pending).toBe(0);
+    await pending;
+    await h.scope.unregisterAll();
+  });
+
+  it("logs every retried attempt redacted exactly as the first", async () => {
+    const clock = createManualClock();
+    const transport = createScriptedTransport(clock, () => ({ status: 503 }));
+    const { h } = await installOver(clock, transport);
+    const secret = "0123456789abcdef0123456789abcdef";
+
+    await settle(
+      clock,
+      httpRequest({
+        method: "GET",
+        url: ncbiUrl(`esearch.fcgi?db=pubmed&term=x&api_key=${secret}`),
+      }),
+    );
+
+    expect(transport.calls).toHaveLength(3);
+    const requests = linesWith(h.sink, "http request");
+    expect(requests).toHaveLength(3);
+    // One redacted form, identical on every attempt.
+    expect(new Set(requests.map((line) => line.url)).size).toBe(1);
+    expect(String(must(requests[0], "the first line").url)).not.toContain(
+      secret,
+    );
+    expect(linesWith(h.sink, "http retry")).toHaveLength(2);
+    for (const line of h.sink.lines) expect(line).not.toContain(secret);
+    await h.scope.unregisterAll();
+  });
+
+  it("createRetryFor hands out each row's cells, and nothing for a host without a row or a limiter", () => {
+    const registry = createHostLimiterRegistry({ clock: createManualClock() });
+    const retryFor = createRetryFor(registry, () => 1);
+    for (const row of HOST_POLICIES) {
+      const budget = must(row.retry, `${row.host}'s retry cells`);
+      const policy = must(retryFor(row.host), `${row.host}'s policy`);
+      expect(policy.maxAttempts, row.host).toBe(budget.maxAttempts);
+      // `random = 1` gives each draw's upper end: base, then min(cap, 3×base).
+      expect(policy.nextDelayMs(0, 1), row.host).toBe(budget.baseMs);
+      expect(policy.nextDelayMs(budget.baseMs, 2), row.host).toBe(
+        Math.min(budget.capMs, budget.baseMs * 3),
+      );
+      // One policy object per host.
+      expect(retryFor(row.host)).toBe(policy);
+    }
+    expect(retryFor("example.test")).toBeUndefined();
+    expect(retryFor("api.openalex.org")).toBeUndefined();
+
+    // A row with retry cells but no limiter gets no policy: an unpaced
+    // retry is the one `docs/07` §7.4 forbids.
+    const unpaced = createRetryFor({
+      policyFor: (host) => registry.policyFor(host),
+      limiterFor: () => undefined,
+    });
+    expect(unpaced(NCBI_HOST)).toBeUndefined();
   });
 });

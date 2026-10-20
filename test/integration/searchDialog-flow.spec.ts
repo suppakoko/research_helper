@@ -2252,7 +2252,7 @@ describe("P2-T25: the replay harness inside Zotero — real adapter, real client
 
   it("turns the recorded 429 into RateLimitError in production code and parks the host", async function () {
     this.timeout(30_000);
-    const { client, limiter, clock } = harness();
+    const { client, limiter, clock, transport, slept } = harness();
     const request = recordedEsearchRequest(PUBMED_SYNTHETIC_429_QUERY, 20, 0);
 
     let thrown: unknown;
@@ -2272,10 +2272,22 @@ describe("P2-T25: the replay harness inside Zotero — real adapter, real client
     // docs/07 §7.3: "Any 429 or 503 with Retry-After calls
     // limiter.penalize(...)". The limiter is the harness's recording one; the
     // call is the shipped client's.
-    assert.strictEqual(limiter.penalties.length, 1);
-    assert.strictEqual(limiter.penalties[0]?.untilEpochMs, clock.now() + 2000);
+    //
+    // Item 228 (2026-10-20): this asserted exactly one penalty, which pinned
+    // the single attempt the shipped client made while `src/bootstrap/
+    // container.ts` supplied no `retryFor`. The client now retries to §7.3's
+    // attempt cap — 3 on the eutils row — and the harness carries the same
+    // policy, so the fixture is read three times, the host is penalized once
+    // per attempt, and the two waits are the Retry-After's 2 s each. The
+    // waits resolve at once in the harness, so the test takes no longer.
+    assert.strictEqual(transport.calls.length, 3, "§7.3's attempt cap");
+    assert.deepEqual([...slept], [2000, 2000], "two waits of Retry-After");
+    assert.strictEqual(limiter.penalties.length, 3);
+    for (const penalty of limiter.penalties) {
+      assert.strictEqual(penalty.untilEpochMs, clock.now() + 2000);
+    }
 
-    const { client: second } = harness();
+    const { client: second, transport: secondTransport } = harness();
     let serverError: unknown;
     try {
       await second.request(
@@ -2290,6 +2302,8 @@ describe("P2-T25: the replay harness inside Zotero — real adapter, real client
       serverError instanceof UpstreamServerError,
       `an UpstreamServerError, not ${String(serverError)}`,
     );
+    // Item 228: the 500 is retried to the same cap before it surfaces.
+    assert.strictEqual(secondTransport.calls.length, 3, "§7.3's attempt cap");
     log25(
       `429 → ${thrown instanceof Error ? thrown.constructor.name : "?"}, ` +
         `500 → ${serverError instanceof Error ? serverError.constructor.name : "?"}`,

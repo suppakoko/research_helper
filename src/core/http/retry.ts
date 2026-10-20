@@ -14,7 +14,11 @@
  *   {@link RetryPolicy.nextDelayMs} is the seam it is injected through.
  * - The per-host **attempt cap** §7.3 names is {@link RetryPolicy.maxAttempts},
  *   supplied per host by the caller. No number is invented here:
- *   `plan/README.md` §5 rule 4 forbids it and §7.3 publishes no cap value.
+ *   `plan/README.md` §5 rule 4 forbids it. §7.3 published no cap value when
+ *   this was written; its retry cells were filled on 2026-10-07 (NCBI,
+ *   `P1-T28`) and 2026-10-14 (every other row), and they reach this module
+ *   only through `src/core/rateLimit/hostLimiter.ts`'s `HOST_POLICIES` and
+ *   {@link retryPolicyFromBudget} (`plan/00` §6 item 228, 2026-10-20).
  * - Which errors may be retried at all is {@link isRetryableError}, and it is
  *   `docs/07` §10.1's own `retryable` flag rather than a second opinion about
  *   status codes.
@@ -43,8 +47,13 @@
  */
 
 import type { Clock } from "../clock";
-import { RateLimitError, ResearchHelperError } from "../errors";
+import {
+  RateLimitError,
+  ResearchHelperError,
+  UpstreamServerError,
+} from "../errors";
 import type { CancellationToken } from "../jobQueue/cancellation";
+import { decorrelatedJitter, type RetryBudget } from "../rateLimit/backoff";
 
 // ---------------------------------------------------------------------------
 // 1. What may be retried
@@ -106,6 +115,53 @@ export interface RetryPolicy {
   nextDelayMs(prevDelayMs: number, attempt: number): number;
 }
 
+/**
+ * A host's {@link RetryPolicy}, built from its `docs/07` §7.3 retry cells.
+ *
+ * `plan/00` §6 item 228 (owner, 2026-10-20). The budget is the `retry` member
+ * of the host's `HOST_POLICIES` row in `src/core/rateLimit/hostLimiter.ts`;
+ * the delay is `src/core/rateLimit/backoff.ts`'s {@link decorrelatedJitter}
+ * over that row's `baseMs` and `capMs`, so the jitter shape still lives in one
+ * place (`P1-T04`'s **Do NOT**) and no number is written here. With
+ * {@link withRetry}'s `prevDelayMs = 0` on the first retry the first wait is
+ * exactly `baseMs`, which is the seam §7.3's cost table is computed against.
+ *
+ * @param budget - the host's base, cap and attempt cap
+ * @param random - uniform `[0, 1)` source; a test injects a fixed one
+ * @returns the policy the HTTP client's `retryFor` hands out for that host
+ */
+export function retryPolicyFromBudget(
+  budget: RetryBudget,
+  random: () => number = Math.random,
+): RetryPolicy {
+  // Validated now, so a malformed row fails at startup rather than on the
+  // first refused request.
+  decorrelatedJitter(budget.baseMs, budget.baseMs, budget.capMs, () => 0);
+  return {
+    maxAttempts: budget.maxAttempts,
+    nextDelayMs: (prevDelayMs) =>
+      decorrelatedJitter(prevDelayMs, budget.baseMs, budget.capMs, random),
+  };
+}
+
+/**
+ * The delay the server asked for, when the error carries one.
+ *
+ * A 429 carries it as {@link RateLimitError.retryAfterMs}. A 503 with
+ * `Retry-After` carries it in `UpstreamServerError`'s context, where
+ * `src/core/http/client.ts`'s `classify` puts it after the same parse. §7.3:
+ * the retry cells "apply only when the server sent no `Retry-After` — one
+ * that is sent always wins".
+ */
+function serverDirectedDelayMs(error: unknown): number | undefined {
+  if (error instanceof RateLimitError) return error.retryAfterMs;
+  if (error instanceof UpstreamServerError) {
+    const { retryAfterMs } = error.context;
+    return typeof retryAfterMs === "number" ? retryAfterMs : undefined;
+  }
+  return undefined;
+}
+
 /** What {@link withRetry} needs besides the operation itself. */
 export interface RetryContext {
   readonly policy: RetryPolicy;
@@ -130,7 +186,10 @@ export interface RetryContext {
  *
  * The delay is `Retry-After` when the server named one — a
  * {@link RateLimitError} carries it as `retryAfterMs`, so a 429 waits exactly
- * as long as the host asked — and {@link RetryPolicy.nextDelayMs} otherwise.
+ * as long as the host asked, and a 503's rides in its context — and
+ * {@link RetryPolicy.nextDelayMs} otherwise. Every attempt is the caller's
+ * `operation`, so in `src/core/http/client.ts` a retry passes through the
+ * host's limiter exactly as the first attempt did; this loop only waits.
  * That ordering is `docs/07` §7.3's: the server's own figure is authoritative
  * and the jitter is what fills in when there is none.
  *
@@ -155,11 +214,14 @@ export async function withRetry<T>(
       return await operation(attempt);
     } catch (error) {
       if (attempt >= maxAttempts || !isRetryableError(error)) throw error;
+      // A cancel that landed while the failed attempt was in flight stops the
+      // loop here, before a wait is scheduled or a retry is logged (`docs/07`
+      // §7.4; `plan/00` §6 item 228: "cancellation stops retrying at once").
+      context.token?.throwIfCancelled();
 
-      const serverDirected =
-        error instanceof RateLimitError ? error.retryAfterMs : undefined;
       const delayMs =
-        serverDirected ?? policy.nextDelayMs(previousDelayMs, attempt);
+        serverDirectedDelayMs(error) ??
+        policy.nextDelayMs(previousDelayMs, attempt);
       previousDelayMs = delayMs;
 
       context.onRetry?.({ attempt, delayMs, error });

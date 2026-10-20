@@ -906,37 +906,48 @@ describe("2. parser snapshot — efetch", () => {
 
 describe("3. typed errors", () => {
   it("turns a 429 with Retry-After into RateLimitError and parks the host [ours]", async () => {
-    const { client, limiter, clock } = harness();
+    const { client, limiter, clock, transport, slept } = harness();
     const planned = plannedRequest("error-429");
     // docs/02 §3.8 row 1. The fixture is hand-written: §3.1 quotes NCBI's IP
     // block warning, so the real limit is never provoked. Status and
     // Retry-After are therefore the only assertable parts, and they are what
     // src/core/http/client.ts classifies on.
-    await expect(
-      client.request("GET", planned.url, { responseType: "text" }),
-    ).rejects.toBeInstanceOf(RateLimitError);
-    await client
+    const error = await client
       .request("GET", planned.url, { responseType: "text" })
-      .catch((error: unknown) => {
-        expect(error).toBeInstanceOf(RateLimitError);
-        if (error instanceof RateLimitError) {
-          expect(error.retryAfterMs).toBe(2000);
-          expect(error.messageKey).toBe("rh-error-rate-limit");
-        }
-      });
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RateLimitError);
+    if (error instanceof RateLimitError) {
+      expect(error.retryAfterMs).toBe(2000);
+      expect(error.messageKey).toBe("rh-error-rate-limit");
+    }
+    // Item 228 (2026-10-20): the harness now carries the shipped retry
+    // policy, so the one request is docs/07 §7.3's three attempts on the
+    // eutils row — three reads of the fixture, two waits of exactly the
+    // Retry-After, and the last 429 is what the caller sees. This test used
+    // to issue the request twice and assert only "more than zero" penalties.
+    expect(transport.calls).toHaveLength(3);
+    expect(slept).toStrictEqual([2000, 2000]);
     // docs/07 §7.3: "Any 429 or 503 with Retry-After calls
-    // limiter.penalize(...), which parks every waiter on that host."
-    expect(limiter.penalties.length).toBeGreaterThan(0);
-    expect(limiter.penalties[0]?.untilEpochMs).toBe(clock.now() + 2000);
+    // limiter.penalize(...), which parks every waiter on that host." Once
+    // per attempt, each at the frozen clock + 2 s.
+    expect(limiter.penalties).toHaveLength(3);
+    for (const penalty of limiter.penalties) {
+      expect(penalty.untilEpochMs).toBe(clock.now() + 2000);
+    }
   });
 
   it("turns a 500 into UpstreamServerError, not an exception [ours]", async () => {
-    const { client } = harness();
+    const { client, transport, slept } = harness();
     const planned = plannedRequest("error-500");
     // docs/02 §3.8 row 4. Hand-written for the same reason as the 429.
     await expect(
       client.request("GET", planned.url, { responseType: "text" }),
     ).rejects.toBeInstanceOf(UpstreamServerError);
+    // Item 228: retried to the eutils row's cap of 3, with no Retry-After, so
+    // the waits are the jitter's — base, then the top of `[base, 3 × base]`
+    // with the harness's pinned draw.
+    expect(transport.calls).toHaveLength(3);
+    expect(slept).toStrictEqual([1000, 3000]);
   });
 
   it("turns a truncated efetch body into ParseError, not zero results [both]", async () => {

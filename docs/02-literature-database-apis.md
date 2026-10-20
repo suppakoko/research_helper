@@ -177,9 +177,17 @@ Final assignment:
 | Host | `User-Agent` | Contact parameter |
 |---|---|---|
 | NCBI E-utilities | maintainer | `email=` **maintainer**, always (NBK25497) |
+| NCBI ID Converter (`pmc.ncbi.nlm.nih.gov`, §3.7) — *row added 2026-10-20* | maintainer | `tool=research_helper` and `email=` **maintainer**, always, as on E-utilities |
 | Crossref | maintainer | `mailto=` **user's, if set**; maintainer otherwise |
 | Europe PMC | maintainer | `email=` maintainer (no per-user benefit documented) |
 | Semantic Scholar, arXiv, bioRxiv/medRxiv, OpenAlex | maintainer | none defined |
+
+> **ID Converter row added 2026-10-20 (`plan/00` §6 item 229, owner's decision).** The converter
+> (§3.7, added 2026-10-19) is an NCBI service and already sent the maintainer's `tool` and `email`
+> following §3.7's example; until this date the table above named E-utilities only, and the HTTP
+> client's D10 guard (`assertContactPolicy` in `src/core/http/client.ts`) checked only
+> `eutils.ncbi.nlm.nih.gov`. The guard now refuses any other `tool` or `email` value on
+> `pmc.ncbi.nlm.nih.gov` as well, before the request is paced, logged or sent.
 
 Consequence for the preferences pane: the field is a **general contact address**, not an
 NCBI-specific one, and its help text must say what it is actually used for — see
