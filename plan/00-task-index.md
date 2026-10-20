@@ -1830,6 +1830,18 @@ the caller of what the card builds; if it does not, the caller is added with a d
     message key yet; `drain()` and job retention pruning are not built; the `job` store's `ON CONFLICT` upsert and
     `crypto.randomUUID` were not measured inside Zotero; `AcquiredSource` has no field for abstract keywords.
 
+### 6.52 Raised by P3-T02 and P3-T33, 2026-10-21
+
+256. **Recorded, not cards.** (a) `ResumeGuards.skipCached` moves to `P3-T26` (noted on the card); automatic resumption
+    still waits on every guard. (b) `docs/07` §9.4's eviction score subtracted the retention bonus; `P3-T33` adds it, with
+    1 hour per hit and 30 days for `summary`/`embedding` — numbers recorded in §9.4 for the owner to confirm. (c) Pinned
+    tags for running jobs need a supplier (`P3-T17`/`P3-T35`). (d) `uninstall()` clears keys only on `ADDON_UNINSTALL`, never on
+    an upgrade; a real uninstall, disable-then-uninstall and upgrade are still unmeasured in Zotero; `docs/09` §2.5's "clears
+    every plugin pref" is not built and Zotero's own pref cleanup is unverified. (e) The pane's `clearAllKeys` keeps its own
+    sweep loop (`P3-T04` can call `secrets.clearAll()`). (f) The coordinator fixed `secrets.spec.ts`'s round-trip test, which
+    `P3-T02`'s new `openrouter.keyPresent` flag broke (the spec bundle had no PrefStore); the flag is restored after the test.
+    (g) `docs/07` §4.1/§9.2 TTL contradiction resolved in place by `P3-T33`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so

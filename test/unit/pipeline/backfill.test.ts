@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { mockLLMRouter } from "../../helpers/mockLLM";
+import { NO_CACHE } from "../../../src/core/cache/cache";
 import { createManualClock } from "../../../src/core/clock";
 import { Semaphore } from "../../../src/core/concurrency";
 import { OperationCancelledError } from "../../../src/core/errors";
@@ -882,7 +883,7 @@ function pipelineRun(options: {
     logger: createLogger({ sink: NULL_LOG_SINK, clock }),
     clock,
     sources: registry,
-    cache: undefined,
+    cache: NO_CACHE,
     budget: undefined,
     llm: mockLLMRouter(),
     tts: undefined,

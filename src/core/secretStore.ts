@@ -6,8 +6,8 @@
  * nowhere else. There is no plaintext tier and there never will be — `docs/09`
  * §1.7's tier 4 is "**Not implemented**" on purpose, and D5 says that adding it
  * is what would turn a decision back into a preference. Nothing in this file
- * reads or writes a preference, a file or a log: it is types plus one frozen
- * list of identifiers.
+ * reads or writes a preference, a file or a log: it is types, one frozen list
+ * of identifiers, and the port-only sweep {@link clearEveryStoredId}.
  *
  * ## Why the port is here and the implementation is in `src/zotero/`
  *
@@ -31,11 +31,19 @@
  *
  * - **No `"plaintext-prefs"` member of {@link SecretBackend}.** §1.7's own
  *   comment on that type says so, and it is the type-level half of D5.
- * - **No `clearAll()`.** §1.7's interface has seven members and `P1-T06` step 1
- *   lists exactly those seven. `docs/09` §2.5's `uninstall()` sweep is
- *   `P3-T02` step 7's; adding the method now would be a half-built surface with
- *   no caller.
  * - **No key-entry or passphrase surface.** Tiers 2 and 3 are `P3-T03`'s.
+ *
+ * ## `clearAll()` — the eighth member (`P3-T02`)
+ *
+ * §1.7's interface has seven members and `P1-T06` shipped exactly those.
+ * `P3-T02` step 3 adds `clearAll()` for `docs/09` §2.5's `uninstall()` sweep,
+ * whose caller is `onUninstall` in `src/hooks.ts`, reached from `uninstall()`
+ * in `addon/bootstrap.js`. {@link clearEveryStoredId} is the one sweep every
+ * tier shares, so a tier cannot leave an id behind by writing its own loop.
+ *
+ * Besides the port, this file now holds that one function. It is written
+ * against the port alone, so it still reads and writes no preference, file or
+ * log.
  */
 
 /**
@@ -103,4 +111,51 @@ export interface SecretStore {
   /** Cheap existence check that never decrypts. Drives the prefs pane. */
   has(id: SecretId): Promise<boolean>;
   listStoredIds(): Promise<readonly SecretId[]>;
+  /**
+   * Clear every id {@link SecretStore.listStoredIds} returns, through
+   * {@link SecretStore.clear}. Resolves to the number of ids cleared.
+   * `docs/09` §2.5: called from `uninstall()`, **never** from `shutdown()`.
+   * Implementations delegate to {@link clearEveryStoredId}.
+   */
+  clearAll(): Promise<number>;
+}
+
+/**
+ * The one `clearAll()` sweep: clear every id `store.listStoredIds()` returns,
+ * through `store.clear()`, and resolve to how many were cleared.
+ *
+ * **One failure does not stop the sweep.** A credential left behind after
+ * removal is the bug `docs/09` §2.5 names, so every remaining id is still
+ * tried. If any id failed, the function throws afterwards. The error names the
+ * failed ids and their count, and carries the first failure as `cause`. An id
+ * is never secret; a value is never read.
+ *
+ * @param store - the tier whose ids to clear
+ * @returns the number of ids cleared
+ * @throws Error when at least one `clear()` rejected
+ */
+export async function clearEveryStoredId(
+  store: Pick<SecretStore, "listStoredIds" | "clear">,
+): Promise<number> {
+  const ids = await store.listStoredIds();
+  const failed: SecretId[] = [];
+  let firstFailure: unknown;
+  let cleared = 0;
+  for (const id of ids) {
+    try {
+      await store.clear(id);
+      cleared += 1;
+    } catch (error) {
+      if (failed.length === 0) firstFailure = error;
+      failed.push(id);
+    }
+  }
+  if (failed.length > 0) {
+    throw new Error(
+      `[research-helper] clearAll() could not clear ${failed.length} of ` +
+        `${ids.length} stored secret(s): ${failed.join(", ")}`,
+      { cause: firstFailure },
+    );
+  }
+  return cleared;
 }

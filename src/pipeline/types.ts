@@ -18,7 +18,7 @@
  *
  * | type | declared in the corpus? | where it belongs (`docs/07` §2.2) |
  * |---|---|---|
- * | `Cache` | yes — §4.1, under a `// src/core/cache/cache.ts` comment | `src/core/cache/cache.ts` |
+ * | `Cache` | yes — §4.1, under a `// src/core/cache/cache.ts` comment (now imported, `P3-T33`) | `src/core/cache/cache.ts` |
  * | `BudgetGuard` | yes — §4.3 | `src/llm/budget.ts` |
  * | `TTSProvider` | yes — §4.4 | `src/tts/types.ts` |
  * | `LLMRouter` | **no** — one occurrence, this member (declared in §4.3 on 2026-10-21, item 248; now imported, `P3-T06`) | `src/llm/types.ts`, built by `src/llm/router.ts` |
@@ -60,6 +60,7 @@
  * `core/`, `sources/` and, since `P3-T06`, `llm/` (types only).
  */
 
+import type { Cache } from "../core/cache/cache";
 import type { Clock } from "../core/clock";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
 import type { ProgressReporter } from "../core/jobQueue/progress";
@@ -183,18 +184,17 @@ export interface PipelineEstimate {
 }
 
 // ===========================================================================
-// 2. The forward aliases — see this file's header (six since P3-T06: LLMRouter is imported)
+// 2. The forward aliases — see this file's header (five since P3-T33: LLMRouter
+//    and Cache are imported)
 // ===========================================================================
 
 /**
- * `docs/07` §4.1's `Cache`, which lives at `src/core/cache/cache.ts` and is not
- * built yet (`docs/11` §1 puts the cache in Phase 2).
- *
- * Deliberately `unknown`: see this file's header. Replace with a re-export of
- * the real declaration; do **not** transcribe §4.1's interface into
- * `pipeline/`.
+ * `docs/07` §4.1's `Cache`, declared in `src/core/cache/cache.ts` and built
+ * over the plugin database by `src/core/cache/sqliteCache.ts` (`P3-T33`). No
+ * longer a forward alias: re-exported, so `PipelineContext.cache` is the real
+ * cache `installServices` builds.
  */
-export type Cache = unknown;
+export type { Cache };
 
 /** `docs/07` §4.3's `BudgetGuard`, which belongs at `src/llm/budget.ts`. */
 export type BudgetGuard = unknown;

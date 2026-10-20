@@ -174,6 +174,7 @@
  * `registerUI.ts` compiles unchanged.
  */
 
+import type { Cache } from "../core/cache/cache";
 import { createSystemClock, type Clock } from "../core/clock";
 import type { PrefObserverHandle, PrefStore } from "../core/config";
 import { ConfigurationError } from "../core/errors";
@@ -223,10 +224,7 @@ import { createCrossrefRecordMapper } from "../sources/crossref/mapper";
 import { createEuropePmcSource } from "../sources/europepmc/europepmcSource";
 import { createEuropePmcRecordMapper } from "../sources/europepmc/mapper";
 import { createPubmedRecordMapper } from "../sources/pubmed/mapper";
-import {
-  createPubmedSource,
-  NCBI_SECRET_ID,
-} from "../sources/pubmed/pubmedSource";
+import { createPubmedSource } from "../sources/pubmed/pubmedSource";
 import { createSourceRegistry, type SourceRegistry } from "../sources/registry";
 import { createSemanticScholarRecordMapper } from "../sources/semanticscholar/mapper";
 import { createSemanticScholarSource } from "../sources/semanticscholar/semanticscholarSource";
@@ -246,6 +244,11 @@ import {
   createZoteroSearchImportWriter,
   registerPipelines,
 } from "./registerPipelines";
+import {
+  installPluginDatabase,
+  type PluginDatabase,
+  type PluginDatabaseSource,
+} from "./pluginDatabase";
 import { registerProviders, type LLMServices } from "./registerProviders";
 import { registerSources, type ShippedSourceAdapters } from "./registerSources";
 
@@ -676,6 +679,16 @@ export interface ServiceGraphOptions {
    * `NULL_LOG_SINK`, which is correct only for a test.
    */
   readonly logSink?: LogSink;
+  /**
+   * The plugin database (`P3-T33`; `plan/00` §6 item 249, owner,
+   * 2026-10-21): `src/zotero/db.ts`'s opener, path and cache blob store,
+   * passed by `src/bootstrap/registerUI.ts`. {@link installServices} opens the
+   * one connection through `installPluginDatabase`
+   * (`src/bootstrap/pluginDatabase.ts`) and closes it in its teardown.
+   * Omitted in a unit test of the graph: then there is no database, the job
+   * queue stays storeless and the cache stores nothing.
+   */
+  readonly pluginDatabase?: PluginDatabaseSource;
   /** Defaults to {@link createSystemClock}. A test passes `createManualClock()`. */
   readonly clock?: Clock;
   /**
@@ -851,10 +864,24 @@ export interface ServiceGraph {
   /**
    * The job queue's persistent half (`P3-T34`, `docs/07` §7.6): job records,
    * states, checkpoints and startup recovery. Built here with no store;
-   * `src/bootstrap/registerUI.ts` attaches the `job` table's store when the
-   * plugin database opens, and detaches it before the connection closes.
+   * {@link database} attaches the `job` table's store once the plugin
+   * database is open and migrated, and detaches it before the connection
+   * closes (`P3-T33`; until then `src/bootstrap/registerUI.ts` did).
    */
   readonly jobs: JobQueue;
+  /**
+   * The plugin database, opened once here and shared by every store
+   * (`P3-T33`; `plan/00` §6 item 249). `ready` is the background
+   * open-and-migrate; `src/bootstrap/registerUI.ts` publishes the provenance
+   * store from it.
+   */
+  readonly database: PluginDatabase;
+  /**
+   * `docs/07` §4.1's cache over `cache_entry` (`P3-T33`), the instance every
+   * job's `PipelineContext.cache` carries. Stores nothing when there is no
+   * database.
+   */
+  readonly cache: Cache;
 }
 
 /** What {@link PipelineContextFactory.forJob} is asked for. */
@@ -1149,6 +1176,8 @@ interface PipelineContextDeps {
   readonly progress: JobProgressFactory;
   /** The one router (`P3-T06`); every job's context carries the same instance. */
   readonly llm: LLMRouter;
+  /** The one cache (`P3-T33`); every job's context carries the same instance. */
+  readonly cache: Cache;
 }
 
 /**
@@ -1216,9 +1245,12 @@ function createPipelineContextFactory(
         // `docs/07` §4.3's router (`P3-T06`, owner item 248): the one instance
         // `registerProviders` built, shared by every job.
         llm: deps.llm,
+        // `docs/07` §4.1's cache over the plugin database (`P3-T33`): the one
+        // instance `installPluginDatabase` built, shared by every job.
+        cache: deps.cache,
         // See this function's doc comment: members doc 07 declares and no
-        // card has implemented yet (`llm` left this list in `P3-T06`).
-        cache: undefined,
+        // card has implemented yet (`llm` left this list in `P3-T06`, `cache`
+        // in `P3-T33`).
         budget: undefined,
         tts: undefined,
         zotero: undefined,
@@ -1583,6 +1615,20 @@ export async function installServices(
   //     adapter yet — `P3-T07`–`P3-T10` add them inside `registerProviders`.
   const llm = registerProviders({ logger });
 
+  // 6c. The plugin database, opened once here (`P3-T33`; `plan/00` §6 item
+  //     249, owner, 2026-10-21), and `docs/07` §4.1's cache over it. The open
+  //     is synchronous; the migrations run in the background so startup does
+  //     not wait on the file (`src/bootstrap/pluginDatabase.ts`'s header). Its
+  //     teardown — recovery awaited, stores detached, connection closed — is
+  //     registered here, so it runs after every later registration is undone.
+  const database = installPluginDatabase(scope, {
+    source: options.pluginDatabase,
+    clock,
+    logger: logger.child({ surface: "pluginDatabase" }),
+    // §8.5's `cache.maxSizeMB`, read on demand so a change applies at once.
+    cacheMaxBytes: () => getPref("cacheMaxSizeMB") * 1024 * 1024,
+  });
+
   // 7. The pipelines (`P1-T16`) and the per-job context factory.
   const pipelines = registerPipelines({
     // `http`: Strategy B's PMCID route (the NCBI ID Converter, owner
@@ -1597,14 +1643,16 @@ export async function installServices(
     sources,
     progress: progress.factory,
     llm: llm.router,
+    cache: database.cache,
   });
 
   // 8. The job queue's persistent half (`P3-T34`). Its store is attached by
-  //    `src/bootstrap/registerUI.ts` once the plugin database is open — the
-  //    one connection, opened after this function returns. No resume guard
-  //    and no notifier is passed yet, so `recover()` resumes nothing: every
-  //    resumable interrupted job waits for `P3-T15`, `P3-T16` and `P3-T33`
-  //    to fill `resumeGuards` here (`plan/00` §6 item 250).
+  //    `database.attachJobs` below once the plugin database is open (`P3-T33`
+  //    moved the open here). No resume guard and no notifier is passed yet,
+  //    so `recover()` resumes nothing: every resumable interrupted job waits
+  //    for `P3-T26` (cached items — it needs `summaryKey`; `P3-T33` left it),
+  //    `P3-T15` and `P3-T16` to fill `resumeGuards` here (`plan/00` §6 item
+  //    250).
   const jobs = createJobQueue({
     clock,
     logger: logger.child({ surface: "jobQueue" }),
@@ -1614,6 +1662,9 @@ export async function installServices(
         .list()
         .some((pipeline) => pipeline.id === pipelineId && pipeline.resumable),
   });
+  // The `job` store on the one connection, then §7.6's startup recovery —
+  // both once the migrations are done, neither awaited by startup.
+  database.attachJobs(jobs);
 
   logger.info("services installed", {
     hosts: limiters.hosts.length,
@@ -1637,12 +1688,15 @@ export async function installServices(
     pipelineContext,
     llm,
     jobs,
+    database,
+    cache: database.cache,
   };
 }
 
 /**
  * Run `docs/09` §1.7's startup probe and build the tier-1 key store if it
- * passed, then reconcile `ncbi.keyPresent` with what the keystore actually holds.
+ * passed, then reconcile every `*.keyPresent` flag with what the keystore
+ * actually holds (`P3-T02`; exported so its tests can call it).
  *
  * **Three failure modes, three different handlings, and none of them fails
  * startup.** A plugin that refused to load because a keychain was unavailable
@@ -1709,7 +1763,7 @@ export async function installServices(
  * is **not in `P1-T16`'s `Files` list**, so it is reported rather than edited
  * (`plan/README.md` §5 rule 2). **Needs a card.**
  */
-async function installSecretStore(
+export async function installSecretStore(
   logger: Logger,
 ): Promise<SecretStore | undefined> {
   let keychain: typeof import("../zotero/keychain");
@@ -1743,16 +1797,19 @@ async function installSecretStore(
 
   const secrets = keychain.createKeychainSecretStore();
   try {
-    // `src/zotero/keychain.ts`: exported "so a composition root can reconcile a
-    // flag left stale by a keystore entry removed outside Zotero". This is that
-    // caller, and it runs before the limiter registry reads the flag.
-    const present = await keychain.refreshKeyPresence(NCBI_SECRET_ID);
-    logger.debug("ncbi.keyPresent reconciled from the keystore", { present });
+    // `P3-T02` step 2: every `*.keyPresent` flag, not only NCBI's, re-derived
+    // from the keystore. A flag left stale by a keystore entry removed outside
+    // Zotero is corrected here, before the limiter registry reads NCBI's.
+    const flags = await keychain.reconcileKeyPresence();
+    logger.debug("key-presence flags reconciled from the keystore", {
+      flags: Object.fromEntries(flags),
+    });
   } catch (error) {
     logger.warn(
-      "could not reconcile ncbi.keyPresent from the keystore; the stored " +
-        "flag stands. If it is stale in the `true` direction, NCBI will be " +
-        "paced at the keyed budget against an unkeyed ceiling (docs/02 §3.1)",
+      "could not reconcile the key-presence flags from the keystore; the " +
+        "stored flags stand. If ncbi.keyPresent is stale in the `true` " +
+        "direction, NCBI will be paced at the keyed budget against an " +
+        "unkeyed ceiling (docs/02 §3.1)",
       { err: error },
     );
   }

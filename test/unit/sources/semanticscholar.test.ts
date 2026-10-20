@@ -377,6 +377,7 @@ function fakeSecrets(
       Promise.resolve(id === SEMANTICSCHOLAR_SECRET_ID && value !== undefined),
     listStoredIds: () =>
       Promise.resolve(value === undefined ? [] : [SEMANTICSCHOLAR_SECRET_ID]),
+    clearAll: () => Promise.resolve(0),
   };
 }
 

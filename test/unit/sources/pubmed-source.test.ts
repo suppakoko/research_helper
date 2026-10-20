@@ -249,6 +249,7 @@ function createStubSecrets(
     clear: () => Promise.resolve(),
     has: (id) => Promise.resolve(id === NCBI_SECRET_ID && value !== undefined),
     listStoredIds: () => Promise.resolve([NCBI_SECRET_ID]),
+    clearAll: () => Promise.resolve(0),
   };
 }
 

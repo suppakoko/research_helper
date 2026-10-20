@@ -173,9 +173,10 @@ export interface EnqueueRecordOptions {
 /** The persistent half of `docs/07` §4.5's queue. */
 export interface JobQueue {
   /**
-   * Hand the queue its store. The plugin database opens after
-   * `installServices` has run (`src/bootstrap/registerUI.ts`), so the store
-   * arrives late; every operation before it throws `ConfigurationError`.
+   * Hand the queue its store. The plugin database's migrations finish after
+   * `installServices` has returned (`src/bootstrap/pluginDatabase.ts`,
+   * `P3-T33`), so the store arrives late; every operation before it throws
+   * `ConfigurationError`.
    */
   attachStore(store: JobStore): void;
   /** Forget the store, before its connection closes. */
@@ -268,8 +269,8 @@ function randomUuid(): string {
 }
 
 /**
- * Build the queue. `installServices` calls this once; `registerUI.ts`
- * attaches the store when the plugin database is open.
+ * Build the queue. `installServices` calls this once, and attaches the store
+ * through `installPluginDatabase` once the plugin database is open (`P3-T33`).
  */
 export function createJobQueue(deps: JobQueueDeps): JobQueue {
   const newId = deps.newId ?? randomUuid;

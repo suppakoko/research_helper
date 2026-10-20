@@ -23,12 +23,19 @@
  * ## What this file exposes
  *
  * - {@link openPluginDatabase} and {@link pluginDatabasePath} — the connection,
- *   opened by `src/bootstrap/registerUI.ts` at startup and closed on shutdown.
+ *   opened once by `installServices` (`src/bootstrap/container.ts`, through
+ *   `src/bootstrap/pluginDatabase.ts`'s `installPluginDatabase`) at startup and
+ *   closed in the service graph's teardown (`plan/00` §6 item 249, owner,
+ *   2026-10-21). Until then `src/bootstrap/registerUI.ts` opened it.
  * - {@link createProvenanceStore} — `src/core/provenance.ts`'s
  *   `ProvenanceStore` port, with **exactly the two operations** `P2-T17` step 1
  *   names. Phase 3 widens it (`P3-T15`, `P3-T29`).
  * - {@link createJobStore} — `src/core/jobQueue/queue.ts`'s `JobStore` port
  *   over the `job` table (`P3-T34`), on the same connection.
+ * - {@link createCacheBlobStore} — `src/core/cache/sqliteCache.ts`'s
+ *   `CacheBlobStore` port: `docs/07` §9.2's blob directory for cache values
+ *   over 256 KB (`P3-T33`). The `cache_entry` rows themselves are written by
+ *   `sqliteCache.ts` through the connection.
  *
  * The schema is not here: `src/bootstrap/migrations.ts` owns it, as `docs/07`
  * §8.3 says ("migrations in `src/bootstrap/migrations.ts`, versioned in a
@@ -48,6 +55,7 @@ import {
   type JobStatus,
 } from "../core/jobQueue/jobRecord";
 import type { JobStore } from "../core/jobQueue/queue";
+import type { CacheBlobStore } from "../core/cache/sqliteCache";
 import {
   parseStoredProvenance,
   serializeProvenance,
@@ -307,6 +315,85 @@ export function createJobStore(db: SqlConnection): JobStore {
       return resultRows(await db.queryAsync(sql, statuses ?? [], QUIET)).map(
         jobRowFrom,
       );
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The cache's blob directory (`P3-T33`)
+// ---------------------------------------------------------------------------
+
+/**
+ * `docs/07` §8.3 and §9.2: spilled cache values live in
+ * `<data dir>/research-helper/cache/blobs/<sha256>`, in the data directory
+ * beside the database (§8.4), never in the profile directory.
+ */
+export function cacheBlobDirectory(): string {
+  return PathUtils.join(
+    Zotero.DataDirectory.dir,
+    "research-helper",
+    "cache",
+    "blobs",
+  );
+}
+
+/** A blob file name: exactly the 64 hex characters `sqliteCache.ts` makes. */
+const BLOB_NAME = /^[0-9a-f]{64}$/;
+
+function checkedName(name: string): string {
+  if (!BLOB_NAME.test(name)) {
+    throw new RangeError(
+      "[research-helper] a cache blob name must be 64 lower-case hex characters",
+    );
+  }
+  return name;
+}
+
+/**
+ * `src/core/cache/sqliteCache.ts`'s `CacheBlobStore` over `IOUtils`.
+ *
+ * A write goes to a temporary file that is renamed into place (`tmpPath`), so
+ * a crash mid-write leaves the old file or none, never half of one. The
+ * directory is created on the first write. Only names of the shape the cache
+ * makes are accepted, so no caller can reach a path outside the directory.
+ * The directory is resolved on every call, from `Zotero.DataDirectory.dir`, so
+ * a relocated data directory is followed (§8.4).
+ *
+ * @param directory - the blob directory; {@link cacheBlobDirectory} outside a test
+ * @returns the store
+ */
+export function createCacheBlobStore(
+  directory: () => string = cacheBlobDirectory,
+): CacheBlobStore {
+  const pathOf = (name: string): string =>
+    PathUtils.join(directory(), checkedName(name));
+  return {
+    async write(name: string, text: string): Promise<void> {
+      const path = pathOf(name);
+      await IOUtils.makeDirectory(directory(), {
+        createAncestors: true,
+        ignoreExisting: true,
+      });
+      await IOUtils.writeUTF8(path, text, { tmpPath: `${path}.tmp` });
+    },
+
+    async read(name: string): Promise<string | undefined> {
+      const path = pathOf(name);
+      if (!(await IOUtils.exists(path))) return undefined;
+      return IOUtils.readUTF8(path);
+    },
+
+    async remove(name: string): Promise<void> {
+      await IOUtils.remove(pathOf(name), { ignoreAbsent: true });
+    },
+
+    async list(): Promise<readonly string[]> {
+      const children = await IOUtils.getChildren(directory(), {
+        ignoreAbsent: true,
+      });
+      return children
+        .map((child) => PathUtils.filename(child))
+        .filter((name) => BLOB_NAME.test(name));
     },
   };
 }

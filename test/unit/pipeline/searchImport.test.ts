@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { mockLLMRouter } from "../../helpers/mockLLM";
 import { buildPipelineSet } from "../../../src/bootstrap/registerPipelines";
+import { NO_CACHE } from "../../../src/core/cache/cache";
 import { createManualClock, type Clock } from "../../../src/core/clock";
 import { createDeferred, Semaphore } from "../../../src/core/concurrency";
 import {
@@ -189,7 +190,7 @@ function createContext(options: {
     logger: createLogger({ sink: NULL_LOG_SINK, clock: options.clock }),
     clock: options.clock,
     sources: options.sources,
-    cache: undefined,
+    cache: NO_CACHE,
     budget: undefined,
     llm: mockLLMRouter(),
     tts: undefined,

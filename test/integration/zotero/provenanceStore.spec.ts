@@ -455,8 +455,9 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
   });
 
   // Moved to schema_version 2 by P3-T34, which appended docs/07 §8.3's `job`
-  // table and `idx_job_status` as migration version 2.
-  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 2, with docs/07 §8.3's tables and indexes", async function () {
+  // table and `idx_job_status` as migration version 2, and to 3 by P3-T33,
+  // which appended `cache_entry` and its two indexes as version 3.
+  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 3, with docs/07 §8.3's tables and indexes", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     const store = await provenance();
     const expected = PathUtils.join(
@@ -471,7 +472,7 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       "never Zotero's own database",
     );
     assert.isTrue(await IOUtils.exists(store.path), "the file exists");
-    assert.strictEqual(store.schemaVersion, 2);
+    assert.strictEqual(store.schemaVersion, 3);
 
     const { database } = store;
     assert.strictEqual(
@@ -480,8 +481,8 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
           "SELECT MAX(version) FROM schema_version",
         ),
       ),
-      2,
-      "schema_version reads 2",
+      3,
+      "schema_version reads 3",
     );
     assert.strictEqual(
       Number(
@@ -525,8 +526,11 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
     assert.deepEqual(
       objects.map((row) => `${String(row["type"])}:${String(row["name"])}`),
       [
+        "index:idx_cache_expiry",
+        "index:idx_cache_lru",
         "index:idx_job_status",
         "index:idx_provenance_collection",
+        "table:cache_entry",
         "table:job",
         "table:schema_version",
         "table:search_provenance",
@@ -542,6 +546,101 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       [...JOB_COLUMNS],
       "docs/07 §8.3's job columns, read back",
     );
+    // P3-T33: cache_entry's columns, in docs/07 §8.3's order.
+    const cacheColumns = (await database.queryAsync(
+      "SELECT name FROM pragma_table_info('cache_entry') ORDER BY cid",
+    )) as Record<string, unknown>[];
+    assert.deepEqual(
+      cacheColumns.map((row) => String(row["name"])),
+      [
+        "namespace",
+        "key",
+        "value",
+        "blob_path",
+        "size_bytes",
+        "tags",
+        "created_at",
+        "expires_at",
+        "last_access",
+        "hits",
+      ],
+      "docs/07 §8.3's cache_entry columns, read back",
+    );
+  });
+
+  // P3-T33 (plan/00 §6 item 249): the database installServices opened is the
+  // one the cache writes through — measured here inside Zotero 10.0.3: the
+  // `ON CONFLICT … DO UPDATE` upsert, the `instr` tag match, and a value over
+  // 256 KB spilled through IOUtils to <data dir>/research-helper/cache/blobs.
+  it("round-trips the service graph's cache on the same connection, spilling a value over 256 KB to a blob file", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const { database } = await provenance();
+    const graph = (await plugin()).api.services;
+    if (!graph) assert.fail("no ServiceGraph is published at api.services");
+    const open = await graph.database.ready;
+    if (!open) assert.fail("the graph has no open database");
+    assert.strictEqual(open.connection, database, "one connection, shared");
+    assert.isTrue(graph.jobs.attached, "the job store is attached");
+
+    const cache = graph.cache;
+    const small = { tag: TAG, n: 1 };
+    const large = { tag: TAG, text: "x".repeat(300 * 1024) };
+    const tag = `work:${TAG}`;
+    try {
+      await cache.set("report", `${TAG}-small`, small, { tags: [tag] });
+      await cache.set(
+        "report",
+        `${TAG}-small`,
+        { ...small, n: 2 },
+        { tags: [tag] },
+      );
+      await cache.set("report", `${TAG}-large`, large, { tags: [tag] });
+      assert.deepEqual(
+        await cache.get("report", `${TAG}-small`),
+        { ...small, n: 2 },
+        "the upsert replaced the row",
+      );
+      assert.deepEqual(
+        await cache.get("report", `${TAG}-large`),
+        large,
+        "the spilled value reads back identical",
+      );
+      const blobPath = await database.valueQueryAsync(
+        "SELECT blob_path FROM cache_entry WHERE namespace = ? AND key = ?",
+        ["report", `${TAG}-large`],
+      );
+      if (typeof blobPath !== "string") assert.fail("no blob_path on the row");
+      const file = PathUtils.join(
+        Zotero.DataDirectory.dir,
+        "research-helper",
+        ...blobPath.split("/"),
+      );
+      log(`cache blob ${file}`);
+      assert.isTrue(await IOUtils.exists(file), "the blob file exists");
+      assert.strictEqual(
+        Number(
+          await database.valueQueryAsync(
+            "SELECT COUNT(*) FROM cache_entry WHERE namespace = ? AND key = ?",
+            ["report", `${TAG}-small`],
+          ),
+        ),
+        1,
+        "one row after two writes",
+      );
+      assert.strictEqual(
+        await cache.invalidateByTag(tag),
+        2,
+        "both entries invalidated by their tag",
+      );
+      assert.isFalse(await IOUtils.exists(file), "the blob file is removed");
+      assert.strictEqual(
+        await cache.get("report", `${TAG}-small`),
+        undefined,
+        "a miss after invalidation",
+      );
+    } finally {
+      await cache.invalidateByTag(tag).catch(() => 0);
+    }
   });
 
   it("writes exactly one row for a completed run, after its note, whose json is the export's and passes the schema", async function () {

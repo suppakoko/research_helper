@@ -28,8 +28,11 @@
  * 3. {@link probeAndRecordBackend} — the startup probe's verdict recorded in the
  *    `secretBackend` preference.
  *
- * Tiers 2 and 3, the passphrase file, the degradation dialog, the backend badge
- * and the other six `SecretId`s are Phase 3's (`P3-T02`, `P3-T03`, `P3-T04`).
+ * Tiers 2 and 3, the passphrase file, the degradation dialog and the backend
+ * badge are Phase 3's (`P3-T03`, `P3-T04`). `P3-T02` added the LLM and TTS
+ * presence flags, the startup reconciliation of every flag
+ * ({@link reconcileKeyPresence}) and the uninstall sweep
+ * ({@link clearAllSecrets}, {@link clearAllSecretsOnUninstall}).
  *
  * **Never log a value from this module**, plaintext or `oskv1:` ciphertext
  * (`docs/09` §2.1, `docs/01` §12 gotcha 15). Nothing below does; ids, counts
@@ -60,12 +63,14 @@
 import type { Logger } from "../core/logger";
 import {
   SECRET_IDS,
+  clearEveryStoredId,
   isSecretId,
   type SecretBackend,
   type SecretId,
   type SecretStore,
 } from "../core/secretStore";
-import { setPref, type PrefName } from "../prefs";
+import { getPrefStore, setPref, setPrefStore, type PrefName } from "../prefs";
+import { createZoteroPrefStore } from "./prefStore";
 
 // `docs/09` §1.7 prints `SecretBackend`, `SecretId` and `SecretStore` under a
 // `// src/zotero/keychain.ts` comment and `P0-T23` declared the first two here.
@@ -161,13 +166,17 @@ export function loginRemovalMethod():
  * **nothing else may write them**." This table is that sentence's other half —
  * the only mapping from a credential to its flag in the product.
  *
- * **Two rows: one per literature-source key that ships.** Phase 1 had one —
- * `docs/11` §1 scoped it to "Tier-1 `SecretStore` for `source.ncbi` only" — and
- * Phase 2's Semantic Scholar adapter (`P2-T05`) added the second on 2026-10-15.
- * The other five `SecretId`s map to nothing and {@link refreshKeyPresence} is a
- * no-op for them. `P3-T02` step 4 adds the remaining four flags — `tts.gemini` shares `gemini.keyPresent`
- * with `llm.gemini`, which is why §8.5 lists six flags for seven ids and why
- * this is a table rather than a string transformation.
+ * **Seven rows, six flags.** Phase 1 had one row — `docs/11` §1 scoped it to
+ * "Tier-1 `SecretStore` for `source.ncbi` only". Phase 2's Semantic Scholar
+ * adapter (`P2-T05`) added the second on 2026-10-15. `P3-T02` step 1 added the
+ * five LLM and TTS rows; their schema rows came from `P3-T32`. `tts.gemini`
+ * shares `gemini.keyPresent` with `llm.gemini`. That is why §8.5 lists six flags
+ * for seven ids, and why this is a table rather than a string transformation.
+ *
+ * **A shared flag means "either key is stored".** {@link refreshKeyPresence}
+ * derives a flag from every id that feeds it ({@link secretIdsForFlag}), never
+ * from the one id just written. Otherwise clearing `tts.gemini` would write
+ * `gemini.keyPresent = false` while an `llm.gemini` key is still stored.
  *
  * **It never holds a key.** Decision D5 and `plan/README.md` §5 rule 5: the
  * value written is the boolean {@link hasSecret} returned, and
@@ -182,11 +191,75 @@ export const KEY_PRESENCE_PREFS: Readonly<Partial<Record<SecretId, PrefName>>> =
     // `setSecret`/`deleteSecret` re-derived nothing for `source.semanticscholar`
     // and the pane's badge stayed at the default `false` with a key stored.
     "source.semanticscholar": "semanticscholarKeyPresent",
+    // `P3-T02` step 1: the four LLM credentials, and the TTS credential that
+    // shares Gemini's flag (`docs/07` §8.5 lists six flags for seven ids).
+    "llm.openrouter": "openrouterKeyPresent",
+    "llm.openai": "openaiKeyPresent",
+    "llm.gemini": "geminiKeyPresent",
+    "llm.anthropic": "anthropicKeyPresent",
+    "tts.gemini": "geminiKeyPresent",
   };
 
-/** The `*.keyPresent` preference for `id`, or `undefined` if it has none yet. */
+/** The `*.keyPresent` preference for `id`, or `undefined` if it has none. */
 export function keyPresencePrefFor(id: SecretId): PrefName | undefined {
   return KEY_PRESENCE_PREFS[id];
+}
+
+/**
+ * Every `SecretId` whose stored key sets `flag`, in {@link SECRET_IDS} order.
+ * One id for most flags; two (`llm.gemini`, `tts.gemini`) for
+ * `geminiKeyPresent`.
+ */
+export function secretIdsForFlag(flag: PrefName): readonly SecretId[] {
+  return SECRET_IDS.filter((id) => KEY_PRESENCE_PREFS[id] === flag);
+}
+
+/** Every distinct `*.keyPresent` flag in {@link KEY_PRESENCE_PREFS}, in order. */
+export function keyPresenceFlags(): readonly PrefName[] {
+  const flags = new Set<PrefName>();
+  for (const id of SECRET_IDS) {
+    const flag = KEY_PRESENCE_PREFS[id];
+    if (flag !== undefined) flags.add(flag);
+  }
+  return [...flags];
+}
+
+/**
+ * What `flag` should read: `true` when any id that feeds it has a stored key.
+ *
+ * Takes the existence check as a parameter so the rule can be tested without a
+ * keystore. The product passes {@link hasSecret}, which never decrypts.
+ *
+ * @param flag - a `*.keyPresent` preference
+ * @param has - the existence check for one id
+ * @returns the derived flag value
+ */
+export async function deriveKeyPresence(
+  flag: PrefName,
+  has: (id: SecretId) => Promise<boolean>,
+): Promise<boolean> {
+  for (const id of secretIdsForFlag(flag)) {
+    if (await has(id)) return true;
+  }
+  return false;
+}
+
+/**
+ * Every flag's derived value, without writing anything. `P3-T02` step 2's
+ * startup reconciliation is this followed by one write per flag
+ * ({@link reconcileKeyPresence}).
+ *
+ * @param has - the existence check for one id
+ * @returns each distinct flag with the value it should hold
+ */
+export async function deriveAllKeyPresence(
+  has: (id: SecretId) => Promise<boolean>,
+): Promise<ReadonlyMap<PrefName, boolean>> {
+  const values = new Map<PrefName, boolean>();
+  for (const flag of keyPresenceFlags()) {
+    values.set(flag, await deriveKeyPresence(flag, has));
+  }
+  return values;
 }
 
 /**
@@ -216,6 +289,10 @@ export function keyPresencePrefFor(id: SecretId): PrefName | undefined {
  * stored key whose flag was silently dropped is the failure this function
  * exists to prevent.
  *
+ * **A shared flag is derived from every id that feeds it** (`P3-T02`), so the
+ * value written for `tts.gemini` is "a `tts.gemini` or an `llm.gemini` key is
+ * stored" ({@link deriveKeyPresence}).
+ *
  * @param id - the credential whose flag to re-derive
  * @returns the boolean written, or `undefined` when `id` has no flag
  */
@@ -226,9 +303,32 @@ export async function refreshKeyPresence(
   if (pref === undefined) {
     return undefined;
   }
-  const present = await hasSecret(id);
+  const present = await deriveKeyPresence(pref, hasSecret);
   setPref(pref, present);
   return present;
+}
+
+/**
+ * Re-derive and write **every** `*.keyPresent` flag from the keystore.
+ * `P3-T02` step 2. Called once at startup by `installSecretStore` in
+ * `src/bootstrap/container.ts`, before the limiter registry reads
+ * `ncbi.keyPresent`.
+ *
+ * Every value is derived first and only then written. So a login-manager
+ * failure part-way through leaves every flag as it was, rather than leaving
+ * some reconciled and some not. A preference-write failure propagates, for the
+ * reason {@link refreshKeyPresence} gives.
+ *
+ * @returns each flag with the value written
+ */
+export async function reconcileKeyPresence(): Promise<
+  ReadonlyMap<PrefName, boolean>
+> {
+  const values = await deriveAllKeyPresence(hasSecret);
+  for (const [flag, present] of values) {
+    setPref(flag, present);
+  }
+  return values;
 }
 
 /**
@@ -315,6 +415,51 @@ export async function listStoredIds(): Promise<readonly SecretId[]> {
     }
   }
   return [...ids];
+}
+
+/**
+ * Remove every stored `SecretId`: `docs/09` §2.5's uninstall sweep, through
+ * the port's one sweep ({@link clearEveryStoredId}) over {@link listStoredIds}
+ * and {@link clearSecret}. Each `clearSecret` re-derives its flag, so every
+ * flag reads `false` afterwards.
+ *
+ * Needs an installed `PrefStore`, as {@link clearSecret} does. The uninstall
+ * path has none, so it goes through {@link clearAllSecretsOnUninstall}.
+ *
+ * @returns the number of ids cleared
+ */
+export async function clearAllSecrets(): Promise<number> {
+  return clearEveryStoredId({
+    listStoredIds,
+    clear: async (id: SecretId): Promise<void> => {
+      await clearSecret(id);
+    },
+  });
+}
+
+/**
+ * {@link clearAllSecrets} for `uninstall()` in `addon/bootstrap.js`, reached
+ * through `onUninstall` in `src/hooks.ts`.
+ *
+ * **Why it may install a `PrefStore`.** `shutdown()` runs before `uninstall()`,
+ * and its teardown detaches the `PrefStore` (step 1 of `installServices` in
+ * `src/bootstrap/container.ts`). If `uninstall()` instead loaded a fresh copy
+ * of the bundle, that copy never had one. Without a store, the first
+ * `clearSecret` removes its login and then throws on the flag write. So, when
+ * none is installed, this installs `createZoteroPrefStore()` for the sweep and
+ * detaches it afterwards. That factory registers nothing when it is built.
+ * A store that is already installed is used and left in place.
+ *
+ * @returns the number of ids cleared
+ */
+export async function clearAllSecretsOnUninstall(): Promise<number> {
+  const borrowed = getPrefStore() === undefined;
+  if (borrowed) setPrefStore(createZoteroPrefStore());
+  try {
+    return await clearAllSecrets();
+  } finally {
+    if (borrowed) setPrefStore(undefined);
+  }
 }
 
 /** Why the startup probe did not reach tier 1. */
@@ -530,5 +675,6 @@ export function createKeychainSecretStore(): SecretStore {
     },
     has: hasSecret,
     listStoredIds,
+    clearAll: clearAllSecrets,
   };
 }

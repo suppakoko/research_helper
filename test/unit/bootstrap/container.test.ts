@@ -1,3 +1,5 @@
+import { DatabaseSync } from "node:sqlite";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FakeZotero } from "../../setup/zotero-global";
@@ -11,6 +13,8 @@ import {
   type Scope,
   type ServiceGraphOptions,
 } from "../../../src/bootstrap/container";
+import type { PluginDatabaseSource } from "../../../src/bootstrap/pluginDatabase";
+import type { CacheBlobStore } from "../../../src/core/cache/sqliteCache";
 import { createManualClock, type ManualClock } from "../../../src/core/clock";
 import {
   createMemoryPrefStore,
@@ -65,6 +69,7 @@ import {
 import { TokenBucket } from "../../../src/core/rateLimit/tokenBucket";
 import { L10N_PROGRESS_HEADLINE } from "../../../src/i18n/keys";
 import { getPrefStore, setPrefStore } from "../../../src/prefs";
+import type { SqlConnection, SqlParam } from "../../../src/zotero/db";
 import type { ProgressWindowHandle } from "../../../src/zotero/progressWindow";
 import { debug as zoteroDebug } from "../../../src/zotero/zoteroApi";
 
@@ -506,7 +511,8 @@ describe("installServices wires the graph Phase 1 built", () => {
   });
 
   // `P3-T34` (`plan/00` §6 item 250): the root builds the job queue with no
-  // store (registerUI.ts attaches it) and, until P3-T15/T16/T33 fill them, no
+  // store when no database is passed (P3-T33 attaches it from the database
+  // installServices opens) and, until P3-T15/T16/T26 fill them, no
   // resume guard and no notifier — so no interrupted job can resume.
   it("builds the job queue storeless, with every resume prerequisite still missing", async () => {
     const h = harness();
@@ -727,9 +733,14 @@ describe("criterion 3: the disable/enable cycle leaves nothing standing", () => 
 
     const live = h.scope.liveHandles();
     // `liveHandles()` reports most-recently-registered first, which is also
-    // teardown order: surfaces, then client, then observer, then registry,
+    // teardown order: the plugin database (`P3-T33`, step 6c — registered
+    // last, so its connection closes first, after its own recovery and
+    // stores), then surfaces, then client, then observer, then registry,
     // then the PrefStore last.
-    expect(live[0]).toBe("job progress reporters and their surfaces");
+    expect(live[0]).toBe(
+      "the plugin database (research-helper.sqlite), its cache and its job store",
+    );
+    expect(live[1]).toBe("job progress reporters and their surfaces");
     expect(live[live.length - 1]).toBe("PrefStore (src/prefs)");
 
     await h.scope.unregisterAll();
@@ -2070,5 +2081,302 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
       limiterFor: () => undefined,
     });
     expect(unpaced(NCBI_HOST)).toBeUndefined();
+  });
+});
+
+/**
+ * `P3-T02` step 2: `installSecretStore` reconciles every key-presence flag,
+ * not only NCBI's.
+ *
+ * `src/zotero/keychain.ts` cannot load in plain Node, so the container's
+ * dynamic import of it is replaced for these tests only (`vi.doMock`, then a
+ * fresh module graph). The replacement holds no key and touches no keystore;
+ * the real reconciliation is exercised in
+ * `test/integration/zotero/keychain.spec.ts`.
+ */
+describe("installSecretStore (P3-T02)", () => {
+  const KEYCHAIN = "../../../src/zotero/keychain";
+
+  type InstallSecretStore =
+    typeof import("../../../src/bootstrap/container").installSecretStore;
+
+  interface FakeKeychain {
+    readonly probeAndRecordBackend: ReturnType<typeof vi.fn>;
+    readonly createKeychainSecretStore: ReturnType<typeof vi.fn>;
+    readonly reconcileKeyPresence: ReturnType<typeof vi.fn>;
+    readonly refreshKeyPresence: ReturnType<typeof vi.fn>;
+  }
+
+  function fakeKeychain(tierOne: boolean): FakeKeychain {
+    return {
+      probeAndRecordBackend: vi.fn(() =>
+        Promise.resolve(
+          tierOne
+            ? { backend: "os-keychain", elapsedMs: 0 }
+            : {
+                backend: "unavailable",
+                failure: "encrypt-threw",
+                detail: "Error: synthetic",
+                elapsedMs: 0,
+              },
+        ),
+      ),
+      createKeychainSecretStore: vi.fn(() => ({ backend: "os-keychain" })),
+      reconcileKeyPresence: vi.fn(() =>
+        Promise.resolve(
+          new Map([
+            ["openrouterKeyPresent", true],
+            ["ncbiKeyPresent", false],
+          ]),
+        ),
+      ),
+      refreshKeyPresence: vi.fn(() => Promise.resolve(false)),
+    };
+  }
+
+  function recordingLogger(): Parameters<InstallSecretStore>[0] & {
+    readonly lines: { level: string; msg: string; ctx: unknown }[];
+  } {
+    const lines: { level: string; msg: string; ctx: unknown }[] = [];
+    const at =
+      (level: string) =>
+      (msg: string, ctx?: Record<string, unknown>): void => {
+        lines.push({ level, msg, ctx });
+      };
+    const logger = {
+      lines,
+      error: at("error"),
+      warn: at("warn"),
+      info: at("info"),
+      debug: at("debug"),
+      child: () => logger,
+      time: <T>(_msg: string, fn: () => Promise<T>) => fn(),
+    };
+    return logger;
+  }
+
+  async function loadWith(keychain: FakeKeychain): Promise<InstallSecretStore> {
+    vi.resetModules();
+    vi.doMock(KEYCHAIN, () => keychain);
+    return (await import("../../../src/bootstrap/container"))
+      .installSecretStore;
+  }
+
+  afterEach(() => {
+    vi.doUnmock(KEYCHAIN);
+    vi.resetModules();
+  });
+
+  it("reconciles every flag once after a tier-1 probe, and returns the store", async () => {
+    const keychain = fakeKeychain(true);
+    const installSecretStore = await loadWith(keychain);
+    const logger = recordingLogger();
+
+    const secrets = await installSecretStore(logger);
+
+    expect(secrets).toEqual({ backend: "os-keychain" });
+    expect(keychain.reconcileKeyPresence).toHaveBeenCalledTimes(1);
+    expect(keychain.refreshKeyPresence).not.toHaveBeenCalled();
+    expect(logger.lines).toEqual([
+      {
+        level: "debug",
+        msg: "key-presence flags reconciled from the keystore",
+        ctx: { flags: { openrouterKeyPresent: true, ncbiKeyPresent: false } },
+      },
+    ]);
+  });
+
+  it("still returns the store when reconciliation throws, and warns once", async () => {
+    const keychain = fakeKeychain(true);
+    keychain.reconcileKeyPresence.mockImplementation(() =>
+      Promise.reject(new Error("login store unreadable")),
+    );
+    const installSecretStore = await loadWith(keychain);
+    const logger = recordingLogger();
+
+    const secrets = await installSecretStore(logger);
+
+    expect(secrets).toEqual({ backend: "os-keychain" });
+    expect(logger.lines.map((line) => line.level)).toEqual(["warn"]);
+    expect(logger.lines[0]?.msg).toContain("key-presence flags");
+  });
+
+  it("reconciles nothing and returns no store when the probe fails", async () => {
+    const keychain = fakeKeychain(false);
+    const installSecretStore = await loadWith(keychain);
+
+    const secrets = await installSecretStore(recordingLogger());
+
+    expect(secrets).toBeUndefined();
+    expect(keychain.createKeychainSecretStore).not.toHaveBeenCalled();
+    expect(keychain.reconcileKeyPresence).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P3-T33 — the plugin database opens once, inside installServices
+// ---------------------------------------------------------------------------
+
+/**
+ * A real SQLite (`node:sqlite`) behind `src/zotero/db.ts`'s port, as
+ * `test/unit/core/provenanceRerun.test.ts` builds one, plus a recorder of the
+ * order the lifetime events happen in.
+ */
+function sqliteDatabase(options: { readonly failOpen?: boolean } = {}): {
+  readonly source: PluginDatabaseSource;
+  readonly db: DatabaseSync;
+  readonly events: string[];
+} {
+  const db = new DatabaseSync(":memory:");
+  const events: string[] = [];
+  const bind = (params: readonly SqlParam[] | undefined): SqlParam[] => [
+    ...(params ?? []),
+  ];
+  const connection: SqlConnection = {
+    queryAsync(sql, params) {
+      const statement = db.prepare(sql);
+      if (/^\s*(select|pragma)/i.test(sql)) {
+        return Promise.resolve(statement.all(...bind(params)));
+      }
+      statement.run(...bind(params));
+      return Promise.resolve(undefined);
+    },
+    valueQueryAsync(sql, params) {
+      const row = db.prepare(sql).get(...bind(params));
+      return Promise.resolve(row === undefined ? false : Object.values(row)[0]);
+    },
+    async executeTransaction(func) {
+      db.exec("BEGIN");
+      try {
+        const result = await func();
+        db.exec("COMMIT");
+        return result;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    closeDatabase() {
+      events.push("close");
+      db.close();
+      return Promise.resolve();
+    },
+  };
+  const files = new Map<string, string>();
+  const blobs: CacheBlobStore = {
+    write: (name, text) => Promise.resolve(void files.set(name, text)),
+    read: (name) => Promise.resolve(files.get(name)),
+    remove: (name) => Promise.resolve(void files.delete(name)),
+    list: () => Promise.resolve([...files.keys()]),
+  };
+  return {
+    db,
+    events,
+    source: {
+      open: () => {
+        events.push("open");
+        if (options.failOpen === true) throw new Error("database is locked");
+        return connection;
+      },
+      path: () => "/data/research-helper.sqlite",
+      blobs,
+    },
+  };
+}
+
+/** Let the background open-and-migrate and the job-store attach settle. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 20; i += 1) {
+    await new Promise((done) => setImmediate(done));
+  }
+}
+
+describe("P3-T33 — installServices opens the plugin database once and shares it (plan/00 §6 item 249)", () => {
+  it("opens the one connection inside installServices, migrates it in the background, and gives it to the job store and the cache", async () => {
+    const database = sqliteDatabase();
+    const h = harness({ pluginDatabase: database.source });
+    const graph = await installServices(h.scope, h.options);
+    // Opened in line, before installServices returned — and only once.
+    expect(database.events).toStrictEqual(["open"]);
+
+    const open = await graph.database.ready;
+    expect(open).toMatchObject({
+      path: "/data/research-helper.sqlite",
+      schemaFrom: 0,
+      schemaVersion: 3,
+    });
+    await settle();
+    expect(graph.jobs.attached).toBe(true);
+    // The job store's recovery ran over the same connection: nothing to do.
+    expect(await graph.jobs.list()).toStrictEqual([]);
+
+    // The cache is the one every job's context carries, on the same file.
+    const token = createCancellationTokenSource().token;
+    const job = graph.pipelineContext.forJob({
+      pipelineId: "searchImport",
+      token,
+    });
+    expect(job.context.cache).toBe(graph.cache);
+    job.dispose();
+    await graph.cache.set("report", "k", { a: 1 });
+    expect(await graph.cache.get("report", "k")).toStrictEqual({ a: 1 });
+    expect(
+      database.db.prepare("SELECT COUNT(*) AS n FROM cache_entry").get(),
+    ).toMatchObject({ n: 1 });
+    // The provenance store is on the same connection too.
+    await open?.provenance.findProvenanceByCollection(1, "ABCD2345");
+    expect(database.events).toStrictEqual(["open"]);
+
+    // §9.4's deferred startup prune is scheduled on the graph's clock.
+    expect(h.clock.pending).toBeGreaterThan(0);
+
+    // Teardown: recovery awaited, store detached, then the connection closed.
+    const detach = vi.spyOn(graph.jobs, "detachStore");
+    detach.mockImplementation(() => {
+      database.events.push("detach");
+    });
+    await h.scope.unregisterAll();
+    expect(database.events).toStrictEqual(["open", "detach", "close"]);
+    expect(h.clock.pending).toBe(0);
+    expect(h.errors).toStrictEqual([]);
+    // After teardown the cache is inert rather than reaching a closed file.
+    expect(await graph.cache.get("report", "k")).toBeUndefined();
+  });
+
+  it("detaches the job store for real before the connection closes", async () => {
+    const database = sqliteDatabase();
+    const h = harness({ pluginDatabase: database.source });
+    const graph = await installServices(h.scope, h.options);
+    await graph.database.ready;
+    await settle();
+    expect(graph.jobs.attached).toBe(true);
+    await h.scope.unregisterAll();
+    expect(graph.jobs.attached).toBe(false);
+    expect(database.events).toStrictEqual(["open", "close"]);
+  });
+
+  it("keeps startup standing when the database cannot open: no job store, an inert cache, one error line", async () => {
+    const database = sqliteDatabase({ failOpen: true });
+    const h = harness({ pluginDatabase: database.source });
+    const graph = await installServices(h.scope, h.options);
+    expect(await graph.database.ready).toBeUndefined();
+    await settle();
+    expect(graph.jobs.attached).toBe(false);
+    await graph.cache.set("report", "k", 1);
+    expect(await graph.cache.get("report", "k")).toBeUndefined();
+    expect(
+      h.sink.lines.filter((line) => line.includes("could not be opened")),
+    ).toHaveLength(1);
+    await h.scope.unregisterAll();
+    expect(h.errors).toStrictEqual([]);
+  });
+
+  it("has no database and schedules nothing when none is passed (a unit test of the graph)", async () => {
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+    expect(await graph.database.ready).toBeUndefined();
+    expect(graph.jobs.attached).toBe(false);
+    expect(h.clock.pending).toBe(0);
+    await h.scope.unregisterAll();
   });
 });

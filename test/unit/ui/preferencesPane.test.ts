@@ -157,6 +157,11 @@ function memoryStore(): SecretStore & {
     },
     has: (id) => Promise.resolve(values.has(id)),
     listStoredIds: () => Promise.resolve([...values.keys()]),
+    clearAll: () => {
+      const cleared = values.size;
+      values.clear();
+      return Promise.resolve(cleared);
+    },
   };
 }
 

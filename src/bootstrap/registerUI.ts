@@ -81,7 +81,6 @@ import {
   type Scope,
   type ServiceGraph,
 } from "./container";
-import type { JobQueue } from "../core/jobQueue/queue";
 import type { Logger } from "../core/logger";
 import { formatValue } from "../i18n/ftl";
 import { L10N_PROGRESS_HEADLINE } from "../i18n/keys";
@@ -120,13 +119,10 @@ import {
   type ProvenanceStore,
 } from "../core/provenance";
 import {
-  createJobStore,
-  createProvenanceStore,
+  createCacheBlobStore,
   openPluginDatabase,
   pluginDatabasePath,
-  type SqlConnection,
 } from "../zotero/db";
-import { runMigrations } from "./migrations";
 import {
   COLLECTION_MENU_DESCRIPTION,
   collectionMenuOptions,
@@ -184,7 +180,7 @@ const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
   openSearchWindow,
   onError: reportError,
   // FR-12's "Re-run This Search…" (`P2-T17`), answered from the plugin
-  // database once {@link openProvenanceStore} has opened it.
+  // database once {@link publishProvenanceStore} has published it.
   provenance: {
     hasRunForCollection: (collectionID) => knownRun(collectionID),
     lookupRunForCollection: (collectionID) => lookupRun(collectionID),
@@ -261,88 +257,48 @@ const DEFERRED_PROVENANCE_STORE: ProvenanceStore = {
 };
 
 /**
- * Open the plugin database, bring it to the current schema, and build FR-12's
- * store over it — and close the connection again on shutdown (`P2-T17`).
+ * Publish FR-12's store over the plugin database the service graph opened
+ * (`P2-T17`), and withdraw it again on shutdown.
+ *
+ * **The database is no longer opened here** (`P3-T33`; `plan/00` §6 item
+ * 249, owner, 2026-10-21). `installServices` opens the one connection through
+ * `installPluginDatabase` (`src/bootstrap/pluginDatabase.ts`), shares it with
+ * the cache and the job store, attaches the job store and runs the startup
+ * recovery, and closes it in the graph's own teardown — which runs after this
+ * registration's, because it was registered first. What stays here is what the
+ * search window and the menu read: {@link provenanceState}, and
+ * `api.provenance` for the integration spec.
  *
  * `docs/07` §8.4: the file is `<Zotero.DataDirectory.dir>/research-helper.sqlite`,
  * resolved by `Zotero.DBConnection` from the name, never a hard-coded path and
  * never Zotero's own `zotero.sqlite`.
  *
- * **The close is not optional.** Zotero opens the file with
- * `PRAGMA locking_mode=EXCLUSIVE` (read out of 10.0.3's `db.js`), so a
- * connection left open across a disable/enable cycle would hold the lock
- * against the fresh instance's own connection. `closeDatabase(true)` checkpoints
- * the WAL and refuses any later re-open of the dead instance's object.
- *
- * Teardown waits for an open that is still in flight, so a shutdown during
- * startup cannot leave a connection behind it.
+ * Teardown waits for an open that is still in flight, so the store is never
+ * published after it has been withdrawn.
  */
-async function openProvenanceStore(
+async function publishProvenanceStore(
   scope: Scope,
-  logger: Logger,
-  jobs: JobQueue,
+  graph: ServiceGraph,
 ): Promise<void> {
   // Captured once, for the reason {@link publishServiceGraph} gives.
   const api = addon.api;
-  let database: SqlConnection | undefined;
-  // `P3-T34`'s startup recovery over the job store; settles, never rejects.
-  let recovering: Promise<void> | undefined;
   await scope.use({
-    description:
-      "the plugin database (research-helper.sqlite) and its provenance store",
+    description: "the plugin database's provenance store (api.provenance)",
     register: () => {
-      const ready = (async (): Promise<ProvenanceIndex | undefined> => {
-        try {
-          database = openPluginDatabase();
-          const outcome = await runMigrations(database);
-          const index = createProvenanceIndex(createProvenanceStore(database));
+      const ready = graph.database.ready.then(
+        (open): ProvenanceIndex | undefined => {
+          if (open === undefined) return undefined;
+          const index = createProvenanceIndex(open.provenance);
           provenanceState.index = index;
           api.provenance = {
             index,
-            database,
-            path: pluginDatabasePath(),
-            schemaVersion: outcome.to,
+            database: open.connection,
+            path: open.path,
+            schemaVersion: open.schemaVersion,
           };
-          logger.info("the plugin database is open", {
-            schemaFrom: outcome.from,
-            schemaTo: outcome.to,
-          });
-          // The job queue's store, on this same connection (`P3-T34`;
-          // `docs/07` §8.2 allows one), then §7.6's startup recovery. Not
-          // awaited here, so the provenance store is ready without waiting on
-          // it; teardown awaits it before the connection closes. A failure is
-          // logged and closes nothing.
-          jobs.attachStore(createJobStore(database));
-          recovering = jobs.recover().then(
-            (recovery) => {
-              logger.info("job recovery done", {
-                interrupted: recovery.interrupted.length,
-                autoResumed: recovery.autoResumed.length,
-                waitingForGuards: recovery.waitingForGuards.length,
-                pausedByGuard: recovery.pausedByGuard.length,
-                awaitingUserDecision: recovery.awaitingUserDecision.length,
-                failed: recovery.failed.length,
-              });
-            },
-            (error: unknown) => {
-              logger.warn("job recovery failed", {
-                reason: error instanceof Error ? error.name : typeof error,
-              });
-            },
-          );
           return index;
-        } catch (error) {
-          logger.error(
-            "the plugin database could not be opened or migrated; " +
-              "Re-run This Search… stays hidden until the next start",
-            { reason: error instanceof Error ? error.name : typeof error },
-          );
-          const opened = database;
-          database = undefined;
-          await opened?.closeDatabase(true).catch(() => undefined);
-          return undefined;
-        }
-      })();
+        },
+      );
       provenanceState.ready = ready;
       // Wrapped, so `scope.use` does not await the open: startup goes on.
       return { ready };
@@ -352,11 +308,6 @@ async function openProvenanceStore(
       delete api.provenance;
       provenanceState.index = undefined;
       provenanceState.ready = undefined;
-      await recovering;
-      jobs.detachStore();
-      const opened = database;
-      database = undefined;
-      await opened?.closeDatabase(true);
     },
   });
 }
@@ -657,7 +608,8 @@ function searchWindowDeps(
     // contributes `Zotero.File.putContentsAsync` and nothing else.
     provenanceFiles: provenanceFileWriter(),
     // FR-12 (`P2-T17`): the search_provenance store, which waits for the
-    // database {@link openProvenanceStore} opens, and the collection lookup a
+    // database `installServices` opens ({@link publishProvenanceStore}), and
+    // the collection lookup a
     // re-run is seeded through — `Zotero.Collections.get`, read by the one file
     // allowed to name it (`src/addon.ts`).
     provenanceStore: DEFERRED_PROVENANCE_STORE,
@@ -946,17 +898,21 @@ export async function registerUI(scope: Scope): Promise<void> {
     // `P1-T25` had to build here — no level, no `reportError` — is gone; the
     // real one is `container.ts`'s, over `zoteroApi.ts`'s two facades.
     logSink: createZoteroLogSink(),
+    // The plugin database (`P3-T33`; `plan/00` §6 item 249): opened once by
+    // `installServices` and shared by every store, closed in its teardown.
+    pluginDatabase: {
+      open: openPluginDatabase,
+      path: pluginDatabasePath,
+      blobs: createCacheBlobStore(),
+    },
   });
 
   await publishServiceGraph(scope, graph);
   // Before the host and the menus that read it (`P2-T17`), so teardown — last
-  // in, first out — removes both before the connection closes. The open itself
+  // in, first out — removes both before the store is withdrawn, and all three
+  // before the graph's own teardown closes the connection. The open itself
   // runs in the background; see {@link provenanceState}.
-  await openProvenanceStore(
-    scope,
-    graph.logger.child({ surface: "provenanceStore" }),
-    graph.jobs,
-  );
+  await publishProvenanceStore(scope, graph);
   await publishSearchWindowHost(scope, graph);
   // Before `APP_REGISTRATIONS`, for the same reason the services are: the
   // pane registration below can make a `zotero:pref` window reload and load

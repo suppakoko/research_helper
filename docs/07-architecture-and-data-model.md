@@ -878,7 +878,11 @@ export interface Cache {
 }
 
 export interface CacheSetOptions {
-  /** Time-to-live in ms; omit for "never expires, subject to eviction". */
+  /**
+   * Time-to-live in ms; omit for the namespace's §9.2 TTL ("never expires, subject to eviction"
+   * for a namespace whose TTL is "none"). Corrected 2026-10-21 (P3-T33): read literally, the old
+   * comment made every omitted TTL infinite and left §9.2's per-namespace TTLs to every caller.
+   */
   readonly ttlMs?: number;
   readonly tags?: readonly string[];
   /** Skip writing if the serialized value exceeds this many bytes. */
@@ -2776,7 +2780,9 @@ This is the hardest requirement and the reason the queue is persistent.
 > guard's reason, asking the user. The user sees a visible notice naming the jobs that resumed. **Until every guard
 > and the notice exist, resumption waits:** the job stays `interrupted` and is looked at again on the next
 > `recover()`; it is never resumed past a missing guard. Built by `P3-T34` as `createJobQueue`'s `recover()` in
-> `src/core/jobQueue/queue.ts`, over its `ResumeGuards` seam (filled by `P3-T33` for cached items, `P3-T15` for the
+> `src/core/jobQueue/queue.ts`, over its `ResumeGuards` seam (filled by ~~`P3-T33`~~ `P3-T26` for cached items
+> — *Corrected 2026-10-21 (`P3-T33`): the generic cache cannot tell which of a checkpoint's work keys are cached
+> without `summaryKey`, which is `P3-T26`'s* — `P3-T15` for the
 > egress acknowledgement, `P3-T16` for the confirm threshold and the ceilings) and its `JobNotifier` (the notice;
 > message `research-helper-job-resumed`). This reverses the recommendation `P3-T34`'s card carried and the
 > `autoResumeJobs` sentence below, which are corrected in place.
@@ -3100,6 +3106,16 @@ Zotero.Prefs   (branch: extensions.zotero.research-helper.*)
 Zotero notes / attachments
     the user-facing copies: summary notes, report notes, audio attachments
 ```
+
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 249): where `research-helper.sqlite` opens.** The plugin database
+> opens **once**, at startup, inside `installServices` (`src/bootstrap/container.ts`), through `installPluginDatabase`
+> (`src/bootstrap/pluginDatabase.ts`, `P3-T33`). That one connection is shared by the provenance store, the cache
+> (`cache_entry`), the summary store and the job store; nothing else opens the file. The open is synchronous
+> (`Zotero.DBConnection` connects on its first query); the migrations run in the background so startup does not
+> wait on them, and every store waits for them instead. Teardown is the service graph's: it awaits the job queue's
+> startup recovery, detaches the stores, and only then closes the connection. Until this decision
+> `src/bootstrap/registerUI.ts`'s `openProvenanceStore` opened the file on its own, after `installServices` had
+> returned (`P2-T17`), and `P3-T34` attached the job store there.
 
 **Placement table.**
 
@@ -3691,7 +3707,7 @@ Every entry carries tags: `promptVersion:<v>`, `model:<id>`, `provider:<id>`, `s
 Order of operations:
 
 1. Delete all entries with `expires_at < now`.
-2. If still over the global cap, evict by **cost-aware LRU**: score each entry as `lastAccess + hits * bonusMs - costWeight`, where `costWeight` strongly favours retaining entries that were expensive to produce. Concretely: `summary` and `embedding` entries get a large retention bonus (they cost money and tokens); `source-response` entries get none (re-fetchable for free).
+2. If still over the global cap, evict by **cost-aware LRU**: score each entry as `lastAccess + hits * bonusMs - costWeight`, where `costWeight` strongly favours retaining entries that were expensive to produce. Concretely: `summary` and `embedding` entries get a large retention bonus (they cost money and tokens); `source-response` entries get none (re-fetchable for free). *Corrected 2026-10-21 (`P3-T33`): the lowest score is evicted first, so a retention bonus is **added**, not subtracted; the score is `lastAccess + hits * bonusMs + retentionBonusMs`. Neither number was given here; `src/core/cache/sqliteCache.ts` uses `bonusMs` = 1 hour per hit and `retentionBonusMs` = 30 days for `summary` and `embedding`, 0 for every other namespace (owner to confirm).*
 3. Evict lowest-scoring entries until 90% of the cap is reached (evict to a low-water mark, not exactly to the cap, so eviction is not triggered again on the next write).
 4. Never evict an entry whose `work_key` belongs to a currently running job.
 5. Sweep orphaned blob files.

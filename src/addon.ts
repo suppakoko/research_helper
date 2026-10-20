@@ -138,8 +138,9 @@ export interface PluginApi {
   searchWindowDeps?: Required<SearchImportViewModelDeps>;
   /**
    * FR-12's store and the plugin database under it (`P2-T17`), published by
-   * `src/bootstrap/registerUI.ts` once the database is open and migrated, and
-   * removed again — the connection closed — on shutdown.
+   * `src/bootstrap/registerUI.ts` once the database `installServices` opened
+   * is migrated, and removed again on shutdown, before the graph's teardown
+   * closes the connection (`P3-T33`).
    *
    * On the public surface for the reason {@link searchWindowDeps} is: Zotero
    * holds the file under an exclusive lock, so an integration spec cannot open

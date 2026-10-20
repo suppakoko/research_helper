@@ -83,6 +83,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { NO_CACHE } from "../src/core/cache/cache";
 import { createSystemClock, type Clock } from "../src/core/clock";
 import { Semaphore } from "../src/core/concurrency";
 import { CompositeProgressReporter } from "../src/core/jobQueue/progress";
@@ -586,7 +587,7 @@ async function main(): Promise<number> {
     logger,
     clock,
     sources,
-    cache: undefined,
+    cache: NO_CACHE,
     budget: undefined,
     llm: mockLLMRouter(),
     tts: undefined,

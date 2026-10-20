@@ -280,6 +280,7 @@ import PROVENANCE_SCHEMA from "../../schema/provenance.schema.json";
 import type { PluginApi } from "../../src/addon";
 import { createScope } from "../../src/bootstrap/container";
 import { createZoteroSearchImportWriter } from "../../src/bootstrap/registerPipelines";
+import { NO_CACHE } from "../../src/core/cache/cache";
 import { createSystemClock } from "../../src/core/clock";
 import { Semaphore } from "../../src/core/concurrency";
 import {
@@ -1285,7 +1286,7 @@ function jobFactory(
         logger: logger.child({ jobId }),
         clock,
         sources,
-        cache: undefined,
+        cache: NO_CACHE,
         budget: undefined,
         llm: mockLLMRouter(),
         tts: undefined,

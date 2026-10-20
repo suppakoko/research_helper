@@ -47,6 +47,7 @@ import {
   setSecret,
   type SecretId,
 } from "../../../src/zotero/keychain";
+import { setPrefStore } from "../../../src/prefs";
 import {
   PREF_BRANCH_ROOT,
   clearPref,
@@ -56,6 +57,7 @@ import {
   prefHasUserValue,
   qualifiedPrefName,
   setPref,
+  createZoteroPrefStore,
   type PrefScalar,
 } from "../../../src/zotero/prefStore";
 
@@ -391,6 +393,16 @@ describe("OS keystore and preference round trip (P0-T23, V-16)", function () {
       );
     }
 
+    // P3-T02 gave llm.openrouter a key-presence flag (openrouter.keyPresent), so
+    // setSecret now writes a preference. This spec is its own esbuild bundle, so
+    // its copy of src/prefs has no PrefStore until one is installed here; the
+    // flag's prior user value is put back in the finally block (coordinator,
+    // 2026-10-21, P3-T02/P3-T33 landing).
+    setPrefStore(createZoteroPrefStore());
+    const FLAG = "openrouter.keyPresent";
+    const flagHadUserValue = prefHasUserValue(FLAG);
+    const flagBefore = flagHadUserValue ? getPref(FLAG) : undefined;
+
     const plaintext = `sk-rh-p0t23-dummy-${Date.now()}-${randomHex(16)}`;
     const verbose = [
       overrideBoolPref("signon.debug", true),
@@ -570,6 +582,12 @@ describe("OS keystore and preference round trip (P0-T23, V-16)", function () {
       for (const override of verbose) {
         override.restore();
       }
+      if (flagHadUserValue && flagBefore !== undefined) {
+        setPref(FLAG, flagBefore);
+      } else {
+        clearPref(FLAG);
+      }
+      setPrefStore(undefined);
     }
   });
 

@@ -34,19 +34,28 @@
  * `console`, so `Date.now()` is the clock.
  */
 
+import { installSecretStore } from "../../../src/bootstrap/container";
 import { createSystemClock } from "../../../src/core/clock";
+import { NULL_LOG_SINK, createLogger } from "../../../src/core/logger";
 import {
   NCBI_HOST,
   NCBI_KEY_PRESENT_PREF,
   createHostLimiterRegistry,
 } from "../../../src/core/rateLimit/hostLimiter";
-import { PREF_KEYS, getPref, setPrefStore } from "../../../src/prefs";
+import {
+  PREF_KEYS,
+  getPref,
+  getPrefStore,
+  setPrefStore,
+} from "../../../src/prefs";
 import { PREFS } from "../../../src/prefs/schema";
 import {
   LOGIN_ORIGIN,
   LOGIN_REALM,
   SECRET_BACKEND_UNAVAILABLE,
+  clearAllSecretsOnUninstall,
   createKeychainSecretStore,
+  keyPresenceFlags,
   keyPresencePrefFor,
   probeAndRecordBackend,
   refreshKeyPresence,
@@ -510,6 +519,229 @@ describe("tier-1 SecretStore for the NCBI key (P1-T06)", function () {
         "an unavailable verdict maps to §8.5's empty string",
       );
     } finally {
+      restorePrefs(saved);
+      detachPrefs();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P3-T02: the LLM presence flags, the startup reconciliation, clearAll()
+// ---------------------------------------------------------------------------
+
+/**
+ * `sk-`-shaped, obviously fake, built at run time, unique per call. Never a
+ * real key, and never printed: the lines below report ids, counts and flags.
+ */
+function syntheticSkValue(): string {
+  return `sk-rh-p3t02-synthetic-${Date.now()}-${randomHex(16)}`;
+}
+
+/** The branch-relative keys of all six `*.keyPresent` flags. */
+const ALL_FLAG_KEYS: readonly string[] = keyPresenceFlags().map(
+  (flag) => PREFS[flag].key,
+);
+
+/**
+ * Refuse to run when **any** login exists under this plugin's origin.
+ *
+ * `clearAll()` removes every stored id, so a spec that called it on the
+ * owner's profile would delete a real key. Nothing is read or decrypted to
+ * decide this; only the usernames are counted.
+ */
+async function refuseIfAnyStored(): Promise<void> {
+  const ids = await createKeychainSecretStore().listStoredIds();
+  if (ids.length > 0) {
+    assert.fail(
+      `refusing to run: ${ids.length} id(s) already stored under ` +
+        `${LOGIN_ORIGIN}; this spec calls clearAll() and must never remove ` +
+        `a stored secret it did not create`,
+    );
+  }
+}
+
+/** Remove whichever of `ids` this spec left behind. */
+async function removeLeftovers(ids: readonly SecretId[]): Promise<void> {
+  const store = createKeychainSecretStore();
+  for (const id of ids) {
+    if ((await ownLoginsFor(id)).length > 0) {
+      await store.clear(id);
+    }
+  }
+}
+
+describe("tier-1 SecretStore for the LLM keys (P3-T02)", function () {
+  it("stores a synthetic sk- value under llm.openrouter, reads it back, clears it, and openrouter.keyPresent follows", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const ID: SecretId = "llm.openrouter";
+    await refuseIfStored(ID);
+
+    const detachPrefs = installPrefStore();
+    const saved = savePrefs([PREFS.openrouterKeyPresent.key]);
+    const store = createKeychainSecretStore();
+    const value = syntheticSkValue();
+    try {
+      await store.set(ID, value);
+      assert.isTrue(
+        (await store.get(ID)) === value,
+        "get() returns exactly what set() stored",
+      );
+      assert.isTrue(
+        getPref("openrouterKeyPresent"),
+        "openrouter.keyPresent is true after set()",
+      );
+      await store.clear(ID);
+      assert.isFalse(
+        getPref("openrouterKeyPresent"),
+        "openrouter.keyPresent is false after clear()",
+      );
+      assert.isFalse(await store.has(ID), "has() is false after clear()");
+      debug(`${LOG_PREFIX} P3-T02: openrouter.keyPresent true -> false`);
+    } finally {
+      await removeLeftovers([ID]);
+      restorePrefs(saved);
+      detachPrefs();
+    }
+  });
+
+  it("keeps gemini.keyPresent true while either Gemini id holds a key", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const LLM: SecretId = "llm.gemini";
+    const TTS: SecretId = "tts.gemini";
+    await refuseIfStored(LLM);
+    await refuseIfStored(TTS);
+
+    const detachPrefs = installPrefStore();
+    const saved = savePrefs([PREFS.geminiKeyPresent.key]);
+    const store = createKeychainSecretStore();
+    try {
+      await store.set(LLM, syntheticSkValue());
+      await store.set(TTS, syntheticSkValue());
+      await store.clear(TTS);
+      assert.isTrue(
+        getPref("geminiKeyPresent"),
+        "clearing tts.gemini leaves the flag true while llm.gemini is stored",
+      );
+      await store.set(TTS, syntheticSkValue());
+      await store.clear(LLM);
+      assert.isTrue(
+        getPref("geminiKeyPresent"),
+        "clearing llm.gemini leaves the flag true while tts.gemini is stored",
+      );
+      await store.clear(TTS);
+      assert.isFalse(
+        getPref("geminiKeyPresent"),
+        "the flag is false once neither Gemini id is stored",
+      );
+    } finally {
+      await removeLeftovers([LLM, TTS]);
+      restorePrefs(saved);
+      detachPrefs();
+    }
+  });
+
+  it("a fresh installSecretStore sets a stale openrouter.keyPresent back to true", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const ID: SecretId = "llm.openrouter";
+    await refuseIfStored(ID);
+
+    const detachPrefs = installPrefStore();
+    const saved = savePrefs([...ALL_FLAG_KEYS, BACKEND_PREF_KEY]);
+    const store = createKeychainSecretStore();
+    try {
+      await store.set(ID, syntheticSkValue());
+      // Make the flag stale, as a keystore edited outside Zotero would.
+      setRawPref(PREFS.openrouterKeyPresent.key, false);
+      assert.isFalse(getPref("openrouterKeyPresent"), "the flag starts stale");
+
+      const installed = await installSecretStore(
+        createLogger({ sink: NULL_LOG_SINK, clock: createSystemClock() }),
+      );
+      assert.isTrue(installed !== undefined, "tier 1 on this machine");
+      assert.isTrue(
+        getPref("openrouterKeyPresent"),
+        "installSecretStore reconciled openrouter.keyPresent to true",
+      );
+      debug(
+        `${LOG_PREFIX} P3-T02: stale openrouter.keyPresent reconciled to ` +
+          `${String(getRawPref(PREFS.openrouterKeyPresent.key))}`,
+      );
+    } finally {
+      await removeLeftovers([ID]);
+      restorePrefs(saved);
+      detachPrefs();
+    }
+  });
+
+  it("clearAll() over three stored ids resolves to 3 and listStoredIds() is then empty", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    await refuseIfAnyStored();
+    const IDS: readonly SecretId[] = [
+      "llm.openrouter",
+      "llm.anthropic",
+      "source.semanticscholar",
+    ];
+
+    const detachPrefs = installPrefStore();
+    const saved = savePrefs(ALL_FLAG_KEYS);
+    const store = createKeychainSecretStore();
+    try {
+      for (const id of IDS) {
+        await store.set(id, syntheticSkValue());
+      }
+      assert.strictEqual(await store.clearAll(), 3, "clearAll() resolves to 3");
+      assert.deepEqual(
+        [...(await store.listStoredIds())],
+        [],
+        "listStoredIds() is empty afterwards",
+      );
+      for (const flag of keyPresenceFlags()) {
+        assert.strictEqual<unknown>(
+          getPref(flag),
+          false,
+          `${flag} is false after clearAll()`,
+        );
+      }
+    } finally {
+      await removeLeftovers(IDS);
+      restorePrefs(saved);
+      detachPrefs();
+    }
+  });
+
+  it("the uninstall sweep works with no PrefStore installed and leaves none installed", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    await refuseIfAnyStored();
+    const IDS: readonly SecretId[] = ["llm.openai", "tts.gemini"];
+
+    const detachPrefs = installPrefStore();
+    const saved = savePrefs(ALL_FLAG_KEYS);
+    const store = createKeychainSecretStore();
+    try {
+      for (const id of IDS) {
+        await store.set(id, syntheticSkValue());
+      }
+      // As after shutdown(): the bundle's PrefStore has been detached.
+      setPrefStore(undefined);
+      const removed = await clearAllSecretsOnUninstall();
+      assert.strictEqual(removed, 2, "both synthetic ids removed");
+      assert.isTrue(
+        getPrefStore() === undefined,
+        "the borrowed PrefStore was detached again",
+      );
+      assert.deepEqual(
+        [...(await store.listStoredIds())],
+        [],
+        "nothing is stored afterwards",
+      );
+      assert.strictEqual(
+        getRawPref(PREFS.geminiKeyPresent.key),
+        false,
+        "gemini.keyPresent was written false through the borrowed store",
+      );
+    } finally {
+      installPrefStore();
+      await removeLeftovers(IDS);
       restorePrefs(saved);
       detachPrefs();
     }

@@ -2440,6 +2440,11 @@ npm run typecheck && npm run test:unit -- summaryKey
 
 **Notes.** Estimate unchanged: the cache layer itself moved to `P3-T33`, and step 5 moved in.
 
+> **2026-10-21 (coordinator, from `plan/reports/P3-T33.md`):** this card also fills `ResumeGuards.skipCached` in the
+> `createJobQueue` call in `installServices` (`P3-T34` built the seam; `P3-T33` could not fill it without `summaryKey`), and
+> chooses between the full version string and `cacheEpoch` for the summary key (item 239(a)). Use `cacheKey` /
+> `stableStringify` from `src/core/cache/keys.ts`, not `docs/07` §9.1's `|` join, unless the owner says otherwise.
+
 ---
 
 ### P3-T27 — Screening: retractions, non-English, duplicates, relevance
@@ -3024,11 +3029,10 @@ TTLs, size caps, tag invalidation and eviction of `docs/07` §9, reachable from 
 5. Give the service graph a route to the database per the open line, and build the cache in
    `installServices`.
 
-> **Open — recommended:** move `openPluginDatabase` and `runMigrations` out of
-> `openProvenanceStore` (`src/bootstrap/registerUI.ts`) into `installServices`, so the provenance
-> store, the cache, the job store and the summary store share one connection owned by the graph and
-> closed in its teardown. Changes `docs/07` §8.3 (where the connection is opened). (Review §2a
-> item 4.)
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 249):** the plugin database opens once in
+> `installServices` at startup, and the one connection is shared by the provenance store, the
+> cache, the summary store and the job store, instead of `openProvenanceStore`
+> (`src/bootstrap/registerUI.ts`) opening it alone. Written into `docs/07` §8.3 first, the same day.
 
 **Do NOT.**
 - Do **not** hash an object without `stableStringify`.

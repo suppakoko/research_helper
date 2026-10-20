@@ -14,6 +14,7 @@
  * two statements to it. Phase 3 adds its tables as version 2 and later, never
  * by editing version 1: a migration that has run on a user's machine is
  * history. Version 2 is §8.3's `job` table and `idx_job_status` (`P3-T34`).
+ * Version 3 is §8.3's `cache_entry` table and its two indexes (`P3-T33`).
  *
  * ## The bookkeeping
  *
@@ -89,6 +90,34 @@ export const JOB_DDL = `CREATE TABLE job (
 export const JOB_STATUS_INDEX_DDL =
   "CREATE INDEX idx_job_status ON job(status)";
 
+/**
+ * `docs/07` §8.3's `cache_entry` table (`P3-T33`), byte for byte — the
+ * comments inside the statement included, so the unit test compares rather
+ * than interprets. `src/core/cache/sqliteCache.ts` is its only reader and
+ * writer.
+ */
+export const CACHE_ENTRY_DDL = `CREATE TABLE cache_entry (
+  namespace    TEXT NOT NULL,
+  key          TEXT NOT NULL,
+  value        TEXT,                  -- inline value, or NULL when blob_path set
+  blob_path    TEXT,                  -- relative path for large values
+  size_bytes   INTEGER NOT NULL,
+  tags         TEXT NOT NULL DEFAULT '',   -- comma-joined
+  created_at   INTEGER NOT NULL,
+  expires_at   INTEGER,
+  last_access  INTEGER NOT NULL,
+  hits         INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (namespace, key)
+)`;
+
+/** `docs/07` §8.3's index for §9.4 step 1, the expiry sweep. */
+export const CACHE_EXPIRY_INDEX_DDL =
+  "CREATE INDEX idx_cache_expiry ON cache_entry(expires_at)";
+
+/** `docs/07` §8.3's index for §9.4's least-recently-used order. */
+export const CACHE_LRU_INDEX_DDL =
+  "CREATE INDEX idx_cache_lru    ON cache_entry(last_access)";
+
 /** One schema step. */
 export interface Migration {
   /** The version the file is at once this migration has run. */
@@ -107,6 +136,11 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 2,
     statements: [JOB_DDL, JOB_STATUS_INDEX_DDL],
+  },
+  // `P3-T33`: the cache (`docs/07` §8.3, §9).
+  {
+    version: 3,
+    statements: [CACHE_ENTRY_DDL, CACHE_EXPIRY_INDEX_DDL, CACHE_LRU_INDEX_DDL],
   },
 ];
 

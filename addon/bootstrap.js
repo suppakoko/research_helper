@@ -130,8 +130,51 @@ async function shutdown({ id, version, resourceURI, rootURI }, reason) {
 }
 
 /**
- * Deliberately empty, and that is FR-56's second acceptance criterion: items,
- * collections and notes the plugin created are ordinary Zotero data and must
- * survive uninstall untouched. Preferences are removed by Zotero itself.
+ * Removes every stored API key (docs/09 §2.5, P3-T02), and nothing else.
+ * Items, collections and notes the plugin created are ordinary Zotero data and
+ * must survive uninstall untouched: that is FR-56's second acceptance
+ * criterion. Preferences are removed by Zotero itself.
+ *
+ * Only for ADDON_UNINSTALL. Gecko also calls the old version's uninstall()
+ * with ADDON_UPGRADE or ADDON_DOWNGRADE when the plugin is updated, and
+ * clearing keys then would delete them on every update.
+ *
+ * Built to work whether or not the bundle is still loaded, because that was
+ * not measured (P3-T02). shutdown() runs first and its onShutdown deletes the
+ * plugin object off Zotero; a plugin that was disabled before removal never
+ * ran startup() in this scope at all. When there is no plugin object, the
+ * bundle is loaded again into a fresh context, exactly as startup() loads it,
+ * but onStartup is never called, so nothing is registered. The object that
+ * load creates is deleted again afterwards.
+ *
+ * Never throws: a failure is written to Debug Output, and the removal of the
+ * plugin itself goes ahead. The line carries a count or an error, never a key.
  */
-async function uninstall(data, reason) {}
+async function uninstall(data, reason) {
+  if (reason !== ADDON_UNINSTALL) {
+    return;
+  }
+  let loadedHere = false;
+  try {
+    if (Zotero.__addonInstance__ === undefined) {
+      const rootURI = data.rootURI ?? data.resourceURI?.spec;
+      const ctx = { rootURI, Zotero, Services, Components, ChromeUtils };
+      ctx._globalThis = ctx;
+      loadedHere = true;
+      Services.scriptloader.loadSubScript(
+        `${rootURI}content/scripts/__addonRef__.js`,
+        ctx,
+      );
+    }
+    const removed = await Zotero.__addonInstance__.hooks.onUninstall();
+    Zotero.debug(`[__addonRef__] uninstall removed ${removed} stored key(s)`);
+  } catch (error) {
+    Zotero.debug(
+      `[__addonRef__] uninstall could not remove stored keys: ${error}`,
+    );
+  } finally {
+    if (loadedHere) {
+      delete Zotero.__addonInstance__;
+    }
+  }
+}
