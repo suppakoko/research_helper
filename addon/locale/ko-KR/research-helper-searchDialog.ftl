@@ -394,6 +394,11 @@ research-helper-search-source-role = ID 조회 · 프리프린트 대조
 # NEEDS REVIEW. en-US `.label`: "Retry"
 # research-helper-search-state-error-retry =
 
+# Item 232: a source refused with HTTP 429 after the client's retries.
+# `{ $database }` is a source display name and is not translated. Drafted by
+# the coordinator, reviewed by the owner 2026-10-20 (G-41).
+research-helper-search-error-rate-limit = { $database }: 요청이 너무 많아 거절됨 · 잠시 뒤 다시 시도하세요
+
 
 ## Error detail disclosure (NFR-14)
 ##

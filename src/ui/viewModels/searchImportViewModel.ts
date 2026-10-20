@@ -396,7 +396,7 @@ export const ERROR_DETAIL_FIELDS = ["code", "httpStatus"] as const;
  * `SerializedError` actually carries — `httpStatus` — plus the failing source's
  * display name. **A row whose message needs an argument neither of those can
  * supply is absent from this table on purpose**, and
- * {@link UNRENDERABLE_ERROR_ROWS} names all three with the reason.
+ * {@link UNRENDERABLE_ERROR_ROWS} names both with the reason.
  */
 interface ErrorRow {
   /** The §8.3 message, built from the database's display name and the status. */
@@ -477,10 +477,29 @@ export const ERROR_ROWS: Readonly<Record<string, ErrorRow>> = {
     retry: false,
     openPreferences: false,
   },
+  /**
+   * A 429 the host still refused after the HTTP client's own retries
+   * (`plan/00` §6 item 232, owner, 2026-10-21; `docs/08` §8.3's dated note).
+   *
+   * **Not** `rh-error-rate-limit`, whose "Retrying in {n}s" would be false:
+   * the client retries a 429 inside the request, so nothing is retrying when
+   * this view sees the error, and the seconds are not carried anyway (see
+   * {@link UNRENDERABLE_ERROR_ROWS}). The row says what happened and what to
+   * do — "too many requests, refused · try again in a moment" — with the
+   * database's name. Its action is §8.3's "Retry now"; it never offers
+   * Preferences, so under item 220's rule a run whose sources all failed on
+   * 429 draws Retry alone.
+   */
+  RATE_LIMIT: {
+    ref: (database) =>
+      message("research-helper-search-error-rate-limit", { database }),
+    retry: true,
+    openPreferences: false,
+  },
 };
 
 /**
- * The three `docs/08` §8.3 rows this build **cannot** render, and why.
+ * The two `docs/08` §8.3 rows this build **cannot** render, and why.
  *
  * Each of these messages declares a placeable that `docs/07` §5.2's
  * `SerializedError` does not carry. `toSerialized()` projects exactly `code`,
@@ -492,32 +511,29 @@ export const ERROR_ROWS: Readonly<Record<string, ErrorRow>> = {
  *
  * | code | §8.3 message | missing |
  * |---|---|---|
- * | `RATE_LIMIT` | "{provider} rate limit reached. Retrying in {n}s." | `seconds` |
  * | `TIMEOUT` | "{host} did not respond within {n}s." | `host`, `seconds` |
  * | `NETWORK` | "Could not reach {host}." | `host` |
- *
- * **`RATE_LIMIT` has a second, independent reason**, and it matters because it
- * is the one this card's `Done when` list names. "Retrying in {n}s" asserts an
- * automatic retry, and **none is pending when this view sees the error.**
- * Since 2026-10-20 (`plan/00` §6 item 228) `src/bootstrap/container.ts`
- * supplies a `retryFor`, so `src/core/http/client.ts` does retry a 429 — but
- * inside the request, up to the host's `docs/07` §7.3 attempt cap, and the
- * `RateLimitError` that reaches a pipeline outcome is the one thrown *after*
- * the last attempt failed. By then every automatic retry has already happened
- * and nothing is retrying. Rendering that row would therefore still be false
- * even with a countdown in hand. (Until 2026-10-20 the reason was that no
- * `retryFor` was supplied at all, so the client made exactly one attempt.)
  *
  * These codes fall through to {@link genericSourceError}, which names what
  * failed and which service (NFR-14's first two requirements) and offers Retry,
  * with the machine code in the disclosure. **This is reported, not smoothed
- * over** (`plan/README.md` §5 rule 6): the criterion "a forced 429 renders the
- * `RATE_LIMIT` row's message with its retry countdown" cannot pass as written,
- * and closing it needs `src/core/errors.ts` to carry a redacted subset of
- * `context` into `SerializedError`. **Needs a card.**
+ * over** (`plan/README.md` §5 rule 6): closing either gap needs
+ * `src/core/errors.ts` to carry a redacted subset of `context` into
+ * `SerializedError`. **Needs a card.**
+ *
+ * **`RATE_LIMIT` left this list on 2026-10-21** (`plan/00` §6 item 232). Its
+ * §8.3 message, "{provider} rate limit reached. Retrying in {n}s.", was
+ * unrenderable for two reasons: the seconds are not carried, and "Retrying"
+ * would be false, because `src/core/http/client.ts` retries a 429 *inside*
+ * the request (since item 228, 2026-10-20) and the `RateLimitError` that
+ * reaches a pipeline outcome is the one thrown after the last attempt failed —
+ * nothing is retrying by then. Both reasons still hold for that message. The
+ * owner chose a different, truthful one instead: {@link ERROR_ROWS}'s
+ * `RATE_LIMIT` row shows "too many requests, refused · try again in a moment"
+ * with the database's name, which needs neither the seconds nor a pending
+ * retry.
  */
 export const UNRENDERABLE_ERROR_ROWS: readonly string[] = [
-  "RATE_LIMIT",
   "TIMEOUT",
   "NETWORK",
 ];

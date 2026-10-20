@@ -3579,10 +3579,10 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
   });
 
   // =========================================================================
-  // 5. A forced 429 — the criterion that cannot pass as written
+  // 5. A forced 429 — item 232's truthful row, never a retry countdown
   // =========================================================================
 
-  it("renders a forced 429 without inventing a retry countdown", async function () {
+  it("renders a forced 429 as item 232's row, without inventing a retry countdown", async function () {
     this.timeout(40_000);
     setKeyword(KEYWORD);
     selectSources([PUBMED]);
@@ -3594,19 +3594,41 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
     });
 
     assert.strictEqual(controller.state.panel, "error");
-    // docs/08 §8.3's RATE_LIMIT row is "{provider} rate limit reached. Retrying
-    // in {n}s." — `SerializedError` carries no `retryAfterMs`, so the countdown
-    // does not exist by the time a view sees the failure, and nothing is
-    // retrying anyway because the HTTP client has no retry policy. The row this
-    // build renders names what failed and which service; the code goes in the
-    // disclosure. Reported under plan/README.md §5 rule 6, not adjusted.
-    assert.isTrue(
+    // docs/08 §8.3's RATE_LIMIT message is "{provider} rate limit reached.
+    // Retrying in {n}s." — false since the HTTP client retries a 429 inside
+    // the request (nothing is retrying when the window sees it), and the
+    // seconds are not carried. Item 232 (owner, 2026-10-21): the window shows
+    // "too many requests, refused · try again in a moment" with the database
+    // name instead. Asserted against the window's own bundle text, which on
+    // this profile's ko-KR chain is the en-US fallback until the Korean is
+    // reviewed.
+    assert.isFalse(
       UNRENDERABLE_ERROR_ROWS.includes("RATE_LIMIT"),
-      "the gap is declared, not discovered at runtime",
+      "item 232 gave RATE_LIMIT a row",
     );
-    const line = await rendered("rh-state-error-lines", "PubMed");
-    assert.include(line, "could not complete the search");
+    // The database name as the window resolves it from the source's
+    // `displayNameKey`, so the expected reference is the bundle's, too.
+    const database = await resolved({
+      id: "research-helper-source-pubmed",
+      args: undefined,
+    });
+    const refused: MessageRef = {
+      id: "research-helper-search-error-rate-limit",
+      args: { database },
+    };
+    // The document points PubMed's line at item 232's message, not at
+    // rh-error-rate-limit's countdown …
+    await pointedAt("rh-state-error-lines", refused);
+    // … and Fluent paints the bundle's text for it.
+    const expected = await resolved(refused);
+    const line = await rendered("rh-state-error-lines", expected);
+    assert.include(line, database, "the database is named");
     assert.notInclude(line, "{", "no unresolved Fluent placeable is painted");
+    const countdown = await resolved({
+      id: "rh-error-rate-limit",
+      args: { provider: "PubMed", seconds: 30 },
+    });
+    assert.notInclude(line, countdown, "no invented retry countdown");
     controller.toggleDetails();
     const details = stringsUnder("rh-state-error-details-list").join("\n");
     assert.include(details, "RATE_LIMIT");
@@ -3615,6 +3637,10 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
     assert.isFalse(
       (el("rh-state-error-retry") as HTMLElement).hidden,
       "a rate limit is retryable, so Retry is offered",
+    );
+    assert.isTrue(
+      (el("rh-state-error-open-preferences") as HTMLElement).hidden,
+      "item 232's row offers Retry alone, never Open Preferences (item 220)",
     );
     log(`429 renders: ${line} | details: ${details.replace(/\n/g, " ")}`);
   });

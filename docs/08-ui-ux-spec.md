@@ -2142,6 +2142,18 @@ Every error the user can see must say **what failed, why, and what to do**. Map 
 | `PARSE` | malformed provider response | "Could not read the response from {provider}." | Retry / Report issue |
 | `CANCELLED` | user abort | "Cancelled. {n} items were already imported." | — |
 
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 232): the Search window shows a 429 refused after the retries as
+> "{database}: too many requests, refused · try again in a moment".** The `RATE_LIMIT` row's "Retrying in {n}s" is
+> not shown, because it would be false. Since 2026-10-20 the HTTP client retries a 429 inside the request
+> (`07-architecture-and-data-model.md` §7.3), so by the time the window sees the error every automatic retry has
+> already happened and nothing is retrying. The error the window receives does not carry the seconds either. The
+> window shows the database name with "too many requests, refused · try again in a moment" instead (message
+> `research-helper-search-error-rate-limit`, in `research-helper-searchDialog.ftl`), in that source's status row and in
+> its line of the all-failed panel. The action offered is this row's **Retry** (the table's "Retry now"; Cancel is
+> the window's own button), never Open Preferences, so under item 220's rule a run whose sources all failed on 429
+> draws Retry alone. The Korean wording awaits the owner's review. The `rh-error-rate-limit` message, which is the
+> `RateLimitError`'s own `messageKey`, keeps the table's wording and is not used by this row.
+
 Always log the underlying exception with `Zotero.logError(e)` and, when debug logging is enabled, `Zotero.debug()` the request *shape* — never the key or the prompt body.
 
 ### 8.4 Empty and loading states — checklist

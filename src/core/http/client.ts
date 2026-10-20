@@ -29,7 +29,10 @@
  *    classification itself is unchanged for every status and every host.
  * 3. **Retry**, through `./retry.ts`, over the retryable classes only and
  *    never over a `TimeoutError` (`plan/00` §6 item 230, 2026-10-20), with the
- *    delay coming from `Retry-After` or from the host's injected jitter. The
+ *    delay coming from `Retry-After` or from the host's injected jitter, and
+ *    inside a 90-second total budget per request (`./retry.ts`'s
+ *    `REQUEST_BUDGET_MS`, `plan/00` §6 item 233, 2026-10-21) that starts when
+ *    the first attempt is handed to the transport. The
  *    `Retry-After` parse is `src/core/rateLimit/backoff.ts`'s and is the only one
  *    in the codebase (`P1-T26`).
  * 4. **Logging**, at `info`, of `{ method, host, path, status, ms }` with the URL
@@ -134,7 +137,7 @@ import {
 } from "../rateLimit/hostLimiter";
 import type { RateLimiterConfig } from "../rateLimit/tokenBucket";
 
-import { type RetryPolicy, withRetry } from "./retry";
+import { REQUEST_BUDGET_MS, type RetryPolicy, withRetry } from "./retry";
 import { MAINTAINER_EMAIL, NCBI_EUTILS_HOST, TOOL_NAME } from "./userAgent";
 
 /** HTTP methods this client issues. */
@@ -538,6 +541,11 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
       const host = hostOf(url);
       const limiter = deps.limiterFor?.(host);
       const policy = deps.retryFor?.(host);
+      // Item 233's budget starts here: the instant the first attempt is handed
+      // to the transport, after its slot and token. Waiting in the host's
+      // queue before the first attempt is pacing, not retrying, and is not
+      // charged; every later attempt's queueing is.
+      let firstSentMs: number | undefined;
 
       /**
        * One attempt, from the moment a slot and a token have been granted.
@@ -550,6 +558,7 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
        */
       const issueAndClassify = async (): Promise<HttpResponse> => {
         const startedMs = clock.now();
+        firstSentMs ??= startedMs;
         let response: HttpResponse;
         try {
           response = await issue(
@@ -612,12 +621,28 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
         policy,
         clock,
         ...(options.token !== undefined && { token: options.token }),
+        budget: {
+          totalMs: REQUEST_BUDGET_MS,
+          startedAtMs: () => firstSentMs,
+        },
         onRetry: ({ attempt, delayMs }) => {
           deps.logger?.warn("http retry", {
             method,
             host,
             path: pathOf(url),
             attempt,
+            delayMs,
+          });
+        },
+        // Without this line a request that stopped short of its attempt cap
+        // would look, in a debug bundle, like one the cap ended.
+        onBudgetSpent: ({ attempt, elapsedMs, delayMs }) => {
+          deps.logger?.warn("http retry budget spent", {
+            method,
+            host,
+            path: pathOf(url),
+            attempt,
+            elapsedMs,
             delayMs,
           });
         },

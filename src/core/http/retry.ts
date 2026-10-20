@@ -24,6 +24,11 @@
  *   status codes. Which of those this loop retries **by itself** is
  *   {@link isRetriedAutomatically}: every one except a `TimeoutError`
  *   (`plan/00` §6 item 230, owner, 2026-10-20).
+ * - How long the attempts and the waits between them may take **in total** is
+ *   {@link REQUEST_BUDGET_MS}, a 90-second budget per request (`plan/00` §6
+ *   item 233, owner, 2026-10-21; `docs/07` §7.3's dated note). Once it is
+ *   spent, or when the next wait would cross it, the loop ends with the last
+ *   error instead of retrying.
  *
  * ## `Retry-After` is parsed in `backoff.ts`, not here (`P1-T26`)
  *
@@ -191,11 +196,66 @@ function serverDirectedDelayMs(error: unknown): number | undefined {
   return undefined;
 }
 
+// ---------------------------------------------------------------------------
+// 3. The total budget
+// ---------------------------------------------------------------------------
+
+/**
+ * The total time one request's attempts and the waits between them may take:
+ * **90 seconds** (`plan/00` §6 item 233, owner, 2026-10-21; the number is
+ * `docs/07` §7.3's dated note's, not this file's).
+ *
+ * Item 230 stopped retrying timeouts, but a host that *answers* each attempt
+ * with a slow 429 or 5xx was still retried to the attempt cap: `P0-T21`
+ * measured arXiv 429s taking up to 46 s to fail, which is about 150 s for
+ * three attempts. The budget ends that case after two attempts, at about 95 s.
+ *
+ * What the budget does **not** do is cut an attempt short. Each attempt keeps
+ * its own request timeout (`docs/07` §8.5); the budget only decides whether
+ * another wait and another attempt may start. See {@link withRetry}.
+ */
+export const REQUEST_BUDGET_MS = 90_000;
+
+/** A request's total budget, as {@link withRetry} enforces it. */
+export interface RequestBudget {
+  /** Milliseconds for every attempt and every wait; {@link REQUEST_BUDGET_MS}. */
+  readonly totalMs: number;
+  /**
+   * When the budget started, on the same clock as {@link RetryContext.clock}.
+   *
+   * `src/core/http/client.ts` answers with the instant its **first attempt
+   * was handed to the transport**, so the wait for the host's bucket before
+   * that attempt is not charged: a request queued behind others on a busy
+   * host would otherwise spend its budget before it was ever sent. Absent, or
+   * `undefined` when asked, means "when {@link withRetry} was entered".
+   */
+  readonly startedAtMs?: () => number | undefined;
+}
+
 /** What {@link withRetry} needs besides the operation itself. */
 export interface RetryContext {
   readonly policy: RetryPolicy;
-  /** Supplies `now()` for `Retry-After` and `sleep()` for the wait. */
+  /**
+   * Supplies `now()` for `Retry-After` and for the budget, and `sleep()` for
+   * the wait.
+   */
   readonly clock: Clock;
+  /**
+   * The request's total budget (`plan/00` §6 item 233). Absent means none:
+   * only the attempt cap ends the loop, which is what a caller outside the
+   * HTTP client gets.
+   */
+  readonly budget?: RequestBudget;
+  /**
+   * Called when the budget ends the loop, before the last error is rethrown.
+   * For logging; never throws into the loop.
+   */
+  readonly onBudgetSpent?: (info: {
+    readonly attempt: number;
+    readonly elapsedMs: number;
+    readonly delayMs: number;
+    readonly error: unknown;
+  }) => void;
   /**
    * Cancellation, checked while waiting. `docs/07` §7.4 point 2: a job parked
    * on a delay must not block cancellation, and {@link Clock.sleep} rejects
@@ -227,6 +287,15 @@ export interface RetryContext {
  * what makes "a 503 is retried up to the per-host cap and then throws
  * `UpstreamServerError`" observable at the call site.
  *
+ * **The total budget** ({@link RetryContext.budget}, `plan/00` §6 item 233).
+ * After a failed attempt the loop knows the wait it would start. If the time
+ * already spent since {@link RequestBudget.startedAtMs} plus that wait reaches
+ * the budget, no wait starts and the last error is rethrown unchanged — so a
+ * spent budget ends the loop, and so does a wait that would cross it; a retry
+ * always *starts* inside the budget. An attempt already running is never cut:
+ * it keeps its own request timeout. Cancellation is checked first, so a
+ * cancelled request still ends with `OperationCancelledError` at once.
+ *
  * @param operation - receives the 1-based attempt number
  * @param context - see {@link RetryContext}
  * @returns whatever `operation` resolved with
@@ -235,8 +304,9 @@ export async function withRetry<T>(
   operation: (attempt: number) => Promise<T>,
   context: RetryContext,
 ): Promise<T> {
-  const { policy, clock } = context;
+  const { policy, clock, budget } = context;
   const maxAttempts = Math.max(1, Math.floor(policy.maxAttempts));
+  const enteredMs = clock.now();
   let previousDelayMs = 0;
 
   for (let attempt = 1; ; attempt += 1) {
@@ -255,6 +325,19 @@ export async function withRetry<T>(
         serverDirectedDelayMs(error) ??
         policy.nextDelayMs(previousDelayMs, attempt);
       previousDelayMs = delayMs;
+
+      if (budget !== undefined) {
+        // Item 233: measured on the injected clock, from the first attempt's
+        // start on the wire when the caller knows it.
+        const startedMs = budget.startedAtMs?.() ?? enteredMs;
+        const elapsedMs = clock.now() - startedMs;
+        // `>=`, not `>`: a wait that ends exactly at the budget would start
+        // the next attempt after the budget had run out.
+        if (elapsedMs + delayMs >= budget.totalMs) {
+          context.onBudgetSpent?.({ attempt, elapsedMs, delayMs, error });
+          throw error;
+        }
+      }
 
       context.onRetry?.({ attempt, delayMs, error });
       // Rejects with OperationCancelledError if the token fires while waiting;

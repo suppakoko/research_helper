@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createManualClock, createSystemClock } from "../../../src/core/clock";
+import {
+  createManualClock,
+  createSystemClock,
+  type ManualClock,
+} from "../../../src/core/clock";
 import {
   AuthenticationError,
   AuthorizationError,
@@ -32,6 +36,7 @@ import {
 import {
   isRetriedAutomatically,
   isRetryableError,
+  REQUEST_BUDGET_MS,
   retryPolicyFromBudget,
   withRetry,
   type RetryPolicy,
@@ -1057,6 +1062,321 @@ describe("retry", () => {
       expect(error, name).not.toBeInstanceOf(TimeoutError);
       expect(transport.calls, name).toHaveLength(3);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5a. The total budget — plan/00 §6 item 233, docs/07 §7.3's dated note
+// ---------------------------------------------------------------------------
+
+describe("item 233: a 90-second total budget per request, retries included", () => {
+  interface Settled {
+    readonly value?: unknown;
+    readonly error?: unknown;
+    /** `clock.now()` when the promise settled. */
+    readonly atMs: number;
+  }
+
+  /**
+   * Step the manual clock one millisecond at a time until `promise` settles.
+   * Stepping, not jumping, so the instant a request ends is an observation.
+   */
+  async function settleOn(
+    clock: ManualClock,
+    promise: Promise<unknown>,
+    maxMs = 400_000,
+  ): Promise<Settled> {
+    let outcome: Settled | undefined;
+    promise.then(
+      (value: unknown) => {
+        outcome = { value, atMs: clock.now() };
+      },
+      (error: unknown) => {
+        outcome = { error, atMs: clock.now() };
+      },
+    );
+    await flushMicrotasks();
+    for (let step = 0; outcome === undefined; step += 1) {
+      if (step >= maxMs) throw new Error(`not settled after ${maxMs} ms`);
+      clock.advance(1);
+      await flushMicrotasks();
+    }
+    return outcome;
+  }
+
+  /** A transport whose every answer arrives `afterMs` later on `clock`. */
+  function slowTransport(
+    clock: ManualClock,
+    answer: (index: number) => { readonly afterMs: number; status: number },
+  ): StubTransport {
+    return createStubTransport(async (_call, index) => {
+      const { afterMs, status } = answer(index);
+      await clock.sleep(afterMs);
+      return stubXhr({ status });
+    });
+  }
+
+  it("is 90 seconds", () => {
+    expect(REQUEST_BUDGET_MS).toBe(90_000);
+  });
+
+  it("ends arXiv's measured slow refusal after two attempts, at 95 s, with the last error", async () => {
+    // `P0-T21`: arXiv 429s took up to 46 s to fail, with no Retry-After. The
+    // arXiv row's waits are 3 s, then up to 9 s. Without the budget this is
+    // three attempts and 46 + 3 + 46 + 9 + 46 = 150 s.
+    const clock = createManualClock();
+    const sink = createCapturingSink();
+    const transport = slowTransport(clock, () => ({
+      afterMs: 46_000,
+      status: 429,
+    }));
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      retryFor: () => ({
+        maxAttempts: 3,
+        nextDelayMs: (prev) => (prev === 0 ? 3000 : 9000),
+      }),
+      logger: createLogger({ sink, clock, level: "debug" }),
+    });
+    const t0 = clock.now();
+
+    const outcome = await settleOn(clock, client.request("GET", URL_OK));
+
+    expect(outcome.error).toBeInstanceOf(RateLimitError);
+    expect(transport.calls).toHaveLength(2);
+    // 46 s, the 3 s wait, 46 s: the budget is spent (95 s ≥ 90 s), so the
+    // 9 s wait never starts and the second 429 is the request's error.
+    expect(outcome.atMs - t0).toBe(95_000);
+    expect(clock.pending).toBe(0);
+    const retries = sink.lines.filter((l) => l.includes('"http retry"'));
+    expect(retries).toHaveLength(1);
+    const spent = sink.lines.filter((l) =>
+      l.includes('"http retry budget spent"'),
+    );
+    expect(spent).toHaveLength(1);
+    expect(spent[0]).toContain('"elapsedMs":95000');
+    expect(spent[0]).toContain('"attempt":2');
+  });
+
+  it("starts no wait that would cross the budget, and rethrows the last error unchanged", async () => {
+    // A Retry-After of 120 s cannot fit in 90 s: no wait, one attempt, the
+    // very error the attempt threw.
+    const clock = createManualClock();
+    const refused = new RateLimitError(429, 120_000, "example.test");
+    const retries: number[] = [];
+    const spent: { attempt: number; elapsedMs: number; delayMs: number }[] = [];
+
+    const error = await withRetry(() => Promise.reject(refused), {
+      policy: immediatePolicy(3),
+      clock,
+      budget: { totalMs: REQUEST_BUDGET_MS },
+      onRetry: (info) => retries.push(info.attempt),
+      onBudgetSpent: ({ attempt, elapsedMs, delayMs }) =>
+        spent.push({ attempt, elapsedMs, delayMs }),
+    }).catch((e: unknown) => e);
+
+    expect(error).toBe(refused);
+    expect(retries).toStrictEqual([]);
+    expect(spent).toStrictEqual([
+      { attempt: 1, elapsedMs: 0, delayMs: 120_000 },
+    ]);
+    expect(clock.pending).toBe(0);
+  });
+
+  it("lets a wait that ends just inside the budget start, and not one that ends on it", async () => {
+    // The attempt fails at 80 s. A 9 999 ms wait ends at 89 999 ms, inside
+    // the budget, so the retry starts; a 10 000 ms wait ends on the 90 s mark,
+    // and a retry starting there would start after the budget ran out.
+    for (const [delayMs, expectedAttempts] of [
+      [9_999, 2],
+      [10_000, 1],
+    ] as const) {
+      const clock = createManualClock();
+      let attempts = 0;
+      const outcome = await settleOn(
+        clock,
+        withRetry(
+          async () => {
+            attempts += 1;
+            if (attempts === 1) await clock.sleep(80_000);
+            throw new UpstreamServerError(503, "boom");
+          },
+          {
+            policy: { maxAttempts: 2, nextDelayMs: () => delayMs },
+            clock,
+            budget: { totalMs: REQUEST_BUDGET_MS },
+          },
+        ),
+      );
+      expect(outcome.error, String(delayMs)).toBeInstanceOf(
+        UpstreamServerError,
+      );
+      expect(attempts, String(delayMs)).toBe(expectedAttempts);
+    }
+  });
+
+  it("measures from the first attempt's start on the wire, not from the call", async () => {
+    // The host's queue holds the first attempt for 120 s — longer than the
+    // whole budget. That is pacing, not retrying: the request still gets
+    // every retry its attempt cap allows.
+    const clock = createManualClock();
+    let runs = 0;
+    const limiter: RateLimiterPort = {
+      key: "example.test",
+      acquire: () => Promise.resolve(),
+      async run(fn) {
+        runs += 1;
+        if (runs === 1) await clock.sleep(120_000);
+        return fn();
+      },
+      penalize: () => undefined,
+    };
+    const transport = createStubTransport(() =>
+      Promise.resolve(stubXhr({ status: 503 })),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      limiterFor: () => limiter,
+      retryFor: () => ({ maxAttempts: 3, nextDelayMs: () => 1000 }),
+    });
+    const t0 = clock.now();
+
+    const outcome = await settleOn(clock, client.request("GET", URL_OK));
+
+    expect(outcome.error).toBeInstanceOf(UpstreamServerError);
+    expect(transport.calls).toHaveLength(3);
+    expect(outcome.atMs - t0).toBe(122_000);
+  });
+
+  it("measures from the first attempt, not afresh from each attempt", async () => {
+    // Each attempt takes 50 s. From the first attempt, 100 s have passed when
+    // the second fails, so the request ends there; a budget restarted at each
+    // attempt would only ever see 50 s and run all five.
+    const clock = createManualClock();
+    const transport = slowTransport(clock, () => ({
+      afterMs: 50_000,
+      status: 503,
+    }));
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      retryFor: () => ({ maxAttempts: 5, nextDelayMs: () => 0 }),
+    });
+
+    const outcome = await settleOn(clock, client.request("GET", URL_OK));
+
+    expect(outcome.error).toBeInstanceOf(UpstreamServerError);
+    expect(transport.calls).toHaveLength(2);
+  });
+
+  it("never cuts an attempt short: a retry started inside the budget keeps its own timeout", async () => {
+    // The first attempt fails at 80 s; the retry starts at 81 s and answers
+    // 200 at 111 s, past the 90 s mark. The budget decides whether an attempt
+    // starts, not how long it may run.
+    const clock = createManualClock();
+    const transport = slowTransport(clock, (index) =>
+      index === 0
+        ? { afterMs: 80_000, status: 503 }
+        : { afterMs: 30_000, status: 200 },
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      timeoutMs: 60_000,
+      retryFor: () => ({ maxAttempts: 3, nextDelayMs: () => 1000 }),
+    });
+    const t0 = clock.now();
+
+    const outcome = await settleOn(clock, client.request("GET", URL_OK));
+
+    expect(outcome.value).toMatchObject({ status: 200 });
+    expect(outcome.atMs - t0).toBe(111_000);
+    expect(transport.calls.map((call) => call.options.timeout)).toStrictEqual([
+      60_000, 60_000,
+    ]);
+  });
+
+  it("still stops at once on cancellation, which is checked before the budget", async () => {
+    // The cancel lands while an attempt is in flight, and that attempt fails
+    // after the budget is spent. The request ends cancelled, not with the
+    // attempt's 503, and the budget is never consulted.
+    const clock = createManualClock();
+    const source = createCancellationTokenSource();
+    const spent: number[] = [];
+    const outcome = await settleOn(
+      clock,
+      withRetry(
+        async () => {
+          await clock.sleep(100_000);
+          source.cancel({ kind: "user" });
+          throw new UpstreamServerError(503, "boom");
+        },
+        {
+          policy: immediatePolicy(3),
+          clock,
+          token: source.token,
+          budget: { totalMs: REQUEST_BUDGET_MS },
+          onBudgetSpent: (info) => spent.push(info.attempt),
+        },
+      ),
+    );
+    expect(outcome.error).toBeInstanceOf(OperationCancelledError);
+    expect(spent).toStrictEqual([]);
+
+    // And a cancel during a wait inside the budget ends the request without
+    // the clock moving, with nothing more sent.
+    const clock2 = createManualClock();
+    const source2 = createCancellationTokenSource();
+    const transport = createStubTransport(() =>
+      Promise.resolve(stubXhr({ status: 503 })),
+    );
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock: clock2,
+      retryFor: () => ({ maxAttempts: 3, nextDelayMs: () => 5000 }),
+    });
+    let ended: unknown;
+    const pending = client
+      .request("GET", URL_OK, { token: source2.token })
+      .catch((e: unknown) => {
+        ended = e;
+      });
+    await flushMicrotasks();
+    expect(transport.calls).toHaveLength(1);
+    expect(clock2.pending).toBe(1);
+    source2.cancel({ kind: "user" });
+    await flushMicrotasks();
+    expect(ended).toBeInstanceOf(OperationCancelledError);
+    await pending;
+    expect(transport.calls).toHaveLength(1);
+  });
+
+  it("gives a host with no retry policy no budget: its one attempt runs to its own timeout", async () => {
+    // The LLM/TTS row and a host with no row make one attempt; a long one is
+    // bounded by the timeout alone, never by the 90 s budget.
+    const clock = createManualClock();
+    const transport = slowTransport(clock, () => ({
+      afterMs: 200_000,
+      status: 200,
+    }));
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      clock,
+      timeoutMs: 300_000,
+    });
+
+    const outcome = await settleOn(clock, client.request("GET", URL_OK));
+
+    expect(outcome.value).toMatchObject({ status: 200 });
+    expect(transport.calls).toHaveLength(1);
   });
 });
 

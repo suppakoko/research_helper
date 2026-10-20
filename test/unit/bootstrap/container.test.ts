@@ -1465,6 +1465,11 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
   interface ScriptedAnswer {
     readonly status: number;
     readonly headers?: Readonly<Record<string, string>>;
+    /**
+     * How long the host takes to answer, on the manual clock (item 233's slow
+     * refusal). Absent, the answer is immediate.
+     */
+    readonly afterMs?: number;
   }
 
   /**
@@ -1492,7 +1497,7 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
         onCall?.(url);
         const scripted = answer(url, nth);
         if (scripted instanceof Error) return Promise.reject(scripted);
-        const { status, headers = {} } = scripted;
+        const { status, headers = {}, afterMs } = scripted;
         const xhr: HttpTransportXhr = {
           status,
           responseText: "",
@@ -1502,7 +1507,9 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
               .map(([name, value]) => `${name}: ${value}`)
               .join("\r\n"),
         };
-        return Promise.resolve(xhr);
+        return afterMs === undefined
+          ? Promise.resolve(xhr)
+          : clock.sleep(afterMs).then(() => xhr);
       },
       UnexpectedStatusException:
         StubUnexpectedStatusException as unknown as HttpExceptionClass<
@@ -1532,6 +1539,7 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
   async function settle(
     clock: ManualClock,
     promise: Promise<unknown>,
+    maxSteps = 40_000,
   ): Promise<{ value?: unknown; error?: unknown }> {
     let outcome: { value?: unknown; error?: unknown } | undefined;
     promise.then(
@@ -1542,7 +1550,7 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
         outcome = { error };
       },
     );
-    await runUntil(clock, () => outcome !== undefined, 40_000);
+    await runUntil(clock, () => outcome !== undefined, maxSteps);
     return must(outcome, "the request's outcome");
   }
 
@@ -1763,6 +1771,57 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
         await h.scope.unregisterAll();
       }
     }
+  });
+
+  it("ends arXiv's measured slow refusal at the 90-second budget: two attempts, not three (item 233)", async () => {
+    // `P0-T21`: arXiv 429s took up to 46 s to fail, with no Retry-After.
+    // Through the real composition root, the arXiv row allows three attempts;
+    // the budget ends the request after two, at about 95 s, with the second
+    // 429. Before item 233 this was three attempts and up to 150 s.
+    const row = must(
+      HOST_POLICIES.find((policy) => policy.host === ARXIV_HOST),
+      "the arXiv row",
+    );
+    expect(must(row.retry, "arXiv's retry cells").maxAttempts).toBe(3);
+    const clock = createManualClock();
+    const transport = createScriptedTransport(clock, () => ({
+      status: 429,
+      afterMs: 46_000,
+    }));
+    const { h } = await installOver(clock, transport);
+    const t0 = clock.now();
+    let endedAt: number | undefined;
+
+    const outcome = await settle(
+      clock,
+      httpRequest({
+        method: "GET",
+        url: `https://${ARXIV_HOST}/api/query?search_query=all:crispr`,
+      }).finally(() => {
+        endedAt = clock.now();
+      }),
+      200_000,
+    );
+
+    expect(outcome.error).toBeInstanceOf(RateLimitError);
+    expect(transport.calls).toHaveLength(2);
+    const at = transport.calls.map((call) => call.atMs);
+    expect(must(at[0], "the first call")).toBe(t0);
+    // 46 s for the refusal, then the row's 3000 ms base wait.
+    const gap = must(at[1], "the second call") - t0;
+    expect(gap).toBeGreaterThanOrEqual(49_000);
+    expect(gap).toBeLessThanOrEqual(49_001);
+    const elapsed = must(endedAt, "the end") - t0;
+    expect(elapsed).toBeGreaterThanOrEqual(95_000);
+    expect(elapsed).toBeLessThanOrEqual(95_002);
+    expect(linesWith(h.sink, "http retry").map((line) => line.attempt)).toEqual(
+      [1],
+    );
+    const spent = linesWith(h.sink, "http retry budget spent");
+    expect(spent.map((line) => line.attempt)).toEqual([2]);
+    expect(must(spent[0], "the budget line").host).toBe(ARXIV_HOST);
+    expect(clock.pending).toBe(0);
+    await h.scope.unregisterAll();
   });
 
   it("waits a 429's Retry-After rather than the jitter, and ends in RateLimitError", async () => {

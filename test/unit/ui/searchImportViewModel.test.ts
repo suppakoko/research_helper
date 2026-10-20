@@ -642,6 +642,16 @@ const EXPECTED_ROWS: Readonly<
     retry: false,
     prefs: false,
   },
+  // Item 232 (owner, 2026-10-21): a 429 refused after the client's retries.
+  // §8.3's action is "Retry now"; never Preferences.
+  RATE_LIMIT: {
+    ref: {
+      id: "research-helper-search-error-rate-limit",
+      args: { database: DATABASE },
+    },
+    retry: true,
+    prefs: false,
+  },
 };
 
 describe("P1-T39 — errorView() over docs/08 §8.3's table", () => {
@@ -690,13 +700,14 @@ describe("P1-T39 — errorView() over docs/08 §8.3's table", () => {
   });
 
   it("sends every row this build cannot render to the generic row", () => {
-    // The three §8.3 rows `UNRENDERABLE_ERROR_ROWS`' doc comment names. Listed
+    // The two §8.3 rows `UNRENDERABLE_ERROR_ROWS`' doc comment names. Listed
     // here as well so that the day one of them becomes renderable — a row in
     // `ERROR_ROWS`, or a member dropped from the constant — this test fails and
-    // says to come here too.
-    for (const code of ["RATE_LIMIT", "TIMEOUT", "NETWORK"]) {
-      expect(UNRENDERABLE_ERROR_ROWS, code).toContain(code);
-    }
+    // says to come here too. `RATE_LIMIT` left the list with item 232.
+    expect([...UNRENDERABLE_ERROR_ROWS].toSorted()).toStrictEqual([
+      "NETWORK",
+      "TIMEOUT",
+    ]);
     // Guards the loop below against a constant emptied by accident, which
     // would make every assertion in it vacuous.
     expect(UNRENDERABLE_ERROR_ROWS.length).toBeGreaterThan(0);
@@ -3270,6 +3281,93 @@ describe("item 220 — the all-failed panel decides from the per-source errors",
       "403",
       "OFFLINE",
     ]);
+  });
+});
+
+describe("item 232 — a 429 refused after the client's retries has a truthful row", () => {
+  const ID = "research-helper-search-error-rate-limit";
+
+  /** A 429 as a pipeline result carries it: serialized, no seconds. */
+  const refused = (): SerializedError =>
+    failure("RATE_LIMIT", { httpStatus: 429, retryable: true });
+
+  it("draws its own row with the database name, never rh-error-rate-limit's countdown", () => {
+    const view = errorView(refused(), DATABASE);
+
+    expect(view.ref).toStrictEqual({ id: ID, args: { database: DATABASE } });
+    // Not the §8.3 table's "Retrying in {n}s" message, and no seconds asked
+    // for: nothing is retrying when this is shown, and none are carried.
+    expect(view.ref.id).not.toBe("rh-error-rate-limit");
+    expect(Object.keys(view.ref.args ?? {})).toStrictEqual(["database"]);
+    // §8.3's "Retry now", and item 220's rule: never Preferences.
+    expect(view.retry).toBe(true);
+    expect(view.prefs).toBe(false);
+    expect(UNRENDERABLE_ERROR_ROWS).not.toContain("RATE_LIMIT");
+  });
+
+  it("ships the owner's wording in the en-US bundle, with the database name and no countdown", () => {
+    const text = enUsSearchDialog().get(ID);
+
+    expect(text).toBe(
+      "{ $database }: too many requests, refused · try again in a moment",
+    );
+    expect(text).not.toMatch(/retrying/i);
+    expect(text).not.toContain("$seconds");
+  });
+
+  it("shows the row in the refused source's status line", () => {
+    const line = sourceStatusLine(
+      report({ sourceId: "pubmed", error: refused() }),
+      { id: "pubmed", displayNameKey: "research-helper-source-pubmed" },
+      DATABASE,
+    );
+
+    expect(line.outcome).toBe("failed");
+    expect(line.nameId).toBe("research-helper-source-pubmed");
+    expect(line.detail).toStrictEqual({ id: ID, args: { database: DATABASE } });
+  });
+
+  it("draws Retry alone when every searching source was refused with 429 (item 220's rule)", async () => {
+    const searching: readonly SourceId[] = [
+      "pubmed",
+      "europepmc",
+      "crossref",
+      "semanticscholar",
+      "arxiv",
+    ];
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      runs: [
+        {
+          output: output({
+            outcome: "failed",
+            error: failure("SOURCE", { retryable: true }),
+            perSource: SEVEN_IDS.map((sourceId) =>
+              searching.includes(sourceId)
+                ? report({ sourceId, error: refused() })
+                : report({ sourceId }),
+            ),
+          }),
+        },
+      ],
+    });
+    await h.model.runSearch(query({ sources: [...SEVEN_IDS] }));
+
+    const error = h.model.state.error;
+    expect(h.model.state.panel).toBe("error");
+    expect(error?.retry).toBe(true);
+    expect(error?.openPreferences).toBe(false);
+    // One line per refused source, each the item-232 row naming its own
+    // database.
+    expect(error?.lines.map((line) => line.sourceId)).toStrictEqual(searching);
+    for (const line of error?.lines ?? []) {
+      expect(line.detail.id, line.sourceId).toBe(ID);
+      const database = line.detail.args?.database;
+      expect(typeof database, line.sourceId).toBe("string");
+      expect(database, line.sourceId).not.toBe("");
+    }
+    // The machine code and the status stay in the disclosure.
+    expect(error?.details.slice(0, 2)).toStrictEqual(["RATE_LIMIT", "429"]);
   });
 });
 

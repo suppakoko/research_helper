@@ -1617,11 +1617,14 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 232. **The `RATE_LIMIT` row's "Retrying in {n}s" is false since retries run inside the request.** **DECIDED 2026-10-21: show
     "too many requests, refused · try again in a moment" with the database name** (a new string; Korean drafted for review).
+    **DONE 2026-10-20** (`plan/reports/items-232-233.md`); the Korean line waits on the owner's review.
 
 233. **A slow refusal retried to the cap can take about 150 s per request.** **DECIDED 2026-10-21: a 90-second total budget per
     request, retries included;** past it the request ends with its last error. `docs/07` §7.3 first.
+    **DONE 2026-10-20** (`plan/reports/items-232-233.md`): the budget bounds when an attempt may *start*, so the worst
+    case is 90 s plus one attempt's own timeout; whether to abort an attempt in flight at 90 s is asked of the owner.
 
-### 6.45 Raised by the Phase 3 plan review, 2026-10-20 — waits on the owner
+### 6.45 Raised by the Phase 3 plan review, 2026-10-20 — decided the same day
 
 234. **Phase 3's cards were written before Phases 1–2 landed, and no longer match the tree.** A read-only review
     (`plan/reports/phase3-plan-review.md`) found: about 28 `docs/07` §8.5 preference rows that Phase 3 reads have no row in
@@ -1632,6 +1635,11 @@ the caller of what the card builds; if it does not, the caller is added with a d
     break security rules (P3-T30 reads keys from `.env` and has no spend gate; P3-T01 would fork the redactor). The review
     lists 21 owner decisions and recommends P3-T01 (re-scoped), P3-T24 (without step 7) and a new preference-rows card
     first. **No card is changed until the owner decides.**
+    **DECIDED 2026-10-20 (owner):** (a) revise all 31 cards first, plan files only, with every remaining open decision
+    written as a marked recommendation for one later owner review; (b) start P3-T01, re-scoped to what is not landed, and
+    P3-T24 without step 7, once their cards are revised; (c) a run that reaches its spend ceiling **pauses and asks** whether
+    to continue (as `docs/11` §1 and P3-T31 say), so `docs/06` §5.4 and P3-T16 change; (d) G-12 starts now with
+    open-access papers only: a candidate list for the owner, and each download asked for separately.
 
 ## 7. Regenerating this file
 

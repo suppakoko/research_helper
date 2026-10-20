@@ -2494,7 +2494,9 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 > its 3000 ms base, because a token at 0.33/s takes 3030 ms to refill. The longest silent wait per row is `base +
 > 3 × base`: **4 s** for the 1000 ms rows, **8 s** for Semantic Scholar, **12 s** for arXiv. Two costs the table above
 > does not show: a `Retry-After` is not clamped to `cap`, so a host that asks for 120 s costs two such waits; and each
-> attempt can itself take up to the request timeout (§8.5's 60 s). *(Corrected 2026-10-20, item 230: this sentence
+> attempt can itself take up to the request timeout (§8.5's 60 s). *(Corrected 2026-10-21, item 233: a wait that
+> would end past the request's 90-second budget is no longer started, so a 120 s `Retry-After` now costs no wait at
+> all — the request ends with its `RateLimitError` at once. See the budget note below.)* *(Corrected 2026-10-20, item 230: this sentence
 > used to end "a `TimeoutError` is retryable, so a host that never answers costs up to three request timeouts before
 > the job sees the error". A timeout is no longer retried, so a host that never answers costs one; the note below
 > gives the worst case that remains.)*
@@ -2513,11 +2515,40 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 > - **A slow refusal is not a timeout and is still retried.** A host that answers every attempt with a 429 or 5xx just
 >   before the timeout can still cost up to the attempt cap of such answers plus the waits. `P0-T21` measured arXiv
 >   429s taking up to 46 s to fail (`02-literature-database-apis.md` §7.1); three of those plus arXiv's longest
->   silent waits (3 s + 9 s) is about 150 s.
-> - **A `Retry-After` is still not clamped to `cap`**, as the note above says.
+>   silent waits (3 s + 9 s) is about 150 s. *(Corrected 2026-10-21, item 233: the 90-second budget below now ends
+>   that case after two attempts, at about 95 s.)*
+> - **A `Retry-After` is still not clamped to `cap`**, as the note above says. *(Since 2026-10-21, item 233, one
+>   that would end past the request's 90-second budget is not waited at all.)*
 >
 > The note above is corrected in place on the same date: its list of retried classes and its last sentence described
 > the behaviour before this decision.
+
+> **A 90-second total budget per request, retries included, from 2026-10-21 (owner, 2026-10-21, `plan/00` §6
+> item 233).** Every request the HTTP client may retry has one budget of **90 s**. It is measured on the injected
+> clock (`Clock.now()`), from the moment the request's **first attempt is handed to the transport**. The first wait
+> for the host's bucket comes before that moment, so a request queued behind others on a busy host does not spend
+> its budget in the queue. The budget covers every attempt from then on and every wait between attempts, including
+> a retry's own wait for the host's bucket. The rule lives in `src/core/http/retry.ts` (`REQUEST_BUDGET_MS`, checked
+> by `withRetry`); `src/core/http/client.ts` supplies the start.
+> - **Once the budget is spent, the request ends with its last error.** No further retry is scheduled.
+> - **No wait starts that would cross the budget.** The wait is known before it starts — the server's `Retry-After`,
+>   or the row's jitter. If it would end at or past the 90 s mark, no wait starts, and the request ends at once with
+>   the error its last attempt got. A retry therefore always starts inside the budget.
+> - **An attempt is never cut short by the budget.** Each attempt keeps its own request timeout (§8.5's
+>   `timeoutSeconds`, 60 s by default). An attempt that started inside the budget runs to its answer or its timeout.
+> - **Cancellation still stops at once**, and it is checked before the budget. A cancelled request ends with
+>   `OperationCancelledError`, not with its last error.
+> - **A host with no retry policy** (the LLM/TTS row, or a host with no row) makes one attempt and has no budget. Its
+>   one attempt is bounded by its timeout alone.
+> - **The per-source 20-second search deadline** in `src/pipeline/searchImport/stages.ts` is separate and unchanged.
+>
+> **The worst case, corrected to the new bound.** The last retry starts before the 90 s mark and may then run to its
+> own timeout, so a request ends at most **90 s + one request timeout** after its first attempt reached the wire
+> (150 s at the 60 s default), plus that retry's wait for the host's bucket. The measured case improves: arXiv's
+> 46 s refusals now cost 46 s + one wait of 3 s + 46 s ≈ **95 s and two attempts**, after which the budget is spent
+> and the request ends with the second 429 — instead of three attempts and about 150 s. A `Retry-After` the budget
+> cannot fit, such as `P1-T26`'s 120 s, costs no wait at all. The host is still `penalize`d for the full 120 s, so
+> every other request to it waits, and the request that was refused ends at once with its `RateLimitError`.
 
 ### 7.4 Cancellation
 

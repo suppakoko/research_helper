@@ -68,6 +68,7 @@ export type FluentMessageId =
   | 'research-helper-search-duplicates-label'
   | 'research-helper-search-duplicates-link'
   | 'research-helper-search-duplicates-skip'
+  | 'research-helper-search-error-rate-limit'
   | 'research-helper-search-export'
   | 'research-helper-search-export-failed'
   | 'research-helper-search-export-written'

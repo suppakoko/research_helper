@@ -452,6 +452,15 @@ research-helper-search-state-error-open-preferences =
 research-helper-search-state-error-retry =
     .label = Retry
 
+# A source the host still refused with HTTP 429 after the client's own retries
+# (`plan/00` §6 item 232, owner, 2026-10-21; `docs/08` §8.3's dated note).
+# Shown in that source's status row and in its line of this panel, in place of
+# `rh-error-rate-limit`'s "Retrying in { $seconds }s", which would be false:
+# the retries have already happened inside the request, and nothing is
+# retrying when this is shown. `$database` is the source's display name, not
+# translated. The action offered is Retry.
+research-helper-search-error-rate-limit = { $database }: too many requests, refused · try again in a moment
+
 
 ## Error detail disclosure (NFR-14, docs/07 §10.2)
 ##

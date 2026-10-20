@@ -520,6 +520,11 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   "research-helper-search-state-error",
   "research-helper-search-state-error-open-preferences",
   "research-helper-search-state-error-retry",
+  // Item 232 (owner, 2026-10-21): a source refused with HTTP 429 after the
+  // client's own retries. Here and not in the mainWindow bundle: only this
+  // window's document resolves it, through `data-l10n-id`, and it is not a
+  // `ResearchHelperError.messageKey` (`rh-error-rate-limit` stays that).
+  "research-helper-search-error-rate-limit",
 
   // NFR-14's details disclosure for raw upstream text.
   "research-helper-search-details-show",
@@ -738,7 +743,7 @@ export const KO_PENDING_REVIEW = [
   "research-helper-prefs-test-absent",
   "research-helper-prefs-test-unavailable",
 
-  // --- searchDialog (61) ---
+  // --- searchDialog (62) ---
   "research-helper-search-window-title",
   "research-helper-search-keyword-label",
   "research-helper-search-keyword-input",
@@ -870,6 +875,9 @@ export const KO_PRESENT = [
   "research-helper-search-tier-title-exact",
   "research-helper-search-tier-title-fuzzy",
   "research-helper-search-tier-version-link",
+  // Item 232's refused-429 row: Korean drafted by the coordinator and
+  // reviewed by the owner on 2026-10-20 (`G-41`).
+  "research-helper-search-error-rate-limit",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -955,6 +963,8 @@ export interface FluentMessageArgsMap {
     failed: number;
     succeeded: number;
   };
+  // Item 232. `$database` is the refused source's display name.
+  "research-helper-search-error-rate-limit": { database: string };
   // `P2-T14`: `$tier` is the deciding deduplication tier's name, already
   // resolved from a `research-helper-search-tier-*` message (item 206; its id
   // only when no name resolved); `$score` the similarity as a whole
@@ -1030,7 +1040,7 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-prefs-test-rejected",
   "research-helper-prefs-test-forbidden",
 
-  // searchDialog (19)
+  // searchDialog (20)
   "research-helper-search-years-span",
   "research-helper-search-result-count",
   "research-helper-search-authors-overflow",
@@ -1045,6 +1055,7 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-search-status-importing",
   "research-helper-search-state-empty",
   "research-helper-search-state-partial",
+  "research-helper-search-error-rate-limit",
   "research-helper-search-row-duplicate",
   "research-helper-search-mode-rerun",
   "research-helper-search-rerun-heading",
