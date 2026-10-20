@@ -55,7 +55,12 @@
  * the caller called it.
  */
 
-import { redact, redactUrl, type SerializedError } from "./errors";
+import {
+  omitSecretFields,
+  redact,
+  redactUrl,
+  type SerializedError,
+} from "./errors";
 import type { SourceId } from "../model/ids";
 
 // ---------------------------------------------------------------------------
@@ -390,6 +395,177 @@ function redactMergeDecision(decision: MergeDecision): MergeDecision {
   return {
     ...decision,
     evidence: redactUnknown(decision.evidence) as MergeDecision["evidence"],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 2a. The gate for every other persisted record (`P3-T36`)
+//
+// Owner decision 2026-10-20 (`plan/00` §6 item 242; `docs/09` §2.1 "Persisted
+// records pass one gate"): every record Phase 3 stores — `StoredSummary` with
+// its `content`, the job record's JSON columns, the egress log,
+// `CredentialCheckResult` — passes `redactRecord`, and a record the gate
+// changed carries a "partly redacted" mark, because `redact()`'s 40-character
+// catch-all can also alter a gene or protein sequence quoted from a paper.
+// ---------------------------------------------------------------------------
+
+/**
+ * What {@link redactRecord} changed — the "partly redacted" mark, as data.
+ *
+ * The storing cards (`P3-T14`, `P3-T15`, `P3-T25`, `P3-T34`) persist this with
+ * the row and show it; this module holds no user-visible string. Counts, not
+ * paths: a path would be built from the record's own property names, and a
+ * count cannot carry anything the gate removed.
+ */
+export interface RedactionMark {
+  /** `true` when the gate changed anything: a string rewritten or a field removed. */
+  readonly partlyRedacted: boolean;
+  /**
+   * Strings {@link redactText} changed — values and property names alike,
+   * each counted once.
+   */
+  readonly redactedStrings: number;
+  /** Fields removed because `omitSecretFields` removes their name. */
+  readonly droppedFields: number;
+}
+
+/** A record after {@link redactRecord}, with its mark. */
+export interface RedactedRecord<T> {
+  /** The record as it may be stored. */
+  readonly record: T;
+  readonly mark: RedactionMark;
+}
+
+/** What the caller tells {@link redactRecord} about its record. */
+export interface RedactRecordOptions {
+  /**
+   * Names of **identifier** fields whose string value, or array of strings, is
+   * copied unchanged, at any depth.
+   *
+   * For values code computed and `KEY_PATTERNS` would destroy:
+   * `StoredSummary.contentHash` is a SHA-256 — 64 hexadecimal characters — and a
+   * `hash:` work key carries 40, so without this every summary row would lose
+   * its identity and carry the mark. {@link redactMergeDecision} makes the same
+   * exception for `workKey`. Never a field that holds text a user or a model
+   * wrote. A name `omitSecretFields` removes is removed even when listed here.
+   */
+  readonly verbatimKeys?: readonly string[];
+}
+
+/** The running count {@link redactRecord}'s walk keeps. */
+interface RedactionTally {
+  redactedStrings: number;
+  droppedFields: number;
+}
+
+/**
+ * Whether a value can carry a credential's text: a string or a container. A
+ * number, a boolean, `null` or `undefined` cannot.
+ */
+function carriesText(value: unknown): boolean {
+  return (
+    typeof value === "string" || (value !== null && typeof value === "object")
+  );
+}
+
+/** One string through {@link redactText}, counted when it changed. */
+function redactCounted(text: string, tally: RedactionTally): string {
+  const out = redactText(text);
+  if (out !== text) tally.redactedStrings += 1;
+  return out;
+}
+
+/** A verbatim field's value: a string, or an array of nothing but strings. */
+function isVerbatimShape(value: unknown): boolean {
+  return (
+    typeof value === "string" ||
+    (Array.isArray(value) && value.every((entry) => typeof entry === "string"))
+  );
+}
+
+/**
+ * The walk behind {@link redactRecord}: {@link redactUnknown}'s, plus
+ * `omitSecretFields` at every object, property names, the verbatim fields
+ * and the tally.
+ */
+function redactWalk(
+  value: unknown,
+  verbatim: ReadonlySet<string>,
+  tally: RedactionTally,
+): unknown {
+  if (typeof value === "string") return redactCounted(value, tally);
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactWalk(entry, verbatim, tally));
+  }
+  if (value === null || typeof value !== "object") return value;
+
+  const entries = Object.entries(value);
+  // `omitSecretFields` decides which names go, over the entries that can carry
+  // text; a key-named number (`inputTokens`) stays.
+  const textual: Record<string, unknown> = {};
+  for (const [name, inner] of entries) {
+    if (carriesText(inner)) textual[name] = inner;
+  }
+  const keptTextual = new Set(Object.keys(omitSecretFields(textual)));
+
+  const out: Record<string, unknown> = {};
+  for (const [name, inner] of entries) {
+    if (carriesText(inner) && !keptTextual.has(name)) {
+      tally.droppedFields += 1;
+      continue;
+    }
+    const outName = redactCounted(name, tally);
+    out[outName] =
+      verbatim.has(name) && isVerbatimShape(inner)
+        ? inner
+        : redactWalk(inner, verbatim, tally);
+  }
+  return out;
+}
+
+/**
+ * The one redaction gate for a new persisted record (`P3-T36`; `docs/09` §2.1).
+ *
+ * Walks a JSON-shaped value and returns a copy in which
+ *
+ * - every string — every value and every property name — has been through
+ *   {@link redactText} (`redactUrl` on each URL inside it, then `redact()`);
+ * - every field `omitSecretFields` removes (its name matches `KEYISH_FIELD`) is
+ *   gone **when its value is a string, an array or an object**. A key-named
+ *   number, boolean or `null` is kept: `KEYISH_FIELD` matches `token`, and
+ *   `inputTokens` or `maxOutputTokens` cannot hold a credential's text;
+ * - the caller's {@link RedactRecordOptions.verbatimKeys} are copied unchanged.
+ *
+ * It adds no pattern and no rule of its own: the two primitives are
+ * `src/core/errors.ts`'s, as {@link redactSearchProvenance}'s are.
+ *
+ * The gate is **idempotent**: putting the result through the gate again
+ * returns an equal record, for {@link redactSourceProvenance}'s reasons, and a
+ * mark with `partlyRedacted: false`. So a later boundary may gate again for
+ * free, but must keep the mark from the pass that produced the stored value
+ * rather than replace it with the second pass's.
+ *
+ * The input is not touched. It must be JSON-shaped — plain objects, arrays,
+ * strings, numbers, booleans, `null` — with no cycles. When two property names
+ * redact to the same text, the later field wins.
+ *
+ * @param record - the record about to be stored
+ * @param options - the identifier fields to copy unchanged
+ * @returns the record as it may be stored, and what the gate changed
+ */
+export function redactRecord<T>(
+  record: T,
+  options: RedactRecordOptions = {},
+): RedactedRecord<T> {
+  const tally: RedactionTally = { redactedStrings: 0, droppedFields: 0 };
+  const out = redactWalk(record, new Set(options.verbatimKeys ?? []), tally);
+  return {
+    record: out as T,
+    mark: {
+      partlyRedacted: tally.redactedStrings > 0 || tally.droppedFields > 0,
+      redactedStrings: tally.redactedStrings,
+      droppedFields: tally.droppedFields,
+    },
   };
 }
 

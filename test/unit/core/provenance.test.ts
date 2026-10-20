@@ -9,6 +9,7 @@ import {
   PROVENANCE_SCHEMA_PATH,
   PROVENANCE_SCHEMA_VERSION,
   redactQueryString,
+  redactRecord,
   redactSearchProvenance,
   redactSourceProvenance,
   serializeProvenance,
@@ -17,6 +18,7 @@ import {
   type SearchProvenance,
   type SourceProvenance,
 } from "../../../src/core/provenance";
+import { KEY_PATTERNS } from "../../../src/core/errors";
 import { SOURCE_IDS } from "../../../src/model/ids";
 import {
   PROVENANCE_NOTE_TITLE_PREFIX,
@@ -1168,5 +1170,272 @@ describe("writeProvenanceNote", () => {
     expect(note.state.note ?? "").toMatch(
       /^<h1>Research Helper — search provenance \d{4}-\d{2}-\d{2}T/,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. The gate for every other persisted record — `P3-T36`
+//
+// Owner decision 2026-10-20 (`plan/00` §6 item 242): every record Phase 3
+// stores passes `redactRecord`, `StoredSummary` content included, and a record
+// the gate changed carries the "partly redacted" mark. Every key below is
+// synthetic and built at run time.
+// ---------------------------------------------------------------------------
+
+describe("redactRecord — one gate for new persisted records (P3-T36)", () => {
+  const anthropicKey = (): string => "sk-ant-" + "x".repeat(30);
+  /** NCBI's shape: 32 hexadecimal characters, below the 40-character floor. */
+  const hexKey = (): string => "0123456789abcdef".repeat(2);
+  /** Too short and too plain for any `KEY_PATTERNS` shape. */
+  const shortKey = (): string => "k3y-" + "q".repeat(8);
+  /** A SHA-256, as `StoredSummary.contentHash` holds it. */
+  const sha256 = (): string => "ab".repeat(32);
+  /** A `hash:` work key, as `src/model/ids.ts` derives it (SHA-1, 40 hex). */
+  const hashWorkKey = (): string => `hash:${"c0ffee".repeat(6)}0123`;
+
+  /**
+   * Green fluorescent protein (Aequorea victoria), residues 1-80: the kind of
+   * sequence a methods section quotes verbatim.
+   */
+  const GFP_1_80 =
+    "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTFSYGVQCFSRYPDHMKQ";
+  /** The start of the EGFP coding sequence, 90 nucleotides. */
+  const EGFP_CDS_START =
+    "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTG";
+
+  /** A `StoredSummary`-shaped row (`docs/07` §5.2), content and envelope. */
+  const summaryRow = (verbatimSupport: string, statement = "GFP folds.") => {
+    const workKey = hashWorkKey();
+    return {
+      id: `${workKey}:1.0.0:model-a`,
+      workKey,
+      content: {
+        researchQuestion: "Does the variant fold at 37 °C?",
+        keyFindings: [{ statement, verbatimSupport }],
+        keywords: ["GFP", "folding"],
+        confidence: "medium",
+      },
+      inputScope: { kind: "abstract+fulltext", charsSent: 18_000, chunks: 2 },
+      promptId: "PAPER_SUMMARY_FULLTEXT",
+      promptVersion: "1.0.0",
+      providerId: "anthropic",
+      modelId: "model-a",
+      temperature: 0,
+      usage: {
+        inputTokens: 4_000,
+        outputTokens: 600,
+        totalTokens: 4_600,
+        costUsd: 0.02,
+      },
+      generatedAtEpochMs: 1_760_000_000_000,
+      sourceItemVersion: undefined,
+      contentHash: sha256(),
+      truncated: false,
+      groundingScore: 1,
+      warnings: [],
+    };
+  };
+  const SUMMARY_IDS = ["id", "workKey", "contentHash"];
+
+  it("removes a key in a string, in a URL query and under an apiKey field, at any depth", () => {
+    const record = {
+      input: {
+        note: `pasted ${anthropicKey()} by mistake`,
+        request: `GET ${ESEARCH}?db=pubmed&term=gfp&api_key=${hexKey()}`,
+        auth: { provider: "ncbi", apiKey: shortKey() },
+      },
+      attemptCount: 1,
+    };
+    const { record: out, mark } = redactRecord(record);
+    const text = JSON.stringify(out);
+    expect(text).not.toContain(anthropicKey());
+    expect(text).not.toContain(hexKey());
+    expect(text).not.toContain(shortKey());
+    expect(text).not.toContain("api_key");
+    expect(out).toEqual({
+      input: {
+        note: "pasted [redacted:37] by mistake",
+        request: `GET ${ESEARCH}?db=pubmed&term=gfp`,
+        auth: { provider: "ncbi" },
+      },
+      attemptCount: 1,
+    });
+    expect(mark).toEqual({
+      partlyRedacted: true,
+      redactedStrings: 2,
+      droppedFields: 1,
+    });
+  });
+
+  it("is idempotent: a second pass returns an equal record and no mark", () => {
+    const record = {
+      error: {
+        code: "BAD_REQUEST",
+        messageKey: "research-helper-error-bad-request",
+        detail: `efetch failed for ${ESEARCH}?api_key=${hexKey()}`,
+        retryable: false,
+        stack: `Error: ${anthropicKey()}\n    at run`,
+      },
+      secret: { value: shortKey() },
+      summary: summaryRow(`It reads ${GFP_1_80}.`),
+    };
+    const once = redactRecord(record, { verbatimKeys: SUMMARY_IDS });
+    const twice = redactRecord(once.record, { verbatimKeys: SUMMARY_IDS });
+    expect(once.mark.partlyRedacted).toBe(true);
+    expect(twice.record).toEqual(once.record);
+    expect(twice.mark).toEqual({
+      partlyRedacted: false,
+      redactedStrings: 0,
+      droppedFields: 0,
+    });
+  });
+
+  it("leaves KEY_PATTERNS at eight entries, the catch-all at 40", () => {
+    expect(KEY_PATTERNS).toHaveLength(8);
+    expect(KEY_PATTERNS.at(-1)?.source).toBe(
+      String.raw`\b[A-Za-z0-9_-]{40,}\b`,
+    );
+  });
+
+  it("marks a summary whose quoted protein sequence the catch-all altered", () => {
+    const row = summaryRow(
+      `The construct encoded ${GFP_1_80} (residues 1-80).`,
+    );
+    const { record: out, mark } = redactRecord(row, {
+      verbatimKeys: SUMMARY_IDS,
+    });
+    // The sequence is gone (the documented cost of the 40-character floor,
+    // which the gate does not weaken) and the row says so.
+    expect(out.content.keyFindings[0]?.verbatimSupport).toBe(
+      "The construct encoded [redacted:80] (residues 1-80).",
+    );
+    expect(mark).toEqual({
+      partlyRedacted: true,
+      redactedStrings: 1,
+      droppedFields: 0,
+    });
+    // Nothing else in the row moved: identity, usage, scope.
+    expect(out).toEqual({
+      ...row,
+      content: {
+        ...row.content,
+        keyFindings: [
+          {
+            statement: "GFP folds.",
+            verbatimSupport:
+              "The construct encoded [redacted:80] (residues 1-80).",
+          },
+        ],
+      },
+    });
+  });
+
+  it("marks a summary whose quoted DNA sequence the catch-all altered", () => {
+    const row = summaryRow("Primer-free.", `The CDS opens ${EGFP_CDS_START}.`);
+    const { record: out, mark } = redactRecord(row, {
+      verbatimKeys: SUMMARY_IDS,
+    });
+    expect(out.content.keyFindings[0]?.statement).toBe(
+      "The CDS opens [redacted:90].",
+    );
+    expect(mark.partlyRedacted).toBe(true);
+    expect(mark.redactedStrings).toBe(1);
+  });
+
+  it("returns an equal, unmarked copy of a record with nothing to redact, and leaves the input untouched", () => {
+    const row = summaryRow("Fluorescence peaked at 509 nm.");
+    const before = structuredClone(row);
+    const { record: out, mark } = redactRecord(row, {
+      verbatimKeys: SUMMARY_IDS,
+    });
+    expect(out).toEqual(row);
+    expect(out).not.toBe(row);
+    expect(row).toEqual(before);
+    expect(mark).toEqual({
+      partlyRedacted: false,
+      redactedStrings: 0,
+      droppedFields: 0,
+    });
+  });
+
+  it("keeps a key-named number, boolean or null, and removes a key-named string, array or object", () => {
+    const { record: out, mark } = redactRecord({
+      usage: { inputTokens: 12, outputTokens: 3, costUsd: 0.01 },
+      models: [{ id: "model-a", contextWindowTokens: 200_000 }],
+      tokenRefreshed: false,
+      bearer: null,
+      token: shortKey(),
+      tokens: [shortKey()],
+      credentials: { user: "owner", pass: shortKey() },
+    });
+    expect(out).toEqual({
+      usage: { inputTokens: 12, outputTokens: 3, costUsd: 0.01 },
+      models: [{ id: "model-a", contextWindowTokens: 200_000 }],
+      tokenRefreshed: false,
+      bearer: null,
+    });
+    expect(mark).toEqual({
+      partlyRedacted: true,
+      redactedStrings: 0,
+      droppedFields: 3,
+    });
+  });
+
+  it("copies the caller's identifier fields unchanged, and loses them without the option", () => {
+    const row = summaryRow("Fluorescence peaked at 509 nm.");
+    const job = { workKeys: [hashWorkKey(), "doi:10.1000/xyz"], total: 2 };
+
+    const kept = redactRecord(
+      { row, job },
+      { verbatimKeys: [...SUMMARY_IDS, "workKeys"] },
+    );
+    expect(kept.record).toEqual({ row, job });
+    expect(kept.mark.partlyRedacted).toBe(false);
+
+    // Without the option the hexadecimal rule takes both hashes, and every
+    // row would carry the mark: the reason the option exists.
+    const lost = redactRecord({ row, job });
+    expect(lost.record.row.contentHash).toBe("[redacted:64]");
+    expect(lost.record.row.workKey).toBe("hash:[redacted:40]");
+    expect(lost.record.job.workKeys[0]).toBe("hash:[redacted:40]");
+    expect(lost.mark.partlyRedacted).toBe(true);
+  });
+
+  it("copies an identifier field only when it holds a string or an array of strings", () => {
+    const { record: out, mark } = redactRecord(
+      { contentHash: { note: `see ${anthropicKey()}` } },
+      { verbatimKeys: ["contentHash"] },
+    );
+    expect(JSON.stringify(out)).not.toContain(anthropicKey());
+    expect(mark.redactedStrings).toBe(1);
+  });
+
+  it("removes a key-named field even when the caller lists it as verbatim", () => {
+    const { record: out, mark } = redactRecord(
+      { apiKey: shortKey(), workKey: hashWorkKey() },
+      { verbatimKeys: ["apiKey", "workKey"] },
+    );
+    expect(out).toEqual({ workKey: hashWorkKey() });
+    expect(mark.droppedFields).toBe(1);
+  });
+
+  it("redacts a key used as a property name", () => {
+    const { record: out, mark } = redactRecord({
+      termWeights: { gfp: 0.4, [anthropicKey()]: 0.1 },
+    });
+    expect(JSON.stringify(out)).not.toContain(anthropicKey());
+    expect(out).toEqual({
+      termWeights: { gfp: 0.4, "[redacted:37]": 0.1 },
+    });
+    expect(mark.redactedStrings).toBe(1);
+  });
+
+  it("passes non-string leaves through, and gates a bare string", () => {
+    expect(redactRecord(42).record).toBe(42);
+    expect(redactRecord(null).record).toBeNull();
+    expect(redactRecord(`x ${hexKey()}`)).toEqual({
+      record: "x [redacted:32]",
+      mark: { partlyRedacted: true, redactedStrings: 1, droppedFields: 0 },
+    });
   });
 });

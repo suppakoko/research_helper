@@ -433,7 +433,7 @@ export function redact(input: string): string {
 }
 ```
 
-The final catch-all pattern will occasionally redact a legitimate long token (a base64 chunk, a hash). That is the correct trade: a false-positive redaction costs a debugging inconvenience; a false negative publishes a billing credential to a GitHub issue.
+The final catch-all pattern will occasionally redact a legitimate long token (a base64 chunk, a hash). That is the correct trade: a false-positive redaction costs a debugging inconvenience; a false negative publishes a billing credential to a GitHub issue. *Corrected 2026-10-20 (owner; `plan/00` §6 item 242):* "a debugging inconvenience" is the cost in a log line. In a **stored record** the same false positive alters stored content — a gene or protein sequence quoted from a paper is a run of 40 or more letters — so the record is marked "partly redacted" (see "Persisted records pass one gate" below). The trade itself and the 40-character floor are unchanged.
 
 **The project's own short credential is below the catch-all. Recorded 2026-10-13 by `P1-T42`; measured
 2026-10-07 by `P1-T17`.** An NCBI `api_key` is unprefixed and hexadecimal, and `P1-T17` measured one at
@@ -496,6 +496,32 @@ Render the real form from the original values, then render the loggable form a *
 every entry whose name `KEYISH_FIELD` matches. `src/sources/pubmed/pubmedSource.ts`'s `buildEfetchRequest`
 shipped the technique inline on 2026-10-07; `P1-T42` lifted it into the module that holds the patterns so
 it is one rule in one place rather than a technique one card used.
+
+**Persisted records pass one gate. Decided 2026-10-20 (owner; `plan/00` §6 item 242).** Every record the
+plugin stores passes one function before it is written: the search provenance record through
+`redactSearchProvenance`, and every record Phase 3 adds — each `StoredSummary` row **with its `content`
+included**, the job record's `input_json`, `error_json`, `progress_json` and `usage_json`, the egress log,
+and the persisted `CredentialCheckResult` — through `redactRecord` in `src/core/provenance.ts` (`P3-T36`).
+That function adds no pattern. It walks the JSON-shaped value, puts every string (property names included)
+through `redactText` — `redactUrl()` on each URL inside the text, then `redact()` — and removes the fields
+`omitSecretFields()` removes. A record whose stored values the gate changed carries a visible **"partly
+redacted"** mark, because the 40-character catch-all can also alter a gene or protein sequence quoted from a
+paper; the catch-all is not weakened to spare content. The gate returns the mark as data next to the record
+(`partlyRedacted`, with the number of rewritten strings and of removed fields); the storing cards (`P3-T14`,
+`P3-T15`, `P3-T25`, `P3-T34`) persist it with the row and show it.
+
+Two further rules were set by `P3-T36` on 2026-10-20 while building the gate. They are **not** part of the
+owner's decision, and the owner may reverse either:
+
+- **A key-named field holding a number, a boolean or `null` is kept.** `KEYISH_FIELD` matches `token`, so
+  `omitSecretFields()` applied to every field would delete `inputTokens` and `outputTokens` from every usage
+  record and `contextWindowTokens` and `maxOutputTokens` from every `ModelInfo`. None of those values can
+  hold a credential's text. A string, an array or an object under a key-named field is removed.
+- **Identifier fields the caller names are copied unchanged.** A SHA-256 `contentHash` is 64 hexadecimal
+  characters and a `hash:` work key carries 40, and `KEY_PATTERNS` replaces both, which would destroy the
+  identifier and mark every row. The caller lists such field names (`verbatimKeys`); a string, or an array
+  of strings, under one of them is copied as it is — the same exception `redactMergeDecision` already makes
+  for `workKey`. A name `KEYISH_FIELD` matches is removed even when the caller lists it.
 
 **Level 3 — headers are structurally excluded.** The HTTP client logs a *derived* header summary, never the header object:
 
