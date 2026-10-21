@@ -291,39 +291,6 @@ const writtenPaths: string[] = [];
 /** Set when this spec created the audio directory, so it may remove it. */
 let audioDirectoryWasCreated = false;
 
-after(async function () {
-  for (const id of createdItemIDs.splice(0)) {
-    const item = Zotero.Items.get(id) as Zotero.Item | false;
-    if (item) {
-      try {
-        await item.eraseTx();
-      } catch (error) {
-        log(`could not erase item ${id}: ${String(error)}`);
-      }
-    }
-  }
-  for (const path of writtenPaths.splice(0)) {
-    try {
-      await IOUtils.remove(path, { ignoreAbsent: true });
-    } catch (error) {
-      log(`could not remove ${path}: ${String(error)}`);
-    }
-  }
-  if (audioDirectoryWasCreated) {
-    const directory = store().directory;
-    try {
-      // Only if this spec emptied it: recursive: false fails on a non-empty
-      // directory, which is the behaviour wanted.
-      await IOUtils.remove(directory, { ignoreAbsent: true });
-      await IOUtils.remove(PathUtils.parent(directory) ?? directory, {
-        ignoreAbsent: true,
-      });
-    } catch {
-      // Something else is in there; leave it alone.
-    }
-  }
-});
-
 /**
  * A standalone parent item for the attachment (`docs/04` §10.1).
  *
@@ -348,6 +315,39 @@ async function createParentItem(): Promise<Zotero.Item> {
 // ---------------------------------------------------------------------------
 
 describe("Audio file storage and attachment (P0-T26, V-11)", function () {
+  // plan/00 §6 item 264: inside the describe, so it runs when this spec ends.
+  after(async function () {
+    for (const id of createdItemIDs.splice(0)) {
+      const item = Zotero.Items.get(id) as Zotero.Item | false;
+      if (item) {
+        try {
+          await item.eraseTx();
+        } catch (error) {
+          log(`could not erase item ${id}: ${String(error)}`);
+        }
+      }
+    }
+    for (const path of writtenPaths.splice(0)) {
+      try {
+        await IOUtils.remove(path, { ignoreAbsent: true });
+      } catch (error) {
+        log(`could not remove ${path}: ${String(error)}`);
+      }
+    }
+    if (audioDirectoryWasCreated) {
+      const directory = store().directory;
+      try {
+        // Only if this spec emptied it: recursive: false fails on a non-empty
+        // directory, which is the behaviour wanted.
+        await IOUtils.remove(directory, { ignoreAbsent: true });
+        await IOUtils.remove(PathUtils.parent(directory) ?? directory, {
+          ignoreAbsent: true,
+        });
+      } catch {
+        // Something else is in there; leave it alone.
+      }
+    }
+  });
   it("writes a valid WAV under the data directory and attaches it", async function () {
     this.timeout(TEST_TIMEOUT_MS);
 

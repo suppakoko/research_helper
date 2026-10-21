@@ -81,6 +81,7 @@ import type { SecretId, SecretStore } from "../../core/secretStore";
 import { Secret } from "../../prefs/secrets";
 import type { BaseUrlResolver } from "../shared/baseUrl";
 import { mapProviderError } from "../shared/errorMap";
+import { withSchemaInPrompt } from "../shared/jsonMode";
 import { estTokens } from "../shared/tokenEstimate";
 import type {
   ChatRequest,
@@ -404,7 +405,15 @@ export function createOpenRouterProvider(
       ctx.token.throwIfCancelled();
       const headers = openRouterHeaders(await readKey());
       const cap = catalogue?.get(request.model)?.maxOutputTokens;
-      const body = toOpenRouterBody(request, {
+      // `P3-T12` step 6: a model the fetched catalogue lists without
+      // `structured_outputs` gets the schema in the prompt instead of
+      // `response_format` + `require_parameters` (`docs/12` §18.2, `docs/06`
+      // §6.4). Unknown (no catalogue yet) keeps the native field.
+      const sent =
+        catalogue?.get(request.model)?.supportsJsonSchema === false
+          ? withSchemaInPrompt(request)
+          : request;
+      const body = toOpenRouterBody(sent, {
         privacyMode: deps.privacyMode?.() ?? DEFAULT_OPENROUTER_PRIVACY_MODE,
         ...(cap !== undefined && { maxOutputTokensCap: cap }),
       });
@@ -419,7 +428,7 @@ export function createOpenRouterProvider(
       );
       const latencyMs = clock.now() - started;
       const parsed = readAnswer(response, request.model);
-      const answer = fromOpenRouterAnswer(parsed, request);
+      const answer = fromOpenRouterAnswer(parsed, sent);
       if (answer === undefined) {
         throw new LLMError(
           OPENROUTER_PROVIDER_ID,

@@ -382,6 +382,33 @@ async function measureImport(
 // ---------------------------------------------------------------------------
 
 describe("Batched import performance (P1-T14, NFR-1, NFR-3, R-16)", function () {
+  // plan/00 §6 item 264: inside the describe, so it runs when this spec ends.
+  // See the file header: cleanup rather than a pref gate, and a failure
+  // here is reported, never thrown — it must not turn a passing run red.
+  after(async function () {
+    const itemIDs = [...writtenItemIDs];
+    const collectionIDs = [...writtenCollectionIDs];
+    const startedAt = Date.now();
+    try {
+      if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
+      for (const collectionID of collectionIDs) {
+        const collection = Zotero.Collections.get(collectionID);
+        if (collection) await collection.eraseTx();
+      }
+      debug(
+        `${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items and ` +
+          `${String(collectionIDs.length)} collections in ` +
+          `${String(Date.now() - startedAt)} ms, so this spec's fixtures do not ` +
+          `change what any later spec measures`,
+      );
+    } catch (error) {
+      debug(
+        `${LOG_PREFIX} cleanup FAILED after ${String(Date.now() - startedAt)} ms ` +
+          `(${error instanceof Error ? error.message : String(error)}); ` +
+          `${String(itemIDs.length)} items may remain`,
+      );
+    }
+  });
   it("imports 100 pre-fetched records within NFR-1, then links all 100 on a re-import (FR-51)", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     await Zotero.Schema.schemaUpdatePromise;
@@ -572,34 +599,4 @@ describe("Batched import performance (P1-T14, NFR-1, NFR-3, R-16)", function () 
       "no single task monopolised the import — the UI was interactive",
     );
   });
-});
-
-// ---------------------------------------------------------------------------
-// Cleanup. See the file header: cleanup rather than a pref gate, and a failure
-// here is reported, never thrown — it must not turn a passing run red.
-// ---------------------------------------------------------------------------
-
-after(async function () {
-  const itemIDs = [...writtenItemIDs];
-  const collectionIDs = [...writtenCollectionIDs];
-  const startedAt = Date.now();
-  try {
-    if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
-    for (const collectionID of collectionIDs) {
-      const collection = Zotero.Collections.get(collectionID);
-      if (collection) await collection.eraseTx();
-    }
-    debug(
-      `${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items and ` +
-        `${String(collectionIDs.length)} collections in ` +
-        `${String(Date.now() - startedAt)} ms, so this spec's fixtures do not ` +
-        `change what any later spec measures`,
-    );
-  } catch (error) {
-    debug(
-      `${LOG_PREFIX} cleanup FAILED after ${String(Date.now() - startedAt)} ms ` +
-        `(${error instanceof Error ? error.message : String(error)}); ` +
-        `${String(itemIDs.length)} items may remain`,
-    );
-  }
 });

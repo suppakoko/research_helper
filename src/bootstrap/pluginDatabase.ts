@@ -108,6 +108,12 @@ export interface PluginDatabaseDeps {
   readonly logger: Logger;
   /** The global cache cap in bytes, from `cache.maxSizeMB` (§8.5), on demand. */
   readonly cacheMaxBytes: () => number;
+  /**
+   * §9.4 step 4: the `work:<workKey>` tags of running jobs, which `prune()`
+   * never evicts. `installServices` passes `RunningWork.pinnedTags`
+   * (`src/core/jobQueue/queue.ts`, `P3-T17`); absent, nothing is pinned.
+   */
+  readonly pinnedTags?: () => readonly string[];
 }
 
 /** `docs/07` §9.4: the first prune waits ~30 s, so it does not compete with startup. */
@@ -181,6 +187,7 @@ export function installPluginDatabase(
     clock: deps.clock,
     logger: logger.child({ surface: "cache" }),
     maxBytes: deps.cacheMaxBytes,
+    ...(deps.pinnedTags !== undefined && { pinnedTags: deps.pinnedTags }),
   });
 
   // §9.4's schedule: once ~30 s after startup, then every 6 hours. Only with

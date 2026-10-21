@@ -947,6 +947,8 @@ Rules of thumb for calibration:
 
 **Correcting the drift.** The heuristic above is fixed, but the error it makes is measurable: every provider returns a `usage` block, so the ratio of estimated to actual input tokens can be accumulated per model and folded back into the next estimate. That rolling correction factor is stored in the **`llm.tokenEstimateCalibration`** preference — a JSON object keyed by model ID, declared with its type, default and write cadence in `07-architecture-and-data-model.md` §8.5 — and applied by `src/llm/shared/tokenEstimate.ts` after `estimateTokens()` and before the 20% headroom. An absent or unparseable entry means "not calibrated yet" and the raw heuristic stands. `06-summarization-and-trend-report.md` §5.1 and `12-prompt-library.md` §11 are the two action items this closes; both previously said "in prefs" without naming a key.
 
+> **Built 2026-10-21 (`P3-T13`); two numbers no document gave, for the owner to confirm.** (1) The stored factor is **actual ÷ estimated**, the multiplier that corrects the estimate (the inverse of the "estimated to actual" ratio named above), measured against the *uncalibrated* heuristic so a stored factor never compounds, and summed over a job's calls before dividing. (2) At job end a model's factor becomes `stored × 0.5 + job × 0.5` (`CALIBRATION_BLEND`); a model with no stored factor takes the job's. The heuristic is `06-summarization-and-trend-report.md` §5.1's `estTokens`, so "after `estimateTokens()`" reads "after `estTokens`", and the headroom applied afterwards is that section's 1.15× (D-06-5), applied by the budget step (`P3-T16`).
+
 ---
 
 ## 11. Rate limits, errors, and retry
@@ -1751,6 +1753,16 @@ Non-2xx must **not** throw at the transport level — the response body carries 
 **Base URLs are resolved here, not hardcoded in the adapters.** Each adapter asks for its base URL and gets `<provider>.baseUrl` when that preference is non-empty, and the base URL documented in this document otherwise — §2.1 (OpenAI), §3.1 (Anthropic), §4.1 (Gemini), §5.1 (OpenRouter). The preference exists because `10-requirements-and-user-stories.md` FR-29 requires a per-provider override in the preferences pane, for users behind a corporate gateway or an API-compatible proxy; its key, type, default and allowed values are `07-architecture-and-data-model.md` §8.5's, and the control is in `08-ui-ux-spec.md` §7.3's per-provider block. Two rules apply to an overridden base URL: it must be `https://`, and the plugin **must not** send a key to a host the user has not explicitly configured — so the value is validated at write time and the pre-flight egress dialog (`09-security-privacy-and-api-keys.md` §3.6) names the *effective* host, not the provider's default one. The override carries no credential of its own; a proxy requiring separate authentication is out of scope.
 
 ### 14.5 Structured-output validation wrapper
+
+> **Built 2026-10-21 (`P3-T12`): the sketch below is not the shipped order.** Its loop makes two attempts with a
+> correction turn appended to the conversation; what ships is `12-prompt-library.md` §18.3's order, which the card
+> binds: the call, then **one** repair call (§18.3's separate "You fix malformed JSON" prompt, temperature 0), then
+> **one** full retry of the original request at temperature 0, then `StructuredOutputError(providerId, modelId, …)` —
+> at most three requests, with no loop. A truncated answer throws `LLMError` and a refusal `ContentFilterError`, both
+> before any repair (the sketch's `'bad_request'` and `'content_filter'` working names are not classes). The fence
+> stripper also takes a fence inside prose and the outermost balanced `{…}` (`06-summarization-and-trend-report.md`
+> §6.4). Code: `completeJSON`, `parseOrRepair`, `tryParseJson` and `withSchemaInPrompt` in
+> `src/llm/shared/jsonMode.ts`; the validator is `validateAgainstSchema` in `src/llm/shared/schemaValidate.ts`.
 
 Because OpenRouter can silently degrade and any provider can occasionally emit malformed JSON, wrap every schema-constrained call:
 

@@ -28,6 +28,16 @@
  * size is `stages.ts`'s `NETWORK_METADATA_POOL_SIZE`, not a figure of this
  * file's, and it is not read from a preference (§7.2 fixes it).
  *
+ * ## So do the `llm` pool and job admission (`P3-T17`)
+ *
+ * {@link buildWorkerPools} builds, once, beside the `network-metadata` pool:
+ * §7.2's `llm` pool, sized from the `concurrency` preference clamped to 1–8
+ * (`createLlmPool` in `src/core/jobQueue/queue.ts`), and the job-level
+ * admission (one `interactive`, two `background`). It also carries the
+ * `RunningWork` registry `installServices` gave the cache as its pinned
+ * tags. No pipeline takes these yet: the summarize pipeline (`P3-T29`) is
+ * their caller, constructed here from the same {@link WorkerPools}.
+ *
  * ## Two things this file does not do, and they are reported not hidden
  *
  * 1. **`notePartialImport` cannot write to the collection.** `docs/07` §7.4
@@ -71,6 +81,14 @@ import {
 import { createPmcidConverter } from "../sources/pubmed/idConverter";
 import { getPref } from "../prefs";
 import { Semaphore } from "../core/concurrency";
+import {
+  createJobAdmission,
+  createLlmPool,
+  createRunningWork,
+  type JobAdmission,
+  type LlmPool,
+  type RunningWork,
+} from "../core/jobQueue/queue";
 import type { HttpClient } from "../core/http/client";
 import type { Logger } from "../core/logger";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
@@ -363,6 +381,47 @@ export interface PipelineConstructionDeps {
    * instrument — not a second opinion about it.
    */
   readonly writeBatchSize?: number;
+  /**
+   * The `concurrency` preference (`docs/07` §8.5), read before every `llm`
+   * dispatch. Defaults to `getPref("concurrency")`; injectable for a test.
+   */
+  readonly readConcurrency?: () => number;
+  /**
+   * The registry whose work keys the cache pins (`docs/07` §9.4 step 4).
+   * `installServices` passes the one it gave the cache; absent, a fresh one
+   * that no cache reads.
+   */
+  readonly runningWork?: RunningWork;
+}
+
+/** `docs/07` §7.2's worker pools and job admission, one each per plugin lifetime. */
+export interface WorkerPools {
+  /** §7.2's `network-metadata` pool, {@link NETWORK_METADATA_POOL_SIZE}. */
+  readonly networkMetadata: Semaphore;
+  /** §7.2's `llm` pool, `concurrency` clamped to 1–8 (`P3-T17`). */
+  readonly llm: LlmPool;
+  /** §7.2's job-level concurrency: one `interactive`, two `background`. */
+  readonly admission: JobAdmission;
+  /** The work keys of live runs, pinned in the cache. */
+  readonly runningWork: RunningWork;
+}
+
+/**
+ * Build {@link WorkerPools}. Called by {@link buildPipelineSet} only — see the
+ * header: a pool built anywhere else would be a second budget.
+ */
+export function buildWorkerPools(deps: PipelineConstructionDeps): WorkerPools {
+  return {
+    // The one construction site of `docs/07` §7.2's `network-metadata` pool —
+    // see the header. Every pipeline in this set that fetches literature
+    // metadata takes this same instance.
+    networkMetadata: new Semaphore(NETWORK_METADATA_POOL_SIZE),
+    llm: createLlmPool(
+      deps.readConcurrency ?? ((): number => getPref("concurrency")),
+    ),
+    admission: createJobAdmission(),
+    runningWork: deps.runningWork ?? createRunningWork(),
+  };
 }
 
 /**
@@ -373,15 +432,14 @@ export interface PipelineConstructionDeps {
  * nothing at run time.
  */
 export function buildPipelineSet(deps: PipelineConstructionDeps): PipelineSet {
-  // The one construction site of `docs/07` §7.2's `network-metadata` pool —
-  // see the header. Every pipeline in this set that fetches literature
-  // metadata takes this same instance.
-  const pool = new Semaphore(NETWORK_METADATA_POOL_SIZE);
+  // `llm`, `admission` and `runningWork` have no taker until the summarize
+  // pipeline (`P3-T29`) is constructed here from the same `pools`.
+  const pools = buildWorkerPools(deps);
   return {
     searchImport: createSearchImportPipeline({
       writer: deps.writer,
       writeBatchSize: deps.writeBatchSize ?? DEFAULT_CHUNK_SIZE,
-      pool,
+      pool: pools.networkMetadata,
     }),
   };
 }

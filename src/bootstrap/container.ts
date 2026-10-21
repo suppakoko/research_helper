@@ -188,7 +188,11 @@ import {
 import { retryPolicyFromBudget, type RetryPolicy } from "../core/http/retry";
 import { buildUserAgent } from "../core/http/userAgent";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
-import { createJobQueue, type JobQueue } from "../core/jobQueue/queue";
+import {
+  createJobQueue,
+  createRunningWork,
+  type JobQueue,
+} from "../core/jobQueue/queue";
 import {
   CompositeProgressReporter,
   createObservableProgressSink,
@@ -1621,12 +1625,16 @@ export async function installServices(
   //     not wait on the file (`src/bootstrap/pluginDatabase.ts`'s header). Its
   //     teardown — recovery awaited, stores detached, connection closed — is
   //     registered here, so it runs after every later registration is undone.
+  // §9.4 step 4 (`P3-T17`): the work keys of live `llm` runs, which the
+  // cache never evicts; the same registry reaches the runs through step 7.
+  const runningWork = createRunningWork();
   const database = installPluginDatabase(scope, {
     source: options.pluginDatabase,
     clock,
     logger: logger.child({ surface: "pluginDatabase" }),
     // §8.5's `cache.maxSizeMB`, read on demand so a change applies at once.
     cacheMaxBytes: () => getPref("cacheMaxSizeMB") * 1024 * 1024,
+    pinnedTags: runningWork.pinnedTags,
   });
 
   // 7. The pipelines (`P1-T16`) and the per-job context factory.
@@ -1636,6 +1644,7 @@ export async function installServices(
     // §7.3's `pmc.ncbi.nlm.nih.gov` bucket paces it. It is used only while
     // `useTranslators` is on, which it ships off.
     writer: createZoteroSearchImportWriter({ logger, http }),
+    runningWork,
   });
   const pipelineContext = createPipelineContextFactory({
     clock,

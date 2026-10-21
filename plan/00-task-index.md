@@ -1891,6 +1891,26 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `attachments.spec.ts`, `import-perf.spec.ts`, `importer.spec.ts`, `preprintRoundTrip.spec.ts`, `versionLinking.spec.ts`
     (`_suite-guards.spec.ts`'s is suite-wide on purpose). Their fixtures stay in the test library for every later spec —
     the same shape as item 263; move each into its `describe` when that file is next touched.
+    **DONE 2026-10-21 (owner: fix now)** (`plan/reports/after-hooks-264.md`): all five moved; no cross-spec dependence.
+
+### 6.55 Raised by P3-T12, P3-T13, P3-T17 and item 264, 2026-10-21
+
+265. **Open for the owner.** (a) `P3-T17` step 6: the batch wall-clock budget has no number (`docs/03` §11.6 "e.g. 30
+    min") and no decided behaviour at the limit (pause and ask, or let the pipeline ask). (b) `P3-T13`: where a user-edited
+    price table is stored (a preference row or the plugin database). (c) `P3-T12`: a truncated answer shows the generic
+    `rh-error-llm`; a dedicated "the summary was cut off" message needs a string. (d) The NFR-10 startup test fails on
+    Zotero's own `api.zotero.org/retractions/list` in 2 of 5 runs today (item 176 suggests leaving Zotero's hosts out of
+    its count).
+
+266. **Recorded, choices made by agents, for later confirmation.** `P3-T13`: calibration factor = actual ÷ estimated,
+    blended 0.5 at job end (`docs/03` §10.2); headroom (1.15× or 20 %) is `P3-T16`'s; price tiers apply strictly above
+    their threshold; OpenRouter cached-input price not parsed (over-quotes). `P3-T17`: priority `normal` shares the
+    background slots; a paused job gives its slot back but keeps its exclusivity key; a call already waiting in a host
+    bucket is not re-queued on pause; the cache pinned-tags hook is supplied (so `P3-T35` need not); `P3-T29` must use
+    `pools.llm`, `pools.admission`, `pools.runningWork` and `runPooledItems`. `P3-T12`: repair bodies enter the error
+    only with `includeBodies` (callers pass `getPref("logRequestBodies")`); usage of a failed `completeJSON` is not
+    returned (the budget guard must count it). Item 264: `batchImport`, `itemCreation` and `itemMapper` specs have no
+    cleanup at all (300 items stay for later specs).
 
 ## 7. Regenerating this file
 

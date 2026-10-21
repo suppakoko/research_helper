@@ -48,6 +48,9 @@
  * createSignalShim}, a minimal same-shape object, where it does not. Both
  * satisfy §4.1's declared member; neither throws. The divergence is reported
  * against the card rather than coded around silently.
+ *
+ * `P3-T17` added one function, {@link createLinkedCancellationTokenSource},
+ * built only from the members above; it declares no new type.
  */
 
 import { OperationCancelledError } from "../errors";
@@ -251,6 +254,43 @@ export function createCancellationTokenSource(): CancellationTokenSource {
       // work succeeded must not make that work look cancelled.
       disposed = true;
       listeners.clear();
+    },
+  };
+}
+
+/**
+ * A source whose token is cancelled by its own `cancel()` **or** when
+ * `parent` is cancelled, with the parent's reason (`P3-T17`).
+ *
+ * The `llm` item runner in `./queue.ts` needs two of these: the run's own
+ * token, cancelled by the run's `cancel()` or by the job's token, and a
+ * short-lived token for each wait on a pool permit, which a pause request
+ * also interrupts. Cancelling the child never cancels the parent. A parent
+ * already cancelled cancels the child at once (`onCancelled` fires
+ * synchronously for a late subscriber).
+ *
+ * `dispose()` drops the subscription on the parent as well, so a finished
+ * child stops being referenced by a long-lived job token.
+ *
+ * @param parent - the token to follow; `undefined` gives a plain source
+ * @returns the linked source
+ */
+export function createLinkedCancellationTokenSource(
+  parent: CancellationToken | undefined,
+): CancellationTokenSource {
+  const source = createCancellationTokenSource();
+  const unlink =
+    parent?.onCancelled((reason) => {
+      source.cancel(reason);
+    }) ?? (() => undefined);
+  return {
+    token: source.token,
+    cancel(reason: CancellationReason): void {
+      source.cancel(reason);
+    },
+    dispose(): void {
+      unlink();
+      source.dispose();
     },
   };
 }

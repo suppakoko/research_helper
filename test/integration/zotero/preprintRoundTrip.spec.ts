@@ -174,6 +174,24 @@ function extraLines(item: Zotero.Item): readonly string[] {
 }
 
 describe("preprint mapping round-trips through a live Zotero (P2-T08, FR-7)", function () {
+  // plan/00 §6 item 264: inside the describe, so it runs when this spec ends.
+  after(async function () {
+    const itemIDs = [...writtenItemIDs];
+    try {
+      if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
+      for (const collectionID of writtenCollectionIDs) {
+        const collection = Zotero.Collections.get(collectionID);
+        if (collection) await collection.eraseTx();
+      }
+      debug(`${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items`);
+    } catch (error) {
+      debug(
+        `${LOG_PREFIX} cleanup FAILED (${
+          error instanceof Error ? error.message : String(error)
+        }); ${String(itemIDs.length)} items may remain`,
+      );
+    }
+  });
   before(async function () {
     this.timeout(TEST_TIMEOUT_MS);
     await Zotero.Schema.schemaUpdatePromise;
@@ -294,22 +312,4 @@ describe("preprint mapping round-trips through a live Zotero (P2-T08, FR-7)", fu
       `foreign lines must lead, unchanged; extra was:\n${extra}`,
     );
   });
-});
-
-after(async function () {
-  const itemIDs = [...writtenItemIDs];
-  try {
-    if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
-    for (const collectionID of writtenCollectionIDs) {
-      const collection = Zotero.Collections.get(collectionID);
-      if (collection) await collection.eraseTx();
-    }
-    debug(`${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items`);
-  } catch (error) {
-    debug(
-      `${LOG_PREFIX} cleanup FAILED (${
-        error instanceof Error ? error.message : String(error)
-      }); ${String(itemIDs.length)} items may remain`,
-    );
-  }
 });

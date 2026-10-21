@@ -2813,6 +2813,81 @@ Cancellation semantics per pipeline are declared, not implicit:
 
 `pause()` sets a flag the scheduler checks before dispatching the next unit of work; in-flight requests finish (aborting them would waste money already spent on an LLM call). The job transitions `running → paused`, a checkpoint is written, and the token bucket's queued waiters for that job are released and re-queued on resume. A paused job holds its `exclusivityKey` so a competing job cannot start on the same collection.
 
+> **Built 2026-10-21 (`P3-T17`): the `llm` pool, job admission and the pooled item runner**, in
+> `src/core/jobQueue/queue.ts`, over §7.2 and this section. Pause and resume move the job through
+> §5.2's states (`queue.pause(jobId, reason)`, `queue.resume(jobId)`) and nothing else: the runner
+> keeps no state machine of its own.
+> - **The `llm` pool** is one `Semaphore` per plugin lifetime, built beside the `network-metadata`
+>   pool in `buildPipelineSet` (`src/bootstrap/registerPipelines.ts`). Its size is the `concurrency`
+>   preference (§8.5), clamped to 1–8 and re-read before every dispatch (a change shrinks by
+>   draining, through `Semaphore.resize`). **The pool bounds this plugin's LLM work; §7.3's LLM rows
+>   still allow at most 3 requests in flight to any one host**, so with `concurrency` above 3 the
+>   extra workers wait in that host's limiter, cancellably.
+> - **Job admission** (§7.2's job-level concurrency): one `interactive` and two `background` slots.
+>   §5.2's third priority, `normal`, is not named by §7.2; it shares the `background` slots. A job
+>   takes its `exclusivityKey` first and its slot second. **A paused job gives its slot back and
+>   keeps its key**; it takes a slot again before it resumes.
+> - **The item runner** dispatches items in order, one at a time, each under a pool permit; never
+>   a `Promise.all` over the items. Before each dispatch it checks cancellation (point 1), a pause
+>   request and the batch wall-clock budget, then skips an item the caller reports as already done
+>   (a cache hit, so a re-run dispatches only the rest). Pause stops dispatching, lets this job's
+>   in-flight calls finish, writes a boundary checkpoint, gives the admission slot back and moves
+>   the job to `paused`. Cancel cancels the run's token at once (the HTTP layer aborts in-flight
+>   requests, point 3; a worker waiting for a permit or in `RateLimiter.acquire` stops, point 2),
+>   moves the job `running → cancelling`, keeps every result already returned, and moves it to
+>   `cancelled` once nothing is in flight. **A call already waiting in a host's token bucket when
+>   the job pauses is in flight, so it is sent rather than re-queued** (the paragraph above asks for
+>   re-queueing, which needs the HTTP layer to tell waiting from sending; not built).
+> - **The batch wall-clock budget** (`03-llm-provider-integration.md` §11.6) is an option of the
+>   runner with **no number**: §11.6's "e.g. 30 min" was never decided (`plan/00` §6 item 240 left it
+>   to `P3-T17`), so nothing passes one yet. Time spent paused does not count.
+> - **§9.4 step 4's pinned tags** are supplied: every live run holds `work:<workKey>` for all of its
+>   items through `RunningWork`, which `installServices` passes to the cache as `pinnedTags`.
+>
+> ```ts
+> // src/core/jobQueue/queue.ts (P3-T17)
+> export interface LlmPool {
+>   readonly size: number;      // `concurrency`, clamped 1–8
+>   readonly inFlight: number;
+>   acquire(token?: CancellationToken): Promise<SemaphoreRelease>;
+> }
+> export interface JobTicket {
+>   suspend(): void;                                  // paused: slot back, key kept
+>   reacquire(token?: CancellationToken): Promise<void>;
+>   release(): void;                                  // the job ended
+> }
+> export interface JobAdmission {
+>   admit(job: Pick<JobRecord, "id" | "priority" | "exclusivityKey">,
+>         token?: CancellationToken): Promise<JobTicket>;
+> }
+> export interface RunningWork {
+>   hold(jobId: string, workKeys: readonly string[]): () => void;
+>   pinnedTags(): readonly string[];                  // `work:<workKey>`
+> }
+> export interface PooledCheckpointState {
+>   readonly version: 1;
+>   readonly completed: readonly string[];
+>   readonly failed: readonly { readonly workKey: string; readonly code: string }[];
+>   readonly pending: readonly string[];
+> }
+> export type PooledRunStop = "finished" | "cancelled" | "budget-elapsed";
+> export interface PooledRunOutcome {
+>   readonly stop: PooledRunStop;
+>   readonly total: number;
+>   readonly completed: number;   // results returned in this run
+>   readonly skipped: number;     // already done (cache hits)
+>   readonly failed: readonly { readonly workKey: string; readonly code: string }[];
+>   readonly dispatched: number;
+>   readonly stoppedAt: number | undefined;  // 1-based: items settled + 1
+> }
+> export interface PooledRun {
+>   readonly result: Promise<PooledRunOutcome>;
+>   pause(reason?: PauseReason): Promise<void>;
+>   resume(): Promise<void>;
+>   cancel(reason?: CancellationReason): Promise<void>;
+> }
+> ```
+
 ### 7.6 Surviving "the user quit Zotero"
 
 This is the hardest requirement and the reason the queue is persistent.

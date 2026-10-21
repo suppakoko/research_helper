@@ -269,6 +269,32 @@ function itemOrFail(itemID: number): Zotero.Item {
 // ---------------------------------------------------------------------------
 
 describe("Batched importer (P1-T14, FR-6, FR-7, FR-51)", function () {
+  // plan/00 §6 item 264: inside the describe, so it runs when this spec ends.
+  // See the file header: cleanup rather than a pref gate, and a failure
+  // here is reported, never thrown — it must not turn a passing run red.
+  after(async function () {
+    const itemIDs = [...writtenItemIDs];
+    const collectionIDs = [...writtenCollectionIDs];
+    const startedAt = Date.now();
+    try {
+      if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
+      for (const collectionID of collectionIDs) {
+        const collection = Zotero.Collections.get(collectionID);
+        if (collection) await collection.eraseTx();
+      }
+      debug(
+        `${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items and ` +
+          `${String(collectionIDs.length)} collections in ` +
+          `${String(Date.now() - startedAt)} ms`,
+      );
+    } catch (error) {
+      debug(
+        `${LOG_PREFIX} cleanup FAILED after ${String(Date.now() - startedAt)} ms ` +
+          `(${error instanceof Error ? error.message : String(error)}); ` +
+          `${String(itemIDs.length)} items may remain`,
+      );
+    }
+  });
   it("creates items in a named collection, tags them automatically, and reports R-17 coverage", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     await Zotero.Schema.schemaUpdatePromise;
@@ -821,33 +847,4 @@ describe("Batched importer (P1-T14, FR-6, FR-7, FR-51)", function () {
     assert.strictEqual(report.abstractCoverage.fraction, 0, "0, not NaN");
     assert.strictEqual(report.abstractCoverage.percent, 0);
   });
-});
-
-// ---------------------------------------------------------------------------
-// Cleanup. See the file header: cleanup rather than a pref gate, and a failure
-// here is reported, never thrown — it must not turn a passing run red.
-// ---------------------------------------------------------------------------
-
-after(async function () {
-  const itemIDs = [...writtenItemIDs];
-  const collectionIDs = [...writtenCollectionIDs];
-  const startedAt = Date.now();
-  try {
-    if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
-    for (const collectionID of collectionIDs) {
-      const collection = Zotero.Collections.get(collectionID);
-      if (collection) await collection.eraseTx();
-    }
-    debug(
-      `${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items and ` +
-        `${String(collectionIDs.length)} collections in ` +
-        `${String(Date.now() - startedAt)} ms`,
-    );
-  } catch (error) {
-    debug(
-      `${LOG_PREFIX} cleanup FAILED after ${String(Date.now() - startedAt)} ms ` +
-        `(${error instanceof Error ? error.message : String(error)}); ` +
-        `${String(itemIDs.length)} items may remain`,
-    );
-  }
 });

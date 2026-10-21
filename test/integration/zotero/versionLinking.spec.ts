@@ -162,6 +162,24 @@ function tagType(item: Zotero.Item, tag: string): number | undefined {
 }
 
 describe("preprint ↔ published version in a live Zotero (P2-T11, gate G-16)", function () {
+  // plan/00 §6 item 264: inside the describe, so it runs when this spec ends.
+  after(async function () {
+    const itemIDs = [...writtenItemIDs];
+    try {
+      if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
+      for (const collectionID of writtenCollectionIDs) {
+        const collection = Zotero.Collections.get(collectionID);
+        if (collection) await collection.eraseTx();
+      }
+      debug(`${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items`);
+    } catch (error) {
+      debug(
+        `${LOG_PREFIX} cleanup FAILED (${
+          error instanceof Error ? error.message : String(error)
+        }); ${String(itemIDs.length)} items may remain`,
+      );
+    }
+  });
   it("both imported together: two items, each Related to the other, the preprint tagged", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     await Zotero.Schema.schemaUpdatePromise;
@@ -255,22 +273,4 @@ describe("preprint ↔ published version in a live Zotero (P2-T11, gate G-16)", 
       "the new item records the version already in the library",
     );
   });
-});
-
-after(async function () {
-  const itemIDs = [...writtenItemIDs];
-  try {
-    if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
-    for (const collectionID of writtenCollectionIDs) {
-      const collection = Zotero.Collections.get(collectionID);
-      if (collection) await collection.eraseTx();
-    }
-    debug(`${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items`);
-  } catch (error) {
-    debug(
-      `${LOG_PREFIX} cleanup FAILED (${
-        error instanceof Error ? error.message : String(error)
-      }); ${String(itemIDs.length)} items may remain`,
-    );
-  }
 });
