@@ -1906,6 +1906,10 @@ the caller of what the card builds; if it does not, the caller is added with a d
     plugin database (a new table, appended migration). (c) a dedicated "summary was cut off" message (Korean drafted for
     owner review). (d) the NFR-10 startup test stops counting Zotero's own hosts (`api.zotero.org`), named in a list in the
     test; plugin requests are still counted.
+    **DONE 2026-10-21:** (a)+(c) `plan/reports/budget-and-truncation-265.md` (new pause reason `wall-clock-budget`; a yes
+    resets the 30 minutes; `OutputTruncatedError`); (b)+(d) `plan/reports/pricetable-and-nfr10-265.md` (`user_price`,
+    schema version 4, `database.prices`; `ZOTERO_OWN_HOSTS = ["api.zotero.org"]`, plugin User-Agent always counted). Korean
+    for both new strings owner-approved and inserted. Combined tree: 3333 unit, 40 contract, 189 integration.
 
 266. **Recorded, choices made by agents, for later confirmation.** `P3-T13`: calibration factor = actual ÷ estimated,
     blended 0.5 at job end (`docs/03` §10.2); headroom (1.15× or 20 %) is `P3-T16`'s; price tiers apply strictly above

@@ -93,6 +93,12 @@ export type JobPriority = "interactive" | "normal" | "background";
  *   `summary.confirmAboveCents` and needs the user's yes (item 250).
  * - `egress-unacknowledged` — a resumed job that would send text off the
  *   machine before `privacy.egressAcknowledged` is set (item 250).
+ * - `wall-clock-budget` — the batch wall-clock budget ran out (`docs/03`
+ *   §11.6, `docs/07` §7.5), and the job asks "N of M done — continue the
+ *   rest?" (owner, 2026-10-21, `plan/00` §6 item 265). A reason of its own
+ *   rather than `awaiting-confirmation` or `budget-stop`: the surface picks its
+ *   question from this member, and those two ask about an estimate and about
+ *   money spent.
  */
 export type PauseReason =
   | "user"
@@ -100,7 +106,8 @@ export type PauseReason =
   | "credential-required"
   | "budget-stop"
   | "awaiting-confirmation"
-  | "egress-unacknowledged";
+  | "egress-unacknowledged"
+  | "wall-clock-budget";
 
 /** Every {@link PauseReason}. */
 export const PAUSE_REASONS: readonly PauseReason[] = [
@@ -110,6 +117,7 @@ export const PAUSE_REASONS: readonly PauseReason[] = [
   "budget-stop",
   "awaiting-confirmation",
   "egress-unacknowledged",
+  "wall-clock-budget",
 ];
 
 /** `docs/07` §5.2's `progress` member. */

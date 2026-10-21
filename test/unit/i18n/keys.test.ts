@@ -7,6 +7,7 @@ import {
   ContentFilterError,
   ContextLengthExceededError,
   LLMError,
+  OutputTruncatedError,
   PolicyViolationError,
   PrivacyRoutingError,
   StructuredOutputError,
@@ -115,6 +116,8 @@ const ID_CONSTANTS = {
   L10N_PROGRESS_HEADLINE: keys.L10N_PROGRESS_HEADLINE,
   // `P3-T34`: the notice that interrupted jobs resumed (`docs/07` §7.6).
   L10N_JOB_RESUMED: keys.L10N_JOB_RESUMED,
+  // Item 265(a): the wall-clock budget's question (`docs/07` §7.5).
+  L10N_JOB_WALL_CLOCK_BUDGET: keys.L10N_JOB_WALL_CLOCK_BUDGET,
 } satisfies Record<string, string>;
 
 /** The exported `L10N_*` string constants that are not message identifiers. */
@@ -572,5 +575,32 @@ describe("src/i18n/keys.ts — OpenRouter's guardrail message (owner, 2026-10-21
   it("sits on KO_PRESENT once the owner reviewed the Korean (2026-10-21, G-41), never pending", () => {
     expect(read("KO_PRESENT")).toContain(key);
     expect(read("KO_PENDING_REVIEW")).not.toContain(key);
+  });
+});
+
+describe("src/i18n/keys.ts — item 265's two strings (owner, 2026-10-21)", () => {
+  const truncated = new OutputTruncatedError("openai", "m", "x").messageKey;
+  const question = keys.L10N_JOB_WALL_CLOCK_BUDGET;
+
+  it("ships OutputTruncatedError's messageKey as an error id that takes an argument (265(c))", () => {
+    expect(truncated).toBe("rh-error-output-truncated");
+    expect(read("ERROR_MESSAGE_IDS")).toContain(truncated);
+    expect(read("MAIN_WINDOW_MESSAGE_IDS")).toContain(truncated);
+    expect(read("ARGUMENT_MESSAGE_IDS")).toContain(truncated);
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).not.toContain(truncated);
+  });
+
+  it("declares the wall-clock budget's question on the main-window surface, with arguments (265(a))", () => {
+    expect(question).toBe("research-helper-job-wall-clock-budget");
+    expect(read("MAIN_WINDOW_MESSAGE_IDS")).toContain(question);
+    expect(read("ARGUMENT_MESSAGE_IDS")).toContain(question);
+    expect(read("ERROR_MESSAGE_IDS")).not.toContain(question);
+  });
+
+  it("puts both on KO_PRESENT once the owner reviewed the Korean (2026-10-21, G-41), never pending", () => {
+    for (const id of [truncated, question]) {
+      expect(read("KO_PRESENT")).toContain(id);
+      expect(read("KO_PENDING_REVIEW")).not.toContain(id);
+    }
   });
 });

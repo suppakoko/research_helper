@@ -15,6 +15,8 @@
  * by editing version 1: a migration that has run on a user's machine is
  * history. Version 2 is §8.3's `job` table and `idx_job_status` (`P3-T34`).
  * Version 3 is §8.3's `cache_entry` table and its two indexes (`P3-T33`).
+ * Version 4 is §8.3's `user_price` table, the user-edited price table
+ * (`plan/00` §6 item 265 (b), owner, 2026-10-21).
  *
  * ## The bookkeeping
  *
@@ -118,6 +120,24 @@ export const CACHE_EXPIRY_INDEX_DDL =
 export const CACHE_LRU_INDEX_DDL =
   "CREATE INDEX idx_cache_lru    ON cache_entry(last_access)";
 
+/**
+ * `docs/07` §8.3's `user_price` table (`plan/00` §6 item 265 (b), owner,
+ * 2026-10-21), byte for byte with the comments inside the statement: one row
+ * per provider and model in the shape of `UserPriceOverride`
+ * (`src/llm/shared/pricing.ts`), fractional US dollars per million tokens
+ * (item 252). `src/zotero/db.ts`'s `createUserPriceStore` is its only reader
+ * and writer.
+ */
+export const USER_PRICE_DDL = `CREATE TABLE user_price (
+  provider_id               TEXT NOT NULL,     -- a ProviderId
+  model_id                  TEXT NOT NULL,     -- as the picker lists it for provider_id
+  input_per_mtok_usd        REAL NOT NULL CHECK (input_per_mtok_usd >= 0),
+  output_per_mtok_usd       REAL NOT NULL CHECK (output_per_mtok_usd >= 0),
+  cached_input_per_mtok_usd REAL CHECK (cached_input_per_mtok_usd >= 0),   -- NULL: unknown
+  as_of                     INTEGER NOT NULL,  -- epoch ms: when the user read these prices
+  PRIMARY KEY (provider_id, model_id)
+)`;
+
 /** One schema step. */
 export interface Migration {
   /** The version the file is at once this migration has run. */
@@ -141,6 +161,11 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 3,
     statements: [CACHE_ENTRY_DDL, CACHE_EXPIRY_INDEX_DDL, CACHE_LRU_INDEX_DDL],
+  },
+  // `plan/00` §6 item 265 (b): the user-edited price table (`docs/07` §8.3).
+  {
+    version: 4,
+    statements: [USER_PRICE_DDL],
   },
 ];
 

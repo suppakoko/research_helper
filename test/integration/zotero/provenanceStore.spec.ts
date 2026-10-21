@@ -455,9 +455,10 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
   });
 
   // Moved to schema_version 2 by P3-T34, which appended docs/07 §8.3's `job`
-  // table and `idx_job_status` as migration version 2, and to 3 by P3-T33,
-  // which appended `cache_entry` and its two indexes as version 3.
-  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 3, with docs/07 §8.3's tables and indexes", async function () {
+  // table and `idx_job_status` as migration version 2, to 3 by P3-T33,
+  // which appended `cache_entry` and its two indexes as version 3, and to 4
+  // by plan/00 §6 item 265 (b), which appended `user_price` as version 4.
+  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 4, with docs/07 §8.3's tables and indexes", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     const store = await provenance();
     const expected = PathUtils.join(
@@ -472,7 +473,7 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       "never Zotero's own database",
     );
     assert.isTrue(await IOUtils.exists(store.path), "the file exists");
-    assert.strictEqual(store.schemaVersion, 3);
+    assert.strictEqual(store.schemaVersion, 4);
 
     const { database } = store;
     assert.strictEqual(
@@ -481,8 +482,8 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
           "SELECT MAX(version) FROM schema_version",
         ),
       ),
-      3,
-      "schema_version reads 3",
+      4,
+      "schema_version reads 4",
     );
     assert.strictEqual(
       Number(
@@ -534,6 +535,7 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
         "table:job",
         "table:schema_version",
         "table:search_provenance",
+        "table:user_price",
       ],
       "no table or index docs/07 §8.3 does not declare",
     );
@@ -565,6 +567,27 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
         "hits",
       ],
       "docs/07 §8.3's cache_entry columns, read back",
+    );
+    // plan/00 §6 item 265 (b): user_price's columns and types, in §8.3's order.
+    const priceColumns = (await database.queryAsync(
+      "SELECT name, type, \"notnull\" AS nn, pk FROM pragma_table_info('user_price') ORDER BY cid",
+    )) as Record<string, unknown>[];
+    assert.deepEqual(
+      priceColumns.map((row) => [
+        String(row["name"]),
+        String(row["type"]),
+        Number(row["nn"]),
+        Number(row["pk"]),
+      ]),
+      [
+        ["provider_id", "TEXT", 1, 1],
+        ["model_id", "TEXT", 1, 2],
+        ["input_per_mtok_usd", "REAL", 1, 0],
+        ["output_per_mtok_usd", "REAL", 1, 0],
+        ["cached_input_per_mtok_usd", "REAL", 0, 0],
+        ["as_of", "INTEGER", 1, 0],
+      ],
+      "docs/07 §8.3's user_price columns, read back",
     );
   });
 
@@ -640,6 +663,83 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       );
     } finally {
       await cache.invalidateByTag(tag).catch(() => 0);
+    }
+  });
+
+  // plan/00 §6 item 265 (b), owner, 2026-10-21: the user-edited price table
+  // lives in the plugin database. Measured here inside Zotero: the store the
+  // graph publishes writes through the one connection, keeps fractional
+  // dollars exactly (item 252), upserts in place, deletes, and the table's
+  // CHECK refuses a negative price written around the store.
+  it("round-trips the user price table on the same connection: fractional dollars, an upsert in place, a delete", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const { database } = await provenance();
+    const graph = (await plugin()).api.services;
+    if (!graph) assert.fail("no ServiceGraph is published at api.services");
+    const open = await graph.database.ready;
+    if (!open) assert.fail("the graph has no open database");
+    assert.strictEqual(open.connection, database, "one connection, shared");
+
+    const prices = graph.database.prices;
+    const modelId = `${TAG}-model`;
+    const asOf = Date.UTC(2026, 9, 21);
+    const mine = (await prices.list()).filter((row) => row.modelId === modelId);
+    assert.deepEqual(mine, [], "no row for this test's model yet");
+    try {
+      await prices.upsert({
+        providerId: "openai",
+        modelId,
+        inputPerMTokUsd: 0.075,
+        outputPerMTokUsd: 3.75,
+        asOfEpochMs: asOf,
+      });
+      await prices.upsert({
+        providerId: "openai",
+        modelId,
+        inputPerMTokUsd: 0.075,
+        outputPerMTokUsd: 3.75,
+        cachedInputPerMTokUsd: 0.0075,
+        asOfEpochMs: asOf + 1,
+      });
+      assert.deepEqual(
+        (await prices.list()).filter((row) => row.modelId === modelId),
+        [
+          {
+            providerId: "openai",
+            modelId,
+            inputPerMTokUsd: 0.075,
+            outputPerMTokUsd: 3.75,
+            cachedInputPerMTokUsd: 0.0075,
+            asOfEpochMs: asOf + 1,
+          },
+        ],
+        "one row, the later edit, fractional dollars exact",
+      );
+      let refused = false;
+      try {
+        await database.queryAsync(
+          "INSERT INTO user_price (provider_id, model_id, input_per_mtok_usd, output_per_mtok_usd, as_of) VALUES (?, ?, ?, ?, ?)",
+          ["openai", `${modelId}-negative`, -1, 1, asOf],
+        );
+      } catch {
+        refused = true;
+      }
+      assert.isTrue(refused, "the CHECK refuses a negative price");
+      await prices.delete("openai", modelId);
+      assert.strictEqual(
+        Number(
+          await database.valueQueryAsync(
+            "SELECT COUNT(*) FROM user_price WHERE model_id LIKE ?",
+            [`${TAG}%`],
+          ),
+        ),
+        0,
+        "the row is deleted, and the refused one was never written",
+      );
+    } finally {
+      await database
+        .queryAsync("DELETE FROM user_price WHERE model_id LIKE ?", [`${TAG}%`])
+        .catch(() => undefined);
     }
   });
 

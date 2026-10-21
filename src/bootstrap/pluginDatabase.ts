@@ -8,8 +8,9 @@
  * `DBConnection` with `PRAGMA locking_mode=EXCLUSIVE` (read out of Zotero
  * 10.0.3's `db.js`), so a second connection would be refused — and every
  * store the plugin keeps in the file is built over it: the provenance store
- * (`P2-T17`), the cache (`P3-T33`), the job store (`P3-T34`), and the summary
- * store when `P3-T26` adds it.
+ * (`P2-T17`), the cache (`P3-T33`), the job store (`P3-T34`), the user price
+ * table (`user_price`, `plan/00` §6 item 265 (b), owner, 2026-10-21) and the
+ * summary store when `P3-T26` adds it.
  *
  * ## Why the open is synchronous and the migrations are not
  *
@@ -30,7 +31,8 @@
  * preference store, the HTTP client and the limiters go. In order: wait for
  * the open-and-migrate; stop the scheduled prune; close the cache (waits for
  * its operations in flight); await the job queue's startup recovery; detach
- * the job store; close the connection. `closeDatabase(true)` checkpoints the
+ * the job store; wait for the user price table's calls in flight; close the
+ * connection. `closeDatabase(true)` checkpoints the
  * WAL and releases the exclusive lock, so the fresh instance a disable/enable
  * cycle creates can open the file again.
  *
@@ -51,9 +53,11 @@ import { createCancellationTokenSource } from "../core/jobQueue/cancellation";
 import type { JobQueue } from "../core/jobQueue/queue";
 import type { Logger } from "../core/logger";
 import type { ProvenanceStore } from "../core/provenance";
+import type { UserPriceStore } from "../llm/shared/pricing";
 import {
   createJobStore,
   createProvenanceStore,
+  createUserPriceStore,
   type SqlConnection,
 } from "../zotero/db";
 import type { Scope } from "./container";
@@ -81,6 +85,8 @@ export interface OpenPluginDatabase {
   readonly schemaVersion: number;
   /** FR-12's store (`P2-T17`), on the connection. */
   readonly provenance: ProvenanceStore;
+  /** The user price table (`plan/00` §6 item 265 (b)), on the connection. */
+  readonly prices: UserPriceStore;
 }
 
 /** {@link installPluginDatabase}'s answer, held on the service graph. */
@@ -92,6 +98,15 @@ export interface PluginDatabase {
   readonly ready: Promise<OpenPluginDatabase | undefined>;
   /** `docs/07` §4.1's cache over `cache_entry`; stores nothing without a database. */
   readonly cache: Cache;
+  /**
+   * The user-edited price table (`user_price`; `plan/00` §6 item 265 (b),
+   * owner, 2026-10-21), usable before {@link ready} settles: each call waits
+   * for it. Without a database, or once teardown has begun, `list()` answers
+   * an empty table and `upsert()` / `delete()` reject. Teardown waits for
+   * calls in flight before it closes the connection. The model catalogue
+   * reads it as `userPriceOverrides: () => graph.database.prices.list()`.
+   */
+  readonly prices: UserPriceStore;
   /**
    * Attach the job queue's store once the database is ready, then run
    * `docs/07` §7.6's startup recovery (not awaited; teardown awaits it).
@@ -159,6 +174,7 @@ export function installPluginDatabase(
         schemaFrom: outcome.from,
         schemaVersion: outcome.to,
         provenance: createProvenanceStore(connection),
+        prices: createUserPriceStore(connection),
       };
     } catch (error) {
       logger.error(
@@ -216,10 +232,56 @@ export function installPluginDatabase(
           }
         })();
 
+  // The user price table: each call waits for the open, and teardown waits
+  // for the calls in flight before the connection closes.
+  let closing = false;
+  const inFlight = new Set<Promise<unknown>>();
+  function tracked<T>(work: Promise<T>): Promise<T> {
+    inFlight.add(work);
+    const done = (): void => {
+      inFlight.delete(work);
+    };
+    work.then(done, done);
+    return work;
+  }
+  async function openPrices(): Promise<UserPriceStore | undefined> {
+    const open = await ready;
+    return closing ? undefined : open?.prices;
+  }
+  const PRICES_UNAVAILABLE =
+    "[research-helper] the plugin database is not available; the user price " +
+    "table was not changed";
+  const prices: UserPriceStore = {
+    list: () =>
+      tracked(
+        (async () => {
+          const store = await openPrices();
+          return store === undefined ? [] : store.list();
+        })(),
+      ),
+    upsert: (row) =>
+      tracked(
+        (async () => {
+          const store = await openPrices();
+          if (store === undefined) throw new Error(PRICES_UNAVAILABLE);
+          await store.upsert(row);
+        })(),
+      ),
+    delete: (providerId, modelId) =>
+      tracked(
+        (async () => {
+          const store = await openPrices();
+          if (store === undefined) throw new Error(PRICES_UNAVAILABLE);
+          await store.delete(providerId, modelId);
+        })(),
+      ),
+  };
+
   scope.defer(
     "the plugin database (research-helper.sqlite), its cache and its job store",
     async () => {
       await ready;
+      closing = true;
       pruneTimer.cancel({ kind: "shutdown" });
       await pruneLoop;
       await cache.close();
@@ -227,6 +289,7 @@ export function installPluginDatabase(
       jobsAttached?.detachStore();
       jobsAttached = undefined;
       pruneTimer.dispose();
+      await Promise.allSettled([...inFlight]);
       const opened = connection;
       connection = undefined;
       await opened?.closeDatabase(true);
@@ -236,6 +299,7 @@ export function installPluginDatabase(
   return {
     ready,
     cache,
+    prices,
     attachJobs(jobs: JobQueue): void {
       recovering = ready.then(async (open) => {
         if (open === undefined) return;

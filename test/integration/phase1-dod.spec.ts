@@ -143,6 +143,14 @@ import { DEFAULT_CHUNK_SIZE } from "../../src/zotero/importer";
 import { buildLibraryIndex } from "../../src/zotero/libraryIndex";
 import { PROVENANCE_NOTE_TITLE_PREFIX } from "../../src/zotero/notes";
 import { notifierRegistration } from "../../src/zotero/registrations";
+import {
+  countedStartupHosts,
+  hostOf,
+  isPluginRequest,
+  isZoteroOwnRequest,
+  ZOTERO_OWN_HOSTS,
+  type ObservedRequest,
+} from "./support/startupRequests";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -192,6 +200,11 @@ const NFR1_TARGET_MS = 6_000;
 const NFR3_TASK_MS = 100;
 /** `FR-10` and `docs/13` §8.2: "cancel mid-search aborts within ~2 s". */
 const FR10_ABORT_MS = 2_000;
+/**
+ * A loopback port nothing listens on, for the NFR-10 recorder check. Not one
+ * of Gecko's banned ports (9, 1, …), whose requests never reach a channel.
+ */
+const LOOPBACK_PROBE_PORT = 59_321;
 /**
  * `docs/10` NFR-10: "shall add ≤ 200 ms to Zotero startup … No network request
  * shall be issued at startup."
@@ -1007,35 +1020,58 @@ const observerService = Services.obs as unknown as {
 /** The subset of `nsIHttpChannel` this file reads. */
 interface ObservedChannel {
   readonly URI?: { readonly spec?: string };
+  getRequestHeader?(name: string): string;
 }
 
 /** The distinct hosts a list of URLs names, in first-seen order. */
 function hostsOf(urls: readonly string[]): string[] {
-  const seen = new Set<string>();
-  for (const url of urls) {
-    const match = /^[a-z]+:\/\/([^/?#]+)/i.exec(url);
-    seen.add(match?.[1] ?? url);
+  return [...new Set(urls.map(hostOf))];
+}
+
+/** The observer's subject as an `nsIHttpChannel`, or as it came. */
+function httpChannel(subject: unknown): ObservedChannel {
+  const queryInterface = (subject as { QueryInterface?: unknown })
+    .QueryInterface;
+  if (typeof queryInterface !== "function") return subject as ObservedChannel;
+  try {
+    return (queryInterface as (iid: unknown) => unknown).call(
+      subject,
+      Components.interfaces.nsIHttpChannel,
+    ) as ObservedChannel;
+  } catch {
+    return subject as ObservedChannel;
   }
-  return [...seen];
 }
 
 /**
- * Record the URL of every HTTP request Gecko makes while `body` runs.
+ * Record every HTTP request Gecko makes while `body` runs: its URL and its
+ * `User-Agent` header (`plan/00` §6 item 265 (d): the header is what tells the
+ * plugin's requests from Zotero's own, see `./support/startupRequests.ts`).
  *
  * `http-on-modify-request` fires for every channel, from any consumer in the
  * process, so the list is deliberately *everything* — the plugin's requests and
  * Zotero's own. `NFR-10`'s requirement is about the plugin, so the report
  * classifies what was seen rather than asserting an empty list and hoping.
  */
-async function recordingRequests<T>(
-  body: () => Promise<T>,
-): Promise<{ result: T; urls: readonly string[] }> {
-  const urls: string[] = [];
+async function recordingRequests<T>(body: () => Promise<T>): Promise<{
+  result: T;
+  urls: readonly string[];
+  requests: readonly ObservedRequest[];
+}> {
+  const requests: ObservedRequest[] = [];
   const observer = {
     observe(subject: unknown): void {
       try {
-        const spec = (subject as ObservedChannel).URI?.spec;
-        if (typeof spec === "string") urls.push(spec);
+        const channel = httpChannel(subject);
+        const spec = channel.URI?.spec;
+        if (typeof spec !== "string") return;
+        let userAgent: string | undefined;
+        try {
+          userAgent = channel.getRequestHeader?.("User-Agent");
+        } catch {
+          userAgent = undefined; // no such header on this channel
+        }
+        requests.push({ url: spec, userAgent });
       } catch {
         // An observer that throws must not fail the measurement it serves.
       }
@@ -1047,7 +1083,11 @@ async function recordingRequests<T>(
     // One turn of the event loop, so a request issued and not yet observed is
     // still counted rather than missed by a race.
     await Zotero.Promise.delay(250);
-    return { result, urls };
+    return {
+      result,
+      urls: requests.map((request) => request.url),
+      requests,
+    };
   } finally {
     observerService.removeObserver(observer, "http-on-modify-request");
   }
@@ -1156,16 +1196,21 @@ describe("P1-T23: Phase 1 definition-of-done run", () => {
     // non-empty one is not automatically the plugin's fault. The disable plus an
     // idle period of the same order is a window in which the plugin is
     // **absent**, so every host seen there is demonstrably not its.
-    const { urls: baselineUrls } = await recordingRequests(async () => {
-      await afterBootstrapCall("shutdown", () => wrapper.disable());
-      await waitUntil(
-        () => pluginInstance() === undefined,
-        `Zotero.${config.addonInstance} to be removed by onShutdown`,
-      );
-      await Zotero.Promise.delay(2_000);
-    });
+    const { urls: baselineUrls, requests: baselineRequests } =
+      await recordingRequests(async () => {
+        await afterBootstrapCall("shutdown", () => wrapper.disable());
+        await waitUntil(
+          () => pluginInstance() === undefined,
+          `Zotero.${config.addonInstance} to be removed by onShutdown`,
+        );
+        await Zotero.Promise.delay(2_000);
+      });
 
-    const { result: elapsedMs, urls } = await recordingRequests(async () => {
+    const {
+      result: elapsedMs,
+      urls,
+      requests,
+    } = await recordingRequests(async () => {
       const startedAt = Date.now();
       await afterBootstrapCall("startup", () => wrapper.enable());
       await waitUntil(
@@ -1192,6 +1237,14 @@ describe("P1-T23: Phase 1 definition-of-done run", () => {
       `NFR-10 startup window, plugin starting: ${String(urls.length)} ` +
         `request(s)${urls.length === 0 ? "" : ` -> ${urls.join(" | ")}`}`,
     );
+    const zoteroOwn = requests.filter(isZoteroOwnRequest);
+    const fromPlugin = requests.filter(isPluginRequest);
+    log(
+      `NFR-10 startup window: ${String(zoteroOwn.length)} request(s) to ` +
+        `Zotero's own hosts (${ZOTERO_OWN_HOSTS.join(",")}), not counted` +
+        `${zoteroOwn.length === 0 ? "" : ` -> ${zoteroOwn.map((r) => r.url).join(" | ")}`}; ` +
+        `${String(fromPlugin.length)} carrying the plugin's User-Agent`,
+    );
 
     // The requirement is about the plugin. Phase 1 has exactly one network
     // consumer — the PubMed adapter, on `docs/02` §3.1's NCBI host — and no
@@ -1204,19 +1257,89 @@ describe("P1-T23: Phase 1 definition-of-done run", () => {
     );
     // Any host that appears only while the plugin is starting is a candidate
     // for being the plugin's, and there must be none.
-    const baselineHosts = new Set(hostsOf(baselineUrls));
-    const newHosts = hostsOf(urls).filter((host) => !baselineHosts.has(host));
+    //
+    // **Changed 2026-10-21 (plan/00 §6 item 265 (d), owner; item 176).** Zotero's
+    // own hosts, named in ZOTERO_OWN_HOSTS (./support/startupRequests.ts), are
+    // no longer counted: Zotero's https://api.zotero.org/retractions/list
+    // download fell inside this window in 1 of 3 runs on 2026-10-15 (item 176)
+    // and 2 of 5 on 2026-10-21. Every other new host is still counted, and so
+    // is every request carrying the plugin's User-Agent, whatever its host and
+    // even if the control window saw that host too. countedStartupHosts is
+    // unit-tested in test/unit/integration/startupRequests.test.ts, and the
+    // next test checks that this recorder reads the plugin's User-Agent.
+    const newHosts = countedStartupHosts(baselineRequests, requests);
     assert.deepEqual(
       newHosts,
       [],
       `NFR-10: ${String(newHosts.length)} host(s) were contacted while the ` +
-        `plugin started that were not contacted while it was absent: ` +
+        `plugin started that were not contacted while it was absent, or ` +
+        `with the plugin's User-Agent (Zotero's own hosts excluded): ` +
         `${newHosts.join(",")}`,
     );
     assert.isAtMost(
       elapsedMs,
       NFR10_STARTUP_MS,
       `NFR-10: the plugin's own startup work took ${String(elapsedMs)} ms`,
+    );
+  });
+
+  // plan/00 §6 item 265 (d), 2026-10-21: the test above tells the plugin's
+  // requests from Zotero's own by the User-Agent header, so this checks on a
+  // real Gecko channel that the recorder reads the header the plugin's own
+  // HttpClient sets. Both requests go to a closed loopback port (not port 9:
+  // Gecko bans it, and a banned port never reaches http-on-modify-request —
+  // measured 2026-10-21, run 1 observed neither request):
+  // http-on-modify-request fires before the connection is attempted, the
+  // connection is refused, and nothing leaves the machine.
+  it("NFR-10's recorder reads the plugin's User-Agent off a real channel, and counts it even on Zotero's own host (loopback only)", async function () {
+    this.timeout(60_000);
+    const services = currentServices();
+    const probe = (who: string): string =>
+      `http://127.0.0.1:${String(LOOPBACK_PROBE_PORT)}/research-helper-nfr10-probe-${who}`;
+    const { requests } = await recordingRequests(async () => {
+      await services.http
+        .request("GET", probe("plugin"), { timeoutMs: 10_000 })
+        .catch(() => undefined); // refused: nothing listens there
+      await Zotero.HTTP.request("GET", probe("zotero"), {
+        timeout: 10_000,
+        successCodes: false,
+      }).catch(() => undefined);
+    });
+    const plugin = requests.find((request) => request.url === probe("plugin"));
+    const zotero = requests.find((request) => request.url === probe("zotero"));
+    log(
+      `NFR-10 recorder check: plugin User-Agent ${JSON.stringify(plugin?.userAgent)}; ` +
+        `Zotero's ${JSON.stringify(zotero?.userAgent)}`,
+    );
+    if (!plugin) {
+      assert.fail(
+        `the plugin's loopback request was not observed; saw ${String(requests.length)}: ` +
+          requests.map((request) => request.url).join(" | "),
+      );
+    }
+    if (!zotero) assert.fail("Zotero's loopback request was not observed");
+    assert.isTrue(
+      isPluginRequest(plugin),
+      "the plugin's HttpClient request carries research_helper/ on the wire",
+    );
+    assert.isFalse(
+      isPluginRequest(zotero),
+      "Zotero's own request does not carry the plugin's User-Agent",
+    );
+    // The same headers, on Zotero's own host: the plugin's is counted, Zotero's is not.
+    const onZoteroHost = (userAgent: string | undefined): ObservedRequest => ({
+      url: "https://api.zotero.org/retractions/list",
+      userAgent,
+    });
+    assert.deepEqual(
+      countedStartupHosts([], [onZoteroHost(plugin.userAgent)]),
+      ["api.zotero.org"],
+      "a plugin request to api.zotero.org still fails NFR-10",
+    );
+    assert.deepEqual(
+      countedStartupHosts([], [onZoteroHost(zotero.userAgent)]),
+      [],
+      "Zotero's own api.zotero.org request is not counted",
     );
   });
 

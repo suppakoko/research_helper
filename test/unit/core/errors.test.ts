@@ -22,6 +22,7 @@ import {
   OfflineError,
   omitSecretFields,
   OperationCancelledError,
+  OutputTruncatedError,
   ParseError,
   PolicyViolationError,
   PrivacyRoutingError,
@@ -210,6 +211,15 @@ const HIERARCHY: readonly {
     userFacing: true,
   },
   {
+    // Owner, 2026-10-21 (`plan/00` §6 item 265(c)): a truncated answer.
+    name: "OutputTruncatedError",
+    instance: new OutputTruncatedError("openai", "gpt-4o-mini", "x"),
+    code: "OUTPUT_TRUNCATED",
+    messageKey: "rh-error-output-truncated",
+    retryable: false,
+    userFacing: true,
+  },
+  {
     name: "TTSError",
     instance: new TTSError("x"),
     code: "TTS",
@@ -313,6 +323,25 @@ describe("docs/07 §10.1 hierarchy", () => {
         retryable: false,
       });
       expect(new BadRequestError(404, "x").userFacing).toBe(false);
+    });
+
+    it("makes OutputTruncatedError an LLMError that keeps the provider and model", () => {
+      const cut = new OutputTruncatedError("openrouter", "m", "x", {
+        finishReason: "length",
+      });
+      expect(cut).toBeInstanceOf(LLMError);
+      expect(cut.providerId).toBe("openrouter");
+      expect(cut.modelId).toBe("m");
+      expect(cut.toSerialized()).toMatchObject({
+        code: "OUTPUT_TRUNCATED",
+        messageKey: "rh-error-output-truncated",
+        retryable: false,
+      });
+      expect(cut.context).toMatchObject({
+        finishReason: "length",
+        providerId: "openrouter",
+        modelId: "m",
+      });
     });
 
     it("makes MissingCredentialError a ConfigurationError", () => {

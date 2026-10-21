@@ -7,7 +7,9 @@
  *
  * **Where a price comes from**, in the order the catalogue applies them:
  * 1. A user override ({@link UserPriceOverride}, {@link applyUserPriceOverride})
- *    wins over everything for its model.
+ *    wins over everything for its model. The table is stored in the plugin
+ *    database's `user_price` (`plan/00` §6 item 265 (b), owner, 2026-10-21;
+ *    `docs/07` §8.3), behind the {@link UserPriceStore} port.
  * 2. OpenRouter's public catalogue (`docs/03` §9.4), for every provider through
  *    `./slugMap.ts` ({@link pricesFromCatalogueEntry}). Its long-context tiers,
  *    `pricing.overrides[]`, are kept: an estimator that ignores them
@@ -112,6 +114,34 @@ export interface UserPriceOverride {
   readonly outputPerMTokUsd: number;
   readonly cachedInputPerMTokUsd?: number;
   readonly asOfEpochMs: number;
+}
+
+/**
+ * The user-edited price table's store: a port, declared here so `llm/` never
+ * imports `zotero/` (`docs/07` §2.3).
+ *
+ * `src/zotero/db.ts`'s `createUserPriceStore` implements it over the plugin
+ * database's `user_price` table (`plan/00` §6 item 265 (b), owner,
+ * 2026-10-21; `docs/07` §8.3), on the one shared connection;
+ * `src/bootstrap/pluginDatabase.ts`'s `installPluginDatabase` publishes it as
+ * the service graph's `database.prices`. The catalogue reads it through
+ * `ModelCatalogueDeps.userPriceOverrides` (`./modelCatalogue.ts`). Nothing
+ * edits it yet: the preferences pane will (`P3-T14`).
+ */
+export interface UserPriceStore {
+  /**
+   * Every stored row that {@link isUsableUserPriceOverride} accepts, ordered
+   * by provider then model. Empty when the plugin database is unavailable.
+   */
+  list(): Promise<readonly UserPriceOverride[]>;
+  /**
+   * Insert the row for its provider and model, or replace the one there.
+   * Rejects, writing nothing, a row {@link isUsableUserPriceOverride} refuses,
+   * or one whose model ID the redaction gate would change.
+   */
+  upsert(row: UserPriceOverride): Promise<void>;
+  /** Remove the row for this provider and model, if there is one. */
+  delete(providerId: ProviderId, modelId: string): Promise<void>;
 }
 
 /** One row of {@link DOCUMENTED_PRICE_TABLE}. */
@@ -332,6 +362,39 @@ function isUsableOverride(override: UserPriceOverride): boolean {
     (override.cachedInputPerMTokUsd === undefined ||
       isPrice(override.cachedInputPerMTokUsd)) &&
     Number.isFinite(override.asOfEpochMs)
+  );
+}
+
+/** The closed `ProviderId` set at run time; `satisfies` keeps it complete. */
+const USER_PRICE_PROVIDERS = {
+  openrouter: true,
+  openai: true,
+  gemini: true,
+  anthropic: true,
+} as const satisfies Record<ProviderId, true>;
+
+/**
+ * Whether a row may be stored in, or read back from, the user price table:
+ * {@link applyUserPriceOverride}'s own test (non-negative finite prices, a
+ * finite date) plus a provider ID from the closed set and a non-empty model
+ * ID. A row a later build wrote, naming a provider this build does not know,
+ * is not usable.
+ *
+ * @param override - the row
+ * @returns true when the row may be stored and applied
+ */
+export function isUsableUserPriceOverride(
+  override: UserPriceOverride,
+): boolean {
+  return (
+    typeof override.providerId === "string" &&
+    Object.prototype.hasOwnProperty.call(
+      USER_PRICE_PROVIDERS,
+      override.providerId,
+    ) &&
+    typeof override.modelId === "string" &&
+    override.modelId.trim() !== "" &&
+    isUsableOverride(override)
   );
 }
 

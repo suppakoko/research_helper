@@ -52,6 +52,11 @@
  * pipeline (`P3-T29`), from `buildPipelineSet` in
  * `src/bootstrap/registerPipelines.ts`, where the pool and the admission are
  * built.
+ *
+ * The batch wall-clock budget is 30 minutes of running time
+ * ({@link WALL_CLOCK_BUDGET_DEFAULT_MS}); at the limit the runner pauses the
+ * job with `wall-clock-budget` and the user is asked whether to continue
+ * (owner, 2026-10-21, `plan/00` §6 item 265).
  */
 
 import {
@@ -973,8 +978,20 @@ export interface PooledCheckpointSink {
   ): Promise<void>;
 }
 
-/** Why a run stopped dispatching. A result, not a job state. */
-export type PooledRunStop = "finished" | "cancelled" | "budget-elapsed";
+/**
+ * Why a run stopped dispatching. A result, not a job state.
+ *
+ * The wall-clock budget is not a stop: it pauses the job and the run waits for
+ * the user's answer (`plan/00` §6 item 265; see {@link runPooledItems}).
+ */
+export type PooledRunStop = "finished" | "cancelled";
+
+/**
+ * `docs/03` §11.6's batch wall-clock budget: **30 minutes** of running time,
+ * time spent paused not counted (owner, 2026-10-21, `plan/00` §6 item 265).
+ * The default of {@link PooledRunDeps.wallClockBudgetMs}.
+ */
+export const WALL_CLOCK_BUDGET_DEFAULT_MS = 1_800_000;
 
 /** What a run did. */
 export interface PooledRunOutcome {
@@ -1058,11 +1075,12 @@ export interface PooledRunDeps<T, R> {
   /** Pins the run's work keys in the cache while it lives. */
   readonly runningWork?: RunningWork;
   /**
-   * `docs/03` §11.6's batch wall-clock budget: once this much time has been
-   * spent running (paused time excluded), nothing more is dispatched and the
-   * run stops with `budget-elapsed`. **No number is decided** (`plan/00` §6
-   * item 240 left §11.6's "e.g. 30 min" to `P3-T17`, and nothing decided it),
-   * so nothing passes one yet; absent, there is no budget.
+   * `docs/03` §11.6's batch wall-clock budget, in milliseconds of running
+   * time (paused time excluded); {@link WALL_CLOCK_BUDGET_DEFAULT_MS} when
+   * absent. Once it is spent and an item is still to be dispatched, the job
+   * pauses with `wall-clock-budget` and asks "N of M done — continue the
+   * rest?" (`plan/00` §6 item 265); a resume is the yes, and the rest gets a
+   * fresh budget.
    */
   readonly wallClockBudgetMs?: number;
 }
@@ -1078,18 +1096,15 @@ function reasonOf(error: unknown): string {
 
 /**
  * Developer-facing one-liner for the log: "cancelled at 87/200", "finished
- * 200/200", "budget elapsed at 120/200". Not a user-visible string.
+ * 200/200". Not a user-visible string.
  */
 export function describePooledOutcome(outcome: PooledRunOutcome): string {
   const total = String(outcome.total);
-  const at = String(outcome.stoppedAt);
   switch (outcome.stop) {
     case "finished":
       return `finished ${String(outcome.completed + outcome.skipped)}/${total}`;
     case "cancelled":
-      return `cancelled at ${at}/${total}`;
-    case "budget-elapsed":
-      return `budget elapsed at ${at}/${total}`;
+      return `cancelled at ${String(outcome.stoppedAt)}/${total}`;
   }
 }
 
@@ -1099,10 +1114,20 @@ export function describePooledOutcome(outcome: PooledRunOutcome): string {
  * Items are dispatched in order, one at a time, each only once it holds a
  * pool permit; there is no `Promise.all` over the items. Before each dispatch
  * the runner checks, in this order: a pause request, the token (`docs/07`
- * §7.4 point 1), the wall-clock budget, and whether the item is already done.
+ * §7.4 point 1), whether the item is already done, and the wall-clock budget.
  * A wait for a permit is cancellable and is interrupted by a pause request
  * (point 2 one layer up; `RateLimiter.acquire` inside a call is point 2
  * itself, through the token the call is given).
+ *
+ * **The wall-clock budget pauses and asks** (`plan/00` §6 item 265). When the
+ * running time reaches {@link PooledRunDeps.wallClockBudgetMs} and an item is
+ * still to be dispatched, the runner asks itself for a pause with the reason
+ * `wall-clock-budget`, which is honoured like any other: in-flight calls
+ * finish, a boundary checkpoint is written, the slot is given back and
+ * {@link JobQueue.pause} moves the job. Every result is kept. A resume is the
+ * user's yes to "continue the rest?" and starts a fresh budget; a cancel is
+ * the no. Only the budget's own pause resets it: a user's pause and resume
+ * leave the running time as it was.
  *
  * The job must be `running` when the run starts (`JobQueue.start`). The run
  * moves it to `paused` and back, and on {@link PooledRun.cancel} to
@@ -1209,9 +1234,9 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
     }
   };
 
+  const budgetMs = deps.wallClockBudgetMs ?? WALL_CLOCK_BUDGET_DEFAULT_MS;
   const budgetElapsed = (): boolean =>
-    deps.wallClockBudgetMs !== undefined &&
-    activeMs + (deps.clock.now() - activeSince) >= deps.wallClockBudgetMs;
+    activeMs + (deps.clock.now() - activeSince) >= budgetMs;
 
   /** Honour a pause request: drain, checkpoint, `paused`, wait, `running`. */
   const pausePoint = async (): Promise<void> => {
@@ -1245,6 +1270,8 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
       }
       if (token.isCancellationRequested) return;
       await deps.queue.resume(jobId);
+      // The user said "continue the rest": the rest gets a fresh budget.
+      if (request.reason === "wall-clock-budget") activeMs = 0;
       activeSince = deps.clock.now();
       resumed?.resolve();
       resumed = undefined;
@@ -1256,7 +1283,6 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
     while (index < deps.items.length) {
       await pausePoint();
       if (token.isCancellationRequested) return "cancelled";
-      if (budgetElapsed()) return "budget-elapsed";
       const item = deps.items[index] as T;
       const key = keys[index] as string;
       if (settled.has(key)) {
@@ -1271,6 +1297,15 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
       }
       if (pauseRequest !== undefined) continue;
       if (token.isCancellationRequested) return "cancelled";
+      // Checked after the done-probe, so a budget pause always has an item
+      // left to ask about. Back to the pause point, then this item again.
+      if (budgetElapsed()) {
+        pauseRequest = {
+          reason: "wall-clock-budget",
+          done: createDeferred<void>(),
+        };
+        continue;
+      }
 
       const wait = createLinkedCancellationTokenSource(token);
       permitWait = wait;

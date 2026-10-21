@@ -44,6 +44,7 @@ import {
   PROVENANCE_COLLECTION_INDEX_DDL,
   SCHEMA_VERSION_DDL,
   SEARCH_PROVENANCE_DDL,
+  USER_PRICE_DDL,
   runMigrations,
 } from "../../../src/bootstrap/migrations";
 import {
@@ -256,9 +257,11 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
   // Moved with P3-T34, which appended version 2 (the `job` table; its own
   // byte-for-byte checks are in test/unit/core/jobQueue.test.ts), and with
   // P3-T33, which appended version 3 (`cache_entry`; its checks are in
-  // test/unit/core/cache.test.ts).
-  it("is version 1 of exactly those two statements, then P3-T34's job table as version 2 and P3-T33's cache_entry as version 3", () => {
-    expect(LATEST_SCHEMA_VERSION).toBe(3);
+  // test/unit/core/cache.test.ts), and with plan/00 §6 item 265 (b), which
+  // appended version 4 (`user_price`; its checks are in
+  // test/unit/zotero/userPriceStore.test.ts).
+  it("is version 1 of exactly those two statements, then P3-T34's job table as version 2, P3-T33's cache_entry as version 3 and user_price as version 4", () => {
+    expect(LATEST_SCHEMA_VERSION).toBe(4);
     expect(MIGRATIONS).toStrictEqual([
       {
         version: 1,
@@ -276,17 +279,21 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
           CACHE_LRU_INDEX_DDL,
         ],
       },
+      {
+        version: 4,
+        statements: [USER_PRICE_DDL],
+      },
     ]);
   });
 
-  it("brings a fresh file to schema_version 3 with §8.3's columns and index, read back", async () => {
+  it("brings a fresh file to schema_version 4 with §8.3's columns and index, read back", async () => {
     const connection = sqlite();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 3 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 4 });
     const { db } = connection;
 
     expect(
       db.prepare("SELECT version FROM schema_version").all().map(plain),
-    ).toStrictEqual([{ version: 3 }]);
+    ).toStrictEqual([{ version: 4 }]);
     expect(
       columns(db, "search_provenance").map(({ name, type, notnull, pk }) => [
         name,
@@ -328,12 +335,13 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
       "table:job",
       "table:schema_version",
       "table:search_provenance",
+      "table:user_price",
     ]);
   });
 
   it("is idempotent: a second run reads the version and changes nothing", async () => {
     const connection = await migrated();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 3, to: 3 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 4, to: 4 });
     expect(
       one(connection.db, "SELECT COUNT(*) AS n FROM schema_version"),
     ).toStrictEqual({ n: 1 });

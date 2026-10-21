@@ -553,6 +553,20 @@ export class StructuredOutputError extends LLMError {
   // order, before the message. A two-argument `new StructuredOutputError(message, ctx)` does
   // not compile — and would strip exactly the two fields that make the report actionable.
 }
+/**
+ * An answer cut off at the output length limit (`ChatResponse.finishReason`
+ * `"length"`). An `LLMError` with its own `code` and `messageKey`, so the user
+ * is told the summary was cut off rather than shown the generic
+ * `rh-error-llm`. `docs/07` §10.1 and its dated note "`OutputTruncatedError`,
+ * a truncated answer" (owner, 2026-10-21, `plan/00` §6 item 265(c)).
+ * User-facing and not retryable, both inherited: the same request is cut off
+ * again. Thrown by `completeJSON` in `src/llm/shared/jsonMode.ts`; its message
+ * takes `$model`.
+ */
+export class OutputTruncatedError extends LLMError {
+  override readonly code: string = "OUTPUT_TRUNCATED";
+  override readonly messageKey: string = "rh-error-output-truncated";
+}
 export class TTSError extends ResearchHelperError {
   readonly code: string = "TTS";
   readonly messageKey: string = "rh-error-tts";

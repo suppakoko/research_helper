@@ -22,6 +22,7 @@ import {
   type CacheSetOptions,
 } from "../../../src/core/cache/cache";
 import { createManualClock, type Clock } from "../../../src/core/clock";
+import { createLogger, type Logger } from "../../../src/core/logger";
 import { OperationCancelledError } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import { toModelInfos } from "../../../src/llm/openai/mapper";
@@ -197,6 +198,9 @@ interface HarnessOptions {
   >;
   readonly openRouter?: () => Promise<readonly OpenRouterCatalogueEntry[]>;
   readonly overrides?: readonly UserPriceOverride[];
+  /** The port as the plugin database answers it: asynchronous (item 265 (b)). */
+  readonly userPrices?: () => Promise<readonly UserPriceOverride[]>;
+  readonly logger?: Logger;
 }
 
 function harness(options: HarnessOptions = {}) {
@@ -232,6 +236,10 @@ function harness(options: HarnessOptions = {}) {
     ...(options.overrides !== undefined && {
       userPriceOverrides: () => options.overrides ?? [],
     }),
+    ...(options.userPrices !== undefined && {
+      userPriceOverrides: options.userPrices,
+    }),
+    ...(options.logger !== undefined && { logger: options.logger }),
   });
   return { clock, cache, calls, catalogue };
 }
@@ -569,6 +577,58 @@ describe("the user-editable price table", () => {
       model(bundledCatalogue([userRow]), "openai", "gpt-5.6-terra").prices
         ?.source,
     ).toBe("user-override");
+  });
+});
+
+describe("the user price table through the plugin database's port (plan/00 §6 item 265 (b))", () => {
+  const stored: UserPriceOverride = {
+    providerId: "openai",
+    modelId: "gpt-5.6-terra",
+    inputPerMTokUsd: 3,
+    outputPerMTokUsd: 15,
+    asOfEpochMs: Date.parse("2026-10-21T00:00:00Z"),
+  };
+
+  it("reads the table through an asynchronous port, as the plugin database's store answers it", async () => {
+    let reads = 0;
+    const { catalogue } = harness({
+      keys: { openai: true },
+      natives: { openai: () => Promise.resolve(SYNTHETIC_OPENAI_MODELS) },
+      userPrices: () => {
+        reads += 1;
+        return Promise.resolve([stored]);
+      },
+    });
+    const snapshot = await catalogue.get(ctx());
+    expect(reads).toBe(1);
+    expect(model(snapshot, "openai", "gpt-5.6-terra").prices).toMatchObject({
+      source: "user-override",
+      inputPerMTokUsd: 3,
+      outputPerMTokUsd: 15,
+      asOfEpochMs: stored.asOfEpochMs,
+    });
+  });
+
+  it("logs a failed read of the table and keeps the catalogue's own prices", async () => {
+    const lines: string[] = [];
+    const logger = createLogger({
+      sink: { write: (line) => lines.push(line) },
+      clock: createManualClock(T0),
+    });
+    const { catalogue } = harness({
+      keys: { openai: true },
+      natives: { openai: () => Promise.resolve(SYNTHETIC_OPENAI_MODELS) },
+      userPrices: () => Promise.reject(new Error("database closed")),
+      logger,
+    });
+    const snapshot = await catalogue.get(ctx());
+    expect(snapshot.stale).toBe(false);
+    expect(model(snapshot, "openai", "gpt-5.6-terra").prices?.source).toBe(
+      "openrouter-catalogue",
+    );
+    expect(lines.join("\n")).toContain(
+      "the user price table could not be read",
+    );
   });
 });
 

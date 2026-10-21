@@ -36,7 +36,13 @@ import {
   createLinkedCancellationTokenSource,
   type CancellationToken,
 } from "../../../src/core/jobQueue/cancellation";
-import type { JobRecord, JobRow } from "../../../src/core/jobQueue/jobRecord";
+import {
+  fromJobRow,
+  isBudgetStop,
+  toJobRow,
+  type JobRecord,
+  type JobRow,
+} from "../../../src/core/jobQueue/jobRecord";
 import {
   admissionClassOf,
   clampLlmPoolSize,
@@ -49,6 +55,7 @@ import {
   LLM_POOL_MAX,
   LLM_POOL_MIN,
   runPooledItems,
+  WALL_CLOCK_BUDGET_DEFAULT_MS,
   type JobNotifier,
   type JobQueue,
   type JobStore,
@@ -888,7 +895,7 @@ describe("P3-T17 — cancellation, pause and failures in the runner", () => {
     expect(h.paused).toHaveLength(0);
   });
 
-  it("stops dispatching once the wall-clock budget is spent, not counting time paused", async () => {
+  it("pauses with wall-clock-budget once the budget is spent, not counting time paused, and a user's pause does not reset it", async () => {
     const h = harness();
     const jobId = await runningJob(h);
     let calls = 0;
@@ -915,14 +922,196 @@ describe("P3-T17 — cancellation, pause and failures in the runner", () => {
     expect(calls).toBe(2);
     h.clock.advance(60_000); // a minute paused does not count
     await run.resume();
-    const outcome = await run.result;
-    expect(outcome.stop).toBe("budget-elapsed");
+    await flush();
+    // 5 s of running time after five calls: the budget pauses before the
+    // sixth, and the user's pause above neither counted nor reset it.
     expect(calls).toBe(5);
-    expect(outcome.stoppedAt).toBe(6);
-    expect(describePooledOutcome(outcome)).toBe("budget elapsed at 6/10");
-    // A budget stop leaves the job running, for the pipeline's
-    // "N of M completed, retry the rest?" (P3-T29).
+    expect(h.paused.map((record) => record.pauseReason)).toStrictEqual([
+      "user",
+      "wall-clock-budget",
+    ]);
+    const paused = await h.queue.get(jobId);
+    expect(paused?.status).toBe("paused");
+    expect(paused?.pauseReason).toBe("wall-clock-budget");
+    // Its own reason: not §12.3's money BudgetStop, and it survives the row.
+    expect(isBudgetStop(paused as JobRecord)).toBe(false);
+    expect(fromJobRow(toJobRow(paused as JobRecord).row).pauseReason).toBe(
+      "wall-clock-budget",
+    );
+    await run.cancel();
+    const outcome = await run.result;
+    expect(outcome).toMatchObject({ stop: "cancelled", completed: 5 });
+  });
+
+  it("asks at the budget at an item boundary, keeps every result, and a yes runs the rest with a fresh budget", async () => {
+    const h = harness();
+    const jobId = await runningJob(h);
+    const results = resultStore();
+    let calls = 0;
+    let inFlight = 0;
+    const run = runPooledItems(
+      baseDeps(
+        h,
+        jobId,
+        {
+          items: items(12),
+          pool: fixedPool(2),
+          wallClockBudgetMs: 5000,
+          checkpoint: createCheckpointWriter({
+            queue: h.queue,
+            jobId,
+            clock: h.clock,
+          }),
+          call: async (item) => {
+            calls += 1;
+            inFlight += 1;
+            h.clock.advance(1000);
+            await flush(1);
+            inFlight -= 1;
+            return `summary ${item.key}`;
+          },
+        },
+        results,
+      ),
+    );
+    await flush(20);
+    // Five calls spend the 5 s; the sixth is never dispatched.
+    expect(calls).toBe(5);
+    expect(inFlight).toBe(0);
+    expect(h.paused).toHaveLength(1);
+    expect(h.paused[0]?.pauseReason).toBe("wall-clock-budget");
+    expect(results.size).toBe(5);
+    // The boundary checkpoint gives the question's N of M: 5 of 12 done.
+    const boundary = (await readCheckpoint(
+      h.queue,
+      jobId,
+    )) as PooledCheckpointState;
+    expect(boundary.completed).toStrictEqual([
+      "w001",
+      "w002",
+      "w003",
+      "w004",
+      "w005",
+    ]);
+    expect(12 - boundary.pending.length).toBe(5);
+
+    h.clock.advance(3_600_000); // an hour waiting for the answer
+    await run.resume(); // "continue the rest?" — yes
+    await flush(20);
+    // A fresh 5 s: five more calls, then the question again.
+    expect(calls).toBe(10);
+    expect(h.paused.map((record) => record.pauseReason)).toStrictEqual([
+      "wall-clock-budget",
+      "wall-clock-budget",
+    ]);
+    await run.resume();
+    const outcome = await run.result;
+    expect(outcome).toMatchObject({
+      stop: "finished",
+      total: 12,
+      completed: 12,
+      dispatched: 12,
+    });
+    expect(calls).toBe(12);
     expect((await h.queue.get(jobId))?.status).toBe("running");
+  });
+
+  it("defaults to WALL_CLOCK_BUDGET_DEFAULT_MS, 30 minutes, and a cancel at the question keeps the results", async () => {
+    expect(WALL_CLOCK_BUDGET_DEFAULT_MS).toBe(1_800_000);
+    const h = harness();
+    const jobId = await runningJob(h);
+    const results = resultStore();
+    let calls = 0;
+    const run = runPooledItems(
+      baseDeps(
+        h,
+        jobId,
+        {
+          items: items(4),
+          pool: fixedPool(1),
+          call: (item) => {
+            calls += 1;
+            // Ten minutes a call, one millisecond short on the second.
+            h.clock.advance(item.n === 2 ? 599_999 : 600_000);
+            return Promise.resolve(`summary ${item.key}`);
+          },
+        },
+        results,
+      ),
+    );
+    await flush();
+    // 29:59.999 after three calls: still running, so the fourth is sent.
+    expect(calls).toBe(4);
+    expect(h.paused).toHaveLength(0);
+    expect((await run.result).stop).toBe("finished");
+
+    const h2 = harness();
+    const job2 = await runningJob(h2);
+    const results2 = resultStore();
+    let calls2 = 0;
+    const run2 = runPooledItems(
+      baseDeps(
+        h2,
+        job2,
+        {
+          items: items(4),
+          pool: fixedPool(1),
+          call: (item) => {
+            calls2 += 1;
+            h2.clock.advance(600_000);
+            return Promise.resolve(`summary ${item.key}`);
+          },
+        },
+        results2,
+      ),
+    );
+    await flush();
+    // Exactly 30 minutes after three calls: the job asks before the fourth.
+    expect(calls2).toBe(3);
+    expect(h2.paused[0]?.pauseReason).toBe("wall-clock-budget");
+    await run2.cancel(); // "continue the rest?" — no
+    const outcome = await run2.result;
+    expect(outcome).toMatchObject({
+      stop: "cancelled",
+      completed: 3,
+      stoppedAt: 4,
+    });
+    expect(results2.size).toBe(3);
+    expect((await h2.queue.get(job2))?.status).toBe("cancelled");
+  });
+
+  it("does not ask when the budget runs out with nothing left to dispatch", async () => {
+    const h = harness();
+    const jobId = await runningJob(h);
+    const results = resultStore();
+    results.set("w003", "cached");
+    results.set("w004", "cached");
+    let calls = 0;
+    const run = runPooledItems(
+      baseDeps(
+        h,
+        jobId,
+        {
+          items: items(4),
+          pool: fixedPool(1),
+          wallClockBudgetMs: 2000,
+          call: (item) => {
+            calls += 1;
+            h.clock.advance(1000);
+            return Promise.resolve(`summary ${item.key}`);
+          },
+        },
+        results,
+      ),
+    );
+    const outcome = await run.result;
+    expect(calls).toBe(2);
+    expect(outcome).toMatchObject({
+      stop: "finished",
+      completed: 2,
+      skipped: 2,
+    });
+    expect(h.paused).toHaveLength(0);
   });
 
   it("writes through checkpoint.ts's CheckpointWriter: the paused job's record holds the boundary checkpoint", async () => {

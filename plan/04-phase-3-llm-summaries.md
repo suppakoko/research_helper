@@ -1284,6 +1284,12 @@ prices and a visible "as of" date, and the one token estimator gains its per-mod
    reads (`P3-T14` renders it in the pane, `P3-T16` in the cost dialog).
 4. `pricing.ts`: cost from `ModelInfo` prices honouring `pricing.overrides[]`, with a user-editable
    override table and the "as of" date.
+   *(Updated 2026-10-21, `plan/00` §6 item 265 (b), owner: the table now exists. It lives in the
+   plugin database, not a preference: `user_price`, migration version 4, `docs/07` §8.3. The store
+   is `createUserPriceStore` in `src/zotero/db.ts` behind the `UserPriceStore` port in `pricing.ts`,
+   published as the service graph's `database.prices`; the catalogue reads it through
+   `ModelCatalogueDeps.userPriceOverrides`. Nothing edits it yet — `P3-T14` must.
+   Report: `plan/reports/pricetable-and-nfr10-265.md`.)*
 5. Calibration: accumulate the estimated-to-actual input ratio per model in memory during a job;
    at job end read `llm.tokenEstimateCalibration`, parse inside try/catch (failure = `{}`), fold in
    the ratios, and write it back **once** with `setPref`. In `estTokens`, apply a positive numeric
@@ -1387,6 +1393,13 @@ running job pauses it once.
 5. On pane load, fill each provider's model menulist from `P3-T13`'s catalogue through
    `PreferencesHostApi`, keeping it editable, with the "as of" date and a stale marker when the
    catalogue fell back to its bundled list. (Moved here from `P3-T13` on 2026-10-20.)
+   *(Added 2026-10-21, `plan/00` §6 item 265 (b), owner: the pane must also **edit the user price
+   table** — list, add or change, and remove a row of input / output / cached-input US dollars per
+   million tokens with its "as of" date — through `PreferencesHostApi`, backed by the service graph's
+   `database.prices` (`UserPriceStore`: `list`, `upsert`, `delete`; `user_price`, `docs/07` §8.3).
+   The pane passes the catalogue `userPriceOverrides: () => graph.database.prices.list()`. The store
+   refuses an unusable row and a credential-shaped model ID, so the pane shows that refusal as a
+   message. Strings per §0.2 item 1. The table exists and nothing edits it until this step.)*
 6. In the queue, a 401 mid-job pauses with `credential-required`, emits one notification, keeps the
    key, and sets `lastValidationResult = "rejected"` with a timestamp.
 7. Reset `lastValidationResult` to `""` on key rotation or removal (`docs/09` §2.5).
@@ -2738,6 +2751,15 @@ collection submenu exists in `registerMenus.ts`.
 > `createJobQueue` takes in `installServices` (`src/core/jobQueue/queue.ts`, `P3-T34`): the visible
 > `research-helper-job-resumed` notice (Korean reviewed 2026-10-21) and the pause notice. Until it exists,
 > automatic resumption waits (item 250).
+
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 265(a)):** this card's surface must show the wall-clock
+> budget question. `runPooledItems` (`src/core/jobQueue/queue.ts`) pauses a job after 30 minutes of running time
+> (`WALL_CLOCK_BUDGET_DEFAULT_MS`) with the pause reason `wall-clock-budget`; the pause notice for that reason asks
+> `research-helper-job-wall-clock-budget` (`L10N_JOB_WALL_CLOCK_BUDGET`; `$done`, `$total`, `$minutes`), where
+> `$total` is the job's item count and `$done` is `$total` minus the boundary checkpoint's `pending`. Yes is
+> `PooledRun.resume`, no is `PooledRun.cancel`. The Korean is pending review (`KO_PENDING_REVIEW`). Also new on
+> 2026-10-21 (item 265(c)): a truncated answer is `OutputTruncatedError` (`rh-error-output-truncated`), a failed
+> item like any other.
 
 ---
 

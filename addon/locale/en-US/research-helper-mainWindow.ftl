@@ -330,6 +330,13 @@ rh-error-content-filter = The model declined to summarize this paper.
 
 rh-error-structured-output = { $provider } returned a summary Research Helper could not read.
 
+# `OutputTruncatedError` (owner, 2026-10-21, `plan/00` §6 item 265(c);
+# `docs/07` §10.1): the answer stopped at the output length limit
+# (`finishReason` "length"), so the summary is incomplete. The item counts as
+# failed and the job continues. `$model` is the model ID, untranslated
+# (`docs/08` §10.3).
+rh-error-output-truncated = The summary was cut off by the output length limit of { $model }.
+
 # `PrivacyRoutingError` (owner, 2026-10-21, `plan/00` §6 item 262(c);
 # `docs/07` §10.1): OpenRouter's guardrail 404, which `docs/09` §3.4 rule 2
 # says gets a real explanation naming the cause and both ways out. The second
@@ -467,4 +474,19 @@ research-helper-job-resumed =
     { $count ->
         [one] Research Helper resumed 1 background task that was interrupted when Zotero closed.
        *[other] Research Helper resumed { $count } background tasks that were interrupted when Zotero closed.
+    }
+
+
+## The batch wall-clock budget's question (owner, 2026-10-21, plan/00 §6 item
+## 265; docs/03 §11.6, docs/07 §7.5)
+##
+## Asked when a job has paused at its time limit (pause reason
+## `wall-clock-budget`). `$minutes` is the limit in minutes (30), `$total` the
+## job's item count, and `$done` the items settled so far, so a yes runs the
+## other `$total` − `$done`. The surface is `P3-T29`'s.
+
+research-helper-job-wall-clock-budget =
+    { $minutes ->
+        [one] Paused after 1 minute of work. { $done } of { $total } done — continue the rest?
+       *[other] Paused after { $minutes } minutes of work. { $done } of { $total } done — continue the rest?
     }

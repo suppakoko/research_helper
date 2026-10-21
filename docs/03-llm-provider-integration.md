@@ -1081,7 +1081,7 @@ Policy notes:
 - **Keep concurrency low and user-configurable.** Sequential is too slow for 100 papers; 20-way parallel guarantees 429s on any consumer tier. The `llm` worker pool's shipped size and its allowed range are owned by `07-architecture-and-data-model.md` §7.2 and the `concurrency` row of §8.5; do not restate a second figure here.
 - **Persist partial progress.** After each successful per-paper summary, write it to the Zotero item (as a child note or an extra-field payload). A run interrupted at paper 73 must resume at 74.
 - **Do not retry `context_length`.** Re-chunk and re-issue instead — a retry of the identical oversized request always fails.
-- **Total wall-clock budget.** Cap the whole batch (e.g. 30 min) and surface a "N of 100 completed, retry the rest?" state rather than retrying indefinitely. *(Corrected 2026-10-20, `plan/00` §6 item 240: this is a pipeline-level limit owned by the `llm` worker pool card, `P3-T17`, not part of the per-request retry. Each request has its own 90-second retry budget, doc 07 §7.3.)*
+- **Total wall-clock budget.** Cap the whole batch at **30 minutes of running time** (time spent paused does not count); at the limit the job **pauses and asks** "N of M done — continue the rest?" rather than retrying indefinitely. *(Decided 2026-10-21 (owner; `plan/00` §6 item 265): this bullet used to read "Cap the whole batch (e.g. 30 min) and surface a 'N of 100 completed, retry the rest?' state". The number is 30 minutes, and the behaviour has the same shape as the spend ceiling (item 234): the job moves to `paused` with the pause reason `wall-clock-budget` at an item boundary, every result already made is kept, and a yes resumes the rest with a fresh 30 minutes. In code: `WALL_CLOCK_BUDGET_DEFAULT_MS` and `runPooledItems` in `src/core/jobQueue/queue.ts`; doc 07 §7.5.)* *(Corrected 2026-10-20, `plan/00` §6 item 240: this is a pipeline-level limit owned by the `llm` worker pool card, `P3-T17`, not part of the per-request retry. Each request has its own 90-second retry budget, doc 07 §7.3.)*
 
 ---
 
@@ -1759,7 +1759,11 @@ Non-2xx must **not** throw at the transport level — the response body carries 
 > binds: the call, then **one** repair call (§18.3's separate "You fix malformed JSON" prompt, temperature 0), then
 > **one** full retry of the original request at temperature 0, then `StructuredOutputError(providerId, modelId, …)` —
 > at most three requests, with no loop. A truncated answer throws `LLMError` and a refusal `ContentFilterError`, both
-> before any repair (the sketch's `'bad_request'` and `'content_filter'` working names are not classes). The fence
+> before any repair (the sketch's `'bad_request'` and `'content_filter'` working names are not classes).
+> *Corrected 2026-10-21 (owner; `plan/00` §6 item 265(c)):* a truncated answer now throws `OutputTruncatedError`, an
+> `LLMError` subclass whose user-facing `messageKey` is `rh-error-output-truncated` ("the summary was cut off by the
+> output length limit"), which replaces the sketch's `userMessage` below; see `07-architecture-and-data-model.md`
+> §10.1. The fence
 > stripper also takes a fence inside prose and the outermost balanced `{…}` (`06-summarization-and-trend-report.md`
 > §6.4). Code: `completeJSON`, `parseOrRepair`, `tryParseJson` and `withSchemaInPrompt` in
 > `src/llm/shared/jsonMode.ts`; the validator is `validateAgainstSchema` in `src/llm/shared/schemaValidate.ts`.

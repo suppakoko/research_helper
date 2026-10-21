@@ -32,6 +32,9 @@
  *   names. Phase 3 widens it (`P3-T15`, `P3-T29`).
  * - {@link createJobStore} — `src/core/jobQueue/queue.ts`'s `JobStore` port
  *   over the `job` table (`P3-T34`), on the same connection.
+ * - {@link createUserPriceStore} — `src/llm/shared/pricing.ts`'s
+ *   `UserPriceStore` port over the `user_price` table (`plan/00` §6 item 265
+ *   (b), owner, 2026-10-21), on the same connection.
  * - {@link createCacheBlobStore} — `src/core/cache/sqliteCache.ts`'s
  *   `CacheBlobStore` port: `docs/07` §9.2's blob directory for cache values
  *   over 256 KB (`P3-T33`). The `cache_entry` rows themselves are written by
@@ -58,10 +61,17 @@ import type { JobStore } from "../core/jobQueue/queue";
 import type { CacheBlobStore } from "../core/cache/sqliteCache";
 import {
   parseStoredProvenance,
+  redactRecord,
   serializeProvenance,
   type ProvenanceStore,
   type SearchProvenance,
 } from "../core/provenance";
+import {
+  isUsableUserPriceOverride,
+  type UserPriceOverride,
+  type UserPriceStore,
+} from "../llm/shared/pricing";
+import type { ProviderId } from "../model/ids";
 
 /** The name `Zotero.DBConnection` resolves in the data directory (§8.2). */
 export const PLUGIN_DATABASE_NAME = "research-helper";
@@ -315,6 +325,113 @@ export function createJobStore(db: SqlConnection): JobStore {
       return resultRows(await db.queryAsync(sql, statuses ?? [], QUIET)).map(
         jobRowFrom,
       );
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The user price table (`plan/00` §6 item 265 (b))
+// ---------------------------------------------------------------------------
+
+/** `docs/07` §8.3's `user_price` columns, in the DDL's order. */
+const USER_PRICE_COLUMN_LIST =
+  "provider_id, model_id, input_per_mtok_usd, output_per_mtok_usd, " +
+  "cached_input_per_mtok_usd, as_of";
+
+/** An upsert on the primary key, for {@link UPSERT_JOB}'s reason. */
+const UPSERT_USER_PRICE =
+  `INSERT INTO user_price (${USER_PRICE_COLUMN_LIST}) ` +
+  "VALUES (?, ?, ?, ?, ?, ?) " +
+  "ON CONFLICT(provider_id, model_id) DO UPDATE SET " +
+  "input_per_mtok_usd = excluded.input_per_mtok_usd, " +
+  "output_per_mtok_usd = excluded.output_per_mtok_usd, " +
+  "cached_input_per_mtok_usd = excluded.cached_input_per_mtok_usd, " +
+  "as_of = excluded.as_of";
+
+const SELECT_USER_PRICES = `SELECT ${USER_PRICE_COLUMN_LIST} FROM user_price ORDER BY provider_id, model_id`;
+
+const DELETE_USER_PRICE =
+  "DELETE FROM user_price WHERE provider_id = ? AND model_id = ?";
+
+/** A stored row as a {@link UserPriceOverride}, or `undefined` if unusable. */
+function userPriceFrom(result: unknown): UserPriceOverride | undefined {
+  const source = result as Record<string, unknown>;
+  const cached = source["cached_input_per_mtok_usd"];
+  const row = {
+    providerId: source["provider_id"] as ProviderId,
+    modelId: source["model_id"] as string,
+    inputPerMTokUsd: source["input_per_mtok_usd"] as number,
+    outputPerMTokUsd: source["output_per_mtok_usd"] as number,
+    ...(cached !== null &&
+      cached !== undefined && { cachedInputPerMTokUsd: cached as number }),
+    asOfEpochMs: source["as_of"] as number,
+  };
+  return isUsableUserPriceOverride(row) ? row : undefined;
+}
+
+/**
+ * `src/llm/shared/pricing.ts`'s `UserPriceStore`, over the plugin's database
+ * (`plan/00` §6 item 265 (b), owner, 2026-10-21; `docs/07` §8.3).
+ *
+ * **What a row holds:** a provider ID from the closed `ProviderId` set, a
+ * model ID, three prices in fractional US dollars per million tokens (item
+ * 252; never rounded, never cents) and the epoch-millisecond date the user
+ * read them. The model ID is the one text field that a typed entry in the
+ * pane could fill, so it goes through the redaction gate (`redactRecord`,
+ * `src/core/provenance.ts`, `P3-T36`) before it is stored; a row the gate
+ * would change is **refused**, not stored redacted, because a changed model
+ * ID would no longer name its model. A row `isUsableUserPriceOverride`
+ * refuses is refused too, and nothing is written. Reading back drops a row
+ * that is no longer usable (a provider a later build added). Every statement
+ * is {@link QUIET}.
+ *
+ * @param db - the connection {@link openPluginDatabase} returned, migrated
+ * @returns the store
+ */
+export function createUserPriceStore(db: SqlConnection): UserPriceStore {
+  return {
+    async list(): Promise<readonly UserPriceOverride[]> {
+      const rows = resultRows(
+        await db.queryAsync(SELECT_USER_PRICES, [], QUIET),
+      );
+      const out: UserPriceOverride[] = [];
+      for (const result of rows) {
+        const row = userPriceFrom(result);
+        if (row !== undefined) out.push(row);
+      }
+      return out;
+    },
+
+    async upsert(row: UserPriceOverride): Promise<void> {
+      if (!isUsableUserPriceOverride(row)) {
+        throw new RangeError(
+          "[research-helper] a user price row needs a known provider, a model " +
+            "ID, non-negative finite prices and a date; nothing was stored",
+        );
+      }
+      const gated = redactRecord({ modelId: row.modelId });
+      if (gated.mark.partlyRedacted) {
+        throw new RangeError(
+          "[research-helper] the model ID looks like a credential and was not " +
+            "stored (docs/09 §2.1)",
+        );
+      }
+      await db.queryAsync(
+        UPSERT_USER_PRICE,
+        [
+          row.providerId,
+          gated.record.modelId,
+          row.inputPerMTokUsd,
+          row.outputPerMTokUsd,
+          row.cachedInputPerMTokUsd ?? null,
+          row.asOfEpochMs,
+        ],
+        QUIET,
+      );
+    },
+
+    async delete(providerId: ProviderId, modelId: string): Promise<void> {
+      await db.queryAsync(DELETE_USER_PRICE, [providerId, modelId], QUIET);
     },
   };
 }

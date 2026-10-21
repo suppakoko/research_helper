@@ -2203,7 +2203,11 @@ export interface JobRecord {
 /** Added 2026-10-21 (P3-T34). `budget-stop` is §12.3's BudgetStop: paused, not failed. */
 export type PauseReason =
   | "user" | "offline" | "credential-required" | "budget-stop"
-  | "awaiting-confirmation" | "egress-unacknowledged";
+  | "awaiting-confirmation" | "egress-unacknowledged"
+  // Decided 2026-10-21 (owner; `plan/00` §6 item 265): the batch wall-clock budget (§7.5) ran out;
+  // the job asks "N of M done — continue the rest?". Its own reason, because the surface picks its
+  // question from this member: `budget-stop` shows money spent, `awaiting-confirmation` an estimate.
+  | "wall-clock-budget";
 
 export interface SerializedError {
   readonly code: string;
@@ -2829,8 +2833,9 @@ Cancellation semantics per pipeline are declared, not implicit:
 >   keeps its key**; it takes a slot again before it resumes.
 > - **The item runner** dispatches items in order, one at a time, each under a pool permit; never
 >   a `Promise.all` over the items. Before each dispatch it checks cancellation (point 1), a pause
->   request and the batch wall-clock budget, then skips an item the caller reports as already done
->   (a cache hit, so a re-run dispatches only the rest). Pause stops dispatching, lets this job's
+>   request ~~and the batch wall-clock budget~~, then skips an item the caller reports as already done
+>   (a cache hit, so a re-run dispatches only the rest), *then the batch wall-clock budget (corrected
+>   2026-10-21, item 265: so a budget pause always has an item left to ask about)*. Pause stops dispatching, lets this job's
 >   in-flight calls finish, writes a boundary checkpoint, gives the admission slot back and moves
 >   the job to `paused`. Cancel cancels the run's token at once (the HTTP layer aborts in-flight
 >   requests, point 3; a worker waiting for a permit or in `RateLimiter.acquire` stops, point 2),
@@ -2838,9 +2843,21 @@ Cancellation semantics per pipeline are declared, not implicit:
 >   `cancelled` once nothing is in flight. **A call already waiting in a host's token bucket when
 >   the job pauses is in flight, so it is sent rather than re-queued** (the paragraph above asks for
 >   re-queueing, which needs the HTTP layer to tell waiting from sending; not built).
-> - **The batch wall-clock budget** (`03-llm-provider-integration.md` §11.6) is an option of the
+> - **The batch wall-clock budget** (`03-llm-provider-integration.md` §11.6) ~~is an option of the
 >   runner with **no number**: §11.6's "e.g. 30 min" was never decided (`plan/00` §6 item 240 left it
->   to `P3-T17`), so nothing passes one yet. Time spent paused does not count.
+>   to `P3-T17`), so nothing passes one yet.~~ Time spent paused does not count.
+>   **Decided 2026-10-21 (owner; `plan/00` §6 item 265): 30 minutes, and at the limit the job pauses
+>   and asks** "N of M done — continue the rest?", the same shape as the spend ceiling (item 234).
+>   `WALL_CLOCK_BUDGET_DEFAULT_MS` is 1,800,000 ms, the runner's default when `wallClockBudgetMs` is
+>   not given. When the running time reaches it and an item is still to be dispatched, the runner
+>   stops dispatching, lets this job's in-flight calls finish, writes a boundary checkpoint, gives
+>   the admission slot back and moves the job to `paused` with the reason `wall-clock-budget`
+>   (§5.2), through `queue.pause` like any other pause; every result already made is kept. The
+>   user's yes is `queue.resume`, and the rest runs with a fresh 30 minutes; a no is a cancel. The
+>   run no longer ends at the budget, so `PooledRunStop` loses `"budget-elapsed"`. For the question,
+>   M is the job's item count and N the items settled so far (summarized now, already cached, or
+>   failed), so M − N is exactly what a yes runs: `total` minus the boundary checkpoint's `pending`.
+>   The message is `research-helper-job-wall-clock-budget`; `P3-T29` builds the surface that shows it.
 > - **§9.4 step 4's pinned tags** are supplied: every live run holds `work:<workKey>` for all of its
 >   items through `RunningWork`, which `installServices` passes to the cache as `pinnedTags`.
 >
@@ -2870,7 +2887,9 @@ Cancellation semantics per pipeline are declared, not implicit:
 >   readonly failed: readonly { readonly workKey: string; readonly code: string }[];
 >   readonly pending: readonly string[];
 > }
-> export type PooledRunStop = "finished" | "cancelled" | "budget-elapsed";
+> // Decided 2026-10-21 (owner; `plan/00` §6 item 265): "budget-elapsed" removed; the budget pauses.
+> export type PooledRunStop = "finished" | "cancelled";
+> export const WALL_CLOCK_BUDGET_DEFAULT_MS = 1_800_000;  // 30 minutes of running time
 > export interface PooledRunOutcome {
 >   readonly stop: PooledRunStop;
 >   readonly total: number;
@@ -3237,6 +3256,16 @@ Zotero notes / attachments
 > `src/bootstrap/registerUI.ts`'s `openProvenanceStore` opened the file on its own, after `installServices` had
 > returned (`P2-T17`), and `P3-T34` attached the job store there.
 
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 265): the user-edited price table lives in the plugin database**,
+> not in a preference: table `user_price` (DDL in the schema sketch below), appended as migration version 4. One row per
+> provider and model, in the shape of `UserPriceOverride` (`src/llm/shared/pricing.ts`, `P3-T13`); a row replaces every
+> other price for its model, tiers included. Money stays **fractional US dollars per million tokens** (item 252), never
+> cents; `as_of` is the epoch-millisecond date the user read the prices. The only text is a provider id from the closed
+> `ProviderId` set and a model id; the store (`createUserPriceStore`, `src/zotero/db.ts`) passes the model id through
+> `redactRecord` (`P3-T36`) and refuses a row the gate would change. It is read and written on the one shared
+> connection, through `installPluginDatabase`'s `prices`; the catalogue reads it through its `userPriceOverrides` port.
+> No surface edits it yet: the preferences pane must (`P3-T14`).
+
 **Placement table.**
 
 | Data | Store | Key / path | Rationale |
@@ -3254,6 +3283,7 @@ Zotero notes / attachments
 | `StoredSummary` (presentation) | Zotero child note | marker comment + tag | User-visible, syncs. |
 | Embeddings | SQLite `embedding`, `vector BLOB` | PK `(work_key, model)` | Float32Array as a BLOB; compact and fast. Never JSON. **No vector extension** — `loadExtension` is unsupported (§8.2), so similarity is a brute-force cosine scan in JS. |
 | `JobRecord` + checkpoints | SQLite `job` | PK `id` | Must survive crash; frequent small updates. |
+| User-edited model prices (`UserPriceOverride`) | SQLite `user_price` | PK `(provider_id, model_id)` | *Decided 2026-10-21 (owner; `plan/00` §6 item 265).* A table of user rows, not a scalar; fractional US dollars per million tokens (item 252). |
 | `SearchProvenance` (authoritative) | SQLite `search_provenance` | PK `run_id` | Written once per run. Read back by "Export provenance as JSON" (FR-8) and by "Re-run this search" (FR-12), which needs it keyed by collection. |
 | `SearchProvenance` (presentation) | Zotero standalone note | title + `research_helper` tag | The user-visible projection FR-8 requires in the target collection. |
 | `CollectionProfile` | SQLite `collection_profile` | PK `id` | Invalidated by `membership_hash`. |
@@ -3367,6 +3397,19 @@ CREATE TABLE cache_entry (
 );
 CREATE INDEX idx_cache_expiry ON cache_entry(expires_at);
 CREATE INDEX idx_cache_lru    ON cache_entry(last_access);
+
+-- Decided 2026-10-21 (owner; plan/00 §6 item 265): the user-edited price table, one row per
+-- provider and model, in the shape of P3-T13's UserPriceOverride. Fractional US dollars per
+-- million tokens (item 252), never cents. Migration version 4 is this statement, byte for byte.
+CREATE TABLE user_price (
+  provider_id               TEXT NOT NULL,     -- a ProviderId
+  model_id                  TEXT NOT NULL,     -- as the picker lists it for provider_id
+  input_per_mtok_usd        REAL NOT NULL CHECK (input_per_mtok_usd >= 0),
+  output_per_mtok_usd       REAL NOT NULL CHECK (output_per_mtok_usd >= 0),
+  cached_input_per_mtok_usd REAL CHECK (cached_input_per_mtok_usd >= 0),   -- NULL: unknown
+  as_of                     INTEGER NOT NULL,  -- epoch ms: when the user read these prices
+  PRIMARY KEY (provider_id, model_id)
+);
 
 CREATE TABLE collection_profile (
   id              TEXT PRIMARY KEY,
@@ -3987,6 +4030,10 @@ export class StructuredOutputError extends LLMError {
   // order, before the message. A two-argument `new StructuredOutputError(message, ctx)` does
   // not compile — and would strip exactly the two fields that make the report actionable.
 }
+export class OutputTruncatedError extends LLMError { // finishReason "length" (plan/00 §6 item 265(c))
+  override readonly code = "OUTPUT_TRUNCATED"; override readonly messageKey = "rh-error-output-truncated";
+  // userFacing (inherited true) and not retryable (inherited false): the same request is cut off again.
+}
 export class TTSError extends ResearchHelperError {
   readonly code = "TTS"; readonly messageKey = "rh-error-tts"; readonly retryable = false;
 }
@@ -4032,6 +4079,20 @@ export class PolicyViolationError extends ResearchHelperError {
 >   `code` and `messageKey`, the literal `false` would otherwise make this subclass's `true` a TS2416. No runtime value
 >   changes.
 
+> **`OutputTruncatedError`, a truncated answer. Decided 2026-10-21 (owner; `plan/00` §6 item 265(c)).** An answer
+> that stops at the output length limit (`ChatResponse.finishReason` `"length"`) used to throw a plain `LLMError`, so
+> the user saw the generic `rh-error-llm` ("… could not complete the request"). The owner asked for a dedicated
+> message saying the summary was cut off by the output length limit. The smallest mechanism inside this hierarchy is
+> one subclass, as for `PrivacyRoutingError` above and `P3-T05`'s LLM subtree:
+> - **An `LLMError`, so nothing that already handles one changes.** It keeps the inherited
+>   `(providerId, modelId, message, ctx?)` constructor, `retryable = false` (the same request is cut off again, so the
+>   transport never re-sends it) and `userFacing = true`; only `code` (`OUTPUT_TRUNCATED`) and `messageKey` differ.
+>   Its thrower is `completeJSON` in `src/llm/shared/jsonMode.ts` (through `refuseUnrepairable`), on the first answer
+>   and on the full retry, before any repair; no other code throws `LLMError` for a truncation.
+> - **`messageKey` is `rh-error-output-truncated`, and its message takes `$model`**, the model ID, untranslated
+>   (`08-ui-ux-spec.md` §10.3), so the user learns which model's answer was cut off. The `rh-error-` prefix is this
+>   hierarchy's.
+
 ### 10.2 User-facing vs. developer-facing
 
 | Audience | Where it appears | Content |
@@ -4053,6 +4114,7 @@ Mapping of common conditions to user text:
 | `BudgetExceededError` | "Stopped at the $2.00 limit you set for this task." | "Raise limit and continue" / "Stop" |
 | `ContentFilterError` | "The model declined to summarize this paper." | Item marked skipped, job continues |
 | `PrivacyRoutingError` (OpenRouter's guardrail 404) | "OpenRouter has no provider for *model* that meets your privacy mode." | Choose a different model, or change the privacy mode from Strict to Balanced (the full text is in the `en-US` bundle's `rh-error-privacy-routing`). *(Added 2026-10-21, `plan/00` §6 item 262(c).)* |
+| `OutputTruncatedError` (`finishReason` `"length"`) | "The summary was cut off by the output length limit of *model*." | Item counted as failed; the job continues. *(Decided 2026-10-21 (owner; `plan/00` §6 item 265(c)); the text is the `en-US` bundle's `rh-error-output-truncated`.)* |
 | `ParseError` | *(nothing)* | Logged; item counted as failed with a generic message |
 
 ### 10.3 Structured logging

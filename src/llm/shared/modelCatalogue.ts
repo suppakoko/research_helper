@@ -37,8 +37,11 @@
  * check is the owner's, at gate `G-18`.
  *
  * **User prices.** {@link ModelCatalogueDeps.userPriceOverrides} is applied
- * last, live and bundled alike. No store holds that table yet: it needs a
- * preference row, which only `P3-T32` may add (`plan/04` §0.2 item 2).
+ * last, live and bundled alike. *Updated 2026-10-21 (`plan/00` §6 item 265
+ * (b), owner):* the table is stored in the plugin database's `user_price`
+ * (`docs/07` §8.3), not in a preference; the composition root passes
+ * `() => graph.database.prices.list()` (`./pricing.ts`'s `UserPriceStore`).
+ * A read that fails is logged and the snapshot keeps the catalogue's prices.
  */
 
 import type { Cache, CacheNamespace } from "../../core/cache/cache";
@@ -112,8 +115,14 @@ export interface ModelCatalogueDeps {
   ) => Promise<readonly OpenRouterCatalogueEntry[]>;
   readonly cache: Cache;
   readonly clock: Clock;
-  /** The user-editable price table. Defaults to none. */
-  readonly userPriceOverrides?: () => readonly UserPriceOverride[];
+  /**
+   * The user-editable price table, read once per {@link ModelCatalogue.get}.
+   * Defaults to none. In the product it is the plugin database's store,
+   * `UserPriceStore.list` (asynchronous); a rejection is logged and read as
+   * an empty table.
+   */
+  readonly userPriceOverrides?: () =>
+    readonly UserPriceOverride[] | Promise<readonly UserPriceOverride[]>;
   readonly logger?: Logger;
 }
 
@@ -364,10 +373,26 @@ export function createModelCatalogue(deps: ModelCatalogueDeps): ModelCatalogue {
     });
   }
 
+  /** The user table; a failed read is logged and leaves it empty. */
+  async function readUserPrices(): Promise<readonly UserPriceOverride[]> {
+    if (deps.userPriceOverrides === undefined) return [];
+    try {
+      return await deps.userPriceOverrides();
+    } catch (error) {
+      deps.logger?.warn(
+        "model catalogue: the user price table could not be read",
+        {
+          error: error instanceof Error ? error.name : typeof error,
+        },
+      );
+      return [];
+    }
+  }
+
   return {
     async get(ctx: LLMCallContext): Promise<ModelCatalogueSnapshot> {
       ctx.token.throwIfCancelled();
-      const overrides = deps.userPriceOverrides?.() ?? [];
+      const overrides = await readUserPrices();
       const failed: CataloguePart[] = [];
 
       const natives = deps.registry

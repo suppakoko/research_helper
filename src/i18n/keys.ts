@@ -233,6 +233,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "rh-error-context-length",
   "rh-error-content-filter",
   "rh-error-structured-output",
+  // `OutputTruncatedError`, a truncated answer (owner, 2026-10-21, plan/00
+  // §6 item 265(c); docs/07 §10.1).
+  "rh-error-output-truncated",
   // `PrivacyRoutingError`, OpenRouter's guardrail 404 (owner, 2026-10-21,
   // plan/00 §6 item 262(c); docs/07 §10.1).
   "rh-error-privacy-routing",
@@ -289,6 +292,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // P3-T34: the notice that interrupted jobs resumed (docs/07 §7.6,
   // plan/00 §6 item 250). See L10N_JOB_RESUMED.
   "research-helper-job-resumed",
+  // The wall-clock budget's question (owner, 2026-10-21, plan/00 §6 item
+  // 265; docs/07 §7.5). See L10N_JOB_WALL_CLOCK_BUDGET.
+  "research-helper-job-wall-clock-budget",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -407,6 +413,18 @@ export const L10N_PROGRESS_HEADLINE = "research-helper-progress-headline";
  * surface implements yet; until one does, the queue resumes nothing.
  */
 export const L10N_JOB_RESUMED = "research-helper-job-resumed";
+
+/**
+ * The question a job asks when it pauses at the batch wall-clock budget
+ * (pause reason `wall-clock-budget`; owner, 2026-10-21, `plan/00` §6 item 265;
+ * `docs/07` §7.5): "N of M done — continue the rest?". `$minutes` is the
+ * budget in minutes (`WALL_CLOCK_BUDGET_DEFAULT_MS` in
+ * `src/core/jobQueue/queue.ts`), `$total` the job's item count and `$done` the
+ * items settled so far. No surface shows it yet; `P3-T29` builds the one that
+ * does.
+ */
+export const L10N_JOB_WALL_CLOCK_BUDGET =
+  "research-helper-job-wall-clock-budget";
 
 /* ------------------------------------------------ searchDialog message ids */
 
@@ -635,7 +653,8 @@ export function surfaceOfMessage(id: string): ShippedSurface | undefined {
  * The `messageKey` of every error class the shipped code can throw,
  * transcribed from `src/core/errors.ts` (`docs/07` §10.1): Phase 1's sixteen,
  * since `P3-T05` (2026-10-20) the four of the LLM subtree, and since
- * 2026-10-21 `PrivacyRoutingError`'s (`plan/00` §6 item 262(c)). `test/integration/l10n.spec.ts`
+ * 2026-10-21 `PrivacyRoutingError`'s (`plan/00` §6 item 262(c)) and
+ * `OutputTruncatedError`'s (item 265(c)). `test/integration/l10n.spec.ts`
  * constructs one instance of each class and asserts its `messageKey` is in
  * this list *and* resolves in `en-US`, which is the only check that catches a
  * key renamed on one side.
@@ -663,6 +682,9 @@ export const ERROR_MESSAGE_IDS = [
   "rh-error-context-length",
   "rh-error-content-filter",
   "rh-error-structured-output",
+  // Item 265(c) (owner, 2026-10-21): `OutputTruncatedError`, thrown for a
+  // truncated answer by `completeJSON` in `src/llm/shared/jsonMode.ts`.
+  "rh-error-output-truncated",
   // Item 262(c) (owner, 2026-10-21): `PrivacyRoutingError`, thrown for
   // OpenRouter's guardrail 404 by `openRouterGuardrailError` in
   // `src/llm/openrouter/mapper.ts`.
@@ -939,6 +961,10 @@ export const KO_PRESENT = [
   // Item 262(c)'s guardrail message: Korean drafted by the coordinator and
   // reviewed by the owner on 2026-10-21 (`G-41`).
   "rh-error-privacy-routing",
+  // Item 265's truncation message and wall-clock budget question: Korean
+  // drafted by the coordinator and reviewed by the owner on 2026-10-21 (`G-41`).
+  "rh-error-output-truncated",
+  "research-helper-job-wall-clock-budget",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -991,6 +1017,8 @@ export interface FluentMessageArgsMap {
   "rh-error-llm": { provider: string };
   "rh-error-context-length": { model: string };
   "rh-error-structured-output": { provider: string };
+  // Item 265(c). `$model` is the model whose answer was cut off, untranslated.
+  "rh-error-output-truncated": { model: string };
   // Item 262(c). `$model` is the model ID the request named, untranslated.
   "rh-error-privacy-routing": { model: string };
   // The preference pane (P1-T44). `$count` is a plural selector; `$time` is a
@@ -1007,6 +1035,13 @@ export interface FluentMessageArgsMap {
   "research-helper-prefs-test-forbidden": { time: string };
   // P3-T34: how many interrupted jobs resumed.
   "research-helper-job-resumed": { count: number };
+  // Item 265(a): `$minutes` is a plural selector (the budget, 30); `$done`
+  // and `$total` are item counts.
+  "research-helper-job-wall-clock-budget": {
+    minutes: number;
+    done: number;
+    total: number;
+  };
 
   // searchDialog
   "research-helper-search-years-span": {
@@ -1107,6 +1142,8 @@ export const ARGUMENT_MESSAGE_IDS = [
   "rh-error-llm",
   "rh-error-context-length",
   "rh-error-structured-output",
+  // mainWindow — a truncated answer (1, item 265(c))
+  "rh-error-output-truncated",
   // mainWindow — OpenRouter's guardrail 404 (1, item 262(c))
   "rh-error-privacy-routing",
   // mainWindow — the preference pane (5, P1-T44)
@@ -1115,8 +1152,9 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-prefs-test-inconclusive",
   "research-helper-prefs-test-rejected",
   "research-helper-prefs-test-forbidden",
-  // mainWindow — the job queue (1, P3-T34)
+  // mainWindow — the job queue (2: P3-T34, item 265(a))
   "research-helper-job-resumed",
+  "research-helper-job-wall-clock-budget",
 
   // searchDialog (20)
   "research-helper-search-years-span",

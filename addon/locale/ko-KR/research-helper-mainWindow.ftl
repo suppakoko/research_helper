@@ -228,6 +228,12 @@ rh-error-context-length = 글이 너무 길어 { $model } 모델이 한 번에 �
 rh-error-content-filter = 모델이 이 논문의 요약을 거절했습니다.
 rh-error-structured-output = { $provider }에서 받은 요약을 Research Helper가 읽지 못했습니다.
 
+# Item 265(c) (owner, 2026-10-21): `OutputTruncatedError`, a truncated answer.
+# The coordinator drafts the Korean and the owner reviews it (G-41); nothing
+# was machine-translated. `{ $model }` stays untranslated (`docs/08` §10.3).
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-21 (G-41).
+rh-error-output-truncated = { $model } 모델의 출력 길이 한도에 걸려 요약이 잘렸습니다.
+
 # Item 262(c) (owner, 2026-10-21): OpenRouter's guardrail 404. The coordinator
 # drafts the Korean and the owner reviews it (G-41); nothing was
 # machine-translated. Keep "Strict" and "Balanced" as the privacy-mode menu's
@@ -268,4 +274,19 @@ research-helper-prefs-use-translators =
 research-helper-job-resumed =
     { $count ->
        *[other] Zotero가 닫히면서 중단된 백그라운드 작업 { $count }개를 Research Helper가 다시 시작했습니다.
+    }
+
+
+## The batch wall-clock budget's question (owner, 2026-10-21, plan/00 §6 item
+## 265; docs/03 §11.6, docs/07 §7.5)
+##
+## The coordinator drafts the Korean and the owner reviews it (G-41); nothing
+## here was machine-translated. Korean has a single plural category, so the
+## entry keeps the selector with only `*[other]` (`docs/08` §10.2).
+##
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-21 (G-41).
+
+research-helper-job-wall-clock-budget =
+    { $minutes ->
+       *[other] { $minutes }분 동안 작업한 뒤 멈췄습니다. { $total }편 중 { $done }편 완료 — 나머지를 계속할까요?
     }

@@ -14,8 +14,10 @@
  * ## The order, and its bound (`docs/12` §18.3, `docs/03` §14.5)
  *
  * 1. **The call.** A truncated answer (`finishReason: "length"`) throws
- *    `LLMError` at once: half a JSON object is not repairable, and the fix is
- *    a larger output limit, not a second spend. A content-filter stop throws
+ *    `OutputTruncatedError`, an `LLMError` with its own user-facing message
+ *    (`plan/00` §6 item 265(c)), at once: half a JSON object is not
+ *    repairable, and the fix is a larger output limit, not a second spend.
+ *    A content-filter stop throws
  *    `ContentFilterError` at once (an adapter usually throws it itself, from
  *    `mapProviderError` on the 2xx, and that propagates unchanged). Neither
  *    is ever repaired or retried.
@@ -57,7 +59,7 @@
 import {
   ConfigurationError,
   ContentFilterError,
-  LLMError,
+  OutputTruncatedError,
   StructuredOutputError,
 } from "../../core/errors";
 import { redactText } from "../../core/provenance";
@@ -358,7 +360,9 @@ function failureContext(
 
 /**
  * Throw for an answer that must never be repaired or retried: a truncation
- * (`LLMError`) or a content-filter stop (`ContentFilterError`).
+ * (`OutputTruncatedError`, whose user-facing message says the summary was cut
+ * off by the output length limit — owner, 2026-10-21, `plan/00` §6 item
+ * 265(c)) or a content-filter stop (`ContentFilterError`).
  */
 function refuseUnrepairable(
   response: ChatResponse,
@@ -366,7 +370,7 @@ function refuseUnrepairable(
   request: StructuredRequest,
 ): void {
   if (response.finishReason === "length") {
-    throw new LLMError(
+    throw new OutputTruncatedError(
       providerId,
       request.model,
       "Output truncated before the JSON completed (finishReason length); not repaired",
@@ -473,8 +477,8 @@ function sumUsage(responses: readonly ChatResponse[]): Usage {
  *   and the request count
  * @throws ConfigurationError, before any request, when the request is not
  *   `json_schema` or its schema is outside the validator's subset
- * @throws LLMError on a truncated answer, ContentFilterError on a refusal —
- *   both before any repair
+ * @throws OutputTruncatedError on a truncated answer, ContentFilterError on
+ *   a refusal — both before any repair
  * @throws StructuredOutputError `(providerId, modelId, …)` when the retry's
  *   answer is still not valid
  */

@@ -4,6 +4,7 @@ import {
   ConfigurationError,
   ContentFilterError,
   LLMError,
+  OutputTruncatedError,
   QuotaExceededError,
   StructuredOutputError,
 } from "../../../src/core/errors";
@@ -469,6 +470,23 @@ describe("completeJSON: one repair, one full retry at temperature 0, then fail (
     expect(llm.calls).toHaveLength(1);
   });
 
+  it("throws a truncation as OutputTruncatedError, whose user-facing message is the cut-off one, not rh-error-llm (item 265(c))", async () => {
+    const llm = mockLLM([
+      chatResponse(VALID_TEXT.slice(0, 200), { finishReason: "length" }),
+    ]);
+    const failure = await completeJSON(llm, structured(), ctx()).catch(
+      (e: unknown) => e,
+    );
+    expect(failure).toBeInstanceOf(OutputTruncatedError);
+    const cut = failure as OutputTruncatedError;
+    expect(cut.messageKey).toBe("rh-error-output-truncated");
+    expect(cut.userFacing).toBe(true);
+    expect(cut.modelId).toBe(structured().model);
+    // Never re-sent: the same request would be cut off again.
+    expect(isRetriedAutomatically(cut)).toBe(false);
+    expect(llm.calls).toHaveLength(1);
+  });
+
   it("throws ContentFilterError with zero repairs: an adapter-thrown refusal, and a content_filter stop", async () => {
     const thrown = mockLLM([
       new ContentFilterError("openrouter", "mock-small", "declined"),
@@ -507,7 +525,7 @@ describe("completeJSON: one repair, one full retry at temperature 0, then fail (
       structured(),
       ctx(),
     ).catch((e: unknown) => e);
-    expect(failure).toBeInstanceOf(LLMError);
+    expect(failure).toBeInstanceOf(OutputTruncatedError);
     expect(failure).not.toBeInstanceOf(StructuredOutputError);
     expect(truncatedRetry.calls).toHaveLength(3);
   });
