@@ -232,8 +232,8 @@ rh-error-structured-output = { $provider }에서 받은 요약을 Research Helpe
 # drafts the Korean and the owner reviews it (G-41); nothing was
 # machine-translated. Keep "Strict" and "Balanced" as the privacy-mode menu's
 # Korean labels once those exist; `{ $model }` stays untranslated.
-# NEEDS REVIEW. en-US: "OpenRouter has no provider for { $model } that meets your privacy mode. Choose a different model, or change the privacy mode from Strict to Balanced if it is set to Strict. Balanced allows providers that keep your text for a time and sends PDF full text, but still refuses providers that may train on your data."
-# rh-error-privacy-routing =
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-21 (G-41).
+rh-error-privacy-routing = OpenRouter에는 개인정보 모드 조건에 맞게 { $model } 모델을 제공하는 곳이 없습니다. 다른 모델을 고르거나, 개인정보 모드가 ‘엄격’이면 ‘균형’으로 바꾸세요. ‘균형’은 글을 일정 기간 보관하는 제공자와 PDF 본문 전송을 허용하지만, 데이터를 학습에 쓸 수 있는 제공자는 여전히 거부합니다.
 
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)

@@ -33,6 +33,30 @@
  *
  * Everything created is erased; the temp files are removed; both preferences
  * are restored.
+ *
+ * ## Leaving Zotero quiet for the next spec
+ *
+ * The cleanup is an `after` hook **inside** this file's `describe`, so it runs
+ * when this spec finishes. At the top level it was a root hook, which Mocha
+ * runs only after the last spec of the whole suite, and this spec's fixtures
+ * stayed in the library for every spec that followed.
+ *
+ * That mattered because changing `fulltext.pdfMaxPages` is not free. Zotero
+ * 10.0.3 (`Zotero.FullText.init`, outside `Zotero.test`, about 30 s after the
+ * interface is ready) watches that preference and, 5 s after its value stops
+ * changing, calls `Zotero.FullText.reindexTruncated` with the settled value.
+ * That re-extracts every PDF whose `indexedPages` is below both its
+ * `totalPages` and the new limit — this spec's `INDEX_STATE_PARTIAL` fixture —
+ * and writes the text in its own `Zotero.DB` transaction. The last preference
+ * restore here is about 5 s before `batchImport.spec.ts` (`P0-T20`) times its
+ * second write, so that transaction was counted as a second one "during the
+ * write" (measured 2026-10-21; `plan/reports/batchimport-flake.md`). With the
+ * fixtures erased before the debounce fires, `reindexTruncated` finds no
+ * truncated row and returns after one `SELECT`, which begins no transaction.
+ * Erasing them also empties the two other paths that would touch them later:
+ * `Zotero.FullText.queueItem`'s delayed indexing skips IDs that no longer
+ * exist, and the background extraction queue no longer lists the
+ * password-protected and missing-file attachments.
  */
 
 import { config } from "../../../package.json";
@@ -299,21 +323,22 @@ function attribute(
   };
 }
 
-after(async function () {
-  setPrefStore(undefined);
-  if (created.length > 0) {
-    await Zotero.Items.erase(created.map((item) => item.id));
-  }
-  for (const path of tempFiles) {
-    await IOUtils.remove(path, { ignoreAbsent: true });
-  }
-});
-
 // ---------------------------------------------------------------------------
 // The specs
 // ---------------------------------------------------------------------------
 
 describe("P3-T18 text acquisition tiers 1-2", function () {
+  // Inside the describe, so it runs when this spec ends rather than after the
+  // whole suite: see "Leaving Zotero quiet for the next spec" above.
+  after(async function () {
+    setPrefStore(undefined);
+    if (created.length > 0) {
+      await Zotero.Items.erase(created.map((item) => item.id));
+    }
+    for (const path of tempFiles) {
+      await IOUtils.remove(path, { ignoreAbsent: true });
+    }
+  });
   it("a fully indexed PDF yields Tier 2 text with zero PDFWorker calls", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     const parent = await createParent(ABSTRACT);

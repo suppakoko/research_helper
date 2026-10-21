@@ -741,11 +741,6 @@ export const KO_PENDING_REVIEW = [
   "rh-error-zotero",
   "rh-error-storage",
   "rh-error-cancelled",
-  // Item 262(c) (owner, 2026-10-21): OpenRouter's guardrail 404. The `ko-KR`
-  // bundle carries a commented stub with the English source; the coordinator
-  // drafts the Korean and the owner reviews it (`G-41`). Nothing was
-  // machine-translated.
-  "rh-error-privacy-routing",
   // `P1-T44`'s preference-pane strings. `G-41` owns the translation; the
   // `ko-KR` bundle is outside that card's `Files` list, so it carries no
   // commented stubs for these yet (reported with the card). Nothing was
@@ -941,6 +936,9 @@ export const KO_PRESENT = [
   // P3-T34's resume notice: Korean drafted by the coordinator and reviewed
   // by the owner on 2026-10-21 (`G-41`).
   "research-helper-job-resumed",
+  // Item 262(c)'s guardrail message: Korean drafted by the coordinator and
+  // reviewed by the owner on 2026-10-21 (`G-41`).
+  "rh-error-privacy-routing",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

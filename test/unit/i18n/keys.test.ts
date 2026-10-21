@@ -569,8 +569,8 @@ describe("src/i18n/keys.ts — OpenRouter's guardrail message (owner, 2026-10-21
     expect(read("DEFERRED_ERROR_MESSAGE_IDS")).not.toContain(key);
   });
 
-  it("waits on KO_PENDING_REVIEW for the coordinator's Korean, never on KO_PRESENT", () => {
-    expect(read("KO_PENDING_REVIEW")).toContain(key);
-    expect(read("KO_PRESENT")).not.toContain(key);
+  it("sits on KO_PRESENT once the owner reviewed the Korean (2026-10-21, G-41), never pending", () => {
+    expect(read("KO_PRESENT")).toContain(key);
+    expect(read("KO_PENDING_REVIEW")).not.toContain(key);
   });
 });

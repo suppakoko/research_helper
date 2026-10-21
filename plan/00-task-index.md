@@ -1881,6 +1881,17 @@ the caller of what the card builds; if it does not, the caller is added with a d
     now. (c) **A dedicated user-facing message for OpenRouter's privacy guardrail 404**; Korean drafted by the coordinator for
     owner review (`G-41`).
 
+263. **The batch-import transaction flake (P0-T20 spec), 2026-10-21.** **DONE** (`plan/reports/batchimport-flake.md`): a
+    Zotero preference observer on `fulltext.pdfMaxPages` re-extracted `P3-T18`'s partly indexed fixture 5 s after the spec
+    restored the pref, inside the batch import's timed write; the spec's cleanup `after` hook sat at file top level, so
+    Mocha ran it only at the end of the whole suite. Moved inside the spec's `describe`; 3 of 3 runs at 187. Item 262(c)'s
+    Korean (owner-approved) landed with it.
+
+264. **Recorded, not a card: five more specs keep a top-level `after` hook**, which Mocha runs only after the whole suite:
+    `attachments.spec.ts`, `import-perf.spec.ts`, `importer.spec.ts`, `preprintRoundTrip.spec.ts`, `versionLinking.spec.ts`
+    (`_suite-guards.spec.ts`'s is suite-wide on purpose). Their fixtures stay in the test library for every later spec —
+    the same shape as item 263; move each into its `describe` when that file is next touched.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
