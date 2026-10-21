@@ -1854,12 +1854,14 @@ the caller of what the card builds; if it does not, the caller is added with a d
     recommendation (OpenRouter first). Shared files (`registerProviders.ts`, `HOST_POLICIES`, `docs/07` §7.3) take small
     exact-string edits only; no live provider call; recorded fixtures stay with `P3-T30`.
 
-### 6.54 Raised by the four adapters (P3-T07–P3-T10), 2026-10-21 — 260 waits on the owner
+### 6.54 Raised by the four adapters (P3-T07–P3-T10), 2026-10-21 — decided the same day
 
 260. **No `HOST_POLICIES` row for any LLM host, so in the product each LLM request makes one attempt with no pacing.** All
     four adapters stopped at their row step: P3-T07's open line ("LLM rows carry no fixed rate") is undecided, `docs/07` §7.3
     says "from provider prefs" and no such pref exists, and `TokenBucket` refuses a non-positive rate. Tests drive
     `LLM_RETRY_BUDGET` directly. Needs an owner number per host (or one shared number) before the four rows can land.
+    **DECIDED 2026-10-21 (owner):** every LLM host row: 1 request per second, burst 1, at most 3 concurrent (the `concurrency`
+    default), `retry: LLM_RETRY_BUDGET`; `docs/07` §7.3 moves first. Completes step 7 of `P3-T07`–`P3-T10`.
 
 261. **Recorded, not cards.** (a) `ChatRequest` has no effort member, so OpenAI `reasoning`, Gemini `thinking_level` are never
     sent and three adapters carry a local `Effort` copy (`docs/07` §4.3 decision). (b) Provider display-name strings do not
@@ -1871,6 +1873,13 @@ the caller of what the card builds; if it does not, the caller is added with a d
     (g) `docs/07` §2.3 says `llm/` imports only `core/`/`model/`, but `Secret` lives in `src/prefs/` (lint allows it).
     (h) Stale "No adapter yet" comments in `registerProviders.ts` and `container.ts` step 6b. (i) `validateCredentials` is a
     placeholder in three adapters and minimal in Anthropic's (`P3-T14`). (j) All fixtures are synthetic; recording is `P3-T30`.
+
+262. **Decisions on item 261 (owner, 2026-10-21).** (a) **Add an effort member to `ChatRequest`** (`docs/07` §4.3 first) with one
+    shared `Effort` type in `src/llm/types.ts`; adapters map it (OpenAI `reasoning.effort`, Gemini `thinking_level`, Anthropic as
+    `docs/03` says); summaries send `low` (`P3-T25` passes it). (b) **Provider names stay English in both locales**, one id
+    scheme `research-helper-provider-<id>`, on `KO_PRESENT` verbatim (`docs/08` §10.3); the coordinator's follow-up does it
+    now. (c) **A dedicated user-facing message for OpenRouter's privacy guardrail 404**; Korean drafted by the coordinator for
+    owner review (`G-41`).
 
 ## 7. Regenerating this file
 
