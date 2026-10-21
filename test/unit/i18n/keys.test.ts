@@ -1,15 +1,24 @@
 import { describe, expect, it } from "vitest";
 
+import { registerProviders } from "../../../src/bootstrap/registerProviders";
+import { createManualClock } from "../../../src/core/clock";
 import {
   BudgetExceededError,
   ContentFilterError,
   ContextLengthExceededError,
   LLMError,
   PolicyViolationError,
+  PrivacyRoutingError,
   StructuredOutputError,
   TTSError,
 } from "../../../src/core/errors";
+import { createLogger } from "../../../src/core/logger";
 import * as keys from "../../../src/i18n/keys";
+import { ANTHROPIC_DISPLAY_NAME_KEY } from "../../../src/llm/anthropic/anthropicProvider";
+import { GEMINI_DISPLAY_NAME_KEY } from "../../../src/llm/gemini/geminiProvider";
+import { OPENAI_DISPLAY_NAME_KEY } from "../../../src/llm/openai/openAiProvider";
+import { OPENROUTER_DISPLAY_NAME_KEY } from "../../../src/llm/openrouter/openRouterProvider";
+import { mockSettings } from "../../helpers/mockLLM";
 
 /**
  * `P1-T40`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network, no
@@ -503,5 +512,65 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
       "rh-error-context-length",
       "rh-error-structured-output",
     ]);
+  });
+});
+
+describe("src/i18n/keys.ts — the LLM provider names (owner, 2026-10-21, item 262(b))", () => {
+  const adapterKeys = [
+    OPENROUTER_DISPLAY_NAME_KEY,
+    OPENAI_DISPLAY_NAME_KEY,
+    ANTHROPIC_DISPLAY_NAME_KEY,
+    GEMINI_DISPLAY_NAME_KEY,
+  ];
+
+  it("gives every registered adapter the one id scheme research-helper-provider-<id>", () => {
+    const { registry } = registerProviders({
+      logger: createLogger({
+        sink: { write: () => undefined },
+        clock: createManualClock(),
+      }),
+      settings: mockSettings({}),
+    });
+    const registered = registry.list();
+    expect(registered).toHaveLength(4);
+    for (const provider of registered) {
+      expect(provider.displayNameKey, provider.id).toBe(
+        `research-helper-provider-${provider.id}`,
+      );
+    }
+    expect(sorted(registered.map((p) => p.displayNameKey))).toEqual(
+      sorted(adapterKeys),
+    );
+  });
+
+  it("declares all four on the main-window surface and on KO_PRESENT, never pending review", () => {
+    // Provider names are not translated (`docs/08` §10.3), so `ko-KR`
+    // carries them verbatim, as it does the source names.
+    expect(notIn(adapterKeys, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(adapterKeys, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(adapterKeys, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(adapterKeys, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(
+      read("MAIN_WINDOW_MESSAGE_IDS").filter((id) =>
+        id.startsWith("research-helper-llm-provider-"),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — OpenRouter's guardrail message (owner, 2026-10-21, item 262(c))", () => {
+  const key = new PrivacyRoutingError(404, "x").messageKey;
+
+  it("ships PrivacyRoutingError's messageKey as an error id that takes an argument", () => {
+    expect(key).toBe("rh-error-privacy-routing");
+    expect(read("ERROR_MESSAGE_IDS")).toContain(key);
+    expect(read("MAIN_WINDOW_MESSAGE_IDS")).toContain(key);
+    expect(read("ARGUMENT_MESSAGE_IDS")).toContain(key);
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).not.toContain(key);
+  });
+
+  it("waits on KO_PENDING_REVIEW for the coordinator's Korean, never on KO_PRESENT", () => {
+    expect(read("KO_PENDING_REVIEW")).toContain(key);
+    expect(read("KO_PRESENT")).not.toContain(key);
   });
 });

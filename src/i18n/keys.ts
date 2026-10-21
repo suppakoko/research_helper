@@ -179,6 +179,16 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-source-biorxiv",
   "research-helper-source-medrxiv",
 
+  // LLMProvider.displayNameKey (docs/07 §4.3). Never translated, like the
+  // source names above (docs/08 §10.3). One per adapter, in the order
+  // registerProviders registers them, under one id scheme
+  // `research-helper-provider-<id>` (owner, 2026-10-21, plan/00 §6 item
+  // 262(b)).
+  "research-helper-provider-openrouter",
+  "research-helper-provider-openai",
+  "research-helper-provider-anthropic",
+  "research-helper-provider-gemini",
+
   // Search provenance (FR-8, P1-T17).
   "research-helper-provenance-note-title",
 
@@ -223,6 +233,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "rh-error-context-length",
   "rh-error-content-filter",
   "rh-error-structured-output",
+  // `PrivacyRoutingError`, OpenRouter's guardrail 404 (owner, 2026-10-21,
+  // plan/00 §6 item 262(c); docs/07 §10.1).
+  "rh-error-privacy-routing",
 
   // The preference pane's literature-source credential blocks (docs/08 §7.3,
   // docs/09 §1.8–1.9; P1-T44). On *this* surface rather than a fourth
@@ -621,7 +634,8 @@ export function surfaceOfMessage(id: string): ShippedSurface | undefined {
 /**
  * The `messageKey` of every error class the shipped code can throw,
  * transcribed from `src/core/errors.ts` (`docs/07` §10.1): Phase 1's sixteen,
- * and since `P3-T05` (2026-10-20) the four of the LLM subtree. `test/integration/l10n.spec.ts`
+ * since `P3-T05` (2026-10-20) the four of the LLM subtree, and since
+ * 2026-10-21 `PrivacyRoutingError`'s (`plan/00` §6 item 262(c)). `test/integration/l10n.spec.ts`
  * constructs one instance of each class and asserts its `messageKey` is in
  * this list *and* resolves in `en-US`, which is the only check that catches a
  * key renamed on one side.
@@ -649,6 +663,10 @@ export const ERROR_MESSAGE_IDS = [
   "rh-error-context-length",
   "rh-error-content-filter",
   "rh-error-structured-output",
+  // Item 262(c) (owner, 2026-10-21): `PrivacyRoutingError`, thrown for
+  // OpenRouter's guardrail 404 by `openRouterGuardrailError` in
+  // `src/llm/openrouter/mapper.ts`.
+  "rh-error-privacy-routing",
 ] as const satisfies readonly MainWindowMessageId[];
 
 /**
@@ -723,6 +741,11 @@ export const KO_PENDING_REVIEW = [
   "rh-error-zotero",
   "rh-error-storage",
   "rh-error-cancelled",
+  // Item 262(c) (owner, 2026-10-21): OpenRouter's guardrail 404. The `ko-KR`
+  // bundle carries a commented stub with the English source; the coordinator
+  // drafts the Korean and the owner reviews it (`G-41`). Nothing was
+  // machine-translated.
+  "rh-error-privacy-routing",
   // `P1-T44`'s preference-pane strings. `G-41` owns the translation; the
   // `ko-KR` bundle is outside that card's `Files` list, so it carries no
   // commented stubs for these yet (reported with the card). Nothing was
@@ -866,6 +889,13 @@ export const KO_PRESENT = [
   "research-helper-source-semanticscholar",
   "research-helper-source-biorxiv",
   "research-helper-source-medrxiv",
+  // The four LLM provider names (owner, 2026-10-21, plan/00 §6 item 262(b)):
+  // `docs/08` §10.3 forbids translating a provider name, so `ko-KR` carries
+  // the English verbatim, as it does the source names above.
+  "research-helper-provider-openrouter",
+  "research-helper-provider-openai",
+  "research-helper-provider-anthropic",
+  "research-helper-provider-gemini",
   "research-helper-search-col-doi",
   // The key-storage badge's fifth state: owner-written Korean in `docs/09`
   // §1.9 (decided 2026-10-15, review row 50; `P2-T34`).
@@ -963,6 +993,8 @@ export interface FluentMessageArgsMap {
   "rh-error-llm": { provider: string };
   "rh-error-context-length": { model: string };
   "rh-error-structured-output": { provider: string };
+  // Item 262(c). `$model` is the model ID the request named, untranslated.
+  "rh-error-privacy-routing": { model: string };
   // The preference pane (P1-T44). `$count` is a plural selector; `$time` is a
   // clock time the pane script has already formatted with
   // `Intl.DateTimeFormat` over `Zotero.locale` (docs/08 §10.3). **No message
@@ -1077,6 +1109,8 @@ export const ARGUMENT_MESSAGE_IDS = [
   "rh-error-llm",
   "rh-error-context-length",
   "rh-error-structured-output",
+  // mainWindow — OpenRouter's guardrail 404 (1, item 262(c))
+  "rh-error-privacy-routing",
   // mainWindow — the preference pane (5, P1-T44)
   "research-helper-prefs-remove-all-done",
   "research-helper-prefs-test-ok",

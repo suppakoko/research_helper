@@ -15,6 +15,7 @@ import {
   ContentFilterError,
   LLMError,
   MissingCredentialError,
+  PrivacyRoutingError,
   QuotaExceededError,
   type ResearchHelperError,
 } from "../../../src/core/errors";
@@ -47,13 +48,18 @@ import {
   mapFinishReason,
   OPENROUTER_GUARDRAIL_CAUSE,
   OPENROUTER_GUARDRAIL_REMEDIES,
+  toOpenRouterBody,
 } from "../../../src/llm/openrouter/mapper";
 import {
   createOpenRouterProvider,
   type OpenRouterProvider,
   type OpenRouterProviderDeps,
 } from "../../../src/llm/openrouter/openRouterProvider";
-import type { ChatRequest, LLMCallContext } from "../../../src/llm/types";
+import type {
+  ChatRequest,
+  Effort,
+  LLMCallContext,
+} from "../../../src/llm/types";
 import { setPrefStore } from "../../../src/prefs";
 
 /**
@@ -389,6 +395,47 @@ describe("OpenRouter chat(): the request on the wire (P3-T07 steps 1–3)", () =
         provider: { data_collection: "deny" },
       }),
     );
+  });
+
+  it("sends ChatRequest.effort as reasoning.effort, folded to the five-level scale, and no reasoning without one (item 262)", async () => {
+    const h = harness([OK]);
+    await h.provider.chat(request({ effort: "minimal" }), ctx());
+    await h.provider.chat(request(), ctx());
+
+    expect(h.transport.calls[0]?.options.body).toBe(
+      JSON.stringify({
+        model: MODEL,
+        messages: [
+          {
+            role: "system",
+            content: "You are a biomedical literature summarizer.",
+          },
+          { role: "user", content: "Summarize this abstract in 3 sentences." },
+        ],
+        max_tokens: 512,
+        reasoning: { effort: "low" },
+        provider: { data_collection: "deny" },
+      }),
+    );
+    expect(h.transport.calls[1]?.options.body).not.toContain("reasoning");
+
+    const expected: Record<Effort, string> = {
+      none: "low",
+      minimal: "low",
+      low: "low",
+      medium: "medium",
+      high: "high",
+      xhigh: "xhigh",
+      max: "max",
+    };
+    for (const [effort, level] of Object.entries(expected)) {
+      expect(
+        toOpenRouterBody(request({ effort: effort as Effort }), {
+          privacyMode: "balanced",
+        }).reasoning,
+        effort,
+      ).toStrictEqual({ effort: level });
+    }
   });
 
   it("adds response_format and require_parameters: true under json_schema", async () => {
@@ -821,16 +868,24 @@ describe("OpenRouter: errors through mapErrorResponse (P3-T07 steps 4 and 6, P3-
     expect(h.transport.calls).toHaveLength(2);
   });
 
-  it("maps the synthetic guardrail 404 onto BadRequestError naming the cause and both remedies", async () => {
+  it("maps the synthetic guardrail 404 onto a user-facing PrivacyRoutingError naming the cause and both remedies", async () => {
     const h = harness(
       [{ status: 404, body: JSON.stringify(SYNTHETIC_GUARDRAIL_404) }],
       { withRetry: true, privacyMode: () => "strict" },
     );
     const error = (await h.provider
       .chat(request(), ctx())
-      .catch((e: unknown) => e)) as BadRequestError;
+      .catch((e: unknown) => e)) as PrivacyRoutingError;
 
+    // Item 262(c): still a BadRequestError, now with its own user-facing
+    // message, whose `$model` is the context's model id.
+    expect(error).toBeInstanceOf(PrivacyRoutingError);
     expect(error).toBeInstanceOf(BadRequestError);
+    expect(error.userFacing).toBe(true);
+    expect(error.messageKey).toBe("rh-error-privacy-routing");
+    expect(error.code).toBe("PRIVACY_ROUTING");
+    expect(error.retryable).toBe(false);
+    expect(error.context.modelId).toBe(MODEL);
     expect(error.httpStatus).toBe(404);
     expect(error.context.cause).toBe(OPENROUTER_GUARDRAIL_CAUSE);
     expect(error.context.remedies).toStrictEqual([
@@ -858,6 +913,8 @@ describe("OpenRouter: errors through mapErrorResponse (P3-T07 steps 4 and 6, P3-
       .chat(request(), ctx())
       .catch((e: unknown) => e)) as ResearchHelperError;
     expect(plain).toBeInstanceOf(BadRequestError);
+    expect(plain).not.toBeInstanceOf(PrivacyRoutingError);
+    expect(plain.userFacing).toBe(false);
     expect(plain.context.cause).toBeUndefined();
 
     const codeOnly = harness([
@@ -869,6 +926,7 @@ describe("OpenRouter: errors through mapErrorResponse (P3-T07 steps 4 and 6, P3-
     const guard = (await codeOnly.provider
       .chat(request(), ctx())
       .catch((e: unknown) => e)) as ResearchHelperError;
+    expect(guard).toBeInstanceOf(PrivacyRoutingError);
     expect(guard.context.cause).toBe(OPENROUTER_GUARDRAIL_CAUSE);
   });
 
@@ -882,6 +940,7 @@ describe("OpenRouter: errors through mapErrorResponse (P3-T07 steps 4 and 6, P3-
       .chat(request({ model: "test-author/not-in-catalogue" }), ctx())
       .catch((e: unknown) => e)) as ResearchHelperError;
     expect(error).toBeInstanceOf(BadRequestError);
+    expect(error).not.toBeInstanceOf(PrivacyRoutingError);
     expect(error.context.cause).toBeUndefined();
   });
 

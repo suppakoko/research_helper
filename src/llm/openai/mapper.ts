@@ -24,6 +24,7 @@
  * prompt coercion §4.3 promises for it.
  */
 
+import { type FiveLevelEffort, toFiveLevelEffort } from "../shared/effort";
 import type {
   ChatRequest,
   ChatResponse,
@@ -35,44 +36,13 @@ import type {
 // ---------------------------------------------------------------------------
 // 1. Effort
 // ---------------------------------------------------------------------------
-
-/**
- * The shared effort scale, `docs/03` §14.1's `Effort` union verbatim.
- *
- * It is the superset of every provider's scale: `none` and `minimal` exist
- * only so the Gemini path has somewhere to land (§14.3). `docs/07` §4.3 does
- * not declare it and `ChatRequest` carries no effort member, so this adapter
- * has no caller that passes one yet (reported with `P3-T08`).
- */
-export type Effort =
-  "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-
-/** OpenAI's five `reasoning.effort` levels (`docs/03` §2.5). No `none`, no `minimal`. */
-export type OpenAiEffort = "low" | "medium" | "high" | "xhigh" | "max";
-
-/**
- * Map the shared scale onto OpenAI's.
- *
- * `none` and `minimal` become `low`, the bottom of OpenAI's scale: the
- * Responses API rejects both (`docs/03` §2.5, §14.2's `mapEffortToFiveLevel`).
- * Every other level exists on both scales and passes through.
- *
- * @param effort - a level on the shared scale
- * @returns the level OpenAI accepts
- */
-export function toOpenAiEffort(effort: Effort): OpenAiEffort {
-  switch (effort) {
-    case "none":
-    case "minimal":
-      return "low";
-    case "low":
-    case "medium":
-    case "high":
-    case "xhigh":
-    case "max":
-      return effort;
-  }
-}
+//
+// `ChatRequest.effort` (`docs/07` §4.3, owner, 2026-10-21, `plan/00` §6 item
+// 262(a)) is sent as `reasoning.effort`, folded onto OpenAI's five levels by
+// `toFiveLevelEffort` in `../shared/effort.ts`: `none` and `minimal` become
+// `low`, because the Responses API rejects both (`docs/03` §2.5, §14.2). This
+// file's local `Effort`, `OpenAiEffort` and `toOpenAiEffort` were removed that
+// day in favour of the shared type and the shared fold.
 
 // ---------------------------------------------------------------------------
 // 2. The request
@@ -98,7 +68,7 @@ export interface ResponsesRequestBody {
   readonly input: readonly ResponsesInputMessage[];
   readonly max_output_tokens?: number;
   readonly temperature?: number;
-  readonly reasoning?: { readonly effort: OpenAiEffort };
+  readonly reasoning?: { readonly effort: FiveLevelEffort };
   readonly text?: { readonly format: ResponsesJsonSchemaFormat };
 }
 
@@ -110,8 +80,6 @@ export interface ResponsesBodyOptions {
    * {@link UNKNOWN_TOKEN_LIMIT}) and clamps nothing.
    */
   readonly maxOutputTokensLimit?: number | undefined;
-  /** A level on the shared scale; mapped by {@link toOpenAiEffort}, never forwarded. */
-  readonly effort?: Effort | undefined;
 }
 
 /**
@@ -141,10 +109,12 @@ export function clampMaxOutputTokens(
  *   clamped to the model's limit (§14.3's "Max output" row).
  * - A JSON schema goes to `text.format`, never `response_format` (§7.1, §7.5),
  *   with `strict: true` (§14.2).
- * - Effort is mapped through {@link toOpenAiEffort}, never forwarded.
+ * - `request.effort` becomes `reasoning.effort`, folded by
+ *   `toFiveLevelEffort` and never forwarded; with no effort, no `reasoning`
+ *   is sent and OpenAI's own default applies.
  *
  * @param request - the provider-agnostic request
- * @param options - the model's output limit and an optional effort
+ * @param options - the model's output limit
  * @returns the body, ready for `JSON.stringify`
  */
 export function buildResponsesBody(
@@ -168,8 +138,8 @@ export function buildResponsesBody(
     ...(request.temperature !== undefined && {
       temperature: request.temperature,
     }),
-    ...(options.effort !== undefined && {
-      reasoning: { effort: toOpenAiEffort(options.effort) },
+    ...(request.effort !== undefined && {
+      reasoning: { effort: toFiveLevelEffort(request.effort) },
     }),
     ...(format?.kind === "json_schema" && {
       text: {

@@ -24,6 +24,7 @@ import {
   OperationCancelledError,
   ParseError,
   PolicyViolationError,
+  PrivacyRoutingError,
   QuotaExceededError,
   RateLimitError,
   redact,
@@ -149,6 +150,16 @@ const HIERARCHY: readonly {
     messageKey: "rh-error-bad-request",
     retryable: false,
     userFacing: false,
+  },
+  {
+    // Owner, 2026-10-21 (`plan/00` §6 item 262(c)): OpenRouter's guardrail
+    // 404, the one user-facing `BadRequestError`.
+    name: "PrivacyRoutingError",
+    instance: new PrivacyRoutingError(404, "x"),
+    code: "PRIVACY_ROUTING",
+    messageKey: "rh-error-privacy-routing",
+    retryable: false,
+    userFacing: true,
   },
   {
     name: "SourceError",
@@ -291,6 +302,19 @@ describe("docs/07 §10.1 hierarchy", () => {
   });
 
   describe("inheritance §10.1 declares", () => {
+    it("makes PrivacyRoutingError a BadRequestError that is user-facing, and leaves BadRequestError log-only", () => {
+      const routing = new PrivacyRoutingError(404, "x", { modelId: "m" });
+      expect(routing).toBeInstanceOf(BadRequestError);
+      expect(routing.httpStatus).toBe(404);
+      expect(routing.toSerialized()).toMatchObject({
+        code: "PRIVACY_ROUTING",
+        messageKey: "rh-error-privacy-routing",
+        httpStatus: 404,
+        retryable: false,
+      });
+      expect(new BadRequestError(404, "x").userFacing).toBe(false);
+    });
+
     it("makes MissingCredentialError a ConfigurationError", () => {
       expect(new MissingCredentialError("openai")).toBeInstanceOf(
         ConfigurationError,

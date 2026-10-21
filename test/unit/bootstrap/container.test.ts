@@ -58,6 +58,8 @@ import {
   CROSSREF_HOST,
   EBI_HOST,
   HOST_POLICIES,
+  LLM_HOSTS,
+  LLM_RETRY_BUDGET,
   NCBI_HOST,
   PMC_IDCONV_HOST,
   SEMANTICSCHOLAR_HOST,
@@ -423,7 +425,8 @@ describe("installServices wires the graph Phase 1 built", () => {
     // bioRxiv/medRxiv (`P2-T07`, one host). Phase 1 pinned this at one host;
     // the pin went with the second adapter. Last, the NCBI ID Converter's
     // host (owner, 2026-10-19, `plan/00` §6 item 214), which the writer's
-    // PMCID route calls through this same client.
+    // PMCID route calls through this same client. Then the four LLM hosts
+    // (owner, 2026-10-21, `plan/00` §6 item 260), one row each.
     expect(graph.limiters.hosts).toEqual([
       NCBI_HOST,
       EBI_HOST,
@@ -432,7 +435,14 @@ describe("installServices wires the graph Phase 1 built", () => {
       SEMANTICSCHOLAR_HOST,
       BIORXIV_HOST,
       PMC_IDCONV_HOST,
+      LLM_HOSTS.openrouter,
+      LLM_HOSTS.openai,
+      LLM_HOSTS.anthropic,
+      LLM_HOSTS.gemini,
     ]);
+    for (const host of Object.values(LLM_HOSTS)) {
+      expect(graph.limiters.limiterFor(host), host).toBeDefined();
+    }
     expect(graph.limiters.limiterFor(PMC_IDCONV_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(NCBI_HOST)).toBeDefined();
     expect(graph.limiters.limiterFor(EBI_HOST)).toBeDefined();
@@ -1608,9 +1618,12 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
       );
 
       expect(outcome.error, row.host).toBeInstanceOf(UpstreamServerError);
-      // §7.3's attempt cap counts the first attempt: 3 → 3 requests.
+      // §7.3's attempt cap counts the first attempt: 3 → 3 requests, and
+      // an LLM row's 5 (`LLM_RETRY_BUDGET`, item 260) → 5.
       expect(transport.calls, row.host).toHaveLength(budget.maxAttempts);
-      expect(transport.calls).toHaveLength(3);
+      expect(transport.calls, row.host).toHaveLength(
+        row.retry === LLM_RETRY_BUDGET ? 5 : 3,
+      );
       const at = transport.calls.map((call) => call.atMs);
       const t0 = must(at[0], "the first call");
       // `withRetry` enters the first retry with `prevDelayMs = 0`, so the
@@ -1632,11 +1645,14 @@ describe("item 228: installServices supplies docs/07 §7.3's retry policy", () =
       expect(second, row.host).toBeLessThanOrEqual(
         Math.max(Math.min(budget.capMs, budget.baseMs * 3), tokenMs) + 1,
       );
-      // Two retries, each announced at `warn` with the wait it took.
+      // One retry fewer than the attempts, each announced at `warn` with the
+      // wait it took: two on a literature row, four on an LLM row.
       expect(
         linesWith(h.sink, "http retry").map((line) => line.attempt),
         row.host,
-      ).toEqual([1, 2]);
+      ).toEqual(
+        Array.from({ length: budget.maxAttempts - 1 }, (_, i) => i + 1),
+      );
 
       await h.scope.unregisterAll();
     }

@@ -691,22 +691,24 @@ describe("docs/07 §7.3's retry budget on the shipped policy rows", () => {
 // ---------------------------------------------------------------------------
 
 describe("an LLM adapter's row is read against §7.3's shared LLM/TTS row (P3-T38, item 244)", () => {
-  // No LLM row ships yet: `P3-T07`–`P3-T10` add them, possibly in parallel,
-  // and the first would otherwise fail the two tests above. These rows are
-  // synthetic; their rate is a placeholder, because how an LLM row's rate is
-  // set is still `P3-T07`'s open line and nothing here reads it.
+  // The four LLM rows ship since 2026-10-21 (owner, `plan/00` §6 item 260),
+  // and the two tests above already read them. The first test here names the
+  // shipped `api.anthropic.com` row; the hand-built rows below use hosts no
+  // row ships, and their rate is a placeholder nothing here reads (the LLM
+  // rows' rate cells are checked in `hostLimiter.test.ts`). *(Rewritten
+  // 2026-10-21, item 260: the first test added a synthetic
+  // `api.anthropic.com` row, which the shipped one now duplicates.)*
   const PLACEHOLDER_RATE = { ratePerSecond: 1, burst: 1, maxConcurrent: 1 };
-  const anthropicRow: HostRateLimitPolicy = {
-    host: "api.anthropic.com",
-    withoutKey: PLACEHOLDER_RATE,
-    retry: LLM_RETRY_BUDGET,
-  };
+  const anthropicRow: HostRateLimitPolicy = must(
+    HOST_POLICIES.find((row) => row.host === "api.anthropic.com"),
+    "the shipped api.anthropic.com row",
+  );
 
-  it("accepts a synthetic api.anthropic.com row carrying LLM_RETRY_BUDGET, beside every shipped row", () => {
+  it("reads the shipped api.anthropic.com row, which carries LLM_RETRY_BUDGET, against the shared row", () => {
     const table = readSection73Table();
-    const policies = [...HOST_POLICIES, anthropicRow];
-    expect(() => expectTranscribed(table, policies)).not.toThrow();
-    expect(() => expectNamed(table, policies)).not.toThrow();
+    expect(anthropicRow.retry).toBe(LLM_RETRY_BUDGET);
+    expect(() => expectTranscribed(table, [anthropicRow])).not.toThrow();
+    expect(() => expectNamed(table, [anthropicRow])).not.toThrow();
     // It was read against the shared row, not against a row of its own.
     expect(() =>
       section73Cell(table, anthropicRow.host, "Attempt cap"),

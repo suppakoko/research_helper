@@ -41,7 +41,6 @@ import {
 } from "../../../src/llm/gemini/geminiProvider";
 import {
   buildInteractionBody,
-  type Effort,
   mapEffortToThinkingLevel,
   toOpenApiSchema,
 } from "../../../src/llm/gemini/mapper";
@@ -51,7 +50,11 @@ import {
   DOCUMENTED_PAID_SIGNALS,
 } from "../../../src/llm/gemini/tierDetect";
 import { createBaseUrlResolver } from "../../../src/llm/shared/baseUrl";
-import type { ChatRequest, LLMCallContext } from "../../../src/llm/types";
+import type {
+  ChatRequest,
+  Effort,
+  LLMCallContext,
+} from "../../../src/llm/types";
 import { Secret } from "../../../src/prefs/secrets";
 import { mockSettings } from "../../helpers/mockLLM";
 
@@ -185,8 +188,9 @@ function recordingClock(): Clock & { readonly slept: number[] } {
 
 /**
  * The shipped `createHttpClient`, with the LLM rows' retry budget for Gemini's
- * host. (No `HOST_POLICIES` row for it ships yet — see the card report — so
- * the budget is supplied here the way `createRetryFor` would build it.)
+ * host, supplied here the way `createRetryFor` builds it from the host's
+ * `HOST_POLICIES` row (shipped 2026-10-21, `plan/00` §6 item 260; this test
+ * file does not install the limiter registry).
  */
 function shippedClient(transport: HttpTransport, clock: Clock): HttpClient {
   return createHttpClient({
@@ -901,6 +905,53 @@ describe("the shared effort scale onto thinking_level (step 2)", () => {
     };
     for (const [effort, level] of Object.entries(table)) {
       expect(mapEffortToThinkingLevel(effort as Effort), effort).toBe(level);
+      expect(
+        buildInteractionBody(chatRequest({ effort: effort as Effort }))
+          .generation_config,
+        effort,
+      ).toMatchObject({ thinking_level: level });
+    }
+  });
+
+  it("sends ChatRequest.effort as generation_config.thinking_level on the wire, and none when it is absent (item 262)", async () => {
+    const client = recordingClient([
+      { status: 200, body: JSON.stringify(interaction()) },
+    ]);
+    const provider = createGeminiProvider(
+      deps(client, memorySecrets(syntheticKey())),
+    );
+    await provider.chat(chatRequest({ effort: "low" }), ctx());
+    await provider.chat(chatRequest({ effort: "max" }), ctx());
+    await provider.chat(chatRequest(), ctx());
+    expect(client.requests).toHaveLength(3);
+    const configs = client.requests.map(
+      ({ options }) =>
+        parsedBody(options).generation_config as Record<string, unknown>,
+    );
+    expect(configs[0]?.thinking_level).toBe("low");
+    expect(configs[1]?.thinking_level).toBe("high");
+    expect(configs[2]).not.toHaveProperty("thinking_level");
+  });
+
+  it("sends no effort on the legacy generateContent fallback: docs/03 §4.5 documents no thinking field", async () => {
+    const client = recordingClient([
+      {
+        status: 200,
+        body: JSON.stringify({
+          candidates: [
+            { content: { parts: [{ text: "ok" }] }, finishReason: "STOP" },
+          ],
+        }),
+      },
+    ]);
+    await chatViaGenerateContent(
+      deps(client, memorySecrets(syntheticKey())),
+      chatRequest({ effort: "low" }),
+      ctx(),
+    );
+    const text = JSON.stringify(parsedBody(client.requests[0]?.options ?? {}));
+    for (const absent of ["thinking", "effort", "reasoning"]) {
+      expect(text, absent).not.toContain(absent);
     }
   });
 });

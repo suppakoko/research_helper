@@ -24,6 +24,18 @@
  * `routing.requireNoTraining` adds nothing: `data_collection: "deny"` is
  * already on every request.
  *
+ * ## `reasoning.effort`
+ *
+ * `ChatRequest.effort` (`docs/07` §4.3, owner, 2026-10-21, `plan/00` §6
+ * item 262(a)) is sent as `reasoning: { effort }`, the field `docs/03`
+ * §14.2's OpenRouter sketch sends. The sketch forwards the shared level
+ * unmapped, which §14.3 forbids for every adapter ("do not pass the string
+ * through blind"); the level is therefore folded by `toFiveLevelEffort`
+ * (`none` and `minimal` → `low`), the scale §9.4's catalogue entry lists
+ * as `supported_efforts` (`low` … `max`). With no effort, no `reasoning`
+ * is sent and the route's own default applies. Per-model
+ * `supported_efforts` is not read: the catalogue parser does not keep it.
+ *
  * ## Deliberately absent
  *
  * - **`response_format` for `{ kind: "json" }`.** `docs/03` documents only
@@ -34,15 +46,15 @@
  * - **`sort`, `allow_fallbacks`, `order`.** `docs/03` §15.3 lists them as
  *   recommendations with defaults OpenRouter already applies; `ChatRequest`
  *   carries no field for them, and the card's steps do not ask for them.
- * - **`reasoning`.** `ChatRequest` (`docs/07` §4.3) has no effort field.
  * - **`servedBy`.** `docs/03` §5.4's answer names no upstream; the routing
  *   metadata exists only under `X-OpenRouter-Metadata: enabled` (§5.2), whose
  *   answer shape is not recorded. It is `undefined` rather than guessed.
  */
 
-import { BadRequestError, redact } from "../../core/errors";
+import { PrivacyRoutingError, redact } from "../../core/errors";
 import { PROJECT_URL, TOOL_NAME } from "../../core/http/userAgent";
 import type { ProviderId } from "../../model/ids";
+import { type FiveLevelEffort, toFiveLevelEffort } from "../shared/effort";
 import type {
   ChatMessage,
   ChatRequest,
@@ -135,6 +147,7 @@ export interface OpenRouterChatBody {
   readonly top_p?: number;
   readonly stop?: readonly string[];
   readonly seed?: number;
+  readonly reasoning?: { readonly effort: FiveLevelEffort };
   readonly response_format?: OpenRouterResponseFormat;
   readonly provider: OpenRouterProviderBlock;
 }
@@ -218,6 +231,9 @@ export function toOpenRouterBody(
     ...(request.stop !== undefined &&
       request.stop.length > 0 && { stop: [...request.stop] }),
     ...(request.seed !== undefined && { seed: request.seed }),
+    ...(request.effort !== undefined && {
+      reasoning: { effort: toFiveLevelEffort(request.effort) },
+    }),
     ...(format?.kind === "json_schema" && {
       response_format: {
         type: "json_schema" as const,
@@ -394,14 +410,17 @@ export function isGuardrailNotFound(
 }
 
 /**
- * The `BadRequestError` for a guardrail 404, naming the cause and both
+ * The `PrivacyRoutingError` for a guardrail 404, naming the cause and both
  * remedies (`docs/09` §3.4 rule 2).
  *
- * The message is a **developer** message: `BadRequestError` is
- * `userFacing = false` and its `messageKey` is `rh-error-bad-request`
- * (`docs/07` §10.1), so no user-visible string is added here. The machine
- * values in the context — `cause`, `remedies`, `restrictions` — are what a
- * surface reads to explain it (`P3-T07` report, Contradiction 2).
+ * **What the user sees** is its `messageKey`, `rh-error-privacy-routing`,
+ * formatted with `$model` (`context.modelId`): a user-facing
+ * `BadRequestError` subclass (`docs/07` §10.1, owner, 2026-10-21,
+ * `plan/00` §6 item 262(c)). Until that date this returned a plain
+ * `BadRequestError`, which is `userFacing = false`, so the explanation
+ * reached only the log. The English `message` below stays the
+ * **developer** half, and the context's machine values — `cause`,
+ * `remedies`, `restrictions` — stay for a surface that wants them.
  *
  * @param modelId - the model the request named
  * @param status - the HTTP status (404)
@@ -412,7 +431,7 @@ export function openRouterGuardrailError(
   modelId: string,
   status: number,
   block: OpenRouterProviderBlock,
-): BadRequestError {
+): PrivacyRoutingError {
   const restrictions = [
     "data_collection: deny",
     ...(block.zdr === true ? ["zdr"] : []),
@@ -421,7 +440,7 @@ export function openRouterGuardrailError(
     ...(block.require_parameters === true ? ["require_parameters"] : []),
   ];
   const safeModel = redact(modelId);
-  return new BadRequestError(
+  return new PrivacyRoutingError(
     status,
     `OpenRouter has no endpoint for ${safeModel} that satisfies this request's ` +
       `routing restrictions (${restrictions.join(", ")}). Either choose a ` +

@@ -33,9 +33,7 @@ import type { SecretId, SecretStore } from "../../../src/core/secretStore";
 import {
   buildResponsesBody,
   clampMaxOutputTokens,
-  type Effort,
   isChatModelId,
-  toOpenAiEffort,
   UNKNOWN_TOKEN_LIMIT,
 } from "../../../src/llm/openai/mapper";
 import {
@@ -43,9 +41,11 @@ import {
   OPENAI_SECRET_ID,
 } from "../../../src/llm/openai/openAiProvider";
 import { createBaseUrlResolver } from "../../../src/llm/shared/baseUrl";
+import { toFiveLevelEffort } from "../../../src/llm/shared/effort";
 import { estTokens } from "../../../src/llm/shared/tokenEstimate";
 import type {
   ChatRequest,
+  Effort,
   LLMCallContext,
   LLMProvider,
 } from "../../../src/llm/types";
@@ -424,12 +424,36 @@ describe("the Responses API request (P3-T08 steps 1–3)", () => {
       max: "max",
     };
     for (const [effort, level] of Object.entries(expected)) {
-      expect(toOpenAiEffort(effort as Effort)).toBe(level);
+      expect(toFiveLevelEffort(effort as Effort)).toBe(level);
+      expect(
+        buildResponsesBody(request({ effort: effort as Effort })).reasoning,
+        effort,
+      ).toStrictEqual({ effort: level });
     }
-    const body = buildResponsesBody(request(), { effort: "minimal" });
+    const body = buildResponsesBody(request({ effort: "minimal" }));
     expect(body.reasoning).toStrictEqual({ effort: "low" });
     expect(JSON.stringify(body)).not.toContain("minimal");
     expect(buildResponsesBody(request())).not.toHaveProperty("reasoning");
+  });
+
+  it("sends ChatRequest.effort as reasoning.effort on the wire, and no reasoning when it is absent (item 262)", async () => {
+    const h = harness([
+      { status: 200, body: responsesBody() },
+      { status: 200, body: responsesBody() },
+      { status: 200, body: responsesBody() },
+    ]);
+
+    await h.provider.chat(request({ effort: "low" }), ctx());
+    await h.provider.chat(request({ effort: "none" }), ctx());
+    await h.provider.chat(request(), ctx());
+
+    expect(sentBody(h.transport.sent[0]).reasoning).toStrictEqual({
+      effort: "low",
+    });
+    expect(sentBody(h.transport.sent[1]).reasoning).toStrictEqual({
+      effort: "low",
+    });
+    expect(sentBody(h.transport.sent[2])).not.toHaveProperty("reasoning");
   });
 });
 

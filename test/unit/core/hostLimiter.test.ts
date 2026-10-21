@@ -15,11 +15,26 @@ import {
 import { createBackoff } from "../../../src/core/rateLimit/backoff";
 import {
   adoptAdvertisedLimits,
+  createHostLimiterRegistry,
+  HOST_POLICIES,
   LLM_ATTEMPT_TIMEOUT_MS,
+  LLM_HOSTS,
   LLM_RETRY_BUDGET,
   parseAdvertisedLimits,
 } from "../../../src/core/rateLimit/hostLimiter";
-import { type RateLimiterConfig } from "../../../src/core/rateLimit/tokenBucket";
+import {
+  type RateLimiterConfig,
+  TokenBucket,
+} from "../../../src/core/rateLimit/tokenBucket";
+import { ANTHROPIC_HOST } from "../../../src/llm/anthropic/anthropicProvider";
+import { GEMINI_HOST } from "../../../src/llm/gemini/geminiProvider";
+import { OPENAI_RATE_LIMIT_KEY } from "../../../src/llm/openai/openAiProvider";
+import { createOpenRouterProvider } from "../../../src/llm/openrouter/openRouterProvider";
+import {
+  createBaseUrlResolver,
+  DEFAULT_BASE_URLS,
+} from "../../../src/llm/shared/baseUrl";
+import type { ProviderId } from "../../../src/model/ids";
 
 /**
  * `P2-T23`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network and no
@@ -413,5 +428,106 @@ describe("the LLM hosts' retry budget and attempt timeout (P3-T05, item 240)", (
     }
     expect(await settled).toBeInstanceOf(UpstreamServerError);
     expect(startedAt).toEqual([0, 1000, 4000, 13_000, 40_000]);
+  });
+});
+
+/* ------------------------------------------------- the LLM hosts' rows */
+
+/** The four providers, in `HOST_POLICIES` order. */
+const LLM_PROVIDERS: readonly ProviderId[] = [
+  "openrouter",
+  "openai",
+  "anthropic",
+  "gemini",
+];
+
+describe("the four LLM hosts' HOST_POLICIES rows (owner, 2026-10-21, item 260)", () => {
+  it("ships one row per LLM host with docs/07 §7.3's LLM/TTS rate, burst and max concurrent cells", () => {
+    const cells = llmRowCells();
+    // The "(LLM)" marker says the figure is the LLM hosts' and not a TTS
+    // one (TTS is undecided), as on the three retry cells.
+    expect(cells.Rate).toMatch(/^[\d.]+\/s \(LLM\)$/);
+    expect(cells["Max concurrent"]).toMatch(/ \(LLM\)$/);
+    const fromDocument: RateLimiterConfig = {
+      ratePerSecond: leadingNumber(cells.Rate),
+      burst: leadingNumber(cells.Burst),
+      maxConcurrent: leadingNumber(cells["Max concurrent"]),
+    };
+    expect(fromDocument).toStrictEqual({
+      ratePerSecond: 1,
+      burst: 1,
+      maxConcurrent: 3,
+    });
+    const llmRows = HOST_POLICIES.filter(
+      (row) => row.retry === LLM_RETRY_BUDGET,
+    );
+    expect(llmRows.map((row) => row.host)).toEqual(
+      LLM_PROVIDERS.map((id) => LLM_HOSTS[id]),
+    );
+    for (const row of llmRows) {
+      // Exactly the four members the decision names: no key mode, no
+      // presence flag, not header-driven.
+      expect(row, row.host).toStrictEqual({
+        host: row.host,
+        withoutKey: fromDocument,
+        retry: LLM_RETRY_BUDGET,
+      });
+    }
+  });
+
+  it("takes each host from the provider's documented base URL, and agrees with each adapter's rateLimitKey", () => {
+    const resolver = createBaseUrlResolver({ override: () => "" });
+    for (const id of LLM_PROVIDERS) {
+      expect(LLM_HOSTS[id], id).toBe(new URL(DEFAULT_BASE_URLS[id]).host);
+      expect(LLM_HOSTS[id], id).toBe(resolver.effectiveHost(id));
+    }
+    expect(LLM_HOSTS.anthropic).toBe(ANTHROPIC_HOST);
+    expect(LLM_HOSTS.gemini).toBe(GEMINI_HOST);
+    expect(LLM_HOSTS.openai).toBe(OPENAI_RATE_LIMIT_KEY);
+    // OpenRouter's key is a getter over the resolver (a gateway override
+    // moves it), so it is read off a constructed adapter.
+    const openRouter = createOpenRouterProvider({
+      secrets: undefined,
+      baseUrls: resolver,
+    });
+    expect(LLM_HOSTS.openrouter).toBe(openRouter.rateLimitKey);
+    expect(Object.isFrozen(LLM_HOSTS)).toBe(true);
+  });
+
+  it("gives each LLM host a bucket of its own that admits one request, then the next after one second", async () => {
+    const clock = createManualClock();
+    const registry = createHostLimiterRegistry({ clock });
+    const limiters = LLM_PROVIDERS.map((id) =>
+      registry.limiterFor(LLM_HOSTS[id]),
+    );
+    expect(new Set(limiters).size).toBe(4);
+    for (const limiter of limiters) {
+      expect(limiter).toBeInstanceOf(TokenBucket);
+      expect((limiter as TokenBucket).currentConfig).toStrictEqual({
+        ratePerSecond: 1,
+        burst: 1,
+        maxConcurrent: 3,
+      });
+    }
+
+    // Burst 1: the first request goes at once, the second waits for the
+    // token that refills at 1/s. Another LLM host's bucket is not touched.
+    const openRouter = limiters[0] as TokenBucket;
+    const openAi = limiters[1] as TokenBucket;
+    await openRouter.acquire();
+    let second = false;
+    const pending = openRouter.acquire().then(() => {
+      second = true;
+    });
+    for (let i = 0; i < 5 && clock.pending === 0; i += 1) {
+      await Promise.resolve();
+    }
+    await openAi.acquire();
+    clock.advance(999);
+    await Promise.resolve();
+    expect(second).toBe(false);
+    clock.advance(1);
+    await pending;
+    expect(second).toBe(true);
   });
 });

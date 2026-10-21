@@ -1157,6 +1157,13 @@ export interface ChatMessage {
   readonly content: string;
 }
 
+/**
+ * Reasoning / thinking effort on one shared scale (03 §14.1), the superset of every provider's:
+ * `none` and `minimal` exist only so Gemini's lowest level has somewhere to land (03 §14.3).
+ * Each adapter maps it onto its own provider's scale through a function; never forwarded blind.
+ */
+export type Effort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
 export interface ChatRequest {
   readonly model: string;
   readonly messages: readonly ChatMessage[];
@@ -1164,6 +1171,8 @@ export interface ChatRequest {
   readonly temperature?: number;
   readonly topP?: number;
   readonly stop?: readonly string[];
+  /** Absent: nothing is sent and the provider's own default applies. */
+  readonly effort?: Effort;
   /** Request structured output. Providers without native support get prompt coercion. */
   readonly responseFormat?:
     | { readonly kind: "text" }
@@ -1264,6 +1273,24 @@ export interface BudgetGuard {
   readonly limitUsd: number | undefined;
 }
 ```
+
+> **`ChatRequest.effort` and the shared `Effort` type. Decided 2026-10-21 (owner; `plan/00` §6 item 262(a)).**
+> Until this date `ChatRequest` had no effort member, so no adapter ever sent OpenAI's `reasoning` or Gemini's
+> `thinking_level`, and three adapters each carried a local copy of `03-llm-provider-integration.md` §14.1's `Effort`
+> union. There is now one `Effort`, declared above and in `src/llm/types.ts`. When `effort` is absent the adapter sends
+> nothing and the provider's own default applies. Each adapter maps it as `03-llm-provider-integration.md` documents for
+> its provider, and never forwards it unmapped (§14.3):
+>
+> | Provider | Field sent | Mapping | Source in doc 03 |
+> |---|---|---|---|
+> | OpenAI | `reasoning.effort` | `none`, `minimal` → `low`; the other five unchanged | §2.3, §2.5, §14.2 |
+> | Anthropic | `output_config.effort` (beside `output_config.format` when a schema is sent) | `none`, `minimal` → `low`; the other five unchanged. No `thinking` field is sent. | §3.6, §14.2 |
+> | Gemini | `generation_config.thinking_level` | `none`, `minimal` → `minimal`; `low`; `medium`; `high`, `xhigh`, `max` → `high` | §4.3, §14.2 |
+> | OpenRouter | `reasoning.effort` | `none`, `minimal` → `low`; the other five unchanged | §14.2's sketch for the field; §14.3's "every adapter" rule and §9.4's `supported_efforts` (`low` … `max`) for the mapping |
+>
+> Gemini's legacy `generateContent` fallback sends no effort: §4.5 documents no thinking field for it. Anthropic's
+> exact token counter (`POST /v1/messages/count_tokens`) sends no effort either. The per-paper summarizer passes
+> `effort: "low"` (`P3-T25`; doc 03 §2.5, §3.6 and §12.3 item 1).
 
 > **`LLMRouter`, the one entry point. Decided 2026-10-21 (owner; `plan/00` §6 item 248).** §4.5's
 > `PipelineContext.llm` named an `LLMRouter` that no document declared. It is declared below, in
@@ -2536,7 +2563,7 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 | `www.ebi.ac.uk` | 5/s | 5 | 3 | 1000 ms | 30 000 ms | 3 | See the unverified note below. |
 | `api.biorxiv.org` | 1/s | 2 | 2 | 1000 ms | 30 000 ms | 3 | No published limit exists; this is a self-imposed conservative default. |
 | `pmc.ncbi.nlm.nih.gov` | 2.5/s, never keyed | 1 | 3 | 1000 ms | 30 000 ms | 3 | The NCBI ID Converter (`02-literature-database-apis.md` §3.7), which resolves a PMCID-only record before Strategy B's lookup (§12.1). An NCBI service on a host of its own, so it gets a bucket of its own with the `eutils.ncbi.nlm.nih.gov` row's **unkeyed** values; **no API key is ever sent** to it. `tool` and `email` carry the maintainer address, as on E-utilities (`02-literature-database-apis.md` §2.2). See the dated note below. |
-| LLM/TTS hosts | from provider prefs | 1 | = `llm` pool size | 1000 ms (LLM) | 60 000 ms (LLM) | 5 (LLM) | Driven by `Retry-After` and provider rate-limit headers rather than a fixed guess. The three retry cells are the **LLM** hosts' budget (`LLM_RETRY_BUDGET`), and one LLM attempt may wait up to 3 minutes; TTS hosts are not decided. See the dated note "LLM hosts' retry budget" below. *(Corrected 2026-10-20, `plan/00` §6 item 240: the three retry cells read `—`.)* |
+| LLM/TTS hosts | 1/s (LLM) | 1 | 3 (LLM) | 1000 ms (LLM) | 60 000 ms (LLM) | 5 (LLM) | Each LLM host is paced at a fixed 1 request per second, burst 1, at most 3 in flight (the `concurrency` default, §8.5), and a `Retry-After` still `penalize`s the host. The three retry cells are the **LLM** hosts' budget (`LLM_RETRY_BUDGET`), and one LLM attempt may wait up to 3 minutes; TTS hosts are not decided. See the dated notes "LLM hosts' retry budget" and "LLM hosts' pacing" below. *(Corrected 2026-10-20, `plan/00` §6 item 240: the three retry cells read `—`.)* *(Corrected 2026-10-21, `plan/00` §6 item 260: the Rate cell read "from provider prefs", and no such preference exists in §8.5; the Max concurrent cell read "= `llm` pool size"; and this cell began "Driven by `Retry-After` and provider rate-limit headers rather than a fixed guess".)* |
 
 > **Retry cells filled 2026-10-14 by the owner's decision (`P2-T03` report, `plan/00` §6 item 126).** Until this date the
 > five non-NCBI rows carried `—` in the three retry columns, and `plan/README.md` §5 rule 4 forbids the code to carry a
@@ -2707,6 +2734,24 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 > - **LLM rows are checked against the shared row.** `test/unit/core/backoff.test.ts` checks a `HOST_POLICIES` row whose
 >   `retry` is `LLM_RETRY_BUDGET` (the same object) against the "LLM/TTS hosts" row of the table above. Every other row
 >   is still checked against the row that names its host.
+
+> **LLM hosts' pacing. Decided 2026-10-21 (owner; `plan/00` §6 item 260).** Until this date no LLM host had a
+> `HOST_POLICIES` row: the Rate cell above read "from provider prefs", no such preference exists in §8.5, and
+> `TokenBucket` refuses a rate that is not positive. So `createRetryFor` gave every LLM host one attempt and no pacing.
+> - **One row per LLM host, all four the same.** `openrouter.ai`, `api.openai.com`, `api.anthropic.com` and
+>   `generativelanguage.googleapis.com` each get `withoutKey: { ratePerSecond: 1, burst: 1, maxConcurrent: 3 }` and
+>   `retry: LLM_RETRY_BUDGET` (the object itself). Each host is the authority of the adapter's documented base URL
+>   (`DEFAULT_BASE_URLS` in `src/llm/shared/baseUrl.ts`).
+> - **No `withKey` and no `keyPresencePref`.** Every chat request needs a key, so there is no keyless mode to tell
+>   apart. The one policy sits in `withoutKey`, as on the literature rows that have no key mode.
+> - **Max concurrent is a fixed 3, the `concurrency` default (§8.5), not the live preference.** A user who raises
+>   `concurrency` above 3 gets more `llm` workers, but still at most three requests in flight to any one LLM host.
+> - **A base-URL override is not covered.** The client paces by the request URL's host, so a request sent to an
+>   overriding gateway's host (§8.5's `<provider>.baseUrl`) finds no row and still gets one attempt and no pacing.
+> - **TTS hosts are not decided.** That is why the Rate and Max concurrent cells carry the "(LLM)" marker, like the
+>   three retry cells.
+> - **Checked against this table.** `test/unit/core/hostLimiter.test.ts` reads the LLM/TTS row's Rate, Burst and Max
+>   concurrent cells and compares every LLM row with them.
 
 ### 7.4 Cancellation
 
@@ -3832,6 +3877,10 @@ export class BadRequestError extends UpstreamError {       // 4xx other
   readonly code = "BAD_REQUEST"; readonly messageKey = "rh-error-bad-request"; readonly retryable = false;
   override readonly userFacing = false;  // almost always our bug
 }
+export class PrivacyRoutingError extends BadRequestError { // OpenRouter's guardrail 404 (09 §3.4 rule 2)
+  override readonly code = "PRIVACY_ROUTING"; override readonly messageKey = "rh-error-privacy-routing";
+  override readonly userFacing = true;   // not our bug: the user can choose another model or relax privacy
+}
 
 /* ---- Adapter-level ---- */
 export class SourceError extends ResearchHelperError {
@@ -3890,6 +3939,24 @@ export class PolicyViolationError extends ResearchHelperError {
 }
 ```
 
+> **`PrivacyRoutingError`, OpenRouter's guardrail 404. Decided 2026-10-21 (owner; `plan/00` §6 item 262(c)).**
+> `09-security-privacy-and-api-keys.md` §3.4 rule 2 wants this 404 explained to the user. `P3-T07` mapped it onto
+> `BadRequestError`, which is `userFacing = false` and whose `rh-error-bad-request` text ("Research Helper sent a
+> request … could not accept") is the wrong explanation, so the user saw nothing useful. The owner asked for a
+> dedicated user-facing message; the smallest mechanism inside this hierarchy is one subclass:
+> - **A `BadRequestError`, so nothing that already handles a 4xx changes.** It keeps `retryable = false` and the
+>   inherited `(httpStatus, message, ctx)` constructor; only `code`, `messageKey` and `userFacing` differ. The OpenRouter
+>   adapter (`openRouterGuardrailError` in `src/llm/openrouter/mapper.ts`) is its only thrower, keyed off the status
+>   plus the error body's structured fields as rule 2 requires.
+> - **`messageKey` is `rh-error-privacy-routing`, and its message takes `$model`.** The `rh-error-` prefix is this
+>   hierarchy's, which `test/unit/core/errors.test.ts` and `test/integration/l10n.spec.ts` both enforce for every
+>   class. The English names both remedies: choose another model, or change the privacy mode from Strict to Balanced.
+>   It states the consequence too, and says that Balanced still sends `data_collection: "deny"` (`09` §3.5), so in
+>   Balanced only another model helps.
+> - **In code, `BadRequestError.userFacing` is annotated `: boolean`.** As the note in `src/core/errors.ts` records for
+>   `code` and `messageKey`, the literal `false` would otherwise make this subclass's `true` a TS2416. No runtime value
+>   changes.
+
 ### 10.2 User-facing vs. developer-facing
 
 | Audience | Where it appears | Content |
@@ -3910,6 +3977,7 @@ Mapping of common conditions to user text:
 | `OfflineError` | "No internet connection." | "Retry" |
 | `BudgetExceededError` | "Stopped at the $2.00 limit you set for this task." | "Raise limit and continue" / "Stop" |
 | `ContentFilterError` | "The model declined to summarize this paper." | Item marked skipped, job continues |
+| `PrivacyRoutingError` (OpenRouter's guardrail 404) | "OpenRouter has no provider for *model* that meets your privacy mode." | Choose a different model, or change the privacy mode from Strict to Balanced (the full text is in the `en-US` bundle's `rh-error-privacy-routing`). *(Added 2026-10-21, `plan/00` §6 item 262(c).)* |
 | `ParseError` | *(nothing)* | Logged; item counted as failed with a generic message |
 
 ### 10.3 Structured logging

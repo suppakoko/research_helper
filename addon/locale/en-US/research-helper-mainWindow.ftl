@@ -130,6 +130,20 @@ research-helper-source-biorxiv = bioRxiv
 research-helper-source-medrxiv = medRxiv
 
 
+## LLM provider display names — `LLMProvider.displayNameKey` (docs/07 §4.3)
+##
+## One per adapter (`P3-T07`–`P3-T10`), one id scheme,
+## `research-helper-provider-<id>` (owner, 2026-10-21, `plan/00` §6 item
+## 262(b)). **Never translated** (`docs/08` §10.3: provider names are not
+## translated), so the ko-KR bundle carries these verbatim, like the source
+## names above.
+
+research-helper-provider-openrouter = OpenRouter
+research-helper-provider-openai = OpenAI
+research-helper-provider-anthropic = Anthropic
+research-helper-provider-gemini = Google Gemini
+
+
 ## Search provenance (FR-8, P1-T17)
 ##
 ## FR-8 fixes the note title format literally as
@@ -315,6 +329,16 @@ rh-error-context-length = The text is too long for { $model } to read in one req
 rh-error-content-filter = The model declined to summarize this paper.
 
 rh-error-structured-output = { $provider } returned a summary Research Helper could not read.
+
+# `PrivacyRoutingError` (owner, 2026-10-21, `plan/00` §6 item 262(c);
+# `docs/07` §10.1): OpenRouter's guardrail 404, which `docs/09` §3.4 rule 2
+# says gets a real explanation naming the cause and both ways out. The second
+# way out is scoped on purpose: `data_collection: "deny"` is sent in every
+# mode (`docs/09` §3.5), so leaving Strict drops only the zero-retention
+# requirement, and in Balanced only another model helps. "Strict" and
+# "Balanced" are the privacy-mode menu's labels (`docs/08` §7.3).
+# `$model` is the model ID, untranslated (`docs/08` §10.3).
+rh-error-privacy-routing = OpenRouter has no provider for { $model } that meets your privacy mode. Choose a different model, or change the privacy mode from Strict to Balanced if it is set to Strict. Balanced allows providers that keep your text for a time and sends PDF full text, but still refuses providers that may train on your data.
 
 
 ## The preference pane — literature-source credentials (docs/08 §7.3–7.5,

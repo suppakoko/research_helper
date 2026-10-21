@@ -461,7 +461,10 @@ export class BadRequestError extends UpstreamError {
   readonly code: string = "BAD_REQUEST";
   readonly messageKey: string = "rh-error-bad-request";
   readonly retryable: boolean = false;
-  override readonly userFacing = false; // almost always our bug
+  // `: boolean`, which §10.1 does not write, for the reason this section's
+  // header gives for `code` and `messageKey`: the literal `false` would make
+  // `PrivacyRoutingError`'s `true` a TS2416. No runtime value changes.
+  override readonly userFacing: boolean = false; // almost always our bug
 
   /**
    * The response body, **already redacted**, when the thrower attached one
@@ -480,6 +483,22 @@ export class BadRequestError extends UpstreamError {
     const { body } = this.context;
     return typeof body === "string" ? body : undefined;
   }
+}
+
+/**
+ * OpenRouter's guardrail 404: no endpoint for the requested model satisfies
+ * the request's routing restrictions (`docs/09` §3.4 rule 2). A
+ * `BadRequestError` with its own `code` and `messageKey`, and user-facing,
+ * because the user can act on it: choose another model, or change the privacy
+ * mode from strict to balanced. `docs/07` §10.1 and its dated note
+ * "`PrivacyRoutingError`, OpenRouter's guardrail 404" (owner, 2026-10-21,
+ * `plan/00` §6 item 262(c)). Thrown only by `openRouterGuardrailError` in
+ * `src/llm/openrouter/mapper.ts`; its message takes `$model`.
+ */
+export class PrivacyRoutingError extends BadRequestError {
+  override readonly code: string = "PRIVACY_ROUTING";
+  override readonly messageKey: string = "rh-error-privacy-routing";
+  override readonly userFacing: boolean = true;
 }
 
 /* ---- Adapter-level ---- */

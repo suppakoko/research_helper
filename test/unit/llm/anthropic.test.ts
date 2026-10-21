@@ -39,12 +39,17 @@ import {
   createAnthropicProvider,
   type AnthropicProvider,
 } from "../../../src/llm/anthropic/anthropicProvider";
-import { ANTHROPIC_VERSION, toUsage } from "../../../src/llm/anthropic/mapper";
+import {
+  ANTHROPIC_VERSION,
+  toMessagesBody,
+  toUsage,
+} from "../../../src/llm/anthropic/mapper";
 import { createBaseUrlResolver } from "../../../src/llm/shared/baseUrl";
 import { ANTHROPIC_SPEND_CAP_CODE } from "../../../src/llm/shared/errorMap";
 import { estTokens } from "../../../src/llm/shared/tokenEstimate";
 import type {
   ChatRequest,
+  Effort,
   LLMCallContext,
   LLMProvider,
 } from "../../../src/llm/types";
@@ -552,6 +557,73 @@ describe("structured output (docs/03 §7.2)", () => {
     });
     expect(answer.json).toStrictEqual({ summary: "Via the tool." });
     expect(answer.finishReason).toBe("stop");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Effort — docs/03 §3.6, §14.2; owner, 2026-10-21, plan/00 §6 item 262(a)
+// ---------------------------------------------------------------------------
+
+describe("ChatRequest.effort as output_config.effort (docs/03 §3.6, item 262)", () => {
+  const SCHEMA = { type: "object", properties: { s: { type: "string" } } };
+
+  it("folds none and minimal to low, passes the other five through, and adds nothing without an effort", () => {
+    const expected: Record<Effort, string> = {
+      none: "low",
+      minimal: "low",
+      low: "low",
+      medium: "medium",
+      high: "high",
+      xhigh: "xhigh",
+      max: "max",
+    };
+    for (const [effort, level] of Object.entries(expected)) {
+      const body = toMessagesBody(
+        request({ effort: effort as Effort }),
+        512,
+        "output_config",
+      );
+      expect(body.output_config, effort).toStrictEqual({ effort: level });
+      expect(body, effort).not.toHaveProperty("thinking");
+    }
+    const plain = toMessagesBody(request(), 512, "output_config");
+    expect(plain).not.toHaveProperty("output_config");
+    expect(JSON.stringify(plain)).not.toContain("effort");
+  });
+
+  it("sends it on the wire, beside output_config.format under a schema and beside the strict tool", async () => {
+    const schemaRequest = request({
+      effort: "minimal",
+      responseFormat: { kind: "json_schema", name: "s", schema: SCHEMA },
+    });
+    const { provider, transport } = harness([
+      OK(messageBody()),
+      OK(messageBody({ content: [{ type: "text", text: '{"s":"x"}' }] })),
+    ]);
+
+    await provider.chat(request({ effort: "low" }), ctx());
+    await provider.chat(schemaRequest, ctx());
+
+    const plain = sentBody(transport.sent[0]) as Record<string, unknown>;
+    expect(plain.output_config).toStrictEqual({ effort: "low" });
+    expect(plain).not.toHaveProperty("thinking");
+    const structured = sentBody(transport.sent[1]) as Record<string, unknown>;
+    expect(structured.output_config).toStrictEqual({
+      format: { type: "json_schema", schema: SCHEMA },
+      effort: "low",
+    });
+    // The strict-tool fallback carries no format, so effort stands alone.
+    expect(
+      toMessagesBody(schemaRequest, 512, "strict_tool").output_config,
+    ).toStrictEqual({ effort: "low" });
+  });
+
+  it("sends no effort to the exact counter: docs/03 §10.1 documents none", async () => {
+    const { provider, transport } = harness([OK('{"input_tokens":7}')]);
+
+    await provider.countTokensExact(request({ effort: "high" }), ctx());
+
+    expect(JSON.stringify(sentBody(transport.sent[0]))).not.toContain("effort");
   });
 });
 

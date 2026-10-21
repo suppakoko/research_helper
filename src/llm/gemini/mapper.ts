@@ -49,6 +49,7 @@ import type {
   ChatMessage,
   ChatRequest,
   ChatResponse,
+  Effort,
   ModelDataPolicy,
   ModelInfo,
   Usage,
@@ -117,19 +118,10 @@ export function parseJsonObject(
 // 2. Effort → thinking_level (step 2)
 // ---------------------------------------------------------------------------
 
-/**
- * The shared effort scale, `docs/03` §14.1's `Effort` union — the superset
- * that carries `none` and `minimal` so the Gemini path has somewhere to land
- * (§14.3).
- *
- * **Not a `docs/07` §4.3 type.** `ChatRequest` in §4.3 has no effort member,
- * so nothing passes one to this adapter yet and {@link buildInteractionBody}
- * sends no `thinking_level`. The union is declared here, adapter-private, so
- * that {@link mapEffortToThinkingLevel} exists and is tested for the day §4.3
- * gains the member (`plan/reports/P3-T10.md`, Contradictions).
- */
-export type Effort =
-  "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+// The shared effort scale is `Effort` in `../types.ts` (`docs/07` §4.3,
+// owner, 2026-10-21, `plan/00` §6 item 262(a)); this file's local copy was
+// removed that day. `ChatRequest.effort` reaches the wire as
+// `generation_config.thinking_level` through {@link mapEffortToThinkingLevel}.
 
 /** `generation_config.thinking_level`'s four values (`docs/03` §4.3). */
 export type ThinkingLevel = "minimal" | "low" | "medium" | "high";
@@ -183,10 +175,11 @@ function conversation(messages: readonly ChatMessage[]): ChatMessage[] {
  *   API without it among the things that break zero data retention.
  * - `system_instruction` carries the system messages; the model, never a key.
  * - `generation_config` carries only fields §4.3's list names:
- *   `max_output_tokens`, `seed`, `stop_sequences`. `temperature` and `topP`
- *   are **not** in that list and are not sent.
- * - No `thinking_level`: `docs/07` §4.3's `ChatRequest` has no effort member
- *   (see {@link Effort}).
+ *   `max_output_tokens`, `seed`, `stop_sequences`, `thinking_level`.
+ *   `temperature` and `topP` are **not** in that list and are not sent.
+ * - `thinking_level` is `request.effort` through
+ *   {@link mapEffortToThinkingLevel} (owner, 2026-10-21, `plan/00` §6 item
+ *   262(a)); with no effort, none is sent and Gemini's own default applies.
  * - `traceId` and `routing` are never sent (§4.3: "never sent upstream";
  *   routing hints are OpenRouter's).
  * - No Context Caching, no File API, no Google Search grounding: each breaks
@@ -207,6 +200,9 @@ export function buildInteractionBody(
     ...(request.seed !== undefined && { seed: request.seed }),
     ...(request.stop !== undefined &&
       request.stop.length > 0 && { stop_sequences: [...request.stop] }),
+    ...(request.effort !== undefined && {
+      thinking_level: mapEffortToThinkingLevel(request.effort),
+    }),
   };
   const single = turns.length === 1 && turns[0]?.role === "user";
   return {

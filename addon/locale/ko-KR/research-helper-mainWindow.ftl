@@ -23,6 +23,10 @@
 #   `research-helper-source-medrxiv` — `docs/08` §10.3 forbids translating a
 #   database name, so the Korean bundle carries them unchanged. Not translations, and nothing for a reviewer to
 #   decide.
+# * `research-helper-provider-openrouter`, `research-helper-provider-openai`,
+#   `research-helper-provider-anthropic` and `research-helper-provider-gemini`
+#   — provider names, which `docs/08` §10.3 likewise forbids translating
+#   (owner, 2026-10-21, `plan/00` §6 item 262(b)).
 # * `research-helper-prefs-backend-indeterminate` — taken verbatim from
 #   `docs/09` §1.9, which ships the owner's Korean for the key-storage
 #   badge's fifth state (decided 2026-10-15, owner review row 50; `P2-T34`).
@@ -79,6 +83,14 @@ research-helper-source-arxiv = arXiv
 research-helper-source-semanticscholar = Semantic Scholar
 research-helper-source-biorxiv = bioRxiv
 research-helper-source-medrxiv = medRxiv
+
+
+## LLM provider display names — never translated (docs/08 §10.3)
+
+research-helper-provider-openrouter = OpenRouter
+research-helper-provider-openai = OpenAI
+research-helper-provider-anthropic = Anthropic
+research-helper-provider-gemini = Google Gemini
 
 
 ## Search provenance (FR-8)
@@ -215,6 +227,13 @@ rh-error-llm = { $provider }에서 요청을 처리하지 못했습니다.
 rh-error-context-length = 글이 너무 길어 { $model } 모델이 한 번에 읽을 수 없습니다.
 rh-error-content-filter = 모델이 이 논문의 요약을 거절했습니다.
 rh-error-structured-output = { $provider }에서 받은 요약을 Research Helper가 읽지 못했습니다.
+
+# Item 262(c) (owner, 2026-10-21): OpenRouter's guardrail 404. The coordinator
+# drafts the Korean and the owner reviews it (G-41); nothing was
+# machine-translated. Keep "Strict" and "Balanced" as the privacy-mode menu's
+# Korean labels once those exist; `{ $model }` stays untranslated.
+# NEEDS REVIEW. en-US: "OpenRouter has no provider for { $model } that meets your privacy mode. Choose a different model, or change the privacy mode from Strict to Balanced if it is set to Strict. Balanced allows providers that keep your text for a time and sends PDF full text, but still refuses providers that may train on your data."
+# rh-error-privacy-routing =
 
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)

@@ -45,6 +45,7 @@
  * `2023-06-01` is ever written (`docs/03` §3.2: "not a date you should bump").
  */
 
+import { type FiveLevelEffort, toFiveLevelEffort } from "../shared/effort";
 import type {
   ChatRequest,
   ChatResponse,
@@ -108,8 +109,13 @@ export interface AnthropicMessagesBody {
   readonly system?: string;
   readonly messages: readonly AnthropicMessage[];
   readonly stop_sequences?: readonly string[];
+  /**
+   * `format` for structured output (`docs/03` §7.2) and `effort` for
+   * `ChatRequest.effort` (§3.6); either, both, or the member is absent.
+   */
   readonly output_config?: {
-    readonly format: { readonly type: "json_schema"; readonly schema: object };
+    readonly format?: { readonly type: "json_schema"; readonly schema: object };
+    readonly effort?: FiveLevelEffort;
   };
   readonly tools?: readonly AnthropicStrictTool[];
   readonly tool_choice?: { readonly type: "tool"; readonly name: string };
@@ -174,6 +180,16 @@ function structuredMembers(
 /**
  * The `POST /v1/messages` body for `request`.
  *
+ * `request.effort` becomes `output_config.effort` (`docs/03` §3.6: inside
+ * `output_config`, not top-level), folded onto Anthropic's `low` … `max` by
+ * `toFiveLevelEffort` so `none` and `minimal` are never sent (§14.2,
+ * §14.3), and merged with `output_config.format` when a schema goes there
+ * too (§14.2's sketch). No `thinking` field is sent: §14.2's sketch sends
+ * none, and on the models §3.6 recommends adaptive thinking is on by default.
+ * With no effort nothing is added and Anthropic's own default applies (owner,
+ * 2026-10-21, `plan/00` §6 item 262(a)). The exact token counter's body
+ * ({@link toCountTokensBody}) carries no effort: §10.1 documents none.
+ *
  * @param request - the provider-agnostic request
  * @param maxTokens - the `max_tokens` to send; the adapter resolves it and it
  *   is always present
@@ -186,6 +202,14 @@ export function toMessagesBody(
   mode: StructuredOutputMode,
 ): AnthropicMessagesBody {
   const { system, messages } = splitSystem(request);
+  const structured = structuredMembers(request, mode);
+  const outputConfig =
+    request.effort === undefined
+      ? structured.output_config
+      : {
+          ...structured.output_config,
+          effort: toFiveLevelEffort(request.effort),
+        };
   return {
     model: request.model,
     max_tokens: maxTokens,
@@ -193,7 +217,8 @@ export function toMessagesBody(
     messages,
     ...(request.stop !== undefined &&
       request.stop.length > 0 && { stop_sequences: [...request.stop] }),
-    ...structuredMembers(request, mode),
+    ...structured,
+    ...(outputConfig !== undefined && { output_config: outputConfig }),
   };
 }
 

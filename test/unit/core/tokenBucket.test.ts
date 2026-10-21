@@ -14,6 +14,7 @@ import {
   getHostLimiters,
   HOST_POLICIES,
   installHostLimiters,
+  LLM_HOSTS,
   NCBI_HOST,
   NCBI_KEY_PRESENT_PREF,
   peekHostLimiters,
@@ -1113,6 +1114,8 @@ describe("hostLimiter policy table", () => {
     // reads them off the page. The NCBI ID Converter's host (owner,
     // 2026-10-19, `plan/00` §6 item 214) is the seventh row: no adapter's
     // `rateLimitKey`, but the client paces it by URL host all the same.
+    // The four LLM hosts follow (owner, 2026-10-21, `plan/00` §6 item 260);
+    // `hostLimiter.test.ts` checks their cells against §7.3's LLM/TTS row.
     const shippedHosts = [
       NCBI_HOST,
       EBI_HOST,
@@ -1121,6 +1124,10 @@ describe("hostLimiter policy table", () => {
       SEMANTICSCHOLAR_HOST,
       BIORXIV_HOST,
       PMC_IDCONV_HOST,
+      LLM_HOSTS.openrouter,
+      LLM_HOSTS.openai,
+      LLM_HOSTS.anthropic,
+      LLM_HOSTS.gemini,
     ];
     expect(HOST_POLICIES.map((policy) => policy.host)).toEqual(shippedHosts);
     const clock = createManualClock();

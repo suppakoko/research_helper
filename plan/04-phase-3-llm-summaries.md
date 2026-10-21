@@ -820,11 +820,12 @@ from `usage.cost`.
 6. Map a guardrail 404 onto `BadRequestError` naming the cause and both remedies.
 7. Add the `openrouter.ai` row to `HOST_POLICIES`.
 
-> **Open — recommended:** the LLM rows in `HOST_POLICIES` carry no fixed request rate — burst and
-> concurrency equal the `concurrency` pref, pacing comes only from `Retry-After` through
-> `penalize()` — and `docs/07` §7.3's "from provider prefs" is replaced by that sentence, since no
-> provider-rate preference exists in §8.5. Changes `docs/07` §7.3 (LLM/TTS row). (Review §4 item 5;
-> applies equally to `P3-T08`–`P3-T10`.)
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 260):** every LLM host's row is `withoutKey:
+> { ratePerSecond: 1, burst: 1, maxConcurrent: 3 }` (3 is the `concurrency` default) with `retry:
+> LLM_RETRY_BUDGET`, and no `withKey`. `docs/07` §7.3's LLM/TTS row was corrected in place and carries
+> the dated note "LLM hosts' pacing". Applies equally to `P3-T08`–`P3-T10`. Landed by the coordinator's
+> follow-up (`plan/reports/adapter-followup-260-262.md`). *(Replaced the "Open — recommended" line,
+> which proposed no fixed rate; `TokenBucket` refuses a rate that is not positive.)*
 
 **Do NOT.**
 - Do **not** omit `provider.data_collection: "deny"` (D6; `docs/09` §3.4 rule 1).
@@ -902,7 +903,11 @@ adapter.
 6. Implement `listModels()` over `GET /v1/models`, dropping embedding, audio, image, realtime and
    moderation entries; enrichment is `P3-T13`'s.
 7. Implement `countTokens(text, modelId)` by delegating to `estTokens` (`P3-T06`).
-8. Add the `api.openai.com` row to `HOST_POLICIES` (same open line as `P3-T07`).
+8. Add the `api.openai.com` row to `HOST_POLICIES`.
+
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 260):** the row is `P3-T07` step 7's — 1/s, burst 1,
+> at most 3 concurrent, `retry: LLM_RETRY_BUDGET`. Landed by the coordinator's follow-up
+> (`plan/reports/adapter-followup-260-262.md`). *(Replaced "(same open line as `P3-T07`)".)*
 
 **Do NOT.**
 - Do **not** use `response_format` on the Responses surface; the field is `text.format`.
@@ -974,7 +979,11 @@ free pre-flight token count as an adapter-private helper.
 5. Implement `listModels()` with pagination, `max_input_tokens` → `contextWindowTokens`,
    `max_tokens` → `maxOutputTokens`.
 6. Sum `input_tokens` with the cache-read and cache-write counts in `Usage`.
-7. Add the `api.anthropic.com` row to `HOST_POLICIES` (same open line as `P3-T07`).
+7. Add the `api.anthropic.com` row to `HOST_POLICIES`.
+
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 260):** the row is `P3-T07` step 7's — 1/s, burst 1,
+> at most 3 concurrent, `retry: LLM_RETRY_BUDGET`. Landed by the coordinator's follow-up
+> (`plan/reports/adapter-followup-260-262.md`). *(Replaced "(same open line as `P3-T07`)".)*
 
 **Do NOT.**
 - Do **not** send `system` as a message, omit `max_tokens`, or look for `context_window`.
@@ -1046,7 +1055,12 @@ free/paid tier determined — or conservatively assumed free — before the firs
 5. Implement `detectTier()` per session and per key change, returning `"free-or-unknown"` when it
    cannot tell.
 6. Keep `generateContent` behind one documented fallback function, unused by default.
-7. Add the host row to `HOST_POLICIES` (same open line as `P3-T07`).
+7. Add the host row to `HOST_POLICIES`.
+
+> **Decided 2026-10-21 (owner; `plan/00` §6 item 260):** the `generativelanguage.googleapis.com` row
+> is `P3-T07` step 7's — 1/s, burst 1, at most 3 concurrent, `retry: LLM_RETRY_BUDGET`. Landed by the
+> coordinator's follow-up (`plan/reports/adapter-followup-260-262.md`). *(Replaced "(same open line as
+> `P3-T07`)".)*
 
 > **Open — recommended:** assume no programmatic billing signal exists — `detectTier()` returns
 > `"free-or-unknown"` unless a documented signal is found — ask the user once per key change with
@@ -2372,6 +2386,11 @@ npm run typecheck && npm run test:unit -- "pipeline/(summarizeItem|grounding)|pr
 
 **Notes.** Re-estimated 1.0 → 1.25 d on 2026-10-20 for the `summary` migration (and the two tests
 that pin the schema version) and the redaction-gated persistence.
+
+> **2026-10-21 (owner; `plan/00` §6 item 262(a)):** every summary request passes `effort: "low"` on
+> its `ChatRequest`. The member and the shared `Effort` type are declared in `docs/07` §4.3 (dated
+> note "`ChatRequest.effort` and the shared `Effort` type") and `src/llm/types.ts`; each adapter maps
+> it onto its provider's scale, so this card passes the one value and maps nothing itself.
 
 ---
 

@@ -79,6 +79,17 @@ export interface ChatMessage {
   readonly content: string;
 }
 
+/**
+ * Reasoning / thinking effort on one shared scale (03 §14.1), the superset of every provider's:
+ * `none` and `minimal` exist only so Gemini's lowest level has somewhere to land (03 §14.3).
+ * Each adapter maps it onto its own provider's scale through a function; never forwarded blind.
+ *
+ * Declared by the owner on 2026-10-21 (`plan/00` §6 item 262(a); `docs/07` §4.3's dated note
+ * "`ChatRequest.effort` and the shared `Effort` type"), replacing the adapters' local copies.
+ */
+export type Effort =
+  "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
 export interface ChatRequest {
   readonly model: string;
   readonly messages: readonly ChatMessage[];
@@ -86,6 +97,8 @@ export interface ChatRequest {
   readonly temperature?: number;
   readonly topP?: number;
   readonly stop?: readonly string[];
+  /** Absent: nothing is sent and the provider's own default applies. */
+  readonly effort?: Effort;
   /** Request structured output. Providers without native support get prompt coercion. */
   readonly responseFormat?:
     | { readonly kind: "text" }

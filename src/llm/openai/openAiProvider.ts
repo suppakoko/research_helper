@@ -89,11 +89,19 @@ export const RESPONSES_PATH = "/responses";
 export const MODELS_PATH = "/models";
 
 /**
- * The provider's display-name message id. **No bundle entry exists yet**: no
- * surface renders a provider name until `P3-T04`'s pane blocks, which add the
- * string under `plan/04` §0.2 item 1 (reported with `P3-T08`).
+ * The provider's display-name message id, `research-helper-provider-<id>`
+ * like the other three adapters'. A literal, for the reason the source
+ * adapters' display-name keys are: `src/llm/**` importing `src/i18n/**` would
+ * add a dependency edge `docs/07` §2.3 does not have.
+ *
+ * `src/i18n/keys.ts` declares it in `MAIN_WINDOW_MESSAGE_IDS` and on
+ * `KO_PRESENT`: provider names are not translated (`docs/08` §10.3), so both
+ * bundles carry the English name (owner, 2026-10-21, `plan/00` §6 item
+ * 262(b)). Until that date it was `research-helper-llm-provider-openai`, the
+ * one id off the scheme. `test/unit/i18n/keys.test.ts` compares this copy
+ * with that list.
  */
-export const OPENAI_DISPLAY_NAME_KEY = "research-helper-llm-provider-openai";
+export const OPENAI_DISPLAY_NAME_KEY = "research-helper-provider-openai";
 
 /** The documented host, the `rateLimitKey` (`docs/03` §2.1). */
 export const OPENAI_RATE_LIMIT_KEY = new URL(DEFAULT_BASE_URLS.openai).host;

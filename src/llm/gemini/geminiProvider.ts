@@ -108,8 +108,14 @@ export const INTERACTIONS_PATH = "/v1beta/interactions";
 export const MODELS_PATH = "/v1beta/models";
 
 /**
- * The provider's display-name message id. No bundle carries it yet: the
- * provider picker's strings are `P3-T04`'s.
+ * The provider's display-name message id. A literal, for the reason the
+ * source adapters' display-name keys are: `src/llm/**` importing
+ * `src/i18n/**` would add a dependency edge `docs/07` §2.3 does not have.
+ *
+ * `src/i18n/keys.ts` declares it in `MAIN_WINDOW_MESSAGE_IDS` and on
+ * `KO_PRESENT`: provider names are not translated (`docs/08` §10.3), so both
+ * bundles carry the English name (owner, 2026-10-21, `plan/00` §6 item
+ * 262(b)). `test/unit/i18n/keys.test.ts` compares this copy with that list.
  */
 export const GEMINI_DISPLAY_NAME_KEY = "research-helper-provider-gemini";
 

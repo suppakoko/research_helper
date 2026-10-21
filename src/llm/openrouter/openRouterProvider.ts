@@ -26,8 +26,11 @@
  * - the job's cancellation token.
  *
  * This file writes no retry loop: the retry budget belongs to the host's
- * `HOST_POLICIES` row (`P3-T07` report: that row is **not** added, because
- * the card's open line on LLM request rates is unresolved). A 2xx is handed to
+ * `HOST_POLICIES` row (`retry: LLM_RETRY_BUDGET`, 1/s, burst 1, at most 3 in
+ * flight; owner, 2026-10-21, `plan/00` §6 item 260), which `createRetryFor`
+ * in `src/bootstrap/container.ts` hands the client. *(Corrected 2026-10-21:
+ * this said the row was not added, the card's open line on LLM request rates
+ * being unresolved.)* A 2xx is handed to
  * `mapProviderError` here, outside the loop, for the refusal row
  * (`finish_reason: "content_filter"` → `ContentFilterError`).
  *
@@ -112,7 +115,12 @@ export const OPENROUTER_SECRET_ID: SecretId = "llm.openrouter";
 
 /**
  * `LLMProvider.displayNameKey`. A literal Fluent id, as the source adapters'
- * are; no bundle declares it yet (`P3-T07` report, Contradiction 3).
+ * are.
+ *
+ * `src/i18n/keys.ts` declares it in `MAIN_WINDOW_MESSAGE_IDS` and on
+ * `KO_PRESENT`: provider names are not translated (`docs/08` §10.3), so both
+ * bundles carry the English name (owner, 2026-10-21, `plan/00` §6 item
+ * 262(b)). `test/unit/i18n/keys.test.ts` compares this copy with that list.
  */
 export const OPENROUTER_DISPLAY_NAME_KEY =
   "research-helper-provider-openrouter";

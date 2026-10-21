@@ -57,6 +57,7 @@
  * answered.
  */
 
+import type { ProviderId } from "../../model/ids";
 import type { Clock } from "../clock";
 import type { PrefObserverHandle, PrefScalar, PrefStore } from "../config";
 import { ConfigurationError } from "../errors";
@@ -199,6 +200,62 @@ export const BIORXIV_HOST = "api.biorxiv.org";
 export const PMC_IDCONV_HOST = "pmc.ncbi.nlm.nih.gov";
 
 /**
+ * The four LLM hosts, by provider: each the authority of the provider's
+ * documented base URL (`DEFAULT_BASE_URLS` in `src/llm/shared/baseUrl.ts`;
+ * `docs/03` §2.1, §3.1, §4.1, §5.1).
+ *
+ * **Written out, not derived**, because `core/` may import only `model/`
+ * (`docs/07` §2.3, `eslint.config.js`) and so cannot read `src/llm/`.
+ * `test/unit/core/hostLimiter.test.ts` asserts that each equals the host of
+ * that base URL and the adapter's own `rateLimitKey`, so a base-URL change on
+ * either side fails a test rather than leaving a host unpaced.
+ */
+export const LLM_HOSTS: Readonly<Record<ProviderId, string>> = Object.freeze({
+  openrouter: "openrouter.ai",
+  openai: "api.openai.com",
+  anthropic: "api.anthropic.com",
+  gemini: "generativelanguage.googleapis.com",
+});
+
+/**
+ * The one retry budget every LLM host shares: base 1000 ms, cap 60 000 ms,
+ * attempt cap 5 — `docs/07` §7.3's LLM/TTS row, whose three retry cells the
+ * owner filled on 2026-10-20 (`plan/00` §6 item 240; `P3-T05`).
+ *
+ * **One budget, carried by every LLM row.** The four LLM rows in
+ * {@link HOST_POLICIES} (owner, 2026-10-21, `plan/00` §6 item 260) each carry
+ * `retry: LLM_RETRY_BUDGET`, the object itself, so the numbers are written
+ * once. Nothing else is needed to make them work: `createRetryFor` in
+ * `src/bootstrap/container.ts` already turns any row's `retry` member into a
+ * policy for the one shipped `withRetry` (`src/core/http/retry.ts`), over the
+ * one shipped jitter shape, `decorrelatedJitter` in `./backoff.ts`. Declared
+ * above {@link HOST_POLICIES} because the table reads it while the module
+ * loads. *(Corrected 2026-10-21, item 260: this paragraph said the adapter
+ * cards "each add" their row, which none could until the rate was decided.)*
+ *
+ * **Why decorrelated jitter, and why these numbers.** `docs/03` §11.6 sketched
+ * a full-jitter loop with `maxAttempts = 5, baseMs = 1000, capMs = 60_000`.
+ * The owner kept the numbers and dropped the shape, so the tree has one jitter
+ * and one loop. `maxAttempts` counts the first attempt
+ * ({@link ./backoff.RetryBudget.maxAttempts}), so this allows four retries.
+ * Through `withRetry`, which enters the first retry with `prevDelayMs = 0`, the
+ * waits are 1 s, then at most 3 s, 9 s and 27 s: 40 s of silent waiting at
+ * the longest. The 60 s cap therefore does not bind at five attempts; a sent
+ * `Retry-After` is the wait itself and is not capped, as on every row.
+ *
+ * **What it does not change.** A timeout is still not retried (item 230:
+ * `isRetriedAutomatically`), and `REQUEST_BUDGET_MS` (90 s, item 233) still
+ * decides whether a retry may start — see {@link LLM_ATTEMPT_TIMEOUT_MS} for
+ * how the two meet. The batch budget (§11.6's "e.g. 30 min") is not here: it
+ * is a pipeline-level limit for `P3-T17`.
+ */
+export const LLM_RETRY_BUDGET: RetryBudget = Object.freeze({
+  baseMs: 1000,
+  capMs: 60_000,
+  maxAttempts: 5,
+});
+
+/**
  * `docs/07` §7.3's policy table, as far as Phase 1 needs it.
  *
  * **NCBI, the one row that ships now.** 2.5/s without a key and 8/s with one,
@@ -257,12 +314,13 @@ export const PMC_IDCONV_HOST = "pmc.ncbi.nlm.nih.gov";
  * `P2-T07` — **shipped below**). `api.openalex.org` gets
  * **no** row: decision D2 puts OpenAlex out of v1 and one of `plan/03`'s cards
  * greps this file to prove it. The LLM and TTS hosts are Phase 3's and Phase 5's.
- * Each LLM adapter card (`P3-T07`–`P3-T10`) adds a static row for its host
- * carrying `retry: LLM_RETRY_BUDGET`, checked against §7.3's shared "LLM/TTS
- * hosts" row; how such a row's request *rate* is set is still `P3-T07`'s open
- * line *(corrected 2026-10-20, `P3-T38`, `plan/00` §6 item 247: this sentence
- * said the LLM hosts "are driven from provider prefs rather than from a static
- * row")*. TTS hosts are not decided. **Each of
+ * The four LLM hosts have static rows since 2026-10-21 (see "LLM hosts"
+ * below), each carrying `retry: LLM_RETRY_BUDGET` and checked against §7.3's
+ * shared "LLM/TTS hosts" row *(corrected 2026-10-20, `P3-T38`, `plan/00` §6
+ * item 247: this sentence said the LLM hosts "are driven from provider prefs
+ * rather than from a static row"; corrected again 2026-10-21, item 260: it
+ * then said the rows' request rate was still `P3-T07`'s open line)*. TTS
+ * hosts are not decided. **Each of
  * those five rows has its own `retry` budget with its own named sources in
  * §7.3** (filled 2026-10-14) — the NCBI numbers are that host's and not a global default, which §7.3
  * states and `test/unit/core/backoff.test.ts` enforces.
@@ -336,6 +394,18 @@ export const PMC_IDCONV_HOST = "pmc.ncbi.nlm.nih.gov";
  * keystore changes nothing here. A host of its own, so a bucket of its own:
  * the converter does not draw on E-utilities' 2.5/s, and the two together may
  * reach 5/s from one address (the dated note under §7.3's table says so).
+ *
+ * **LLM hosts, item 260 (owner, 2026-10-21).** §7.3's LLM/TTS row as
+ * corrected that day: every LLM host is paced at **1/s, burst 1, at most 3 in
+ * flight** (3 is the `concurrency` default, `docs/07` §8.5, fixed rather than
+ * read from the live preference), with `retry: LLM_RETRY_BUDGET`, the object
+ * itself, which `test/unit/core/backoff.test.ts` routes to the shared row. One
+ * row per host in {@link LLM_HOSTS}, so each provider has a bucket of its own.
+ * No `withKey` and no `keyPresencePref`: every chat request needs a key, so
+ * there is no keyless mode to tell apart (§7.3's dated note "LLM hosts'
+ * pacing"). Until this date the rows were absent, so `createRetryFor` gave
+ * each LLM host one attempt and no pacing. A base-URL override's host still
+ * has no row.
  */
 export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
   {
@@ -411,42 +481,31 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
     withoutKey: { ratePerSecond: 2.5, burst: 1, maxConcurrent: 3 },
     retry: { baseMs: 1000, capMs: 30_000, maxAttempts: 3 },
   },
+  // `docs/07` §7.3, LLM/TTS hosts (owner 2026-10-21, `plan/00` §6 item 260):
+  // 1/s, burst 1, max concurrent 3; retry `LLM_RETRY_BUDGET` (1000 ms /
+  // 60 000 ms / 5). One row per LLM host. See the header's "LLM hosts"
+  // paragraph.
+  {
+    host: LLM_HOSTS.openrouter,
+    withoutKey: { ratePerSecond: 1, burst: 1, maxConcurrent: 3 },
+    retry: LLM_RETRY_BUDGET,
+  },
+  {
+    host: LLM_HOSTS.openai,
+    withoutKey: { ratePerSecond: 1, burst: 1, maxConcurrent: 3 },
+    retry: LLM_RETRY_BUDGET,
+  },
+  {
+    host: LLM_HOSTS.anthropic,
+    withoutKey: { ratePerSecond: 1, burst: 1, maxConcurrent: 3 },
+    retry: LLM_RETRY_BUDGET,
+  },
+  {
+    host: LLM_HOSTS.gemini,
+    withoutKey: { ratePerSecond: 1, burst: 1, maxConcurrent: 3 },
+    retry: LLM_RETRY_BUDGET,
+  },
 ];
-
-/**
- * The one retry budget every LLM host shares: base 1000 ms, cap 60 000 ms,
- * attempt cap 5 — `docs/07` §7.3's LLM/TTS row, whose three retry cells the
- * owner filled on 2026-10-20 (`plan/00` §6 item 240; `P3-T05`).
- *
- * **One budget, carried by every LLM row.** The adapter cards (`P3-T07`–
- * `P3-T10`) each add their host's row to {@link HOST_POLICIES} with
- * `retry: LLM_RETRY_BUDGET`, so the numbers are written once. Nothing else is
- * needed to make them work: `createRetryFor` in `src/bootstrap/container.ts`
- * already turns any row's `retry` member into a policy for the one shipped
- * `withRetry` (`src/core/http/retry.ts`), over the one shipped jitter shape,
- * `decorrelatedJitter` in `./backoff.ts`.
- *
- * **Why decorrelated jitter, and why these numbers.** `docs/03` §11.6 sketched
- * a full-jitter loop with `maxAttempts = 5, baseMs = 1000, capMs = 60_000`.
- * The owner kept the numbers and dropped the shape, so the tree has one jitter
- * and one loop. `maxAttempts` counts the first attempt
- * ({@link ./backoff.RetryBudget.maxAttempts}), so this allows four retries.
- * Through `withRetry`, which enters the first retry with `prevDelayMs = 0`, the
- * waits are 1 s, then at most 3 s, 9 s and 27 s: 40 s of silent waiting at
- * the longest. The 60 s cap therefore does not bind at five attempts; a sent
- * `Retry-After` is the wait itself and is not capped, as on every row.
- *
- * **What it does not change.** A timeout is still not retried (item 230:
- * `isRetriedAutomatically`), and `REQUEST_BUDGET_MS` (90 s, item 233) still
- * decides whether a retry may start — see {@link LLM_ATTEMPT_TIMEOUT_MS} for
- * how the two meet. The batch budget (§11.6's "e.g. 30 min") is not here: it
- * is a pipeline-level limit for `P3-T17`.
- */
-export const LLM_RETRY_BUDGET: RetryBudget = Object.freeze({
-  baseMs: 1000,
-  capMs: 60_000,
-  maxAttempts: 5,
-});
 
 /**
  * How long one LLM attempt may wait for its answer: **3 minutes**
