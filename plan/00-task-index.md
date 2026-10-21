@@ -1893,7 +1893,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     the same shape as item 263; move each into its `describe` when that file is next touched.
     **DONE 2026-10-21 (owner: fix now)** (`plan/reports/after-hooks-264.md`): all five moved; no cross-spec dependence.
 
-### 6.55 Raised by P3-T12, P3-T13, P3-T17 and item 264, 2026-10-21
+### 6.55 Raised by P3-T12, P3-T13, P3-T17 and item 264, 2026-10-21 — 265 decided the same day
 
 265. **Open for the owner.** (a) `P3-T17` step 6: the batch wall-clock budget has no number (`docs/03` §11.6 "e.g. 30
     min") and no decided behaviour at the limit (pause and ask, or let the pipeline ask). (b) `P3-T13`: where a user-edited
@@ -1901,6 +1901,11 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `rh-error-llm`; a dedicated "the summary was cut off" message needs a string. (d) The NFR-10 startup test fails on
     Zotero's own `api.zotero.org/retractions/list` in 2 of 5 runs today (item 176 suggests leaving Zotero's hosts out of
     its count).
+    **DECIDED 2026-10-21 (owner):** (a) 30 minutes, not counting paused time; at the limit the job **pauses and asks**
+    "N of M done — continue the rest?" (same shape as the spend ceiling, item 234). (b) the user price table lives in the
+    plugin database (a new table, appended migration). (c) a dedicated "summary was cut off" message (Korean drafted for
+    owner review). (d) the NFR-10 startup test stops counting Zotero's own hosts (`api.zotero.org`), named in a list in the
+    test; plugin requests are still counted.
 
 266. **Recorded, choices made by agents, for later confirmation.** `P3-T13`: calibration factor = actual ÷ estimated,
     blended 0.5 at job end (`docs/03` §10.2); headroom (1.15× or 20 %) is `P3-T16`'s; price tiers apply strictly above
