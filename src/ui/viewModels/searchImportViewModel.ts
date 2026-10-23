@@ -116,8 +116,10 @@ import type {
   SearchImportTarget,
   SearchImportWriteReport,
 } from "../../pipeline/searchImport/types";
+import type { RunEstimate } from "../../pipeline/shared/estimate";
 import type { Pipeline, PipelineContext } from "../../pipeline/types";
 import type { FluentArgsParam, FluentMessageId } from "../../i18n/keys";
+import { PREFS } from "../../prefs/schema";
 import type {
   SearchWindowDuplicates,
   SearchWindowImportRequest,
@@ -125,6 +127,11 @@ import type {
   SearchWindowRecord,
 } from "../dialogs/searchDialog";
 import { NEW_COLLECTION_VALUE } from "../dialogs/searchDialog";
+import {
+  formatUsd,
+  shouldOpenCostDialog,
+  type CostDialogOutcome,
+} from "../dialogs/costConfirmDialog";
 
 // ---------------------------------------------------------------------------
 // 1. Message references
@@ -251,7 +258,63 @@ export interface SearchResultRow extends SearchWindowRecord {
    * preprint and its published version, gate `G-16`). Both are kept.
    */
   readonly linked: RowMarker | undefined;
+  /**
+   * The row's relevance score, when the search was screened and the model
+   * scored it (`P3-T27`). Absent for an unscored row, which no threshold
+   * hides. The document hides a row whose score is below the threshold
+   * control's value until "Show excluded" is ticked ({@link belowThreshold}).
+   */
+  readonly relevance?: RowRelevance;
 }
+
+/** One row's relevance badge (`P3-T27`, `docs/12` §3). */
+export interface RowRelevance {
+  /** 0–100, the model's score. */
+  readonly score: number;
+  /** `research-helper-search-row-relevance`: the badge and its tooltip. */
+  readonly ref: MessageRef;
+}
+
+/**
+ * What the window shows about a screened search (`P3-T27`): the run's
+ * threshold, which the control keeps for this run, and how many rows were
+ * scored. `undefined` when the search was not screened.
+ */
+export interface ScreeningView {
+  readonly threshold: number;
+  readonly scored: number;
+  readonly unscored: number;
+}
+
+/**
+ * Whether a score is excluded by a threshold: strictly below it, so `0`
+ * excludes nothing (`docs/07` §8.5). The document's `logic.belowThreshold`
+ * is this rule, written once more because the document cannot import it;
+ * `test/unit/ui/searchImportViewModel.test.ts` evaluates both.
+ */
+export function belowThreshold(score: number, threshold: number): boolean {
+  return score < threshold;
+}
+
+/**
+ * What a screening estimate is asked for (owner, 2026-10-24, `plan/00` §6
+ * item 281(b); `docs/08` §4.2's note of that date).
+ */
+export interface ScreeningEstimateRequest {
+  /**
+   * How many results would be scored: before the search runs, the most it can
+   * return ({@link screeningResultCount}).
+   */
+  readonly resultCount: number;
+  /** The keyword, which the prompt carries as the topic. */
+  readonly topic: string;
+}
+
+/** The three window facts the screening cost line is drawn from (item 281(b)). */
+export type ScreeningCostQuery = Pick<
+  SearchWindowQuery,
+  "keyword" | "sources" | "maxResults"
+>;
 
 /** `docs/08` §4.6's "All databases failed" panel, as data. */
 export interface ErrorView {
@@ -316,6 +379,8 @@ export interface SearchViewState {
   /** 0–100, or `undefined` for indeterminate / idle. */
   readonly progressPercent: number | undefined;
   readonly cancelVisible: boolean;
+  /** The last search's screening, or `undefined` when it was not screened (`P3-T27`). */
+  readonly screening: ScreeningView | undefined;
 }
 
 /**
@@ -811,6 +876,35 @@ export interface SearchImportViewModelDeps {
   readonly findCollection?: (
     collectionID: number,
   ) => RerunCollection | undefined;
+  /**
+   * Relevance screening's two window facts (`P3-T27`, `docs/08` §4.2): the
+   * `screening.threshold` preference the control opens at, and whether the
+   * active LLM provider can be called at all. Both read on every call, like
+   * {@link getPrefs}. **Nothing here writes the preference**: a change to the
+   * control is the run's own (`docs/07` §8.5). Absent means the screening
+   * controls are never shown.
+   */
+  readonly screening?: {
+    threshold(): number;
+    available(): boolean;
+    /**
+     * Price a screen before it runs (owner, 2026-10-24, `plan/00` §6 item
+     * 281(b)): `estimateRelevanceScreen` over the `"screening"` model, the
+     * bundled `RELEVANCE_SCREEN` template and the graph's `modelPrices`.
+     * Absent, or rejecting, means no estimate — and then no screening.
+     */
+    estimate?(request: ScreeningEstimateRequest): Promise<RunEstimate>;
+    /** `summary.confirmAboveCents`, read per search. */
+    confirmAboveCents?(): number;
+    /**
+     * `P3-T16`'s cost dialog over the estimate (`confirmRunCost`). Asked only
+     * above the threshold or for an unknown price
+     * ({@link screeningNeedsConfirmation}).
+     */
+    confirm?(estimate: RunEstimate): Promise<CostDialogOutcome>;
+    /** The application's locale, for the cost line's `Intl`; `en-US` when absent. */
+    locale?(): string;
+  };
 }
 
 /** The collection a re-run was invoked on (`P2-T17`). */
@@ -877,6 +971,7 @@ export function initialViewState(): SearchViewState {
     databaseProgress: undefined,
     progressPercent: undefined,
     cancelVisible: false,
+    screening: undefined,
   };
 }
 
@@ -921,6 +1016,13 @@ export function toWindowRecords(
       }),
     })),
   );
+  // `P3-T27`: each scored row's badge, keyed by the representative's id.
+  const scores = new Map(
+    (review.screening?.verdicts ?? []).map((verdict) => [
+      verdict.id,
+      verdict.score,
+    ]),
+  );
   const links = pairMarkers(
     review.links.map((link) => ({
       a: workRowKey(link.aWorkKey, records, works),
@@ -954,8 +1056,23 @@ export function toWindowRecords(
       existing: isExisting === undefined ? false : isExisting(record),
       duplicate: flags.get(record.id),
       linked: links.get(record.id),
+      ...relevanceOf(scores.get(record.id)),
     };
   });
+}
+
+/** The `relevance` member for a score, or nothing for an unscored row. */
+function relevanceOf(score: number | undefined): {
+  readonly relevance?: RowRelevance;
+} {
+  return score === undefined
+    ? {}
+    : {
+        relevance: {
+          score,
+          ref: message("research-helper-search-row-relevance", { score }),
+        },
+      };
 }
 
 /**
@@ -976,6 +1093,8 @@ export interface ReviewInput {
    * tooltip is never empty.
    */
   readonly tierNames?: ReadonlyMap<string, string>;
+  /** The search's screening report, for each row's relevance badge (`P3-T27`). */
+  readonly screening?: SearchImportOutput["screening"];
 }
 
 const NO_REVIEW: ReviewInput = { works: [], flags: [], links: [] };
@@ -1155,7 +1274,142 @@ export function toPipelineInput(
     ...(works !== undefined && { works }),
     ...(works !== undefined &&
       mergeDecisions !== undefined && { mergeDecisions }),
+    // `P3-T27`: a search the user chose to screen. Never on an import — the
+    // preview it writes was screened already.
+    ...(records === undefined &&
+      query.screening?.enabled === true && {
+        screening: { threshold: screeningThreshold(query.screening.threshold) },
+      }),
   };
+}
+
+/**
+ * The control's value as the run's threshold: an integer inside `docs/07`
+ * §8.5's range, read off the schema. A value the control cannot hold (an
+ * emptied box) is the range's minimum, `0`, which hides nothing — the safe
+ * direction.
+ */
+export function screeningThreshold(raw: unknown): number {
+  const { min, max } = PREFS.screeningThreshold;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (raw === "" || raw === null || !Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+/** `P3-T27`: what the window shows about a screened search, or `undefined`. */
+export function screeningView(
+  output: Pick<SearchImportOutput, "screening">,
+): ScreeningView | undefined {
+  const report = output.screening;
+  if (report === undefined) return undefined;
+  return {
+    threshold: report.threshold,
+    scored: report.verdicts.length,
+    unscored: report.unscored.length,
+  };
+}
+
+/**
+ * `P3-T27`: the banner lines a screened search adds — one when nothing could
+ * be scored, one when some rows could not. Unscored rows are never hidden, and
+ * these lines are how the user learns why they carry no score.
+ */
+export function screeningWarnings(
+  output: Pick<SearchImportOutput, "screening">,
+): readonly MessageRef[] {
+  const report = output.screening;
+  if (report === undefined) return [];
+  if (report.error !== undefined) {
+    return [message("research-helper-search-screening-failed")];
+  }
+  if (report.unscored.length > 0) {
+    return [
+      message("research-helper-search-screening-unscored", {
+        count: report.unscored.length,
+      }),
+    ];
+  }
+  return [];
+}
+
+/**
+ * Item 281(b): the most results a search can return, which is what a screen
+ * is priced for before it runs — the per-database maximum (held to `docs/07`
+ * §8.5's range) times the ticked databases that search. A lookup-only source
+ * (bioRxiv, medRxiv) adds none on a keyword run, and an id that names no
+ * registered source adds none. Merging duplicates can only lower the count.
+ *
+ * @param sources - the ticked ids, as the document sent them
+ * @param maxResults - the per-database box, as the document sent it
+ * @param descriptors - the registered sources
+ * @returns the count, `0` when nothing would be fetched
+ */
+export function screeningResultCount(
+  sources: readonly unknown[],
+  maxResults: unknown,
+  descriptors: readonly SourceDescriptor[],
+): number {
+  const raw = typeof maxResults === "number" ? maxResults : Number(maxResults);
+  const perSource =
+    Number.isFinite(raw) && raw > 0
+      ? Math.min(Math.floor(raw), PREFS.maxResults.max)
+      : 0;
+  const searching = new Set(
+    sources.filter((id): id is string => {
+      if (typeof id !== "string") return false;
+      const descriptor = descriptors.find((d) => d.id === id);
+      return descriptor !== undefined && !isLookupOnly(descriptor);
+    }),
+  );
+  return searching.size * perSource;
+}
+
+/**
+ * Item 281(b): the line beside the screening checkbox — the estimate, or that
+ * the model's price is not known. `undefined` when nothing would be scored,
+ * and the line is then hidden.
+ *
+ * @param estimate - `estimateRelevanceScreen`'s answer
+ * @param resultCount - the count it was made for
+ * @param locale - for `Intl`
+ */
+export function screeningCostLine(
+  estimate: RunEstimate,
+  resultCount: number,
+  locale: string,
+): MessageRef | undefined {
+  if (resultCount <= 0 || estimate.selected.calls === 0) return undefined;
+  const cost = estimate.selected.costUsd;
+  return cost === undefined
+    ? message("research-helper-search-screening-cost-unpriced", {
+        model: estimate.modelId,
+      })
+    : message("research-helper-search-screening-cost", {
+        cost: formatUsd(cost, locale),
+        count: resultCount,
+      });
+}
+
+/**
+ * Item 281(b): whether pressing Search opens `P3-T16`'s cost dialog first.
+ * `shouldOpenCostDialog` with no routine confirmation — a search has no
+ * collection to ask for — and no ceiling, so it opens exactly when the
+ * second acknowledgement is due: above `summary.confirmAboveCents`, or a cost
+ * that cannot be known.
+ *
+ * @param estimate - the screen's estimate
+ * @param confirmAboveCents - `summary.confirmAboveCents`
+ */
+export function screeningNeedsConfirmation(
+  estimate: RunEstimate,
+  confirmAboveCents: number,
+): boolean {
+  return shouldOpenCostDialog({
+    confirmation: { ask: false, reasons: [] },
+    plan: estimate.selected,
+    confirmAboveCents,
+    ceiling: undefined,
+  }).open;
 }
 
 /** `YYYY-MM-DD`, the precision `toSearchParams` hands the window. */
@@ -1535,8 +1789,18 @@ export interface SearchImportViewModel {
   readonly state: SearchViewState;
   /** Attach the document. Returns the detach function its unload must call. */
   connect(view: SearchWindowView): () => void;
-  /** The Search button. Resolves when the run has finished rendering. */
+  /**
+   * The Search button. Resolves when the run has finished rendering. With
+   * screening ticked, the screen is priced first and, when
+   * {@link screeningNeedsConfirmation} says so, nothing starts until the cost
+   * dialog is confirmed (item 281(b)).
+   */
   runSearch(query: SearchWindowQuery): Promise<void>;
+  /**
+   * Item 281(b): the line beside the screening checkbox for these databases,
+   * maximum and keyword, or `undefined` when there is none to show.
+   */
+  screeningCost(query: ScreeningCostQuery): Promise<MessageRef | undefined>;
   /** The Import button. Resolves when the write half has finished rendering. */
   runImport(request: SearchWindowImportRequest): Promise<void>;
   /** The Cancel button, and `Escape` while a job runs (FR-10). */
@@ -1590,6 +1854,11 @@ export interface SearchWindowHostApi {
   getPrefs(): Readonly<Record<string, unknown>>;
   connect(view: SearchWindowView): () => void;
   runSearch(query: SearchWindowQuery): Promise<void>;
+  /**
+   * Item 281(b): the screening cost line. The document tolerates it being
+   * absent, like every other member, and then shows no line.
+   */
+  screeningCost(query: ScreeningCostQuery): Promise<MessageRef | undefined>;
   runImport(request: SearchWindowImportRequest): Promise<void>;
   cancel(): void;
   /**
@@ -1736,8 +2005,105 @@ export function createSearchImportViewModel(
   const descriptors = (): readonly SourceDescriptor[] =>
     deps.listSources?.() ?? [];
 
+  /**
+   * The screening controls' seed (`P3-T27`): read on every call, so the
+   * control opens at the preference's current value. A reader that throws
+   * leaves the controls hidden rather than the window broken.
+   */
+  const screeningSeed = (): Record<string, unknown> => {
+    const screening = deps.screening;
+    if (screening === undefined) return {};
+    try {
+      return {
+        screeningThreshold: screening.threshold(),
+        screeningAvailable: screening.available(),
+      };
+    } catch {
+      deps.logger.warn("the relevance-screening seed could not be read");
+      return {};
+    }
+  };
+
   const nameOf = (sourceId: string): string =>
     sourceNames.get(sourceId) ?? sourceId;
+
+  /**
+   * Item 281(b): set while a screened search is being priced or confirmed, so
+   * a second press of Search does not open a second dialog.
+   */
+  let confirming = false;
+
+  /**
+   * Item 281(b): price a screen of what `query` can return. `undefined` when
+   * no estimator is bound or it fails, logged; the caller then does not screen.
+   */
+  async function screeningEstimate(
+    query: Partial<ScreeningCostQuery>,
+  ): Promise<
+    { readonly estimate: RunEstimate; readonly resultCount: number } | undefined
+  > {
+    const estimate = deps.screening?.estimate;
+    if (estimate === undefined) return undefined;
+    const resultCount = screeningResultCount(
+      Array.isArray(query.sources) ? query.sources : [],
+      query.maxResults,
+      descriptors(),
+    );
+    try {
+      return {
+        estimate: await estimate({
+          resultCount,
+          topic: typeof query.keyword === "string" ? query.keyword : "",
+        }),
+        resultCount,
+      };
+    } catch (error) {
+      deps.logger.warn(
+        "the cost of relevance screening could not be estimated",
+        { reason: error instanceof Error ? error.name : typeof error },
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * Item 281(b) (owner, 2026-10-24): may the screened search `query` start?
+   *
+   * - `"run"` — priced at or below `summary.confirmAboveCents`, or the cost
+   *   dialog was confirmed.
+   * - `"cancelled"` — the user cancelled or closed the dialog: nothing starts.
+   * - `"unavailable"` — no estimate, or no dialog could be shown: the search
+   *   runs **without** screening and says so. Nothing is ever screened
+   *   without its number having been checked against the threshold.
+   */
+  async function screeningGate(
+    query: SearchWindowQuery,
+  ): Promise<"run" | "cancelled" | "unavailable"> {
+    const screening = deps.screening;
+    const priced = await screeningEstimate(query);
+    if (priced === undefined || screening?.confirmAboveCents === undefined) {
+      return "unavailable";
+    }
+    if (
+      !screeningNeedsConfirmation(
+        priced.estimate,
+        screening.confirmAboveCents(),
+      )
+    ) {
+      return "run";
+    }
+    if (screening.confirm === undefined) return "unavailable";
+    try {
+      const outcome = await screening.confirm(priced.estimate);
+      return outcome.kind === "run" ? "run" : "cancelled";
+    } catch (error) {
+      deps.logger.warn(
+        "the cost dialog could not be shown, so the search runs without screening",
+        { reason: error instanceof Error ? error.name : typeof error },
+      );
+      return "unavailable";
+    }
+  }
 
   function publish(next: Partial<SearchViewState>): void {
     state = { ...state, ...next };
@@ -2107,7 +2473,10 @@ export function createSearchImportViewModel(
    * **plus** a non-blocking banner (FR-9), never a modal and never the error
    * panel.
    */
-  function renderSearchOutcome(output: SearchImportOutput): void {
+  function renderSearchOutcome(
+    output: SearchImportOutput,
+    extraWarnings: readonly MessageRef[] = [],
+  ): void {
     const lines = output.perSource.map((report) =>
       sourceStatusLine(
         report,
@@ -2138,8 +2507,10 @@ export function createSearchImportViewModel(
         flags: output.flags,
         links: output.links,
         tierNames,
+        ...(output.screening !== undefined && { screening: output.screening }),
       },
     );
+    const screening = screeningView(output);
     // `P2-T14`: a run where every source that *searches* failed is the
     // all-failed state — a lookup-only source makes no keyword request on a
     // keyword run, so it cannot fail one, and without this the default
@@ -2163,6 +2534,7 @@ export function createSearchImportViewModel(
         records,
         recordsRevision: revision,
         panel: output.records.length > 0 ? "results" : "initial",
+        screening,
         status: message("rh-error-cancelled", {
           imported: output.write?.created ?? 0,
         }),
@@ -2206,6 +2578,7 @@ export function createSearchImportViewModel(
         records: [],
         recordsRevision: revision,
         panel: "error",
+        screening: undefined,
         error: {
           // **The headline is not unconditionally "Could not reach any
           // database".** §12.1 reaches `Failed` by two routes, and §4.6 only
@@ -2254,15 +2627,20 @@ export function createSearchImportViewModel(
           descriptors().find((descriptor) => descriptor.id === report.sourceId),
         ),
     ).length;
-    const warnings: readonly MessageRef[] =
-      output.outcome === "partial"
+    const warnings: readonly MessageRef[] = [
+      ...(output.outcome === "partial"
         ? [
             message("research-helper-search-state-partial", {
               failed,
               succeeded,
             }),
           ]
-        : [];
+        : []),
+      ...screeningWarnings(output),
+      // Item 281(b): screening was ticked but not run (no estimate, or no
+      // dialog could be shown).
+      ...extraWarnings,
+    ];
 
     publish({
       sources: lines,
@@ -2273,6 +2651,7 @@ export function createSearchImportViewModel(
       panel: output.records.length === 0 ? "empty" : "results",
       emptyHeadline: undefined,
       warnings,
+      screening,
       status: undefined,
       databaseProgress: undefined,
       progressPercent: undefined,
@@ -2489,19 +2868,65 @@ export function createSearchImportViewModel(
     },
 
     async runSearch(query: SearchWindowQuery): Promise<void> {
+      let input = toPipelineInput(query, undefined, undefined);
+      const extraWarnings: MessageRef[] = [];
+      // Item 281(b) (owner, 2026-10-24): a screened search is priced first,
+      // and above `summary.confirmAboveCents` nothing starts until `P3-T16`'s
+      // cost dialog is confirmed.
+      if (input.screening !== undefined) {
+        if (confirming || source !== undefined) {
+          deps.logger.warn("a search or import is already running; ignoring", {
+            panel: state.panel,
+          });
+          return;
+        }
+        confirming = true;
+        let gate: "run" | "cancelled" | "unavailable";
+        try {
+          gate = await screeningGate(query);
+        } finally {
+          confirming = false;
+        }
+        if (gate === "cancelled") {
+          // Nothing started: redraw the window as it was before Search.
+          publish({});
+          return;
+        }
+        if (gate === "unavailable") {
+          input = toPipelineInput(
+            query.screening === undefined
+              ? query
+              : { ...query, screening: { ...query.screening, enabled: false } },
+            undefined,
+            undefined,
+          );
+          extraWarnings.push(
+            message("research-helper-search-screening-failed"),
+          );
+        }
+      }
       // See {@link retained}: a search replaces what the window shows, so the
       // previous import's record stops being this window's record.
       retained = undefined;
       // Before the records are handed over, never after: the table's Source
       // column draws these as text.
       await ensureSourceNames();
-      const running = await runJob(
-        toPipelineInput(query, undefined, undefined),
-        false,
-      );
+      const running = await runJob(input, false);
       if (running === undefined) return;
-      renderSearchOutcome(running.output);
+      renderSearchOutcome(running.output, extraWarnings);
       running.finish(await searchToast(running.output));
+    },
+
+    async screeningCost(
+      query: ScreeningCostQuery,
+    ): Promise<MessageRef | undefined> {
+      const priced = await screeningEstimate(query);
+      if (priced === undefined) return undefined;
+      return screeningCostLine(
+        priced.estimate,
+        priced.resultCount,
+        deps.screening?.locale?.() ?? "en-US",
+      );
     },
 
     async runImport(request: SearchWindowImportRequest): Promise<void> {
@@ -2708,11 +3133,16 @@ export function createSearchImportViewModel(
           windowSources(descriptors(), deps.semanticScholarKeyStatus?.()),
         listCollections: (): readonly CollectionDescriptor[] =>
           deps.listCollections?.() ?? [],
-        getPrefs: (): Readonly<Record<string, unknown>> =>
-          deps.getPrefs?.() ?? {},
+        getPrefs: (): Readonly<Record<string, unknown>> => ({
+          ...(deps.getPrefs?.() ?? {}),
+          ...screeningSeed(),
+        }),
         connect: (next: SearchWindowView): (() => void) => model.connect(next),
         runSearch: (query: SearchWindowQuery): Promise<void> =>
           model.runSearch(query),
+        screeningCost: (
+          query: ScreeningCostQuery,
+        ): Promise<MessageRef | undefined> => model.screeningCost(query),
         runImport: (request: SearchWindowImportRequest): Promise<void> =>
           model.runImport(request),
         cancel: (): void => {

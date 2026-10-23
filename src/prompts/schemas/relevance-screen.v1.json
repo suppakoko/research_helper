@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RelevanceScreen",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["results"],
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "score",
+          "reason",
+          "confidence",
+          "isPrimaryResearch"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "reason": { "type": "string", "maxLength": 300 },
+          "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+          "isPrimaryResearch": { "type": "boolean" },
+          "flags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "keyword_ambiguity",
+                "no_abstract",
+                "excluded_by_criterion",
+                "not_primary_research",
+                "prompt_injection_attempt"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -407,3 +407,37 @@ research-helper-search-error-rate-limit = { $database }: 요청이 너무 많아
 #
 # NEEDS REVIEW. en-US `.label`: "Hide details"
 # research-helper-search-details-hide =
+
+## Relevance screening (P3-T27; docs/08 §4.2, docs/12 §3)
+##
+# NEEDS REVIEW (P3-T27, 2026-10-24). en-US `.label`: "Screen results for relevance with the AI model"
+# research-helper-search-screening-enable =
+#
+# NEEDS REVIEW (P3-T27, 2026-10-24). en-US `.value`: "Relevance threshold"
+# research-helper-search-screening-threshold-label =
+#
+# NEEDS REVIEW (P3-T27, 2026-10-24). en-US `.aria-label`: "Relevance threshold, from 0 to 100"
+# research-helper-search-screening-threshold-input =
+#
+# NEEDS REVIEW (P3-T27, 2026-10-24). en-US `.label`: "Show excluded"
+# research-helper-search-screening-show-excluded =
+#
+# NEEDS REVIEW (P3-T27, 2026-10-24). en-US: "Importing { $kept } of { $total } results · { $excluded } below the threshold"
+# research-helper-search-screening-count =
+#
+# NEEDS REVIEW (P3-T27, 2026-10-24). en-US: "The AI model could not score { $count } results. They are shown without a score and are never hidden."
+# research-helper-search-screening-unscored =
+#
+# NEEDS REVIEW (P3-T27, 2026-10-24). en-US: "Relevance screening could not run, so no result was scored and none is hidden."
+# research-helper-search-screening-failed =
+#
+# NEEDS REVIEW (P3-T27, 2026-10-24). en-US: "Relevance { $score }"; `.title`: "Relevance score from the AI model, from 0 to 100. A row below the threshold is hidden unless Show excluded is ticked."
+# research-helper-search-row-relevance =
+
+## The estimated cost of screening (owner, 2026-10-24, plan/00 §6 item 281(b))
+##
+# NEEDS REVIEW (item 281(b), 2026-10-24). en-US: "Estimated cost of screening: up to about { $cost } for up to { $count } results"
+# research-helper-search-screening-cost =
+#
+# NEEDS REVIEW (item 281(b), 2026-10-24). en-US: "The price of { $model } is not known, so the cost of screening cannot be estimated."
+# research-helper-search-screening-cost-unpriced =

@@ -232,6 +232,13 @@ export interface PreflightDialogInput {
   readonly ceilingDowngrade: CeilingStop | undefined;
   /** This session's spend so far, for the usage line. */
   readonly session: SpendTotals;
+  /**
+   * Whether to offer "Don't ask again for this collection". Default `true`.
+   * `false` for a run over no collection — the Search & Import window's
+   * relevance screen (owner, 2026-10-24, `plan/00` §6 item 281(b)) — where
+   * the box would have nothing to apply to.
+   */
+  readonly offerDontAskAgain?: boolean;
 }
 
 /** What the mid-run question is built from. */
@@ -283,7 +290,8 @@ export interface PreflightDialogModel {
       }
     | undefined;
   readonly footer: readonly FluentLine[];
-  readonly dontAskAgain: FluentLine;
+  /** `undefined` when the run has no collection to remember the answer for. */
+  readonly dontAskAgain: FluentLine | undefined;
   readonly accept: FluentLine;
   readonly cancel: FluentLine;
 }
@@ -497,7 +505,10 @@ export function buildCostDialogModel(
     selected,
     downgrade,
     footer,
-    dontAskAgain: { id: COST_DIALOG_L10N.dontAskAgain },
+    dontAskAgain:
+      input.offerDontAskAgain === false
+        ? undefined
+        : { id: COST_DIALOG_L10N.dontAskAgain },
     accept: { id: COST_DIALOG_L10N.run },
     cancel: { id: COST_DIALOG_L10N.cancel },
   };
@@ -589,7 +600,9 @@ export function decideCostDialog(
       view.raise === undefined
         ? undefined
         : { ceiling: view.raise.ceiling, limitUsd: view.raise.limitUsd },
-    dontAskAgain: answer.dontAskAgain === true,
+    // Only a box the window was given can have been ticked (item 281(b)).
+    dontAskAgain:
+      model.dontAskAgain !== undefined && answer.dontAskAgain === true,
   };
 }
 

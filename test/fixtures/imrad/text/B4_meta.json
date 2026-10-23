@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "B4",
+  "title": "Sexually dimorphic renal expression of Klotho is directed by a kidney-specific distal enhancer responsive to HNF1b",
+  "venue": "bioRxiv v1",
+  "publisher": "biorxiv",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "unknown",
+    "webHeadings": null,
+    "notes": [
+      "the only CC0 paper"
+    ]
+  },
+  "doi": "10.1101/2024.02.29.582831",
+  "otherId": null,
+  "licence": "CC0 1.0",
+  "licenceEvidence": "page 1: \"not subject to copyright under 17 USC 105 ... CC0\"",
+  "sourceUrl": "https://www.biorxiv.org/content/10.1101/2024.02.29.582831v1.full.pdf",
+  "landingUrl": "https://www.biorxiv.org/content/10.1101/2024.02.29.582831v1",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "B4.pdf",
+    "bytes": 913580,
+    "sha256": "1c74d56841c7e195d53228824aaee60d4b8e6420113b1b7b502aef4280b88629"
+  },
+  "text": {
+    "file": "B4.txt",
+    "bytes": 43312,
+    "chars": 43255,
+    "sha256": "506b558244cd8a67f4f3aac407b00dfde2c578f274e729c658414b310185f4ba",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 43255,
+      "truncated": false,
+      "pages": 26,
+      "runningHeadLinesRemoved": 52,
+      "gutterPages": 6,
+      "referencesCut": true,
+      "referencesShare": 0.32595265007819396,
+      "supplementaryCharsRemoved": 273,
+      "ocrAlnumPunctShare": 0.846306785342735,
+      "ocrLetterShare": 0.7929256733325627,
+      "ocrChars": 43255,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 21,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

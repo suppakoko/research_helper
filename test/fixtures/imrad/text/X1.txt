@@ -1,0 +1,211 @@
+JOURNAL OF RESEARCH of the National Bureau of Standards Vol. 85, No.6, November-December 1980
+Observations on the Mechanisms of High Resistance Junction Formation in Aluminum Wire Connections
+Dale Newbury* and S. Greenwald t
+National Bureau of Standards, Washington, D.C. 20234
+June 19, 1980
+The bas ic mechani sm of high res istance jun cti on formation in duplex co nn ectors wired with a luminum wa s inves tigated. Laboratory e xpe rime nts to simulate loose co nn ecti ons we re made both in ac tual dup lex conn ectors a nd in a n experim e nta l apparatus. Mi c rostructura l o bse rva tio ns we re made by sca nnin g e lectron mic roscopy a nd x- ray mi croa nal ys is of th e struct ures formed at th e inte rfaces between th e circ uit co mpone nts durin g high resistan ce juncti on formation. At th e iro n screw / aluminum wire interface, th e a rcing process whi ch occurs in a loose co nn ection cau ses hi gh tempe ratures in excess of 15 00 ' C a nd mater ia l tra nsport be tween th e co mpo ne nt s . Und e r th es e condition s, aluminum a nd iron react to form inte rme ta llic compound s such as re3 AI and reAl,. Th e formati o n of a n ex te nsive zo ne of these co mpound s adjace nt to the iro n-aluminum inte rface in dupl ex co nn ectors was revea led by electro n m etallograph y. In duplex co nnectors tested to g low failure, the formation of inte rme tallic compound s s uc h as CuAh and Cu,Z nAI wa s observed a t the brass plate / aluminum wire in te rface. These inte rm eta ll ic compound s have a resistivity of th e ord e r o f lOO X 10- 6 ohm-em o r hi gher whi ch ma y provide s ufficie nt res istence at the current-carry ing inte rface to lead to signifi ca nt f 'R heatin g losses at th e int e rface.
+Key words : Aluminum wiring; duplex co nn ecto rs; hig h resista nce jun cti ons; junctio n resista nce; scanning electro n mi croscopy; x-ray microana lys is.
+1. Introduction
+Overh eatin g of electri cal connections has been observed in various studi es of aluminum wiring used in reside ntial branch circuits [I)'. The impli cation s of this overh eatin g for damaging th e co nn ection , des troying th e device, and possibly ca using fir e have been establis hed_ It is not obvious however why th e compon e nts involved , which typically in clude aluminum wire, a steel screw with a thin brass, tin or zinc plating, and a brass plate, should produce overheating since all are good conductors_ Engineering studies have revealed that the overheating occurs mainly in loose co nn ection s [2 ,3] - The overheating is often accompanied by the emission of visible light, the so-ca lled glow phenomenon , an apparent result of electrical arcing. Loose screw connections in th e receptacle may res ult from one or more of th e followin g causes:
+(a) Expansion and contraction of the connection. Hea ting caused by the fR losses in th e co nnection is th e principal means of expansion and contraction [2 ,3]. Receptacles located in outer walls are also subject to heating and cooling without the need for any e lectri c curre nt in th e
+• Center for Ana lyti ca l Chemi stry, Na ti onal Meas urement Laboratory. t Center for Consumer Product Techn ology, Na ti onal Engineerin g La boratory, Retired, 1980.
+I Figures in brackets refe r to lite rature refere nces at th e e nd of thi s paper.
+bran ch circuit. S uch tempe rature swin gs cau se an alternate compression and relaxation of the connection mainl y because of th e differen ce In expansion rates of aluminum and stee l. (b) Creep. Aluminum is a metal which ma y ex hibit cree p or relaxation under stress at ambient tempe ratures , Thi s effect in th e aluminum wire is de pe nd e nt on its compos ition and heat treatmen t durin g manufacture and on the temperature at whi ch th e co nn ecti o n operates_ Re lated to this problem is the very limited mec hani cal compliance of the screw-wire-brass plate system found In these receptacles [2,3]. (c) Workmanship. A rece ptacl e in which the screws are not sufficiently tightened durin g installation is a so urce of potential problem s, Even whe n th e scre ws are satisfactoril y tightened ou tside the wall box durin g in stallation, some of th e screws ma y be loosened in th e act of press in g th e rece ptacles back in their box _The stiffe r th e wire, the more likely thi s will occur [2,3]. In a tight connection very little heat is di ssipated at th e electri cal interface, With 15 A of curre nt flowin g across the junction, th e power co ns um ed is on th e order of 80 mW_ With the same current flow, powe r dissipation as high as 36 W has bee n reported with a glowing co nnection [1]- One particular glow situation was reported to have bee n sustained for over 100 h although th e time duration is
+
+
+usually shorter [3]. Temperatures as high as 400°C have been measured in this study at the break-off tab (fig_ 2)_ In the center of the glow area itself, the visible color may vary from a dull red to a bright white, indicating maximum temperatures in excess of 1200-1300° C [1]. The origin of the junction resistance leading to resistive heating in aluminum wire/steel connections is not well understood_ Previous work on copper! copper junctions by Suzuki et al. [4] indicated that the formation of filamentous Cu20 between the loose copper conductors was responsible for high junction resistance_ This observation suggests the possibility that the formation of aluminum oxide and / or iron oxide might be an important mechanism for the development of high resistance junctions in aluminum wire/iron screw connections. In the present study, the microstructures of components from laboratory simulations of aluminum-iron glowing connections as well as actual wall receptacles tested at the onset and after the full development of glow formation were examined by scanning electron microscopy and x-ray microanalysis to determine the underlying mechanism of high resistance junction formation.
+2. Experimental Methods
+Two different types of electrical connections were examined. In order to study the initial stages of the glow phenomenon, it was necessary to simulate a loose connection with electrical contact established in a known location. This was accomplished III an experimental apparatus designed to create a controlled contact region (fig. 1). Actual residential duplex receptacles were tested to simulate service failure (fig. 2).
+2.1 Simulated Wire/Screw Contacts
+To simulate a glow failure in a controlled location on an aluminum wire/iron screw complex a simple apparatus was constructed (fig. 1). In this device, which was essentially a micromllnipulator, an aluminum wire was pressed against the head of a brass-coated steel 8-32 screw taken from a commercial receptacle. The gap between the wire and screw was adjustable. Because of the curved geometry of screw and wire (longitudinal axis perpendicular), contact area was minimal. Voltage was provided by a variable ac source, and a resistor of about 1 D. in series with t;le wire-screw connection was used to control the current level to prevent gross instabilities. In operation, voltage was first removed from the fixture and the thumbscrew turned until the test wire and steel screw just made contact as indicated by an ohmmeter. Next, voltage was applied and current increased to 15 A. If a
+Ff(;UHf: J. Apparatus/or controlled wire/ screw arc experiments.
+glow did not appear within 2 or 3 min, the thumbscrew was backed off very slightly. Arcing (defined as a low voltage, high current sustained discharge) would then be observed visually and a sustained glow could frequently be obtained. In order to avoid the effects of residual contaminants on the test wIre and screw, both were cleaned with trichloroethylene and acetone and rinsed with distilled water and methanol. The specimens produced with this simple apparatus were primarily used for examination of the initial phases of the glow phenomenon, since the location of the electrical contact could be carefully controlled.
+2.2 Residential Connections
+The second set of experiments examined the situation Nhich resembled the conditions in house wiring_ Here the goal was to induce a glow under the head of a screw in an actual residential receptacle. To this end 10 duplex receptacles were mounted on a rack and wired in series with #12 gage aluminum wire. All receptacles in the experiment were of a common commercial variety using steel screws with a very thin brass or zinc plating. Figure 2 shows a typical device removed from the rack for observation. The connections were tightened to a relatively low torque of about 0.4 nt-m (4 in-lb), in order to try to induce glow in a few current cycles. A current of 40 A ac was periodically passed through all connections. A complete cycle took 20 min with equal "on" and "off' times. High currents were employed to accelerate the development of glow failures in order to obtain suitable samples in a
+
+
+Fe screw
+AI wire
+1cm
+FrcUlu: 2. Duplex junction box sh.owing wire alld screw componen/.s and location of lab Jar lemperallire measurements.
+reaso nable time. Previous work indicated that glow failures could be obtained over a wide ran ge of curren t, 0.8-50 A [1 ]. Some of th e co nn ection s tested developed a glow failure which co uld be s us tained for co nsid erabl e time. Sample "A" was one such exa mple (see table 1) which dev elo ped a glow after only 8 h of cycling. This specim e n was left in th e circuit and co ntinu ed to glow, but was finall y rem oved after 4 more hours had elapsed. Th e tota l number of "on"·"ofP' cycles at that time was 36. In other tests, e.g., specim e ns C and 0 in table 1, the test was interrupted at ea rli er stages in the development of the glow phenomenon in an attempt to trace th e sequen ce of th e eve nts. Temperatures were meas ured during th e test with a th ermoco uple co nn ected to an electronic digital th ermom eter at the position s hown in figure 2. Samples were prepa red for scanning electron mi crosco py and x-ray mi c roanal ysis. In the case of the simple wire/ screw con tact experiments, the region of the contact co uld be examined directly in the scanning electron
+TABI.E l. La boratory test conditions of /wuse/wld wiring fixtures
+Time Maxi mum of Temperature· * s ustain ed Sa mple Cycles· Current °C glow
+A 36 40A 350 4h B 36 40A 360 4 h C 12 40A 340 n-d D 16 40A !l60 n-d
+Il- d- visible glow not detecte d; th e tes t was interrupted to study the inc ipient failure. • A cycle consisted of 10 min "on" foll owed by 10 min "off." •• Te mperature measured at tab on fixture .
+microsco pe without prior preparation. For the hou se hold fixtures, metallographic sections were prepa red through th e wire/screw/ brass plate junction. Because of the three dimen sional nature of the junction, it was not always possi ble to simulta neo usly interce pt th e region of glow interaction at th e wire/screw inte rfa ce and th e wire/brass plate inte rfa ce. An optical microscope incorporated in the scanning electro n microsco pe allowed direct co mparison betwee n the optical and e lectron me tallography of th e samp le. X-ray microanalysis was carri ed out with an e nergy dis persive x-ray spectrom eter (EDS) attached to th e scannin g electro n microsco pe (SEM). The elements of interest in the analyses, a luminum , iron , cop per, and zinc, have characte risti c x-ray e ne rgi es wh ich are suffi cie ntl y se parated in e nergy so that no peak overlap occurs. For th e flat metallographic section s, quantitative x-ray mi croanal ys is was possible. The NBS th eore tica l matrix correction procedure for x-ray mi croa nalysis, FRAME C, was used to reduce th e meas ured x-ray spectral inte nsities to quantitative compositional values [5]. Pure ele me nts were e mplo yed as sta ndard s, and th e beam e nergy was 20 ke Y for all analyses. Under such anal ytica l co ndition s with well resolved peaks, prev iou s ex peri ence in th e ana lys is of known sa mpl es indicates that FRAME C analyses li e within 5 percent relative of th e co rrect va lu e in 90 pe rcent of th e cases tested when major elements (concentrations greater than 10 wt%) are being co ns idered . Quantitative x-ray microanal ys is of the irreg ular surfa ces observed on th e aluminum wire and iron screw couples from th e loose-co ntact simulatio n was perfo rmed with the NBS th eo re ti cal matrix co rrection procedure for rough s urfaces, FRAME P [6,7]. This is a rece ntly developed procedure for the analysis of samples whi ch deviate from the ideal sample, e.g., flat, polished, and set at a specifi c ang le to the x-ray detector. Th e ty pical e rror li mit for FRAME P anal ys is have not yet bee n determined, but preliminary testing suggests that an error range of ±20 percent relative should be obtained in most cases.
+3. Experimental Results
+3.1 Wire/Screw Loose Contact Simulation of Glow Failures
+3.1.1 Free surface
+The regions on the surfaces of the aluminum wIre and iron screw associated with a glow failure were examined by sca nning electron microsco py. Examp les of th e structures observed on the wire and screw are shown in figures 3(a) (wire s urface) and 4(a) (screw surface). Craters are observed on both surfaces. These crater surfaces have a
+
+
+FIGURE 3 (.) . Damage crater observed on aluminum wire after loose junction FI GU RE 4(.). Damage crater observed pn iron screw after loose junction glow glow simulation. simulation. Anal yse!> at point s ind ica ted are li sted in tab le 2 (SEM im al'ej.
+FIGURE 3(b). Structure located at position 2 in figure 3(a) (SEM image).
+smooth appearance which appears to be a result of melting and solidification. X-ray microanalyses of the areas indicated in figures 3(a) and 4(a) are listed in table 2. The analyses reveal that both aluminum and iron are present in significant amounts within both crater regions_ Since the surrounding matrix material is either nearly pure aluminum or nearly pure iron, the intimate mixing of these elements in the crater regions indicates that significant material transport occurred between the wire and the screw during the glow phenomenon . Close examination of the craters revealed a number of interesting features. Ball-like structures, marked in figures 3(b) and 4(b), found in both craters contain mostly iron,
+An alyses at po ints indica ted are listed in table 2 (SE M image).
+FIGURE 4(b). Ball-like structures observed in region of figure 4(a) (SEM image).
+with only 2-4 percent aluminum [table 2, Al(2,7); Fe(4,5,8,9)]. Elongated structures, indicated in figure 4(c), are also composed mainly of iron. The spherical and elongated structures appear to be the result of melting and rapid freezing of the metal. The presence of molten iron during the glow phenomena indicates that temperatures in excess of 1500 ·C are generated in the region of the crater. The imaging process in the scanning electron microscope is sensitive to the presence of insulating layers through the phenomenon of electrical charging. The presence of thick layers of aluminum oxide or iron oxide on the surface of the craters would be revealed in the scanning electron micrographs by bright regions characteristic of such
+
+
+TABI.E 2. X-ray microana Lysis of craters
+Aluminum wire locatio n
+I 2 3 4 5 6 7 8 9 10 11 Iron Screw
+2 3 4 5 6 7 8 9
+Analys is of cross section
+Location
+AI (w t%)
+77 4.8 59 73 69 96 4.3 15 89 12 77
+16 59 73 3.3 2.2 26 58 0.9 1. 6
+AI
+10.1
+Fe
+88.0
+Fe (wt % )
+23 95 41 27 30 3.9 96 85 I \.3 88 23
+84 41 26 97 97 74 41 99 99
+C Ui
+1.5
+FIG URE 4(c). SpLatter-Like structures on edge of damage crater on iron screw. The ci rcled area shows ev id e nce of charg in g (bright a reas) (SEM im age),
+
+
+FIGURE 5. jt,jetallographic cross section through a damage crater on aluminum wire (SEM image).
+charging. These areas are occasionally observed within the craters, e.g., as indicated by circles in figures 3(a) and 4(c). The regions of charging in the image represent only a small portion of the crater area, and thus the dominant character of the crater is conductive.
+3.1.2 Interior
+The sub·surface structure of a crater formed during the glow process on the aluminum wire was examined in a metallographic cross section (fig. 5). The electron image of this structure reveals a new phase at the surface of the wire below the crater, which is found to contain principally aluminum and iron with a small amount of copper (table 2).
+3.2 Branch Circuit Receptacle Glow Failures
+3.2.1 Long term sustained glow failures
+Sample A (table 1) underwent a sustained glow, 4 h in duration reaching a measured temperature of 350°C. The metallographic cross section (unetched, figs. 6(a) and 6(b)) showed evidence of extensive reaction at the aluminum wire/iron screw interface and at the aluminum wire/brass plate interface.
+(a) Aluminum wire/iron screw interface. A backscattered electron image (which is sensitive to compositional differences) of the aluminum wireliron screw interface,
+(fig. 7) reveals a complex reaction zone which consists of two distinct layers located between the aluminum and iron. Quantitative analyses (table 3A) performed at the locations indicated in figure 7 reveal that the thin outer layer (near the aluminum wire) consists of 62 wt% AI-38 wt% Fe0.5 wt% Cu while the thick inner layer (near the iron screw) consists of 57 wt% AI-43 wt% Fe-0.1 wt% Cu. Zinc (from the brass electroplated coating) was not detected.
+FIG UHE 6(a). Optical micrograph of aluminum wire/iron screw/brass plate from duplex receptacle following glow failure (sample A, table I).
+
+
+FI GU RE 6(b). Optical micrograph oj aluminum-iron region oj figu re 6(a) showing reaction zone (unetched).
+T ABI.E 3 A. X-ray microanalysis oj section through duplex connector
+Location" Al Fe Cu Zn
+62.5 38. 1 0.5 0 2 57.5 43.3 0 0 3 57.3 43.3 0 0 4 55.5 44.4 0 0
+" Locations ma rked in fi gure 7.
+FIGU RE 7. SEM micrograph oj the circled region oj figure orb). Th e analyses at th e indicated locations are li sted in ta bl e 3A.
+The interfaces of this reaction zone with the aluminum and with the iron are both highl y irregular, which suggests that the zone is growin g into both materials. In this sample, no evid ence of a thick oxide layer was obtained. The structures observed in sample A were typical fo r sustained glow failures. Oxide laye rs were not usually found. In one sample, howeve r (sample B, table 1), a thick oxide laye r was observ ed to addition to the usual aluminum-iron intermetallic laye rs. The optical micrograph (fig. 8) of the cross section of sampl e B shows the reaction zone ("Fe-AI") and the oxide layer. Selected points in these structures we re an alyzed, as s hown in table 3B. The inte rmetallic layer (figs . 9(a) and 9 (b)) contained two distinct regions, with the region adjacent to the wIre slightl y richer in aluminum . The oxide structure (fig. 9(c)) contained main ly alum inum (table 3 B). Note that the measured aluminum weight fracti on in this region; 71 percent, IS substantiall y higher than a lum inum to stoichiometri c AI 20 3 (weight percent Al is 53%), which
+I.----A
+_ ___50b!
+F IGU RE 8. Optical micrograph oj iron/aluminum interface region in sample B, table 1, showing iron-aluminum interaction region and an oxidized region near the aluminum wire.
+435
+T ABI.E 3B. X-ray microanalysis oj section through duplex conneclor
+Location" Al Fe
+66.2 33.7 2 6 1.3 39.0 3 94.1 3 .9 4 66.3 35.0 ox ide 7 1.1 0. 4 incl us io n in ox id e 70.0 30 .2 All conce ntrations in weight percent.
+" Locations marked in figure 9(a).
+Cu
+0 .6 0.2 3 .6 0 .4 0
+0
+Zn
+o
+o
+0.7
+o
+o
+o
+
+
+FIGURE 9(a). SEM image of iron/alaminum reaction region in figure 8.
+FIGU RE 9(b).
+FI GU RE 9(c).
+SEM image of interface between iron/aluminum reaction zone and iron screw in figure 8.
+! '----t
+100!Jm
+SEM image of oxide/iron-aluminum reaction zone in figure 8.
+indicates that the aluminum IS incompletely oxidized. Inclusions are observed in this oxide layer which correspond to nonoxidized intermetallic compounds (table 38) .
+(b) Brass-aluminum inte1ace. Reactions are often observed as well at the interface between the aluminum wire and the brass plate. At the brass-aluminum interface in sample A (fig. 10) a structure is observed with a nearly radial symmetry. X-ray microanalysis at the points indicated in figure 11 reveals that this region is an
+Brass
+FI GU RE 10. Optical micrograph of reaction zone at an aluminum wire/brass plate interface.
+436
+Reactio n zo ne c ircled . Sample A, table 1.
+1.
+FIGU RE 11. SEM micrograph of reaction zone Analyses at nu mbe red location s a re li sted in tab le 4 .
+*------J
+20!J m
+in figu re 10.
+
+
+,~
+aluminum-copper-zinc alloy which is slightly enriched in copper and strongly depleted in zinc as compared to the unaffected region of the brass plate (table 4).
+TABLE 4. X-ray microanalysis of section through duplex connector
+Point" AI Fe e u Zn
+5.2 0 65.0 29.7 2 16.4 0.9 72.4 10.2 3 lS.4 0 74.2 7.3 4 lS.7 0 74.6 6.S 5 19. 1 0 74.3 6.5 bulk brass 0 0 69.4 31.1
+All concentrations in weight percent.
+" Locations marked in fi gure 11.
+3.2.2 Incipient glow foilures
+A series of circuit connections was tested to examine the initial stages of the failure mechanism by interrupting th e test after a small number of cycles prior to th e development of a visible glow. Structures relating to incipient failure were found at both the aluminum wire/ iron screw interface and the aluminum wire/ brass plate interface. Because of the small size of the regions of incipient failure, locatin g the regions of interest in the metallographic cross section was difficult. Ten rece ptacles were sectioned to yield the following observation s.
+(a) Aluminum wire/iron screw interface. An example of a structure form ed at the wire /screw interface durin g the early stages of a glow failure (sample C, table 1) is illustrated in figure 12. The structure consists of two distinct aluminum-iron regions with the compositions listed in table 5. The reaction region in figure 12 has on ly a small
+FI GU RE 12. Incipient reaction zone at iron/aluminum interface. Ana lyses at numbered locations are listed in tabl e 5.
+percentage of the volume of the reaction zone deve loped in a sample such as A in which a sustained glow occured. A major difference between the reaction zone form ed in the initial stage and the full y-developed reaction zone is th e detection of a large amount of zinc, which is derived from a galvanized zin c coating. In full y-developed reaction zo nes associated with galvanized screws, th e zinc component is apparently lost by -volatization .
+(b) Aluminum wire/brass plate interface. Two differe nt types of structures are observed at th e brass-aluminum interface. In one type of structure a complex laye red reaction zone is found at the aluminum wire/ brass plate interface during th e initial stages of the failure (sample 1). A scanning electron micrograph (fig. 13) reveals that this region contain s at least four distinct zo nes. The analyses of these areas (table 5) indicate that the formation of an a luminum-coppe r-zinc alloy has occurred durin g the fai lu re.
+FI("; UHE 13 . Incipient reaction zone at aluminum/brass interface.
+The aluminum content of the alloy increases near the wire. A second type of structure can be observed at the aluminum-brass interface (fig. 14(a)) which consists of a mixture of two distinct phases (table 5, sample C). The continuous phase "C" (fig. 14(b)) consists principally of aluminum and copper with a minor amount of zinc. In the di scontinuous phase "D", a luminum and zinc are present as · major co nstituents, while copper is a minor constituent.
+4. Discussion
+The observations of the structure and composition of the regions on the aluminum wire, steel screw, and brass plate components affected by the glow failure mechanism can be summarized as follows: (1) High temperatures are created III the region of the glow discharge. The observation of
+
+
+FI(;UHE 14(a). Incipient reaction zone at aLuminum/brass interface.
+FIGURE 14(b). Higher magnification image of figure 14(a) showing
+continuous (" e") phase and discontinuous phase ("D 'J.
+structures of solidified iron suggests the development of temperatures in excess of 1500°C. (2) Material transport occurs between the members of the wire/ screw couple and the wire/brass plate couple, initially in the vapor phase and possibly in the liquid phase after sustained glow. (3) Reaction of these metals occurs creating thick zones of alloy products which intrude into the wire, screw, and plate. In the case of the aluminum-iron reaction, initially a single phase is formed . Further reaction results in the formation of multiple layers of distinctly different composition. Each layer appears to be single phase. At the brass-aluminum interface, a two-phase structure or a layered structure of single phase layers can form.
+TABI.E 5. Analysis of strucwres associated with incipient gLow failure
+Aluminum Wire/ Iron Screw Interface
+Location' Al Fe Cu
+50.3 37.S 0 2 62.3 33.1 0
+, Locations marked in figure 12.
+Aluminum Wire/Brass Plate Interface
+(a) Layered structure
+Location' Al Fe Cu
+50.2 0 48.3 2 26.0 0 56.3 3 32.3 0 47.9 4 20.3 0 52.7
+, Locations marked in figure 13.
+Aluminum Wire/Brass Plate Interface
+(b) Two-phase structure
+Location'
+Continuous phase Discontinuous phase
+Al
+49.6 67.2
+, Locations marked in figure 14(b).
+Fe
+o
+o
+Cu
+49.3 7.9
+Zn
+12.S 4.4
+Zn
+3.1 19.1 lS.9 24.9
+Zn
+2.5 26.0
+- -I
+The binary phase diagrams of AI-Fe and AI-Cu contain numerous intermetallic compounds (table 6 [8]). Comparison of the analytical results on the structures observed in the cross-sections of high resistance aluminum/iron and aluminum/brass junctions reveals that, in many cases, the structures formed are intermetallic compounds. In the iron-aluminum junctions, the initial phase observed in the reaction zone (table 2) corresponds closely in composition to Fe3Al. In the samples in which the reaction proceeded to a greater extent (table 3A) the layers in the structure correspond approximately to Fe2Al5 and FeAI3• Note that the intermetallic compounds generally have a range of composition over which they are stable and thus the observed values may not correspond exactly to the stoichiometric values. In the case of the aluminum-brass reactions, the situation is more complex. For sample A (table 4), the single phase reaction product [approximately Cu(74)-Zn(7)-AI(18)] appears to be Cu9Al4 with some replacement of copper by zinc. For the layered structure observed in sample C [table 5(b)], layer 1 is CuAI2, while layers 2, 3, and 4 are probably a variety of intermetallics (Cu4AI3, CuAl, and Cu3A12) with zinc partially replacing copper. In the two
+
+
+phase structure observed In sample D [table 5(c)], the continuous phase is CuAl2 (with a small amount of zinc) and the discontinuous phase is an aluminum solid solution. The observation of th e formation of intermetallic phases at the current-carrying interface In aluminum/iron and aluminum / brass connections is critical to understanding the development of high resistan ce junctions In these connections. The res istivity of solid solution alloys is, In general, higher than the resistivity of pure metals due to disruption of the matrix lattice by substitutional or interstitial so lute atoms. In the case of intermetallic compounds, such as those li sted in table 6, the resistivity can be a fa ctor of 10 or more higher than that of the pure metals, because of the localization of electrons in chemical bonds. In the AI-Fe system, the resistivity of the intermetallic phases IS as much as a factor of 50 greater than the resistivity of pure aluminum and 10 times greater than the resistivity of pure iron, figure 15 [10]. The maxImum resistivity in thi s system is of the order of 100-200 /-Lflem, which is similar to the res istivity of the alloy nichrome. To obtain the resistan ce of an intermetallic depos it with the complex topo grap hic structure shown In figures 6(a), (b) and 7 would require a detailed study of the morphology and interconnections of the three dimensiona l object.
+TABI.E 6. IntermetaUic compounds /8 , 9/
+Approximate AI range of Fe-AI syslem AI Fe slability
+Fe"AI 13.9 86.1 12-18 FeA I 32.6 67.4 stoichiometric FeA I2 49. 1 50.9 stoichiometric Fe2AI, 54.7 45.3 53-57 FeAI" 59.2 40.8 58-63
+Approximate AI range of Cu-AI system AI Cu stabil ity
+CuA I2 45.9 54.1 44-46 CuAI 29.8 70.2 29-31 Cu.AI3 24.2 75.8 24-26 Cu"AI2 22.1 77.9 21-23 Cu9AI. 15.9 84.1 16-20
+Zn-A I system
+- no intermetallics
+Cu-Zn-AI system Cu Zn AI
+Cu2ZnAI 55 32 13 CU3Z nAI6 56 12 32
+AI, wt.%
+o 2M 5.10 7.88 10.70 6.87 am 20.6
+160
+AI. at. 0/0
+FI GU HE 15. Resistivity behavior in the iron·aluminum phase diagram (ref. 8).
+Calcu lations indi cate that the res istan ce of the individual "fingerlike" protuberan ces observed at the interface is of th e order of 0.5 fl for a structure with dim ensions of 250 /-Lm length, a cross sectional area of 625/-Lm 2 and a resistivity of 100 /-Lfl-cm. From the morphology of the interface, man y of these structures may operate in parallel, although the exact number of active sites is difficult to determine because of voids. The estimate of the junction resistance in glowing circuits is of the order of 0.1 fl [1]. The values suggested by the resistance of an individual finger does not seem inconsistent with these measurem ents. The formation of intermetallic compounds at the currentcarrying interfaces in aluminum wire/iron screw and aluminum wire/brass plate connections may thu s be an important factor in the mechanism of high resistance junction formation. The formation of intermetallic compounds as a mechanism for high resistance junctions is more reasonable than postulating that aluminum oxide is the prime factor. Although there is some evidence for aluminum oxide at the surface of the arc-damage craters, the resistivity of aluminum oxide is so great that extensive formation of aluminum oxide at the current carrying interface would reduce the current flow to a negligible level. lntermetallic compounds, on the other hand, have sufficient co nductivity to allow the current to continue to flow, while providing a significant increase in resistance so that the fR heating losses can become large.
+
+
+5. Conclusions
+(1) The glow-arc process which occurs in mechanically loose aluminum wireliron screw and aluminum wire/brass plate connections results in locally high temperatures and causes material transport between the members of the connections. (2) Under these conditions of high temperatures and intimate mixing the elements react to form intermetallic compounds,such as FeAI3 and CuAI2, and solid solutions. (3) The resistivity of these intermetallic compounds may be one of the main factors causing high resistance junction formation in these connections.
+The outstanding work of Mr. Charles Brady, who prepared the metallographic sections used In this work, is gratefully acknowledged by the authors.
+6. References
+[11 Meese, W. 1. and Beausoliel, R. W., Exploratory study of glowing electrical connections, Nat. Bur. Stand. (U.S.), Bldg. Sci. Ser. 103 (Oct. 1977).
+[2) Rabinow , J. , Some thoughts on electrical connection s, Nat. Bur. Stand. (U.S.) NBSIR 78-1507 (Aug. 1978). [3) Rabinow, J., Special report on aluminum wire, Report for the U.S. Consumer Product Safety Commission (Sept. 1974). [4] Suzuki, H., Inoue, S., Tago, M., and Umemura, T ., Cu20 breeding phenomena in electrical con nections, Report to the Furukawa Electric Co., Ltd., Japan . [5] Myklebust, R. L., Fiori, C. E., and Heinrich, K. F. J., FRAM E C: A compact procedure for quantitative energy·dispersive electron probe x·ray analysis, Nat. Bur. Stand. (U.S.), Tech. Note 1106 (Sept. 1979). [6) Small, 1. A., Heinrich, K. F. J ., Newbury, D. E., and Myklebust, R. L., Progress in the development of the peak.to·background method for the quantitative analysis of single particles with the electron probe, SEMIl979 (SEM, Inc., Chicago, 1979), Vol. 2, 807-816. [7) Small, J. A., Newbury, D. E., and Myklebust, R. L., Analysis of particles and rough samples by FRAM E P, a ZAF method incorporating peak.to·background measurements, Microbeam Analysis-1979, D. E. Newbury, ed., (San Francisco Press, 1979) 243-246. [8] Hansen, M., Constitution of Binary Alloys (M cG raw·Hill, New York, 1958) 84-95.
+(9) Metals Handbook, Vol. 8., Metallography, Structure and Phase Diagrams, (American Society for Metals, Metal s Park, OH, 1973) 391-392.
+[10] Vol, A. E., Handbook of Binary Metallic Systems (translated from Russian), (Dept. of Commerce (U .S.), Washington , DC, 1966) p. 146 (fig. 61). .

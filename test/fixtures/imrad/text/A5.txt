@@ -1,0 +1,903 @@
+arXiv:2405.00172v2 [cs.LG] 2 Jun 2025
+Bypassing Skip-Gram Negative Sampling: Dimension Regularization as a More Efficient Alternative for Graph Embeddings
+David Liu
+Northeastern University
+Khoury College of Computer Sciences
+Boston, MA, USA
+Arjun Seshadri
+Amazon
+AWS
+San Francisco, CA, USA
+Tina Eliassi-Rad
+Northeastern University
+Khoury College of Computer Sciences &
+Network Science Institute
+Boston, MA, USA
+Johan Ugander
+Stanford University
+Management Science &
+Engineering
+Stanford, CA, USA
+Abstract
+A wide range of graph embedding objectives decompose into two
+components: one that enforces similarity, attracting the embeddings
+of nodes that are perceived as similar, and another that enforces
+dissimilarity, repelling the embeddings of nodes that are perceived
+as dissimilar. Without repulsion, the embeddings would collapse
+into trivial solutions. Skip-Gram Negative Sampling (SGNS) is a
+popular and efficient repulsion approach that prevents collapse by
+repelling each node from a sample of dissimilar nodes. In this work,
+we show that when repulsion is most needed and the embeddings
+approach collapse, SGNS node-wise repulsion is, in the aggregate,
+an approximate re-centering of the node embedding dimensions.
+Such dimension operations are more scalable than node operations
+and produce a simpler geometric interpretation of the repulsion.
+Our theoretical result establishes dimension regularization as an
+effective and more efficient, compared to skip-gram node contrast,
+approach to enforcing dissimilarity among embeddings of nodes.
+We use this result to propose a flexible algorithm augmentation
+framework that improves the scalability of any existing algorithm
+using SGNS. The framework prioritizes node attraction and replaces
+SGNS with dimension regularization. We instantiate this generic
+framework for LINE and node2vec and show that the augmented al
+gorithms preserve downstream link-prediction performance while
+reducing GPU memory usage by up to 33.3% and training time
+by 23.4%. Moreover, we show that completely removing repulsion
+(a special case of our augmentation framework) in LINE reduces
+training time by 70.9% on average, while increasing link predic
+tion performance, especially for graphs that are globally sparse but
+locally dense. Global sparsity slows down dimensional collapse,
+while local density ensures that node attraction brings the nodes
+near their neighbors. In general, however, repulsion is needed, and
+dimension regularization provides an efficient alternative to SGNS.
+This work is licensed under a Creative Commons Attribution 4.0 International License. ©2025 Copyright held by the owner/author(s).
+1 Introduction
+Graph embedding algorithms use the structure of graphs to learn
+node-level embeddings. In unsupervised and supervised graph em
+bedding algorithms, loss functions attempt to preserve similarity
+and dissimilarity. Nodes that are similar in the input graph should
+have similar embeddings, while dissimilar nodes should have dis
+similar embeddings [4, 31]. The push and pull of the similarity and
+dissimilarity objectives are key: in the absence of a dissimilarity
+objective, the loss would be minimized by embedding all nodes at a
+single embedding point, a degenerate and useless embedding. Of
+ten, enforcing dissimilarity is much more expensive than similarity,
+owing to the generally sparse nature of graphs and the number of
+pairs of dissimilar nodes growing quadratically with the size of the
+graph. Enforcing dissimilarity is also complex for graphs because
+graph data frequently have missing edges or noise [26, 38]. Here, we
+show that while many past works have focused on repelling pairs of
+dissimilar nodes, the repulsion can be replaced with a regularization
+of the embedding dimensions, which is more scalable.
+The skip-gram (SG) model is one of the most popular approaches
+to graph embeddings [1, 35]. In the SG model, a target node is
+similar to a source node if it is in the source node’s neighborhood.
+Furthermore, skip-gram negative sampling (SGNS) is a dominant
+method to efficiently approximate dissimilarity preservation. In
+stead of repelling all pairs of dissimilar nodes, SGNS repels only
+a sample of dissimilar nodes per pair of similar nodes. SGNS is
+utilized in LINE [30] and node2vec [13], for instance, and has been
+shown to yield strong downstream performance. However, several
+analytical issues with SGNS have also been identified. First, SGNS
+introduces a bias by re-scaling the relative importance of preserv
+ing similarity and dissimilarity [29]. Second, with SGNS, in the
+limit as the number of nodes in the graph approaches infinity, the
+similarities among embeddings diverge from the similarities among
+nodes in the graph [10]. Although SGNS has been used to learn
+both graph and word embeddings [23, 24], we focus on the graph
+context because, for graph embeddings in particular, SGNS remains
+a popular method for preserving dissimilarity [5].
+
+
+David Liu, Arjun Seshadri, Tina Eliassi-Rad, and Johan Ugander
+In this paper, we propose a change in perspective and show that
+node repulsion in the SG model can be achieved via dimension cen
+tering. If X is an embedding matrix where the rows are node embed
+dings, “dimensions” refers to the columns of X . We draw inspiration
+from advances in the self-supervised learning (SSL) literature, which
+show an equivalence between sample-contrastive learning and
+dimension-contrastive learning [2, 11]. Sample-contrastive learn
+ing explicitly repels dissimilar pairs while dimension-contrastive
+learning regularizes dimensions.
+The known parallels between sample and dimension contrast,
+however, do not suggest whether SG loss functions can also be
+re-interpreted from the dimension perspective. We present a novel
+theoretical contribution that extends the dimension-contrastive
+approach to a new class of loss functions. Our findings show that
+while the dissimilarity term in the SG loss is not itself a dimension
+regularizer when the term is most needed to counteract the attrac
+tion of similarity, the dissimilarity preservation can be achieved
+via regularization. We begin by characterizing the degenerate em
+bedding behavior when the dissimilarity term is removed alto
+gether. We prove that, under initialization conditions,1 when only
+positive pairs are considered, the embeddings collapse into a low
+dimensional space. However, as the dimensions approach collapse,
+the dissimilarity term approaches a dimension-mean regularizer.
+We operationalize the dimension-based approach with an algo
+rithm augmentation framework. We augment existing algorithms
+using SGNS by making two modifications. First, the augmentation
+framework prioritizes similarity preservation over dissimilarity
+preservation. This is desirable because, in real-world graph data,
+the lack of similarity between two nodes does not necessarily sug
+gest that the two nodes are dissimilar. Second, when the embeddings
+begin to collapse after optimizing only for similarity preservation
+for a fixed number of epochs, our augmentation framework repels
+nodes from each other using a regularizer that induces embedding
+dimensions centered on the origin.
+In summary, our contributions are as follows:
+(1) In Section 3, we map node repulsion to dimension regular
+ization for the SG model. We show that instead of short
+cutting the full skip-gram loss function with SGNS and
+repelling a sample of pairs, the repulsion function can be
+approximated with a dimension-mean regularization. We
+prove that as the need for node repulsion grows, optimiz
+ing the regularizer converges to optimizing the skip-gram
+loss. Our result extends the equivalence between sample
+contrastive objectives and dimension regularization estab
+lished in self-supervised learning to a new class of loss
+functions.
+(2) In Section 4, we introduce a generic algorithm augmenta
+tion framework that prioritizes node attraction and replaces
+SGNS with occasional dimension regularization for any
+existing SG algorithm. We instantiate the augmentation
+framework for node2vec and LINE, reducing the repulsion
+complexity from O (n) to O (d) vector additions per epoch.
+1Our asymptotic result holds when the learning rate approaches zero and the embedding initializations approach the origin, an assumption inherited from the implicit regularization in matrix factorization established in Gunasekar et al. [14].
+(The number of embedding dimensions d is much less than
+the number of nodes n.)
+(3) In Section 5, we show that our augmentation framework
+reduces runtime and memory usage while also preserving
+link-prediction performance. Moreover, in globally sparse
+networks with high local density, removing repulsion al
+together, a special case of our framework, even improves
+performance for LINE. However, in networks with low local
+density, repulsion is needed, and dimension regularization
+provides an efficient solution.
+2 Related Works
+In this section, we review the popular use of SGNS within graph
+embeddings as well as its limitations. Our approach is also similar in
+spirit to the growing body of literature on non-contrastive learning
+and can be used in concert with existing scalable graph learning
+methods.
+2.1 Skip-Gram Negative Sampling
+SGNS was introduced in word2vec by Mikolov et al. [23] as an
+efficient method for learning word embeddings. While the softmax
+normalization constant is costly to optimize, Mikolov et al. [23] mod
+eled SGNS after Noise Contrastive Estimation (NCE) [15], which
+learns to separate positive samples from samples drawn from a noise
+distribution. SGNS has since been adopted for graph representation
+learning, where it is utilized in both unsupervised [13, 27, 30] and
+supervised [34] skip-gram models.
+At the same time, there are many known limitations of SGNS.
+Rudolph et al. [29] place SGNS embeddings within the framework of
+Exponential Family Embeddings and note that SGNS downweights
+the magnitude of the negative update and leads to biased embed
+dings, relative to the gradients of the non-sampled objective. Sec
+ond, Davison and Austern [10] examine the limiting distribution
+of embeddings learned via SGNS and show that the distribution
+decouples from the true sampling distribution in the limit. Last, it
+has also been shown that the optimal noise distribution and the
+corresponding parameters can vary by dataset [36].
+We would also like to note that while the motivations are similar,
+SGNS differs from the negative sampling that has arisen in the self
+supervised learning literature [28]. In self-supervised learning, the
+negative samples are generally other nodes in the training batch.
+2.2 Non-contrastive Self-Supervised Learning
+Energy-Based Models in self-supervised learning are a unified
+framework for balancing similarity and dissimilarity [19]. As in
+our decomposition, energy-based models ensure that similar pairs
+have low energy and dissimilar pairs have high energy. Within
+energy-based models, there has been more focus across both vision
+and graph representation learning on contrastive models, which
+explicitly repel dissimilar pairs [18, 20, 37, 41]. However, given the
+computational complexities of pairwise contrast, there is a growing
+body of work on non-contrastive representation learning meth
+ods, which do not use negative samples. Embedding collapse is
+the main challenge facing non-contrastive methods, and several
+mitigation strategies have emerged, such as asymmetric encoders
+
+
+Bypassing Skip-Gram Negative Sampling: Dimension Regularization as a More Efficient Alternative for Graph Embeddings
+in SimSiam [7], momentum encoders in BYOL [12], and redun
+dancy reduction in Barlow Twins [39]. Garrido et al. [11] establish
+a duality between dimension-regularization based non-contrastive
+approaches and standard contrastive learning; however, the work
+specifically analyzes the squared-loss term, and there are no exist
+ing works, to our knowledge, establishing a connection between
+skip-gram loss and non-contrastive methods.
+2.3 Scalable and Efficient Graph Learning
+Past works on developing scalable and efficient representation learn
+ing for large graphs have focused on data-driven scalability, utilizing
+node/edge sampling [6, 16, 40], graph partitioning [8, 43], and graph
+coarsening [21]. The sampling-based approaches mitigate the expo
+nential growth of neighbors as the depth of message-passing layers
+increases in GNNs. One approach is to sample at the layer level,
+such as in GraphSAGE [16] and FastGCN [6], where the neighbors
+of each node are sampled in each layer. An alternative approach,
+such as GraphSAINT [40], is to first sample a subgraph and then
+train a full GNN, without layer sampling, on the subgraph. Like
+wise, partitioning-based approaches also prevent neighborhood
+explosion. For instance, ClusterGCN [8] performs message passing
+within clusters to reduce neighborhood scope, while GraphVite [43]
+leverages partitioning to train in parallel. Finally, coarsening ap
+proaches leverage the multi-scale nature of graphs. For example,
+MILE [21] first learns embeddings for the structural backbone of
+a graph, which is much smaller, before refining the backbone em
+beddings onto the full, original graph. Our approach is orthogonal
+to data-driven approaches to scalability and can be used in con
+junction; for example, our dimensionality-regularization bypass
+improves the efficiency of learning skip-gram embeddings for graph
+backbones or cluster partitions.
+Instead, our approach is more similar to scalability approaches
+that propose efficiency bypasses for loss functions or optimization
+processes. For instance, Zhu et al. [42] identify that the outputs
+of normalization layers in transformers approximate the hyper
+bolic tangent function, and replacing normalization layers with
+element-wise tanh transformations preserves accuracy while re
+ducing training time. Meanwhile, Loveland et al. [22] observe that
+one purpose of negative sampling in collaborative filtering is to
+increase the rank of the embedding matrix; the authors show that
+replacing negative sampling with a regularization on matrix rank,
+which is more efficient, effectively reduces compute cost. In contrast
+to these two prior works proposing bypasses, our work contributes
+a theoretical result showing that as the number of nodes increases,
+the difference between the expensive operation, SGNS, and the
+efficiency bypass, dimension-mean regularization, vanishes.
+3 From Node Repulsion to Dimension Regularization
+In this section, we introduce a generic loss decomposition where a
+function P operationalizes similarity preservation and a “negative”
+function N achieves dissimilarity preservation. We then show that
+instead of optimizing negative functions with costly node repul
+sions, we can instead regularize dimensions. Crucially, in Section
+3.2, we show that when node repulsion is needed, the negative
+Table 1: Notations used in this paper.
+Symbol Meaning
+G, V , E Graph G with nodes V and edges E
+n, m number of nodes and edges respectively
+d number of embedding dimensions
+N , P negative and positive loss functions
+S similarity matrix ∈ {0, 1}n×n
+X node embedding matrix ∈ Rn×d
+Xi ith row of X , as a column vector
+X.j jth column of X , as a column vector
+Pα Probability distribution with parameter α
+p, q node2vec random-walk bias parameters [13]
+k number of negative samples per positive pair
+b average number of positive pairs per node
+η learning rate
+Dx diagonal matrix where x is the diagonal
+C the constriction of the embeddings (Def. 3.1)
+1®, 1 a vector and a matrix of all ones, respectively
+[d] {1, 2, . . . , d }
+function in the skip-gram loss can be optimized via dimension
+regularization.
+Using notation introduced in Table 1, the decomposition is as
+follows: given an embedding matrix X ∈ Rn×d and a similarity
+matrix S ∈ {0, 1}n×n, where Si j = 1 if nodes i and j are similar, a
+generic graph embedding loss function L(X, S) can be written as:
+L(X, S) = P (X, S) + N (X, S). (1)
+The decomposition in Eq. (1) applies to nearly all unsupervised
+graph embedding objectives as well as many supervised learning
+objectives, where supervision is provided in the form of node labels.
+In the graph embedding survey by Chami et al. [5], the decom
+position applies to all unsupervised methods except for Graph
+Factorization [1], which does not include a negative function N .
+Examples of popular decomposable loss functions are matrix re
+construction error (e.g., spectral embeddings) as well as softmax
+(e.g. node2vec [13] and LINE [30]). The decomposition also applies
+to supervised methods that regularize for graph structure (β > 0
+as defined in Chami et al. [5]), such as Neural Graph Machines [3]
+and Planetoid [34].
+Given that graphs are sparse, performing gradient descent on N
+is costly as the gradient update repels all dissimilar pairs, resulting
+in O n2 vector additions per epoch. In this paper, we build on the
+argument that the costly node-wise operation can be replaced with
+a more efficient dimension-wise operation, as summarized in Figure
+1.
+Below, we will map two dominant negative functions found in
+graph embedding algorithms to dimension regularizations. The
+two loss functions are spectral loss functions and skip-gram loss
+functions. The mapping of spectral loss functions to dimension
+covariance regularization in Section 3.1 parallels recent approaches
+to non-contrastive learning [2, 11]. Our novel contribution, detailed
+in Section 3.2, is a mapping from the skip-gram loss to a regularizer
+
+
+David Liu, Arjun Seshadri, Tina Eliassi-Rad, and Johan Ugander
+Negative Function
+Squared Loss
+% = ##!
+"
+#
+e.g. spectral
+∇% complexity: &((#)
+Skip-Gram Loss % = Σ$% log .(−#$
+! #% )
+e.g. LINE, node2vec
+∇% complexity: &((#)
+Dimension Covariance Regularization
+% = #!# "
+#
+∇% complexity: &(0#)
+Skip-Gram Negative Sampling
+%= ∑$ 4%(~') log .(−#$
+! #% )
+∇% complexity: &(12()
+Dimension Mean Regularization
+% = #!1 #
+∇% complexity: &(0)
+bypass
+Step 1: Random Initialization
+Step 2: Positive Updates
+origin
+Step 3: Dimension Mean Regularization
+Step 4: Positive Updates
+B)
+Two-Block SBM Graph
+Node Repulsion Dimension Regularization
+Equality Approximation
+Figure 1: Nearly all unsupervised and many supervised graph embedding loss functions define a “negative” function that repels embeddings of dissimilar nodes. We show that instead of repelling pairs of nodes (orange), which is costly, the negative function in the popular skip-gram (SG) loss can be approximated with a dimension-mean regularizer. The regularizer is efficient given that d ≪ n. Our result establishing a connection between the skip-gram loss and dimension-mean regularization is novel. Runtime complexities are expressed in terms of the number of vector additions per epoch with details in Section 3.2.1.
+that induces origin-centered dimensions. Proof for all propositions
+below are included in Appendix A.
+3.1 Dimension Regularization for Spectral Embeddings
+In the case of Adjacency Spectral Embeddings (ASE) [9], which
+are equivalent to taking the leading eigenvectors of the adjacency
+matrix, the matrix S is the adjacency matrix A ∈ {0, 1}n×n.
+LASE (X , S) = ∥S − X XT ∥2
+2, (2)
+PASE (X, S) = −2
+∑︁
+i,j |Si j =1
+XT
+i Xj + ∥S ∥2
+F , (3)
+NASE (X , S) = ∥X XT ∥2
+F . (4)
+On one hand, performing gradient descent on NASE can be in
+terpreted as repelling all pairs of embeddings where the repulsion
+magnitude is the dot product between embeddings. If η is a learning
+rate and t is the step count, the embedding for node i is updated as:
+X t+1
+i = Xt
+i −η
+∑︁
+i′ ∈V
+XT
+i Xi′ Xi′ ∀i ∈ V . (5)
+The same negative function can also be written as a dimension
+covariance regularization:
+Proposition 3.1. NASE is equivalent to the regularization function ∥XT X ∥2
+F which penalizes covariance among dimensions.
+With Proposition 3.1, we can re-interpret the gradient descent
+updates in Eq. (5) as collectively repelling dimensions. The gradient
+update can now be written in terms of dimensions:
+X t+1
+.j = Xt
+.j − η
+∑︁
+j′ ∈ [d ]
+XT
+.j X.j′ X.j′ ∀j ∈ [d]. (6)
+3.2 Dimension Regularization for Skip-Gram Embeddings
+We now introduce a novel dimension-based approach for skip-gram
+embeddings. For skip-gram embeddings, the similarity matrix is
+defined such that Si j = 1 if node j is in the neighborhood of i. For
+first-order LINE, the neighborhood for node i is simply all nodes
+connected to i, while for node2vec, the neighborhood is defined as
+all nodes within the context of i on a random walk. The skip-gram
+(SG) loss function can be decomposed as:
+LSG (X, S) = −
+∑︁
+i,j
+Si j log σ XT
+i X j + (1 − Si j ) log σ −XT
+i Xj ,
+(7)
+PSG (X, S) = −
+∑︁
+i,j |Si j =1
+log σ XT
+i X j , (8)
+NSG (X, S) = −
+∑︁
+i,j |Si j =0
+log σ −XT
+i X j . (9)
+Our goal is to map NSG to a dimension regularization. Recall
+that this work is motivated by the fact that the purpose of NSG
+is to prevent the similarity σ XT
+i X j from increasing for all i, j;
+without NSG , trivial embedding solutions can emerge that maximize
+similarity for all pairs of nodes, not just similar pairs.
+Guaranteed collapse. To measure the onset of the degenerate
+condition in which all pairs of nodes are similar, we define the con
+striction C of a set of embeddings to be the minimum dot product
+between any pair of nodes:
+Definition 3.1 (Constriction). The constriction C of an em
+bedding matrix X is defined as: C = mini,j ∈ [n]×[n] XT
+i Xj.
+Geometrically, the embedding constriction is maximized when
+embeddings are radially squeezed and growing in magnitude, that is,
+collapsed. Proposition 3.2 states that if we remove NSG altogether
+and the embeddings are initialized with sufficiently small norm and
+learning rate, the degenerate collapse will inevitably arise during
+gradient descent.
+Proposition 3.2. As the Euclidean norm of the initial embeddings and the learning rate approach zero, then in the process of performing gradient descent on PSG , there exists a step t such that for all gradient updates after t, the constriction C is positive and monotonically increasing.
+The proof sketch for Proposition 3.2 is as follows: as the embed
+dings are initialized closer to the origin, gradient descent on PSG
+approaches gradient descent on the matrix completion loss func
+tion: ∥1S>0 ⊙ 1 − 1
+2XXT ∥2
+F
+, where 1S>0 is the indicator matrix
+for whether entries of S are positive. From Gunasekar et al. [14],
+gradient descent implicitly regularizes matrix completion to con
+verge to the minimum nuclear solution; this implicit regularization
+drives all dot products to be positive, not just pairs of embeddings
+corresponding to connected nodes.
+
+
+Bypassing Skip-Gram Negative Sampling: Dimension Regularization as a More Efficient Alternative for Graph Embeddings
+Approaching dimension regularization. Now, we show that as con
+striction increases, performing gradient descent on NSG approaches
+optimizing a dimension regularizer. That is, when repulsion is most
+needed and the embeddings approach collapse due to similarity
+preservation, repulsion can be achieved via regularization.
+First, we map NSG to an “all-to-all” node repulsion. While NSG
+only sums over negative node pairs (i, j where j is not in the neigh
+borhood of i), for large, sparse graphs we can approximate NSG
+with the objective N ′ SG
+which sums over all pairs of nodes:
+N′
+SG = −
+∑︁
+i,j
+log σ −XT
+i X j . (10)
+Proposition 3.3 states that if the embedding norms are bounded
+and the constriction C > 0, then, in the limit of n, the difference
+between the gradient of N ′ SG
+and NSG approaches zero.
+Proposition 3.3. If all embeddings have norms that are neither infinitely large or vanishingly small and the embedding constriction C > 0, then, as the number of nodes in a sparse graph grows to infinity, the gradients of ∇NSG and ∇N ′
+SG converge:
+lim
+n→∞
+∥∇N ′
+SG − ∇NSG ∥2
+F
+∥∇NSG ∥2
+F
+= 0, (11)
+where a graph is sparse if |E| is o (n2).
+For a single node i, performing gradient descent on Eq. (10)
+results in the following update:
+X t+1
+i = Xt
+i −η
+∑︁
+i′ ∈V
+σ Xt
+i
+T
+Xt
+i′ Xt
+i′ . (12)
+The right-hand term in the gradient update repels node i from
+all other nodes where the repulsion is proportional to the similarity
+between the node embeddings. In Proposition 3.4, we show a con
+nection between minimizing N ′ SG
+and centering the dimensions at
+the origin. For intuition, observe that if all pairs of nodes are highly
+similar, the gradient update in Eq. (12) is approximately equal to
+subtracting the column means scaled by a constant (2η XT 1® ).
+This is equivalent to performing gradient descent on a dimension
+regularizer that penalizes non-zero dimension means,
+R(X ) = ∥XT ®1∥2
+2. (13)
+We formalize the connection between the negative function N ′ SG and origin-centering in the following proposition:
+Proposition 3.4. Let R be the dimension regularizer defined in Eq. (13) that penalizes embeddings centered away from the origin and n ≫ d. Then, as the constriction increases beyond zero, the difference between performing gradient descent on R versus N ′
+SG vanishes.
+We note that our result establishing a connection between the
+skip-gram loss and origin-centered dimensions is related to the
+finding in Wang and Isola [32] connecting the InfoNCE loss with
+embeddings uniformly distributed on unit hyperspheres; however,
+as the SG and InfoNCE losses are distinct, our theoretical contribu
+tion in Proposition 3.4 is novel.
+3.2.1 Comparison with Skip-Gram Negative Sampling. Skip-gram
+negative sampling (SGNS) offers an efficient stochastic approxima
+tion to the gradient update in Eq. (12). Furthermore, the SGNS proce
+dure provides a tunable way to bias the gradients—via non-uniform
+sampling—in a manner that has been seen to empirically improve
+the utility of the resulting embedding in downstream tasks [23].
+Instead of repelling node i from all other n − 1 nodes, SGNS repels i
+from a sample of k nodes where the nodes are sampled according to
+a distribution Pα over all nodes, optimizing the following objective:
+NSGN S (X , S, i) = −kEj′∼Pα
+h
+log σ −XT
+i Xj′
+i
+, (14)
+where the expectation is estimated based on k samples.
+In aggregate, SGNS reduces the repulsion time complexity from
+O n2 to O (kbn) vector additions per epoch. b is the average
+number of positive pairs per node; for LINE, b = m/n, and for
+node2vec, b is the product of the context size and random-walk
+length. With Proposition 3.4, we reduce the time complexity to
+O (d) vector additions per epoch.
+As mentioned, SGNS embeddings can be tuned by the choice of
+the non-uniform sampling distribution, where in graph embedding
+contexts the distribution Pα is typically sampling nodes propor
+tional to their degreeα , with α = 3/4. An optimization-based intu
+ition for this choice is that a degree-based non-uniform distribution
+prioritizes learning the embeddings of high-degree nodes, but we
+emphasize that the specific choice of α = 3/4 is typically motivated
+directly based on improved empirical performance in downstream
+tasks [23].
+We briefly note that our dimension-mean regularizer is imme
+diately amenable to introducing an analogous tuning opportunity.
+We can simply replace the regularization in Eq. (13) with
+R(X ; p®) = ∥XT p®∥2
+2, (15)
+where p® is a normalized weight vector that biases the negative
+update in exact correspondence to the probabilities of each node
+in Pα . In our subsequent simulations, we focus our efforts on the
+uniform case of p® = ®1, i.e., the regularizer in Eq. (13).
+4 Algorithm Augmentation to Replace SGNS
+We now propose a generic algorithm augmentation framework
+that directly replaces SGNS with dimension regularization. We
+instantiate this algorithm augmentation for LINE and node2vec,
+but note that the framework is applicable to any graph embedding
+algorithm using SGNS.
+Our augmentation modifies existing algorithms using SGNS in
+two ways. First, the augmentation prioritizes the positive function
+P, that is, preserving similarity when possible. Not only does pri
+oritizing observed edges increase efficiency, but it is also desirable
+given the fact that real-world graph data frequently have missing
+edges. We prioritize the observed edges by defaulting to performing
+gradient descent on P.
+Second, our augmentation achieves repulsion via gradient de
+scent on R, the dimension-mean regularizer introduced in Eq. (13).
+As constriction increases from optimizing only P, dimension-mean
+regularization approximates ∇N ′
+SG
+per Proposition 3.4.
+
+
+David Liu, Arjun Seshadri, Tina Eliassi-Rad, and Johan Ugander
+Taken together, the algorithm augmentation framework can be
+summarized as:
+X t+1 =
+(
+X t − η∇PSG X t t % nnegative ≠ 0,
+X t − η ∇PSG X t + λ∇R X t t % nnegative = 0,
+(16)
+where λ is the regularization hyperparameter, nnegative controls
+the frequency of performing gradient descent on R, and η is the
+learning rate.
+Figure 2 visualizes our algorithm augmentation with a Stochastic
+Block Model (SBM). We begin by randomly initializing embeddings
+around the origin and then repeatedly (over 100 epochs) attract the
+embeddings of similar nodes. The attraction drives the embeddings
+away from the origin and causes the two blocks to remain entangled.
+Then, we repel dissimilar pairs via dimension-mean regularization,
+which pulls the embeddings back to the origin. Once we resume
+applying positive updates, the embeddings for the two blocks begin
+to separate, indicating effective repulsion.
+4.1 Instantiation for LINE and node2vec
+In Algorithm 1 we include the pseudo-code for the augmented ver
+sions of LINE and node2vec, utilizing the framework in Eq. (16).
+The loop labeled “old negative update” shows where SGNS would
+have occurred. When instantiated for LINE and node2vec, we imple
+ment our algorithm augmentation with batched gradient descent,
+where batches are sets of positive pairs. Dimension regularization
+is applied every nnegative batches, and the regularization is applied
+to the entire embedding matrix X .
+Algorithm 1 Augmented LINE and node2vec
+Input: G, n, d, p, q, num_epochs, batch_size, λ, η, nnegative
+t ←0
+X 0 ← random_initialization(n, d) pairs ← run_random_walks(G, p, q)
+for {1, . . . , num_epochs} do
+pair_batches ← get_batches(pairs, batch_size)
+for batch in pair_batches do X t+1 ← X t
+for i, j ∈ batch do
+X t+1
+i += ησ −⟨X t
+i ,Xt
+j⟩ Xt
+j
+⊲ positive update
+X t+1
+j += ησ −⟨X t
+i ,Xt
+j⟩ Xt
+i
+for j′ ∈ sample (Pα, k) do ⊲ old negative update
+X t+1
+i −= ησ −⟨X t
+i ,Xt
+j′⟩ Xt
+j′
+X t+1
+j′ −= ησ −⟨X t
+i ,Xt
+j′⟩ Xt
+i
+end for end for
+t ←t+1
+end for
+if t % nnegative == 0 then ⊲ new negative update
+X t+1 −= λ
+n 1X t end if end for
+LINE and node2vec differ in their implementation of the random
+walk generation function. For LINE, the function simply returns
+the edge set E. For node2vec, the function returns the set of all
+node and neighbor pairs ( i, j |Si j = 1 ) where neighbors of i are
+nodes that co-occur in a biased-random-walk context window. The
+parameters p, q control the bias of the random walk [13], interpo
+lating between “outward” DFS-like walks and “inward” BFS-like
+walks. The default values for p and q are 1; smaller values of p
+increase the probability of backtracking to the previous node in the
+random walk and smaller values of q encourage outward DFS-like
+walks. In Section 5.1, we discuss our hyperparameter optimization
+methodology for p and q.
+5 Experiments
+To assess the efficacy of our dimension-regularization augmenta
+tion framework for capturing topological structure, we evaluate the
+link-prediction performance of the node2vec and LINE instantia
+tions. Our results show that replacing SGNS with dimension-mean
+regularization reduces both training time and GPU memory us
+age while preserving link-prediction performance. Moreover, for
+real-world networks, we show that applying no repulsion at all, a
+special case of our framework, nearly always outperforms LINE and
+reduces training time by 71.7% on average. We correlate the success
+of attraction-only models with local density, which is common in
+real-world networks. However, more generally, in networks with
+local sparsity, repulsion is needed, and dimension regularization
+provides an efficient alternative to SGNS.
+5.1 Methodology
+Below, we summarize the data and experimental methodology used
+for our empirical evaluation. All of the experiments were executed
+on a machine with a single NVIDIA V100 32 GB GPU. Our code is
+available at: https://doi.org/10.5281/zenodo.15557847. More details
+are provided in Appendix B.
+Data. We utilize the popular link-prediction benchmarks of Cora,
+CiteSeer, and PubMed [34] as well as four OGB datasets to demon
+strate the scalability of our augmentation: ogbl-collab, ogbl-ppa,
+ogbl-citation2, ogbl-vessel [17]. We uniformly-randomly split the
+edge sets for Cora, CiteSeer, and PubMed into training/valida
+tion/test sets following standard 70/10/20 splits. For the OGB datasets,
+we use the provided edge splits. Table 2 summarizes the structural
+properties of the datasets, showing that the datasets span two types
+of densities: global density, measured by edge density, and local
+density, measured by the average clustering coefficient (“CC”) [33].
+Table 2: Summary of datasets with structural properties. “CC” refers to the average clustering coefficient.
+Dataset Nodes Edges CC Edge Density
+Cora 2.7 × 103 1.2 × 104 0.24 1.6 × 10−3
+CiteSeer 3.3 × 103 1.0 × 104 0.14 9.0 × 10−4
+PubMed 2.0 × 104 9.8 × 104 0.06 2.5 × 10−4
+ogbl-collab 2.4 × 105 1.3 × 106 0.73 2.4 × 10−5
+ogbl-ppa 5.8 × 105 3.6 × 107 0.22 1.1 × 10−4
+ogbl-citation2 2.9 × 106 3.1 × 107 0.09 3.6 × 10−6
+ogbl-vessel 3.5 × 106 5.9 × 106 0.01 4.7 × 10−7
+
+
+Bypassing Skip-Gram Negative Sampling: Dimension Regularization as a More Efficient Alternative for Graph Embeddings
+Two-Block SBM Graph
+Step 1: Random Initialization
+Step 2: Positive Updates (100 epochs)
+origin
+Step 3: Dimension Mean Regularization
+Step 4: Positive Updates (50 epochs)
+origin origin
+Figure 2: We use a two-block Stochastic Block Model (SBM) example to summarize how we bypass skip-gram negative sampling with dimension regularization. We introduce an algorithm augmentation that prioritizes attracting embeddings of similar nodes together (Step 2), where similarity is the sigmoid of embedding dot products. Eventually, to prevent all pairs of embeddings from becoming similar, the dimension regularization re-centers the embeddings around the origin, increasing node contrast (Step 3). Attraction updates are then again repeatedly applied, but the blocks are more distinguishable following dimension regularization (Step 4).
+Models. For each of node2vec and LINE, we instantiate three
+model variants: variant I is vanilla node2vec/LINE; variant II0 is a
+special instance of our framework in which no repulsion is applied
+at all (nnegative is set to be larger than the number of batches); and
+variant II is our augmented model in which dimension regulariza
+tion is applied at least once per epoch. The variant II0 is trained
+for only 2 epochs to prevent collapse. For completeness, we also
+instantiate variants of the vanilla algorithms and our augmentation
+in which node repulsion is proportional to degreeα as discussed in
+Section 3.2.1; these results are comparable to the results for I and
+II and included in Appendix C. In all cases, we set the embedding
+dimension d = 128.
+For link prediction, the embeddings for each model are used
+to train a multi-layer perceptron (MLP) edge classifier. A MLP is
+trained for each combination of dataset and model variant (I, II0,
+II). The input to MLP is the concatenation of two node embeddings
+and the output is an edge prediction score ∈ [0, 1]. The time and
+memory values in the results correspond only to the resources used
+to train the embeddings and exclude the MLP training.
+Hyperparameter optimization. For each dataset and SG model,
+we optimize the following hyperparameters: the learning rate η, the
+node2vec random-walk parameters p and q, as well as nnegative and
+λ from our augmentation. Details about the optimization process
+and the final values are included in Appendix B.
+Metrics. We report AUC-ROC, MRR, and Hits@k evaluation met
+rics for link prediction. All metrics are evaluated at the node level
+and then averaged. To account for class imbalance when measur
+ing AUC-ROC, we sample negative edges such that the number of
+positive and negative test edges is equal.
+5.2 Results
+5.2.1 Dimension regularization reduces training time and memory while preserving link-prediction performance. Tables 3 and 4 show
+the training time, GPU memory usage, and AUC-ROC for vanilla
+and augmented node2vec and LINE. The training time is aggregated
+over multiple epochs, where the number of epochs is fixed for each
+graph and specified in Appendix B. The reported GPU memory is
+the maximum GPU memory allocated by PyTorch over the course
+of embedding training. The Δ(%) columns under time and memory
+report the relative difference between II and I, which lower-bounds
+the efficiency improvement given that II0, a specific instance of
+our framework, is the most efficient variant.
+For LINE, replacing SGNS with dimension regularization de
+creases training time by 11.4%, and link-prediction performance
+increases for all graphs, with AUC-ROC increasing by 0.05 on av
+erage. Of note, LINE does not learn meaningful embeddings for
+the ogbl-vessel graph, likely due to the graph’s low edge density.
+For node2vec, training time reduces by 16.5%, on average. The
+AUC-ROC decreases for certain graphs, but, on average, the AUC
+ROC changes by less than 0.05. Meanwhile, GPU memory usage
+decreases by 30.7% on average. In cases where GPU memory is
+constrained, our augmentation can enable node2vec training for
+graphs that were previously infeasible to train.
+Our augmentation does not reduce memory usage for LINE be
+cause we obtain the best performance across all models when using
+small batch sizes; with small batches, even the vanilla algorithm
+has low GPU memory usage, and negative sampling contributes
+marginally to memory usage. We include the performance accord
+ing to ranking metrics in Appendix C, which shows similar patterns
+as the AUC-ROC results.
+5.2.2 Removing repulsion altogether reduces training time by over 70% and improves LINE’s performance, especially for locally dense
+graphs. Interestingly, we observe that the special case of our algo
+rithm augmentation that removes repulsion altogether (II0) out
+performs vanilla LINE for all seven graphs and significantly reduces
+training time. The top of Figure 3 shows that removing repulsion
+reduces training time by at least 40%. Meanwhile, the bottom of
+the figure correlates the gain in LINE’s performance with local
+edge density, as measured by the average clustering coefficient.
+The trend is most noticeable in the case of ogbl-collab, which has
+the highest clustering coefficient and reflects increases, relative to
+vanilla LINE, in all three metrics when repulsion is removed.
+Intuitively, removing repulsion is effective in globally sparse
+but locally dense graphs, which characterizes many real-world
+networks [25], because the global sparsity hinders dimensional
+collapse while the local density ensures that node attraction brings
+nodes near hidden neighbors. While we would theoretically expect
+
+
+David Liu, Arjun Seshadri, Tina Eliassi-Rad, and Johan Ugander
+Table 3: For LINE, our dimension-regularization augmentation framework decreases training time by 11.4% on average. The differences in link prediction performance (as measured by AUC-ROC) are negligible (±0.05 on average). We use small batch sizes for LINE; thus, memory use is not affected. The column I refers to vanilla LINE. The column II refers to augmented LINE where dimension regularization is applied at least once per epoch. The column II0 refers to a special case of our framework where no repulsion is applied. For training time and memory, the Δ columns report the relative difference between II and I, which lower-bounds the efficiency gain of our framework as II0 is the most efficient.
+Dataset Time (min) Memory (GB) AUC-ROC
+I II0 II Δ(%) I II0 II Δ(%) I II0 II
+CiteSeer 0.05 <0.01 0.04 -20.00% 0.02 0.02 0.02 0.00% 0.6 0.65 0.67
+Cora 0.06 0.01 0.05 -16.67% 0.02 0.02 0.02 0.00% 0.59 0.67 0.68
+PubMed 0.55 0.05 0.45 -18.18% 0.06 0.06 0.06 0.00% 0.7 0.72 0.75
+ogbl-collab 0.77 0.25 0.65 -15.58% 0.64 0.64 0.64 0.00% 0.72 0.78 0.8
+ogbl-ppa 16.23 5.12 15.43 -4.93% 2.07 2.07 2.07 0.00% 0.9 0.91 0.78
+ogbl-citation2 48.51 25.19 47.4 -2.29% 8.02 8.02 8.02 0.00% 0.61 0.65 0.62
+ogbl-vessel 9.39 4.9 9.2 -2.02% 9.19 9.19 9.19 0.00% 0.5 0.5 0.5
+Table 4: For node2vec, our augmentation framework reduces training time by 16.5% and memory by 30.7% on average. The differences in link prediction performance (as measured by AUC-ROC) are negligible (±0.05 on average). The columns are defined analogously as in Table 3.
+Dataset Time (min) Memory (GB) AUC-ROC
+I II0 II Δ(%) I II0 II Δ(%) I II0 II
+CiteSeer 0.53 0.03 0.42 -20.75% 3.12 2.09 2.09 -33.01% 0.76 0.78 0.77
+Cora 0.44 0.03 0.36 -18.18% 3.12 2.08 2.08 -33.33% 0.87 0.66 0.8
+PubMed 2.61 0.19 2.00 -23.37% 3.16 2.12 2.12 -32.91% 0.91 0.76 0.81
+ogbl-collab 4.31 1.48 3.88 -9.98% 13.25 9.00 9.00 -32.08% 0.94 0.93 0.96
+ogbl-ppa 24.72 9.23 23.43 -5.22% 27.24 18.74 18.74 -31.20% 1.00 0.81 0.97
+ogbl-citation2 35.75 20.5 28.07 -21.48% 31.98 23.49 23.49 -26.55% 0.98 0.81 0.95
+ogbl-vessel 51.69 27.93 42.99 -16.83% 32.84 24.35 24.35 -25.85% 0.96 0.83 0.87
+the embeddings to collapse even in sparse networks, in our experi
+ments, we use the Adam optimizer, which decays the learning rate,
+and we train for only 2 epochs in the case of II0. On the other
+hand, removing repulsion is less effective for node2vec because
+the random walks effectively increase global density–and thus, the
+likelihood of collapse–by creating positive pairs among not just
+connected nodes but also nodes within the same context window.
+5.2.3 More generally, repulsion is needed, and dimension regularization provides a scalable solution. To generalize beyond the seven
+real-world graphs, we examine the performance of our augmen
+tation on two-block SBM graphs in which we toggle local density.
+Figure 4 shows that when the within-block edge probability is much
+greater than the between-block probability, all variants perform
+well. However, as local density decreases and the boundary between
+the two blocks erodes, repulsion is needed as indicated by the gap
+between I and II0; the figure shows that dimension regularization
+(II) is an effective repulsion mechanism. In LINE, dimension reg
+ularization outperforms all variants, and in node2vec, dimension
+regularization interpolates between the vanilla and repulsion-less
+variants. For LINE, the performance dip for II0 indicates that per
+formance may be unstable when repulsion is removed, likely due
+to the possibility of embedding collapse.
+6 Discussion
+In this section, we discuss the broader applicability of our theoreti
+cal result as well as the limitations of our dimension-regularization
+meta-algorithm.
+Broader Applicability of Theoretical Result. While we focus on
+the skip-gram loss in this work, our theoretical contribution con
+necting skip-gram repulsion and dimension-mean regularization,
+as detailed in Section 3.2, is applicable beyond skip-gram. First,
+observe that the skip-gram loss we introduce in Eq. (8) is a generic
+cross-entropy logistic pair-classifier loss. Though we focus on the
+setting where positive and negative pairs are defined via the skip
+gram model, dimension-mean regularization can be efficiently used
+for repulsion in Eq. (8) regardless of how positive and negative pairs
+are defined, provided the number of positive pairs is o (n2), where
+n is the vocabulary size. Second, dimension-mean regularization
+is also an efficiency bypass for certain formulations of Noise Con
+trastive Estimation (NCE) [15]. Past works, such as the similarity
+based graph embedding algorithm VERSE [31], have reformulated
+NCE in terms of negative sampling, using the exact SGNS loss in
+Eq. (9); for these negative-sampling-based formulations of NCE,
+the dimension-mean regularizer is an efficient bypass of negative
+sampling, again provided the number of positive samples is o (n2).
+These two applications of the dimension-mean regularizer as an
+
+
+Bypassing Skip-Gram Negative Sampling: Dimension Regularization as a More Efficient Alternative for Graph Embeddings
+CiteSeer Cora
+PubMed
+ogbl-collab
+ogbl-ppa
+ogbl-citation2
+ogbl-vessel
+0
+20
+40
+60
+80
+Relative Time Decrease (%)
+Training Time Decrease from Removing Repulsion
+LINE node2vec
+0.0 0.2 0.4 0.6 Average clustering coefficient
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+AUC-ROC
+AUC-ROC
+0.0 0.2 0.4 0.6 Average clustering coefficient
+MRR
+MRR
+0.0 0.2 0.4 0.6 Average clustering coefficient
+Hits@100
+Hits@100
+Cora CiteSeer PubMed ogbl-collab ogbl-ppa ogbl-citation2 ogbl-vessel
+Figure 3: We find that in practice, removing repulsion altogether significantly reduces training time, as shown in the top figure, and can even improve performance. Specifically, removing repulsion performs especially well for real-world graphs that are globally sparse but locally dense (high clustering coefficient). In the bottom figure, we show the change in performance when repulsion is removed relative to vanilla LINE. For almost all graphs, AUC-ROC, MRR, and Hits@k all increase; the increase is most prominent in the case of ogbl-collab, which has high local density.
+Figure 4: We show that as we decrease local density in a twoblock SBM, the need for repulsion increases and dimension regularization provides an effective repulsion mechanism. In both figures, lower values on the x-axis imply fewer edges within blocks (lower local density) and more edges between blocks. When local density is high, the blocks are easily distinguishable and all variants perform well, but as local density decreases, repulsion is needed to separate the blocks and the performance of the repulsion-less special case (II0) erodes. Dimension regularization (II) performs the best in LINE and interpolates between the vanilla and repulsion-less variants in node2vec.
+efficient form of repulsion for cross-entropy and NCE fall directly
+from our theoretical analysis in Section 3.2.
+Meta-algorithm Limitations. While the results in Section 5 demon
+strate that our augmentation framework reduces training time
+and memory usage while preserving link-prediction performance,
+we note two limitations. First, our dimension-regularization meta
+algorithm introduces two hyperparameters λ and nnegative, which
+require tuning. Second, while link-prediction performance is pre
+served overall, there are graphs, such as Cora, for which perfor
+mance decreased relative to node2vec. That said, these graphs still
+benefit from significant decreases in training time and memory.
+7 Conclusion
+We provide a new perspective on dissimilarity preservation in graph
+representation learning and show that dissimilarity preservation
+can be achieved via dimension regularization. Our main theoret
+ical finding shows that when node repulsion is most needed and
+embedding dot products are all increasing, the difference between
+the original skip-gram dissimilarity loss and the dimension-mean
+regularizer vanishes. Combined with the efficiency of dimension
+operations over node repulsions, dimension regularization bypasses
+the need for SGNS. We then introduce a generic algorithm aug
+mentation that prioritizes positive updates. When node repulsion is
+needed and collapse approaches, the augmentation utilizes dimen
+sion regularization instead of SGNS. Our experimental results show
+that replacing SGNS with dimension regularization in LINE and
+node2vec preserves the link-prediction performance of the original
+algorithms while reducing runtime by up to 23.4% and memory by
+up to 33.3% for OGB benchmark datasets. Furthermore, for LINE,
+removing dissimilarity preservation altogether, a special case of our
+augmentation framework, reduces training time by 70.9% on aver
+age while also increasing link prediction performance–especially
+for graphs that are globally sparse but locally dense. However, for
+graphs with low local density, repulsion is needed, and dimension
+regularization is an efficient and effective approach.

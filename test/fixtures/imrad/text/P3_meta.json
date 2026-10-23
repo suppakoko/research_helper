@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "P3",
+  "title": "Synthesis and characterization of sustainable Zinc Oxide nanoparticles for waxy crude flow assurance application",
+  "venue": "PLOS ONE 2026",
+  "publisher": "plos",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract; Introduction; Methodology; Results and discussion; Conclusion",
+    "notes": [
+      "\"Methodology\" instead of Methods",
+      "combined Results and Discussion heading"
+    ]
+  },
+  "doi": "10.1371/journal.pone.0358989",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0358989&type=printable",
+  "landingUrl": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0358989",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "P3.pdf",
+    "bytes": 3595679,
+    "sha256": "1a03f7d6ab34826d495e229ad87e21627675dbe3d0b30f120dabc77a766a1761"
+  },
+  "text": {
+    "file": "P3.txt",
+    "bytes": 52589,
+    "chars": 52282,
+    "sha256": "f225d46d39f8a3ef351bbcf657660857e2d94128c0b6737b59d6506d6b97f7c3",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 52282,
+      "truncated": false,
+      "pages": 22,
+      "runningHeadLinesRemoved": 22,
+      "gutterPages": 1,
+      "referencesCut": true,
+      "referencesShare": 0.229568830862633,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.85878505030412,
+      "ocrLetterShare": 0.7692513675834896,
+      "ocrChars": 52282,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 19,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

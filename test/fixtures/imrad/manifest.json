@@ -1,0 +1,1167 @@
+{
+  "schema": "imrad-manifest-v1",
+  "description": "P3-T20: the 40 open-access papers of gate G-12. Metadata from the owner-approved candidate list and plan/reports/G-12-downloads.md; columnCount and hasImradStructure are written by scripts/build-imrad-fixtures.ts. See README.md.",
+  "papers": [
+    {
+      "id": "S1",
+      "title": "RSEM: accurate transcript quantification from RNA-Seq data with or without a reference genome",
+      "venue": "BMC Bioinformatics 2011",
+      "publisher": "springer",
+      "doi": "10.1186/1471-2105-12-323",
+      "otherId": null,
+      "landingUrl": "https://link.springer.com/article/10.1186/1471-2105-12-323",
+      "sourceUrl": "https://link.springer.com/content/pdf/10.1186/1471-2105-12-323.pdf",
+      "licence": "CC BY 2.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 2.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract / Background / Implementation / Results and Discussion / Conclusions / Availability and requirements / Methods",
+        "notes": [
+          "combined Results and Discussion heading",
+          "Methods after the Conclusions",
+          "Background instead of Introduction",
+          "a software article"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 14 of 15 pages with body text are two-column",
+      "textFile": "text/S1.txt",
+      "labelsFile": "labels/S1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "S2",
+      "title": "Randomized SMILES strings improve the quality of molecular generative models",
+      "venue": "Journal of Cheminformatics 2019",
+      "publisher": "springer",
+      "doi": "10.1186/s13321-019-0393-0",
+      "otherId": null,
+      "landingUrl": "https://link.springer.com/article/10.1186/s13321-019-0393-0",
+      "sourceUrl": "https://link.springer.com/content/pdf/10.1186/s13321-019-0393-0.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract / Introduction / Methods / Results / Discussion / Conclusions",
+        "notes": [
+          "plain IMRaD with unnumbered headings"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 12 of 13 pages with body text are two-column",
+      "textFile": "text/S2.txt",
+      "labelsFile": "labels/S2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "S4",
+      "title": "Social media sensors as early signals of influenza outbreaks at scale",
+      "venue": "EPJ Data Science 2024",
+      "publisher": "springer",
+      "doi": "10.1140/epjds/s13688-024-00474-1",
+      "otherId": null,
+      "landingUrl": "https://link.springer.com/article/10.1140/epjds/s13688-024-00474-1",
+      "sourceUrl": "https://link.springer.com/content/pdf/10.1140/epjds/s13688-024-00474-1.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "Abstract / 1 Introduction / 2 Results / 3 Discussion / 4 Methods",
+        "notes": [
+          "numbered headings",
+          "Methods at the end"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 15 pages with body text are two-column",
+      "textFile": "text/S4.txt",
+      "labelsFile": "labels/S4.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "S5",
+      "title": "Monodispersed mesoscopic star-shaped gold particles via silver-ion-assisted multi-directional growth for highly sensitive SERS-active substrates",
+      "venue": "Nano Convergence 2024",
+      "publisher": "springer",
+      "doi": "10.1186/s40580-024-00435-4",
+      "otherId": null,
+      "landingUrl": "https://link.springer.com/article/10.1186/s40580-024-00435-4",
+      "sourceUrl": "https://link.springer.com/content/pdf/10.1186/s40580-024-00435-4.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "Abstract / 1 Introduction / 2 Experimental method / 3 Results and discussion / 4 Conclusion",
+        "notes": [
+          "numbered headings",
+          "\"Experimental method\" instead of Methods",
+          "combined Results and Discussion heading"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 8 of 9 pages with body text are two-column",
+      "textFile": "text/S5.txt",
+      "labelsFile": "labels/S5.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "N1",
+      "title": "Knowledge-guided machine learning can improve carbon cycle quantification in agroecosystems",
+      "venue": "Nature Communications 2024",
+      "publisher": "nature",
+      "doi": "10.1038/s41467-023-43860-5",
+      "otherId": null,
+      "landingUrl": "https://www.nature.com/articles/s41467-023-43860-5",
+      "sourceUrl": "https://www.nature.com/articles/s41467-023-43860-5.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "\"licensed under a Creative Commons Attribution 4.0\" at the end of the article",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "confirmed on the web page",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract / Introduction / Results / Discussion / Methods",
+        "notes": [
+          "Methods at the end",
+          "the Introduction heading may be absent from the PDF"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 13 of 14 pages with body text are two-column",
+      "textFile": "text/N1.txt",
+      "labelsFile": "labels/N1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "N2",
+      "title": "Native qudit entanglement in a trapped ion quantum processor",
+      "venue": "Nature Communications 2023",
+      "publisher": "nature",
+      "doi": "10.1038/s41467-023-37375-2",
+      "otherId": null,
+      "landingUrl": "https://www.nature.com/articles/s41467-023-37375-2",
+      "sourceUrl": "https://www.nature.com/articles/s41467-023-37375-2.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "\"licensed under a Creative Commons Attribution 4.0\" at the end of the article",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "confirmed on the web page",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract / Introduction / Results / Discussion",
+        "notes": [
+          "no Methods section (a detector must find none)"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 6 of 6 pages with body text are two-column",
+      "textFile": "text/N2.txt",
+      "labelsFile": "labels/N2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "N3",
+      "title": "Turning copper into an efficient and stable CO evolution catalyst beyond noble metals",
+      "venue": "Nature Communications 2024",
+      "publisher": "nature",
+      "doi": "10.1038/s41467-024-50436-4",
+      "otherId": null,
+      "landingUrl": "https://www.nature.com/articles/s41467-024-50436-4",
+      "sourceUrl": "https://www.nature.com/articles/s41467-024-50436-4.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "\"licensed under a Creative Commons Attribution 4.0\" at the end of the article",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "confirmed on the web page",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract / Introduction / Results and discussion / Methods",
+        "notes": [
+          "combined Results and Discussion heading",
+          "Methods at the end"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 10 of 11 pages with body text are two-column",
+      "textFile": "text/N3.txt",
+      "labelsFile": "labels/N3.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "N6",
+      "title": "Effects of Rhizophagus intraradices on soybean yield and the composition of microbial communities in the rhizosphere soil of continuous cropping soybean",
+      "venue": "Scientific Reports 2022",
+      "publisher": "nature",
+      "doi": "10.1038/s41598-022-22473-w",
+      "otherId": null,
+      "landingUrl": "https://www.nature.com/articles/s41598-022-22473-w",
+      "sourceUrl": "https://www.nature.com/articles/s41598-022-22473-w.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "\"licensed under a Creative Commons Attribution 4.0\" at the end of the article",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": null,
+        "columnsExpectedBasis": "not checked",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract / Introduction / Materials and methods / Results / Discussion / Conclusions",
+        "notes": [
+          "Methods in the middle (the same journal also prints Methods at the end)"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 12 pages with body text are two-column",
+      "textFile": "text/N6.txt",
+      "labelsFile": "labels/N6.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "E1",
+      "title": "Synthesis and characterization of polyurethane flexible foams provided from PET derivatives, fly ash, and glass wastes",
+      "venue": "Heliyon 2023",
+      "publisher": "elsevier",
+      "doi": "10.1016/j.heliyon.2023.e23097",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10777411/",
+      "sourceUrl": "https://europepmc.org/articles/PMC10777411?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "Abstract; 1. Introduction; 2. Materials and methods; 3. Results and discussion; 4. Conclusions",
+        "notes": [
+          "numbered headings",
+          "combined Results and Discussion heading",
+          "single column"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 14 pages with body text are two-column",
+      "textFile": "text/E1.txt",
+      "labelsFile": "labels/E1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "E2",
+      "title": "Oleic acid released by sensory neurons inhibits TRPV1-mediated thermal hypersensitivity via GPR40",
+      "venue": "iScience 2024 (Cell Press)",
+      "publisher": "elsevier",
+      "doi": "10.1016/j.isci.2024.110552",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11338150/",
+      "sourceUrl": "https://europepmc.org/articles/PMC11338150?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "CC BY 4.0 stated on a later page of the PDF",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Summary; Highlights; Introduction; Results; Discussion; STAR★Methods",
+        "notes": [
+          "STAR Methods at the end",
+          "\"Summary\" instead of Abstract"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 3 of 16 pages with body text are two-column",
+      "textFile": "text/E2.txt",
+      "labelsFile": "labels/E2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "E4",
+      "title": "Radial and translational motions of a gas bubble in a Gaussian standing wave field",
+      "venue": "Ultrasonics Sonochemistry 2023",
+      "publisher": "elsevier",
+      "doi": "10.1016/j.ultsonch.2023.106712",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10746565/",
+      "sourceUrl": "https://europepmc.org/articles/PMC10746565?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "Abstract; 1. Introduction; 2. Theoretical model; 3. Results and discussion; 4. Conclusions",
+        "notes": [
+          "theory paper: \"Theoretical model\" instead of Methods",
+          "combined Results and Discussion heading"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 8 of 8 pages with body text are two-column",
+      "textFile": "text/E4.txt",
+      "labelsFile": "labels/E4.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "E5",
+      "title": "Mycoplasma pneumoniae carriage in children with recurrent respiratory tract infections is associated with a less diverse and altered microbiota",
+      "venue": "eBioMedicine 2023",
+      "publisher": "elsevier",
+      "doi": "10.1016/j.ebiom.2023.104868",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10679896/",
+      "sourceUrl": "https://europepmc.org/articles/PMC10679896?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Summary (Background / Methods / Findings / Interpretation); Research in context; Introduction; Methods; Results; Discussion",
+        "notes": [
+          "a \"Methods\" subheading inside the structured summary (false-positive risk)",
+          "a boxed panel before the Introduction"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 10 of 11 pages with body text are two-column",
+      "textFile": "text/E5.txt",
+      "labelsFile": "labels/E5.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "E6",
+      "title": "Deciphering specificity and cross-reactivity in tachykinin NK1 and NK2 receptors",
+      "venue": "Journal of Biological Chemistry 2023",
+      "publisher": "elsevier",
+      "doi": "10.1016/j.jbc.2023.105438",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10724690/",
+      "sourceUrl": "https://europepmc.org/articles/PMC10724690?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract; Results and discussion; Conclusion; Experimental procedures",
+        "notes": [
+          "no Introduction heading",
+          "combined Results and Discussion heading",
+          "Methods at the end (\"Experimental procedures\")",
+          "PubMed Central credits the society (ASBMB); Elsevier is the publisher by DOI only"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 10 of 10 pages with body text are two-column",
+      "textFile": "text/E6.txt",
+      "labelsFile": "labels/E6.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "W1",
+      "title": "Methane Decomposition to Hydrogen Over Zirconia-Supported Fe Catalysts–Effects of the Modified Support",
+      "venue": "ChemistryOpen 2023",
+      "publisher": "wiley",
+      "doi": "10.1002/open.202300112",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10491930/",
+      "sourceUrl": "https://europepmc.org/articles/PMC10491930?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract; Introduction; Results and Discussion; Conclusions; Experimental Section",
+        "notes": [
+          "combined Results and Discussion heading",
+          "Experimental Section after the Conclusions"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 9 of 9 pages with body text are two-column",
+      "textFile": "text/W1.txt",
+      "labelsFile": "labels/W1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "W2",
+      "title": "Pressure-Induced Superconductivity and Topological Quantum Phase Transitions in the Topological Semimetal ZrTe2",
+      "venue": "Advanced Science 2023",
+      "publisher": "wiley",
+      "doi": "10.1002/advs.202301332",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10724415/",
+      "sourceUrl": "https://europepmc.org/articles/PMC10724415?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "Abstract; 1. Introduction; 2. Results and Discussion; 3. Conclusion; 4. Experimental Section",
+        "notes": [
+          "numbered headings",
+          "combined Results and Discussion heading",
+          "Experimental Section at the end"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 6 of 6 pages with body text are two-column",
+      "textFile": "text/W2.txt",
+      "labelsFile": "labels/W2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "W3",
+      "title": "Mammary Microvessels are Sensitive to Menstrual Cycle Sex Hormones",
+      "venue": "Advanced Science 2023",
+      "publisher": "wiley",
+      "doi": "10.1002/advs.202302561",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10724440/",
+      "sourceUrl": "https://europepmc.org/articles/PMC10724440?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "Abstract; 1. Introduction; 2. Results; 3. Discussion; 4. Conclusion; 5. Experimental Section",
+        "notes": [
+          "same template as W2, with Results and Discussion separate"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 11 of 11 pages with body text are two-column",
+      "textFile": "text/W3.txt",
+      "labelsFile": "labels/W3.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "W4",
+      "title": "Effects of home-cage elevation on behavioral tests in mice",
+      "venue": "Brain and Behavior 2024",
+      "publisher": "wiley",
+      "doi": "10.1002/brb3.3269",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10897499/",
+      "sourceUrl": "https://europepmc.org/articles/PMC10897499?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "1. INTRODUCTION; 2. MATERIALS AND METHODS; 3. RESULTS; 4. DISCUSSION; 5. CONCLUSIONS",
+        "notes": [
+          "numbered upper-case headings (possibly \"1 | INTRODUCTION\")"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 8 of 9 pages with body text are two-column",
+      "textFile": "text/W4.txt",
+      "labelsFile": "labels/W4.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "W5",
+      "title": "De novo biosynthesis of α-aminoadipate via multi-strategy metabolic engineering in Escherichia coli",
+      "venue": "MicrobiologyOpen 2022",
+      "publisher": "wiley",
+      "doi": "10.1002/mbo3.1301",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9437556/",
+      "sourceUrl": "https://europepmc.org/articles/PMC9437556?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "1. INTRODUCTION; 2. MATERIALS AND METHODS; 3. RESULTS AND DISCUSSION; 4. CONCLUSION; APPENDIX A; APPENDIX B",
+        "notes": [
+          "appendices inside the article PDF",
+          "combined RESULTS AND DISCUSSION heading (upper case)"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 12 of 14 pages with body text are two-column",
+      "textFile": "text/W5.txt",
+      "labelsFile": "labels/W5.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "P1",
+      "title": "English-Persian cross-language plagiarism detection: Multilingual deep learning approach",
+      "venue": "PLOS ONE 2026",
+      "publisher": "plos",
+      "doi": "10.1371/journal.pone.0354459",
+      "otherId": null,
+      "landingUrl": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0354459",
+      "sourceUrl": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0354459&type=printable",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract; Introduction; Literature review; Materials & methods; Results; Discussion; Conclusions",
+        "notes": [
+          "\"Materials & methods\" with an ampersand",
+          "an extra Literature review section"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 22 pages with body text are two-column",
+      "textFile": "text/P1.txt",
+      "labelsFile": "labels/P1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "P3",
+      "title": "Synthesis and characterization of sustainable Zinc Oxide nanoparticles for waxy crude flow assurance application",
+      "venue": "PLOS ONE 2026",
+      "publisher": "plos",
+      "doi": "10.1371/journal.pone.0358989",
+      "otherId": null,
+      "landingUrl": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0358989",
+      "sourceUrl": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0358989&type=printable",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract; Introduction; Methodology; Results and discussion; Conclusion",
+        "notes": [
+          "\"Methodology\" instead of Methods",
+          "combined Results and Discussion heading"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 19 pages with body text are two-column",
+      "textFile": "text/P3.txt",
+      "labelsFile": "labels/P3.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "P5",
+      "title": "Comparative effectiveness of amlodipine versus nifedipine prescribed at discharge in patients with ischemic stroke or transient ischemic attack: A nationwide 5-year follow-up registry study",
+      "venue": "PLOS Medicine 2026",
+      "publisher": "plos",
+      "doi": "10.1371/journal.pmed.1005277",
+      "otherId": null,
+      "landingUrl": "https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.1005277",
+      "sourceUrl": "https://journals.plos.org/plosmedicine/article/file?id=10.1371/journal.pmed.1005277&type=printable",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "Abstract (Background / Methods and findings / Conclusions); Author summary; 1 Introduction; 2 Methods; 3 Results; 4 Discussion",
+        "notes": [
+          "numbered headings without a period",
+          "subheadings inside the structured abstract (false-positive risk)"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 1 of 10 pages with body text are two-column",
+      "textFile": "text/P5.txt",
+      "labelsFile": "labels/P5.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "P6",
+      "title": "Genome-Wide DNA methylation profiling of tissue-plasma pairs identifies Novel cfDNA biomarkers for the diagnosis of gastric cancer",
+      "venue": "PLOS Genetics 2026",
+      "publisher": "plos",
+      "doi": "10.1371/journal.pgen.1012322",
+      "otherId": null,
+      "landingUrl": "https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1012322",
+      "sourceUrl": "https://journals.plos.org/plosgenetics/article/file?id=10.1371/journal.pgen.1012322&type=printable",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract; Author summary; Introduction; Result; Discussion; Conclusion; Materials and methods",
+        "notes": [
+          "singular \"Result\"",
+          "Methods after the Conclusion"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 1 of 16 pages with body text are two-column",
+      "textFile": "text/P6.txt",
+      "labelsFile": "labels/P6.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "O2",
+      "title": "Experimental and computational investigations of RNA duplexes containing N7-regioisomers of adenosine and LNA-adenosine",
+      "venue": "Nucleic Acids Research 2024",
+      "publisher": "oup",
+      "doi": "10.1093/nar/gkae1222",
+      "otherId": null,
+      "landingUrl": "https://academic.oup.com/nar/article/53/1/gkae1222/7931344",
+      "sourceUrl": "https://europepmc.org/articles/PMC11724317?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract; Introduction; Materials and methods; Results; Discussion",
+        "notes": [
+          "plain IMRaD",
+          "many back-matter headings"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 11 of 12 pages with body text are two-column",
+      "textFile": "text/O2.txt",
+      "labelsFile": "labels/O2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "O3",
+      "title": "An integrative multiomics random forest framework for robust biomarker discovery",
+      "venue": "GigaScience 2025",
+      "publisher": "oup",
+      "doi": "10.1093/gigascience/giaf148",
+      "otherId": null,
+      "landingUrl": "https://academic.oup.com/gigascience/article/doi/10.1093/gigascience/giaf148/8374728",
+      "sourceUrl": "https://europepmc.org/articles/PMC12821379?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "uncertain",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract; Introduction; Material and Methods; Results; Discussion",
+        "notes": [
+          "singular \"Material and Methods\""
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 17 of 18 pages with body text are two-column",
+      "textFile": "text/O3.txt",
+      "labelsFile": "labels/O3.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "O4",
+      "title": "SCARAP: scalable cross-species comparative genomics of prokaryotes",
+      "venue": "Bioinformatics 2024",
+      "publisher": "oup",
+      "doi": "10.1093/bioinformatics/btae735",
+      "otherId": null,
+      "landingUrl": "https://academic.oup.com/bioinformatics/article/41/1/btae735/7921419",
+      "sourceUrl": "https://europepmc.org/articles/PMC11681940?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "Abstract; 1 Introduction; 2 Materials and methods; 3 Results and discussion; 4 Conclusions",
+        "notes": [
+          "numbered headings",
+          "combined Results and Discussion heading"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 10 of 10 pages with body text are two-column",
+      "textFile": "text/O4.txt",
+      "labelsFile": "labels/O4.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "O5",
+      "title": "Antibody-mediated clearance of an ER-resident aggregate that causes glaucoma",
+      "venue": "PNAS Nexus 2024",
+      "publisher": "oup",
+      "doi": "10.1093/pnasnexus/pgae556",
+      "otherId": null,
+      "landingUrl": "https://academic.oup.com/pnasnexus/article/4/1/pgae556/7920644",
+      "sourceUrl": "https://europepmc.org/articles/PMC11670252?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "none",
+        "webHeadings": "Abstract; Significance Statement; Background; Results; Discussion; Methods",
+        "notes": [
+          "Background instead of Introduction",
+          "Methods at the end",
+          "a Significance Statement box"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 10 of 11 pages with body text are two-column",
+      "textFile": "text/O5.txt",
+      "labelsFile": "labels/O5.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "I1",
+      "title": "UKSSL: Underlying Knowledge Based Semi-Supervised Learning for Medical Image Classification",
+      "venue": "IEEE Open Journal of Engineering in Medicine and Biology 2023",
+      "publisher": "ieee",
+      "doi": "10.1109/OJEMB.2023.3305190",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11186655/",
+      "sourceUrl": "https://europepmc.org/articles/PMC11186655?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "roman",
+        "webHeadings": "I. Introduction; II. Materials and Methods; III. Results and Discussion; IV. Conclusion",
+        "notes": [
+          "Roman-numeral headings",
+          "combined Results and Discussion heading"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 6 of 7 pages with body text are two-column",
+      "textFile": "text/I1.txt",
+      "labelsFile": "labels/I1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "I3",
+      "title": "Tumor-Attentive Segmentation-Guided GAN for Synthesizing Breast Contrast-Enhanced MRI Without Contrast Agents",
+      "venue": "IEEE Journal of Translational Engineering in Health and Medicine 2022",
+      "publisher": "ieee",
+      "doi": "10.1109/JTEHM.2022.3221918",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9721354/",
+      "sourceUrl": "https://europepmc.org/articles/PMC9721354?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "roman",
+        "webHeadings": "I. Introduction; II. Materials and Methods; III. Results; IV. Discussion; V. Conclusion; Appendix",
+        "notes": [
+          "an unnumbered Appendix between the Conclusion and the references"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 10 of 11 pages with body text are two-column",
+      "textFile": "text/I3.txt",
+      "labelsFile": "labels/I3.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "I4",
+      "title": "Design and Evaluation of a Balanced Compliant Laparoscopic Grasper",
+      "venue": "IEEE Journal of Translational Engineering in Health and Medicine 2023",
+      "publisher": "ieee",
+      "doi": "10.1109/JTEHM.2023.3291925",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10561751/",
+      "sourceUrl": "https://europepmc.org/articles/PMC10561751?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "roman",
+        "webHeadings": "Nomenclature; I. Introduction; II. Materials and Methods; III. Results; IV. Discussion; V. Conclusion",
+        "notes": [
+          "a Nomenclature block before the Introduction"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 8 of 9 pages with body text are two-column",
+      "textFile": "text/I4.txt",
+      "labelsFile": "labels/I4.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "I5",
+      "title": "An Epileptic Seizure Prediction Method Based on CBAM-3D CNN-LSTM Model",
+      "venue": "IEEE Journal of Translational Engineering in Health and Medicine 2023",
+      "publisher": "ieee",
+      "doi": "10.1109/JTEHM.2023.3290036",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10328218/",
+      "sourceUrl": "https://europepmc.org/articles/PMC10328218?pdf=render",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "roman",
+        "webHeadings": "I. Introduction; II. Methodology; III. Results; IV. Conclusion",
+        "notes": [
+          "no Discussion section",
+          "\"Methodology\" instead of Methods"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 7 of 7 pages with body text are two-column",
+      "textFile": "text/I5.txt",
+      "labelsFile": "labels/I5.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "A1",
+      "title": "Comparing Motion Distortion Between Vehicle Field Deployments",
+      "venue": "arXiv (IEEE conference template, estimated)",
+      "publisher": "arxiv",
+      "doi": null,
+      "otherId": "arXiv:2405.00189v1",
+      "landingUrl": "https://arxiv.org/abs/2405.00189",
+      "sourceUrl": "https://arxiv.org/pdf/2405.00189",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "the PDF prints none; the arXiv abstract page links creativecommons.org/licenses/by/4.0",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "estimated from the template",
+        "headingNumbering": "roman",
+        "webHeadings": "I Introduction; II Related work…; III Motion distortion metric; IV Case study; V Lessons learned; VI Conclusion",
+        "notes": [
+          "no Methods or Results headings",
+          "\"Case study\" and \"Lessons learned\" sections"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 5 of 5 pages with body text are two-column",
+      "textFile": "text/A1.txt",
+      "labelsFile": "labels/A1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "A4",
+      "title": "Thawed Gaussian wavepacket dynamics with Δ-machine learned potentials",
+      "venue": "arXiv (AIP/REVTeX template, estimated)",
+      "publisher": "arxiv",
+      "doi": null,
+      "otherId": "arXiv:2405.00193v1",
+      "landingUrl": "https://arxiv.org/abs/2405.00193",
+      "sourceUrl": "https://arxiv.org/pdf/2405.00193",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "the PDF prints none; the arXiv abstract page links creativecommons.org/licenses/by/4.0",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "estimated from the template",
+        "headingNumbering": "roman",
+        "webHeadings": "I Introduction; II Theory; III Numerical simulations; IV Conclusions; Appendix A/B/C",
+        "notes": [
+          "appendices before the references",
+          "\"Theory\" instead of Methods"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 11 of 11 pages with body text are two-column",
+      "textFile": "text/A4.txt",
+      "labelsFile": "labels/A4.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "A5",
+      "title": "Bypassing Skip-Gram Negative Sampling: Dimension Regularization as a More Efficient Alternative for Graph Embeddings",
+      "venue": "arXiv (ACM template, estimated)",
+      "publisher": "arxiv",
+      "doi": null,
+      "otherId": "arXiv:2405.00172v2",
+      "landingUrl": "https://arxiv.org/abs/2405.00172",
+      "sourceUrl": "https://arxiv.org/pdf/2405.00172",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "estimated from the template",
+        "headingNumbering": "arabic",
+        "webHeadings": "1 Introduction; 2 Related Works; 3 …; 4 …; 5 Experiments (5.1 Methodology, 5.2 Results); 6 Discussion; 7 Conclusion; A/B/C after References",
+        "notes": [
+          "Arabic-numeral headings",
+          "appendices after the references",
+          "Results as a subsection"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 12 of 12 pages with body text are two-column",
+      "textFile": "text/A5.txt",
+      "labelsFile": "labels/A5.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "A6",
+      "title": "Graph Neural Network Approach to Semantic Type Detection in Tables",
+      "venue": "arXiv (Springer LNCS template, estimated)",
+      "publisher": "arxiv",
+      "doi": null,
+      "otherId": "arXiv:2405.00123v1",
+      "landingUrl": "https://arxiv.org/abs/2405.00123",
+      "sourceUrl": "https://arxiv.org/pdf/2405.00123",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "the PDF prints none; the arXiv abstract page links creativecommons.org/licenses/by/4.0",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "estimated from the template",
+        "headingNumbering": "arabic",
+        "webHeadings": "1 Introduction; 2 Related works; 3 Problem Definition; 4 GAIT; 5 Evaluation (5.2 Results); 6 Conclusion",
+        "notes": [
+          "single column",
+          "Results as a subsection"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 11 pages with body text are two-column",
+      "textFile": "text/A6.txt",
+      "labelsFile": "labels/A6.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "B1",
+      "title": "Self-organization of modular activity in immature cortical networks",
+      "venue": "bioRxiv 2024 v1",
+      "publisher": "biorxiv",
+      "doi": "10.1101/2024.03.02.583133",
+      "otherId": null,
+      "landingUrl": "https://www.biorxiv.org/content/10.1101/2024.03.02.583133v1",
+      "sourceUrl": "https://www.biorxiv.org/content/10.1101/2024.03.02.583133v1.full.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 bioRxiv header: \"CC-BY 4.0 International license\"",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "unknown",
+        "webHeadings": null,
+        "notes": [
+          "preprint template",
+          "headings not checked in advance"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 24 pages with body text are two-column",
+      "textFile": "text/B1.txt",
+      "labelsFile": "labels/B1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "B2",
+      "title": "Non-linear transcriptional responses to gradual modulation of transcription factor dosage",
+      "venue": "bioRxiv v3 (2025-08-07)",
+      "publisher": "biorxiv",
+      "doi": "10.1101/2024.03.01.582837",
+      "otherId": null,
+      "landingUrl": "https://www.biorxiv.org/content/10.1101/2024.03.01.582837v3",
+      "sourceUrl": "https://www.biorxiv.org/content/10.1101/2024.03.01.582837v3.full.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 bioRxiv header: \"CC-BY 4.0 International license\"",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "unknown",
+        "webHeadings": null,
+        "notes": [
+          "preprint template",
+          "version 3, fixed"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 2 of 13 pages with body text are two-column",
+      "textFile": "text/B2.txt",
+      "labelsFile": "labels/B2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "B4",
+      "title": "Sexually dimorphic renal expression of Klotho is directed by a kidney-specific distal enhancer responsive to HNF1b",
+      "venue": "bioRxiv v1",
+      "publisher": "biorxiv",
+      "doi": "10.1101/2024.02.29.582831",
+      "otherId": null,
+      "landingUrl": "https://www.biorxiv.org/content/10.1101/2024.02.29.582831v1",
+      "sourceUrl": "https://www.biorxiv.org/content/10.1101/2024.02.29.582831v1.full.pdf",
+      "licence": "CC0 1.0",
+      "licenceEvidence": "page 1: \"not subject to copyright under 17 USC 105 ... CC0\"",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "unknown",
+        "webHeadings": null,
+        "notes": [
+          "the only CC0 paper"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 21 pages with body text are two-column",
+      "textFile": "text/B4.txt",
+      "labelsFile": "labels/B4.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "X1",
+      "title": "Observations on the Mechanisms of High Resistance Junction Formation in Aluminum Wire Connections",
+      "venue": "J Res Natl Bur Stand 1980",
+      "publisher": "us-government",
+      "doi": "10.6028/jres.085.024",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6756263/",
+      "sourceUrl": "https://europepmc.org/articles/PMC6756263?pdf=render",
+      "licence": "US government work (17 U.S.C. 105)",
+      "licenceEvidence": "scanned page 1 gives the authors' affiliation as the National Bureau of Standards (a US government work by authorship)",
+      "preprint": false,
+      "scanned": true,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "1. Introduction; 2. Experimental Methods; 3. Experimental Results; 4. Discussion; 5. Conclusions",
+        "notes": [
+          "scanned (18.3 MB file)",
+          "numbered headings",
+          "the heading list is on the PMC page"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 11 of 11 pages with body text are two-column",
+      "textFile": "text/X1.txt",
+      "labelsFile": "labels/X1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "X2",
+      "title": "Size and Refractive Index Determination of Single Polystyrene Spheres",
+      "venue": "J Res Natl Bur Stand 1983",
+      "publisher": "us-government",
+      "doi": "10.6028/jres.088.016",
+      "otherId": null,
+      "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6768154/",
+      "sourceUrl": "https://europepmc.org/articles/PMC6768154?pdf=render",
+      "licence": "US government work (17 U.S.C. 105)",
+      "licenceEvidence": "scanned page 1 gives the authors' affiliation as the National Bureau of Standards (a US government work by authorship)",
+      "preprint": false,
+      "scanned": true,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "arabic",
+        "webHeadings": "1. Introduction; 2. Experimental Method; 3. Data Analysis; 4. Results; 5. Discussion; 6. Concluding Remarks",
+        "notes": [
+          "scanned source (text layer from OCR, with recognition errors)",
+          "an extra Data Analysis section",
+          "the small file size suggested a text layer; not checked in advance"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 12 of 15 pages with body text are two-column",
+      "textFile": "text/X2.txt",
+      "labelsFile": "labels/X2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "XR2",
+      "title": "Sweep effect on the drag of rows of perpendicular circular cylinders in a laminar boundary layer at supersonic free-stream velocities",
+      "venue": "NASA Technical Note D-7812, December 1974",
+      "publisher": "us-government",
+      "doi": null,
+      "otherId": "NTRS 19750004163",
+      "landingUrl": "https://ntrs.nasa.gov/citations/19750004163",
+      "sourceUrl": "https://ntrs.nasa.gov/api/citations/19750004163/downloads/19750004163.pdf",
+      "licence": "US government work (17 U.S.C. 105)",
+      "licenceEvidence": "NASA Technical Note D-7812; NTRS record: distribution PUBLIC, GOV_PUBLIC_USE_PERMITTED",
+      "preprint": false,
+      "scanned": true,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected",
+        "headingNumbering": "unknown",
+        "webHeadings": null,
+        "notes": [
+          "a technical report, not a journal article"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 3 of 17 pages with body text are two-column",
+      "textFile": "text/XR2.txt",
+      "labelsFile": "labels/XR2.json",
+      "hasImradStructure": null
+    }
+  ]
+}

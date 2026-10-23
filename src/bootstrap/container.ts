@@ -2021,6 +2021,12 @@ export async function installServices(
     // `useTranslators` is on, which it ships off.
     writer: createZoteroSearchImportWriter({ logger, http }),
     runningWork,
+    // `P3-T27`: the relevance screen's privacy check judges the model the
+    // active adapter describes (`docs/12` §3's note of 2026-10-24).
+    screening: {
+      modelInfo: (providerId, modelId) =>
+        providers.registry.get(providerId)?.getModel(modelId),
+    },
   });
   // The per-job context factory is built after step 8, because a queued
   // job's checkpoint writes through the queue (`P3-T35`).

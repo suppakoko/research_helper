@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "B1",
+  "title": "Self-organization of modular activity in immature cortical networks",
+  "venue": "bioRxiv 2024 v1",
+  "publisher": "biorxiv",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "unknown",
+    "webHeadings": null,
+    "notes": [
+      "preprint template",
+      "headings not checked in advance"
+    ]
+  },
+  "doi": "10.1101/2024.03.02.583133",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 bioRxiv header: \"CC-BY 4.0 International license\"",
+  "sourceUrl": "https://www.biorxiv.org/content/10.1101/2024.03.02.583133v1.full.pdf",
+  "landingUrl": "https://www.biorxiv.org/content/10.1101/2024.03.02.583133v1",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "B1.pdf",
+    "bytes": 1676193,
+    "sha256": "e5f90c192cd5fc92bfc4188aa2e777fd82b805d1bc59be644902224c9df5086c"
+  },
+  "text": {
+    "file": "B1.txt",
+    "bytes": 83261,
+    "chars": 82979,
+    "sha256": "9457fcb573a10ed2326e2533ae22bd56d87574810e72162b50e7e403f83bd708",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 82979,
+      "truncated": false,
+      "pages": 32,
+      "runningHeadLinesRemoved": 64,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.15185862777363274,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8529989515419564,
+      "ocrLetterShare": 0.8009737403439424,
+      "ocrChars": 82979,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 24,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

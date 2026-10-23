@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "S2",
+  "title": "Randomized SMILES strings improve the quality of molecular generative models",
+  "venue": "Journal of Cheminformatics 2019",
+  "publisher": "springer",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract / Introduction / Methods / Results / Discussion / Conclusions",
+    "notes": [
+      "plain IMRaD with unnumbered headings"
+    ]
+  },
+  "doi": "10.1186/s13321-019-0393-0",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://link.springer.com/content/pdf/10.1186/s13321-019-0393-0.pdf",
+  "landingUrl": "https://link.springer.com/article/10.1186/s13321-019-0393-0",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "S2.pdf",
+    "bytes": 2164918,
+    "sha256": "392de71bffdcb4c0444d6d63d79208a5b003cd4456293dfac89dc444c8634926"
+  },
+  "text": {
+    "file": "S2.txt",
+    "bytes": 48129,
+    "chars": 47846,
+    "sha256": "691470298b6e1bfdedb3ad894e555d61f7a360f028dbac12e472863c1f0d1b5f",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 47846,
+      "truncated": false,
+      "pages": 13,
+      "runningHeadLinesRemoved": 12,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.14544157366355806,
+      "supplementaryCharsRemoved": 2460,
+      "ocrAlnumPunctShare": 0.838920703925093,
+      "ocrLetterShare": 0.7755507252434896,
+      "ocrChars": 47846,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 13,
+      "twoColumnPages": 12
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

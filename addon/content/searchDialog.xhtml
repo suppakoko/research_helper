@@ -201,6 +201,55 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
       <description id="rh-search-result-count" class="rh-hint" hidden="true" />
     </hbox>
 
+    <!-- 4b. Relevance screening — docs/08 §4.2's threshold row (P3-T27).
+         The whole row stays hidden unless the host says the active AI
+         provider can be called. The checkbox is unticked on every open:
+         screening spends money during a search, so it is chosen per run. The
+         number, "Show excluded" and the count line show only while it is
+         ticked; the number opens at the screening.threshold preference and a
+         change is never written back. The count line takes three arguments,
+         so its id is set by script with them. -->
+    <hbox id="rh-search-screening-row" align="center" hidden="true">
+      <checkbox
+        id="rh-search-screening"
+        data-l10n-id="research-helper-search-screening-enable"
+      />
+      <!-- Item 281(b) (owner, 2026-10-24): the estimated cost of screening,
+           beside the checkbox. Hidden, and with no data-l10n-id, until the
+           host has priced the query: its two messages take arguments, so the
+           script sets the id and the arguments together. -->
+      <description
+        id="rh-search-screening-cost"
+        class="rh-hint"
+        hidden="true"
+      />
+      <hbox id="rh-search-screening-controls" align="center" hidden="true">
+        <label
+          id="rh-search-screening-threshold-label"
+          control="rh-search-screening-threshold"
+          data-l10n-id="research-helper-search-screening-threshold-label"
+        />
+        <html:input
+          id="rh-search-screening-threshold"
+          type="number"
+          min="0"
+          max="100"
+          step="5"
+          data-l10n-id="research-helper-search-screening-threshold-input"
+        />
+        <checkbox
+          id="rh-search-screening-show-excluded"
+          data-l10n-id="research-helper-search-screening-show-excluded"
+        />
+      </hbox>
+      <spacer flex="1" />
+      <description
+        id="rh-search-screening-count"
+        class="rh-hint"
+        hidden="true"
+      />
+    </hbox>
+
     <!-- 5. The results area and docs/08 §4.6's states as swappable panels.
          Four of the five panels §4.6 draws are P1-T20's; the fifth,
          "Re-run (pre-filled from provenance)", is FR-12's and P2-T17's

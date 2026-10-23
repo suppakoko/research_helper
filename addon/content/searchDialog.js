@@ -109,6 +109,17 @@ var RHSearchWindow = {
     filter: "rh-search-filter",
     hideExisting: "rh-search-hide-existing",
     resultCount: "rh-search-result-count",
+    // P3-T27: relevance screening, docs/08 §4.2's threshold row. The row is
+    // hidden unless the host says screening is available; the controls inside
+    // it show while the per-run checkbox is ticked.
+    screeningRow: "rh-search-screening-row",
+    screeningEnable: "rh-search-screening",
+    screeningControls: "rh-search-screening-controls",
+    screeningThreshold: "rh-search-screening-threshold",
+    screeningShowExcluded: "rh-search-screening-show-excluded",
+    screeningCount: "rh-search-screening-count",
+    // Item 281(b): the estimated cost beside the checkbox.
+    screeningCost: "rh-search-screening-cost",
     resultsArea: "rh-results-area",
     resultsContainer: "rh-results-container",
     sourceStatus: "rh-search-source-status",
@@ -228,6 +239,8 @@ var RHSearchWindow = {
       duplicateBadge: "rh-duplicate-badge",
       linkedBadge: "rh-linked-badge",
       duplicateRow: "rh-row-duplicate",
+      // P3-T27: the model's relevance score on a screened row.
+      relevanceBadge: "rh-relevance-badge",
     },
 
     /**
@@ -348,6 +361,9 @@ var RHSearchWindow = {
     rerunRecorded: "research-helper-search-rerun-recorded",
     rerunAllYears: "research-helper-search-rerun-all-years",
     resultCount: "research-helper-search-result-count",
+    // P3-T27: "Importing { $kept } of { $total } results · { $excluded } below
+    // the threshold", set by script with its arguments.
+    screeningCount: "research-helper-search-screening-count",
     selectedCount: "research-helper-search-selected-count",
     authorsOverflow: "research-helper-search-authors-overflow",
     rowExisting: "research-helper-search-row-existing",
@@ -469,6 +485,17 @@ var RHSearchWindow = {
     visible: [],
     selection: [],
     view: { filter: "", hideExisting: false },
+    /**
+     * P3-T27: the view model's `ScreeningView` for the rows on screen, or
+     * `null` when the search that produced them was not screened. Only a
+     * screened result set is ever filtered by the threshold.
+     */
+    screening: null,
+    /**
+     * Item 281(b): the number of the latest screening-cost request. An answer
+     * to an older one is dropped, so the line shows the latest query's cost.
+     */
+    screeningCostRequest: 0,
     /** The count the in-flight Import-label request was made for. */
     importLabelCount: 0,
 
@@ -924,6 +951,93 @@ var RHSearchWindow = {
       return ref && typeof ref.id === "string" && ref.id !== "" ? ref : null;
     },
 
+    /**
+     * A row's relevance from the host (`{ score, ref }`, P3-T27), or `null`
+     * when the row carries none or a malformed one.
+     *
+     * @param {unknown} relevance
+     * @returns {{score: number, ref: {id: string, args?: object}}|null}
+     */
+    relevanceOf(relevance) {
+      if (!relevance || typeof relevance.score !== "number") {
+        return null;
+      }
+      if (!Number.isFinite(relevance.score)) {
+        return null;
+      }
+      const ref = this.markerRef(relevance);
+      return ref ? { score: relevance.score, ref } : null;
+    },
+
+    /**
+     * P3-T27: a score is excluded when it is strictly below the threshold, so
+     * `0` excludes nothing (docs/07 §8.5). The same rule as the view model's
+     * `belowThreshold`, which this document cannot import.
+     *
+     * @param {number} score
+     * @param {number} threshold
+     * @returns {boolean}
+     */
+    belowThreshold(score, threshold) {
+      return score < threshold;
+    },
+
+    /**
+     * The threshold control's value as a number the rule can use: an integer
+     * from 0 to 100, or 0 for a box the user emptied — 0 hides nothing.
+     *
+     * @param {unknown} raw
+     * @returns {number}
+     */
+    screeningThreshold(raw) {
+      if (raw === "" || raw === null || raw === undefined) {
+        return 0;
+      }
+      const n = Number(raw);
+      if (!Number.isFinite(n)) {
+        return 0;
+      }
+      return Math.min(100, Math.max(0, Math.round(n)));
+    },
+
+    /**
+     * P3-T27: the numbers the count line beside the threshold reads.
+     * `excluded` counts scored rows below the threshold; `kept` is every
+     * other row, unscored ones included.
+     *
+     * @param {object[]} rows
+     * @param {number} threshold
+     * @returns {{total: number, kept: number, excluded: number}}
+     */
+    screeningCounts(rows, threshold) {
+      const all = rows || [];
+      const excluded = all.filter(
+        (row) =>
+          row.relevance && this.belowThreshold(row.relevance.score, threshold),
+      ).length;
+      return { total: all.length, kept: all.length - excluded, excluded };
+    },
+
+    /**
+     * P3-T27: the screening seed out of the host's `getPrefs()`. The row is
+     * offered only when the host says screening is available **and** gives a
+     * threshold this rule can hold; there is no fallback number here, because
+     * the preference's default is docs/07 §8.5's to state, not this file's.
+     *
+     * @param {object} raw - the host's `getPrefs()` answer
+     * @returns {{available: boolean, threshold: number|null}}
+     */
+    screeningSeed(raw) {
+      const source = raw || {};
+      const threshold = source.screeningThreshold;
+      const valid =
+        Number.isInteger(threshold) && threshold >= 0 && threshold <= 100;
+      return {
+        available: source.screeningAvailable === true && valid,
+        threshold: valid ? threshold : null,
+      };
+    },
+
     // -----------------------------------------------------------------------
     // 1b. The result table (P1-T21) — docs/08 §4.2's columns, §4.3's widget
     // -----------------------------------------------------------------------
@@ -1127,6 +1241,9 @@ var RHSearchWindow = {
           // two rows, two keys and two checkboxes; nothing here merges them.
           duplicate: this.markerRef(source.duplicate),
           linked: this.markerRef(source.linked),
+          // P3-T27: the model's score, or null for a row it did not score —
+          // which no threshold hides.
+          relevance: this.relevanceOf(source.relevance),
         };
         row.filterText = this.filterText(row);
         return row;
@@ -1191,9 +1308,20 @@ var RHSearchWindow = {
     visibleRows(rows, view) {
       const filter = (view && view.filter) || "";
       const hideExisting = Boolean(view && view.hideExisting);
+      // P3-T27: a screened result set hides the rows scored below the
+      // threshold until "Show excluded" is ticked. An unscored row is never
+      // hidden, and `threshold` absent means the set was not screened.
+      const threshold =
+        view && typeof view.threshold === "number" ? view.threshold : null;
+      const showExcluded = Boolean(view && view.showExcluded);
       return (rows || []).filter(
         (row) =>
-          (!hideExisting || !row.existing) && this.matchesFilter(row, filter),
+          (!hideExisting || !row.existing) &&
+          (threshold === null ||
+            showExcluded ||
+            !row.relevance ||
+            !this.belowThreshold(row.relevance.score, threshold)) &&
+          this.matchesFilter(row, filter),
       );
     },
 
@@ -1380,6 +1508,9 @@ var RHSearchWindow = {
     this.showPanel("initial");
     this.refreshSearchGate();
     this.refreshImportGate();
+    // Item 281(b): after the Databases row is drawn, so the first estimate
+    // counts the ticked databases.
+    this.refreshScreeningCost();
     this.focusKeyword();
     // FR-12 (P2-T17): seed the controls from the collection's stored record.
     // Asynchronous, and last, so the window is fully usable before it lands.
@@ -1524,6 +1655,8 @@ var RHSearchWindow = {
       hide.checked = prefs.hideExisting;
     }
 
+    this.seedScreening();
+
     const duplicates = this.el(this.spec.duplicates);
     if (duplicates) {
       duplicates.value = this.spec.duplicatesDefault;
@@ -1533,6 +1666,118 @@ var RHSearchWindow = {
     if (mode && this.io.mode === "keyword") {
       mode.setAttribute("data-l10n-id", this.l10n.modeKeyword);
     }
+  },
+
+  /**
+   * P3-T27: offer relevance screening when the host says it can run, with the
+   * threshold at the `screening.threshold` preference **as it is now** (the
+   * host reads it per call). The checkbox starts unticked on every open, and
+   * nothing in this document writes the preference back: a change to the
+   * number belongs to the run (docs/07 §8.5, docs/08 §4.2).
+   */
+  seedScreening() {
+    const raw =
+      typeof this.host.getPrefs === "function" ? this.host.getPrefs() : {};
+    const seed = this.logic.screeningSeed(raw);
+    const row = this.el(this.spec.screeningRow);
+    if (row) {
+      row.hidden = !seed.available;
+    }
+    const enable = this.el(this.spec.screeningEnable);
+    if (enable) {
+      enable.checked = false;
+    }
+    const threshold = this.el(this.spec.screeningThreshold);
+    if (threshold && seed.threshold !== null) {
+      threshold.value = String(seed.threshold);
+    }
+    this.refreshScreeningControls();
+  },
+
+  /**
+   * Item 281(b) (owner, 2026-10-24): ask the host what screening the current
+   * query may cost, and show it beside the checkbox. Asked again whenever the
+   * databases, the per-database maximum or the keyword change. The host
+   * answers with a message reference, or nothing when there is no line to
+   * show; an answer overtaken by a later request is dropped.
+   */
+  refreshScreeningCost() {
+    const line = this.el(this.spec.screeningCost);
+    if (!line) {
+      return;
+    }
+    this.state.screeningCostRequest += 1;
+    const request = this.state.screeningCostRequest;
+    const row = this.el(this.spec.screeningRow);
+    if (!row || row.hidden || typeof this.host.screeningCost !== "function") {
+      line.hidden = true;
+      return;
+    }
+    const query = this.collectQuery();
+    let pending;
+    try {
+      pending = this.host.screeningCost({
+        keyword: query.keyword,
+        sources: query.sources,
+        maxResults: query.maxResults,
+      });
+    } catch {
+      line.hidden = true;
+      return;
+    }
+    Promise.resolve(pending).then(
+      (ref) => {
+        if (request === this.state.screeningCostRequest) {
+          this.renderScreeningCost(ref);
+        }
+      },
+      () => {
+        if (request === this.state.screeningCostRequest) {
+          this.renderScreeningCost(undefined);
+        }
+      },
+    );
+  },
+
+  /**
+   * Item 281(b): place the host's answer — `{ id, args }` — or hide the line.
+   *
+   * @param {{id: string, args?: object}|undefined} ref
+   */
+  renderScreeningCost(ref) {
+    const line = this.el(this.spec.screeningCost);
+    if (!line) {
+      return;
+    }
+    if (!ref || typeof ref.id !== "string") {
+      line.hidden = true;
+      return;
+    }
+    if (ref.args === undefined) {
+      line.removeAttribute("data-l10n-args");
+    }
+    this.localize(
+      this.spec.screeningCost,
+      ref.id,
+      ref.args === undefined ? undefined : JSON.stringify(ref.args),
+    );
+    line.hidden = false;
+  },
+
+  /** P3-T27: the threshold, "Show excluded" and the count follow the checkbox. */
+  refreshScreeningControls() {
+    const controls = this.el(this.spec.screeningControls);
+    if (controls) {
+      controls.hidden = !this.screeningChosen();
+    }
+  },
+
+  /** P3-T27: whether this run asks for screening — row offered and box ticked. */
+  screeningChosen() {
+    const row = this.el(this.spec.screeningRow);
+    return Boolean(
+      row && !row.hidden && this.checked(this.spec.screeningEnable),
+    );
   },
 
   /**
@@ -1704,6 +1949,8 @@ var RHSearchWindow = {
       box.addEventListener("command", () => {
         this.refreshSearchGate();
         this.saveSources();
+        // Item 281(b): the databases decide how many results screening scores.
+        this.refreshScreeningCost();
       });
       row.appendChild(box);
     }
@@ -1801,6 +2048,19 @@ var RHSearchWindow = {
     // A XUL <checkbox> reports through `command`. Toggling it only re-filters:
     // the hidden rows stay in `state.rows` and come straight back.
     this.on(this.spec.hideExisting, "command", () => this.applyFilter());
+    // P3-T27: the threshold re-filters the rows already fetched, as the box
+    // above does; it never re-runs the search and never writes a preference.
+    this.on(this.spec.screeningEnable, "command", () => {
+      this.refreshScreeningControls();
+      this.applyFilter();
+    });
+    this.on(this.spec.screeningThreshold, "input", () => this.applyFilter());
+    // Item 281(b): the maximum and the keyword change what screening costs.
+    this.on(this.spec.maxResults, "input", () => this.refreshScreeningCost());
+    this.on(this.spec.keyword, "input", () => this.refreshScreeningCost());
+    this.on(this.spec.screeningShowExcluded, "command", () =>
+      this.applyFilter(),
+    );
 
     this.on(this.spec.selectAll, "command", () => this.selectVisible("all"));
     this.on(this.spec.selectNone, "command", () => this.selectVisible("none"));
@@ -2090,6 +2350,8 @@ var RHSearchWindow = {
       return;
     }
     this.state.running = Boolean(state.running);
+    // P3-T27: before the table, so a new result set is filtered by it.
+    this.state.screening = state.screening || null;
 
     // The table, only when the result set actually changed — see
     // `state.appliedRecordsRevision`.
@@ -2617,16 +2879,54 @@ var RHSearchWindow = {
    * @returns {{total: number, new: number, selected: number}}
    */
   applyFilter() {
+    // P3-T27: only a screened result set is filtered by the threshold, and
+    // only while the checkbox — and so the number — is showing: a filter the
+    // user cannot see would be the silent hard-filter docs/12 §3 forbids.
+    const screened = this.state.screening !== null && this.screeningChosen();
+    const threshold = screened
+      ? this.logic.screeningThreshold(this.value(this.spec.screeningThreshold))
+      : null;
     this.state.view = {
       filter: this.value(this.spec.filter) || "",
       hideExisting: this.checked(this.spec.hideExisting),
+      ...(threshold === null
+        ? {}
+        : {
+            threshold,
+            showExcluded: this.checked(this.spec.screeningShowExcluded),
+          }),
     };
     this.state.visible = this.logic.visibleRows(
       this.state.rows,
       this.state.view,
     );
+    this.renderScreeningCount(threshold);
     this.renderResults();
     return this.refreshSelection();
+  },
+
+  /**
+   * P3-T27: docs/12 §3's "importing 47 of 210 results", beside the threshold,
+   * for a screened result set — never filtering without showing the number.
+   *
+   * @param {number|null} threshold - `null` when the rows were not screened
+   */
+  renderScreeningCount(threshold) {
+    const line = this.el(this.spec.screeningCount);
+    if (!line) {
+      return;
+    }
+    if (threshold === null || this.state.rows.length === 0) {
+      line.hidden = true;
+      return;
+    }
+    const counts = this.logic.screeningCounts(this.state.rows, threshold);
+    line.hidden = false;
+    this.localize(
+      this.spec.screeningCount,
+      this.l10n.screeningCount,
+      JSON.stringify(counts),
+    );
   },
 
   /** Rebuild the table body from `state.visible`. */
@@ -2697,6 +2997,8 @@ var RHSearchWindow = {
     for (const [ref, className] of [
       [row.duplicate, classes.duplicateBadge],
       [row.linked, classes.linkedBadge],
+      // P3-T27: the model's score, its words and number from Fluent.
+      [row.relevance && row.relevance.ref, classes.relevanceBadge],
     ]) {
       if (ref) {
         const marker = this.createHTML("span");
@@ -2718,7 +3020,7 @@ var RHSearchWindow = {
       text.setAttribute("data-l10n-args", JSON.stringify({ title: row.title }));
       text.setAttribute("data-l10n-id", this.l10n.rowExisting);
       titleCell.appendChild(text);
-    } else if (row.duplicate || row.linked) {
+    } else if (row.duplicate || row.linked || row.relevance) {
       // A paper's title is data, not a translatable string — in a span of its
       // own here, because `textContent` on the cell would remove the badges.
       const text = this.createHTML("span");
@@ -3397,6 +3699,12 @@ var RHSearchWindow = {
       collectionID: this.value(this.spec.target),
       // FR-12 (P2-T17): the re-run's exact window, while the years are untouched.
       ...this.rerunDateWindow(),
+      // P3-T27: the run's own screening choice. The view model coerces the
+      // number; nothing here or there writes it to a preference.
+      screening: {
+        enabled: this.screeningChosen(),
+        threshold: Number(this.value(this.spec.screeningThreshold)),
+      },
     };
   },
 
@@ -3479,6 +3787,8 @@ var RHSearchWindow = {
     this.applyRerunWindow(this.logic.rerunWindow(seed, "recorded"));
 
     this.refreshSearchGate();
+    // Item 281(b): the seed changed the keyword, the databases and the maximum.
+    this.refreshScreeningCost();
     if (this.state.panel === "initial") {
       this.showPanel("rerun");
     }

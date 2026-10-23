@@ -1,0 +1,72 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "E6",
+  "title": "Deciphering specificity and cross-reactivity in tachykinin NK1 and NK2 receptors",
+  "venue": "Journal of Biological Chemistry 2023",
+  "publisher": "elsevier",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract; Results and discussion; Conclusion; Experimental procedures",
+    "notes": [
+      "no Introduction heading",
+      "combined Results and Discussion heading",
+      "Methods at the end (\"Experimental procedures\")",
+      "PubMed Central credits the society (ASBMB); Elsevier is the publisher by DOI only"
+    ]
+  },
+  "doi": "10.1016/j.jbc.2023.105438",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC10724690?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10724690/",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "E6.pdf",
+    "bytes": 3197389,
+    "sha256": "64d49d55a0f9dd3b4da779e4566b6fb84f18165497c8900cd88b8c73c282b1ab"
+  },
+  "text": {
+    "file": "E6.txt",
+    "bytes": 44030,
+    "chars": 43924,
+    "sha256": "9fc7d77f891b81282ce8d7c5846894061e6884230072908672224dec48fd371b",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 43924,
+      "truncated": false,
+      "pages": 11,
+      "runningHeadLinesRemoved": 10,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.14531161831377815,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8445724433111739,
+      "ocrLetterShare": 0.7710591020854203,
+      "ocrChars": 43924,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 10,
+      "twoColumnPages": 10
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

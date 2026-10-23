@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "A4",
+  "title": "Thawed Gaussian wavepacket dynamics with Δ-machine learned potentials",
+  "venue": "arXiv (AIP/REVTeX template, estimated)",
+  "publisher": "arxiv",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "estimated from the template",
+    "headingNumbering": "roman",
+    "webHeadings": "I Introduction; II Theory; III Numerical simulations; IV Conclusions; Appendix A/B/C",
+    "notes": [
+      "appendices before the references",
+      "\"Theory\" instead of Methods"
+    ]
+  },
+  "doi": null,
+  "otherId": "arXiv:2405.00193v1",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "the PDF prints none; the arXiv abstract page links creativecommons.org/licenses/by/4.0",
+  "sourceUrl": "https://arxiv.org/pdf/2405.00193",
+  "landingUrl": "https://arxiv.org/abs/2405.00193",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "A4.pdf",
+    "bytes": 610704,
+    "sha256": "e4758be2a81a1bc7c28a647b1b43d52afac55e60cf9bb8f14c337d941b99955c"
+  },
+  "text": {
+    "file": "A4.txt",
+    "bytes": 53032,
+    "chars": 50925,
+    "sha256": "10568f67aa5bf82a1695fb7ca4922acd2248a0b3242bda75448a0994453ce356",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 50925,
+      "truncated": false,
+      "pages": 12,
+      "runningHeadLinesRemoved": 11,
+      "gutterPages": 0,
+      "referencesCut": false,
+      "referencesShare": null,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8239175257731959,
+      "ocrLetterShare": 0.7295041728031418,
+      "ocrChars": 50925,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 11,
+      "twoColumnPages": 11
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

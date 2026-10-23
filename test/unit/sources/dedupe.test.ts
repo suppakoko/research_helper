@@ -44,6 +44,7 @@ import {
   PREPRINT_DOI_PREFIXES,
   SIGNATURE_TOKEN_COUNT,
   TIER_CONFIDENCE,
+  titleNumbers,
   titleTokens,
   toCandidate,
   type DedupDecision,
@@ -736,6 +737,120 @@ describe("guard 2 — series titles differing by a trailing numeral", () => {
     const b = record({
       title: "Caring for the mentally ill in rural areas",
       year: 2001,
+    });
+    expect(compareRecords(a, b).verdict).toBe("match");
+  });
+});
+
+describe("item 281(c) — a number inside the title (owner, 2026-10-24; docs/02 §11.3.3's note)", () => {
+  /** `P3-T27` finding 7's pair: the same author and year, one inner number apart. */
+  const NUMBER_1 =
+    "A synthetic study number 1 of widget counts in three regions";
+  const NUMBER_2 =
+    "A synthetic study number 2 of widget counts in three regions";
+
+  it("reads a title's numbers in order, with leading zeros dropped", () => {
+    expect(titleNumbers(normalizeTitle("COVID-19 in 2021: wave 03"))).toEqual([
+      "19",
+      "2021",
+      "3",
+    ]);
+    expect(titleNumbers(normalizeTitle("3D printing"))).toEqual(["3"]);
+    expect(titleNumbers(normalizeTitle("3-D printing"))).toEqual(["3"]);
+    expect(titleNumbers(normalizeTitle("No numbers here at all"))).toEqual([]);
+  });
+
+  it("never makes the two titles one work — flagged for review, not merged", () => {
+    const a = record({ title: NUMBER_1, year: 2024, authors: ["Okafor"] });
+    const b = record({ title: NUMBER_2, year: 2024, authors: ["Okafor"] });
+    const d = compareRecords(a, b);
+    // The pair cleared the duplicate thresholds — the case the guard is for.
+    expect(d.evidence["levSim"]).toBeGreaterThanOrEqual(
+      LEVSIM_DUPLICATE_THRESHOLD,
+    );
+    expect(d.tier).toBe("title-fuzzy");
+    expect(d.verdict).toBe("flag");
+    expect(d.evidence["titleNumbersDiffer"]).toBe(true);
+    const result = dedupeRecords([a, b]);
+    expect(result.groups).toHaveLength(2);
+    expect(result.flags).toHaveLength(1);
+  });
+
+  it("treats a number on one side only as a difference", () => {
+    const a = record({
+      title: "A synthetic study of widget counts in three regions",
+      year: 2024,
+      authors: ["Okafor"],
+    });
+    const b = record({
+      title: "A synthetic study 2 of widget counts in three regions",
+      year: 2024,
+      authors: ["Okafor"],
+    });
+    expect(compareRecords(a, b).verdict).not.toBe("match");
+  });
+
+  it("still matches the same title whose numbers are written the same way", () => {
+    // Over-correction guard: punctuation and spacing around a number are not
+    // a different number, so §11.3.3's typo-tolerant match still fires.
+    const a = record({
+      title: "COVID-19 vaccine uptake among health workers in 2021: a survey",
+      year: 2022,
+      authors: ["Nakamura"],
+    });
+    const b = record({
+      title: "COVID 19 vaccine uptake among health-workers in 2021 - a surveys",
+      year: 2022,
+      authors: ["Nakamura"],
+    });
+    const d = compareRecords(a, b);
+    expect(d.tier).toBe("title-fuzzy");
+    expect(d.verdict).toBe("match");
+    expect(d.evidence["titleNumbersDiffer"]).toBeUndefined();
+  });
+
+  it("leaves a link the earlier guards gave exactly as it was", () => {
+    // §11.5 rule 1: a title match across conflicting DOIs is a link. The
+    // number guard lowers only a match, so this stays a link, not a flag.
+    const a = record({
+      title: NUMBER_1,
+      year: 2024,
+      authors: ["Okafor"],
+      ids: { doi: doi("10.1000/rh.n1") },
+    });
+    const b = record({
+      title: NUMBER_2,
+      year: 2024,
+      authors: ["Okafor"],
+      ids: { doi: doi("10.1000/rh.n2") },
+    });
+    const d = compareRecords(a, b);
+    expect(d.verdict).toBe("link");
+    expect(d.evidence["conflictingIds"]).toBe("doi");
+    expect(d.evidence["titleNumbersDiffer"]).toBeUndefined();
+  });
+
+  it("leaves §11.3.3's own flag row as it was", () => {
+    // levSim 0.85, different first authors: nothing corroborates, so the
+    // table's flag row speaks, and the number guard adds nothing to it.
+    const a = record({ title: NUMBER_1, year: 2024, authors: ["Okafor"] });
+    const b = record({
+      title: "A synthetic study number 2 of gadget tallies in three regions",
+      year: 2024,
+      authors: ["Lindqvist"],
+    });
+    const d = compareRecords(a, b);
+    expect(d.verdict).toBe("flag");
+    expect(d.evidence["rule"]).toBe("flag");
+    expect(d.evidence["titleNumbersDiffer"]).toBeUndefined();
+  });
+
+  it("leaves an identical numbered title to Tier 5's match", () => {
+    const a = record({ title: NUMBER_1, year: 2024, authors: ["Okafor"] });
+    const b = record({
+      title: `${NUMBER_1}.`,
+      year: 2024,
+      authors: ["Okafor"],
     });
     expect(compareRecords(a, b).verdict).toBe("match");
   });

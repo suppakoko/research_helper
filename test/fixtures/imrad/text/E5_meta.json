@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "E5",
+  "title": "Mycoplasma pneumoniae carriage in children with recurrent respiratory tract infections is associated with a less diverse and altered microbiota",
+  "venue": "eBioMedicine 2023",
+  "publisher": "elsevier",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Summary (Background / Methods / Findings / Interpretation); Research in context; Introduction; Methods; Results; Discussion",
+    "notes": [
+      "a \"Methods\" subheading inside the structured summary (false-positive risk)",
+      "a boxed panel before the Introduction"
+    ]
+  },
+  "doi": "10.1016/j.ebiom.2023.104868",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC10679896?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10679896/",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "E5.pdf",
+    "bytes": 1059027,
+    "sha256": "2eb0c99a739cf4f200fd030201c90e7f56df2e8992840dca0982662310acda17"
+  },
+  "text": {
+    "file": "E5.txt",
+    "bytes": 48408,
+    "chars": 48160,
+    "sha256": "3534d6aeb1725e058e42e74e54aedb2ce6a374e56a6bb450597d326c9262acf6",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 48160,
+      "truncated": false,
+      "pages": 14,
+      "runningHeadLinesRemoved": 14,
+      "gutterPages": 2,
+      "referencesCut": true,
+      "referencesShare": 0.193661264398607,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8598421926910299,
+      "ocrLetterShare": 0.773546511627907,
+      "ocrChars": 48160,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 11,
+      "twoColumnPages": 10
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

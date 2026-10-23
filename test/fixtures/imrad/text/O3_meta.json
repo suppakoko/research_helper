@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "O3",
+  "title": "An integrative multiomics random forest framework for robust biomarker discovery",
+  "venue": "GigaScience 2025",
+  "publisher": "oup",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "uncertain",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract; Introduction; Material and Methods; Results; Discussion",
+    "notes": [
+      "singular \"Material and Methods\""
+    ]
+  },
+  "doi": "10.1093/gigascience/giaf148",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC12821379?pdf=render",
+  "landingUrl": "https://academic.oup.com/gigascience/article/doi/10.1093/gigascience/giaf148/8374728",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "O3.pdf",
+    "bytes": 2173800,
+    "sha256": "06d8bfc2e3b0fc39f17c724e82356e33f030513a734f229f0b29972a40a99f67"
+  },
+  "text": {
+    "file": "O3.txt",
+    "bytes": 96092,
+    "chars": 95388,
+    "sha256": "57a52687c1c3b5705cbd5a400f7a9209ee8c9ac094c531c2a685afb40dd76bb0",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 95388,
+      "truncated": false,
+      "pages": 23,
+      "runningHeadLinesRemoved": 22,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.11339449200197046,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8487650438210257,
+      "ocrLetterShare": 0.7554094854698704,
+      "ocrChars": 95388,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 18,
+      "twoColumnPages": 17
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

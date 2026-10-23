@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "O2",
+  "title": "Experimental and computational investigations of RNA duplexes containing N7-regioisomers of adenosine and LNA-adenosine",
+  "venue": "Nucleic Acids Research 2024",
+  "publisher": "oup",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract; Introduction; Materials and methods; Results; Discussion",
+    "notes": [
+      "plain IMRaD",
+      "many back-matter headings"
+    ]
+  },
+  "doi": "10.1093/nar/gkae1222",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC11724317?pdf=render",
+  "landingUrl": "https://academic.oup.com/nar/article/53/1/gkae1222/7931344",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "O2.pdf",
+    "bytes": 2163092,
+    "sha256": "3ef178764ce36585801fd1b7cca17f76b94ad6f5073babdc6dede6567596860a"
+  },
+  "text": {
+    "file": "O2.txt",
+    "bytes": 56360,
+    "chars": 55514,
+    "sha256": "6d9e99335bd775dc6ebcd2ee8972f65ace89dec78cf5c68a88e8d317941b8470",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 55514,
+      "truncated": false,
+      "pages": 16,
+      "runningHeadLinesRemoved": 15,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.24351623620190763,
+      "supplementaryCharsRemoved": 955,
+      "ocrAlnumPunctShare": 0.8410851316784955,
+      "ocrLetterShare": 0.7434881291205822,
+      "ocrChars": 55514,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 12,
+      "twoColumnPages": 11
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

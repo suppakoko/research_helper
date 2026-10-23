@@ -170,7 +170,8 @@ var RHCostDialog = {
       }
     }
     const dontAsk = document.getElementById(this.spec.dontAsk);
-    if (dontAsk) {
+    // Absent for a run over no collection (item 281(b)): the box stays hidden.
+    if (dontAsk && model.dontAskAgain) {
       this.setL10n(dontAsk, model.dontAskAgain);
       dontAsk.hidden = false;
     }

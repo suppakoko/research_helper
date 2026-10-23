@@ -320,6 +320,14 @@
   margin-inline-end: 0.3em;
 }
 
+/* P3-T27: the model's relevance score on a screened row (docs/12 §3). Words
+   and number only — research-helper-search-row-relevance — no glyph, so it
+   cannot be mistaken for either review badge above. */
+.rh-relevance-badge {
+  margin-inline-end: 0.5em;
+  color: var(--fill-secondary, inherit);
+}
+
 /* docs/08 §4.2's reserved role row for a source with no keyword search
    (bioRxiv, medRxiv). The circled plus is drawn here and nowhere else, so it
    cannot turn up on an error or an empty search (P2-T14). */

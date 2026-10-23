@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "N6",
+  "title": "Effects of Rhizophagus intraradices on soybean yield and the composition of microbial communities in the rhizosphere soil of continuous cropping soybean",
+  "venue": "Scientific Reports 2022",
+  "publisher": "nature",
+  "layout": {
+    "columnsExpected": null,
+    "columnsExpectedBasis": "not checked",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract / Introduction / Materials and methods / Results / Discussion / Conclusions",
+    "notes": [
+      "Methods in the middle (the same journal also prints Methods at the end)"
+    ]
+  },
+  "doi": "10.1038/s41598-022-22473-w",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "\"licensed under a Creative Commons Attribution 4.0\" at the end of the article",
+  "sourceUrl": "https://www.nature.com/articles/s41598-022-22473-w.pdf",
+  "landingUrl": "https://www.nature.com/articles/s41598-022-22473-w",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "N6.pdf",
+    "bytes": 2539720,
+    "sha256": "89cd19530cdc1334d105e8c04343fac5535ae65f3e178291f14a70b5018c6d63"
+  },
+  "text": {
+    "file": "N6.txt",
+    "bytes": 46275,
+    "chars": 46015,
+    "sha256": "b18ddc748543e2d78a8854a64e8c269e16282b4606b67f5445324f14b72afbcd",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 46015,
+      "truncated": false,
+      "pages": 16,
+      "runningHeadLinesRemoved": 16,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.20952364592101422,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8488319026404433,
+      "ocrLetterShare": 0.7040964902749104,
+      "ocrChars": 46015,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 12,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

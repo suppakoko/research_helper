@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "E2",
+  "title": "Oleic acid released by sensory neurons inhibits TRPV1-mediated thermal hypersensitivity via GPR40",
+  "venue": "iScience 2024 (Cell Press)",
+  "publisher": "elsevier",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Summary; Highlights; Introduction; Results; Discussion; STAR★Methods",
+    "notes": [
+      "STAR Methods at the end",
+      "\"Summary\" instead of Abstract"
+    ]
+  },
+  "doi": "10.1016/j.isci.2024.110552",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "CC BY 4.0 stated on a later page of the PDF",
+  "sourceUrl": "https://europepmc.org/articles/PMC11338150?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11338150/",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "E2.pdf",
+    "bytes": 4671680,
+    "sha256": "5466b5216ff80078345187fc36df632e6a8bc80479a027a44e8453c9c3afadd7"
+  },
+  "text": {
+    "file": "E2.txt",
+    "bytes": 65307,
+    "chars": 65141,
+    "sha256": "862f88ec9c2f48f1621a1141a8dabc834a72c4c44db690dc952f709596b69ca9",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 65141,
+      "truncated": false,
+      "pages": 17,
+      "runningHeadLinesRemoved": 17,
+      "gutterPages": 0,
+      "referencesCut": false,
+      "referencesShare": null,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8528115933129673,
+      "ocrLetterShare": 0.732672203374219,
+      "ocrChars": 65141,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 16,
+      "twoColumnPages": 3
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

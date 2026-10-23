@@ -4602,6 +4602,8 @@ stateDiagram-v2
     Deduping --> BackfillingAbstracts : records missing abstracts
     Deduping --> CreatingCollection : all abstracts present
     BackfillingAbstracts --> CreatingCollection
+    BackfillingAbstracts --> Screening : relevance screening chosen for the run
+    Screening --> CreatingCollection
 
     CreatingCollection --> WritingItems
     WritingItems --> WritingItems : next batch of ~50 (checkpoint per batch)
@@ -4628,6 +4630,8 @@ stateDiagram-v2
 ```
 
 Notes: `PartialFetch` is a first-class state, not an error. If PubMed is down but Crossref and arXiv are fine, the user gets results plus a clear warning — a total failure would be a worse outcome. Deduping runs before any Zotero write, and existing library items are checked by DOI/PMID so re-running a search does not create duplicates; matched items are added to the new collection instead.
+
+> **Added 2026-10-24 (`P3-T27`): the `Screening` state.** Between `BackfillingAbstracts` and `CreatingCollection` the run scores its merged works with `RELEVANCE_SCREEN` (`12-prompt-library.md` §3) when, and only when, the run's input carries `screening` (the window's per-run choice) and the run is a search rather than the import of a preview's own works. It is a stage of its own, entered and completed on every run so the bar behaves the same, with weight 0.1 taken from `Fetching` (0.45 → 0.35). A screening failure is a run warning, never a failed run: the works it could not score are kept unscored, and an unscored work is never excluded. A cancel during it is the run's cancel, like any other stage. Its output is `SearchImportOutput.screening`: the threshold, every score, the unscored ids and the ids below the threshold. Body: `screenSearchResults` in `src/pipeline/searchImport/stages.ts`, over `screenRelevance` in `src/pipeline/shared/relevanceScreen.ts`.
 
 `WritingItems` is where the two import strategies of `01-zotero-plugin-platform.md` §6.3 are selected between. It reads `useTranslators` (§8.5) once on entry: **off** — the shipped default — means hand-mapping (Strategy A) for every record, which is the path `10-requirements-and-user-stories.md` NFR-1 measures; **on** means one `Zotero.Translate.Search` identifier lookup per record that has a DOI, PMID or arXiv ID, with hand-mapping as the per-record fallback on failure or timeout, and the abstract-backfill step of doc 01 §6.3 item 4 applied after either path. The per-record lookup is a network round trip, so a run with the preference on is outside NFR-1's budget by construction; the pref's tooltip must say the path is slower before a user turns it on. `WritingItems` also produces the FR-8 counts that §5.3's `SourceProvenance` records.
 

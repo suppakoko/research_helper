@@ -1,0 +1,71 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "E1",
+  "title": "Synthesis and characterization of polyurethane flexible foams provided from PET derivatives, fly ash, and glass wastes",
+  "venue": "Heliyon 2023",
+  "publisher": "elsevier",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "arabic",
+    "webHeadings": "Abstract; 1. Introduction; 2. Materials and methods; 3. Results and discussion; 4. Conclusions",
+    "notes": [
+      "numbered headings",
+      "combined Results and Discussion heading",
+      "single column"
+    ]
+  },
+  "doi": "10.1016/j.heliyon.2023.e23097",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC10777411?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10777411/",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "E1.pdf",
+    "bytes": 8443191,
+    "sha256": "67249dd3db6e95ded30ce3b79ce6831d495c7ea3fadbffbfdaf97699804d360a"
+  },
+  "text": {
+    "file": "E1.txt",
+    "bytes": 44412,
+    "chars": 44163,
+    "sha256": "f1009fc12cf49d1e06c57193ba40f717f20858281780d8adf31e591ff53c5e82",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 44163,
+      "truncated": false,
+      "pages": 15,
+      "runningHeadLinesRemoved": 29,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.23215744910200461,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8405678962027037,
+      "ocrLetterShare": 0.7767588252609651,
+      "ocrChars": 44163,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 14,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

@@ -7,7 +7,9 @@
  * **Scope.** `P1-T16` step 2 declared the seven states the card's `Read first`
  * names: `Planning → Fetching → Merging → Deduping → BackfillingAbstracts →
  * CreatingCollection → WritingItems`. `P2-T02` adds the parallel fan-out that
- * runs *inside* `Fetching` — section 3 below.
+ * runs *inside* `Fetching` — section 3 below. `P3-T27` adds an eighth,
+ * `Screening`, between `BackfillingAbstracts` and `CreatingCollection`
+ * (`docs/07` §12.1's note of 2026-10-24), and its body — section 7.
  *
  * ## What is deliberately **not** a stage
  *
@@ -157,6 +159,7 @@
 import type { Clock } from "../../core/clock";
 import type { Semaphore } from "../../core/concurrency";
 import {
+  OperationCancelledError,
   ResearchHelperError,
   TimeoutError,
   type SerializedError,
@@ -169,7 +172,7 @@ import type { ProgressReporter } from "../../core/jobQueue/progress";
 import type { Logger } from "../../core/logger";
 import type { MergeDecision } from "../../core/provenance";
 import type { CanonicalWork } from "../../model/canonicalWork";
-import type { ExternalIds, SourceId } from "../../model/ids";
+import type { ExternalIds, ProviderId, SourceId } from "../../model/ids";
 import { merge, type IdConflict } from "../../model/merge";
 import type { SourceRecord } from "../../model/sourceRecord";
 import {
@@ -186,12 +189,21 @@ import {
   resolveDateFilterMode,
 } from "../../sources/shared/recency";
 import type { LiteratureSource, SourceQuery } from "../../sources/types";
+import type { ModelInfo } from "../../llm/types";
+import type { PromptTemplate } from "../../prompts";
 import { SUPERSEDED_BY_PUBLISHED_TAG } from "../../zotero/itemMapper";
-import type { StageDescriptor } from "../types";
+import {
+  excludedIds,
+  screenRelevance,
+  type ScreeningCandidate,
+} from "../shared/relevanceScreen";
+import type { PipelineContext, StageDescriptor } from "../types";
 import type {
   SearchImportFanOutResult,
   SearchImportFetchState,
   SearchImportInput,
+  SearchImportScreeningOptions,
+  SearchImportScreeningReport,
   SearchImportSourceReport,
 } from "./types";
 
@@ -218,6 +230,7 @@ export type SearchImportStageKey =
   | "merging"
   | "deduping"
   | "backfillingAbstracts"
+  | "screening"
   | "creatingCollection"
   | "writingItems";
 
@@ -237,7 +250,9 @@ export const SEARCH_IMPORT_STAGES: readonly StageDescriptor[] = Object.freeze([
   {
     key: "fetching",
     labelKey: "research-helper-stage-fetching",
-    weight: 0.45,
+    // 0.45 until `P3-T27`, which gave `screening` 0.1 of it (0.35 + 0.1 keeps
+    // the set's IEEE-754 sum at exactly 1; measured 2026-10-24).
+    weight: 0.35,
   },
   {
     key: "merging",
@@ -252,6 +267,14 @@ export const SEARCH_IMPORT_STAGES: readonly StageDescriptor[] = Object.freeze([
   {
     key: "backfillingAbstracts",
     labelKey: "research-helper-stage-backfilling-abstracts",
+    weight: 0.1,
+  },
+  {
+    // `P3-T27`: `docs/07` §12.1's `Screening` state (its note of 2026-10-24).
+    // An LLM pass when the run asked for it, so a slice as large as the
+    // backfill's; entered and completed at once when it did not.
+    key: "screening",
+    labelKey: "research-helper-stage-screening",
     weight: 0.1,
   },
   {
@@ -1098,4 +1121,132 @@ export function attributeDeduplicatedAway(
     recordsDeduplicatedAway:
       result.deduplicatedAwayBySource[report.sourceId] ?? 0,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// 7. Screening — P3-T27
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the `Screening` stage gets what the job's context does not carry: the
+ * `RELEVANCE_SCREEN` template and the adapter's description of a model.
+ */
+export interface SearchScreeningDeps {
+  /**
+   * The active `RELEVANCE_SCREEN` template. Defaults to the bundled registry,
+   * imported lazily: `src/prompts/bundled.ts` imports `.md` files, which only
+   * the esbuild bundles can load (a unit test passes the template instead).
+   */
+  readonly relevancePrompt?: () => PromptTemplate | Promise<PromptTemplate>;
+  /** The adapter's `getModel`, for the privacy check (`relevanceScreen.ts`). */
+  readonly modelInfo?: (
+    providerId: ProviderId,
+    modelId: string,
+  ) => ModelInfo | undefined;
+}
+
+/** What {@link screenSearchResults} needs. */
+export interface ScreenSearchResultsArgs {
+  /** One representative per row, as `Merging` left them. */
+  readonly records: readonly SourceRecord[];
+  /** Aligned with {@link records} once `Merging` has run; may be empty. */
+  readonly works: readonly CanonicalWork[];
+  readonly options: SearchImportScreeningOptions;
+  /** The run's query: the topic when {@link SearchImportScreeningOptions.topic} is absent. */
+  readonly query: string;
+  readonly ctx: PipelineContext;
+  /** The `Screening` stage's reporter. */
+  readonly progress: ProgressReporter;
+  readonly deps: SearchScreeningDeps | undefined;
+}
+
+async function bundledRelevancePrompt(): Promise<PromptTemplate> {
+  const { PROMPT_REGISTRY } = await import("../../prompts/bundled");
+  return PROMPT_REGISTRY.get("RELEVANCE_SCREEN");
+}
+
+/**
+ * One row as `{{CANDIDATES_JSON}}` carries it: the merged work's fields when
+ * the works are aligned (so a backfilled abstract is what the model reads),
+ * the representative's own otherwise.
+ */
+function candidateOf(
+  record: SourceRecord,
+  work: CanonicalWork | undefined,
+): ScreeningCandidate {
+  const w = work ?? record.work;
+  return {
+    id: record.id,
+    title: w.title,
+    abstract: w.abstract,
+    year: w.publishedDate?.year ?? w.onlineDate?.year,
+    venue: w.containerTitle,
+    itemType: w.type,
+  };
+}
+
+/**
+ * The `Screening` stage's body (`docs/07` §12.1's note of 2026-10-24): score
+ * every row with `RELEVANCE_SCREEN` and record which fall below the run's
+ * threshold. **Nothing is removed here** — the rows stay in the output, and
+ * the window hides the excluded ones until "Show excluded" is ticked
+ * (`docs/12` §3: never hard-filter silently).
+ *
+ * A failure that is not the run's cancellation — a refused model, a missing
+ * key, a budget stop, a network error — leaves every row unscored and is
+ * returned as the report's `error`; the search itself still succeeds. Every
+ * LLM call carries `budget: ctx.budget` (`relevanceScreen.ts`).
+ *
+ * @throws OperationCancelledError when the run is cancelled
+ */
+export async function screenSearchResults(
+  args: ScreenSearchResultsArgs,
+): Promise<SearchImportScreeningReport> {
+  const { records, options, ctx } = args;
+  const aligned = args.works.length === records.length;
+  const candidates = records.map((record, at) =>
+    candidateOf(record, aligned ? args.works[at] : undefined),
+  );
+  const ids = candidates.map((c) => c.id);
+  try {
+    const prompt = await (
+      args.deps?.relevancePrompt ?? bundledRelevancePrompt
+    )();
+    const result = await screenRelevance(
+      candidates,
+      { topic: options.topic ?? args.query },
+      {
+        llm: ctx.llm,
+        budget: ctx.budget,
+        token: ctx.token,
+        privacy: ctx.privacy,
+        config: ctx.config,
+        prompt,
+        ...(args.deps?.modelInfo !== undefined && {
+          modelInfo: args.deps.modelInfo,
+        }),
+        progress: args.progress,
+        logger: ctx.logger,
+        traceId: `${ctx.jobId}:screening`,
+      },
+    );
+    return {
+      threshold: options.threshold,
+      verdicts: result.verdicts,
+      unscored: result.unscored,
+      excluded: excludedIds(result.verdicts, options.threshold),
+      modelId: result.model?.modelId,
+      error: undefined,
+    };
+  } catch (caught) {
+    if (caught instanceof OperationCancelledError) throw caught;
+    return {
+      threshold: options.threshold,
+      verdicts: [],
+      unscored: ids,
+      excluded: [],
+      modelId: undefined,
+      error: serialize(caught),
+    };
+  }
 }

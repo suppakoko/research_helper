@@ -406,3 +406,82 @@ function logFieldSupport(): void {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// `Zotero.Retractions` reads — `P3-T27` step 1
+// ---------------------------------------------------------------------------
+
+/** What Zotero's own Retraction Watch data says about one item. */
+export interface ZoteroRetraction {
+  /** `Zotero.Retractions.isRetracted(item)`: synchronous and free (`docs/06` §13.3). */
+  readonly retracted: boolean;
+  /**
+   * Each reason's description, for Appendix A. Empty when the item is not
+   * retracted, when this Zotero has no `getData` / `getReasonDescription`, or
+   * when either throws or answers in a shape not recognised.
+   */
+  readonly reasons: readonly string[];
+}
+
+/**
+ * The two members `docs/06` §13.3 names by line number but whose parameter
+ * and return types it does not give, which is why `typings/zotero-augment.d.ts`
+ * declares only `isRetracted`. Read structurally here and feature-detected,
+ * never assumed: an unknown shape yields no reason rather than a guess.
+ */
+interface RetractionReasonReaders {
+  getData?: (item: Zotero.Item) => unknown;
+  getReasonDescription?: (reason: string) => unknown;
+}
+
+/**
+ * Read Zotero's own retraction data for `item` (`docs/06` §13.3 layer (a)):
+ * the plugin reads what Zotero already holds and never fetches or scrapes
+ * Retraction Watch itself.
+ *
+ * `isRetracted` decides; the reasons are best-effort. **Unverified against a
+ * real retracted item** — `getData`'s record is read as an object whose
+ * `reasons` member is an array of strings, each passed through
+ * `getReasonDescription` when that is a function. Anything else yields no
+ * reason, and the item is still reported retracted.
+ *
+ * @param item - a regular item
+ * @returns whether Zotero flags it, and the reason descriptions it gives
+ */
+export async function readRetraction(
+  item: Zotero.Item,
+): Promise<ZoteroRetraction> {
+  const retracted = Zotero.Retractions.isRetracted(item);
+  if (!retracted) return { retracted, reasons: [] };
+  const readers = Zotero.Retractions as unknown as RetractionReasonReaders;
+  try {
+    if (typeof readers.getData !== "function") {
+      return { retracted, reasons: [] };
+    }
+    const data: unknown = await readers.getData(item);
+    const raw =
+      typeof data === "object" && data !== null
+        ? (data as { reasons?: unknown }).reasons
+        : undefined;
+    if (!Array.isArray(raw)) return { retracted, reasons: [] };
+    const reasons: string[] = [];
+    for (const reason of raw as unknown[]) {
+      if (typeof reason !== "string") continue;
+      const described =
+        typeof readers.getReasonDescription === "function"
+          ? readers.getReasonDescription(reason)
+          : undefined;
+      reasons.push(
+        typeof described === "string" && described !== "" ? described : reason,
+      );
+    }
+    return { retracted, reasons };
+  } catch (error) {
+    debug(
+      `Zotero.Retractions reason lookup failed: ${
+        error instanceof Error ? error.name : typeof error
+      }`,
+    );
+    return { retracted, reasons: [] };
+  }
+}

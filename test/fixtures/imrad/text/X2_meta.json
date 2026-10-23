@@ -1,0 +1,71 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "X2",
+  "title": "Size and Refractive Index Determination of Single Polystyrene Spheres",
+  "venue": "J Res Natl Bur Stand 1983",
+  "publisher": "us-government",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "arabic",
+    "webHeadings": "1. Introduction; 2. Experimental Method; 3. Data Analysis; 4. Results; 5. Discussion; 6. Concluding Remarks",
+    "notes": [
+      "scanned source (text layer from OCR, with recognition errors)",
+      "an extra Data Analysis section",
+      "the small file size suggested a text layer; not checked in advance"
+    ]
+  },
+  "doi": "10.6028/jres.088.016",
+  "otherId": null,
+  "licence": "US government work (17 U.S.C. 105)",
+  "licenceEvidence": "scanned page 1 gives the authors' affiliation as the National Bureau of Standards (a US government work by authorship)",
+  "sourceUrl": "https://europepmc.org/articles/PMC6768154?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6768154/",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "X2.pdf",
+    "bytes": 783761,
+    "sha256": "df18d0057ac8e2dbc94d90b2820767ff328b8dd233d60d7c3076ccb6b98317da"
+  },
+  "text": {
+    "file": "X2.txt",
+    "bytes": 59306,
+    "chars": 59187,
+    "sha256": "11558042bc9ef027529339758ed2331a1ca4d588502898c647d60d6da8ba26ae",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 59187,
+      "truncated": false,
+      "pages": 18,
+      "runningHeadLinesRemoved": 17,
+      "gutterPages": 0,
+      "referencesCut": false,
+      "referencesShare": 0.016642168043658236,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8296923310862182,
+      "ocrLetterShare": 0.721611164613851,
+      "ocrChars": 59187,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 15,
+      "twoColumnPages": 12
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

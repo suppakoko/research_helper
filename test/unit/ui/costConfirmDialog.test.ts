@@ -574,3 +574,93 @@ describe("the pane paints the Usage section from api.usage (preferences.js, ship
     expect(empty.container.children).toEqual([]);
   });
 });
+
+describe("item 281(b) — a run over no collection offers no 'Don't ask again' (owner, 2026-10-24)", () => {
+  it("leaves the box out of the model when asked to, and offers it otherwise", () => {
+    expect(asPreflight(preflight()).dontAskAgain).toEqual({
+      id: COST_DIALOG_L10N.dontAskAgain,
+    });
+    expect(
+      asPreflight(preflight({ offerDontAskAgain: true })).dontAskAgain,
+    ).toEqual({ id: COST_DIALOG_L10N.dontAskAgain });
+    expect(
+      asPreflight(preflight({ offerDontAskAgain: false })).dontAskAgain,
+    ).toBeUndefined();
+  });
+
+  it("never records 'don't ask again' from a window that was not offered the box", () => {
+    const model = asPreflight(
+      preflight({ confirmAboveCents: 1, offerDontAskAgain: false }),
+    );
+    expect(
+      decideCostDialog(model, {
+        accepted: true,
+        acknowledged: true,
+        dontAskAgain: true,
+      }),
+    ).toEqual({
+      kind: "run",
+      plan: "selected",
+      raise: undefined,
+      dontAskAgain: false,
+    });
+  });
+
+  it("the window script keeps the box hidden when the model has none", () => {
+    const code = readFileSync(
+      resolve(process.cwd(), "addon/content/costConfirm.js"),
+      "utf8",
+    );
+    interface Fake {
+      hidden: boolean;
+      checked: boolean;
+      firstChild: null;
+      readonly attrs: Map<string, string>;
+      setAttribute(name: string, value: string): void;
+      appendChild(): void;
+      addEventListener(): void;
+    }
+    const fake = (): Fake => ({
+      hidden: true,
+      checked: false,
+      firstChild: null,
+      attrs: new Map(),
+      setAttribute(name: string, value: string) {
+        this.attrs.set(name, value);
+      },
+      appendChild: () => undefined,
+      addEventListener: () => undefined,
+    });
+    const paint = (model: PreflightDialogModel): Fake => {
+      const elements = new Map<string, Fake>();
+      const doc = {
+        getElementById: (id: string): Fake => {
+          const found = elements.get(id) ?? fake();
+          elements.set(id, found);
+          return found;
+        },
+        createElementNS: fake,
+      };
+      const factory = new Function(
+        "document",
+        `${code}\nreturn RHCostDialog;`,
+      ) as (d: unknown) => {
+        spec: { dontAsk: string };
+        io: unknown;
+        renderPreflight(m: unknown): void;
+      };
+      const dialog = factory(doc);
+      dialog.io = { model };
+      dialog.renderPreflight(model);
+      return doc.getElementById(dialog.spec.dontAsk);
+    };
+    const offered = paint(asPreflight(preflight()));
+    expect(offered.hidden).toBe(false);
+    expect(offered.attrs.get("data-l10n-id")).toBe(
+      COST_DIALOG_L10N.dontAskAgain,
+    );
+    const absent = paint(asPreflight(preflight({ offerDontAskAgain: false })));
+    expect(absent.hidden).toBe(true);
+    expect(absent.attrs.has("data-l10n-id")).toBe(false);
+  });
+});

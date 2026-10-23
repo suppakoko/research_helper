@@ -100,7 +100,10 @@ import {
   type PipelineSet,
 } from "../pipeline/registry";
 import { createSearchImportPipeline } from "../pipeline/searchImport/searchImportPipeline";
-import { NETWORK_METADATA_POOL_SIZE } from "../pipeline/searchImport/stages";
+import {
+  NETWORK_METADATA_POOL_SIZE,
+  type SearchScreeningDeps,
+} from "../pipeline/searchImport/stages";
 import type {
   SearchImportBatchResult,
   SearchImportTarget,
@@ -392,6 +395,12 @@ export interface PipelineConstructionDeps {
    * that no cache reads.
    */
   readonly runningWork?: RunningWork;
+  /**
+   * The search pipeline's `Screening` stage dependencies (`P3-T27`): the
+   * adapter's model description for the privacy check. Absent, every model's
+   * data policy is judged `unknown`.
+   */
+  readonly screening?: SearchScreeningDeps;
 }
 
 /** `docs/07` §7.2's worker pools and job admission, one each per plugin lifetime. */
@@ -440,6 +449,7 @@ export function buildPipelineSet(deps: PipelineConstructionDeps): PipelineSet {
       writer: deps.writer,
       writeBatchSize: deps.writeBatchSize ?? DEFAULT_CHUNK_SIZE,
       pool: pools.networkMetadata,
+      ...(deps.screening !== undefined && { screening: deps.screening }),
     }),
   };
 }

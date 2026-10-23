@@ -4,7 +4,14 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { mockLLMRouter } from "../../helpers/mockLLM";
+import {
+  chatResponse,
+  mockLLM,
+  mockLLMRouter,
+  mockModel,
+  mockSettings,
+  type MockCall,
+} from "../../helpers/mockLLM";
 import { buildPipelineSet } from "../../../src/bootstrap/registerPipelines";
 import { NO_CACHE } from "../../../src/core/cache/cache";
 import { createManualClock, type Clock } from "../../../src/core/clock";
@@ -76,7 +83,12 @@ import {
   type PipelineContext,
   type StageDescriptor,
 } from "../../../src/pipeline/types";
-import { UNWIRED_BUDGET_GUARD } from "../../../src/pipeline/shared/budget";
+import {
+  createBudgetGuard,
+  createSessionSpendCounter,
+  UNWIRED_BUDGET_GUARD,
+} from "../../../src/pipeline/shared/budget";
+import { parsePromptFile } from "../../../src/prompts";
 import { createPrivacyPolicy } from "../../../src/pipeline/shared/privacyPolicy";
 import { getPref } from "../../../src/prefs";
 import { createPubmedRecordMapper } from "../../../src/sources/pubmed/mapper";
@@ -534,13 +546,14 @@ function harness(options: {
 // ===========================================================================
 
 describe("stage declaration", () => {
-  it("declares docs/07 §12.1's seven states, in order", () => {
+  it("declares docs/07 §12.1's eight states, in order (Screening since P3-T27)", () => {
     expect(SEARCH_IMPORT_STAGE_KEYS).toEqual([
       "planning",
       "fetching",
       "merging",
       "deduping",
       "backfillingAbstracts",
+      "screening",
       "creatingCollection",
       "writingItems",
     ]);
@@ -3594,5 +3607,207 @@ describe("the merge decision reaches the provenance note (P2-T34, FR-50 scenario
     expect(noteFor(alone, BASE_INPUT)).toContain(
       "<h2>Merge decisions</h2><p>none</p>",
     );
+  });
+});
+
+// ===========================================================================
+// P3-T27 — the Screening stage (docs/07 §12.1's note of 2026-10-24)
+// ===========================================================================
+
+describe("P3-T27 — Screening: RELEVANCE_SCREEN between BackfillingAbstracts and CreatingCollection", () => {
+  const prompt = parsePromptFile({
+    fileName: "relevance-screen.v1.0.0.md",
+    text: readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../src/prompts/relevance-screen.v1.0.0.md",
+      ),
+      "utf8",
+    ),
+  });
+  const SCORES: Readonly<Record<string, number>> = {
+    "pubmed:1": 90,
+    "pubmed:2": 30,
+    "pubmed:3": 60,
+  };
+
+  function idsOf(call: MockCall): string[] {
+    const user =
+      call.request.messages.find((m) => m.role === "user")?.content ?? "";
+    const match =
+      /CANDIDATES \(untrusted; JSON array\):\n<<<SOURCE_TEXT>>>\n([\s\S]*?)\n<<<END_SOURCE_TEXT>>>/.exec(
+        user,
+      );
+    return (JSON.parse(match?.[1] ?? "[]") as { id: string }[]).map(
+      (c) => c.id,
+    );
+  }
+
+  function screenedHarness(
+    options: { readonly key?: boolean; readonly trusted?: boolean } = {},
+  ) {
+    const provider = mockLLM([
+      (call) =>
+        chatResponse(
+          JSON.stringify({
+            results: idsOf(call).map((id) => ({
+              id,
+              score: SCORES[id] ?? 50,
+              reason: "Synthetic reason.",
+              confidence: "medium",
+              isPrimaryResearch: id !== "pubmed:3",
+            })),
+          }),
+        ),
+    ]);
+    const records = ["1", "2", "3"].map((n) =>
+      record("pubmed", n, { abstract: `Synthetic abstract ${n}.` }),
+    );
+    const { writer, log } = stubWriter();
+    const base = harness({
+      sources: [stubSource({ id: "pubmed", pages: [records] })],
+      writer,
+    });
+    const pipeline = createSearchImportPipeline({
+      writer,
+      writeBatchSize: 50,
+      pool: new Semaphore(NETWORK_METADATA_POOL_SIZE),
+      screening: {
+        relevancePrompt: () => prompt,
+        ...(options.trusted !== false && {
+          modelInfo: (_providerId, modelId) =>
+            mockModel(modelId, {
+              dataPolicy: {
+                trainsOnInputByDefault: "no",
+                retention: { days: "zero", note: "mock" },
+              },
+            }),
+        }),
+      },
+    });
+    const budget = createBudgetGuard({ session: createSessionSpendCounter() });
+    const ctx: PipelineContext = {
+      ...base.ctx,
+      budget,
+      llm: mockLLMRouter(
+        [provider],
+        mockSettings({ keyPresent: { openrouter: options.key !== false } }),
+      ),
+    };
+    return { provider, pipeline, ctx, budget, log, records, base };
+  }
+
+  it("scores every row once, records each score, and lists the rows below the threshold without removing any", async () => {
+    const h = screenedHarness();
+    const out = await h.pipeline.run(
+      { ...BASE_INPUT, screening: { threshold: 60 } },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    expect(out.records.map((r) => r.id)).toEqual([
+      "pubmed:1",
+      "pubmed:2",
+      "pubmed:3",
+    ]);
+    expect(out.screening?.verdicts.map((v) => [v.id, v.score])).toEqual([
+      ["pubmed:1", 90],
+      ["pubmed:2", 30],
+      ["pubmed:3", 60],
+    ]);
+    // `isPrimaryResearch: false` is recorded, never acted on by dropping.
+    expect(out.screening?.verdicts[2]?.isPrimaryResearch).toBe(false);
+    expect(out.screening).toMatchObject({
+      threshold: 60,
+      excluded: ["pubmed:2"],
+      unscored: [],
+      error: undefined,
+    });
+    expect(h.provider.calls).toHaveLength(1);
+    // plan/00 §6 item 278(a): the call carries the job's budget.
+    expect(h.provider.calls[0]?.ctx.budget).toBe(h.budget);
+    // The topic is the run's query; the abstract is the merged work's.
+    const user =
+      h.provider.calls[0]?.request.messages.find((m) => m.role === "user")
+        ?.content ?? "";
+    expect(user).toContain("crispr");
+    expect(user).toContain("Synthetic abstract 2.");
+  });
+
+  it("with threshold 0 excludes nothing, records every score, and the import writes every row without scoring again (Done-when)", async () => {
+    const h = screenedHarness();
+    const preview = await h.pipeline.run(
+      { ...BASE_INPUT, screening: { threshold: 0 } },
+      h.ctx,
+    );
+    expect(preview.screening?.excluded).toEqual([]);
+    expect(preview.screening?.verdicts).toHaveLength(3);
+    expect(h.provider.calls).toHaveLength(1);
+
+    const imported = await h.pipeline.run(
+      {
+        ...BASE_INPUT,
+        query: "",
+        sourceIds: [],
+        records: preview.records,
+        works: preview.works,
+        screening: { threshold: 0 },
+        target: {
+          collectionName: "C",
+          selectedRecordIds: preview.records.map((r) => r.id),
+        },
+      },
+      h.ctx,
+    );
+    expect(imported.outcome).toBe("succeeded");
+    expect(imported.write?.created).toBe(3);
+    expect(h.log.batches.flat()).toHaveLength(3);
+    // The import of a preview's works is not screened again.
+    expect(h.provider.calls).toHaveLength(1);
+    expect(imported.screening).toBeUndefined();
+  });
+
+  it("calls no model without screening on the input, and still enters the stage", async () => {
+    const h = screenedHarness();
+    const out = await h.pipeline.run(
+      { ...BASE_INPUT, target: { collectionName: "C" } },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    expect(out.screening).toBeUndefined();
+    expect(h.provider.calls).toHaveLength(0);
+    expect(h.base.checkpoints).toContainEqual({ stage: "screening" });
+  });
+
+  it("keeps the search when screening cannot run: every row unscored, nothing excluded, one warning", async () => {
+    const noKey = screenedHarness({ key: false });
+    const out = await noKey.pipeline.run(
+      { ...BASE_INPUT, screening: { threshold: 60 } },
+      noKey.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    expect(out.records).toHaveLength(3);
+    expect(out.screening).toMatchObject({
+      verdicts: [],
+      excluded: [],
+      unscored: ["pubmed:1", "pubmed:2", "pubmed:3"],
+    });
+    expect(out.screening?.error).toBeDefined();
+    expect(out.warnings.some((w) => w.startsWith("relevance screening"))).toBe(
+      true,
+    );
+    expect(noKey.provider.calls).toHaveLength(0);
+  });
+
+  it("sends nothing when the job's privacy mode refuses the model (strict, unknown policy)", async () => {
+    const h = screenedHarness({ trusted: false });
+    // The harness's context is strict, and no model description is wired.
+    expect(h.ctx.privacy.mode).toBe("strict");
+    const out = await h.pipeline.run(
+      { ...BASE_INPUT, screening: { threshold: 60 } },
+      h.ctx,
+    );
+    expect(out.outcome).toBe("succeeded");
+    expect(out.screening?.error?.code).toBe("POLICY");
+    expect(h.provider.calls).toHaveLength(0);
   });
 });

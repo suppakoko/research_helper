@@ -2081,6 +2081,30 @@ the caller of what the card builds; if it does not, the caller is added with a d
     (c) confirmed: model suggestions are fetched when a list is first opened, never when Settings opens. (d)
     `research-helper-prefs-key-present` becomes "A key is stored. Not tested yet." now that results are stored; its
     Korean, and the 20 new pane strings, go on the review page (item 276(c)).
+    **DONE 2026-10-23** (`plan/reports/followups-278-279.md`); wave 7 landed as 3a7423b. The review page holds 137 ids.
+
+### 6.59 Wave 8, 2026-10-24
+
+280. **Wave 8.** **DECIDED 2026-10-24 (owner):** (a) `P3-T27` (screening) starts now. (b) `P3-T20`'s ground-truth labels
+    are set by the owner on a private labelling page: for each of the 40 papers the page lists candidate heading lines
+    taken from the text the plugin itself extracts (the `P3-T18`/`P3-T19` path), chosen by a plain line-shape rule and
+    never by the detector under test or a model, and the owner marks each as introduction, methods, results, discussion,
+    other, or not a heading (and can add one the list missed). The agent builds the extraction, the manifest, the label
+    format and its ingestion; it never writes a label.
+
+281. **Raised by `P3-T27` and `P3-T20`, 2026-10-24.** **DECIDED 2026-10-24 (owner):** (a) `screening.retractionPolicy`
+    `include` keeps `P3-T27`'s reading: a retracted item may get its per-paper summary but never contributes to a synthesis
+    (`docs/06` §13.3 holds). (b) the search window's relevance screening shows an estimated cost beside its checkbox, and
+    opens `P3-T16`'s cost confirmation when the estimate is above `summary.confirmAboveCents`; built after wave 8. (c)
+    `dedupe.ts`'s fuzzy title tier must not call two papers one work when their titles differ by an inner number ("…
+    study number 1 …" vs "… number 2 …"); fixed after wave 8 with a test, and the effect on `P2-T16`'s accuracy report
+    recorded.
+    **Recorded, not cards:** `P3-T20` finding 4 — the OCR probe flagged none of the 40, including the garbled scans X1 and
+    X2 (lowest share 0.823), so the 0.80 threshold separates nothing (item 258; `P3-T22` measures); finding 5 — the
+    cleaning pass leaves W2's running footer and skips the reference cut on 7 papers; finding 2 — Zotero 10.0.3 emits one
+    line per text block (D-06-4's BMC observation from 10.0.2 no longer holds); XR2 is dated December 1974, not 1972.
+    **Labelling page published 2026-10-24** (item 280(b)): https://claude.ai/artifact/Lv5nnG4rtocWc5Yd8us2YR, db collection
+    `imrad`, doc id = paper id, in the shape `scripts/build-imrad-fixtures.ts ingest` reads (`plan/reports/P3-T20.md`).
 
 ## 7. Regenerating this file
 

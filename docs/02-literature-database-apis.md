@@ -2589,6 +2589,23 @@ Korean titles, so the non-Latin path §11.3.2 now preserves is measured rather t
 - Same title, different year, different journal → almost always a conference paper later extended
   into a journal article. Link, don't merge.
 
+> **Decided 2026-10-24 (owner, `plan/00` §6 item 281(c)): a number anywhere in the title, not only
+> at its end.** The series guard above reads only a title's last word, so "A synthetic study number 1
+> of widget counts in three regions" and the same title with "number 2", by the same first author in
+> the same year, cleared the duplicate thresholds and were made one work (`P3-T27`'s report, finding
+> 7). Now the title tiers compare each title's **numbers**: its runs of digits after §11.3.2's
+> normalization, in order, with leading zeros dropped. When a pair would otherwise be a duplicate
+> and the two lists differ — including a title with a number against one without — the pair is
+> **flagged for the user's review instead, never merged** (`innerNumbersDiffer`, applied last in
+> `guardTitleVerdict`, `src/sources/shared/dedupe.ts`). A flag or a link the rules above already
+> gave is left as it was, so a known preprint ↔ published relation (§11.4) still links. The same
+> number written the same way ("COVID-19" and "COVID 19", "3D" and "3-D") still matches. Numbers
+> written as words ("three") and roman numerals inside a title are not compared. *Measured the same
+> day:* over the 534 pairs of `P2-T13`'s corpus (`test/fixtures/dedup/pairs.jsonl`, 1 058 records)
+> no prediction changes — 103 merged, 107 linked, 141 flagged, 183 distinct before and after — so
+> `npm run dedup:report`'s figures cannot move once the owner's labels are in. Its output today is
+> unchanged too: the corpus is still unlabelled and the script measures nothing.
+
 ### 11.4 Preprint ↔ published-version linking
 
 These are **different works** with different DOIs, and a user may legitimately want both. **Link

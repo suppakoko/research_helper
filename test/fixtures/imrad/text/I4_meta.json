@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "I4",
+  "title": "Design and Evaluation of a Balanced Compliant Laparoscopic Grasper",
+  "venue": "IEEE Journal of Translational Engineering in Health and Medicine 2023",
+  "publisher": "ieee",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "roman",
+    "webHeadings": "Nomenclature; I. Introduction; II. Materials and Methods; III. Results; IV. Discussion; V. Conclusion",
+    "notes": [
+      "a Nomenclature block before the Introduction"
+    ]
+  },
+  "doi": "10.1109/JTEHM.2023.3291925",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC10561751?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10561751/",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "I4.pdf",
+    "bytes": 1194639,
+    "sha256": "0496c8e1586f2d818cf5a0a10bca29e177af5dd6a1c459bfad9c554bd63dcda4"
+  },
+  "text": {
+    "file": "I4.txt",
+    "bytes": 37508,
+    "chars": 37434,
+    "sha256": "1cf8bcd7e45f9f1beea250d32129abab3e3d6acad7923396e72a738419ef7286",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 37434,
+      "truncated": false,
+      "pages": 9,
+      "runningHeadLinesRemoved": 17,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.1082021106796579,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.846236042100764,
+      "ocrLetterShare": 0.8001282256771919,
+      "ocrChars": 37434,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 9,
+      "twoColumnPages": 8
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

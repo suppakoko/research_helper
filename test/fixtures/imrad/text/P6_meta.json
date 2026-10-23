@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "P6",
+  "title": "Genome-Wide DNA methylation profiling of tissue-plasma pairs identifies Novel cfDNA biomarkers for the diagnosis of gastric cancer",
+  "venue": "PLOS Genetics 2026",
+  "publisher": "plos",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract; Author summary; Introduction; Result; Discussion; Conclusion; Materials and methods",
+    "notes": [
+      "singular \"Result\"",
+      "Methods after the Conclusion"
+    ]
+  },
+  "doi": "10.1371/journal.pgen.1012322",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://journals.plos.org/plosgenetics/article/file?id=10.1371/journal.pgen.1012322&type=printable",
+  "landingUrl": "https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1012322",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "P6.pdf",
+    "bytes": 2625919,
+    "sha256": "1f91137dfcc79cf88d3f1d80cac2eee14cf26f8c9b568e4cbaf042e9cb0da942"
+  },
+  "text": {
+    "file": "P6.txt",
+    "bytes": 53709,
+    "chars": 53599,
+    "sha256": "c0bb3d18d8069f7c581071018022a1018b1b2f32c67189c55fbecd00d731996a",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 53599,
+      "truncated": false,
+      "pages": 21,
+      "runningHeadLinesRemoved": 21,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.1951739537563927,
+      "supplementaryCharsRemoved": 2267,
+      "ocrAlnumPunctShare": 0.8579077967872535,
+      "ocrLetterShare": 0.7939886938189146,
+      "ocrChars": 53599,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 16,
+      "twoColumnPages": 1
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "A1",
+  "title": "Comparing Motion Distortion Between Vehicle Field Deployments",
+  "venue": "arXiv (IEEE conference template, estimated)",
+  "publisher": "arxiv",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "estimated from the template",
+    "headingNumbering": "roman",
+    "webHeadings": "I Introduction; II Related work…; III Motion distortion metric; IV Case study; V Lessons learned; VI Conclusion",
+    "notes": [
+      "no Methods or Results headings",
+      "\"Case study\" and \"Lessons learned\" sections"
+    ]
+  },
+  "doi": null,
+  "otherId": "arXiv:2405.00189v1",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "the PDF prints none; the arXiv abstract page links creativecommons.org/licenses/by/4.0",
+  "sourceUrl": "https://arxiv.org/pdf/2405.00189",
+  "landingUrl": "https://arxiv.org/abs/2405.00189",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "A1.pdf",
+    "bytes": 1578770,
+    "sha256": "58fb975166966b92af9490a3e2d4362d6cb3b57c120e95b0316841cdd8c4cb0b"
+  },
+  "text": {
+    "file": "A1.txt",
+    "bytes": 24812,
+    "chars": 24751,
+    "sha256": "55c0e6e2b6361dc08fbd2139c262c966fa438c8a321268cfe764c24ed021282d",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 24751,
+      "truncated": false,
+      "pages": 6,
+      "runningHeadLinesRemoved": 6,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.17734645041212443,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8426730233121894,
+      "ocrLetterShare": 0.8057856248232395,
+      "ocrChars": 24751,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 5,
+      "twoColumnPages": 5
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

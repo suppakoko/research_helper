@@ -83,7 +83,7 @@ import {
 } from "./container";
 import type { Logger } from "../core/logger";
 import { formatValue } from "../i18n/ftl";
-import { L10N_PROGRESS_HEADLINE } from "../i18n/keys";
+import { L10N_PROGRESS_HEADLINE, type FluentMessageId } from "../i18n/keys";
 import { merge } from "../model/merge";
 import type { SourceRecord } from "../model/sourceRecord";
 import type {
@@ -120,6 +120,14 @@ import {
   createSessionSpendCounter,
   type SessionSpendCounter,
 } from "../pipeline/shared/budget";
+import {
+  buildEgressDisclosure,
+  settleDisclosure,
+} from "../pipeline/shared/egressDisclosure";
+import type { RunEstimate } from "../pipeline/shared/estimate";
+import { isPrivacyMode } from "../pipeline/shared/privacyPolicy";
+import { estimateRelevanceScreen } from "../pipeline/shared/relevanceScreen";
+import type { ScreeningEstimateRequest } from "../ui/viewModels/searchImportViewModel";
 import {
   LLM_CREDENTIALS,
   PREFERENCES_API_PROPERTY,
@@ -563,6 +571,7 @@ function singletonWorkKey(record: SourceRecord): string | undefined {
  * | `isExisting` | `P1-T13`'s `LibraryIndex.findExisting`, over {@link libraryIndex} |
  * | `writeProvenanceNote` | `src/zotero/notes.ts`'s `writeProvenanceNote`, `FR-8`'s note |
  * | `provenanceFiles` | `src/zotero/notes.ts`'s `provenanceFileWriter()`, `FR-8`'s JSON export |
+ * | `screening` | `getPref("screeningThreshold")` and the LLM registry's `isConfigured` for the active provider (`P3-T27`); since item 281(b), {@link estimateScreeningCost}, `summary.confirmAboveCents`, {@link confirmScreeningCost} and the application locale |
  *
  * The last three are the ones `P1-T22` could not make, because `src/ui/**` may
  * not import `src/zotero/**` (`docs/07` §2.3) and no file in that card's
@@ -650,7 +659,124 @@ function searchWindowDeps(
         ? undefined
         : { libraryId: ref.libraryId, collectionKey: ref.key, name: ref.name };
     },
+    // `P3-T27` (`docs/08` §4.2's threshold row): the control opens at the
+    // preference, read per open; screening is offered only while the active
+    // provider can be called. Nothing here writes the preference.
+    screening: {
+      threshold: () => getPref("screeningThreshold"),
+      available: () =>
+        graph.llm.registry.isConfigured(graph.llm.registry.activeProviderId()),
+      // Owner, 2026-10-24, `plan/00` §6 item 281(b): the cost beside the
+      // checkbox, and `P3-T16`'s dialog above `summary.confirmAboveCents`.
+      estimate: (request) => estimateScreeningCost(graph, request),
+      confirmAboveCents: () => getPref("summaryConfirmAboveCents"),
+      confirm: (estimate) => confirmScreeningCost(graph, estimate),
+      locale: appLocale,
+    },
   };
+}
+
+/**
+ * Item 281(b) (owner, 2026-10-24): price a relevance screen before it runs —
+ * `estimateRelevanceScreen` over the router's `"screening"` model, the
+ * bundled `RELEVANCE_SCREEN` template and the graph's one price source,
+ * `modelPrices` (item 278(b)), which is the snapshot the spend guard reserves
+ * the screen's calls with. No catalogue request is sent: the snapshot held is
+ * read as it stands.
+ *
+ * @param graph - the service graph
+ * @param request - the result count and the topic
+ * @returns the estimate; rejects when the model or the template cannot be read
+ */
+async function estimateScreeningCost(
+  graph: ServiceGraph,
+  request: ScreeningEstimateRequest,
+): Promise<RunEstimate> {
+  // A lazy import, as the `Screening` stage's own: `../prompts/bundled`
+  // imports the `.md` prompt files (`src/pipeline/searchImport/stages.ts`).
+  const { PROMPT_REGISTRY } = await import("../prompts/bundled");
+  const model = graph.llm.router.resolveModel("screening");
+  return estimateRelevanceScreen({
+    resultCount: request.resultCount,
+    request: { topic: request.topic },
+    prompt: PROMPT_REGISTRY.get("RELEVANCE_SCREEN"),
+    modelId: model.modelId,
+    prices: graph.modelPrices.pricesFor(model.providerId, model.modelId),
+    atEpochMs: graph.clock.now(),
+  });
+}
+
+/**
+ * Item 281(b): `P3-T16`'s cost dialog over a screen's estimate, through
+ * {@link confirmRunCost} — the same window and model as a summary run, not a
+ * second dialog. It carries `P3-T15`'s disclosure for the `"screening"`
+ * model under the global privacy mode (a search has no collection), and no
+ * "Don't ask again for this collection" box. Confirming a dialog that showed
+ * the first-job notice records the acknowledgement (`settleDisclosure`).
+ *
+ * @param graph - the service graph
+ * @param estimate - from {@link estimateScreeningCost}
+ * @returns what the user chose; rejects when no window can show the number
+ */
+async function confirmScreeningCost(
+  graph: ServiceGraph,
+  estimate: RunEstimate,
+): Promise<CostDialogOutcome> {
+  const providerId = graph.llm.router.resolveModel("screening").providerId;
+  const mode = getPref("privacyMode");
+  const disclosure = buildEgressDisclosure(
+    {
+      providerId,
+      modelId: estimate.modelId,
+      // The search job's own reading (`container.ts`'s `globalPrivacyMode`):
+      // a job over no collection follows the global mode; unreadable is strict.
+      privacyMode: isPrivacyMode(mode) ? mode : "strict",
+      items: Array.from(
+        { length: estimate.selected.counts.items },
+        () => "abstract" as const,
+      ),
+    },
+    { baseUrls: graph.llm.baseUrls },
+  );
+  const outcome = await confirmRunCost({
+    mode: "preflight",
+    estimate,
+    disclosure,
+    confirmAboveCents: getPref("summaryConfirmAboveCents"),
+    fullTextAutoMaxPapers: getPref("summaryFullTextAutoMaxPapers"),
+    providerName: await providerDisplayName(graph, providerId),
+    ceilingSelected: undefined,
+    ceilingDowngrade: undefined,
+    session: sessionSpend.totals,
+    offerDontAskAgain: false,
+  });
+  settleDisclosure(
+    disclosure,
+    outcome.kind === "run" ? "confirmed" : "cancelled",
+  );
+  return outcome;
+}
+
+/**
+ * The provider's name for the cost dialog's destination line: its
+ * `displayNameKey` resolved in the main-window bundle, or the provider id when
+ * it resolves to nothing (the names are brand names, never translated).
+ */
+async function providerDisplayName(
+  graph: ServiceGraph,
+  providerId: ProviderId,
+): Promise<string> {
+  const key = graph.llm.registry.get(providerId)?.displayNameKey;
+  if (key === undefined) return providerId;
+  try {
+    const name = await formatValue(
+      new Localization([MAIN_WINDOW_FTL]),
+      key as FluentMessageId,
+    );
+    return name ?? providerId;
+  } catch {
+    return providerId;
+  }
 }
 
 /**

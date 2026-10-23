@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "S4",
+  "title": "Social media sensors as early signals of influenza outbreaks at scale",
+  "venue": "EPJ Data Science 2024",
+  "publisher": "springer",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "arabic",
+    "webHeadings": "Abstract / 1 Introduction / 2 Results / 3 Discussion / 4 Methods",
+    "notes": [
+      "numbered headings",
+      "Methods at the end"
+    ]
+  },
+  "doi": "10.1140/epjds/s13688-024-00474-1",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://link.springer.com/content/pdf/10.1140/epjds/s13688-024-00474-1.pdf",
+  "landingUrl": "https://link.springer.com/article/10.1140/epjds/s13688-024-00474-1",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "S4.pdf",
+    "bytes": 1433353,
+    "sha256": "47990f6287dc72d7de832797dee6c73edf9fe888215df225a47db0567cdb945e"
+  },
+  "text": {
+    "file": "S4.txt",
+    "bytes": 44154,
+    "chars": 43575,
+    "sha256": "9744c7e495df034a5ca4baa2a5a3a937761f5f83ae4e125810bf6f904e019037",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 43575,
+      "truncated": false,
+      "pages": 16,
+      "runningHeadLinesRemoved": 15,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.19630046290319605,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8393574297188755,
+      "ocrLetterShare": 0.7619506597819851,
+      "ocrChars": 43575,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 15,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

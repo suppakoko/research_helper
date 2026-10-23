@@ -1,0 +1,273 @@
+AlND
+NASA TECHNICAL NOTE NASA TN D-7812
+c-J
+$
+Co
+I
+(1NASA-TN-D-7812) SWEEP EFFECT ON THE N7512235
+SDRAG OF BOWS OF PERPENDICULAR CIRCULAR 12235 ICYLINDERS IN A LAMINAR BOUNDARY LAYER AT
+SUPERSONIC FREE-STREAB VELOCITIES (NASA) Unclas
+_18p HC $3.25 CSCL 20D H1/34 03692
+SWEEP EFFECT ON THE DRAG OF ROWS
+OF PERPENDICULAR CIRCULAR CYLINDERS
+IN A LAMINAR BOUNDARY LAYER AT .
+SUPERSONIC FREE-STREAM VELOCITIES O
+by Milton Lamb and Robert L. Stallings, Jr.
+Langley Research Center
+Hampton, Va. 23665
+NATIONAL AERONAUTICS AND SPACE ADMINISTRATION * WASHINGTON, D. C. * DECEMBER 1974
+
+
+1. Report No. 2. Government Accession No. 3. Recipient's Catalog No. NASA TN D-7812
+4. Title and Subtitle 5. Report Date
+SWEEP EFFECT ON THE DRAG OF ROWS OF PERPENDIC- December 1974
+ULAR CIRCULAR CYLINDERS IN A LAMINAR BOUNDARY 6. Performing Organization Code LAYER AT SUPERSONIC FREE-STREAM VELOCITIES
+7. Author(s) 8. Performing Organization Report No.
+Milton Lamb and Robert L. Stallings, Jr. L-9799 10. Work Unit No. 9. Performing Organization Name and Address 505-11-15-03
+NASA Langley Research Center 11. Contract or Grant No. Hampton, Va. 23665
+13. Type of Report and Period Covered 12. Sponsoring Agency Name and Address Technical Note
+National Aeronautics and Space Administration 14. Sponsoring Agency Code Washington, D.C. 20546
+15. Supplementary Notes
+16. Abstract
+Drag measurements were obtained for circular cylinders attached perpendicularly to a flat-plate surface. Measurements were obtained for a single cylinder and for rows of cylinders. The cylinders were alined at various sweep angles relative to the free-stream velocity vector and at spacings appropriate for roughness elements used as boundary-layer trips. The drag measurements were obtained for Mach numbers of 3.95 and 4.60, ratios of cylinder height to an undisturbed laminar-boundary-layer displacement thickness of approximately 1.0 to 3.0, a cylinder height-to-diameter ratio of approximately 2, and
+sweep angles up to 600.
+A complete presentation of the experimental results is given in the figures. A discussion of the more significant findings, including the most appropriate parameters for corre
+lating the experimental results, is presented.
+17. Key Words (Suggested b/ Author(s)) 18. Distribution Statement
+Cylinder drag Unclassified - Unlimited
+Protuberance drag Tripping elements Boundary-layer trips STAR Category 12 19. Security Classif. (of this report) 20. Security Classif. (of this page) 21. No. of Pages 22. Price*
+Unclassified Unclassified 16 $3.25
+For sale by the National Technical Information Service, Springfield, Virginia 22151
+
+
+SWEEP EFFECT ON THE DRAG OF ROWS OF PERPENDICULAR
+CIRCULAR CYLINDERS IN A LAMINAR BOUNDARY LAYER
+AT SUPERSONIC FREE-STREAM VELOCITIES
+By Milton Lamb and Robert L. Stallings, Jr.
+Langley Research Center
+SUMMARY
+An experimental investigation has been conducted in the Langley Unitary Plan wind
+tunnel to extend the results of NASA TN D-7369 in order to include the effects of sweep
+on the drag characteristics of circular cylinders attached to a flat-plate surface. The
+longitudinal axes of symmetry for the cylinders were perpendicular to the plate surface.
+The undisturbed flat-plate boundary layer was laminar at the cylinder installation location
+through the range of free-stream variables. The cylinders were alined in rows at various
+angles of sweep relative to the free-stream velocity vector. Spacing between the cylinders
+was varied from a minimum value of approximately 5 cylinder diameters to an upper
+limit value corresponding to a single isolated-cylinder installation.
+The isolated-cylinder drag coefficient, when plotted as a function of the ratio of
+the cylinder height to the boundary-layer displacement thickness k/6*, was found to be
+invariant with the free-stream Mach number. Increasing the sweep angle for a row of
+cylinders resulted in a reduction in the cylinder drag coefficient. For both the row of
+cylinders and the isolated cylinders, increasing k/6* resulted in an increase in the
+cylinder drag coefficient. When the cylinder drag coefficient for the row of cylinders was
+normalized by values from the isolated cylinders, this normalized parameter was found to be essentially invariant with k/O* for k/6* > 2.
+INTRODUCTION
+The use of artificial roughness to create turbulent flow on wind-tunnel models has
+been an accepted practice by aerodynamicists for many years. Previously developed
+techniques have been applied to flows ranging from incompressible to hypersonic speeds.
+However, the use of artificial roughness can add an extraneous drag component to the model drag.
+Two methods of correcting for grit drag are discussed in reference 1. One*method
+requires a variable Reynolds number. This technique, however, is limited to those tunnels
+
+
+with a sufficiently high unit Reynolds number and free-stream turbulence level to produce
+essentially all turbulent flow on the model surfaces at the highest unit Reynolds number
+without artificial trips. The other method involves variable roughness size. This
+technique requires that the slope of the drag coefficient plotted against the grit-height
+squared be extrapolated linearly to zero roughness height. As noted in reference 1, the
+determination of the correct slope is very difficult. Both methods described in reference 1 require additional testing specifically to obtain grit drag.
+Another possible method of correcting for grit drag consists of using a roughness
+shape that has known drag characteristics. A right circular cylinder is a promising
+shape, and, in recent years, several experimental investigations have been conducted.to
+document cylinder drag characteristics through a wide range of test conditions. For
+example, the drag coefficient of a small cylinder located in a laminar boundary layer has
+been measured (ref. 2) using a very sensitive skin-friction balance. The instrumented
+cylinder was one of several cylinders mounted with the longitudinal axes perpendicular
+to the flat-plate surface and alined in a spanwise row at a sweep angle of 0 0 . Also
+presented in reference 2 is a simplified empirical technique, based on the experimental
+data, for determining the drag coefficient for a given cylinder configuration used as a
+boundary-layer trip. However, this technique only applies to cylinders alined in a span
+wise row perpendicular to the free-stream velocity.
+The purpose of the present investigation is to extend the results of reference 2 in
+order to include the effects of sweeping the row of cylinders on the drag of circular
+cylinders partially or totally submerged in a laminar boundary layer through the higher
+supersonic speed region. Results from this investigation can be applied not only to
+roughness drag on wind-tunnel models, but also to cylindrical protuberances in a laminar boundary layer on flight vehicles.
+SYMBOLS
+A frontal area of cylinder, cm 2
+CD drag coefficient
+CD,IC drag coefficient of isolated cylinder
+CD/CD,IC ratio of drag coefficient to drag coefficient of isolated cylinder
+(CD/CD,IC )A=O ratio of drag coefficient to drag coefficient of isolated cylinder evaluated at zero sweep
+
+
+k cylinder height, cm
+M Mach number
+q dynamic pressure, N/m2
+s spacing between cylinders, cm
+V velocity vector
+w cylinder diameter, cm
+Ycp center-of-pressure location on cylinder, cm
+6* boundary-layer displacement thickness, cm
+A sweep angle of row of cylinders, deg
+Subscripts:
+1 local conditions at outer edge of boundary layer
+00 free-stream conditions
+TEST FACILITY
+This investigation was conducted in the high Mach number test section of the
+Langley Unitary Plan wind tunnel, which is a variable-pressure continuous-flow facility.
+The test section is approximately 1.22 meters square and 2.13 meters long. The nozzle
+leading to the test section is of the asymmetric sliding-block type, which permits a con
+tinuous variation in the test-section Mach number from 2.30 to 4.63. For this investi
+gation the Mach numbers were 3.95 and 4.60; the tunnel stagnation temperature was 353 K. A detailed description of the facility is given in reference 3.
+MODELS AND TEST PROCEDURE
+The swept flat-plate model used in this investigation is shown in the photograph
+(fig. l(a)) and in the drawing (fig. l(b)). The flat surface of the model was 45.72 cm in
+length, 50.80 cm in width, and had a 450 sweep leading-edge angle with a 22.20 wedge
+
+
+leading-edge angle in the streamwise direction (300 wedge normal to the leading edge).
+The leading-edge thickness (normal to the leading edge) was approximately 0.005 cm.
+Cylinder drag measurements were obtained by using a skin-friction balance mounted
+in the flat plate with the sensing element flush with the surface of the plate. The center
+line of the balance was 10.16 cm (measured streamwise) from the leading edge and was
+chosen to correspond to the streamwise location of the balance used in reference 2. By
+locating the balance at the same streamwise location as was used in reference 2, the
+boundary-layer surveys presented in reference 2 are assumed to be applicable to this
+investigation.
+The right circular cylinders were 0.239 cm in height and 0.127 cm in diameter
+(fig. 1(c)). The ratio of cylinder height to the undisturbed laminar boundary-layer dis
+placement thickness k/6* ranged from approximately 1.0 to 3.0 and was obtained by
+varying the Reynolds number from 1.9 x 106 to 16.4 x 106 per meter. The ratios of the
+cylinder spacing to the cylinder diameter were s/w = - (isolated cylinder), s/w = 10,
+and s/w = 5. The latter cases approximate values of s/w that are appropriate for the
+spacing of the roughness elements used as boundary-layer trips. These cylinder configu
+rations were tested at sweep angles of 300, 450, and 600 at Mach numbers of 3.95 and 4.60.
+A detailed listing of the cylinder configurations is given in the table of figure 1(c).
+For the isolated-cylinder tests, a single cylinder was cemented to the balance sens
+ing element with the longitudinal center line of the cylinder perpendicular to, and at the
+center of, the balance sensing element. When more than one cylinder was tested (see
+sketch in fig. 1(c)), the cylinders were alined in a row having a sweep relative to the free
+stream velocity vector, and only the center cylinder was cemented to the sensing element. The remaining cylinders were cemented to the flat surface beyond the sensing-element
+radius. A very thin film of cement applied to the cylinder base was found to be adequate
+for supporting the cylinders.
+INSTRUMENTATION AND ACCURACY
+The skin-friction balance used in this investigation utilizes the force-balance prin
+ciple in which the aerodynamic forces are counterbalanced by an electromagnetic force
+(ref. 4). A balance having a full-scale range from 0 to 0.07 newton was used, and the
+accuracy was better than 1 percent of full scale.
+The balance is essentially a moment-measuring device. The balance output is
+therefore proportional to the location of the applied force relative to the internal flexure
+point of the sensing element; for the present balance, this point was located 0.792 cm
+beneath the sensing element. If the resultant force is not located at the surface of the
+
+
+sensing element (as is the case when the balance is calibrated), a correction must be
+applied to the balance output in order to account for this discrepancy. For the case of
+the cylinder drag measurements, the applied force acts through the center of pressure
+of the cylinder. A correction must therefore be applied to the balance output in order to
+account for the moment arm from the sensing-element surface to the cylinder center of pressure.
+The results presented in reference 2, pertaining both to the center-of-pressure
+location and to the contribution of extraneous forces, are applicable to the present investi
+gation. The center of pressure was assumed to be located at Ycp/& = 0.62. Based on
+the results of reference 2, the error in drag measurement as a result of using this average
+value of ycp/k is less than 5 percent. The contribution of extraneous forces (discussed
+in ref. 2) to the drag measurements is approximately 6 percent for the test Mach numbers.
+It is believed that the largest possible error resulting from a combination of these errors
+would only be 11 percent of the total drag coefficient at any k/6*.
+DATA REDUCTION
+Based on the results of reference 2, the variation of ycp/k with the range of
+k/6* of the present investigation is small relative to the moment arm. A constant
+value of Ycp/k = 0.62 was therefore used to correct the balance output and was applied
+in the following form:
+0.792
+(Drag force)corrected = (Drag force)measured 0.62k + 0.792 (1)
+The cylinder drag coefficient was then obtained from the following equation:
+(Drag force)corrected
+CD = (2)
+where q, is the free-stream dynamic pressure and A is the cylinder frontal area.
+RESULTS AND DISCUSSION
+All experimental cylinder drag coefficients presented herein for the zero-sweep
+condition were obtained from reference 2. The values of 6* used to nondimensionalize
+k on the abscissa scale were also obtained from experimental data fairings presented
+in reference 2 for the free-stream Reynolds numbers of the present investigation.
+The drag coefficients determined from balance measurements for the isolated
+cylinder configuration of the present study and the identical configuration of reference 2
+
+
+are presented in figure 2. The approximate theoretical calculations developed in refer
+ence 2 are also shown for M. = 2.30 and 4.60. The results indicate reasonably good
+repeatability of the data for the isolated-cylinder configurations as well as reasonably
+good agreement between the theoretical and experimental isolated-cylinder drag coefficients.
+Before results such as those presented in figure 2 for the isolated cylinder can be
+applied in order to determine the drag of small cylinders used as boundary-layer trips, it is necessary to establish the effect of sweep and the effect of additional cylinders on the
+isolated-cylinder drag. The effect of additional cylinders and cylinder spacing was estab
+lished in reference 2; therefore, the present investigation was predominately concerned
+with sweep effect.
+Shown in figure 3 is the effect of sweep angle on the cylinder drag coefficient for a
+given Mach number and for cylinder spacing. An increase in the sweep angle results in
+a progressive decrease in cylinder drag coefficient with an increasing k/6*. The largest
+change occurs between 450 and 600. In general, the trends of the variation of CD with
+both Mach number and spacing are as follows: An increase in the Mach number decreases the cylinder drag coefficient, and an increase in the spacing increases the cylinder drag
+coefficient.
+The normalized drag-coefficient parameter CD/CD,IC , presented in figure 4, shows
+that for values of k/6* > 2, the normalized drag coefficients are essentially independent
+of k/6* for all sweep angles tested. The magnitude of the normalized drag coefficients
+for k/6* > 2 tends to decrease with increasing sweep angle, to decrease with increasing
+Mach number, and to increase with increasing cylinder spacing. Because of the similarity
+between the trends at the two Mach numbers and at the various sweep angles, the average
+values of CD/CD,IC for A > 0 and k/5* > 2 were normalized by the average values
+of (CD/CD,IC)A=0o in an attempt to obtain a parameter that would not be strongly
+affected by Mach number. These results are presented in figure 5(a), where the data
+for the two test Mach numbers collapse into a narrow band at each sweep angle; a slight
+decrease in the drag parameter with increasing Mach number is indicated at the higher
+sweep angles. The curves representing the experimental data fairings at each sweep
+angle from figure 5(a) are shown relative to a common origin in figure 5(b), and the
+decrease in drag with the increasing sweep is seen more clearly.
+The results presented in figure 5 can be combined with the data of reference 2 in
+order to determine the drag of circular cylinders used as boundary-layer trips for a wide
+range of test conditions. In order to determine the drag coefficient for a given cylinder
+configuration, the following simplified procedure is recommended.
+
+
+The drag coefficient is determined from the equation
+CD (CD/CD,IC) CD CDC (3) (CD/CD,IC)A0 0 CDIC/A=00
+where (1) (CD/CD,IC)/(CD/CD,IC)A=00 is obtained from figure 5(b) as a function of A
+and w/s; (2) (CD/CD,IC)A=00 is obtained from figure 6 (reprinted from ref. 2) as a
+function of M and w/s; and (3) CD,IC is obtained from figure 2 as a function of
+k/6*.
+The results presented herein should be applicable for the following range of test
+conditions: (a) k/6* > 2.0, (b) k/w = 2, (c) 00 - A - 600, and (d) 3.95 - M !5 4.6.
+Although sweep measurements were not obtained at M = 2.3, it is believed, based on the
+A =00 results of reference 2, that the M range can be extended to 2.3 5 M, - 4.6
+without any significant loss in accuracy.
+CONCLUDING REMARKS
+An experimental investigation has been conducted to extend the results of NASA
+TN D-7369 in order to include the effects of sweep on the drag characteristics of circu
+lar cylinders attached perpendicularly to a flat-plate surface. The undisturbed flat
+plate boundary layer was laminar at the cylinder installation location through the range
+of free-stream variables. The drag measurements were obtained for Mach numbers for
+3.95 and 4.60, sweep angles from 00 to 600, ratios of cylinder spacing to cylinder diameter
+from s/w = o (isolated cylinder) to s/w = 5, ratios of cylinder height to undisturbed
+laminar-boundary-layer displacement thickness k/6* from approximately 1.0 to 3.0,
+and a cylinder height-to-diameter ratio of approximately 2.
+The results of this investigation lead to the following conclusions:
+1. An increase in the sweep angle of the cylinder rows decreased the cylinder drag
+coefficient.
+2. A simplified procedure is outlined for obtaining cylinder drag coefficients, including the effects of sweep, by using the results of this investigation and the results
+of NASA TN D-7369.
+
+
+3. The isolated cylinder drag coefficient, as a function of the ratio of cylinder
+height to boundary-layer displacement thickness k/6*, was found to be only a weak
+function of free-stream Mach number.
+4. A decrease in the spacing between cylinders resulted in a decrease in the cylin
+der drag coefficient.
+5. An increase in k/6* resulted in an increase in the cylinder drag coefficient;
+however, if the cylinder drag coefficient for the row of cylinders is normalized by the
+isolated-cylinder values, the normalized parameter is essentially invariant with k/6*
+for k/6* > 2.
+Langley Research Center,
+National Aeronautics and Space Administration,
+Hampton, Va., October 17, 1974.

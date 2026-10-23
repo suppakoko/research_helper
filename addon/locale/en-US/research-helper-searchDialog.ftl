@@ -472,3 +472,54 @@ research-helper-search-details-show =
 
 research-helper-search-details-hide =
     .label = Hide details
+
+## Relevance screening (P3-T27; docs/08 §4.2's threshold row, docs/12 §3)
+##
+## Shown only while the active AI provider has a key, and only after the user
+## ticks the checkbox for this run: screening sends each result's title and
+## abstract to the AI model, which costs money. The threshold is the run's own
+## and is never saved.
+
+# The per-run checkbox. Unticked every time the window opens.
+research-helper-search-screening-enable =
+    .label = Screen results for relevance with the AI model
+
+research-helper-search-screening-threshold-label =
+    .value = Relevance threshold
+
+research-helper-search-screening-threshold-input =
+    .aria-label = Relevance threshold, from 0 to 100
+
+# Brings back the rows the threshold hides, so a wrongly excluded paper can be
+# rescued (docs/12 §3: never hard-filter without showing the number).
+research-helper-search-screening-show-excluded =
+    .label = Show excluded
+
+# Beside the threshold, updated as the number changes. `{ $kept }` counts the
+# rows the threshold keeps (unscored rows included), `{ $total }` every row,
+# `{ $excluded }` the scored rows below the threshold.
+research-helper-search-screening-count = Importing { $kept } of { $total } results · { $excluded } below the threshold
+
+# A banner line: some rows have no score. `{ $count }` is how many.
+research-helper-search-screening-unscored = The AI model could not score { $count } results. They are shown without a score and are never hidden.
+
+# A banner line: screening was chosen but could not run at all (no key, a
+# privacy setting that refuses the model, a spending limit, a network error).
+research-helper-search-screening-failed = Relevance screening could not run, so no result was scored and none is hidden.
+
+# The badge on a scored row. `{ $score }` is the model's score, 0 to 100.
+research-helper-search-row-relevance = Relevance { $score }
+    .title = Relevance score from the AI model, from 0 to 100. A row below the threshold is hidden unless Show excluded is ticked.
+
+## The estimated cost of screening (owner, 2026-10-24, plan/00 §6 item 281(b);
+## docs/08 §4.2, docs/12 §3)
+
+# Beside the screening checkbox. `{ $cost }` is the estimate, already formatted
+# as currency; `{ $count }` is the most results the ticked databases can return
+# (the per-database maximum times the databases that search). Both are upper
+# bounds, because merging duplicates leaves fewer results to score.
+research-helper-search-screening-cost = Estimated cost of screening: up to about { $cost } for up to { $count } results
+
+# Beside the screening checkbox when the model's price is not known.
+# `{ $model }` is the model's id, not translated.
+research-helper-search-screening-cost-unpriced = The price of { $model } is not known, so the cost of screening cannot be estimated.

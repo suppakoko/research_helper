@@ -1809,6 +1809,8 @@ const VIEW_MODEL_DEPENDENCIES: Record<keyof SearchImportViewModelDeps, true> = {
   // re-run is seeded through.
   provenanceStore: true,
   findCollection: true,
+  // `P3-T27`: the relevance-screening seed (threshold and availability).
+  screening: true,
 };
 
 /**

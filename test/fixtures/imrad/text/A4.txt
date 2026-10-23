@@ -1,0 +1,937 @@
+Thawed Gaussian wavepacket dynamics with ∆-machine learned potentials
+Rami Gherib,a) Ilya G. Ryabinkin,b) and Scott N. Geninc)
+OTI Lumionics Inc., 3415 American Drive Unit 1, Mississauga, Ontario L4V 1T4, Canada
+(Dated: 2 May 2024)
+A method for performing variable-width (thawed) Gaussian wavepacket (GWP) variational dynamics on machinelearned potentials is presented. Instead of fitting the potential energy surface (PES), the anharmonic correction to the global harmonic approximation (GHA) is fitted using kernel ridge regression—this is a ∆-machine learning approach. The training set consists of energy differences between ab initio electronic energies and values given by the GHA. The learned potential is subsequently used to propagate a single thawed GWP using the time-dependent variational principle to compute the autocorrelation function, which provides direct access to vibronic spectra via its Fourier transform. We applied the developed method to simulate the photoelectron spectrum of ammonia and found excellent agreement between theoretical and experimental spectra. We show that fitting the anharmonic corrections requires a smaller training set as compared to fitting total electronic energies. We also demonstrate that our approach allows to reduce the dimensionality of the nuclear space used to scan the PES when constructing the training set. Thus, only the degrees of freedom associated with large amplitude motions need to be treated with ∆-machine learning, which paves a way for reliable simulations of vibronic spectra of large floppy molecules.
+I. INTRODUCTION
+Computational spectroscopic methods play an important role in in silico predictions of novel organic light-emitting diode materials. One of the essential characteristics of such materials is their vibrationally-resolved electronic (vibronic) spectra. The vibronic spectrum of a given molecule can be obtained through the Fourier transform of its autocorrelation function.1–5 In turn, constructing an autocorrelation function requires solving the time-dependent Schrödinger equation. For sizable molecules, this task is known to be difficult. Numerically exact methods such as the split-operator6 or the multiconfguration time-dependent Hartree (MCTDH)7,8 methods scale exponentially with the number of nuclei and cannot be applied to industrially relevant molecules. Fortunately, exact solutions are not always needed and approximate schemes are often sufficient. In particular, Gaussian wavepacket (GWP) methods9–14 are well-studied practical alternatives. This family of methods represents the nuclear wavefunction as a linear combination of multidimensional Gaussians. Different schemes are used to evolve the GWP parameters and expansion coefficients. For example, the variational multi-configurational Gaussian (vMCG)15 approach evolves Gaussian positions and expansion coefficients according to the time-dependent variational principle (TDVP). Others, like the full multiple spawning method,16 evolve the positions and momenta of Gaussian functions according to classical mechanics. A subset of GWP methods represents the entire wavefunction as a single multidimensional Gaussian. This is in part motivated by a standard result in quantum mechanics, which shows that for the case of a harmonic potential, a GWP maintains that form during its evolution. Even in cases where the potential is anharmonic, a single GWP can often be a rea
+a)Electronic mail: rami.gherib@otilumionics.com b)Electronic mail: ilya.ryabinkin@otilumionics.com c)Electronic mail: scott.genin@otilumionics.com
+sonable approximation, especially when the potential energy surface (PES) varies slowly on the scale of its width,17,18 and when the relevant timescale is short. Arguably, one of the most popular single GWP schemes is the semiclassical approach proposed by Heller19 in which the GWP center follows the classical trajectory.
+GWP methods that are based on the TDVP require the evaluation of potential energy matrix elements, which are multidimensional integrals involving electronic potentials. This necessitates PESs to be represented in compact and computationally efficient form, mitigating or eliminating the curse of dimensionality, while at the same time ensuring that multidimensional integrals can be evaluated efficiently. One approach, often referred to as the local harmonic approximation (LHA), consists of Taylor expanding and truncating of the molecular PES to second order around the center of each GWP. The LHA has the advantage of exploiting the localized nature of GWPs, but suffers from the drawbacks of requiring computational costly Hessian (second-order derivatives) matrix calculations at each time step. Additionally, the potential energy matrix elements are correct only to the second order.20,21
+To address these limitations, some studies have proposed to fit PESs using machine learning (ML) and to employ machine-learned potentials in GWP dynamics. For instance, Alborzpour, Tew, and Habershon 22 simulated nuclear dynamics with a wavefunction ansatz consisting of a linear combination of Gaussians whose centers followed classical trajectories on PES fitted by Gaussian process regression (GPR). Richings and Habershon 23 used on-the-fly fitting of PESs by GPR in MCTDH simulations. Polyak et al. 21 also employed PESs fitted with GPR in vMCG simulations. Finally, Koch et al. 24 performed two-layer Gaussian-based multiconfiguration time-dependent Hartree dynamics on multiplicative neural network potentials utilizing exponential transfer functions.
+A significant portion of the computational efforts of producing machine-learned potential energy surfaces (ML-PESs) stems from the electronic structure calculations needed to
+arXiv:2405.00193v1 [physics.chem-ph] 30 Apr 2024
+
+
+build the training set. Obviously, one way to reduce the computational burden is to reduce the size of the training set. In this study, we show how this can be accomplished in a relatively simple way. We demonstrate that by fitting ML models on anharmonic corrections, rather than on the PESs themselves, we can significantly reduce the number of single-point electronic structure calculations needed to fit ML-PESs. This approach is a type of ∆-machine learning method,25,26 which has been utilized in a previous study to correct energies predicted by coupled-cluster singles and doubles (CCSD), taken as reference, to bring them closer to energies produced by coupled-cluster singles and doubles and non-iterative triples (CCSD(T)).27 In our approach we choose the reference method to be the global harmonic approximation (GHA), and the higher-level of theory to be the energies given by DFT calculations. The GHA represents the entire PES as a paraboloid constructed from the truncated Taylor expansion at some fixed nuclear configuration. Unlike the LHA, the GHA requires gradient and Hessian calculations to be performed only once throughout all the dynamics.
+This study uses kernel ridge regression (KRR)28–34 to construct ML-PESs. It is a non-parametric ML technique capable of fitting non-linear multidimensional functions and contains a regularization parameter to prevent overfitting. Compared to some other ML techniques, such as artificial neural networks, KRR is typically easier to implement and generally performs better, especially when one is limited to a relatively small training set.34 An additional advantage is that KRR with a Gaussian kernel can be quite naturally integrated with GWP dynamics.
+We investigate the ∆-KRR scheme of fitting ML-PESs in conjunction with the variational dynamics of a single thawed multidimensional Gaussian. As numerical validation, we simulate the photoelectron spectra of ammonia (NH3), which is commonly used as a prototype of floppy molecules. We show how the ∆-KRR scheme not only helps to reduce the size of the training set but also allows to reduce the dimensionality of the nuclear subspace that is used to build the training set.
+The rest of the manuscript is organized as follows. First, we present the working equations needed to perform timedependent variational dynamics of a single thawed Gaussian wavepacket (TGWP), while assuming a particular decomposition of the PES separating harmonic and anharmonic contributions. Next, we present the mathematical background detailing how ∆-KRR-derived PESs can be incorporated into our GWP dynamics. We also describe the methodology we used to construct training sets suitable for molecular dynamics along curvilinear coordinates. Finally, we validate the approach on ammonia, a molecule on which the GHA performs poorly. Mathematical symbols representing arrays are written in bold. To improve the readability of the mathematical expressions, two-dimensional arrays are denoted with a check mark ( ˇ ) to distinguish them from one-dimensional arrays. Atomic units are used throughout.
+II. THEORY
+A. Time-dependent vibronic spectroscopy
+In this study, we consider dipole-allowed optical transitions between only two relevant electronic states. The initial and final electronic states are denoted as |ΦI⟩ and |ΦF⟩, respectively. We assume that the system is initially in the vibrational ground state χ0(R) of |ΦI⟩. The nuclear wavepacket χ(R,t) evolves on the single final state PES represented by a function VF(R); χ(R, 0) = χ0(R). Absorption spectra Iabs(ω) are evaluated as
+Iabs(ω) = C ω
+Z∞
+−∞
+⟨χ(0)|χ(t)⟩ exp (i (ω + E0)t) dt, (1)
+where ω is the frequency, C is a constant, E0 is the energy of χ0(R) |ΦF⟩.
+B. Variational TGWP dynamics
+This section presents a detailed derivation of the equations of motion (EOMs) obtained from the Dirac–Frenkel variational principle (DFVP)35–37 for the TGWP parameters. The nuclear wavepacket has the form
+χ(R|σˇ, P , γ) = N exp(−R⊺σˇR + P ⊺R + γ), (2)
+where
+N=
+s
+πd
+det(σˇr) exp 1
+4P⊺
+r σˇ−1
+r Pr + γr (3)
+is the normalization constant, σˇ is a symmetric matrix with elements σ jk, P is a one-dimensional array with elements Pj, γ is a scalar, σˇr = 2 Re(σˇ), Pr = 2 Re(P ) and γr = 2 Re(γ). σˇ, P and γ are time-dependent. The EOMs are derived by plugging the variation δ χ and time derivative dχ
+dt into the DFVP (see Appendix A), thereby producing
+hg = iMˇ g
+
+
+dσ ddPt
+ddtγ dt
+
+ , (4)
+where
+hg =
+
+
+hσˇ
+hP hγ
+
+ , (5a)
+Mˇ g =
+
+
+Mˇ σˇσˇ Mˇ σˇP Mˇ σˇγ
+Mˇ P σˇ Mˇ P P MP γ
+Mˇ γσˇ MγP Mγγ
+
+ , (5b)
+and where dσ
+dt is a 1D array whose elements are the time
+derivatives of σˇ, hσˇ is a 1D array built by reshaping the ma
+trix whose elements are
+D
+∂χ ∂ σ jk
+Hˆ χ
+E
+. hP is a 1D array whose
+
+
+elements are hP
+j=
+D
+∂χ ∂ Pj
+Hˆ χ
+E
+and hγ =
+D
+∂χ
+∂ γ Hˆ χ
+E
+. Mˇ σˇσˇ
+is a square matrix built by reshaping the 4D array whose
+elements are Mσˇσˇ
+jkln =
+D
+∂χ ∂ σ jk
+∂χ ∂ σln
+E
+. Mˇ σˇP is a rectangular
+matrix built by reshaping the 3D array whose elements are
+M σˇ P
+jkn =
+D
+∂χ ∂ σ jk
+∂χ ∂ Pn
+E
+. Mˇ σˇγ is a square matrix whose elements
+are Mσˇγ
+jk =
+D
+∂χ ∂ σ jk
+∂χ ∂γ
+E
+. Mˇ P P is a square matrix whose el
+ements are MP P
+jk =
+D
+∂χ ∂ Pj
+∂χ ∂ Pk
+E
+. MP γ is a 1D array whose
+elements are MP γ
+j=
+D
+∂χ ∂ Pj
+∂χ ∂γ
+E
+and Mγγ =
+D
+∂χ ∂γ
+∂χ ∂γ
+E
+. The
+remaining submatrices, Mˇ P σˇ , Mˇ γσˇ and MP γ are the transposes of Mˇ σˇP , Mˇ σˇγ and MγP , respectively. dσ
+dt is 1D array whose elements are built by reshaping the 2D array whose el
+ements are dσ jk
+dt .
+Computing the elements of hg and Mˇ g requires computing all moments up to fourth order of the nuclear density ρ(R|σˇ, P , γ) = χ∗(R|σˇ, P , γ)χ(R|σˇ, P , γ) (see Appendix C for more details). For completeness, the derivations of the required moments are given in Appendix B.
+C. Separating harmonic and anharmonic contributions
+The array hg can be separated into kinetic tg and a potential energy vg contributions as follows,
+
+
+hσˇ
+hP hγ
+
+=
+
+
+tσˇ
+tP tγ
+
++
+
+
+vσˇ
+vP vγ
+
+
+=
+
+   
+D
+∂χ
+∂ σˇ Tˆ χ
+E
+D
+∂χ
+∂ P Tˆ χ
+E
+D
+∂χ
+∂ γ Tˆ χ
+E
+
+   
++
+
+   
+D
+∂χ
+∂ σˇ Vˆ χ
+E
+D
+∂χ
+∂ P Vˆ χ
+E
+D
+∂χ
+∂ γ Vˆ χ
+E
+
+   
+,
+(6)
+where R Tˆ χ = − 1
+2 ∑j
+∂ 2χ(R) ∂ R2
+j
+.
+The potential energy can then be further separated into two parts, V (R) = Vh(R)+Va(R) where the harmonic part Vh(R) approximates the potential up to second order, while the anharmonic part Va(R) contains all higher order terms. Electronic structure packages can typically be utilized to obtain Vh(R) in Hessian calculations. When expanding from the
+PES minimum, Vh(R) = 1
+2 ∑j ω2
+j R2
+j where ω j is the harmonic
+frequency of the jth normal mode and R j is the projection of the mass-weighted nuclear displacement along the jth normal mode. When this separation is considered, Eq. (6) becomes
+
+
+hσˇ
+hP hγ
+
+=
+
+   
+D
+∂χ
+∂ σˇ Tˆ χ
+E
+D
+∂χ
+∂ P Tˆ χ
+E
+D
+∂χ
+∂ γ Tˆ χ
+E
+
+   
++
+
+   
+D
+∂χ
+∂ σˇ Vˆhχ
+E
+D
+∂χ
+∂ P Vˆhχ
+E
+D
+∂χ
+∂ γ Vˆhχ
+E
+
+   
++
+
+   
+D
+∂χ
+∂ σˇ Vˆaχ
+E
+D
+∂χ
+∂ P Vˆaχ
+E
+D
+∂χ
+∂ γ Vˆaχ
+E
+
+   
+.
+(7)
+The terms tg =
+D
+∂χ
+∂ λ Tˆ χ
+E
+and vg
+h=
+D
+∂χ
+∂ λ Vˆhχ
+E
+, where λ
+stands as one of the variational parameters, are derived in Ap
+pendix C and vg
+a=
+D
+∂χ
+∂ λ Vˆaχ
+E
+is approximated in Sec. II D 2.
+D. TGWP dynamics with ∆-KRR potentials
+1. Kernel ridge regression
+The anharmonic contribution to the potential energy is fitted by KRR28 with a Gaussian kernel. A function f (X) fitted by KRR takes on the form
+f (X) =
+Nt
+s= ∑1
+csk (X|Xs) , (8)
+where Xs is the sth elements of the training set, Nt is the size
+of the training set, cs is the weight of the sth elements of the training set and k(X|Xs) is the kernel; it is a function that corresponds to the similarity between X and Xs. The kernel must be a symmetric and positive semidefinite function. Because we are propagating a Gaussian wavepacket, an obvious choice is the Gaussian kernel
+kg(R|Rs, Ω) = exp − (R − Rs)⊺ ˇΩ (R − Rs) , (9)
+where ˇΩ = Ωˇ1, ˇ1 being the identity matrix. The hyperparameter Ω controls the length scale on which the Gaussian kernel acts. Effectively, our approach to taking anharmonicity into account is to fit Va(R) to a sum of Nt Gaussians, each centered around an element Rs of the training set
+Va(R) ≈ V KRR
+a (R) =
+Nt
+s= ∑1
+cs exp − (R − Rs)⊺ ˇΩ (R − Rs) .
+(10) The weights c = [c1, c2, · · · , cNt ]⊺ are determined by minimizing the penalty function
+P(c) =
+Nt
+s= ∑1
+Va(Rs) −V KRR
+a (Rs) 2 + χc⊺Kˇ c, (11)
+where Kˇ is a square matrix with elements Kjk = kg(R j, Rk) and χ ≥ 0 is the so-called ridge parameters. It is a hyperparameter that makes the model less susceptible to overfitting. The coefficients minimizing P(c) are
+c = Kˇ + χˇ1 −1 Va, (12)
+where Va = [Va(R1),Va(R2), · · · ,Va(RNt )].
+2. Variational dynamics with ∆-KRR potentials
+Once a particular ∆-KRR model is built, the anharmonic contribution to vg can be incorporated into variational quantum dynamics. By replacing Va(R) with V KRR
+a (R), we can
+approximate vg
+a as
+vg
+a ≈ vKRR
+a=
+Nt
+s= ∑1
+cs
+Z +∞
+−∞
+∂ χ(R|σˇ, P , γ)
+∂λ
+∗
+×
+kg(R, Rs)χ(R|σˇ, P , γ)dR,
+(13)
+
+
+which reduces to evaluating the weighted sum of moments of the Gaussians Gs(R|Rs, σˇ, P , γ), each being the prod
+ucts of the sth Gaussian kg(R|Rs) and the nuclear density ρ(R|σˇ, P , γ)
+Gs(R|Rs, σˇ, P , γ) = kg(R|Rs)ρ(R|σˇ, P , γ)
+= N2 exp −R⊺AˇR + B⊺
+s R +Cs ,
+(14)
+where
+Aˇ = σˇr + ˇΩ, (15a)
+Bs = Pr + 2 ˇΩRs, (15b)
+Cs = γr − R⊺
+s ˇΩRs. (15c)
+From Eq. (C1), we can see that we only needs to consider zeroth, first and second-order moments to compute the anharmonic contribution to hg
+∂χ
+∂ σ jk
+Vˆ KRR
+a χ = −2
+Nt
+s= ∑1
+cs
+Z +∞
+−∞
+R jRkGs(R|Rs, σˇ, P , γ)dR,
+(16a)
+∂χ
+∂σjj
+Vˆ KRR
+a χ =−
+Nt
+s= ∑1
+cs
+Z +∞
+−∞
+R2
+j Gs(R|Rs, σˇ, P , γ)dR,
+(16b)
+∂χ
+∂ Pj
+Vˆ KRR
+a χ=
+Nt
+s= ∑1
+cs
+Z +∞
+−∞
+R jGs(R|Rs, σˇ, P , γ)dR,
+(16c)
+∂χ
+∂γ
+Vˆ KRR
+a χ=
+Nt
+s= ∑1
+cs
+Z +∞
+−∞
+Gs(R|Rs, σˇ, P , γ)dR. (16d)
+Equation (4) then becomes
+tg + vg
+h + vKRR
+a = iMˇ g
+
+
+dσ ddPt
+ddtγ dt
+
+ (17)
+and it is the EOM that governs the dynamics of a single TGWP on a potential where the anharmonic contributions have been fitted using the KRR in conjunction with a Gaussian kernel.
+3. Constructing the training set
+The utility of a ML-PES strongly depends on its training set. In the context of a single GWP propagation, the training set must contain nuclear configurations that are sampled by the nuclear density ρ(R|t). One way to construct it is to perform exhaustive global sampling of the PES, which becomes prohibitely expensive for large molecules. Another way is to perform GWP dynamics on the fly, and to construct a ML-PES from local sampling. This approach was studied and successfully implemented by Polyak et al. 21
+Admitting the importance of a problem, we do not seek in this study the most efficient way of producing training sets. Instead, we focus on a general scheme to perform GWP dynamics with ML-PESs regardless of the methodology used for generating the training set. We employ a global sampling approach, which has the advantage of producing a single training set that does not depend on dynamics. This allows for the fair comparison of different ML schemes that utilize training sets drawn from the same pool of nuclear configurations and electronic energies.
+A direct approach for fitting PESs globally is to scan along orthogonal coordinates that span a molecule internal configurational space. One of the possible choices for such coordinates are vibrational modes (VMs)—the eigenvectors of a mass-weighted Hessian. Unfortunately, they are frequently ill-suited for molecular dynamics since these often involve curvilinear atomic displacements,38–42 such as bondangle, dihedral-angle and out-of-plane distortions. VMs represent atomic displacements along which molecular bonds can break, but the corresponding high-energy regions of the PES usually have little relevance for the molecular dynamics at low energies.
+An ad hoc approach, which we use in the present study, is to augment the VMs in a way that allows curvilinear molecular displacements to be naturally incorporated. To this end we define curvilinear vibrational modes (CVMs), which locally resemble VMs but induce curvilinear displacements at large amplitudes. Operationally, CVMs are determined by means of auxiliary classical dynamics simulations. The molecule is depicted as a set of particles connected together by rigid rods; each particle corresponds to an atom in the system and each rod corresponds to an atomic bond. Thus, the entire molecule is represented as a system of coupled rigid rotors. The classical dynamics of this system are initiated by setting the initial atomic velocity vectors aligned along individual VMs. The rigid-rotor model of the molecule is set to evolve freely, thus allowing the normal modes to be projected onto curvilinear coordinates describing the motion of the rigid rods. It is important to note that the rigid-rotor model can only depict curvilinear displacements; it does not span a nuclear subspace containing stretching modes. Thus, to model rectilinear displacements associated with high-frequency stretching modes and to ensure that the set of all CVMs forms a complete basis of the vibrational subspace, similar classical dynamics are also performed with only bond distances allowed to vary while all bond angles remained fixed. Thus-defined CVMs were used to scan the PES to produce a training set for fitting the anharmonic corrective potential V KRR
+a (R).
+Classical simulations were performed for each VM, each time generating a one dimensional scan along its corresponding CVM. However, to obtain an accurate V KRR
+a (R), a training set must also describe the coupling between the CVMs. This can be achieved in several ways. One way is to carry out further classical simulations but using linear combinations of VMs as initial velocities. This approach considers all pairs, triplets, quadruplets, etc., of VMs and comes with significant computational costs. Another approach is to randomly select nuclear configurations from the set of all 1D scans and to per
+
+
+turb them by random displacement along scaled vibrational modes. This second approach is a form of Monte Carlo sampling and it is the one used in this study.
+III. NUMERICAL SIMULATIONS
+A. Computational details
+1. Electronic structure calculations
+Electronic structure density-functional theory (DFT) calculations for NH3 with the B3LYP functional43,44 and the 6
+311G(d) basis set45 were performed using the Firefly software package.46 The restricted open-shell formalism was used for NH +
+3 . Hessians were computed by first-order numerical differentiation of analytic gradients with atomic displacements of 0.01 a0. Simulated spectra were translated horizontally to match the experimental spectral profile. We attribute this small energetic mismatch to the flaws of the DFT electronic structure calculations that are unable to predict accurately the relative energies of NH3 and NH +
+3.
+2. Wavepacket dynamics
+Each dynamical simulation was performed with a total duration of 500 fs and a timestep of 0.05 fs. To model environmental factors existing in experiments but absent in dynamical simulations, the autocorrelation functions ⟨χ(0)|χ(t)⟩, [see also Eq. (1)] were multiplied by an phenomenological exponential damping function, f (t) = e−κt where κ = 0.0165 fs−1. Equations (4) and (17) were numerically integrated using the 5th order Adams-Bashforth multistep method.47 The parameters of the wavepacket at t = 0, σˇ0, P0 and γ0, were defined by parameterizing the initial state using Heller’s semiclassical ansatz19
+χH (R|σˇH , RH , PH , γH )
+= N exp − R⊺ − R⊺
+H σˇH (R − RH ) + P ⊺
+H (R − RH ) + γH , (18)
+where
+σˇH = 1
+2
+Λˇ ⊺
+F ˇΛIωˇI ˇΛ⊺
+I ˇΛF, (19a)
+RH = Λˇ ⊺
+FMˇ 1
+2 (XI − XF) , (19b)
+PH = 0, (19c)
+γH = 0, (19d)
+XI and XF are the Cartesian coordinates of the nuclear geometries of the PES minima of the initial and final electronic
+states and Mˇ is a diagonal matrix containing the atomic
+masses. Hˇ I and Hˇ F are the Hessians of the initial and fi
+nal electronic states, respectively. The columns of Λˇ are the mass-weighted vibrational modes and ωˇ is a diagonal matrix containing the vibrational frequencies,
+Hˇ MW
+I(F) = Mˇ − 1
+2 Hˇ I(F)Mˇ − 1
+2 , (20a)
+Hˇ MW
+I(F) ˇΛI(F) = ωˇ 2
+I(F) ˇΛI(F). (20b)
+The GWP parameters at t = 0 as defined in Eq. (2) are obtained by distributing the terms in the Eq. (18)
+σˇ0 = σˇH , (21a)
+P0 = 2R⊺
+H σˇH + PH , (21b)
+γ0 = −R⊺
+H σˇH RH − P ⊺
+H RH + γ. (21c)
+3. Fitting anharmonic corrections with KRR
+The set of nuclear geometries used to train and assess the KRR-fitted anharmonic corrective potential was generated by scanning along each CVM in both forward and backward directions. Rigid-rotor dynamics were performed with timesteps of 0.5 arbitrary time units (arb.t.u.) for 200 timesteps. The total duration of the simulation was chosen so that for most 1D scans, atomic distances would not be smaller than 0.5 Å nor bigger than 2.0 Å. For each set of 1D scans, the nuclear geometries after intervals of 5 arb.t.u. were taken to be part of the final training set. To account for couplings between CVMs, 2000 geometries were generated by sampling randomly from the set of geometries produced from the one dimensional scans and randomly displacing their atoms along scaled VMs. The scaling coefficients were selected by latin hypercube sampling,48 a sampling technique designed to selects points on a grid so as to evenly cover the space of interest. The scaling coefficients were sampled from a 6D grid where each dimension spanned the interval [−5, 5]. This range was selected as it allowed most nuclear geometries to be deformed without compressing atomic distances within 0.5 Å nor stretching them beyond 2.0 Å. Geometries outside this range were discarded. Single point calculations were performed for 2224 nuclear geometries. The highest relative energy (with respect to the PES minima of NH +
+3 was 344.43 kcal/mol.
+We performed 10-fold cross-validation49 to assess the performance of the KRR model and to tune the hyperparameters Ω and χ. All of the geometries generated from the 1D scans along the CVMs were placed in the training set. The rest were shuffled randomly and divided into 10 groups. The KRR model was then fitted ten separate times, with each time taking one of the groups as the validation set and combining all others with the 1D scans to construct the training set. Ultimately, 10 sets of training and validation set combinations
+
+
+were considered. Each combination had a training set with 2025 elements and a validation set with 199 elements. The KRR model was trained to compute the difference Va(R j) between the exact relative energy Vrel(R j) and the relative energy given by the harmonic approximation Vh(R) given an arbitrary nuclear geometry R j
+Va(R j) = Vrel(R j) −Vh(R j), (22a)
+Vrel(R j) = Vex(R j) −Vex(Rmin), (22b)
+where Vex(R j) and Vex(Rmin) are the exact electronic energies of R j and the PES minima Rmin, respectively. Vh(R j) is calculated as
+Vh(R j) = 1
+2 R⊺
+j Hˇ MW R j. (23)
+The numerical inputs used to map nuclear geometry to anharmonic correction were the mass-weighted displacement of nuclear geometries from the PES minimum projected along the vibrational modes of the Hessian of the final electronic state
+R j = ˇΛ⊺
+FMˇ 1
+2 (X j − XF) , (24)
+where X j are the Cartesian coordinates of the geometry of interest. The metric used to assess the performance of each individual kth fold was the difference between the mean absolute errors (MAEs) of the energies predicted by GHA and KRR
+M AE (k)
+GHA = 1
+Nt
+Nt
+t=∑1
+Vrel R(k)
+t − Vh R(k)
+t , (25a)
+M AE (k)
+KRR = 1
+Nt
+Nt
+t=∑1
+Vrel R(k)
+t − Vh R(k)
+t + V KRR
+a R(k)
+t,
+(25b) where R(k)
+t is the tth element of the kth validation set. To assess the performance of the regression as a whole, we used the percentage of mean absolute error reduction (%MAER) defined as
+%MAER = MAEGHA − MAEKRR
+MAEGHA
+× 100, (26)
+where
+MAEGHA = 1
+K
+K
+∑
+k=1
+M AE (k)
+GHA, (27a)
+MAEKRR = 1
+K
+K
+∑
+k=1
+M AE (k)
+KRR (27b)
+and K is the number of folds, being 10 in our case. The closer a model’s %MAER is to being 100%, the more accurate it is deemed to be.
+The hyperparameters Ω and χ (see Sec. II D 1) were selected from a 2D logarithmic grid search. We performed 10fold cross-validation for each grid point and chose the hyperparameters corresponding to a MAEKRR of 0.33 ± 0.07 kcal/mol (the second number being the standard deviation). This was an improvement compared to the GHA where MAEGHA = 23.14 ± 3.57 kcal/mol, resulting in a %MAER of 98.6 %. Out of the 10 folds, the one selected to perform wavepacket dynamics was the one with the lowest MAEKRR, which was 0.22 kcal/mol.
+B. Photoelectron spectra of ammonia (NH3)
+1. The global harmonic approximation
+Our methodology assumes that the initial state is wellapproximated by a single Gaussian. However, NH3 is well known to have a double-well PES along the pyramidal inversion coordinate. Its initial state cannot be well represented by a single Gaussian, which may suggest that the vibronic spectra of ammonia lies outside of a domain of applicability of our method. However, according to the argument made by Smith and Warsop 50 based on the symmetry of the PES of NH3, it is valid to depict the initial vibrational state as localized for our present purposes. As evident from Fig. 1, the GHA poorly predicts the photoelectron spectra of ammonia. The simulated spectrum is broader than experimental one, and the vibrational progressions do not match. While the experimental spectrum has an envelope that is more or less symmetric with an even distribution of peak intensities, the GHA counterpart is highly asymmetric and peaks do not seem to follow a particular pattern. Peak spacings are also incorrect in the GHA spectrum—they are much closer together than in the experiment, implying more Franck-Condon transitions than there should be. The
+FIG. 1. Photoelectron spectra of ammonia. The full red line corresponds to the theoretical simulation obtained with the GHA. The dashed black line is the experimental spectrum.51
+
+
+FIG. 2. Photoelectron spectra of ammonia. The full blue line corresponds to the theoretical simulation obtained with an anharmonic corrective ∆-KRR-fitted potential sampling all six CVMs. The green dotted line corresponds to the theoretical simulation obtained with an anharmonic corrective ∆-KRR-fitted potential in which the training set samples the nuclear configurational space across two CVMs. The experimental spectrum is taken from Ref. 51. The theoretical spectra were shifted to the left by 2.0 and 1.8 nm, respectively.
+failures of the GHA have been documented in many stud
+ies.17,18,52,53
+2. The ∆-KRR scheme and reducing the dimensionality of the training set
+As can be seen in Fig. 2, ∆-KRR-simulated spectrum agrees very well with the experimental one. The anharmonic model correctly reproduces the spacings between the peaks. It captures the relative intensities much better than the GHA, albeit with some peaks having slightly smaller amplitudes than their experimental counterpart. Overall, it is considerable improvement over the GHA. The nuclear geometry of the minima of NH3 projected onto
+the vibrational normal modes of NH +
+3 can be represented by the array
+48.52 −0.10 −0.21 11.71 0.42 −0.73 . (28)
+The two largest coefficients, 48.52 and 11.71, correspond to nuclear displacements along the pyramidal inversion and symmetric N−H bond stretching modes, respectively. Being two orders of magnitudes larger than the other contribution suggests that the only relevant anharmonic displacements are those in the subspace spanned by these two modes. Our sampling scheme can be readily adapted to cases when only a few nuclear degrees of freedom (DOFs) are strongly anharmonic. Rather than sampling all CVMs for the training set evenly, it might be beneficial to put more weight on strongly anharmonic ones. To confirm this expectation, we trained another ∆-KRR model, this time involving the first and the fourth CVMs, and the couplings between them when
+generating the training set. This reduced-dimensionality ∆KRR model effectively samples nuclear configurations predominantly in a subspace spanned by the CVMs corresponding to the pyramidal inversion and the symmetric bond stretch modes, and trains the anharmonic corrections from there. Nevertheless, the reduced model still maps the nuclear geometry represented in all six dimensions only giving more weight to the large-amplitude modes, such that the GWP dynamics are still performed in the 6D vibrational space. Figure 2 displays the photoelectron spectrum obtained using a reduced ∆-KRR model. The methodology used to train the reduced model was the same as the full 6D one. The reduced model demonstrates a great improvement over the GHA. It captures the peaks spacings almost perfectly and their amplitudes are reproduced even better than in the full 6D model. Both models were trained using 2000 nuclear configurations sampled from perturbed CVMs scans. However, while these were scattered among six dimensions in the full ∆-KRR model, in the reduced model they are distributed much more densely in a lower-dimensional space. As a result, the fitting quality is higher resulting in a better spectrum.
+3. The KRR scheme for learning the entire PES
+As was mentioned previously, a standard approach to construction of ML-PESs is to fit electronic energies rather than anharmonic corrections. Hence, an obvious concern is whether the ∆-KRR scheme is superior to its KRR counterpart. To answer this question, we simulated the photoelectron spectra using a KRR model trained to reproduce the electronic energies rather than anharmonic corrections. To this end, we
+removed vg
+h from Eq. (7) and Vh(R j) from Eq. (22a). First, we considered a training set of approximately the same size as that for the ∆-KRR scheme, with 2023 elements. As can be seen in Fig. 3, although the corresponding simulation captured the envelope of the spectra, it failed to demonstrate vibration progressions due to extremely poor resolution, despite having a %MAER of 97.4%. Suspecting that the KRR scheme requires a larger training set, we retrained the KRR model with a training set with 4732 elements, essentially doubling the size. As can be seen in Fig. 3, the corresponding theoretical spectrum is much closer to the experimental counterpart, representing a great improvement over the one provided by the KRR model trained with a smaller training set. However, despite the increased computational efforts needed to train the KRR model, its spectrum remains slightly inferior to the ones obtained with the ∆-KRR models. The limitations of the KRR model trained on the smaller, training set of 2023 elements became more evident when the dynamics of the center of the wavepacket were visualized. Upon leaving the Franck-Condon region, the distances between the nitrogen and each of the hydrogens atoms started growing steadily and without bounds leading to complete molecular dissociation. It is clear that the wavepacket left the properly sampled region of the PES and evolved on a nuclear potential that was effectively flat. By sampling the nuclear configurational space more thoroughly with 4732 elements,
+
+
+FIG. 3. Photoelectron spectra of ammonia. The magenta dotted line corresponds to the theoretical simulation obtained by fiting the electronic energies with 2032 training points and the blue line with 4732 training points. The experimental spectrum is taken from Ref. 51. The theoretical spectra were translated to the left by 1.5 and 2.1 nm, respectively.
+the PES was better represented, which prevented dissociation. Both KRR and ∆-KRR values can be interpreted as corrections to some reference potential. In the case of KRR, this reference potential is a flat 6D surface. The KRR model improves this flat potential by adding a Gaussian function at the location of each element of the training set. With insufficient sampling certain parts of the PES remain flat. Thus, when the GWP reaches these regions, its dynamics resembles thoses occuring on a flat potential. In the case of the ∆-KRR model, the reference potential is a 6D paraboloid. If the wavepacket reaches a region that has not been sampled adequately, it will still experience a bound potential preventing dissociative nuclear dynamics.
+IV. CONCLUSIONS
+In this study, we examined the propagation of a single thawed Gaussian wavepacket on a harmonic PES with KRRfitted anharmonic corrections. The KRR scheme relies upon the Gaussian kernel, which complements nicely the wave function form, allowing for analytic evaluation of anharmonic terms. This type of ∆-ML approach to PES fitting was tested on the nuclear dynamics responsible for the photoelectron spectrum of ammonia. We found that the quality of the simulated spectrum is vastly superior to that of predicted with the use of global harmonic approximation and compares very favorably to the experimental results. The ∆-KRR simulations predict the correct spacings and intensities of the vibrational progressions. We also compared the ∆-KRR approach to the standard one, which consists of fiting the total electronic energies. We have shown that while it is possible to reproduce the photoelectron
+spectrum of ammonia, albeit not as well as the ∆-KRR approach, larger training sets are required. This study also highlights the importance of selecting relevant nuclear configurations to generate small but functional ML training sets. We examined an approach that considers a simplified rigid-rotor model of a molecule to sample “soft” nuclear DOFs responsible for the large-amplitude motions, such as bend and torsion angles. By running classical dynamics simulations of this model, initiated along the normal modes, we identified the regions of the nuclear configuration space that are expected to provide large anharmonic corrections to the reference harmonic potential. Additionally, this sampling approach allowed us to construct a reduceddimensionality scheme, in which only a priori strongly anharmonic modes are needed to be sampled. Photoelectron spectra simulations of ammonia confirmed the viability of our approach, but its full potential is a subject of future studies.
+Appendix A: The Dirac–Frenkel variational principle
+The Dirac–Frenkel variational principle (DFVP)35–37 can be used to approximate quantum dynamics when the wavefunction χ(R,t) is constrained to a parametric form. The parametric EOMs are found by solving
+⟨δ χ|Hˆ − i d
+dt |χ⟩ = 0, (A1)
+where χ(R,t) is defined at all times through parameters λ(t) that evolve in time, χ(R,t) → χ(R|λ(t)). In cases where there are a finite number of parameters, λ is a 1D array that contains the parameters that define the wavefunction. Using the chain rule, the variation δ χ and the time-derivative dχ
+dt can be expressed as
+δ χ = ∑j
+∂χ
+∂λj
+δ λ j, (A2a)
+dχ
+dt = ∑j
+∂χ
+∂λj
+dλj
+dt . (A2b)
+By plugging these expressions into Eq. (A1), we obtain
+∂χ
+∂λj
+Hˆ χ = i ∑
+jk
+∂χ
+∂λj
+∂χ
+∂ λk
+dλk
+dt , (A3)
+which can be rewritten in the matrix form,
+h = iMˇ dλ
+dt , (A4)
+where h j =
+D
+∂χ ∂λj
+Hˆ χ
+E
+and Mjk =
+D
+∂χ ∂λj
+∂χ ∂ λk
+E
+. Quantum dy
+namics can then be approximated by evaluating h and Mˇ and integrating Eq. (A4). For a thawed Gaussian ansatz, Eq. (A2) becomes
+δχ =∑ jk
+∂χ
+∂ σ jk
+δ σ jk + ∑j
+∂χ
+∂ Pj
+δ Pl + ∂ χ
+∂ γ δ γ, (A5)
+dχ
+dt = ∑
+jk
+∂χ
+∂ σ jk
+dσ jk
+dt + ∑j
+∂χ
+∂ Pj
+dPj
+dt + ∂ χ
+∂γ
+dγ
+dt , (A6)
+
+
+and Eq. (A4) becomes Eq. (4).
+Appendix B: Moments of the nuclear density
+Computation of hg and Mˇ g reduces to computing all moments up to fourth order of the nuclear density. Zeroth, first, second, third and fourth-order moments of the nuclear density are hereon denoted as m(0), m(1), ˇm(2), m(3) and m(4), respectively. With the exception of m(0), which is a scalar quantity, the moments are arrays whose elements are the multidimensional integrals
+m(0) =
+Z∞
+−∞
+ρ(R)dR, (B1a)
+m(1)
+j=
+Z∞
+−∞
+R jρ(R)dR, (B1b)
+m(2)
+jk =
+Z∞
+−∞
+R jRkρ(R)dR, (B1c)
+m(3)
+jkl =
+Z∞
+−∞
+R jRkRlρ(R)dR, (B1d)
+m(4)
+jkln =
+Z∞
+−∞
+R jRkRlRnρ(R)dR, (B1e)
+where R j, Rk, Rl and Rn are nuclear degrees of freedom, and
+ρ(R) = χ∗(R)χ(R).
+The moments correspond to the derivatives of a multidimensional generating function G(τ ) = R exp(τ ⊺R)ρ(R)dR. By Taylor expanding exp(τ ⊺R)
+G(τ ) =
+Z +∞
+−∞
+ρ(R)dR + ∑
+k
+τk
+Z +∞
+−∞
+Rk ρ (R)d R
++1
+2! ∑
+kl
+τk τl
+Z +∞
+−∞
+RkRlρ(R)dR + · · ·
+= m(0) + ∑j
+τ jm(1)
+j +1
+2! ∑
+jk
+τ jτkm(2)
+jk + · · ·
+(B2)
+it becomes clear that the moments correspond to the partial derivatives of G(τ ) with respect to τ . Since the wavepacket is a Gaussian, G(τ ) is also a Gaussian
+G(Γ) = β exp (Γ⊺αˇΓ) , (B3)
+where
+β = N2 exp(γr)
+s
+πd
+det(σˇr) , (B4a)
+αˇ = σˇ−1
+r
+4 , (B4b)
+Γ = pr + τ , (B4c)
+where σˇr is defined in Sec. II B. The moments can then be directly calculated
+m(1)
+j = ∂ G(Γ)
+∂ Γ j Γ=pr
+= G(pr)F′
+j,
+(B5a)
+m(2)
+jk = ∂ 2G(Γ)
+∂ τ j∂ τk Γ=pr
+= G(pr) F′
+jF′
+k + F ′′
+jk ,
+(B5b)
+m(3)
+jkl = ∂ 3G(Γ)
+∂ τ j∂ τk∂ τl Γ=pr
+= G(pr) F′
+jF′
+kF′
+l + F ′′
+jk F ′
+l + F ′′
+jl F ′
+k + F ′′
+kl F ′
+j,
+(B5c)
+m(4)
+jkln = ∂ 4G(Γ)
+∂ τ j∂ τk∂ τl ∂ τn Γ=pr
+= G(pr) F′
+jF′
+kF′
+l F′
+n + F ′′
+jk F ′
+l F′
+n + F ′′
+jl F ′
+kF′
+n
++ F ′′
+kn F ′
+l F′
+n + F ′′
+lmF′
+kF′
+n + F ′′
+kn F ′
+jF′
+l
++ F ′′
+lnF′
+jF′
+k + F ′′
+jkF ′′
+ln + F ′′
+jl F ′′
+kn + F ′′
+jnF ′′
+kl ,
+(B5d)
+where F ′ = 2αˇpr and Fˇ′′ = 2αˇ.
+Appendix C: Computing
+The partial derivatives of the GWP with respect to its parameters are needed in order to compute hg and Mˇ g. Since the DFVP conserves the norm of the wavefunction,7 ∂N
+∂t can
+be ignored and we only need to consider the derivatives of the exponential
+∂ χ(R|σˇ, P , γ)
+∂σjj
+= −R2
+j χ(R|σˇ, P , γ), (C1a)
+∂ χ(R|σˇ, P , γ)
+∂ σ jk
+= −2R jRkχ(R|σˇ, P , γ), (C1b)
+∂ χ(R|σˇ, P , γ)
+∂ Pj
+= R jχ(R|σˇ, P , γ, ), (C1c)
+∂ χ(R|σˇ, P , γ)
+∂ γ = χ(R|σˇ, P , γ). (C1d)
+Equation (C1) is obtained using the symmetric nature of σˇ that allows the exponential part of the wavepacket to be expressed as
+exp − ∑j
+σ j jR2
+j − ∑j ∑
+k> j
+2σ jkR jRk + ∑j
+PjR j + γ
+!
+. (C2)
+
+
+Elements of Mˇ g are readily computed from the moments of the nuclear density (see Eq. (B5))
+M σˇ σˇ
+jkln = 4m(4)
+jkln, (C3a)
+M σˇ σˇ
+j jln = 2m(4)
+j jln, (C3b)
+M σˇ σˇ
+jkll = 2m(4)
+jkll, (C3c)
+M σˇ σˇ
+j jll = m(4)
+j jll, (C3d)
+M σˇ P
+jkl = −2m(3)
+jkl , (C3e)
+M σˇ P
+j jl = −m(3)
+j jl , (C3f)
+M σˇ γ
+jk = −2m(2)
+jk , (C3g)
+M σˇ γ
+j j = −m(2)
+j j , (C3h)
+MP P
+jk = m(2)
+jk , (C3i)
+MP γ
+j = m(1)
+j , (C3j)
+Mγγ = 1. (C3k)
+The computation of hg is more involved. The kinetic energy term Tˆ χ requires computing the action of the Laplacian on the wavepacket
+∂ 2χ(R)
+∂Rj
+= χ(R) 4σ 2
+j jR2
+j − 4σ j jPjR j − 2σ j j + P2
+j −∑
+k̸= j
+4σ jkPjRk
++∑
+k̸= j
+8σ j jσ jkR jRk + ∑ k̸= j
+∑
+l̸= j
+4σ jkσ jl RkRl
+!
+.
+(C4)
+The components of tg are weighted sums of different moments of the nuclear density
+∂χ
+∂ σmn
+Tˆ χ = ∑j
+4σ 2
+j jm(4)
+mn j j − 4σ j jPkm(3)
+mn j − 2σ j jm(2)
+mn + P2
+j m(2)
+mn − ∑ l̸= j
+4σ jl Pjm(3)
+mnl
++∑
+l̸= j
+8σ j jσ jl m(4)
+mnl j + ∑ k̸= j
+∑
+l̸= j
+4σ jl σ jkm(4)
+mnkl
+!
+,
+(C5a)
+∂χ
+∂ σnn
+Tˆ χ = 1
+2 ∑j
+4σ 2
+j jm(4)
+nn j j − 4σ j jPkm(3)
+nn j − 2σ j jm(2)
+nn + P2
+k m(2)
+nn − ∑ l̸= j
+4σ jl Pjm(3)
+nnl
++∑
+l̸= j
+8σ j jσ jl m(4)
+nnl j + ∑ k̸= j
+∑
+l̸= j
+4σ jl σ jkm(4)
+nnkl
+!
+,
+(C5b)
+∂χ
+∂ Pn
+Tˆ χ = − 1
+2 ∑j
+4σ 2
+j jm(3)
+n j j − 4σ j jPkm(2)
+n j − 2σ j jm(1)
+n + P2
+j m(1)
+n −∑ l̸= j
+4σ jl Pkm(2)
+nl
++∑
+l̸= j
+8σ j jσ jl m(3)
+nl j + ∑ k̸= j
+∑
+l̸= j
+4σ jl σ jkm(3)
+nkl
+!
+,
+(C5c)
+∂χ
+∂γ
+Tˆ χ = − 1
+2 ∑j
+4σ 2
+j jm(2)
+j j − 4σ j jPkm(1)
+j − 2σ j j + P2
+j −∑
+l̸= j
+4σ jl Pjm(1)
+l
++∑
+l̸= j
+8σ j jσ jl m(2)
+lj + ∑ k̸= j
+∑
+l̸= j
+4σ jl σ jkm(2)
+kl
+!
+,
+(C5d)
+while the components of vg
+h are
+∂χ
+∂ σnn
+Vˆhχ = − 1
+2 ∑j
+ω2
+j m(4)
+nn j j, (C6a)
+∂χ
+∂ σmn
+Vˆhχ = − ∑j
+ω2
+j m(4)
+mn j j, (C6b)
+
+
+∂χ
+∂ Pn
+Vˆhχ = 1
+2 ∑j
+ω2
+j m(3)
+n j j, (C6c)
+∂χ
+∂γ
+Vˆhχ = 1
+2 ∑j
+ω2
+j m(2)
+j j . (C6d)
+1E. J. Heller, “The semiclassical way to molecular spectroscopy,” Acc. Chem. Res. 14, 368–375 (1981).
+2D. J. Tannor, Introduction to Quantum Mechanics: a Time-Dependent Perspective (University Science Books, Sausalito, CA, USA, 2007) p. 437. 3Y. Niu, Q. Peng, C. Deng, X. Gao, and Z. Shuai, “Theory of excited state decays and optical spectra: Application to polyatomic molecules,” J. Phys. Chem. A 114, 7817–7831 (2010). 4Q. Peng, Y. Niu, C. Deng, and Z. Shuai, “Vibration correlation function formalism of radiative and non-radiative rates for complex molecules,” Chem. Phys. 370, 215–222 (2010). 5A. Baiardi, J. Bloino, and V. Barone, “General time dependent approach to vibronic spectroscopy including franck–condon, herzberg–teller, and duschinsky effects,” J. Chem. Theory Comput. 9, 4097–4115 (2013). 6R. Kosloff, “Time-dependent quantum-mechanical methods for molecular dynamics,” J. Phys. Chem. 92, 2087–2100 (1988). 7H. Meyer, “Introduction to mctdh,” ttps://www.pci.uniheidelberg.de/tc/usr/mctdh/lit/intro_MCTDH.pdf, accessed: 2023-03-30. 8M. H. Beck, A. Jäckle, G. A. Worth, and H.-D. Meyer, “The multiconfiguration time-dependent hartree (mctdh) method: a highly efficient algorithm for propagating wavepackets,” Phys. Rep. 324, 1–105 (2000). 9S.-I. Sawada and H. Metiu, “A gaussian wave packet method for studying time dependent quantum mechanics in a curve crossing system: Low energy motion, tunneling, and thermal dissipation,” J. Chem. Phys. 84, 6293–6311 (1986). 10G. A. Worth, M. A. Robb, and I. Burghardt, “A novel algorithm for nonadiabatic direct dynamics using variational gaussian wavepackets,” Faraday Discuss. 127, 307–323 (2004). 11B. F. Curchod and T. J. Martínez, “Ab initio nonadiabatic quantum molecular dynamics,” Chem. Rev. 118, 3305–3336 (2018). 12G. A. Worth and B. Lasorne, “Gaussian wave packets and the dd-vmcg approach,” Quantum Chemistry and Dynamics of Excited States: Methods and Applications , 413–433 (2020). 13L. Joubert-Doriol, “Variational approach for linearly dependent moving bases in quantum dynamics: application to gaussian functions,” J. Chem. Theory Comput. 18, 5799–5809 (2022). 14J. JL Vanícˇek, “Family of gaussian wavepacket dynamics methods from the perspective of a nonlinear schrödinger equation,” J. Chem. Phys. 159 (2023). 15G. W. Richings, I. Polyak, K. E. Spinlove, G. A. Worth, I. Burghardt, and B. Lasorne, “Quantum dynamics simulations using gaussian wavepackets: the vmcg method,” Int. Rev. Phys. Chem. 34, 269–308 (2015). 16M. Ben-Nun and T. J. Martinez, “A multiple spawning approach to tunneling dynamics,” J. Chem. Phys. 112, 6113–6121 (2000). 17M. Wehrle, S. Oberli, and J. Vanicek, “On-the-fly ab initio semiclassical dynamics of floppy molecules: Absorption and photoelectron spectra of ammonia,” J. Phys. Chem. A 119, 5685–5690 (2015). 18T. Begusic, E. Tapavicza, and J. Vanicek, “Applicability of the thawed gaussian wavepacket dynamics to the calculation of vibronic spectra of molecules with double-well potential energy surfaces,” J. Chem. Theory Comput. 18, 3065–3074 (2022). 19E. J. Heller, “Time-dependent approach to semiclassical dynamics,” J. Chem. Phys. 62, 1544–1555 (1975). 20T. J. Frankcombe, M. A. Collins, and G. A. Worth, “Converged quantum dynamics with modified shepard interpolation and gaussian wave packets,” Chem. Phys. Lett. 489, 242–247 (2010). 21I. Polyak, G. W. Richings, S. Habershon, and P. J. Knowles, “Direct quantum dynamics using variational gaussian wavepackets and gaussian process regression,” J. Chem. Phys. 150, 041101 (2019). 22J. P. Alborzpour, D. P. Tew, and S. Habershon, “Efficient and accurate evaluation of potential energy matrix elements for quantum dynamics using gaussian process regression,” J. Chem. Phys. 145, 174112 (2016).
+23G. W. Richings and S. Habershon, “Direct quantum dynamics using gridbased wave function propagation and machine-learned potential energy surfaces,” J. Chem. Theory Comput. 13, 4012–4024 (2017). 24W. Koch, M. Bonfanti, P. Eisenbrandt, A. Nandi, B. Fu, J. Bowman, D. Tannor, and I. Burghardt, “Two-layer gaussian-based mctdh study of the s 1← s 0 vibronic absorption spectrum of formaldehyde using multiplicative neural network potentials,” J. Chem. Phys. 151, 064121 (2019). 25R. Ramakrishnan, P. O. Dral, M. Rupp, and O. A. Von Lilienfeld, “Big data meets quantum chemistry approximations: the δ -machine learning approach,” J. Chem. Theory Comput. 11, 2087–2096 (2015). 26R. Ramakrishnan, M. Hartmann, E. Tapavicza, and O. A. Von Lilienfeld, “Electronic spectra from tddft and machine learning in chemical space,” J. Chem. Phys. 143 (2015). 27M. Ruth, D. Gerbig, and P. R. Schreiner, “Machine learning of coupled cluster (t)-energy corrections via delta (δ )-learning,” J. Chem. Theory Comput. 18, 4846–4855 (2022). 28V. Vovk, “Kernel ridge regression,” Empirical Inference: Festschrift in Honor of Vladimir N. Vapnik , 105–116 (2013). 29O. T. Unke and M. Meuwly, “Toolkit for the construction of reproducing kernel-based representations of data: Application to multidimensional potential energy surfaces,” J. Chem. Inf. Model. 57, 1923–1931 (2017). 30P. O. Dral, A. Owens, S. N. Yurchenko, and W. Thiel, “Structure-based sampling and self-correcting machine learning for accurate calculations of potential energy surfaces and vibrational levels,” J. Chem. Phys. 146, 244108 (2017), https://doi.org/10.1063/1.4989536. 31D. Hu, Y. Xie, X. Li, L. Li, and Z. Lan, “Inclusion of machine learning kernel ridge regression potential energy surfaces in on-the-fly nonadiabatic molecular dynamics simulation,” J. Phys. Chem. Let. 9, 2725–2732 (2018). 32J. Westermayr, F. A. Faber, A. S. Christensen, O. A. von Lilienfeld, and P. Marquetand, “Neural networks and kernel ridge regression for excited states dynamics of ch2nh: From single-state to multi-state representations and multi-property machine learning models,” Mach. Learn.: Sci. Technol. 1, 025009 (2020). 33P. O. Dral, “Quantum chemistry assisted by machine learning,” in Adv. Quantum Chem., Vol. 81 (Elsevier, 2020) pp. 291–324. 34M. Pinheiro, F. Ge, N. Ferré, P. O. Dral, and M. Barbatti, “Choosing the right molecular machine learning potential,” Chem. Sci. 12, 14396–14413 (2021). 35P. A. Dirac, “Note on exchange phenomena in the thomas atom,” in Math. Proc. Camb. Philos. Soc., Vol. 26 (Cambridge University Press, 1930) pp. 376–385.
+36J. Frenkel et al., Wave mechanics, advanced general theory, Vol. 436 (Oxford, 1934). 37A. McLachlan, “A variational solution of the time-dependent schrodinger equation,” Mol. Phys. 8, 39–44 (1964). 38N. Vaidehi and A. Jain, “Internal coordinate molecular dynamics: A foundation for multiscale dynamics,” J. Phys. Chem. B 119, 1233–1242 (2015). 39E. Marsili, F. Agostini, A. Nauts, and D. Lauvergnat, “Quantum dynamics with curvilinear coordinates: models and kinetic energy operator,” Philos. Trans. Royal Soc. A 380, 20200388 (2022). 40O. Vendrell, F. Gatti, D. Lauvergnat, and H.-D. Meyer, “Full-dimensional (15-dimensional) quantum-dynamical simulation of the protonated water dimer. i. hamiltonian setup and analysis of the ground vibrational state,” J. Chem. Phys. 127, 184302 (2007). 41G. Schiffel and U. Manthe, “Quantum dynamics of the h+ ch 4→ h 2+ ch 3 reaction in curvilinear coordinates: Full-dimensional and reduced dimensional calculations of reaction rates,” J. Chem. Phys. 132, 084103 (2010). 42L. Joubert-Doriol, B. Lasorne, F. Gatti, M. Schröder, O. Vendrell, and H.D. Meyer, “Suitable coordinates for quantum dynamics: Applications using the multiconfiguration time-dependent hartree (mctdh) algorithm,” Comput. Theor. Chem. 990, 75–89 (2012). 43A. D. Becke, “A new mixing of hartree–fock and local density-functional theories,” J. Chem. Phys. 98, 1372–1377 (1993). 44C. Lee, W. Yang, and R. G. Parr, “Development of the colle-salvetti correlation-energy formula into a functional of the electron density,” Phys. Rev. B 37, 785 (1988). 45R. Krishnan, J. S. Binkley, R. Seeger, and J. A. Pople, “Self-consistent molecular orbital methods. xx. a basis set for correlated wave functions,” J. Chem. Phys. 72, 650–654 (1980). 46A. A. Granovsky, “Firefly version 8,”
+
+
+http://classic.chem.msu.su/gran/firefly/index.html, accessed: 2023-0303.
+47J. Butcher, Numerical methods for ordinary differential equations (John Wiley & Sons, 2008) pp. 109–110. 48M. D. McKay, R. J. Beckman, and W. J. Conover, “A comparison of three methods for selecting values of input variables in the analysis of output from a computer code,” Technometrics 42, 55–61 (2000). 49S. An, W. Liu, and S. Venkatesh, “Fast cross-validation algorithms for least squares support vector machine and kernel ridge regression,” Pattern Recognit. 40, 2154–2162 (2007). 50W. Smith and P. Warsop, “Franck-condon principle and large change of shape in polyatomic molecules,” Trans. Faraday Soc. 64, 1165–1173
+(1968). 51J. Rabalais, L. Karlsson, L. Werme, T. Bergmark, and K. Siegbahn, “Analysis of vibrational structure and jahn-teller effects in the electron spectrum of ammonia,” J. Chem. Phys. 58, 3370–3372 (1973). 52W. Domcke, L. Cederbaum, H. Köppel, and W. Von Niessen, “A comparison of different approaches to the calculation of franck-condon factors for polyatomic molecules,” Mol. Phys. 34, 1759–1770 (1977). 53A. Peluso, R. Borrelli, and A. Capobianco, “Photoelectron spectrum of ammonia, a test case for the calculation of franck- condon factors in molecules undergoing large geometrical displacements upon photoionization,” J. Phys. Chem. A 113, 14831–14837 (2009).

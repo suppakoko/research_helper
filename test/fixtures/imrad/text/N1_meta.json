@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "N1",
+  "title": "Knowledge-guided machine learning can improve carbon cycle quantification in agroecosystems",
+  "venue": "Nature Communications 2024",
+  "publisher": "nature",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "confirmed on the web page",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract / Introduction / Results / Discussion / Methods",
+    "notes": [
+      "Methods at the end",
+      "the Introduction heading may be absent from the PDF"
+    ]
+  },
+  "doi": "10.1038/s41467-023-43860-5",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "\"licensed under a Creative Commons Attribution 4.0\" at the end of the article",
+  "sourceUrl": "https://www.nature.com/articles/s41467-023-43860-5.pdf",
+  "landingUrl": "https://www.nature.com/articles/s41467-023-43860-5",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "N1.pdf",
+    "bytes": 2435629,
+    "sha256": "75a119c47fb8744af9a012bd172d86c19c012600dce43594b65241eca2d87bc2"
+  },
+  "text": {
+    "file": "N1.txt",
+    "bytes": 79931,
+    "chars": 79666,
+    "sha256": "a80c8834bcdc4b70f6412a9d5e0ae0ff851e4e92723c65a03cd75511d58750fa",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 79666,
+      "truncated": false,
+      "pages": 15,
+      "runningHeadLinesRemoved": 15,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.1642240429705941,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8508774132001105,
+      "ocrLetterShare": 0.7839730876409008,
+      "ocrChars": 79666,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 14,
+      "twoColumnPages": 13
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

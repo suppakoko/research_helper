@@ -83,9 +83,17 @@ import type {
   SearchWindowQuery,
   SearchWindowRecord,
 } from "../../../src/ui/dialogs/searchDialog";
+import type { RunEstimate } from "../../../src/pipeline/shared/estimate";
+import type { CostDialogOutcome } from "../../../src/ui/dialogs/costConfirmDialog";
 import {
+  belowThreshold,
   buildProvenance,
   createSearchImportViewModel,
+  screeningCostLine,
+  screeningNeedsConfirmation,
+  screeningResultCount,
+  screeningThreshold,
+  type ScreeningEstimateRequest,
   importPathLines,
   importSummary,
   errorDetails,
@@ -841,6 +849,8 @@ describe("P1-T39 — initialViewState()", () => {
       databaseProgress: undefined,
       progressPercent: undefined,
       cancelVisible: false,
+      // P3-T27: no search has been screened yet.
+      screening: undefined,
     });
 
     // A fresh object per call, and fresh arrays with it. A shared literal would
@@ -3484,3 +3494,692 @@ function enUsSearchDialog(): ReadonlyMap<string, string> {
   }
   return values;
 }
+
+// ===========================================================================
+// P3-T27 — relevance screening in the window (docs/08 §4.2's threshold row)
+// ===========================================================================
+
+describe("P3-T27 — relevance screening: the threshold control, per run", () => {
+  const ROWS = [
+    record({ sourceId: "pubmed", nativeId: "1", title: "On topic" }),
+    record({ sourceId: "pubmed", nativeId: "2", title: "Off topic" }),
+    record({ sourceId: "pubmed", nativeId: "3", title: "Unscored" }),
+  ];
+
+  function screened(
+    threshold: number,
+    extra: Partial<NonNullable<SearchImportOutput["screening"]>> = {},
+  ): SearchImportOutput {
+    const verdict = (id: string, score: number) => ({
+      id,
+      score,
+      reason: "Synthetic reason.",
+      confidence: "high" as const,
+      isPrimaryResearch: true,
+      flags: [],
+    });
+    return {
+      ...output({
+        outcome: "succeeded",
+        records: ROWS,
+        perSource: [report({ sourceId: "pubmed", recordsRetrieved: 3 })],
+      }),
+      screening: {
+        threshold,
+        verdicts: [verdict("pubmed:1", 90), verdict("pubmed:2", 20)],
+        unscored: ["pubmed:3"],
+        excluded: threshold > 20 ? ["pubmed:2"] : [],
+        modelId: "screen-model",
+        error: undefined,
+        ...extra,
+      },
+    };
+  }
+
+  /** A pref store the window may read and must never write. */
+  function screeningPort(start: number) {
+    const store = { threshold: start, reads: 0 };
+    return {
+      store,
+      port: {
+        threshold: (): number => {
+          store.reads += 1;
+          return store.threshold;
+        },
+        available: (): boolean => true,
+        // Item 281(b): priced below summary.confirmAboveCents, so no dialog.
+        estimate: (): Promise<RunEstimate> =>
+          Promise.resolve(screeningEstimateFixture(0.01, 3)),
+        confirmAboveCents: (): number => 200,
+      },
+    };
+  }
+
+  it("opens the control at the preference's value, read on demand (Done-when)", () => {
+    const { store, port } = screeningPort(60);
+    const h = harness({ runs: [], extra: { screening: port } });
+    expect(h.model.host.getPrefs()).toMatchObject({
+      screeningThreshold: 60,
+      screeningAvailable: true,
+    });
+    // Read again on the next open: a preference changed in between is seen.
+    store.threshold = 45;
+    expect(h.model.host.getPrefs()["screeningThreshold"]).toBe(45);
+    expect(store.reads).toBe(2);
+  });
+
+  it("offers no screening seed without the port, or when the port throws", () => {
+    const none = harness({ runs: [] });
+    expect(none.model.host.getPrefs()).not.toHaveProperty("screeningThreshold");
+    const broken = harness({
+      runs: [],
+      extra: {
+        screening: {
+          threshold: () => {
+            throw new Error("unreadable");
+          },
+          available: () => true,
+        },
+      },
+    });
+    expect(broken.model.host.getPrefs()).not.toHaveProperty(
+      "screeningAvailable",
+    );
+    expect(broken.lines.join("\n")).toContain("relevance-screening seed");
+  });
+
+  it("keeps a per-run change in the run's options and never writes the preference (Done-when)", async () => {
+    const { store, port } = screeningPort(60);
+    const h = harness({
+      runs: [{ output: screened(30) }],
+      sources: TWO_SOURCES,
+      extra: { screening: port },
+    });
+    await h.model.runSearch(
+      query({ screening: { enabled: true, threshold: 30 } }),
+    );
+    expect(h.inputs[0]?.screening).toEqual({ threshold: 30 });
+    expect(store.threshold).toBe(60);
+    // The host has no member that could write it. Its one screening member
+    // since item 281(b) prices a query and writes nothing.
+    expect(
+      Object.keys(h.model.host).filter((k) => /screen|threshold/i.test(k)),
+    ).toEqual(["screeningCost"]);
+  });
+
+  it("asks for no screening when the box is unticked, and never on an import", async () => {
+    const h = harness({
+      runs: [
+        { output: screened(60) },
+        {
+          output: output({
+            outcome: "succeeded",
+            write: writeReport({ created: 3 }),
+          }),
+        },
+      ],
+      sources: TWO_SOURCES,
+    });
+    await h.model.runSearch(
+      query({ screening: { enabled: false, threshold: 60 } }),
+    );
+    expect(h.inputs[0]).not.toHaveProperty("screening");
+    await h.model.runImport({
+      ...query({ screening: { enabled: true, threshold: 60 } }),
+      records: [],
+    });
+    expect(h.inputs[1]).not.toHaveProperty("screening");
+  });
+
+  it("coerces the control's value into docs/07 §8.5's range; an emptied box is 0, which hides nothing", () => {
+    expect(screeningThreshold(30)).toBe(30);
+    expect(screeningThreshold(150)).toBe(100);
+    expect(screeningThreshold(-5)).toBe(0);
+    expect(screeningThreshold(59.6)).toBe(60);
+    expect(screeningThreshold(Number.NaN)).toBe(0);
+    expect(screeningThreshold("")).toBe(0);
+    expect(
+      toPipelineInput(
+        query({ screening: { enabled: true, threshold: Number.NaN } }),
+        undefined,
+        undefined,
+      ).screening,
+    ).toEqual({ threshold: 0 });
+  });
+
+  it("badges every scored row, leaves the unscored row bare, and says how many were not scored", async () => {
+    const h = harness({
+      runs: [{ output: screened(60) }],
+      sources: TWO_SOURCES,
+    });
+    await h.model.runSearch(
+      query({ screening: { enabled: true, threshold: 60 } }),
+    );
+    const rows = h.model.state.records ?? [];
+    expect(rows.map((r) => r.relevance?.score)).toEqual([90, 20, undefined]);
+    expect(rows[0]?.relevance?.ref).toEqual(
+      message("research-helper-search-row-relevance", { score: 90 }),
+    );
+    expect(rows[2]).not.toHaveProperty("relevance");
+    expect(h.model.state.screening).toEqual({
+      threshold: 60,
+      scored: 2,
+      unscored: 1,
+    });
+    expect(h.model.state.warnings).toContainEqual(
+      message("research-helper-search-screening-unscored", { count: 1 }),
+    );
+  });
+
+  it("says screening could not run when it failed, and a later unscreened search clears it", async () => {
+    const failed = screened(60, {
+      verdicts: [],
+      excluded: [],
+      unscored: ["pubmed:1", "pubmed:2", "pubmed:3"],
+      error: {
+        code: "POLICY",
+        messageKey: "rh-error-policy",
+        detail: "refused",
+        retryable: false,
+      },
+    });
+    const h = harness({
+      runs: [
+        { output: failed },
+        { output: output({ outcome: "succeeded", records: ROWS }) },
+      ],
+      sources: TWO_SOURCES,
+      extra: { screening: screeningPort(60).port },
+    });
+    await h.model.runSearch(
+      query({ screening: { enabled: true, threshold: 60 } }),
+    );
+    expect(h.model.state.warnings).toEqual([
+      message("research-helper-search-screening-failed"),
+    ]);
+    expect(
+      (h.model.state.records ?? []).every((r) => r.relevance === undefined),
+    ).toBe(true);
+    await h.model.runSearch(query());
+    expect(h.model.state.screening).toBeUndefined();
+    expect(h.model.state.warnings).toEqual([]);
+  });
+
+  it("with threshold 0 hides no row, so the import writes every candidate (Done-when)", async () => {
+    const h = harness({
+      runs: [
+        { output: screened(0) },
+        {
+          output: output({
+            outcome: "succeeded",
+            write: writeReport({ created: 3 }),
+          }),
+        },
+      ],
+      sources: TWO_SOURCES,
+    });
+    await h.model.runSearch(
+      query({ screening: { enabled: true, threshold: 0 } }),
+    );
+    const rows = h.model.state.records ?? [];
+    expect(
+      rows.filter(
+        (r) =>
+          r.relevance !== undefined && belowThreshold(r.relevance.score, 0),
+      ),
+    ).toEqual([]);
+    await h.model.runImport({ ...query(), records: rows });
+    expect(h.inputs[1]?.target?.selectedRecordIds).toEqual([
+      "pubmed:1",
+      "pubmed:2",
+      "pubmed:3",
+    ]);
+  });
+});
+
+describe("P3-T27 — the document's screening rules match the view model's", () => {
+  /** `addon/content/searchDialog.js`'s `logic`, evaluated from the shipped bytes. */
+  function documentLogic(): {
+    belowThreshold(score: number, threshold: number): boolean;
+    screeningThreshold(raw: unknown): number;
+    screeningCounts(rows: unknown[], threshold: number): unknown;
+    screeningSeed(raw: unknown): unknown;
+    relevanceOf(raw: unknown): unknown;
+    visibleRows(rows: unknown[], view: unknown): { key: string }[];
+  } {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const script = readFileSync(
+      resolve(here, "../../../addon/content/searchDialog.js"),
+      "utf8",
+    );
+    const factory = new Function(
+      "Zotero",
+      "window",
+      "document",
+      `${script}\nreturn RHSearchWindow;`,
+    ) as (
+      z: unknown,
+      w: unknown,
+      d: unknown,
+    ) => { logic: ReturnType<typeof documentLogic> };
+    return factory(undefined, {}, {}).logic;
+  }
+
+  const ref = {
+    id: "research-helper-search-row-relevance",
+    args: { score: 1 },
+  };
+  const row = (key: string, score?: number) => ({
+    key,
+    existing: false,
+    filterText: key,
+    ...(score === undefined ? {} : { relevance: { score, ref } }),
+  });
+
+  it("excludes exactly what belowThreshold excludes, over the whole range", () => {
+    const logic = documentLogic();
+    for (const threshold of [0, 1, 59, 60, 61, 100]) {
+      for (const score of [0, 1, 59, 60, 61, 100]) {
+        expect(logic.belowThreshold(score, threshold)).toBe(
+          belowThreshold(score, threshold),
+        );
+      }
+      expect(logic.screeningThreshold(threshold)).toBe(
+        screeningThreshold(threshold),
+      );
+    }
+    for (const raw of ["", Number.NaN, 150, -3, 42.4]) {
+      expect(logic.screeningThreshold(raw)).toBe(screeningThreshold(raw));
+    }
+  });
+
+  it("hides scored rows below the threshold until Show excluded, never an unscored row, and counts them", () => {
+    const logic = documentLogic();
+    const rows = [row("a", 90), row("b", 20), row("c")];
+    const keys = (view: unknown) =>
+      logic.visibleRows(rows, view).map((r) => r.key);
+    expect(keys({ filter: "", hideExisting: false })).toEqual(["a", "b", "c"]);
+    expect(keys({ filter: "", hideExisting: false, threshold: 60 })).toEqual([
+      "a",
+      "c",
+    ]);
+    expect(
+      keys({
+        filter: "",
+        hideExisting: false,
+        threshold: 60,
+        showExcluded: true,
+      }),
+    ).toEqual(["a", "b", "c"]);
+    expect(keys({ filter: "", hideExisting: false, threshold: 0 })).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+    expect(logic.screeningCounts(rows, 60)).toEqual({
+      total: 3,
+      kept: 2,
+      excluded: 1,
+    });
+    expect(logic.screeningCounts(rows, 0)).toEqual({
+      total: 3,
+      kept: 3,
+      excluded: 0,
+    });
+  });
+
+  it("offers the row only with a valid threshold from the host, and restates no default", () => {
+    const logic = documentLogic();
+    expect(
+      logic.screeningSeed({ screeningThreshold: 60, screeningAvailable: true }),
+    ).toEqual({ available: true, threshold: 60 });
+    expect(
+      logic.screeningSeed({
+        screeningThreshold: 60,
+        screeningAvailable: false,
+      }),
+    ).toEqual({ available: false, threshold: 60 });
+    expect(logic.screeningSeed({ screeningAvailable: true })).toEqual({
+      available: false,
+      threshold: null,
+    });
+    expect(
+      logic.screeningSeed({
+        screeningThreshold: "60",
+        screeningAvailable: true,
+      }),
+    ).toEqual({ available: false, threshold: null });
+    expect(logic.relevanceOf({ score: 70, ref })).toEqual({ score: 70, ref });
+    expect(logic.relevanceOf({ score: "70", ref })).toBeNull();
+    expect(logic.relevanceOf(undefined)).toBeNull();
+    const here = dirname(fileURLToPath(import.meta.url));
+    const script = readFileSync(
+      resolve(here, "../../../addon/content/searchDialog.js"),
+      "utf8",
+    );
+    expect(script).not.toMatch(/screening[A-Za-z]*:\s*\{[^}]*default:/);
+  });
+});
+
+// ===========================================================================
+// Item 281(b) — the screening cost beside the checkbox, and P3-T16's dialog
+// above summary.confirmAboveCents (owner, 2026-10-24)
+// ===========================================================================
+
+/** A screen's estimate as `estimateRelevanceScreen` shapes it. */
+function screeningEstimateFixture(
+  costUsd: number | undefined,
+  items: number,
+): RunEstimate {
+  const calls = Math.ceil(items / 20);
+  const plan = {
+    fullTextMode: "never" as const,
+    items: [],
+    counts: {
+      items,
+      cached: 0,
+      fullText: 0,
+      abstractOnly: items,
+      metadataOnly: 0,
+      chunked: 0,
+    },
+    calls,
+    rawInputTokens: calls * 7_000,
+    inputTokens: calls * 8_050,
+    outputTokens: items * 100,
+    costUsd,
+  };
+  return {
+    modelId: "screen-model",
+    selected: plan,
+    abstractOnly: plan,
+    preselectDowngrade: false,
+    pricesAsOfEpochMs: costUsd === undefined ? undefined : 0,
+    isEstimate: true,
+  };
+}
+
+describe("item 281(b) — what a screened search may cost (owner, 2026-10-24)", () => {
+  const SEVEN: readonly SourceDescriptor[] = [
+    { id: "pubmed", displayNameKey: "research-helper-source-pubmed" },
+    { id: "crossref", displayNameKey: "research-helper-source-crossref" },
+    {
+      id: "biorxiv",
+      displayNameKey: "research-helper-source-biorxiv",
+      keywordSearch: false,
+    },
+  ];
+  const ROWS = [
+    record({ sourceId: "pubmed", nativeId: "1", title: "On topic" }),
+  ];
+  const screenedQuery = (): SearchWindowQuery =>
+    query({ screening: { enabled: true, threshold: 60 } });
+
+  /** A port that records what it was asked, priced at `costUsd`. */
+  function costPort(options: {
+    readonly costUsd: number | undefined;
+    readonly answer?: CostDialogOutcome | Error;
+    readonly estimateFails?: boolean;
+  }) {
+    const asked: ScreeningEstimateRequest[] = [];
+    const confirmed: RunEstimate[] = [];
+    let release: () => void = () => undefined;
+    const port = {
+      threshold: (): number => 60,
+      available: (): boolean => true,
+      estimate: (request: ScreeningEstimateRequest): Promise<RunEstimate> => {
+        asked.push(request);
+        return options.estimateFails === true
+          ? Promise.reject(new Error("no template"))
+          : Promise.resolve(
+              screeningEstimateFixture(options.costUsd, request.resultCount),
+            );
+      },
+      confirmAboveCents: (): number => 200,
+      confirm: (estimate: RunEstimate): Promise<CostDialogOutcome> => {
+        confirmed.push(estimate);
+        const answer = options.answer;
+        if (answer instanceof Error) return Promise.reject(answer);
+        return new Promise((resolve) => {
+          release = () => {
+            resolve(answer ?? { kind: "cancelled" });
+          };
+          if (answer !== undefined) release();
+        });
+      },
+      locale: (): string => "en-US",
+    };
+    return { port, asked, confirmed, release: () => release() };
+  }
+
+  it("counts the most a search can return: the maximum times the ticked databases that search", () => {
+    expect(screeningResultCount(["pubmed", "crossref"], 100, SEVEN)).toBe(200);
+    // bioRxiv adds none on a keyword run; an unknown id adds none.
+    expect(
+      screeningResultCount(["pubmed", "biorxiv", "nope"], 100, SEVEN),
+    ).toBe(100);
+    // The document's untyped values, held to docs/07 §8.5's range.
+    expect(screeningResultCount(["pubmed"], "50", SEVEN)).toBe(50);
+    expect(screeningResultCount(["pubmed"], 5000, SEVEN)).toBe(200);
+    expect(screeningResultCount(["pubmed"], Number.NaN, SEVEN)).toBe(0);
+    expect(screeningResultCount([], 100, SEVEN)).toBe(0);
+  });
+
+  it("draws the cost line, or that the price is unknown, or nothing", () => {
+    expect(
+      screeningCostLine(screeningEstimateFixture(0.4231, 200), 200, "en-US"),
+    ).toStrictEqual(
+      message("research-helper-search-screening-cost", {
+        cost: "$0.42",
+        count: 200,
+      }),
+    );
+    expect(
+      screeningCostLine(screeningEstimateFixture(undefined, 200), 200, "en-US"),
+    ).toStrictEqual(
+      message("research-helper-search-screening-cost-unpriced", {
+        model: "screen-model",
+      }),
+    );
+    expect(
+      screeningCostLine(screeningEstimateFixture(0, 0), 0, "en-US"),
+    ).toBeUndefined();
+  });
+
+  it("asks above summary.confirmAboveCents or for an unknown price, never at or below it", () => {
+    expect(
+      screeningNeedsConfirmation(screeningEstimateFixture(2.5, 300), 200),
+    ).toBe(true);
+    expect(
+      screeningNeedsConfirmation(screeningEstimateFixture(2, 300), 200),
+    ).toBe(false);
+    expect(
+      screeningNeedsConfirmation(screeningEstimateFixture(0.4, 300), 200),
+    ).toBe(false);
+    expect(
+      screeningNeedsConfirmation(screeningEstimateFixture(undefined, 300), 200),
+    ).toBe(true);
+    // Nothing to score sends nothing.
+    expect(
+      screeningNeedsConfirmation(screeningEstimateFixture(undefined, 0), 200),
+    ).toBe(false);
+  });
+
+  it("the host prices the window's query: count from its databases and maximum, topic from its keyword", async () => {
+    const { port, asked } = costPort({ costUsd: 0.4231 });
+    const h = harness({ runs: [], sources: SEVEN, extra: { screening: port } });
+    const line = await h.model.host.screeningCost({
+      keyword: "ionizable lipid nanoparticle",
+      sources: ["pubmed", "crossref", "biorxiv"],
+      maxResults: 100,
+    });
+    expect(asked).toStrictEqual([
+      { resultCount: 200, topic: "ionizable lipid nanoparticle" },
+    ]);
+    expect(line).toStrictEqual(
+      message("research-helper-search-screening-cost", {
+        cost: "$0.42",
+        count: 200,
+      }),
+    );
+    // No estimator, or one that fails: no line.
+    const bare = harness({ runs: [], sources: SEVEN });
+    expect(
+      await bare.model.host.screeningCost({
+        keyword: "x",
+        sources: ["pubmed"],
+        maxResults: 100,
+      }),
+    ).toBeUndefined();
+    const failing = costPort({ costUsd: 1, estimateFails: true });
+    const f = harness({
+      runs: [],
+      sources: SEVEN,
+      extra: { screening: failing.port },
+    });
+    expect(
+      await f.model.host.screeningCost({
+        keyword: "x",
+        sources: ["pubmed"],
+        maxResults: 100,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("at or below the threshold, screens with no dialog", async () => {
+    const { port, asked, confirmed } = costPort({ costUsd: 1.99 });
+    const h = harness({
+      runs: [{ output: output({ outcome: "succeeded", records: ROWS }) }],
+      sources: TWO_SOURCES,
+      extra: { screening: port },
+    });
+    await h.model.runSearch(screenedQuery());
+    expect(asked).toHaveLength(1);
+    expect(confirmed).toHaveLength(0);
+    expect(h.inputs[0]?.screening).toEqual({ threshold: 60 });
+  });
+
+  it("above the threshold, opens P3-T16's dialog with the estimate and screens only once Run is chosen", async () => {
+    const run: CostDialogOutcome = {
+      kind: "run",
+      plan: "selected",
+      raise: undefined,
+      dontAskAgain: false,
+    };
+    const { port, confirmed } = costPort({ costUsd: 2.01, answer: run });
+    const h = harness({
+      runs: [{ output: output({ outcome: "succeeded", records: ROWS }) }],
+      sources: TWO_SOURCES,
+      extra: { screening: port },
+    });
+    await h.model.runSearch(screenedQuery());
+    expect(confirmed).toHaveLength(1);
+    // pubmed and crossref at 25 each: the estimate the dialog shows.
+    expect(confirmed[0]?.selected.counts.items).toBe(50);
+    expect(confirmed[0]?.selected.costUsd).toBe(2.01);
+    expect(h.inputs[0]?.screening).toEqual({ threshold: 60 });
+    expect(h.model.state.warnings).toEqual([]);
+  });
+
+  it("an unknown price opens the dialog too", async () => {
+    const { port, confirmed } = costPort({
+      costUsd: undefined,
+      answer: { kind: "cancelled" },
+    });
+    const h = harness({
+      runs: [],
+      sources: TWO_SOURCES,
+      extra: { screening: port },
+    });
+    await h.model.runSearch(screenedQuery());
+    expect(confirmed).toHaveLength(1);
+    expect(h.inputs).toHaveLength(0);
+  });
+
+  it("Cancel starts nothing: no search, no screening, and the window is redrawn as it was", async () => {
+    const { port, confirmed } = costPort({
+      costUsd: 5,
+      answer: { kind: "cancelled" },
+    });
+    const h = harness({
+      runs: [],
+      sources: TWO_SOURCES,
+      extra: { screening: port },
+    });
+    const before = h.states.length;
+    await h.model.runSearch(screenedQuery());
+    expect(confirmed).toHaveLength(1);
+    expect(h.inputs).toHaveLength(0);
+    expect(h.states.length).toBe(before + 1);
+    expect(h.model.state.running).toBe(false);
+    expect(h.model.state.panel).toBe("initial");
+  });
+
+  it("a second Search while the dialog is open is ignored, so one dialog asks", async () => {
+    const pending = costPort({ costUsd: 5 });
+    const h = harness({
+      runs: [],
+      sources: TWO_SOURCES,
+      extra: { screening: pending.port },
+    });
+    const first = h.model.runSearch(screenedQuery());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await h.model.runSearch(screenedQuery());
+    expect(pending.confirmed).toHaveLength(1);
+    expect(h.lines.join("\n")).toContain("already running");
+    pending.release();
+    await first;
+    expect(h.inputs).toHaveLength(0);
+  });
+
+  it("with no estimate, or a dialog that cannot open, searches without screening and says so", async () => {
+    for (const options of [
+      { costUsd: 1, estimateFails: true },
+      { costUsd: 5, answer: new Error("no main window") },
+    ] as const) {
+      const { port } = costPort(options);
+      const h = harness({
+        runs: [{ output: output({ outcome: "succeeded", records: ROWS }) }],
+        sources: TWO_SOURCES,
+        extra: { screening: port },
+      });
+      await h.model.runSearch(screenedQuery());
+      expect(h.inputs[0]).not.toHaveProperty("screening");
+      expect(h.model.state.warnings).toEqual([
+        message("research-helper-search-screening-failed"),
+      ]);
+    }
+    // And with no estimator bound at all.
+    const h = harness({
+      runs: [{ output: output({ outcome: "succeeded", records: ROWS }) }],
+      sources: TWO_SOURCES,
+      extra: {
+        screening: { threshold: () => 60, available: () => true },
+      },
+    });
+    await h.model.runSearch(screenedQuery());
+    expect(h.inputs[0]).not.toHaveProperty("screening");
+  });
+
+  it("an unscreened search is never priced", async () => {
+    const { port, asked } = costPort({ costUsd: 5 });
+    const h = harness({
+      runs: [{ output: output({ outcome: "succeeded", records: ROWS }) }],
+      sources: TWO_SOURCES,
+      extra: { screening: port },
+    });
+    await h.model.runSearch(query());
+    expect(asked).toHaveLength(0);
+    expect(h.inputs).toHaveLength(1);
+  });
+
+  it("the two new en-US strings say what the line means", () => {
+    const bundle = enUsSearchDialog();
+    expect(bundle.get("research-helper-search-screening-cost")).toBe(
+      "Estimated cost of screening: up to about { $cost } for up to { $count } results",
+    );
+    expect(bundle.get("research-helper-search-screening-cost-unpriced")).toBe(
+      "The price of { $model } is not known, so the cost of screening cannot be estimated.",
+    );
+  });
+});

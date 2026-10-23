@@ -564,6 +564,35 @@ export function seriesMarkersDiffer(
 }
 
 /**
+ * A normalized title's numbers: its runs of decimal digits, in order, each
+ * with its leading zeros dropped (`docs/02` §11.3.3's note of 2026-10-24,
+ * owner, `plan/00` §6 item 281(c)). `"covid 19 in 2021"` gives `["19", "2021"]`;
+ * `"3d"` and `"3 d"` both give `["3"]`. Numbers written as words and roman
+ * numerals are not read.
+ */
+export function titleNumbers(normalizedTitle: string): readonly string[] {
+  return (normalizedTitle.match(/\p{Nd}+/gu) ?? []).map((run) =>
+    run.replace(/^0+(?=\p{Nd})/u, ""),
+  );
+}
+
+/**
+ * Item 281(c) (owner, 2026-10-24): do the two titles carry different numbers
+ * anywhere — `"… study number 1 of …"` against `"… number 2 …"`, or a number
+ * on one side only? {@link seriesMarkersDiffer} reads only the last word, and
+ * `P3-T27` found two such titles merged by the fuzzy tier with the same first
+ * author and year. `guardTitleVerdict` turns such a match into a flag.
+ */
+export function innerNumbersDiffer(
+  a: DedupCandidate,
+  b: DedupCandidate,
+): boolean {
+  const na = titleNumbers(a.title);
+  const nb = titleNumbers(b.title);
+  return na.length !== nb.length || na.some((n, i) => n !== nb[i]);
+}
+
+/**
  * Tier 7's input: does either side name the other as a related version?
  *
  * An identifier of any {@link ID_KINDS} kind in one side's
@@ -624,7 +653,8 @@ export function isPreprintPair(a: DedupCandidate, b: DedupCandidate): boolean {
  * to a provisional title-tier verdict. Order matters and is deliberate:
  * a series difference is proof of distinctness and wins over everything; a
  * known version link is a certain relation and wins over any text score; the
- * remaining guards only ever *lower* a provisional `"match"`.
+ * remaining guards only ever *lower* a provisional `"match"`, the last of them
+ * being item 281(c)'s: a match whose titles carry different numbers is a flag.
  */
 function guardTitleVerdict(
   a: DedupCandidate,
@@ -679,6 +709,19 @@ function guardTitleVerdict(
       ...evidence,
       conflictingIds: ctx.conflicts.join(","),
     });
+  }
+  if (provisional.verdict === "match" && innerNumbersDiffer(a, b)) {
+    // Item 281(c) (owner, 2026-10-24; `docs/02` §11.3.3's note): titles whose
+    // numbers differ anywhere are never made one work. Flagged for the user's
+    // review, never merged (`docs/11` R-18); a flag or a link the guards above
+    // gave is left exactly as it was. Reached only by the fuzzy tier: Tier 5's
+    // titles are equal, and so are their numbers.
+    return decide(
+      "flag",
+      tier,
+      typeof evidence["levSim"] === "number" ? evidence["levSim"] : confidence,
+      { ...evidence, titleNumbersDiffer: true },
+    );
   }
   return provisional;
 }

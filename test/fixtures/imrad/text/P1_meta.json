@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "P1",
+  "title": "English-Persian cross-language plagiarism detection: Multilingual deep learning approach",
+  "venue": "PLOS ONE 2026",
+  "publisher": "plos",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract; Introduction; Literature review; Materials & methods; Results; Discussion; Conclusions",
+    "notes": [
+      "\"Materials & methods\" with an ampersand",
+      "an extra Literature review section"
+    ]
+  },
+  "doi": "10.1371/journal.pone.0354459",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0354459&type=printable",
+  "landingUrl": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0354459",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "P1.pdf",
+    "bytes": 2683638,
+    "sha256": "f0f6dbc1ae8753ac29c0cf76d4cfff3d48a3f8288d3d7091da7b52f5286c828a"
+  },
+  "text": {
+    "file": "P1.txt",
+    "bytes": 56434,
+    "chars": 56129,
+    "sha256": "2ecb5d4c534a96a88e86cd4acaa583e57a972d9475204b5593079307b69897b2",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 56129,
+      "truncated": false,
+      "pages": 23,
+      "runningHeadLinesRemoved": 23,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.09818286981250302,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.865755669974523,
+      "ocrLetterShare": 0.7994975859181528,
+      "ocrChars": 56129,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 22,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

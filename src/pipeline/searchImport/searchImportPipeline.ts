@@ -99,9 +99,11 @@ import {
   mergeDecisionsOf,
   SEARCH_IMPORT_DISPLAY_NAME_KEY,
   SEARCH_IMPORT_STAGES,
+  screenSearchResults,
   serialize,
   type DedupeMergeResult,
   type SearchImportStageKey,
+  type SearchScreeningDeps,
   type VersionLink,
 } from "./stages";
 import { abstractBackfillRequestBound, backfillAbstracts } from "./backfill";
@@ -111,6 +113,7 @@ import type {
   SearchImportOutcome,
   SearchImportOutput,
   SearchImportPathCounts,
+  SearchImportScreeningReport,
   SearchImportSourceReport,
   SearchImportWriteReport,
   SearchImportWriteSession,
@@ -204,6 +207,13 @@ export interface SearchImportDeps {
    * from timing.
    */
   readonly yieldToEventLoop?: () => Promise<void>;
+  /**
+   * The `Screening` stage's template and model lookup (`P3-T27`). Optional:
+   * without it the template is loaded from the bundled registry and every
+   * model's data policy is judged `unknown` — refused in strict mode, warned
+   * in balanced (`./stages.ts`'s {@link SearchScreeningDeps}).
+   */
+  readonly screening?: SearchScreeningDeps;
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +256,8 @@ interface RunState {
    */
   importPaths: SearchImportPathCounts | undefined;
   partialNoteRecorded: boolean;
+  /** Set by `Screening` when the run screened (`P3-T27`). */
+  screening: SearchImportScreeningReport | undefined;
 }
 
 function freshState(): RunState {
@@ -267,6 +279,7 @@ function freshState(): RunState {
     createdWithAbstract: 0,
     importPaths: undefined,
     partialNoteRecorded: false,
+    screening: undefined,
   };
 }
 
@@ -693,7 +706,50 @@ export function createSearchImportPipeline(
       warnings: state.warnings,
       error,
       cancellationKind,
+      ...(state.screening !== undefined && { screening: state.screening }),
     };
+  }
+
+  /**
+   * `docs/07` §12.1's `Screening` (`P3-T27`; its note of 2026-10-24): score
+   * the rows with `RELEVANCE_SCREEN` when the run asked for it.
+   *
+   * Skipped — the stage still entered and completed — when the input carries
+   * no `screening`, and on the import of a preview's own works, which that
+   * preview already screened. A failed screen is a run warning and leaves the
+   * rows unscored; only a cancellation leaves by a throw.
+   */
+  async function screeningStage(
+    state: RunState,
+    input: SearchImportInput,
+    ctx: PipelineContext,
+    stage: ProgressReporter,
+  ): Promise<void> {
+    if (input.screening === undefined || input.works !== undefined) return;
+    if (state.records.length === 0) return;
+    const report = await screenSearchResults({
+      records: state.records,
+      works: state.works,
+      options: input.screening,
+      query: input.query,
+      ctx,
+      progress: stage,
+      deps: deps.screening,
+    });
+    state.screening = report;
+    if (report.error !== undefined) {
+      warn(
+        state,
+        stage,
+        `relevance screening scored nothing (${report.error.code}); every result is kept`,
+      );
+    } else if (report.unscored.length > 0) {
+      warn(
+        state,
+        stage,
+        `relevance screening could not score ${String(report.unscored.length)} result(s); they are kept`,
+      );
+    }
   }
 
   return {
@@ -972,6 +1028,12 @@ export function createSearchImportPipeline(
         );
         await backfillStage(state, input, ctx, backfilling);
         backfilling.done("succeeded");
+
+        // ---- Screening (`P3-T27`) -----------------------------------------
+        // After the backfill, so the model reads the abstracts it found.
+        const screening = await enterStage(state, ctx, "screening");
+        await screeningStage(state, input, ctx, screening);
+        screening.done("succeeded");
 
         // ---- CreatingCollection, WritingItems -----------------------------
         await writeHalf(state, input, ctx);

@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "W1",
+  "title": "Methane Decomposition to Hydrogen Over Zirconia-Supported Fe Catalysts–Effects of the Modified Support",
+  "venue": "ChemistryOpen 2023",
+  "publisher": "wiley",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract; Introduction; Results and Discussion; Conclusions; Experimental Section",
+    "notes": [
+      "combined Results and Discussion heading",
+      "Experimental Section after the Conclusions"
+    ]
+  },
+  "doi": "10.1002/open.202300112",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC10491930?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10491930/",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "W1.pdf",
+    "bytes": 1932064,
+    "sha256": "5515275430856685c8bfc340c95703c49e4bfed97335e0870afda8e39d42a44a"
+  },
+  "text": {
+    "file": "W1.txt",
+    "bytes": 31374,
+    "chars": 31206,
+    "sha256": "5ab95697f45473711bd834f84aa3d42a7c1b0b1d45566b3320f2fcfb39fea360",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 31206,
+      "truncated": false,
+      "pages": 9,
+      "runningHeadLinesRemoved": 9,
+      "gutterPages": 0,
+      "referencesCut": false,
+      "referencesShare": null,
+      "supplementaryCharsRemoved": 6150,
+      "ocrAlnumPunctShare": 0.8399987181952189,
+      "ocrLetterShare": 0.7544382490546689,
+      "ocrChars": 31206,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 9,
+      "twoColumnPages": 9
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

@@ -1,0 +1,457 @@
+Comparing Motion Distortion Between Vehicle
+Field Deployments
+Nicolas Samson1, Dominic Baril, Julien L ́epine, Fran ̧cois Pomerleau1
+Abstract—Recent advances in autonomous driving for uncrewed ground vehicles (UGVs) have spurred significant development, particularly in challenging terrains. This paper introduces a classification system assessing various UGV deployments reported in the literature. Our approach considers motion distortion features that include internal UGV features, such as mass and speed, and external features, such as terrain complexity, which all influence the efficiency of models and navigation systems. We present results that map UGV deployments relative to vehicle kinetic energy and terrain complexity, providing insights into the level of complexity and risk associated with different operational environments. Additionally, we propose a motion distortion metric to assess UGV navigation performance that does not require an explicit quantification of motion distortion features. Using this metric, we conduct a case study to illustrate the impact of motion distortion features on modeling accuracy. This research advocates for creating a comprehensive database containing many different motion distortion features, which would contribute to advancing the understanding of autonomous driving capabilities in rough conditions and provide a validation framework for future developments in UGV navigation systems.
+Index Terms—motion model; slip estimation; metric; skid-steer
+I. INTRODUCTION
+Since motion models are a fundamental component of
+autonomous navigation systems, improving their accuracy and
+robustness to complex motion is critical to enabling efficient
+autonomy in various scenarios. Much attention has been given
+to model formulation in the last years [1], however, motion
+complexity in evaluation datasets varies greatly. While we
+recently proposed a protocol to standardize model training and
+evaluation dataset gathering [2], no standard metric exists for
+comparing model performances on different uncrewed ground
+vehicle (UGV) terrains. Such a metric is key to enabling
+efficient comparisons between models and easing the selection
+of motion models based on operational requirements. A vast
+amount of factors affect UGV motion to a varying degree.
+A few examples can be the UGV weight and speed, the
+terrain steepness, roughness, hardness, and friction coefficient,
+as shown inFigure 1. In this work, we use the terms motion
+distortion features for these factors. We regrouped them into
+two categories: internal and external. Internal motion distortion
+*This research was supported by the Fonds de recherche du Qu ́ebec –
+Nature et technologies (FRQNT) and by the Natural Sciences and Engineering
+Research Council of Canada (NSERC) through grant CRDPJ 527642-18
+SNOW (Self-driving Navigation Optimized for Winter).
+1Northern Robotics Laboratory, Universit ́e Laval, Quebec City,
+Quebec, Canada {nicolas.samson francois.pomerleau }@norlab.ulaval.ca
+AB
+C
+EF
+D
+Fig. 1. Examples of motion distortion features that affect UGV motion.
+Heavier vehicles with higher top speeds have more inertia (A, B). Aggressive
+motion leads to transitory behavior and non-linear dynamics as opposed to
+slower, conservative driving (A, B). Terrain steepness and roughness also lead
+to slippage and loss of contact between wheels and terrain (C, D). Lastly,
+terrain hardness and friction significantly impact vehicle motion (E, F). In F,
+the Warthog is navigating on a resurfaced ice rink.
+features are related to the driving speed, aggressive maneuvers,
+or vehicle properties. External motion distortion features are
+related to terrain properties, such as steepness, hardness, or
+the friction coefficient between the terrain and the tire. Quantifying terrain properties and their impact on the UGV
+motion is complex and challenging [3]. Methods based on ex
+teroceptive sensors have the disadvantage of misinterpretation
+when the ground is composed of layers of different materials
+because hidden layers change the terrain properties but are
+not necessarily perceptible by the sensors. For example, a thin
+layer of snow can hide from a camera an icy terrain that is
+more slippery than snow. Methods based on proprioceptive
+sensors have the inconvenience that the mobile robot needs
+to cross the terrain to obtain its properties, which can put the
+robots in precarious terrain that causes immobilization [1]. In this work, we propose a metric that solves the problem
+of comparing motion model performances that have not been
+arXiv:2405.00189v1 [cs.RO] 30 Apr 2024
+
+
+tested in the presence of the same motion distortion features.
+Our approach consists of subtracting observed velocity from
+the ideal slip-less velocity computed by an ideal nominal
+model. The underlying hypothesis is that the ideal motion
+model assumes a pure rolling motion, which occurs only at low
+speed on simple and flat terrain. The ideal motion model error
+is a measurement of the dynamics imposed by the combination
+of the terrain, the trajectory, and the vehicle. The minimal
+computational requirement of our approach facilitates its use
+for comparing model evaluation conditions, at the cost of not
+being able to discern the difficulty caused by the internal
+motion distortion from the external ones. In the first section of this article, we list and describe
+the motion distortion features in recent motion modeling and
+control papers. These papers are also mapped based on the
+concept of external and internal motion distortion features to
+show the need for a metric agnostic to the source of motion
+distortion. In the second section, we present the mathematical
+formulation for our proposed motion difficulty metric. In the
+last section, we present a case study of the metric on four
+datasets containing two types of vehicles deployed respectively
+on two terrains.
+II. RELATED WORK ON UGV MOTION DISTORTION FEATURES
+We divide motion distortion features into two categories:
+internal and external. Internal motion distortion features in
+clude factors that are caused by the vehicle properties or
+a command vector u. For example, commanding the UGV
+to drift will generate more internal motion distortion than
+turning slowly without skidding. External motion distortion
+features include factors caused by the environment, such as
+terrain properties. In this section, we provide a comprehensive
+list of both types of motion distortion features, as observed
+in previous UGV field deployments from different authors.
+InFigure 2, these deployments are also qualitatively mapped
+based on the description of the article’s experiment, with
+external and internal motion distortion features represented
+on different axes. The information on the motion distortion
+features varies from paper to paper. Consequently, the internal
+motion distortion features are approximated by the maximum
+kinetic energy of the heaviest UGV used in the experiment
+presented in each article. This approximation is used because
+it gives the order of energy engaged in the system. Therefore,
+the maximum kinetic energy indicates an approximation of the
+order of the forces that must be applied to change the state
+of the UGV. Another benefit of approximating the internal
+motion distortion in the mapping by the maximum kinetic
+energy is that it can be computed for more articles because it
+only depends on two commonly given parameters: the mass
+and the square of the vehicle maximum speed. InFigure 2,
+the external motion distortion features are approximated by
+the most complex terrain tested in each article. The terrain
+complexity has been qualitatively ordered based on the in
+formation available about the terrain steepness, roughness,
+hardness, and friction coefficient. The terrain complexity goes
+from flat asphalt to soft soil like sand and deep snow with
+steep slopes [4], [5]. In the worst case, terrain information
+was inferred based on the visual information present in the
+article.
+Low Moderate Extreme External Motion Distortion (Terrain Complexity)
+10−1
+100
+101
+102
+103
+104
+105
+Internal Motion Distortion (Kinetic Energy) [J]
+Motion Model Type and the Dangerosity of the Deployment Physic-based Machine Learning
+Low-risk Medium-risk
+High-risk Dangerous
+Aguilera-Marinovic2017
+Rabiee2019
+Triest2022
+Pentzer2014
+Djeumou2023
+Becker2023
+Ostafew2016
+Yang2022
+Takemura2021
+Tremblay2021
+Baril2022
+Huskic2019
+Baril2024
+Kabzan2019
+Mart ́ınez2023
+Tyler2024
+Williams2018
+Seegmiller2016
+Bussmann2018
+Mandow2007
+Fig. 2. Qualitative mapping of the related work based on the motion distortion
+features respectively represented by the maximum kinetic energy of the
+vehicles used in the experiment and the most complex terrain used in the
+experiment. The type of motion model developed by the authors is also
+presented using different markers. The area created by the internal and external
+motion distortion features is also divided based on the risk associated with
+mobile robot deployment in these conditions. One should note the logarithm
+scale used for the y-axis.
+Internal motion distortion features are related to the
+vehicle and how it is commanded. Rabiee et al. [6] quantify the
+accuracy improvement when including the impact of vehicle
+inertia in the motion model. Kabzan et al. [7] show that high
+speed driving on a racetrack with an autonomous race car leads
+to tire saturation, causing motion distortion, which they model
+with Gaussian processes (GPs). Djeumou et al. [8] combine
+this high-speed driving with aggressive motions, pushing the
+tires past the saturation point. In their work, they successfully
+perform autonomous drifting with a full-size car by modeling
+tire forces with a neural network. The car weight (1450 kg)
+and top speed (13.86 m/s) make it the motion model validated
+with the highest kinetic energy. Becker et al. [9] also used tire
+force models to improve autonomous racing performance for a
+1:10 scale racecar. Aggressive driving was also performed on
+a dirt racetrack by Williams et al. [10], who modeled motion
+distortions with a neural network. However, both authors used
+a scaled-down car version, which results in lower kinetic
+energy. In their work, they show that aggressive motion on
+dirt roads leads to a change in the vehicle orientation, which
+affects the resulting body velocity. The steering geometry
+also has an impact on the internal motion distortion features.
+
+
+For example, Ackermann steering geometries are designed to
+minimize wheel skidding, while skid-steering mobile robots
+(SSMRs) require skidding for angular motion [11]. Pentzer
+et al. [12] showed that the inherent skidding and slipping of
+SSMRs increased with the speed of the SSMR.
+External motion distortion features are related to the
+surrounding environment and the vehicle interaction with that
+environment. A small change of terrain properties between
+the ground at calibration and the ground at deployments can
+lead to a divergent motion model if the parameters are not
+updated continuously [13]. Terrain steepness has multiple
+impacts on the vehicle motion. Seegmiller et al. [3] showed
+that the vehicle pitch and roll orientation affect motion to
+a scale depending on the terrain properties. Ostafew et al.
+[14] observed a similar phenomenon when driving a SSMR
+over gravel piles. Takemura et al. [15] deployed a lunar
+rover on loose terrain with an inclination leading to ground
+deformation and terrain slip. As part of their large off-road
+driving dataset, Triest et al. [16] deployed an all-terrain vehicle
+(ATV) weighing approximately 730 kg in sloped terrains and
+benchmarked learning approaches to account for the resulting
+motion distortion. To quantify the difficulty of their dataset,
+they measure the average variation of height per second. Steep
+terrain also limits the ability of SSMR to turn around itself
+because its inherent skidding combined with the slopes results
+in the SSMR skidding towards the bottom of the slopes instead
+of skidding around itself [17].
+Terrain roughness can affect vehicle motion by reducing
+the contact between the ground and the wheels. A rougher
+terrain leads to a higher number of contact losses and, there
+fore, a more complex motion. Yang et al. [4] explain that a
+wrong estimation of the contact area between the deformable
+soil and the wheels of a UGV can lead to significant motion
+prediction error and the failure of the dynamic-motion-model
+simulation. Similarly, Tremblay et al. [18] deployed a small
+size SSMR in boreal forest trails cluttered with fallen branches
+and roots that modify the contact between the ground and the
+wheels. In their work, they learn motion distortions based on
+multiple sensor modalities. In parallel, Aguilera-Marinovic et
+al. [19] developed another general physic-based motion model
+approach that can estimate the impact of the loss of contact
+between the ground and the wheels on the movement of a
+mobile manipulator installed on a skid-steer.
+Ground hardness and friction are also important external
+motion distortion features. Fiset et al. [20] studied the energy
+loss and ground bulldozing effect for a SSMR turning in loose
+sand. In previous work, we show that deep snow navigation
+can lead to complete vehicle immobilization, which would
+represent an extreme case of motion distortion [5]. As for
+terrain friction, Huskic ́ et al. [21] showed that the same set of
+parameters was sufficient to conduct high-speed path following
+on relatively uniform terrain, namely concrete, light grass, and
+gravel. However, in previous work, we show that navigation on
+surfaced ice generates much higher motion distortion than on
+other hard ground [2]. In this case, we observed that the low
+friction force leads to longer transitory behavior and a high
+impact of vehicle inertia. Even advanced slip learning-based
+models failed to predict motion accurately in this terrain [2]. As shown inFigure 2, motion models are often tested in the
+presence of different motion distortion features. This variety
+of motion distortion features makes it hard to compare the
+performances of motion models. For example, Yang et al. [4]
+have a motion model that performed well in adverse external
+motion distortion features like non-cohesive sand and slopes
+but was only tested for low internal motion distortion features.
+Djeumou et al. [8] did the opposite by validating its motion
+model only in the presence of high internal and low external
+motion distortion features. A motion distortion metric agnostic
+to the causes could help reduce the different motion distortion
+features in one dimension. The mapping inFigure 2also lights a remaining research
+challenge: the development of a motion model for high
+risk deployments. To the best knowledge of the authors, only
+Djeumou et al. [8], Triest et al. [16], and Han et al. [22]
+have pushed the motion validation in the high-risk validation
+by deploying a UGV in complex terrain. Triest et al. [16]
+presented a learning-based motion model that can predict the
+position of a Yamaha Viking navigating on a forest track
+with a median height variation of 0.2253 m/s and a vehicle
+speed of up to 6 m/s. Similarly, Han et al. [22] deployed an
+autonomous ATV that successfully navigated at a speed of up
+to 10 m/s on different complex terrains like v-ditches, dried
+rivers, slopes of 20 degrees, and craters. However, both of
+these motion models have been validated with a respective
+maximum kinetic energy that represents only 1.5 % and 0.11 %
+of the kinetic energy used to validate the motion model of
+Djeumou et al. [8]. This statistic proves that motion model
+for high-risk deployments on more complex terrain have
+not reached their maximum performances. In addition, some
+terrains remain out of reach. For example, Baril et al. [5]
+deployed a SSMR in snow and observed that deep snow is a
+highly complex terrain to navigate because the SSMR tends to
+sink in it. The sinkage of the vehicle reduces the viable angular
+motion. If the turning restrictions are not respected, the SSMR
+can sink to the point where it is impossible to recover without
+human intervention.
+III. MOTION DISTORTION METRIC
+While we provide a comprehensive list of motion distortion
+features that are known to impact UGV motions, many others
+exist. Quantifying all motion distortion features would be
+costly because it would require the complete characterization
+of the UGV, the terrain, and the interaction between the two.
+The expensive material and expertise required to accomplish
+these tasks motivate the usage of our motion distortion metric,
+which only requires vehicle command and velocity. To quantify the difficulty of a UGV motion dataset, we set
+basic concepts for the model formulation, which are illustrated
+inFigure 3. All the velocities are defined in the vehicle body
+frame R, which has its origin located on the vehicle center of
+rotation and x-axis parallel to its longitudinal direction.
+
+
+We proceed by estimating motion distortion Rgt from an
+ideal driving model, assuming slip-less motion, similar as done
+in the previous work of Baril et al. [2]:
+Rgt = Rft(ut) −R vt, (1)
+where t is the time at which the metric is calculated, Rgt is
+the slip body velocity and Rvt is the observed body velocity,
+estimated by a vehicle localization system. Ideal motion is
+dependent on the vehicle command, or input vector ut. In this
+work, we provide model formulation for SSMRs, for which
+ideal motion is computed by the ideal differential-drive model:
+Rft(ut) =
+
+
+fx fy fω
+
+=r
+
+
+1
+2, 1
+2
+0, 0 −1
+b, 1
+b
+
+
+ωlt ωrt
+, (2)
+where ωlt and ωrt are the left and right wheel velocities. The
+model parameters are the vehicle wheel radius r and vehicle
+width b, as shown inFigure 3. One could easily adapt this
+model formulation to Ackermann vehicles, by switching the
+differential-drive model with a bicycle model, as described by
+Becker et al. [9].
+gl fl
+vl
+b
+r
+R
+y
+x
+fω
+gω
+Fig. 3. A 2D planar representation of our model formulation’s important
+variables. The ideal motion Rf is represented in orange. The estimated
+resulting body velocity Rv is represented in green. Motion distortion Rg,
+or body-level slip, is shown in purple. Angular components for all velocities
+are represented as (·)ω. Linear components for all velocities are represented
+as (·)l For the case of SSMRs, ideal motion is parameterized by wheel radius r
+and vehicle width b.
+We propose a simple motion distortion metric consisting of
+the modulus of the slip vector Rgt . This metric quantifies
+the difficulty of a motion without explicitly measuring the
+sources of the motion distortion. The metric is also straight
+forward to compute, only requiring a localization system to
+estimate the body frame displacement. Once all the moduli
+of the slip vectors are calculated, it is possible to compare
+the difficulties of datasets by doing hypothesis testing and
+verifying whether the difficulty levels of the two datasets are
+significantly different.
+IV. CASE STUDY
+The proposed metric was tested on four datasets collected
+with the Data-driven Robot Input Vector Exploration (DRIVE)
+protocol [2] to show that it can be used to evaluate the
+difficulty of the terrain, trajectory, and vehicle combination.
+Two datasets were collected with a Clearpath Husky A200
+robot navigating separately on tile and on snow. The Husky
+has a maximum speed of 1 m/s and weighs 75 kg. The two
+other datasets were separately collected with a Warthog on ice
+and gravel. The Warthog weighs 470 kg and has a maximum
+speed of 5 m/s. The resulting quantitative motion distortion metric for every
+time step of the dataset has been computed, and the results are
+presented inFigure 4. As supposed, the dataset made with
+the lightest vehicle going at the lowest speed on the sim
+plest terrain (tile) has the smallest motion distortion modulus
+median (1.716 m2rad/sec3). The motion distortion modulus
+median increases with the terrain complexity, as shown by
+the motion distortion modulus median of the Husky on snow
+(2.76 m2rad/sec3), which is 1.6 times bigger than the median
+obtained on tile. The motion distortion modulus median also
+increases with the internal motion distortion features. The
+Warthog is 6.2 times heavier and 5 times faster than the Husky,
+and its dataset on ice has a motion distortion modulus median
+approximately 3.6 times greater than the motion distortion
+modulus median of the Husky on snow.
+Fig. 4. Motion distortion moduli were calculated on four datasets collected
+with the DRIVE protocol. A Clearpath Husky A200 was used to record data
+separately on tile and on snow. The two other datasets were collected with
+a Warthog on gravel and on ice separately. The Warthog weighs 470 kg and
+has a maximum speed of 5 m/s while the Husky has a maximum speed of
+1 m/s and weighs 75 kg.
+
+
+One limitation of the current metric is that it does not
+account for the error of transitory motion. Therefore, highly
+dynamic terrain like ice could have a similar motion modulus
+median to less dynamically challenging terrain like gravel.
+This phenomenon can be seen inFigure 4where the motion
+distortion modulus median of the Warthog on ice dataset is
+5 % lower than the motion distortion modulus median of the
+Warthog on gravel dataset. Ice is more dynamically challeng
+ing than gravel because of a lower friction coefficient, lower
+traction force, and a longer transitory motion than gravel.
+V. LESSONS LEARNED
+Over the last few years, we have focused on the prob
+lem of characterizing UGV motion in off-road and remote
+environments. Notably, we quantified the behavior difference
+between SSMR navigation on concrete and snow-covered
+terrain through 2 km of driving data [23]. To facilitate UGV
+behavior characterization, we recently released the DRIVE
+protocol and used it to gather 7 km and 1.8 h of driving data
+over three distinct UGVs and four terrain types [2].1 We also
+successfully completed 18.8 km of autonomous navigation in
+a subarctic forest during wintertime, a deployment through
+which we had to account for the high slip induced by snow
+covered terrain [5]. In this section, we provide a list of lessons
+learned, with the intent of helping fellow field roboticists
+save time and bypass some mistakes we made in previous
+deployments. All of these are listed and described below:
+• Controllers that require terrain characterization tend to
+perform better but need to be re-trained for any novel
+terrain conditions, which is costly in human time and
+energy.
+• The energy and time budget allowed for motion character
+ization must be minimized for operation in remote areas,
+as both are crucial resources and any UGV breakdown has
+significant consequences. Disaster response, forestry, and
+underground operations, as well as deployments in polar
+regions are examples of situations where these factors are
+critical.
+• The temperature and ground properties have a significant
+impact on the energy consumption of UGVs. For exam
+ple, snow traction properties vary significantly with re
+spect to temperature, sun illumination and humidity [24].
+For example, we observed an unexpected battery outage
+when executing the DRIVE protocol on wet snow. Thus,
+motion characterization protocols must be adapted for
+these features.
+• When recording data for model identification, accelera
+tion ramps are critical to minimize premature mechanical
+wear and tear. However, these ramps limited the range of
+internal features that were observed in our experiments.
+Removing them would allow the recording of extreme
+motions, at the cost of accelerated hardware wear and
+tear.
+1https://github.com/norlab-ulaval/DRIVE
+• Terrain properties are a continuous spectrum, multi
+dimensional, and dependent on meteorological condi
+tions. Thus, friction on a terrain patch might differ over
+a single day and even more throughout the year. This
+variation is especially true for winter navigation.
+• The current lack of a database containing all the differ
+ent motion distortion features makes it hard to validate
+motion models for all applications.
+VI. CONCLUSION
+In this work, we investigate the problem of comparing
+various UGV deployments and the high variance in internal
+and external motion distortion features. We propose a terrain
+agnostic metric to estimate the difficulty of a motion dataset.
+We show that this metric increases with the intensity of both
+internal and external motion distortion features. However, it
+currently does not capture the impact of transitory motion
+caused by low terrain friction and aggressive driving. Future
+work includes extending this metric to account for transitory
+motion distortion and using it to normalize the difficulty of
+motion datasets. We also plan to generate a large collaborative
+dataset concatenating experiments with vehicles covering the
+entire spectrum of motion distortion features.

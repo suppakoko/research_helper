@@ -1,0 +1,71 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "X1",
+  "title": "Observations on the Mechanisms of High Resistance Junction Formation in Aluminum Wire Connections",
+  "venue": "J Res Natl Bur Stand 1980",
+  "publisher": "us-government",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "arabic",
+    "webHeadings": "1. Introduction; 2. Experimental Methods; 3. Experimental Results; 4. Discussion; 5. Conclusions",
+    "notes": [
+      "scanned (18.3 MB file)",
+      "numbered headings",
+      "the heading list is on the PMC page"
+    ]
+  },
+  "doi": "10.6028/jres.085.024",
+  "otherId": null,
+  "licence": "US government work (17 U.S.C. 105)",
+  "licenceEvidence": "scanned page 1 gives the authors' affiliation as the National Bureau of Standards (a US government work by authorship)",
+  "sourceUrl": "https://europepmc.org/articles/PMC6756263?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6756263/",
+  "recordedAt": "2026-10-23T15:31:03.624Z",
+  "extractedAt": "2026-10-23T15:31:03.624Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "X1.pdf",
+    "bytes": 19189959,
+    "sha256": "7c720afcc136b527565ce7cd13345bea472773d19923f578cd88b29bd528160e"
+  },
+  "text": {
+    "file": "X1.txt",
+    "bytes": 32678,
+    "chars": 32650,
+    "sha256": "5fa16885236a0c24a74608ec18913f3743b07dc959bfc8289180ef652e63ac7b",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 32650,
+      "truncated": false,
+      "pages": 12,
+      "runningHeadLinesRemoved": 10,
+      "gutterPages": 0,
+      "referencesCut": false,
+      "referencesShare": null,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.82260336906585,
+      "ocrLetterShare": 0.7515773353751914,
+      "ocrChars": 32650,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 11,
+      "twoColumnPages": 11
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

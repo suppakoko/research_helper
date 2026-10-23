@@ -1,0 +1,71 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "A5",
+  "title": "Bypassing Skip-Gram Negative Sampling: Dimension Regularization as a More Efficient Alternative for Graph Embeddings",
+  "venue": "arXiv (ACM template, estimated)",
+  "publisher": "arxiv",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "estimated from the template",
+    "headingNumbering": "arabic",
+    "webHeadings": "1 Introduction; 2 Related Works; 3 …; 4 …; 5 Experiments (5.1 Methodology, 5.2 Results); 6 Discussion; 7 Conclusion; A/B/C after References",
+    "notes": [
+      "Arabic-numeral headings",
+      "appendices after the references",
+      "Results as a subsection"
+    ]
+  },
+  "doi": null,
+  "otherId": "arXiv:2405.00172v2",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://arxiv.org/pdf/2405.00172",
+  "landingUrl": "https://arxiv.org/abs/2405.00172",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "A5.pdf",
+    "bytes": 1175523,
+    "sha256": "86a06093516f9b259b0cf084bb8a3fc03d674dab496b20043334882d04ba5c9e"
+  },
+  "text": {
+    "file": "A5.txt",
+    "bytes": 48513,
+    "chars": 48069,
+    "sha256": "075cc87ad0862aa93e3a796d7a7af842c8119f8d6cee942c9fa811d2c94cc47d",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 48069,
+      "truncated": false,
+      "pages": 13,
+      "runningHeadLinesRemoved": 0,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.29923027581783196,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8417275166947513,
+      "ocrLetterShare": 0.7717031766835174,
+      "ocrChars": 48069,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 12,
+      "twoColumnPages": 12
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

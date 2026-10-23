@@ -1,0 +1,72 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "S1",
+  "title": "RSEM: accurate transcript quantification from RNA-Seq data with or without a reference genome",
+  "venue": "BMC Bioinformatics 2011",
+  "publisher": "springer",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract / Background / Implementation / Results and Discussion / Conclusions / Availability and requirements / Methods",
+    "notes": [
+      "combined Results and Discussion heading",
+      "Methods after the Conclusions",
+      "Background instead of Introduction",
+      "a software article"
+    ]
+  },
+  "doi": "10.1186/1471-2105-12-323",
+  "otherId": null,
+  "licence": "CC BY 2.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 2.0",
+  "sourceUrl": "https://link.springer.com/content/pdf/10.1186/1471-2105-12-323.pdf",
+  "landingUrl": "https://link.springer.com/article/10.1186/1471-2105-12-323",
+  "recordedAt": "2026-10-23T15:31:03.624Z",
+  "extractedAt": "2026-10-23T15:31:03.624Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "S1.pdf",
+    "bytes": 726547,
+    "sha256": "999152186529bc6a474bb6beb94ef5c0433e68eb1334b982c97499f1e941c871"
+  },
+  "text": {
+    "file": "S1.txt",
+    "bytes": 64003,
+    "chars": 63784,
+    "sha256": "0c4c3975f1ca3981953daaf8044d84027e46c412120af5a5fcd02ee92e57393c",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 63784,
+      "truncated": false,
+      "pages": 16,
+      "runningHeadLinesRemoved": 15,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.136775153934637,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8426564655713031,
+      "ocrLetterShare": 0.7669635018186379,
+      "ocrChars": 63784,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 15,
+      "twoColumnPages": 14
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

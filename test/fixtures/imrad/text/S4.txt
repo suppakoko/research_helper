@@ -1,0 +1,536 @@
+Martín-Corral et al. EPJ Data Science (2024) 13:43 https://doi.org/10.1140/epjds/s13688-024-00474-1
+R E S E A R C H Open Access
+Social media sensors as early signals of influenza outbreaks at scale
+David Martín-Corral1,6 , Manuel García-Herranz3, Manuel Cebrian4 and Esteban Moro1,2,5*
+*Correspondence: esteban.moroegido@gmail.com 1Department of Mathematics and GISC, Universidad Carlos III de Madrid, Leganes, 28911, Spain 2Institute for Data, Systems, and Society, Massachusetts Institute of Technology, Cambridge, MA 02139, USA Full list of author information is available at the end of the article
+Abstract
+Detecting early signals of an outbreak in a viral process is challenging due to its exponential nature, yet crucial given the benefits to public health it can provide. If available, the network structure where infection happens can provide rich information about the very early stages of viral outbreaks. For example, more central nodes have been used as social network sensors in biological or informational diffusion processes to detect early contagious outbreaks. We aim to combine both approaches to detect early signals of a biological viral process (influenza-like illness, ILI), using its informational epidemic coverage in public social media. We use a large social media dataset covering three years in a country. We demonstrate that it is possible to use highly central users on social media, more precisely high out-degree users from Twitter, as sensors to detect the early signals of ILI outbreaks in the physical world without monitoring the whole population. We also investigate other behavioral and content features that distinguish those early sensors in social media beyond centrality. While high centrality on Twitter is the most distinctive feature of sensors, they are more likely to talk about local news, language, politics, or government than the rest of the users. Our new approach could detect a better and smaller set of social sensors for epidemic outbreaks and is more operationally efficient and privacy respectful than previous ones, not requiring the collection of vast amounts of data.
+Keywords: Computational epidemiology; Social networks; Informational epidemics; Biological epidemics
+1 Introduction
+For many viral diseases, the early detection of when and where an outbreak will appear
+is critical. Public administrations responsible for public health management face public
+health risks such as the Avian flu [1], Zika [2], SARS [3, 4], Ebola [5, 6] or the latest SARS
+COV-2 [7, 8] that can cause millions of deaths in a short period of time at global scale
+[9]. Traditional health surveillance systems require monitoring and detecting symptoms
+or case incidence in populations. However, their precision sometimes needs to be im
+proved by the size and delayed testing methods on those populations. Combining those
+data sources with others about people’s mobility, the spatial spreading structure of the
+disease, and even other data sources seem like a promising venue to establish appropri
+ate warning models in the early epidemic stage [10]. Novel data streams like related web
+© The Author(s) 2024. Open Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons licence, and indicate if changes were made. The images or other third party material in this article are included in the article’s Creative Commons licence, unless indicated otherwise in a credit line to the material. If material is not included in the article’s Creative Commons licence and your intended use is not permitted by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the copyright holder. To view a copy of this licence, visit http://creativecommons.org/licenses/by/4.0/.
+
+
+search queries and web visits [11–15], weather data [16] or monitoring multiple digital
+traces at the same time [10] have proven to be complementary and even advantageous
+to traditional health monitoring systems. In the same way, social media traces have been
+demonstrated to be a good proxy for digital epidemiological forecasting models of ILI
+[17–19]. Online user activity exhibits some benefits like broader spatial and demographic
+reach or monitoring populations that have no easy access to health services [15].
+Since some viruses are transmitted by contact on face-to-face social networks, epidemi
+ological methods that exploit the network structure are more effective in detecting, mon
+itoring, and forecasting contagious outbreaks [20, 21], since they allow to anticipate more
+accurately the transmission dynamics. Furthermore, these methods can help public health
+decision-makers to enhance the adoption of public health interventions [22] like social dis
+tancing, vaccination, or behavior change campaigns, identifying those individuals most
+likely to get infected and spread an infectious disease or behavior (e.g., super-spreaders),
+or which places are more likely to be visited by those individuals [23]. This allows more
+efficient vaccination campaigns [24] when the vaccination of an entire population is not
+possible or recommended.
+The key idea behind using high-connected individuals to monitor epidemic spreading is
+that they are more likely to be reached by the infection. In general, human social sensing,
+when carefully selected, can help predict and explain social dynamics better [25–27]. In
+the absence of complete detailed data about contact networks, simple approaches like the
+friendship paradox [28] can be used to identify more connected and central individuals
+(sensors) in the network that can give early signals and anticipate the spreading of infor
+mation, behavior or disease before it reaches a significant fraction of the population. In
+particular, the friendship paradox has already been found advantageous to identify sen
+sors for detecting influenza [29–31] or COVID-19 [32]. In social media, a previous study
+demonstrated the detection of global-scale viral outbreaks of information diffusion [33]
+by monitoring high-degree users on Twitter.
+In this work, we address the question of how we can use sensors for information prop
+agation in online social media to get better early warning signals of a biological epidemic.
+We hypothesize that social media connectivity and activity are a proxy of social interac
+tions in the real world. Thus, highly-connected users in social media (online sensors) also
+mirror highly-connected individuals (offline sensors) in the physical contact network. This
+hypothesis is based on the wealth of literature showing that online networks mimic offline
+contacts’ connections, similarity, and spatial organization [25, 34, 35]. Furthermore, we
+study if it is possible to identify better social media sensors automatically based on their
+centrality (degree) and mobility, and content behavior. We found that social media sensors
+can serve as early signals of the exponential growth of an epidemic several weeks before
+the peak. The current global pandemic threads make it vital to improve the efficiency of
+Early Warning Epidemiological Systems (EWES) by using operationally efficient methods
+to anticipate the exponential growth of a virus in a community, region, or country without
+compromising the citizens’ privacy. Our method provides such a system in a fully privacy
+preserving framework because it does not necessitate the collection of users’ contact links;
+instead, it solely relies on the degree metric.
+2 Results
+We used social media traces obtained from the micro-blogging site Twitter, where we
+collected more than 250 million tweets from December 2012 to April 2015 on Spain’s
+
+
+Figure 1 Dynamics of an average ILI season. Average ILI prevalence and ILI-related posts on Twitter across three seasons from December 2012 to April 2015 in Spain. Time (in weeks) is centered to the peak for each season. Lines are average weekly incidences for Official ILI rates (Blue) from Instituto Carlos III de Salud and first-person ILI-related mentions rate (Green) from Twitter. Bands are their confidence intervals
+mainland. Using Natural Language processing techniques, we only included first-person
+ILI-related posts, summing up a population of 19,696 users with at least one first-person
+ILI-related mention, which comprised a total of 23,975 tweets (Sect. 4 & Additional file 1
+Sect. 1 discusses our methodology). We also made use of official ILI cases from the surveil
+lance system for influenza in Spain (ScVGE) [36] managed by the Instituto Carlos III de
+Salud [36]. This system reported weekly ILI cases in Spain for each province with two
+weeks of delay in the state of the seasonal flu epidemic based on the current European
+Union proposal that regulates ILI surveillance [37]. Our dataset of official ILI cases ranges
+from December 2012 to April 2015 and includes three different seasons of influenza out
+breaks in Spain.
+Figure 1 shows a generalized ILI season from the average of ILI cases and ILI-related
+mentions for the three seasons. ILI cases and ILI-related mentions time series have a Pear
+son correlation of 0.87 (CI [0.79, 0.93] and pvalue < 0.001). Since different outbreaks hap
+pen at different times of the year, we have shifted each influenza outbreak to the time of its
+peak. We can see that ILI-related mentions precede the official ILI cases at the beginning
+of the growth stages before the peak. Previous studies have proved this [17–19]. Mentions
+of the outbreak in social media seem to precede the exponential growth in the total popu
+lation. ILI-related posts peak at –15 weeks could be related to the start of the cold season
+and users mixing ILI symptoms with cold symptoms, stating that they are suffering from
+ILI. We found a similar pattern in Google trends data.
+2.1 Validating high-degree individuals as sensors
+However, here, we want to go a step further. Can we subset the users posting ILI-related
+posts to get better earlier signals about the outbreak than monitoring the whole social
+network platform? Similarly to [29], and [33], high-degree users could be better than the
+average individual on the platform. To test whether high centrality or degree correlates
+with early signals, we measure the total weekly out-degree, Dt, of users having social ILI
+related mentions before and after the peak. To delineate the periods before and after the
+peak, we centered the epidemic curves around their respective maximum values for each
+season. Defining the pre-peak period as –15 ≤ t ≤ –1 and the post-peak period as 1 ≤ t ≤
+15. Figure 2 shows distributions for Dt before the peak, after the peak and for the whole
+season. There is a statistically significant difference in the mean (pvalue < 0.01). The average
+
+
+Figure 2 Total weekly out-degree before and after the peak. Total weekly out-degree, Dt, power law distributions for the whole season (Green), weeks before (Yellow) peak and weeks after peak groups (Purple). Horizontal axis, total weekly out-degree, Dt. Vertical axis probability distribution functions
+total weekly out-degree is 31,108 (Confidence Interval, CI [21,539.03, 40,677.32]) before
+the peak, while it is only 14,373 (CI [11,202.94, 18,455.78]) after the peak. The difference
+is also present in extreme values. We modelled large values of Dt as power laws with an
+exponent of 2.56 (CI [2.51, 2.62]) for the whole period. For the weeks before the peak, it
+follows an exponent of 2.10 (CI [1.91, 2.29]). Finally, for the weeks after the peak, it follows
+an exponent of 2.86 (CI [2.48, 3.25]). Thus, on the aggregated level, we indeed see that the
+users in social media that have ILI mentions before the peak have more social connections
+than after the peak. This result signals the possibility of using high-connected users as
+potential early sensors. This result is robust against other aggregated degree centrality
+variables (see Additional file 1, Sect. 2). For selecting sensors, we selected each individual
+with an out-degree greater that 1000 (see Additional file 1, Sect. 3).
+Figure 3.A compares Twitter’s cumulative ILI-related mentions of our control and sensor
+groups against the official ILI-related cases. As we said before, the activity in social media
+for both the control and sensor groups anticipates the cumulative incidence of ILI cases
+by one or two weeks. For each user i we define tpost
+i as the time in which she has an ILI
+related post on social media. Figure 3.B shows confidence intervals for ILI-related posting
+times for each group and ILI season, relative to the peak tpost
+i – tpeak. For all ILI seasons, the
+control group has an average ILI-related posting time of tC = 〈tpost
+i – tpeak〉i∈C = –5.35 (CI
+[–5.54, –5.17]) weeks before the peak. The sensor group has an average ILI-related posting
+time of tS = 〈tpost
+i – tpeak〉i∈S = –6.72 (CI [–7.42, –6.02]) weeks before the peak. This yields
+that sensors are posting on average tS – tC = –1.37 (CI [–2.08, –0.64] and pvalue < 0.01)
+weeks before the control group, during the exponential growth phase, between 8 to 4
+weeks for all seasons. In more detail, the 2012-2013 season has a tS – tC = –0.62
+(CI [–1.58, –0.84] and pvalue > 0.1), the 2013-2014 season has a tS – tC = –2.46 (CI
+[–3.45, –0.36] and pvalue < 0.01) and the 2014-2015 season has a tS – tC = –1.54 (CI
+[–2.45, –0.63] and pvalue < 0.01). As we can see, the ILI-related mentions of sensors could
+
+
+Figure 3 Cumulative incidence between real ILI, all Twitter, and only Twitter sensors. (A) Empirical cumulative distribution differences in official ILI cases (Yellow), control ILI-related mentions on Twitter (Purple), and sensor ILI-related mentions on Twitter (Green). Horizontal axis measures weeks since the peak on ILI cases. Inset: Weekly incidence for ILI cases, control ILI-related mentions and sensor ILI-related mentions on Twitter. (B) Confidence intervals for ILI-related posting times relative to the peak tpost
+i – tpeak for control (Purple) and sensors (Green) groups for each ILI season. 2012-2013 (Circle), 2013-2014 (Triangle), 2014-2015 (Square) and all seasons (Cross)
+anticipate the epidemic’s growth by 1 or 2 weeks with respect to other users in the plat
+form.
+2.2 Autoregressive models with sensors and its theoretical validation
+To quantify statistically how valid our sensors in social media could be in a potential EWES
+model, we built an autoregressive model that considered different epidemiological and
+social media features (see Sect. 4). The models considered different combinations of the
+total number of weekly ILI cases at time t, It, the total weekly out-degree of all users from
+the social media platform (DT,t) that posted ILI-related mentions, and the total weekly
+out-degree of the subset of those users in the sensor group (DS,t). We have also considered
+different temporal week lags, t – δ, for each variable to test their potential role as early
+warning signals. As a baseline, we have considered a model that only incorporates the ILI
+cases and their autoregressive power at t – 1. As we see in Table 1, that simple model is
+already quite accurate in explaining the evolution of the weekly ILI rate. On top of that
+baseline model, we built four others, including the degree centrality of all users and the
+sensor group at different lags. For each model, we predict the It number of ILI-related cases
+using the information of the It–1 cases and the total out-degree of all users and sensors with
+ILI-related mentions at time t and t – δ. We ran all models using a step-wise approach to
+keep only statistically significant regressors for δ = 1, 2, 3, 4, 5, 6. Due to multicollinearity
+problems between variables, we also monitor the variance inflation factor (VIF) for each
+to choose the best δ. Improved: For δ values greater than 1, VIF values remain below 10.
+However, when considering δ = [5, 6], the VIF values drop below 5, albeit with a slight
+reduction in their predictive power.
+Results in Table 1 and Fig. 4A quantitatively show the importance of social media ILI
+related mentions, especially those from the sensor group. As we can see, the predicting
+power (adjusted R2) on next week’s official ILI rate after incorporating social media men
+
+
+Table 1 Empirical ILI regression models. Regression table with normalized beta coefficients for each group of variables, Official (I)LI, (T)witter and (S)ensors, where Xt are weekly ILI related variables for each group. Di,t are weekly total out-degree variables from Twitter and Sensors
+Official weekly ILI rate
+ILI T + S t – 1 T + S t – 2 T + S t – 3 T + S t – 4 T + S t – 5 T + S t – 6 (1) (2) (3) (4) (5) (6) (7)
+It–1 0.925∗∗∗ 0.789∗∗∗ 0.856∗∗∗ 0.849∗∗∗ 0.800∗∗∗ 0.778∗∗∗ 0.757∗∗∗ (0.041) (0.047) (0.049) (0.045) (0.044) (0.042) (0.042) DT,t 0.717∗∗∗ 0.634∗∗∗ 0.580∗∗∗ 0.561∗∗∗ 0.560∗∗∗ 0.568∗∗∗ (0.0003) (0.0002) (0.0002) (0.0002) (0.0002) (0.0002) DT,t–1 –0.281∗∗∗ (0.0003) DT,t–2 –0.344∗∗∗ (0.0003) DT,t–3 –0.313∗∗∗ (0.0002) DT,t–4 –0.217∗∗∗ (0.0002) DT,t–5 –0.089∗∗∗ (0.0002) DT,t–6 –0.104∗∗∗ (0.0002) DS,t –0.443∗∗∗ –0.393∗∗∗ –0.348∗∗∗ –0.339∗∗∗ –0.349∗∗∗ –0.359∗∗∗ (0.0004) (0.0003) (0.0003) (0.0003) (0.0004) (0.0004) DS,t–1 0.211∗∗∗ (0.0005) DS,t–2 0.227∗∗∗ (0.0004) DS,t–3 0.186∗∗∗ (0.0003) DS,t–4 0.132∗∗∗ (0.0003) DS,t–5 –0.015∗∗∗ (0.0003) DS,t–6 0.034∗∗∗ (0.0003) Constant 4.951 0.000 0.000 0.000 0.000 0.000 0.000 (4.627) (4.093) (4.071) (4.123) (4.516) (4.771) (5.081)
+Observations 87 87 86 85 84 83 82 R2 0.854 0.925 0.932 0.935 0.929 0.927 0.923 Adjusted R2 0.852 0.920 0.928 0.931 0.924 0.922 0.918 Maximum VIF NA 15.16 9.36 6.77 5.28 4.59 4.37 Residual Std. Error 34.092 (df = 85)
+25.042 (df = 81)
+23.951 (df = 80)
+23.529 (df = 79)
+24.741 (df = 78)
+25.166 (df = 77)
+25.910 (df = 76)
+Note: ∗p < 0.1; ∗∗p < 0.05; ∗∗∗p < 0.01
+tions increases significantly (and we also reduced collinearity), especially at five- or six
+week lags. In all those cases, the total degree of sensors at time T and time t – δ has a
+significant regression coefficient and role (in R2) in the prediction. That is, social sensors
+can help anticipate official ILI cases five to six weeks before, a result consistent with pre
+vious similar analyses of ILI contagious outbreaks in small settings [29] or of information
+spreading in social media [33]. We also note that the signs of the variables of all users
+and sensors have different effects. For example, a higher total degree of sensors at times
+t – δ predicts more ILI-related cases (positive coefficient) at time t for δ > 0, but a smaller
+number of cases (negative coefficient) for δ = 0. As we will see below, this apparent con
+
+
+Figure 4 Results for the Empirical and Theoretical ILI auto-regression models. (A) Normalized coefficients for the different autoregressive models for It, see Eq. (4) for different time lags δ. Model regressors for each δ are the number of cases one week in the past It–1, the total out-degree at time t, DT,t, the total out-degree at time t – δ, DT,t–δ , and the total out degree of sensors at time t, DS,t and at time t – δ, DS,t–δ . We show the normalized coefficient and their confidence intervals (shaded area). (B) Same as in (A) but for the agent-based model of ILI disease and information diffusion
+tradiction comes from the auto-correlation of the time series of ILI-related cases and the
+total degree of users.
+We investigated the predicting power of high-degree sensors in a synthetic model to vali
+date that sensors anticipate ILI cases because social media connectivity mirrors social con
+nections in the real world. Specifically, we built a base agent-based susceptible-infected
+recovery (SIR) epidemic spreading on a random network mimicking real (face-to-face)
+social contacts between people (see Sect. 4 for details about the network and simulations
+details). Apart from their physical contacts, we also assumed that each person has acted
+on a social media platform and that the degree in both the real and online networks are
+correlated moderately. Assuming that agents post on social media when they are infected,
+we also constructed the time series Dˆ T,t and Dˆ S,t for the model and their autoregressive fits
+as in Table 1. Our results once again show that high-degree agents (sensors) carry some
+predicting power on the epidemic spreading.
+Furthermore, the coefficients for the different models show the same regression struc
+ture as the empirical models in 1, see Fig. 4A. We can see that both coefficient structures
+are nearly the same, including their magnitude and signs. Although this is not direct proof
+of our hypothesis that the online and offline centrality of real users is similar, it shows that
+under that assumption, we not only get that the effect of sensors is the same as we found in
+our empirical analysis, but even the structure of coefficients (magnitude and sign) is simi
+lar. These results support the idea that sensors in an informational epidemic that mirrors
+a biological epidemic are also sensors of a biological epidemic, like ILI, that we can trace
+on Twitter.
+
+
+Figure 5 Detecting better sensors. (A) Normalized β coefficients from logistic models [see Eq. (7)] for each group of features for explaining sensors: content topics they posted (yellow), their network features (green), their mobility by the radius of gyration (blue) and all group variables together (purple). (B) Accuracy metrics for each group of variables: topics (yellow), network (green), mobility (blue), and all variables (purple)
+2.3 Identification of sensors beyond out-degree
+So far, we have seen that high out-degree users in social media can be early sensors of ILI
+cases. However, can we identify a better group of sensors beyond high degrees by looking
+at other traits? Are individuals that signal the epidemic’s early stages defined just by their
+centrality degree, or do they have other behavioral or content traits? To do that, we define a
+sensor functionally as every user who posts an ILI-related tweet from fifteen weeks to two
+weeks before the epidemic’s peak (–15 ≤ t ≤ –2). On the other hand, a control user was
+a random user who did not talk about ILI during the same period. (see Sect. 4 contextual
+features for more details).
+To characterize users’ content, behavior, and network traits in both groups, we analyzed
+every tweet they posted 30 days before their first ILI-related tweet (sensors) or a randomly
+chosen tweet (control). Specifically, we identify three groups of traits for each user. Firstly,
+we extract the content of each user’s tweets and classify them into topics like sports, poli
+tics, entertainment and many other categories using the TextRazor classifier (see Sect. 4).
+Secondly, since our tweets are geolocalized, we extract the mobility features of each user,
+in particular, the radius of gyration, which measures the size of the area covered while
+moving around [38]. The radius of gyration could proxy the number of different and di
+verse people the user is in daily contact. Thus it might serve to estimate potential exposure
+to infected people [39]. Lastly, we also use their activity (number of posts) and, as before,
+their out-degree in the social network.
+To test how relevant those groups of traits are to define a sensor, we developed a straight
+forward logistic regression model (see Sect. 4) to classify users into the sensor or control
+groups using different variables. As we can see in Fig. 5, the accuracy of our models is above
+the primary level (0.5). While Network and Content groups independently achieve simi
+lar accuracies (∼ 0.61) than the Mobility group (∼ 0.62), we get better accuracy, including
+all types of traits (∼ 0.64). This result signals that even different traits carry complemen
+
+
+tary information about who could be sensors in the social media platform. To understand
+this further, we looked into each trait’s (normalized) coefficients in our model. As shown
+in Fig. 4A, the most crucial variable to predict a user in the sensor group is still the out
+degree in the social network, even after controlling for the number of posts. This is im
+portant because it shows that our simple method of using high-connected Twitter users
+as sensors works much better than other traits. We also see a small but significant effect
+on the radius of gyration and high number of posts, meaning, all things equal, users that
+move further are more likely to be exposed to the virus, have a higher probability to get
+infected and sensors. A more pronounced effect is observable for the number of posts.
+According to our hypothesis asserting that social networks mirror physical networks, in
+dividuals with both a high radius of gyration and an elevated number of posts are likely to
+be highly socially active in the real world. Consequently, such individuals would possess
+a higher degree and serve as better sensors for detecting early signals of an epidemic. Re
+garding the content, we see a structure of topics that users in the sensor group are more
+likely to discuss, like National, Language, Politics, and Government. On the contrary, users
+that talk about Sports, Popular topics, or Entertainment are less likely to be in the sensor
+group. This finding could signal and be related to other unobserved user traits like income
+or educational attainment level, which also are known to be related to the activity in social
+media [40] and amount of real offline contacts [41].
+3 Discussion
+Early warning epidemiological systems (EWES) detect outbreaks weeks in advance to help
+public health decision-makers make more efficient allocations of public resources to avoid
+or minimize an overflood of contagious in the healthcare system. EWES are undergoing
+significant investments and changes due to the COVID-19 disruption. However, most of
+them harvest vast amounts of data and do not exploit the explanatory and predictive power
+of the network heterogeneity where a disease-informational epidemic is spreading.
+In this study, we demonstrated that social media traces, like Twitter, could be used as a
+source of social-behavioral data to monitor disease-informational epidemics that mirror
+offline biological contagious disease epidemics, like ILI, by exploiting the network hetero
+geneity whenever social centrality measures of the network are available. By having a sim
+ple centrality metric, such as the out-degree, we can define suitable sensors for the disease
+informational epidemic in the network. When aggregated correctly, we can use sensors to
+feed autoregressive models that could yield signals of an outbreak up to four weeks in ad
+vance. Although previous studies showed the advantage of using social network metrics
+to detect, monitor, and forecast contagious outbreaks [20, 21]. The usage of sensors in a
+network to detect early signals of an outbreak in a biological disease contagious epidemic
+[29, 30], or informational epidemics [33]. Furthermore previous studies have used digital
+traces for predicting epidemics like ILI [11, 12, 42]. However, these studies do not fully
+leverage the power of network heterogeneity. Consequently, our study stands as the first
+to integrate the use of social media sensors to forecast real-life epidemics, unlocking new
+potential in the field by leveraging an indirect metric of a user’s network position, such
+as their degree, for detecting early signals of an epidemic. Our results are based on the
+hypothesis that social media networks are related to offline contact networks, which has
+been validated directly in other works [25, 34, 35]. Our empirical and theoretical results
+show that instead of harvesting large amounts of data and metrics from social networks
+
+
+[19], we can track and anticipate early outbreaks of a disease-informational epidemic by
+inexpensively looking at a small set of specific users (sensors).
+We also demonstrated that sensors could be profiled and detected automatically from
+social media raw data by using their topological network properties and based on the con
+tent posted by individuals and their mobility patterns. Explicitly, we found that sensors talk
+more about some topics like National, Politics, and Government and less about Sports
+and Entertainment. The fact that those topics could also be related to their income, edu
+cational attainment [40], but also to other traits like more extroversion personality traits
+[43] opens the possibility to investigate the potential overlapping reasons why sensors not
+only are more prone to get infected earlier but also that they would like to post about it on
+social media. For instance, the Music topic requires further investigation; previous litera
+ture suggests individual differences in personality in the way we use and experience music
+[44], possibly having a social component.
+Finally, our method uses the out-degree in the social media platform as a proxy for cen
+trality. Better knowledge of the network structure could yield more optimized methods
+to detect highly-central users. Our approach exhibits additional limitations. Specifically,
+our dataset is confined to a particular epidemic within a specific country, covering flu
+related mentions from 2012 to 2015 in a given social media platform. The method has
+not undergone testing across diverse regions, with more recent data, or against global,
+contemporary epidemics or different social media platforms, such as the COVID-19 pan
+demic. However, given that our findings rely on the collective behavior of people in so
+cial media and the observed relationship between offline and online networks [45, 46], we
+think that our findings could be extrapolated to other epidemics, regions and social media
+platforms. We hope our research can help study the role of sensors in other pandemics,
+specially COVID-19, where more information about real-world offline contact networks
+exists due to better mobility data [47] or contact tracing applications.
+In summary, this study proposes a feasible approach to exploit the network heterogene
+ity underneath social media sites, like Twitter, to detect more efficiently and earlier out
+breaks from a disease-informational epidemic that mirror a biological disease contagious
+epidemic, like ILI. Furthermore, the sensors approach we used to detect early outbreaks
+within informational epidemics and biological contagious disease epidemics, but this is
+the first time in a disease-informational epidemic as we have done in this study. Finally,
+novel epidemiological systems have been developed for other pathogens such as Zika,
+SAR, or COVID-19, among others, in addition to influenza, using conventional and non
+conventional data sources such as the official public cases, online searches, or health fo
+rums. For instance, for the COVID-19 pandemic, some studies used social media traces
+to try to predict the dynamics of the pandemic [48, 49]. Such approaches, along with our
+findings about the power of the network structure, could improve the results of their pre
+dictions.
+Also, health systems and health organizations initiatives, like the Global Outbreak Alert
+and Response Network (GOARN) [50] from WHO that is composed of 250 technical insti
+tutions and networks globally and projects like the Integrated Outbreak Analytics (IOA)
+[51], Epidemic Intelligence from Open Sources (EIOS) [52], and Epi-Brain [53] that re
+spond to acute public health events. This network is already moving in a double direction
+of incorporating early signals from Big Data, social sciences techniques and behavioral
+data into epidemic response systems [54] to control outbreaks and public health emergen
+
+
+cies across the globe. Also, syndromic surveillance platforms like InfluenzaNet could ask
+for Twitter profiles or the number of people an individual interacted with in the last week
+to reweight the impact of different users in the prediction. Our innovative approach might
+help detect early outbreaks without having to monitor and harvest data from a whole pop
+ulation, making EWES more accurate in time prediction of an outbreak, more efficient in
+resources, and more respectful of citizens’ data privacy.
+4 Methods
+4.1 Data collection
+We extracted Twitter data through their streaming API [55] that allowed us to collect data
+programmatically on the Spanish mainland by using a geolocated query in Spanish for
+minimizing data inconsistencies. The official ILI rate data was extracted through a web
+crawler built ad-hoc for the web of the Institute Carlos III of Health since there was no
+access to the raw data from an open data portal or a programmatic interface.
+4.2 ILI-related keywords based search and tweets classification
+To get ILI-related mentions from users in the social media platform, we first filtered tweets
+by keeping those that mentioned simple terms like “flu” or other ILI-related words (see Ad
+ditional file 1). After that, we only kept first-person ILI-related mentions to exclude general
+or not directly-related posts like ‘The Spanish flu was an unusually deadly influenza pan
+demic’. This was done using Natural Language Processing methods. We employed a text
+classifier utilizing the Stochastic Gradient Descendant algorithm, implemented through
+the scikit-learn library [56]. We handpicked and labeled a set of 7836 tweets to
+train our classifier, containing 3918 true positive (first-person) tweets and 3918 true neg
+ative tweets We performed a vectorization on the labeled data using the Term Frequency
+Inverse Document Frequency (TF-IDF) procedure in the scikit-learn library. Subse
+quently, we reduced the TF-IDF matrix using the TruncatedSVD procedure, also provided
+by scikit-learn. Finally, we hyper-parameterized the Stochastic Gradient Descent
+classifier with α = 0.0001 and a regularization L2 norm, and applied it to the processed
+matrix, achieving an accuracy of (∼ 0.94) and kappa value of (∼ 0.83). We then applied
+our classifier to identify first-person mentions in the remaining tweets (see Additional file
+1 for more details about our pipeline). After this process, we ended up with N = 19,696
+users and 23,975 tweets classified as first-person ILI-related posts.
+4.3 ILI-related post time series
+We added up and normalized the number of weekly users mentioning the flu by the total
+number of users in the system. We followed equation
+xˆ users,t = xILI Users,t
+xTotal Users,t
+, (1)
+where t is the week. This time series is shown in Fig. 1, together with the prevalence of ILI
+cases.
+4.4 Centrality features
+Each tweet at time t has information about the out-degree (followees), dout,i,t, and in
+degree (followers), din,i,t, for each Twitter user i posting it. We used them as proxies of the
+
+
+network centrality for each user. Only 5% of users have more than one ILI-related mention
+and their in and out degrees do not change dramatically so we take dout,i,t dout,i (similarly
+for din,i,t) with t being their first (or most of the times only) ILI-related mention. We tested
+out several aggregated centrality features for the selection of sensors. We found that the
+weekly total out-degree was the best centrality metric to apply with a Pearson correlation
+of 0.91 (CI [0.87, 0.93] and pvalue < 0.001), compare against the weekly total in-degree with
+a Pearson correlation of 0.77 (CI [0.68, 0.82] and pvalue < 0.001). We also calculated the
+weekly total, mean, median, maximum and minimum out-degree of individuals before
+and after the peak making first-person ILI-related mentions to test if other out-degree
+statistics had more explanatory power. The centrality metrics are solely based on twitter
+users metrics and we do not build the real network between users. See Additional file 1,
+Sect. 2 for further details.
+The weekly total out-degree is defined by
+DT,t =
+∑
+i∈ t
+dout,i, (2)
+where t is the set of users that made an ILI-related mention at week t.
+Sensors are selected as the group of users with dout,i > 1000. For that group, we also
+define the time series of their centrality as
+DS,t =
+∑
+i∈ t∗
+dout,i, (3)
+where ∗
+t is the set of users in the sensor group that made an ILI-related mention at week
+t.
+4.5 Linear autoregressive model
+The following equation represents a linear autoregressive model for explaining and now
+casting the dependent variable, It, being the Official ILI rate for each week. DT,t are total
+weekly out-degree for the whole twitter population, and DS,t, are total weekly out-degree
+for the whole sensor population. We followed
+It = β0 + β1It–1 +
+∑
+δ≥0
+(αδDT,t–δ + γδDS,t–δ) + t. (4)
+4.6 Agent-based model of ILI disease and information diffusion
+To understand our empirical findings, we compare them with the simulations of epidemic
+spreading on a physical and online network through an agent-based model (ABM). We
+model the offline (physical) contacts using a random heavy-tailed network. Specifically, we
+created a synthetic population of N = 150k agents which are connected through a scale
+free network with degree distribution P(k) ∼ k–3 obtained through the Barabasi-Albert
+model. [57]. The network was built using the R package igraph [58].
+At the same time, we supposed that each agent participates in a social media platform.
+We hypothesize that the online degree of the agents is related to the offline degree in the
+complex network. To account for some variability, we assumed that the degree in the social
+media platform was modified by a random uniform distributed number (See Additional
+
+
+file 1 Sect. 4 for more details). Thus, the degree in the social media platform is given by
+dTwitter
+out,i = dOffline
+out,i (1 + νi), where νi is a random number uniformly distributed between 0 and
+1. This way we account for potential variability between offline and online degrees.
+We simulate the ILI spreading using a simple Susceptible-Infected-Recovered (SIR) epi
+demic model. In particular, at each time-step t, the infectious (I) agents can transmit the
+disease to their susceptible (S) neighbors in the contact network with probability β. If the
+transmission is successful, the susceptible node will move to the (I) state. An individual
+will move independently to the recovery (R) state with a probability α. We initialized the
+model with two initial infected seeds. After getting infected, we assumed that the agent
+immediately posted an ILI-related tweet on the social media platform. In our model, we
+considered a user to be sensors if she has an out-degree in the platform higher than four
+times the average degree in the Barabasi-Albert model. We also calibrated the time unit
+in this model so that the epidemic curves have a similar time scale as the real ILI rate (See
+Additional file 1 Sect. 4 for further details on the simulation’s parameters).
+4.7 User traits
+To characterize the different traits of Twitter users, we analyzed each user’s tweets dur
+ing a time window of 30 days before the initial event. For the sensor group, we selected
+individuals with an out-degree dout,i ≥ 1000 and that made at least an ILI-related men
+tion during the weeks –15 ≤ t ≤ –2 before the peak of the epidemic. The initial event is
+their first post with the ILI-related mention. For the control group, we picked individuals
+that made an ILI-related mention after the –15 ≤ t ≤ –2, then we picked a random post
+of them as an initial event in weeks –15 ≤ t ≤ –2, before the peak of the epidemic. Us
+ing that 30 days period, we computed different Mobility, Content, and Network traits to
+characterize each user.
+4.7.1 Mobility traits
+We worked out the mobility pattern from a user by looking at geolocations from tweets.
+To characterize their mobility, we used the radius of gyration [38], which measures the
+size of the area covered while moving around:
+Ri
+g=
+√√√√ 1
+N
+N ∑
+i=1
+(ri – rmean), (5)
+where variable ri represents the user’s position at time instant i.
+4.7.2 Content topics
+We extracted topics from the texts in each user’s tweets. To this end, we use the Tex
+tRazor classifier trained against the IPTC news-codes [59], which classify each tweet into
+approximately 1400 high-level categories organized into a three-level tree hierarchy. Each
+tweet is given a probability of containing such a topic. Thus each user is characterized by
+a content vector of n topics
+Ci =
+{
+Ci
+1, Ci
+2, . . . , Ci
+n
+}
+, (6)
+where the components Ci
+m are the aggregated probability of topic m in all her tweets.
+
+
+4.7.3 Network traits
+Apart from the out-degree for each user i we also took into account the total user activity
+in the social network platform by computing the number of tweets generated during the
+observation period. This variable is called the number of posts.
+4.8 Linear logistic regression model
+The following equation represents a linear logistic regression model for explaining the
+probability of an individual being a sensor by different features, where {Mi} are the mo
+bility features (we only consider the radius of gyration variable, Rg ), {Ni} the group of
+network variables, out-degree, dout,i, and the number of posts, and {Ci} is the group of
+content variables for each individual i. Our model is
+Pr
+(
+i ∈ ∗)
+= logit–1
+[
+β0 +
+∑
+l
+αl Mi
+l+
+∑
+n
+βnN i
+n+
+∑
+m
+γmCi
+m
+]
+, (7)
+where ∗ is the set of users defined as sensors, and logit–1(x) = ex/(1 + ex). In the model,
+each individual variable in the different groups is standardized to have zero mean and unit
+variance.
+Abbreviations
+ABM, Agent based model; EWES, Early warning epidemiological systems; ILI, Influenza-like illness; IPTC, International Press Telecommunications Council; NLP, Natural Language Processing; SIR, Susceptible-infected-recovery.
+Acknowledgements
+E.M. acknowledges support by Ministerio de Ciencia e Innovación/Agencia Española de Investigación (MCIN/AEI/10.13039/501100011033) through grant PID2019-106811GB-C32. M.C. wishes to acknowledge the following funding: the Ministry of Universities of the Government of Spain, under the program “Convocatoria de Ayudas para la recualificación del sistema universitario español para 2021-2023, de la Universidad Carlos III de Madrid, de 1 de Julio de 2021”. Furthermore, he is thankful for the support of project “Ayuda PID2022-137243OB-I00 financiada por MCIN/AEI/10.13039/501100011033” and by “FEDER Una manera de hacer Europa”.
+Author contributions
+M.G.-H. built the code to access Twitter data from their API. D.M.-C., E.M. and M-C. designed the research. D.M.-C. performed research. D.M.-C. analysed the results. D.M.-C. and E.M. wrote the first draft of the manuscript. D.M.-C., E.M. M-C. and M.G.-H. discussed results and edited the manuscript. All authors approved the final version.
+Funding
+Open access funding provided by Northeastern University Library.
+Data availability
+All data needed to evaluate the conclusions in the paper are present in the paper, the Supplementary Materials and the following repository: https://github.com/dmartincc/sensors. Additional data related to this paper may be requested from the authors.
+Declarations
+Competing interests
+The authors declare no competing interests.
+Author details
+1Department of Mathematics and GISC, Universidad Carlos III de Madrid, Leganes, 28911, Spain. 2Institute for Data, Systems, and Society, Massachusetts Institute of Technology, Cambridge, MA 02139, USA. 3UNICEF, New York City, USA. 4Center for Automation and Robotics, Spanish National Research Council, Madrid, Spain. 5Network Science Institute, Northeastern University, Boston, MA, 02115, USA. 6Department of Telematics and Computing, ICAI Engineering School, Universidad Pontificia Comillas, Madrid, 28015, Spain.
+Received: 20 April 2023 Accepted: 19 April 2024

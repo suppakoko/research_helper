@@ -309,6 +309,19 @@ export interface SearchWindowQuery {
    */
   readonly dateWindow?:
     { readonly fromIso: string; readonly toIso: string } | "all-years";
+  /**
+   * Relevance screening for this run (`P3-T27`, `docs/08` §4.2's threshold
+   * row): the "screen with the AI model" checkbox and the threshold control's
+   * value, read off the controls like every other member — so `threshold` can
+   * be `NaN` from an emptied box, and the view model's `screeningThreshold`
+   * coerces it. The value is the run's own: nothing writes it back to the
+   * `screening.threshold` preference. Absent, or `enabled: false`, means no
+   * model is called.
+   */
+  readonly screening?: {
+    readonly enabled: boolean;
+    readonly threshold: number;
+  };
 }
 
 /**

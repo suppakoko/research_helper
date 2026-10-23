@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "A6",
+  "title": "Graph Neural Network Approach to Semantic Type Detection in Tables",
+  "venue": "arXiv (Springer LNCS template, estimated)",
+  "publisher": "arxiv",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "estimated from the template",
+    "headingNumbering": "arabic",
+    "webHeadings": "1 Introduction; 2 Related works; 3 Problem Definition; 4 GAIT; 5 Evaluation (5.2 Results); 6 Conclusion",
+    "notes": [
+      "single column",
+      "Results as a subsection"
+    ]
+  },
+  "doi": null,
+  "otherId": "arXiv:2405.00123v1",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "the PDF prints none; the arXiv abstract page links creativecommons.org/licenses/by/4.0",
+  "sourceUrl": "https://arxiv.org/pdf/2405.00123",
+  "landingUrl": "https://arxiv.org/abs/2405.00123",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "A6.pdf",
+    "bytes": 623098,
+    "sha256": "d898c0a04d1d49a85b509edc69e4490bd65a62980b1f785c267b5530d7a0d2ff"
+  },
+  "text": {
+    "file": "A6.txt",
+    "bytes": 29579,
+    "chars": 29427,
+    "sha256": "f334aa894ed427ecae17498572dfaebbf53ada0b96bdb6f0365bc4566b4488a4",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 29427,
+      "truncated": false,
+      "pages": 12,
+      "runningHeadLinesRemoved": 0,
+      "gutterPages": 3,
+      "referencesCut": true,
+      "referencesShare": 0.12335785993029283,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8404186631324974,
+      "ocrLetterShare": 0.7687158052128997,
+      "ocrChars": 29427,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 11,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

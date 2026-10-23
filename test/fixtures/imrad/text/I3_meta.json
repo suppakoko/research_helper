@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "I3",
+  "title": "Tumor-Attentive Segmentation-Guided GAN for Synthesizing Breast Contrast-Enhanced MRI Without Contrast Agents",
+  "venue": "IEEE Journal of Translational Engineering in Health and Medicine 2022",
+  "publisher": "ieee",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "roman",
+    "webHeadings": "I. Introduction; II. Materials and Methods; III. Results; IV. Discussion; V. Conclusion; Appendix",
+    "notes": [
+      "an unnumbered Appendix between the Conclusion and the references"
+    ]
+  },
+  "doi": "10.1109/JTEHM.2022.3221918",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC9721354?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9721354/",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "I3.pdf",
+    "bytes": 2755287,
+    "sha256": "ebc9be025a0b0e629c018f5d40be37b6925718a6bf77d43b7b00a2c61712c88d"
+  },
+  "text": {
+    "file": "I3.txt",
+    "bytes": 45997,
+    "chars": 45783,
+    "sha256": "ee89a2b564bc07d1dbc6522c174136424974f9314dda7ca7660e7d3c2153bc46",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 45783,
+      "truncated": false,
+      "pages": 12,
+      "runningHeadLinesRemoved": 22,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.1872614630855804,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8425179651835835,
+      "ocrLetterShare": 0.7861214861411441,
+      "ocrChars": 45783,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 11,
+      "twoColumnPages": 10
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "O5",
+  "title": "Antibody-mediated clearance of an ER-resident aggregate that causes glaucoma",
+  "venue": "PNAS Nexus 2024",
+  "publisher": "oup",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract; Significance Statement; Background; Results; Discussion; Methods",
+    "notes": [
+      "Background instead of Introduction",
+      "Methods at the end",
+      "a Significance Statement box"
+    ]
+  },
+  "doi": "10.1093/pnasnexus/pgae556",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC11670252?pdf=render",
+  "landingUrl": "https://academic.oup.com/pnasnexus/article/4/1/pgae556/7920644",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "O5.pdf",
+    "bytes": 1138695,
+    "sha256": "31b85ce5cbee097ec98e3bd19acc0cfff2b6eddd35b02afb6acacbac8adfaa07"
+  },
+  "text": {
+    "file": "O5.txt",
+    "bytes": 58220,
+    "chars": 58013,
+    "sha256": "4882702b005349a16a915b8dcd1de57148028b25d9a3b702b83fc4c8c5b49a36",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 58013,
+      "truncated": false,
+      "pages": 13,
+      "runningHeadLinesRemoved": 0,
+      "gutterPages": 2,
+      "referencesCut": true,
+      "referencesShare": 0.20017272555528567,
+      "supplementaryCharsRemoved": 1258,
+      "ocrAlnumPunctShare": 0.8542395669936049,
+      "ocrLetterShare": 0.7856342543912571,
+      "ocrChars": 58013,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 11,
+      "twoColumnPages": 10
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

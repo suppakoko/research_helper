@@ -73,6 +73,7 @@
 
 import { ConfigurationError } from "../core/errors";
 import paperSummarySchemaV1 from "./schemas/paper-summary.v1.json";
+import relevanceScreenSchemaV1 from "./schemas/relevance-screen.v1.json";
 
 // ---------------------------------------------------------------------------
 // Identifiers and the file list
@@ -123,6 +124,13 @@ export const PROMPT_SCHEMAS: Readonly<Record<string, JsonSchemaObject>> =
   Object.freeze({
     "paper-summary.v1.json": deepFreeze(
       paperSummarySchemaV1 as JsonSchemaObject,
+    ),
+    // `docs/12` §3's `RelevanceScreen` (`P3-T27`; `plan/00` §6 item 239(c)).
+    // `relevance-screen.v1.0.0.md` keeps `schema: none` — a released file is
+    // not edited (§17.5) — so `src/pipeline/shared/relevanceScreen.ts`
+    // attaches this one itself (`docs/12` §3's note of 2026-10-24).
+    "relevance-screen.v1.json": deepFreeze(
+      relevanceScreenSchemaV1 as JsonSchemaObject,
     ),
   });
 

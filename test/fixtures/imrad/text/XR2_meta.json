@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "XR2",
+  "title": "Sweep effect on the drag of rows of perpendicular circular cylinders in a laminar boundary layer at supersonic free-stream velocities",
+  "venue": "NASA Technical Note D-7812, December 1974",
+  "publisher": "us-government",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "unknown",
+    "webHeadings": null,
+    "notes": [
+      "a technical report, not a journal article"
+    ]
+  },
+  "doi": null,
+  "otherId": "NTRS 19750004163",
+  "licence": "US government work (17 U.S.C. 105)",
+  "licenceEvidence": "NASA Technical Note D-7812; NTRS record: distribution PUBLIC, GOV_PUBLIC_USE_PERMITTED",
+  "sourceUrl": "https://ntrs.nasa.gov/api/citations/19750004163/downloads/19750004163.pdf",
+  "landingUrl": "https://ntrs.nasa.gov/citations/19750004163",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "XR2.pdf",
+    "bytes": 861148,
+    "sha256": "80c51f277851b72890e7b84282f5471c896871e00a4bde521b61a4e2ef385ec5"
+  },
+  "text": {
+    "file": "XR2.txt",
+    "bytes": 18765,
+    "chars": 18765,
+    "sha256": "67c495dd09121e43e5576c7f832986b33f7270eb2444580dfcc34ab5db3b4d3a",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 18765,
+      "truncated": false,
+      "pages": 18,
+      "runningHeadLinesRemoved": 13,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.12300214973361996,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8400746069810818,
+      "ocrLetterShare": 0.7849187316813216,
+      "ocrChars": 18765,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 17,
+      "twoColumnPages": 3
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

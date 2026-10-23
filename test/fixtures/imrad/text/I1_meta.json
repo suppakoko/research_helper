@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "I1",
+  "title": "UKSSL: Underlying Knowledge Based Semi-Supervised Learning for Medical Image Classification",
+  "venue": "IEEE Open Journal of Engineering in Medicine and Biology 2023",
+  "publisher": "ieee",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "roman",
+    "webHeadings": "I. Introduction; II. Materials and Methods; III. Results and Discussion; IV. Conclusion",
+    "notes": [
+      "Roman-numeral headings",
+      "combined Results and Discussion heading"
+    ]
+  },
+  "doi": "10.1109/OJEMB.2023.3305190",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC11186655?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11186655/",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "I1.pdf",
+    "bytes": 1616455,
+    "sha256": "b5aab476ba6c55b41bd46495b954d4ceaa8e6672bcd86e2d496be7aff74401a4"
+  },
+  "text": {
+    "file": "I1.txt",
+    "bytes": 26992,
+    "chars": 26747,
+    "sha256": "dd5dbbe4f8c42d40d35f620d4306da3de4f7e71765dbd704defd111948258f64",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 26747,
+      "truncated": false,
+      "pages": 8,
+      "runningHeadLinesRemoved": 8,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.2348751394490689,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8400942161737766,
+      "ocrLetterShare": 0.7674131678319064,
+      "ocrChars": 26747,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 7,
+      "twoColumnPages": 6
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

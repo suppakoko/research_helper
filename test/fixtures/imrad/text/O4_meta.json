@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "O4",
+  "title": "SCARAP: scalable cross-species comparative genomics of prokaryotes",
+  "venue": "Bioinformatics 2024",
+  "publisher": "oup",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "arabic",
+    "webHeadings": "Abstract; 1 Introduction; 2 Materials and methods; 3 Results and discussion; 4 Conclusions",
+    "notes": [
+      "numbered headings",
+      "combined Results and Discussion heading"
+    ]
+  },
+  "doi": "10.1093/bioinformatics/btae735",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC11681940?pdf=render",
+  "landingUrl": "https://academic.oup.com/bioinformatics/article/41/1/btae735/7921419",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "O4.pdf",
+    "bytes": 2658043,
+    "sha256": "d3a6894a291e714ba058b7fc45da23c3c44b3e2bc4b5a3bf14a5e32ec9abc45e"
+  },
+  "text": {
+    "file": "O4.txt",
+    "bytes": 37295,
+    "chars": 37226,
+    "sha256": "b3e88fa505b5a048e5120e376807c947c725df113bc47d7f09dcf91bae2817c2",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 37226,
+      "truncated": false,
+      "pages": 10,
+      "runningHeadLinesRemoved": 0,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.18242468023626396,
+      "supplementaryCharsRemoved": 1253,
+      "ocrAlnumPunctShare": 0.843093536775372,
+      "ocrLetterShare": 0.7908451082576694,
+      "ocrChars": 37226,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 10,
+      "twoColumnPages": 10
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

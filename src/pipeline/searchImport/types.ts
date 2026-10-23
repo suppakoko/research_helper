@@ -49,6 +49,7 @@ import type { DedupPair } from "../../sources/shared/dedupe";
 import type { RecencyWindow } from "../../sources/shared/recency";
 import type { DuplicatePolicy } from "../../zotero/importer";
 import type { TranslatorFallbackReason } from "../../zotero/translatorImport";
+import type { RelevanceVerdict } from "../shared/relevanceScreen";
 import type { SearchImportStageKey, VersionLink } from "./stages";
 
 /**
@@ -189,6 +190,42 @@ export interface SearchImportInput {
    * produces its own.
    */
   readonly mergeDecisions?: readonly MergeDecision[];
+  /**
+   * Relevance screening for this run (`P3-T27`; `docs/12` §3, `docs/07`
+   * §12.1's `Screening` state). Present means the user chose it for this run;
+   * absent means no model is called. Ignored on the import of a preview's own
+   * {@link works}: that preview was screened already.
+   */
+  readonly screening?: SearchImportScreeningOptions;
+}
+
+/** The window's per-run screening choice (`docs/08` §4.2's threshold row). */
+export interface SearchImportScreeningOptions {
+  /**
+   * 0–100. Seeded from `screening.threshold` and changed per run only; `0`
+   * scores everything and excludes nothing (`docs/07` §8.5).
+   */
+  readonly threshold: number;
+  /** The topic the model scores against; the run's {@link SearchImportInput.query} when absent. */
+  readonly topic?: string;
+}
+
+/** What the `Screening` stage recorded (`P3-T27`). */
+export interface SearchImportScreeningReport {
+  readonly threshold: number;
+  /** Every scored row, keyed by its representative's `SourceRecord.id`. */
+  readonly verdicts: readonly RelevanceVerdict[];
+  /** Rows no call could score. Never in {@link excluded}. */
+  readonly unscored: readonly string[];
+  /** Scored rows below {@link threshold}; empty when it is `0`. */
+  readonly excluded: readonly string[];
+  /** The model that scored them, as the router resolved it. */
+  readonly modelId: string | undefined;
+  /**
+   * Why nothing was scored — a refused model, a missing key, a budget stop.
+   * The search itself still succeeded.
+   */
+  readonly error: SerializedError | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -474,6 +511,12 @@ export interface SearchImportOutput {
   readonly error: SerializedError | undefined;
   /** `CancellationToken.reason`'s `kind`, when the run was cancelled. */
   readonly cancellationKind: string | undefined;
+  /**
+   * The `Screening` stage's record (`P3-T27`). Absent when the run did not
+   * screen: no {@link SearchImportInput.screening}, the import of a
+   * preview's works, or a run that ended before the stage.
+   */
+  readonly screening?: SearchImportScreeningReport;
 }
 
 // ---------------------------------------------------------------------------

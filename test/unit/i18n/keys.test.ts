@@ -849,3 +849,54 @@ describe("src/i18n/keys.ts — the out-of-credit Test line (owner, 2026-10-23, p
     expect(sharedBy(pending, read("KO_PRESENT"))).toEqual([]);
   });
 });
+
+describe("src/i18n/keys.ts — P3-T27's relevance-screening strings (docs/08 §4.2, docs/12 §3)", () => {
+  // src/ui/viewModels/searchImportViewModel.ts builds the three with
+  // arguments; addon/content/searchDialog.xhtml and .js carry the rest.
+  const withArguments = [
+    "research-helper-search-screening-count",
+    "research-helper-search-screening-unscored",
+    "research-helper-search-row-relevance",
+  ];
+  const plain = [
+    "research-helper-search-screening-enable",
+    "research-helper-search-screening-threshold-label",
+    "research-helper-search-screening-threshold-input",
+    "research-helper-search-screening-show-excluded",
+    "research-helper-search-screening-failed",
+  ];
+  const all = [...withArguments, ...plain];
+
+  it("declares all eight on the search-window surface, outside the error ids; three take arguments", () => {
+    expect(all).toHaveLength(8);
+    expect(notIn(all, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(all, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(withArguments, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(plain, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(all, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("puts all eight on KO_PENDING_REVIEW until the owner reviews the Korean (G-41), never on KO_PRESENT", () => {
+    expect(notIn(all, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(all, read("KO_PRESENT"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — the screening cost line (owner, 2026-10-24, plan/00 §6 item 281(b))", () => {
+  const both = [
+    "research-helper-search-screening-cost",
+    "research-helper-search-screening-cost-unpriced",
+  ];
+
+  it("declares both on the search-window surface, with arguments, outside the error ids", () => {
+    expect(notIn(both, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(both, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(both, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(both, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("puts both on KO_PENDING_REVIEW until the owner reviews the Korean (G-41), never on KO_PRESENT", () => {
+    expect(notIn(both, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(both, read("KO_PRESENT"))).toEqual([]);
+  });
+});

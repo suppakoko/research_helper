@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "N3",
+  "title": "Turning copper into an efficient and stable CO evolution catalyst beyond noble metals",
+  "venue": "Nature Communications 2024",
+  "publisher": "nature",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "confirmed on the web page",
+    "headingNumbering": "none",
+    "webHeadings": "Abstract / Introduction / Results and discussion / Methods",
+    "notes": [
+      "combined Results and Discussion heading",
+      "Methods at the end"
+    ]
+  },
+  "doi": "10.1038/s41467-024-50436-4",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "\"licensed under a Creative Commons Attribution 4.0\" at the end of the article",
+  "sourceUrl": "https://www.nature.com/articles/s41467-024-50436-4.pdf",
+  "landingUrl": "https://www.nature.com/articles/s41467-024-50436-4",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "N3.pdf",
+    "bytes": 2626105,
+    "sha256": "83c48cbb3e446b646c08fee0d55de9588af604687d9aea014bdf8a0ed02651f1"
+  },
+  "text": {
+    "file": "N3.txt",
+    "bytes": 50533,
+    "chars": 50021,
+    "sha256": "0e909e17bb374bccb7fa23e494f920247503a4978ec35df544c25cf2941435d7",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 50021,
+      "truncated": false,
+      "pages": 11,
+      "runningHeadLinesRemoved": 11,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.20395302205671728,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8409268107394894,
+      "ocrLetterShare": 0.7354511105335759,
+      "ocrChars": 50021,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 11,
+      "twoColumnPages": 10
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

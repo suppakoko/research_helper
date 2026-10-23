@@ -1266,6 +1266,8 @@ describe("searchDialog.xhtml follows docs/08 §4.1.1", () => {
       "rh-search-scope-row",
       "rh-search-databases-group",
       "rh-search-filter-row",
+      // P3-T27: docs/08 §4.2 draws the relevance threshold above the table.
+      "rh-search-screening-row",
       "rh-results-area",
       "rh-search-target-row",
       "rh-search-duplicates-group",
@@ -3585,5 +3587,252 @@ describe('P2-T17 — the window opened with mode: "rerun" (steps 6–7)', () => 
       ["radio", "recorded", "research-helper-search-rerun-as-recorded"],
       ["radio", "advance", "research-helper-search-rerun-advance"],
     ]);
+  });
+});
+
+// ===========================================================================
+// P3-T27 — the relevance-screening row (docs/08 §4.2's threshold row)
+// ===========================================================================
+
+describe("P3-T27 — the relevance-screening row", () => {
+  const SCREENING_HOST = {
+    getPrefs: () => ({ screeningThreshold: 45, screeningAvailable: true }),
+  };
+
+  function scoredRecords(): TableRecord[] {
+    const ref = (score: number) => ({
+      score,
+      ref: { id: "research-helper-search-row-relevance", args: { score } },
+    });
+    return [
+      { ...record(1), relevance: ref(90) },
+      { ...record(2), relevance: ref(20) },
+      record(3),
+    ] as TableRecord[];
+  }
+
+  function screenedState(records: TableRecord[]): Record<string, unknown> {
+    return {
+      panel: "results",
+      running: false,
+      sources: [],
+      records,
+      recordsRevision: 1,
+      warnings: [],
+      notices: [],
+      cancelVisible: false,
+      screening: { threshold: 60, scored: 2, unscored: 1 },
+    };
+  }
+
+  it("opens at the host's screening.threshold, unticked, with the number hidden (Done-when)", () => {
+    const h = harness({ host: SCREENING_HOST });
+    h.controller.init();
+    expect(h.byId("rh-search-screening-row")?.hidden).toBe(false);
+    expect(h.byId("rh-search-screening")?.checked).toBe(false);
+    expect(h.byId("rh-search-screening-controls")?.hidden).toBe(true);
+    expect(h.byId("rh-search-screening-threshold")?.value).toBe("45");
+    expect(h.controller.collectQuery()["screening"]).toStrictEqual({
+      enabled: false,
+      threshold: 45,
+    });
+    expect(h.prefReads).toStrictEqual([]);
+  });
+
+  it("is not offered when the host says screening cannot run, or gives no threshold", () => {
+    for (const getPrefs of [
+      () => ({ screeningThreshold: 45, screeningAvailable: false }),
+      () => ({ screeningAvailable: true }),
+      () => ({}),
+    ]) {
+      const h = harness({ host: { getPrefs } });
+      h.controller.init();
+      expect(h.byId("rh-search-screening-row")?.hidden).toBe(true);
+      const box = h.byId("rh-search-screening");
+      if (box) box.checked = true;
+      expect(h.controller.collectQuery()["screening"]).toMatchObject({
+        enabled: false,
+      });
+    }
+  });
+
+  it("sends a per-run number when ticked, and nothing writes it back (Done-when)", () => {
+    const h = harness({ host: SCREENING_HOST });
+    h.controller.init();
+    const box = h.byId("rh-search-screening");
+    if (box) box.checked = true;
+    box?.dispatch("command");
+    expect(h.byId("rh-search-screening-controls")?.hidden).toBe(false);
+    const number = h.byId("rh-search-screening-threshold");
+    if (number) number.value = "70";
+    number?.dispatch("input");
+    expect(h.controller.collectQuery()["screening"]).toStrictEqual({
+      enabled: true,
+      threshold: 70,
+    });
+    // The fake Zotero has no Prefs.set and the host no setter: the only way
+    // the preference could change is a call that does not exist.
+    expect(SCREENING_HOST.getPrefs().screeningThreshold).toBe(45);
+    expect(h.prefReads).toStrictEqual([]);
+  });
+
+  it("hides a scored row below the threshold until Show excluded, never an unscored row, with the count beside it", () => {
+    const h = harness({ host: SCREENING_HOST });
+    h.controller.init();
+    const box = h.byId("rh-search-screening");
+    if (box) box.checked = true;
+    box?.dispatch("command");
+    const number = h.byId("rh-search-screening-threshold");
+    if (number) number.value = "60";
+    h.controller.render(screenedState(scoredRecords()));
+    const visible = (): string[] =>
+      h.controller.state.visible.map((row) => row.key);
+    expect(visible()).toStrictEqual(["10.1000/rh.1", "10.1000/rh.3"]);
+    const count = h.byId("rh-search-screening-count");
+    expect(count?.hidden).toBe(false);
+    expect(count?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-screening-count",
+    );
+    expect(
+      JSON.parse(count?.getAttribute("data-l10n-args") ?? "{}"),
+    ).toStrictEqual({ total: 3, kept: 2, excluded: 1 });
+
+    const show = h.byId("rh-search-screening-show-excluded");
+    if (show) show.checked = true;
+    show?.dispatch("command");
+    expect(visible()).toHaveLength(3);
+
+    // Threshold 0 hides nothing; unticking the box shows every row too.
+    if (show) show.checked = false;
+    if (number) number.value = "0";
+    number?.dispatch("input");
+    expect(visible()).toHaveLength(3);
+    if (number) number.value = "60";
+    if (box) box.checked = false;
+    box?.dispatch("command");
+    expect(visible()).toHaveLength(3);
+    expect(count?.hidden).toBe(true);
+  });
+});
+
+// ===========================================================================
+// Item 281(b) — the estimated cost beside the screening checkbox (owner,
+// 2026-10-24; docs/08 §4.2's note of that date)
+// ===========================================================================
+
+describe("item 281(b) — the screening cost line", () => {
+  const tick = (): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, 0));
+
+  /** A host that answers each cost request when the test says so. */
+  function costHost(available = true) {
+    const asked: Record<string, unknown>[] = [];
+    const answers: ((ref: unknown) => void)[] = [];
+    const host = {
+      listSources: () => [PUBMED, CROSSREF],
+      getPrefs: () => ({
+        screeningThreshold: 45,
+        screeningAvailable: available,
+      }),
+      screeningCost: (query: Record<string, unknown>) => {
+        asked.push(query);
+        return new Promise((resolve) => answers.push(resolve));
+      },
+    };
+    return { host, asked, answers };
+  }
+
+  const line = (cost: string, count: number) => ({
+    id: "research-helper-search-screening-cost",
+    args: { cost, count },
+  });
+
+  it("shows the host's estimate beside the checkbox once the window opens", async () => {
+    const { host, asked, answers } = costHost();
+    const h = harness({ host });
+    h.controller.init();
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatchObject({
+      sources: ["pubmed", "crossref"],
+      maxResults: PREFS.maxResults.default,
+    });
+    const cost = h.byId("rh-search-screening-cost");
+    expect(cost?.hidden).toBe(true);
+    answers[0]?.(line("$0.42", 200));
+    await tick();
+    expect(cost?.hidden).toBe(false);
+    expect(cost?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-screening-cost",
+    );
+    expect(JSON.parse(cost?.getAttribute("data-l10n-args") ?? "{}")).toEqual({
+      cost: "$0.42",
+      count: 200,
+    });
+  });
+
+  it("asks again when a database, the maximum or the keyword changes, and drops an overtaken answer", async () => {
+    const { host, asked, answers } = costHost();
+    const h = harness({ host });
+    h.controller.init();
+    const box = h.byId("rh-search-databases")?.children[1];
+    if (box) box.checked = false;
+    box?.dispatch("command");
+    expect(asked[1]).toMatchObject({ sources: ["pubmed"] });
+    const max = h.byId("rh-search-max-results");
+    if (max) max.value = "50";
+    max?.dispatch("input");
+    expect(asked[2]).toMatchObject({ maxResults: 50 });
+    const keyword = h.byId("rh-search-keyword");
+    if (keyword) keyword.value = "lipid";
+    keyword?.dispatch("input");
+    expect(asked[3]).toMatchObject({ keyword: "lipid", maxResults: 50 });
+    // The latest answer lands first; the older ones are dropped when they come.
+    answers[3]?.(line("$0.05", 50));
+    await tick();
+    answers[0]?.(line("$9.99", 200));
+    answers[1]?.(line("$9.99", 100));
+    await tick();
+    expect(
+      JSON.parse(
+        h.byId("rh-search-screening-cost")?.getAttribute("data-l10n-args") ??
+          "{}",
+      ),
+    ).toEqual({ cost: "$0.05", count: 50 });
+  });
+
+  it("says when the price is unknown, and hides the line when there is nothing to price", async () => {
+    const { host, answers } = costHost();
+    const h = harness({ host });
+    h.controller.init();
+    answers[0]?.({
+      id: "research-helper-search-screening-cost-unpriced",
+      args: { model: "screen-model" },
+    });
+    await tick();
+    const cost = h.byId("rh-search-screening-cost");
+    expect(cost?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-screening-cost-unpriced",
+    );
+    expect(cost?.hidden).toBe(false);
+    const keyword = h.byId("rh-search-keyword");
+    keyword?.dispatch("input");
+    answers[1]?.(undefined);
+    await tick();
+    expect(cost?.hidden).toBe(true);
+  });
+
+  it("asks nothing and shows nothing when screening is not offered, or the host has no estimate", () => {
+    const off = costHost(false);
+    const h = harness({ host: off.host });
+    h.controller.init();
+    expect(off.asked).toHaveLength(0);
+    expect(h.byId("rh-search-screening-cost")?.hidden).toBe(true);
+    const bare = harness({
+      host: {
+        getPrefs: () => ({ screeningThreshold: 45, screeningAvailable: true }),
+      },
+    });
+    bare.controller.init();
+    expect(bare.byId("rh-search-screening-cost")?.hidden).toBe(true);
   });
 });

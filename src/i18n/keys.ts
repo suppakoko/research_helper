@@ -703,6 +703,20 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   // NFR-14's details disclosure for raw upstream text.
   "research-helper-search-details-show",
   "research-helper-search-details-hide",
+
+  // `P3-T27`: relevance screening (docs/08 §4.2's threshold row, docs/12 §3).
+  "research-helper-search-screening-enable",
+  "research-helper-search-screening-threshold-label",
+  "research-helper-search-screening-threshold-input",
+  "research-helper-search-screening-show-excluded",
+  "research-helper-search-screening-count",
+  "research-helper-search-screening-unscored",
+  "research-helper-search-screening-failed",
+  "research-helper-search-row-relevance",
+  // Owner, 2026-10-24, `plan/00` §6 item 281(b): the estimated cost beside
+  // the screening checkbox (docs/08 §4.2's note of that date).
+  "research-helper-search-screening-cost",
+  "research-helper-search-screening-cost-unpriced",
 ] as const satisfies readonly FluentMessageId[];
 
 export type SearchDialogMessageId = (typeof SEARCH_DIALOG_MESSAGE_IDS)[number];
@@ -1034,6 +1048,21 @@ export const KO_PENDING_REVIEW = [
   "research-helper-search-state-error-retry",
   "research-helper-search-details-show",
   "research-helper-search-details-hide",
+  // `P3-T27`'s eight relevance-screening strings. `G-41` owns the
+  // translation; the `ko-KR` bundle carries each as a commented stub with its
+  // English source, and nothing was machine-translated.
+  "research-helper-search-screening-enable",
+  "research-helper-search-screening-threshold-label",
+  "research-helper-search-screening-threshold-input",
+  "research-helper-search-screening-show-excluded",
+  "research-helper-search-screening-count",
+  "research-helper-search-screening-unscored",
+  "research-helper-search-screening-failed",
+  "research-helper-search-row-relevance",
+  // The screening cost line (owner, 2026-10-24, `plan/00` §6 item 281(b)); a
+  // commented `ko-KR` stub each, nothing machine-translated (`G-41`).
+  "research-helper-search-screening-cost",
+  "research-helper-search-screening-cost-unpriced",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -1379,6 +1408,21 @@ export interface FluentMessageArgsMap {
   // only when no name resolved); `$score` the similarity as a whole
   // percentage.
   "research-helper-search-row-duplicate": { tier: string; score: number };
+  // `P3-T27`: `$score` is the model's 0–100 relevance score; `$kept` the
+  // rows the threshold keeps (unscored rows included), `$total` every row,
+  // `$excluded` the scored rows below it; `$count` the unscored rows.
+  "research-helper-search-row-relevance": { score: number };
+  "research-helper-search-screening-count": {
+    kept: number;
+    total: number;
+    excluded: number;
+  };
+  "research-helper-search-screening-unscored": { count: number };
+  // Item 281(b) (owner, 2026-10-24): `$cost` is the estimate, already
+  // formatted as currency for the application locale; `$count` the most
+  // results the search can return; `$model` the model id (not translated).
+  "research-helper-search-screening-cost": { cost: string; count: number };
+  "research-helper-search-screening-cost-unpriced": { model: string };
   // `P2-T17`, FR-12. `$collection` is the collection's own name (data, not a
   // translatable string); `$date` the recorded run's finish date, already
   // formatted by the window. `$present` is `linkedExisting + skipped` — see
@@ -1508,6 +1552,13 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-search-rerun-heading",
   "research-helper-search-rerun-recorded",
   "research-helper-search-import-summary-rerun",
+  // `P3-T27`.
+  "research-helper-search-row-relevance",
+  "research-helper-search-screening-count",
+  "research-helper-search-screening-unscored",
+  // Item 281(b).
+  "research-helper-search-screening-cost",
+  "research-helper-search-screening-cost-unpriced",
 ] as const satisfies readonly (keyof FluentMessageArgsMap)[];
 
 /**

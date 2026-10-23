@@ -1,0 +1,70 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "I5",
+  "title": "An Epileptic Seizure Prediction Method Based on CBAM-3D CNN-LSTM Model",
+  "venue": "IEEE Journal of Translational Engineering in Health and Medicine 2023",
+  "publisher": "ieee",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected",
+    "headingNumbering": "roman",
+    "webHeadings": "I. Introduction; II. Methodology; III. Results; IV. Conclusion",
+    "notes": [
+      "no Discussion section",
+      "\"Methodology\" instead of Methods"
+    ]
+  },
+  "doi": "10.1109/JTEHM.2023.3290036",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the PDF states CC BY 4.0",
+  "sourceUrl": "https://europepmc.org/articles/PMC10328218?pdf=render",
+  "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10328218/",
+  "recordedAt": "2026-10-23T15:36:06.675Z",
+  "extractedAt": "2026-10-23T15:36:06.675Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "I5.pdf",
+    "bytes": 1288301,
+    "sha256": "0325ca92c289311745db208348475ecf2de25f4eb99a2324900a24447d6780dd"
+  },
+  "text": {
+    "file": "I5.txt",
+    "bytes": 26057,
+    "chars": 25991,
+    "sha256": "6332da308ddbc2ada663e5c56ae9c55c62e5bd0be5828dc2ea48b107f3dfc1dd",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 25991,
+      "truncated": false,
+      "pages": 7,
+      "runningHeadLinesRemoved": 13,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.1813801140121571,
+      "supplementaryCharsRemoved": 0,
+      "ocrAlnumPunctShare": 0.8416374899003501,
+      "ocrLetterShare": 0.7958524104497711,
+      "ocrChars": 25991,
+      "ocrFailed": "",
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 7,
+      "twoColumnPages": 7
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}
