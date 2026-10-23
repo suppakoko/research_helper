@@ -7,8 +7,11 @@
  * {@link modelsFor} and shows {@link ModelCatalogueSnapshot.asOfEpochMs} and
  * the {@link ModelCatalogueSnapshot.stale} marker) and the cost estimator
  * (`P3-T16`, which prices a run with `./pricing.ts`'s `costOf` on
- * {@link CatalogueModel.prices}). Neither is wired yet; the composition root
- * that builds {@link createModelCatalogue} belongs to those cards.
+ * {@link CatalogueModel.prices}). *(Updated 2026-10-23, `plan/00` §6 item
+ * 278(b): the composition root builds one catalogue, inside the one
+ * {@link ModelPriceSource} (section 5), which the pane's suggestions refresh
+ * and the budgeted router's reservations read; the cost dialog, `P3-T29`'s,
+ * is to read the same source.)*
  *
  * **What is fetched** (`docs/03` §9 preamble and §9.4):
  * - OpenRouter's catalogue, always: it needs no key, it is the only
@@ -63,6 +66,7 @@ import {
   pricesFromDocumentedRow,
   type ModelPrices,
   type UserPriceOverride,
+  type UserPriceStore,
 } from "./pricing";
 import { toOpenRouterSlug } from "./slugMap";
 
@@ -476,6 +480,182 @@ export function createModelCatalogue(deps: ModelCatalogueDeps): ModelCatalogue {
         stale: false,
         failed,
       };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 5. The price snapshot (owner, 2026-10-23, `plan/00` §6 item 278(b))
+// ---------------------------------------------------------------------------
+
+/**
+ * `snapshot` with `overrides` applied to every model it lists, exactly as
+ * {@link createModelCatalogue} applies them. `applyUserPriceOverride`
+ * replaces a model's prices wholesale, so applying the same table twice
+ * changes nothing.
+ *
+ * @param snapshot - a catalogue snapshot
+ * @param overrides - the user-editable price table
+ * @returns the snapshot with the user's prices
+ */
+export function applyUserPrices(
+  snapshot: ModelCatalogueSnapshot,
+  overrides: readonly UserPriceOverride[],
+): ModelCatalogueSnapshot {
+  if (overrides.length === 0) return snapshot;
+  return {
+    ...snapshot,
+    models: snapshot.models.map((model) => withUserPrices(model, overrides)),
+  };
+}
+
+/**
+ * The prices a reservation and the cost dialog read: **one snapshot, read
+ * synchronously, refreshed asynchronously** (`docs/07` §4.3's note of
+ * 2026-10-23, `plan/00` §6 item 278(b)).
+ *
+ * The budgeted router's `pricesFor` is synchronous and the catalogue is not,
+ * so the source holds the last catalogue snapshot it adopted, with the user
+ * price table applied over it. Until one has been adopted it holds
+ * {@link bundledCatalogue} — `docs/03` §12.1's documented table — with the
+ * user table applied over that. Nothing here fetches on its own: startup
+ * sends no catalogue request (`plan/00` §6 item 279(c)).
+ */
+export interface ModelPriceSource {
+  /**
+   * `modelId` as `providerId` lists it, in the snapshot held now.
+   *
+   * @returns its prices, or `undefined` when the snapshot lists it with none
+   *   or does not list it (the call is then unpriced)
+   */
+  pricesFor(providerId: ProviderId, modelId: string): ModelPrices | undefined;
+  /** The snapshot {@link pricesFor} reads now, user prices applied. */
+  current(): ModelCatalogueSnapshot;
+  /**
+   * Whether a catalogue snapshot has been adopted; `false` while the source
+   * still serves the documented table it started with.
+   */
+  readonly loaded: boolean;
+  /**
+   * Read the user price table and the catalogue (its cache, else the
+   * network, else its bundled fallback), adopt both, and return the
+   * snapshot adopted. A snapshot that arrives after a later refresh's is not
+   * adopted. Rejects only when `ctx` is cancelled.
+   */
+  refresh(ctx: LLMCallContext): Promise<ModelCatalogueSnapshot>;
+  /**
+   * Re-read the user price table only — the plugin database, no network —
+   * and apply it to the snapshot held. A failed read is logged and keeps the
+   * table held before.
+   */
+  reloadUserPrices(): Promise<void>;
+}
+
+/** What {@link createModelPriceSource} needs. */
+export interface ModelPriceSourceDeps {
+  /**
+   * The catalogue, built **without** `userPriceOverrides`: the source applies
+   * the user table itself, so a row the user removes stops applying at once.
+   */
+  readonly catalogue: ModelCatalogue;
+  /** The user-editable price table (`UserPriceStore.list` in the product). */
+  readonly userPriceOverrides: () =>
+    readonly UserPriceOverride[] | Promise<readonly UserPriceOverride[]>;
+  readonly logger?: Logger;
+}
+
+/**
+ * Build the one price source of a plugin lifetime.
+ *
+ * @param deps - see {@link ModelPriceSourceDeps}
+ * @returns the source, holding the documented table until a refresh
+ */
+export function createModelPriceSource(
+  deps: ModelPriceSourceDeps,
+): ModelPriceSource {
+  let base: ModelCatalogueSnapshot = bundledCatalogue();
+  let loaded = false;
+  let overrides: readonly UserPriceOverride[] = [];
+  let held: ModelCatalogueSnapshot = base;
+  /** The newest refresh started, and the newest whose snapshot was adopted. */
+  let started = 0;
+  let adopted = 0;
+  /** The same two counters for the user table's reads. */
+  let readsStarted = 0;
+  let readAdopted = 0;
+
+  const rebuild = (): void => {
+    held = applyUserPrices(base, overrides);
+  };
+
+  async function readOverrides(): Promise<void> {
+    const ticket = ++readsStarted;
+    let rows: readonly UserPriceOverride[];
+    try {
+      rows = await deps.userPriceOverrides();
+    } catch (error) {
+      deps.logger?.warn(
+        "model prices: the user price table could not be read; the table held before stays",
+        { error: error instanceof Error ? error.name : typeof error },
+      );
+      return;
+    }
+    if (ticket < readAdopted) return;
+    readAdopted = ticket;
+    overrides = rows;
+    rebuild();
+  }
+
+  return {
+    pricesFor(providerId, modelId) {
+      return findCatalogueModel(held, providerId, modelId)?.prices;
+    },
+    current: () => held,
+    get loaded(): boolean {
+      return loaded;
+    },
+    async refresh(ctx) {
+      const ticket = ++started;
+      const [snapshot] = await Promise.all([
+        deps.catalogue.get(ctx),
+        readOverrides(),
+      ]);
+      if (ticket >= adopted) {
+        adopted = ticket;
+        base = snapshot;
+        loaded = true;
+        rebuild();
+      }
+      return applyUserPrices(snapshot, overrides);
+    },
+    reloadUserPrices: readOverrides,
+  };
+}
+
+/**
+ * `store` with `source` re-reading the user price table after each change
+ * it makes (owner, 2026-10-23, `plan/00` §6 item 278(b)), so the next
+ * reservation is priced as the user just said. The pane's price form writes
+ * through it. The re-read is awaited and never rejects: a failed re-read is
+ * logged by the source, which keeps the table it held.
+ *
+ * @param store - the `user_price` store
+ * @param source - the price source to refresh
+ * @returns the same store surface
+ */
+export function reloadingUserPriceStore(
+  store: UserPriceStore,
+  source: Pick<ModelPriceSource, "reloadUserPrices">,
+): UserPriceStore {
+  return {
+    list: () => store.list(),
+    upsert: async (row) => {
+      await store.upsert(row);
+      await source.reloadUserPrices();
+    },
+    delete: async (providerId, modelId) => {
+      await store.delete(providerId, modelId);
+      await source.reloadUserPrices();
     },
   };
 }

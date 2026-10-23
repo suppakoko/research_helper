@@ -72,6 +72,7 @@ import {
   type SemaphoreRelease,
 } from "../concurrency";
 import {
+  AuthenticationError,
   BudgetExceededError,
   ConfigurationError,
   ResearchHelperError,
@@ -1107,6 +1108,20 @@ export interface PooledRunDeps<T, R> {
    * (owner, 2026-10-23, `plan/00` §6 item 274(c); `docs/07` §7.5).
    */
   readonly budgetStopOf?: (error: unknown) => unknown;
+  /**
+   * `docs/09` §2.4 (`P3-T14` step 6): a call refused with
+   * `AuthenticationError` — HTTP 401, or Gemini's bad-key 400 — is not a
+   * failed item. It stays pending, the job pauses with `credential-required`
+   * (one notification, through {@link JobQueue.pause}), and this is called
+   * **once per such pause** with the error, so the caller can set
+   * `<provider>.lastValidationResult = "rejected"` with a timestamp
+   * (`markProviderKeyRejected` in `src/zotero/keychain.ts`, which `core/` may
+   * not import). Nothing here touches the stored key (step 4). A throw is
+   * logged by name and does not stop the pause. Absent, the job still pauses.
+   */
+  readonly onCredentialRejected?: (
+    error: AuthenticationError,
+  ) => void | Promise<void>;
 }
 
 /** The `code` a failed item is recorded with. */
@@ -1169,6 +1184,14 @@ export function describePooledOutcome(outcome: PooledRunOutcome): string {
  * rest; a cancel leaves them pending. A pause the user asked for that has not
  * taken effect yet takes the reason `budget-stop`, so the question asked is
  * the money one.
+ *
+ * **A rejected key pauses once** (`docs/09` §2.4, `P3-T14` step 6). A call
+ * refused with `AuthenticationError` stays pending exactly as a budget
+ * refusal does, the job pauses with `credential-required` — which outranks
+ * every other pending reason — with one notification however many in-flight
+ * calls were refused, and {@link PooledRunDeps.onCredentialRejected} is told
+ * once per pause. The stored key is never touched; a resume after the user
+ * fixes it dispatches the refused items first.
  *
  * The job must be `running` when the run starts (`JobQueue.start`). The run
  * moves it to `paused` and back, and on {@link PooledRun.cancel} to
@@ -1245,11 +1268,40 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
    * the money (item 274(c)).
    */
   const requestBudgetPause = (): void => {
+    // A rejected key is asked about first: no spend question helps until the
+    // key is fixed (`P3-T14`).
+    if (pauseRequest?.reason === "credential-required") return;
     if (pauseRequest !== undefined && pauseRequest.reason !== "budget-stop") {
       pauseRequest = { reason: "budget-stop", done: pauseRequest.done };
       return;
     }
     void requestPause("budget-stop");
+  };
+
+  /**
+   * A call was refused with `AuthenticationError` (`docs/09` §2.4): pause
+   * with `credential-required`, which outranks any other pending reason, and
+   * tell the caller once per pause so the key is marked rejected.
+   */
+  const requestCredentialPause = (error: AuthenticationError): void => {
+    if (pauseRequest?.reason === "credential-required") return;
+    if (pauseRequest !== undefined) {
+      pauseRequest = { reason: "credential-required", done: pauseRequest.done };
+    } else {
+      void requestPause("credential-required");
+    }
+    const mark = deps.onCredentialRejected;
+    if (mark === undefined) return;
+    void (async () => {
+      try {
+        await mark(error);
+      } catch (failure) {
+        deps.logger.warn("marking the rejected key failed", {
+          jobId,
+          reason: reasonOf(failure),
+        });
+      }
+    })();
   };
 
   const recordFailure = (key: string, error: unknown): void => {
@@ -1290,6 +1342,15 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
         jobId,
       });
       requestBudgetPause();
+    } else if (outcome.error instanceof AuthenticationError) {
+      // Pending, never failed, never retried: the key was rejected, so every
+      // later item would fail the same way (`docs/09` §2.4, `P3-T14`).
+      refused.push(at);
+      deps.logger.info("a call's key was rejected; pausing", {
+        jobId,
+        httpStatus: outcome.error.httpStatus,
+      });
+      requestCredentialPause(outcome.error);
     } else {
       recordFailure(key, outcome.error);
     }

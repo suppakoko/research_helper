@@ -734,8 +734,13 @@ describe("installServices builds the LLM layer (P3-T06 step 7)", () => {
       expect(first.context.llm).toBe(graph.llm.router);
       expect(second.context.llm).toBe(graph.llm.router);
 
+      // The job passes its own guard: the shared router refuses a call
+      // without one (owner, 2026-10-23, plan/00 §6 item 278(a)).
       await expect(
-        first.context.llm.chat(request("or/base"), { token: cts.token }),
+        first.context.llm.chat(request("or/base"), {
+          token: cts.token,
+          budget: first.context.budget,
+        }),
       ).rejects.toBeInstanceOf(MissingCredentialError);
       expect(requests).toEqual([]);
       first.dispose();

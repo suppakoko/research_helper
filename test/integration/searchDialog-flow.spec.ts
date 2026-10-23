@@ -308,6 +308,7 @@ import type {
 import type { Pipeline, PipelineContext } from "../../src/pipeline/types";
 import { UNWIRED_BUDGET_GUARD } from "../../src/pipeline/shared/budget";
 import { createPrivacyPolicy } from "../../src/pipeline/shared/privacyPolicy";
+import { getPref } from "../../src/prefs";
 import { createPubmedRecordMapper } from "../../src/sources/pubmed/mapper";
 import {
   DEDUP_CORPUS_PUBMED_NO_RECORDS,
@@ -1293,7 +1294,8 @@ function jobFactory(
         llm: mockLLMRouter(),
         tts: undefined,
         zotero: undefined,
-        config: undefined,
+        // `docs/07` §4.5's `ConfigReader` (`P3-T35`): `getPref`, read-only.
+        config: { get: getPref },
         privacy: createPrivacyPolicy("strict"),
         checkpoint: (): Promise<void> => Promise.resolve(),
         resumeState: undefined,

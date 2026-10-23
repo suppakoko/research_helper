@@ -42,9 +42,22 @@
  * each of its up to three requests through that `chat`, so when it throws
  * (a repair still invalid, a truncation) the requests it made are already
  * counted. A settled call is priced in this order: the provider's own
- * `costUsd` (OpenRouter reports one); the reported tokens through `costOf`;
- * the reservation's estimate, marked estimated. A request that fails before
- * any answer settles nothing and frees its reservation.
+ * `costUsd` (OpenRouter reports one); the reported tokens through `costOf`,
+ * at the prices the call was reserved with (owner, `plan/00` §6 item 278(b));
+ * the reservation's estimate, marked estimated, only when the tokens were not
+ * reported. A request that fails before any answer settles nothing and frees
+ * its reservation.
+ *
+ * **A call with no guard is refused** (owner, 2026-10-23, `plan/00` §6 item
+ * 278(a)): {@link withBudget} throws `ConfigurationError` before anything is
+ * sent, so a caller that forgets `budget: ctx.budget` spends nothing. The
+ * pane's key Test and the model catalogue never pass through the router.
+ *
+ * **Prices.** {@link WithBudgetDeps.pricesFor} is synchronous; the composition
+ * root reads it from the service graph's `modelPrices`
+ * (`createModelPriceSource` in `src/llm/shared/modelCatalogue.ts`), the
+ * snapshot the cost dialog prices from too (`docs/07` §4.3's note of
+ * 2026-10-23).
  *
  * A model with no known price is **unpriced**: its reservation passes, because
  * nothing can be compared, its tokens are counted and the totals say how many
@@ -281,6 +294,12 @@ export interface ReservationEstimate {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly costUsd?: number;
+  /**
+   * The prices `costUsd` was computed with. A settled call whose provider
+   * reports no cost is charged at these × its reported tokens (`plan/00` §6
+   * item 278(b)); absent, the guard's own {@link BudgetGuardDeps.prices}.
+   */
+  readonly prices?: ModelPrices;
 }
 
 /** One call's reservation, settled or freed exactly once. */
@@ -322,7 +341,10 @@ export interface BudgetGuardDeps {
   readonly session: SessionSpendCounter;
   /** The ceilings; {@link PREF_CEILINGS} by default. */
   readonly limits?: CeilingLimitsCents;
-  /** The run model's prices, to price reported tokens at settle. */
+  /**
+   * The run model's prices, to price reported tokens at settle when the
+   * reservation carries none of its own ({@link ReservationEstimate.prices}).
+   */
   readonly prices?: ModelPrices;
   /** Now, for a promotion's end date (`costOf`); `Date.now` by default. */
   readonly now?: () => number;
@@ -431,12 +453,11 @@ export function createBudgetGuard(deps: BudgetGuardDeps): RunBudgetGuard {
     let estimated = input === undefined || output === undefined;
     const inputTokens = input ?? reserved.inputTokens;
     const outputTokens = output ?? reserved.outputTokens;
-    if (costUsd === undefined && !estimated && deps.prices !== undefined) {
-      costUsd = costOf(
-        deps.prices,
-        { inputTokens, outputTokens },
-        now(),
-      ).costUsd;
+    // Item 278(b): the prices the call was reserved with, so a call the
+    // provider does not price is charged for what it used, not its estimate.
+    const prices = reserved.prices ?? deps.prices;
+    if (costUsd === undefined && !estimated && prices !== undefined) {
+      costUsd = costOf(prices, { inputTokens, outputTokens }, now()).costUsd;
     }
     if (costUsd === undefined && reserved.costUsd !== undefined) {
       costUsd = reserved.costUsd;
@@ -478,6 +499,7 @@ export function createBudgetGuard(deps: BudgetGuardDeps): RunBudgetGuard {
           inputTokens: estimate.inputTokens,
           outputTokens: estimate.outputTokens,
           ...(costUsd !== undefined && { costUsd }),
+          ...(estimate.prices !== undefined && { prices: estimate.prices }),
         });
       },
       release: close,
@@ -531,12 +553,16 @@ export function createBudgetGuard(deps: BudgetGuardDeps): RunBudgetGuard {
 }
 
 /**
- * The placeholder a job context carries until `P3-T35` wires a real guard
- * into `createPipelineContextFactory`. It **fails closed**: every reservation
- * throws `ConfigurationError`, so no LLM request can be sent under it, and it
- * can spend nothing (`limitUsd` 0). Phase 1–2's pipelines make no LLM call,
- * so they never reach it. The same reasoning as the strict privacy
- * placeholder `P3-T15` put in the same factory.
+ * A guard that **fails closed**: every reservation throws
+ * `ConfigurationError`, so no LLM request can be sent under it, and it can
+ * spend nothing (`limitUsd` 0).
+ *
+ * *(Updated 2026-10-23: `P3-T35` replaced it in
+ * `createPipelineContextFactory` with a real guard per job, so the product no
+ * longer uses it.)* It stays for the callers that build a `PipelineContext`
+ * by hand for a pipeline that makes no LLM call — `scripts/bench-search.ts`,
+ * the search-import and backfill tests and `searchDialog-flow.spec.ts` —
+ * where a real guard would be noise.
  */
 export const UNWIRED_BUDGET_GUARD: BudgetGuard = Object.freeze({
   reserve(): void {
@@ -557,7 +583,11 @@ export const UNWIRED_BUDGET_GUARD: BudgetGuard = Object.freeze({
 
 /** What {@link withBudget} needs to estimate one request. */
 export interface WithBudgetDeps {
-  /** The prices of a model, or `undefined` when none is known. */
+  /**
+   * The prices of a model, or `undefined` when none is known. Synchronous: the
+   * composition root reads a snapshot (`ModelPriceSource.pricesFor`), the one
+   * the cost dialog prices from (`plan/00` §6 item 278(b)).
+   */
   pricesFor(modelId: string): ModelPrices | undefined;
   /** Now, for a promotion's end date. */
   now(): number;
@@ -568,7 +598,8 @@ export interface WithBudgetDeps {
 /**
  * One request's reservation: the messages' tokens with the model's
  * calibration and D-06-5's headroom, the request's own output ceiling, and the
- * price of both.
+ * price of both. The prices travel with the estimate, so the call is settled
+ * at them ({@link ReservationEstimate.prices}).
  *
  * `maxOutputTokens` absent reserves no output: the per-paper summarizer always
  * sends one (`docs/06` §5.2; `plan/00` §6 item 261(e)).
@@ -595,9 +626,9 @@ export function requestEstimate(
     prices === undefined
       ? undefined
       : costOf(prices, { inputTokens, outputTokens }, deps.now()).costUsd;
-  return costUsd === undefined
+  return costUsd === undefined || prices === undefined
     ? { inputTokens, outputTokens }
-    : { inputTokens, outputTokens, costUsd };
+    : { inputTokens, outputTokens, costUsd, prices };
 }
 
 function isRunGuard(guard: BudgetGuard): guard is RunBudgetGuard {
@@ -628,10 +659,26 @@ const NO_USAGE: Usage = Object.freeze({
 });
 
 /**
+ * The refusal of a call that carries no guard (`plan/00` §6 item 278(a)).
+ * `ConfigurationError`: the caller's wiring is at fault, which the summarize
+ * stages rethrow as fatal; never `BudgetExceededError`, which the job runner
+ * would read as a ceiling and answer with "raise the limit?".
+ */
+function unbudgeted(request: ChatRequest): ConfigurationError {
+  return new ConfigurationError(
+    "an LLM call through the shared router carries no budget guard " +
+      "(LLMCallContext.budget); nothing is sent",
+    { model: request.model },
+  );
+}
+
+/**
  * `LLMCallContext.budget` enforced (`docs/07` §4.3: "Enforced before the
  * call"). A call whose context carries a guard reserves before it is sent and
  * settles when its answer arrives; the guard is not passed further down, so
- * nothing counts a call twice. A call without a guard goes straight through.
+ * nothing counts a call twice. **A call without a guard is refused** with
+ * `ConfigurationError` before anything is sent (owner, 2026-10-23, `plan/00`
+ * §6 item 278(a): fail closed).
  *
  * @param router - the router to wrap
  * @param deps - see {@link WithBudgetDeps}
@@ -646,7 +693,7 @@ export function withBudget(router: LLMRouter, deps: WithBudgetDeps): LLMRouter {
       ctx: LLMCallContext,
     ): Promise<ChatResponse> {
       const { budget, ...rest } = ctx;
-      if (budget === undefined) return router.chat(request, ctx);
+      if (budget === undefined) throw unbudgeted(request);
       const reservation = reserveOn(budget, requestEstimate(request, deps));
       let response: ChatResponse;
       try {
@@ -663,10 +710,7 @@ export function withBudget(router: LLMRouter, deps: WithBudgetDeps): LLMRouter {
       ctx: LLMCallContext,
     ): AsyncIterable<ChatStreamChunk> {
       const { budget, ...rest } = ctx;
-      if (budget === undefined) {
-        yield* router.chatStream(request, ctx);
-        return;
-      }
+      if (budget === undefined) throw unbudgeted(request);
       const reservation = reserveOn(budget, requestEstimate(request, deps));
       let settled = false;
       try {

@@ -47,21 +47,38 @@
  * binding writes every keystroke and cannot refuse a value (`docs/08` §7.3,
  * the note dated 2026-10-23). The model field and the Gemini paid-tier
  * checkbox **are** bound: neither has a write-time rule. The host does not
- * *resolve* a base URL — `src/llm/shared/baseUrl.ts` (`P3-T06`) does — and
- * the LLM blocks' Test is `P3-T14`'s: {@link isTestableCredential} keeps an
- * LLM key out of the two source requests below.
+ * *resolve* a base URL — `src/llm/shared/baseUrl.ts` (`P3-T06`) does.
+ *
+ * ## The Test call for all six credentials (`P3-T14`)
+ *
+ * The two source keys are tested here, by the two `docs/09` §2.3 requests
+ * below — they stay in this file for Phase 3 and move into the source
+ * adapters with `plan/00` §6 item 52 (owner, item 272(d); `docs/09` §8 item
+ * 8). An LLM key is tested by its own adapter's `validateCredentials()`,
+ * through the {@link PreferencesHostDeps.validateLlm} port, so it only ever
+ * goes to its own provider's host and the host here never reads it.
+ * {@link classifyLlmCheck} maps the answer to `docs/07` §8.5's enum; an
+ * out-of-credit answer (`rh-error-quota`) is `ok` with its own line
+ * (owner, 2026-10-23, `plan/00` §6 item 279(a)). Every
+ * outcome the service actually answered is persisted through the
+ * {@link ValidationPort} (`<provider>.lastValidationResult` and
+ * `.lastValidatedAt`); a Test that got no answer — a network failure, a
+ * timeout — leaves the stored status as it was (`docs/09` §2.3). The pane
+ * paints every status row from the stored status on load. The store's own
+ * `set` and `clear` reset it (`docs/09` §2.5, `src/zotero/keychain.ts`).
+ *
+ * The model fields' suggestions come from `P3-T13`'s catalogue through
+ * {@link PreferencesHostDeps.modelSuggestions}, and the user price table is
+ * listed and edited through {@link PreferencesHostDeps.prices} (`P3-T14`
+ * step 5; `plan/00` §6 item 265(b)).
  *
  * Tier 2 (`P3-T03`): a `secretBackend` of `"session"` paints *"Not saved
  * between sessions"* and still lets the fields store, into memory only.
  *
  * ## What is deliberately not here
  *
- * - **No `lastValidatedAt` / `lastValidationResult` preference write.**
- *   `docs/07` §8.5 declares those rows; persisting the Test outcome is
- *   `P3-T14`'s step 3. Until then the host keeps the last Test result **in
- *   memory for the session** and the status row says so.
- * - **No live model list.** `P3-T14` fills each model field's suggestions from
- *   `P3-T13`'s catalogue through this host.
+ * - *(Corrected 2026-10-23, `P3-T14`: this list said the host wrote no
+ *   validation status and had no live model list; both are now built.)*
  * - **No store at all** (the startup probe failed and the user declined tier
  *   2, or the keychain module could not load): the host reports
  *   `"unavailable"` and refuses to store.
@@ -200,12 +217,19 @@ export function isPaneCredential(id: string): id is SecretId {
 }
 
 /**
- * Whether the host can run `id`'s Test call. Only the two source credentials:
- * the LLM blocks' Test is `P3-T14`'s, and an LLM key must never be put into an
- * NCBI or Semantic Scholar request.
+ * Whether the host can run `id`'s Test call: every block the pane shows
+ * (`P3-T14`; until then only the two source credentials). The two source
+ * keys take `docs/09` §2.3's requests below; an LLM key takes its own
+ * adapter's `validateCredentials()` and never reaches a source request
+ * ({@link llmCredentialFor}).
  */
 export function isTestableCredential(id: string): id is SecretId {
-  return isSecretId(id) && SOURCE_CREDENTIALS.some((entry) => entry.id === id);
+  return isPaneCredential(id);
+}
+
+/** The LLM block that holds `id`, or `undefined` for a source credential. */
+export function llmCredentialFor(id: string): LlmCredential | undefined {
+  return LLM_CREDENTIALS.find((entry) => entry.id === id);
 }
 
 /** Whether `value` names one of the four LLM provider blocks. */
@@ -296,6 +320,31 @@ export const PREFERENCES_L10N = {
   usageEstimated: "research-helper-cost-usage-estimated",
   usageLimit: "research-helper-prefs-usage-limit",
   usageLimitOff: "research-helper-prefs-usage-limit-off",
+  // P3-T14: an LLM key accepted under a 429, the model suggestions' source
+  // line, and the user price table (step 5; plan/00 §6 item 265(b)).
+  testOkRateLimited: "research-helper-prefs-test-ok-rate-limited",
+  // Owner, 2026-10-23, plan/00 §6 item 279(a): a key accepted by an account
+  // with no credit left (QuotaExceededError).
+  testOkNoCredit: "research-helper-prefs-test-ok-no-credit",
+  modelSuggestions: "research-helper-prefs-model-suggestions",
+  modelsAsOf: "research-helper-prefs-models-as-of",
+  modelsStale: "research-helper-prefs-models-stale",
+  pricesTitle: "research-helper-prefs-prices",
+  pricesNote: "research-helper-prefs-prices-note",
+  priceRow: "research-helper-prefs-price-row",
+  priceRowNoCached: "research-helper-prefs-price-row-no-cached",
+  priceModel: "research-helper-prefs-price-model",
+  priceInput: "research-helper-prefs-price-input",
+  priceOutput: "research-helper-prefs-price-output",
+  priceCached: "research-helper-prefs-price-cached",
+  priceAsOf: "research-helper-prefs-price-as-of",
+  priceSave: "research-helper-prefs-price-save",
+  priceRemove: "research-helper-prefs-price-remove",
+  priceSaved: "research-helper-prefs-price-saved",
+  priceRemoved: "research-helper-prefs-price-removed",
+  priceInvalid: "research-helper-prefs-price-invalid",
+  priceRefused: "research-helper-prefs-price-refused",
+  priceUnavailable: "research-helper-prefs-price-unavailable",
 } as const satisfies Record<string, MainWindowMessageId>;
 
 /* ------------------------------------------------------- rule 7: paste input */
@@ -587,7 +636,11 @@ export type InconclusiveReason =
   | "body-error"
   | "no-paper-id"
   | "rate-limited"
-  | "request-failed";
+  | "request-failed"
+  // `P3-T14`: no answer arrived at all (network failure, timeout, a throw
+  // with no HTTP status). The only reason that is **not** persisted: the
+  // stored status is left as it was (`docs/09` §2.3).
+  | "no-answer";
 
 export type TestReport =
   | {
@@ -596,6 +649,23 @@ export type TestReport =
       readonly reason?: InconclusiveReason;
       /** ISO 8601, from the host's clock. */
       readonly checkedAt: string;
+      /**
+       * `P3-T14`: the key was accepted under an HTTP 429 (`docs/09` §2.3's
+       * "counts as a pass"); the pane says so. LLM keys only.
+       */
+      readonly rateLimited?: true;
+      /**
+       * The key was accepted, but the account has no credit left
+       * (`QuotaExceededError`; owner, 2026-10-23, `plan/00` §6 item
+       * 279(a)); the pane says so. Shown at the Test only: the stored result
+       * is `ok`. LLM keys only.
+       */
+      readonly noCredit?: true;
+      /**
+       * `P3-T14`: the model IDs a successful LLM Test listed, so the pane can
+       * refill that provider's suggestions at once. Never stored.
+       */
+      readonly models?: readonly string[];
     }
   | { readonly kind: "absent" }
   | { readonly kind: "unavailable" };
@@ -728,6 +798,10 @@ export function classifySemanticScholarResponse(
  *
  * Nothing about the error's *text* is read: the message could carry the URL,
  * and the URL carries the key. Only the class is consulted.
+ *
+ * *(`P3-T14`.)* A failure that carries no HTTP status — a network failure, a
+ * timeout, anything thrown before an answer — is `no-answer`, which the host
+ * does not persist; an answered failure keeps `request-failed`.
  */
 export function classifyFailure(id: SecretId, error: unknown): Classification {
   if (error instanceof RateLimitError) {
@@ -741,7 +815,80 @@ export function classifyFailure(id: SecretId, error: unknown): Classification {
       return { outcome: "forbidden" };
     }
   }
+  if (httpStatusOf(error) === undefined) {
+    return { outcome: "inconclusive", reason: "no-answer" };
+  }
   return { outcome: "inconclusive", reason: "request-failed" };
+}
+
+/**
+ * What an LLM adapter's `validateCredentials()` answers: `docs/07` §4.3's
+ * `CredentialCheckResult`, restated structurally because `ui/` may not import
+ * `llm/` (`docs/07` §2.3). `src/bootstrap/registerUI.ts` passes the adapter's
+ * value through unchanged, and the type checker holds the two together there.
+ */
+export interface LlmKeyCheck {
+  readonly ok: boolean;
+  readonly messageKey: string;
+  readonly httpStatus?: number;
+  readonly models?: readonly { readonly id: string }[];
+}
+
+/**
+ * `AuthenticationError`'s and `AuthorizationError`'s `messageKey`s
+ * (`src/core/errors.ts`), which the adapters return on a 401 (and Gemini's
+ * bad-key 400) and a 403. `test/unit/ui/preferencesPane.test.ts` asserts they
+ * equal the classes' values.
+ */
+export const REJECTED_MESSAGE_KEY = "rh-error-auth";
+export const FORBIDDEN_MESSAGE_KEY = "rh-error-forbidden";
+/**
+ * `QuotaExceededError`'s `messageKey`: an adapter answers a spend cap with
+ * it and `ok: true` (item 279(a)). Asserted equal to the class's value.
+ */
+export const NO_CREDIT_MESSAGE_KEY = "rh-error-quota";
+
+/** {@link classifyLlmCheck}'s answer. */
+export interface LlmClassification extends Classification {
+  /** Accepted under a rate-limit HTTP 429 (`docs/09` §2.3). */
+  readonly rateLimited: boolean;
+  /**
+   * Accepted, but the account has no credit left (`rh-error-quota`; owner,
+   * 2026-10-23, `plan/00` §6 item 279(a)). Never with {@link rateLimited}.
+   */
+  readonly noCredit: boolean;
+}
+
+/**
+ * Map an LLM adapter's answer to `docs/07` §8.5's enum (`P3-T14` step 2):
+ * `ok` → `ok` (a 429 included: the adapter already counts it as a pass;
+ * an out-of-credit `rh-error-quota` is `noCredit`, never `rateLimited`);
+ * `rh-error-auth` → `rejected`; `rh-error-forbidden` → `forbidden`; anything
+ * else `inconclusive` — `no-answer` when no HTTP status came back, so a
+ * network failure or timeout is never persisted. The `messageKey` text is
+ * matched, never shown, and no other field is read.
+ */
+export function classifyLlmCheck(check: LlmKeyCheck): LlmClassification {
+  if (check.ok) {
+    const noCredit = check.messageKey === NO_CREDIT_MESSAGE_KEY;
+    return {
+      outcome: "ok",
+      rateLimited: !noCredit && check.httpStatus === 429,
+      noCredit,
+    };
+  }
+  if (check.messageKey === REJECTED_MESSAGE_KEY) {
+    return { outcome: "rejected", rateLimited: false, noCredit: false };
+  }
+  if (check.messageKey === FORBIDDEN_MESSAGE_KEY) {
+    return { outcome: "forbidden", rateLimited: false, noCredit: false };
+  }
+  return {
+    outcome: "inconclusive",
+    reason: check.httpStatus === undefined ? "no-answer" : "request-failed",
+    rateLimited: false,
+    noCredit: false,
+  };
 }
 
 /* ------------------------------------------------------------------ the host */
@@ -750,9 +897,89 @@ export function classifyFailure(id: SecretId, error: unknown): Classification {
 export interface CredentialState {
   readonly id: SecretId;
   readonly present: boolean;
-  /** The last Test result **this session**, or `undefined`. */
+  /**
+   * The stored Test status (`<provider>.lastValidationResult` and
+   * `.lastValidatedAt`, read through the {@link ValidationPort}), or
+   * `undefined` when the key was never tested — or was replaced or removed
+   * since (`P3-T14`; until then the last result of this session).
+   */
   readonly lastTest: TestReport | undefined;
 }
+
+/**
+ * The validation status rows (`docs/07` §8.5), bound by the composition root
+ * to `readValidation` / `recordValidation` in `src/zotero/keychain.ts`, which
+ * put the record through the redaction gate before `setPref` (`P3-T14` step
+ * 3). This file never writes a preference itself.
+ */
+export interface ValidationPort {
+  /** `result` `""` means never validated; `undefined` means no such rows. */
+  read(
+    id: SecretId,
+  ): { readonly result: string; readonly at: string } | undefined;
+  record(id: SecretId, result: TestOutcome, atIso: string): void;
+}
+
+/**
+ * The model fields' suggestions (`P3-T14` step 5): `P3-T13`'s catalogue
+ * snapshot, reduced to model IDs per provider. `stale` is true only for the
+ * bundled fallback list, whose `asOfEpochMs` is its documented date.
+ */
+export interface ModelSuggestions {
+  readonly providers: readonly {
+    readonly provider: ProviderId;
+    readonly models: readonly string[];
+  }[];
+  readonly asOfEpochMs: number;
+  readonly stale: boolean;
+}
+
+/**
+ * One row of the user price table (`user_price`, `docs/07` §8.3): the shape
+ * of `UserPriceOverride` in `src/llm/shared/pricing.ts`, restated because
+ * `ui/` may not import `llm/`. US dollars per million tokens.
+ */
+export interface PriceRow {
+  readonly providerId: ProviderId;
+  readonly modelId: string;
+  readonly inputPerMTokUsd: number;
+  readonly outputPerMTokUsd: number;
+  readonly cachedInputPerMTokUsd?: number;
+  readonly asOfEpochMs: number;
+}
+
+/** The plugin database's `UserPriceStore`, bound by the composition root. */
+export interface PricesPort {
+  list(): Promise<readonly PriceRow[]>;
+  /** Rejects, writing nothing, a row the store refuses. */
+  upsert(row: PriceRow): Promise<void>;
+  delete(providerId: ProviderId, modelId: string): Promise<void>;
+}
+
+/** What the pane's price form sends: the fields as typed. */
+export interface PriceInput {
+  readonly provider: string;
+  readonly modelId: string;
+  readonly input: string;
+  readonly output: string;
+  /** Empty: no cached-input price. */
+  readonly cached: string;
+  /** `YYYY-MM-DD`, read as midnight UTC. */
+  readonly asOf: string;
+}
+
+/** {@link PreferencesHostApi.savePrice}'s answer. Never echoes a value. */
+export type PriceSaveResult =
+  | { readonly saved: true }
+  | {
+      readonly saved: false;
+      /**
+       * `invalid`: a field did not parse (checked here, before the store);
+       * `refused`: the store refused the row (an unusable row, or a model ID
+       * the redaction gate would change); `unavailable`: no price store.
+       */
+      readonly reason: "invalid" | "refused" | "unavailable";
+    };
 
 /** What the pane needs to paint one LLM provider block's non-secret rows. */
 export interface ProviderState {
@@ -804,8 +1031,22 @@ export interface PreferencesHostApi {
   clearKey(id: string): Promise<boolean>;
   /** Clears every stored `SecretId`; resolves to how many were removed. */
   clearAllKeys(): Promise<number>;
-  /** The two source credentials only; see {@link isTestableCredential}. */
+  /**
+   * Test any of the six; see {@link isTestableCredential}. An LLM key is
+   * tested by its own adapter, never read here.
+   */
   testKey(id: string): Promise<TestReport>;
+  /**
+   * The model fields' suggestions, or `undefined` when no catalogue is bound
+   * or it could not be read at all (`P3-T14` step 5).
+   */
+  modelSuggestions(): Promise<ModelSuggestions | undefined>;
+  /** The user price table; empty with no store. */
+  listPrices(): Promise<readonly PriceRow[]>;
+  /** Parse, then add or replace one row (`P3-T14` step 5). */
+  savePrice(input: PriceInput): Promise<PriceSaveResult>;
+  /** Remove one row; resolves to whether a store was there to ask. */
+  deletePrice(provider: string, modelId: string): Promise<boolean>;
   /**
    * Validate `raw` with {@link checkBaseUrlInput} and, only when it passes,
    * write `<provider>.baseUrl`. A refused value leaves the stored one as it
@@ -845,6 +1086,21 @@ export interface PreferencesHostDeps {
    * restore condition). Absent or failing: `false`, so the notice stays off.
    */
   readonly hasPluginData?: () => Promise<boolean>;
+  /**
+   * `P3-T14`: the provider's own adapter's `validateCredentials()` — its own
+   * host, the shared `HttpClient` — or a rejection when this build has no
+   * adapter for it. Absent, an LLM Test reports `inconclusive` with no answer.
+   */
+  readonly validateLlm?: (provider: ProviderId) => Promise<LlmKeyCheck>;
+  /**
+   * `P3-T14`: the stored status rows. Absent (a unit test), the host keeps
+   * the status in memory, as `P1-T44` did.
+   */
+  readonly validation?: ValidationPort;
+  /** `P3-T14` step 5: the catalogue, reduced for the model fields. */
+  readonly modelSuggestions?: () => Promise<ModelSuggestions>;
+  /** `P3-T14` step 5: the user price table. */
+  readonly prices?: PricesPort;
   readonly clock: Clock;
   /**
    * Redacting logger (`src/core/logger.ts`). The host logs ids, outcomes,
@@ -888,10 +1144,36 @@ export function createPreferencesHost(
     getBackendPref,
     providerPrefs,
     hasPluginData,
+    validateLlm,
+    modelSuggestions: readSuggestions,
+    prices,
     clock,
     logger,
   } = deps;
+  /**
+   * Only without a bound {@link ValidationPort}: `P1-T44`'s session memory,
+   * cleared by this host's own store and clear. With the port, the store's
+   * `set` and `clear` reset the rows (`src/zotero/keychain.ts`).
+   */
   const lastTests = new Map<SecretId, TestReport>();
+  const validation: ValidationPort = deps.validation ?? {
+    read: (id) => {
+      const report = lastTests.get(id);
+      return report?.kind === "tested"
+        ? { result: report.outcome, at: report.checkedAt }
+        : undefined;
+    },
+    record: (id, result, atIso) => {
+      lastTests.set(id, { kind: "tested", outcome: result, checkedAt: atIso });
+    },
+  };
+
+  /** The stored status as a report, or `undefined` when never tested. */
+  function storedReport(id: SecretId): TestReport | undefined {
+    const stored = validation.read(id);
+    if (stored === undefined || !isTestOutcome(stored.result)) return undefined;
+    return { kind: "tested", outcome: stored.result, checkedAt: stored.at };
+  }
 
   function requireCredential(id: string): SecretId {
     if (!isPaneCredential(id)) {
@@ -927,7 +1209,7 @@ export function createPreferencesHost(
     const credentials: CredentialState[] = [];
     for (const { id } of PANE_CREDENTIALS) {
       const present = secrets === undefined ? false : await secrets.has(id);
-      credentials.push({ id, present, lastTest: lastTests.get(id) });
+      credentials.push({ id, present, lastTest: storedReport(id) });
     }
     const active = providerPrefs.getActiveProvider();
     return {
@@ -1012,6 +1294,49 @@ export function createPreferencesHost(
     return count;
   }
 
+  /** The LLM path: the provider's own adapter reads and sends the key. */
+  async function issueLlm(provider: ProviderId): Promise<{
+    readonly classification: Classification;
+    readonly rateLimited: boolean;
+    readonly noCredit: boolean;
+    readonly models: readonly string[] | undefined;
+  }> {
+    if (validateLlm === undefined) {
+      return {
+        classification: { outcome: "inconclusive", reason: "no-answer" },
+        rateLimited: false,
+        noCredit: false,
+        models: undefined,
+      };
+    }
+    let check: LlmKeyCheck;
+    try {
+      check = await validateLlm(provider);
+    } catch (error) {
+      // Name and status only, for the reason `testKey` gives below.
+      logger?.warn("LLM key test failed before an answer", {
+        provider,
+        error: errorName(error),
+        httpStatus: httpStatusOf(error),
+      });
+      return {
+        classification: { outcome: "inconclusive", reason: "no-answer" },
+        rateLimited: false,
+        noCredit: false,
+        models: undefined,
+      };
+    }
+    const { rateLimited, noCredit, ...classification } =
+      classifyLlmCheck(check);
+    const models =
+      check.ok && Array.isArray(check.models)
+        ? check.models
+            .map((model) => model.id)
+            .filter((id): id is string => typeof id === "string")
+        : undefined;
+    return { classification, rateLimited, noCredit, models };
+  }
+
   async function issue(id: SecretId, key: string): Promise<Classification> {
     if (id === "source.ncbi") {
       try {
@@ -1038,34 +1363,44 @@ export function createPreferencesHost(
 
   async function testKey(rawId: string): Promise<TestReport> {
     const id = requireCredential(rawId);
-    if (!isTestableCredential(id)) {
-      // Before any `get()`: an LLM key must never reach the source requests
-      // below. Its Test is P3-T14's; the pane keeps that button disabled.
-      throw new RangeError(
-        `[research-helper] "${id}" has no Test call yet (P3-T14)`,
-      );
-    }
     if (secrets === undefined) {
       return { kind: "unavailable" };
     }
-    // The one `get()`: for the request, never for a field (§1.9 rule 2).
-    const key = await secrets.get(id);
-    if (key === undefined || key.length === 0) {
-      return { kind: "absent" };
-    }
+    const llm = llmCredentialFor(id);
     let classification: Classification;
-    try {
-      classification = await issue(id, key);
-    } catch (error) {
-      // `issue` catches request failures itself; this is for a defect in the
-      // classifiers. The name is logged, the message is not: a message built
-      // from a response could carry the URL, and the URL carries the key.
-      logger?.warn("key test could not be classified", {
-        credential: id,
-        error: errorName(error),
-        httpStatus: httpStatusOf(error),
-      });
-      classification = { outcome: "inconclusive", reason: "request-failed" };
+    let rateLimited = false;
+    let noCredit = false;
+    let models: readonly string[] | undefined;
+    if (llm !== undefined) {
+      // P3-T14: an LLM key is never read here and never reaches the source
+      // requests below; its own adapter reads it and sends it to its own
+      // host. `has()` never decrypts.
+      if (!(await secrets.has(id))) {
+        return { kind: "absent" };
+      }
+      ({ classification, rateLimited, noCredit, models } = await issueLlm(
+        llm.provider,
+      ));
+    } else {
+      // The one `get()`: for the request, never for a field (§1.9 rule 2).
+      const key = await secrets.get(id);
+      if (key === undefined || key.length === 0) {
+        return { kind: "absent" };
+      }
+      try {
+        classification = await issue(id, key);
+      } catch (error) {
+        // `issue` catches request failures itself; this is for a defect in
+        // the classifiers. The name is logged, the message is not: a message
+        // built from a response could carry the URL, and the URL carries the
+        // key.
+        logger?.warn("key test could not be classified", {
+          credential: id,
+          error: errorName(error),
+          httpStatus: httpStatusOf(error),
+        });
+        classification = { outcome: "inconclusive", reason: "request-failed" };
+      }
     }
     const report: TestReport = {
       kind: "tested",
@@ -1074,14 +1409,83 @@ export function createPreferencesHost(
         reason: classification.reason,
       }),
       checkedAt: new Date(clock.now()).toISOString(),
+      ...(rateLimited && { rateLimited: true as const }),
+      ...(noCredit && { noCredit: true as const }),
+      ...(models !== undefined && { models }),
     };
-    lastTests.set(id, report);
+    // docs/09 §2.3: no answer, no verdict — the stored status stays as it was.
+    const persisted = classification.reason !== "no-answer";
+    if (persisted) {
+      try {
+        validation.record(id, report.outcome, report.checkedAt);
+      } catch (error) {
+        logger?.warn("key test outcome not stored", {
+          credential: id,
+          error: errorName(error),
+        });
+      }
+    }
     logger?.info("key tested", {
       credential: id,
       outcome: report.outcome,
       reason: report.reason,
+      persisted,
     });
     return report;
+  }
+
+  async function modelSuggestions(): Promise<ModelSuggestions | undefined> {
+    if (readSuggestions === undefined) return undefined;
+    try {
+      return await readSuggestions();
+    } catch (error) {
+      logger?.warn("model suggestions unavailable", {
+        error: errorName(error),
+      });
+      return undefined;
+    }
+  }
+
+  async function listPrices(): Promise<readonly PriceRow[]> {
+    if (prices === undefined) return [];
+    try {
+      return await prices.list();
+    } catch (error) {
+      logger?.warn("price table could not be read", {
+        error: errorName(error),
+      });
+      return [];
+    }
+  }
+
+  async function savePrice(input: PriceInput): Promise<PriceSaveResult> {
+    if (prices === undefined) return { saved: false, reason: "unavailable" };
+    const row = parsePriceInput(input);
+    if (row === undefined) return { saved: false, reason: "invalid" };
+    try {
+      await prices.upsert(row);
+    } catch (error) {
+      // The model ID is never logged: the store refuses a credential-shaped
+      // one, and that is exactly the value that must not reach a log line.
+      logger?.info("price row refused", {
+        provider: row.providerId,
+        error: errorName(error),
+      });
+      return { saved: false, reason: "refused" };
+    }
+    logger?.info("price row stored", { provider: row.providerId });
+    return { saved: true };
+  }
+
+  async function deletePrice(
+    rawProvider: string,
+    modelId: string,
+  ): Promise<boolean> {
+    const provider = requireProvider(rawProvider);
+    if (prices === undefined) return false;
+    await prices.delete(provider, modelId);
+    logger?.info("price row removed", { provider });
+    return true;
   }
 
   return {
@@ -1092,5 +1496,72 @@ export function createPreferencesHost(
     clearAllKeys,
     testKey,
     setBaseUrl,
+    modelSuggestions,
+    listPrices,
+    savePrice,
+    deletePrice,
+  };
+}
+
+/** Whether `value` is one of {@link TestOutcome}'s four. */
+function isTestOutcome(value: string): value is TestOutcome {
+  return (
+    value === "ok" ||
+    value === "inconclusive" ||
+    value === "rejected" ||
+    value === "forbidden"
+  );
+}
+
+/** A price as typed: a finite number of zero or more, or `undefined`. */
+function parsePrice(raw: string): number | undefined {
+  const text = raw.trim();
+  if (!/^\d+(?:\.\d+)?$/.test(text)) return undefined;
+  const value = Number(text);
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/**
+ * Parse the price form (`P3-T14` step 5) into a {@link PriceRow}, or
+ * `undefined` when any field does not parse: a provider the pane has a block
+ * for, a non-empty model ID, input and output prices of zero or more (plain
+ * decimals: no sign, no exponent, no thousands separator), an optional cached
+ * price of the same form, and an `as of` date `YYYY-MM-DD` that is a real
+ * calendar day, read as midnight UTC. The store applies its own rules after
+ * this (`isUsableUserPriceOverride`, and the redaction gate on the model ID).
+ */
+export function parsePriceInput(input: PriceInput): PriceRow | undefined {
+  if (!isPaneProvider(input.provider)) return undefined;
+  const modelId = input.modelId.trim();
+  if (modelId === "") return undefined;
+  const inputPrice = parsePrice(input.input);
+  const outputPrice = parsePrice(input.output);
+  if (inputPrice === undefined || outputPrice === undefined) return undefined;
+  const cachedText = input.cached.trim();
+  const cached = cachedText === "" ? undefined : parsePrice(cachedText);
+  if (cachedText !== "" && cached === undefined) return undefined;
+  const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.asOf.trim());
+  if (date === null) return undefined;
+  const [year, month, day] = [
+    Number(date[1]),
+    Number(date[2]),
+    Number(date[3]),
+  ];
+  const asOfEpochMs = Date.UTC(year, month - 1, day);
+  const check = new Date(asOfEpochMs);
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== month - 1 ||
+    check.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+  return {
+    providerId: input.provider,
+    modelId,
+    inputPerMTokUsd: inputPrice,
+    outputPerMTokUsd: outputPrice,
+    ...(cached !== undefined && { cachedInputPerMTokUsd: cached }),
+    asOfEpochMs,
   };
 }

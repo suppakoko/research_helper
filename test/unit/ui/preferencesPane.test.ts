@@ -9,7 +9,9 @@ import {
   AuthenticationError,
   AuthorizationError,
   NetworkError,
+  QuotaExceededError,
   RateLimitError,
+  TimeoutError,
   UpstreamServerError,
 } from "../../../src/core/errors";
 import type { HttpRequest, HttpResponse } from "../../../src/core/http/client";
@@ -62,7 +64,19 @@ import {
   semanticScholarTestRequest,
   showRestoreNotice,
   type BaseUrlResult,
+  type PreferencesHostDeps,
   type TestReport,
+  FORBIDDEN_MESSAGE_KEY,
+  NO_CREDIT_MESSAGE_KEY,
+  REJECTED_MESSAGE_KEY,
+  classifyLlmCheck,
+  parsePriceInput,
+  type LlmKeyCheck,
+  type ModelSuggestions,
+  type PriceInput,
+  type PriceRow,
+  type PriceSaveResult,
+  type PricesPort,
 } from "../../../src/ui/prefs/preferencesPane";
 
 /**
@@ -210,6 +224,11 @@ function hostHarness(
     backend?: string;
     activeProvider?: string;
     hasPluginData?: () => Promise<boolean>;
+    /** P3-T14's ports, passed through as given. */
+    ports?: Pick<
+      PreferencesHostDeps,
+      "validateLlm" | "validation" | "modelSuggestions" | "prices"
+    >;
   } = {},
 ): HostHarness {
   const store = memoryStore();
@@ -236,6 +255,7 @@ function hostHarness(
     ...(options.hasPluginData !== undefined && {
       hasPluginData: options.hasPluginData,
     }),
+    ...options.ports,
     clock,
     logger: createLogger({ sink, clock, level: "debug" }),
   });
@@ -306,9 +326,8 @@ describe("P1-T44 — registration", () => {
     expect(LLM_CREDENTIALS[0]?.elementPrefix).toBe("rh-or");
     for (const id of SECRET_IDS) {
       expect(isPaneCredential(id), id).toBe(id !== "tts.gemini");
-      expect(isTestableCredential(id), id).toBe(
-        id === "source.ncbi" || id === "source.semanticscholar",
-      );
+      // P3-T14: every block's key can be tested; tts.gemini has no block.
+      expect(isTestableCredential(id), id).toBe(id !== "tts.gemini");
     }
     expect(isPaneCredential("not-an-id")).toBe(false);
   });
@@ -652,18 +671,21 @@ describe("P1-T44 — rule 5, docs/09 §2.3's outcome table", () => {
   });
 
   it("failures: server errors, network failures and unknown throws are inconclusive", () => {
-    const cases: unknown[] = [
-      new UpstreamServerError(503, "HTTP 503", {}),
-      new NetworkError("boom", {}),
-      new Error("anything"),
-      "a string",
-      undefined,
+    // P3-T14: an answered failure is `request-failed` (persisted); one with
+    // no HTTP status is `no-answer`, which leaves the stored status alone.
+    const cases: [unknown, string][] = [
+      [new UpstreamServerError(503, "HTTP 503", {}), "request-failed"],
+      [new NetworkError("boom", {}), "no-answer"],
+      [new TimeoutError(15_000, "https://example.invalid/"), "no-answer"],
+      [new Error("anything"), "no-answer"],
+      ["a string", "no-answer"],
+      [undefined, "no-answer"],
     ];
-    for (const error of cases) {
+    for (const [error, reason] of cases) {
       for (const id of ["source.ncbi", "source.semanticscholar"] as const) {
         expect(classifyFailure(id, error)).toEqual({
           outcome: "inconclusive",
-          reason: "request-failed",
+          reason,
         });
       }
     }
@@ -786,18 +808,39 @@ describe("P1-T44 — the host over an in-memory store", () => {
     });
   }
 
-  it("Test refuses an LLM key before reading it, and sends no request (its Test is P3-T14's)", async () => {
-    const h = hostHarness(() => Promise.reject(new Error("unused")));
+  it("Test of an LLM key goes to its own adapter through validateLlm: the host never reads it and sends no source request (P3-T14)", async () => {
+    const asked: ProviderId[] = [];
+    const h = hostHarness(() => Promise.reject(new Error("unused")), {
+      ports: {
+        validateLlm: (provider) => {
+          asked.push(provider);
+          return Promise.resolve({
+            ok: true,
+            messageKey: PREFERENCES_L10N.testOk,
+            httpStatus: 200,
+            models: [{ id: `${provider}-model-a` }],
+          });
+        },
+      },
+    });
     let reads = 0;
     const get = h.store.get.bind(h.store);
     (h.store as { get: SecretStore["get"] }).get = (id) => {
       reads += 1;
       return get(id);
     };
-    for (const { id } of LLM_CREDENTIALS) {
+    for (const { id, provider } of LLM_CREDENTIALS) {
+      // No key stored: absent, and the adapter is not asked.
+      expect(await h.host.testKey(id)).toEqual({ kind: "absent" });
       await h.host.storeKey(id, syntheticKey());
-      await expect(h.host.testKey(id)).rejects.toThrow(RangeError);
+      expect(await h.host.testKey(id)).toEqual({
+        kind: "tested",
+        outcome: "ok",
+        checkedAt: new Date(h.clock.now()).toISOString(),
+        models: [`${provider}-model-a`],
+      });
     }
+    expect(asked).toEqual(LLM_CREDENTIALS.map(({ provider }) => provider));
     expect(reads).toBe(0);
     expect(h.requests).toEqual([]);
   });
@@ -1486,18 +1529,68 @@ interface FakeEvent {
   preventDefault: () => void;
 }
 
+/**
+ * The harness's id index, so an element the script builds (`P3-T14`) is
+ * found by `getElementById` once it is inserted, as in a real document.
+ */
+let liveIndex: Map<string, FakeElement> | undefined;
+
 class FakeElement {
   readonly listeners = new Map<string, Handler[]>();
   readonly attributes = new Map<string, string>();
   readonly classes = new Set<string>();
   readonly style: Record<string, string> = {};
+  readonly children: FakeElement[] = [];
+  parentNode: FakeElement | undefined;
+  /** Elements inserted with `after()` on an element that has no parent. */
+  readonly following: FakeElement[] = [];
   type = "";
   value = "";
   placeholder = "";
   disabled = false;
   hidden = false;
   textContent = "";
-  constructor(readonly id: string) {}
+  constructor(
+    public id: string,
+    readonly tag = "",
+  ) {}
+  get firstChild(): FakeElement | null {
+    return this.children[0] ?? null;
+  }
+  private adopt(child: FakeElement): void {
+    child.parentNode = this;
+    child.register();
+  }
+  register(): void {
+    if (this.id !== "") liveIndex?.set(this.id, this);
+    for (const child of this.children) child.register();
+  }
+  appendChild(child: FakeElement): FakeElement {
+    this.children.push(child);
+    this.adopt(child);
+    return child;
+  }
+  after(node: FakeElement): void {
+    const parent = this.parentNode;
+    if (parent === undefined) {
+      this.following.push(node);
+      node.register();
+      return;
+    }
+    parent.children.splice(parent.children.indexOf(this) + 1, 0, node);
+    parent.adopt(node);
+  }
+  remove(): void {
+    const parent = this.parentNode;
+    if (parent === undefined) return;
+    parent.children.splice(parent.children.indexOf(this), 1);
+    this.parentNode = undefined;
+    if (liveIndex?.get(this.id) === this) liveIndex.delete(this.id);
+  }
+  dispatchEvent(event: { type: string }): boolean {
+    this.fire(event.type);
+    return true;
+  }
   get classList() {
     return {
       toggle: (name: string, on: boolean) => {
@@ -1584,12 +1677,15 @@ function paneHarness(options: {
 }): PaneHarness {
   const ids = [...XHTML_CODE.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]!);
   const index = new Map<string, FakeElement>();
+  liveIndex = index;
   for (const id of ids) index.set(id, new FakeElement(id));
   const docListeners = new Map<string, Handler[]>();
   const l10nCalls: PaneHarness["l10nCalls"] = [];
   const debugLines: string[] = [];
   const doc = {
     getElementById: (id: string) => index.get(id) ?? null,
+    createElementNS: (_ns: string, tag: string) => new FakeElement("", tag),
+    createXULElement: (tag: string) => new FakeElement("", tag),
     addEventListener: (type: string, handler: Handler) => {
       const bucket = docListeners.get(type) ?? [];
       bucket.push(handler);
@@ -1619,7 +1715,12 @@ function paneHarness(options: {
       ? { api: { preferences: options.host } }
       : undefined,
   };
-  const win = { setTimeout: (fn: () => void) => fn() };
+  const win = {
+    setTimeout: (fn: () => void) => fn(),
+    Event: class {
+      constructor(readonly type: string) {}
+    },
+  };
   const factory = new Function(
     "Zotero",
     "window",
@@ -2106,19 +2207,47 @@ describe("P3-T04 — the controller's LLM provider blocks, evaluated from the sh
     }
   });
 
-  it("keeps every LLM Test button disabled, even with a key stored, and never asks the host to test one", async () => {
+  it("P3-T14: enables each LLM Test with a key stored, paints the outcome inline (a 429 pass and an out-of-credit pass each say so) and refills that provider's suggestions", async () => {
     const host = fakeHost({
       present: Object.fromEntries(LLM_CREDENTIALS.map(({ id }) => [id, true])),
+      test: (id) =>
+        Promise.resolve<TestReport>({
+          kind: "tested",
+          outcome: "ok",
+          checkedAt: "2026-10-23T09:00:00.000Z",
+          ...(id === "llm.openai" && { rateLimited: true as const }),
+          // Item 279(a): the out-of-credit line.
+          ...(id === "llm.anthropic" && { noCredit: true as const }),
+          models: [`${id}-model-a`, `${id}-model-b`],
+        }),
     });
     const h = paneHarness({ host });
     await h.controller.init(h.root);
-    for (const { elementPrefix } of LLM_CREDENTIALS) {
+    for (const { id, elementPrefix } of LLM_CREDENTIALS) {
       const test = h.byId(`${elementPrefix}-test`);
-      expect(test.disabled).toBe(true);
+      expect(test.disabled).toBe(false);
       test.fire("command");
+      await flush();
+      await flush();
+      expect(
+        h.byId(`${elementPrefix}-status`).getAttribute("data-l10n-id"),
+      ).toBe(
+        id === "llm.openai"
+          ? PREFERENCES_L10N.testOkRateLimited
+          : id === "llm.anthropic"
+            ? PREFERENCES_L10N.testOkNoCredit
+            : PREFERENCES_L10N.testOk,
+      );
+      const popup = h.byId(`${elementPrefix}-model-suggestions`).firstChild!;
+      expect(popup.children.map((item) => item.getAttribute("value"))).toEqual([
+        "",
+        `${id}-model-a`,
+        `${id}-model-b`,
+      ]);
     }
-    await flush();
-    expect(host.calls.filter((c) => c.method === "testKey")).toEqual([]);
+    expect(
+      host.calls.filter((c) => c.method === "testKey").map((c) => c.args[0]),
+    ).toEqual(LLM_CREDENTIALS.map(({ id }) => id));
   });
 
   it("rule 4: shows only the active provider's block, and follows the menulist", async () => {
@@ -2234,5 +2363,641 @@ describe("P3-T04 — the controller's LLM provider blocks, evaluated from the sh
     expect(
       await shown({ pluginDataPresent: true, backendPref: SESSION_PREF_VALUE }),
     ).toBe(false);
+  });
+});
+
+/* ------------------------------- P3-T14: the LLM Test, suggestions, prices */
+
+const KO_FTL = readFileSync(
+  resolve(root, "addon/locale/ko-KR/research-helper-mainWindow.ftl"),
+  "utf8",
+);
+
+/** The twenty ids P3-T14 adds to PREFERENCES_L10N. */
+const P3T14_IDS = [
+  PREFERENCES_L10N.testOkRateLimited,
+  PREFERENCES_L10N.modelSuggestions,
+  PREFERENCES_L10N.modelsAsOf,
+  PREFERENCES_L10N.modelsStale,
+  PREFERENCES_L10N.pricesTitle,
+  PREFERENCES_L10N.pricesNote,
+  PREFERENCES_L10N.priceRow,
+  PREFERENCES_L10N.priceRowNoCached,
+  PREFERENCES_L10N.priceModel,
+  PREFERENCES_L10N.priceInput,
+  PREFERENCES_L10N.priceOutput,
+  PREFERENCES_L10N.priceCached,
+  PREFERENCES_L10N.priceAsOf,
+  PREFERENCES_L10N.priceSave,
+  PREFERENCES_L10N.priceRemove,
+  PREFERENCES_L10N.priceSaved,
+  PREFERENCES_L10N.priceRemoved,
+  PREFERENCES_L10N.priceInvalid,
+  PREFERENCES_L10N.priceRefused,
+  PREFERENCES_L10N.priceUnavailable,
+];
+
+describe("P3-T14 — the host: classification, persistence, suggestions, prices", () => {
+  it("classifyLlmCheck: ok (a 429 flagged, an out-of-credit answer flagged apart), rejected, forbidden, else inconclusive — no-answer only without a status", () => {
+    const cases: [LlmKeyCheck, ReturnType<typeof classifyLlmCheck>][] = [
+      [
+        { ok: true, messageKey: PREFERENCES_L10N.testOk, httpStatus: 200 },
+        { outcome: "ok", rateLimited: false, noCredit: false },
+      ],
+      [
+        { ok: true, messageKey: "rh-error-rate-limit", httpStatus: 429 },
+        { outcome: "ok", rateLimited: true, noCredit: false },
+      ],
+      // Item 279(a): a spend cap is a pass with its own line, never the 429
+      // line — a 429 (OpenAI, Anthropic) and OpenRouter's 402 alike.
+      [
+        { ok: true, messageKey: NO_CREDIT_MESSAGE_KEY, httpStatus: 429 },
+        { outcome: "ok", rateLimited: false, noCredit: true },
+      ],
+      [
+        { ok: true, messageKey: NO_CREDIT_MESSAGE_KEY, httpStatus: 402 },
+        { outcome: "ok", rateLimited: false, noCredit: true },
+      ],
+      [
+        { ok: false, messageKey: REJECTED_MESSAGE_KEY, httpStatus: 401 },
+        { outcome: "rejected", rateLimited: false, noCredit: false },
+      ],
+      [
+        { ok: false, messageKey: REJECTED_MESSAGE_KEY, httpStatus: 400 },
+        { outcome: "rejected", rateLimited: false, noCredit: false },
+      ],
+      [
+        { ok: false, messageKey: FORBIDDEN_MESSAGE_KEY, httpStatus: 403 },
+        { outcome: "forbidden", rateLimited: false, noCredit: false },
+      ],
+      [
+        { ok: false, messageKey: "rh-error-upstream", httpStatus: 503 },
+        {
+          outcome: "inconclusive",
+          reason: "request-failed",
+          rateLimited: false,
+          noCredit: false,
+        },
+      ],
+      [
+        { ok: false, messageKey: "rh-error-network" },
+        {
+          outcome: "inconclusive",
+          reason: "no-answer",
+          rateLimited: false,
+          noCredit: false,
+        },
+      ],
+    ];
+    for (const [check, expected] of cases) {
+      expect(classifyLlmCheck(check), JSON.stringify(check)).toEqual(expected);
+    }
+  });
+
+  function recordingValidation() {
+    const rows = new Map<SecretId, { result: string; at: string }>();
+    const writes: [SecretId, string, string][] = [];
+    return {
+      rows,
+      writes,
+      port: {
+        read: (id: SecretId) => rows.get(id),
+        record: (id: SecretId, result: string, at: string) => {
+          writes.push([id, result, at]);
+          rows.set(id, { result, at });
+        },
+      },
+    };
+  }
+
+  it("persists every answered outcome of all six through the port, and never one with no answer", async () => {
+    const v = recordingValidation();
+    let llmAnswer: () => Promise<LlmKeyCheck> = () =>
+      Promise.resolve({
+        ok: false,
+        messageKey: REJECTED_MESSAGE_KEY,
+        httpStatus: 401,
+      });
+    let sourceAnswer: () => Promise<HttpResponse> = () =>
+      Promise.resolve(response(200, "{}", { "X-Ratelimit-Limit": "10" }));
+    const h = hostHarness(() => sourceAnswer(), {
+      ports: { validateLlm: () => llmAnswer(), validation: v.port },
+    });
+    await h.host.storeKey("llm.anthropic", syntheticKey());
+    await h.host.storeKey("source.ncbi", syntheticKey());
+    const at = new Date(h.clock.now()).toISOString();
+
+    expect(await h.host.testKey("llm.anthropic")).toMatchObject({
+      outcome: "rejected",
+    });
+    expect(await h.host.testKey("source.ncbi")).toMatchObject({
+      outcome: "ok",
+    });
+    expect(v.writes).toEqual([
+      ["llm.anthropic", "rejected", at],
+      ["source.ncbi", "ok", at],
+    ]);
+
+    // No answer: nothing written, the stored rows stay.
+    llmAnswer = () => Promise.reject(new NetworkError("synthetic", {}));
+    sourceAnswer = () => Promise.reject(new NetworkError("synthetic", {}));
+    expect(await h.host.testKey("llm.anthropic")).toMatchObject({
+      outcome: "inconclusive",
+      reason: "no-answer",
+    });
+    expect(await h.host.testKey("source.ncbi")).toMatchObject({
+      outcome: "inconclusive",
+      reason: "no-answer",
+    });
+    expect(v.writes).toHaveLength(2);
+
+    // readState paints from the stored rows, not from the last Test.
+    const state = await h.host.readState();
+    expect(
+      state.credentials.find((c) => c.id === "llm.anthropic")?.lastTest,
+    ).toEqual({ kind: "tested", outcome: "rejected", checkedAt: at });
+    expect(
+      state.credentials.find((c) => c.id === "source.ncbi")?.lastTest,
+    ).toEqual({ kind: "tested", outcome: "ok", checkedAt: at });
+    // A stored value outside the enum, or never tested, paints nothing.
+    v.rows.set("llm.openai", { result: "", at: "" });
+    v.rows.set("llm.gemini", { result: "nonsense", at });
+    const again = await h.host.readState();
+    for (const id of ["llm.openai", "llm.gemini"]) {
+      expect(
+        again.credentials.find((c) => c.id === id)?.lastTest,
+      ).toBeUndefined();
+    }
+  });
+
+  it("an LLM Test with no adapter port bound, or one that throws, is inconclusive with no answer and logs no message", async () => {
+    const key = syntheticKey();
+    const none = hostHarness(() => Promise.reject(new Error("unused")));
+    await none.host.storeKey("llm.openai", key);
+    expect(await none.host.testKey("llm.openai")).toMatchObject({
+      outcome: "inconclusive",
+      reason: "no-answer",
+    });
+    const throwing = hostHarness(() => Promise.reject(new Error("unused")), {
+      ports: {
+        validateLlm: () =>
+          Promise.reject(new Error(`leaked ${key} in a message`)),
+      },
+    });
+    await throwing.host.storeKey("llm.openai", key);
+    expect(await throwing.host.testKey("llm.openai")).toMatchObject({
+      outcome: "inconclusive",
+      reason: "no-answer",
+    });
+    const lines = throwing.sink.lines.join("\n");
+    expect(lines).not.toContain("leaked");
+    expect(lines.includes(key)).toBe(false);
+  });
+
+  it("modelSuggestions passes the catalogue's answer through, and reads a failure as none", async () => {
+    const suggestions: ModelSuggestions = {
+      providers: [{ provider: "openai", models: ["gpt-a"] }],
+      asOfEpochMs: Date.UTC(2026, 8, 8),
+      stale: true,
+    };
+    const h = hostHarness(() => Promise.reject(new Error("unused")), {
+      ports: { modelSuggestions: () => Promise.resolve(suggestions) },
+    });
+    expect(await h.host.modelSuggestions()).toEqual(suggestions);
+    const failing = hostHarness(() => Promise.reject(new Error("unused")), {
+      ports: { modelSuggestions: () => Promise.reject(new Error("offline")) },
+    });
+    expect(await failing.host.modelSuggestions()).toBeUndefined();
+    const absent = hostHarness(() => Promise.reject(new Error("unused")));
+    expect(await absent.host.modelSuggestions()).toBeUndefined();
+  });
+
+  it("parsePriceInput: plain decimals of zero or more, an optional cached price, a real YYYY-MM-DD day; anything else refused", () => {
+    const good: PriceInput = {
+      provider: "openai",
+      modelId: "  gpt-a  ",
+      input: "0.25",
+      output: "1.5",
+      cached: "",
+      asOf: "2026-10-23",
+    };
+    expect(parsePriceInput(good)).toEqual({
+      providerId: "openai",
+      modelId: "gpt-a",
+      inputPerMTokUsd: 0.25,
+      outputPerMTokUsd: 1.5,
+      asOfEpochMs: Date.UTC(2026, 9, 23),
+    });
+    expect(parsePriceInput({ ...good, cached: "0" })).toMatchObject({
+      cachedInputPerMTokUsd: 0,
+    });
+    const bads: Partial<PriceInput>[] = [
+      { provider: "mistral" },
+      { modelId: "   " },
+      { input: "-1" },
+      { input: "1e3" },
+      { output: "" },
+      { output: "1,000" },
+      { cached: "free" },
+      { asOf: "2026-02-30" },
+      { asOf: "23/10/2026" },
+      { asOf: "" },
+    ];
+    for (const bad of bads) {
+      expect(
+        parsePriceInput({ ...good, ...bad }),
+        JSON.stringify(bad),
+      ).toBeUndefined();
+    }
+  });
+
+  it("savePrice: invalid before the store, refused when the store refuses (model ID never logged), unavailable without one; list and delete go through", async () => {
+    const rows: PriceRow[] = [];
+    let refuse = false;
+    const prices: PricesPort = {
+      list: () => Promise.resolve([...rows]),
+      upsert: (row) => {
+        if (refuse) return Promise.reject(new RangeError("refused"));
+        rows.push(row);
+        return Promise.resolve();
+      },
+      delete: (providerId, modelId) => {
+        const at = rows.findIndex(
+          (r) => r.providerId === providerId && r.modelId === modelId,
+        );
+        if (at >= 0) rows.splice(at, 1);
+        return Promise.resolve();
+      },
+    };
+    const h = hostHarness(() => Promise.reject(new Error("unused")), {
+      ports: { prices },
+    });
+    const input: PriceInput = {
+      provider: "anthropic",
+      modelId: "claude-rhsyn",
+      input: "1",
+      output: "5",
+      cached: "0.1",
+      asOf: "2026-10-23",
+    };
+    expect(await h.host.savePrice({ ...input, input: "x" })).toEqual({
+      saved: false,
+      reason: "invalid",
+    });
+    expect(rows).toEqual([]);
+    expect(await h.host.savePrice(input)).toEqual({ saved: true });
+    expect(await h.host.listPrices()).toEqual([
+      {
+        providerId: "anthropic",
+        modelId: "claude-rhsyn",
+        inputPerMTokUsd: 1,
+        outputPerMTokUsd: 5,
+        cachedInputPerMTokUsd: 0.1,
+        asOfEpochMs: Date.UTC(2026, 9, 23),
+      },
+    ]);
+    refuse = true;
+    const keyShaped = `sk-${syntheticKey(40)}`;
+    expect(await h.host.savePrice({ ...input, modelId: keyShaped })).toEqual({
+      saved: false,
+      reason: "refused",
+    });
+    expect(h.sink.lines.join("\n").includes(keyShaped)).toBe(false);
+    expect(await h.host.deletePrice("anthropic", "claude-rhsyn")).toBe(true);
+    expect(rows).toEqual([]);
+    await expect(h.host.deletePrice("mistral", "x")).rejects.toThrow(
+      RangeError,
+    );
+
+    const none = hostHarness(() => Promise.reject(new Error("unused")));
+    expect(await none.host.savePrice(input)).toEqual({
+      saved: false,
+      reason: "unavailable",
+    });
+    expect(await none.host.listPrices()).toEqual([]);
+    expect(await none.host.deletePrice("openai", "x")).toBe(false);
+  });
+});
+
+describe("P3-T14 — the controller: Test, stored status, model suggestions, price table", () => {
+  function suggestionsHost(
+    load: () => Promise<ModelSuggestions | undefined>,
+  ): ReturnType<typeof fakeHost> & {
+    readonly asked: string[];
+    modelSuggestions: () => Promise<ModelSuggestions | undefined>;
+  } {
+    const asked: string[] = [];
+    return Object.assign(fakeHost({}), {
+      asked,
+      modelSuggestions: () => {
+        asked.push("modelSuggestions");
+        return load();
+      },
+    });
+  }
+
+  const STALE: ModelSuggestions = {
+    providers: LLM_CREDENTIALS.map(({ provider }) => ({
+      provider,
+      models: [`${provider}-bundled-a`, `${provider}-bundled-b`],
+    })),
+    asOfEpochMs: Date.UTC(2026, 8, 8),
+    stale: true,
+  };
+
+  type Logic = PaneController["logic"] & {
+    formatDate: (epochMs: number) => string;
+    priceMessage: (
+      row: PriceRow,
+      names: Record<string, string>,
+      l10n: Record<string, string>,
+    ) => { id: string; args: Record<string, string> };
+  };
+
+  it("paints each status row from the stored result on load", async () => {
+    const host = fakeHost({ present: { "llm.gemini": true } });
+    const read = host.readState;
+    Object.assign(host, {
+      readState: async () => {
+        const state = await read();
+        return {
+          ...state,
+          credentials: state.credentials.map((c) =>
+            c.id === "llm.gemini"
+              ? {
+                  ...c,
+                  lastTest: {
+                    kind: "tested",
+                    outcome: "rejected",
+                    checkedAt: "2026-10-22T09:00:00.000Z",
+                  },
+                }
+              : c,
+          ),
+        };
+      },
+    });
+    const h = paneHarness({ host });
+    await h.controller.init(h.root);
+    expect(h.byId("rh-gemini-status").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.testRejected,
+    );
+  });
+
+  it("builds a suggestion list beside each model field, asks nothing on load, and with the catalogue stale shows the bundled list and the stale marker when first opened", async () => {
+    const host = suggestionsHost(() => Promise.resolve(STALE));
+    const h = paneHarness({ host });
+    await h.controller.init(h.root);
+    const logic = h.controller.logic as Logic;
+    expect(host.asked).toEqual([]);
+    for (const { elementPrefix } of LLM_CREDENTIALS) {
+      const popup = h.byId(`${elementPrefix}-model-suggestions`).firstChild!;
+      expect(popup.children.map((i) => i.getAttribute("value"))).toEqual([""]);
+    }
+    h.byId("rh-or-model-suggestions").fire("popupshowing");
+    h.byId("rh-gemini-model-suggestions").fire("popupshowing");
+    await flush();
+    await flush();
+    // One load serves every list.
+    expect(host.asked).toEqual(["modelSuggestions"]);
+    for (const { provider, elementPrefix } of LLM_CREDENTIALS) {
+      const popup = h.byId(`${elementPrefix}-model-suggestions`).firstChild!;
+      expect(popup.children.map((i) => i.getAttribute("value"))).toEqual([
+        "",
+        `${provider}-bundled-a`,
+        `${provider}-bundled-b`,
+      ]);
+      const status = h.byId(`${elementPrefix}-models-status`);
+      expect(status.getAttribute("data-l10n-id")).toBe(
+        PREFERENCES_L10N.modelsStale,
+      );
+      expect(JSON.parse(status.getAttribute("data-l10n-args")!)).toEqual({
+        date: logic.formatDate(STALE.asOfEpochMs),
+      });
+    }
+  });
+
+  it("a live list says 'as of' instead; a load that found nothing can be asked again", async () => {
+    const live = { ...STALE, stale: false, asOfEpochMs: Date.UTC(2026, 9, 23) };
+    let answer: ModelSuggestions | undefined = undefined;
+    const host = suggestionsHost(() => Promise.resolve(answer));
+    const h = paneHarness({ host });
+    await h.controller.init(h.root);
+    h.byId("rh-openai-model-suggestions").fire("popupshowing");
+    await flush();
+    expect(
+      h.byId("rh-openai-models-status").getAttribute("data-l10n-id"),
+    ).toBeNull();
+    answer = live;
+    h.byId("rh-openai-model-suggestions").fire("popupshowing");
+    await flush();
+    await flush();
+    expect(host.asked).toHaveLength(2);
+    expect(h.byId("rh-openai-models-status").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.modelsAsOf,
+    );
+  });
+
+  it("picking a suggestion types it into the bound model field and fires input and change; a typed ID is left alone", async () => {
+    const host = suggestionsHost(() => Promise.resolve(STALE));
+    const h = paneHarness({ host });
+    await h.controller.init(h.root);
+    const input = h.byId("rh-anthropic-model");
+    const events: string[] = [];
+    input.addEventListener("input", () => events.push("input"));
+    input.addEventListener("change", () => events.push("change"));
+    // A typed model ID no list offers is the user's to keep.
+    input.value = "claude-typed-by-hand";
+    const menu = h.byId("rh-anthropic-model-suggestions");
+    menu.value = "";
+    menu.fire("command");
+    expect(input.value).toBe("claude-typed-by-hand");
+    expect(events).toEqual([]);
+    menu.fire("popupshowing");
+    await flush();
+    await flush();
+    menu.value = "anthropic-bundled-b";
+    menu.fire("command");
+    expect(input.value).toBe("anthropic-bundled-b");
+    expect(events).toEqual(["input", "change"]);
+    expect(menu.value).toBe("");
+  });
+
+  it("builds the price table into the providers group: lists rows, saves for the chosen provider, says why a save failed, removes", async () => {
+    const rows: PriceRow[] = [
+      {
+        providerId: "openai",
+        modelId: "gpt-rhsyn",
+        inputPerMTokUsd: 2,
+        outputPerMTokUsd: 12,
+        cachedInputPerMTokUsd: 0.2,
+        asOfEpochMs: Date.UTC(2026, 9, 1),
+      },
+    ];
+    const saves: PriceInput[] = [];
+    let answer: PriceSaveResult = { saved: false, reason: "invalid" };
+    const host = Object.assign(fakeHost({ activeProvider: "gemini" }), {
+      listPrices: () => Promise.resolve([...rows]),
+      savePrice: (input: PriceInput) => {
+        saves.push(input);
+        return Promise.resolve(answer);
+      },
+      deletePrice: (provider: string, modelId: string) => {
+        rows.splice(
+          rows.findIndex(
+            (r) => r.providerId === provider && r.modelId === modelId,
+          ),
+          1,
+        );
+        return Promise.resolve(true);
+      },
+    });
+    const h = paneHarness({ host });
+    await h.controller.init(h.root);
+    const logic = h.controller.logic as Logic;
+    const group = h.byId("rh-prefs-providers");
+    expect(group.children.map((c) => c.id)).toContain("rh-prefs-prices");
+    const list = h.byId("rh-prefs-price-rows");
+    expect(list.children).toHaveLength(1);
+    const line = list.children[0]!.children[0]!;
+    expect(line.getAttribute("data-l10n-id")).toBe(PREFERENCES_L10N.priceRow);
+    expect(JSON.parse(line.getAttribute("data-l10n-args")!)).toEqual({
+      provider: "OpenAI",
+      model: "gpt-rhsyn",
+      input: "2",
+      output: "12",
+      cached: "0.2",
+      date: logic.formatDate(Date.UTC(2026, 9, 1)),
+    });
+    expect(h.byId("rh-prefs-price-model").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.priceModel,
+    );
+
+    h.byId("rh-provider").value = "gemini";
+    h.byId("rh-prefs-price-model").value = "gemini-rhsyn";
+    h.byId("rh-prefs-price-input").value = "0.3";
+    h.byId("rh-prefs-price-output").value = "2.5";
+    h.byId("rh-prefs-price-as-of").value = "2026-10-23";
+    h.byId("rh-prefs-price-save").fire("click");
+    await flush();
+    expect(saves).toEqual([
+      {
+        provider: "gemini",
+        modelId: "gemini-rhsyn",
+        input: "0.3",
+        output: "2.5",
+        cached: "",
+        asOf: "2026-10-23",
+      },
+    ]);
+    const status = h.byId("rh-prefs-price-status");
+    expect(status.getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.priceInvalid,
+    );
+    // A refused value stays in the field.
+    expect(h.byId("rh-prefs-price-model").value).toBe("gemini-rhsyn");
+    const outcomes: [PriceSaveResult, string][] = [
+      [{ saved: false, reason: "refused" }, PREFERENCES_L10N.priceRefused],
+      [
+        { saved: false, reason: "unavailable" },
+        PREFERENCES_L10N.priceUnavailable,
+      ],
+      [{ saved: true }, PREFERENCES_L10N.priceSaved],
+    ];
+    for (const [result, id] of outcomes) {
+      answer = result;
+      h.byId("rh-prefs-price-save").fire("click");
+      await flush();
+      await flush();
+      expect(status.getAttribute("data-l10n-id")).toBe(id);
+    }
+    expect(h.byId("rh-prefs-price-model").value).toBe("");
+
+    list.children[0]!.children[1]!.fire("click");
+    await flush();
+    await flush();
+    expect(rows).toEqual([]);
+    expect(list.children).toHaveLength(0);
+    expect(status.getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.priceRemoved,
+    );
+  });
+
+  it("a row with no cached price uses the shorter line; with no host the form is disabled", async () => {
+    const h = paneHarness({});
+    await h.controller.init(h.root);
+    expect(h.byId("rh-prefs-price-save").disabled).toBe(true);
+    expect(h.byId("rh-prefs-price-model").disabled).toBe(true);
+    const message = (h.controller.logic as Logic).priceMessage(
+      {
+        providerId: "anthropic",
+        modelId: "m",
+        inputPerMTokUsd: 1,
+        outputPerMTokUsd: 5,
+        asOfEpochMs: 0,
+      },
+      { anthropic: "Anthropic" },
+      h.controller.l10n,
+    );
+    expect(message.id).toBe(PREFERENCES_L10N.priceRowNoCached);
+    expect(message.args).not.toHaveProperty("cached");
+  });
+
+  it("agrees with the TypeScript side: Test credentials, provider ids, names, and no built id collides with the markup", () => {
+    const h = paneHarness({});
+    const spec = h.controller.spec as unknown as {
+      providerCredentials: Record<string, string>;
+      providerNames: Record<string, string>;
+      built: Record<string, string>;
+    };
+    expect(spec.providerCredentials).toEqual(
+      Object.fromEntries(LLM_CREDENTIALS.map((c) => [c.provider, c.id])),
+    );
+    for (const [provider, name] of Object.entries(spec.providerNames)) {
+      expect(name).toBe(ftlValue(`research-helper-provider-${provider}`));
+    }
+    const markupIds = new Set(
+      [...XHTML_CODE.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]!),
+    );
+    const suffixes = [spec.built.suggestions!, spec.built.modelsStatus!];
+    const builtIds = [
+      ...Object.values(spec.built).filter((v) => !suffixes.includes(v)),
+      ...LLM_CREDENTIALS.flatMap(({ elementPrefix }) =>
+        suffixes.map((suffix) => `${elementPrefix}${suffix}`),
+      ),
+    ];
+    for (const id of builtIds) expect(markupIds.has(id), id).toBe(false);
+    expect(markupIds.has("rh-prefs-providers")).toBe(true);
+  });
+
+  it("every P3-T14 string is in the en-US bundle, and only a commented stub in ko-KR (G-41)", () => {
+    expect(P3T14_IDS).toHaveLength(20);
+    for (const id of P3T14_IDS) {
+      expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+    }
+    // docs/09 §2.3's wording: a 429 is a pass, and the line says so.
+    expect(ftlValue(PREFERENCES_L10N.testOkRateLimited)).toContain("HTTP 429");
+  });
+
+  it("item 279(a) and (d): the out-of-credit line and the key-present line, in en-US with a ko-KR stub or pending", () => {
+    // The owner's wording (plan/00 §6 item 279(a)), with the time placed.
+    expect(ftlValue(PREFERENCES_L10N.testOkNoCredit)).toBe(
+      "Key accepted, but the account has no credit left · checked { $time }",
+    );
+    expect(KO_FTL).not.toMatch(
+      new RegExp(`^${PREFERENCES_L10N.testOkNoCredit} =`, "m"),
+    );
+    expect(KO_FTL).toMatch(
+      new RegExp(`^# ${PREFERENCES_L10N.testOkNoCredit} =`, "m"),
+    );
+    // Item 279(d): results are stored now, so "this session" is gone.
+    expect(ftlValue(PREFERENCES_L10N.keyPresent)).toBe(
+      "A key is stored. Not tested yet.",
+    );
+    expect(NO_CREDIT_MESSAGE_KEY).toBe(
+      new QuotaExceededError(402, "x", {}).messageKey,
+    );
   });
 });

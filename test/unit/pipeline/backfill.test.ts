@@ -42,6 +42,7 @@ import type {
 import type { PipelineContext } from "../../../src/pipeline/types";
 import { UNWIRED_BUDGET_GUARD } from "../../../src/pipeline/shared/budget";
 import { createPrivacyPolicy } from "../../../src/pipeline/shared/privacyPolicy";
+import { getPref } from "../../../src/prefs";
 import { createEuropePmcSource } from "../../../src/sources/europepmc/europepmcSource";
 import { createEuropePmcRecordMapper } from "../../../src/sources/europepmc/mapper";
 import { EUROPEPMC_DOI_LOOKUP_BATCH } from "../../../src/sources/europepmc/query";
@@ -890,7 +891,8 @@ function pipelineRun(options: {
     llm: mockLLMRouter(),
     tts: undefined,
     zotero: undefined,
-    config: undefined,
+    // `docs/07` §4.5's `ConfigReader` (`P3-T35`): `getPref`, read-only.
+    config: { get: getPref },
     privacy: createPrivacyPolicy("strict"),
     checkpoint: () => Promise.resolve(),
     resumeState: undefined,

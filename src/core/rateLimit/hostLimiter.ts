@@ -579,6 +579,32 @@ export function llmAttemptTimeouts(streamed: boolean): {
     : { timeoutMs: LLM_ATTEMPT_TIMEOUT_MS };
 }
 
+/**
+ * How long one request of the pane's key Test may take: **15 seconds**
+ * (owner, 2026-10-23, `plan/00` §6 item 279(b); `docs/07` §7.3's note "A key
+ * Test makes one attempt of 15 seconds"). A named constant, not a preference.
+ */
+export const LLM_KEY_TEST_TIMEOUT_MS = 15_000;
+
+/** The limits an LLM key Test request carries, in place of {@link llmAttemptTimeouts}. */
+export interface LlmAttemptLimits {
+  readonly timeoutMs: number;
+  readonly idleTimeoutMs?: number;
+  /** `HttpOptions.singleAttempt`: one attempt, never retried. */
+  readonly singleAttempt?: boolean;
+}
+
+/**
+ * What every request of a key Test (`validateCredentials`) carries: one
+ * attempt, never retried, of at most {@link LLM_KEY_TEST_TIMEOUT_MS}. Summary
+ * calls keep {@link llmAttemptTimeouts} and {@link LLM_RETRY_BUDGET} (item
+ * 279(b)).
+ */
+export const LLM_KEY_TEST_ATTEMPT: LlmAttemptLimits = Object.freeze({
+  timeoutMs: LLM_KEY_TEST_TIMEOUT_MS,
+  singleAttempt: true,
+});
+
 // ---------------------------------------------------------------------------
 // 2. The registry
 // ---------------------------------------------------------------------------

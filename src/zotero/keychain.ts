@@ -39,6 +39,11 @@
  * `docs/09` §1.7 corrected 2026-10-21), so nothing here derives a key from a
  * passphrase or writes a secrets file.
  *
+ * `P3-T14` added the validation status pair ({@link VALIDATION_PREFS}): a
+ * Test outcome is persisted by {@link recordValidation}, a running job's 401
+ * by {@link markProviderKeyRejected}, and every `set` and `clear` of either
+ * tier resets it ({@link resetValidation}, `docs/09` §2.5).
+ *
  * **Never log a value from this module**, plaintext or `oskv1:` ciphertext
  * (`docs/09` §2.1, `docs/01` §12 gotcha 15). Nothing below does; ids, counts
  * and verdicts only.
@@ -74,7 +79,14 @@ import {
   type SecretId,
   type SecretStore,
 } from "../core/secretStore";
-import { getPrefStore, setPref, setPrefStore, type PrefName } from "../prefs";
+import { redactRecord } from "../core/provenance";
+import {
+  getPref,
+  getPrefStore,
+  setPref,
+  setPrefStore,
+  type PrefName,
+} from "../prefs";
 import { createZoteroPrefStore } from "./prefStore";
 
 // `docs/09` §1.7 prints `SecretBackend`, `SecretId` and `SecretStore` under a
@@ -336,6 +348,150 @@ export async function reconcileKeyPresence(): Promise<
   return values;
 }
 
+// ---------------------------------------------------------------------------
+// The non-secret validation status — docs/07 §8.5, docs/09 §2.3–§2.5 (P3-T14)
+// ---------------------------------------------------------------------------
+
+/** `docs/07` §8.5's `<provider>.lastValidationResult` values, minus `""`. */
+export type ValidationResult = "ok" | "rejected" | "forbidden" | "inconclusive";
+
+/** The two status rows of one credential. */
+export interface ValidationPrefNames {
+  readonly result: PrefName;
+  readonly at: PrefName;
+}
+
+/**
+ * The `<provider>.lastValidationResult` / `<provider>.lastValidatedAt` pair
+ * each `SecretId` owns: the same six credentials as the `*.keyPresent` flags
+ * (`docs/07` §8.5). `tts.gemini` has none — its key is never Tested, and the
+ * Gemini pair describes `llm.gemini`'s key — so rotating it resets nothing.
+ */
+export const VALIDATION_PREFS: Readonly<
+  Partial<Record<SecretId, ValidationPrefNames>>
+> = {
+  "source.ncbi": {
+    result: "ncbiLastValidationResult",
+    at: "ncbiLastValidatedAt",
+  },
+  "source.semanticscholar": {
+    result: "semanticscholarLastValidationResult",
+    at: "semanticscholarLastValidatedAt",
+  },
+  "llm.openrouter": {
+    result: "openrouterLastValidationResult",
+    at: "openrouterLastValidatedAt",
+  },
+  "llm.openai": {
+    result: "openaiLastValidationResult",
+    at: "openaiLastValidatedAt",
+  },
+  "llm.gemini": {
+    result: "geminiLastValidationResult",
+    at: "geminiLastValidatedAt",
+  },
+  "llm.anthropic": {
+    result: "anthropicLastValidationResult",
+    at: "anthropicLastValidatedAt",
+  },
+};
+
+/** What {@link readValidation} returns: `result` `""` means never validated. */
+export interface StoredValidation {
+  readonly result: ValidationResult | "";
+  /** ISO 8601, or `""`. */
+  readonly at: string;
+}
+
+const VALIDATION_RESULTS: readonly string[] = [
+  "ok",
+  "rejected",
+  "forbidden",
+  "inconclusive",
+];
+
+/**
+ * The stored status of `id`'s key, or `undefined` when `id` has no pair. A
+ * value outside the enum reads as `""` (the schema's `values` already coerce
+ * it, `docs/07` §8.5.1).
+ */
+export function readValidation(id: SecretId): StoredValidation | undefined {
+  const names = VALIDATION_PREFS[id];
+  if (names === undefined) return undefined;
+  const result = String(getPref(names.result));
+  return {
+    result: VALIDATION_RESULTS.includes(result)
+      ? (result as ValidationResult)
+      : "",
+    at: String(getPref(names.at)),
+  };
+}
+
+/**
+ * Persist a Test outcome — `docs/09` §2.3's "store only the outcome and the
+ * timestamp" — or `docs/09` §2.4 step 3's `rejected`. The record passes
+ * `redactRecord` (`src/core/provenance.ts`, `P3-T36`), the one gate for a
+ * persisted record, and a record the gate would change is refused: neither
+ * member can carry text, so a change means something is wrong upstream.
+ *
+ * Never called for an inconclusive Test that got no answer: a network
+ * failure leaves the stored status as it was (`docs/09` §2.3, `P3-T14` step
+ * 2); that is the caller's rule.
+ *
+ * @returns whether it was written (`false` when `id` has no pair)
+ */
+export function recordValidation(
+  id: SecretId,
+  result: ValidationResult,
+  atIso: string,
+): boolean {
+  const names = VALIDATION_PREFS[id];
+  if (names === undefined) return false;
+  if (!VALIDATION_RESULTS.includes(result)) {
+    throw new RangeError(`[research-helper] not a validation result`);
+  }
+  const gated = redactRecord({ result, at: atIso });
+  if (gated.mark.partlyRedacted) {
+    throw new RangeError(
+      "[research-helper] a validation record the redaction gate changed is not stored",
+    );
+  }
+  setPref(names.result, gated.record.result);
+  setPref(names.at, gated.record.at);
+  return true;
+}
+
+/**
+ * `docs/09` §2.5: a replaced or removed key is "not yet tested". Called by
+ * every `set` and `clear` of both tiers, so no other path can leave a verdict
+ * about an old key beside a new one.
+ */
+export function resetValidation(id: SecretId): void {
+  const names = VALIDATION_PREFS[id];
+  if (names === undefined) return;
+  setPref(names.result, "");
+  setPref(names.at, "");
+}
+
+/**
+ * `docs/09` §2.4 step 3, for a provider whose key a running job's request
+ * was refused with (HTTP 401): `rejected`, stamped now. The key is kept
+ * (step 4). The summarize pipeline (`P3-T29`) binds this to
+ * `PooledRunDeps.onCredentialRejected` in `src/core/jobQueue/queue.ts`.
+ *
+ * @param providerId - the `providerId` the `AuthenticationError` carries
+ * @param nowEpochMs - the clock's time
+ * @returns whether a status was written (`false` for an unknown provider)
+ */
+export function markProviderKeyRejected(
+  providerId: string,
+  nowEpochMs: number,
+): boolean {
+  const id = `llm.${providerId}`;
+  if (!isSecretId(id)) return false;
+  return recordValidation(id, "rejected", new Date(nowEpochMs).toISOString());
+}
+
 /**
  * Store `value` for `id`: `docs/09` §1.7's `setTier1`, with the removal made
  * version-proof.
@@ -363,6 +519,8 @@ export async function setSecret(id: SecretId, value: string): Promise<void> {
     new LoginInfo(LOGIN_ORIGIN, null, LOGIN_REALM, id, encrypted, "", ""),
   );
   await refreshKeyPresence(id);
+  // `docs/09` §2.5: the new key is not yet tested (`P3-T14` step 7).
+  resetValidation(id);
 }
 
 /**
@@ -408,6 +566,8 @@ export async function clearSecret(id: SecretId): Promise<number> {
     await removeLogin(login);
   }
   await refreshKeyPresence(id);
+  // `docs/09` §2.5: no key, no verdict (`P3-T14` step 7).
+  resetValidation(id);
   return logins.length;
 }
 
@@ -817,10 +977,13 @@ export function createSessionSecretStore(): SecretStore {
     set: async (id: SecretId, value: string): Promise<void> => {
       sessionSecrets.set(id, value);
       await refreshSessionKeyPresence(id);
+      // `docs/09` §2.5, as tier 1's `setSecret` (`P3-T14` step 7).
+      resetValidation(id);
     },
     clear: async (id: SecretId): Promise<void> => {
       sessionSecrets.delete(id);
       await refreshSessionKeyPresence(id);
+      resetValidation(id);
     },
     has: sessionHas,
     listStoredIds: (): Promise<readonly SecretId[]> =>

@@ -34,11 +34,13 @@ import { createLLMProviderRegistry } from "../../../src/llm/registry";
 import {
   bundledCatalogue,
   createModelCatalogue,
+  createModelPriceSource,
   findCatalogueModel,
   MODEL_CATALOGUE_NAMESPACE,
   MODEL_CATALOGUE_TTL_MS,
   modelCatalogueCacheKey,
   modelsFor,
+  reloadingUserPriceStore,
   type ModelCatalogueSnapshot,
 } from "../../../src/llm/shared/modelCatalogue";
 import {
@@ -908,5 +910,143 @@ describe("createModelCatalogue — the 24 h cache and the bundled fallback", () 
     await expect(second.get({ token: midway.token })).rejects.toBeInstanceOf(
       OperationCancelledError,
     );
+  });
+});
+
+describe("createModelPriceSource — one snapshot, read synchronously, refreshed asynchronously (owner, 2026-10-23, plan/00 §6 item 278(b))", () => {
+  const TERRA_OVERRIDE: UserPriceOverride = {
+    providerId: "openai",
+    modelId: "gpt-5.6-terra",
+    inputPerMTokUsd: 7,
+    outputPerMTokUsd: 70,
+    asOfEpochMs: T0,
+  };
+
+  function source(rows: { current: readonly UserPriceOverride[] }) {
+    const h = harness({
+      keys: { openai: true },
+      natives: { openai: () => Promise.resolve(SYNTHETIC_OPENAI_MODELS) },
+    });
+    const prices = createModelPriceSource({
+      catalogue: h.catalogue,
+      userPriceOverrides: () => Promise.resolve(rows.current),
+    });
+    return { ...h, prices };
+  }
+
+  it("serves the documented table until a catalogue snapshot is adopted, and fetches nothing on its own", async () => {
+    const rows = { current: [] as readonly UserPriceOverride[] };
+    const { prices, calls } = source(rows);
+    expect(prices.loaded).toBe(false);
+    const terra = prices.pricesFor("openai", "gpt-5.6-terra");
+    expect(terra).toEqual(
+      pricesFromDocumentedRow(
+        DOCUMENTED_PRICE_TABLE.find((r) => r.modelId === "gpt-5.6-terra")!,
+      ),
+    );
+    expect(prices.current().stale).toBe(true);
+    // Reading the user table is no catalogue request.
+    await prices.reloadUserPrices();
+    expect(calls).toEqual([]);
+  });
+
+  it("applies the user table over the documented table, and over the live snapshot once refreshed; a removed row stops applying", async () => {
+    const rows = { current: [TERRA_OVERRIDE] as readonly UserPriceOverride[] };
+    const { prices, calls } = source(rows);
+    await prices.reloadUserPrices();
+    expect(prices.pricesFor("openai", "gpt-5.6-terra")).toMatchObject({
+      inputPerMTokUsd: 7,
+      outputPerMTokUsd: 70,
+      source: "user-override",
+    });
+
+    const snapshot = await prices.refresh(ctx());
+    expect(calls.sort()).toEqual(["openai", "openrouter-catalogue"]);
+    expect(prices.loaded).toBe(true);
+    expect(snapshot.stale).toBe(false);
+    // The refresh's answer is the snapshot held, user prices applied.
+    expect(model(snapshot, "openai", "gpt-5.6-terra").prices?.source).toBe(
+      "user-override",
+    );
+    expect(prices.pricesFor("openai", "gpt-5.6-terra")?.source).toBe(
+      "user-override",
+    );
+
+    rows.current = [];
+    await prices.reloadUserPrices();
+    const live = prices.pricesFor("openai", "gpt-5.6-terra");
+    expect(live?.source).not.toBe("user-override");
+    expect(live?.asOfEpochMs).toBe(T0);
+    expect(live?.inputPerMTokUsd).toBeCloseTo(2, 9);
+  });
+
+  it("keeps the table it held when the user table cannot be read, and never adopts an older refresh over a newer one", async () => {
+    let fail = false;
+    const h = harness({
+      keys: { openai: true },
+      natives: { openai: () => Promise.resolve(SYNTHETIC_OPENAI_MODELS) },
+    });
+    const prices = createModelPriceSource({
+      catalogue: h.catalogue,
+      userPriceOverrides: () =>
+        fail
+          ? Promise.reject(new Error("synthetic read failure"))
+          : Promise.resolve([TERRA_OVERRIDE]),
+    });
+    await prices.reloadUserPrices();
+    fail = true;
+    await prices.reloadUserPrices();
+    expect(prices.pricesFor("openai", "gpt-5.6-terra")?.source).toBe(
+      "user-override",
+    );
+
+    // Two refreshes in flight: the second answers first and is kept.
+    let releaseFirst!: (snapshot: ModelCatalogueSnapshot) => void;
+    const live = await h.catalogue.get(ctx());
+    const gated = createModelPriceSource({
+      catalogue: {
+        get: (() => {
+          let n = 0;
+          return () => {
+            n += 1;
+            return n === 1
+              ? new Promise<ModelCatalogueSnapshot>((done) => {
+                  releaseFirst = done;
+                })
+              : Promise.resolve(live);
+          };
+        })(),
+      },
+      userPriceOverrides: () => [],
+    });
+    const first = gated.refresh(ctx());
+    await gated.refresh(ctx());
+    releaseFirst(bundledCatalogue());
+    await first;
+    expect(gated.current().stale).toBe(false);
+  });
+
+  it("reloadingUserPriceStore re-reads the table after each change it makes", async () => {
+    const stored: UserPriceOverride[] = [];
+    let reloads = 0;
+    const store = reloadingUserPriceStore(
+      {
+        list: () => Promise.resolve([...stored]),
+        upsert: (row) => Promise.resolve(void stored.push(row)),
+        delete: () => Promise.resolve(void stored.splice(0)),
+      },
+      {
+        reloadUserPrices: () => {
+          reloads += 1;
+          return Promise.resolve();
+        },
+      },
+    );
+    await store.list();
+    expect(reloads).toBe(0);
+    await store.upsert(TERRA_OVERRIDE);
+    expect(reloads).toBe(1);
+    await store.delete("openai", "gpt-5.6-terra");
+    expect(reloads).toBe(2);
   });
 });

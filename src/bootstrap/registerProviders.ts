@@ -134,6 +134,12 @@ export interface ProviderWiringDeps {
    * through `httpRequest` (`docs/13` §2.2's substitution point).
    */
   readonly http?: HttpClient | undefined;
+  /**
+   * The global `privacy.mode`, read per request by the OpenRouter adapter
+   * (`P3-T15`'s floor; `OpenRouterProviderDeps.privacyMode`). Passed by
+   * `installServices` (`P3-T35`). Absent, the adapter uses its own default.
+   */
+  readonly privacyMode?: () => "strict" | "balanced" | "full";
 }
 
 /** The LLM layer, as `installServices` holds it. */
@@ -167,6 +173,7 @@ export function registerProviders(deps: ProviderWiringDeps): LLMServices {
       secrets: deps.secrets,
       baseUrls,
       ...(deps.http !== undefined && { http: deps.http }),
+      ...(deps.privacyMode !== undefined && { privacyMode: deps.privacyMode }),
       logger: deps.logger,
     }),
   );

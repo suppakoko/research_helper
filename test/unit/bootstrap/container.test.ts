@@ -7,6 +7,7 @@ import {
   adoptPrefObserverHandle,
   createRetryFor,
   createScope,
+  createSpendResumeGuards,
   createZoteroLogSink,
   installServices,
   registration,
@@ -14,6 +15,7 @@ import {
   type ServiceGraphOptions,
 } from "../../../src/bootstrap/container";
 import type { PluginDatabaseSource } from "../../../src/bootstrap/pluginDatabase";
+import { registerProviders } from "../../../src/bootstrap/registerProviders";
 import type { CacheBlobStore } from "../../../src/core/cache/sqliteCache";
 import { createManualClock, type ManualClock } from "../../../src/core/clock";
 import {
@@ -23,16 +25,20 @@ import {
   type PrefStore,
 } from "../../../src/core/config";
 import {
+  BudgetExceededError,
   ConfigurationError,
+  MissingCredentialError,
   NetworkError,
   OfflineError,
   OperationCancelledError,
   RateLimitError,
+  StorageError,
   TimeoutError,
   UpstreamServerError,
 } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import {
+  createHttpClient,
   getHttpClient,
   httpRequest,
   setHttpClient,
@@ -50,7 +56,12 @@ import {
   PROGRESS_REPAINT_INTERVAL_MS,
   type ProgressSnapshot,
 } from "../../../src/core/jobQueue/progress";
-import { LOG_PREFIX, type LogSink } from "../../../src/core/logger";
+import { createJobRecord } from "../../../src/core/jobQueue/jobRecord";
+import {
+  createLogger,
+  LOG_PREFIX,
+  type LogSink,
+} from "../../../src/core/logger";
 import {
   ARXIV_HOST,
   BIORXIV_HOST,
@@ -69,7 +80,15 @@ import {
   type HostLimiterRegistry,
 } from "../../../src/core/rateLimit/hostLimiter";
 import { TokenBucket } from "../../../src/core/rateLimit/tokenBucket";
+import type { SecretStore } from "../../../src/core/secretStore";
 import { L10N_PROGRESS_HEADLINE } from "../../../src/i18n/keys";
+import { reloadingUserPriceStore } from "../../../src/llm/shared/modelCatalogue";
+import type { ChatRequest } from "../../../src/llm/types";
+import type { Usage } from "../../../src/model/usage";
+import {
+  ceilingStopOf,
+  createSessionSpendCounter,
+} from "../../../src/pipeline/shared/budget";
 import { getPrefStore, setPrefStore } from "../../../src/prefs";
 import type { SqlConnection, SqlParam } from "../../../src/zotero/db";
 import type { ProgressWindowHandle } from "../../../src/zotero/progressWindow";
@@ -524,13 +543,14 @@ describe("installServices wires the graph Phase 1 built", () => {
   // store when no database is passed (P3-T33 attaches it from the database
   // installServices opens) and, until P3-T15/T16 fill them, no other
   // resume guard and no notifier — so no interrupted job can resume.
-  // `skipCached` is P3-T26's, passed since 2026-10-23.
-  it("builds the job queue storeless, with every resume prerequisite but skipCached still missing", async () => {
+  // `skipCached` is P3-T26's, passed since 2026-10-23; `egress` (P3-T15) is
+  // installed by P3-T35. `confirm` and `ceilings` wait for P3-T29's
+  // remaining-work estimate and the notifier is P3-T29's.
+  it("builds the job queue storeless, with confirm, ceilings and the notifier still missing", async () => {
     const h = harness();
     const graph = await installServices(h.scope, h.options);
     expect(graph.jobs.attached).toBe(false);
     expect(graph.jobs.missingResumePrerequisites()).toStrictEqual([
-      "egress",
       "confirm",
       "ceilings",
       "notifier",
@@ -2437,5 +2457,483 @@ describe("P3-T33 — installServices opens the plugin database once and shares i
     expect(graph.jobs.attached).toBe(false);
     expect(h.clock.pending).toBe(0);
     await h.scope.unregisterAll();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P3-T35 — every job's context carries the real members
+// ---------------------------------------------------------------------------
+
+describe("P3-T35 — every job's PipelineContext carries a real cache, budget, llm, config, privacy and checkpoint", () => {
+  /** `docs/03` §12.1's Sonnet row, reached through OpenRouter's slug. */
+  const DOCUMENTED_SLUG = "anthropic/claude-sonnet-5";
+
+  function chatRequest(model: string): ChatRequest {
+    return {
+      model,
+      messages: [{ role: "user", content: "hello" }],
+      maxOutputTokens: 10_000,
+      traceId: "p3-t35",
+    };
+  }
+
+  function usage(costUsd: number): Usage {
+    return {
+      inputTokens: 100,
+      outputTokens: 10,
+      totalTokens: 110,
+      costUsd,
+    };
+  }
+
+  it("fills every member but tts and zotero from what installServices built once", async () => {
+    const h = harness({}, { "privacy.mode": "full" });
+    const graph = await installServices(h.scope, h.options);
+    const token = createCancellationTokenSource().token;
+    const job = graph.pipelineContext.forJob({
+      pipelineId: "searchImport",
+      token,
+    });
+    const { context } = job;
+    expect(context.cache).toBe(graph.cache);
+    expect(context.llm).toBe(graph.llm.router);
+    expect(context.config).toBe(graph.config);
+    expect(context.budget).toBe(job.budget);
+    expect(context.budget.spentUsd).toBe(0);
+    // A job over no collection runs under the global mode, which is
+    // `loadPrivacyPolicy`'s rule for it.
+    expect(context.privacy.mode).toBe("full");
+    expect(context.tts).toBeUndefined();
+    expect(context.zotero).toBeUndefined();
+    // No record, so nothing to write into: the no-op stays.
+    expect(job.checkpoints).toBeUndefined();
+    await expect(context.checkpoint({ stage: 1 })).resolves.toBeUndefined();
+    expect(context.resumeState).toBeUndefined();
+    job.dispose();
+    await h.scope.unregisterAll();
+    expect(h.errors).toStrictEqual([]);
+  });
+
+  it("reads preferences through ctx.config, live and with getPref's fallback", async () => {
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+    const job = graph.pipelineContext.forJob({
+      pipelineId: "searchImport",
+      token: createCancellationTokenSource().token,
+    });
+    const { config } = job.context;
+    expect(Object.isFrozen(config)).toBe(true);
+    // docs/07 §8.5's defaults.
+    expect(config.get("privacyMode")).toBe("balanced");
+    expect(config.get("runMaxSessionSpendCents")).toBe(500);
+    h.prefs.set("privacy.mode", "strict");
+    expect(config.get("privacyMode")).toBe("strict");
+    h.prefs.set("privacy.mode", "nonsense");
+    expect(config.get("privacyMode")).toBe("balanced");
+    job.dispose();
+    await h.scope.unregisterAll();
+  });
+
+  it("gives two jobs distinct run counters over the same session counter", async () => {
+    const session = createSessionSpendCounter();
+    const h = harness({ sessionSpend: session });
+    const graph = await installServices(h.scope, h.options);
+    expect(graph.sessionSpend).toBe(session);
+    const token = createCancellationTokenSource().token;
+    const first = graph.pipelineContext.forJob({
+      pipelineId: "summarize",
+      token,
+    });
+    const second = await graph.pipelineContext.openJob({
+      pipelineId: "summarize",
+      token,
+    });
+    expect(first.budget).not.toBe(second.budget);
+
+    first.budget
+      .reserveCall({ inputTokens: 100, outputTokens: 10, costUsd: 0.25 })
+      .settle(usage(0.25));
+    expect(first.context.budget.spentUsd).toBe(0.25);
+    expect(second.context.budget.spentUsd).toBe(0);
+    expect(session.totals.costUsd).toBe(0.25);
+    expect(second.budget.usage().session).toStrictEqual(session.totals);
+
+    second.budget
+      .reserveCall({ inputTokens: 100, outputTokens: 10, costUsd: 0.5 })
+      .settle(usage(0.5));
+    expect(first.budget.spentUsd).toBe(0.25);
+    expect(second.budget.spentUsd).toBe(0.5);
+    expect(first.budget.usage().session.costUsd).toBe(0.75);
+    first.dispose();
+    second.dispose();
+    await h.scope.unregisterAll();
+  });
+
+  it("budgets the one router: a call carrying ctx.budget is refused before it is sent; one without it is refused too (item 278(a))", async () => {
+    const h = harness({}, { "run.maxSpendCents": 1 });
+    const graph = await installServices(h.scope, h.options);
+    const token = createCancellationTokenSource().token;
+    const job = graph.pipelineContext.forJob({
+      pipelineId: "summarize",
+      token,
+    });
+    const { llm, budget } = job.context;
+
+    // Priced from the documented table: 10,000 output tokens at $10/M pass a
+    // 1-cent run ceiling, so nothing is sent.
+    let refused: unknown;
+    await llm
+      .chat(chatRequest(DOCUMENTED_SLUG), { token, budget })
+      .catch((error: unknown) => {
+        refused = error;
+      });
+    expect(refused).toBeInstanceOf(BudgetExceededError);
+    expect(ceilingStopOf(refused)?.ceiling).toBe("run");
+    expect(h.transport.calls).toHaveLength(0);
+    expect(budget.spentUsd).toBe(0);
+
+    // Without the guard the router refuses before anything else, the key
+    // lookup included (owner, 2026-10-23, plan/00 §6 item 278(a): fail
+    // closed). Not a ceiling, so the job runner never reads it as one.
+    const unbudgeted = await llm
+      .chat(chatRequest(DOCUMENTED_SLUG), { token })
+      .catch((error: unknown) => error);
+    expect(unbudgeted).toBeInstanceOf(ConfigurationError);
+    expect(unbudgeted).not.toBeInstanceOf(MissingCredentialError);
+    expect(ceilingStopOf(unbudgeted)).toBeUndefined();
+    // A model the table does not list is unpriced: it passes the ceiling and
+    // the router then refuses for the key; its reservation is released.
+    await expect(
+      llm.chat(chatRequest("test-author/unlisted-model"), { token, budget }),
+    ).rejects.toBeInstanceOf(MissingCredentialError);
+    expect(h.transport.calls).toHaveLength(0);
+    expect(job.budget.binding()?.reservedUsd).toBe(0);
+    job.dispose();
+    await h.scope.unregisterAll();
+  });
+
+  it("prices every reservation from graph.modelPrices (item 278(b)): the documented table at first, the user's price once read — at startup and after a change — and no catalogue request at startup", async () => {
+    const database = sqliteDatabase();
+    const h = harness(
+      { pluginDatabase: database.source },
+      { "run.maxSpendCents": 1 },
+    );
+    const graph = await installServices(h.scope, h.options);
+    expect(graph.modelPrices.loaded).toBe(false);
+    const documented = graph.modelPrices.pricesFor(
+      "openrouter",
+      DOCUMENTED_SLUG,
+    );
+    expect(documented?.source).toBe("documented-table");
+    // The startup read: a row already in user_price when the database opens.
+    await graph.database.ready;
+    database.db
+      .prepare(
+        "INSERT INTO user_price (provider_id, model_id, input_per_mtok_usd, " +
+          "output_per_mtok_usd, cached_input_per_mtok_usd, as_of) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run("openrouter", DOCUMENTED_SLUG, 0, 0, null, Date.UTC(2026, 9, 23));
+    await settle();
+    expect(
+      graph.modelPrices.pricesFor("openrouter", DOCUMENTED_SLUG)?.source,
+    ).toBe("user-override");
+    // Startup and that read sent nothing (item 279(c)).
+    expect(h.transport.calls).toHaveLength(0);
+    expect(graph.modelPrices.loaded).toBe(false);
+
+    const token = createCancellationTokenSource().token;
+    const job = graph.pipelineContext.forJob({
+      pipelineId: "summarize",
+      token,
+    });
+    const { llm, budget } = job.context;
+    // At $0/M the reservation is $0, so the 1-cent ceiling passes and the
+    // router refuses only for the missing key; nothing is reserved after.
+    await expect(
+      llm.chat(chatRequest(DOCUMENTED_SLUG), { token, budget }),
+    ).rejects.toBeInstanceOf(MissingCredentialError);
+    expect(job.budget.binding()?.reservedUsd).toBe(0);
+
+    // A change through the pane's store surface reaches the next reservation.
+    const store = reloadingUserPriceStore(
+      graph.database.prices,
+      graph.modelPrices,
+    );
+    await store.delete("openrouter", DOCUMENTED_SLUG);
+    await expect(
+      llm.chat(chatRequest(DOCUMENTED_SLUG), { token, budget }),
+    ).rejects.toBeInstanceOf(BudgetExceededError);
+    await store.upsert({
+      providerId: "openrouter",
+      modelId: DOCUMENTED_SLUG,
+      inputPerMTokUsd: 0,
+      outputPerMTokUsd: 0,
+      asOfEpochMs: Date.UTC(2026, 9, 23),
+    });
+    await expect(
+      llm.chat(chatRequest(DOCUMENTED_SLUG), { token, budget }),
+    ).rejects.toBeInstanceOf(MissingCredentialError);
+    expect(h.transport.calls).toHaveLength(0);
+    job.dispose();
+    await h.scope.unregisterAll();
+  });
+
+  it("binds a queued job's checkpoint() and resumeState to its record, and starts its run counter from the record's usage", async () => {
+    const database = sqliteDatabase();
+    const h = harness({ pluginDatabase: database.source });
+    const graph = await installServices(h.scope, h.options);
+    await graph.database.ready;
+    await settle();
+    const token = createCancellationTokenSource().token;
+    const record = await graph.jobs.enqueue("summarize", { collection: "X" });
+
+    const job = await graph.pipelineContext.openJob({
+      pipelineId: "summarize",
+      token,
+      record,
+    });
+    expect(job.jobId).toBe(record.id);
+    expect(job.context.jobId).toBe(record.id);
+    expect(job.context.resumeState).toBeUndefined();
+    const writer = must(job.checkpoints, "the checkpoint writer");
+
+    const first = { version: 1, completed: ["a"], failed: [], pending: ["b"] };
+    const later = {
+      version: 1,
+      completed: ["a", "b"],
+      failed: [],
+      pending: [],
+    };
+    await job.context.checkpoint(first);
+    expect(await graph.jobs.readCheckpoint(record.id)).toStrictEqual(first);
+    // docs/07 §7.6: at most one write per 2 s; the held state waits for a
+    // flush (or for the next write the throttle allows).
+    await job.context.checkpoint(later);
+    expect(await graph.jobs.readCheckpoint(record.id)).toStrictEqual(first);
+    await writer.flush();
+    expect(await graph.jobs.readCheckpoint(record.id)).toStrictEqual(later);
+    job.dispose();
+
+    // A resumed job reads its checkpoint back, and its run counter starts
+    // from what earlier attempts spent.
+    await graph.jobs.addUsage(record.id, {
+      inputTokens: 10,
+      outputTokens: 5,
+      costUsd: 0.5,
+    });
+    const stored = must(await graph.jobs.get(record.id), "the stored record");
+    const resumed = await graph.pipelineContext.openJob({
+      pipelineId: "summarize",
+      token,
+      record: stored,
+    });
+    expect(resumed.context.resumeState).toStrictEqual(later);
+    expect(resumed.budget.spentUsd).toBe(0.5);
+    resumed.dispose();
+
+    // A record cannot be opened as another pipeline.
+    await expect(
+      graph.pipelineContext.openJob({
+        pipelineId: "searchImport",
+        token,
+        record,
+      }),
+    ).rejects.toBeInstanceOf(ConfigurationError);
+
+    await h.scope.unregisterAll();
+    expect(h.errors).toStrictEqual([]);
+  });
+
+  it("applies a collection's privacy override, which only tightens, and fails closed to strict on a row it cannot read", async () => {
+    const database = sqliteDatabase();
+    const h = harness(
+      { pluginDatabase: database.source },
+      { "privacy.mode": "balanced" },
+    );
+    const graph = await installServices(h.scope, h.options);
+    await graph.database.ready;
+    const token = createCancellationTokenSource().token;
+    const modeOf = async (collectionKey?: string): Promise<string> => {
+      const job = await graph.pipelineContext.openJob({
+        pipelineId: "summarize",
+        token,
+        ...(collectionKey !== undefined && {
+          collection: { libraryID: 1, collectionKey },
+        }),
+      });
+      job.dispose();
+      return job.context.privacy.mode;
+    };
+
+    await graph.collectionSettings.put(1, "STRICT23", {
+      privacyMode: "strict",
+    });
+    await graph.collectionSettings.put(1, "LOOSE234", { privacyMode: "full" });
+    expect(
+      database.db
+        .prepare("SELECT COUNT(*) AS n FROM collection_settings")
+        .get(),
+    ).toMatchObject({ n: 2 });
+    expect(await modeOf("STRICT23")).toBe("strict");
+    // An override never loosens the global mode.
+    expect(await modeOf("LOOSE234")).toBe("balanced");
+    expect(await modeOf("NOROW234")).toBe("balanced");
+    expect(await modeOf()).toBe("balanced");
+
+    // A stored row that is not a JSON object reads as strict, never as "no
+    // override".
+    database.db
+      .prepare(
+        "INSERT INTO collection_settings (library_id, collection_key, json) " +
+          "VALUES (1, 'BROKEN23', 'not json')",
+      )
+      .run();
+    expect(await modeOf("BROKEN23")).toBe("strict");
+
+    await h.scope.unregisterAll();
+    expect(h.errors).toStrictEqual([]);
+  });
+
+  it("gives a collection job a strict policy when there is no database, and writes nothing", async () => {
+    const h = harness({}, { "privacy.mode": "full" });
+    const graph = await installServices(h.scope, h.options);
+    const token = createCancellationTokenSource().token;
+    const overCollection = await graph.pipelineContext.openJob({
+      pipelineId: "summarize",
+      token,
+      collection: { libraryID: 1, collectionKey: "ABCD2345" },
+    });
+    expect(overCollection.context.privacy.mode).toBe("strict");
+    expect(
+      h.sink.lines.filter((line) => line.includes("strict privacy mode")),
+    ).toHaveLength(1);
+    const overNone = await graph.pipelineContext.openJob({
+      pipelineId: "summarize",
+      token,
+    });
+    expect(overNone.context.privacy.mode).toBe("full");
+    await expect(
+      graph.collectionSettings.put(1, "ABCD2345", { privacyMode: "strict" }),
+    ).rejects.toBeInstanceOf(StorageError);
+    overCollection.dispose();
+    overNone.dispose();
+    await h.scope.unregisterAll();
+  });
+
+  it("builds the confirm and ceilings resume guards only once a remaining-work estimate exists, over the session counter it is given", async () => {
+    const h = harness();
+    await installServices(h.scope, h.options);
+    const session = createSessionSpendCounter();
+    expect(createSpendResumeGuards({ session })).toStrictEqual({});
+
+    const record = createJobRecord({
+      id: "job-1",
+      pipelineId: "summarize",
+      input: {},
+      createdAtEpochMs: 0,
+      createdByPluginVersion: "1.2.3",
+    });
+    const guards = createSpendResumeGuards({
+      session,
+      remaining: () => Promise.resolve({ calls: 2, costUsd: 0.02 }),
+    });
+    const confirm = must(guards.confirm, "the confirm guard");
+    const ceilings = must(guards.ceilings, "the ceilings guard");
+    // Under summary.confirmAboveCents and the 500-cent session ceiling.
+    await expect(confirm(record)).resolves.toStrictEqual({ proceed: true });
+    await expect(ceilings(record)).resolves.toStrictEqual({ proceed: true });
+    // The session counter it was given is the one it judges by.
+    session.add({
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 4.99,
+      estimated: false,
+    });
+    await expect(ceilings(record)).resolves.toStrictEqual({
+      proceed: false,
+      pauseReason: "budget-stop",
+    });
+    await h.scope.unregisterAll();
+  });
+
+  it("hands the OpenRouter adapter the global privacy mode, read on every request", async () => {
+    const clock = createManualClock();
+    const transport = createFakeTransport(clock);
+    const http = createHttpClient({
+      transport,
+      userAgent:
+        "research_helper/9.9.9 (https://example.test; mailto:x@example.test)",
+      clock,
+    });
+    // Synthetic, built at run time; never a real key.
+    const key = ["sk", "or", "v1", "0123456789abcdef".repeat(4)].join("-");
+    const secrets: SecretStore = {
+      backend: "session-only",
+      unattended: true,
+      get: (id) => Promise.resolve(id === "llm.openrouter" ? key : undefined),
+      set: () => Promise.resolve(),
+      clear: () => Promise.resolve(),
+      has: (id) => Promise.resolve(id === "llm.openrouter"),
+      listStoredIds: () => Promise.resolve(["llm.openrouter"]),
+      clearAll: () => Promise.resolve(0),
+    };
+    let mode: "strict" | "balanced" | "full" = "strict";
+    const services = registerProviders({
+      logger: createLogger({ sink: createCapturingSink(), clock }),
+      http,
+      secrets,
+      privacyMode: () => mode,
+    });
+    const openrouter = must(services.registry.get("openrouter"), "OpenRouter");
+    const token = createCancellationTokenSource().token;
+    const providerBlock = async (): Promise<unknown> => {
+      // The fake transport answers "ok", which is no answer; only the body
+      // that went out is looked at.
+      await openrouter
+        .chat(chatRequest("test-author/test-model"), { token })
+        .catch(() => undefined);
+      const body = transport.calls.at(-1)?.options.body;
+      return (JSON.parse(String(body)) as { provider: unknown }).provider;
+    };
+    expect(await providerBlock()).toStrictEqual({
+      data_collection: "deny",
+      zdr: true,
+    });
+    mode = "balanced";
+    expect(await providerBlock()).toStrictEqual({ data_collection: "deny" });
+  });
+
+  it("passes registerProviders the global privacy.mode, read on every call", async () => {
+    const PROVIDERS = "../../../src/bootstrap/registerProviders";
+    let passed: (() => string) | undefined;
+    vi.resetModules();
+    vi.doMock(PROVIDERS, async (importOriginal) => {
+      const actual =
+        await importOriginal<
+          typeof import("../../../src/bootstrap/registerProviders")
+        >();
+      return {
+        ...actual,
+        registerProviders: (
+          deps: Parameters<typeof actual.registerProviders>[0],
+        ) => {
+          passed = deps.privacyMode;
+          return actual.registerProviders(deps);
+        },
+      };
+    });
+    try {
+      const fresh = await import("../../../src/bootstrap/container");
+      const h = harness({}, { "privacy.mode": "strict" });
+      await fresh.installServices(h.scope, h.options);
+      const privacyMode = must(passed, "the privacy-mode getter");
+      expect(privacyMode()).toBe("strict");
+      h.prefs.set("privacy.mode", "full");
+      expect(privacyMode()).toBe("full");
+      await h.scope.unregisterAll();
+    } finally {
+      vi.doUnmock(PROVIDERS);
+      vi.resetModules();
+    }
   });
 });

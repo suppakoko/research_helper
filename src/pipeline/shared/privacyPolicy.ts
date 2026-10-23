@@ -26,9 +26,11 @@
  *
  * `P3-T16`'s cost dialog and `P3-T29`'s summarize pipeline, through
  * `PipelineContext.privacy`, which `P3-T35` fills per job with
- * {@link loadPrivacyPolicy}. Until it does, the composition root hands every
- * job a strict policy (`createPipelineContextFactory` in
- * `src/bootstrap/container.ts`), which fails closed.
+ * {@link loadPrivacyPolicy}. *(Updated 2026-10-23: `P3-T35` did, and the
+ * 2026-10-21 strict placeholder is gone. `createPipelineContextFactory` in
+ * `src/bootstrap/container.ts` gives a job over no collection the global
+ * mode and a collection job the stricter of the two; an override that cannot
+ * be read still gives strict — owner, `plan/00` §6 item 278(c).)*
  *
  * **Layering.** `pipeline/` may import `core/`, `model/`, `llm/` and
  * `zotero/` (`docs/07` §2.3); this file imports types from the last three and

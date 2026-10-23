@@ -425,9 +425,55 @@ describe("settling after every call (step 5)", () => {
     await router.chat(request(), ctx(guard));
     expect(mock.calls[0]?.ctx.budget).toBeUndefined();
     expect(guard.usage().run.calls).toBe(1);
-    // Without a guard the router is called as it is.
-    await router.chat(request(), ctx());
-    expect(guard.usage().run.calls).toBe(1);
+  });
+
+  it("refuses a call that carries no guard (owner, 2026-10-23, plan/00 §6 item 278(a)): ConfigurationError, nothing sent, chat and chatStream alike", async () => {
+    const { mock, router } = budgetedRouter([chatResponse("x")], {
+      streaming: true,
+    });
+    const refused = await router
+      .chat(request(), ctx())
+      .catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(ConfigurationError);
+    // Not a ceiling: the job runner must not read it as budget-stop.
+    expect(refused).not.toBeInstanceOf(BudgetExceededError);
+    expect(ceilingStopOf(refused)).toBeUndefined();
+    const streamed: unknown[] = [];
+    let streamRefused: unknown;
+    try {
+      for await (const chunk of router.chatStream(request(), ctx())) {
+        streamed.push(chunk);
+      }
+    } catch (error) {
+      streamRefused = error;
+    }
+    expect(streamRefused).toBeInstanceOf(ConfigurationError);
+    expect(streamed).toEqual([]);
+    expect(mock.calls).toHaveLength(0);
+  });
+
+  it("settles a call the provider does not price at the prices it was reserved with × its reported tokens, not at its reservation (item 278(b))", async () => {
+    // The guard has no prices of its own, as every job's guard is built.
+    const guard = guardOf(createSessionSpendCounter(), limits(0, 0));
+    const { router } = budgetedRouter([
+      chatResponse("x", { usage: usage(2_000, 300) }),
+      chatResponse("y", { usage: usage(undefined, undefined) }),
+    ]);
+    await router.chat(request("summarize this", 1_000), ctx(guard));
+    expect(guard.spentUsd).toBeCloseTo((2_000 * 1 + 300 * 10) / 1e6, 15);
+    expect(guard.usage().run.estimatedCalls).toBe(0);
+    // Tokens not reported: the reservation's estimate, marked estimated.
+    const reserved = requestEstimate(request("summarize this", 1_000), {
+      pricesFor: () => PRICES,
+      now: () => NOW,
+    });
+    expect(reserved.prices).toBe(PRICES);
+    await router.chat(request("summarize this", 1_000), ctx(guard));
+    expect(guard.spentUsd).toBeCloseTo(
+      (2_000 * 1 + 300 * 10) / 1e6 + reserved.costUsd!,
+      15,
+    );
+    expect(guard.usage().run.estimatedCalls).toBe(1);
   });
 
   it("drives a bare BudgetGuard through its reserve() and settle() pair once per call", async () => {

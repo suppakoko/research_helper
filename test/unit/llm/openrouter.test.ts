@@ -11,7 +11,6 @@ import { type Clock } from "../../../src/core/clock";
 import { createMemoryPrefStore } from "../../../src/core/config";
 import {
   BadRequestError,
-  ConfigurationError,
   ContentFilterError,
   LLMError,
   MissingCredentialError,
@@ -1052,12 +1051,13 @@ describe("OpenRouter: the rest of LLMProvider, and registerProviders (P3-T07 Fil
     expect(h.provider.countTokens(text, MODEL)).toBe(estTokens(text));
   });
 
-  it("validateCredentials is P3-T14's: it rejects with ConfigurationError and sends nothing", async () => {
+  it("validateCredentials sends GET /api/v1/key first (P3-T14; the outcome table is test/unit/llm/validateCredentials.test.ts)", async () => {
     const h = harness([OK]);
-    await expect(h.provider.validateCredentials(ctx())).rejects.toBeInstanceOf(
-      ConfigurationError,
-    );
-    expect(h.transport.calls).toHaveLength(0);
+    await expect(h.provider.validateCredentials(ctx())).resolves.toMatchObject({
+      ok: true,
+    });
+    expect(h.transport.calls[0]?.method).toBe("GET");
+    expect(h.transport.calls[0]?.url.endsWith("/api/v1/key")).toBe(true);
   });
 
   it("is registered by registerProviders with the store and client it is given", async () => {

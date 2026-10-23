@@ -829,6 +829,31 @@ describe("retry", () => {
     expect(transport.calls).toHaveLength(1);
   });
 
+  it("singleAttempt (item 279(b)): one attempt whatever the host's policy, with the request's own timeout; without it the same answers are retried", async () => {
+    for (const status of [429, 503]) {
+      const transport = createStubTransport(() =>
+        Promise.resolve(stubXhr({ status })),
+      );
+      const client = createHttpClient({
+        transport,
+        userAgent: UA,
+        clock: createSystemClock(),
+        retryFor: () => immediatePolicy(5),
+      });
+      const error = await client
+        .request("GET", URL_OK, { singleAttempt: true, timeoutMs: 15_000 })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(
+        status === 429 ? RateLimitError : UpstreamServerError,
+      );
+      expect(transport.calls).toHaveLength(1);
+      expect(transport.calls[0]!.options.timeout).toBe(15_000);
+
+      await client.request("GET", URL_OK).catch(() => undefined);
+      expect(transport.calls).toHaveLength(1 + 5);
+    }
+  });
+
   it("retries a 503 to the per-host cap and then throws UpstreamServerError", async () => {
     const transport = createStubTransport(() =>
       Promise.resolve(stubXhr({ status: 503 })),

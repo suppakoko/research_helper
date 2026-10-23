@@ -153,7 +153,12 @@ export interface LLMCallContext {
   readonly token: CancellationToken;
   readonly progress?: ProgressReporter;
   readonly bypassCache?: boolean;
-  /** Enforced before the call; throws BudgetExceededError. */
+  /**
+   * Enforced before the call; throws BudgetExceededError. The shared router
+   * (`withBudget`) refuses a call without one with `ConfigurationError`
+   * (owner, 2026-10-23, `plan/00` §6 item 278(a)); a call made on an adapter
+   * directly, such as the key Test, needs none.
+   */
   readonly budget?: BudgetGuard;
 }
 

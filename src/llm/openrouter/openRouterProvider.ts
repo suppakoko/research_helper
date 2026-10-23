@@ -24,7 +24,9 @@
  *   rule 2) and returns {@link openRouterGuardrailError} for that 404;
  * - `timeoutMs: LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240), or for a
  *   stream 15 minutes in all and 3 without new text (`llmAttemptTimeouts`,
- *   item 268(c));
+ *   item 268(c)); a key Test's requests instead carry
+ *   `LLM_KEY_TEST_ATTEMPT`, one attempt of at most 15 s, never retried
+ *   (owner, 2026-10-23, `plan/00` §6 item 279(b));
  * - the job's cancellation token.
  *
  * This file writes no retry loop: the retry budget belongs to the host's
@@ -55,8 +57,9 @@
  *
  * ## Not here
  *
- * - `validateCredentials` is `P3-T14`'s (that card modifies this file); it
- *   throws `ConfigurationError` here and sends nothing.
+ * - *(Corrected 2026-10-23, `P3-T14`: `validateCredentials` was listed here
+ *   as that card's and threw. It now sends `GET /api/v1/key` with the key,
+ *   then reads the public catalogue, without the key, for `models`.)*
  * - *(Corrected 2026-10-21: streaming was listed here as `P3-T11`'s. That
  *   card added `chatStream`, which sends `chat`'s body — one builder,
  *   `chatBody` — with `stream: true`.)*
@@ -73,10 +76,12 @@
 
 import { type Clock, createSystemClock } from "../../core/clock";
 import {
-  ConfigurationError,
   LLMError,
   loggableHeaders,
   MissingCredentialError,
+  OperationCancelledError,
+  ResearchHelperError,
+  UpstreamError,
 } from "../../core/errors";
 import {
   type ErrorResponseMapper,
@@ -86,11 +91,15 @@ import {
   httpRequest,
 } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
-import { llmAttemptTimeouts } from "../../core/rateLimit/hostLimiter";
+import {
+  LLM_KEY_TEST_ATTEMPT,
+  llmAttemptTimeouts,
+  type LlmAttemptLimits,
+} from "../../core/rateLimit/hostLimiter";
 import type { SecretId, SecretStore } from "../../core/secretStore";
 import { Secret } from "../../prefs/secrets";
 import type { BaseUrlResolver } from "../shared/baseUrl";
-import { mapProviderError } from "../shared/errorMap";
+import { isKeyAcceptedFailure, mapProviderError } from "../shared/errorMap";
 import { withSchemaInPrompt } from "../shared/jsonMode";
 import { createOpenRouterStreamDecoder, streamChat } from "../shared/sse";
 import { estTokens } from "../shared/tokenEstimate";
@@ -126,6 +135,23 @@ import {
 
 /** The keystore id the key is read from (`docs/09` §1.7). */
 export const OPENROUTER_SECRET_ID: SecretId = "llm.openrouter";
+
+/**
+ * `GET /api/v1/key`: the key's own metadata and limits, `docs/09` §2.3's Test
+ * call for OpenRouter (`P3-T14`). Relative to the base, which ends in `/v1`.
+ */
+export const KEY_PATH = "/key";
+
+/**
+ * The preference pane's success id (`P1-T44`'s `testOk` in
+ * `src/ui/prefs/preferencesPane.ts`), spelled out because `llm/` may not
+ * import `ui/`. `test/unit/llm/validateCredentials.test.ts` asserts all four
+ * adapters return the pane's value (`P3-T14`).
+ */
+const TEST_OK_MESSAGE_KEY = "research-helper-prefs-test-ok";
+
+/** `LLMError`'s id, for an answer that is neither a 2xx nor an error (`P3-T14`). */
+const UNREAD_ANSWER_MESSAGE_KEY = "rh-error-llm";
 
 /**
  * `LLMProvider.displayNameKey`. A literal Fluent id, as the source adapters'
@@ -308,6 +334,8 @@ export function createOpenRouterProvider(
     hook: ErrorResponseMapper,
     ctx: LLMCallContext,
     onBodyText?: (text: string) => void,
+    // A key Test's `LLM_KEY_TEST_ATTEMPT` (item 279(b)).
+    limits: LlmAttemptLimits = llmAttemptTimeouts(onBodyText !== undefined),
   ): Promise<HttpResponse> {
     if (headers !== undefined) {
       logger?.debug("openrouter request", {
@@ -322,7 +350,7 @@ export function createOpenRouterProvider(
       {
         ...(headers !== undefined && { headers }),
         ...(body !== undefined && { body }),
-        ...llmAttemptTimeouts(onBodyText !== undefined),
+        ...limits,
         token: ctx.token,
         mapErrorResponse: hook,
         ...(onBodyText !== undefined && { onBodyText }),
@@ -359,6 +387,7 @@ export function createOpenRouterProvider(
 
   async function fetchCatalogue(
     ctx: LLMCallContext,
+    limits?: LlmAttemptLimits,
   ): Promise<readonly OpenRouterCatalogueEntry[]> {
     ctx.token.throwIfCancelled();
     // Public endpoint: no key, no headers (`docs/03` §9.4).
@@ -369,6 +398,8 @@ export function createOpenRouterProvider(
       undefined,
       errorHook("", undefined),
       ctx,
+      undefined,
+      limits,
     );
     const { entries, skipped } = parseOpenRouterCatalogue(
       readAnswer(response, ""),
@@ -422,13 +453,70 @@ export function createOpenRouterProvider(
       return presence !== false;
     },
 
-    validateCredentials(): Promise<CredentialCheckResult> {
-      return Promise.reject(
-        new ConfigurationError(
-          "openrouter: validateCredentials() is built by P3-T14 (GET /api/v1/key)",
-          { providerId: OPENROUTER_PROVIDER_ID },
-        ),
-      );
+    async validateCredentials(
+      ctx: LLMCallContext,
+    ): Promise<CredentialCheckResult> {
+      // `P3-T14`: `docs/09` §2.3's call, `GET /api/v1/key` with the key —
+      // key metadata, never a completion, no user content — through the same
+      // `send` and hook as every request. A failure answers with the error's
+      // own message key (`docs/07` §4.3's note "as built").
+      let response: HttpResponse;
+      try {
+        ctx.token.throwIfCancelled();
+        const headers = openRouterHeaders(await readKey());
+        // One attempt of at most 15 s, never retried (item 279(b)).
+        response = await send(
+          "GET",
+          KEY_PATH,
+          headers,
+          undefined,
+          errorHook("", undefined),
+          ctx,
+          undefined,
+          LLM_KEY_TEST_ATTEMPT,
+        );
+      } catch (error) {
+        if (error instanceof OperationCancelledError) throw error;
+        if (!(error instanceof ResearchHelperError)) throw error;
+        const httpStatus =
+          error instanceof UpstreamError ? error.httpStatus : undefined;
+        return {
+          // `docs/09` §2.3: a 429 means the key was accepted, and so does
+          // the 402 spend cap, `QuotaExceededError`, with its own pane line
+          // (item 279(a)).
+          ok: isKeyAcceptedFailure(error),
+          messageKey: error.messageKey,
+          ...(httpStatus !== undefined && { httpStatus }),
+        };
+      }
+      if (response.status < 200 || response.status >= 300) {
+        // The client hands back only answers below 400; a 3xx is not a
+        // verdict on the key.
+        return {
+          ok: false,
+          messageKey: UNREAD_ANSWER_MESSAGE_KEY,
+          httpStatus: response.status,
+        };
+      }
+      // The key was accepted. The model list is the public catalogue, which
+      // carries no key (`docs/03` §9.4); without it the verdict still stands.
+      let models: readonly ModelInfo[] | undefined;
+      try {
+        models = (await fetchCatalogue(ctx, LLM_KEY_TEST_ATTEMPT)).map(
+          (entry) => entry.model,
+        );
+      } catch (error) {
+        if (error instanceof OperationCancelledError) throw error;
+        logger?.debug("openrouter: key accepted; catalogue unavailable", {
+          error: error instanceof Error ? error.name : typeof error,
+        });
+      }
+      return {
+        ok: true,
+        messageKey: TEST_OK_MESSAGE_KEY,
+        httpStatus: response.status,
+        ...(models !== undefined && { models }),
+      };
     },
 
     async listModels(ctx: LLMCallContext): Promise<readonly ModelInfo[]> {
@@ -436,7 +524,7 @@ export function createOpenRouterProvider(
       return entries.map((entry) => entry.model);
     },
 
-    listCatalogue: fetchCatalogue,
+    listCatalogue: (ctx) => fetchCatalogue(ctx),
 
     getModel(modelId: string): ModelInfo | undefined {
       return catalogue?.get(modelId);

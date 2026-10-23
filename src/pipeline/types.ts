@@ -23,7 +23,7 @@
  * | `TTSProvider` | yes — §4.4 | `src/tts/types.ts` |
  * | `LLMRouter` | **no** — one occurrence, this member (declared in §4.3 on 2026-10-21, item 248; now imported, `P3-T06`) | `src/llm/types.ts`, built by `src/llm/router.ts` |
  * | `ZoteroFacade` | **no** — one occurrence, this member | `src/zotero/zoteroApi.ts` (§3.2) |
- * | `ConfigReader` | **no** — one occurrence, this member | — nothing names one |
+ * | `ConfigReader` | **no** — one occurrence, this member (declared in §4.5 on 2026-10-23, item 272(a); now declared below, `P3-T35`) | this file — a read-only view of `src/prefs/index.ts`'s `getPref` |
  * | `PrivacyPolicy` | **no** — one occurrence, this member (declared in §4.5 on 2026-10-21, item 267; now imported, `P3-T15`) | `src/pipeline/shared/privacyPolicy.ts` |
  *
  * None of those seven files is in `P1-T16`'s `Files` list, and transcribing a
@@ -49,10 +49,13 @@
  * cache, no budget guard, no LLM router and no privacy policy, so a context
  * that claimed to carry them would be the lie.
  *
- * **Reported, not absorbed.** `ConfigReader` has no declaration and no home
- * anywhere in the corpus, and needs a card. *(Updated 2026-10-21, `P3-T15`:
+ * **Reported, not absorbed.** ~~`ConfigReader` has no declaration and no home
+ * anywhere in the corpus, and needs a card.~~ *(Updated 2026-10-21, `P3-T15`:
  * this sentence named `PrivacyPolicy` too; the owner declared it in §4.5,
- * `plan/00` §6 item 267, and it is now imported.)*
+ * `plan/00` §6 item 267, and it is now imported.)* *(Updated 2026-10-23,
+ * `P3-T35`: the owner declared `ConfigReader` in §4.5, `plan/00` §6 item
+ * 272(a), and it is declared below; only `TTSProvider` and `ZoteroFacade`
+ * remain aliases, and neither is Phase 3's.)*
  *
  * **Layering.** `pipeline/` may import `core/`, `model/`, `sources/`, `llm/`,
  * `tts/` and `zotero/`, and may not import `ui/` (`docs/07` §2.3,
@@ -66,6 +69,7 @@ import type { CancellationToken } from "../core/jobQueue/cancellation";
 import type { ProgressReporter } from "../core/jobQueue/progress";
 import type { Logger } from "../core/logger";
 import type { BudgetGuard, LLMRouter } from "../llm/types";
+import type { PrefName, PrefValue } from "../prefs";
 import type { SourceRegistry } from "../sources/registry";
 
 import type { PrivacyPolicy } from "./shared/privacyPolicy";
@@ -107,8 +111,11 @@ export const PIPELINE_IDS: readonly PipelineId[] = Object.keys(
 /**
  * The byte-for-byte member list of `docs/07` §4.5's `PipelineContext`.
  *
- * See this file's header for why seven of the member types are forward aliases
- * rather than imports. Nothing in `src/pipeline/` reads one of those seven.
+ * See this file's header for why seven of the member types began as forward
+ * aliases rather than imports. *(Updated 2026-10-23: since `P3-T35` five are
+ * real — `LLMRouter`, `Cache`, `PrivacyPolicy` and `BudgetGuard` imported,
+ * `ConfigReader` declared — and only `TTSProvider` and `ZoteroFacade` remain
+ * aliases to `unknown`; nothing in `src/pipeline/` reads `tts` or `zotero`.)*
  */
 export interface PipelineContext {
   readonly jobId: string;
@@ -186,8 +193,8 @@ export interface PipelineEstimate {
 }
 
 // ===========================================================================
-// 2. The forward aliases — see this file's header (three since P3-T16: LLMRouter,
-//    Cache, PrivacyPolicy and BudgetGuard are imported)
+// 2. The forward aliases — see this file's header (two since P3-T35: LLMRouter,
+//    Cache, PrivacyPolicy and BudgetGuard are imported, ConfigReader declared)
 // ===========================================================================
 
 /**
@@ -233,12 +240,20 @@ export type { LLMRouter };
 export type ZoteroFacade = unknown;
 
 /**
- * Named by §4.5 and **declared nowhere** — one occurrence in the whole corpus.
- * Needs a card: `docs/07` §8.5 is the preference schema's authority and
- * `src/prefs/index.ts` the typed accessor, but no `ConfigReader` interface is
- * declared anywhere.
+ * `docs/07` §4.5's `ConfigReader`, declared by the owner on 2026-10-23
+ * (`plan/00` §6 item 272(a)): a **read-only view of `src/prefs/index.ts`'s
+ * `getPref`**, so a pipeline reads a preference through its context instead of
+ * importing `src/prefs/`. `installServices` builds one per plugin lifetime and
+ * every job's `PipelineContext.config` carries it (`P3-T35`).
  */
-export type ConfigReader = unknown;
+export interface ConfigReader {
+  /**
+   * §8.5's value of `name`, coerced to the schema's type; its default when
+   * the value is absent or malformed. Read on demand, never cached, and never
+   * throws — `getPref`'s contract.
+   */
+  get<K extends PrefName>(name: K): PrefValue<K>;
+}
 
 /**
  * `docs/07` §4.5's `PrivacyPolicy`, declared by the owner on 2026-10-21

@@ -455,9 +455,10 @@ research-helper-prefs-key-absent = No key stored.
 # operating-system store — under the NSSKeyStore fallback the key *does* travel
 # with the profile, so this sentence would be false there (G-09, 2026-09-30).
 research-helper-prefs-key-absent-os = No key stored. API keys are stored in this computer's credential store and do not travel with your Zotero data folder.
-# "This session": the last test result is not yet persisted — docs/07 §8.5's
-# lastValidatedAt / lastValidationResult rows have no schema entry yet (P1-T44).
-research-helper-prefs-key-present = A key is stored. Not tested yet this session.
+# A stored key with no stored Test result. Test results are stored since P3-T14
+# (docs/07 §8.5's lastValidatedAt / lastValidationResult), so "this session" was
+# dropped (owner, 2026-10-23, plan/00 §6 item 279(d)).
+research-helper-prefs-key-present = A key is stored. Not tested yet.
 research-helper-prefs-key-cleared = Key removed.
 research-helper-prefs-store-unavailable = This key was not stored: no credential store is available on this computer.
 research-helper-prefs-store-empty = Nothing to store: the field is empty after trimming.
@@ -642,6 +643,49 @@ research-helper-cost-skipped-notice =
 research-helper-prefs-usage = Usage
 research-helper-prefs-usage-limit = Spending limit for this Zotero session: { $limit }. It resets when Zotero restarts.
 research-helper-prefs-usage-limit-off = No spending limit is set for this Zotero session.
+
+
+## The LLM Test, the model suggestions and the user price table (P3-T14;
+## docs/09 §2.3, docs/03 §9, plan/00 §6 item 265(b))
+##
+## Placed by `addon/content/preferences.js`. `$time` and `$date` arrive
+## formatted with Intl over the application locale, and the four prices with
+## Intl.NumberFormat (docs/08 §10.3). `$provider` is a provider's display name
+## and `$model` a model ID: names, never translated. No message takes any part
+## of a key.
+
+# docs/09 §2.3: an HTTP 429 on the Test call means the key was accepted.
+research-helper-prefs-test-ok-rate-limited = Key accepted. The provider is limiting requests right now (HTTP 429) · checked { $time }
+# The Test was answered "out of credit" (a spend cap: OpenAI's insufficient_quota,
+# Anthropic's spend limit, OpenRouter's 402): the key itself was accepted (owner,
+# 2026-10-23, plan/00 §6 item 279(a)).
+research-helper-prefs-test-ok-no-credit = Key accepted, but the account has no credit left · checked { $time }
+# The first, empty item of each provider's model-suggestion list.
+research-helper-prefs-model-suggestions =
+    .label = Choose a suggested model…
+research-helper-prefs-models-as-of = Suggestions from the provider's model list as of { $date }. You can also type any model ID.
+research-helper-prefs-models-stale = The live model list could not be fetched. These suggestions are the built-in list of { $date } and may be out of date. You can also type any model ID.
+research-helper-prefs-prices = Your model prices
+research-helper-prefs-prices-note = A price you enter here replaces the catalogue's price for that model when Research Helper estimates a cost. Enter US dollars per million tokens and the date you read the price. A new row is saved for the provider chosen above.
+research-helper-prefs-price-row = { $provider } · { $model }: input { $input }, output { $output }, cached input { $cached } US dollars per million tokens · as of { $date }
+research-helper-prefs-price-row-no-cached = { $provider } · { $model }: input { $input }, output { $output } US dollars per million tokens · as of { $date }
+research-helper-prefs-price-model =
+    .placeholder = Model ID
+research-helper-prefs-price-input =
+    .placeholder = Input price
+research-helper-prefs-price-output =
+    .placeholder = Output price
+research-helper-prefs-price-cached =
+    .placeholder = Cached input price (optional)
+research-helper-prefs-price-as-of =
+    .placeholder = As of (YYYY-MM-DD)
+research-helper-prefs-price-save = Save price
+research-helper-prefs-price-remove = Remove
+research-helper-prefs-price-saved = Price saved.
+research-helper-prefs-price-removed = Price removed.
+research-helper-prefs-price-invalid = Not saved: enter a model ID, input and output prices of zero or more (such as 0.25), and a date such as 2026-10-23.
+research-helper-prefs-price-refused = Not saved: this row cannot be stored. Check that the model field holds a model name, not an API key.
+research-helper-prefs-price-unavailable = The plugin database is not available, so prices cannot be saved.
 
 
 ## The key-storage degradation dialog (P3-T03; docs/09 §1.7, gate G-10)

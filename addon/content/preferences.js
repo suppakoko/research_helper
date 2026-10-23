@@ -34,8 +34,19 @@
  *   each `<provider>.model`, `gemini.paidTier` — are written by Zotero's own
  *   `preference=` binding; each `<provider>.baseUrl` is written by the host's
  *   `setBaseUrl`, which validates first (`docs/03` §14.4).
- * - **No LLM Test yet.** The four LLM blocks' Test buttons stay disabled until
- *   `P3-T14` wires them; the host refuses to test an LLM key.
+ * - **Test, for all six keys** (`P3-T14`). The host tests an LLM key through
+ *   that provider's own adapter; this file only asks for the outcome and
+ *   paints it inline, then paints every status row from the stored status
+ *   on the next refresh. A successful LLM Test refills that provider's model
+ *   suggestions from the list it returned.
+ * - **Model suggestions and the price table** (`P3-T14` step 5) are built
+ *   here as DOM, inside elements the markup already has: each model field
+ *   gets a suggestion list beside it — filled from the host's catalogue the
+ *   first time it is opened, so opening the pane sends no request — and a
+ *   line under it giving the list's date and, for the built-in list, that
+ *   it may be out of date. Picking a suggestion only types it into the
+ *   field, which Zotero's own binding then stores; any model ID can still be
+ *   typed. The price table is listed and edited through the host.
  * - **No literal human-readable string.** Every visible string is a Fluent id
  *   from `research-helper-mainWindow.ftl`; the ids are listed in
  *   {@link RHPreferences.l10n} and `test/unit/ui/preferencesPane.test.ts`
@@ -77,8 +88,49 @@ var RHPreferences = {
       "llm.gemini": "rh-gemini",
       "llm.anthropic": "rh-anthropic",
     },
-    /** The credentials the host can Test (`isTestableCredential`). */
-    testable: ["source.ncbi", "source.semanticscholar"],
+    /** The credentials the host can Test (`isTestableCredential`): all six. */
+    testable: [
+      "source.ncbi",
+      "source.semanticscholar",
+      "llm.openrouter",
+      "llm.openai",
+      "llm.gemini",
+      "llm.anthropic",
+    ],
+    /** The LLM credential of each provider block (`LLM_CREDENTIALS`). */
+    providerCredentials: {
+      openrouter: "llm.openrouter",
+      openai: "llm.openai",
+      gemini: "llm.gemini",
+      anthropic: "llm.anthropic",
+    },
+    /**
+     * Provider display names for the price rows: names, never translated
+     * (docs/08 §10.3); the unit test asserts each equals the en-US value of
+     * `research-helper-provider-<id>`.
+     */
+    providerNames: {
+      openrouter: "OpenRouter",
+      openai: "OpenAI",
+      gemini: "Google Gemini",
+      anthropic: "Anthropic",
+    },
+    /** The groupbox the price table is built into (P3-T14 step 5). */
+    providersGroup: "rh-prefs-providers",
+    /** Ids this file gives the elements it builds. */
+    built: {
+      suggestions: "-model-suggestions",
+      modelsStatus: "-models-status",
+      prices: "rh-prefs-prices",
+      priceRows: "rh-prefs-price-rows",
+      priceModel: "rh-prefs-price-model",
+      priceInput: "rh-prefs-price-input",
+      priceOutput: "rh-prefs-price-output",
+      priceCached: "rh-prefs-price-cached",
+      priceAsOf: "rh-prefs-price-as-of",
+      priceSave: "rh-prefs-price-save",
+      priceStatus: "rh-prefs-price-status",
+    },
     /**
      * The four LLM provider blocks (`LLM_CREDENTIALS`), keyed by `ProviderId`.
      * Each block is `rh-provider-<provider>`; its base-URL field and status
@@ -128,6 +180,27 @@ var RHPreferences = {
     baseUrlNotHttps: "research-helper-prefs-base-url-not-https",
     baseUrlTrailingSlash: "research-helper-prefs-base-url-trailing-slash",
     baseUrlInvalid: "research-helper-prefs-base-url-invalid",
+    testOkRateLimited: "research-helper-prefs-test-ok-rate-limited",
+    testOkNoCredit: "research-helper-prefs-test-ok-no-credit",
+    modelSuggestions: "research-helper-prefs-model-suggestions",
+    modelsAsOf: "research-helper-prefs-models-as-of",
+    modelsStale: "research-helper-prefs-models-stale",
+    pricesTitle: "research-helper-prefs-prices",
+    pricesNote: "research-helper-prefs-prices-note",
+    priceRow: "research-helper-prefs-price-row",
+    priceRowNoCached: "research-helper-prefs-price-row-no-cached",
+    priceModel: "research-helper-prefs-price-model",
+    priceInput: "research-helper-prefs-price-input",
+    priceOutput: "research-helper-prefs-price-output",
+    priceCached: "research-helper-prefs-price-cached",
+    priceAsOf: "research-helper-prefs-price-as-of",
+    priceSave: "research-helper-prefs-price-save",
+    priceRemove: "research-helper-prefs-price-remove",
+    priceSaved: "research-helper-prefs-price-saved",
+    priceRemoved: "research-helper-prefs-price-removed",
+    priceInvalid: "research-helper-prefs-price-invalid",
+    priceRefused: "research-helper-prefs-price-refused",
+    priceUnavailable: "research-helper-prefs-price-unavailable",
   },
 
   /**
@@ -145,6 +218,13 @@ var RHPreferences = {
 
   /** Set by `init()`; `true` while a Test call is in flight for a credential. */
   busy: {},
+
+  /** The one load of the model suggestions, once asked for (P3-T14). */
+  suggestionsLoad: null,
+
+  /** The namespaces of the elements this file builds. */
+  HTML_NS: "http://www.w3.org/1999/xhtml",
+  XUL_NS: "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul",
 
   /**
    * Pure decisions, kept free of DOM so the unit test can evaluate this file
@@ -307,7 +387,18 @@ var RHPreferences = {
       const time = RHPreferences.logic.formatTime(report.checkedAt);
       switch (report.outcome) {
         case "ok":
-          return { id: l10n.testOk, args: { time } };
+          // docs/09 §2.3: a 429 on an LLM Test is a pass, and says so; an
+          // account with no credit left says that instead (owner,
+          // 2026-10-23, plan/00 §6 item 279(a)).
+          return {
+            id:
+              report.noCredit === true
+                ? l10n.testOkNoCredit
+                : report.rateLimited === true
+                  ? l10n.testOkRateLimited
+                  : l10n.testOk,
+            args: { time },
+          };
         case "rejected":
           return { id: l10n.testRejected, args: { time } };
         case "forbidden":
@@ -337,6 +428,113 @@ var RHPreferences = {
       } catch {
         return iso;
       }
+    },
+
+    /**
+     * A calendar date for `epochMs`, in UTC (the catalogue's dates and the
+     * price table's `as of` are midnight UTC), formatted with `Intl` over
+     * `Zotero.locale` (docs/08 §10.3).
+     *
+     * @param {number} epochMs
+     * @returns {string}
+     */
+    formatDate(epochMs) {
+      const locale =
+        typeof Zotero !== "undefined" && Zotero.locale
+          ? Zotero.locale
+          : "en-US";
+      try {
+        return new Intl.DateTimeFormat(locale, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        }).format(new Date(epochMs));
+      } catch {
+        return String(epochMs);
+      }
+    },
+
+    /**
+     * A price, with `Intl.NumberFormat` over `Zotero.locale`.
+     *
+     * @param {number} value
+     * @returns {string}
+     */
+    formatPrice(value) {
+      const locale =
+        typeof Zotero !== "undefined" && Zotero.locale
+          ? Zotero.locale
+          : "en-US";
+      try {
+        return new Intl.NumberFormat(locale, {
+          maximumFractionDigits: 6,
+        }).format(value);
+      } catch {
+        return String(value);
+      }
+    },
+
+    /**
+     * The line under a model field: where its suggestions come from and how
+     * old they are; the stale marker when it is the built-in list.
+     *
+     * @param {{ asOfEpochMs: number, stale: boolean }} suggestions
+     * @param {object} l10n
+     * @returns {{ id: string, args: { date: string } }}
+     */
+    suggestionsMessage(suggestions, l10n) {
+      const date = RHPreferences.logic.formatDate(suggestions.asOfEpochMs);
+      return {
+        id: suggestions.stale ? l10n.modelsStale : l10n.modelsAsOf,
+        args: { date },
+      };
+    },
+
+    /**
+     * One price row's line.
+     *
+     * @param {{ providerId: string, modelId: string, inputPerMTokUsd: number,
+     *   outputPerMTokUsd: number, cachedInputPerMTokUsd?: number,
+     *   asOfEpochMs: number }} row
+     * @param {Record<string, string>} names - provider display names
+     * @param {object} l10n
+     * @returns {{ id: string, args: object }}
+     */
+    priceMessage(row, names, l10n) {
+      const logic = RHPreferences.logic;
+      const args = {
+        provider: names[row.providerId] || row.providerId,
+        model: row.modelId,
+        input: logic.formatPrice(row.inputPerMTokUsd),
+        output: logic.formatPrice(row.outputPerMTokUsd),
+        date: logic.formatDate(row.asOfEpochMs),
+      };
+      if (typeof row.cachedInputPerMTokUsd === "number") {
+        return {
+          id: l10n.priceRow,
+          args: {
+            ...args,
+            cached: logic.formatPrice(row.cachedInputPerMTokUsd),
+          },
+        };
+      }
+      return { id: l10n.priceRowNoCached, args };
+    },
+
+    /**
+     * The status line for `savePrice`'s answer.
+     *
+     * @param {{ saved: boolean, reason?: string }} result
+     * @param {object} l10n
+     * @returns {{ id: string }}
+     */
+    priceSaveMessage(result, l10n) {
+      if (result && result.saved) return { id: l10n.priceSaved };
+      const reason = result && result.reason;
+      if (reason === "unavailable") return { id: l10n.priceUnavailable };
+      if (reason === "refused") return { id: l10n.priceRefused };
+      return { id: l10n.priceInvalid };
     },
 
     /**
@@ -442,8 +640,12 @@ var RHPreferences = {
       this.wireCredentialBlock(id, this.spec.credentials[id]);
     }
     this.wireProviderBlocks();
+    this.suggestionsLoad = null;
+    this.buildModelSuggestions();
+    this.buildPriceSection();
     const state = await this.refresh();
     this.paintProviders(state);
+    await this.paintPrices();
     this.paintUsage();
     if (root && typeof root.setAttribute === "function") {
       root.setAttribute("data-rh-initialized", "true");
@@ -742,6 +944,271 @@ var RHPreferences = {
   },
 
   /**
+   * @param {string} tag
+   * @param {string} [id]
+   * @returns {Element}
+   */
+  html(tag, id) {
+    const el = document.createElementNS(this.HTML_NS, tag);
+    if (id) el.id = id;
+    return el;
+  },
+
+  /**
+   * @param {string} tag
+   * @param {string} [id]
+   * @returns {Element}
+   */
+  xul(tag, id) {
+    const el =
+      typeof document.createXULElement === "function"
+        ? document.createXULElement(tag)
+        : document.createElementNS(this.XUL_NS, tag);
+    if (id) el.id = id;
+    return el;
+  },
+
+  /**
+   * P3-T14 step 5: beside each model field, a suggestion list (empty but for
+   * its prompt until first opened) and, under the field's row, the line that
+   * dates the list. The field itself is untouched and still takes any ID.
+   */
+  buildModelSuggestions() {
+    for (const provider of Object.keys(this.spec.providers)) {
+      const prefix = this.spec.providers[provider];
+      const input = this.el(prefix + "-model");
+      if (!input || this.el(prefix + this.spec.built.suggestions)) continue;
+      const menu = this.xul("menulist", prefix + this.spec.built.suggestions);
+      menu.appendChild(this.xul("menupopup"));
+      this.fillSuggestions(menu, []);
+      input.after(menu);
+      const status = this.html("p", prefix + this.spec.built.modelsStatus);
+      status.setAttribute("class", "rh-hint");
+      status.setAttribute("role", "status");
+      const row = input.parentNode;
+      (row && typeof row.after === "function" ? row : menu).after(status);
+      // Fetched the first time any list is opened, never on pane load: an
+      // open pane sends nothing the user did not ask for.
+      menu.addEventListener("popupshowing", () => {
+        this.settle(this.loadSuggestions());
+      });
+      menu.addEventListener("command", () => {
+        this.pickSuggestion(menu, input);
+      });
+    }
+  },
+
+  /**
+   * Replace a suggestion list's items: its prompt, then one item per ID.
+   * Model IDs are names and are shown as they are (docs/08 §10.3).
+   *
+   * @param {Element} menu
+   * @param {string[]} models
+   */
+  fillSuggestions(menu, models) {
+    const popup = menu.firstChild;
+    if (!popup) return;
+    while (popup.firstChild) popup.firstChild.remove();
+    const prompt = this.xul("menuitem");
+    prompt.setAttribute("value", "");
+    this.localize(prompt, this.l10n.modelSuggestions);
+    popup.appendChild(prompt);
+    for (const id of models) {
+      if (typeof id !== "string" || id === "") continue;
+      const item = this.xul("menuitem");
+      item.setAttribute("label", id);
+      item.setAttribute("value", id);
+      popup.appendChild(item);
+    }
+    menu.value = "";
+  },
+
+  /**
+   * @param {string} provider
+   * @param {string[]} models
+   */
+  paintSuggestions(provider, models) {
+    const prefix = this.spec.providers[provider];
+    const menu = prefix && this.el(prefix + this.spec.built.suggestions);
+    if (menu) this.fillSuggestions(menu, models);
+  },
+
+  /**
+   * @param {string} provider
+   * @param {{ asOfEpochMs: number, stale: boolean }} suggestions
+   */
+  paintSuggestionsStatus(provider, suggestions) {
+    const prefix = this.spec.providers[provider];
+    const status = prefix && this.el(prefix + this.spec.built.modelsStatus);
+    if (!status) return;
+    const message = this.logic.suggestionsMessage(suggestions, this.l10n);
+    this.localize(status, message.id, message.args);
+  },
+
+  /** Ask the host for the catalogue once; a failed load may be asked again. */
+  loadSuggestions() {
+    if (this.suggestionsLoad) return this.suggestionsLoad;
+    if (!this.can("modelSuggestions")) return Promise.resolve();
+    this.suggestionsLoad = (async () => {
+      let suggestions;
+      try {
+        suggestions = await this.host.modelSuggestions();
+      } catch (error) {
+        this.suggestionsLoad = null;
+        throw error;
+      }
+      if (!suggestions) {
+        this.suggestionsLoad = null;
+        return;
+      }
+      for (const entry of suggestions.providers || []) {
+        this.paintSuggestions(entry.provider, entry.models || []);
+        this.paintSuggestionsStatus(entry.provider, suggestions);
+      }
+    })();
+    return this.suggestionsLoad;
+  },
+
+  /**
+   * Type the picked ID into the model field and let Zotero's `preference=`
+   * binding store it, as if the user had typed it; then show the prompt
+   * again. This file still writes no preference itself.
+   *
+   * @param {Element} menu
+   * @param {HTMLInputElement} input
+   */
+  pickSuggestion(menu, input) {
+    const value = menu.value;
+    if (!value) return;
+    input.value = value;
+    const EventCtor = window.Event;
+    for (const type of ["input", "change"]) {
+      input.dispatchEvent(new EventCtor(type, { bubbles: true }));
+    }
+    menu.value = "";
+  },
+
+  /**
+   * P3-T14 step 5: the user price table, built at the end of the LLM
+   * providers group: a heading, a note, one line per stored row with a
+   * Remove button, and a form that adds or replaces a row for the provider
+   * chosen above. Everything goes through the host; nothing is stored here.
+   */
+  buildPriceSection() {
+    const group = this.el(this.spec.providersGroup);
+    const built = this.spec.built;
+    if (!group || this.el(built.prices)) return;
+    const section = this.html("div", built.prices);
+    const title = this.html("h3");
+    this.localize(title, this.l10n.pricesTitle);
+    const note = this.html("p");
+    note.setAttribute("class", "rh-hint");
+    this.localize(note, this.l10n.pricesNote);
+    const rows = this.html("div", built.priceRows);
+    const form = this.html("div");
+    const canSave = this.can("savePrice");
+    for (const [id, l10nId] of [
+      [built.priceModel, this.l10n.priceModel],
+      [built.priceInput, this.l10n.priceInput],
+      [built.priceOutput, this.l10n.priceOutput],
+      [built.priceCached, this.l10n.priceCached],
+      [built.priceAsOf, this.l10n.priceAsOf],
+    ]) {
+      const field = this.html("input", id);
+      field.setAttribute("type", "text");
+      field.setAttribute("autocomplete", "off");
+      field.setAttribute("spellcheck", "false");
+      field.disabled = !canSave;
+      this.localize(field, l10nId);
+      form.appendChild(field);
+    }
+    const save = this.html("button", built.priceSave);
+    save.disabled = !canSave;
+    this.localize(save, this.l10n.priceSave);
+    save.addEventListener("click", () => {
+      this.settle(this.savePrice());
+    });
+    form.appendChild(save);
+    const status = this.html("p", built.priceStatus);
+    status.setAttribute("class", "rh-hint");
+    status.setAttribute("role", "status");
+    for (const child of [title, note, rows, form, status]) {
+      section.appendChild(child);
+    }
+    group.appendChild(section);
+  },
+
+  /** Repaint the stored price rows from the host. */
+  async paintPrices() {
+    const container = this.el(this.spec.built.priceRows);
+    if (!container || !this.can("listPrices")) return;
+    const rows = (await this.host.listPrices()) || [];
+    while (container.firstChild) container.firstChild.remove();
+    for (const row of rows) {
+      const line = this.html("div");
+      const text = this.html("span");
+      const message = this.logic.priceMessage(
+        row,
+        this.spec.providerNames,
+        this.l10n,
+      );
+      this.localize(text, message.id, message.args);
+      const remove = this.html("button");
+      remove.disabled = !this.can("deletePrice");
+      this.localize(remove, this.l10n.priceRemove);
+      remove.addEventListener("click", () => {
+        this.settle(this.removePrice(row));
+      });
+      line.appendChild(text);
+      line.appendChild(remove);
+      container.appendChild(line);
+    }
+  },
+
+  async savePrice() {
+    if (!this.can("savePrice")) return;
+    const built = this.spec.built;
+    const value = (id) => {
+      const field = this.el(id);
+      return field ? String(field.value) : "";
+    };
+    const menu = this.el(this.spec.providerMenu);
+    const result = await this.host.savePrice({
+      provider: (menu && menu.value) || "openrouter",
+      modelId: value(built.priceModel),
+      input: value(built.priceInput),
+      output: value(built.priceOutput),
+      cached: value(built.priceCached),
+      asOf: value(built.priceAsOf),
+    });
+    this.localize(
+      this.el(built.priceStatus),
+      this.logic.priceSaveMessage(result, this.l10n).id,
+    );
+    if (result && result.saved) {
+      for (const id of [
+        built.priceModel,
+        built.priceInput,
+        built.priceOutput,
+        built.priceCached,
+        built.priceAsOf,
+      ]) {
+        const field = this.el(id);
+        if (field) field.value = "";
+      }
+      await this.paintPrices();
+    }
+  },
+
+  /** @param {{ providerId: string, modelId: string }} row */
+  async removePrice(row) {
+    if (!this.can("deletePrice")) return;
+    await this.host.deletePrice(row.providerId, row.modelId);
+    this.localize(this.el(this.spec.built.priceStatus), this.l10n.priceRemoved);
+    await this.paintPrices();
+  },
+
+  /**
    * The display-side half of rule 7 — the host's `normalizeKeyInput` is the
    * one that decides what is stored.
    *
@@ -795,6 +1262,18 @@ var RHPreferences = {
     try {
       const report = await this.host.testKey(id);
       this.setStatus(prefix, this.logic.testMessage(report, this.l10n));
+      // P3-T14 step 4: a successful LLM Test refills that provider's
+      // suggestions from the list it returned.
+      const provider = Object.keys(this.spec.providerCredentials).find(
+        (name) => this.spec.providerCredentials[name] === id,
+      );
+      if (provider && report && Array.isArray(report.models)) {
+        this.paintSuggestions(provider, report.models);
+        this.paintSuggestionsStatus(provider, {
+          asOfEpochMs: Date.parse(report.checkedAt),
+          stale: false,
+        });
+      }
     } catch (error) {
       // The outcome vocabulary has no "error" member on purpose: a thrown
       // error is "could not verify", and its text stays out of the pane.

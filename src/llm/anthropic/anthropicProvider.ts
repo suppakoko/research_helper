@@ -23,7 +23,9 @@
  *   `overloaded`;
  * - `timeoutMs: LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240), or for a
  *   stream 15 minutes in all and 3 without new text (`llmAttemptTimeouts`,
- *   item 268(c));
+ *   item 268(c)); a key Test's requests instead carry
+ *   `LLM_KEY_TEST_ATTEMPT`, one attempt of at most 15 s, never retried
+ *   (owner, 2026-10-23, `plan/00` §6 item 279(b));
  * - the job's cancellation token.
  *
  * The retry budget is not here: it is the host's `HOST_POLICIES` row
@@ -71,7 +73,6 @@ import {
   loggableHeaders,
   MissingCredentialError,
   OperationCancelledError,
-  RateLimitError,
   ResearchHelperError,
   UpstreamError,
 } from "../../core/errors";
@@ -83,11 +84,15 @@ import {
   type HttpResponse,
 } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
-import { llmAttemptTimeouts } from "../../core/rateLimit/hostLimiter";
+import {
+  LLM_KEY_TEST_ATTEMPT,
+  llmAttemptTimeouts,
+  type LlmAttemptLimits,
+} from "../../core/rateLimit/hostLimiter";
 import type { SecretId, SecretStore } from "../../core/secretStore";
 import { Secret } from "../../prefs/secrets";
 import { DEFAULT_BASE_URLS, type BaseUrlResolver } from "../shared/baseUrl";
-import { mapProviderError } from "../shared/errorMap";
+import { isKeyAcceptedFailure, mapProviderError } from "../shared/errorMap";
 import { createAnthropicStreamDecoder, streamChat } from "../shared/sse";
 import { estTokens } from "../shared/tokenEstimate";
 import type {
@@ -140,7 +145,8 @@ export const ANTHROPIC_HOST = new URL(DEFAULT_BASE_URLS.anthropic).host;
 /**
  * The pane's existing success id (`P1-T44`, `src/ui/prefs/preferencesPane.ts`
  * `testOk`), spelled out because `llm/` may not import `ui/`. It takes a
- * `time` argument the pane supplies. `P3-T14` owns the Test outcome set.
+ * `time` argument the pane supplies. `test/unit/llm/validateCredentials.test.ts`
+ * asserts all four adapters return the pane's value (`P3-T14`).
  */
 const TEST_OK_MESSAGE_KEY = "research-helper-prefs-test-ok";
 
@@ -286,7 +292,11 @@ export function createAnthropicProvider(
     return new Secret(raw);
   }
 
-  /** One request through the shared client, with the key, the hook and the 3-minute attempt. */
+  /**
+   * One request through the shared client, with the key, the hook and the
+   * 3-minute attempt — or, for a key Test, `LLM_KEY_TEST_ATTEMPT`'s one
+   * 15-second attempt (item 279(b)).
+   */
   async function send(
     method: HttpMethod,
     path: string,
@@ -294,6 +304,7 @@ export function createAnthropicProvider(
     modelId: string,
     ctx: LLMCallContext,
     onBodyText?: (text: string) => void,
+    limits: LlmAttemptLimits = llmAttemptTimeouts(onBodyText !== undefined),
   ): Promise<HttpResponse> {
     ctx.token.throwIfCancelled();
     const headers = anthropicHeaders(await readKey());
@@ -308,7 +319,7 @@ export function createAnthropicProvider(
       {
         headers,
         ...(body !== undefined && { body }),
-        ...llmAttemptTimeouts(onBodyText !== undefined),
+        ...limits,
         token: ctx.token,
         mapErrorResponse: errorHook(modelId),
         ...(onBodyText !== undefined && { onBodyText }),
@@ -376,6 +387,64 @@ export function createAnthropicProvider(
     );
   }
 
+  /**
+   * `GET /v1/models`, every page. `docs/03` §9.2: follow `has_more` /
+   * `last_id`, carried as `after_id`. A key Test passes
+   * `LLM_KEY_TEST_ATTEMPT` for every page (item 279(b)).
+   */
+  async function listModelPages(
+    ctx: LLMCallContext,
+    limits?: LlmAttemptLimits,
+  ): Promise<readonly ModelInfo[]> {
+    const models = new Map<string, ModelInfo>();
+    const seen = new Set<string>();
+    let afterId: string | undefined;
+    for (;;) {
+      const path =
+        afterId === undefined
+          ? MODELS_PATH
+          : `${MODELS_PATH}?after_id=${encodeURIComponent(afterId)}`;
+      const response = await send(
+        "GET",
+        path,
+        undefined,
+        "",
+        ctx,
+        undefined,
+        limits,
+      );
+      const page = toModelsPage(readAnswer(response, ""));
+      if (page === undefined) {
+        throw new LLMError(
+          ANTHROPIC_PROVIDER_ID,
+          "",
+          "GET /v1/models from anthropic: not a model list",
+          { httpStatus: response.status },
+        );
+      }
+      for (const model of page.models) models.set(model.id, model);
+      if (page.skipped.length > 0) {
+        logger?.debug(
+          "anthropic: models without max_input_tokens or max_tokens left out",
+          { skipped: page.skipped },
+        );
+      }
+      if (!page.hasMore) break;
+      if (page.lastId === undefined || seen.has(page.lastId)) {
+        throw new LLMError(
+          ANTHROPIC_PROVIDER_ID,
+          "",
+          "GET /v1/models from anthropic: has_more without a new last_id",
+          { pages: seen.size + 1 },
+        );
+      }
+      seen.add(page.lastId);
+      afterId = page.lastId;
+    }
+    catalogue = models;
+    return [...models.values()];
+  }
+
   const provider: AnthropicProvider = {
     id: ANTHROPIC_PROVIDER_ID,
     displayNameKey: ANTHROPIC_DISPLAY_NAME_KEY,
@@ -396,10 +465,13 @@ export function createAnthropicProvider(
       ctx: LLMCallContext,
     ): Promise<CredentialCheckResult> {
       // `docs/09` §2.3's cheapest authenticated call, `GET /v1/models`, and
-      // never a completion. `P3-T14` owns the full outcome set and its
-      // persistence; this answers with the error's own message key.
+      // never a completion (`P3-T14`; `docs/07` §4.3's note "as built"). A
+      // failure answers with the error's own message key; the pane maps it to
+      // the stored outcome and persists it.
+      // Every page is one attempt of at most 15 s, never retried (item
+      // 279(b)).
       try {
-        const models = await provider.listModels(ctx);
+        const models = await listModelPages(ctx, LLM_KEY_TEST_ATTEMPT);
         return { ok: true, messageKey: TEST_OK_MESSAGE_KEY, models };
       } catch (error) {
         if (error instanceof OperationCancelledError) throw error;
@@ -407,56 +479,18 @@ export function createAnthropicProvider(
         const httpStatus =
           error instanceof UpstreamError ? error.httpStatus : undefined;
         return {
-          // `docs/09` §2.3: a 429 means the key was accepted.
-          ok: error instanceof RateLimitError,
+          // `docs/09` §2.3: a 429 means the key was accepted — an ordinary
+          // rate limit and the spend-cap 429 alike; the spend cap's
+          // `rh-error-quota` gets its own pane line (item 279(a)).
+          ok: isKeyAcceptedFailure(error),
           messageKey: error.messageKey,
           ...(httpStatus !== undefined && { httpStatus }),
         };
       }
     },
 
-    async listModels(ctx: LLMCallContext): Promise<readonly ModelInfo[]> {
-      // `docs/03` §9.2: follow `has_more` / `last_id`, carried as `after_id`.
-      const models = new Map<string, ModelInfo>();
-      const seen = new Set<string>();
-      let afterId: string | undefined;
-      for (;;) {
-        const path =
-          afterId === undefined
-            ? MODELS_PATH
-            : `${MODELS_PATH}?after_id=${encodeURIComponent(afterId)}`;
-        const response = await send("GET", path, undefined, "", ctx);
-        const page = toModelsPage(readAnswer(response, ""));
-        if (page === undefined) {
-          throw new LLMError(
-            ANTHROPIC_PROVIDER_ID,
-            "",
-            "GET /v1/models from anthropic: not a model list",
-            { httpStatus: response.status },
-          );
-        }
-        for (const model of page.models) models.set(model.id, model);
-        if (page.skipped.length > 0) {
-          logger?.debug(
-            "anthropic: models without max_input_tokens or max_tokens left out",
-            { skipped: page.skipped },
-          );
-        }
-        if (!page.hasMore) break;
-        if (page.lastId === undefined || seen.has(page.lastId)) {
-          throw new LLMError(
-            ANTHROPIC_PROVIDER_ID,
-            "",
-            "GET /v1/models from anthropic: has_more without a new last_id",
-            { pages: seen.size + 1 },
-          );
-        }
-        seen.add(page.lastId);
-        afterId = page.lastId;
-      }
-      catalogue = models;
-      return [...models.values()];
-    },
+    listModels: (ctx: LLMCallContext): Promise<readonly ModelInfo[]> =>
+      listModelPages(ctx),
 
     getModel(modelId: string): ModelInfo | undefined {
       return catalogue.get(modelId);

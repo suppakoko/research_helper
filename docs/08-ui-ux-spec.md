@@ -1924,6 +1924,34 @@ Fluent goes in a XUL `<linkset>`, and each `<groupbox>` should carry `aria-label
 >    items. The input accepts any model ID, as `07-architecture-and-data-model.md` §8.5 allows; offering the
 >    catalogue's models as suggestions is `P3-T14`'s.
 
+> **Added 2026-10-23 (`P3-T14`; the card's reading, for the owner to confirm).** `preferences.js` builds three
+> things as DOM inside elements the markup already has, so the markup above is unchanged:
+> 1. **Beside each model input, a non-editable suggestion `<menulist>`** whose first item is a prompt. Picking
+>    an item types its ID into the input and fires `input` and `change`, so Zotero's own `preference=`
+>    binding stores it; the script still writes no preference. Any ID can still be typed. Under the input's
+>    row, a status line gives the list's date, or says it is the built-in list of its documented date and may
+>    be out of date (the catalogue's stale fallback). **The list is fetched the first time any suggestion
+>    list is opened, not when the pane loads**, so opening Settings contacts no provider the user did not ask
+>    for (the catalogue reads OpenRouter's public list and each configured provider's own); a successful
+>    Test refills that provider's list from the models it returned.
+> 2. **The Test button of each LLM block is live.** The host tests the key through that provider's own
+>    adapter (`validateCredentials()`), paints the outcome inline, and every status row is painted from
+>    `<provider>.lastValidationResult` / `.lastValidatedAt` when the pane loads.
+> 3. **"Your model prices"**, appended to the LLM providers group: one line per `user_price` row with a
+>    Remove button, and a form (model ID, input, output, optional cached input, as-of date) that adds or
+>    replaces a row for the provider chosen in the menulist above. The store's refusal is shown as a message.
+>
+> *Decided 2026-10-23 (owner, `plan/00` §6 items 279(a), (c) and (d)):* (a) a Test answered "out of credit"
+> (`QuotaExceededError`) paints `research-helper-prefs-test-ok-no-credit`, "Key accepted, but the account has no
+> credit left · checked { $time }", instead of the accepted line; a plain rate-limit 429 keeps
+> `research-helper-prefs-test-ok-rate-limited` (`09-security-privacy-and-api-keys.md` §2.3). The line is shown at the
+> Test; the stored result is `ok`, which repaints as the plain accepted line. (c) confirmed: the suggestions are
+> fetched when a list is first opened, never when Settings opens. (d) now that results are stored, a stored key with
+> no stored result reads `research-helper-prefs-key-present`, "A key is stored. Not tested yet." (it read "… Not
+> tested yet this session."). A model list fetched for the suggestions also refreshes the prices the spend guard
+> reserves with (`07-architecture-and-data-model.md` §4.3's note of this date, item 278(b)), and a price saved or
+> removed here reaches the guard at once.
+
 > ⚠️ **Zotero 8+ isolates preference-pane global scope.** A `var` declared in `preferences.js` is not shared with other panes or the prefs window. Attach anything you need across scopes to `window` explicitly ([Zotero 8 for Developers](https://www.zotero.org/support/dev/zotero_8_for_developers)).
 
 ### 7.4 Wireframe

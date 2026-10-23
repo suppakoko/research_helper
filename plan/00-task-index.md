@@ -2042,6 +2042,45 @@ the caller of what the card builds; if it does not, the caller is added with a d
     **DONE 2026-10-23** (`plan/reports/followup-275.md`): unit 3751, contract 40, build with typings unchanged,
     integration 194 passed in 3 of 3 runs. **Recorded, not a card:** 116 ids remain on `KO_PENDING_REVIEW`, among them
     the five original residual-risk paragraphs, so a Korean pane mixes Korean and English until those are reviewed.
+    Wave 6 landed as dc61675.
+
+### 6.58 Wave 7, 2026-10-23
+
+276. **Wave 7, gate G-12, and the Korean backlog.** **DECIDED 2026-10-23 (owner):** (a) wave 7 is `P3-T14` and `P3-T35`
+    together; `P3-T14` stops at gate `G-18` (the owner enters each key in the pane and presses Test). (b) gate `G-12`: the
+    owner approves the 40 recommended open-access candidates on the picks page as the `P3-T20` set; each download is still
+    asked for (a list may be shown and approved together), and each licence is re-checked on the PDF's first page. (c) the
+    116 ids on `KO_PENDING_REVIEW` are reviewed on a private review page that shows each en-US source beside the
+    coordinator's Korean draft; the owner approves or edits each there, and the coordinator reads the page and inserts
+    the result (G-41).
+    **(b) DONE 2026-10-23** (`plan/reports/G-12-downloads.md`): the owner approved the download list; O1 (MNRAS, 403
+    and not in Europe PMC) was replaced by O3 (GigaScience). PubMed Central's PDF links answer with a script-driven bot
+    check, so those papers came from Europe PMC's PDF render instead (nothing bypassed). 40 files in
+    `D:\KIST\projects\research_helper-g12\` (outside the repository). **(c) review page published:**
+    https://claude.ai/artifact/9XWYSJVPFztfpHkFtwxb8J (db collection `review`).
+
+277. **G-12 licence re-check, 2026-10-23.** 39 of the 40 licences were confirmed from the PDFs (Nature's at the end of
+    the article; arXiv's from the abstract page, since arXiv PDFs print none). X3 (Public Health Reports 1965) failed: its
+    authors were university staff, so it is not a US government work and no licence shows. **DECIDED 2026-10-23
+    (owner):** X3 is replaced by reserve XR2, NASA TN D-7812 (NTRS `GOV_PUBLIC_USE_PERMITTED`); X3's file was removed.
+    The `P3-T20` set is the 40 files now in the folder.
+
+278. **Raised by `P3-T35`, 2026-10-23.** **DECIDED 2026-10-23 (owner):** (a) the shared budgeted router **refuses** an LLM
+    call that carries no `budget` (fail closed), so a caller that forgets `ctx.budget` spends nothing; calls that are not
+    summary work (the pane's key Test, which goes through each adapter's `validateCredentials`, not the router) are
+    unaffected. (b) a reservation is priced with the same prices the cost dialog shows (the live catalogue with the user
+    price table over the documented table), and a settled call is charged at those prices × the provider's reported
+    tokens when it reports no cost. (c) confirmed: a job over no collection follows the global privacy mode; a collection
+    job takes the stricter of the two; an unreadable collection row gives strict. (a) and (b) are built after wave 7
+    lands.
+
+279. **Raised by `P3-T14`, 2026-10-23.** **DECIDED 2026-10-23 (owner):** (a) a Test answered with an out-of-credit 429
+    (`QuotaExceededError`: OpenAI `insufficient_quota`, Anthropic spend cap, OpenRouter 402 where it applies) shows its
+    own line, "key accepted, but the account has no credit", not plain "key accepted"; a rate-limit 429 keeps the
+    accepted line. (b) a key Test makes one attempt with a 15-second limit and no retry; summary calls keep their rules.
+    (c) confirmed: model suggestions are fetched when a list is first opened, never when Settings opens. (d)
+    `research-helper-prefs-key-present` becomes "A key is stored. Not tested yet." now that results are stored; its
+    Korean, and the 20 new pane strings, go on the review page (item 276(c)).
 
 ## 7. Regenerating this file
 

@@ -361,6 +361,32 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-prefs-usage",
   "research-helper-prefs-usage-limit",
   "research-helper-prefs-usage-limit-off",
+  // Owner, 2026-10-23, plan/00 §6 item 279(a): an LLM key accepted by an
+  // account with no credit left (QuotaExceededError).
+  "research-helper-prefs-test-ok-no-credit",
+  // P3-T14: an LLM key accepted under a 429 (docs/09 §2.3), the model fields'
+  // suggestions, and the user price table (plan/00 §6 item 265(b)). See
+  // PREFERENCES_L10N in src/ui/prefs/preferencesPane.ts.
+  "research-helper-prefs-test-ok-rate-limited",
+  "research-helper-prefs-model-suggestions",
+  "research-helper-prefs-models-as-of",
+  "research-helper-prefs-models-stale",
+  "research-helper-prefs-prices",
+  "research-helper-prefs-prices-note",
+  "research-helper-prefs-price-row",
+  "research-helper-prefs-price-row-no-cached",
+  "research-helper-prefs-price-model",
+  "research-helper-prefs-price-input",
+  "research-helper-prefs-price-output",
+  "research-helper-prefs-price-cached",
+  "research-helper-prefs-price-as-of",
+  "research-helper-prefs-price-save",
+  "research-helper-prefs-price-remove",
+  "research-helper-prefs-price-saved",
+  "research-helper-prefs-price-removed",
+  "research-helper-prefs-price-invalid",
+  "research-helper-prefs-price-refused",
+  "research-helper-prefs-price-unavailable",
   // P3-T03: the key-storage degradation dialog (docs/09 §1.7, gate G-10).
   // See SECRET_BACKEND_DIALOG_L10N in src/ui/dialogs/secretBackendDialog.ts.
   "research-helper-secret-backend-title",
@@ -912,6 +938,33 @@ export const KO_PENDING_REVIEW = [
   "research-helper-prefs-test-forbidden",
   "research-helper-prefs-test-absent",
   "research-helper-prefs-test-unavailable",
+  // The out-of-credit Test line (owner, 2026-10-23, `plan/00` §6 item
+  // 279(a)); a commented `ko-KR` stub, nothing machine-translated (`G-41`).
+  "research-helper-prefs-test-ok-no-credit",
+  // `P3-T14`'s twenty pane strings (the 429 pass, the model suggestions, the
+  // price table). `G-41` owns the translation; the `ko-KR` bundle carries each
+  // as a commented stub with its English source, and nothing was
+  // machine-translated.
+  "research-helper-prefs-test-ok-rate-limited",
+  "research-helper-prefs-model-suggestions",
+  "research-helper-prefs-models-as-of",
+  "research-helper-prefs-models-stale",
+  "research-helper-prefs-prices",
+  "research-helper-prefs-prices-note",
+  "research-helper-prefs-price-row",
+  "research-helper-prefs-price-row-no-cached",
+  "research-helper-prefs-price-model",
+  "research-helper-prefs-price-input",
+  "research-helper-prefs-price-output",
+  "research-helper-prefs-price-cached",
+  "research-helper-prefs-price-as-of",
+  "research-helper-prefs-price-save",
+  "research-helper-prefs-price-remove",
+  "research-helper-prefs-price-saved",
+  "research-helper-prefs-price-removed",
+  "research-helper-prefs-price-invalid",
+  "research-helper-prefs-price-refused",
+  "research-helper-prefs-price-unavailable",
 
   // --- searchDialog (62) ---
   "research-helper-search-window-title",
@@ -1259,6 +1312,30 @@ export interface FluentMessageArgsMap {
   "research-helper-prefs-test-inconclusive": { time: string };
   "research-helper-prefs-test-rejected": { time: string };
   "research-helper-prefs-test-forbidden": { time: string };
+  // P3-T14. `$date` is formatted by the pane script with `Intl.DateTimeFormat`
+  // over `Zotero.locale`; the four prices with `Intl.NumberFormat`. `$model`
+  // is a model ID and `$provider` a provider's display name, neither
+  // translated (docs/08 §10.3). No message takes any part of a key.
+  "research-helper-prefs-test-ok-rate-limited": { time: string };
+  // Owner, 2026-10-23, plan/00 §6 item 279(a). `$time` as above.
+  "research-helper-prefs-test-ok-no-credit": { time: string };
+  "research-helper-prefs-models-as-of": { date: string };
+  "research-helper-prefs-models-stale": { date: string };
+  "research-helper-prefs-price-row": {
+    provider: string;
+    model: string;
+    input: string;
+    output: string;
+    cached: string;
+    date: string;
+  };
+  "research-helper-prefs-price-row-no-cached": {
+    provider: string;
+    model: string;
+    input: string;
+    output: string;
+    date: string;
+  };
   // P3-T34: how many interrupted jobs resumed.
   "research-helper-job-resumed": { count: number };
   // Item 265(a): `$minutes` is a plural selector (the budget, 30); `$done`
@@ -1378,6 +1455,13 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-prefs-test-inconclusive",
   "research-helper-prefs-test-rejected",
   "research-helper-prefs-test-forbidden",
+  // mainWindow — the preference pane (5, P3-T14; 1, item 279(a))
+  "research-helper-prefs-test-ok-rate-limited",
+  "research-helper-prefs-test-ok-no-credit",
+  "research-helper-prefs-models-as-of",
+  "research-helper-prefs-models-stale",
+  "research-helper-prefs-price-row",
+  "research-helper-prefs-price-row-no-cached",
   // mainWindow — the job queue (2: P3-T34, item 265(a))
   "research-helper-job-resumed",
   "research-helper-job-wall-clock-budget",

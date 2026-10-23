@@ -347,6 +347,11 @@ const EXERCISED = [
   "adoptSessionSecretStore",
   "reconcileSessionKeyPresence",
   "clearSessionSecrets",
+  // P3-T14: the validation status pair (docs/07 §8.5), written as an enum
+  // and an ISO time, never a value.
+  "recordValidation",
+  "resetValidation",
+  "markProviderKeyRejected",
 ] as const;
 
 /** Exports no value passes through: constants, pure lookups, the removal primitive. */
@@ -365,6 +370,8 @@ const VALUE_FREE = [
   "deriveKeyPresence",
   "deriveAllKeyPresence",
   "secretBackendPrefValue",
+  "VALIDATION_PREFS",
+  "readValidation",
 ] as const;
 
 describe("no src/zotero/ export writes a SecretId value through PrefStore (P3-T03 step 5)", () => {
@@ -412,6 +419,13 @@ describe("no src/zotero/ export writes a SecretId value through PrefStore (P3-T0
     expect(await keychain.clearAllSecrets()).toBe(SECRET_IDS.length - 1);
     for (const [id, value] of values) await keychain.setSecret(id, value);
     expect(await keychain.clearAllSecretsOnUninstall()).toBe(SECRET_IDS.length);
+    // P3-T14: the validation status pair.
+    expect(
+      keychain.recordValidation("llm.openai", "ok", "2026-10-23T09:00:00.000Z"),
+    ).toBe(true);
+    expect(keychain.markProviderKeyRejected("anthropic", 0)).toBe(true);
+    keychain.resetValidation("source.ncbi");
+    expect(keychain.readValidation("tts.gemini")).toBeUndefined();
 
     // Tier 2.
     await keychain.reconcileSessionKeyPresence();
@@ -429,6 +443,13 @@ describe("no src/zotero/ export writes a SecretId value through PrefStore (P3-T0
     const flagKeys = new Set<string>(
       keychain.keyPresenceFlags().map((flag) => PREFS[flag].key),
     );
+    const validationNames = Object.values(keychain.VALIDATION_PREFS);
+    const resultKeys = new Set<string>(
+      validationNames.map((names) => PREFS[names.result].key),
+    );
+    const atKeys = new Set<string>(
+      validationNames.map((names) => PREFS[names.at].key),
+    );
     const forbidden = [...values.values()].flatMap((value) => [
       value,
       platform.encryptedForm(value),
@@ -441,6 +462,14 @@ describe("no src/zotero/ export writes a SecretId value through PrefStore (P3-T0
       expect(def.secret ?? false, key).toBe(false);
       if (flagKeys.has(key)) {
         expect(typeof written, key).toBe("boolean");
+      } else if (resultKeys.has(key)) {
+        expect(["ok", "rejected", "forbidden", "inconclusive", ""]).toContain(
+          written,
+        );
+      } else if (atKeys.has(key)) {
+        expect(String(written), key).toMatch(
+          /^(?:|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)$/,
+        );
       } else {
         expect(key).toBe(PREFS.secretBackend.key);
         expect(["oskeystore", "session", ""]).toContain(written);

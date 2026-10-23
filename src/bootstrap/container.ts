@@ -177,7 +177,7 @@
 import type { Cache } from "../core/cache/cache";
 import { createSystemClock, type Clock } from "../core/clock";
 import type { PrefObserverHandle, PrefStore } from "../core/config";
-import { ConfigurationError } from "../core/errors";
+import { ConfigurationError, StorageError } from "../core/errors";
 import {
   createHttpClient,
   getHttpClient,
@@ -188,10 +188,12 @@ import {
 import { retryPolicyFromBudget, type RetryPolicy } from "../core/http/retry";
 import { buildUserAgent } from "../core/http/userAgent";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
+import type { JobRecord } from "../core/jobQueue/jobRecord";
 import {
   createJobQueue,
   createRunningWork,
   type JobQueue,
+  type ResumeGuards,
 } from "../core/jobQueue/queue";
 import {
   CompositeProgressReporter,
@@ -218,13 +220,46 @@ import {
 import type { SecretStore } from "../core/secretStore";
 import type { SecretBackendChoice } from "../ui/dialogs/secretBackendDialog";
 import type { PipelineRegistry } from "../pipeline/registry";
-import { createPrivacyPolicy } from "../pipeline/shared/privacyPolicy";
-import { UNWIRED_BUDGET_GUARD } from "../pipeline/shared/budget";
+import type { OpenRouterProvider } from "../llm/openrouter/openRouterProvider";
+import {
+  createModelCatalogue,
+  createModelPriceSource,
+  type ModelPriceSource,
+} from "../llm/shared/modelCatalogue";
+import {
+  createPrivacyPolicy,
+  isPrivacyMode,
+  loadPrivacyPolicy,
+  type CollectionRef,
+  type LoadPrivacyPolicyDeps,
+  type PrivacyMode,
+  type PrivacyPolicy,
+} from "../pipeline/shared/privacyPolicy";
+import {
+  createBudgetGuard,
+  createCeilingsResumeGuard,
+  createConfirmResumeGuard,
+  createSessionSpendCounter,
+  withBudget,
+  type ResumeGuardDeps,
+  type RunBudgetGuard,
+  type SessionSpendCounter,
+} from "../pipeline/shared/budget";
+import {
+  createCheckpointWriter,
+  type CheckpointWriter,
+} from "../pipeline/shared/checkpoint";
+import { createEgressResumeGuard } from "../pipeline/shared/egressDisclosure";
 import {
   createSkipCachedGuard,
   reconcilePromptVersions,
 } from "../pipeline/summarize/summaryCache";
-import type { LLMRouter, PipelineContext, PipelineId } from "../pipeline/types";
+import type {
+  ConfigReader,
+  LLMRouter,
+  PipelineContext,
+  PipelineId,
+} from "../pipeline/types";
 import { getPref, setPrefStore } from "../prefs";
 import { createArxivSource } from "../sources/arxiv/arxivSource";
 import { createArxivRecordMapper } from "../sources/arxiv/mapper";
@@ -243,6 +278,10 @@ import { createSemanticScholarSource } from "../sources/semanticscholar/semantic
 // `installSecretStore`: it runs `Components.Constructor(...)` in its module
 // body, which is a `ReferenceError` in plain Node and would take down every
 // layer-1 test whose module graph reaches this file.
+import {
+  createCollectionSettingsStore,
+  type CollectionSettingsStore,
+} from "../zotero/db";
 import {
   ZoteroProgressWindowSink,
   type ProgressWindowHandle,
@@ -729,6 +768,13 @@ export interface ServiceGraphOptions {
    * the declined choice and never a silently selected tier.
    */
   readonly chooseSecretBackend?: () => Promise<SecretBackendChoice>;
+  /**
+   * The plugin lifetime's one session spend counter (`docs/06` §11.4,
+   * `P3-T16`), which every job's budget guard shares (`P3-T35`).
+   * `src/bootstrap/registerUI.ts` passes the counter its Usage readout reads.
+   * Omitted in a unit test of the graph: then the graph builds its own.
+   */
+  readonly sessionSpend?: SessionSpendCounter;
 }
 
 /**
@@ -910,6 +956,34 @@ export interface ServiceGraph {
    * database.
    */
   readonly cache: Cache;
+  /**
+   * `docs/07` §4.5's `ConfigReader` (`P3-T35`; owner, item 272(a)): the
+   * read-only view of `getPref` every job's `PipelineContext.config` carries.
+   */
+  readonly config: ConfigReader;
+  /**
+   * The session spend counter every job's budget guard shares (`P3-T35`):
+   * {@link ServiceGraphOptions.sessionSpend}, or the graph's own.
+   */
+  readonly sessionSpend: SessionSpendCounter;
+  /**
+   * `collection_settings` (`docs/07` §8.3, `P3-T15`) on the one connection,
+   * usable before the database is ready: each call waits for it. Without a
+   * database every call rejects with `StorageError`, so a privacy override
+   * that cannot be read gives a strict policy, never the global mode
+   * (`loadPrivacyPolicy`). The summarize surface (`P3-T29`) writes "don't ask
+   * again for this collection" through it.
+   */
+  readonly collectionSettings: CollectionSettingsStore;
+  /**
+   * The one model price source (owner, 2026-10-23, `plan/00` §6 item
+   * 278(b); `docs/07` §4.3's note of that date): the last catalogue snapshot
+   * with the user price table over it, the documented table until one has
+   * loaded. The budgeted router prices every reservation from it; the pane's
+   * model suggestions refresh it; the cost dialog (`P3-T29`) must price from
+   * it too, so the dialog and the reservations agree.
+   */
+  readonly modelPrices: ModelPriceSource;
 }
 
 /** What {@link PipelineContextFactory.forJob} is asked for. */
@@ -941,8 +1015,43 @@ export interface PipelineJob {
   readonly context: PipelineContext;
   /** This job's reporter and sinks, for a caller that wants `events`. */
   readonly progress: JobProgress;
+  /**
+   * The job's own budget guard — the same object as `context.budget` — with
+   * the members the cost dialog needs besides (`raiseLimit` for "continue",
+   * `usage` for the readout, `check` for a pre-flight ceiling). `P3-T35`.
+   */
+  readonly budget: RunBudgetGuard;
+  /**
+   * The throttled writer `context.checkpoint` goes through, for a job opened
+   * with a {@link QueuedPipelineJobOptions.record}; `undefined` otherwise.
+   * The job's owner flushes it when the job stops, and passes it as
+   * `runPooledItems`' `checkpoint` sink so a stage boundary is written at
+   * once (`docs/07` §7.6). `P3-T35`.
+   */
+  readonly checkpoints: CheckpointWriter | undefined;
   /** Close this job's surfaces. Idempotent; touches no other job. */
   dispose(): void;
+}
+
+/**
+ * What {@link PipelineContextFactory.openJob} is asked for: a job's options,
+ * plus what makes its context the job's own (`P3-T35`).
+ */
+export interface QueuedPipelineJobOptions extends PipelineJobOptions {
+  /**
+   * The job's record in the queue (`P3-T34`), when it has one. Then the
+   * context's `jobId` is the record's id, `checkpoint()` writes to the record,
+   * `resumeState` is the record's checkpoint, and the budget guard's run
+   * counter starts from the record's `usage`. Its `pipelineId` must be
+   * {@link PipelineJobOptions.pipelineId}.
+   */
+  readonly record?: JobRecord;
+  /**
+   * The collection the job works on, when it has one: its
+   * `collection_settings` privacy override is applied (it can only tighten
+   * the global mode), and a store that cannot answer gives a strict policy.
+   */
+  readonly collection?: CollectionRef;
 }
 
 /**
@@ -953,7 +1062,22 @@ export interface PipelineJob {
  * composition root is the only place allowed to know both (`docs/07` §2.3).
  */
 export interface PipelineContextFactory {
+  /**
+   * A job over no collection and with no record — Phase 1's `searchImport`,
+   * run directly. Its privacy policy is the global `privacy.mode`, which is
+   * what {@link openJob} gives a job with no collection; its `checkpoint()`
+   * is a no-op, because there is no record to write to.
+   */
   forJob(options: PipelineJobOptions): PipelineJob;
+  /**
+   * A job with a record or over a collection (`P3-T35`): asynchronous because
+   * the collection's privacy override is read from the plugin database. A job
+   * that works on a collection must be opened here, never with {@link forJob}.
+   *
+   * @throws ConfigurationError when `record.pipelineId` is not
+   *   `options.pipelineId`
+   */
+  openJob(options: QueuedPipelineJobOptions): Promise<PipelineJob>;
 }
 
 /**
@@ -1206,10 +1330,39 @@ interface PipelineContextDeps {
   readonly llm: LLMRouter;
   /** The one cache (`P3-T33`); every job's context carries the same instance. */
   readonly cache: Cache;
+  /** The one `ConfigReader` (`P3-T35`); every job's context carries it. */
+  readonly config: ConfigReader;
+  /** The one session counter every job's fresh budget guard shares (`P3-T35`). */
+  readonly sessionSpend: SessionSpendCounter;
+  /** What `loadPrivacyPolicy` reads: the global mode and `collection_settings`. */
+  readonly privacy: LoadPrivacyPolicyDeps;
+  /** The job queue whose records a queued job's checkpoint is written to. */
+  readonly jobs: Pick<JobQueue, "writeCheckpoint">;
 }
 
 /**
  * Build {@link ServiceGraph.pipelineContext} — `docs/07` §4.5's context, per job.
+ *
+ * ## Since `P3-T35`: every member but `tts` and `zotero` is real
+ *
+ * *(Added 2026-10-23, `P3-T35`; `docs/07` §4.5's note of that date.)* The two
+ * sections below record Phase 1's state and are kept for their reasoning; the
+ * members they list as unfilled are now filled, each from what
+ * {@link installServices} built once:
+ *
+ * - `cache`, `llm` and `config` — one instance each, shared by every job. `llm`
+ *   is the router `withBudget` wraps (step 6d), so a call that passes
+ *   `budget: ctx.budget` is reserved and settled, and one that does not is
+ *   refused before anything is sent (owner, 2026-10-23, `plan/00` §6 item
+ *   278(a)).
+ * - `budget` — a **fresh** `createBudgetGuard` per job over the **one**
+ *   session counter: two jobs never share a run counter, and both feed the
+ *   same session total.
+ * - `privacy` — `loadPrivacyPolicy`: a job over a collection gets the stricter
+ *   of the global mode and the collection's override, and strict when the
+ *   override cannot be read; a job over none gets the global mode.
+ * - `checkpoint` / `resumeState` — bound to the job's `JobRecord` when it has
+ *   one ({@link PipelineContextFactory.openJob}); the no-op otherwise.
  *
  * ## The seven members Phase 1 cannot fill, and what they are set to
  *
@@ -1249,63 +1402,181 @@ function createPipelineContextFactory(
 ): PipelineContextFactory {
   let sequence = 0;
 
+  /** One job: its context, its surfaces, its guard and its checkpoint writer. */
+  const build = (
+    options: PipelineJobOptions,
+    privacy: PrivacyPolicy,
+    record: JobRecord | undefined,
+  ): PipelineJob => {
+    sequence += 1;
+    const jobId =
+      record?.id ??
+      `${options.pipelineId}-${String(deps.clock.now())}-${String(sequence)}`;
+    // `P3-T16`'s guard, fresh for this job (its own run counter) over the one
+    // session counter. A record's `usage` is what earlier attempts spent.
+    const budget = createBudgetGuard({
+      session: deps.sessionSpend,
+      ...(record !== undefined && { resumedFrom: record.usage }),
+    });
+    // `P3-T34`'s throttled writer, bound to this job's record.
+    const checkpoints =
+      record === undefined
+        ? undefined
+        : createCheckpointWriter({
+            queue: deps.jobs,
+            jobId: record.id,
+            clock: deps.clock,
+          });
+    const progress = deps.progress.forJob(options.pipelineId, {
+      token: options.token,
+      ...(options.openOn !== undefined && { openOn: options.openOn }),
+      ...(options.message !== undefined && { message: options.message }),
+    });
+
+    const context: PipelineContext = {
+      jobId,
+      token: options.token,
+      progress: progress.reporter,
+      // Bound with the job id, so every line a pipeline logs can be traced to
+      // one run without the pipeline having to remember to add it.
+      logger: deps.logger.child({ jobId, pipelineId: options.pipelineId }),
+      clock: deps.clock,
+      sources: deps.sources,
+      // `docs/07` §4.3's router (`P3-T06`, owner item 248): the one instance
+      // `installServices` holds — `registerProviders`' router under
+      // `withBudget` (`P3-T35`) — shared by every job.
+      llm: deps.llm,
+      // `docs/07` §4.1's cache over the plugin database (`P3-T33`): the one
+      // instance `installPluginDatabase` built, shared by every job.
+      cache: deps.cache,
+      // `docs/07` §4.5's `PrivacyPolicy` (`P3-T15`, owner item 267), loaded
+      // for this job by the caller (`P3-T35`): see `forJob` and `openJob`.
+      privacy,
+      // `docs/07` §4.3's `BudgetGuard` (`P3-T16`): this job's own guard.
+      budget,
+      // `docs/07` §4.5's `ConfigReader` (owner item 272(a), `P3-T35`).
+      config: deps.config,
+      // Not Phase 3's: TTS is Phase 5's and `ZoteroFacade` is declared
+      // nowhere (`src/pipeline/types.ts`'s header).
+      tts: undefined,
+      zotero: undefined,
+      // `docs/07` §4.5 / §7.6: written into the job's record, throttled to
+      // one write per 2 s (`P3-T34`'s writer). A job with no record has
+      // nothing to write into, so its checkpoint stays `P1-T16`'s no-op.
+      checkpoint:
+        checkpoints === undefined
+          ? (): Promise<void> => Promise.resolve()
+          : (state: unknown): Promise<void> => checkpoints.checkpoint(state),
+      resumeState:
+        record === undefined ? undefined : (record.checkpoint ?? undefined),
+    };
+
+    return {
+      jobId,
+      context,
+      progress,
+      budget,
+      checkpoints,
+      dispose(): void {
+        progress.dispose();
+      },
+    };
+  };
+
+  /** `loadPrivacyPolicy`'s rule for a job over no collection: the global mode. */
+  const globalPolicy = (): PrivacyPolicy =>
+    createPrivacyPolicy(deps.privacy.globalMode());
+
   return {
     forJob(options: PipelineJobOptions): PipelineJob {
-      sequence += 1;
-      const jobId = `${options.pipelineId}-${String(
-        deps.clock.now(),
-      )}-${String(sequence)}`;
-      const progress = deps.progress.forJob(options.pipelineId, {
-        token: options.token,
-        ...(options.openOn !== undefined && { openOn: options.openOn }),
-        ...(options.message !== undefined && { message: options.message }),
-      });
-
-      const context: PipelineContext = {
-        jobId,
-        token: options.token,
-        progress: progress.reporter,
-        // Bound with the job id, so every line a pipeline logs can be traced to
-        // one run without the pipeline having to remember to add it.
-        logger: deps.logger.child({ jobId, pipelineId: options.pipelineId }),
-        clock: deps.clock,
-        sources: deps.sources,
-        // `docs/07` §4.3's router (`P3-T06`, owner item 248): the one instance
-        // `registerProviders` built, shared by every job.
-        llm: deps.llm,
-        // `docs/07` §4.1's cache over the plugin database (`P3-T33`): the one
-        // instance `installPluginDatabase` built, shared by every job.
-        cache: deps.cache,
-        // `docs/07` §4.5's `PrivacyPolicy` (`P3-T15`, owner item 267). Strict
-        // until `P3-T35` builds each job's policy with `loadPrivacyPolicy`
-        // (global mode + the collection's override): a policy built from the
-        // global mode alone could be looser than a collection's override, so
-        // the placeholder fails closed. No shipped pipeline reads it yet.
-        privacy: createPrivacyPolicy("strict"),
-        // `docs/07` §4.3's `BudgetGuard` (`P3-T16`). A placeholder that fails
-        // closed — every reservation throws, so no LLM request can be sent —
-        // until `P3-T35` builds each job's guard with `createBudgetGuard`
-        // over the one session counter. No shipped pipeline reaches it.
-        budget: UNWIRED_BUDGET_GUARD,
-        // See this function's doc comment: members doc 07 declares and no
-        // card has implemented yet (`llm` left this list in `P3-T06`, `cache`
-        // in `P3-T33`, `privacy` in `P3-T15`, `budget` in `P3-T16`).
-        tts: undefined,
-        zotero: undefined,
-        config: undefined,
-        checkpoint: (): Promise<void> => Promise.resolve(),
-        resumeState: undefined,
-      };
-
-      return {
-        jobId,
-        context,
-        progress,
-        dispose(): void {
-          progress.dispose();
-        },
-      };
+      return build(options, globalPolicy(), undefined);
     },
+
+    async openJob(options: QueuedPipelineJobOptions): Promise<PipelineJob> {
+      const { record, collection } = options;
+      if (record !== undefined && record.pipelineId !== options.pipelineId) {
+        throw new ConfigurationError(
+          `[research-helper] job ${record.id} is a "${record.pipelineId}" ` +
+            `record; it cannot be opened as "${options.pipelineId}"`,
+        );
+      }
+      const privacy = await loadPrivacyPolicy(deps.privacy, collection);
+      return build(options, privacy, record);
+    },
+  };
+}
+
+/** What {@link createSpendResumeGuards} needs. */
+export interface SpendResumeGuardDeps {
+  /** The one session counter, which the ceilings guard judges against. */
+  readonly session: SessionSpendCounter;
+  /**
+   * The summarize pipeline's estimate of a record's remaining work, over its
+   * checkpoint (`P3-T29`). Absent until that pipeline exists.
+   */
+  readonly remaining?: ResumeGuardDeps["remaining"];
+}
+
+/**
+ * `ResumeGuards.confirm` and `ResumeGuards.ceilings` (`P3-T16`), installed by
+ * the composition root (`P3-T35`) — **only once the remaining-work estimate
+ * exists**. Both judge a resumed job by what is left to do, which only the
+ * pipeline can price; a guard built over an invented estimate would either
+ * resume spending nobody confirmed or hold back every job for a reason that
+ * is not true. So without `remaining` this returns neither, the queue keeps
+ * naming them in `missingResumePrerequisites()`, and `recover()` resumes
+ * nothing (`plan/00` §6 item 250). `P3-T29` passes its estimate here.
+ *
+ * @param deps - see {@link SpendResumeGuardDeps}
+ * @returns both guards, or none
+ */
+export function createSpendResumeGuards(
+  deps: SpendResumeGuardDeps,
+): Partial<Pick<ResumeGuards, "confirm" | "ceilings">> {
+  const { remaining } = deps;
+  if (remaining === undefined) return {};
+  return {
+    confirm: createConfirmResumeGuard({ remaining }),
+    ceilings: createCeilingsResumeGuard({ remaining, session: deps.session }),
+  };
+}
+
+/**
+ * `collection_settings` (`P3-T15`) on the plugin database's one connection,
+ * usable before the open-and-migrate has settled: each call waits for it.
+ *
+ * With no database this run — none passed, or the open failed — every call
+ * rejects with `StorageError`. `loadPrivacyPolicy` turns that into a strict
+ * policy, so an override that cannot be read never reads as "no override".
+ * Built here rather than in `installPluginDatabase` (whose file is not
+ * `P3-T35`'s); it adds no connection and no teardown of its own, and after the
+ * database's teardown a call fails the same way.
+ *
+ * @param database - the graph's plugin database
+ * @returns the store
+ */
+function createDeferredCollectionSettings(
+  database: Pick<PluginDatabase, "ready">,
+): CollectionSettingsStore {
+  let store: CollectionSettingsStore | undefined;
+  const open = async (): Promise<CollectionSettingsStore> => {
+    const ready = await database.ready;
+    if (ready === undefined) {
+      throw new StorageError(
+        "[research-helper] the plugin database is not available, so " +
+          "collection_settings cannot be read or written",
+      );
+    }
+    store ??= createCollectionSettingsStore(ready.connection);
+    return store;
+  };
+  return {
+    get: async (libraryID, collectionKey) =>
+      (await open()).get(libraryID, collectionKey),
+    put: async (libraryID, collectionKey, settings) =>
+      (await open()).put(libraryID, collectionKey, settings),
+    delete: async (libraryID, collectionKey) =>
+      (await open()).delete(libraryID, collectionKey),
   };
 }
 
@@ -1653,7 +1924,25 @@ export async function installServices(
   // 6b. The LLM layer (`P3-T06`): settings over the typed prefs, the provider
   //     registry, the base-URL resolver and `docs/07` §4.3's router. No
   //     adapter yet — `P3-T07`–`P3-T10` add them inside `registerProviders`.
-  const llm = registerProviders({ logger, http, secrets });
+  //
+  //     `P3-T35`: the OpenRouter adapter reads the global `privacy.mode` per
+  //     request (`P3-T15`'s floor; a stricter collection mode rides on the
+  //     request as `routing`), and the router every job carries is the one
+  //     router wrapped **once** by `withBudget` (`P3-T16`): a call whose
+  //     `LLMCallContext` carries `budget: ctx.budget` reserves before it is
+  //     sent and settles when it returns, and a call without one is refused
+  //     before anything is sent (owner, 2026-10-23, `plan/00` §6 item 278(a)).
+  //     The wrapping waits for step 6c, because its prices do (item 278(b)).
+  const globalPrivacyMode = (): PrivacyMode => {
+    const mode = getPref("privacyMode");
+    return isPrivacyMode(mode) ? mode : "strict";
+  };
+  const providers = registerProviders({
+    logger,
+    http,
+    secrets,
+    privacyMode: globalPrivacyMode,
+  });
 
   // 6c. The plugin database, opened once here (`P3-T33`; `plan/00` §6 item
   //     249, owner, 2026-10-21), and `docs/07` §4.1's cache over it. The open
@@ -1673,6 +1962,57 @@ export async function installServices(
     pinnedTags: runningWork.pinnedTags,
   });
 
+  // 6d. The one model price source and the budgeted router (owner,
+  //     2026-10-23, `plan/00` §6 item 278(b); `docs/07` §4.3's note of that
+  //     date). One `createModelCatalogue` over the registry and the cache —
+  //     built without the user table, which the source applies itself — held
+  //     as a snapshot the router's synchronous `pricesFor` reads for the
+  //     active provider: the documented table (`docs/03` §12.1) until a
+  //     catalogue snapshot is adopted, the user's `user_price` rows over
+  //     either. Nothing here fetches a catalogue: startup sends no request
+  //     (item 279(c)); the pane's suggestions and the cost dialog refresh it.
+  //     The user table is read once the database is open (no network), and
+  //     the pane reloads it after each change it saves.
+  const pricesLogger = logger.child({ surface: "modelPrices" });
+  const modelPrices = createModelPriceSource({
+    catalogue: createModelCatalogue({
+      registry: providers.registry,
+      openRouterCatalogue: (ctx) => {
+        const adapter = providers.registry.get("openrouter");
+        if (adapter === undefined || !("listCatalogue" in adapter)) {
+          return Promise.reject(
+            new Error("[research-helper] no OpenRouter adapter is registered"),
+          );
+        }
+        return (adapter as OpenRouterProvider).listCatalogue(ctx);
+      },
+      cache: database.cache,
+      clock,
+      logger: pricesLogger,
+    }),
+    userPriceOverrides: () => database.prices.list(),
+    logger: pricesLogger,
+  });
+  // Not awaited, and no teardown of its own: the read is one of the
+  // database's tracked calls, which its teardown already waits for, and a
+  // read that starts while it closes gets an empty table.
+  void (async () => {
+    if ((await database.ready) === undefined) return;
+    await modelPrices.reloadUserPrices();
+  })().catch((error: unknown) => {
+    pricesLogger.warn("the user price table was not read at startup", {
+      error: error instanceof Error ? error.name : typeof error,
+    });
+  });
+  const llm: LLMServices = {
+    ...providers,
+    router: withBudget(providers.router, {
+      pricesFor: (modelId) =>
+        modelPrices.pricesFor(providers.router.activeProvider(), modelId),
+      now: () => clock.now(),
+    }),
+  };
+
   // 7. The pipelines (`P1-T16`) and the per-job context factory.
   const pipelines = registerPipelines({
     // `http`: Strategy B's PMCID route (the NCBI ID Converter, owner
@@ -1682,23 +2022,26 @@ export async function installServices(
     writer: createZoteroSearchImportWriter({ logger, http }),
     runningWork,
   });
-  const pipelineContext = createPipelineContextFactory({
-    clock,
-    logger,
-    sources,
-    progress: progress.factory,
-    llm: llm.router,
-    cache: database.cache,
-  });
+  // The per-job context factory is built after step 8, because a queued
+  // job's checkpoint writes through the queue (`P3-T35`).
+
+  // `P3-T35`: what every job's context shares — the one `ConfigReader`
+  // (owner item 272(a)), the one session spend counter (`docs/06` §11.4),
+  // and `collection_settings` on the one connection.
+  const config: ConfigReader = Object.freeze({ get: getPref });
+  const sessionSpend = options.sessionSpend ?? createSessionSpendCounter();
+  const collectionSettings = createDeferredCollectionSettings(database);
 
   // 8. The job queue's persistent half (`P3-T34`). Its store is attached by
   //    `database.attachJobs` below once the plugin database is open (`P3-T33`
   //    moved the open here). `skipCached` is `P3-T26`'s; until it has a probe
   //    (the summarize pipeline, `P3-T29`) it skips nothing, so the spend
-  //    guards after it may over-count and never under-count. The other guards
-  //    and the notifier are not passed yet, so `recover()` resumes nothing:
-  //    every resumable interrupted job waits for `P3-T15` and `P3-T16` to fill
-  //    `resumeGuards` here (`plan/00` §6 item 250).
+  //    guards after it may over-count and never under-count. `egress` is
+  //    `P3-T15`'s, installed by `P3-T35`. `confirm` and `ceilings` (`P3-T16`)
+  //    need the summarize pipeline's remaining-work estimate, which `P3-T29`
+  //    passes to {@link createSpendResumeGuards}; until then they, and the
+  //    notifier (`P3-T29`), are absent, so `recover()` resumes nothing: every
+  //    resumable interrupted job waits (`plan/00` §6 item 250).
   const jobs = createJobQueue({
     clock,
     logger: logger.child({ surface: "jobQueue" }),
@@ -1711,11 +2054,33 @@ export async function installServices(
       skipCached: createSkipCachedGuard({
         logger: logger.child({ surface: "summaryCache" }),
       }),
+      // Reads `privacy.egressAcknowledged` on every call (its default).
+      egress: createEgressResumeGuard(),
+      ...createSpendResumeGuards({ session: sessionSpend }),
     },
   });
   // The `job` store on the one connection, then §7.6's startup recovery —
   // both once the migrations are done, neither awaited by startup.
   database.attachJobs(jobs);
+
+  // 7 (cont.). The per-job context factory (`P1-T16`; every member wired by
+  //    `P3-T35`, `docs/07` §4.5's note of 2026-10-23).
+  const pipelineContext = createPipelineContextFactory({
+    clock,
+    logger,
+    sources,
+    progress: progress.factory,
+    llm: llm.router,
+    cache: database.cache,
+    config,
+    sessionSpend,
+    privacy: {
+      globalMode: globalPrivacyMode,
+      store: collectionSettings,
+      logger: logger.child({ surface: "privacyPolicy" }),
+    },
+    jobs,
+  });
 
   // 8b. `docs/07` §9.3 trigger 1 (`P3-T26`): once the cache is usable,
   //     compare the shipped prompt versions with `cache.lastSeenPromptVersions`,
@@ -1772,6 +2137,10 @@ export async function installServices(
     jobs,
     database,
     cache: database.cache,
+    config,
+    sessionSpend,
+    collectionSettings,
+    modelPrices,
   };
 }
 

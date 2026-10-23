@@ -1274,6 +1274,29 @@ export interface BudgetGuard {
 }
 ```
 
+> **`CredentialCheckResult`, as built (`P3-T14`, 2026-10-23; the card's reading, for the owner to confirm).**
+> Each adapter's `validateCredentials` sends its own provider's list call through the shared `HttpClient`, never a
+> completion: `GET /v1/models` (OpenAI, Anthropic), `GET /v1beta/models` with the key in `x-goog-api-key` (Gemini),
+> `GET /api/v1/key` (OpenRouter, whose `models` then come from its public catalogue, which carries no key).
+> A 2xx is `ok: true` with `messageKey` `research-helper-prefs-test-ok` and `models`. Otherwise `messageKey` is the
+> §10.1 error's own: `rh-error-auth` (401, and Gemini's 400 `API_KEY_INVALID`) and `rh-error-forbidden` (403) are
+> `ok: false`; an HTTP 429 (`rh-error-rate-limit`, or `rh-error-quota` for a spend cap) is `ok: true`, because the key
+> was accepted (`09-security-privacy-and-api-keys.md` §2.3); anything else is `ok: false`. The pane maps these to the
+> §8.5 enum: `ok`, `rejected`, `forbidden`, else `inconclusive`. `httpStatus` is present whenever the provider
+> answered; its absence means no answer arrived (network failure, timeout), and then `<provider>.lastValidationResult`
+> and `<provider>.lastValidatedAt` (§8.5) are left unchanged. Only that enum and the ISO time are persisted, through
+> `setPref` after `redactRecord`; `models` fills the pane's model suggestions and is not stored.
+>
+> *Decided 2026-10-23 (owner, `plan/00` §6 item 279(a) and (b)):* **an out-of-credit answer is `ok: true` with
+> `messageKey` `rh-error-quota`**, whatever its status — `QuotaExceededError`: OpenAI's `insufficient_quota` 429,
+> Anthropic's spend-cap 429 and OpenRouter's 402 — and the pane shows it on its own line
+> (`research-helper-prefs-test-ok-no-credit`), not as plain "key accepted". A plain rate-limit 429
+> (`rh-error-rate-limit`) keeps the accepted line. The stored §8.5 enum is `ok` for both, as before; the separate
+> line is shown at the Test only. **Every request of a Test is one attempt of at most 15 seconds, never retried**
+> (`LLM_KEY_TEST_ATTEMPT`, §7.3's note of this date); summary calls keep `LLM_ATTEMPT_TIMEOUT_MS` and
+> `LLM_RETRY_BUDGET`. *(Corrects "an HTTP 429 … is `ok: true`" above: OpenRouter's 402 was `ok: false`, and a
+> spend cap showed the accepted line.)*
+
 > **`BudgetGuard`, as built (`P3-T16`, 2026-10-23).** Owner decisions are cited; every other line is the card's
 > reading, recorded for the owner to confirm. The interface above stays in `src/llm/types.ts`; the implementation is
 > `createBudgetGuard` in `src/pipeline/shared/budget.ts` (§2.2's tree), and `src/pipeline/types.ts` re-exports the type.
@@ -1306,6 +1329,35 @@ export interface BudgetGuard {
 >   sends each of its up to three requests through that `chat`, so **the usage of a `completeJSON` that throws is
 >   already counted** (owner, 2026-10-21, `plan/00` §6 item 266). A request that fails before any answer settles
 >   nothing and frees its reservation.
+>
+> **Decided 2026-10-23 (owner, `plan/00` §6 item 278(a) and (b)): the shared router refuses a call with no budget,
+> and prices a reservation as the cost dialog does.** Built after wave 7. Two bullets above are corrected by it.
+>
+> - **(a) Fail closed.** `withBudget` refuses a `chat` or `chatStream` whose `LLMCallContext` carries no `budget`. It
+>   throws `ConfigurationError` (§10.1, `rh-error-configuration`, not retryable) before any request is sent, so a
+>   caller that forgets `budget: ctx.budget` spends nothing. The class is `ConfigurationError` because the fault is
+>   the caller's wiring, a composition-root bug, which the summarize stages already rethrow as fatal; it is not
+>   `BudgetExceededError`, which the job runner reads as `budget-stop` and answers by asking the user to raise a
+>   limit. Calls that are not summary work never pass through the router and are unaffected: the pane's key Test
+>   calls each adapter's `validateCredentials`, and the model catalogue calls `listModels` / `listCatalogue`.
+>   *(Corrects "Where it is enforced" above, which left an unbudgeted call free to pass.)*
+> - **(b) One price source, read as a snapshot.** The composition root builds one `ModelPriceSource`
+>   (`createModelPriceSource`, `src/llm/shared/modelCatalogue.ts`), the service graph's `modelPrices`, and
+>   `withBudget`'s synchronous `pricesFor` reads it for the active provider. It holds the last catalogue snapshot
+>   (`createModelCatalogue`: the live lists, priced from OpenRouter's catalogue) with the user price table
+>   (`user_price`, §8.3) applied over it the way `createModelCatalogue` applies it. **While no catalogue snapshot
+>   has loaded it holds `bundledCatalogue()`**, the documented table of `03-llm-provider-integration.md` §12.1, with
+>   the user table applied over that. It is refreshed asynchronously, and startup sends no catalogue request
+>   (`plan/00` §6 item 279(c)): the user table is read from the plugin database once it is open and again after
+>   each price the pane saves or removes (no network); the catalogue is adopted each time something fetches it
+>   through `modelPrices.refresh` — the pane's model suggestions today. **The cost dialog (`P3-T29`) must take its
+>   prices from `modelPrices` too, after a `refresh`**, so that the dialog and the reservations of the run it
+>   confirms read the same snapshot.
+> - **(b) Settling.** A reservation carries the prices it was priced with. A call whose provider reports no
+>   `costUsd` but reports its input and output tokens is charged at those prices × those tokens (`costOf`), not at
+>   its reservation; only a call whose tokens are not reported is counted at the reservation's estimate, marked
+>   estimated. *(Corrects "Settling" above in effect: each job's guard is built without `prices`, so until this date
+>   such a call was charged its reservation, with headroom and the full `maxOutputTokens`.)*
 
 > **`ChatRequest.effort` and the shared `Effort` type. Decided 2026-10-21 (owner; `plan/00` §6 item 262(a)).**
 > Until this date `ChatRequest` had no effort member, so no adapter ever sent OpenAI's `reasoning` or Gemini's
@@ -1579,6 +1631,47 @@ export interface TTSProvider {
 > loosen anything by leaving the route out. The callers (`P3-T16`, `P3-T29`) pass the route of the
 > provider the router resolved. The disclosure's side is 09 §3.6 item 3.
 
+> **`PipelineContext.config`. Decided 2026-10-23 (owner, plan/00 §6 item 272(a)).** The member's
+> type is `ConfigReader`, declared in `src/pipeline/types.ts`: a **read-only view of
+> `src/prefs/index.ts`'s `getPref`**, so a pipeline reads a preference through its context
+> (`ctx.config.get("summaryFullTextMode")`) instead of importing `src/prefs/`. It reads on demand
+> and caches nothing, so a preference changed mid-job applies at the next read; it falls back to
+> §8.5's default exactly as `getPref` does and never throws; it has no write. One reader is built
+> per plugin lifetime, by `installServices`, and every job's context carries it.
+>
+> ```ts
+> // src/pipeline/types.ts
+> export interface ConfigReader {
+>   /** §8.5's value of `name`, coerced; its default when absent or malformed. Never throws. */
+>   get<K extends PrefName>(name: K): PrefValue<K>;   // PrefName, PrefValue: §8.5.1
+> }
+> ```
+>
+> *Added 2026-10-23 (`P3-T35`; how `installServices` fills each job's context, for the owner to
+> confirm):*
+> - `cache` and `llm` are one instance each, shared by every job. The router is `registerProviders`'
+>   router wrapped **once** by `withBudget` (`src/pipeline/shared/budget.ts`): a call whose
+>   `LLMCallContext` carries `budget: ctx.budget` reserves before it is sent and settles when its
+>   answer arrives, and a call without one goes straight through, so a caller must pass it. A
+>   reservation is priced from the documented price table (`03-llm-provider-integration.md` §12.1) for the
+>   active provider; a model the table does not list is unpriced. *(Corrected 2026-10-23 (owner, `plan/00` §6
+>   item 278): a call without `budget` is now refused with `ConfigurationError` and sends nothing, and a
+>   reservation is priced from the graph's `modelPrices` — the live catalogue with the user price table, the
+>   documented table only until a catalogue snapshot has loaded. See §4.3's note of that date.)*
+> - `budget` is a fresh guard per job (`createBudgetGuard`) over the **one** session counter
+>   (`docs/06` §11.4), so two jobs never share a run counter; a job with a `JobRecord` starts its
+>   run counter from the record's `usage`.
+> - `privacy` is `loadPrivacyPolicy`: the global `privacy.mode` and the collection's override from
+>   `collection_settings` (§8.3). A job over no collection runs under the global mode; a store that
+>   cannot answer gives strict.
+> - `checkpoint`: a job with a `JobRecord` writes to that record through `createCheckpointWriter`
+>   (§7.6's 2-second throttle) and reads `resumeState` from it; a job with no record (Phase 1's
+>   directly run `searchImport`) keeps the no-op.
+> - `tts` and `zotero` stay `undefined`.
+> - Of §7.6's resume guards the root installs `skipCached` and `egress`; `confirm` and `ceilings` need
+>   the summarize pipeline's remaining-work estimate and the notifier is `P3-T29`'s, so
+>   `recover()` still resumes nothing (item 250).
+
 ```ts
 // src/pipeline/types.ts
 
@@ -1600,6 +1693,7 @@ export interface PipelineContext {
   readonly llm: LLMRouter;
   readonly tts: TTSProvider | undefined;
   readonly zotero: ZoteroFacade;
+  /** §8.5's preferences, read-only (Decided 2026-10-23, owner; `plan/00` §6 item 272(a)). */
   readonly config: ConfigReader;
   /** Privacy posture in force for this job (see doc 09). */
   readonly privacy: PrivacyPolicy;
@@ -2923,6 +3017,22 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 >   three retry cells.
 > - **Checked against this table.** `test/unit/core/hostLimiter.test.ts` reads the LLM/TTS row's Rate, Burst and Max
 >   concurrent cells and compares every LLM row with them.
+
+> **A key Test makes one attempt of 15 seconds. Decided 2026-10-23 (owner; `plan/00` §6 item 279(b)).** Until this
+> date the pane's LLM Test went through the same path as a summary call: a 3-minute attempt and the LLM row's retry
+> budget, so a Test against a rate-limited or failing host could take about 90 s before it reported.
+> - **One per-request option on the one client.** `HttpOptions.singleAttempt` (`src/core/http/client.ts`): `true`
+>   makes the request one attempt, never retried, whatever the host's retry policy; the host's bucket still paces it
+>   (§4.1's `run`), the hook (`mapErrorResponse`) still reads its error answer, and a `Retry-After` still `penalize`s
+>   the host. With one attempt the 90-second request budget has nothing to decide. Absent or `false`, nothing
+>   changes. There is no second HTTP stack.
+> - **The Test's limits are one constant.** `LLM_KEY_TEST_ATTEMPT` in `src/core/rateLimit/hostLimiter.ts`, beside
+>   `LLM_ATTEMPT_TIMEOUT_MS`: `{ timeoutMs: LLM_KEY_TEST_TIMEOUT_MS (15 000), singleAttempt: true }`. Each adapter's
+>   `validateCredentials` sends every request of the Test with it: the list call, each further page of Anthropic's
+>   list, and OpenRouter's public catalogue after its `GET /api/v1/key`. Its other calls, `chat` and `chatStream`
+>   and a `listModels` made for the catalogue, keep `llmAttemptTimeouts` and `LLM_RETRY_BUDGET`.
+> - **What it bounds.** A Test request ends after one answer or 15 s, plus any wait for the host's bucket; a 429 or
+>   5xx is reported at once (a 429 still means the key was accepted, `09-security-privacy-and-api-keys.md` §2.3).
 
 ### 7.4 Cancellation
 

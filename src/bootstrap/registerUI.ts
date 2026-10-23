@@ -121,12 +121,22 @@ import {
   type SessionSpendCounter,
 } from "../pipeline/shared/budget";
 import {
+  LLM_CREDENTIALS,
   PREFERENCES_API_PROPERTY,
   PREFERENCES_PANE_DESCRIPTION,
   createPreferencesHost,
   preferencePaneOptions,
+  type LlmKeyCheck,
+  type ModelSuggestions,
   type PreferencesHostApi,
 } from "../ui/prefs/preferencesPane";
+import { createCancellationTokenSource } from "../core/jobQueue/cancellation";
+import {
+  modelsFor,
+  reloadingUserPriceStore,
+} from "../llm/shared/modelCatalogue";
+import type { ProviderId } from "../model/ids";
+import { readValidation, recordValidation } from "../zotero/keychain";
 import {
   createSearchImportViewModel,
   type SearchImportViewModelDeps,
@@ -838,6 +848,10 @@ declare module "../addon" {
  * | `getBackendPref` | `src/prefs`' typed `getPref("secretBackend")`, the non-secret row `probeAndRecordBackend` wrote (or `adoptSessionSecretStore`, on a tier-2 choice) |
  * | `providerPrefs` | `getPref("llmProvider")`, and `getPref` / `setPref` over each provider's `<provider>.baseUrl` row, named by `PROVIDER_PREF_NAMES` (`P3-T04`); the host validates before it writes |
  * | `hasPluginData` | {@link pluginDatabaseHasData} over the graph's plugin database, for `docs/09` §1.9 item 8's restore notice (`P3-T04`) |
+ * | `validateLlm` | {@link validateWithAdapter}: the provider's own registered adapter's `validateCredentials()` (`P3-T14`) |
+ * | `validation` | `readValidation` / `recordValidation` in `src/zotero/keychain.ts`: the §8.5 status rows, gated by `redactRecord` (`P3-T14`) |
+ * | `modelSuggestions` | {@link preferencesModelSuggestions}: `P3-T13`'s catalogue over the registry, the cache and the price table (`P3-T14`), through the graph's `modelPrices` (item 278(b)) |
+ * | `prices` | the graph's `database.prices`, the `user_price` store (`P3-T14` step 5), through `reloadingUserPriceStore` so a change reaches `modelPrices` at once (item 278(b)) |
  * | `clock` | the graph's clock, for the Semantic Scholar retry delay and the `checkedAt` stamp |
  * | `logger` | a child of the graph's redacting logger |
  *
@@ -861,6 +875,11 @@ async function publishPreferencesHost(
       },
     },
     hasPluginData: () => pluginDatabaseHasData(graph.database),
+    // P3-T14: each LLM key is tested by its own adapter, over its own host.
+    validateLlm: (provider) => validateWithAdapter(graph, provider),
+    validation: { read: readValidation, record: recordValidation },
+    modelSuggestions: preferencesModelSuggestions(graph),
+    prices: reloadingUserPriceStore(graph.database.prices, graph.modelPrices),
     clock: graph.clock,
     logger: graph.logger.child({ surface: "preferences" }),
   });
@@ -876,6 +895,57 @@ async function publishPreferencesHost(
       delete api[PREFERENCES_API_PROPERTY];
     },
   });
+}
+
+/**
+ * `P3-T14`: the pane's LLM Test — `provider`'s own registered adapter's
+ * `validateCredentials()` (`docs/07` §4.3), so the key goes only to that
+ * provider's host, through the shared `HttpClient` the adapter was built
+ * with. The adapter reads the key itself; nothing here sees it. The token
+ * is never cancelled: a Test is one bounded request.
+ */
+function validateWithAdapter(
+  graph: ServiceGraph,
+  provider: ProviderId,
+): Promise<LlmKeyCheck> {
+  const adapter = graph.llm.registry.get(provider);
+  if (adapter === undefined) {
+    return Promise.reject(
+      new Error(`[research-helper] no adapter registered for ${provider}`),
+    );
+  }
+  const source = createCancellationTokenSource();
+  return adapter.validateCredentials({ token: source.token });
+}
+
+/**
+ * `P3-T14` step 5: the model fields' suggestions, from `P3-T13`'s catalogue
+ * over the graph's registry, cache and price table. The catalogue caches each
+ * list for 24 hours, so a pane opened twice in a day sends nothing the second
+ * time. OpenRouter's public catalogue comes from its adapter's
+ * `listCatalogue`, which sends no key.
+ *
+ * *(Updated 2026-10-23, `plan/00` §6 item 278(b).)* The catalogue is the
+ * graph's one, inside {@link ServiceGraph.modelPrices}: fetching the
+ * suggestions also refreshes the prices the spend guard reserves with, so the
+ * pane builds no catalogue of its own.
+ */
+function preferencesModelSuggestions(
+  graph: ServiceGraph,
+): () => Promise<ModelSuggestions> {
+  return async () => {
+    const snapshot = await graph.modelPrices.refresh({
+      token: createCancellationTokenSource().token,
+    });
+    return {
+      providers: LLM_CREDENTIALS.map(({ provider }) => ({
+        provider,
+        models: modelsFor(snapshot, provider).map((model) => model.id),
+      })),
+      asOfEpochMs: snapshot.asOfEpochMs,
+      stale: snapshot.stale,
+    };
+  };
 }
 
 /**
@@ -1109,6 +1179,9 @@ export async function registerUI(scope: Scope): Promise<void> {
     // `docs/09` §1.7's degradation dialog (`P3-T03`), asked only when the
     // keystore probe fails. See {@link chooseSecretBackend}.
     chooseSecretBackend,
+    // The one session spend counter (`P3-T16`): every job's budget guard
+    // shares it (`P3-T35`), and the Usage readout below reads the same one.
+    sessionSpend,
   });
 
   await publishServiceGraph(scope, graph);

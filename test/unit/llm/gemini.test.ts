@@ -4,7 +4,6 @@ import { registerProviders } from "../../../src/bootstrap/registerProviders";
 import { type Clock, createManualClock } from "../../../src/core/clock";
 import {
   AuthenticationError,
-  ConfigurationError,
   ContentFilterError,
   LLMError,
   MissingCredentialError,
@@ -869,15 +868,17 @@ describe("the Gemini key: the keystore, Secret and the logs", () => {
     expect(secrets.gets).toBe(0);
   });
 
-  it("refuses validateCredentials until P3-T14 builds it, sending nothing", async () => {
+  it("validateCredentials sends the one model-list call (P3-T14; the outcome table is test/unit/llm/validateCredentials.test.ts)", async () => {
     const client = recordingClient([{ status: 200 }]);
     const provider = createGeminiProvider(
       deps(client, memorySecrets(syntheticKey())),
     );
-    await expect(provider.validateCredentials(ctx())).rejects.toBeInstanceOf(
-      ConfigurationError,
-    );
-    expect(client.requests).toHaveLength(0);
+    await expect(provider.validateCredentials(ctx())).resolves.toMatchObject({
+      ok: false,
+    });
+    expect(client.requests).toHaveLength(1);
+    expect(client.requests[0]?.method).toBe("GET");
+    expect(client.requests[0]?.url.endsWith("/v1beta/models")).toBe(true);
   });
 
   it("names its documented host as its rate-limit key", () => {

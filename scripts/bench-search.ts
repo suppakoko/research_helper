@@ -106,6 +106,7 @@ import type { SearchImportWriter } from "../src/pipeline/searchImport/types";
 import type { PipelineContext } from "../src/pipeline/types";
 import { UNWIRED_BUDGET_GUARD } from "../src/pipeline/shared/budget";
 import { createPrivacyPolicy } from "../src/pipeline/shared/privacyPolicy";
+import { getPref } from "../src/prefs";
 import { createArxivSource } from "../src/sources/arxiv/arxivSource";
 import { createArxivRecordMapper } from "../src/sources/arxiv/mapper";
 import { createCrossrefSource } from "../src/sources/crossref/crossrefSource";
@@ -594,7 +595,8 @@ async function main(): Promise<number> {
     llm: mockLLMRouter(),
     tts: undefined,
     zotero: undefined,
-    config: undefined,
+    // `docs/07` §4.5's `ConfigReader` (`P3-T35`): `getPref`, read-only.
+    config: { get: getPref },
     privacy: createPrivacyPolicy("strict"),
     checkpoint: () => Promise.resolve(),
     resumeState: undefined,

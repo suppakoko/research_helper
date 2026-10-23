@@ -449,3 +449,79 @@ research-helper-prefs-gemini-paid-tier-note = 사용자 본인의 확인입니�
 research-helper-prefs-risk-1-session = API 키는 이번 Zotero 세션 동안 메모리에만 보관됩니다. 운영체제의 자격 증명 저장소, Zotero의 로그인 관리자, 디스크 어디에도 쓰지 않으며, Zotero를 닫으면 사라지므로 다시 시작한 뒤에는 키를 다시 입력해야 합니다.
 # Korean drafted by the coordinator and reviewed by the owner on 2026-10-23 (G-41, plan/00 §6 item 275).
 research-helper-prefs-risk-4-session = 메모리에 있는 키도 같은 사용자 계정에서 실행되는 다른 프로그램(다른 Zotero 플러그인 포함)으로부터는 보호되지 않습니다. Zotero는 플러그인끼리 격리하지 않습니다.
+
+
+## The LLM Test, the model suggestions and the user price table (P3-T14;
+## docs/09 §2.3, docs/03 §9, plan/00 §6 item 265(b)). G-41 owns the
+## translation; every entry is a commented stub with its English source, and
+## nothing was machine-translated. `$provider` and `$model` are names, never
+## translated (docs/08 §10.3).
+
+# NEEDS REVIEW. en-US: "Key accepted. The provider is limiting requests right now (HTTP 429) · checked { $time }"
+# research-helper-prefs-test-ok-rate-limited =
+#
+# NEEDS REVIEW (owner, 2026-10-23, plan/00 §6 item 279(a)). en-US: "Key accepted, but the account has no credit left · checked { $time }"
+# research-helper-prefs-test-ok-no-credit =
+#
+# NEEDS REVIEW. en-US (.label): "Choose a suggested model…"
+# research-helper-prefs-model-suggestions =
+#     .label =
+#
+# NEEDS REVIEW. en-US: "Suggestions from the provider's model list as of { $date }. You can also type any model ID."
+# research-helper-prefs-models-as-of =
+#
+# NEEDS REVIEW. en-US: "The live model list could not be fetched. These suggestions are the built-in list of { $date } and may be out of date. You can also type any model ID."
+# research-helper-prefs-models-stale =
+#
+# NEEDS REVIEW. en-US: "Your model prices"
+# research-helper-prefs-prices =
+#
+# NEEDS REVIEW. en-US: "A price you enter here replaces the catalogue's price for that model when Research Helper estimates a cost. Enter US dollars per million tokens and the date you read the price. A new row is saved for the provider chosen above."
+# research-helper-prefs-prices-note =
+#
+# NEEDS REVIEW. en-US: "{ $provider } · { $model }: input { $input }, output { $output }, cached input { $cached } US dollars per million tokens · as of { $date }"
+# research-helper-prefs-price-row =
+#
+# NEEDS REVIEW. en-US: "{ $provider } · { $model }: input { $input }, output { $output } US dollars per million tokens · as of { $date }"
+# research-helper-prefs-price-row-no-cached =
+#
+# NEEDS REVIEW. en-US (.placeholder): "Model ID"
+# research-helper-prefs-price-model =
+#     .placeholder =
+#
+# NEEDS REVIEW. en-US (.placeholder): "Input price"
+# research-helper-prefs-price-input =
+#     .placeholder =
+#
+# NEEDS REVIEW. en-US (.placeholder): "Output price"
+# research-helper-prefs-price-output =
+#     .placeholder =
+#
+# NEEDS REVIEW. en-US (.placeholder): "Cached input price (optional)"
+# research-helper-prefs-price-cached =
+#     .placeholder =
+#
+# NEEDS REVIEW. en-US (.placeholder): "As of (YYYY-MM-DD)"
+# research-helper-prefs-price-as-of =
+#     .placeholder =
+#
+# NEEDS REVIEW. en-US: "Save price"
+# research-helper-prefs-price-save =
+#
+# NEEDS REVIEW. en-US: "Remove"
+# research-helper-prefs-price-remove =
+#
+# NEEDS REVIEW. en-US: "Price saved."
+# research-helper-prefs-price-saved =
+#
+# NEEDS REVIEW. en-US: "Price removed."
+# research-helper-prefs-price-removed =
+#
+# NEEDS REVIEW. en-US: "Not saved: enter a model ID, input and output prices of zero or more (such as 0.25), and a date such as 2026-10-23."
+# research-helper-prefs-price-invalid =
+#
+# NEEDS REVIEW. en-US: "Not saved: this row cannot be stored. Check that the model field holds a model name, not an API key."
+# research-helper-prefs-price-refused =
+#
+# NEEDS REVIEW. en-US: "The plugin database is not available, so prices cannot be saved."
+# research-helper-prefs-price-unavailable =

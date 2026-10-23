@@ -286,6 +286,19 @@ export interface HttpOptions {
    * never a way to turn a limit off.
    */
   readonly idleTimeoutMs?: number;
+  /**
+   * `true`: **one attempt, never retried**, whatever the host's retry policy
+   * (owner, 2026-10-23, `plan/00` §6 item 279(b); `docs/07` §7.3's note "A key
+   * Test makes one attempt of 15 seconds"). Everything else is a plain
+   * request's: the host's bucket paces it, {@link mapErrorResponse} reads its
+   * error answer, a `Retry-After` still `penalize`s the host, and
+   * {@link timeoutMs} bounds it. With one attempt the 90-second request
+   * budget has nothing to decide. Absent or `false`, nothing changes.
+   *
+   * For the pane's key Test (`LLM_KEY_TEST_ATTEMPT` in
+   * `src/core/rateLimit/hostLimiter.ts`), so a Test reports after one answer.
+   */
+  readonly singleAttempt?: boolean;
 }
 
 /**
@@ -790,7 +803,10 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
         return limiter.run(issueAndClassify, options.cost ?? 1, options.token);
       };
 
-      if (policy === undefined) return attemptOnce();
+      // Item 279(b): a request that asked for one attempt gets one.
+      if (policy === undefined || options.singleAttempt === true) {
+        return attemptOnce();
+      }
 
       // Streaming mode: an attempt that delivered text ends the loop with its
       // own error. `withRetry` decides on the thrown value, so the error is

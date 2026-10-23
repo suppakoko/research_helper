@@ -30,7 +30,9 @@
  * client's `withRetry`, under the host row's budget; this file has none. Each
  * request waits up to `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240; a
  * stream instead 3 minutes without new text and 15 in all,
- * `llmAttemptTimeouts`, item 268(c)). A 2xx is
+ * `llmAttemptTimeouts`, item 268(c); a key Test's request instead one
+ * attempt of at most 15 s, never retried, `LLM_KEY_TEST_ATTEMPT`, item
+ * 279(b)). A 2xx is
  * also handed to `mapProviderError`, outside any loop, for the refusal row.
  *
  * **Two Gemini shapes are not documented and are not guessed at**
@@ -43,7 +45,8 @@
  *
  * ## Not built here
  *
- * - `validateCredentials()` is `P3-T14`'s; here it refuses.
+ * - *(Corrected 2026-10-23, `P3-T14`: `validateCredentials()` was listed
+ *   here as that card's and refused; it now sends the model-list call.)*
  * - *(Corrected 2026-10-21: streaming was listed here as `P3-T11`'s; that
  *   card added `chatStream`, whose Interactions payload shapes are
  *   assumptions — see `createGeminiStreamDecoder` in `../shared/sse.ts`.)*
@@ -53,10 +56,12 @@
 
 import { createSystemClock, type Clock } from "../../core/clock";
 import {
-  ConfigurationError,
   LLMError,
   loggableHeaders,
   MissingCredentialError,
+  OperationCancelledError,
+  ResearchHelperError,
+  UpstreamError,
 } from "../../core/errors";
 import {
   httpRequest,
@@ -65,11 +70,15 @@ import {
   type HttpResponse,
 } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
-import { llmAttemptTimeouts } from "../../core/rateLimit/hostLimiter";
+import {
+  LLM_KEY_TEST_ATTEMPT,
+  llmAttemptTimeouts,
+  type LlmAttemptLimits,
+} from "../../core/rateLimit/hostLimiter";
 import type { SecretId, SecretStore } from "../../core/secretStore";
 import { Secret } from "../../prefs/secrets";
 import { DEFAULT_BASE_URLS, type BaseUrlResolver } from "../shared/baseUrl";
-import { mapProviderError } from "../shared/errorMap";
+import { isKeyAcceptedFailure, mapProviderError } from "../shared/errorMap";
 import { createGeminiStreamDecoder, streamChat } from "../shared/sse";
 import { estTokens } from "../shared/tokenEstimate";
 import type {
@@ -130,6 +139,14 @@ const INSTALLED_CLIENT: HttpClient = {
   request: (method, url, options) => httpRequest({ method, url, ...options }),
 };
 
+/**
+ * The preference pane's success id (`P1-T44`'s `testOk` in
+ * `src/ui/prefs/preferencesPane.ts`), spelled out because `llm/` may not
+ * import `ui/`. `test/unit/llm/validateCredentials.test.ts` asserts all four
+ * adapters return the pane's value (`P3-T14`).
+ */
+const TEST_OK_MESSAGE_KEY = "research-helper-prefs-test-ok";
+
 /** The model id a model-list error is reported against. */
 const MODEL_LIST_ID = "(model list)";
 
@@ -187,6 +204,8 @@ interface GeminiTransport {
     body: Record<string, unknown> | undefined,
     ctx: LLMCallContext,
     onBodyText?: (text: string) => void,
+    /** A key Test's `LLM_KEY_TEST_ATTEMPT` (item 279(b)); else `llmAttemptTimeouts`. */
+    limits?: LlmAttemptLimits,
   ): Promise<HttpResponse>;
 }
 
@@ -218,6 +237,7 @@ function createTransport(
       body,
       ctx,
       onBodyText,
+      limits = llmAttemptTimeouts(onBodyText !== undefined),
     ): Promise<HttpResponse> {
       ctx.token.throwIfCancelled();
       const headers = geminiHeaders(await readKey());
@@ -228,7 +248,7 @@ function createTransport(
       return (deps.http ?? INSTALLED_CLIENT).request(method, url, {
         headers,
         ...(body !== undefined && { body: JSON.stringify(body) }),
-        ...llmAttemptTimeouts(onBodyText !== undefined),
+        ...limits,
         token: ctx.token,
         mapErrorResponse: (response, nowEpochMs) =>
           mapProviderError(
@@ -333,6 +353,34 @@ export function createGeminiProvider(deps: GeminiProviderDeps): GeminiProvider {
   }
   probeKey();
 
+  /** `GET /v1beta/models`; a key Test passes `LLM_KEY_TEST_ATTEMPT` (item 279(b)). */
+  async function listModels(
+    ctx: LLMCallContext,
+    limits?: LlmAttemptLimits,
+  ): Promise<readonly ModelInfo[]> {
+    const response = await transport.send(
+      "GET",
+      transport.url(MODELS_PATH),
+      MODEL_LIST_ID,
+      undefined,
+      ctx,
+      undefined,
+      limits,
+    );
+    const raw = parseJsonObject(response.body);
+    if (raw === undefined) {
+      throw new LLMError(
+        "gemini",
+        MODEL_LIST_ID,
+        "Gemini's model list is not a JSON object",
+        { httpStatus: response.status },
+      );
+    }
+    const models = readModelList(raw, await tier.detectTier());
+    lastModels = new Map(models.map((model) => [model.id, model]));
+    return models;
+  }
+
   return {
     id: "gemini",
     displayNameKey: GEMINI_DISPLAY_NAME_KEY,
@@ -342,35 +390,35 @@ export function createGeminiProvider(deps: GeminiProviderDeps): GeminiProvider {
       return deps.secrets !== undefined && keyKnownPresent !== false;
     },
 
-    validateCredentials(): Promise<CredentialCheckResult> {
-      return Promise.reject(
-        new ConfigurationError(
-          "Gemini's key check is not built yet (P3-T14 adds validateCredentials)",
-        ),
-      );
+    async validateCredentials(
+      ctx: LLMCallContext,
+    ): Promise<CredentialCheckResult> {
+      // `P3-T14`: `docs/09` §2.3's call, `GET /v1beta/models` with the key in
+      // `x-goog-api-key` — the model list, never a completion and never the
+      // `?key=` query — through the same transport as every request. A failure
+      // answers with the error's own message key (`docs/07` §4.3's note "as
+      // built"); a bad key is HTTP 400 `API_KEY_INVALID`, which
+      // `mapProviderError` already reads as `AuthenticationError`.
+      // One attempt of at most 15 s, never retried (item 279(b)).
+      try {
+        const models = await listModels(ctx, LLM_KEY_TEST_ATTEMPT);
+        return { ok: true, messageKey: TEST_OK_MESSAGE_KEY, models };
+      } catch (error) {
+        if (error instanceof OperationCancelledError) throw error;
+        if (!(error instanceof ResearchHelperError)) throw error;
+        const httpStatus =
+          error instanceof UpstreamError ? error.httpStatus : undefined;
+        return {
+          // `docs/09` §2.3: a 429 means the key was accepted (Gemini has
+          // no spend-cap shape of its own; `isKeyAcceptedFailure`, item 279(a)).
+          ok: isKeyAcceptedFailure(error),
+          messageKey: error.messageKey,
+          ...(httpStatus !== undefined && { httpStatus }),
+        };
+      }
     },
 
-    async listModels(ctx: LLMCallContext): Promise<readonly ModelInfo[]> {
-      const response = await transport.send(
-        "GET",
-        transport.url(MODELS_PATH),
-        MODEL_LIST_ID,
-        undefined,
-        ctx,
-      );
-      const raw = parseJsonObject(response.body);
-      if (raw === undefined) {
-        throw new LLMError(
-          "gemini",
-          MODEL_LIST_ID,
-          "Gemini's model list is not a JSON object",
-          { httpStatus: response.status },
-        );
-      }
-      const models = readModelList(raw, await tier.detectTier());
-      lastModels = new Map(models.map((model) => [model.id, model]));
-      return models;
-    },
+    listModels: (ctx) => listModels(ctx),
 
     getModel(modelId: string): ModelInfo | undefined {
       return lastModels.get(modelId);

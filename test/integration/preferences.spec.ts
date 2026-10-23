@@ -244,12 +244,34 @@ const INERT_PROVIDER_PREFS: ProviderPrefsPort = {
   },
 };
 
-/** The profile's `prefs.js` after a forced flush (`zotero/secrets.spec.ts`'s method). */
+/**
+ * The profile's `prefs.js` after a forced flush (`zotero/secrets.spec.ts`'s method).
+ *
+ * *Added 2026-10-23 (wave 7's combined run):* the read is retried, up to five
+ * times 200 ms apart, while Windows reports the file locked. Run 1 of three
+ * failed the P3-T04 test with `NS_ERROR_FILE_IS_LOCKED` from `readUTF8`, and
+ * runs 2 and 3 passed. The likely cause, not measured: the pref service's own
+ * background save of `prefs.js` still holding the file just after this forced
+ * one — and since `P3-T14` every key stored or cleared also writes the two
+ * validation rows, so it saves more often. A lock is not a verdict on the
+ * file's content; any other error, or a lock that outlasts the retries,
+ * still fails the test.
+ */
 async function flushedPrefsFile(): Promise<string> {
   // `null` means "the profile's prefs.js" (nsIPrefService); the binding omits it.
   Services.prefs.savePrefFile(null as unknown as nsIFile);
   const path = PathUtils.join(PathUtils.profileDir, "prefs.js");
-  return (await IOUtils.exists(path)) ? IOUtils.readUTF8(path) : "";
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return (await IOUtils.exists(path)) ? await IOUtils.readUTF8(path) : "";
+    } catch (error) {
+      if (attempt >= 5 || !String(error).includes("NS_ERROR_FILE_IS_LOCKED")) {
+        throw error;
+      }
+      log(`prefs.js was locked on read ${attempt}; reading again`);
+      await delay(200);
+    }
+  }
 }
 
 /* -------------------------------------------------------- the sweep tools */

@@ -790,3 +790,62 @@ describe("src/i18n/keys.ts — docs/09 §1.8's tier-2 replacements (owner, 2026-
     expect(sharedBy(ids, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 });
+
+describe("src/i18n/keys.ts — P3-T14's LLM Test, model suggestions and price table", () => {
+  // `PREFERENCES_L10N` in src/ui/prefs/preferencesPane.ts is typed against
+  // these; test/unit/ui/preferencesPane.test.ts ties the pane to them.
+  const withArguments = [
+    "research-helper-prefs-test-ok-rate-limited",
+    "research-helper-prefs-models-as-of",
+    "research-helper-prefs-models-stale",
+    "research-helper-prefs-price-row",
+    "research-helper-prefs-price-row-no-cached",
+  ];
+  const plain = [
+    "research-helper-prefs-model-suggestions",
+    "research-helper-prefs-prices",
+    "research-helper-prefs-prices-note",
+    "research-helper-prefs-price-model",
+    "research-helper-prefs-price-input",
+    "research-helper-prefs-price-output",
+    "research-helper-prefs-price-cached",
+    "research-helper-prefs-price-as-of",
+    "research-helper-prefs-price-save",
+    "research-helper-prefs-price-remove",
+    "research-helper-prefs-price-saved",
+    "research-helper-prefs-price-removed",
+    "research-helper-prefs-price-invalid",
+    "research-helper-prefs-price-refused",
+    "research-helper-prefs-price-unavailable",
+  ];
+  const all = [...withArguments, ...plain];
+
+  it("declares all twenty on the main-window surface, outside the error ids; five take arguments", () => {
+    expect(all).toHaveLength(20);
+    expect(notIn(all, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(withArguments, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(plain, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(all, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("puts all twenty on KO_PENDING_REVIEW until the owner reviews the Korean (G-41), never on KO_PRESENT", () => {
+    expect(notIn(all, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(all, read("KO_PRESENT"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — the out-of-credit Test line (owner, 2026-10-23, plan/00 §6 item 279(a))", () => {
+  const id = "research-helper-prefs-test-ok-no-credit";
+
+  it("declares it on the main-window surface with one argument, outside the error ids", () => {
+    expect(notIn([id], read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn([id], read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy([id], read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("puts it, and the reworded key-present line (item 279(d)), on KO_PENDING_REVIEW, never on KO_PRESENT (G-41)", () => {
+    const pending = [id, "research-helper-prefs-key-present"];
+    expect(notIn(pending, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(pending, read("KO_PRESENT"))).toEqual([]);
+  });
+});

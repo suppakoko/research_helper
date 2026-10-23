@@ -81,6 +81,7 @@ import {
   RateLimitError,
   redact,
   type ResearchHelperError,
+  UpstreamError,
   UpstreamServerError,
 } from "../../core/errors";
 import { parseRetryAfter } from "../../core/rateLimit/backoff";
@@ -100,6 +101,22 @@ export const OPENROUTER_SPEND_CAP_STATUS = 402;
 
 /** OpenAI's spend cap: a 429 whose `error.code` or `error.type` is this. */
 export const OPENAI_SPEND_CAP_CODE = "insufficient_quota";
+
+/**
+ * Whether a key Test's failure still means **the key was accepted**
+ * (`docs/09` §2.3; owner, 2026-10-23, `plan/00` §6 item 279(a)): any HTTP 429
+ * — a rate limit or a spend cap — and any `QuotaExceededError`, whatever its
+ * status, so OpenRouter's 402 too. The four adapters' `validateCredentials`
+ * share it; the pane tells the out-of-credit case apart by its `messageKey`
+ * (`rh-error-quota`).
+ *
+ * @param error - what the Test's request threw
+ * @returns `true` when the answer says the key itself is good
+ */
+export function isKeyAcceptedFailure(error: ResearchHelperError): boolean {
+  if (error instanceof QuotaExceededError) return true;
+  return error instanceof UpstreamError && error.httpStatus === 429;
+}
 
 /**
  * Gemini's legacy `finishReason` values that mean the provider's safety system

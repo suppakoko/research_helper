@@ -23,7 +23,9 @@
  * handed to `mapProviderError` here, outside the loop, for the refusal row.
  * Every request waits up to `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240);
  * a streamed one has 3 minutes without new text and 15 in all instead
- * (`llmAttemptTimeouts`, item 268(c)).
+ * (`llmAttemptTimeouts`, item 268(c)). A key Test's request instead makes one
+ * attempt of at most 15 s, never retried (`LLM_KEY_TEST_ATTEMPT`; owner,
+ * 2026-10-23, `plan/00` §6 item 279(b)).
  *
  * **Streaming (`P3-T11`).** `chatStream` sends `chat`'s body with
  * `stream: true` through the same `send`, in the client's streaming mode, and
@@ -49,10 +51,12 @@
 import type { Clock } from "../../core/clock";
 import { createSystemClock } from "../../core/clock";
 import {
-  ConfigurationError,
   LLMError,
   loggableHeaders,
   MissingCredentialError,
+  OperationCancelledError,
+  ResearchHelperError,
+  UpstreamError,
 } from "../../core/errors";
 import {
   type ErrorResponseMapper,
@@ -61,11 +65,15 @@ import {
   type HttpResponse,
 } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
-import { llmAttemptTimeouts } from "../../core/rateLimit/hostLimiter";
+import {
+  LLM_KEY_TEST_ATTEMPT,
+  llmAttemptTimeouts,
+  type LlmAttemptLimits,
+} from "../../core/rateLimit/hostLimiter";
 import type { SecretId, SecretStore } from "../../core/secretStore";
 import { Secret } from "../../prefs/secrets";
 import { type BaseUrlResolver, DEFAULT_BASE_URLS } from "../shared/baseUrl";
-import { mapProviderError } from "../shared/errorMap";
+import { isKeyAcceptedFailure, mapProviderError } from "../shared/errorMap";
 import { createOpenAiStreamDecoder, streamChat } from "../shared/sse";
 import { estTokens } from "../shared/tokenEstimate";
 import type {
@@ -112,6 +120,14 @@ export const MODELS_PATH = "/models";
  * with that list.
  */
 export const OPENAI_DISPLAY_NAME_KEY = "research-helper-provider-openai";
+
+/**
+ * The preference pane's success id (`P1-T44`'s `testOk` in
+ * `src/ui/prefs/preferencesPane.ts`), spelled out because `llm/` may not
+ * import `ui/`. `test/unit/llm/validateCredentials.test.ts` asserts all four
+ * adapters return the pane's value (`P3-T14`).
+ */
+const TEST_OK_MESSAGE_KEY = "research-helper-prefs-test-ok";
 
 /** The documented host, the `rateLimitKey` (`docs/03` §2.1). */
 export const OPENAI_RATE_LIMIT_KEY = new URL(DEFAULT_BASE_URLS.openai).host;
@@ -237,6 +253,7 @@ export function createOpenAiProvider(deps: OpenAiProviderDeps): LLMProvider {
     ctx: LLMCallContext,
     body?: string,
     onBodyText?: (text: string) => void,
+    limits: LlmAttemptLimits = llmAttemptTimeouts(onBodyText !== undefined),
   ): Promise<HttpResponse> {
     ctx.token.throwIfCancelled();
     const key = await readKey();
@@ -251,7 +268,7 @@ export function createOpenAiProvider(deps: OpenAiProviderDeps): LLMProvider {
     return http.request(method, url, {
       headers,
       ...(body !== undefined && { body }),
-      ...llmAttemptTimeouts(onBodyText !== undefined),
+      ...limits,
       token: ctx.token,
       mapErrorResponse: errorHook(modelId),
       ...(onBodyText !== undefined && { onBodyText }),
@@ -265,6 +282,25 @@ export function createOpenAiProvider(deps: OpenAiProviderDeps): LLMProvider {
     });
   }
 
+  /** `GET /v1/models`; a key Test passes `LLM_KEY_TEST_ATTEMPT` (item 279(b)). */
+  async function listModels(
+    ctx: LLMCallContext,
+    limits?: LlmAttemptLimits,
+  ): Promise<readonly ModelInfo[]> {
+    const response = await send(
+      "GET",
+      MODELS_PATH,
+      "",
+      ctx,
+      undefined,
+      undefined,
+      limits,
+    );
+    const models = toModelInfos(checkedBody(response, ""));
+    known = new Map(models.map((model) => [model.id, model]));
+    return models;
+  }
+
   return {
     id: OPENAI_PROVIDER_ID,
     displayNameKey: OPENAI_DISPLAY_NAME_KEY,
@@ -274,23 +310,33 @@ export function createOpenAiProvider(deps: OpenAiProviderDeps): LLMProvider {
       return deps.secrets !== undefined;
     },
 
-    validateCredentials(): Promise<CredentialCheckResult> {
-      // `P3-T14` builds the Test-key path for all four adapters (its Files
-      // list this one). Until then nothing calls this, and it sends nothing.
-      return Promise.reject(
-        new ConfigurationError(
-          "validateCredentials() for openai is P3-T14's and not built yet",
-          { providerId: OPENAI_PROVIDER_ID },
-        ),
-      );
+    async validateCredentials(
+      ctx: LLMCallContext,
+    ): Promise<CredentialCheckResult> {
+      // `P3-T14`: `docs/09` §2.3's cheapest authenticated call, `GET
+      // /v1/models` — the model list, never a completion, no user content —
+      // through the same `send` as every other request. A failure answers
+      // with the error's own message key (`docs/07` §4.3's note "as built").
+      // One attempt of at most 15 s, never retried (item 279(b)).
+      try {
+        const models = await listModels(ctx, LLM_KEY_TEST_ATTEMPT);
+        return { ok: true, messageKey: TEST_OK_MESSAGE_KEY, models };
+      } catch (error) {
+        if (error instanceof OperationCancelledError) throw error;
+        if (!(error instanceof ResearchHelperError)) throw error;
+        const httpStatus =
+          error instanceof UpstreamError ? error.httpStatus : undefined;
+        return {
+          // A 429, or `insufficient_quota` as `QuotaExceededError`, means the
+          // key was accepted (`docs/09` §2.3; item 279(a)).
+          ok: isKeyAcceptedFailure(error),
+          messageKey: error.messageKey,
+          ...(httpStatus !== undefined && { httpStatus }),
+        };
+      }
     },
 
-    async listModels(ctx: LLMCallContext): Promise<readonly ModelInfo[]> {
-      const response = await send("GET", MODELS_PATH, "", ctx);
-      const models = toModelInfos(checkedBody(response, ""));
-      known = new Map(models.map((model) => [model.id, model]));
-      return models;
-    },
+    listModels: (ctx) => listModels(ctx),
 
     getModel(modelId: string): ModelInfo | undefined {
       return known.get(modelId);

@@ -78,6 +78,7 @@ import {
 } from "../../../src/pipeline/types";
 import { UNWIRED_BUDGET_GUARD } from "../../../src/pipeline/shared/budget";
 import { createPrivacyPolicy } from "../../../src/pipeline/shared/privacyPolicy";
+import { getPref } from "../../../src/prefs";
 import { createPubmedRecordMapper } from "../../../src/sources/pubmed/mapper";
 import { createPubmedSource } from "../../../src/sources/pubmed/pubmedSource";
 import { createSourceRegistry } from "../../../src/sources/registry";
@@ -197,7 +198,8 @@ function createContext(options: {
     llm: mockLLMRouter(),
     tts: undefined,
     zotero: undefined,
-    config: undefined,
+    // `docs/07` §4.5's `ConfigReader` (`P3-T35`): `getPref`, read-only.
+    config: { get: getPref },
     privacy: createPrivacyPolicy("strict"),
     checkpoint: (state: unknown): Promise<void> => {
       options.checkpoints?.push(state);
