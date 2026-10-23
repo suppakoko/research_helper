@@ -1,0 +1,13 @@
+1 An invented preprint about counting widgets
+2 Widgets were counted at three simulated sites every week.
+3 Two observers took part, and their counts were compared.
+4 Agreement was high, and the counts rose slightly over the year.
+5 Nothing in this text describes a real study.
+6 Each line carries a manuscript line number, as accepted
+7 manuscripts and preprints often do.
+
+
+
+8 The second page continues the numbering from the first.
+9 Its lines are numbered in the same gutter.
+10 A table row such as 12 widgets keeps its inner number.

@@ -51,13 +51,34 @@
  *    card, because reading a response header needs a response and `P1-T04` could
  *    not touch this path.
  *
- * Streaming is still not here: `docs/01` §8.4.1 needs `requestObserver` plus a
- * `progress` listener over a *cumulative* `responseText`, which is a different
- * response contract from this facade's one-shot {@link HttpResponse}. Measured
- * 2026-09-30 (`P0-T16`): the sandbox-viable path is XHR with
- * `responseType: "text"` and a listener added with `addEventListener` inside
- * `requestObserver` — assigning `xhr.onprogress` loses the handler, because
- * `http.js` may assign to that slot afterwards. `docs/03` §6.5 owns the shape.
+ * 6. **A streaming mode** (`P3-T11`, `docs/07` §4.3's dated note "the
+ *    streaming contract", 2026-10-21). A request that carries
+ *    {@link HttpOptions.onBodyText} is the same request — same limiter slot,
+ *    retry, timeout, classification, logging and redaction — whose 2xx body
+ *    is also handed over **as it arrives**, through `docs/01` §8.4.1's XHR
+ *    path: `requestObserver` plus a `progress` listener over the *cumulative*
+ *    `responseText`, sliced from a cursor so each character is delivered once.
+ *    Measured 2026-09-30 (`P0-T16`, spike `V-8`): that is the sandbox-viable
+ *    path, with `responseType: "text"` and the listener added with
+ *    `addEventListener` — assigning `xhr.onprogress` loses the handler, because
+ *    `http.js` may assign to that slot afterwards. The one difference from a
+ *    plain request is that **an attempt that has delivered any text is never
+ *    retried**: a second attempt would hand the caller the text again.
+ *    *Corrected 2026-10-21: this paragraph said streaming was "still not here"
+ *    because the one-shot {@link HttpResponse} could not carry it; the callback
+ *    beside it can, so no second HTTP stack was needed.*
+ *
+ *    **A stream's two time limits** (`plan/00` §6 item 268(c), owner,
+ *    2026-10-22; `docs/07` §4.3's note "a stream's two time limits"). The
+ *    request's `timeoutMs` is the XHR `timeout` and bounds the whole exchange,
+ *    as for any request. A streamed request may add
+ *    {@link HttpOptions.idleTimeoutMs}: the client counts on its injected
+ *    clock from the moment the attempt is handed to the transport, restarts
+ *    the count whenever the body grows, and aborts the request through
+ *    `cancellerReceiver` when the count runs out. Either expiry is a
+ *    `TimeoutError` on the normal path. **No timeout is ever set to zero or
+ *    lifted from the progress handler** (`docs/01` §8.4.1 records that other
+ *    plugins do; the no-hang rule forbids it).
  *
  * ## Why the transport is injected
  *
@@ -135,7 +156,10 @@ import {
   TimeoutError,
   UpstreamServerError,
 } from "../errors";
-import type { CancellationToken } from "../jobQueue/cancellation";
+import {
+  type CancellationToken,
+  createCancellationTokenSource,
+} from "../jobQueue/cancellation";
 import type { Logger } from "../logger";
 import { redactText } from "../provenance";
 import { parseRetryAfter } from "../rateLimit/backoff";
@@ -229,6 +253,39 @@ export interface HttpOptions {
    * The hook never sees the raw body: see {@link ErrorResponseMapper}.
    */
   readonly mapErrorResponse?: ErrorResponseMapper;
+  /**
+   * Streaming mode (`P3-T11`): receives the response body **as it arrives**,
+   * in order, each character exactly once.
+   *
+   * Only a 2xx body is delivered — an error answer is still read whole and
+   * classified exactly as without this option — and the concatenation of
+   * every call equals the resolved {@link HttpResponse.body}. Requires
+   * `responseType` `"text"` (the default); any other value is refused with a
+   * `RangeError` before anything is sent, because XHR exposes no partial body
+   * for it (`docs/01` §8.4.1 mechanic 1).
+   *
+   * Everything else is a plain request's: the host's slot is held for the
+   * whole stream, the timeout bounds the whole stream, a cancel aborts it. An
+   * attempt that has delivered any text is **not retried**; its error is
+   * thrown unchanged. Called from the XHR's `progress` event, so it must not
+   * throw and should only queue the text.
+   */
+  readonly onBodyText?: (text: string) => void;
+  /**
+   * Streaming mode only: the longest the body may go **without growing**, in
+   * milliseconds (`plan/00` §6 item 268(c), owner, 2026-10-22).
+   *
+   * Counted on the client's clock from the moment the attempt is handed to
+   * the transport, and restarted each time the body grows, so a host that
+   * sends nothing at all is cut after this long too. When the count runs out
+   * the request is aborted through `cancellerReceiver` and the attempt fails
+   * with `TimeoutError`, whose `timeoutMs` is this value; a timeout is never
+   * retried. {@link HttpOptions.timeoutMs} still bounds the whole exchange.
+   * Refused with a `RangeError`, before anything is sent, without
+   * {@link HttpOptions.onBodyText} or when not a positive finite number: it is
+   * never a way to turn a limit off.
+   */
+  readonly idleTimeoutMs?: number;
 }
 
 /**
@@ -320,6 +377,12 @@ export interface HttpTransportOptions {
   logBodyLength?: number;
   /** `docs/01` §8.1; `docs/07` §7.4 makes it the cancellation mechanism. */
   cancellerReceiver?: (cancel: () => void) => void;
+  /**
+   * `docs/01` §8.1: called with the `XMLHttpRequest` after `open()` and before
+   * `send()`, the only moment a `progress` listener can be attached. Passed
+   * only in streaming mode ({@link HttpOptions.onBodyText}, `P3-T11`).
+   */
+  requestObserver?: (xhr: HttpTransportObservedXhr) => void;
 }
 
 /** The members of the resolved `XMLHttpRequest` this client reads. */
@@ -329,6 +392,23 @@ export interface HttpTransportXhr {
   readonly responseText: string | null;
   readonly responseURL: string;
   getAllResponseHeaders(): string;
+}
+
+/**
+ * The members of the in-flight `XMLHttpRequest` the streaming mode reads
+ * (`P3-T11`). A structural subset, so the real XHR is assignable without a
+ * cast and a test can hand in a four-member fake.
+ */
+export interface HttpTransportObservedXhr {
+  /** The HTTP status once headers have arrived; `0` before and on failure. */
+  readonly status: number;
+  /** The body so far — cumulative, not a delta (`docs/01` §8.4.1 mechanic 3). */
+  readonly responseText: string | null;
+  /**
+   * `addEventListener`, never the `onprogress` slot, which `http.js` may
+   * assign after `requestObserver` returns (`P0-T16`).
+   */
+  addEventListener(type: "progress", listener: () => void): void;
 }
 
 /**
@@ -445,7 +525,10 @@ export type HttpErrorSource =
   | "TimeoutException"
   | "CancelledException"
   | "SecurityException"
-  | "status-0";
+  | "status-0"
+  // A streamed request whose body stopped growing for `idleTimeoutMs`
+  // (`plan/00` §6 item 268(c)): the client aborted it itself.
+  | "idle-timeout";
 
 /**
  * A request that produced no HTTP response, as the *transport* saw it.
@@ -583,6 +666,39 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
         // Zotero reads 0 as "no timeout"; a hung LLM call must not be possible.
         throw new RangeError(`timeoutMs must be > 0, got ${timeoutMs}`);
       }
+      const sink = options.onBodyText;
+      if (sink !== undefined && (options.responseType ?? "text") !== "text") {
+        // XHR exposes no partial body for any other type (docs/01 §8.4.1).
+        throw new RangeError(
+          `onBodyText needs responseType "text", got "${options.responseType}"`,
+        );
+      }
+      const { idleTimeoutMs } = options;
+      if (idleTimeoutMs !== undefined) {
+        // Item 268(c): an idle limit belongs to a stream, and is never a way
+        // to switch a limit off.
+        if (sink === undefined) {
+          throw new RangeError("idleTimeoutMs needs onBodyText");
+        }
+        if (!Number.isFinite(idleTimeoutMs) || idleTimeoutMs <= 0) {
+          throw new RangeError(
+            `idleTimeoutMs must be > 0, got ${idleTimeoutMs}`,
+          );
+        }
+      }
+      // Set once any body text has been handed to the caller: from then on a
+      // failed attempt must not be retried, or the caller gets the text twice.
+      let streamed = false;
+      const attemptOptions: HttpOptions =
+        sink === undefined
+          ? options
+          : {
+              ...options,
+              onBodyText: (text) => {
+                streamed = true;
+                sink(text);
+              },
+            };
 
       // D10 before anything else: a request that must not be sent must not be
       // paced, logged or counted either.
@@ -616,8 +732,9 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
             userAgent,
             method,
             url,
-            options,
+            attemptOptions,
             timeoutMs,
+            clock,
           );
         } catch (e) {
           // A request that never got a status still gets a line: without one,
@@ -674,38 +791,71 @@ export function createHttpClient(deps: HttpClientDeps): HttpClient {
       };
 
       if (policy === undefined) return attemptOnce();
-      return withRetry(attemptOnce, {
-        policy,
-        clock,
-        ...(options.token !== undefined && { token: options.token }),
-        budget: {
-          totalMs: REQUEST_BUDGET_MS,
-          startedAtMs: () => firstSentMs,
-        },
-        onRetry: ({ attempt, delayMs }) => {
-          deps.logger?.warn("http retry", {
-            method,
-            host,
-            path: pathOf(url),
-            attempt,
-            delayMs,
-          });
-        },
-        // Without this line a request that stopped short of its attempt cap
-        // would look, in a debug bundle, like one the cap ended.
-        onBudgetSpent: ({ attempt, elapsedMs, delayMs }) => {
-          deps.logger?.warn("http retry budget spent", {
-            method,
-            host,
-            path: pathOf(url),
-            attempt,
-            elapsedMs,
-            delayMs,
-          });
-        },
-      });
+
+      // Streaming mode: an attempt that delivered text ends the loop with its
+      // own error. `withRetry` decides on the thrown value, so the error is
+      // parked and a non-retryable marker thrown in its place; the original is
+      // rethrown below, unchanged, with no retry logged or waited for.
+      let streamFailure: { readonly error: unknown } | undefined;
+      const runAttempt =
+        sink === undefined
+          ? attemptOnce
+          : async (): Promise<HttpResponse> => {
+              try {
+                return await attemptOnce();
+              } catch (error) {
+                if (!streamed) throw error;
+                streamFailure = { error };
+                throw new Error("stream started: not retried", {
+                  cause: error,
+                });
+              }
+            };
+      try {
+        return await withRetry(runAttempt, {
+          policy,
+          clock,
+          ...(options.token !== undefined && { token: options.token }),
+          budget: {
+            totalMs: REQUEST_BUDGET_MS,
+            startedAtMs: () => firstSentMs,
+          },
+          onRetry: ({ attempt, delayMs }) => {
+            deps.logger?.warn("http retry", {
+              method,
+              host,
+              path: pathOf(url),
+              attempt,
+              delayMs,
+            });
+          },
+          // Without this line a request that stopped short of its attempt cap
+          // would look, in a debug bundle, like one the cap ended.
+          onBudgetSpent: ({ attempt, elapsedMs, delayMs }) => {
+            deps.logger?.warn("http retry budget spent", {
+              method,
+              host,
+              path: pathOf(url),
+              attempt,
+              elapsedMs,
+              delayMs,
+            });
+          },
+        });
+      } catch (error) {
+        if (streamFailure !== undefined) throw streamFailure.error;
+        throw error;
+      }
     },
   };
+}
+
+/**
+ * What the idle watch rejects the race with (`plan/00` §6 item 268(c)). It
+ * never leaves {@link issue}: it is turned into a `TimeoutError` there.
+ */
+class IdleExpired extends Error {
+  override readonly name = "IdleExpired";
 }
 
 /**
@@ -721,6 +871,7 @@ async function issue(
   url: string,
   options: HttpOptions,
   timeoutMs: number,
+  clock: Clock,
 ): Promise<HttpResponse> {
   const headers: Record<string, string> = {};
   for (const [name, value] of Object.entries(options.headers ?? {})) {
@@ -742,9 +893,17 @@ async function issue(
   // long-lived token (`docs/01` §12 gotcha 10).
   const subscription: { off: (() => void) | undefined } = { off: undefined };
 
+  // Item 268(c): a streamed request's idle limit. The raw canceller is kept so
+  // an idle expiry can abort the request without it reading as a user cancel.
+  const { idleTimeoutMs } = options;
+  let transportCancel: (() => void) | undefined;
+
   const wireCanceller =
-    token !== undefined || onCanceller !== undefined
+    token !== undefined ||
+    onCanceller !== undefined ||
+    idleTimeoutMs !== undefined
       ? (cancel: () => void) => {
+          transportCancel = cancel;
           const abort = (): void => {
             cancelRequested = true;
             cancel();
@@ -758,6 +917,85 @@ async function issue(
         }
       : undefined;
 
+  // Streaming mode (`P3-T11`): the cursor into the cumulative `responseText`.
+  // `docs/01` §8.4.1 mechanic 3 — slicing from a saved offset keeps the cost
+  // linear in the stream, where re-reading the whole text per tick is O(n²).
+  const { onBodyText } = options;
+  let delivered = 0;
+  /** True once the request settled or was aborted: no text after that. */
+  let closed = false;
+  const deliver = (status: number, text: string | null): void => {
+    if (onBodyText === undefined || closed || cancelRequested) return;
+    // Only a 2xx streams; an error answer is classified whole, as always.
+    if (status < 200 || status >= 300 || text === null) return;
+    if (text.length <= delivered) return;
+    const slice = text.slice(delivered);
+    delivered = text.length;
+    onBodyText(slice);
+  };
+  // The idle count: when the body last grew, and how long it was then. Any
+  // growth counts, whatever the status, because "idle" is about the wire.
+  let lastGrowthMs = clock.now();
+  let seenLength = 0;
+  const observeProgress =
+    onBodyText === undefined
+      ? undefined
+      : (observed: HttpTransportObservedXhr): void => {
+          observed.addEventListener("progress", () => {
+            // No read at all once settled or aborted: a late event is ignored.
+            if (closed || cancelRequested) return;
+            let text: string | null;
+            try {
+              text = observed.responseText;
+            } catch {
+              return; // some states refuse the read; the next tick catches up
+            }
+            if (text !== null && text.length > seenLength) {
+              seenLength = text.length;
+              lastGrowthMs = clock.now();
+            }
+            deliver(observed.status, text);
+          });
+        };
+
+  // The idle watch. `expiry` rejects when the count runs out, and the request
+  // below races it, so the attempt ends on time even if the transport were to
+  // ignore the abort. `stop` ends the watch when the request settles.
+  const idleWatch =
+    idleTimeoutMs === undefined
+      ? undefined
+      : (() => {
+          const stop = createCancellationTokenSource();
+          let expire: (reason: unknown) => void = () => undefined;
+          const expiry = new Promise<never>((_resolve, reject) => {
+            expire = reject;
+          });
+          const watch = async (): Promise<void> => {
+            for (;;) {
+              const remaining = lastGrowthMs + idleTimeoutMs - clock.now();
+              if (remaining <= 0) break;
+              await clock.sleep(remaining, stop.token);
+            }
+            if (closed || cancelRequested) return;
+            // Reject first, then abort: a transport whose cancel rejects at
+            // once must not win the race with a cancellation.
+            expire(new IdleExpired());
+            transportCancel?.();
+          };
+          return { stop, expiry, watch };
+        })();
+  const idleTimeout = (): Error =>
+    toHierarchy(
+      new HttpError({
+        code: "TIMEOUT",
+        source: "idle-timeout",
+        method,
+        url,
+        timeoutMs: idleTimeoutMs ?? timeoutMs,
+      }),
+      token,
+    );
+
   const transportOptions: HttpTransportOptions = {
     headers,
     responseType: options.responseType ?? "text",
@@ -769,12 +1007,30 @@ async function issue(
     logBodyLength: 0,
     ...(options.body !== undefined && { body: options.body }),
     ...(wireCanceller !== undefined && { cancellerReceiver: wireCanceller }),
+    ...(observeProgress !== undefined && { requestObserver: observeProgress }),
   };
 
   let xhr: HttpTransportXhr;
   try {
-    xhr = await transport.request(method, url, transportOptions);
+    lastGrowthMs = clock.now();
+    const sent = transport.request(method, url, transportOptions);
+    if (idleWatch === undefined) {
+      xhr = await sent;
+    } else {
+      // A stopped watch rejects with OperationCancelledError: nothing to do.
+      idleWatch.watch().catch(() => undefined);
+      xhr = await Promise.race([sent, idleWatch.expiry]);
+    }
+    // The last bytes may arrive with no progress event after them (`P0-T16`).
+    // Guarded here: `responseText` throws for a non-text `responseType`.
+    if (onBodyText !== undefined) deliver(xhr.status, xhr.responseText);
+    closed = true;
   } catch (e) {
+    closed = true;
+    // The idle limit ran out. The race's rejection is queued before the abort
+    // is sent, so the transport's own answer to that abort (a
+    // `CancelledException`, or a status-0 resolve) always loses the race.
+    if (e instanceof IdleExpired) throw idleTimeout();
     const asHttp = (code: HttpErrorCode, source: HttpErrorSource): HttpError =>
       new HttpError({ code, source, method, url, timeoutMs, cause: e });
     if (e instanceof transport.UnexpectedStatusException) {
@@ -792,6 +1048,9 @@ async function issue(
     }
   } finally {
     subscription.off?.();
+    // The reason is never read: it only wakes the watch's sleep to end it.
+    idleWatch?.stop.cancel({ kind: "user" });
+    idleWatch?.stop.dispose();
   }
 
   if (xhr.status === 0) {

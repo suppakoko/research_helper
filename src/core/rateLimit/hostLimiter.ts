@@ -528,8 +528,56 @@ export const HOST_POLICIES: readonly HostRateLimitPolicy[] = [
  * - the worst case is a retry started just inside 90 s that then runs this
  *   full timeout: about 90 s + 180 s = 270 s after the first attempt reached
  *   the wire, plus that retry's wait for the host's bucket.
+ *
+ * **A plain request only** since 2026-10-22: a streamed one has the two limits
+ * below instead (`plan/00` §6 item 268(c); `docs/07` §4.3's note "a stream's
+ * two time limits"). {@link llmAttemptTimeouts} picks between them.
  */
 export const LLM_ATTEMPT_TIMEOUT_MS = 180_000;
+
+/**
+ * How long a **streamed** LLM attempt may go without new text: **3 minutes**
+ * (`plan/00` §6 item 268(c), owner, 2026-10-22).
+ *
+ * Passed as `HttpOptions.idleTimeoutMs` (`src/core/http/client.ts`). The
+ * client starts the count when the attempt is handed to the transport and
+ * restarts it each time the body grows, so a host that sends nothing at all is
+ * cut after the same 3 minutes as a plain request. Expiry is a `TimeoutError`
+ * and is not retried.
+ */
+export const LLM_STREAM_IDLE_TIMEOUT_MS = 180_000;
+
+/**
+ * How long a **streamed** LLM attempt may last in all: **15 minutes**
+ * (`plan/00` §6 item 268(c), owner, 2026-10-22).
+ *
+ * Passed as the request's `timeoutMs`, which reaches `Zotero.HTTP.request` as
+ * the XHR `timeout` and covers the whole exchange, body included. It replaces
+ * {@link LLM_ATTEMPT_TIMEOUT_MS} for a stream, which until this date covered
+ * the whole stream and so ended any answer longer than 3 minutes.
+ */
+export const LLM_STREAM_TOTAL_TIMEOUT_MS = 900_000;
+
+/**
+ * The time limits an LLM adapter passes with one attempt (`plan/00` §6 item
+ * 268(c)): {@link LLM_ATTEMPT_TIMEOUT_MS} for a plain request;
+ * {@link LLM_STREAM_TOTAL_TIMEOUT_MS} and {@link LLM_STREAM_IDLE_TIMEOUT_MS}
+ * for a streamed one. One function, so the four adapters cannot disagree.
+ *
+ * @param streamed - whether the request carries `HttpOptions.onBodyText`
+ * @returns the `timeoutMs` and, for a stream, the `idleTimeoutMs` to send
+ */
+export function llmAttemptTimeouts(streamed: boolean): {
+  readonly timeoutMs: number;
+  readonly idleTimeoutMs?: number;
+} {
+  return streamed
+    ? {
+        timeoutMs: LLM_STREAM_TOTAL_TIMEOUT_MS,
+        idleTimeoutMs: LLM_STREAM_IDLE_TIMEOUT_MS,
+      }
+    : { timeoutMs: LLM_ATTEMPT_TIMEOUT_MS };
+}
 
 // ---------------------------------------------------------------------------
 // 2. The registry

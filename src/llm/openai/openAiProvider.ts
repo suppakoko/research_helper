@@ -21,7 +21,14 @@
  * cap (`insufficient_quota`) ends after one attempt as `QuotaExceededError`
  * while an ordinary 429 is retried by the client's one `withRetry`. A 2xx is
  * handed to `mapProviderError` here, outside the loop, for the refusal row.
- * Every request waits up to `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240).
+ * Every request waits up to `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240);
+ * a streamed one has 3 minutes without new text and 15 in all instead
+ * (`llmAttemptTimeouts`, item 268(c)).
+ *
+ * **Streaming (`P3-T11`).** `chatStream` sends `chat`'s body with
+ * `stream: true` through the same `send`, in the client's streaming mode, and
+ * reads it with `createOpenAiStreamDecoder` (`../shared/sse.ts`): no `[DONE]`
+ * on this API, so `response.completed` / `response.incomplete` end the stream.
  *
  * **The key (D5, `docs/09` §2.1).** Read from the `SecretStore` on every call,
  * wrapped in `Secret` at once, and exposed exactly once, in
@@ -54,15 +61,17 @@ import {
   type HttpResponse,
 } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
-import { LLM_ATTEMPT_TIMEOUT_MS } from "../../core/rateLimit/hostLimiter";
+import { llmAttemptTimeouts } from "../../core/rateLimit/hostLimiter";
 import type { SecretId, SecretStore } from "../../core/secretStore";
 import { Secret } from "../../prefs/secrets";
 import { type BaseUrlResolver, DEFAULT_BASE_URLS } from "../shared/baseUrl";
 import { mapProviderError } from "../shared/errorMap";
+import { createOpenAiStreamDecoder, streamChat } from "../shared/sse";
 import { estTokens } from "../shared/tokenEstimate";
 import type {
   ChatRequest,
   ChatResponse,
+  ChatStreamChunk,
   CredentialCheckResult,
   LLMCallContext,
   LLMProvider,
@@ -72,6 +81,7 @@ import type {
 import {
   buildResponsesBody,
   parseResponsesJson,
+  type ResponsesRequestBody,
   toChatResponse,
   toModelInfos,
 } from "./mapper";
@@ -226,6 +236,7 @@ export function createOpenAiProvider(deps: OpenAiProviderDeps): LLMProvider {
     modelId: string,
     ctx: LLMCallContext,
     body?: string,
+    onBodyText?: (text: string) => void,
   ): Promise<HttpResponse> {
     ctx.token.throwIfCancelled();
     const key = await readKey();
@@ -240,9 +251,17 @@ export function createOpenAiProvider(deps: OpenAiProviderDeps): LLMProvider {
     return http.request(method, url, {
       headers,
       ...(body !== undefined && { body }),
-      timeoutMs: LLM_ATTEMPT_TIMEOUT_MS,
+      ...llmAttemptTimeouts(onBodyText !== undefined),
       token: ctx.token,
       mapErrorResponse: errorHook(modelId),
+      ...(onBodyText !== undefined && { onBodyText }),
+    });
+  }
+
+  /** The Responses API body for `request` (`docs/03` §2.3), one builder for both calls. */
+  function responsesBody(request: ChatRequest): ResponsesRequestBody {
+    return buildResponsesBody(request, {
+      maxOutputTokensLimit: known.get(request.model)?.maxOutputTokens,
     });
   }
 
@@ -281,11 +300,7 @@ export function createOpenAiProvider(deps: OpenAiProviderDeps): LLMProvider {
       request: ChatRequest,
       ctx: LLMCallContext,
     ): Promise<ChatResponse> {
-      const body = JSON.stringify(
-        buildResponsesBody(request, {
-          maxOutputTokensLimit: known.get(request.model)?.maxOutputTokens,
-        }),
-      );
+      const body = JSON.stringify(responsesBody(request));
       const started = clock.now();
       const response = await send(
         "POST",
@@ -298,6 +313,29 @@ export function createOpenAiProvider(deps: OpenAiProviderDeps): LLMProvider {
       return toChatResponse(parsed, {
         request,
         latencyMs: Math.max(0, clock.now() - started),
+      });
+    },
+
+    chatStream(
+      request: ChatRequest,
+      ctx: LLMCallContext,
+    ): AsyncIterable<ChatStreamChunk> {
+      // `P3-T11`: the same body with `stream: true` (`docs/03` §6.1), through
+      // the same `send` — key, hook, timeout — in the client's streaming mode.
+      return streamChat({
+        providerId: OPENAI_PROVIDER_ID,
+        request,
+        token: ctx.token,
+        decoder: createOpenAiStreamDecoder(request, () => clock.now()),
+        start: (hooks) =>
+          send(
+            "POST",
+            RESPONSES_PATH,
+            request.model,
+            { ...ctx, token: hooks.token },
+            JSON.stringify({ ...responsesBody(request), stream: true }),
+            hooks.onBodyText,
+          ),
       });
     },
 

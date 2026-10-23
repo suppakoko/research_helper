@@ -118,6 +118,11 @@ const ID_CONSTANTS = {
   L10N_JOB_RESUMED: keys.L10N_JOB_RESUMED,
   // Item 265(a): the wall-clock budget's question (`docs/07` §7.5).
   L10N_JOB_WALL_CLOCK_BUDGET: keys.L10N_JOB_WALL_CLOCK_BUDGET,
+  // `P3-T15`: the egress disclosure's two notices (`docs/09` §3.6).
+  L10N_EGRESS_FIRST_JOB_NOTICE: keys.L10N_EGRESS_FIRST_JOB_NOTICE,
+  L10N_EGRESS_GEMINI_FREE_TIER: keys.L10N_EGRESS_GEMINI_FREE_TIER,
+  // Item 269(b): the reminder for a Gemini key declared paid (`docs/09` §3.6).
+  L10N_EGRESS_GEMINI_DECLARED_PAID: keys.L10N_EGRESS_GEMINI_DECLARED_PAID,
 } satisfies Record<string, string>;
 
 /** The exported `L10N_*` string constants that are not message identifiers. */
@@ -602,5 +607,77 @@ describe("src/i18n/keys.ts — item 265's two strings (owner, 2026-10-21)", () =
       expect(read("KO_PRESENT")).toContain(id);
       expect(read("KO_PENDING_REVIEW")).not.toContain(id);
     }
+  });
+});
+
+describe("src/i18n/keys.ts — P3-T15's two egress notices (docs/09 §3.6)", () => {
+  const notices = [
+    keys.L10N_EGRESS_FIRST_JOB_NOTICE,
+    keys.L10N_EGRESS_GEMINI_FREE_TIER,
+  ];
+
+  it("declares both on the main-window surface, taking no argument and outside the error ids", () => {
+    expect(notices).toEqual([
+      "research-helper-egress-first-job-notice",
+      "research-helper-egress-gemini-free-tier",
+    ]);
+    for (const id of notices) {
+      expect(read("MAIN_WINDOW_MESSAGE_IDS")).toContain(id);
+      expect(read("ARGUMENT_MESSAGE_IDS")).not.toContain(id);
+      expect(read("ERROR_MESSAGE_IDS")).not.toContain(id);
+    }
+  });
+
+  it("puts both on KO_PRESENT once the owner reviewed the Korean (2026-10-22, G-41), never pending", () => {
+    for (const id of notices) {
+      expect(read("KO_PRESENT")).toContain(id);
+      expect(read("KO_PENDING_REVIEW")).not.toContain(id);
+    }
+  });
+
+  it("keeps rh-error-policy deferred: PolicyViolationError gains no message with P3-T15", () => {
+    const key = new PolicyViolationError("x").messageKey;
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toContain(key);
+    expect(read("ERROR_MESSAGE_IDS")).not.toContain(key);
+  });
+});
+
+describe("src/i18n/keys.ts — the Gemini declared-paid reminder (plan/00 §6 item 269(b))", () => {
+  const reminder = keys.L10N_EGRESS_GEMINI_DECLARED_PAID;
+
+  it("declares it on the main-window surface, taking no argument and outside the error ids", () => {
+    expect(reminder).toBe("research-helper-egress-gemini-declared-paid");
+    expect(read("MAIN_WINDOW_MESSAGE_IDS")).toContain(reminder);
+    expect(read("ARGUMENT_MESSAGE_IDS")).not.toContain(reminder);
+    expect(read("ERROR_MESSAGE_IDS")).not.toContain(reminder);
+  });
+
+  it("puts it on KO_PRESENT once the owner reviewed the Korean (2026-10-23, G-41), never pending", () => {
+    expect(read("KO_PRESENT")).toContain(reminder);
+    expect(read("KO_PENDING_REVIEW")).not.toContain(reminder);
+  });
+});
+
+describe("src/i18n/keys.ts — P3-T03's degradation dialog (docs/09 §1.7)", () => {
+  // `SECRET_BACKEND_DIALOG_L10N` in src/ui/dialogs/secretBackendDialog.ts is
+  // typed against these; test/unit/zotero/sessionStore.test.ts ties the two.
+  const dialog = [
+    "research-helper-secret-backend-title",
+    "research-helper-secret-backend-explain",
+    "research-helper-secret-backend-session",
+    "research-helper-secret-backend-none",
+    "research-helper-secret-backend-accept",
+    "research-helper-secret-backend-decline",
+  ];
+
+  it("declares all six on the main-window surface, taking no argument and outside the error ids", () => {
+    expect(notIn(dialog, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(dialog, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(dialog, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("puts all six on KO_PRESENT once the owner reviewed the Korean (2026-10-22, G-41), never pending", () => {
+    expect(notIn(dialog, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(dialog, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 });

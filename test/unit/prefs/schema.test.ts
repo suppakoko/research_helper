@@ -226,7 +226,8 @@ const SECTION_8_5: readonly Section85Row[] = [
     default: "",
     min: null,
     max: null,
-    values: ["oskeystore", "session", "passphrase", ""],
+    // 2026-10-22 (plan/00 §6 item 268): `passphrase` left with tier 3 (G-10).
+    values: ["oskeystore", "session", ""],
   },
 
   // P3-T32, 2026-10-20: the fifty rows Phase 3 reads.
@@ -259,6 +260,8 @@ const SECTION_8_5: readonly Section85Row[] = [
     "boolean",
     false,
   ),
+  // Owner, 2026-10-22 (plan/00 §6 item 269(b)): the sixty-fourth row.
+  row("geminiPaidTier", "gemini.paidTier", "boolean", false),
   row(
     "llmTokenEstimateCalibration",
     "llm.tokenEstimateCalibration",
@@ -393,6 +396,9 @@ const NO_PREF_LINE: readonly string[] = [
   "reportModel",
   "screening.model",
   "privacy.egressAcknowledged",
+  // Added after §7.2 was written (owner, 2026-10-22, item 269(b)); §8.5's row
+  // says it has no `pref()` line.
+  "gemini.paidTier",
   "llm.tokenEstimateCalibration",
   "summary.fullTextMode",
   "summary.fullTextAutoMaxPapers",
@@ -488,14 +494,15 @@ function parseDefaultCell(cell: string): unknown {
 }
 
 describe("PREFS transcribes docs/07 §8.5", () => {
-  it("declares exactly the sixty-three §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent and P3-T32's fifty — and no others", () => {
+  it("declares exactly the sixty-four §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty and the owner's gemini.paidTier — and no others", () => {
     // The card's Do NOT: "do not add a preference that docs/07 §8.5 does not
     // declare". An extra entry fails here, not in review. Phase 1 pinned this
     // at twelve; `P2-T05` grew it by the one row `docs/07` §8.5 and §11.1
     // step 9 give a credential-holding source (2026-10-15); `P3-T32` grew it by
-    // the fifty rows Phase 3 reads (2026-10-20).
-    expect(SECTION_8_5).toHaveLength(63);
-    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(63);
+    // the fifty rows Phase 3 reads (2026-10-20); the owner added
+    // `gemini.paidTier` (2026-10-22, `plan/00` §6 item 269(b)).
+    expect(SECTION_8_5).toHaveLength(64);
+    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(64);
     expect([...PREF_NAMES].sort()).toEqual(
       SECTION_8_5.map((row) => row.name).sort(),
     );
@@ -727,15 +734,24 @@ describe("getPref coerces and falls back", () => {
       setPrefStore(createMemoryPrefStore({ logLevel: level }));
       expect(getPref("logLevel")).toBe(level);
     }
-    for (const backend of [
-      "oskeystore",
-      "session",
-      "passphrase",
-      "",
-    ] as const) {
+    for (const backend of ["oskeystore", "session", ""] as const) {
       setPrefStore(createMemoryPrefStore({ secretBackend: backend }));
       expect(getPref("secretBackend")).toBe(backend);
     }
+  });
+
+  it("reads a stored passphrase backend as the default: tier 3 does not ship (G-10; plan/00 §6 item 268)", () => {
+    setPrefStore(createMemoryPrefStore({ secretBackend: "passphrase" }));
+    expect(getPref("secretBackend")).toBe("");
+  });
+
+  it("reads gemini.paidTier as false until the user declares the key paid (plan/00 §6 item 269(b))", () => {
+    setPrefStore(createMemoryPrefStore({}));
+    expect(getPref("geminiPaidTier")).toBe(false);
+    setPrefStore(createMemoryPrefStore({ "gemini.paidTier": true }));
+    expect(getPref("geminiPaidTier")).toBe(true);
+    setPrefStore(createMemoryPrefStore({ "gemini.paidTier": "yes" }));
+    expect(getPref("geminiPaidTier")).toBe(false);
   });
 
   it("reads whole cents for a money row and refuses a fractional amount (P3-T39)", () => {
@@ -1135,7 +1151,8 @@ describe("addon/prefs.js agrees with PREFS", () => {
 
   it("lists only real schema keys as having no pref() line", () => {
     const keys = new Set(SECTION_8_5.map((r) => r.key));
-    expect(NO_PREF_LINE).toHaveLength(25);
+    // 26 since 2026-10-22: `gemini.paidTier` (plan/00 §6 item 269(b)).
+    expect(NO_PREF_LINE).toHaveLength(26);
     for (const key of NO_PREF_LINE) expect(keys.has(key), key).toBe(true);
   });
 

@@ -270,8 +270,9 @@ describe("P3-T34 — the job table is docs/07 §8.3's, as migration version 2", 
   });
 
   // Moved with P3-T33, which appended version 3 (`cache_entry`), and with
-  // plan/00 §6 item 265 (b), which appended version 4 (`user_price`): a
-  // version-1 file now goes through version 2 to the latest.
+  // plan/00 §6 item 265 (b), which appended version 4 (`user_price`), and with
+  // P3-T15, which appended version 5 (`collection_settings`): a version-1 file
+  // now goes through version 2 to the latest.
   it("brings a version-1 file through version 2 to the latest without touching search_provenance", async () => {
     const connection = sqlite();
     await runMigrations(connection, [
@@ -281,7 +282,7 @@ describe("P3-T34 — the job table is docs/07 §8.3's, as migration version 2", 
       },
     ]);
     connection.db.exec("INSERT INTO search_provenance VALUES ('kept')");
-    expect(await runMigrations(connection)).toStrictEqual({ from: 1, to: 4 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 1, to: 5 });
     expect(
       connection.db
         .prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'job'")

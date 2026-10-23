@@ -93,6 +93,8 @@ export const PREF_KEYS = {
   screeningModel: "screening.model",
   privacyMode: "privacy.mode",
   privacyEgressAcknowledged: "privacy.egressAcknowledged",
+  // The Gemini key declared paid (owner, 2026-10-22, plan/00 §6 item 269(b)).
+  geminiPaidTier: "gemini.paidTier",
   llmTokenEstimateCalibration: "llm.tokenEstimateCalibration",
 
   // Summarization (docs/07 §8.5, "Summarization"; P3-T32).

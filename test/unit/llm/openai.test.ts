@@ -834,7 +834,8 @@ describe("listModels over GET /v1/models (P3-T08 step 6)", () => {
       contextWindowTokens: UNKNOWN_TOKEN_LIMIT,
       maxOutputTokens: UNKNOWN_TOKEN_LIMIT,
       supportsJsonSchema: false,
-      supportsStreaming: false,
+      // Item 268(d): "not known" is written as the value the router streams.
+      supportsStreaming: true,
       supportsSystemPrompt: true,
       inputCostPerMTokUsd: undefined,
       outputCostPerMTokUsd: undefined,

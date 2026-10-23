@@ -295,6 +295,22 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // The wall-clock budget's question (owner, 2026-10-21, plan/00 §6 item
   // 265; docs/07 §7.5). See L10N_JOB_WALL_CLOCK_BUDGET.
   "research-helper-job-wall-clock-budget",
+  // P3-T15: the egress disclosure's two notices (docs/09 §3.6). See
+  // L10N_EGRESS_FIRST_JOB_NOTICE and L10N_EGRESS_GEMINI_FREE_TIER.
+  "research-helper-egress-first-job-notice",
+  "research-helper-egress-gemini-free-tier",
+  // The reminder that replaces the Gemini warning for a key declared paid
+  // (owner, 2026-10-22, plan/00 §6 item 269(b)). See
+  // L10N_EGRESS_GEMINI_DECLARED_PAID.
+  "research-helper-egress-gemini-declared-paid",
+  // P3-T03: the key-storage degradation dialog (docs/09 §1.7, gate G-10).
+  // See SECRET_BACKEND_DIALOG_L10N in src/ui/dialogs/secretBackendDialog.ts.
+  "research-helper-secret-backend-title",
+  "research-helper-secret-backend-explain",
+  "research-helper-secret-backend-session",
+  "research-helper-secret-backend-none",
+  "research-helper-secret-backend-accept",
+  "research-helper-secret-backend-decline",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -425,6 +441,31 @@ export const L10N_JOB_RESUMED = "research-helper-job-resumed";
  */
 export const L10N_JOB_WALL_CLOCK_BUDGET =
   "research-helper-job-wall-clock-budget";
+
+/**
+ * The egress disclosure's first-job notice (`P3-T15`; `docs/09` §3.6): shown
+ * in the cost dialog while `privacy.egressAcknowledged` is `false`. Carried as
+ * data by `src/pipeline/shared/egressDisclosure.ts`; rendered by `P3-T16`.
+ */
+export const L10N_EGRESS_FIRST_JOB_NOTICE =
+  "research-helper-egress-first-job-notice";
+
+/**
+ * The Gemini free-tier warning (`P3-T15`; `docs/09` §3.6 item 3, verbatim):
+ * shown on every job whose Gemini key's tier is free or unknown, with no
+ * suppression path.
+ */
+export const L10N_EGRESS_GEMINI_FREE_TIER =
+  "research-helper-egress-gemini-free-tier";
+
+/**
+ * The one-line reminder that replaces {@link L10N_EGRESS_GEMINI_FREE_TIER}
+ * when the user has declared the Gemini key paid (`gemini.paidTier`; owner,
+ * 2026-10-22, `plan/00` §6 item 269(b); `docs/09` §3.6 item 3's extension,
+ * verbatim). Shown on every such job, with no suppression path.
+ */
+export const L10N_EGRESS_GEMINI_DECLARED_PAID =
+  "research-helper-egress-gemini-declared-paid";
 
 /* ------------------------------------------------ searchDialog message ids */
 
@@ -965,6 +1006,21 @@ export const KO_PRESENT = [
   // drafted by the coordinator and reviewed by the owner on 2026-10-21 (`G-41`).
   "rh-error-output-truncated",
   "research-helper-job-wall-clock-budget",
+  // P3-T15's two egress notices: Korean drafted by the coordinator and
+  // reviewed by the owner on 2026-10-22 (`G-41`, plan/00 §6 item 269(a)).
+  "research-helper-egress-first-job-notice",
+  "research-helper-egress-gemini-free-tier",
+  // The Gemini declared-paid reminder: Korean drafted by the coordinator and
+  // reviewed by the owner on 2026-10-23 (`G-41`, plan/00 §6 item 270(b)).
+  "research-helper-egress-gemini-declared-paid",
+  // P3-T03's key-storage dialog: Korean drafted by the coordinator and
+  // reviewed by the owner on 2026-10-22 (`G-41`, plan/00 §6 item 268(a)).
+  "research-helper-secret-backend-title",
+  "research-helper-secret-backend-explain",
+  "research-helper-secret-backend-session",
+  "research-helper-secret-backend-none",
+  "research-helper-secret-backend-accept",
+  "research-helper-secret-backend-decline",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

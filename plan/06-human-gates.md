@@ -585,6 +585,12 @@ Dropping tier 3 would *reduce* committed scope, not avoid new work. Second, the 
 `docs/09` §8 item 1 — that "some Linux users cannot run unattended background jobs" — is
 **unquantified**. Step 2 of `G-09`'s measurement is what turns it into a number.
 
+*Corrected 2026-10-22 (`plan/00` §6 item 268, recorded from `P3-T03`):* the paragraph above
+describes the card as it was written on 2026-09-30, not what was built. After this gate was
+decided on 2026-10-08 (tier 2 only), `P3-T03` built **tier 2 alone**. Its degradation dialog offers
+session-only storage or no stored keys. No passphrase tier exists, and `secretBackend` has no
+`passphrase` value (`docs/07` §8.5, corrected 2026-10-21 under `plan/00` §6 item 267).
+
 **What ships regardless, and needs no decision.** Tier 1 is measured and is the default. Tier 4,
 plaintext preferences, stays not implemented; D5 and `docs/09` §1.7 both refuse it, and this
 deferral does not reopen it. Nothing in Phase 1 or Phase 2 depends on this gate.

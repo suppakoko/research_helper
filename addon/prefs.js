@@ -186,8 +186,8 @@ pref("anthropic.lastValidationResult", "");
 pref("ncbi.lastValidationResult", "");
 pref("semanticscholar.lastValidationResult", "");
 // Which secret backend is live, for the prefs pane's storage badge:
-// "oskeystore" | "session" | "passphrase" | "" (unprobed). These are docs/07
-// §8.5's spellings, which are NOT docs/09 §1.7's SecretBackend union
-// ("os-keychain" | "session-only" | "passphrase") — §8.5 is the authority for
-// a preference's allowed values.
+// "oskeystore" | "session" | "" (unprobed, or no store). These are docs/07
+// §8.5's spellings; secretBackendPrefValue maps the port's SecretBackend
+// ("os-keychain" | "session-only") onto them. No passphrase tier ships in v1
+// (gate G-10; corrected 2026-10-22, plan/00 §6 item 268).
 pref("secretBackend", "");

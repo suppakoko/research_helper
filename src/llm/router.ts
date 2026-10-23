@@ -37,15 +37,21 @@
  *
  * Each of those throws before the adapter is called, so no request is issued.
  *
- * **Not here.** `LLMCallContext.budget` enforcement belongs to `P3-T16`, and
- * routing a stream to `chat` when `ModelInfo.supportsStreaming` is false
- * belongs to `P3-T11`. Today a missing `chatStream` is the only fallback.
+ * **Streaming** (`P3-T11`; `docs/07` §4.3's dated note "the streaming
+ * contract"). `chatStream` calls the adapter's `chatStream` unless it has
+ * none or its `getModel(request.model)` says `supportsStreaming: false`; then
+ * it calls `chat` and yields one terminal chunk, under the stream's own
+ * truncation rule (`terminalChunkOf` in `./shared/sse.ts`), so the caller
+ * never branches. A model the adapter does not know streams.
+ *
+ * **Not here.** `LLMCallContext.budget` enforcement belongs to `P3-T16`.
  */
 
 import { ConfigurationError, MissingCredentialError } from "../core/errors";
 import type { ProviderId } from "../model/ids";
 
 import type { LLMProviderRegistry, LLMSettings } from "./registry";
+import { terminalChunkOf } from "./shared/sse";
 import type {
   ChatRequest,
   ChatResponse,
@@ -185,12 +191,17 @@ export function createLLMRouter(deps: LLMRouterDeps): LLMRouter {
       ctx: LLMCallContext,
     ): AsyncIterable<ChatStreamChunk> {
       const provider = configuredProvider(ctx);
-      if (provider.chatStream !== undefined) {
+      // `P3-T11` step 4: an adapter without `chatStream`, or a model its
+      // catalogue says cannot stream, gets `chat`. An unknown model streams.
+      if (
+        provider.chatStream !== undefined &&
+        provider.getModel(request.model)?.supportsStreaming !== false
+      ) {
         yield* provider.chatStream(request, ctx);
         return;
       }
       const response = await provider.chat(request, ctx);
-      yield { deltaText: response.text, done: true, usage: response.usage };
+      yield terminalChunkOf(provider.id, request, response);
     },
   };
 }

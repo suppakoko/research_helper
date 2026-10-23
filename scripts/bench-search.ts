@@ -104,6 +104,7 @@ import {
 } from "../src/pipeline/searchImport/stages";
 import type { SearchImportWriter } from "../src/pipeline/searchImport/types";
 import type { PipelineContext } from "../src/pipeline/types";
+import { createPrivacyPolicy } from "../src/pipeline/shared/privacyPolicy";
 import { createArxivSource } from "../src/sources/arxiv/arxivSource";
 import { createArxivRecordMapper } from "../src/sources/arxiv/mapper";
 import { createCrossrefSource } from "../src/sources/crossref/crossrefSource";
@@ -593,7 +594,7 @@ async function main(): Promise<number> {
     tts: undefined,
     zotero: undefined,
     config: undefined,
-    privacy: undefined,
+    privacy: createPrivacyPolicy("strict"),
     checkpoint: () => Promise.resolve(),
     resumeState: undefined,
   };

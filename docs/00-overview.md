@@ -102,8 +102,10 @@ uses for its own zotero.org API key.
 Where the OS keystore is unavailable — most realistically a Linux box without
 libsecret — the plugin **degrades explicitly and visibly** down the ladder in
 [09](09-security-privacy-and-api-keys.md) §1.7: tier 2 session-only memory (keys
-re-entered each launch, so unattended background jobs stop working), then tier 3
-a passphrase-encrypted file in the profile directory. **There is no tier 4.**
+re-entered each launch, so unattended background jobs stop working), offered in a
+dialog, never chosen silently. *(Corrected 2026-10-21, `plan/00` §6 item 267;
+owner: tier 3 does not ship in v1. The ladder continued "then tier 3 a
+passphrase-encrypted file in the profile directory".)* **There is no tier 4.**
 Plaintext storage is not implemented and must not be added — that is what makes
 D5 a decision rather than a preference.
 
@@ -112,9 +114,14 @@ verbatim residual-risk text the UI must display: this protects keys from file
 theft and other user accounts, but **not** from other Zotero plugins, which share
 the same privileged context and can decrypt exactly as we do.
 
-> **Open:** whether tier 2 or tier 3 is the right fallback on Linux without
-> libsecret — see doc 09 §8 open question 1. Both are implemented; the question
-> is which is offered first.
+> **Decided 2026-10-08 (gate `G-10`):** tier 2, session-only, is the only
+> fallback, and tier 3 does not ship in v1 — see doc 09 §8 items 1–2. The owner
+> accepted the cost: on a machine without a usable keystore, background work that
+> needs a key stops until the keys are entered again. *(Corrected 2026-10-21,
+> `plan/00` §6 item 267. This note read "**Open:** whether tier 2 or tier 3 is the
+> right fallback on Linux without libsecret … Both are implemented; the question
+> is which is offered first." Neither tier had been implemented when it was
+> written.)*
 
 ### D6 — Default LLM provider is OpenRouter
 

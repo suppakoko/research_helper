@@ -35,6 +35,12 @@
  * - {@link createUserPriceStore} — `src/llm/shared/pricing.ts`'s
  *   `UserPriceStore` port over the `user_price` table (`plan/00` §6 item 265
  *   (b), owner, 2026-10-21), on the same connection.
+ * - {@link createCollectionSettingsStore} — {@link CollectionSettingsStore}
+ *   over the `collection_settings` table (`P3-T15`; `docs/07` §8.3), on the
+ *   same connection. The port is declared here, not by its reader
+ *   (`src/pipeline/shared/privacyPolicy.ts`), because `zotero/` may not import
+ *   `pipeline/` (`docs/07` §2.3); the store keeps a JSON object and the
+ *   pipeline gives it meaning.
  * - {@link createCacheBlobStore} — `src/core/cache/sqliteCache.ts`'s
  *   `CacheBlobStore` port: `docs/07` §9.2's blob directory for cache values
  *   over 256 KB (`P3-T33`). The `cache_entry` rows themselves are written by
@@ -59,6 +65,7 @@ import {
 } from "../core/jobQueue/jobRecord";
 import type { JobStore } from "../core/jobQueue/queue";
 import type { CacheBlobStore } from "../core/cache/sqliteCache";
+import { StorageError } from "../core/errors";
 import {
   parseStoredProvenance,
   redactRecord,
@@ -432,6 +439,156 @@ export function createUserPriceStore(db: SqlConnection): UserPriceStore {
 
     async delete(providerId: ProviderId, modelId: string): Promise<void> {
       await db.queryAsync(DELETE_USER_PRICE, [providerId, modelId], QUIET);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Per-collection settings (`P3-T15`)
+// ---------------------------------------------------------------------------
+
+/** One collection's `collection_settings.json`, parsed: a JSON object. */
+export type CollectionSettings = Readonly<Record<string, unknown>>;
+
+/**
+ * The `collection_settings` table (`docs/07` §8.3, migration version 5), one
+ * JSON object per collection.
+ *
+ * The store gives the object no meaning; `src/pipeline/shared/privacyPolicy.ts`
+ * reads and writes its privacy members (`docs/07` §4.5's `PrivacyPolicy`
+ * note). A per-collection setting lives here and never in a preference
+ * (`docs/09` §3.5).
+ */
+export interface CollectionSettingsStore {
+  /**
+   * The collection's object, or `undefined` when it has no row.
+   *
+   * @throws StorageError when the stored text is not a JSON object — never
+   *   `undefined`, because an override that cannot be read must not read as
+   *   "no override" (the caller fails closed)
+   */
+  get(
+    libraryID: number,
+    collectionKey: string,
+  ): Promise<CollectionSettings | undefined>;
+  /**
+   * Replace the collection's object.
+   *
+   * @throws RangeError, writing nothing, for a library id that is not an
+   *   integer, an empty collection key, a value that is not a plain object, or
+   *   an object the redaction gate would change
+   */
+  put(
+    libraryID: number,
+    collectionKey: string,
+    settings: CollectionSettings,
+  ): Promise<void>;
+  /** Remove the collection's row; a missing row changes nothing. */
+  delete(libraryID: number, collectionKey: string): Promise<void>;
+}
+
+const UPSERT_COLLECTION_SETTINGS =
+  "INSERT INTO collection_settings (library_id, collection_key, json) " +
+  "VALUES (?, ?, ?) " +
+  "ON CONFLICT(library_id, collection_key) DO UPDATE SET json = excluded.json";
+
+const SELECT_COLLECTION_SETTINGS =
+  "SELECT json FROM collection_settings WHERE library_id = ? AND collection_key = ?";
+
+const DELETE_COLLECTION_SETTINGS =
+  "DELETE FROM collection_settings WHERE library_id = ? AND collection_key = ?";
+
+/** A plain JSON object: not null, not an array. */
+function isJsonObject(value: unknown): value is CollectionSettings {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The row key, checked. */
+function collectionRowKey(
+  libraryID: number,
+  collectionKey: string,
+): [number, string] {
+  if (!Number.isInteger(libraryID) || collectionKey.trim() === "") {
+    throw new RangeError(
+      "[research-helper] collection settings need an integer library id and " +
+        "a collection key; nothing was read or written",
+    );
+  }
+  return [libraryID, collectionKey];
+}
+
+/**
+ * {@link CollectionSettingsStore} over the plugin's database (`P3-T15`;
+ * `docs/07` §8.3).
+ *
+ * **What a row holds:** whatever object the caller puts, serialized. It can
+ * carry a model id a user typed (§8.3's "model overrides"), so `put` passes
+ * the whole object through the redaction gate (`redactRecord`,
+ * `src/core/provenance.ts`, `P3-T36`) and **refuses** an object the gate would
+ * change, as {@link createUserPriceStore} does: a setting stored redacted
+ * would no longer say what the user chose. Every statement is {@link QUIET}.
+ *
+ * @param db - the connection {@link openPluginDatabase} returned, migrated
+ * @returns the store
+ */
+export function createCollectionSettingsStore(
+  db: SqlConnection,
+): CollectionSettingsStore {
+  return {
+    async get(
+      libraryID: number,
+      collectionKey: string,
+    ): Promise<CollectionSettings | undefined> {
+      const key = collectionRowKey(libraryID, collectionKey);
+      const rows = resultRows(
+        await db.queryAsync(SELECT_COLLECTION_SETTINGS, key, QUIET),
+      );
+      const first = rows[0] as Record<string, unknown> | undefined;
+      if (first === undefined) return undefined;
+      let value: unknown;
+      try {
+        value = JSON.parse(String(first["json"]));
+      } catch {
+        value = undefined;
+      }
+      if (!isJsonObject(value)) {
+        throw new StorageError(
+          "[research-helper] a collection_settings row is not a JSON object",
+          { libraryID },
+        );
+      }
+      return value;
+    },
+
+    async put(
+      libraryID: number,
+      collectionKey: string,
+      settings: CollectionSettings,
+    ): Promise<void> {
+      const key = collectionRowKey(libraryID, collectionKey);
+      if (!isJsonObject(settings)) {
+        throw new RangeError(
+          "[research-helper] collection settings must be a JSON object; " +
+            "nothing was stored",
+        );
+      }
+      const gated = redactRecord(settings);
+      if (gated.mark.partlyRedacted) {
+        throw new RangeError(
+          "[research-helper] a collection setting looks like a credential and " +
+            "was not stored (docs/09 §2.1)",
+        );
+      }
+      await db.queryAsync(
+        UPSERT_COLLECTION_SETTINGS,
+        [...key, JSON.stringify(gated.record)],
+        QUIET,
+      );
+    },
+
+    async delete(libraryID: number, collectionKey: string): Promise<void> {
+      const key = collectionRowKey(libraryID, collectionKey);
+      await db.queryAsync(DELETE_COLLECTION_SETTINGS, key, QUIET);
     },
   };
 }

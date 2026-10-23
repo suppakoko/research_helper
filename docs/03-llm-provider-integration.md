@@ -574,6 +574,14 @@ Set `"stream": true`. Emits **OpenAI Chat Completions-shaped** deltas regardless
 
 ### 6.5 Streaming implementation note for Zotero
 
+> **Corrected 2026-10-22 (`plan/00` §6 item 268, recorded from `P3-T11`).** The next sentence is wrong. Spike `V-8`
+> (`P0-T16`, measured 2026-09-30; `01-zotero-plugin-platform.md` §8.4.1) showed that `Zotero.HTTP.request()` **can**
+> stream: its `requestObserver` option hands over the `XMLHttpRequest` before `send()`, and a `progress` listener
+> added with `addEventListener` reads the cumulative `responseText` from a saved offset. `P3-T11` built streaming on
+> exactly that path, as `HttpOptions.onBodyText` in `src/core/http/client.ts`, so a stream goes through the same
+> choke point as every other request. No `fetch()` path and no second HTTP stack exist. The time limits of a stream
+> are doc 07 §4.3's note "a stream's two time limits". The original text is kept below as the record.
+
 `Zotero.HTTP.request()` buffers the whole response and is not suitable for streaming. For SSE either:
 
 - use `fetch()` with `response.body.getReader()` and a manual `TextDecoder` + line splitter, or
@@ -1023,7 +1031,11 @@ Three traps worth calling out:
 >   60 s cap does not bind at 5 attempts.
 > - **One LLM attempt may wait up to 3 minutes** (`LLM_ATTEMPT_TIMEOUT_MS` = 180 000 ms, beside the retry budget in
 >   `hostLimiter.ts`), because a long full-text generation can exceed 60 s. Literature hosts keep the 60 s
->   `timeoutSeconds` (§8.5 of doc 07).
+>   `timeoutSeconds` (§8.5 of doc 07). *(Updated 2026-10-22, owner, `plan/00` §6 item 268(c): that limit is for a
+>   plain request. A **streamed** request (§6) has two limits instead: **3 minutes without new text**
+>   (`LLM_STREAM_IDLE_TIMEOUT_MS`) and **15 minutes in all** (`LLM_STREAM_TOTAL_TIMEOUT_MS`), both beside it in
+>   `hostLimiter.ts` and enforced by `src/core/http/client.ts`'s streaming mode, with no timeout ever set to zero.
+>   Doc 07 §4.3's note "a stream's two time limits" is the contract.)*
 > - **A timeout is not retried automatically** (`plan/00` §6 item 230), so a silent LLM host costs one 3-minute
 >   attempt, not five.
 > - **The 90-second per-request budget stays as shipped** (`REQUEST_BUDGET_MS`, `plan/00` §6 item 233). It decides

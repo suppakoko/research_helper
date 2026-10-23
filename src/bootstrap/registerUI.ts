@@ -100,6 +100,11 @@ import {
   type SearchWindowQuery,
 } from "../ui/dialogs/searchDialog";
 import {
+  openSecretBackendDialog,
+  type SecretBackendChoice,
+  type SecretBackendDialogHost,
+} from "../ui/dialogs/secretBackendDialog";
+import {
   PREFERENCES_API_PROPERTY,
   PREFERENCES_PANE_DESCRIPTION,
   createPreferencesHost,
@@ -812,9 +817,9 @@ declare module "../addon" {
  *
  * | port | bound to |
  * |---|---|
- * | `secrets` | {@link ServiceGraph.secrets} — the tier-1 store, or `undefined` after a failed probe, in which case the host refuses every write and the badge warns |
+ * | `secrets` | {@link ServiceGraph.secrets} — the tier-1 store; after a failed probe, the tier-2 session store if the user chose it in the degradation dialog (`P3-T03`), otherwise `undefined`, in which case the host refuses every write and the badge warns |
  * | `request` | `src/core/http/client.ts`'s `httpRequest`: the one outbound choke point, with its per-host limiter, D10 guard and redacted log line |
- * | `getBackendPref` | `src/prefs`' typed `getPref("secretBackend")`, the non-secret row `probeAndRecordBackend` wrote |
+ * | `getBackendPref` | `src/prefs`' typed `getPref("secretBackend")`, the non-secret row `probeAndRecordBackend` wrote (or `adoptSessionSecretStore`, on a tier-2 choice) |
  * | `clock` | the graph's clock, for the Semantic Scholar retry delay and the `checkedAt` stamp |
  * | `logger` | a child of the graph's redacting logger |
  *
@@ -845,6 +850,42 @@ async function publishPreferencesHost(
       delete api[PREFERENCES_API_PROPERTY];
     },
   });
+}
+
+/**
+ * `docs/09` §1.7's degradation dialog (`P3-T03`), raised over the Zotero main
+ * window. `installServices` calls this only after the keystore probe failed,
+ * and installs no store until it resolves.
+ *
+ * **Why the window comes from `Services.wm` here.** `src/ui/**` may not touch
+ * the platform, and this file may not reference the `Zotero` global
+ * (`research-helper/zotero-global`), so `Zotero.getMainWindow()` is out of
+ * reach — the same limit {@link searchWindowDeps} records for the file chooser.
+ * `Services.wm.getMostRecentWindow("navigator:browser")` is the call
+ * `Zotero.getMainWindow()` itself makes; `hooks.ts` awaits
+ * `Zotero.uiReadyPromise` before `registerUI` runs, so a main window exists.
+ * The result is narrowed by the one member used, as `registerMenus.ts`
+ * narrows its menu's window.
+ *
+ * @returns the user's choice
+ * @throws when no main window can raise the dialog; `installServices` then
+ *   continues with no stored keys rather than choosing a tier for the user
+ */
+function chooseSecretBackend(): Promise<SecretBackendChoice> {
+  const win: unknown = Services.wm.getMostRecentWindow("navigator:browser");
+  if (
+    typeof win !== "object" ||
+    win === null ||
+    typeof (win as Partial<SecretBackendDialogHost>).openDialog !== "function"
+  ) {
+    return Promise.reject(
+      new Error(
+        "[research-helper] no Zotero main window to raise the key-storage " +
+          "dialog over",
+      ),
+    );
+  }
+  return openSecretBackendDialog(win as SecretBackendDialogHost);
 }
 
 /**
@@ -905,6 +946,9 @@ export async function registerUI(scope: Scope): Promise<void> {
       path: pluginDatabasePath,
       blobs: createCacheBlobStore(),
     },
+    // `docs/09` §1.7's degradation dialog (`P3-T03`), asked only when the
+    // keystore probe fails. See {@link chooseSecretBackend}.
+    chooseSecretBackend,
   });
 
   await publishServiceGraph(scope, graph);

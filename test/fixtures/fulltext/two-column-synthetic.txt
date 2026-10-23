@@ -1,0 +1,75 @@
+Journal of Synthetic Examples 2026;12:345-356
+Counting invented widgets at three simulated field sites:
+a worked example for text-cleaning tests
+A. Example, B. Placeholder and C. Fixture
+Abstract
+Widgets were counted weekly at three invented sites for one
+simulated year. Counts rose by four per cent between the first
+and the last quarter, and the two observers agreed closely.
+Introduction
+Widget counting is a stand-in task chosen because it has no
+real literature. Earlier invented studies counted widgets only
+once a month, which left seasonal swings unmeasured. Here we
+count every week and report the agreement between observers.
+The approach was tar
+geted at the questions a weekly series can answer and a monthly
+series cannot, namely the size of short-term swings and the lag
+between sites.
+Methods
+Three sites were simulated with different widget densities. Two
+observers counted every widget in a fixed square at each site
+once a week. The N- and C-terminal halves of each widget were
+counted separately and summed, as in the invented protocol. Counts
+were entered twice and compared, and disagreements were resolved
+by a third count. Agreement was summarised as an intraclass
+correlation with a ninety-five per cent interval.
+Page 1 of 4
+
+
+Journal of Synthetic Examples 2026;12:345-356
+Results
+In total 15,600 widgets were counted over 52 weeks. The mean
+weekly count rose from 96 in the first quarter to 100 in the
+last, an increase of four per cent (95% CI 2 to 6). The site with
+the highest density showed the largest swings, and the site with
+the lowest density showed almost none. Observer agreement was
+high at every site (intraclass correlation 0.97, 95% CI 0.95 to
+0.98). Disagreements were rare and were all resolved by the third
+count; none changed a weekly total by more than two widgets.
+Weekly counts at the three sites moved together with a lag of
+about one week between the densest and the sparsest site, which
+a monthly series could not have shown. The lag was stable across
+the four quarters and did not depend on which observer counted
+first. Removing the first four weeks, during which the observers
+were still learning the protocol, changed none of the estimates.
+Page 2 of 4
+
+
+Journal of Synthetic Examples 2026;12:345-356
+Discussion
+A weekly series reveals swings and lags that a monthly series
+hides. The four per cent rise is small but consistent across
+sites, and agreement between observers was high enough that a
+single observer would suffice in future invented studies. The
+main limitation is that every number in this paper is invented,
+so nothing here should be cited as a finding about real widgets.
+The example exists only so that a cleaning pass has a running
+head, a page footer, a split word, a suspended hyphen and a
+reference list to work on, with every sentence written for the
+purpose and no text taken from any published paper.
+Conclusions
+Weekly counting is feasible, and two observers agree closely.
+Page 3 of 4
+
+
+Journal of Synthetic Examples 2026;12:345-356
+References
+1. Example A, Placeholder B. Monthly widget counts at one invented
+site. J Synth Ex. 2024;10:1-9.
+2. Fixture C. Observer agreement in invented counting tasks. J
+Synth Ex. 2025;11:20-31.
+3. Example A. A protocol for counting widget halves. Synth Methods.
+2025;4:100-108.
+4. Placeholder B, Fixture C. Seasonal swings in invented series.
+J Synth Ex. 2025;11:200-212.
+Page 4 of 4

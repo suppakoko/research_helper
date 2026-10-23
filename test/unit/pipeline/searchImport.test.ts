@@ -76,6 +76,7 @@ import {
   type PipelineContext,
   type StageDescriptor,
 } from "../../../src/pipeline/types";
+import { createPrivacyPolicy } from "../../../src/pipeline/shared/privacyPolicy";
 import { createPubmedRecordMapper } from "../../../src/sources/pubmed/mapper";
 import { createPubmedSource } from "../../../src/sources/pubmed/pubmedSource";
 import { createSourceRegistry } from "../../../src/sources/registry";
@@ -196,7 +197,7 @@ function createContext(options: {
     tts: undefined,
     zotero: undefined,
     config: undefined,
-    privacy: undefined,
+    privacy: createPrivacyPolicy("strict"),
     checkpoint: (state: unknown): Promise<void> => {
       options.checkpoints?.push(state);
       return Promise.resolve();

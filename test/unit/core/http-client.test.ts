@@ -2254,3 +2254,461 @@ describe("mapErrorResponse: an error answer read before the client classifies it
     expect(clock.slept).toStrictEqual([1000, 1000]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// P3-T11 — the streaming mode (`HttpOptions.onBodyText`)
+// ---------------------------------------------------------------------------
+
+describe("the streaming mode (P3-T11)", () => {
+  /** An in-flight XHR that grows and fires `progress`, as docs/01 §8.4.1's path does. */
+  interface GrowingXhr extends HttpTransportXhr {
+    status: number;
+    text: string;
+    reads: number;
+    readonly listeners: (() => void)[];
+    addEventListener(type: "progress", listener: () => void): void;
+  }
+
+  function growingXhr(status: number): GrowingXhr {
+    const xhr: GrowingXhr = {
+      status,
+      text: "",
+      reads: 0,
+      listeners: [],
+      get responseText() {
+        xhr.reads += 1;
+        return xhr.text;
+      },
+      responseURL: "",
+      getAllResponseHeaders: () => "",
+      addEventListener(_type, listener) {
+        xhr.listeners.push(listener);
+      },
+    };
+    return xhr;
+  }
+
+  /** Each call: observe, push `chunks` with a progress event each, then end. */
+  function streamingTransport(
+    attempts: readonly {
+      status: number;
+      chunks: readonly string[];
+      tail?: string;
+      end: "finish" | "cut";
+    }[],
+  ): StubTransport & { readonly xhrs: GrowingXhr[] } {
+    const xhrs: GrowingXhr[] = [];
+    const transport = createStubTransport(async (call, index) => {
+      const script = attempts[Math.min(index, attempts.length - 1)]!;
+      const xhr = growingXhr(script.status);
+      xhrs.push(xhr);
+      call.options.requestObserver?.(xhr);
+      for (const chunk of script.chunks) {
+        await Promise.resolve();
+        xhr.text += chunk;
+        for (const listener of xhr.listeners) listener();
+      }
+      // Bytes that arrive with no progress event after them (P0-T16).
+      xhr.text += script.tail ?? "";
+      if (script.end === "cut") {
+        xhr.status = 0;
+        xhr.text = "";
+      }
+      return xhr;
+    });
+    return Object.assign(transport, { xhrs });
+  }
+
+  it("delivers each slice of a 2xx body once, in order, including a tail with no progress event", async () => {
+    const transport = streamingTransport([
+      {
+        status: 200,
+        chunks: ["data: a", "bc\n\n", "", "data: d"],
+        tail: "ef\n\n",
+        end: "finish",
+      },
+    ]);
+    const client = createHttpClient({ transport, userAgent: UA });
+    const delivered: string[] = [];
+
+    const response = await client.request("POST", URL_OK, {
+      onBodyText: (text) => delivered.push(text),
+    });
+
+    expect(delivered).toStrictEqual(["data: a", "bc\n\n", "data: d", "ef\n\n"]);
+    expect(delivered.join("")).toBe(response.body);
+    expect(transport.calls[0]?.options.responseType).toBe("text");
+  });
+
+  it("passes no requestObserver to a plain request", async () => {
+    const { client, transport } = clientFor(stubXhr({ status: 200 }));
+
+    await client.request("GET", URL_OK);
+
+    expect(transport.calls[0]?.options.requestObserver).toBeUndefined();
+  });
+
+  it("delivers nothing of an error answer, which is classified whole", async () => {
+    const transport = streamingTransport([
+      { status: 503, chunks: ['{"error":', '"busy"}'], end: "finish" },
+    ]);
+    const client = createHttpClient({ transport, userAgent: UA });
+    const delivered: string[] = [];
+
+    await expect(
+      client.request("POST", URL_OK, { onBodyText: (t) => delivered.push(t) }),
+    ).rejects.toBeInstanceOf(UpstreamServerError);
+    expect(delivered).toStrictEqual([]);
+  });
+
+  it("refuses a non-text responseType before anything is sent", async () => {
+    const { client, transport } = clientFor(stubXhr({ status: 200 }));
+
+    await expect(
+      client.request("GET", URL_OK, {
+        responseType: "json",
+        onBodyText: () => undefined,
+      }),
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(transport.calls).toHaveLength(0);
+  });
+
+  it("does not retry an attempt that delivered text, and throws its own error", async () => {
+    const transport = streamingTransport([
+      { status: 200, chunks: ["data: partial"], end: "cut" },
+      { status: 200, chunks: ["data: again\n\n"], end: "finish" },
+    ]);
+    const limiter = createStubLimiter();
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      limiterFor: () => limiter,
+      retryFor: () => immediatePolicy(3),
+    });
+    const delivered: string[] = [];
+
+    const error = await client
+      .request("POST", URL_OK, { onBodyText: (t) => delivered.push(t) })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NetworkError);
+    expect(transport.calls).toHaveLength(1);
+    expect(delivered).toStrictEqual(["data: partial"]);
+    // Paced like any request: the attempt went through the host's limiter.
+    expect(limiter.acquired).toHaveLength(1);
+  });
+
+  it("still retries a streamed request that failed before any text arrived", async () => {
+    const transport = streamingTransport([
+      { status: 503, chunks: [], end: "finish" },
+      { status: 200, chunks: ["data: ok\n\n"], end: "finish" },
+    ]);
+    const client = createHttpClient({
+      transport,
+      userAgent: UA,
+      retryFor: () => immediatePolicy(3),
+    });
+    const delivered: string[] = [];
+
+    await client.request("POST", URL_OK, {
+      onBodyText: (t) => delivered.push(t),
+    });
+
+    expect(transport.calls).toHaveLength(2);
+    expect(delivered).toStrictEqual(["data: ok\n\n"]);
+  });
+
+  it("reads and delivers nothing after a cancel", async () => {
+    let xhr: GrowingXhr | undefined;
+    const transport = createStubTransport(
+      (call) =>
+        new Promise<HttpTransportXhr>((_resolve, reject) => {
+          xhr = growingXhr(200);
+          call.options.cancellerReceiver?.(() =>
+            reject(new StubCancelledException()),
+          );
+          call.options.requestObserver?.(xhr);
+        }),
+    );
+    const client = createHttpClient({ transport, userAgent: UA });
+    const source = createCancellationTokenSource();
+    const delivered: string[] = [];
+
+    const promise = client.request("POST", URL_OK, {
+      token: source.token,
+      onBodyText: (t) => delivered.push(t),
+    });
+    await flushMicrotasks();
+    xhr!.text = "data: one\n\n";
+    for (const listener of xhr!.listeners) listener();
+    source.cancel({ kind: "user" });
+    const readsAtCancel = xhr!.reads;
+    xhr!.text += "data: two\n\n";
+    for (const listener of xhr!.listeners) listener();
+
+    await expect(promise).rejects.toBeInstanceOf(OperationCancelledError);
+    expect(delivered).toStrictEqual(["data: one\n\n"]);
+    expect(xhr!.reads).toBe(readsAtCancel);
+  });
+
+  // -------------------------------------------------------------------------
+  // Item 268(c), owner, 2026-10-22: a stream's two time limits
+  // -------------------------------------------------------------------------
+
+  describe("a stream's two time limits (plan/00 §6 item 268(c))", () => {
+    const IDLE_MS = 180_000;
+    const TOTAL_MS = 900_000;
+
+    /**
+     * A stream the test drives by hand. `onCancel` is what the transport does
+     * when the client aborts it: reject with `CancelledException`, resolve
+     * with status 0 (both happen in Zotero), or ignore the abort entirely.
+     */
+    function heldStream(onCancel: "reject" | "status-0" | "ignore") {
+      const state: {
+        xhr: GrowingXhr | undefined;
+        finish: (() => void) | undefined;
+        cancels: number;
+      } = { xhr: undefined, finish: undefined, cancels: 0 };
+      const transport = createStubTransport(
+        (call) =>
+          new Promise<HttpTransportXhr>((resolve, reject) => {
+            const xhr = growingXhr(200);
+            state.xhr = xhr;
+            state.finish = () => resolve(xhr);
+            call.options.cancellerReceiver?.(() => {
+              state.cancels += 1;
+              if (onCancel === "reject") reject(new StubCancelledException());
+              if (onCancel === "status-0") {
+                xhr.status = 0;
+                resolve(xhr);
+              }
+            });
+            call.options.requestObserver?.(xhr);
+          }),
+      );
+      const push = (text: string): void => {
+        state.xhr!.text += text;
+        for (const listener of state.xhr!.listeners) listener();
+      };
+      return { transport, state, push };
+    }
+
+    /** Settle-tracking: whether `promise` has settled yet, without awaiting it. */
+    function track<T>(promise: Promise<T>): { settled: () => boolean } {
+      let done = false;
+      promise.then(
+        () => (done = true),
+        () => (done = true),
+      );
+      return { settled: () => done };
+    }
+
+    it("ends a stream whose body stops growing for idleTimeoutMs with a TimeoutError carrying the idle limit, and aborts the request", async () => {
+      const clock = createManualClock();
+      const { transport, state, push } = heldStream("reject");
+      const client = createHttpClient({ transport, userAgent: UA, clock });
+      const delivered: string[] = [];
+
+      const promise = client.request("POST", URL_OK, {
+        timeoutMs: TOTAL_MS,
+        idleTimeoutMs: IDLE_MS,
+        onBodyText: (t) => delivered.push(t),
+      });
+      const tracked = track(promise);
+      await flushMicrotasks();
+      push("data: a\n\n");
+      clock.advance(IDLE_MS - 1);
+      await flushMicrotasks();
+      push("data: b\n\n"); // new text restarts the count
+      clock.advance(IDLE_MS - 1);
+      await flushMicrotasks();
+      expect(tracked.settled()).toBe(false);
+      expect(state.cancels).toBe(0);
+
+      clock.advance(1);
+      await flushMicrotasks();
+      const error = (await promise.catch((e: unknown) => e)) as TimeoutError;
+
+      expect(error).toBeInstanceOf(TimeoutError);
+      expect(error.timeoutMs).toBe(IDLE_MS);
+      expect(state.cancels).toBe(1);
+      expect(delivered).toStrictEqual(["data: a\n\n", "data: b\n\n"]);
+      // Nothing is read or delivered after the expiry.
+      const reads = state.xhr!.reads;
+      push("data: late\n\n");
+      expect(state.xhr!.reads).toBe(reads);
+      expect(delivered).toHaveLength(2);
+      // The whole exchange still had the total limit, never 0.
+      expect(transport.calls[0]?.options.timeout).toBe(TOTAL_MS);
+    });
+
+    it("cuts a host that sends nothing at all after the idle limit, even if the transport ignores the abort", async () => {
+      const clock = createManualClock();
+      const { transport, state } = heldStream("ignore");
+      const client = createHttpClient({ transport, userAgent: UA, clock });
+
+      const promise = client.request("POST", URL_OK, {
+        timeoutMs: TOTAL_MS,
+        idleTimeoutMs: IDLE_MS,
+        onBodyText: () => undefined,
+      });
+      const tracked = track(promise);
+      await flushMicrotasks();
+      clock.advance(IDLE_MS - 1);
+      await flushMicrotasks();
+      expect(tracked.settled()).toBe(false);
+      clock.advance(1);
+      await flushMicrotasks();
+
+      await expect(promise).rejects.toBeInstanceOf(TimeoutError);
+      expect(state.cancels).toBe(1);
+    });
+
+    for (const onCancel of ["reject", "status-0"] as const) {
+      it(`reports the client's own abort as TimeoutError, not a cancel or a network failure, when the transport answers with ${onCancel}`, async () => {
+        const clock = createManualClock();
+        const { transport } = heldStream(onCancel);
+        const client = createHttpClient({ transport, userAgent: UA, clock });
+
+        const promise = client.request("POST", URL_OK, {
+          timeoutMs: TOTAL_MS,
+          idleTimeoutMs: IDLE_MS,
+          onBodyText: () => undefined,
+        });
+        await flushMicrotasks();
+        clock.advance(IDLE_MS);
+        await flushMicrotasks();
+        const error = await promise.catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(TimeoutError);
+        expect(error).not.toBeInstanceOf(OperationCancelledError);
+        expect((error as TimeoutError).timeoutMs).toBe(IDLE_MS);
+      });
+    }
+
+    it("lets a stream that keeps sending text run past the 3-minute attempt limit, and stops the idle watch when it ends", async () => {
+      const clock = createManualClock();
+      const { transport, state, push } = heldStream("reject");
+      const client = createHttpClient({ transport, userAgent: UA, clock });
+      const delivered: string[] = [];
+
+      const promise = client.request("POST", URL_OK, {
+        timeoutMs: TOTAL_MS,
+        idleTimeoutMs: IDLE_MS,
+        onBodyText: (t) => delivered.push(t),
+      });
+      await flushMicrotasks();
+      // Ten minutes of text, one frame a minute.
+      for (let minute = 0; minute < 10; minute += 1) {
+        push(`data: ${minute}\n\n`);
+        clock.advance(60_000);
+        await flushMicrotasks();
+      }
+      state.finish!();
+      const response = await promise;
+
+      expect(delivered).toHaveLength(10);
+      expect(response.body).toBe(delivered.join(""));
+      expect(state.cancels).toBe(0);
+      expect(clock.pending).toBe(0);
+    });
+
+    it("does not retry an idle expiry, even one with no text delivered", async () => {
+      const clock = createManualClock();
+      const { transport } = heldStream("reject");
+      const client = createHttpClient({
+        transport,
+        userAgent: UA,
+        clock,
+        retryFor: () => immediatePolicy(3),
+      });
+
+      const promise = client.request("POST", URL_OK, {
+        timeoutMs: TOTAL_MS,
+        idleTimeoutMs: IDLE_MS,
+        onBodyText: () => undefined,
+      });
+      await flushMicrotasks();
+      clock.advance(IDLE_MS);
+      await flushMicrotasks();
+
+      await expect(promise).rejects.toBeInstanceOf(TimeoutError);
+      expect(transport.calls).toHaveLength(1);
+    });
+
+    it("reports the total limit's expiry (the transport's TimeoutException) as TimeoutError carrying the total, not retried", async () => {
+      const transport = createStubTransport(() =>
+        Promise.reject(new StubTimeoutException()),
+      );
+      const client = createHttpClient({
+        transport,
+        userAgent: UA,
+        clock: createManualClock(),
+        retryFor: () => immediatePolicy(3),
+      });
+
+      const error = (await client
+        .request("POST", URL_OK, {
+          timeoutMs: TOTAL_MS,
+          idleTimeoutMs: IDLE_MS,
+          onBodyText: () => undefined,
+        })
+        .catch((e: unknown) => e)) as TimeoutError;
+
+      expect(error).toBeInstanceOf(TimeoutError);
+      expect(error.timeoutMs).toBe(TOTAL_MS);
+      expect(transport.calls).toHaveLength(1);
+      expect(transport.calls[0]?.options.timeout).toBe(TOTAL_MS);
+    });
+
+    it("keeps a user cancel a cancel, and stops the idle watch", async () => {
+      const clock = createManualClock();
+      const { transport, push } = heldStream("reject");
+      const client = createHttpClient({ transport, userAgent: UA, clock });
+      const source = createCancellationTokenSource();
+
+      const promise = client.request("POST", URL_OK, {
+        token: source.token,
+        timeoutMs: TOTAL_MS,
+        idleTimeoutMs: IDLE_MS,
+        onBodyText: () => undefined,
+      });
+      await flushMicrotasks();
+      push("data: a\n\n");
+      source.cancel({ kind: "user" });
+
+      await expect(promise).rejects.toBeInstanceOf(OperationCancelledError);
+      expect(clock.pending).toBe(0);
+    });
+
+    it("refuses an idle limit without onBodyText, or one that is not a positive finite number, before anything is sent", async () => {
+      const { client, transport } = clientFor(stubXhr({ status: 200 }));
+
+      await expect(
+        client.request("GET", URL_OK, { idleTimeoutMs: IDLE_MS }),
+      ).rejects.toBeInstanceOf(RangeError);
+      for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        await expect(
+          client.request("GET", URL_OK, {
+            idleTimeoutMs: bad,
+            onBodyText: () => undefined,
+          }),
+          String(bad),
+        ).rejects.toBeInstanceOf(RangeError);
+      }
+      expect(transport.calls).toHaveLength(0);
+    });
+
+    it("leaves a plain request without any idle watch", async () => {
+      const clock = createManualClock();
+      const { client } = clientFor(stubXhr({ status: 200, body: "{}" }), {
+        clock,
+      });
+
+      await client.request("GET", URL_OK);
+
+      expect(clock.pending).toBe(0);
+    });
+  });
+});

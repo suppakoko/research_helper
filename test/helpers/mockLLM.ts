@@ -77,7 +77,15 @@ export interface MockLLMProvider extends LLMProvider {
   remaining(): number;
 }
 
-/** A `ModelInfo` for tests. */
+/**
+ * A `ModelInfo` for tests.
+ *
+ * `supportsStreaming` defaults to `true` (`plan/00` §6 item 268(d)): with
+ * `false` the router sends every `chatStream` to `chat`, so a `streaming: true`
+ * mock's own stream was never reached and router.test.ts's pass-through test
+ * passed on the fallback (`P3-T11` finding 2). Pass `false` to test the
+ * fallback.
+ */
 export function mockModel(
   id: string,
   overrides: Partial<ModelInfo> = {},
@@ -88,7 +96,7 @@ export function mockModel(
     contextWindowTokens: 128_000,
     maxOutputTokens: 8_000,
     supportsJsonSchema: true,
-    supportsStreaming: false,
+    supportsStreaming: true,
     supportsSystemPrompt: true,
     inputCostPerMTokUsd: undefined,
     outputCostPerMTokUsd: undefined,

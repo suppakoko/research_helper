@@ -24,7 +24,7 @@
  * | `LLMRouter` | **no** — one occurrence, this member (declared in §4.3 on 2026-10-21, item 248; now imported, `P3-T06`) | `src/llm/types.ts`, built by `src/llm/router.ts` |
  * | `ZoteroFacade` | **no** — one occurrence, this member | `src/zotero/zoteroApi.ts` (§3.2) |
  * | `ConfigReader` | **no** — one occurrence, this member | — nothing names one |
- * | `PrivacyPolicy` | **no** — one occurrence, this member | — nothing names one |
+ * | `PrivacyPolicy` | **no** — one occurrence, this member (declared in §4.5 on 2026-10-21, item 267; now imported, `P3-T15`) | `src/pipeline/shared/privacyPolicy.ts` |
  *
  * None of those seven files is in `P1-T16`'s `Files` list, and transcribing a
  * `Cache` or a `BudgetGuard` **here** would put a `core/` declaration in
@@ -49,10 +49,10 @@
  * cache, no budget guard, no LLM router and no privacy policy, so a context
  * that claimed to carry them would be the lie.
  *
- * **Reported, not absorbed.** `ConfigReader` and `PrivacyPolicy` have no
- * declaration and no home anywhere in the corpus; `docs/09` describes a privacy
- * *posture* in prose and §4.5's comment points at "doc 09", but no interface
- * exists. Those two need a card.
+ * **Reported, not absorbed.** `ConfigReader` has no declaration and no home
+ * anywhere in the corpus, and needs a card. *(Updated 2026-10-21, `P3-T15`:
+ * this sentence named `PrivacyPolicy` too; the owner declared it in §4.5,
+ * `plan/00` §6 item 267, and it is now imported.)*
  *
  * **Layering.** `pipeline/` may import `core/`, `model/`, `sources/`, `llm/`,
  * `tts/` and `zotero/`, and may not import `ui/` (`docs/07` §2.3,
@@ -67,6 +67,8 @@ import type { ProgressReporter } from "../core/jobQueue/progress";
 import type { Logger } from "../core/logger";
 import type { LLMRouter } from "../llm/types";
 import type { SourceRegistry } from "../sources/registry";
+
+import type { PrivacyPolicy } from "./shared/privacyPolicy";
 
 // ===========================================================================
 // 1. docs/07 §4.5, transcribed
@@ -184,8 +186,8 @@ export interface PipelineEstimate {
 }
 
 // ===========================================================================
-// 2. The forward aliases — see this file's header (five since P3-T33: LLMRouter
-//    and Cache are imported)
+// 2. The forward aliases — see this file's header (four since P3-T15: LLMRouter,
+//    Cache and PrivacyPolicy are imported)
 // ===========================================================================
 
 /**
@@ -231,11 +233,12 @@ export type ZoteroFacade = unknown;
 export type ConfigReader = unknown;
 
 /**
- * Named by §4.5 and **declared nowhere** — one occurrence in the whole corpus.
- * `docs/09` describes the privacy posture in prose and §4.5's comment points at
- * that document, but no interface exists. Needs a card.
+ * `docs/07` §4.5's `PrivacyPolicy`, declared by the owner on 2026-10-21
+ * (`plan/00` §6 item 267) and built by `./shared/privacyPolicy.ts`'s
+ * `createPrivacyPolicy` (`P3-T15`). No longer a forward alias: re-exported so
+ * `PipelineContext.privacy` is the real policy.
  */
-export type PrivacyPolicy = unknown;
+export type { PrivacyPolicy };
 
 // ===========================================================================
 // 3. Weights → fractions

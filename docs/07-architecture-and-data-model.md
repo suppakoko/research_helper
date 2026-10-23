@@ -1309,6 +1309,52 @@ export interface BudgetGuard {
 >    preference is read on each call, so a change needs no restart.
 > 3. **A missing `chatStream` falls back to `chat`**, as `LLMProvider.chatStream`'s comment says,
 >    so a caller never branches.
+>
+> **Decided 2026-10-21 (`P3-T11`): the streaming contract.** (a) The router also calls `chat` when
+> the adapter's `getModel(request.model)` says `supportsStreaming: false`; an unknown model streams.
+> (b) A stream yields text chunks with `done: false` and then **exactly one** chunk with
+> `done: true`, `deltaText: ""` and the provider's final `usage` when it sent one; completion is
+> taken from the provider's terminal event (`[DONE]`, `response.completed`/`response.incomplete`,
+> `message_stop`, `interaction.completed`), never from an empty delta. (c) A stream that ends
+> without its terminal event — cut mid-frame, or a frame that is not JSON — throws
+> `NetworkError`, never a short result. (d) A terminal event whose stop reason is a truncation
+> throws `OutputTruncatedError` (the same class `completeJSON` throws for `finishReason:
+> "length"`) after the text already yielded, and a refusal throws `ContentFilterError` through
+> `mapProviderError`, because `ChatStreamChunk` has no `finishReason`; the `chat` fallback in (a)
+> applies the same truncation rule, so a caller of `chatStream` sees one contract. (e) An error
+> event after HTTP 200 (`docs/03` §6.2 note 4) is mapped through `mapProviderError`. (f) The
+> request is `HttpClient.request` with `HttpOptions.onBodyText` (§7.4's choke point, its limiter
+> slot held for the stream's life, its retry, timeout and redaction unchanged); an attempt that
+> has delivered any text is never retried. (g) A consumer that stops iterating cancels the request
+> through a token linked to `LLMCallContext.token`; that is not an error and nothing is thrown.
+>
+> **Decided 2026-10-22 (owner, plan/00 §6 item 268(c)): a stream's two time limits.** *(This
+> corrects (f)'s "timeout … unchanged".)* A plain request keeps `LLM_ATTEMPT_TIMEOUT_MS`
+> (3 minutes) for the whole request. A streamed request has two limits instead: **3 minutes
+> without new text** (`LLM_STREAM_IDLE_TIMEOUT_MS`, 180 000 ms) and **15 minutes in all**
+> (`LLM_STREAM_TOTAL_TIMEOUT_MS`, 900 000 ms). Both constants sit beside `LLM_ATTEMPT_TIMEOUT_MS`
+> in `src/core/rateLimit/hostLimiter.ts`, and the adapters take all three through
+> `llmAttemptTimeouts` in the same file. Before this date the 3-minute attempt limit covered the
+> whole stream, so a trend report that streamed for longer ended in `TimeoutError` (`P3-T11`
+> finding 4). Both limits live in `HttpClient`'s streaming mode, with no second HTTP stack. The
+> 15-minute limit is the request's `timeoutMs`, passed to `Zotero.HTTP.request` as the XHR
+> `timeout`, which covers the whole exchange. The 3-minute idle limit is `HttpOptions.idleTimeoutMs`,
+> which the client accepts only together with `onBodyText`. The client measures it on its injected
+> clock, starting when the attempt is handed to the transport (so a host that sends nothing at all
+> is cut after 3 minutes, as a plain request is) and restarting each time the body grows. When it
+> runs out, the client aborts the request through `cancellerReceiver`. **No timeout is ever set to
+> zero or lifted from the progress handler**: `01-zotero-plugin-platform.md` §8.4.1 records that
+> other plugins do this, and the no-hang rule forbids it. Either expiry surfaces as `TimeoutError`
+> through the client's normal path; after an idle expiry, its `timeoutMs` is the idle limit. Neither
+> is retried: a timeout never is (item 230), and an attempt that delivered text never is either, as
+> (f) says.
+>
+> **Decided 2026-10-22 (owner, plan/00 §6 item 268(d)): "not known" streams.** `supportsStreaming`
+> is a boolean, so an adapter that cannot tell whether a model streams writes `true`, the value
+> (a) treats as streamable. It never writes `false`, which (a) reads as "cannot stream". OpenAI's
+> `toModelInfos` (`src/llm/openai/mapper.ts`) wrote `false` for "not known" until this date, so
+> every OpenAI model it had listed took the `chat` fallback (`P3-T11` finding 1). The decision does
+> not touch `supportsJsonSchema`.
 
 ```ts
 // src/llm/types.ts (continued) — the router's public surface
@@ -1415,6 +1461,90 @@ export interface TTSProvider {
 > purpose (`resolveModel`) and sends the call through it (`chat`, `chatStream`), and never holds an
 > `LLMProvider` itself. One router is built per plugin lifetime, by `registerProviders` called from
 > `installServices`, and every job's context carries that same router.
+
+> **`PipelineContext.privacy`. Decided 2026-10-21 (owner, plan/00 §6 item 267).** The member's
+> type is `PrivacyPolicy`, the surface `P3-T15` builds in `src/pipeline/shared/privacyPolicy.ts`
+> and `src/pipeline/types.ts` re-exports: the mode in force for the job, and the three checks
+> `09-security-privacy-and-api-keys.md` §3.5 describes in prose — `effectiveMode`,
+> `allowedInputScope`, `assertModelAllowed`. `effectiveMode` returns the stricter of the global
+> `privacy.mode` preference (§8.5) and the collection's override: **a per-collection setting can
+> only be stricter, never looser**, and it is **never stored in a preference** — it lives in the
+> `collection_settings` table (§8.3). `allowedInputScope` forces `fullTextMode` to `never` in
+> strict mode and excludes notes, annotations, tags and collection names except under `full` with
+> a separate opt-in. `assertModelAllowed` reads `ModelInfo.dataPolicy` (§4.3) and throws
+> `PolicyViolationError` (§10.1) for an `"unknown"` policy in strict mode and for `"yes"` in strict
+> and balanced mode; otherwise it returns the warnings to show.
+>
+> ```ts
+> // src/pipeline/shared/privacyPolicy.ts
+> export type PrivacyMode = "strict" | "balanced" | "full";   // §8.5's privacy.mode values
+> export interface PrivacyPolicy {
+>   /** The mode in force for this job: effectiveMode(privacy.mode, the collection's override). */
+>   readonly mode: PrivacyMode;
+>   /** The stricter of the two; an override never loosens the global mode. */
+>   effectiveMode(globalMode: PrivacyMode, collectionOverride: PrivacyMode | undefined): PrivacyMode;
+>   /** What a job in `mode` may send (09 §3.5's table). */
+>   allowedInputScope(mode: PrivacyMode, request?: InputScopeRequest): AllowedInputScope;
+>   /** Throws PolicyViolationError when `mode` refuses `model`; otherwise the warnings to show. */
+>   assertModelAllowed(model: ModelInfo, mode: PrivacyMode, route?: ModelRoute): ModelPolicyCheck;
+> }
+> /** The provider the model is reached through (item 269(b), 2026-10-22). */
+> export interface ModelRoute {
+>   readonly providerId: ProviderId;
+>   /** §8.5's gemini.paidTier, read when the check runs; consulted for Gemini only. */
+>   readonly geminiPaidTier?: boolean;
+> }
+> export type FullTextMode = "never" | "auto" | "always";    // 06 §5.4, §8.5's summary.fullTextMode
+> export interface InputScopeRequest {
+>   readonly fullTextMode?: FullTextMode;                     // the run's choice; absent = "auto" (D7)
+>   /** Separate, explicitly labelled opt-ins (09 §3.2); honoured only under "full". */
+>   readonly optIns?: { readonly notes?: boolean; readonly annotations?: boolean; readonly collectionAndTagNames?: boolean };
+> }
+> export interface AllowedInputScope {
+>   readonly mode: PrivacyMode;
+>   readonly fullTextMode: FullTextMode;                      // "never" in strict
+>   readonly notes: boolean;
+>   readonly annotations: boolean;
+>   readonly collectionAndTagNames: boolean;
+> }
+> export interface ModelPolicyCheck {
+>   readonly warnings: readonly ("data-policy-unknown" | "may-train-on-input")[];
+>   /** Full mode and a model that may train on input: the user confirms first (09 §3.5). */
+>   readonly requiresConfirmation: boolean;
+> }
+> ```
+>
+> *Added 2026-10-21 (`P3-T15`; the card's choices, for the owner to confirm):* `mode` is a member
+> because §4.5 calls the context member "the privacy posture in force for this job". In
+> `full` mode an `"unknown"` policy passes with no warning, as §3.5's table says ("Allowed").
+> The stricter mode reaches OpenRouter per request through `ChatRequest.routing` (§4.3):
+> `routingHints(mode)` in the same file sets `requireZeroRetention` in strict mode, which the
+> adapter sends as `provider.zdr: true`. `collection_settings.json` (§8.3) holds
+> `{ "privacyMode"?: PrivacyMode, "routineConfirmation"?: { providerId, privacyMode, fullText } }`
+> — the override, and what "don't ask again for this collection" was ticked under (09 §3.6
+> item 2). The per-job egress log (09 §3.6 item 4) rides in `JobRecord.input` as its `egress`
+> member, so the `input` column's redaction gate (§5.2) covers it; `JobRecord` gains no member.
+>
+> **Decided 2026-10-22 (owner, plan/00 §6 item 269(b)): a Gemini key the user declares paid.**
+> The Gemini rules live in **one place**: `assertModelAllowed`, through its third parameter
+> `ModelRoute`. The adapter's `ModelInfo.dataPolicy` stays what the plugin itself knows (the
+> detected tier, which is free or unknown today, so `trainsOnInputByDefault: "yes"`), and the
+> model picker shows that. With `route.providerId === "gemini"`:
+> - ~~**strict** refuses the model on every tier. The free tier trains on input, and the paid tier
+>   keeps content for 55 days for abuse monitoring (09 §3.3).~~ *Corrected 2026-10-23 (owner, `plan/00` §6 item 270):* strict judges a model
+>   by its training policy, not by abuse-monitoring retention (OpenAI and Anthropic keep content
+>   30 days and strict allows them, 09 §3.3), so Gemini has no strict-only rule.
+> - **strict**, **balanced** and **full** read `trainsOnInputByDefault` as `"no"` when `route.geminiPaidTier`
+>   is `true`, and as the model's own policy otherwise. So strict and balanced allow a declared-paid key and
+>   refuse a free or unknown one. Full allows a declared-paid key with no warning and no
+>   confirmation; a free or unknown one is still warned and needs confirmation.
+>
+> `geminiPaidTier` is §8.5's `gemini.paidTier`, read when the check runs. `modelRouteFor` in
+> `src/pipeline/shared/privacyPolicy.ts` builds the route that way and reads the preference only
+> for Gemini. A check without a route reads `dataPolicy` alone, as it always did. For a free or
+> unknown Gemini key that check still fails closed in strict and balanced, so a caller cannot
+> loosen anything by leaving the route out. The callers (`P3-T16`, `P3-T29`) pass the route of the
+> provider the router resolved. The disclosure's side is 09 §3.6 item 3.
 
 ```ts
 // src/pipeline/types.ts
@@ -2694,6 +2824,10 @@ Policy table (`src/core/rateLimit/hostLimiter.ts`). Values are governed by the t
 > - **One LLM attempt may wait up to 3 minutes.** `LLM_ATTEMPT_TIMEOUT_MS` (180 000 ms) sits beside the budget in
 >   `hostLimiter.ts`, and the adapter passes it as the request's `timeoutMs`, because a long full-text generation can
 >   exceed 60 s. It is a named constant, not a preference. Literature hosts keep §8.5's `timeoutSeconds` (60 s).
+>   *(Updated 2026-10-22, owner, plan/00 §6 item 268(c): this limit is for a plain request. A **streamed**
+>   request has two limits instead: 3 minutes without new text (`LLM_STREAM_IDLE_TIMEOUT_MS`) and 15 minutes in all
+>   (`LLM_STREAM_TOTAL_TIMEOUT_MS`), both beside it in `hostLimiter.ts`. See §4.3's note "a stream's two time
+>   limits".)*
 > - **A timeout is not retried automatically** (item 230, note above). A silent LLM host costs one 3-minute attempt.
 > - **The 90-second request budget is unchanged and now covers LLM requests too.** It decides only whether a retry may
 >   *start*; it never cuts an attempt short. Three consequences. An LLM attempt that fails after 90 s or more is not
@@ -3458,6 +3592,9 @@ CREATE TABLE search_provenance (
 );
 CREATE INDEX idx_provenance_collection ON search_provenance(library_id, collection_key);
 
+-- Added 2026-10-21 (P3-T15; plan/00 §6 item 267): migration version 5 is this statement, byte for
+-- byte. `json` is a JSON object; its privacy members are declared in §4.5's PrivacyPolicy note. A
+-- per-collection privacy override can only make the global privacy.mode stricter (09 §3.5).
 CREATE TABLE collection_settings (
   library_id     INTEGER NOT NULL,
   collection_key TEXT NOT NULL,
@@ -3540,6 +3677,7 @@ Rows marked **⚠** are settings the design uses but no document had declared as
 | `screening.model` | string | `""` (empty = use `summaryModel`, and `<provider>.model` when that is also empty) | a model ID | `12-prompt-library.md` §3 | **Not in the pane.** **This is not a third model tier.** Doc 03 §16 sanctions exactly two tiers (`summaryModel` / `reportModel`); this key exists only so a user can point the cheap relevance-screening pass (doc 12 §3, `RELEVANCE_SCREEN` — the highest-volume call in the plugin) at an even cheaper model. Left empty, screening runs on `summaryModel` and no third model is in play. |
 | `privacy.mode` | string | `"balanced"` | `strict` \| `balanced` \| `full` | `09-security-privacy-and-api-keys.md` §3.5 | Prefs pane → Privacy (doc 08 §7.3). This row is the **global** default only; per-collection overrides live in the `collection_settings` table (§8.3), are surfaced in the collection context menu, and can only ever be *stricter* than this value (doc 09 §3.5). |
 | `privacy.egressAcknowledged` | boolean | `false` | — | `09-security-privacy-and-api-keys.md` §3.6 | **Not in the pane.** The one-time data-egress acknowledgement `10-requirements-and-user-stories.md` FR-36 requires be "recorded in prefs". Written **once**, by the first-job confirmation dialog, when the user acknowledges the notice; read to decide whether to show that notice again. It is *not* a suppression switch for the per-job disclosure, which doc 09 §3.6 item 1 requires on every job that sends content, and it does not suppress any of the four non-suppressible warnings in doc 09 §3.6 items 2–3. No document named the key; the shape is pinned here. |
+| `gemini.paidTier` | boolean | `false` | — | `09-security-privacy-and-api-keys.md` §3.4 rule 4, §3.5, §3.6 item 3 | Prefs pane → LLM providers, Gemini block: a checkbox and its label, which are `P3-T04`'s. **Decided 2026-10-22 (owner, `plan/00` §6 item 269(b)).** This is the user's statement that the Gemini key's Cloud project is billing-linked (Google's paid tier). The plugin cannot read that itself (doc 09 §3.4 rule 4). The value is read **on demand**, each time a policy check or a disclosure needs it, and is never cached. **`false`** (the default) means free or unknown, which the plugin treats as the free tier. **`true`** means three things. A Gemini model counts as not training on input, so `strict` and `balanced` modes allow it. *(Corrected 2026-10-23 (owner, `plan/00` §6 item 270): this read "`strict` mode still refuses Gemini, because the paid tier keeps content for abuse monitoring"; strict judges training, not abuse-monitoring retention, as it does for OpenAI and Anthropic.)* The free-tier warning is replaced, on every job, by a one-line reminder that the key is declared paid, and that reminder can never be turned off (doc 09 §3.6 item 3). The setting is a declaration, not evidence: only the user sets it, and no detected signal does. It has no `pref()` line (`01-zotero-plugin-platform.md` §7.2), like `privacy.egressAcknowledged`, so an absent value reads as the default. |
 | `llm.tokenEstimateCalibration` | string (JSON) | `"{}"` | JSON object, model ID → correction factor (a positive number) | `03-llm-provider-integration.md` §10.2 | **Not user-visible.** The rolling per-model correction factor that `06-summarization-and-trend-report.md` §5.1 and `12-prompt-library.md` §11 ask be measured from the returned `usage` blocks and stored "in prefs" so the heuristic estimator becomes self-calibrating. This row is that store, and it is a **preference rather than a database table** because it is bounded (one entry per model the user actually runs), tiny, and read at estimate time by `src/llm/shared/tokenEstimate.ts` — the same reasoning that makes `cache.lastSeenPromptVersions` a pref. Write it at most **once per job**, on completion, never per call: §8.2's rule that prefs rewrite the whole file on every change still applies. An absent or unparseable value means "no calibration yet" and the raw heuristic is used. |
 
 Model IDs churn on a scale of weeks. These are **seed defaults only** — the pickers are repopulated from each provider's models endpoint at run time (`03-llm-provider-integration.md` §9). Never hardcode a model ID outside `prefs.js`.
@@ -3629,7 +3767,7 @@ Per decision **D5** (`00-overview.md` §3) and `09-security-privacy-and-api-keys
 | `semanticscholar.keyPresent` | boolean | `false` | — | as above | Doc 08 §7.3 renders an S2 key field with a backend badge and doc 09 §1.7 assigns the `source.semanticscholar` `SecretId`, so the flag is required; `01-zotero-plugin-platform.md` §7.2's `prefs.js` ships the `pref()` line for it. |
 | `<provider>.lastValidatedAt` | string | `""` | ISO 8601 timestamp, or empty | `09-security-privacy-and-api-keys.md` §2.3 | Prefs pane status row ("last validated …"). One key per provider ID, same set as `keyPresent`. |
 | `<provider>.lastValidationResult` | string | `""` | `ok` \| `rejected` \| `forbidden` \| `inconclusive` \| `""` (never validated) | `09-security-privacy-and-api-keys.md` §2.4 | Prefs pane key-status row — the per-credential `role="status"` hint element beside the key field in doc 08 §7.3's markup (`rh-or-status` in the OpenRouter block, one per key-holding block) supplies its colour and wording. **One key per credential-holding ID — exactly the same six as `keyPresent` and `lastValidatedAt` above**: `openrouter`, `openai`, `gemini`, `anthropic`, `ncbi`, `semanticscholar`. Doc 09 §2.3 defines a validation test call for all six. It was scoped to the four LLM providers in an earlier draft; **the owner extended it to all six on 2026-09-09**, because the two source credentials fail *silently*: a wrong or expired NCBI key does not error, it simply drops the user from 10 req/s back to the unkeyed 3 req/s (`02-literature-database-apis.md` §3.1), and a wrong Semantic Scholar key drops features F2 and F6 onto the saturated anonymous pool that `02-literature-database-apis.md` §6.4 measured returning HTTP 429 on three consecutive attempts. Without a stored validation status neither failure has any surface at all. Written together with `<provider>.lastValidatedAt` by the validation flow and by doc 09 §2.4 step 3; reset to `""` on key rotation (doc 09 §2.5). It is a **status**, not an input, so doc 08 §7.3 gives it no `preference=` binding — the status element is driven imperatively by `preferences.js`, like the key field itself. |
-| ⚠ `secretBackend` | string | `""` | `oskeystore` \| `session` \| `passphrase` \| `""` (unprobed). **CONFLICT, recorded 2026-09-30 (`P1-T03`): `docs/09` §1.7's `SecretBackend` type spells these `"os-keychain" \| "session-only" \| "passphrase"` — two of the three differ and it has no unprobed member.** §8.5 is the sole authority for a preference's allowed values, so these spellings ship; one of the two documents must be corrected, and `P3-T02`'s startup probe is where the mismatch bites. Note the 2026-09-30 `G-09` measurement added a **fifth** live case neither set has a member for — Gecko's `NSSKeyStore` fallback, decided as a degraded tier — so the answer may be five values, not four. | `09-security-privacy-and-api-keys.md` §1.7 | Prefs pane storage-backend badge. `09-security-privacy-and-api-keys.md` §1.7 says "the selected backend" goes in prefs but names no key. |
+| ⚠ `secretBackend` | string | `""` | `oskeystore` (tier 1) \| `session` (tier 2, chosen in the degradation dialog) \| `""` (unprobed, or no store: the probe failed and the user declined tier 2). **Corrected 2026-10-21 (owner, `plan/00` §6 item 267): the CONFLICT recorded here on 2026-09-30 (`P1-T03`) is resolved in favour of these spellings, and `passphrase` is dropped.** The row read `oskeystore` \| `session` \| `passphrase` \| `""`, against `docs/09` §1.7's `SecretBackend` type `"os-keychain" \| "session-only" \| "passphrase"`. The type is the `SecretStore` port's vocabulary and keeps its spellings; this row is the preference's, and `secretBackendPrefValue` in `src/zotero/keychain.ts` is the one mapping between them: `os-keychain` → `oskeystore`, `session-only` → `session`, no store → `""`. `passphrase` left both sets because tier 3 does not ship in v1 (`G-10`, decided 2026-10-08). **The fifth live case — Gecko's `NSSKeyStore` fallback — records `oskeystore` today.** The startup probe is a round trip and succeeds on that backend too, so it cannot tell it from a system keyring (`P1-T41`); that is why the pane's badge reads *Indeterminate* on Linux instead of naming a store (`docs/09` §1.9 item 3). `G-10`'s 2026-09-30 ruling sends the substitute to the degradation dialog once `P3-T37` can detect it, and that dialog writes only `session` or `""`, so the ruling needs no fifth value. One would be needed only if detection proves infeasible and the owner then accepts NSS-backed storage as tier 1 (`P3-T37`'s open line); the ⚠ stays until that is settled. | `09-security-privacy-and-api-keys.md` §1.7 | Prefs pane storage-backend badge. `09-security-privacy-and-api-keys.md` §1.7 says "the selected backend" goes in prefs but names no key. |
 
 There is **no** `*.apiKey`, `apiKey.*`, or similarly-named preference, and there must never be one. `src/prefs/schema.ts` carries a `secret: true` flag per entry, and a unit test asserts that no `secret: true` entry has a `Zotero.Prefs` writer (`09-security-privacy-and-api-keys.md` §1.7). The debug bundle's `settings.json` uses the same flag to replace secret-flagged values with `"[present]"` / `"[absent]"` (§10.4).
 

@@ -383,8 +383,15 @@ export function isChatModelId(id: string): boolean {
  *
  * Every field the list does not carry is "not known": both token limits are
  * {@link UNKNOWN_TOKEN_LIMIT}, both prices `undefined`, and
- * `supportsJsonSchema` / `supportsStreaming` `false` until `P3-T13` enriches
- * them. A repeated id is kept once, in first-seen order.
+ * `supportsJsonSchema` `false` until `P3-T13` enriches it. A repeated id is
+ * kept once, in first-seen order.
+ *
+ * **`supportsStreaming` is `true`** (`plan/00` §6 item 268(d), owner,
+ * 2026-10-22; `docs/07` §4.3's note "'not known' streams"). The field is a
+ * boolean and the router reads `false` as "cannot stream", so "not known" is
+ * written as the value the router streams, `true`. Until that date this wrote
+ * `false`, and every listed OpenAI model took the router's `chat` fallback
+ * (`P3-T11` finding 1).
  *
  * @param parsed - the parsed list body
  * @returns the chat models
@@ -405,7 +412,7 @@ export function toModelInfos(parsed: JsonRecord): ModelInfo[] {
       contextWindowTokens: UNKNOWN_TOKEN_LIMIT,
       maxOutputTokens: UNKNOWN_TOKEN_LIMIT,
       supportsJsonSchema: false,
-      supportsStreaming: false,
+      supportsStreaming: true, // "not known" streams (item 268(d))
       supportsSystemPrompt: true,
       inputCostPerMTokUsd: undefined,
       outputCostPerMTokUsd: undefined,

@@ -3,6 +3,9 @@
 /* eslint-disable */
 // @ts-nocheck
 export type FluentMessageId =
+  | 'research-helper-egress-first-job-notice'
+  | 'research-helper-egress-gemini-declared-paid'
+  | 'research-helper-egress-gemini-free-tier'
   | 'research-helper-import-abstract-coverage'
   | 'research-helper-import-fallback-reason'
   | 'research-helper-import-paths'
@@ -137,6 +140,12 @@ export type FluentMessageId =
   | 'research-helper-search-years-label'
   | 'research-helper-search-years-span'
   | 'research-helper-search-years-to'
+  | 'research-helper-secret-backend-accept'
+  | 'research-helper-secret-backend-decline'
+  | 'research-helper-secret-backend-explain'
+  | 'research-helper-secret-backend-none'
+  | 'research-helper-secret-backend-session'
+  | 'research-helper-secret-backend-title'
   | 'research-helper-source-arxiv'
   | 'research-helper-source-biorxiv'
   | 'research-helper-source-crossref'

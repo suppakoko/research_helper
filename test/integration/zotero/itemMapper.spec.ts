@@ -27,6 +27,11 @@
  * The runner gives Zotero a temporary data directory that it empties before
  * every run (`docs/13` §2.3), so nothing here touches a real library.
  *
+ * **Cleanup** (`plan/00` §6 items 264 and 266, added 2026-10-22): every item
+ * {@link saveMapped} writes, and the overflow test's child note, is erased by
+ * an `after` hook inside this file's `describe`, so later specs never see
+ * them. A failure there is reported, never thrown.
+ *
  * Sandbox caveats (`docs/01` §2.3, measured `P0-T08`): no `performance`, no
  * `console` — `Date.now()` is the clock and `debug()` is the log.
  */
@@ -51,6 +56,7 @@ import {
 // locally, to exactly what this file uses: no Mocha types are installed.
 declare function describe(title: string, body: () => void): void;
 declare function it(title: string, body: () => Promise<void>): void;
+declare function after(body: () => Promise<void>): void;
 declare const assert: {
   strictEqual<T>(actual: T, expected: T, message?: string): void;
   deepEqual<T>(actual: T, expected: T, message?: string): void;
@@ -64,6 +70,12 @@ declare const assert: {
 declare function debug(line: string): void;
 
 const LOG_PREFIX = "[P1-T12]";
+
+/**
+ * What the specs wrote, in write order, for the cleanup hook. The hook erases
+ * in reverse, so the child note goes before its parent.
+ */
+const writtenItemIDs: number[] = [];
 
 const DOI = normalizeDoi("https://doi.org/10.1056/NEJMoa2300709");
 const PMID = normalizePmid("37258680");
@@ -142,10 +154,26 @@ async function saveMapped(json: object): Promise<Zotero.Item> {
     assert.fail(`fromJSON(json, {strict: true}) threw ${name}: ${message}`);
   }
   await item.saveTx();
+  writtenItemIDs.push(item.id);
   return item;
 }
 
 describe("CanonicalWork → Zotero item JSON, validated by Zotero (P1-T12)", function () {
+  // plan/00 §6 items 264 and 266: inside the describe, so it runs when this
+  // spec ends; a failure here is reported, never thrown.
+  after(async function () {
+    const itemIDs = [...writtenItemIDs].reverse();
+    try {
+      if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
+      debug(`${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items`);
+    } catch (error) {
+      debug(
+        `${LOG_PREFIX} cleanup FAILED (${
+          error instanceof Error ? error.message : String(error)
+        }); ${String(itemIDs.length)} items may remain`,
+      );
+    }
+  });
   it("is accepted by fromJSON in strict mode and round-trips its fields", async function () {
     await Zotero.Schema.schemaUpdatePromise;
     debug(
@@ -363,6 +391,7 @@ describe("CanonicalWork → Zotero item JSON, validated by Zotero (P1-T12)", fun
     note.setNote(mapping.overflowNote);
     note.parentID = item.id;
     await note.saveTx();
+    writtenItemIDs.push(note.id);
 
     const children = item.getNotes();
     assert.strictEqual(children.length, 1, "exactly one child note");

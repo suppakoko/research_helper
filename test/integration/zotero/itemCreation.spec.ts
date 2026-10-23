@@ -13,9 +13,14 @@
  *
  * The runner gives Zotero a temporary data directory that it empties before
  * every run (`.scaffold/test/data`, `docs/13` §2.3), so nothing here touches
- * a real library and nothing is cleaned up afterwards. The spec still counts
- * items *before* and *after* rather than assuming an empty collection, because
- * a watch-mode re-run reuses the same Zotero.
+ * a real library. The spec still counts items *before* and *after* rather than
+ * assuming an empty collection, because a watch-mode re-run reuses the same
+ * Zotero.
+ *
+ * **Cleanup** (`plan/00` §6 items 264 and 266, added 2026-10-22): an `after`
+ * hook inside this file's `describe` erases the item(s) the click wrote and,
+ * only when the click created it, the `SPIKE_COLLECTION_NAME` collection, so
+ * later specs never see them. A failure there is reported, never thrown.
  *
  * No network, no LLM (`docs/13` §2.3): the command writes fixed local data.
  *
@@ -49,6 +54,7 @@ import {
 // locally, to exactly what this file uses: no Mocha types are installed.
 declare function describe(title: string, body: () => void): void;
 declare function it(title: string, body: () => Promise<void>): void;
+declare function after(body: () => Promise<void>): void;
 declare const assert: {
   strictEqual<T>(actual: T, expected: T, message?: string): void;
   deepEqual<T>(actual: T, expected: T, message?: string): void;
@@ -56,6 +62,14 @@ declare const assert: {
   include<T>(haystack: readonly T[], needle: T, message?: string): void;
   fail(message: string): never;
 };
+/** The scaffold runner's `window.debug`: POSTs one line to the terminal. */
+declare function debug(line: string): void;
+
+const LOG_PREFIX = "[P0-T10]";
+
+/** What the click wrote, for the cleanup hook; see the file header. */
+const writtenItemIDs = new Set<number>();
+const writtenCollectionIDs = new Set<number>();
 
 const TOOLS_POPUP_ID = "menu_ToolsPopup";
 const TOOLS_TARGET = "main/menubar/tools";
@@ -146,6 +160,29 @@ function idle(win: _ZoteroTypes.MainWindow): Promise<void> {
 }
 
 describe("Tools-menu spike command (P0-T10)", function () {
+  // plan/00 §6 items 264 and 266: inside the describe, so it runs when this
+  // spec ends; a failure here is reported, never thrown.
+  after(async function () {
+    const itemIDs = [...writtenItemIDs];
+    const collectionIDs = [...writtenCollectionIDs];
+    try {
+      if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
+      for (const collectionID of collectionIDs) {
+        const collection = Zotero.Collections.get(collectionID);
+        if (collection) await collection.eraseTx();
+      }
+      debug(
+        `${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items and ` +
+          `${String(collectionIDs.length)} collections`,
+      );
+    } catch (error) {
+      debug(
+        `${LOG_PREFIX} cleanup FAILED (${
+          error instanceof Error ? error.message : String(error)
+        }); ${String(itemIDs.length)} items may remain`,
+      );
+    }
+  });
   it("creates one journalArticle with four fields inside the named collection", async function () {
     await waitUntil(
       () =>
@@ -156,6 +193,7 @@ describe("Tools-menu spike command (P0-T10)", function () {
     );
 
     const before = new Set(spikeItemIDs());
+    const collectionExistedBefore = spikeCollection() !== undefined;
     await clickSpikeMenuItem(Zotero.getMainWindow());
 
     // onCommand does not await the command (src/ui/menus/toolsMenu.ts), so
@@ -169,6 +207,12 @@ describe("Tools-menu spike command (P0-T10)", function () {
     await delay(SETTLE_MS);
 
     const created = newIDs();
+    // Bookkeeping first, so the cleanup hook has it even if an assertion fails.
+    for (const id of created) writtenItemIDs.add(id);
+    const collectionAfter = spikeCollection();
+    if (!collectionExistedBefore && collectionAfter !== undefined) {
+      writtenCollectionIDs.add(collectionAfter.id);
+    }
     assert.strictEqual(created.length, 1, "exactly one item per click");
 
     const item = Zotero.Items.get(created[0]!);

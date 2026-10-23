@@ -290,3 +290,39 @@ research-helper-job-wall-clock-budget =
     { $minutes ->
        *[other] { $minutes }분 동안 작업한 뒤 멈췄습니다. { $total }편 중 { $done }편 완료 — 나머지를 계속할까요?
     }
+
+
+## The egress disclosure's two notices (P3-T15; docs/09 §3.6)
+##
+## The coordinator drafts the Korean and the owner reviews it (G-41); nothing
+## here was machine-translated. "Research Helper", "API" and "Google" stay as
+## they are (`docs/08` §10.3).
+##
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-22 (G-41,
+# plan/00 §6 item 269(a)).
+
+research-helper-egress-first-job-notice = Research Helper는 사용자의 컴퓨터에서 실행되고 사용자의 API 키를 쓰며, 개발자에게는 아무것도 보내지 않습니다. 그렇다고 제공자에게까지 자료가 비공개로 유지되는 것은 아닙니다. 위에 적힌 내용은 사용자가 고른 제공자에게 전송되며, 제공자는 자체 약관에 따라 이를 처리합니다. 확인을 누르면 이 안내를 읽었다는 사실만 기록됩니다. 이 창이나 창 안의 경고가 꺼지지는 않습니다.
+research-helper-egress-gemini-free-tier = 이 Google API 키는 무료 등급으로 보입니다. Google 약관에 따르면 무료 등급으로 보낸 내용은 Google 제품 개선에 쓰이며, 사람 검토자가 읽을 수 있습니다. 발표하지 않았거나 기밀인 자료에는 무료 등급을 쓰지 마세요.
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-23 (G-41,
+# plan/00 §6 item 270(b)).
+research-helper-egress-gemini-declared-paid = 이 Google API 키는 Research Helper 설정에서 유료 키로 표시되어 있습니다. 실제로 무료 등급이라면 Google이 보낸 내용을 제품 개선에 쓸 수 있습니다.
+
+
+## The key-storage degradation dialog (P3-T03; docs/09 §1.7, gate G-10)
+##
+## The coordinator drafts the Korean and the owner reviews it (G-41); nothing
+## here was machine-translated. "API", "NCBI" and "Zotero" stay as they are
+## (`docs/08` §10.3).
+##
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-22 (G-41,
+# plan/00 §6 item 268(a)).
+
+research-helper-secret-backend-title = Research Helper가 이 컴퓨터에 API 키를 저장할 수 없습니다
+research-helper-secret-backend-explain = Research Helper는 API 키를 운영체제의 자격 증명 저장소에만 보관하는데, 그 저장소를 쓸 수 없습니다. 키는 다른 어디에도 저장하지 않습니다. 어떻게 계속할지 고르세요.
+research-helper-secret-backend-session = 이번 세션 동안만 키를 보관합니다. 키는 메모리에만 두고 어디에도 쓰지 않습니다. Zotero를 시작할 때마다 다시 입력해야 하며, 입력할 때까지 키가 필요한 백그라운드 작업은 멈춥니다.
+research-helper-secret-backend-none = 키를 저장하지 않고 계속합니다. 검색과 가져오기는 그대로 되지만, NCBI 키가 없으면 더 느립니다. 요약처럼 키가 필요한 기능은 꺼진 채로 있습니다.
+research-helper-secret-backend-accept =
+    .label = 이번 세션만 키 보관
+research-helper-secret-backend-decline =
+    .label = 키 없이 계속

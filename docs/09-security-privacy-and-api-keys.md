@@ -201,6 +201,8 @@ This is the layer that actually raises the bar. Under DPAPI, ciphertext copied t
 
 It remains worth offering as an **optional hardening layer** for users on machines where the OS keystore is unavailable (§1.7, tier 3) — there, a passphrase is strictly better than plaintext.
 
+> *Corrected 2026-10-22 (`plan/00` §6 item 268, recorded from `P3-T03`):* the sentence above is not what v1 does. Gate `G-10` was decided on 2026-10-08: when the OS keystore is unavailable, the only fallback offered is tier 2, session-only, and **tier 3, the passphrase-encrypted file, does not ship in v1** (§1.7, corrected 2026-10-21 under `plan/00` §6 item 267). No passphrase layer is offered, so no `secretBackend` value names one (`07-architecture-and-data-model.md` §8.5). The paragraph is kept as the record of the alternative considered.
+
 **A plugin-managed encryption key stored beside the ciphertext.** This is what "encrypting" with a hard-coded or derived-from-machine-ID key amounts to. **Rejected.** It is obfuscation presented as encryption, which is worse than plaintext because it misleads the user about their exposure.
 
 **Not storing keys at all — prompt every session.** Rejected for the same background-job reason, but offered as an opt-in mode (§1.7, "session-only") for users handling sensitive material who accept the friction.
@@ -229,13 +231,20 @@ Consequences that drive design rules:
 
 ### 1.7 Recommendation
 
-**Three-tier storage, degrading explicitly and visibly.**
+**Two-tier storage, degrading explicitly and visibly.**
+
+*Corrected 2026-10-21 (owner, `plan/00` §6 item 267):* this section recommended **three** tiers, and
+the type below had a third member, `"passphrase"`. Gate `G-10` was decided on 2026-10-08: when the
+OS keystore is unavailable, tier 2 (session-only) is the only fallback offered, and tier 3 (the
+passphrase-encrypted file) **does not ship in v1**. Tier 3's paragraph below is kept as the record
+of what is not built. The `SecretBackend` port type and the `secretBackend` *preference* use
+different spellings on purpose; see "What *does* go in `Zotero.Prefs`" below.
 
 ```ts
 // src/zotero/keychain.ts
 
 /** No "plaintext-prefs" member exists, deliberately — see tier 4 below. */
-export type SecretBackend = "os-keychain" | "session-only" | "passphrase";
+export type SecretBackend = "os-keychain" | "session-only";
 
 export interface SecretStore {
   readonly backend: SecretBackend;
@@ -298,8 +307,10 @@ verbatim.**
    deliberate-reveal requirement should not assume it can.
 
 **Decided 2026-09-30 by the product owner: the NSS-backed case is a degraded tier, not tier 1.**
-When the live backend is `NSSKeyStore`, the plugin routes into the tier-2/tier-3 dialog below and
-**must not** display a system-keyring badge. The reasoning is this section's own tier-4 argument: a
+When the live backend is `NSSKeyStore`, the plugin routes into the degradation dialog below and
+**must not** display a system-keyring badge. *(Corrected 2026-10-21, owner, `plan/00` §6 item 267:
+this read "the tier-2/tier-3 dialog"; tier 3 does not ship in v1, so the dialog offers tier 2 or no
+stored keys.)* The reasoning is this section's own tier-4 argument: a
 key in the profile, travelling with any copy or backup of the Zotero folder and protected only by a
 primary password if one is set, is nearer tier 4's problem than tier 1's guarantee. **The decision
 is conditional on detection being possible** — `nsIOSKeyStore` reports no backend name and
@@ -339,15 +350,19 @@ async function setTier1(id: SecretId, value: string): Promise<void> {
 }
 ```
 
-At startup the plugin probes the backend by round-tripping a throwaway value through `encrypt`/`decrypt`. Success → tier 1. Failure → escalate to the tier-2/3 decision **with a dialog**, never silently.
+At startup the plugin probes the backend by round-tripping a throwaway value through `encrypt`/`decrypt`. Success → tier 1. Failure → the degradation dialog, **never silently**: it offers tier 2 with its cost stated, or running without LLM features, and no store is installed until the user chooses. Closing the dialog is the second choice, because it stores nothing. The dialog appears at every startup whose probe fails; no earlier answer is reused. *(Corrected 2026-10-21, owner, `plan/00` §6 item 267: this read "escalate to the tier-2/3 decision **with a dialog**"; tier 3 does not ship in v1. The last two sentences record how `P3-T03` builds it.)*
 
-**Tier 2 — session-only (offered on probe failure, and available as an opt-in for sensitive users).** Keys live in a module-scoped variable, cleared on shutdown. Background jobs that need a key while it is absent transition to `paused` with reason `credential-required` rather than failing. Honest and safe; the cost is re-entering keys each session and losing unattended resume.
+**Tier 2 — session-only (offered on probe failure, and available as an opt-in for sensitive users).** Keys live in a module-scoped variable, cleared on shutdown. Background jobs that need a key while it is absent transition to `paused` with reason `credential-required` rather than failing. Honest and safe; the cost is re-entering keys each session and losing unattended resume. The store reports `unattended: false`, and choosing it writes `secretBackend = "session"`. While no key is held in memory, every `*.keyPresent` flag reads `false`, so a flag left `true` by an earlier session cannot claim a key that is gone.
+
+**Tier 3 — does not ship in v1.** *Corrected 2026-10-21 (owner, `plan/00` §6 item 267; gate `G-10`, decided 2026-10-08):* tier 2 is the only fallback, so tier 3 has no caller. One word from the owner reverses that, and nothing else does. The paragraph that follows is kept only as the record of what is **not** built:
 
 **Tier 3 — passphrase-encrypted, stored in the plugin's own file (NOT prefs, NOT the database — a file under the data directory is still wrong for a secret, so: a file in the *profile* directory, `research-helper/secrets.enc`).** AES-GCM with a key from PBKDF2-HMAC-SHA256 at ≥600,000 iterations, or Argon2id if a vetted implementation is available. Passphrase held in memory for the session after one prompt. Offered only when tier 1 is unavailable and the user wants unattended operation.
 
-**Tier 4 — plaintext `Zotero.Prefs`.** **Not implemented.** There is no code path that writes an API key to a preference. If tiers 1–3 all fail, the plugin operates without LLM features and says so. This is a deliberate refusal: implementing it as a fallback guarantees it becomes the common case.
+**Tier 4 — plaintext `Zotero.Prefs`.** **Not implemented.** There is no code path that writes an API key to a preference. If tier 1 fails and the user declines tier 2, the plugin operates without LLM features and says so. *(Corrected 2026-10-21, owner, `plan/00` §6 item 267: this read "If tiers 1–3 all fail".)* This is a deliberate refusal: implementing it as a fallback guarantees it becomes the common case.
 
-**What *does* go in `Zotero.Prefs`:** presence booleans (`research-helper.openai.keyPresent`), last-validation timestamps and results, the selected backend, and every non-secret setting. The pref schema in `src/prefs/schema.ts` carries a `secret: true` flag, and there is a unit test asserting that no `secret: true` entry has a `Zotero.Prefs` writer.
+**What *does* go in `Zotero.Prefs`:** presence booleans (`research-helper.openai.keyPresent`), last-validation timestamps and results, the selected backend, and every non-secret setting.
+
+*Corrected 2026-10-21 (owner, `plan/00` §6 item 267):* "the selected backend" is the `secretBackend` preference, and its values are `docs/07` §8.5's: `oskeystore` (tier 1), `session` (tier 2) and `""` (not probed yet, or no store). They are **not** the `SecretBackend` spellings above, which belong to the port. `secretBackendPrefValue` in `src/zotero/keychain.ts` is the one mapping: `os-keychain` → `oskeystore`, `session-only` → `session`, no store → `""`. There is no `passphrase` value, because tier 3 does not ship. Gecko's `NSSKeyStore` fallback records `oskeystore`: the probe succeeds on it and cannot tell it from a system keyring (`P1-T41`), so §1.9 item 3's badge reads *Indeterminate* on Linux. Once `P3-T37` can detect that fallback, it goes to the degradation dialog, which writes only `session` or `""`. The pref schema in `src/prefs/schema.ts` carries a `secret: true` flag, and there is a unit test asserting that no `secret: true` entry has a `Zotero.Prefs` writer.
 
 ### 1.8 Residual risk statement
 
@@ -375,7 +390,7 @@ Requirements for `08-ui-ux-spec.md`:
 
 1. **The key field is never a plain text input.** Masked, with a deliberate reveal (hold-to-show, not a sticky toggle), and the value is never selected-on-focus in a way that invites accidental copy into a screenshot.
 2. **Once stored, the key is never re-displayed** — the field shows `sk-…••••••••1a2b` (first 3 and last 4 characters only), matching how the providers' own dashboards do it. `SecretStore.get()` is never called to populate a UI field.
-3. **A storage-backend badge** sits next to the key fields: *"Protected by Windows Credential Manager"* / *"macOS Keychain"* / *"System keyring"* — or, in degraded tiers, a warning-coloured *"Not saved between sessions"* / *"Protected by your passphrase"*. **A fourth, warning-coloured state is required (added 2026-09-30, `G-09`): *"Stored in Zotero's database — protected only by your primary password"*.** Gecko falls back to `NSSKeyStore` when libsecret is absent and `encrypt()` still succeeds, so without this state the pane would display *"System keyring"* over a key that is sitting in the profile. §1.8's verbatim text is only true if this badge is accurate, which makes it load-bearing. **A fifth, warning-coloured state is required (added 2026-10-15, owner review row 50; measured by `P1-T41`, shipped by `P1-T44`): *"Indeterminate — this operating system does not reveal the key-storage tier"*** (ko-KR: *「확인 불가 — 이 운영체제에서는 열쇠 보관 등급을 판별할 수 없습니다」*). It is the Linux state until `G-09`'s keyring-library presence check lands: the startup probe round-trips a value through `encrypt()` and succeeds on Linux **whether or not** a system keyring library is present, because the platform silently substitutes the profile-resident store — so the probe's answer cannot be classified as *"System keyring"* or as the fourth state, and the badge must not claim a tier the probe cannot tell apart. The shipped badge (`backendBadge` in `src/ui/prefs/preferencesPane.ts`, id `research-helper-prefs-backend-indeterminate`) takes this branch on Linux; the wording above is the owner's, and both bundles carry it since 2026-10-15 (`P2-T34`, asserted inside Zotero by `test/integration/l10n.spec.ts`).
+3. **A storage-backend badge** sits next to the key fields: *"Protected by Windows Credential Manager"* / *"macOS Keychain"* / *"System keyring"* — or, in the degraded tier, a warning-coloured *"Not saved between sessions"*. *(Corrected 2026-10-21, owner, `plan/00` §6 item 267: this also listed *"Protected by your passphrase"*, tier 3's state; tier 3 does not ship in v1. The badge is chosen from the `secretBackend` preference's `docs/07` §8.5 values: `oskeystore` selects one of the operating-system states, or the indeterminate state below on Linux; `session` selects *"Not saved between sessions"*; `""` selects the warning that no store is available.)* **A fourth, warning-coloured state is required (added 2026-09-30, `G-09`): *"Stored in Zotero's database — protected only by your primary password"*.** Gecko falls back to `NSSKeyStore` when libsecret is absent and `encrypt()` still succeeds, so without this state the pane would display *"System keyring"* over a key that is sitting in the profile. §1.8's verbatim text is only true if this badge is accurate, which makes it load-bearing. **A fifth, warning-coloured state is required (added 2026-10-15, owner review row 50; measured by `P1-T41`, shipped by `P1-T44`): *"Indeterminate — this operating system does not reveal the key-storage tier"*** (ko-KR: *「확인 불가 — 이 운영체제에서는 열쇠 보관 등급을 판별할 수 없습니다」*). It is the Linux state until `G-09`'s keyring-library presence check lands: the startup probe round-trips a value through `encrypt()` and succeeds on Linux **whether or not** a system keyring library is present, because the platform silently substitutes the profile-resident store — so the probe's answer cannot be classified as *"System keyring"* or as the fourth state, and the badge must not claim a tier the probe cannot tell apart. The shipped badge (`backendBadge` in `src/ui/prefs/preferencesPane.ts`, id `research-helper-prefs-backend-indeterminate`) takes this branch on Linux; the wording above is the owner's, and both bundles carry it since 2026-10-15 (`P2-T34`, asserted inside Zotero by `test/integration/l10n.spec.ts`).
 4. **The residual-risk text of §1.8 is visible, not behind a "Learn more" link.** A collapsed disclosure is acceptable for the second paragraph only if the first is always shown.
 5. **A per-provider status row**: key present / absent, last validated when and with what result, and a "Test" button (§2.3). **One for each of the six credentials**, not only the LLM providers — the NCBI and Semantic Scholar fields get the same status element, backend badge and "Test" button, because §2.3 explains that those two are precisely the keys whose failure is otherwise invisible.
 6. **A "Remove all stored keys" button** that clears every `SecretId` and reports how many were removed.
@@ -763,8 +778,24 @@ Three modes, selectable globally and overridable per collection. The global defa
 | Models with `dataPolicy: "unknown"` | **Refused** | Warned | Allowed |
 | Models that may train on input | **Refused** | **Refused** | Warned, requires confirmation |
 | OpenRouter routing | `data_collection: "deny"` + `zdr: true` | `data_collection: "deny"` | `data_collection: "deny"` (still) |
-| Gemini free tier | **Refused** | Warned every session | Warned once |
+| Gemini (any tier) | **Refused**, unless the key is declared paid; then allowed (item 270) | **Refused**, unless the key is declared paid (`gemini.paidTier`, `07-architecture-and-data-model.md` §8.5); then allowed | Allowed. A free or unknown key is warned and needs confirmation, as a model that may train on input. Every job shows the free-tier warning, or the declared-paid reminder instead (§3.6 item 3) |
 | Cached prompts/responses stored locally | Metadata only | Yes | Yes |
+
+> **Corrected 2026-10-22 (owner, `plan/00` §6 item 269(b)–(c)).** The Gemini row read "Gemini free tier —
+> **Refused** / Warned every session / Warned once", and it could not be built as written. The key's tier cannot be
+> read (§3.4 rule 4), so a free or unknown key carries `trainsOnInputByDefault: "yes"`, and the "may train on input"
+> row above already refuses it in balanced mode. "Warned once" also contradicted §3.6 item 3, which says the warning
+> can never be suppressed. The owner decided three things:
+> - The **user may declare the key paid** (`gemini.paidTier`, default off). A declared-paid key counts as not training
+>   on input, so balanced mode allows it.
+> - ~~**Strict refuses Gemini on every tier**, because the paid tier also keeps content for 55 days for abuse
+>   monitoring (§3.3).~~ **Corrected 2026-10-23 (owner, `plan/00` §6 item 270):** strict refuses a model for its training policy, not for
+>   abuse-monitoring retention (OpenAI and Anthropic keep content 30 days, §3.3, and strict allows them), so strict
+>   allows a declared-paid key as well and refuses a free or unknown one.
+> - In full mode the warning, or the declared-paid reminder, appears on **every job**.
+>
+> The rule is `assertModelAllowed`'s (`07-architecture-and-data-model.md` §4.5, note "a Gemini key the user declares
+> paid"). The checkbox is `P3-T04`'s.
 
 **"Abstract-only" is the floor, not an option.** Even strict mode sends abstracts, because a summarization tool that sends no content is not a summarization tool. What strict mode guarantees is: *nothing beyond the published bibliographic record leaves your machine, and it only goes to endpoints that contractually do not train on it and do not retain it.* That is a defensible, explainable line.
 
@@ -783,6 +814,12 @@ It is an *acknowledgement*, not consent-in-advance, and it suppresses nothing. I
 1. **Pre-flight dialog for every job that sends content**, showing: the destination provider and model, the number of items, what will be sent (metadata / +abstract / +full text) in plain words, the estimated cost, and the current privacy mode. This dialog already exists for cost reasons (`Pipeline.estimate()`); privacy information goes in the same dialog rather than a second one. **When a `<provider>.baseUrl` override is in effect (`03-llm-provider-integration.md` §14.4) the dialog names the effective host**, not the provider's default one — the destination is what the user is being asked about.
 2. **A "don't ask again for this collection" checkbox** — but it suppresses only the *routine* confirmation. It never suppresses: a change of provider, a change of privacy mode, the first use of full-text sending, or the Gemini free-tier warning.
 3. **The Gemini free-tier warning is not suppressible** while the tier is free or unknown: *"This Google API key appears to be on the free tier. Google's terms state that content you send on the unpaid tier is used to improve Google products, and that human reviewers may read it. Do not use the free tier for unpublished or confidential material."*
+   *Extended 2026-10-22 (owner, `plan/00` §6 item 269(b)):* **When the user has declared the key paid**
+   (`gemini.paidTier`, `07-architecture-and-data-model.md` §8.5), the warning above is replaced, on every job, by a
+   one-line reminder: *"This Google API key is marked as a paid key in Research Helper's settings. If it is actually on the free tier, Google may use the content you send to improve its products."*
+   The reminder is never removed while the declaration stands, and, like the warning, it has no suppression path: it
+   forces the confirmation that item 2's checkbox would otherwise skip. Turning the declaration off brings the
+   free-tier warning back.
 4. **An egress log.** The plugin's own job records log, per job, exactly which provider received how many items and what scope of content. `StoredSummary.inputScope` (`07-architecture-and-data-model.md` §5.2) already captures this per summary. A researcher asked by their IRB "what did you send where" must be able to answer from the plugin's own records. This log is local only. **What v1 does not ship is a window for browsing it:** the Job Center, which would have carried that view, is deferred to v1.1 (`10-requirements-and-user-stories.md` §4 item 18; `07-architecture-and-data-model.md` §7.7.1), so in v1 the log is read out of the job records themselves and through the debug bundle (`07-architecture-and-data-model.md` §10.4, which includes recent jobs). The recording obligation above is unaffected by that deferral.
 
 ### 3.7 Local data the user should be able to clear
@@ -1130,8 +1167,8 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 
 ## 8. Open decisions for the human
 
-1. **The OS-keystore-unavailable path.** `Zotero.OSKeyStore` exposes `confirmUnencryptedFallback()`, implying Gecko offers an unencrypted route when no platform keystore exists (realistically: Linux without libsecret). §1.7 proposes refusing plaintext and offering session-only or passphrase instead. Confirm this is the desired behaviour — it means some Linux users cannot run unattended background jobs.
-2. **Whether to ship the passphrase tier at all in v1.** It is real work and serves a small population. Shipping only tiers 1 and 2 is defensible.
+1. ~~**The OS-keystore-unavailable path.**~~ **Settled 2026-10-08 (gate `G-10`): refuse plaintext and offer session-only (tier 2) alone.** The owner accepted the stated cost: on a machine without a usable keystore, background work that needs a key stops until the keys are entered again. *(Corrected 2026-10-21, owner, `plan/00` §6 item 267. The question read: `Zotero.OSKeyStore` exposes `confirmUnencryptedFallback()`, implying Gecko offers an unencrypted route when no platform keystore exists; §1.7 proposed refusing plaintext and offering session-only or passphrase instead; confirm, given that some Linux users then cannot run unattended background jobs.)*
+2. ~~**Whether to ship the passphrase tier at all in v1.**~~ **Settled 2026-10-08 (gate `G-10`): no.** With tier 2 chosen as the fallback, tier 3 has no caller, so v1 ships tiers 1 and 2 only. One word from the owner reverses that. *(Corrected 2026-10-21, owner, `plan/00` §6 item 267. The question read: it is real work and serves a small population; shipping only tiers 1 and 2 is defensible.)*
 3. **Gemini tier detection.** If no programmatic billing signal exists, the fallback is asking the user and defaulting to "free/unsure". Confirm that repeatedly warning a paid-tier user who has not answered is acceptable — the alternative is under-warning a free-tier user, which is worse.
 4. ~~Whether full-text sending ships in v1 at all.~~ **Settled by decision D7** (`00-overview.md` §3): full text ships and is preferred whenever available, cost-gated. What remains for this document is only that the publisher-TDM exposure (§4.4) is now on the default path, so the first-use warning and the strict-mode escape hatch are load-bearing rather than optional.
 5. ~~**The maintainer contact address.**~~ **Settled 2026-09-09: `suppakoko@gmail.com`** (decision D10, `00-overview.md` §3). It ships in the `User-Agent` on every host and in NCBI's `tool`/`email` parameters, is published inside the XPI, and will receive real mail from these services — it must be monitored. Crossref's `mailto` parameter is the one slot that carries the *user's* address instead, when they set the `contactEmail` pref; see `02-literature-database-apis.md` §2.2 for the per-host table.

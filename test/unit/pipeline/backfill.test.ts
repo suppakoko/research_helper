@@ -40,6 +40,7 @@ import type {
   SearchImportWriter,
 } from "../../../src/pipeline/searchImport/types";
 import type { PipelineContext } from "../../../src/pipeline/types";
+import { createPrivacyPolicy } from "../../../src/pipeline/shared/privacyPolicy";
 import { createEuropePmcSource } from "../../../src/sources/europepmc/europepmcSource";
 import { createEuropePmcRecordMapper } from "../../../src/sources/europepmc/mapper";
 import { EUROPEPMC_DOI_LOOKUP_BATCH } from "../../../src/sources/europepmc/query";
@@ -889,7 +890,7 @@ function pipelineRun(options: {
     tts: undefined,
     zotero: undefined,
     config: undefined,
-    privacy: undefined,
+    privacy: createPrivacyPolicy("strict"),
     checkpoint: () => Promise.resolve(),
     resumeState: undefined,
   };

@@ -1920,6 +1920,60 @@ the caller of what the card builds; if it does not, the caller is added with a d
     only with `includeBodies` (callers pass `getPref("logRequestBodies")`); usage of a failed `completeJSON` is not
     returned (the budget guard must count it). Item 264: `batchImport`, `itemCreation` and `itemMapper` specs have no
     cleanup at all (300 items stay for later specs).
+    **DECIDED 2026-10-21 (owner):** every choice above is confirmed as built (the calibration blend, strict tier
+    thresholds and the unparsed OpenRouter cached-input price; normal priority on the background slots, a paused job
+    keeping its exclusivity key, an already-queued call still sent; repair bodies only under `logRequestBodies`, a failed
+    `completeJSON`'s usage counted by the budget guard). The three specs without cleanup get one after wave 5 lands.
+
+### 6.56 Wave 5, 2026-10-21
+
+267. **Wave 5 and the open lines of `P3-T03` and `P3-T15`.** **DECIDED 2026-10-21 (owner):** (a) the next wave is all four
+    ready cards together: `P3-T03`, `P3-T11`, `P3-T15`, `P3-T19` (`P3-T19`'s lines were settled by item 258). (b) `P3-T03`:
+    write `G-10`'s outcome (tier 2 only, no passphrase file) into `docs/11` §1, `docs/09` §1.7 and §8 items 1–2 and the D5
+    note in `docs/00` §3, each with a dated "Corrected 2026-10-21" note; the `secretBackend` value set becomes
+    `oskeystore` | `session` | `""` (no `passphrase`), and the CONFLICT note resolves in favour of `docs/07` §8.5.
+    (c) `P3-T15`: declare `PrivacyPolicy` in `docs/07` §4.5 (`effectiveMode`, `allowedInputScope`, `assertModelAllowed`)
+    before the code; a per-collection setting can only be stricter.
+
+268. **Raised by `P3-T03` and `P3-T11`, 2026-10-21.** **DECIDED 2026-10-21 (owner):** (a) the six Korean strings of the
+    key-storage dialog as the coordinator drafted them (G-41). (b) `P3-T03`'s dialog behaviour is confirmed: it opens at
+    every startup whose probe fails (no remembered answer), startup waits for the choice, and closing it means "continue
+    without keys". (c) A streamed LLM answer is bounded by **3 minutes without new text** (idle) and **15 minutes in
+    all**, instead of the 3-minute whole-request limit (`P3-T11` finding 4); a plain request keeps 3 minutes. (d) OpenAI's
+    `toModelInfos` stops writing "unknown" as `supportsStreaming: false` (unknown streams, as the router rule says), and
+    `mockModel` in `test/helpers/mockLLM.ts` is fixed so the router pass-through test tests pass-through (`P3-T11` findings
+    1–2). (c) and (d) are done after wave 5 lands, with item 264's three spec cleanups and the two
+    `acquireFullText.spec.ts` specs that `P3-T19`'s cleaning pass invalidates.
+    **Recorded, not cards:** `secretBackend.values` in `src/prefs/schema.ts` (and its copy in `schema.test.ts`) still
+    lists `passphrase` (belongs to the next `P3-T32`-style edit); `backendBadge` shows `session` as "unavailable" and keeps
+    key fields disabled (`P3-T04`, which owns the "Not saved between sessions" state); stale tier-3 text in `docs/09` §1.4,
+    `docs/11` §5 and `plan/06` G-10's Status; `docs/03` §6.5 still says `Zotero.HTTP.request` cannot stream (V-8 disproved
+    it); Gemini stream payload shapes are assumed until a recording (`P3-T30`); no `PaperSummary` type yet (`P3-T25`);
+    Crossref and PubMed have no `lookup()`, so abstract recovery uses Europe PMC and Semantic Scholar only; the
+    write-back consent question and the Zotero `abstractNote` writer are callbacks with no surface yet.
+
+269. **Raised by `P3-T15`, 2026-10-22.** (a) Korean for the two egress notices. (b) A Gemini key's tier cannot be read, so
+    `P3-T10` encodes free-or-unknown as `trainsOnInputByDefault: "yes"` and balanced mode refuses every Gemini model, while
+    `docs/09` §3.5's table says "warned every session". (c) The same table says the free-tier warning shows "once" in full
+    mode; §3.6 item 3 and the card say it can never be suppressed. (d) The card's own choices (`docs/07` §4.5 note).
+    **DECIDED 2026-10-22 (owner):** (a) both as the coordinator drafted them (G-41). (b) **the user may declare the Gemini
+    key paid**: a new boolean preference, default off. When on, a Gemini model counts as not training on input and is
+    allowed in **balanced** mode; **strict still refuses it** (Google's paid tier retains content for abuse monitoring). The
+    free-tier warning is then replaced, on every job, by a one-line reminder that the key is declared paid and that a
+    free key's content may be used for training — never removed. The preference row and the policy rule are built now;
+    the checkbox and its label belong to `P3-T04`. (c) every job, as built; `docs/09` §3.5's table is corrected. (d)
+    confirmed: in full mode an unknown-policy model passes without a warning; `collection_settings.json` holds the mode
+    and the routine-confirmation tuple; the egress log rides in `JobRecord.input.egress` and never leaves the machine.
+
+270. **Correction to item 269(b), 2026-10-23.** The coordinator's question for 269(b) described strict mode as refusing
+    providers that keep content; that was wrong. Strict refuses a model for its training policy (`"unknown"` or
+    `"yes"`), not for abuse-monitoring retention: OpenAI and Anthropic keep content 30 days and strict allows them
+    (`docs/09` §3.3, §3.5). **DECIDED 2026-10-23 (owner):** (a) a Gemini key declared paid is allowed in **strict** mode
+    too, the same as any model whose policy is `"no"`; a free or unknown key is still refused in strict and balanced.
+    The special strict-mode Gemini refusal is removed from `assertModelAllowed`. (b) the Korean for
+    `research-helper-egress-gemini-declared-paid` as the coordinator drafted it (G-41). (c) the agent's readings are
+    confirmed: the declared-paid reminder forces the confirmation question even where "don't ask again" is on, and it
+    shows whenever the key is declared paid, even if a future detector reports a paid tier.
 
 ## 7. Regenerating this file
 

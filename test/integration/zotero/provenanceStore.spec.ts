@@ -60,6 +60,11 @@ import type {
   SearchImportInput,
   SearchImportOutput,
 } from "../../../src/pipeline/searchImport/types";
+import {
+  loadPrivacyPolicy,
+  readCollectionPrivacySettings,
+  writeCollectionPrivacySettings,
+} from "../../../src/pipeline/shared/privacyPolicy";
 import type { Pipeline, PipelineContext } from "../../../src/pipeline/types";
 import {
   NEW_COLLECTION_VALUE,
@@ -70,7 +75,10 @@ import {
   createSearchImportViewModel,
   type SearchImportViewModel,
 } from "../../../src/ui/viewModels/searchImportViewModel";
-import { PLUGIN_DATABASE_FILE } from "../../../src/zotero/db";
+import {
+  createCollectionSettingsStore,
+  PLUGIN_DATABASE_FILE,
+} from "../../../src/zotero/db";
 
 /** The slice of Mocha's test context this file uses. */
 interface MochaContext {
@@ -457,8 +465,9 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
   // Moved to schema_version 2 by P3-T34, which appended docs/07 §8.3's `job`
   // table and `idx_job_status` as migration version 2, to 3 by P3-T33,
   // which appended `cache_entry` and its two indexes as version 3, and to 4
-  // by plan/00 §6 item 265 (b), which appended `user_price` as version 4.
-  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 4, with docs/07 §8.3's tables and indexes", async function () {
+  // by plan/00 §6 item 265 (b), which appended `user_price` as version 4, and
+  // to 5 by P3-T15, which appended `collection_settings` as version 5.
+  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 5, with docs/07 §8.3's tables and indexes", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     const store = await provenance();
     const expected = PathUtils.join(
@@ -473,7 +482,7 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       "never Zotero's own database",
     );
     assert.isTrue(await IOUtils.exists(store.path), "the file exists");
-    assert.strictEqual(store.schemaVersion, 4);
+    assert.strictEqual(store.schemaVersion, 5);
 
     const { database } = store;
     assert.strictEqual(
@@ -482,8 +491,8 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
           "SELECT MAX(version) FROM schema_version",
         ),
       ),
-      4,
-      "schema_version reads 4",
+      5,
+      "schema_version reads 5",
     );
     assert.strictEqual(
       Number(
@@ -532,6 +541,7 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
         "index:idx_job_status",
         "index:idx_provenance_collection",
         "table:cache_entry",
+        "table:collection_settings",
         "table:job",
         "table:schema_version",
         "table:search_provenance",
@@ -588,6 +598,24 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
         ["as_of", "INTEGER", 1, 0],
       ],
       "docs/07 §8.3's user_price columns, read back",
+    );
+    // P3-T15: collection_settings' columns and types, in §8.3's order.
+    const settingsColumns = (await database.queryAsync(
+      "SELECT name, type, \"notnull\" AS nn, pk FROM pragma_table_info('collection_settings') ORDER BY cid",
+    )) as Record<string, unknown>[];
+    assert.deepEqual(
+      settingsColumns.map((row) => [
+        String(row["name"]),
+        String(row["type"]),
+        Number(row["nn"]),
+        Number(row["pk"]),
+      ]),
+      [
+        ["library_id", "INTEGER", 1, 1],
+        ["collection_key", "TEXT", 1, 2],
+        ["json", "TEXT", 1, 0],
+      ],
+      "docs/07 §8.3's collection_settings columns, read back",
     );
   });
 
@@ -739,6 +767,101 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
     } finally {
       await database
         .queryAsync("DELETE FROM user_price WHERE model_id LIKE ?", [`${TAG}%`])
+        .catch(() => undefined);
+    }
+  });
+
+  // P3-T15 (docs/09 §3.5): a collection's privacy override lives in the
+  // plugin database, never in a preference, and can only make the global mode
+  // stricter. Measured here inside Zotero 10.0.3 on the graph's connection.
+  it("round-trips a collection's privacy override in collection_settings, which only ever tightens the global mode", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const { database } = await provenance();
+    const store = createCollectionSettingsStore(database);
+    const libraryID = Zotero.Libraries.userLibraryID;
+    const collection = { libraryID, collectionKey: `${TAG}-c` };
+    try {
+      assert.strictEqual(
+        await store.get(libraryID, collection.collectionKey),
+        undefined,
+        "no row yet",
+      );
+      await store.put(libraryID, collection.collectionKey, {
+        model: "kept",
+      });
+      await writeCollectionPrivacySettings(store, collection, {
+        privacyMode: "strict",
+        routineConfirmation: {
+          providerId: "openrouter",
+          privacyMode: "strict",
+          fullText: false,
+        },
+      });
+      const stored = await store.get(libraryID, collection.collectionKey);
+      assert.deepEqual(
+        stored,
+        {
+          model: "kept",
+          privacyMode: "strict",
+          routineConfirmation: {
+            providerId: "openrouter",
+            privacyMode: "strict",
+            fullText: false,
+          },
+        },
+        "the privacy members are merged into the object, the other member kept",
+      );
+      assert.strictEqual(
+        readCollectionPrivacySettings(stored).privacyMode,
+        "strict",
+      );
+      const policy = await loadPrivacyPolicy(
+        { globalMode: () => "full", store },
+        collection,
+      );
+      assert.strictEqual(policy.mode, "strict", "the override tightens full");
+      await writeCollectionPrivacySettings(store, collection, {
+        privacyMode: "full",
+      });
+      const looser = await loadPrivacyPolicy(
+        { globalMode: () => "balanced", store },
+        collection,
+      );
+      assert.strictEqual(
+        looser.mode,
+        "balanced",
+        "a looser override is ignored",
+      );
+      await database.queryAsync(
+        "UPDATE collection_settings SET json = ? WHERE library_id = ? AND collection_key = ?",
+        ["not json", libraryID, collection.collectionKey],
+      );
+      const unreadable = await loadPrivacyPolicy(
+        { globalMode: () => "full", store },
+        collection,
+      );
+      assert.strictEqual(
+        unreadable.mode,
+        "strict",
+        "an unreadable row fails closed",
+      );
+      await store.delete(libraryID, collection.collectionKey);
+      assert.strictEqual(
+        Number(
+          await database.valueQueryAsync(
+            "SELECT COUNT(*) FROM collection_settings WHERE collection_key LIKE ?",
+            [`${TAG}%`],
+          ),
+        ),
+        0,
+        "the row is deleted",
+      );
+    } finally {
+      await database
+        .queryAsync(
+          "DELETE FROM collection_settings WHERE collection_key LIKE ?",
+          [`${TAG}%`],
+        )
         .catch(() => undefined);
     }
   });

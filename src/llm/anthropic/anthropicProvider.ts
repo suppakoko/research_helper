@@ -21,7 +21,9 @@
  *   still retried as `RateLimitError`, and the non-standard 529 overload
  *   (`docs/03` §11.5 trap 1) is a retryable `UpstreamServerError` marked
  *   `overloaded`;
- * - `timeoutMs: LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240);
+ * - `timeoutMs: LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240), or for a
+ *   stream 15 minutes in all and 3 without new text (`llmAttemptTimeouts`,
+ *   item 268(c));
  * - the job's cancellation token.
  *
  * The retry budget is not here: it is the host's `HOST_POLICIES` row
@@ -31,6 +33,14 @@
  * `docs/03` §11.5 trap 2: a refusal arrives as HTTP 200 with
  * `stop_reason: "refusal"` and becomes `ContentFilterError` before `content`
  * is read (§3.4).
+ *
+ * ## Streaming
+ *
+ * `chatStream` (`P3-T11`) sends `chat`'s body with `stream: true` through the
+ * same `send`, in the client's streaming mode, and reads it with
+ * `createAnthropicStreamDecoder` (`../shared/sse.ts`): `message_stop` ends
+ * the stream, and an `event: error` after HTTP 200 (`docs/03` §6.2 note 4) is
+ * mapped through `mapProviderError`, never read as a short success.
  *
  * ## The key
  *
@@ -73,15 +83,17 @@ import {
   type HttpResponse,
 } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
-import { LLM_ATTEMPT_TIMEOUT_MS } from "../../core/rateLimit/hostLimiter";
+import { llmAttemptTimeouts } from "../../core/rateLimit/hostLimiter";
 import type { SecretId, SecretStore } from "../../core/secretStore";
 import { Secret } from "../../prefs/secrets";
 import { DEFAULT_BASE_URLS, type BaseUrlResolver } from "../shared/baseUrl";
 import { mapProviderError } from "../shared/errorMap";
+import { createAnthropicStreamDecoder, streamChat } from "../shared/sse";
 import { estTokens } from "../shared/tokenEstimate";
 import type {
   ChatRequest,
   ChatResponse,
+  ChatStreamChunk,
   CredentialCheckResult,
   LLMCallContext,
   LLMProvider,
@@ -281,6 +293,7 @@ export function createAnthropicProvider(
     body: string | undefined,
     modelId: string,
     ctx: LLMCallContext,
+    onBodyText?: (text: string) => void,
   ): Promise<HttpResponse> {
     ctx.token.throwIfCancelled();
     const headers = anthropicHeaders(await readKey());
@@ -295,9 +308,10 @@ export function createAnthropicProvider(
       {
         headers,
         ...(body !== undefined && { body }),
-        timeoutMs: LLM_ATTEMPT_TIMEOUT_MS,
+        ...llmAttemptTimeouts(onBodyText !== undefined),
         token: ctx.token,
         mapErrorResponse: errorHook(modelId),
+        ...(onBodyText !== undefined && { onBodyText }),
       },
     );
   }
@@ -481,6 +495,37 @@ export function createAnthropicProvider(
         );
       }
       return answer;
+    },
+
+    chatStream(
+      request: ChatRequest,
+      ctx: LLMCallContext,
+    ): AsyncIterable<ChatStreamChunk> {
+      // `P3-T11`: `chat`'s body with `stream: true` (`docs/03` §6.2), through
+      // the same `send`, read by `createAnthropicStreamDecoder`.
+      const mode = structuredMode(request);
+      return streamChat({
+        providerId: ANTHROPIC_PROVIDER_ID,
+        request,
+        token: ctx.token,
+        decoder: createAnthropicStreamDecoder(request, mode, () => clock.now()),
+        start: (hooks) =>
+          send(
+            "POST",
+            MESSAGES_PATH,
+            JSON.stringify({
+              ...toMessagesBody(
+                request,
+                maxTokensFor(request),
+                mode ?? "output_config",
+              ),
+              stream: true,
+            }),
+            request.model,
+            { ...ctx, token: hooks.token },
+            hooks.onBodyText,
+          ),
+      });
     },
 
     countTokens(text: string): number {

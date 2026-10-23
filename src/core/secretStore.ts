@@ -31,7 +31,8 @@
  *
  * - **No `"plaintext-prefs"` member of {@link SecretBackend}.** §1.7's own
  *   comment on that type says so, and it is the type-level half of D5.
- * - **No key-entry or passphrase surface.** Tiers 2 and 3 are `P3-T03`'s.
+ * - **No key-entry or passphrase surface.** Tier 2 is `P3-T03`'s, in
+ *   `src/zotero/keychain.ts`; tier 3 does not ship in v1 (`G-10`).
  *
  * ## `clearAll()` — the eighth member (`P3-T02`)
  *
@@ -78,20 +79,21 @@ export function isSecretId(value: string): value is SecretId {
 }
 
 /**
- * The three backends of `docs/09` §1.7's ladder. **No `"plaintext-prefs"`
+ * The two backends of `docs/09` §1.7's ladder. **No `"plaintext-prefs"`
  * member exists, deliberately** — §1.7's own comment, and decision D5.
  *
- * Only `"os-keychain"` is implemented: `P1-T06`'s **Do NOT** keeps tiers 2 and 3
- * out of Phase 1 ("a half-built ladder is worse than one rung") and `P3-T03`
- * ships them.
+ * `"os-keychain"` is tier 1 (`createKeychainSecretStore`); `"session-only"` is
+ * tier 2 (`createSessionSecretStore`, `P3-T03`), offered only through the
+ * degradation dialog. **There is no `"passphrase"` member since 2026-10-21**:
+ * gate `G-10` (decided 2026-10-08) keeps tier 3 out of v1, and `docs/09` §1.7
+ * dropped it from this type the same day (owner, `plan/00` §6 item 267).
  *
  * **These are not the `secretBackend` *preference*'s values.** `docs/07` §8.5
- * declares that row as `oskeystore | session | passphrase | ""` and is the sole
- * authority for a preference's allowed values; §8.5 records the conflict
- * outright. `src/zotero/keychain.ts`'s `secretBackendPrefValue` is the one
- * mapping between the two vocabularies.
+ * declares that row as `oskeystore | session | ""` and is the sole authority
+ * for a preference's allowed values. `src/zotero/keychain.ts`'s
+ * `secretBackendPrefValue` is the one mapping between the two vocabularies.
  */
-export type SecretBackend = "os-keychain" | "session-only" | "passphrase";
+export type SecretBackend = "os-keychain" | "session-only";
 
 /**
  * `docs/09` §1.7's `SecretStore`, member for member.

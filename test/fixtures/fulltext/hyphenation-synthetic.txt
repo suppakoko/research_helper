@@ -1,0 +1,4 @@
+The N- and C-terminal domains were expressed separately, and the open- and closed
+states were compared. Each construct was tar
+geted to the membrane, and the wild-type rho
+dopsin served as the control. Both a- and b-wave amplitudes were recorded.

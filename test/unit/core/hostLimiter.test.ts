@@ -20,6 +20,9 @@ import {
   LLM_ATTEMPT_TIMEOUT_MS,
   LLM_HOSTS,
   LLM_RETRY_BUDGET,
+  LLM_STREAM_IDLE_TIMEOUT_MS,
+  LLM_STREAM_TOTAL_TIMEOUT_MS,
+  llmAttemptTimeouts,
   parseAdvertisedLimits,
 } from "../../../src/core/rateLimit/hostLimiter";
 import {
@@ -381,6 +384,18 @@ describe("the LLM hosts' retry budget and attempt timeout (P3-T05, item 240)", (
   it("lets one LLM attempt wait 3 minutes, three times the literature hosts' 60 s", () => {
     expect(LLM_ATTEMPT_TIMEOUT_MS).toBe(180_000);
     expect(LLM_ATTEMPT_TIMEOUT_MS).toBeGreaterThan(REQUEST_BUDGET_MS);
+  });
+
+  it("gives a streamed LLM attempt 3 minutes without new text and 15 in all, and a plain one 3 minutes (item 268(c))", () => {
+    expect(LLM_STREAM_IDLE_TIMEOUT_MS).toBe(180_000);
+    expect(LLM_STREAM_TOTAL_TIMEOUT_MS).toBe(900_000);
+    expect(llmAttemptTimeouts(false)).toStrictEqual({
+      timeoutMs: LLM_ATTEMPT_TIMEOUT_MS,
+    });
+    expect(llmAttemptTimeouts(true)).toStrictEqual({
+      timeoutMs: LLM_STREAM_TOTAL_TIMEOUT_MS,
+      idleTimeoutMs: LLM_STREAM_IDLE_TIMEOUT_MS,
+    });
   });
 
   it("does not retry an LLM attempt that failed after the 90 s request budget", async () => {

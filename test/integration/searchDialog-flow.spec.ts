@@ -306,6 +306,7 @@ import type {
   SearchImportWriter,
 } from "../../src/pipeline/searchImport/types";
 import type { Pipeline, PipelineContext } from "../../src/pipeline/types";
+import { createPrivacyPolicy } from "../../src/pipeline/shared/privacyPolicy";
 import { createPubmedRecordMapper } from "../../src/sources/pubmed/mapper";
 import {
   DEDUP_CORPUS_PUBMED_NO_RECORDS,
@@ -1292,7 +1293,7 @@ function jobFactory(
         tts: undefined,
         zotero: undefined,
         config: undefined,
-        privacy: undefined,
+        privacy: createPrivacyPolicy("strict"),
         checkpoint: (): Promise<void> => Promise.resolve(),
         resumeState: undefined,
       };

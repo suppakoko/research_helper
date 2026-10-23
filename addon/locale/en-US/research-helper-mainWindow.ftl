@@ -490,3 +490,40 @@ research-helper-job-wall-clock-budget =
         [one] Paused after 1 minute of work. { $done } of { $total } done — continue the rest?
        *[other] Paused after { $minutes } minutes of work. { $done } of { $total } done — continue the rest?
     }
+
+
+## The egress disclosure's two notices (P3-T15; docs/09 §3.6)
+##
+## Data the cost dialog (P3-T16) embeds; never a second dialog. The first-job
+## notice is shown while `privacy.egressAcknowledged` is false and suppresses
+## nothing once acknowledged. The Gemini warning is docs/09 §3.6 item 3's text,
+## verbatim (edit docs/09 first): shown on every job whose Gemini key's tier is
+## free or unknown, with no way to turn it off.
+
+research-helper-egress-first-job-notice = Research Helper runs on your computer, uses your own API key, and sends nothing to its authors. That does not keep your material private from the provider: the content listed above leaves your computer for the provider you chose, which handles it under its own terms. Confirming records that you have read this notice. It does not turn off this dialog or any warning in it.
+research-helper-egress-gemini-free-tier = This Google API key appears to be on the free tier. Google's terms state that content you send on the unpaid tier is used to improve Google products, and that human reviewers may read it. Do not use the free tier for unpublished or confidential material.
+# The reminder that replaces the Gemini warning when the user has declared the
+# key paid (gemini.paidTier; owner, 2026-10-22, plan/00 §6 item 269(b)). It is
+# docs/09 §3.6 item 3's extension, verbatim (edit docs/09 first), and is shown
+# on every such job, with no way to turn it off.
+research-helper-egress-gemini-declared-paid = This Google API key is marked as a paid key in Research Helper's settings. If it is actually on the free tier, Google may use the content you send to improve its products.
+
+
+## The key-storage degradation dialog (P3-T03; docs/09 §1.7, gate G-10)
+##
+## Shown at startup when the operating system's credential store fails the
+## probe. It offers session-only storage with its cost, or running without
+## stored keys; it never chooses for the user, and there is no third option
+## (tier 3, the passphrase file, does not ship in v1). The document is
+## `addon/content/secretBackend.xhtml`. `-title` and the two button labels are
+## formatted by `addon/content/secretBackend.js`, because XUL carries them in
+## attributes; the other three are `data-l10n-id`s in the document.
+
+research-helper-secret-backend-title = Research Helper cannot save API keys on this computer
+research-helper-secret-backend-explain = Research Helper keeps API keys only in your operating system's credential store, and that store could not be used. Keys are never saved anywhere else. Choose how to continue.
+research-helper-secret-backend-session = Keep keys for this session only. They are held in memory and written nowhere. You will enter them again each time Zotero starts, and background tasks that need a key stop until you do.
+research-helper-secret-backend-none = Continue without stored keys. Searching and importing still work, more slowly without an NCBI key. Summaries and other features that need a key stay off.
+research-helper-secret-backend-accept =
+    .label = Keep keys for this session
+research-helper-secret-backend-decline =
+    .label = Continue without keys

@@ -16,7 +16,10 @@
  * history. Version 2 is §8.3's `job` table and `idx_job_status` (`P3-T34`).
  * Version 3 is §8.3's `cache_entry` table and its two indexes (`P3-T33`).
  * Version 4 is §8.3's `user_price` table, the user-edited price table
- * (`plan/00` §6 item 265 (b), owner, 2026-10-21).
+ * (`plan/00` §6 item 265 (b), owner, 2026-10-21). Version 5 is §8.3's
+ * `collection_settings` table: the per-collection privacy override and the
+ * "don't ask again for this collection" record (`P3-T15`; `docs/09` §3.5,
+ * §3.6 item 2).
  *
  * ## The bookkeeping
  *
@@ -138,6 +141,21 @@ export const USER_PRICE_DDL = `CREATE TABLE user_price (
   PRIMARY KEY (provider_id, model_id)
 )`;
 
+/**
+ * `docs/07` §8.3's `collection_settings` table (`P3-T15`), byte for byte with
+ * the comment inside the statement. `json` is a JSON object whose privacy
+ * members `docs/07` §4.5's `PrivacyPolicy` note declares; a per-collection
+ * override can only make the global `privacy.mode` stricter (`docs/09` §3.5),
+ * and is never a preference. `src/zotero/db.ts`'s
+ * `createCollectionSettingsStore` is its only reader and writer.
+ */
+export const COLLECTION_SETTINGS_DDL = `CREATE TABLE collection_settings (
+  library_id     INTEGER NOT NULL,
+  collection_key TEXT NOT NULL,
+  json           TEXT NOT NULL,     -- privacy overrides, model overrides
+  PRIMARY KEY (library_id, collection_key)
+)`;
+
 /** One schema step. */
 export interface Migration {
   /** The version the file is at once this migration has run. */
@@ -166,6 +184,11 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 4,
     statements: [USER_PRICE_DDL],
+  },
+  // `P3-T15`: per-collection privacy settings (`docs/07` §8.3, `docs/09` §3.5).
+  {
+    version: 5,
+    statements: [COLLECTION_SETTINGS_DDL],
   },
 ];
 

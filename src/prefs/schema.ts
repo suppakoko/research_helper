@@ -14,7 +14,9 @@
  * `prefsSchemaVersion`; `P2-T05` added `semanticscholar.keyPresent`; and
  * `P3-T32` added the fifty rows Phase 3 reads (its **Do** step 1 lists them).
  * `plan/04` §0.2 item 2 makes `P3-T32` the only Phase 3 card that adds a row:
- * every other card reads through `getPref` / `setPref`. Rows for later phases
+ * every other card reads through `getPref` / `setPref`. *(Updated 2026-10-22:
+ * the owner added one more Phase 3 row, `gemini.paidTier`, by decision —
+ * `plan/00` §6 item 269(b) — written into §8.5 first.)* Rows for later phases
  * (`reportLanguage`, `tts.*`, `background.enabled`, …) are not here. Every card
  * that adds rows is bound by the same rule: "do not add a preference that
  * `docs/07` §8.5 does not declare, and do not change a default". The ordering
@@ -307,6 +309,21 @@ export const PREFS = {
    */
   privacyEgressAcknowledged: {
     key: PREF_KEYS.privacyEgressAcknowledged,
+    type: "boolean",
+    default: false,
+  },
+
+  /**
+   * The user's declaration that the Gemini key is on Google's paid tier, which
+   * the plugin cannot read itself (`docs/09` §3.4 rule 4). Added 2026-10-22 by
+   * the owner's decision (`plan/00` §6 item 269(b)); `docs/07` §8.5's row is
+   * the authority. Read on demand, never cached. When `true`, strict and
+   * balanced modes allow Gemini (item 270), and every job's free-tier warning
+   * becomes a declared-paid reminder (`assertModelAllowed`,
+   * `buildEgressDisclosure`). The checkbox is `P3-T04`'s. No `pref()` line.
+   */
+  geminiPaidTier: {
+    key: PREF_KEYS.geminiPaidTier,
     type: "boolean",
     default: false,
   },
@@ -760,15 +777,20 @@ export const PREFS = {
    * Which secret backend is live, for the prefs pane's storage badge.
    *
    * §8.5's spellings, which are **not** `docs/09` §1.7's `SecretBackend` union
-   * (`os-keychain` | `session-only` | `passphrase`): §8.5 is the authority for
-   * the *preference's* allowed values and this row is what it declares. `""`
-   * means the backend has not been probed yet.
+   * (`os-keychain` | `session-only`): §8.5 is the authority for the
+   * *preference's* allowed values and this row is what it declares. `""`
+   * means the backend has not been probed yet, or no store is installed.
+   *
+   * *Corrected 2026-10-22 (`plan/00` §6 item 268, recorded from `P3-T03`):*
+   * the value set also listed `passphrase`, which §8.5 dropped on 2026-10-21
+   * (item 267) because tier 3 does not ship in v1 (gate `G-10`). Nothing ever
+   * wrote it; a stored `passphrase` now reads as the default, `""`.
    */
   secretBackend: {
     key: PREF_KEYS.secretBackend,
     type: "string",
     default: "",
-    values: ["oskeystore", "session", "passphrase", ""],
+    values: ["oskeystore", "session", ""],
   },
 } as const satisfies Record<string, PrefDef<unknown>>;
 

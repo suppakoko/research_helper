@@ -44,6 +44,13 @@
  *
  * Sandbox caveats (`docs/01` §2.3, measured `P0-T08`): no `performance`, no
  * `console`, so `Date.now()` is the clock and `debug()` is the log.
+ *
+ * **Cleanup.** The 300 items and three collections the three runs write are
+ * erased by an `after` hook inside this file's `describe`, so they are gone
+ * before the next spec starts (`plan/00` §6 items 264 and 266; before
+ * 2026-10-22 they stayed for every later spec). The hook runs after the one
+ * `it` has finished, so no erase can land inside a timed write or be counted
+ * by the `begin` callback; and a failure there is reported, never thrown.
  */
 
 import type { CanonicalWork } from "../../../src/model/canonicalWork";
@@ -69,6 +76,7 @@ declare function it(
   title: string,
   body: (this: MochaContext) => Promise<void>,
 ): void;
+declare function after(body: () => Promise<void>): void;
 declare const assert: {
   strictEqual<T>(actual: T, expected: T, message?: string): void;
   deepEqual<T>(actual: T, expected: T, message?: string): void;
@@ -268,6 +276,10 @@ function isRunningOnCI(): boolean {
   return Services.env.exists("CI") && Services.env.get("CI") !== "";
 }
 
+/** What the runs wrote, for the cleanup hook; see the file header. */
+const writtenItemIDs = new Set<number>();
+const writtenCollectionIDs = new Set<number>();
+
 /** One measured write, as the report table needs it. */
 interface RunMeasurement {
   readonly totalMs: number;
@@ -352,6 +364,11 @@ async function measureOneRun(
     const childrenAtResolve = result.collection.getChildItems(true).length;
     // ------------------------------------------------------------------------
     const transactionsDuringWrite = begun.length;
+    // Bookkeeping for the cleanup hook, after the counter has been read.
+    for (const id of result.itemIDs) writtenItemIDs.add(id);
+    if (result.collectionCreated) {
+      writtenCollectionIDs.add(result.collection.id);
+    }
 
     await delay(SETTLE_MS);
     monitor.stop();
@@ -474,6 +491,32 @@ async function measureOneRun(
 }
 
 describe("Batch import of 100 items (P0-T20, V-12, NFR-1)", function () {
+  // plan/00 §6 items 264 and 266: inside the describe, so it runs when this
+  // spec ends. After the `it`, so outside every timed write; a failure here
+  // is reported, never thrown — it must not turn a passing run red.
+  after(async function () {
+    const itemIDs = [...writtenItemIDs];
+    const collectionIDs = [...writtenCollectionIDs];
+    const startedAt = Date.now();
+    try {
+      if (itemIDs.length > 0) await Zotero.Items.erase(itemIDs);
+      for (const collectionID of collectionIDs) {
+        const collection = Zotero.Collections.get(collectionID);
+        if (collection) await collection.eraseTx();
+      }
+      debug(
+        `${LOG_PREFIX} cleanup erased ${String(itemIDs.length)} items and ` +
+          `${String(collectionIDs.length)} collections in ` +
+          `${String(Date.now() - startedAt)} ms`,
+      );
+    } catch (error) {
+      debug(
+        `${LOG_PREFIX} cleanup FAILED after ${String(Date.now() - startedAt)} ms ` +
+          `(${error instanceof Error ? error.message : String(error)}); ` +
+          `${String(itemIDs.length)} items may remain`,
+      );
+    }
+  });
   it("writes 100 journalArticles into one collection in one transaction within NFR-1", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     await Zotero.Schema.schemaUpdatePromise;

@@ -28,11 +28,16 @@
  * 3. {@link probeAndRecordBackend} — the startup probe's verdict recorded in the
  *    `secretBackend` preference.
  *
- * Tiers 2 and 3, the passphrase file, the degradation dialog and the backend
- * badge are Phase 3's (`P3-T03`, `P3-T04`). `P3-T02` added the LLM and TTS
- * presence flags, the startup reconciliation of every flag
- * ({@link reconcileKeyPresence}) and the uninstall sweep
- * ({@link clearAllSecrets}, {@link clearAllSecretsOnUninstall}).
+ * `P3-T02` added the LLM and TTS presence flags, the startup reconciliation of
+ * every flag ({@link reconcileKeyPresence}) and the uninstall sweep
+ * ({@link clearAllSecrets}, {@link clearAllSecretsOnUninstall}). `P3-T03`
+ * added tier 2, the session-only store ({@link createSessionSecretStore}), at
+ * the end of this file; the dialog that offers it is
+ * `src/ui/dialogs/secretBackendDialog.ts`, and `installSecretStore` in
+ * `src/bootstrap/container.ts` opens it on a failed probe. **Tier 3, the
+ * passphrase file, does not ship in v1** (gate `G-10`, decided 2026-10-08;
+ * `docs/09` §1.7 corrected 2026-10-21), so nothing here derives a key from a
+ * passphrase or writes a secrets file.
  *
  * **Never log a value from this module**, plaintext or `oskv1:` ciphertext
  * (`docs/09` §2.1, `docs/01` §12 gotcha 15). Nothing below does; ids, counts
@@ -549,37 +554,71 @@ export async function probeKeystore(): Promise<KeystoreProbeVerdict> {
 /**
  * The `secretBackend` preference's value for "not probed yet, or no backend".
  *
- * `docs/07` §8.5 gives the row's value set as
- * `oskeystore | session | passphrase | ""` and `""` as its default, documented
- * there as "(unprobed)". `P1-T06` step 3 writes it on probe failure as well, so
- * the pane's badge says nothing rather than naming a tier that is not there.
+ * `docs/07` §8.5 gives the row's value set as `oskeystore | session | ""` and
+ * `""` as its default. `P1-T06` step 3 writes it on probe failure as well, so
+ * the pane's badge says nothing rather than naming a tier that is not there;
+ * since `P3-T03` it is also what a declined degradation dialog leaves behind.
  */
 export const SECRET_BACKEND_UNAVAILABLE = "";
 
 /**
- * The `secretBackend` preference value a probe verdict maps to.
+ * `docs/07` §8.5's value set for the `secretBackend` preference, as settled on
+ * 2026-10-21 (owner, `plan/00` §6 item 267). There is no `passphrase` value:
+ * tier 3 does not ship in v1 (`G-10`).
+ */
+export type SecretBackendPrefValue =
+  "oskeystore" | "session" | typeof SECRET_BACKEND_UNAVAILABLE;
+
+/**
+ * The preference value for each {@link SecretBackend}, written once. A record
+ * over the union, so a backend added to the port without a preference
+ * spelling does not compile.
+ */
+export const SECRET_BACKEND_PREF_VALUES: Readonly<
+  Record<SecretBackend, SecretBackendPrefValue>
+> = {
+  "os-keychain": "oskeystore",
+  "session-only": "session",
+};
+
+/**
+ * The `secretBackend` preference value for a backend, a probe verdict, or no
+ * store at all.
  *
- * **This function exists only because the two documents disagree, and `docs/07`
- * §8.5 records the disagreement itself.** §8.5's row spells the values
- * `oskeystore | session | passphrase | ""`; `docs/09` §1.7's {@link SecretBackend}
- * type spells them `os-keychain | session-only | passphrase` and has no unprobed
- * member. §8.5's note — "§8.5 is the sole authority for a preference's allowed
- * values, so these spellings ship; one of the two documents must be corrected"
- * — decides it, and `plan/README.md` §5 rule 3 says the same. So the *type* keeps
- * §1.7's spellings, the *preference* gets §8.5's, and this is the single place
- * the two vocabularies meet. §8.5 predicted the mismatch would bite at
- * `P3-T02`'s probe; it bites here, one phase earlier.
+ * **The single place the two vocabularies meet.** `docs/07` §8.5 is the sole
+ * authority for a preference's allowed values and spells them
+ * `oskeystore | session | ""`; `docs/09` §1.7's {@link SecretBackend} port type
+ * spells its members `os-keychain | session-only` and has no "no store" member.
+ * The CONFLICT §8.5 recorded on 2026-09-30 was resolved on 2026-10-21 in
+ * favour of §8.5's spellings (owner, `plan/00` §6 item 267): the *type* keeps
+ * §1.7's spellings, the *preference* gets §8.5's, and this maps one onto the
+ * other.
  *
- * `src/prefs/schema.ts` declares the row's closed value set, so a wrong spelling
- * returned from here is a `ConfigurationError` on the write rather than a badge
- * that silently reads empty.
+ * - a {@link SecretBackend} → {@link SECRET_BACKEND_PREF_VALUES}'s entry;
+ * - `undefined` (no store installed) → {@link SECRET_BACKEND_UNAVAILABLE};
+ * - a probe verdict → `oskeystore` for tier 1, `""` otherwise. A failed probe
+ *   is not tier 2: tier 2 exists only once the user chooses it in the dialog.
  *
- * @param verdict - what {@link probeKeystore} returned
+ * **Gecko's `NSSKeyStore` fallback maps to `oskeystore`.** It is not a value
+ * this function sees: {@link probeKeystore} succeeds on that backend and
+ * returns `"os-keychain"`, because a round trip cannot tell it from a system
+ * keyring (`P1-T41`). `P3-T37` owns detecting it.
+ *
+ * `src/prefs/schema.ts` declares the row's closed value set, so a wrong
+ * spelling returned from here is a `ConfigurationError` on the write rather
+ * than a badge that silently reads empty.
+ *
+ * @param source - a backend, what {@link probeKeystore} returned, or
+ *   `undefined` for "no store"
  * @returns a member of §8.5's value set
  */
-export function secretBackendPrefValue(verdict: KeystoreProbeVerdict): string {
-  return verdict.backend === "os-keychain"
-    ? "oskeystore"
+export function secretBackendPrefValue(
+  source: SecretBackend | KeystoreProbeVerdict | undefined,
+): SecretBackendPrefValue {
+  if (source === undefined) return SECRET_BACKEND_UNAVAILABLE;
+  if (typeof source === "string") return SECRET_BACKEND_PREF_VALUES[source];
+  return source.backend === "os-keychain"
+    ? SECRET_BACKEND_PREF_VALUES["os-keychain"]
     : SECRET_BACKEND_UNAVAILABLE;
 }
 
@@ -603,16 +642,16 @@ export interface ProbeAndRecordOptions {
  * preference. `P1-T06` step 3: "on success write `secretBackend = "oskeystore"`;
  * on failure write `""` and log a warning. Phase 1 stops there."
  *
- * **Phase 1 stops there — deliberately.** `docs/09` §1.7 escalates a failed probe
- * to the tier-2/tier-3 decision "**with a dialog**, never silently"; that dialog,
- * those tiers and the pane badge are `P3-T03`'s and `P3-T04`'s, and `P1-T06`'s
- * **Do NOT** says a half-built ladder is worse than one rung. So on failure this
- * writes `""`, warns, and returns the verdict for its caller to act on.
+ * **This function stops there — deliberately.** `docs/09` §1.7 escalates a
+ * failed probe to the degradation dialog, "never silently". On failure this
+ * writes `""`, warns, and returns the verdict; its caller, `installSecretStore`
+ * in `src/bootstrap/container.ts`, opens the dialog and, only if the user
+ * chooses tier 2, calls {@link adoptSessionSecretStore}, which writes
+ * `session`.
  *
- * **Nothing calls this at startup yet.** `src/bootstrap/container.ts` is outside
- * `P1-T06`'s `Files` list, so the probe ships unwired and `secretBackend` stays
- * `""` in a running plugin until a card wires it. Reported with `P1-T06` rather
- * than widened into (`plan/README.md` §5 rule 2).
+ * *Updated 2026-10-21 (`P3-T03`):* this comment said nothing called the probe
+ * at startup. `installSecretStore` has called it since the composition root
+ * was wired.
  *
  * Never throws for a keystore failure — {@link probeKeystore} turns those into
  * verdicts. It *does* propagate a preference-write failure, for the reason
@@ -655,8 +694,9 @@ export async function probeAndRecordBackend(
  * - `backend` is `"os-keychain"`. It is **not** probed here: a constructor that
  *   round-tripped the keystore would be an async constructor, and `docs/09` §1.7
  *   puts the probe at startup instead. Call {@link probeAndRecordBackend} and
- *   build this store only on a tier-1 verdict; on any other verdict Phase 1 has
- *   no store to offer, which is `docs/11` §1's scope and not an oversight.
+ *   build this store only on a tier-1 verdict; on any other verdict the only
+ *   other store is tier 2 ({@link createSessionSecretStore}), and only after
+ *   the user chooses it in the degradation dialog.
  * - `unattended` is `true`: Windows DPAPI, the macOS Keychain and libsecret all
  *   decrypt for the running user without a prompt, which is what lets a
  *   background job resume. `docs/09` §1.7 contrasts this with tier 2, whose cost
@@ -677,4 +717,133 @@ export function createKeychainSecretStore(): SecretStore {
     listStoredIds,
     clearAll: clearAllSecrets,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Tier 2 — session-only (docs/09 §1.7, P3-T03)
+// ---------------------------------------------------------------------------
+
+/**
+ * Tier 2's storage: one module-scoped map, and nothing else.
+ *
+ * `docs/09` §1.7: "Keys live in a module-scoped variable, cleared on
+ * shutdown." **No value in this map is ever written anywhere** — not to a
+ * preference, a file, the database, a log or the login manager. Only
+ * {@link createSessionSecretStore}'s methods read or write it, and
+ * {@link clearSessionSecrets} empties it at shutdown.
+ */
+const sessionSecrets = new Map<SecretId, string>();
+
+/** Tier 2's existence check, over the map. Never reads a value out. */
+function sessionHas(id: SecretId): Promise<boolean> {
+  return Promise.resolve(sessionSecrets.has(id));
+}
+
+/**
+ * Re-derive `id`'s `*.keyPresent` flag from the session map and write it: the
+ * tier-2 counterpart of {@link refreshKeyPresence}, under the same rule (a
+ * shared flag means "either key is stored", {@link deriveKeyPresence}). The
+ * value written is a boolean, never the key.
+ */
+async function refreshSessionKeyPresence(id: SecretId): Promise<void> {
+  const pref = keyPresencePrefFor(id);
+  if (pref === undefined) return;
+  setPref(pref, await deriveKeyPresence(pref, sessionHas));
+}
+
+/**
+ * Write every `*.keyPresent` flag from the session map. At startup the map is
+ * empty, so every flag becomes `false`.
+ *
+ * `installSecretStore` calls this on **every** failed probe, before the dialog,
+ * whatever the user then chooses. A flag is a stored preference and outlives
+ * the session: without this, a `true` written while a session key was held
+ * (or while tier 1 last worked) would still claim a key after restart. A stale
+ * `ncbi.keyPresent = true` paces NCBI at the keyed budget with no key sent,
+ * which `docs/02` §3.1 says earns an IP block.
+ *
+ * @returns each flag with the value written
+ */
+export async function reconcileSessionKeyPresence(): Promise<
+  ReadonlyMap<PrefName, boolean>
+> {
+  const values = await deriveAllKeyPresence(sessionHas);
+  for (const [flag, present] of values) {
+    setPref(flag, present);
+  }
+  return values;
+}
+
+/**
+ * Empty the session map. `installServices` in `src/bootstrap/container.ts`
+ * defers this into the root scope when tier 2 is installed, so it runs from
+ * `shutdown()`. Never writes a preference: teardown detaches the `PrefStore`,
+ * and the next startup's {@link reconcileSessionKeyPresence} resets the flags.
+ *
+ * @returns how many keys were dropped
+ */
+export function clearSessionSecrets(): number {
+  const dropped = sessionSecrets.size;
+  sessionSecrets.clear();
+  return dropped;
+}
+
+/**
+ * `docs/09` §1.7's tier 2: keys held in memory for this session and **written
+ * nowhere**.
+ *
+ * - `backend` is `"session-only"`, recorded in the preference as `session`
+ *   ({@link secretBackendPrefValue}).
+ * - `unattended` is **`false`** (`P3-T03` step 4): after a restart no key is
+ *   held, so a job that needs one cannot resume on its own. The summarize
+ *   pipeline (`P3-T29`) reads this to pause such a job with reason
+ *   `credential-required` (`docs/07` §7.5) instead of failing it.
+ * - `set` and `clear` maintain the `*.keyPresent` flags, as tier 1's do,
+ *   because `docs/07` §8.5 says the `SecretStore` writes them and nothing else.
+ *   The flag holds a boolean; the value stays in the map.
+ * - `clearAll` is the port's one sweep ({@link clearEveryStoredId}).
+ *
+ * Every store this returns shares the one map, so a second call does not
+ * start a second, empty session.
+ *
+ * @returns the tier-2 {@link SecretStore}
+ */
+export function createSessionSecretStore(): SecretStore {
+  const store: SecretStore = {
+    backend: "session-only",
+    unattended: false,
+    get: (id: SecretId): Promise<string | undefined> =>
+      Promise.resolve(sessionSecrets.get(id)),
+    set: async (id: SecretId, value: string): Promise<void> => {
+      sessionSecrets.set(id, value);
+      await refreshSessionKeyPresence(id);
+    },
+    clear: async (id: SecretId): Promise<void> => {
+      sessionSecrets.delete(id);
+      await refreshSessionKeyPresence(id);
+    },
+    has: sessionHas,
+    listStoredIds: (): Promise<readonly SecretId[]> =>
+      Promise.resolve(SECRET_IDS.filter((id) => sessionSecrets.has(id))),
+    clearAll: (): Promise<number> => clearEveryStoredId(store),
+  };
+  return store;
+}
+
+/**
+ * The user chose tier 2 in the degradation dialog: record the choice in the
+ * `secretBackend` preference (`session`, `P3-T03` step 3) and return the
+ * store.
+ *
+ * Called by `installSecretStore` in `src/bootstrap/container.ts`, **only**
+ * after the dialog returned that choice. Nothing calls it on a failed probe by
+ * itself: `docs/09` §1.7 forbids falling from tier 1 to tier 2 without the
+ * dialog.
+ *
+ * @returns the tier-2 {@link SecretStore}
+ */
+export function adoptSessionSecretStore(): SecretStore {
+  const store = createSessionSecretStore();
+  setPref("secretBackend", secretBackendPrefValue(store.backend));
+  return store;
 }

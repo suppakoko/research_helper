@@ -216,7 +216,9 @@ import {
   type HostLimiterRegistry,
 } from "../core/rateLimit/hostLimiter";
 import type { SecretStore } from "../core/secretStore";
+import type { SecretBackendChoice } from "../ui/dialogs/secretBackendDialog";
 import type { PipelineRegistry } from "../pipeline/registry";
+import { createPrivacyPolicy } from "../pipeline/shared/privacyPolicy";
 import type { LLMRouter, PipelineContext, PipelineId } from "../pipeline/types";
 import { getPref, setPrefStore } from "../prefs";
 import { createArxivSource } from "../sources/arxiv/arxivSource";
@@ -705,6 +707,15 @@ export interface ServiceGraphOptions {
    * returns a fresh fake from each call.
    */
   readonly openProgressWindow?: () => ProgressWindowHandle;
+  /**
+   * The degradation dialog (`docs/09` §1.7, `P3-T03`): asked only when the
+   * startup keystore probe fails, and awaited before any store is installed.
+   * `src/bootstrap/registerUI.ts` passes `openSecretBackendDialog` from
+   * `src/ui/dialogs/secretBackendDialog.ts` over the main window. Omitted in a
+   * unit test of the graph: then a failed probe installs no store, which is
+   * the declined choice and never a silently selected tier.
+   */
+  readonly chooseSecretBackend?: () => Promise<SecretBackendChoice>;
 }
 
 /**
@@ -1252,14 +1263,19 @@ function createPipelineContextFactory(
         // `docs/07` §4.1's cache over the plugin database (`P3-T33`): the one
         // instance `installPluginDatabase` built, shared by every job.
         cache: deps.cache,
+        // `docs/07` §4.5's `PrivacyPolicy` (`P3-T15`, owner item 267). Strict
+        // until `P3-T35` builds each job's policy with `loadPrivacyPolicy`
+        // (global mode + the collection's override): a policy built from the
+        // global mode alone could be looser than a collection's override, so
+        // the placeholder fails closed. No shipped pipeline reads it yet.
+        privacy: createPrivacyPolicy("strict"),
         // See this function's doc comment: members doc 07 declares and no
         // card has implemented yet (`llm` left this list in `P3-T06`, `cache`
-        // in `P3-T33`).
+        // in `P3-T33`, `privacy` in `P3-T15`).
         budget: undefined,
         tts: undefined,
         zotero: undefined,
         config: undefined,
-        privacy: undefined,
         checkpoint: (): Promise<void> => Promise.resolve(),
         resumeState: undefined,
       };
@@ -1431,10 +1447,13 @@ export async function installServices(
   //
   //    `probeKeystore()` is a real encrypt/decrypt round trip and never throws:
   //    a platform without `Zotero.OSKeyStore` — a layer-1 unit test, for
-  //    instance — comes back `"unavailable"` and this phase then has no store to
-  //    offer, which `src/zotero/keychain.ts` records as `docs/11` §1's scope
-  //    rather than a failure.
-  const secrets = await installSecretStore(logger);
+  //    instance — comes back `"unavailable"`. Then the degradation dialog
+  //    (`P3-T03`) is awaited, and the only store it can license is tier 2,
+  //    whose in-memory keys this scope drops at teardown.
+  const secrets = await installSecretStore(logger, {
+    chooseSecretBackend: options.chooseSecretBackend,
+    scope,
+  });
 
   // 3. The per-host buckets, and the observer that raises NCBI's budget when a
   //    key is entered while Zotero is running.
@@ -1713,10 +1732,13 @@ export async function installServices(
  * makes a supported configuration.
  *
  * 1. **The probe says `"unavailable"`.** `probeAndRecordBackend` has already
- *    written `secretBackend = ""` and logged a `warn` naming the failure class;
- *    no store is built, and `docs/09` §1.7's escalation to tiers 2 and 3 "with a
- *    dialog, never silently" is `P3-T03`'s, so Phase 1 stops here by instruction
- *    (`P1-T06`'s **Do NOT**: "a half-built ladder is worse than one rung").
+ *    written `secretBackend = ""` and logged a `warn` naming the failure class.
+ *    Since `P3-T03` this goes on to {@link installFallbackSecretStore}: every
+ *    `*.keyPresent` flag is reset from the empty session store, then the
+ *    degradation dialog is awaited, and only a `"session"` answer installs a
+ *    store — tier 2, recorded as `secretBackend = "session"`. `docs/09` §1.7
+ *    forbids falling to tier 2 "without the dialog", and tier 3 does not ship
+ *    in v1 (`G-10`).
  * 2. **The probe itself throws.** It is documented as never doing so, so this is
  *    a defect somewhere below; caught, logged, treated as unavailable.
  * 3. **`refreshKeyPresence` throws.** It reads the login manager, which
@@ -1774,6 +1796,7 @@ export async function installServices(
  */
 export async function installSecretStore(
   logger: Logger,
+  options: SecretStoreInstallOptions = {},
 ): Promise<SecretStore | undefined> {
   let keychain: typeof import("../zotero/keychain");
   try {
@@ -1802,7 +1825,7 @@ export async function installSecretStore(
     );
     return undefined;
   }
-  if (!tierOne) return undefined;
+  if (!tierOne) return installFallbackSecretStore(keychain, logger, options);
 
   const secrets = keychain.createKeychainSecretStore();
   try {
@@ -1822,5 +1845,113 @@ export async function installSecretStore(
       { err: error },
     );
   }
+  return secrets;
+}
+
+/** What {@link installSecretStore} needs beyond a logger (`P3-T03`). */
+export interface SecretStoreInstallOptions {
+  /**
+   * The degradation dialog, asked only after a failed probe. Absent: a failed
+   * probe installs no store.
+   */
+  readonly chooseSecretBackend?:
+    (() => Promise<SecretBackendChoice>) | undefined;
+  /**
+   * Where the tier-2 store's teardown goes: the in-memory keys are dropped
+   * when this scope is torn down, which is `shutdown()`.
+   */
+  readonly scope?: Pick<Scope, "defer"> | undefined;
+}
+
+/**
+ * `docs/09` §1.7 after a failed probe: the degradation dialog, never a silent
+ * fallback (`P3-T03` step 2).
+ *
+ * In order:
+ *
+ * 1. **Every `*.keyPresent` flag is reset** from the session store, which is
+ *    empty at startup, so every flag reads `false`. This happens whatever the
+ *    user then chooses: no key is usable this session until one is entered,
+ *    and a stale `ncbi.keyPresent = true` would pace NCBI at the keyed budget
+ *    with no key sent (`docs/02` §3.1). A failure here is logged, not fatal.
+ * 2. **The dialog is awaited.** No store exists until it answers, so nothing
+ *    can store or read a key in the meantime.
+ * 3. **Only `"session"` installs a store**: `adoptSessionSecretStore` writes
+ *    `secretBackend = "session"` and returns tier 2, and the scope drops its
+ *    keys at teardown. `"none"`, a closed window, a dialog that could not be
+ *    opened, or no dialog at all (a unit test) all leave `secretBackend = ""`
+ *    and no store — running without stored keys, which is not a tier.
+ *
+ * Never throws, for the reason {@link installSecretStore} gives. What reaches
+ * the log is a choice and an error; no key exists yet to reach it.
+ *
+ * @param keychain - the loaded `src/zotero/keychain.ts`
+ * @param logger - the graph's redacting logger
+ * @param options - see {@link SecretStoreInstallOptions}
+ * @returns the tier-2 store, or `undefined` when none was chosen
+ */
+async function installFallbackSecretStore(
+  keychain: typeof import("../zotero/keychain"),
+  logger: Logger,
+  options: SecretStoreInstallOptions,
+): Promise<SecretStore | undefined> {
+  try {
+    await keychain.reconcileSessionKeyPresence();
+  } catch (error) {
+    logger.warn(
+      "could not reset the key-presence flags after the keystore probe " +
+        "failed; the stored flags stand. If ncbi.keyPresent is stale in the " +
+        "`true` direction, NCBI will be paced at the keyed budget with no key " +
+        "sent (docs/02 §3.1)",
+      { err: error },
+    );
+  }
+
+  const choose = options.chooseSecretBackend;
+  if (choose === undefined) {
+    logger.warn(
+      "the OS keystore is unavailable and this build has no degradation " +
+        "dialog to offer session-only storage; continuing with no stored keys",
+    );
+    return undefined;
+  }
+
+  let choice: SecretBackendChoice;
+  try {
+    choice = await choose();
+  } catch (error) {
+    logger.warn(
+      "the key-storage dialog could not be shown; continuing with no stored " +
+        "keys rather than choosing a tier for the user (docs/09 §1.7)",
+      { err: error },
+    );
+    return undefined;
+  }
+  if (choice !== "session") {
+    logger.info(
+      "session-only key storage declined; continuing with no stored keys",
+      { choice },
+    );
+    return undefined;
+  }
+
+  let secrets: SecretStore;
+  try {
+    secrets = keychain.adoptSessionSecretStore();
+  } catch (error) {
+    logger.warn(
+      "could not record the session-only choice in the secretBackend " +
+        "preference; continuing with no stored keys",
+      { err: error },
+    );
+    return undefined;
+  }
+  options.scope?.defer("tier-2 session-only key store (docs/09 §1.7)", () => {
+    keychain.clearSessionSecrets();
+  });
+  logger.info(
+    "session-only key storage chosen: keys are held in memory, written " +
+      "nowhere, and must be entered again after a restart",
+  );
   return secrets;
 }

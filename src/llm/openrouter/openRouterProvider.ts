@@ -22,7 +22,9 @@
  *   `QuotaExceededError` while an ordinary 429 is still retried. A chat
  *   request's hook first asks {@link isGuardrailNotFound} (`docs/09` §3.4
  *   rule 2) and returns {@link openRouterGuardrailError} for that 404;
- * - `timeoutMs: LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240);
+ * - `timeoutMs: LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240), or for a
+ *   stream 15 minutes in all and 3 without new text (`llmAttemptTimeouts`,
+ *   item 268(c));
  * - the job's cancellation token.
  *
  * This file writes no retry loop: the retry budget belongs to the host's
@@ -55,10 +57,18 @@
  *
  * - `validateCredentials` is `P3-T14`'s (that card modifies this file); it
  *   throws `ConfigurationError` here and sends nothing.
- * - Streaming (`chatStream`) is `P3-T11`'s; the router falls back to `chat`.
+ * - *(Corrected 2026-10-21: streaming was listed here as `P3-T11`'s. That
+ *   card added `chatStream`, which sends `chat`'s body — one builder,
+ *   `chatBody` — with `stream: true`.)*
  * - Budget enforcement (`LLMCallContext.budget`) is `P3-T16`'s.
- * - The effective privacy mode is `P3-T15`'s; until then
- *   {@link OpenRouterProviderDeps.privacyMode} is absent and `balanced` holds.
+ * - *(Corrected 2026-10-21, `P3-T15`: this said the effective privacy mode
+ *   was `P3-T15`'s and absent until then.)* A job's mode reaches the body per
+ *   request: `routingHints(mode)` (`src/pipeline/shared/privacyPolicy.ts`)
+ *   sets `ChatRequest.routing.requireZeroRetention` in strict mode, and
+ *   `chatBody` sends it as `provider.zdr: true` for `chat` and `chatStream`
+ *   alike — so a collection stricter than the global mode is honoured.
+ *   {@link OpenRouterProviderDeps.privacyMode} is the global floor; the
+ *   composition root does not pass it yet (`P3-T35`), so `balanced` holds.
  */
 
 import { type Clock, createSystemClock } from "../../core/clock";
@@ -76,16 +86,18 @@ import {
   httpRequest,
 } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
-import { LLM_ATTEMPT_TIMEOUT_MS } from "../../core/rateLimit/hostLimiter";
+import { llmAttemptTimeouts } from "../../core/rateLimit/hostLimiter";
 import type { SecretId, SecretStore } from "../../core/secretStore";
 import { Secret } from "../../prefs/secrets";
 import type { BaseUrlResolver } from "../shared/baseUrl";
 import { mapProviderError } from "../shared/errorMap";
 import { withSchemaInPrompt } from "../shared/jsonMode";
+import { createOpenRouterStreamDecoder, streamChat } from "../shared/sse";
 import { estTokens } from "../shared/tokenEstimate";
 import type {
   ChatRequest,
   ChatResponse,
+  ChatStreamChunk,
   CredentialCheckResult,
   LLMCallContext,
   LLMProvider,
@@ -105,6 +117,7 @@ import {
   MODELS_PATH,
   OPENROUTER_ATTRIBUTION_HEADERS,
   OPENROUTER_PROVIDER_ID,
+  type OpenRouterChatBody,
   type OpenRouterPrivacyMode,
   type OpenRouterProviderBlock,
   openRouterGuardrailError,
@@ -144,8 +157,10 @@ export interface OpenRouterProviderDeps {
   /** For `latencyMs` and the error hook. Defaults to the system clock. */
   readonly clock?: Clock;
   /**
-   * The effective privacy mode, read per request (`docs/09` §3.5). `P3-T15`
-   * supplies it; absent means {@link DEFAULT_OPENROUTER_PRIVACY_MODE}.
+   * The global privacy mode (`privacy.mode`), read per request (`docs/09`
+   * §3.5); absent means {@link DEFAULT_OPENROUTER_PRIVACY_MODE}. A job's
+   * stricter collection mode arrives on the request instead, as
+   * `routing.requireZeroRetention` (`P3-T15`'s `routingHints`).
    */
   readonly privacyMode?: () => OpenRouterPrivacyMode;
   readonly logger?: Logger;
@@ -292,6 +307,7 @@ export function createOpenRouterProvider(
     body: string | undefined,
     hook: ErrorResponseMapper,
     ctx: LLMCallContext,
+    onBodyText?: (text: string) => void,
   ): Promise<HttpResponse> {
     if (headers !== undefined) {
       logger?.debug("openrouter request", {
@@ -306,9 +322,10 @@ export function createOpenRouterProvider(
       {
         ...(headers !== undefined && { headers }),
         ...(body !== undefined && { body }),
-        timeoutMs: LLM_ATTEMPT_TIMEOUT_MS,
+        ...llmAttemptTimeouts(onBodyText !== undefined),
         token: ctx.token,
         mapErrorResponse: hook,
+        ...(onBodyText !== undefined && { onBodyText }),
       },
     );
   }
@@ -363,6 +380,33 @@ export function createOpenRouterProvider(
     return entries;
   }
 
+  /**
+   * The request as sent and its body. One builder for `chat` and
+   * `chatStream` (`P3-T11`), so the `provider` block — `data_collection`,
+   * `zdr` — can never differ between them.
+   */
+  function chatBody(request: ChatRequest): {
+    sent: ChatRequest;
+    body: OpenRouterChatBody;
+  } {
+    const cap = catalogue?.get(request.model)?.maxOutputTokens;
+    // `P3-T12` step 6: a model the fetched catalogue lists without
+    // `structured_outputs` gets the schema in the prompt instead of
+    // `response_format` + `require_parameters` (`docs/12` §18.2, `docs/06`
+    // §6.4). Unknown (no catalogue yet) keeps the native field.
+    const sent =
+      catalogue?.get(request.model)?.supportsJsonSchema === false
+        ? withSchemaInPrompt(request)
+        : request;
+    // `P3-T15` step 4: `zdr: true` when the global mode is strict, or when the
+    // job's policy put `routing.requireZeroRetention` on the request.
+    const body = toOpenRouterBody(sent, {
+      privacyMode: deps.privacyMode?.() ?? DEFAULT_OPENROUTER_PRIVACY_MODE,
+      ...(cap !== undefined && { maxOutputTokensCap: cap }),
+    });
+    return { sent, body };
+  }
+
   const provider: OpenRouterProvider = {
     id: OPENROUTER_PROVIDER_ID,
     displayNameKey: OPENROUTER_DISPLAY_NAME_KEY,
@@ -404,19 +448,7 @@ export function createOpenRouterProvider(
     ): Promise<ChatResponse> {
       ctx.token.throwIfCancelled();
       const headers = openRouterHeaders(await readKey());
-      const cap = catalogue?.get(request.model)?.maxOutputTokens;
-      // `P3-T12` step 6: a model the fetched catalogue lists without
-      // `structured_outputs` gets the schema in the prompt instead of
-      // `response_format` + `require_parameters` (`docs/12` §18.2, `docs/06`
-      // §6.4). Unknown (no catalogue yet) keeps the native field.
-      const sent =
-        catalogue?.get(request.model)?.supportsJsonSchema === false
-          ? withSchemaInPrompt(request)
-          : request;
-      const body = toOpenRouterBody(sent, {
-        privacyMode: deps.privacyMode?.() ?? DEFAULT_OPENROUTER_PRIVACY_MODE,
-        ...(cap !== undefined && { maxOutputTokensCap: cap }),
-      });
+      const { sent, body } = chatBody(request);
       const started = clock.now();
       const response = await send(
         "POST",
@@ -438,6 +470,34 @@ export function createOpenRouterProvider(
         );
       }
       return { ...answer, latencyMs, raw: parsed };
+    },
+
+    chatStream(
+      request: ChatRequest,
+      ctx: LLMCallContext,
+    ): AsyncIterable<ChatStreamChunk> {
+      // `P3-T11`: `chat`'s body with `stream: true` (`docs/03` §6.4), through
+      // the same `send` and hook, read by `createOpenRouterStreamDecoder`.
+      return streamChat({
+        providerId: OPENROUTER_PROVIDER_ID,
+        request,
+        token: ctx.token,
+        decoder: createOpenRouterStreamDecoder(request, () => clock.now()),
+        start: async (hooks) => {
+          hooks.token.throwIfCancelled();
+          const headers = openRouterHeaders(await readKey());
+          const { body } = chatBody(request);
+          return send(
+            "POST",
+            CHAT_COMPLETIONS_PATH,
+            headers,
+            JSON.stringify({ ...body, stream: true }),
+            errorHook(request.model, body.provider),
+            { ...ctx, token: hooks.token },
+            hooks.onBodyText,
+          );
+        },
+      });
     },
 
     countTokens(text: string): number {

@@ -18,6 +18,7 @@ import {
   chatResponse,
   mockLLM,
   mockLLMRouter,
+  mockModel,
   mockSettings,
 } from "../../helpers/mockLLM";
 import { createScope, installServices } from "../../../src/bootstrap/container";
@@ -499,6 +500,39 @@ describe("the router dispatches to the active provider only", () => {
     expect(chunks.map((chunk) => chunk.deltaText).join("")).toBe("two words");
     expect(chunks.at(-1)?.done).toBe(true);
     expect(chunks.filter((chunk) => chunk.done)).toHaveLength(1);
+    // Item 268(d): the provider's own word-by-word stream, not the `chat`
+    // fallback's single terminal chunk, which the assertions above also pass.
+    expect(chunks).toEqual([
+      { deltaText: "two ", done: false },
+      { deltaText: "words", done: false },
+      {
+        deltaText: "",
+        done: true,
+        usage: chatResponse("two words").usage,
+      },
+    ]);
+  });
+
+  it("chatStream falls back to chat for a model whose catalogue says supportsStreaming: false, though the provider streams", async () => {
+    const mock = mockLLM([chatResponse("two words")], {
+      streaming: true,
+      models: [mockModel("mock-small", { supportsStreaming: false })],
+    });
+    const router = mockLLMRouter(
+      [mock],
+      mockSettings({ keyPresent: { openrouter: true } }),
+    );
+
+    const chunks = await collect(router.chatStream(request(), callContext()));
+
+    expect(chunks).toEqual([
+      {
+        deltaText: "two words",
+        done: true,
+        usage: chatResponse("two words").usage,
+      },
+    ]);
+    expect(mock.calls).toHaveLength(1);
   });
 });
 

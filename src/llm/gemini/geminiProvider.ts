@@ -28,7 +28,9 @@
  * `mapProviderError` (`src/llm/shared/errorMap.ts`) inside the HTTP client's
  * own attempt (`P3-T38`, `plan/00` §6 item 244). The retry loop is the
  * client's `withRetry`, under the host row's budget; this file has none. Each
- * request waits up to `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240). A 2xx is
+ * request waits up to `LLM_ATTEMPT_TIMEOUT_MS` (3 minutes, item 240; a
+ * stream instead 3 minutes without new text and 15 in all,
+ * `llmAttemptTimeouts`, item 268(c)). A 2xx is
  * also handed to `mapProviderError`, outside any loop, for the refusal row.
  *
  * **Two Gemini shapes are not documented and are not guessed at**
@@ -42,7 +44,9 @@
  * ## Not built here
  *
  * - `validateCredentials()` is `P3-T14`'s; here it refuses.
- * - Streaming is `P3-T11`'s; the router falls back to `chat`.
+ * - *(Corrected 2026-10-21: streaming was listed here as `P3-T11`'s; that
+ *   card added `chatStream`, whose Interactions payload shapes are
+ *   assumptions — see `createGeminiStreamDecoder` in `../shared/sse.ts`.)*
  * - Spend reservation (`LLMCallContext.budget`) has no decided enforcer yet
  *   (`P3-T16`); this adapter does not call it.
  */
@@ -61,15 +65,17 @@ import {
   type HttpResponse,
 } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
-import { LLM_ATTEMPT_TIMEOUT_MS } from "../../core/rateLimit/hostLimiter";
+import { llmAttemptTimeouts } from "../../core/rateLimit/hostLimiter";
 import type { SecretId, SecretStore } from "../../core/secretStore";
 import { Secret } from "../../prefs/secrets";
 import { DEFAULT_BASE_URLS, type BaseUrlResolver } from "../shared/baseUrl";
 import { mapProviderError } from "../shared/errorMap";
+import { createGeminiStreamDecoder, streamChat } from "../shared/sse";
 import { estTokens } from "../shared/tokenEstimate";
 import type {
   ChatRequest,
   ChatResponse,
+  ChatStreamChunk,
   CredentialCheckResult,
   LLMCallContext,
   LLMProvider,
@@ -180,6 +186,7 @@ interface GeminiTransport {
     modelId: string,
     body: Record<string, unknown> | undefined,
     ctx: LLMCallContext,
+    onBodyText?: (text: string) => void,
   ): Promise<HttpResponse>;
 }
 
@@ -204,7 +211,14 @@ function createTransport(
     url(path: string): string {
       return `${deps.baseUrls.resolveBaseUrl("gemini")}${path}`;
     },
-    async send(method, url, modelId, body, ctx): Promise<HttpResponse> {
+    async send(
+      method,
+      url,
+      modelId,
+      body,
+      ctx,
+      onBodyText,
+    ): Promise<HttpResponse> {
       ctx.token.throwIfCancelled();
       const headers = geminiHeaders(await readKey());
       deps.logger?.debug("gemini request", {
@@ -214,7 +228,7 @@ function createTransport(
       return (deps.http ?? INSTALLED_CLIENT).request(method, url, {
         headers,
         ...(body !== undefined && { body: JSON.stringify(body) }),
-        timeoutMs: LLM_ATTEMPT_TIMEOUT_MS,
+        ...llmAttemptTimeouts(onBodyText !== undefined),
         token: ctx.token,
         mapErrorResponse: (response, nowEpochMs) =>
           mapProviderError(
@@ -225,6 +239,7 @@ function createTransport(
             response.body,
             nowEpochMs,
           ),
+        ...(onBodyText !== undefined && { onBodyText }),
       });
     },
   };
@@ -374,6 +389,32 @@ export function createGeminiProvider(deps: GeminiProviderDeps): GeminiProvider {
         ctx,
       );
       return finishChat(transport, response, request, started, readInteraction);
+    },
+
+    chatStream(
+      request: ChatRequest,
+      ctx: LLMCallContext,
+    ): AsyncIterable<ChatStreamChunk> {
+      // `P3-T11`: `chat`'s Interactions body with `stream: true` (`docs/03`
+      // §6.3), through the same `send`. The payload shapes the decoder reads
+      // are ASSUMPTIONS (`createGeminiStreamDecoder`, `../shared/sse.ts`).
+      return streamChat({
+        providerId: "gemini",
+        request,
+        token: ctx.token,
+        decoder: createGeminiStreamDecoder(request, () =>
+          transport.clock.now(),
+        ),
+        start: (hooks) =>
+          transport.send(
+            "POST",
+            transport.url(INTERACTIONS_PATH),
+            request.model,
+            { ...buildInteractionBody(request), stream: true },
+            { ...ctx, token: hooks.token },
+            hooks.onBodyText,
+          ),
+      });
     },
 
     countTokens(text: string): number {

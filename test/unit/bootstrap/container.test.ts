@@ -2319,8 +2319,9 @@ describe("P3-T33 — installServices opens the plugin database once and shares i
     expect(open).toMatchObject({
       path: "/data/research-helper.sqlite",
       schemaFrom: 0,
-      // 4 since plan/00 §6 item 265 (b) appended `user_price`.
-      schemaVersion: 4,
+      // 4 since plan/00 §6 item 265 (b) appended `user_price`; 5 since P3-T15
+      // appended `collection_settings`.
+      schemaVersion: 5,
     });
     await settle();
     expect(graph.jobs.attached).toBe(true);
