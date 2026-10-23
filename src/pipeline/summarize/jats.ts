@@ -41,9 +41,12 @@
  * | `sec` titled `/supplement\|supporting information\|data availability\|author contribution\|conflict\|funding\|competing interest/i`, or `@sec-type="supplementary-material"` | dropped with everything inside it |
  * | `supplementary-material` | dropped |
  *
- * Section *labels* (`ImradSection`) are not assigned here: `P3-T21` maps
- * `@sec-type` and headings onto §4.3's union, so `AcquiredSource.sections`
- * stays empty until then and the sections live on {@link JatsExtraction}.
+ * Section *labels* (`ImradSection`) are not assigned here. The sections
+ * live on {@link JatsExtraction}; `P3-T21`'s `detectSectionsFromJats`
+ * (`./imrad.ts`, called from `acquire.ts`) maps their `@sec-type` and
+ * headings onto §4.3's union and fills `AcquiredSource.sections`, with
+ * offsets into the acquired text. *(Corrected 2026-10-23: this said
+ * `AcquiredSource.sections` stays empty until `P3-T21`; it no longer does.)*
  *
  * ## `DOMParser` is injected
  *

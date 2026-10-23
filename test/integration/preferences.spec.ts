@@ -50,8 +50,12 @@ import { UpstreamServerError } from "../../src/core/errors";
 import type { HttpRequest, HttpResponse } from "../../src/core/http/client";
 import { createLogger } from "../../src/core/logger";
 import type { SecretId } from "../../src/core/secretStore";
+import type { ProviderId } from "../../src/model/ids";
 import { PREF_KEYS, setPrefStore } from "../../src/prefs";
+import { qualifiedPrefKey } from "../../src/prefs/keys";
 import {
+  LLM_CREDENTIALS,
+  PANE_CREDENTIALS,
   PREFERENCES_API_PROPERTY,
   PREFERENCES_L10N,
   PREFERENCES_PANE_ID,
@@ -60,6 +64,7 @@ import {
   createPreferencesHost,
   keyDigest,
   type PreferencesHostApi,
+  type ProviderPrefsPort,
   type TestReport,
 } from "../../src/ui/prefs/preferencesPane";
 import { createKeychainSecretStore } from "../../src/zotero/keychain";
@@ -218,6 +223,34 @@ function syntheticKey(): string {
 const PANE_IDS: readonly SecretId[] = SOURCE_CREDENTIALS.map(
   (entry) => entry.id,
 );
+
+/** The four LLM ids (`P3-T04`). */
+const LLM_IDS: readonly SecretId[] = LLM_CREDENTIALS.map((entry) => entry.id);
+
+/** Each LLM id's `<provider>.keyPresent` row, branch-relative. */
+const LLM_FLAG: Readonly<Record<ProviderId, string>> = {
+  openrouter: PREF_KEYS.openrouterKeyPresent,
+  openai: PREF_KEYS.openaiKeyPresent,
+  gemini: PREF_KEYS.geminiKeyPresent,
+  anthropic: PREF_KEYS.anthropicKeyPresent,
+};
+
+/** A port that writes nowhere, for a second host that never sets a base URL. */
+const INERT_PROVIDER_PREFS: ProviderPrefsPort = {
+  getActiveProvider: () => "openrouter",
+  getBaseUrl: () => "",
+  setBaseUrl: () => {
+    throw new Error("this spec's second host never writes a base URL");
+  },
+};
+
+/** The profile's `prefs.js` after a forced flush (`zotero/secrets.spec.ts`'s method). */
+async function flushedPrefsFile(): Promise<string> {
+  // `null` means "the profile's prefs.js" (nsIPrefService); the binding omits it.
+  Services.prefs.savePrefFile(null as unknown as nsIFile);
+  const path = PathUtils.join(PathUtils.profileDir, "prefs.js");
+  return (await IOUtils.exists(path)) ? IOUtils.readUTF8(path) : "";
+}
 
 /* -------------------------------------------------------- the sweep tools */
 
@@ -391,6 +424,7 @@ describe("P1-T44 — the preference pane", function () {
       "clearKey",
       "clearAllKeys",
       "testKey",
+      "setBaseUrl",
     ] as const) {
       assert.strictEqual(
         typeof host![method],
@@ -405,8 +439,8 @@ describe("P1-T44 — the preference pane", function () {
     );
     assert.deepEqual(
       state.credentials.map((c) => c.id),
-      [...PANE_IDS],
-      "the two literature-source credentials and no other",
+      PANE_CREDENTIALS.map((c) => c.id),
+      "the two literature-source credentials and the four LLM ones (P3-T04), and no other",
     );
   });
 
@@ -489,8 +523,8 @@ describe("P1-T44 — the preference pane", function () {
       "the controller lives in the pane's isolated scope",
     );
 
-    // Rules 1 and 9 as rendered.
-    for (const { elementPrefix } of SOURCE_CREDENTIALS) {
+    // Rules 1 and 9 as rendered — all six key fields (P3-T04 added four).
+    for (const { elementPrefix } of PANE_CREDENTIALS) {
       const input = doc.getElementById(
         `${elementPrefix}-key`,
       ) as HTMLInputElement | null;
@@ -512,11 +546,46 @@ describe("P1-T44 — the preference pane", function () {
         );
       }
     }
-    assert.strictEqual(
-      doc.querySelectorAll(`#${PREFERENCES_ROOT_ID} [preference]`).length,
-      0,
-      "no element in the pane is bound to a preference",
+    // P3-T04: the only bound elements are docs/07 §8.5's non-secret rows —
+    // llmProvider, the four <provider>.model fields and gemini.paidTier — and
+    // no key field or base-URL field is among them.
+    const bound = [
+      ...doc.querySelectorAll(`#${PREFERENCES_ROOT_ID} [preference]`),
+    ];
+    const allowed = new Set(
+      [
+        PREF_KEYS.llmProvider,
+        PREF_KEYS.openrouterModel,
+        PREF_KEYS.openaiModel,
+        PREF_KEYS.geminiModel,
+        PREF_KEYS.anthropicModel,
+        PREF_KEYS.geminiPaidTier,
+      ].map((key) => qualifiedPrefKey(key)),
     );
+    assert.strictEqual(bound.length, allowed.size, "six bound elements");
+    for (const element of bound) {
+      const name = element.getAttribute("preference") ?? "";
+      assert.isTrue(allowed.has(name), `${name} is an allowed binding`);
+      assert.isFalse(
+        element.classList.contains("rh-key") ||
+          element.classList.contains("rh-base-url"),
+        `${element.id} is neither a key field nor a base-URL field`,
+      );
+    }
+    // Rule 4: one provider block is shown, the others hidden but present.
+    const shownBlocks = LLM_CREDENTIALS.filter(
+      ({ provider }) =>
+        !(
+          doc.getElementById(`rh-provider-${provider}`) as
+            (Element & { hidden?: boolean }) | null
+        )?.hidden,
+    );
+    assert.strictEqual(
+      shownBlocks.length,
+      1,
+      "exactly one provider block shown",
+    );
+    log(`shown provider block: ${shownBlocks[0]?.provider ?? "none"}`);
 
     // Rule 3: the badge says something, in the window's own language.
     const badge = doc.getElementById("rh-prefs-backend");
@@ -714,6 +783,7 @@ describe("P1-T44 — the preference pane", function () {
       secrets: store,
       request,
       getBackendPref: () => "oskeystore",
+      providerPrefs: INERT_PROVIDER_PREFS,
       clock,
       logger: createLogger({
         clock,
@@ -780,6 +850,210 @@ describe("P1-T44 — the preference pane", function () {
       await store.clear("source.ncbi");
       stored.delete("source.ncbi");
       if (!debugWasStoring) Zotero.Debug.setStore(false);
+    }
+  });
+
+  it("P3-T04: each LLM block stores, masks and clears a synthetic key through the shipped host, its keyPresent flag follows, and prefs.js never holds it", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const instance = await initializedInstance();
+    const host = publishedHost(instance)!;
+    const store = createKeychainSecretStore();
+    if (!(await host.readState()).storeAvailable) {
+      log("SKIPPED: no secret backend is live; see the storage section.");
+      return;
+    }
+    // Never touch a real key: refuse if any LLM id — or tts.gemini, which
+    // shares gemini.keyPresent — already holds a login.
+    for (const id of [...LLM_IDS, "tts.gemini" as const]) {
+      if (await store.has(id)) {
+        log(
+          `SKIPPED: a login for ${id} already exists under this plugin's ` +
+            `origin; this spec never overwrites, decrypts or measures it.`,
+        );
+        return;
+      }
+    }
+    const flagsBefore = new Map<
+      string,
+      { had: boolean; value: PrefScalar | undefined }
+    >();
+    for (const flag of Object.values(LLM_FLAG)) {
+      flagsBefore.set(flag, {
+        had: prefHasUserValue(flag),
+        value: getRawPref(flag),
+      });
+    }
+    const needles: string[] = [];
+    try {
+      for (const { id, provider } of LLM_CREDENTIALS) {
+        const key = `sk-rhsyn-${randomHex(20)}`;
+        const result = await host.storeKey(id, `Bearer ${key} `);
+        stored.add(id);
+        assert.deepEqual(
+          result,
+          { stored: true, digest: keyDigest(key) },
+          `${id}: stored, with the digest of the normalised value`,
+        );
+        needles.push(key, keyDigest(key));
+        assert.strictEqual(
+          await store.get(id),
+          key,
+          `${id}: the keystore holds the trimmed key without the scheme word`,
+        );
+        assert.strictEqual(
+          getRawPref(LLM_FLAG[provider]),
+          true,
+          `${provider}.keyPresent was re-derived to true`,
+        );
+        const state = await host.readState();
+        assert.isTrue(
+          state.credentials.find((c) => c.id === id)?.present === true,
+          `${id}: the pane reads it as present`,
+        );
+        const prefsFile = await flushedPrefsFile();
+        assert.isFalse(
+          containsAny(prefsFile, [key, keyDigest(key)]),
+          `${id}: the profile's prefs.js holds neither the key nor its digest`,
+        );
+        assert.isTrue(await host.clearKey(id), `${id}: something was removed`);
+        stored.delete(id);
+        assert.isFalse(await store.has(id), `${id}: the keystore is empty`);
+        assert.strictEqual(
+          getRawPref(LLM_FLAG[provider]),
+          false,
+          `${provider}.keyPresent was re-derived to false`,
+        );
+      }
+      assert.deepEqual(
+        allPrefsContaining(needles).hits,
+        [],
+        "no preference anywhere in the profile holds any of the four keys or digests",
+      );
+      assert.isFalse(
+        containsAny(await flushedPrefsFile(), needles),
+        "prefs.js holds none of them after the four clears either",
+      );
+    } finally {
+      for (const id of LLM_IDS) {
+        if (!stored.has(id)) continue;
+        try {
+          await store.clear(id);
+        } catch (error) {
+          log(`cleanup: could not clear ${id}: ${String(error)}`);
+        }
+        stored.delete(id);
+      }
+      for (const [flag, before] of flagsBefore) {
+        if (before.had && before.value !== undefined) {
+          setRawPref(flag, before.value);
+        } else {
+          clearRawPref(flag);
+        }
+      }
+    }
+  });
+
+  it("P3-T04: the live pane refuses http:// and a trailing slash with a message, and stores and reads back https://proxy.example/v1", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const instance = await initializedInstance();
+    const host = publishedHost(instance)!;
+    const prefKey = PREF_KEYS.openaiBaseUrl;
+    const had = prefHasUserValue(prefKey);
+    const before = getRawPref(prefKey);
+
+    const win = Zotero.Utilities.Internal.openPreferences(PREFERENCES_PANE_ID);
+    assert.isNotNull(win, "openPreferences returned a window");
+    prefsWindow = win;
+    interface PrefsWindow extends Window {
+      Zotero_Preferences?: {
+        panes: Map<string, { loaded?: boolean }>;
+      };
+    }
+    await waitUntil(
+      () =>
+        (win as PrefsWindow).Zotero_Preferences?.panes?.get(PREFERENCES_PANE_ID)
+          ?.loaded === true,
+      "the pane to finish loading",
+    );
+    const doc = win!.document;
+    const root = doc.getElementById(PREFERENCES_ROOT_ID);
+    await waitUntil(
+      () => root?.getAttribute("data-rh-initialized") === "true",
+      "the controller to initialise",
+    );
+    const input = doc.getElementById(
+      "rh-openai-base-url",
+    ) as HTMLInputElement | null;
+    const status = doc.getElementById("rh-openai-base-url-status");
+    assert.isNotNull(input, "the OpenAI base-URL field exists");
+    assert.isNotNull(status, "its status element exists");
+    assert.isFalse(input!.hasAttribute("preference"), "the field is not bound");
+    assert.strictEqual(
+      input!.getAttribute("placeholder"),
+      "https://api.openai.com/v1",
+      "the placeholder is docs/03 §2.1's documented base URL",
+    );
+    const l10n = (doc as unknown as { l10n: Localization }).l10n;
+
+    async function typeAndCommit(value: string, expectedId: string) {
+      status!.removeAttribute("data-l10n-id");
+      input!.value = value;
+      input!.dispatchEvent(new win!.Event("change"));
+      await waitUntil(
+        () => status!.getAttribute("data-l10n-id") === expectedId,
+        `"${value}" to be answered with ${expectedId}`,
+      );
+      const text = await l10n.formatValue(expectedId);
+      assert.isTrue(
+        typeof text === "string" && text.length > 0,
+        `${expectedId} resolves to a message in this window`,
+      );
+    }
+
+    try {
+      const start = getRawPref(prefKey);
+      await typeAndCommit(
+        "http://proxy.example/v1",
+        PREFERENCES_L10N.baseUrlNotHttps,
+      );
+      assert.strictEqual(getRawPref(prefKey), start, "http:// was not stored");
+      assert.strictEqual(
+        input!.value,
+        "http://proxy.example/v1",
+        "the refused value stays in the field as typed",
+      );
+      await typeAndCommit(
+        "https://proxy.example/v1/",
+        PREFERENCES_L10N.baseUrlTrailingSlash,
+      );
+      assert.strictEqual(
+        getRawPref(prefKey),
+        start,
+        "a trailing slash was not stored, nor stripped and stored",
+      );
+      await typeAndCommit(
+        "https://proxy.example/v1",
+        PREFERENCES_L10N.baseUrlSaved,
+      );
+      assert.strictEqual(
+        getRawPref(prefKey),
+        "https://proxy.example/v1",
+        "stored in openai.baseUrl",
+      );
+      const state = await host.readState();
+      assert.strictEqual(
+        state.providers.find((p) => p.provider === "openai")?.baseUrl,
+        "https://proxy.example/v1",
+        "read back through the host",
+      );
+    } finally {
+      if (had && before !== undefined) {
+        setRawPref(prefKey, before);
+      } else {
+        clearRawPref(prefKey);
+      }
+      win!.close();
+      prefsWindow = null;
     }
   });
 });

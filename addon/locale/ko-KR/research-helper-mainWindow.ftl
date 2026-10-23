@@ -241,6 +241,13 @@ rh-error-output-truncated = { $model } 모델의 출력 길이 한도에 걸려 
 # Korean drafted by the coordinator and reviewed by the owner on 2026-10-21 (G-41).
 rh-error-privacy-routing = OpenRouter에는 개인정보 모드 조건에 맞게 { $model } 모델을 제공하는 곳이 없습니다. 다른 모델을 고르거나, 개인정보 모드가 ‘엄격’이면 ‘균형’으로 바꾸세요. ‘균형’은 글을 일정 기간 보관하는 제공자와 PDF 본문 전송을 허용하지만, 데이터를 학습에 쓸 수 있는 제공자는 여전히 거부합니다.
 
+# P3-T16 (2026-10-23): BudgetExceededError, a spend ceiling reached (the job
+# pauses; plan/00 §6 item 234). $limit and $spent are dollar amounts formatted
+# by the caller.
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-23 (G-41,
+# plan/00 §6 item 274).
+rh-error-budget = 지출 한도({ $limit })에 도달해 멈췄습니다. 지금까지 쓴 금액: { $spent }. 이미 만든 요약은 그대로 있습니다.
+
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)
 ##
@@ -309,6 +316,81 @@ research-helper-egress-gemini-free-tier = 이 Google API 키는 무료 등급으
 research-helper-egress-gemini-declared-paid = 이 Google API 키는 Research Helper 설정에서 유료 키로 표시되어 있습니다. 실제로 무료 등급이라면 Google이 보낸 내용을 제품 개선에 쓸 수 있습니다.
 
 
+## The cost confirmation dialog and the Usage readout (P3-T16; docs/06 §5.4,
+## docs/10 FR-24, docs/09 §3.6)
+##
+## Money, counts and dates arrive formatted by the caller; `$ceiling`
+## (`run` / `session`) and `$mode` (`strict` / `balanced` / `full`) are
+## selectors; `$provider`, `$host` and `$model` are never translated. Korean
+## has one plural category, so `$calls` keeps only `*[other]` (`docs/08`
+## §10.2). Text is never joined to a placeholder by a particle.
+##
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-23 (G-41,
+# plan/00 §6 item 274).
+
+research-helper-cost-title = Research Helper — 예상 비용
+research-helper-cost-items = 논문 { $items }편 · 본문 포함 { $fullText } · 초록만 { $abstract } · 이미 요약됨 { $cached } · 보낼 내용 없음 { $metadata }
+research-helper-cost-destination =
+    { $provider }({ $host })의 { $model } 모델로 보냅니다. 개인정보 모드: { $mode ->
+        [strict] 엄격
+        [full] 전체
+       *[balanced] 균형
+    }.
+research-helper-cost-calls =
+    { $calls ->
+       *[other] 모델 호출 { $calls }회
+    }
+research-helper-cost-input = 예상 입력: 약 { $tokens } 토큰
+research-helper-cost-output = 예상 출력: 최대 { $tokens } 토큰
+research-helper-cost-total = 예상 비용: 약 { $cost }
+research-helper-cost-unpriced = 모델 { $model }의 가격을 알 수 없어 이번 실행의 비용을 어림할 수 없습니다.
+research-helper-cost-disclaimer = 어림값이며 실제 비용과 다를 수 있습니다. 가격 기준일: { $date }.
+research-helper-cost-above-threshold = 설정하신 확인 기준액({ $threshold })보다 많습니다.
+research-helper-cost-acknowledge =
+    .label = 이번 실행에 약 { $cost }의 비용이 들 수 있음을 이해합니다.
+research-helper-cost-acknowledge-unpriced =
+    .label = 이번 실행의 비용을 알 수 없음을 이해합니다.
+research-helper-cost-downgrade =
+    .label = 대신 초록만 보내기(약 { $cost })
+research-helper-cost-downgrade-preselected = 논문이 { $max }편을 넘어 ‘초록만 보내기’가 선택되어 있습니다. 본문을 보내려면 선택을 해제하세요.
+research-helper-cost-ceiling-preflight =
+    { $ceiling ->
+        [session] 이 예상 비용은 이번 Zotero 세션의 지출 한도({ $limit })를 넘습니다. 이미 쓴 금액: { $spent }. 실행하면 이번 실행에 한해 한도가 { $raised }까지 올라갑니다.
+       *[run] 이 예상 비용은 실행당 지출 한도({ $limit })를 넘습니다. 실행하면 이번 실행에 한해 한도가 { $raised }까지 올라갑니다.
+    }
+research-helper-cost-ceiling-reached =
+    { $ceiling ->
+        [session] 이번 Zotero 세션의 지출 한도({ $limit })에 도달해 멈췄습니다. 이번 세션에 지금까지 쓴 금액: { $spent }. 이미 만든 요약은 모두 그대로 있습니다. 계속하면 이번 실행에 한해 한도가 { $raised }까지 올라갑니다.
+       *[run] 실행당 지출 한도({ $limit })에 도달해 멈췄습니다. 이번 실행에서 지금까지 쓴 금액: { $spent }. 이미 만든 요약은 모두 그대로 있습니다. 계속하면 이번 실행에 한해 한도가 { $raised }까지 올라갑니다.
+    }
+research-helper-cost-usage-job =
+    이 작업의 지금까지 사용량: { $calls ->
+       *[other] 호출 { $calls }회
+    }, 입력 토큰 { $input }개, 출력 토큰 { $output }개, { $cost }.
+research-helper-cost-usage-session =
+    이번 Zotero 세션 사용량: { $calls ->
+       *[other] 호출 { $calls }회
+    }, 입력 토큰 { $input }개, 출력 토큰 { $output }개, { $cost }.
+research-helper-cost-usage-estimated = 제공자가 사용량을 알려 주지 않았거나 가격을 알 수 없어, 일부 수치는 어림값입니다.
+research-helper-cost-dont-ask =
+    .label = 이 컬렉션은 다시 묻지 않기
+research-helper-cost-run =
+    .label = 실행
+research-helper-cost-cancel =
+    .label = 취소
+research-helper-cost-continue =
+    .label = 계속
+research-helper-cost-stop =
+    .label = 중지
+research-helper-cost-skipped-notice =
+    예상 비용: { $calls ->
+       *[other] 호출 { $calls }회
+    }에 약 { $cost }. 어림값이며 실제 비용과 다를 수 있습니다.
+research-helper-prefs-usage = 사용량
+research-helper-prefs-usage-limit = 이번 Zotero 세션의 지출 한도: { $limit }. Zotero를 다시 시작하면 초기화됩니다.
+research-helper-prefs-usage-limit-off = 이번 Zotero 세션에는 지출 한도가 설정되어 있지 않습니다.
+
+
 ## The key-storage degradation dialog (P3-T03; docs/09 §1.7, gate G-10)
 ##
 ## The coordinator drafts the Korean and the owner reviews it (G-41); nothing
@@ -326,3 +408,44 @@ research-helper-secret-backend-accept =
     .label = 이번 세션만 키 보관
 research-helper-secret-backend-decline =
     .label = 키 없이 계속
+
+
+## The LLM provider blocks, tier 2's badge and the restore notice (P3-T04;
+## docs/08 §7.3, docs/09 §1.9 items 3 and 8, docs/03 §14.4)
+##
+## "API", "URL", "Zotero", "Research Helper", "Google" and "https://" stay as
+## they are (`docs/08` §10.3).
+##
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-23 (G-41,
+# plan/00 §6 item 274).
+
+research-helper-prefs-backend-session = 세션 사이에 저장되지 않음
+research-helper-prefs-restore-note = 이 컴퓨터에는 저장된 API 키가 없지만, 이 Zotero 데이터 폴더에는 이미 Research Helper 데이터가 있습니다. 다른 컴퓨터에서 폴더를 복원하거나 복사했다면 키를 다시 입력하세요. API 키는 이 컴퓨터의 자격 증명 저장소에 저장되며 Zotero 데이터 폴더와 함께 옮겨지지 않습니다.
+research-helper-prefs-providers = AI 모델 제공자
+research-helper-prefs-active-provider =
+    .value = 사용할 제공자
+research-helper-prefs-api-key =
+    .value = API 키
+research-helper-prefs-model =
+    .value = 모델
+research-helper-prefs-base-url =
+    .value = 기본 URL
+research-helper-prefs-base-url-saved = 저장했습니다. 이제 이 제공자에 대한 요청은 이 주소로 갑니다.
+research-helper-prefs-base-url-default = 지웠습니다. 이 제공자에 대한 요청은 빈 칸에 표시된 제공자 자체 주소로 갑니다.
+research-helper-prefs-base-url-not-https = 저장하지 않았습니다. 주소는 https://로 시작해야 합니다. 이전 설정을 유지합니다.
+research-helper-prefs-base-url-trailing-slash = 저장하지 않았습니다. 주소 끝의 슬래시(/)를 지우세요. 이전 설정을 유지합니다.
+research-helper-prefs-base-url-invalid = 저장하지 않았습니다. https://proxy.example/v1 처럼 완전한 주소를 사용자 이름, 비밀번호, ?, # 없이 입력하세요. 이전 설정을 유지합니다.
+research-helper-prefs-gemini-paid-tier =
+    .label = 이 키의 Google Cloud 프로젝트에 결제 계정이 연결되어 있음을 직접 확인합니다(Google 유료 등급)
+research-helper-prefs-gemini-paid-tier-note = 사용자 본인의 확인입니다. Research Helper는 키의 등급을 확인할 수 없으므로, 직접 켜지 않는 한 꺼져 있습니다. Google 무료 등급에서는 보낸 내용이 Google 제품 개선에 쓰이고 사람 검토자가 읽을 수 있습니다. 이 항목을 켜 두면 모든 개인정보 모드에서 Gemini 모델을 쓸 수 있으며, 작업마다 키가 유료로 표시되어 있다는 알림은 계속 보입니다.
+
+
+## docs/09 §1.8's two tier-2 replacements, shown in place of risk paragraphs
+## 1 and 4 while `secretBackend` is `session` (owner, 2026-10-23, plan/00 §6
+## items 274(a) and 275(b); gate G-19). G-41 owns the translation; nothing was
+## machine-translated.
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-23 (G-41, plan/00 §6 item 275).
+research-helper-prefs-risk-1-session = API 키는 이번 Zotero 세션 동안 메모리에만 보관됩니다. 운영체제의 자격 증명 저장소, Zotero의 로그인 관리자, 디스크 어디에도 쓰지 않으며, Zotero를 닫으면 사라지므로 다시 시작한 뒤에는 키를 다시 입력해야 합니다.
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-23 (G-41, plan/00 §6 item 275).
+research-helper-prefs-risk-4-session = 메모리에 있는 키도 같은 사용자 계정에서 실행되는 다른 프로그램(다른 Zotero 플러그인 포함)으로부터는 보호되지 않습니다. Zotero는 플러그인끼리 격리하지 않습니다.

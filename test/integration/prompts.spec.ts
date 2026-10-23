@@ -67,11 +67,19 @@ const SCHEMA_FILE = "paper-summary.v1.json";
 
 describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
   it("loads all five prompts at version 1.0.0 from the bundled files", async function () {
-    const { PROMPT_REGISTRY, PROMPT_VERSIONS, PROMPT_SOURCE_FILES } =
-      await loadBundled();
+    const {
+      PROMPT_REGISTRY,
+      PROMPT_VERSIONS,
+      PROMPT_CACHE_EPOCHS,
+      PROMPT_SOURCE_FILES,
+    } = await loadBundled();
 
     assert.strictEqual(PROMPT_SOURCE_FILES.length, 5);
     const expected: Record<string, string> = {};
+    // The summary cache keys on these (2026-10-23, plan/00 §6 item 273(a)).
+    for (const id of PROMPT_IDS) {
+      assert.strictEqual(PROMPT_CACHE_EPOCHS[id], 1, `${id}: cacheEpoch`);
+    }
     for (const id of PROMPT_IDS) {
       const template = PROMPT_REGISTRY.get(id);
       assert.strictEqual(template.id, id);

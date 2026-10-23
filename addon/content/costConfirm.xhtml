@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!--
+  The cost confirmation dialog (P3-T16; docs/06 §5.4, docs/10 FR-24,
+  docs/09 §3.6).
+
+  Opened by src/ui/dialogs/costConfirmDialog.ts's openCostConfirmDialog in two
+  moments: before a paid run's first call ("preflight": the estimate, the
+  egress disclosure, the abstract-only downgrade, the second acknowledgement
+  above summary.confirmAboveCents, and a spend ceiling the estimate would
+  pass), and when a run paused at a spend ceiling ("ceiling": continue or
+  stop). Every line is placed by costConfirm.js from the model the privileged
+  side built; nothing here is a literal human-readable string.
+
+  Shape copied from secretBackend.xhtml (docs/08 §4.1.1): `<window>` outside,
+  `<dialog>` inside, every script from a chrome:// path, no inline script, no
+  width/height attributes.
+
+  `defaultButton="cancel"`: Enter on an untouched dialog runs nothing.
+-->
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?> <?xml-stylesheet
+href="chrome://zotero/skin/zotero.css" type="text/css"?> <?xml-stylesheet
+href="chrome://zotero-platform/content/zotero.css"?>
+<window
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  onload="RHCostDialog.init()"
+>
+  <dialog
+    id="rh-cost-dialog"
+    orient="vertical"
+    buttons="accept,cancel"
+    defaultButton="cancel"
+  >
+    <script src="chrome://global/content/globalOverlay.js" />
+    <script src="chrome://zotero/content/include.js" />
+    <script src="chrome://__addonRef__/content/costConfirm.js" />
+    <linkset>
+      <html:link rel="localization" href="__addonRef__-mainWindow.ftl" />
+    </linkset>
+
+    <html:div style="max-width: 40em">
+      <html:div id="rh-cost-header" />
+      <html:div id="rh-cost-notices" role="alert" />
+      <html:div id="rh-cost-plan" />
+      <html:div id="rh-cost-raise" />
+      <checkbox id="rh-cost-downgrade" hidden="true" />
+      <html:p id="rh-cost-downgrade-note" hidden="hidden" />
+      <checkbox id="rh-cost-acknowledge" hidden="true" />
+      <html:div id="rh-cost-footer" />
+      <checkbox id="rh-cost-dont-ask" hidden="true" />
+    </html:div>
+  </dialog>
+</window>

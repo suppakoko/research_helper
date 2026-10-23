@@ -30,11 +30,26 @@ export type ImradSection =
   | "limitations"
   | "other";
 
-/** One labelled span of the body. */
+/**
+ * One labelled span of the body — `docs/06` §3.6 and its 2026-10-23
+ * correction (`P3-T21`).
+ */
 export interface AcquiredSection {
+  /** The first of {@link AcquiredSection.labels}. */
   readonly imrad: ImradSection;
+  /**
+   * Every label, in `docs/06` §4.3's table order; never empty. A combined
+   * "Results and Discussion" heading carries `["results", "discussion"]`.
+   */
+  readonly labels: readonly ImradSection[];
+  /** The heading as found; `""` for the text before the first heading. */
   readonly heading: string;
+  /** `AcquiredSource.text.slice(start, end)`, the heading included. */
   readonly text: string;
+  /** UTF-16 offset of the section's first character in `AcquiredSource.text`. */
+  readonly start: number;
+  /** UTF-16 offset one past the section's last character. */
+  readonly end: number;
 }
 
 /**
@@ -69,8 +84,18 @@ export interface AcquiredSource {
    * `docs/06` §3.2's five steps, on full-text tiers too; otherwise `null`.
    */
   readonly abstract: string | null;
-  /** Sectioned body. Empty until `P3-T21`'s detector exists. */
+  /**
+   * Sectioned body (`docs/06` §4.3, `P3-T21`); empty on Tiers 1 and 4 and
+   * whenever the detector declared failure. The abstract preamble is never a
+   * section.
+   */
   readonly sections: readonly AcquiredSection[];
+  /**
+   * `docs/06` §4.3: `true` only when at least two IMRaD sections were
+   * recognized in the body. When `false`, nothing downstream may claim
+   * section provenance.
+   */
+  readonly sectionAware: boolean;
   /**
    * The text actually sent to the model: the abstract alone on Tier 1; the
    * abstract, a blank line, then the attachment text exactly as Zotero gave

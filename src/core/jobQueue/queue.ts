@@ -57,8 +57,14 @@
  * ({@link WALL_CLOCK_BUDGET_DEFAULT_MS}); at the limit the runner pauses the
  * job with `wall-clock-budget` and the user is asked whether to continue
  * (owner, 2026-10-21, `plan/00` §6 item 265).
+ *
+ * A spend ceiling reached mid-run pauses the same way, with `budget-stop`: the
+ * call the budget guard refused is kept pending, never recorded as failed,
+ * and is dispatched again first when the user says continue (owner,
+ * 2026-10-23, `plan/00` §6 item 274(c), restating item 234; `docs/07` §7.5).
  */
 
+import { encodeTagValue } from "../cache/keys";
 import {
   createDeferred,
   Semaphore,
@@ -66,6 +72,7 @@ import {
   type SemaphoreRelease,
 } from "../concurrency";
 import {
+  BudgetExceededError,
   ConfigurationError,
   ResearchHelperError,
   type SerializedError,
@@ -921,7 +928,12 @@ export interface RunningWork {
    * @returns the release; idempotent
    */
   hold(jobId: string, workKeys: readonly string[]): () => void;
-  /** `work:<workKey>` for every held key, each once. */
+  /**
+   * `work:<workKey>` for every held key, each once, the key escaped with
+   * `encodeTagValue` (`src/core/cache/keys.ts`) exactly as the summary cache
+   * writes its `work:` tag — so a work key holding `,` or `%` (a DOI may) is
+   * still pinned (owner, 2026-10-23, `plan/00` §6 item 273(c)).
+   */
   pinnedTags(): readonly string[];
 }
 
@@ -944,7 +956,9 @@ export function createRunningWork(): RunningWork {
     pinnedTags: (): readonly string[] => {
       const tags = new Set<string>();
       for (const workKeys of holds.values()) {
-        for (const key of workKeys) tags.add(`${WORK_TAG_PREFIX}${key}`);
+        for (const key of workKeys) {
+          tags.add(`${WORK_TAG_PREFIX}${encodeTagValue(key)}`);
+        }
       }
       return [...tags];
     },
@@ -1083,11 +1097,26 @@ export interface PooledRunDeps<T, R> {
    * fresh budget.
    */
   readonly wallClockBudgetMs?: number;
+  /**
+   * Whether a call's error is the budget guard's refusal: anything but
+   * `undefined` means it is. The summarize pipeline passes `ceilingStopOf`
+   * (`src/pipeline/shared/budget.ts`), which `core/` may not import. Absent,
+   * every `BudgetExceededError` counts, so no caller can record a refusal as
+   * a failure. A refused item stays pending, the job pauses with
+   * `budget-stop`, and a resume dispatches the item again before the rest
+   * (owner, 2026-10-23, `plan/00` §6 item 274(c); `docs/07` §7.5).
+   */
+  readonly budgetStopOf?: (error: unknown) => unknown;
 }
 
 /** The `code` a failed item is recorded with. */
 function failureCode(error: unknown): string {
   return error instanceof ResearchHelperError ? error.code : "UNKNOWN";
+}
+
+/** {@link PooledRunDeps.budgetStopOf}'s default: any `BudgetExceededError`. */
+function anyBudgetRefusal(error: unknown): unknown {
+  return error instanceof BudgetExceededError ? error : undefined;
 }
 
 function reasonOf(error: unknown): string {
@@ -1129,14 +1158,26 @@ export function describePooledOutcome(outcome: PooledRunOutcome): string {
  * the no. Only the budget's own pause resets it: a user's pause and resume
  * leave the running time as it was.
  *
+ * **A spend ceiling pauses and asks too** (owner, 2026-10-23, `plan/00` §6
+ * item 274(c), restating item 234). A call the budget guard refuses
+ * ({@link PooledRunDeps.budgetStopOf}) is not a failed item: it stays
+ * pending, and the runner asks itself for a pause with `budget-stop`, which
+ * is honoured like the others — the job's other in-flight calls finish, the
+ * boundary checkpoint lists the refused item in `pending`, the slot is given
+ * back and the job moves to `paused`. A resume (the user's "continue", after
+ * the guard's `raiseLimit`) dispatches every refused item again, before the
+ * rest; a cancel leaves them pending. A pause the user asked for that has not
+ * taken effect yet takes the reason `budget-stop`, so the question asked is
+ * the money one.
+ *
  * The job must be `running` when the run starts (`JobQueue.start`). The run
  * moves it to `paused` and back, and on {@link PooledRun.cancel} to
  * `cancelling` and `cancelled`; it never moves it to `succeeded` or `failed`,
  * which are the pipeline's, after its later stages.
  *
- * A per-item error is recorded in `failed` and the run continues (`docs/07`
- * §12.3's `ItemFailed`); the 30 % stop is the pipeline's policy over these
- * counts. A call that rejects after this run was cancelled is neither done
+ * Any other per-item error is recorded in `failed` and the run continues
+ * (`docs/07` §12.3's `ItemFailed`); the 30 % stop is the pipeline's policy
+ * over these counts. A call that rejects after this run was cancelled is neither done
  * nor failed: a re-run dispatches it again.
  */
 export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
@@ -1153,6 +1194,11 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
   let skipped = 0;
   let dispatched = 0;
   let finished = false;
+  /** The next item, by position, that has not been dispatched yet. */
+  let index = 0;
+  /** Positions of items the budget guard refused: dispatched again first. */
+  const refused: number[] = [];
+  const budgetStopOf = deps.budgetStopOf ?? anyBudgetRefusal;
 
   let pauseRequest:
     { readonly reason: PauseReason; readonly done: Deferred<void> } | undefined;
@@ -1182,6 +1228,30 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
     }
   };
 
+  /** Ask for a pause; a request already pending is the one honoured. */
+  const requestPause = (reason: PauseReason): Promise<void> => {
+    if (pauseRequest === undefined) {
+      pauseRequest = { reason, done: createDeferred<void>() };
+      // A wait for a permit, possibly behind another job's calls, must not
+      // hold the pause up.
+      permitWait?.cancel({ kind: "user" });
+    }
+    return pauseRequest.done.promise;
+  };
+
+  /**
+   * The budget guard refused a call: pause with `budget-stop`. A pause still
+   * pending for another reason becomes this one, so the user is asked about
+   * the money (item 274(c)).
+   */
+  const requestBudgetPause = (): void => {
+    if (pauseRequest !== undefined && pauseRequest.reason !== "budget-stop") {
+      pauseRequest = { reason: "budget-stop", done: pauseRequest.done };
+      return;
+    }
+    void requestPause("budget-stop");
+  };
+
   const recordFailure = (key: string, error: unknown): void => {
     failed.push({ workKey: key, code: failureCode(error) });
     settled.add(key);
@@ -1190,6 +1260,7 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
   const settle = async (
     item: T,
     key: string,
+    at: number,
     releasePermit: SemaphoreRelease,
   ): Promise<void> => {
     let outcome:
@@ -1210,7 +1281,16 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
       } catch (error) {
         recordFailure(key, error);
       }
-    } else if (!token.isCancellationRequested) {
+    } else if (token.isCancellationRequested) {
+      // Neither done nor failed: a re-run dispatches it again.
+    } else if (budgetStopOf(outcome.error) !== undefined) {
+      // Pending, never failed: pause and ask (item 274(c)).
+      refused.push(at);
+      deps.logger.info("a call was refused by the budget guard; pausing", {
+        jobId,
+      });
+      requestBudgetPause();
+    } else {
       recordFailure(key, outcome.error);
     }
     await writeCheckpoint(false);
@@ -1279,20 +1359,26 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
   };
 
   const dispatchAll = async (): Promise<PooledRunStop> => {
-    let index = 0;
-    while (index < deps.items.length) {
+    while (index < deps.items.length || refused.length > 0) {
       await pausePoint();
       if (token.isCancellationRequested) return "cancelled";
-      const item = deps.items[index] as T;
-      const key = keys[index] as string;
+      // A refused item goes again before the rest, once the pause is over.
+      const retry = refused.length > 0;
+      const at = retry ? (refused[0] as number) : index;
+      const advance = (): void => {
+        if (retry) refused.shift();
+        else index += 1;
+      };
+      const item = deps.items[at] as T;
+      const key = keys[at] as string;
       if (settled.has(key)) {
-        index += 1;
+        advance();
         continue;
       }
       if (await isDone(item)) {
         skipped += 1;
         settled.add(key);
-        index += 1;
+        advance();
         continue;
       }
       if (pauseRequest !== undefined) continue;
@@ -1328,13 +1414,13 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
         continue;
       }
       dispatched += 1;
-      const task = settle(item, key, releasePermit);
+      const task = settle(item, key, at, releasePermit);
       inFlight.add(task);
       const forget = (): void => {
         inFlight.delete(task);
       };
       task.then(forget, forget);
-      index += 1;
+      advance();
     }
     return "finished";
   };
@@ -1352,11 +1438,20 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
   const result = (async (): Promise<PooledRunOutcome> => {
     try {
       let stop: PooledRunStop;
-      try {
-        stop = await dispatchAll();
-      } finally {
-        await drain();
-      }
+      // A call refused while the last ones were in flight leaves an item to
+      // ask about after the dispatch loop ended: go round again, so the
+      // budget pause happens and a resume runs the item.
+      do {
+        try {
+          stop = await dispatchAll();
+        } finally {
+          await drain();
+        }
+      } while (
+        stop === "finished" &&
+        refused.length > 0 &&
+        !token.isCancellationRequested
+      );
       // Cancelled after the last dispatch: the aborted tail is not done.
       if (token.isCancellationRequested && settled.size < new Set(keys).size) {
         stop = "cancelled";
@@ -1393,13 +1488,7 @@ export function runPooledItems<T, R>(deps: PooledRunDeps<T, R>): PooledRun {
     result,
     pause(reason: PauseReason = "user"): Promise<void> {
       if (finished || resumeGate !== undefined) return Promise.resolve();
-      if (pauseRequest === undefined) {
-        pauseRequest = { reason, done: createDeferred<void>() };
-        // A wait for a permit, possibly behind another job's calls, must not
-        // hold the pause up.
-        permitWait?.cancel({ kind: "user" });
-      }
-      return pauseRequest.done.promise;
+      return requestPause(reason);
     },
     resume(): Promise<void> {
       if (finished) return Promise.resolve();

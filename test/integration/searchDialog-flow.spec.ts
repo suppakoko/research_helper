@@ -306,6 +306,7 @@ import type {
   SearchImportWriter,
 } from "../../src/pipeline/searchImport/types";
 import type { Pipeline, PipelineContext } from "../../src/pipeline/types";
+import { UNWIRED_BUDGET_GUARD } from "../../src/pipeline/shared/budget";
 import { createPrivacyPolicy } from "../../src/pipeline/shared/privacyPolicy";
 import { createPubmedRecordMapper } from "../../src/sources/pubmed/mapper";
 import {
@@ -1288,7 +1289,7 @@ function jobFactory(
         clock,
         sources,
         cache: NO_CACHE,
-        budget: undefined,
+        budget: UNWIRED_BUDGET_GUARD,
         llm: mockLLMRouter(),
         tts: undefined,
         zotero: undefined,

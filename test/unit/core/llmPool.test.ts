@@ -27,10 +27,13 @@ import {
   createCheckpointWriter,
   readCheckpoint,
 } from "../../../src/pipeline/shared/checkpoint";
+import { encodeTagValue } from "../../../src/core/cache/keys";
 import {
+  BudgetExceededError,
   OperationCancelledError,
   UpstreamServerError,
 } from "../../../src/core/errors";
+import { ceilingStopOf } from "../../../src/pipeline/shared/budget";
 import {
   createCancellationTokenSource,
   createLinkedCancellationTokenSource,
@@ -1165,6 +1168,191 @@ describe("P3-T17 — cancellation, pause and failures in the runner", () => {
 });
 
 // ---------------------------------------------------------------------------
+// A spend ceiling mid-run: pause and ask (plan/00 §6 item 274(c), item 234)
+// ---------------------------------------------------------------------------
+
+/** The guard's refusal, with the figures `ceilingStopOf` reads. */
+function refusal(): BudgetExceededError {
+  return new BudgetExceededError("the run spend ceiling would be passed", {
+    ceiling: "run",
+    limitUsd: 1,
+    spentUsd: 0.98,
+    projectedUsd: 1.03,
+    runSpentUsd: 0.98,
+  });
+}
+
+describe("item 274(c) — a budget refusal mid-run pauses the job and asks", () => {
+  it("pauses with budget-stop, keeps the refused item pending (never failed), and a resume dispatches it again before the rest", async () => {
+    const h = harness();
+    const jobId = await runningJob(h);
+    const results = resultStore();
+    const order: string[] = [];
+    let limitRaised = false;
+    const run = runPooledItems(
+      baseDeps(
+        h,
+        jobId,
+        {
+          items: items(6),
+          pool: fixedPool(1),
+          budgetStopOf: ceilingStopOf,
+          checkpoint: createCheckpointWriter({
+            queue: h.queue,
+            jobId,
+            clock: h.clock,
+          }),
+          call: (item) => {
+            order.push(item.key);
+            return item.n === 3 && !limitRaised
+              ? Promise.reject(refusal())
+              : Promise.resolve(`summary ${item.key}`);
+          },
+        },
+        results,
+      ),
+    );
+    await flush(20);
+
+    // Paused at the refusal: nothing after it was dispatched.
+    expect(order).toStrictEqual(["w001", "w002", "w003"]);
+    expect(h.paused).toHaveLength(1);
+    const paused = await h.queue.get(jobId);
+    expect(paused?.status).toBe("paused");
+    expect(paused?.pauseReason).toBe("budget-stop");
+    expect(isBudgetStop(paused as JobRecord)).toBe(true);
+    // The boundary checkpoint holds the refused item as pending, not failed.
+    const boundary = (await readCheckpoint(
+      h.queue,
+      jobId,
+    )) as PooledCheckpointState;
+    expect(boundary.completed).toStrictEqual(["w001", "w002"]);
+    expect(boundary.failed).toStrictEqual([]);
+    expect(boundary.pending).toStrictEqual(["w003", "w004", "w005", "w006"]);
+
+    // "Continue" — the guard's raiseLimit, then resume.
+    limitRaised = true;
+    await run.resume();
+    const outcome = await run.result;
+    expect(order).toStrictEqual([
+      "w001",
+      "w002",
+      "w003",
+      "w003",
+      "w004",
+      "w005",
+      "w006",
+    ]);
+    expect(outcome).toMatchObject({
+      stop: "finished",
+      completed: 6,
+      dispatched: 7,
+      stoppedAt: undefined,
+    });
+    expect(outcome.failed).toStrictEqual([]);
+    expect(results.get("w003")).toBe("summary w003");
+  });
+
+  it("a refusal that arrives after the last dispatch still pauses, and the item runs on resume", async () => {
+    const h = harness();
+    const jobId = await runningJob(h);
+    const third = createDeferred<string>();
+    let thirdCalls = 0;
+    const run = runPooledItems(
+      baseDeps(h, jobId, {
+        items: items(3),
+        pool: fixedPool(3),
+        budgetStopOf: ceilingStopOf,
+        call: (item) => {
+          if (item.n !== 3) return Promise.resolve(`summary ${item.key}`);
+          thirdCalls += 1;
+          return thirdCalls === 1
+            ? third.promise
+            : Promise.resolve(`summary ${item.key}`);
+        },
+      }),
+    );
+    await flush();
+    // All three were dispatched before any answer came back.
+    expect(thirdCalls).toBe(1);
+    third.reject(refusal());
+    await flush(20);
+    expect((await h.queue.get(jobId))?.pauseReason).toBe("budget-stop");
+    expect(h.paused).toHaveLength(1);
+
+    await run.resume();
+    const outcome = await run.result;
+    expect(thirdCalls).toBe(2);
+    expect(outcome).toMatchObject({ stop: "finished", completed: 3 });
+    expect(outcome.failed).toStrictEqual([]);
+  });
+
+  it("a user's pause that has not taken effect yet becomes budget-stop, so the money question is asked", async () => {
+    const h = harness();
+    const jobId = await runningJob(h);
+    const first = createDeferred<string>();
+    const second = createDeferred<string>();
+    const run = runPooledItems(
+      baseDeps(h, jobId, {
+        items: items(4),
+        pool: fixedPool(2),
+        budgetStopOf: ceilingStopOf,
+        call: (item) =>
+          item.n === 1
+            ? first.promise
+            : item.n === 2
+              ? second.promise
+              : Promise.resolve(`summary ${item.key}`),
+      }),
+    );
+    await flush();
+    const pausing = run.pause(); // the user's, while two calls are in flight
+    second.reject(refusal());
+    await flush();
+    first.resolve("summary w001");
+    await pausing;
+    expect(h.paused.map((record) => record.pauseReason)).toStrictEqual([
+      "budget-stop",
+    ]);
+    await run.cancel();
+    const outcome = await run.result;
+    // Cancelled at the question: the refused item is pending, not failed.
+    expect(outcome).toMatchObject({
+      stop: "cancelled",
+      completed: 1,
+      stoppedAt: 2,
+    });
+    expect(outcome.failed).toStrictEqual([]);
+    expect((await h.queue.get(jobId))?.status).toBe("cancelled");
+  });
+
+  it("without budgetStopOf any BudgetExceededError is a refusal; any other error is still a failure", async () => {
+    const h = harness();
+    const jobId = await runningJob(h);
+    const run = runPooledItems(
+      baseDeps(h, jobId, {
+        items: items(4),
+        pool: fixedPool(1),
+        call: (item) =>
+          item.n === 1
+            ? Promise.reject(new UpstreamServerError(529, "overloaded"))
+            : item.n === 3
+              ? Promise.reject(new BudgetExceededError("no figures"))
+              : Promise.resolve(`summary ${item.key}`),
+      }),
+    );
+    await flush(20);
+    expect((await h.queue.get(jobId))?.pauseReason).toBe("budget-stop");
+    await run.cancel();
+    const outcome = await run.result;
+    expect(outcome.failed).toStrictEqual([
+      { workKey: "w001", code: "UPSTREAM_SERVER" },
+    ]);
+    expect(outcome).toMatchObject({ stop: "cancelled", completed: 1 });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Pinned work: the cache's §9.4 step 4 hook
 // ---------------------------------------------------------------------------
 
@@ -1200,6 +1388,24 @@ describe("P3-T17 — running jobs' work keys are pinned in the cache", () => {
     other();
     other();
     expect(runningWork.pinnedTags()).toStrictEqual([]);
+  });
+
+  it("escapes a work key holding ',' or '%' as the summary cache's tag does (item 273(c))", () => {
+    const runningWork = createRunningWork();
+    const release = runningWork.hold("job-1", [
+      "doi:10.1000/a,b%c",
+      "doi:10.1000/a,b%c",
+      "w1",
+    ]);
+    expect(runningWork.pinnedTags()).toStrictEqual([
+      `work:${encodeTagValue("doi:10.1000/a,b%c")}`,
+      "work:w1",
+    ]);
+    expect(runningWork.pinnedTags()[0]).toBe("work:doi:10.1000/a%2Cb%25c");
+    for (const tag of runningWork.pinnedTags()) {
+      expect(tag.includes(",")).toBe(false);
+    }
+    release();
   });
 
   it("installPluginDatabase hands pinnedTags to the cache, whose prune keeps the pinned entries", async () => {

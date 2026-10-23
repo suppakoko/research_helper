@@ -19,7 +19,7 @@
  * | type | declared in the corpus? | where it belongs (`docs/07` §2.2) |
  * |---|---|---|
  * | `Cache` | yes — §4.1, under a `// src/core/cache/cache.ts` comment (now imported, `P3-T33`) | `src/core/cache/cache.ts` |
- * | `BudgetGuard` | yes — §4.3 | `src/llm/budget.ts` |
+ * | `BudgetGuard` | yes — §4.3 (declared in `src/llm/types.ts`; now imported, `P3-T16`) | `src/pipeline/shared/budget.ts` |
  * | `TTSProvider` | yes — §4.4 | `src/tts/types.ts` |
  * | `LLMRouter` | **no** — one occurrence, this member (declared in §4.3 on 2026-10-21, item 248; now imported, `P3-T06`) | `src/llm/types.ts`, built by `src/llm/router.ts` |
  * | `ZoteroFacade` | **no** — one occurrence, this member | `src/zotero/zoteroApi.ts` (§3.2) |
@@ -65,7 +65,7 @@ import type { Clock } from "../core/clock";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
 import type { ProgressReporter } from "../core/jobQueue/progress";
 import type { Logger } from "../core/logger";
-import type { LLMRouter } from "../llm/types";
+import type { BudgetGuard, LLMRouter } from "../llm/types";
 import type { SourceRegistry } from "../sources/registry";
 
 import type { PrivacyPolicy } from "./shared/privacyPolicy";
@@ -186,8 +186,8 @@ export interface PipelineEstimate {
 }
 
 // ===========================================================================
-// 2. The forward aliases — see this file's header (four since P3-T15: LLMRouter,
-//    Cache and PrivacyPolicy are imported)
+// 2. The forward aliases — see this file's header (three since P3-T16: LLMRouter,
+//    Cache, PrivacyPolicy and BudgetGuard are imported)
 // ===========================================================================
 
 /**
@@ -198,8 +198,16 @@ export interface PipelineEstimate {
  */
 export type { Cache };
 
-/** `docs/07` §4.3's `BudgetGuard`, which belongs at `src/llm/budget.ts`. */
-export type BudgetGuard = unknown;
+/**
+ * `docs/07` §4.3's `BudgetGuard`, declared in `src/llm/types.ts` beside
+ * `LLMCallContext.budget` and built by `./shared/budget.ts`'s
+ * `createBudgetGuard` (`P3-T16`; §4.3's note "`BudgetGuard`, as built"). No
+ * longer a forward alias: re-exported, so `PipelineContext.budget` is the real
+ * guard. *(Corrected 2026-10-23, `P3-T16`: this comment placed it at
+ * `src/llm/budget.ts`; §2.2's tree puts the implementation in
+ * `src/pipeline/shared/budget.ts`.)*
+ */
+export type { BudgetGuard };
 
 /** `docs/07` §4.4's `TTSProvider`, which belongs in `src/tts/types.ts`. */
 export type TTSProvider = unknown;

@@ -1905,6 +1905,25 @@ Fluent goes in a XUL `<linkset>`, and each `<groupbox>` should carry `aria-label
 | `rh-verbose-logging` | There is no `debug` pref to bind to (`07-architecture-and-data-model.md` §8.5, Diagnostics) | On load, `checked = getPref("logLevel") === "debug"`. On toggle, `setPref("logLevel", checked ? "debug" : "warn")`. It never touches `logRequestBodies`. |
 | The four clear buttons and **Delete all plugin data** | Actions, not settings | Each is the corresponding item in `09-security-privacy-and-api-keys.md` §3.7's required list. **"Clear generated summaries" must state, in the confirmation, that it does *not* delete the Zotero notes** — notes are user data and are removed only through Zotero's own UI (doc 09 §3.7). `rh-data-location` shows where the plugin database lives, per the same section. |
 
+> **Corrected 2026-10-23 (`P3-T04`; measured in the `omni.ja` files of Zotero 10.0.3).** Two controls in the
+> markup above cannot be built as drawn, and the pane ships them differently:
+> 1. **The base-URL input carries no `preference=` attribute.** Zotero's `_syncToPrefOnModify`
+>    (`chrome/content/zotero/preferences/preferences.js`) writes the element's value on every `input`,
+>    `change` and `command` event, and its `beforesynctopreference` event is a plain, non-cancelable `Event`
+>    dispatched after the value has been read, so a bound field stores every keystroke and cannot refuse a
+>    value. `03-llm-provider-integration.md` §14.4 requires the value to be validated at write time, so
+>    `preferences.js` sends it on `change` through `PreferencesHostApi.setBaseUrl`, which writes
+>    `<provider>.baseUrl` only for an absolute `https://` URL with no trailing slash, no user name or
+>    password, no `?` and no `#`, or for an empty value. Anything else is refused with a message and the
+>    stored value is kept. The placeholder is still the documented base URL. This is a fourth control in the
+>    table above.
+> 2. **The model control is an `<html:input>` bound to `<provider>.model`, not an editable `<menulist>`.**
+>    Toolkit's `menulist.js` (`chrome/toolkit/content/global/elements/menulist.js`) keeps an `editable`
+>    check only in `setInitialSelection` and has no text-entry part, so an `editable="true"` menulist takes
+>    no typed model ID, and a non-editable one shows a blank label for a stored ID that is not one of its
+>    items. The input accepts any model ID, as `07-architecture-and-data-model.md` §8.5 allows; offering the
+>    catalogue's models as suggestions is `P3-T14`'s.
+
 > ⚠️ **Zotero 8+ isolates preference-pane global scope.** A `var` declared in `preferences.js` is not shared with other panes or the prefs window. Attach anything you need across scopes to `window` explicitly ([Zotero 8 for Developers](https://www.zotero.org/support/dev/zotero_8_for_developers)).
 
 ### 7.4 Wireframe
@@ -2021,7 +2040,7 @@ The authoritative requirements are `09-security-privacy-and-api-keys.md` §1.9; 
 7. A **storage-backend badge** next to the key fields names the active tier — "Protected by Windows Credential Manager" / "macOS Keychain" / "System keyring", or a warning-coloured "Not saved between sessions" / "Protected by your passphrase" in degraded tiers, or doc 09 §1.9's fourth state "Stored in Zotero's database — protected only by your primary password". **Added 2026-10-15 (owner review row 50): a warning-coloured *indeterminate* state** — en-US "Indeterminate — this operating system does not reveal the key-storage tier", ko-KR 「확인 불가 — 이 운영체제에서는 열쇠 보관 등급을 판별할 수 없습니다」 — shown when the probe succeeded but its answer cannot be classified, which on Linux is always, because a missing keyring library does not make `encrypt()` fail (`P1-T41`; doc 09 §1.9 item 3 is the authority, this line restates it). The badge never claims a tier the probe cannot tell apart; `G-09`'s library-presence check retires the state.
 8. The residual-risk statement of doc 09 §1.8 appears in the pane **verbatim and visible** (not behind a "Learn more" link), including the sentence that other Zotero plugins can read the keys.
 9. A **Remove all stored keys** button clears every `SecretId` and reports how many were removed.
-10. On an empty-key state after a data-directory restore, explain *why*: keys live in this computer's credential store and do not travel with the Zotero data folder.
+10. On an empty-key state after a data-directory restore, explain *why*: keys live in this computer's credential store and do not travel with the Zotero data folder. *(Added 2026-10-23, `P3-T04`: the pane shows this as one notice under the badge when no key of any `SecretId` is stored, the plugin database already holds data — a row in any of its tables — and the badge names an operating-system store; doc 09 §1.9 item 8 says why only then.)*
 
 ---
 

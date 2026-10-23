@@ -40,6 +40,7 @@ import type {
   SearchImportWriter,
 } from "../../../src/pipeline/searchImport/types";
 import type { PipelineContext } from "../../../src/pipeline/types";
+import { UNWIRED_BUDGET_GUARD } from "../../../src/pipeline/shared/budget";
 import { createPrivacyPolicy } from "../../../src/pipeline/shared/privacyPolicy";
 import { createEuropePmcSource } from "../../../src/sources/europepmc/europepmcSource";
 import { createEuropePmcRecordMapper } from "../../../src/sources/europepmc/mapper";
@@ -885,7 +886,7 @@ function pipelineRun(options: {
     clock,
     sources: registry,
     cache: NO_CACHE,
-    budget: undefined,
+    budget: UNWIRED_BUDGET_GUARD,
     llm: mockLLMRouter(),
     tts: undefined,
     zotero: undefined,

@@ -76,6 +76,7 @@ import {
   type PipelineContext,
   type StageDescriptor,
 } from "../../../src/pipeline/types";
+import { UNWIRED_BUDGET_GUARD } from "../../../src/pipeline/shared/budget";
 import { createPrivacyPolicy } from "../../../src/pipeline/shared/privacyPolicy";
 import { createPubmedRecordMapper } from "../../../src/sources/pubmed/mapper";
 import { createPubmedSource } from "../../../src/sources/pubmed/pubmedSource";
@@ -192,7 +193,7 @@ function createContext(options: {
     clock: options.clock,
     sources: options.sources,
     cache: NO_CACHE,
-    budget: undefined,
+    budget: UNWIRED_BUDGET_GUARD,
     llm: mockLLMRouter(),
     tts: undefined,
     zotero: undefined,

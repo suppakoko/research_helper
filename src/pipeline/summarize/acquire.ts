@@ -61,6 +61,18 @@
  * (corrected D-06-4): it is kept as the extractor emitted it, and the page
  * separators (`\n*\f`) survive the cleaning pass verbatim.
  *
+ * ## Sections (`P3-T21`)
+ *
+ * `docs/06` §4.3's detector (`./imrad.ts`) runs on the full-text body only:
+ * Tier 3 re-uses `extractJats`'s sections; Tier 2 reads the attachment's
+ * section outline and heading blocks through the port's optional
+ * `getDocumentStructure` (once, after cleaning, and never for a truncated
+ * text — that read lays out every page) and falls back to the line scan when
+ * there is none or the read fails. A structure failure never demotes the
+ * tier. `sections` carry offsets into the final `text`; `sectionAware` is
+ * `false` on Tiers 1 and 4 and whenever fewer than two IMRaD sections were
+ * recognized.
+ *
  * ## `contentHash`
  *
  * Lower-case hex SHA-256 over the exact `text` returned, through
@@ -90,6 +102,7 @@ import type { LiteratureSource, SourceCallContext } from "../../sources/types";
 import { parseExtra } from "../../zotero/extraField";
 import {
   zoteroFullTextPort,
+  type DocumentStructure,
   type IndexedPageCounts,
   type PdfFullText,
 } from "../../zotero/fulltext";
@@ -100,9 +113,17 @@ import {
   type CleanReport,
 } from "./clean";
 import {
+  detectSectionsFromJats,
+  detectSectionsFromPdf,
+  NO_SECTIONS,
+  type PdfDetectionStats,
+  type SectionDetection,
+} from "./imrad";
+import {
   fetchEpmcFullText,
   type EpmcFullTextOutcome,
   type EpmcIdentifiers,
+  type JatsSection,
 } from "./jats";
 import { detectLanguage, LANGUAGE_NON_ENGLISH_WARNING } from "./languageDetect";
 import { normalizeAbstract } from "./normalizeAbstract";
@@ -139,6 +160,12 @@ export interface FullTextPort<I, A extends AcquirableAttachment> {
     attachmentID: number,
     maxPages: number,
   ): Promise<PdfFullText>;
+  /**
+   * The attachment's section outline and heading blocks (`docs/06` §4.3,
+   * `P3-T21`). Optional: without it, Tier 2's section detector runs on the
+   * line-scan fallback alone.
+   */
+  getDocumentStructure?(attachment: A): Promise<DocumentStructure | null>;
   md5Hex(text: string): string;
 }
 
@@ -353,6 +380,43 @@ interface FullTextBody {
   readonly jatsAbstract: string | null;
   /** Tier 2's cleaning report. */
   readonly clean: CleanReport | null;
+  /**
+   * Tier 2's section outline and heading blocks; `null` on Tier 3, when the
+   * port has no reader, when the read failed, and when the text is truncated.
+   */
+  readonly structure: DocumentStructure | null;
+  /** Why Tier 2 has no structure, for the diagnostics line. */
+  readonly structureSkipped:
+    "no_reader" | "truncated" | "failed" | "no_pack" | null;
+  /** Tier 3's sections as `extractJats` built them; `null` on Tier 2. */
+  readonly jatsSections: readonly JatsSection[] | null;
+}
+
+/**
+ * Read the attachment's structure for §4.3's detector. A failure here never
+ * demotes Tier 2: the text is already in hand, and the detector falls back to
+ * its line scan. A truncated text is not given a structure at all — reading
+ * one means layout analysis of **every** page, which is exactly the cost
+ * D-06-3's page cap exists to refuse.
+ */
+async function readStructure<I, A extends AcquirableAttachment>(
+  port: FullTextPort<I, A>,
+  attachment: A,
+  truncated: boolean,
+): Promise<Pick<FullTextBody, "structure" | "structureSkipped">> {
+  if (port.getDocumentStructure === undefined) {
+    return { structure: null, structureSkipped: "no_reader" };
+  }
+  if (truncated) return { structure: null, structureSkipped: "truncated" };
+  try {
+    const structure = await port.getDocumentStructure(attachment);
+    return structure === null
+      ? { structure: null, structureSkipped: "no_pack" }
+      : { structure, structureSkipped: null };
+  } catch (error) {
+    rethrowIfFatal(error);
+    return { structure: null, structureSkipped: "failed" };
+  }
 }
 
 type WarningSink = (AcquisitionWarning | AcquisitionStageWarning)[];
@@ -385,6 +449,8 @@ async function tryTier2<I, A extends AcquirableAttachment>(
       attachmentKey: attachment.key,
       jatsAbstract: null,
       clean: cleaned.report,
+      ...(await readStructure(port, attachment, read.truncated)),
+      jatsSections: null,
     };
   } catch (error) {
     warnings.push(
@@ -414,6 +480,9 @@ async function tryTier3(
     attachmentKey: null,
     jatsAbstract: outcome.extraction.abstract,
     clean: null,
+    structure: null,
+    structureSkipped: null,
+    jatsSections: outcome.extraction.sections,
   };
 }
 
@@ -446,6 +515,30 @@ async function tryRecovery<I>(
     }
   }
   return abstract;
+}
+
+// ---------------------------------------------------------------------------
+// Sections (docs/06 §4.3, P3-T21)
+// ---------------------------------------------------------------------------
+
+/**
+ * §4.3's detector on the full-text body, with offsets into the final `text`
+ * (the body follows the abstract preamble and a blank line when there is
+ * one). Tiers 1 and 4 have no body and are never given to the detector.
+ */
+function detectBodySections(
+  body: FullTextBody | null,
+  abstract: string | null,
+): SectionDetection & { readonly stats?: PdfDetectionStats } {
+  if (body === null) return NO_SECTIONS;
+  const offset = abstract === null ? 0 : abstract.length + 2;
+  if (body.jatsSections !== null) {
+    return detectSectionsFromJats(
+      { sections: body.jatsSections, text: body.text },
+      offset,
+    );
+  }
+  return detectSectionsFromPdf(body.text, body.structure, offset);
 }
 
 // ---------------------------------------------------------------------------
@@ -515,6 +608,8 @@ export async function acquireSource<
     text = "";
   }
 
+  const sections = detectBodySections(body, abstract);
+
   const language = text === "" ? null : detectLanguage(text);
   if (language?.nonEnglish === true) {
     warnings.push(LANGUAGE_NON_ENGLISH_WARNING);
@@ -545,6 +640,20 @@ export async function acquireSource<
       ocrChars: body.clean.ocr.chars,
       ocrFailed: body.clean.ocr.failed.join(","),
     }),
+    sectionAware: sections.sectionAware,
+    sectionsRecognized: sections.recognized,
+    sectionLabels: sections.sections.map((s) => s.labels.join("+")).join(","),
+    ...(body?.tier === "fulltext_pdf" && {
+      structureSkipped: body.structureSkipped,
+    }),
+    ...(sections.stats !== undefined && {
+      outlineEntries: sections.stats.outlineEntries,
+      outlineAnchored: sections.stats.outlineAnchored,
+      headingBlocks: sections.stats.headingBlocks,
+      structureCandidates: sections.stats.structureCandidates,
+      structureLocated: sections.stats.structureLocated,
+      fallbackAdded: sections.stats.fallbackAdded,
+    }),
     warnings: warnings.join(","),
   });
 
@@ -553,7 +662,8 @@ export async function acquireSource<
     libraryID: item.libraryID,
     tier,
     abstract,
-    sections: [],
+    sections: sections.sections,
+    sectionAware: sections.sectionAware,
     text,
     charCount: text.length,
     estTokens: options.estimateTokens(text),

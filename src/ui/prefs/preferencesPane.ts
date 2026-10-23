@@ -37,21 +37,34 @@
  * how the card's negative assertion drives a failing Test call without a
  * network and without a real key.
  *
+ * ## The four LLM provider blocks (`P3-T04`)
+ *
+ * {@link LLM_CREDENTIALS} adds one block per provider. Each key stores, masks
+ * and clears exactly as the two source keys do; the store re-derives the
+ * matching `<provider>.keyPresent` flag itself (`src/zotero/keychain.ts`).
+ * The block's base URL goes through {@link checkBaseUrlInput} and the host's
+ * `setBaseUrl`, never through a `preference=` binding, because Zotero's
+ * binding writes every keystroke and cannot refuse a value (`docs/08` §7.3,
+ * the note dated 2026-10-23). The model field and the Gemini paid-tier
+ * checkbox **are** bound: neither has a write-time rule. The host does not
+ * *resolve* a base URL — `src/llm/shared/baseUrl.ts` (`P3-T06`) does — and
+ * the LLM blocks' Test is `P3-T14`'s: {@link isTestableCredential} keeps an
+ * LLM key out of the two source requests below.
+ *
+ * Tier 2 (`P3-T03`): a `secretBackend` of `"session"` paints *"Not saved
+ * between sessions"* and still lets the fields store, into memory only.
+ *
  * ## What is deliberately not here
  *
  * - **No `lastValidatedAt` / `lastValidationResult` preference write.**
- *   `docs/07` §8.5 declares those rows, but `src/prefs/schema.ts` does not yet
- *   carry them (grepped 2026-10-13: the schema has `ncbi.keyPresent` and
- *   `secretBackend` and no validation row for any credential), and that file is
- *   outside `P1-T44`'s `Files` list. The host therefore keeps the last Test
- *   result **in memory for the session** and the status row says so. Reported
- *   with the card; needs a card.
- * - **No summarizing-provider control.** `P3-T04`'s, by the card's `Retires`
- *   line.
- * - **No tier 2 or 3.** When the composition root has no `SecretStore` — the
- *   startup probe failed, or the keychain module could not load — the host
- *   reports `"unavailable"` and refuses to store, which is the honest behaviour
- *   until `P3-T03` lands.
+ *   `docs/07` §8.5 declares those rows; persisting the Test outcome is
+ *   `P3-T14`'s step 3. Until then the host keeps the last Test result **in
+ *   memory for the session** and the status row says so.
+ * - **No live model list.** `P3-T14` fills each model field's suggestions from
+ *   `P3-T13`'s catalogue through this host.
+ * - **No store at all** (the startup probe failed and the user declined tier
+ *   2, or the keychain module could not load): the host reports
+ *   `"unavailable"` and refuses to store.
  */
 
 import type { Clock } from "../../core/clock";
@@ -69,6 +82,7 @@ import {
   type SecretStore,
 } from "../../core/secretStore";
 import type { MainWindowMessageId } from "../../i18n/keys";
+import type { ProviderId } from "../../model/ids";
 
 /* ------------------------------------------------------------ registration */
 
@@ -144,17 +158,59 @@ export interface SourceCredential {
 }
 
 /**
- * The two credentials this pane holds — **and only these two**. The card's
- * scope line: the summarizing-provider blocks are `P3-T04`'s.
+ * The two literature-source credentials (`P1-T44`). The only two the host can
+ * **Test** today: `docs/09` §2.3's two requests below are theirs.
  */
 export const SOURCE_CREDENTIALS: readonly SourceCredential[] = [
   { id: "source.ncbi", elementPrefix: "rh-ncbi" },
   { id: "source.semanticscholar", elementPrefix: "rh-s2" },
 ];
 
-/** Whether `id` is a credential this pane may store, test or clear. */
+/** One LLM provider block (`docs/08` §7.3, `P3-T04`). */
+export interface LlmCredential extends SourceCredential {
+  /** The provider whose `<provider>.model` / `.baseUrl` rows the block edits. */
+  readonly provider: ProviderId;
+}
+
+/**
+ * The four LLM provider blocks, in `docs/07` §8.5's `llmProvider` value order.
+ * `rh-or` is `docs/08` §7.3's own prefix; the other three follow its "identical
+ * structure" comment. `addon/content/preferences.js` carries the same table as
+ * literals and `test/unit/ui/preferencesPane.test.ts` asserts they agree.
+ *
+ * `tts.gemini` has no block: `docs/08` §7.3 draws none, and the TTS key is
+ * Phase 5's.
+ */
+export const LLM_CREDENTIALS: readonly LlmCredential[] = [
+  { id: "llm.openrouter", elementPrefix: "rh-or", provider: "openrouter" },
+  { id: "llm.openai", elementPrefix: "rh-openai", provider: "openai" },
+  { id: "llm.gemini", elementPrefix: "rh-gemini", provider: "gemini" },
+  { id: "llm.anthropic", elementPrefix: "rh-anthropic", provider: "anthropic" },
+];
+
+/** Every credential block the pane shows: the two sources, then the four LLMs. */
+export const PANE_CREDENTIALS: readonly SourceCredential[] = [
+  ...SOURCE_CREDENTIALS,
+  ...LLM_CREDENTIALS,
+];
+
+/** Whether `id` is a credential this pane may store or clear. */
 export function isPaneCredential(id: string): id is SecretId {
+  return isSecretId(id) && PANE_CREDENTIALS.some((entry) => entry.id === id);
+}
+
+/**
+ * Whether the host can run `id`'s Test call. Only the two source credentials:
+ * the LLM blocks' Test is `P3-T14`'s, and an LLM key must never be put into an
+ * NCBI or Semantic Scholar request.
+ */
+export function isTestableCredential(id: string): id is SecretId {
   return isSecretId(id) && SOURCE_CREDENTIALS.some((entry) => entry.id === id);
+}
+
+/** Whether `value` names one of the four LLM provider blocks. */
+export function isPaneProvider(value: string): value is ProviderId {
+  return LLM_CREDENTIALS.some((entry) => entry.provider === value);
 }
 
 /* --------------------------------------------------------------------- l10n */
@@ -184,6 +240,13 @@ export const PREFERENCES_L10N = {
   risk3: "research-helper-prefs-risk-3",
   risk4: "research-helper-prefs-risk-4",
   risk5: "research-helper-prefs-risk-5",
+  // docs/09 §1.8's tier-2 sentence, in place of risk1 under the session badge
+  // (owner, 2026-10-23, plan/00 §6 item 274(a)); see riskOpeningMessageId.
+  risk1Session: "research-helper-prefs-risk-1-session",
+  // docs/09 §1.8's tier-2 paragraph-4 replacement, in place of risk4 under the
+  // session badge (owner, 2026-10-23, plan/00 §6 item 275(b)); see
+  // riskOwnAccountMessageId.
+  risk4Session: "research-helper-prefs-risk-4-session",
   removeAll: "research-helper-prefs-remove-all",
   removeAllDone: "research-helper-prefs-remove-all-done",
   ncbiTitle: "research-helper-prefs-ncbi",
@@ -209,6 +272,30 @@ export const PREFERENCES_L10N = {
   testForbidden: "research-helper-prefs-test-forbidden",
   testAbsent: "research-helper-prefs-test-absent",
   testUnavailable: "research-helper-prefs-test-unavailable",
+  // P3-T04: tier 2's badge (docs/09 §1.9 item 3), the restore notice (item 8),
+  // and the LLM provider blocks (docs/08 §7.3).
+  backendSession: "research-helper-prefs-backend-session",
+  restoreNote: "research-helper-prefs-restore-note",
+  providersTitle: "research-helper-prefs-providers",
+  activeProvider: "research-helper-prefs-active-provider",
+  apiKey: "research-helper-prefs-api-key",
+  model: "research-helper-prefs-model",
+  baseUrl: "research-helper-prefs-base-url",
+  baseUrlSaved: "research-helper-prefs-base-url-saved",
+  baseUrlDefault: "research-helper-prefs-base-url-default",
+  baseUrlNotHttps: "research-helper-prefs-base-url-not-https",
+  baseUrlTrailingSlash: "research-helper-prefs-base-url-trailing-slash",
+  baseUrlInvalid: "research-helper-prefs-base-url-invalid",
+  geminiPaidTier: "research-helper-prefs-gemini-paid-tier",
+  geminiPaidTierNote: "research-helper-prefs-gemini-paid-tier-note",
+  // P3-T16 step 6: the Usage section. The heading is markup; the other four
+  // are placed by preferences.js from the lines `api.usage.readout()` returns
+  // (`USAGE_L10N` in src/ui/dialogs/costConfirmDialog.ts, the same ids).
+  usageTitle: "research-helper-prefs-usage",
+  usageSession: "research-helper-cost-usage-session",
+  usageEstimated: "research-helper-cost-usage-estimated",
+  usageLimit: "research-helper-prefs-usage-limit",
+  usageLimitOff: "research-helper-prefs-usage-limit-off",
 } as const satisfies Record<string, MainWindowMessageId>;
 
 /* ------------------------------------------------------- rule 7: paste input */
@@ -262,19 +349,22 @@ export function keyDigest(key: string): string {
 export type PanePlatform = "win" | "mac" | "linux" | "other";
 
 /**
- * The four things the badge can say.
+ * The five things the badge can say.
  *
- * `"windows"` and `"mac"` are `docs/09` §1.9 item 3's named tiers. `"unavailable"`
- * is its warning for a failed probe. **`"indeterminate"` is this card's and is
- * not in §1.9**: `P1-T41` measured (2026-10-13) that the startup probe cannot
- * tell a Linux system keyring from Gecko's `NSSKeyStore` substitute, because a
- * missing libsecret does not make `encrypt()` fail (`docs/09` §1.7, the
- * 2026-09-30 block). §1.8's verbatim text is only true if the badge is
- * accurate, so until gate `G-09`'s library-presence check lands the badge on
- * Linux must say that it cannot tell, rather than claim either tier.
+ * `"windows"` and `"mac"` are `docs/09` §1.9 item 3's named tiers. `"session"`
+ * is its degraded tier 2, *"Not saved between sessions"* (`P3-T03`'s dialog
+ * wrote `secretBackend = "session"`; painted since `P3-T04`). `"unavailable"`
+ * is its warning for no store at all. **`"indeterminate"` is `P1-T44`'s and
+ * was added to §1.9 on 2026-10-15**: `P1-T41` measured (2026-10-13) that the
+ * startup probe cannot tell a Linux system keyring from Gecko's `NSSKeyStore`
+ * substitute, because a missing libsecret does not make `encrypt()` fail
+ * (`docs/09` §1.7, the 2026-09-30 block). §1.8's verbatim text is only true if
+ * the badge is accurate, so until gate `G-09`'s library-presence check lands
+ * the badge on Linux must say that it cannot tell, rather than claim either
+ * tier.
  */
 export type BackendBadgeState =
-  "windows" | "mac" | "indeterminate" | "unavailable";
+  "windows" | "mac" | "indeterminate" | "session" | "unavailable";
 
 export interface BackendBadge {
   readonly state: BackendBadgeState;
@@ -283,6 +373,12 @@ export interface BackendBadge {
   readonly warning: boolean;
   /** Whether a key may be stored at all. False only when no backend is live. */
   readonly canStore: boolean;
+  /**
+   * Whether the badge names an operating-system store — the only case in
+   * which `docs/09` §1.9 item 8's "do not travel with your Zotero data folder"
+   * sentence is known to be true.
+   */
+  readonly osStore: boolean;
 }
 
 /**
@@ -294,7 +390,14 @@ export interface BackendBadge {
 export const OS_KEYSTORE_PREF_VALUE = "oskeystore";
 
 /**
- * Map the recorded probe verdict and the platform to the badge.
+ * `docs/07` §8.5's `secretBackend` value for tier 2, duplicated for the same
+ * reason as {@link OS_KEYSTORE_PREF_VALUE} and asserted against
+ * `SECRET_BACKEND_PREF_VALUES` the same way.
+ */
+export const SESSION_PREF_VALUE = "session";
+
+/**
+ * Map the recorded backend and the platform to the badge.
  *
  * @param backendPref - the `secretBackend` preference's current value
  * @param platform - see {@link PanePlatform}
@@ -303,12 +406,24 @@ export function backendBadge(
   backendPref: string,
   platform: PanePlatform,
 ): BackendBadge {
+  if (backendPref === SESSION_PREF_VALUE) {
+    // docs/09 §1.9 item 3: warning-coloured, and the fields still store — into
+    // memory only, which is what the user chose in P3-T03's dialog.
+    return {
+      state: "session",
+      messageId: PREFERENCES_L10N.backendSession,
+      warning: true,
+      canStore: true,
+      osStore: false,
+    };
+  }
   if (backendPref !== OS_KEYSTORE_PREF_VALUE) {
     return {
       state: "unavailable",
       messageId: PREFERENCES_L10N.backendUnavailable,
       warning: true,
       canStore: false,
+      osStore: false,
     };
   }
   switch (platform) {
@@ -318,6 +433,7 @@ export function backendBadge(
         messageId: PREFERENCES_L10N.backendWindows,
         warning: false,
         canStore: true,
+        osStore: true,
       };
     case "mac":
       return {
@@ -325,6 +441,7 @@ export function backendBadge(
         messageId: PREFERENCES_L10N.backendMac,
         warning: false,
         canStore: true,
+        osStore: true,
       };
     default:
       return {
@@ -332,8 +449,119 @@ export function backendBadge(
         messageId: PREFERENCES_L10N.backendIndeterminate,
         warning: true,
         canStore: true,
+        osStore: false,
       };
   }
+}
+
+/* ------------------------------------------ docs/09 §1.8: paragraph 1, tier 2 */
+
+/**
+ * Which message opens the residual-risk statement. Paragraph 1 says the keys
+ * are "encrypted using your operating system's credential store", which is
+ * untrue under tier 2, so while the badge is `"session"` the pane shows
+ * `docs/09` §1.8's tier-2 sentence in its place — keys held in memory only,
+ * written nowhere, gone when Zotero closes — and paragraphs 2, 3 and 5
+ * unchanged (owner, 2026-10-23, `plan/00` §6 item 274(a); gate `G-19`;
+ * paragraph 4 is swapped too, by {@link riskOwnAccountMessageId}). Every other
+ * badge keeps paragraph 1.
+ *
+ * `addon/content/preferences.js`'s `logic.riskOpening` is the same rule.
+ *
+ * @param badge - what {@link backendBadge} returned
+ */
+export function riskOpeningMessageId(
+  badge: Pick<BackendBadge, "state">,
+): MainWindowMessageId {
+  return badge.state === "session"
+    ? PREFERENCES_L10N.risk1Session
+    : PREFERENCES_L10N.risk1;
+}
+
+/**
+ * Which message is the residual-risk statement's paragraph 4. Paragraph 4 says
+ * other software running as the user "can decrypt them", which presumes
+ * encryption and is untrue under tier 2, so while the badge is `"session"` the
+ * pane shows `docs/09` §1.8's tier-2 paragraph-4 replacement in its place —
+ * even held in memory, the keys can be read by any program running as the
+ * user (owner, 2026-10-23, `plan/00` §6 item 275(b)). Every other badge keeps
+ * paragraph 4. It is the same test as {@link riskOpeningMessageId}'s.
+ *
+ * `addon/content/preferences.js`'s `logic.riskOwnAccount` is the same rule.
+ *
+ * @param badge - what {@link backendBadge} returned
+ */
+export function riskOwnAccountMessageId(
+  badge: Pick<BackendBadge, "state">,
+): MainWindowMessageId {
+  return badge.state === "session"
+    ? PREFERENCES_L10N.risk4Session
+    : PREFERENCES_L10N.risk4;
+}
+
+/* ------------------------------------------- docs/09 §1.9 item 8: restore */
+
+/**
+ * Whether the pane shows the restore notice: no key is stored at all, the
+ * plugin database already holds data (so this is not a first start), and the
+ * badge names an operating-system store — under any other backend the
+ * notice's "do not travel with your Zotero data folder" is not known to be
+ * true (`docs/09` §1.9 item 8). "No key is stored" is the store's
+ * `listStoredIds()` coming back empty: every `*.keyPresent` flag is derived
+ * from the same store, and this also counts `tts.gemini`, which has no block
+ * here but sets `gemini.keyPresent`.
+ */
+export function showRestoreNotice(
+  state: Pick<PaneState, "anyKeyStored" | "pluginDataPresent">,
+  badge: Pick<BackendBadge, "osStore">,
+): boolean {
+  return badge.osStore && state.pluginDataPresent && !state.anyKeyStored;
+}
+
+/* ------------------------------------- docs/03 §14.4: the base-URL override */
+
+/** Why {@link checkBaseUrlInput} refused a value. */
+export type BaseUrlRefusal = "not-https" | "trailing-slash" | "invalid";
+
+export type BaseUrlCheck =
+  | { readonly ok: true; readonly value: string }
+  | { readonly ok: false; readonly reason: BaseUrlRefusal };
+
+/**
+ * Validate a typed `<provider>.baseUrl` at write time (`docs/03` §14.4,
+ * `docs/07` §8.5: "an absolute `https://` URL with no trailing slash, or
+ * empty"). **Refuses rather than normalizes**: a missing scheme is not given
+ * one and a trailing slash is not removed (`P3-T04` step 3). Surrounding
+ * whitespace is trimmed, as the resolver trims the stored value.
+ *
+ * Also refused, as `"invalid"`: a value that does not parse, has no host, or
+ * carries a user name, a password, a query or a fragment — the same set
+ * `src/llm/shared/baseUrl.ts`'s resolver ignores at call time, so nothing this
+ * accepts is silently replaced by the documented URL later. An `https:` value
+ * spelled without `//` (`https:proxy.example`) is `"not-https"`, because the
+ * user must see the scheme they are getting.
+ */
+export function checkBaseUrlInput(raw: string): BaseUrlCheck {
+  const value = raw.trim();
+  if (value === "") return { ok: true, value: "" };
+  if (!/^https:\/\//i.test(value)) return { ok: false, reason: "not-https" };
+  if (/[?#]/.test(value)) return { ok: false, reason: "invalid" };
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return { ok: false, reason: "invalid" };
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname === "" ||
+    parsed.username !== "" ||
+    parsed.password !== ""
+  ) {
+    return { ok: false, reason: "invalid" };
+  }
+  if (value.endsWith("/")) return { ok: false, reason: "trailing-slash" };
+  return { ok: true, value };
 }
 
 /* ----------------------------------------------------- rule 5: the Test call */
@@ -526,17 +754,38 @@ export interface CredentialState {
   readonly lastTest: TestReport | undefined;
 }
 
+/** What the pane needs to paint one LLM provider block's non-secret rows. */
+export interface ProviderState {
+  readonly provider: ProviderId;
+  /** The stored `<provider>.baseUrl`; `""` means the documented base URL. */
+  readonly baseUrl: string;
+}
+
 export interface PaneState {
   /** The `secretBackend` preference's current value, for {@link backendBadge}. */
   readonly backendPref: string;
   /** Whether a `SecretStore` exists at all. False after a failed probe. */
   readonly storeAvailable: boolean;
+  /** Every block in {@link PANE_CREDENTIALS} order. */
   readonly credentials: readonly CredentialState[];
+  /** The `llmProvider` preference: the one provider block the pane shows. */
+  readonly activeProvider: ProviderId;
+  /** One entry per {@link LLM_CREDENTIALS} block, in that order. */
+  readonly providers: readonly ProviderState[];
+  /** Whether the plugin database already holds a row, for {@link showRestoreNotice}. */
+  readonly pluginDataPresent: boolean;
+  /** Whether any `SecretId` at all is stored, for {@link showRestoreNotice}. */
+  readonly anyKeyStored: boolean;
 }
 
 export type StoreResult =
   | { readonly stored: true; readonly digest: string }
   | { readonly stored: false; readonly reason: "unavailable" | "empty" };
+
+/** {@link PreferencesHostApi.setBaseUrl}'s answer. Never echoes the value. */
+export type BaseUrlResult =
+  | { readonly stored: true; readonly cleared: boolean }
+  | { readonly stored: false; readonly reason: BaseUrlRefusal };
 
 /**
  * What `addon/content/preferences.js` is allowed to do. Published on the plugin
@@ -555,20 +804,47 @@ export interface PreferencesHostApi {
   clearKey(id: string): Promise<boolean>;
   /** Clears every stored `SecretId`; resolves to how many were removed. */
   clearAllKeys(): Promise<number>;
+  /** The two source credentials only; see {@link isTestableCredential}. */
   testKey(id: string): Promise<TestReport>;
+  /**
+   * Validate `raw` with {@link checkBaseUrlInput} and, only when it passes,
+   * write `<provider>.baseUrl`. A refused value leaves the stored one as it
+   * was. Never resolves the URL; `P3-T06`'s resolver does that at call time.
+   */
+  setBaseUrl(provider: string, raw: string): Promise<BaseUrlResult>;
+}
+
+/**
+ * The non-secret LLM rows the host reads and writes, bound by the composition
+ * root to `src/prefs`' typed `getPref` / `setPref` — so this file imports no
+ * preference writer, and no secret can reach one through it.
+ */
+export interface ProviderPrefsPort {
+  /** The `llmProvider` row. */
+  getActiveProvider(): string;
+  getBaseUrl(provider: ProviderId): string;
+  setBaseUrl(provider: ProviderId, value: string): void;
 }
 
 /** The ports {@link createPreferencesHost} binds. */
 export interface PreferencesHostDeps {
   /**
-   * The live store, or `undefined` when the startup probe did not reach
-   * tier 1. With `undefined` every write refuses and the badge warns.
+   * The live store — tier 1, or tier 2 when the user chose it in `P3-T03`'s
+   * dialog — or `undefined` when there is none. With `undefined` every write
+   * refuses and the badge warns.
    */
   readonly secrets: SecretStore | undefined;
   /** `src/core/http/client.ts`'s `httpRequest`, or a stub in a spec. */
   readonly request: (request: HttpRequest) => Promise<HttpResponse>;
   /** Reads the non-secret `secretBackend` preference. */
   readonly getBackendPref: () => string;
+  /** The LLM blocks' non-secret rows. */
+  readonly providerPrefs: ProviderPrefsPort;
+  /**
+   * Whether the plugin database already holds a row (`docs/09` §1.9 item 8's
+   * restore condition). Absent or failing: `false`, so the notice stays off.
+   */
+  readonly hasPluginData?: () => Promise<boolean>;
   readonly clock: Clock;
   /**
    * Redacting logger (`src/core/logger.ts`). The host logs ids, outcomes,
@@ -592,17 +868,29 @@ function httpStatusOf(error: unknown): number | undefined {
   return undefined;
 }
 
+/** `docs/07` §8.5's `llmProvider` default, used when the row reads as nothing we know. */
+const DEFAULT_ACTIVE_PROVIDER: ProviderId = "openrouter";
+
 /**
  * Build the pane's privileged host over the injected ports.
  *
- * Every method validates `id` against {@link SOURCE_CREDENTIALS} first, so the
- * pane cannot reach a credential it has no block for, and every method is
- * total over a missing store.
+ * Every method validates `id` against {@link PANE_CREDENTIALS} first — and
+ * `testKey` against {@link SOURCE_CREDENTIALS} — so the pane cannot reach a
+ * credential it has no block for, and every method is total over a missing
+ * store.
  */
 export function createPreferencesHost(
   deps: PreferencesHostDeps,
 ): PreferencesHostApi {
-  const { secrets, request, getBackendPref, clock, logger } = deps;
+  const {
+    secrets,
+    request,
+    getBackendPref,
+    providerPrefs,
+    hasPluginData,
+    clock,
+    logger,
+  } = deps;
   const lastTests = new Map<SecretId, TestReport>();
 
   function requireCredential(id: string): SecretId {
@@ -614,17 +902,67 @@ export function createPreferencesHost(
     return id;
   }
 
+  function requireProvider(value: string): ProviderId {
+    if (!isPaneProvider(value)) {
+      throw new RangeError(
+        `[research-helper] "${value}" is not a provider this pane holds`,
+      );
+    }
+    return value;
+  }
+
+  async function pluginDataPresent(): Promise<boolean> {
+    if (hasPluginData === undefined) return false;
+    try {
+      return await hasPluginData();
+    } catch (error) {
+      logger?.warn("could not tell whether the plugin database holds data", {
+        error: errorName(error),
+      });
+      return false;
+    }
+  }
+
   async function readState(): Promise<PaneState> {
     const credentials: CredentialState[] = [];
-    for (const { id } of SOURCE_CREDENTIALS) {
+    for (const { id } of PANE_CREDENTIALS) {
       const present = secrets === undefined ? false : await secrets.has(id);
       credentials.push({ id, present, lastTest: lastTests.get(id) });
     }
+    const active = providerPrefs.getActiveProvider();
     return {
       backendPref: getBackendPref(),
       storeAvailable: secrets !== undefined,
       credentials,
+      activeProvider: isPaneProvider(active) ? active : DEFAULT_ACTIVE_PROVIDER,
+      providers: LLM_CREDENTIALS.map(({ provider }) => ({
+        provider,
+        baseUrl: providerPrefs.getBaseUrl(provider),
+      })),
+      pluginDataPresent: await pluginDataPresent(),
+      // Ids only, never a value: `listStoredIds()` reads login user names.
+      anyKeyStored:
+        secrets === undefined
+          ? false
+          : (await secrets.listStoredIds()).length > 0,
     };
+  }
+
+  async function setBaseUrl(
+    rawProvider: string,
+    raw: string,
+  ): Promise<BaseUrlResult> {
+    const provider = requireProvider(rawProvider);
+    const checked = checkBaseUrlInput(raw);
+    if (!checked.ok) {
+      // The value is never logged: docs/03 §14.4 — it may hold a credential.
+      logger?.info("base URL refused", { provider, reason: checked.reason });
+      return { stored: false, reason: checked.reason };
+    }
+    providerPrefs.setBaseUrl(provider, checked.value);
+    const cleared = checked.value === "";
+    logger?.info("base URL stored", { provider, cleared });
+    return { stored: true, cleared };
   }
 
   async function storeKey(
@@ -666,13 +1004,12 @@ export function createPreferencesHost(
     if (secrets === undefined) {
       return 0;
     }
-    const ids = await secrets.listStoredIds();
-    for (const id of ids) {
-      await secrets.clear(id);
-    }
+    // The port's one sweep (`clearEveryStoredId`, P3-T02): every stored
+    // SecretId, not only the pane's six, and it keeps going past a failure.
+    const count = await secrets.clearAll();
     lastTests.clear();
-    logger?.info("all stored keys removed", { count: ids.length });
-    return ids.length;
+    logger?.info("all stored keys removed", { count });
+    return count;
   }
 
   async function issue(id: SecretId, key: string): Promise<Classification> {
@@ -701,6 +1038,13 @@ export function createPreferencesHost(
 
   async function testKey(rawId: string): Promise<TestReport> {
     const id = requireCredential(rawId);
+    if (!isTestableCredential(id)) {
+      // Before any `get()`: an LLM key must never reach the source requests
+      // below. Its Test is P3-T14's; the pane keeps that button disabled.
+      throw new RangeError(
+        `[research-helper] "${id}" has no Test call yet (P3-T14)`,
+      );
+    }
     if (secrets === undefined) {
       return { kind: "unavailable" };
     }
@@ -747,5 +1091,6 @@ export function createPreferencesHost(
     clearKey,
     clearAllKeys,
     testKey,
+    setBaseUrl,
   };
 }

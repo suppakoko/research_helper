@@ -125,9 +125,11 @@ pref("timeoutSeconds", 60);
 // run.maxSessionSpendCents the per-Zotero-session one. Every surface shows and
 // accepts dollars. Neither is bound by a control; both are listed here so they
 // are visible in about:config. Changing either default is gate G-20 (P3-T32;
-// renamed from the USD keys by P3-T39, plan/00 §6 item 245).
+// renamed from the USD keys by P3-T39, plan/00 §6 item 245). Gate G-20 decided
+// 2026-10-23 (owner, plan/00 §6 item 271(b)): the session ceiling ships at 500
+// cents (US $5.00); the per-run ceiling stays 0 (off).
 pref("run.maxSpendCents", 0);
-pref("run.maxSessionSpendCents", 0);
+pref("run.maxSessionSpendCents", 500);
 // How far the pref migrations of docs/07 §8.5.3 have got. 0 = none has run, and
 // no migration entry exists yet: §8.5.3 is explicit that renames applied
 // before first release need no entry, only document updates.

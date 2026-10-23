@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
 > card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-20 · **157 tasks: 112 `DONE`, 45 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 157, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-23 · **157 tasks: 112 `DONE`, 45 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 157, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -23,9 +23,17 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
 | 2 — Multi-source + dedup | 37 | 33.25 d | 33.25–47 d | 12–16 d (+108%) |
-| 3 — LLM + summaries | 39 | 28.50 d | 28.5–40 d | 12–15 d (+90%) |
-| **Phases 0–3** | **157** | **108.75 d** | **108.75–153 d** | 39–52 d (+109% over the top of the band) |
+| 3 — LLM + summaries | 39 | 29.50 d | 29.5–41 d | 12–15 d (+97%) |
+| **Phases 0–3** | **157** | **109.75 d** | **109.75–154 d** | 39–52 d (+111% over the top of the band) |
 | 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
+
+**2026-10-23: `P3-T21` re-estimated 0.5 → 1.5 d** (§6 item 274(d)). Phase 3 is **39 cards and
+29.50 d**, re-read from the cards' `Estimate` rows by script; 29.5 × 1.4 = 41.3 → 41. The Phases
+0–3 subtotal is 109.75 d, its high end 25 + 41 + 47 + 41 = 154, and the project total 183.25–256 d.
+The critical path P0 → P1 → P2 → P4 → P6 → P7 stays 132.75–186 d because it does not run through
+Phase 3; the route through Phase 3 is now 129.00–180 d, 3.75 d and 6 d short of it. The
+percentages are 29.5 ÷ 15 = 1.97 → +97% and 109.75 ÷ 52 = 2.11 → +111% (they read +90% and +109%).
+`docs/11` §1–§2 carry the rest.
 
 **2026-10-20, later: `P3-T38` and `P3-T39` added** (0.5 d each; §6 items 244 and 245). Phase 3 is
 **39 cards and 28.50 d**, re-read from the cards' `Estimate` rows by script; 28.5 × 1.4 = 39.9 → 40.
@@ -293,7 +301,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P3-T18` | Text acquisition tiers 1–2 (abstract, attachment text) | `P3-T32` | 0.5 d |  |
 | `P3-T19` | Tiers 3–4, cleaning pass, OCR probe, language detection | `P3-T18`, `P3-T32` | 0.75 d |  |
 | `P3-T20` | The 40-PDF IMRaD fixture set with ground-truth labels | `P3-T19` | 1.75 d | 🔒 |
-| `P3-T21` | IMRaD section detector | `P3-T19` | 0.5 d |  |
+| `P3-T21` | IMRaD section detector | `P3-T19` | 1.5 d |  |
 | `P3-T22` | Detector accuracy harness, 85 % gate, degrade switch | `P3-T20`, `P3-T21` | 0.5 d | 🔒 |
 | `P3-T23` | Chunker: section-aware, flat, and single-shot paths | `P3-T13`, `P3-T21`, `P3-T22` | 0.75 d |  |
 | `P3-T24` | Prompt registry with versioned prompt files | — | 0.5 d |  |
@@ -1974,6 +1982,66 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `research-helper-egress-gemini-declared-paid` as the coordinator drafted it (G-41). (c) the agent's readings are
     confirmed: the declared-paid reminder forces the confirmation question even where "don't ask again" is on, and it
     shows whenever the key is declared paid, even if a future detector reports a paid tier.
+    **DONE 2026-10-23:** wave 5 landed as d293a7e (P3-T03, P3-T11, P3-T15, P3-T19; items 266, 268–270). Combined tree:
+    typecheck, lint:check, eslint, unit 3541, contract 40, build with typings unchanged, integration 190 passed in 3 of
+    3 runs.
+
+### 6.57 Wave 6, 2026-10-23
+
+271. **Wave 6 and the open lines of `P3-T16` and `P3-T21`.** **DECIDED 2026-10-23 (owner):** (a) the next wave is
+    `P3-T04`, `P3-T16`, `P3-T21` and `P3-T26` together; `P3-T04` stops at gate `G-18` (the owner types each key into the
+    pane; keys are never given in chat) and `P3-T16` at gate `G-21` (the owner's first real spend). (b) `P3-T16` / gate
+    `G-20`: `run.maxSessionSpendCents` ships at **500** (US $5), and `run.maxSpendCents` stays `0` (off); `docs/07` §8.5
+    first. (c) `P3-T21`: the PDF path is built on `getStructuredDocumentText`'s outline and heading blocks, with the regex
+    heading table only as the fallback for headings the outline does not anchor, and never on `style.bold`; the card is
+    re-estimated when its agent reports (the five places of `plan/README.md` §7).
+
+272. **Open lines of later Phase 3 cards, settled ahead.** **DECIDED 2026-10-23 (owner), each as the card's recommended
+    line:** (a) `P3-T35`: declare `ConfigReader` in `docs/07` §4.5 as a read-only view of `getPref`
+    (`get<K extends PrefName>(name: K): PrefValue<K>`), so a pipeline reads preferences through the context. (b)
+    `P3-T25`: create `summary` without the `REFERENCES work(work_key)` clause; add it in the migration that first
+    populates `work` (`docs/07` §8.3). (c) `P3-T29` and `P3-T31`: "cancelling at 87/200 retains 86 notes" reads as
+    "retains 86 `StoredSummary` rows, and 86 notes when `report.perPaperNotes` is on" (`docs/11` §1). (d) `P3-T14`:
+    the NCBI and Semantic Scholar checks stay in `preferencesPane.ts` for Phase 3 and move with item 52 (`docs/09` §8
+    item 8). Each card's agent writes its line into the named document first, dated.
+
+273. **Raised by `P3-T26`, 2026-10-23.** (a) The key uses the full prompt version string, so `docs/12` §17.2's "PATCH: cache
+    retained" does not hold. (b) The prompt metadata sent with the text (title, authors, year, venue, DOI, tags…) is a key
+    component, so editing a title re-summarizes that item. (c) `RunningWork.pinnedTags` (`queue.ts`) writes a raw
+    `work:<key>` while the summary cache escapes `,` and `%`, so a work key holding either is not protected from eviction
+    while its job runs. **DECIDED 2026-10-23 (owner):** (a) key on `cacheEpoch`, so a PATCH bump keeps cached summaries
+    (`docs/12` §17.2 holds; `docs/06` §11.2 and §17.4 are corrected); built after wave 6 lands. (b) kept as built. (c)
+    `pinnedTags` applies `encodeTagValue`, with a test; built after wave 6 lands.
+    **Recorded, not cards:** the summary cache's `skipCached` guard skips nothing until `P3-T29` passes a probe; `docs/07`
+    §9.3 trigger 2 (invalidate by `model:<old>`) is unbuilt and would work against `cache.ignoreModel`;
+    `src/pipeline/summarize/jats.ts`'s header still says `AcquiredSource.sections` stays empty (`P3-T21` finding 5);
+    `P3-T04` did not build the `useTranslators` checkbox that `plan/03` (`P2-T18`) assigns to this pane; `P3-T16`'s
+    `runPooledItems` records a budget refusal as a failed item instead of pausing (`P3-T16` finding 1);
+    `plan/06` G-20 still reads open (decided by item 271(b)).
+
+274. **Raised by `P3-T04`, `P3-T16` and `P3-T21`, 2026-10-23.** **DECIDED 2026-10-23 (owner):** (a) gate `G-19`: the
+    owner accepts `docs/09` §1.8's five residual-risk paragraphs, and a tier-2 sentence is added for when `secretBackend`
+    is `session` (keys held in memory only, written nowhere, gone when Zotero closes), `docs/09` §1.8 first, with its
+    string; built after wave 6 lands. (b) `P3-T16`'s readings are confirmed: the ceiling with the least room binds;
+    1.15× headroom; output reserved at `maxOutputTokens`; an unpriced model needs the second acknowledgement; "don't ask
+    again" never skips a confirmation forced by money; the abstracts-only downgrade is a checkbox showing its price.
+    (c) `P3-T16` finding 1: a budget refusal mid-run pauses the job and asks, and the item stays pending
+    (`runPooledItems`, item 234); built after wave 6 lands. (d) `P3-T21` is re-estimated 0.5 → 1.5 d, and the structure
+    read stays the direct `getStructuredDocumentText` call that writes nothing into the attachment folder.
+    `P3-T04`'s two deviations from `docs/08` §7.3 (base URL written only through `setBaseUrl`; model as a text input)
+    stand as recorded there.
+    **DONE 2026-10-23** (`plan/reports/followups-273-274.md`): items 273(a), 273(c), 274(a), 274(c), 274(d); integration
+    194 passed in 3 of 3 runs.
+
+275. **Tier-2 risk wording, 2026-10-23.** **DECIDED 2026-10-23 (owner):** (a) the Korean for
+    `research-helper-prefs-risk-1-session` as the coordinator drafted it (G-41). (b) under tier 2, paragraph 4 of
+    `docs/09` §1.8 (which presumes encryption) is replaced too, by: "Even held in memory, the keys are not protected from
+    software running under your own user account: any program you run — including any other Zotero plugin — can read
+    them. Zotero does not isolate plugins from each other." Its Korean as drafted: "메모리에 있는 키도 같은 사용자 계정에서
+    실행되는 다른 프로그램(다른 Zotero 플러그인 포함)으로부터는 보호되지 않습니다. Zotero는 플러그인끼리 격리하지 않습니다."
+    **DONE 2026-10-23** (`plan/reports/followup-275.md`): unit 3751, contract 40, build with typings unchanged,
+    integration 194 passed in 3 of 3 runs. **Recorded, not a card:** 116 ids remain on `KO_PENDING_REVIEW`, among them
+    the five original residual-risk paragraphs, so a Korean pane mixes Korean and English until those are reviewed.
 
 ## 7. Regenerating this file
 

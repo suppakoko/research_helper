@@ -384,6 +384,29 @@ block. A residual-risk statement that overstates protection is worse than none, 
 tied to the backend the pane names. This makes §1.9 item 3's badge **load-bearing rather than
 informational**: the text is only true if the badge is accurate.
 
+**Decided 2026-10-23 (owner, `plan/00` §6 item 274(a); gate `G-19`).** The owner accepted the five
+paragraphs above as the residual-risk statement. Paragraph 1 is not true under tier 2 (§1.7): when
+the `secretBackend` preference is `session`, nothing is encrypted into an operating-system store and
+nothing reaches Zotero's login manager. So in that state — and only then, which is when the badge
+reads *"Not saved between sessions"* (§1.9 item 3) — the pane shows the sentence below **in place
+of paragraph 1**, verbatim, followed by paragraphs 2–5 unchanged. It is the `en-US` bundle's
+`research-helper-prefs-risk-1-session`, and a unit test reads it from here as it reads the five above.
+
+> **Tier 2 (session-only), in place of paragraph 1:**
+> Your API keys are held in memory only, for this Zotero session. They are written nowhere — not to your operating system's credential store, not to Zotero's login manager, not to disk — and they are gone when Zotero closes, so you will need to enter them again after a restart.
+
+**Decided 2026-10-23 (owner, `plan/00` §6 item 275(b)).** Paragraph 4 is not true under tier 2
+either: it presumes the keys are encrypted ("can decrypt them"), and under tier 2 nothing is, so after
+the sentence above its "It" would have no antecedent. So in the same state — the `secretBackend`
+preference is `session` and the badge reads *"Not saved between sessions"* — the pane also shows the
+sentence below **in place of paragraph 4**, verbatim. Under tier 2 the pane therefore reads: the
+sentence above, paragraphs 2 and 3, the sentence below, paragraph 5 (this narrows item 274(a)'s
+"paragraphs 2–5 unchanged"). It is the `en-US` bundle's `research-helper-prefs-risk-4-session`, and a
+unit test reads it from here as it reads the paragraph-1 replacement.
+
+> **Tier 2 (session-only), in place of paragraph 4:**
+> Even held in memory, the keys are not protected from software running under your own user account: any program you run — including any other Zotero plugin — can read them. Zotero does not isolate plugins from each other.
+
 ### 1.9 How the UI communicates this
 
 Requirements for `08-ui-ux-spec.md`:
@@ -821,6 +844,23 @@ It is an *acknowledgement*, not consent-in-advance, and it suppresses nothing. I
    forces the confirmation that item 2's checkbox would otherwise skip. Turning the declaration off brings the
    free-tier warning back.
 4. **An egress log.** The plugin's own job records log, per job, exactly which provider received how many items and what scope of content. `StoredSummary.inputScope` (`07-architecture-and-data-model.md` §5.2) already captures this per summary. A researcher asked by their IRB "what did you send where" must be able to answer from the plugin's own records. This log is local only. **What v1 does not ship is a window for browsing it:** the Job Center, which would have carried that view, is deferred to v1.1 (`10-requirements-and-user-stories.md` §4 item 18; `07-architecture-and-data-model.md` §7.7.1), so in v1 the log is read out of the job records themselves and through the debug bundle (`07-architecture-and-data-model.md` §10.4, which includes recent jobs). The recording obligation above is unaffected by that deferral.
+
+> **Recorded 2026-10-23 (`P3-T16`; for the owner to confirm): how item 2 meets "always show the dialog".** `plan/04`
+> `P3-T16` step 2 says the cost dialog is always shown, and `06-summarization-and-trend-report.md` §11.4 says no paid
+> run starts without a number; item 2 lets a collection skip the routine confirmation. The two are read together as
+> follows, and `shouldOpenCostDialog` in `src/ui/dialogs/costConfirmDialog.ts` encodes it:
+>
+> 1. The dialog opens whenever `mustAskConfirmation` (`src/pipeline/shared/egressDisclosure.ts`) says to ask: no
+>    stored "don't ask again" record, a changed provider or privacy mode, the first full-text send, the Gemini
+>    free-tier warning or the declared-paid reminder, or the first-job notice.
+> 2. It also opens, whatever the stored record says, for **cost reasons item 2 never covered**: the estimate is above
+>    `summary.confirmAboveCents`, the estimate would reach a spend ceiling, or the model has no known price. The
+>    checkbox suppresses a *routine* confirmation; a confirmation forced by money is not routine.
+> 3. Only when neither applies is the dialog skipped, and even then **the number is shown**: the job's progress line
+>    carries the estimate as `research-helper-cost-skipped-notice` ("estimate; actual cost may differ", FR-24), so
+>    no run starts without a number. The checkbox is offered on every pre-run dialog (never on the dialog a
+>    reached ceiling opens); ticking it stores `routineConfirmationFor` the disclosure confirmed, which can
+>    suppress only the routine question of point 1 and none of point 2.
 
 ### 3.7 Local data the user should be able to clear
 

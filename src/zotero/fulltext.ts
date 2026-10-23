@@ -17,6 +17,13 @@
  * here only because `Zotero.Utilities` may be named nowhere else) and the port
  * object.
  *
+ * `P3-T21` added the structure reader — {@link getStructuredDocumentText},
+ * {@link narrowStructuredDocument} and {@link getDocumentStructure} — which
+ * `docs/06` §4.3's PDF section detector is built on (owner, 2026-10-23,
+ * `plan/00` §6 item 271(c)). It is the second direct `PDFWorker` call here;
+ * like the first, it writes nothing (it does not go through `Zotero.SDT`,
+ * which caches a `.zotero-sdt-cache` file).
+ *
  * ### What it may and may not call
  *
  * `docs/06` §3.3.2, **decision D-06-2**: `await attachment.attachmentText` is
@@ -79,11 +86,11 @@ export interface PdfFullText {
 }
 
 /**
- * The slice of the untyped `Zotero.PDFWorker` this module uses.
+ * The slice of the untyped `Zotero.PDFWorker` this module uses for flat text.
  *
- * `getStructuredDocumentText` is deliberately absent: `P0-T18` measured it and
- * Phase 3 owns whatever uses it, and a second consumer of the same `any` would
- * defeat the point of narrowing it in one place.
+ * `getStructuredDocumentText` is narrowed separately, by
+ * {@link structuredTextWorker} (`P3-T21`), so that a build lacking it breaks
+ * only section detection and never Tier 2 text.
  */
 interface PdfWorkerFullTextApi {
   /**
@@ -287,6 +294,294 @@ export function md5Hex(text: string): string {
   return Zotero.Utilities.Internal.md5(text, false).toLowerCase();
 }
 
+// ---------------------------------------------------------------------------
+// Structured document text — the section outline and heading blocks (P3-T21)
+// ---------------------------------------------------------------------------
+
+/**
+ * One entry of `catalog.outline`, flattened into document order.
+ *
+ * `blockIndex` is the top-level `content[]` index the entry's `ref` points
+ * into (`ref[0]`), or `null` when the worker did not anchor the entry to a
+ * block — `P0-T18` measured a native outline anchoring 4 of 23 entries.
+ */
+export interface StructuredOutlineEntry {
+  readonly title: string;
+  /** 0 for a top-level entry, 1 for its children, and so on. */
+  readonly depth: number;
+  readonly blockIndex: number | null;
+  /** The anchored block's plain text; `null` when unanchored or empty. */
+  readonly blockText: string | null;
+  /** The anchored block's first page (0-based), when it has a box. */
+  readonly pageIndex: number | null;
+}
+
+/** One top-level `content[]` block the worker classified `heading`. */
+export interface StructuredHeadingBlock {
+  readonly blockIndex: number;
+  readonly text: string;
+  readonly pageIndex: number | null;
+}
+
+/**
+ * The part of `getStructuredDocumentText`'s decoded document that `docs/06`
+ * §4.3's detector reads (owner, 2026-10-23, `plan/00` §6 item 271(c)): the
+ * outline and the heading blocks, each with its page. Plain data; no
+ * `style.bold` is read anywhere (`V-8b`: not portable).
+ */
+export interface DocumentStructure {
+  readonly schemaVersion: string | null;
+  /** `catalog.pages.length`. */
+  readonly pageCount: number;
+  /** `catalog.outline`, depth-first, in document order. */
+  readonly outline: readonly StructuredOutlineEntry[];
+  /**
+   * Top-level blocks of type `heading` whose `flowClass` is absent (running
+   * heads and footers carry `flowClass: "excluded"`), in `content[]` order.
+   */
+  readonly headingBlocks: readonly StructuredHeadingBlock[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function arrayOf(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? (value as unknown[]) : [];
+}
+
+/**
+ * A block's plain text, the way the bundled reader's own
+ * `getNestedBlockPlainText` builds it: a text node's `text`; a block whose
+ * children are all text nodes, their concatenation; otherwise the child
+ * blocks' texts joined by `\n`. Whitespace runs are then collapsed to one
+ * space, because only the words are used — to find the heading in the flat
+ * text and to label it.
+ */
+function blockPlainText(node: unknown): string {
+  const raw = (function text(n: unknown): string {
+    if (!isRecord(n)) return "";
+    if (typeof n.text === "string") return n.text;
+    const children = arrayOf(n.content);
+    if (children.every((c) => isRecord(c) && typeof c.text === "string")) {
+      return children.map((c) => (c as { text: string }).text).join("");
+    }
+    return children
+      .filter((c) => !(isRecord(c) && typeof c.text === "string"))
+      .map(text)
+      .filter((t) => t !== "")
+      .join("\n");
+  })(node);
+  return raw.replace(/\s+/gu, " ").trim();
+}
+
+/** `anchor.pageRects[0][0]`: the block's first page, 0-based. */
+function blockPageIndex(node: unknown): number | null {
+  if (!isRecord(node) || !isRecord(node.anchor)) return null;
+  const first = arrayOf(node.anchor.pageRects)[0];
+  const page = Array.isArray(first) ? (first as unknown[])[0] : undefined;
+  return typeof page === "number" && Number.isInteger(page) && page >= 0
+    ? page
+    : null;
+}
+
+/**
+ * Narrow a materialized SDT document (`{ schemaVersion, metadata, catalog,
+ * content }`, `docs/06` §3.3.5) to {@link DocumentStructure}. Pure: every
+ * field is read defensively, so a shape this build does not expect yields
+ * fewer headings rather than an exception.
+ */
+export function narrowStructuredDocument(doc: unknown): DocumentStructure {
+  const record = isRecord(doc) ? doc : {};
+  const catalog = isRecord(record.catalog) ? record.catalog : {};
+  const content = arrayOf(record.content);
+
+  const outline: StructuredOutlineEntry[] = [];
+  const visit = (entries: readonly unknown[], depth: number): void => {
+    for (const entry of entries) {
+      if (!isRecord(entry)) continue;
+      const ref = arrayOf(entry.ref);
+      const head = ref[0];
+      const blockIndex =
+        typeof head === "number" &&
+        Number.isInteger(head) &&
+        head >= 0 &&
+        head < content.length
+          ? head
+          : null;
+      const block = blockIndex === null ? undefined : content[blockIndex];
+      const blockText = block === undefined ? "" : blockPlainText(block);
+      outline.push({
+        title:
+          typeof entry.title === "string"
+            ? entry.title.replace(/\s+/gu, " ").trim()
+            : "",
+        depth,
+        blockIndex,
+        blockText: blockText === "" ? null : blockText,
+        pageIndex: block === undefined ? null : blockPageIndex(block),
+      });
+      visit(arrayOf(entry.children), depth + 1);
+    }
+  };
+  visit(arrayOf(catalog.outline), 0);
+
+  const headingBlocks: StructuredHeadingBlock[] = [];
+  content.forEach((block, blockIndex) => {
+    if (!isRecord(block) || block.type !== "heading") return;
+    if (block.flowClass !== undefined) return;
+    const text = blockPlainText(block);
+    if (text === "") return;
+    headingBlocks.push({ blockIndex, text, pageIndex: blockPageIndex(block) });
+  });
+
+  return {
+    schemaVersion:
+      typeof record.schemaVersion === "string" ? record.schemaVersion : null,
+    pageCount: arrayOf(catalog.pages).length,
+    outline,
+    headingBlocks,
+  };
+}
+
+/** The slice of `Zotero.PDFWorker` the structure reader uses. */
+interface PdfWorkerStructuredTextApi {
+  /**
+   * @param itemID - **attachment** item id (PDF, EPUB or snapshot).
+   * @returns `{ buf: ArrayBuffer }` (an SDTPack), or `null` when the file is
+   *   missing (`xpcom/pdfWorker/manager.js`).
+   */
+  getStructuredDocumentText(
+    itemID: number,
+    options?: { isPriority?: boolean; password?: string },
+  ): Promise<unknown>;
+}
+
+/** The narrowing of `Zotero.PDFWorker` for {@link getStructuredDocument}. */
+function structuredTextWorker(): PdfWorkerStructuredTextApi {
+  const candidate: unknown = Zotero.PDFWorker;
+  if (
+    !isRecord(candidate) ||
+    typeof candidate.getStructuredDocumentText !== "function"
+  ) {
+    throw new Error(
+      "Zotero.PDFWorker.getStructuredDocumentText is unavailable on this Zotero build",
+    );
+  }
+  return candidate as unknown as PdfWorkerStructuredTextApi;
+}
+
+/** `resource://zotero/document-worker/structured-document-text.js`'s reader. */
+interface SdtPackReader {
+  materialize(): Promise<unknown>;
+}
+
+/** The two exports of Zotero's bundled SDT reader module this file calls. */
+interface SdtModule {
+  openStructuredDocumentTextPack(
+    input: Uint8Array,
+    options: { inflate(bytes: Uint8Array): Uint8Array },
+  ): Promise<SdtPackReader>;
+}
+
+/** `resource://zotero/pako.js`, as `xpcom/sdt.js` uses it. */
+interface PakoModule {
+  inflateRaw(bytes: Uint8Array): Uint8Array;
+}
+
+const SDT_MODULE_URL =
+  "resource://zotero/document-worker/structured-document-text.js";
+const PAKO_MODULE_URL = "resource://zotero/pako.js";
+
+/**
+ * Evaluate one of Zotero's bundled CommonJS files and return its exports.
+ *
+ * `xpcom/sdt.js` reaches both files through `require()`, which the plugin
+ * sandbox does not have (`addon/bootstrap.js`'s `ctx` carries no loader). A
+ * subscript loaded with a `{ module, exports }` scope object gives each file
+ * exactly what its CommonJS / UMD wrapper looks for; everything else it names
+ * (`Object`, `TextDecoder`, `Uint8Array`) resolves from the sandbox global.
+ */
+function loadBundledCommonJs<T>(url: string): T {
+  const module = { exports: {} as unknown };
+  const scope = { module, exports: module.exports };
+  Services.scriptloader.loadSubScript(url, scope);
+  return module.exports as T;
+}
+
+let bundledModules:
+  { readonly sdt: SdtModule; readonly pako: PakoModule } | undefined;
+
+function sdtModules(): { readonly sdt: SdtModule; readonly pako: PakoModule } {
+  if (bundledModules === undefined) {
+    const sdt = loadBundledCommonJs<Partial<SdtModule>>(SDT_MODULE_URL);
+    const pako = loadBundledCommonJs<Partial<PakoModule>>(PAKO_MODULE_URL);
+    if (
+      typeof sdt.openStructuredDocumentTextPack !== "function" ||
+      typeof pako.inflateRaw !== "function"
+    ) {
+      throw new Error(
+        "Zotero's bundled SDT reader or pako did not load on this Zotero build",
+      );
+    }
+    bundledModules = { sdt: sdt as SdtModule, pako: pako as PakoModule };
+  }
+  return bundledModules;
+}
+
+/**
+ * The attachment's structured document text, decoded and materialized:
+ * `{ schemaVersion, metadata, catalog, content }` (`docs/06` §3.3.5), or
+ * `null` when the worker returned no pack (the file is missing).
+ *
+ * Calls `Zotero.PDFWorker.getStructuredDocumentText` **directly** and decodes
+ * the pack with Zotero's own reader module and `pako.inflateRaw`, exactly as
+ * `xpcom/sdt.js`'s `_openPack` does. Unlike `Zotero.SDT.getPack`, this writes
+ * nothing: no `.zotero-sdt-cache` file, no index row. It is one worker job per
+ * call — layout analysis of every page — so callers make it once per
+ * acquisition. Throws whatever the worker throws (non-PDF/EPUB/snapshot item,
+ * password, corrupt file); the caller decides what that means.
+ */
+export async function getStructuredDocumentText(
+  attachmentID: number,
+): Promise<unknown> {
+  const result = await structuredTextWorker().getStructuredDocumentText(
+    attachmentID,
+    {},
+  );
+  if (result === null || result === undefined) return null;
+  const buf = isRecord(result) ? result.buf : undefined;
+  // A tag test, not `instanceof`: the buffer comes from Zotero's global, and an
+  // `instanceof` against the plugin sandbox's own `ArrayBuffer` is false
+  // across compartments (the bundled reader tests the same way).
+  let bytes: Uint8Array;
+  if (Object.prototype.toString.call(buf) === "[object ArrayBuffer]") {
+    bytes = new Uint8Array(buf as ArrayBuffer);
+  } else if (ArrayBuffer.isView(buf)) {
+    bytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+  } else {
+    throw new Error(
+      "Zotero.PDFWorker.getStructuredDocumentText resolved without a pack buffer",
+    );
+  }
+  const { sdt, pako } = sdtModules();
+  const reader = await sdt.openStructuredDocumentTextPack(bytes, {
+    inflate: (chunk) => pako.inflateRaw(chunk),
+  });
+  return reader.materialize();
+}
+
+/**
+ * {@link getStructuredDocumentText}, narrowed to the outline and heading
+ * blocks `docs/06` §4.3's detector reads; `null` when there is no pack.
+ */
+export async function getDocumentStructure(
+  attachment: Zotero.Item,
+): Promise<DocumentStructure | null> {
+  const doc = await getStructuredDocumentText(attachment.id);
+  return doc === null ? null : narrowStructuredDocument(doc);
+}
+
 /**
  * Everything `acquireSource` needs from the platform, as one object, so the
  * pipeline module never names the `Zotero` global (`docs/07` §2.3).
@@ -299,5 +594,6 @@ export const zoteroFullTextPort = {
   getAttachmentText,
   getFullTextAllPages,
   getFullTextFirstPages,
+  getDocumentStructure,
   md5Hex,
 } as const;

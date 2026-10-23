@@ -304,7 +304,10 @@ nearest whole day — e.g. Phase 2's 24.25 × 1.4 = 33.95 → the published 24.2
 Phase 3's 27.5 → 39 on 2026-10-20). The Phases 0–3 subtotal's high end is the sum of the rounded
 phase tops, not the subtotal × 1.4: `docs/11` §1 does it this way (25 + 41 + 47 + 40 = 153, where
 108.75 × 1.4 = 152.25 would give 152). *Updated 2026-10-20 for `P3-T38` and `P3-T39`: the example
-read 25 + 41 + 47 + 39 = 152 against 107.75 × 1.4 = 150.85 → 151.*
+read 25 + 41 + 47 + 39 = 152 against 107.75 × 1.4 = 150.85 → 151.* *Noted 2026-10-23 (`P3-T21`
+re-estimated 0.5 → 1.5 d, `plan/00` §6 item 274(d)): the example above keeps the 2026-10-20
+figures because today's happen to agree — 25 + 41 + 47 + 41 = 154 and 109.75 × 1.4 = 153.65 → 154 —
+so they no longer show the difference; the rule is unchanged.*
 So for Phases 0–3 the cards are the measurement and `docs/11` records it.
 
 **The propagation checklist — all five sites, because naming three of them is

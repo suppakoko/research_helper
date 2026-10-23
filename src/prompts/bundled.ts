@@ -25,8 +25,11 @@
  * `createPromptRegistry` rejects a name that disagrees with the file's `id`
  * and `version`.
  *
- * Callers, none yet: `summarizeItem` (`P3-T25`), the cache key (`P3-T26`) and
- * `relevanceScreen` (`P3-T27`).
+ * Callers: `registerUI.ts` loads {@link PROMPT_VERSIONS} lazily for the
+ * startup prompt-version comparison (`P3-T26`). Still to come:
+ * `summarizeItem` (`P3-T25`), which passes {@link PROMPT_VERSIONS} and
+ * {@link PROMPT_CACHE_EPOCHS} to the summary cache, and `relevanceScreen`
+ * (`P3-T27`).
  */
 
 import chunkMapV100 from "./chunk-map.v1.0.0.md" with { type: "text" };
@@ -62,7 +65,17 @@ export const PROMPT_REGISTRY: PromptRegistry =
 
 /**
  * Each prompt's active version string (`docs/12` §17.4's
- * `PROMPT_VERSIONS[promptId]`). `P3-T26` keys and tags the cache on these.
+ * `PROMPT_VERSIONS[promptId]`). The summary cache records it in every entry's
+ * `meta` and tags by its `MAJOR.MINOR` line; the startup prompt-version
+ * comparison stores it (`P3-T26`).
  */
 export const PROMPT_VERSIONS: Readonly<Record<PromptId, string>> =
   PROMPT_REGISTRY.versions;
+
+/**
+ * Each prompt's active `cacheEpoch`: the summary cache key's prompt component,
+ * so a PATCH bump keeps cached summaries (`docs/12` §17.2 and §17.4, corrected
+ * 2026-10-23, owner, `plan/00` §6 item 273(a)).
+ */
+export const PROMPT_CACHE_EPOCHS: Readonly<Record<PromptId, number>> =
+  PROMPT_REGISTRY.cacheEpochs;

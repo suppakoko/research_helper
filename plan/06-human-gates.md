@@ -58,8 +58,8 @@ in this plan.
 | Before Phase 2 | G-16 | Decide the preprint/published merge policy | Dedup engine | Product-owner turnaround |
 | Phase 2 | G-17 | Label the ≥ 200-pair deduplication corpus | Phase 2 DoD | Days of the human's own time |
 | Phase 3 | G-18 | Enter API keys into the prefs pane | Phase 3 DoD, all LLM features | Minutes |
-| Phase 3 | G-19 | Accept the residual key-storage risk statement | Phase 3 ship | Minutes |
-| Phase 3 | G-20 | Decide whether the spend ceilings ship non-zero | Phase 3 prefs defaults | Product-owner turnaround |
+| Phase 3 | G-19 | Accept the residual key-storage risk statement | Phase 3 ship | **ACCEPTED 2026-10-23** — the five paragraphs, plus a tier-2 sentence shown in place of paragraph 1 (`plan/00` §6 item 274(a)) |
+| Phase 3 | G-20 | Decide whether the spend ceilings ship non-zero | Phase 3 prefs defaults | **DECIDED 2026-10-23** — the session ceiling ships at 500 cents (US $5), the per-run ceiling stays 0 (`plan/00` §6 item 271(b)); every later change is still this gate |
 | Phase 3 | G-21 | Approve the first real summarization job's cost | Phase 3 DoD | Minutes |
 | Phase 3 | G-22 | Decide the R-19b outcome if the detector misses its threshold | Phase 3 ship, Phase 4 shape | Product-owner turnaround |
 | Phase 4 | G-23 | Curate the 3 evaluation collections and expected themes | Phase 4 DoD | Days of domain time |
@@ -1047,6 +1047,15 @@ Never write a key into a file, a fixture, a pref, a log or a commit — `docs/09
 
 ### G-19 — Accept the residual key-storage risk statement
 
+> **ACCEPTED 2026-10-23 (owner, `plan/00` §6 item 274(a)).** The owner accepted `docs/09` §1.8's
+> five residual-risk paragraphs, which ship verbatim as `research-helper-prefs-risk-1` … `-5` (a unit
+> test compares them with `docs/09`). Because paragraph 1 ("encrypted using your operating system's
+> credential store") is untrue under tier 2, the owner also decided a tier-2 sentence — keys held in
+> memory only, written nowhere, gone when Zotero closes — which `docs/09` §1.8 now carries and the pane
+> shows **in place of paragraph 1** whenever `secretBackend` is `session`
+> (`research-helper-prefs-risk-1-session`). Its Korean waits on `G-41`. The text below is the gate as
+> it was posed.
+
 **Blocks:** Phase 3's ship; `docs/09` §7's documentation `[BLOCKER]`.
 
 **What the human must do.** Read `docs/09` §1.8's verbatim residual-risk statement
@@ -1071,6 +1080,13 @@ be reproduced verbatim, not paraphrased — and ask for explicit acceptance.
 ---
 
 ### G-20 — Decide whether the spend ceilings ship non-zero, and approve every later change
+
+> **DECIDED 2026-10-23 (owner, `plan/00` §6 item 271(b)).** `run.maxSessionSpendCents` ships at
+> **500** (US $5.00), so a first run can stop itself; `run.maxSpendCents` stays **0** (off). `docs/07`
+> §8.5 moved first, then `src/prefs/schema.ts` and `addon/prefs.js` (`P3-T16`). The first half of the
+> gate is closed; the second half stands — **every later change to a ceiling is still this gate**, and
+> a mid-run "continue" raises a ceiling for that run only, never the preference. The text below is the
+> gate as it was posed.
 
 **Blocks:** Phase 3's prefs defaults; the release (`docs/10` §5 question 6's
 residual half is still open).

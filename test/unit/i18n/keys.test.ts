@@ -19,6 +19,10 @@ import { ANTHROPIC_DISPLAY_NAME_KEY } from "../../../src/llm/anthropic/anthropic
 import { GEMINI_DISPLAY_NAME_KEY } from "../../../src/llm/gemini/geminiProvider";
 import { OPENAI_DISPLAY_NAME_KEY } from "../../../src/llm/openai/openAiProvider";
 import { OPENROUTER_DISPLAY_NAME_KEY } from "../../../src/llm/openrouter/openRouterProvider";
+import {
+  COST_DIALOG_L10N,
+  USAGE_L10N,
+} from "../../../src/ui/dialogs/costConfirmDialog";
 import { mockSettings } from "../../helpers/mockLLM";
 
 /**
@@ -487,7 +491,7 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
     new StructuredOutputError("openai", "m", "x"),
   ].map((error) => error.messageKey);
 
-  it("ships the four LLM messageKeys and defers only TTS, budget and policy", () => {
+  it("ships the four LLM messageKeys and defers only TTS and policy (budget shipped with P3-T16)", () => {
     expect(llmKeys).toEqual([
       "rh-error-llm",
       "rh-error-context-length",
@@ -500,7 +504,6 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
     expect(sorted(read("DEFERRED_ERROR_MESSAGE_IDS"))).toEqual(
       sorted([
         new TTSError("x").messageKey,
-        new BudgetExceededError("x").messageKey,
         new PolicyViolationError("x").messageKey,
       ]),
     );
@@ -642,6 +645,59 @@ describe("src/i18n/keys.ts — P3-T15's two egress notices (docs/09 §3.6)", () 
   });
 });
 
+describe("src/i18n/keys.ts — P3-T16's budget error, cost dialog and Usage readout", () => {
+  const budget = new BudgetExceededError("x").messageKey;
+  const ids = [
+    budget,
+    ...Object.values(COST_DIALOG_L10N),
+    ...Object.values(USAGE_L10N),
+  ];
+  const unique = [...new Set(ids)];
+
+  it("ships rh-error-budget as an error id that takes the limit and the spend", () => {
+    expect(budget).toBe("rh-error-budget");
+    expect(read("ERROR_MESSAGE_IDS")).toContain(budget);
+    expect(read("MAIN_WINDOW_MESSAGE_IDS")).toContain(budget);
+    expect(read("ARGUMENT_MESSAGE_IDS")).toContain(budget);
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).not.toContain(budget);
+  });
+
+  it("declares all twenty-nine on the main-window surface, and only the budget id among the errors", () => {
+    expect(unique).toHaveLength(29);
+    expect(notIn(unique, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(unique, read("ERROR_MESSAGE_IDS"))).toEqual([budget]);
+  });
+
+  it("lists exactly the nineteen that take arguments as argument messages", () => {
+    expect(sharedBy(unique, read("ARGUMENT_MESSAGE_IDS"))).toHaveLength(19);
+    for (const id of [
+      COST_DIALOG_L10N.title,
+      COST_DIALOG_L10N.usageEstimated,
+      COST_DIALOG_L10N.acknowledgeUnpriced,
+      COST_DIALOG_L10N.dontAskAgain,
+      COST_DIALOG_L10N.run,
+      COST_DIALOG_L10N.cancel,
+      COST_DIALOG_L10N.continue,
+      COST_DIALOG_L10N.stop,
+      USAGE_L10N.title,
+      USAGE_L10N.limitOff,
+    ]) {
+      expect(read("ARGUMENT_MESSAGE_IDS")).not.toContain(id);
+    }
+  });
+
+  it("puts all twenty-nine on KO_PRESENT once the owner reviewed the Korean (2026-10-23, G-41), never pending", () => {
+    expect(notIn(unique, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(unique, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+
+  it("still defers rh-error-policy: the cost dialog renders no refusal (P3-T15 finding 4)", () => {
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toContain(
+      new PolicyViolationError("x").messageKey,
+    );
+  });
+});
+
 describe("src/i18n/keys.ts — the Gemini declared-paid reminder (plan/00 §6 item 269(b))", () => {
   const reminder = keys.L10N_EGRESS_GEMINI_DECLARED_PAID;
 
@@ -679,5 +735,58 @@ describe("src/i18n/keys.ts — P3-T03's degradation dialog (docs/09 §1.7)", () 
   it("puts all six on KO_PRESENT once the owner reviewed the Korean (2026-10-22, G-41), never pending", () => {
     expect(notIn(dialog, read("KO_PRESENT"))).toEqual([]);
     expect(sharedBy(dialog, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — P3-T04's LLM provider blocks, tier-2 badge and restore notice", () => {
+  // `PREFERENCES_L10N` in src/ui/prefs/preferencesPane.ts is typed against
+  // these; test/unit/ui/preferencesPane.test.ts ties the pane to them.
+  const pane = [
+    "research-helper-prefs-backend-session",
+    "research-helper-prefs-restore-note",
+    "research-helper-prefs-providers",
+    "research-helper-prefs-active-provider",
+    "research-helper-prefs-api-key",
+    "research-helper-prefs-model",
+    "research-helper-prefs-base-url",
+    "research-helper-prefs-base-url-saved",
+    "research-helper-prefs-base-url-default",
+    "research-helper-prefs-base-url-not-https",
+    "research-helper-prefs-base-url-trailing-slash",
+    "research-helper-prefs-base-url-invalid",
+    "research-helper-prefs-gemini-paid-tier",
+    "research-helper-prefs-gemini-paid-tier-note",
+  ];
+
+  it("declares all fourteen on the main-window surface, taking no argument and outside the error ids", () => {
+    expect(notIn(pane, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(pane, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(pane, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("puts all fourteen on KO_PRESENT once the owner reviewed the Korean (2026-10-23, G-41), never pending", () => {
+    expect(notIn(pane, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(pane, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — docs/09 §1.8's tier-2 replacements (owner, 2026-10-23, items 274(a) and 275(b))", () => {
+  // The pane shows them in place of research-helper-prefs-risk-1 and -risk-4
+  // under the session badge; test/unit/ui/preferencesPane.test.ts ties them
+  // to docs/09.
+  const ids = [
+    "research-helper-prefs-risk-1-session",
+    "research-helper-prefs-risk-4-session",
+  ];
+
+  it("declares both on the main-window surface, taking no argument and outside the error ids", () => {
+    expect(notIn(ids, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(ids, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(ids, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("puts both on KO_PRESENT once the owner reviewed the Korean (2026-10-23, G-41, item 275), never pending", () => {
+    expect(notIn(ids, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(ids, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 });

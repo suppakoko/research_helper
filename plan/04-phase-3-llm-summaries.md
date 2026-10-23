@@ -65,8 +65,11 @@ promises tier 3; the open line on `P3-T03` covers the documents.)
 **Risks retired.** R-4, R-5, R-6 (partly), **R-9** (retired by design under D5), **R-19** (quality
 gate + cost preview), **R-19b** (detector validated, or `auto` degraded to whole-document chunking).
 
-**Effort.** **28.5 developer-days over 39 cards** (§3), so the published band is
-**28.5–40 d** (28.5 × 1.4 = 39.9 → 40). *Updated 2026-10-20:* `P3-T38` and `P3-T39` (0.5 d each,
+**Effort.** **29.5 developer-days over 39 cards** (§3), so the published band is
+**29.5–41 d** (29.5 × 1.4 = 41.3 → 41). *Updated 2026-10-23:* `P3-T21` was re-estimated 0.5 → 1.5 d
+(owner, `plan/00` §6 item 274(d)), moving it from 28.5–40 d; propagated the same day to the five
+places in `plan/README.md` §7, with the sums re-read from the cards by script, and
+`npm run index:derive` was run. *Updated 2026-10-20:* `P3-T38` and `P3-T39` (0.5 d each,
 `plan/00` §6 items 244 and 245) moved it from 27.5–39 d over 37 cards; the figure before the
 re-carding was 23.5–33 d over 31 cards. Propagated the same day to the five places in
 `plan/README.md` §7, and `npm run index:derive` was run (`plan/reports/cards-P3-T38-T39.md`; the
@@ -186,7 +189,7 @@ And two that `docs/11` states as deliverables but which gate the phase as hard:
 | `P3-T18` | Text acquisition tiers 1–2 (abstract, attachment text) | 0.5 | none |
 | `P3-T19` | Tiers 3–4, cleaning pass, OCR probe, language detection | 0.75 | none |
 | `P3-T20` | The 40-PDF IMRaD fixture set with ground-truth labels | 1.75 | **Yes** |
-| `P3-T21` | IMRaD section detector | 0.5 | none |
+| `P3-T21` | IMRaD section detector | 1.5 | none |
 | `P3-T22` | Detector accuracy harness, 85 % gate, degrade switch | 0.5 | **Yes** |
 | `P3-T23` | Chunker: section-aware, flat, and single-shot paths | 0.75 | none |
 | `P3-T24` | Prompt registry with versioned prompt files | 0.5 | none |
@@ -205,7 +208,7 @@ And two that `docs/11` states as deliverables but which gate the phase as hard:
 | `P3-T37` | Detect a keyring-less Linux backend (gate `G-09`) | 0.25 | **Yes** |
 | `P3-T38` | Keep an LLM 429's body; never retry a parse failure | 0.5 | none |
 | `P3-T39` | Store money preferences as whole cents | 0.5 | none |
-| | **Total** | **28.5** | 8 gates |
+| | **Total** | **29.5** | 8 gates |
 
 **Entry points** (no `Depends on`): `P3-T01`, `P3-T05`, `P3-T24`, `P3-T32`, `P3-T36`. The owner
 chose `P3-T01` and `P3-T24` (without its old step 7) to start first; `P3-T32` is the next natural
@@ -2002,7 +2005,7 @@ is not in the figure.
 | **Blocks** | `P3-T22`, `P3-T23` |
 | **Retires** | part of `R-19b` |
 | **Implements** | part of `FR-22` |
-| **Estimate** | 0.5 d |
+| **Estimate** | 1.5 d |
 | **Human gate** | none |
 
 **Goal.** Sections are labelled where the source says so (JATS) and heuristically where it does not
@@ -2060,6 +2063,15 @@ npm run typecheck && npm run test:unit -- pipeline/imrad
 ```
 
 **Notes.** This card does not claim the detector is good enough; `P3-T22` measures it.
+
+*Re-estimated 2026-10-23 (owner, `plan/00` §6 item 274(d)): 0.5 → 1.5 d.* The owner ruled for the
+outline path (item 271(c)) and the executing agent measured what it cost (`plan/reports/P3-T21.md`):
+about 0.5 d for a platform reader the plugin did not have (a direct `getStructuredDocumentText`
+call, the pack decoded with Zotero's bundled reader and pako because the sandbox has no `require()`,
+and a real-Zotero measurement spec), about 0.5 d for placing each outline or heading-block entry in
+the cleaned flat text, and about 0.5 d for the offsets, the model and document changes, JATS
+labelling and the tests. The structure read stays the direct call, which writes nothing into the
+attachment folder (item 274(d)).
 
 ---
 
@@ -3660,10 +3672,11 @@ dollars; the conversion from cents is theirs.
 
 | | Developer-days |
 |---|---|
-| Sum of the 39 task cards (2026-10-20, after `P3-T38` and `P3-T39`) | **28.5** |
+| Sum of the 39 task cards (2026-10-23, after `P3-T21`'s re-estimate) | **29.5** |
+| Sum of the 39 task cards (2026-10-20, after `P3-T38` and `P3-T39`) | 28.5 |
 | Sum of the 37 task cards (2026-10-20, the re-carding) | 27.5 |
 | Previous sum (31 cards, 2026-09-09) | 23.5 |
-| `docs/11` §1 Phase 3 band, published 2026-10-20 | **28.5–40** (28.5 × 1.4 = 39.9 → 40; was 27.5–39 earlier that day) |
+| `docs/11` §1 Phase 3 band, published 2026-10-23 | **29.5–41** (29.5 × 1.4 = 41.3 → 41; was 28.5–40 from 2026-10-20, and 27.5–39 earlier that day) |
 
 **Re-estimated 2026-10-20, with the revision of every card** (`plan/00` §6 item 234). Three
 movements:
@@ -3695,6 +3708,13 @@ HTTP client keeps an LLM 429's body and never retries a parse failure) and `P3-T
 from the cards' `Estimate` rows by script. Both are ungated, so the gate count stays 8. New edges:
 `P3-T05` → `P3-T38` → `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`; `P3-T32` → `P3-T39` → `P3-T16`.
 Propagated the same day to the five places in `plan/README.md` §7 (`plan/reports/cards-P3-T38-T39.md`).
+
+**`P3-T21` re-estimated 2026-10-23, 0.5 → 1.5 d** (owner, `plan/00` §6 item 274(d)), after the owner
+ruled for the outline-based detector (item 271(c)) and the card's agent measured its cost
+(`plan/reports/P3-T21.md`; the card's `Notes` carry the breakdown). 28.5 − 0.5 + 1.5 = **29.5 d**
+over 39 cards, re-read from the cards' `Estimate` rows by script; 29.5 × 1.4 = 41.3 → 41. The card
+is ungated, so the gate count stays 8, and no edge changed. Propagated the same day to the five places
+in `plan/README.md` §7.
 
 The estimates exclude review latency, waiting for key approvals, and the owner's time at gates
 (`G-12`'s adjudication in particular), per `plan/README.md` §7.

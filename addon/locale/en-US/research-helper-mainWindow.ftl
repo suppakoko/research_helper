@@ -255,7 +255,8 @@ research-helper-progress-headline = Research Helper
 ## `plan/README.md` §5 rule 2 forbids adding them here on spec: `rh-error-tts`,
 ## `rh-error-budget` and `rh-error-policy` arrive with the cards that can throw
 ## them. Until 2026-10-20 the list also held the four LLM keys, which `P3-T05`
-## added at the end of this block.
+## added at the end of this block. *(Updated 2026-10-23, `P3-T16`:
+## `rh-error-budget` left the list, and its entry closes this block; two remain.)*
 ## `src/i18n/keys.ts` exports that list as `DEFERRED_ERROR_MESSAGE_IDS` and
 ## `test/integration/l10n.spec.ts` asserts it is exactly the set missing, so a
 ## new error class cannot be added without this file noticing.
@@ -346,6 +347,12 @@ rh-error-output-truncated = The summary was cut off by the output length limit o
 # "Balanced" are the privacy-mode menu's labels (`docs/08` §7.3).
 # `$model` is the model ID, untranslated (`docs/08` §10.3).
 rh-error-privacy-routing = OpenRouter has no provider for { $model } that meets your privacy mode. Choose a different model, or change the privacy mode from Strict to Balanced if it is set to Strict. Balanced allows providers that keep your text for a time and sends PDF full text, but still refuses providers that may train on your data.
+# `BudgetExceededError` (P3-T16; docs/07 §10.1, §4.3's note "BudgetGuard, as
+# built"): a spend ceiling was reached, and the job paused rather than stopped
+# (owner, 2026-10-20, plan/00 §6 item 234). `$limit` and `$spent` are dollar
+# amounts the caller formatted with Intl (docs/08 §10.3). The question that
+# follows ("Continue" / "Stop") is the cost dialog's ceiling moment.
+rh-error-budget = Paused at the { $limit } spending limit. { $spent } is spent so far, and summaries already made are kept.
 
 
 ## The preference pane — literature-source credentials (docs/08 §7.3–7.5,
@@ -369,6 +376,11 @@ rh-error-privacy-routing = OpenRouter has no provider for { $model } that meets 
 ## markers dropped (`docs/09` §1.9 item 4, `docs/08` §7.5 rule 8: "verbatim and
 ## visible, not behind a link"). `test/unit/ui/preferencesPane.test.ts` reads
 ## §1.8 off disk and fails if a word here differs. Edit `docs/09` first.
+## `-risk-1-session` is §1.8's tier-2 sentence (2026-10-23), held to the same
+## rule; the pane shows it instead of `-risk-1` under the session-only badge.
+## `-risk-4-session` is §1.8's tier-2 replacement for paragraph 4 (2026-10-23,
+## item 275(b)), held to the same rule; the pane shows it instead of `-risk-4`
+## under the same badge.
 ##
 ## ### The badge wording is load-bearing, not decorative
 ##
@@ -394,6 +406,14 @@ research-helper-prefs-risk-2 = When that store is Windows Credential Manager, th
 research-helper-prefs-risk-3 = When the pane says the key is stored in Zotero's own database instead, that protection does not apply: the key is inside your Zotero profile, so it travels with a copy or a backup of it, and it is protected only by Zotero's primary password if you have set one. Set one, or do not store keys on that machine.
 research-helper-prefs-risk-4 = It does not protect them from software running under your own user account. Any program you run — including any other Zotero plugin — can decrypt them, because your operating system will decrypt them for anything running as you. Zotero does not isolate plugins from each other.
 research-helper-prefs-risk-5 = Treat these keys as you would a password saved in your browser. Set spending limits with your provider, and rotate any key you think may have been exposed.
+# docs/09 §1.8's tier-2 sentence, verbatim: the pane shows it in place of
+# -risk-1 while `secretBackend` is `session` (owner, 2026-10-23, plan/00 §6
+# item 274(a); gate G-19). Edit docs/09 first.
+research-helper-prefs-risk-1-session = Your API keys are held in memory only, for this Zotero session. They are written nowhere — not to your operating system's credential store, not to Zotero's login manager, not to disk — and they are gone when Zotero closes, so you will need to enter them again after a restart.
+# docs/09 §1.8's tier-2 replacement for paragraph 4, verbatim: the pane shows it
+# in place of -risk-4 while `secretBackend` is `session` (owner, 2026-10-23,
+# plan/00 §6 item 275(b)). Edit docs/09 first.
+research-helper-prefs-risk-4-session = Even held in memory, the keys are not protected from software running under your own user account: any program you run — including any other Zotero plugin — can read them. Zotero does not isolate plugins from each other.
 
 research-helper-prefs-remove-all =
     .label = Remove all stored keys
@@ -451,6 +471,36 @@ research-helper-prefs-test-forbidden = The service refused the request (HTTP 403
 research-helper-prefs-test-absent = Store a key before testing it.
 research-helper-prefs-test-unavailable = No credential store is available, so there is no key to test.
 
+## The LLM provider blocks, tier 2's badge and the restore notice (P3-T04;
+## docs/08 §7.3, docs/09 §1.9 items 3 and 8, docs/03 §14.4)
+##
+## `-backend-session` is docs/09 §1.9 item 3's tier-2 wording, verbatim. The
+## base-URL messages answer a write the pane refused or made; a refused value
+## is never stored, so each refusal says the previous setting is kept. The
+## paid-tier checkbox is a declaration only the user makes (docs/07 §8.5
+## `gemini.paidTier`; owner, plan/00 §6 items 269(b) and 270): its label says
+## so, and its note says what turning it on changes (docs/09 §3.5, §3.6 item 3).
+
+research-helper-prefs-backend-session = Not saved between sessions
+research-helper-prefs-restore-note = No API key is stored on this computer, but this Zotero data folder already holds Research Helper data. If you restored or copied the folder from another computer, enter your keys again: API keys are stored in this computer's credential store and do not travel with your Zotero data folder.
+research-helper-prefs-providers = LLM providers
+research-helper-prefs-active-provider =
+    .value = Active provider
+research-helper-prefs-api-key =
+    .value = API key
+research-helper-prefs-model =
+    .value = Model
+research-helper-prefs-base-url =
+    .value = Base URL
+research-helper-prefs-base-url-saved = Saved. Requests to this provider now go to this address.
+research-helper-prefs-base-url-default = Cleared. Requests to this provider go to its own address, shown in the empty field.
+research-helper-prefs-base-url-not-https = Not saved: the address must start with https://. The previous setting is kept.
+research-helper-prefs-base-url-trailing-slash = Not saved: remove the slash at the end of the address. The previous setting is kept.
+research-helper-prefs-base-url-invalid = Not saved: enter a full address such as https://proxy.example/v1, without a user name, password, ? or #. The previous setting is kept.
+research-helper-prefs-gemini-paid-tier =
+    .label = I declare that this key's Google Cloud project is billing-linked (Google's paid tier)
+research-helper-prefs-gemini-paid-tier-note = This is your own statement: Research Helper cannot check a key's tier, so this stays off unless you turn it on. On Google's free tier, what you send may be used to improve Google products and read by human reviewers. While this is on, Gemini models are allowed in every privacy mode, and every job still shows a reminder that the key is marked as paid.
+
 
 ## The import-path preference (P2-T18; docs/01 §6.3 item 3, docs/07 §8.5, §12.1)
 ##
@@ -507,6 +557,91 @@ research-helper-egress-gemini-free-tier = This Google API key appears to be on t
 # docs/09 §3.6 item 3's extension, verbatim (edit docs/09 first), and is shown
 # on every such job, with no way to turn it off.
 research-helper-egress-gemini-declared-paid = This Google API key is marked as a paid key in Research Helper's settings. If it is actually on the free tier, Google may use the content you send to improve its products.
+
+
+## The cost confirmation dialog and the Usage readout (P3-T16; docs/06 §5.4,
+## docs/10 FR-24, docs/09 §3.6, docs/06 §11.4)
+##
+## The dialog is `addon/content/costConfirm.xhtml`; every id is placed by
+## `addon/content/costConfirm.js` from the model `src/ui/dialogs/costConfirmDialog.ts`
+## builds (`COST_DIALOG_L10N`). Money, token counts and dates arrive formatted
+## with Intl over the application locale (docs/08 §10.3): `$cost`, `$limit`,
+## `$spent`, `$raised`, `$threshold`, `$tokens`, `$input`, `$output`, `$date`
+## are strings. `$ceiling` is `run` or `session` and `$mode` is `strict`,
+## `balanced` or `full`, both selectors only. `$provider`, `$host` and `$model`
+## are names, never translated. FR-24 requires the words "estimate; actual cost
+## may differ"; the egress notices of the section above are shown in the same
+## dialog, never in a second one.
+
+research-helper-cost-title = Research Helper — estimated cost
+research-helper-cost-items = Papers: { $items } · with full text: { $fullText } · abstract only: { $abstract } · already summarized: { $cached } · no text to send: { $metadata }
+research-helper-cost-destination =
+    Sent to { $provider } at { $host }, model { $model }. Privacy mode: { $mode ->
+        [strict] Strict
+        [full] Full
+       *[balanced] Balanced
+    }.
+research-helper-cost-calls =
+    { $calls ->
+        [one] 1 call to the model
+       *[other] { $calls } calls to the model
+    }
+research-helper-cost-input = Estimated input: about { $tokens } tokens
+research-helper-cost-output = Estimated output: up to { $tokens } tokens
+research-helper-cost-total = Estimated cost: about { $cost }
+research-helper-cost-unpriced = The price of { $model } is not known, so this run's cost cannot be estimated.
+research-helper-cost-disclaimer = This is an estimate; actual cost may differ. Prices as of { $date }.
+research-helper-cost-above-threshold = This is above your { $threshold } confirmation threshold.
+research-helper-cost-acknowledge =
+    .label = I understand this run may cost about { $cost }.
+research-helper-cost-acknowledge-unpriced =
+    .label = I understand that the cost of this run is not known.
+research-helper-cost-downgrade =
+    .label = Use abstracts instead (about { $cost })
+research-helper-cost-downgrade-preselected = This run has more than { $max } papers, so abstracts are selected. Clear the box to send full text.
+research-helper-cost-ceiling-preflight =
+    { $ceiling ->
+        [session] This estimate would pass your spending limit for this Zotero session, { $limit }, of which { $spent } is already spent. Running raises that limit to { $raised } for this run only.
+       *[run] This estimate would pass your spending limit per run, { $limit }. Running raises that limit to { $raised } for this run only.
+    }
+research-helper-cost-ceiling-reached =
+    { $ceiling ->
+        [session] Paused at your spending limit for this Zotero session, { $limit }. { $spent } is spent so far this session, and every summary already made is kept. Continue raises the limit to { $raised } for this run only.
+       *[run] Paused at your spending limit per run, { $limit }. { $spent } is spent so far in this run, and every summary already made is kept. Continue raises the limit to { $raised } for this run only.
+    }
+research-helper-cost-usage-job =
+    This job so far: { $calls ->
+        [one] 1 call
+       *[other] { $calls } calls
+    }, { $input } input and { $output } output tokens, { $cost }.
+research-helper-cost-usage-session =
+    This Zotero session: { $calls ->
+        [one] 1 call
+       *[other] { $calls } calls
+    }, { $input } input and { $output } output tokens, { $cost }.
+research-helper-cost-usage-estimated = Some of these figures are estimates, because a provider did not report its usage or a price was not known.
+research-helper-cost-dont-ask =
+    .label = Don't ask again for this collection
+research-helper-cost-run =
+    .label = Run
+research-helper-cost-cancel =
+    .label = Cancel
+research-helper-cost-continue =
+    .label = Continue
+research-helper-cost-stop =
+    .label = Stop
+# The job's progress line when the dialog did not open (docs/09 §3.6's dated
+# note of 2026-10-23): the number is still shown.
+research-helper-cost-skipped-notice =
+    Estimated cost: about { $cost } for { $calls ->
+        [one] 1 call
+       *[other] { $calls } calls
+    }. This is an estimate; actual cost may differ.
+# The preference pane's Usage section (P3-T16 step 6). The session's figures
+# reuse research-helper-cost-usage-session above.
+research-helper-prefs-usage = Usage
+research-helper-prefs-usage-limit = Spending limit for this Zotero session: { $limit }. It resets when Zotero restarts.
+research-helper-prefs-usage-limit-off = No spending limit is set for this Zotero session.
 
 
 ## The key-storage degradation dialog (P3-T03; docs/09 §1.7, gate G-10)

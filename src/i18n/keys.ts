@@ -239,6 +239,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // `PrivacyRoutingError`, OpenRouter's guardrail 404 (owner, 2026-10-21,
   // plan/00 §6 item 262(c); docs/07 §10.1).
   "rh-error-privacy-routing",
+  // `BudgetExceededError`, a spend ceiling reached: the job pauses (P3-T16;
+  // owner, 2026-10-20, plan/00 §6 item 234; docs/07 §10.1).
+  "rh-error-budget",
 
   // The preference pane's literature-source credential blocks (docs/08 §7.3,
   // docs/09 §1.8–1.9; P1-T44). On *this* surface rather than a fourth
@@ -260,6 +263,14 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-prefs-risk-3",
   "research-helper-prefs-risk-4",
   "research-helper-prefs-risk-5",
+  // docs/09 §1.8's tier-2 sentence, shown in place of paragraph 1 while
+  // `secretBackend` is `session` (owner, 2026-10-23, plan/00 §6 item 274(a)).
+  // No argument.
+  "research-helper-prefs-risk-1-session",
+  // docs/09 §1.8's tier-2 replacement for paragraph 4, shown in its place
+  // while `secretBackend` is `session` (owner, 2026-10-23, plan/00 §6 item
+  // 275(b)). No argument.
+  "research-helper-prefs-risk-4-session",
   "research-helper-prefs-remove-all",
   "research-helper-prefs-remove-all-done",
   "research-helper-prefs-ncbi",
@@ -286,6 +297,22 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-prefs-test-forbidden",
   "research-helper-prefs-test-absent",
   "research-helper-prefs-test-unavailable",
+  // P3-T04: tier 2's badge (docs/09 §1.9 item 3), the restore notice (item 8),
+  // and the LLM provider blocks (docs/08 §7.3). None takes an argument.
+  "research-helper-prefs-backend-session",
+  "research-helper-prefs-restore-note",
+  "research-helper-prefs-providers",
+  "research-helper-prefs-active-provider",
+  "research-helper-prefs-api-key",
+  "research-helper-prefs-model",
+  "research-helper-prefs-base-url",
+  "research-helper-prefs-base-url-saved",
+  "research-helper-prefs-base-url-default",
+  "research-helper-prefs-base-url-not-https",
+  "research-helper-prefs-base-url-trailing-slash",
+  "research-helper-prefs-base-url-invalid",
+  "research-helper-prefs-gemini-paid-tier",
+  "research-helper-prefs-gemini-paid-tier-note",
   // P2-T18 step 11: the `useTranslators` checkbox's label and slower-path
   // tooltip, for `P3-T04`'s pane to bind (docs/08 §7.3).
   "research-helper-prefs-use-translators",
@@ -303,6 +330,37 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // (owner, 2026-10-22, plan/00 §6 item 269(b)). See
   // L10N_EGRESS_GEMINI_DECLARED_PAID.
   "research-helper-egress-gemini-declared-paid",
+  // P3-T16: the cost confirmation dialog (docs/06 §5.4, docs/10 FR-24,
+  // docs/09 §3.6) and the preference pane's Usage section. See
+  // COST_DIALOG_L10N and USAGE_L10N in src/ui/dialogs/costConfirmDialog.ts.
+  "research-helper-cost-title",
+  "research-helper-cost-items",
+  "research-helper-cost-destination",
+  "research-helper-cost-calls",
+  "research-helper-cost-input",
+  "research-helper-cost-output",
+  "research-helper-cost-total",
+  "research-helper-cost-unpriced",
+  "research-helper-cost-disclaimer",
+  "research-helper-cost-above-threshold",
+  "research-helper-cost-acknowledge",
+  "research-helper-cost-acknowledge-unpriced",
+  "research-helper-cost-downgrade",
+  "research-helper-cost-downgrade-preselected",
+  "research-helper-cost-ceiling-preflight",
+  "research-helper-cost-ceiling-reached",
+  "research-helper-cost-usage-job",
+  "research-helper-cost-usage-session",
+  "research-helper-cost-usage-estimated",
+  "research-helper-cost-dont-ask",
+  "research-helper-cost-run",
+  "research-helper-cost-cancel",
+  "research-helper-cost-continue",
+  "research-helper-cost-stop",
+  "research-helper-cost-skipped-notice",
+  "research-helper-prefs-usage",
+  "research-helper-prefs-usage-limit",
+  "research-helper-prefs-usage-limit-off",
   // P3-T03: the key-storage degradation dialog (docs/09 §1.7, gate G-10).
   // See SECRET_BACKEND_DIALOG_L10N in src/ui/dialogs/secretBackendDialog.ts.
   "research-helper-secret-backend-title",
@@ -730,6 +788,9 @@ export const ERROR_MESSAGE_IDS = [
   // OpenRouter's guardrail 404 by `openRouterGuardrailError` in
   // `src/llm/openrouter/mapper.ts`.
   "rh-error-privacy-routing",
+  // P3-T16 (2026-10-23): `BudgetExceededError`, thrown by the budget guard's
+  // reservation (`createBudgetGuard` in src/pipeline/shared/budget.ts).
+  "rh-error-budget",
 ] as const satisfies readonly MainWindowMessageId[];
 
 /**
@@ -739,7 +800,9 @@ export const ERROR_MESSAGE_IDS = [
  * check that goes with them. Seven until 2026-10-20, when `P3-T05` moved the
  * four LLM keys (`rh-error-llm`, `rh-error-context-length`,
  * `rh-error-content-filter`, `rh-error-structured-output`) to
- * {@link ERROR_MESSAGE_IDS} with their `en-US` strings; three since.
+ * {@link ERROR_MESSAGE_IDS} with their `en-US` strings; three since, and two
+ * since 2026-10-23, when `P3-T16` moved `rh-error-budget` there with the budget
+ * guard that throws it.
  *
  * Listed rather than ignored so the gap is asserted: `plan/README.md` §5 rule 2
  * forbids adding strings this card does not cover, and
@@ -750,7 +813,6 @@ export const ERROR_MESSAGE_IDS = [
  */
 export const DEFERRED_ERROR_MESSAGE_IDS = [
   "rh-error-tts",
-  "rh-error-budget",
   "rh-error-policy",
 ] as const;
 
@@ -822,6 +884,9 @@ export const KO_PENDING_REVIEW = [
   "research-helper-prefs-risk-3",
   "research-helper-prefs-risk-4",
   "research-helper-prefs-risk-5",
+  // `research-helper-prefs-risk-1-session` left this list on 2026-10-23: the
+  // owner reviewed its Korean (`G-41`, plan/00 §6 item 275(a)), so it is on
+  // KO_PRESENT with `research-helper-prefs-risk-4-session`.
   "research-helper-prefs-remove-all",
   "research-helper-prefs-remove-all-done",
   "research-helper-prefs-ncbi",
@@ -1021,6 +1086,57 @@ export const KO_PRESENT = [
   "research-helper-secret-backend-none",
   "research-helper-secret-backend-accept",
   "research-helper-secret-backend-decline",
+  // P3-T04's fourteen pane strings and P3-T16's twenty-nine (the budget error,
+  // the cost dialog and the Usage section): Korean drafted by the coordinator
+  // and reviewed by the owner on 2026-10-23 (`G-41`, plan/00 §6 item 274).
+  "research-helper-prefs-backend-session",
+  "research-helper-prefs-restore-note",
+  "research-helper-prefs-providers",
+  "research-helper-prefs-active-provider",
+  "research-helper-prefs-api-key",
+  "research-helper-prefs-model",
+  "research-helper-prefs-base-url",
+  "research-helper-prefs-base-url-saved",
+  "research-helper-prefs-base-url-default",
+  "research-helper-prefs-base-url-not-https",
+  "research-helper-prefs-base-url-trailing-slash",
+  "research-helper-prefs-base-url-invalid",
+  "research-helper-prefs-gemini-paid-tier",
+  "research-helper-prefs-gemini-paid-tier-note",
+  "rh-error-budget",
+  "research-helper-cost-title",
+  "research-helper-cost-items",
+  "research-helper-cost-destination",
+  "research-helper-cost-calls",
+  "research-helper-cost-input",
+  "research-helper-cost-output",
+  "research-helper-cost-total",
+  "research-helper-cost-unpriced",
+  "research-helper-cost-disclaimer",
+  "research-helper-cost-above-threshold",
+  "research-helper-cost-acknowledge",
+  "research-helper-cost-acknowledge-unpriced",
+  "research-helper-cost-downgrade",
+  "research-helper-cost-downgrade-preselected",
+  "research-helper-cost-ceiling-preflight",
+  "research-helper-cost-ceiling-reached",
+  "research-helper-cost-usage-job",
+  "research-helper-cost-usage-session",
+  "research-helper-cost-usage-estimated",
+  "research-helper-cost-dont-ask",
+  "research-helper-cost-run",
+  "research-helper-cost-cancel",
+  "research-helper-cost-continue",
+  "research-helper-cost-stop",
+  "research-helper-cost-skipped-notice",
+  "research-helper-prefs-usage",
+  "research-helper-prefs-usage-limit",
+  "research-helper-prefs-usage-limit-off",
+  // docs/09 §1.8's two tier-2 replacements (paragraphs 1 and 4): Korean
+  // drafted by the coordinator and reviewed by the owner on 2026-10-23
+  // (`G-41`, plan/00 §6 item 275).
+  "research-helper-prefs-risk-1-session",
+  "research-helper-prefs-risk-4-session",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -1077,6 +1193,60 @@ export interface FluentMessageArgsMap {
   "rh-error-output-truncated": { model: string };
   // Item 262(c). `$model` is the model ID the request named, untranslated.
   "rh-error-privacy-routing": { model: string };
+  // P3-T16. Every money, token and date argument is a string the caller
+  // formatted with `Intl` (docs/08 §10.3); `$calls`, `$items` and the other
+  // counts are numbers (plural selectors); `$ceiling` (`run` | `session`) and
+  // `$mode` (`strict` | `balanced` | `full`) are selectors only.
+  "rh-error-budget": { limit: string; spent: string };
+  "research-helper-cost-items": {
+    items: number;
+    fullText: number;
+    abstract: number;
+    cached: number;
+    metadata: number;
+  };
+  "research-helper-cost-destination": {
+    provider: string;
+    host: string;
+    model: string;
+    mode: string;
+  };
+  "research-helper-cost-calls": { calls: number };
+  "research-helper-cost-input": { tokens: string };
+  "research-helper-cost-output": { tokens: string };
+  "research-helper-cost-total": { cost: string };
+  "research-helper-cost-unpriced": { model: string };
+  "research-helper-cost-disclaimer": { date: string };
+  "research-helper-cost-above-threshold": { threshold: string };
+  "research-helper-cost-acknowledge": { cost: string };
+  "research-helper-cost-downgrade": { cost: string };
+  "research-helper-cost-downgrade-preselected": { max: number };
+  "research-helper-cost-ceiling-preflight": {
+    ceiling: string;
+    limit: string;
+    spent: string;
+    raised: string;
+  };
+  "research-helper-cost-ceiling-reached": {
+    ceiling: string;
+    limit: string;
+    spent: string;
+    raised: string;
+  };
+  "research-helper-cost-usage-job": {
+    calls: number;
+    input: string;
+    output: string;
+    cost: string;
+  };
+  "research-helper-cost-usage-session": {
+    calls: number;
+    input: string;
+    output: string;
+    cost: string;
+  };
+  "research-helper-cost-skipped-notice": { cost: string; calls: number };
+  "research-helper-prefs-usage-limit": { limit: string };
   // The preference pane (P1-T44). `$count` is a plural selector; `$time` is a
   // clock time the pane script has already formatted with
   // `Intl.DateTimeFormat` over `Zotero.locale` (docs/08 §10.3). **No message
@@ -1211,6 +1381,27 @@ export const ARGUMENT_MESSAGE_IDS = [
   // mainWindow — the job queue (2: P3-T34, item 265(a))
   "research-helper-job-resumed",
   "research-helper-job-wall-clock-budget",
+  // mainWindow — the budget error, the cost dialog and the Usage readout
+  // (19, P3-T16)
+  "rh-error-budget",
+  "research-helper-cost-items",
+  "research-helper-cost-destination",
+  "research-helper-cost-calls",
+  "research-helper-cost-input",
+  "research-helper-cost-output",
+  "research-helper-cost-total",
+  "research-helper-cost-unpriced",
+  "research-helper-cost-disclaimer",
+  "research-helper-cost-above-threshold",
+  "research-helper-cost-acknowledge",
+  "research-helper-cost-downgrade",
+  "research-helper-cost-downgrade-preselected",
+  "research-helper-cost-ceiling-preflight",
+  "research-helper-cost-ceiling-reached",
+  "research-helper-cost-usage-job",
+  "research-helper-cost-usage-session",
+  "research-helper-cost-skipped-notice",
+  "research-helper-prefs-usage-limit",
 
   // searchDialog (20)
   "research-helper-search-years-span",

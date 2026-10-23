@@ -93,6 +93,8 @@ import type {
 import type { Pipeline } from "../pipeline/types";
 import { httpRequest } from "../core/http/client";
 import { getPref, setPref } from "../prefs";
+import { PROVIDER_PREF_NAMES } from "./registerProviders";
+import type { PluginDatabase } from "./pluginDatabase";
 import { SEMANTICSCHOLAR_KEY_REQUEST_URL } from "../sources/semanticscholar/semanticscholarSource";
 import {
   SEARCH_WINDOW_API_PROPERTY,
@@ -104,6 +106,20 @@ import {
   type SecretBackendChoice,
   type SecretBackendDialogHost,
 } from "../ui/dialogs/secretBackendDialog";
+import {
+  USAGE_API_PROPERTY,
+  buildCostDialogModel,
+  createUsageHost,
+  openCostConfirmDialog,
+  type CostDialogHost,
+  type CostDialogInput,
+  type CostDialogOutcome,
+  type UsageHostApi,
+} from "../ui/dialogs/costConfirmDialog";
+import {
+  createSessionSpendCounter,
+  type SessionSpendCounter,
+} from "../pipeline/shared/budget";
 import {
   PREFERENCES_API_PROPERTY,
   PREFERENCES_PANE_DESCRIPTION,
@@ -820,6 +836,8 @@ declare module "../addon" {
  * | `secrets` | {@link ServiceGraph.secrets} — the tier-1 store; after a failed probe, the tier-2 session store if the user chose it in the degradation dialog (`P3-T03`), otherwise `undefined`, in which case the host refuses every write and the badge warns |
  * | `request` | `src/core/http/client.ts`'s `httpRequest`: the one outbound choke point, with its per-host limiter, D10 guard and redacted log line |
  * | `getBackendPref` | `src/prefs`' typed `getPref("secretBackend")`, the non-secret row `probeAndRecordBackend` wrote (or `adoptSessionSecretStore`, on a tier-2 choice) |
+ * | `providerPrefs` | `getPref("llmProvider")`, and `getPref` / `setPref` over each provider's `<provider>.baseUrl` row, named by `PROVIDER_PREF_NAMES` (`P3-T04`); the host validates before it writes |
+ * | `hasPluginData` | {@link pluginDatabaseHasData} over the graph's plugin database, for `docs/09` §1.9 item 8's restore notice (`P3-T04`) |
  * | `clock` | the graph's clock, for the Semantic Scholar retry delay and the `checkedAt` stamp |
  * | `logger` | a child of the graph's redacting logger |
  *
@@ -835,6 +853,14 @@ async function publishPreferencesHost(
     secrets: graph.secrets,
     request: httpRequest,
     getBackendPref: () => getPref("secretBackend"),
+    providerPrefs: {
+      getActiveProvider: () => getPref("llmProvider"),
+      getBaseUrl: (provider) => getPref(PROVIDER_PREF_NAMES[provider].baseUrl),
+      setBaseUrl: (provider, value) => {
+        setPref(PROVIDER_PREF_NAMES[provider].baseUrl, value);
+      },
+    },
+    hasPluginData: () => pluginDatabaseHasData(graph.database),
     clock: graph.clock,
     logger: graph.logger.child({ surface: "preferences" }),
   });
@@ -850,6 +876,40 @@ async function publishPreferencesHost(
       delete api[PREFERENCES_API_PROPERTY];
     },
   });
+}
+
+/**
+ * Whether the plugin database already holds a row in any of its tables other
+ * than `schema_version` — `docs/09` §1.9 item 8's sign that this Zotero data
+ * folder has been used with the plugin before (`P3-T04` step 4). The tables
+ * are read from `sqlite_master` rather than listed, so a table a later
+ * migration adds counts without an edit here.
+ *
+ * `false` when there is no database this run. Reads only whether a row
+ * exists, never what it holds.
+ */
+async function pluginDatabaseHasData(
+  database: PluginDatabase,
+): Promise<boolean> {
+  const open = await database.ready;
+  if (open === undefined) return false;
+  const result: unknown = await open.connection.queryAsync(
+    "SELECT name FROM sqlite_master WHERE type = 'table' " +
+      "AND name NOT LIKE 'sqlite_%' AND name <> 'schema_version'",
+  );
+  const tables = Array.isArray(result)
+    ? (result as readonly { name?: unknown }[])
+    : [];
+  for (const row of tables) {
+    if (typeof row.name !== "string") continue;
+    // The name comes from sqlite_master, not from input; quoted all the same.
+    const quoted = `"${row.name.replaceAll('"', '""')}"`;
+    const any: unknown = await open.connection.valueQueryAsync(
+      `SELECT EXISTS (SELECT 1 FROM ${quoted})`,
+    );
+    if (Number(any) === 1) return true;
+  }
+  return false;
 }
 
 /**
@@ -886,6 +946,101 @@ function chooseSecretBackend(): Promise<SecretBackendChoice> {
     );
   }
   return openSecretBackendDialog(win as SecretBackendDialogHost);
+}
+
+/**
+ * `P3-T16`: this plugin lifetime's one session spend counter (`docs/06`
+ * §11.4). Held in memory only and never written anywhere: the next Zotero
+ * start evaluates this module again and the count is zero, which is the rule
+ * "resets when Zotero restarts". The Usage readout reads it; `P3-T35` hands
+ * the same counter to every job's `createBudgetGuard` (reported: the card
+ * that wires the context owns that call).
+ */
+const sessionSpend: SessionSpendCounter = createSessionSpendCounter();
+
+/** The counter every job's budget guard must share (`P3-T35`). */
+export function getSessionSpendCounter(): SessionSpendCounter {
+  return sessionSpend;
+}
+
+/**
+ * The application's locale, for `Intl` (`docs/08` §10.3). `Zotero.locale` is
+ * out of reach here (`research-helper/zotero-global`); `Services.locale` is
+ * what it reads. Falls back to `en-US`, the bundle every id resolves in.
+ */
+function appLocale(): string {
+  try {
+    const tag = Services.locale.appLocaleAsBCP47;
+    return typeof tag === "string" && tag !== "" ? tag : "en-US";
+  } catch {
+    return "en-US";
+  }
+}
+
+/**
+ * `P3-T16` step 2: the cost dialog the summarize pipeline calls before its
+ * first paid call, and again when a spend ceiling pauses it (`P3-T29` passes
+ * this to its pipeline). Raised over the Zotero main window, for the reason
+ * {@link chooseSecretBackend} gives.
+ *
+ * @param input - the pre-run estimate and disclosure, or the ceiling stop
+ * @returns what the user chose; rejects when no window can show the number,
+ *   and the caller then runs nothing
+ */
+export function confirmRunCost(
+  input: CostDialogInput,
+): Promise<CostDialogOutcome> {
+  const win: unknown = Services.wm.getMostRecentWindow("navigator:browser");
+  if (
+    typeof win !== "object" ||
+    win === null ||
+    typeof (win as Partial<CostDialogHost>).openDialog !== "function"
+  ) {
+    return Promise.reject(
+      new Error(
+        "[research-helper] no Zotero main window to raise the cost dialog over",
+      ),
+    );
+  }
+  return openCostConfirmDialog(
+    win as CostDialogHost,
+    buildCostDialogModel(input, appLocale()),
+  );
+}
+
+declare module "../addon" {
+  interface PluginApi {
+    /**
+     * The preference pane's Usage host (`P3-T16` step 6), at the property
+     * `USAGE_API_PROPERTY` names; `addon/content/preferences.js` reads it.
+     */
+    usage?: UsageHostApi;
+  }
+}
+
+/**
+ * Publish the Usage host where `addon/content/preferences.js` looks for it:
+ * the session counter's totals and `run.maxSessionSpendCents`, read each time
+ * the pane asks.
+ */
+async function publishUsageHost(scope: Scope): Promise<void> {
+  const host = createUsageHost({
+    session: () => sessionSpend.totals,
+    sessionLimitCents: () => getPref("runMaxSessionSpendCents"),
+    locale: appLocale,
+  });
+  // Captured once, for the reason {@link publishServiceGraph} gives.
+  const api = addon.api;
+  await scope.use({
+    description: `the Usage readout host (api.${USAGE_API_PROPERTY})`,
+    register: () => {
+      api[USAGE_API_PROPERTY] = host;
+      return USAGE_API_PROPERTY;
+    },
+    unregister: () => {
+      delete api[USAGE_API_PROPERTY];
+    },
+  });
 }
 
 /**
@@ -946,6 +1101,11 @@ export async function registerUI(scope: Scope): Promise<void> {
       path: pluginDatabasePath,
       blobs: createCacheBlobStore(),
     },
+    // The shipped prompt versions for `docs/07` §9.3's startup comparison
+    // (`P3-T26`). A lazy `import()`: `../prompts/bundled` imports the `.md`
+    // prompt files, which no unit test that imports this module may reach.
+    promptVersions: async () =>
+      (await import("../prompts/bundled")).PROMPT_VERSIONS,
     // `docs/09` §1.7's degradation dialog (`P3-T03`), asked only when the
     // keystore probe fails. See {@link chooseSecretBackend}.
     chooseSecretBackend,
@@ -962,6 +1122,9 @@ export async function registerUI(scope: Scope): Promise<void> {
   // pane registration below can make a `zotero:pref` window reload and load
   // our fragment at once, and its script resolves the host on load.
   await publishPreferencesHost(scope, graph);
+  // The pane's Usage section (`P3-T16`), before the pane is registered, for
+  // the same reason.
+  await publishUsageHost(scope);
 
   for (const register of APP_REGISTRATIONS) {
     await register(scope);

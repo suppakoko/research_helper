@@ -1704,6 +1704,8 @@ So: **the prompt version is part of every cache key.** Change the prompt, bump t
 | **MINOR** | Instruction changes that alter behaviour without changing the output shape — a new style rule, a clarified constraint, a new enum value | Cache **invalidated** for that prompt |
 | **MAJOR** | Output schema changes — a field added, removed, renamed, or retyped | Cache invalidated **and** a migration is required for stored objects |
 
+> **Decided 2026-10-23 (owner, `plan/00` §6 item 273(a)): this table holds as written.** The summary cache key carries each prompt's `cacheEpoch`, not its version string (§17.4, corrected the same day), so a PATCH bump keeps the cache; the startup comparison (`reconcilePromptVersions`, `src/pipeline/summarize/summaryCache.ts`) invalidates a prompt's entries only when its MAJOR.MINOR changed. Until this decision `P3-T26`'s build keyed the full version string, so the PATCH row did not hold.
+
 ### 17.3 Storage layout
 
 Prompts live as data, not as string literals scattered through the code:
@@ -1782,6 +1784,8 @@ const parts = [
   schemaVersion, provider, model, temperature,
 ];
 ```
+
+> **Corrected 2026-10-23 (owner, `plan/00` §6 item 273(a)): the key carries the prompt's `cacheEpoch`, not its full version string.** Read the marked line as `promptId, PROMPT_CACHE_EPOCHS[promptId]` (`src/prompts/bundled.ts`; the registry's `cacheEpochs`). §17.3's registry holds `cacheEpoch` equal across a PATCH bump and strictly higher across a MINOR or MAJOR one, so this is what makes §17.2's PATCH row true; keying the full version string, as built by `P3-T26` before this decision, re-summarized on every PATCH bump. The full version string is still what goes into `meta` below — the object names the exact prompt text that produced it. `06-summarization-and-trend-report.md` §11.2 (reading 3) records the built key.
 
 Also store the version **inside** every cached object's `meta`, not only in the key. Without it, a cache directory is uninspectable and unmigratable:
 

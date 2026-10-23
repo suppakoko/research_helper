@@ -1274,6 +1274,39 @@ export interface BudgetGuard {
 }
 ```
 
+> **`BudgetGuard`, as built (`P3-T16`, 2026-10-23).** Owner decisions are cited; every other line is the card's
+> reading, recorded for the owner to confirm. The interface above stays in `src/llm/types.ts`; the implementation is
+> `createBudgetGuard` in `src/pipeline/shared/budget.ts` (§2.2's tree), and `src/pipeline/types.ts` re-exports the type.
+>
+> - **Two counters.** One per run, from zero (or from a resumed job's recorded `usage.costUsd`), and one per Zotero
+>   session (`createSessionSpendCounter`, in memory, one per plugin lifetime, never persisted; `06` §11.4). Every
+>   settled call adds to both.
+> - **Ceilings, read before every call.** `run.maxSpendCents` binds the run counter and `run.maxSessionSpendCents` the
+>   session counter (§8.5; `0` is off). Both are read from the preferences at each reservation, so a ceiling set
+>   mid-run applies at the next call. Cents become dollars through `centsToUsd`; money stays fractional dollars
+>   (`plan/00` §6 items 245, 252).
+> - **"The stricter binds"** is read as the ceiling with the least room left (its limit minus its own counter), not
+>   the smaller number. `limitUsd` is the run spend at which that ceiling is reached; `undefined` when both are off.
+> - **Reaching one pauses and asks** (`plan/00` §6 item 234). `reserve()` throws `BudgetExceededError` when spend so
+>   far, plus the reservations of calls still in flight, plus this call's estimate would pass a ceiling. Its context
+>   names the ceiling, the limit and the spend (numbers only; `ceilingStopOf` reads them). The job pauses with
+>   `budget-stop` (§12.3's `BudgetStop`); "continue" calls `raiseLimit`, which raises that ceiling **for this run
+>   only** and never writes the preference (gate `G-20`).
+> - **Headroom: 1.15×** on the token estimate (`06` §5.1, D-06-5), not `03` §10.2's 20 % — the factor `P3-T13`'s note in
+>   `03` §10.2 already names. Applied after `estTokens`' per-model calibration, in the pre-run estimate
+>   (`estimateRun`, `src/pipeline/shared/estimate.ts`) and in every reservation alike. The output side is the call's
+>   `maxOutputTokens` ceiling (`06` §5.2), never its typical fill, so an estimate over-quotes rather than under-quotes.
+> - **Settling.** A provider-reported `costUsd` wins; otherwise the reported tokens are priced (`costOf`); otherwise
+>   the reservation's own estimate is counted and the total is marked estimated. A call with no price at all counts
+>   tokens and is marked unpriced: its reservation passes, because nothing can be compared, and the cost dialog then
+>   requires the second acknowledgement.
+> - **Where it is enforced.** `withBudget(router, deps)` wraps `LLMRouter.chat` and `chatStream`: a request whose
+>   `LLMCallContext.budget` carries a guard reserves before it is sent and settles when its answer arrives, and the
+>   guard is not passed further down, so no adapter counts it twice. `completeJSON` (`src/llm/shared/jsonMode.ts`)
+>   sends each of its up to three requests through that `chat`, so **the usage of a `completeJSON` that throws is
+>   already counted** (owner, 2026-10-21, `plan/00` §6 item 266). A request that fails before any answer settles
+>   nothing and frees its reservation.
+
 > **`ChatRequest.effort` and the shared `Effort` type. Decided 2026-10-21 (owner; `plan/00` §6 item 262(a)).**
 > Until this date `ChatRequest` had no effort member, so no adapter ever sent OpenAI's `reasoning` or Gemini's
 > `thinking_level`, and three adapters each carried a local copy of `03-llm-provider-integration.md` §14.1's `Effort`
@@ -2994,6 +3027,21 @@ Cancellation semantics per pipeline are declared, not implicit:
 >   The message is `research-helper-job-wall-clock-budget`; `P3-T29` builds the surface that shows it.
 > - **§9.4 step 4's pinned tags** are supplied: every live run holds `work:<workKey>` for all of its
 >   items through `RunningWork`, which `installServices` passes to the cache as `pinnedTags`.
+>   *(Corrected 2026-10-23, owner, `plan/00` §6 item 273(c): the work key is escaped with
+>   `encodeTagValue` (`src/core/cache/keys.ts`) — `%` as `%25`, `,` as `%2C` — exactly as the summary
+>   cache writes its `work:` tag, so a work key holding either character is still pinned.)*
+> - **A spend ceiling reached mid-run pauses and asks.** *Decided 2026-10-23 (owner, `plan/00` §6 item
+>   274(c), restating item 234).* A call the budget guard refuses (`BudgetExceededError`, read by
+>   `ceilingStopOf` in `src/pipeline/shared/budget.ts`) is **not** a failed item: the runner keeps the
+>   item pending, asks itself for a pause with §5.2's existing reason `budget-stop` (no new reason is
+>   needed), lets the job's other in-flight calls finish, writes a boundary checkpoint (the refused item
+>   in `pending`), gives the slot back and moves the job to `paused`, exactly as any other pause. A
+>   resume — the user's "continue", after `raiseLimit` — dispatches the refused item again before the
+>   rest; a cancel leaves it pending. Because `core/` may not import `pipeline/`, the reader arrives as
+>   `PooledRunDeps.budgetStopOf`, which the summarize pipeline sets to `ceilingStopOf`; without it the
+>   runner treats any `BudgetExceededError` as a refusal, so no caller can record one as a failure. A
+>   pause the user already asked for that has not yet taken effect takes the reason `budget-stop`, so
+>   the question shown is the money one.
 >
 > ```ts
 > // src/core/jobQueue/queue.ts (P3-T17)
@@ -3640,7 +3688,7 @@ Rows marked **⚠** are settings the design uses but no document had declared as
 
 > **Decided 2026-10-20 (owner; `plan/00` §6 item 241):** `privacy.egressAcknowledged`, `llm.tokenEstimateCalibration` and `cache.lastSeenPromptVersions` ship as written, with the types and defaults their rows give, and their ⚠ marks are removed. `P3-T32` adds them to `src/prefs/schema.ts`; none of the three gets a `pref()` line (`01-zotero-plugin-platform.md` §7.2).
 
-> **Decided 2026-10-20 (owner; `plan/00` §6 item 245): money preferences are stored as whole US cents, and the unit is part of the key.** Gecko's preference store holds only booleans, integers and strings (§8.2: `setBoolPref`/`setStringPref`/`setIntPref`), so a fractional row such as $2.50 cannot round-trip. The three money rows are therefore `summary.confirmAboveCents` (integer, `200`, i.e. $2.00), `run.maxSpendCents` (integer, `0` = off) and `run.maxSessionSpendCents` (integer, `0` = off), each ≥ 0. Every surface shows and accepts **dollars** and converts at the boundary; only the stored value is in cents. They replace ~~`summary.confirmAboveUSD`~~, ~~`run.maxSpendUSD`~~ and ~~`run.maxSessionSpendUSD`~~ (`number` rows), which never shipped, so no migration entry is needed (§8.5.3). Defaults keep their meaning: 200 cents is the same $2.00, and both ceilings still ship off (gate `G-20`). `P3-T39` makes the change.
+> **Decided 2026-10-20 (owner; `plan/00` §6 item 245): money preferences are stored as whole US cents, and the unit is part of the key.** Gecko's preference store holds only booleans, integers and strings (§8.2: `setBoolPref`/`setStringPref`/`setIntPref`), so a fractional row such as $2.50 cannot round-trip. The three money rows are therefore `summary.confirmAboveCents` (integer, `200`, i.e. $2.00), `run.maxSpendCents` (integer, `0` = off) and `run.maxSessionSpendCents` (integer, `0` = off), each ≥ 0. Every surface shows and accepts **dollars** and converts at the boundary; only the stored value is in cents. They replace ~~`summary.confirmAboveUSD`~~, ~~`run.maxSpendUSD`~~ and ~~`run.maxSessionSpendUSD`~~ (`number` rows), which never shipped, so no migration entry is needed (§8.5.3). Defaults keep their meaning: 200 cents is the same $2.00, and both ceilings still ship off (gate `G-20`). `P3-T39` makes the change. *(Corrected 2026-10-23 (owner, `plan/00` §6 item 271(b); gate `G-20`): `run.maxSessionSpendCents` now ships at `500` ($5.00); `run.maxSpendCents` still ships off at `0`. See the row below.)*
 
 #### Sources & search
 
@@ -3734,7 +3782,7 @@ The allowed-value enumerations for `screening.retractionPolicy` and `screening.n
 | `concurrency` | integer | `3` | **1–8** | `07-architecture-and-data-model.md` §7.2 | Prefs pane → Advanced |
 | `timeoutSeconds` | integer | `60` | 10–600, step 10 | `07-architecture-and-data-model.md` §7.3 | Prefs pane → Advanced |
 | `run.maxSpendCents` | integer | `0` (off) | ≥ 0 | `06-summarization-and-trend-report.md` §11.4 | Cost dialog; no prefs-pane control yet. The value is **US cents**; every surface shows and accepts dollars and converts at the boundary. *(Corrected 2026-10-20 (`plan/00` §6 item 245; owner: store as integer cents): was ~~`run.maxSpendUSD`, number~~.)* |
-| `run.maxSessionSpendCents` | integer | `0` (off) | ≥ 0 | `06-summarization-and-trend-report.md` §11.4 | Cost dialog; no prefs-pane control yet. The value is **US cents**, shown and accepted as dollars like `run.maxSpendCents`. *(Corrected 2026-10-20 (`plan/00` §6 item 245; owner: store as integer cents): was ~~`run.maxSessionSpendUSD`, number~~.)* Same semantics as `run.maxSpendCents` — ~~a hard ceiling that aborts with partial results preserved~~ a ceiling at which the run **pauses and asks** whether to continue, partial results kept *(Corrected 2026-10-20: owner decision, `plan/00` §6 item 234; `06-summarization-and-trend-report.md` §5.4)* — but scoped to the **Zotero session** rather than to one job: the running total lives in memory and resets to zero when Zotero restarts, so it is never persisted. Required by `10-requirements-and-user-stories.md` NFR-5, which asks for a per-session ceiling distinct from the per-job one. |
+| `run.maxSessionSpendCents` | integer | `500` ($5.00) | ≥ 0 | `06-summarization-and-trend-report.md` §11.4 | Cost dialog; no prefs-pane control yet (the pane's Usage section shows the session's spend against it, `P3-T16`). **Decided 2026-10-23 (owner, `plan/00` §6 item 271(b); gate `G-20`): ships at `500`, US $5.00, so a first run can stop itself; `run.maxSpendCents` stays `0` (off).** Was `0` (off) until this date. The value is **US cents**, shown and accepted as dollars like `run.maxSpendCents`. *(Corrected 2026-10-20 (`plan/00` §6 item 245; owner: store as integer cents): was ~~`run.maxSessionSpendUSD`, number~~.)* Same semantics as `run.maxSpendCents` — ~~a hard ceiling that aborts with partial results preserved~~ a ceiling at which the run **pauses and asks** whether to continue, partial results kept *(Corrected 2026-10-20: owner decision, `plan/00` §6 item 234; `06-summarization-and-trend-report.md` §5.4)* — but scoped to the **Zotero session** rather than to one job: the running total lives in memory and resets to zero when Zotero restarts, so it is never persisted. Required by `10-requirements-and-user-stories.md` NFR-5, which asks for a per-session ceiling distinct from the per-job one. |
 | ⚠ `background.enabled` | boolean | `true` | — | `05-related-work-discovery.md` §9.6 | **Not in the pane.** §9.6 requires "a user preference to disable background network activity entirely (some institutions require this)" but names no key. |
 | ⚠ `prefsSchemaVersion` | integer | `0` | ≥ 0 | `07-architecture-and-data-model.md` §8.5.3 | Not user-visible. Bookkeeping for the pref migrations in §8.5.3; `0` means "no migration has run yet". No document declared it — it exists because the migration rule needs somewhere to record how far it has got. |
 
@@ -3974,6 +4022,35 @@ Two rules that matter:
 - **Everything that could change the output is in the key**: provider, model, prompt version, schema version, temperature, input scope, and the content hash of the text actually sent. A cache that returns a summary generated by a different model under a different prompt is worse than no cache.
 - **`06-summarization-and-trend-report.md` §11.2 owns the summary-cache-key component list** and explains why each component is load-bearing; the coarser `tc` / `cr` / `rp` namespaces for clustering, theme analysis and the report are defined there too. `summaryKey` above must stay in step with it. This section owns the hashing mechanics (`stableStringify`, `CACHE_SCHEMA_VERSION`) and the non-summary key builders.
 
+> **Corrected 2026-10-23 (`P3-T26`): `summaryKey` as built.** The sketch above drifted from `06-…` §11.2, which owns the list: it keyed `workKey` where §11.2 keys `libraryID` + `itemKey`, and it had no `tier` and no `promptId`. The built form follows §11.2 plus the readings recorded under §11.2 ("Decided 2026-10-23"), and hashes with `cacheKey` (`stableStringify` of an array), not a `|` join. `workKey` is a tag, not a component. The cached value is the payload with its `meta` block (`12-prompt-library.md` §17.4), gated by `redactRecord`; it is not a second envelope type — `P3-T25` builds `StoredSummary` from it (`content` = `summary`, the envelope fields from `meta`), and replaces `P` with `PaperSummary`.
+>
+> ```ts
+> // src/core/cache/keys.ts
+> export interface SummaryKeyInput {
+>   readonly libraryID: number; readonly itemKey: string;
+>   readonly contentHash: string;            // AcquiredSource.contentHash: the cleaned text actually sent
+>   readonly tier: SourceTier;
+>   readonly inputScopeKind: string;         // SummaryInputScope["kind"]
+>   readonly promptId: string;
+>   readonly promptCacheEpochs: Readonly<Record<string, number>>; // cacheEpoch: promptId's own, plus CHUNK_MAP's for CHUNK_REDUCE
+>   readonly promptMetadata: Readonly<Record<string, string>>; // every user-message variable but the text
+>   readonly schemaVersion: string;          // "paper-summary-v1"
+>   readonly providerId: ProviderId; readonly modelId: string; readonly temperature: number;
+> }
+> export function summaryKey(input: SummaryKeyInput, options?: { readonly anyModel?: boolean }): string;
+>
+> // src/pipeline/summarize/summaryCache.ts
+> export interface CachedSummary<P> {
+>   readonly summary: P;
+>   readonly meta: SummaryCacheMeta;         // promptId, promptVersion(s), promptCacheEpochs, schemaVersion,
+>                                            // providerId, modelId, temperature, tier, inputScopeKind, contentHash,
+>                                            // libraryID, itemKey, workKey, generatedAtEpochMs
+>   readonly redaction: RedactionMark;       // what redactRecord changed
+> }
+> ```
+>
+> **Corrected 2026-10-23 (owner, `plan/00` §6 item 273(a)): the prompt component is `cacheEpoch`.** `SummaryKeyInput` read `promptVersions: Readonly<Record<string, string>>`, the full version strings; it is now `promptCacheEpochs`, each keyed prompt's `cacheEpoch` (`PromptTemplate.cacheEpoch`; `PROMPT_CACHE_EPOCHS` in `src/prompts/bundled.ts`), so a PATCH bump keeps cached summaries as `12-prompt-library.md` §17.2 says. `SummaryCacheDeps` gains `promptCacheEpochs` beside `promptVersions`; the full versions stay in `meta` for provenance, and a lookup compares `meta.promptCacheEpochs`, never `meta.promptVersions`. `encodeTagValue` (the tag-value escape) moved to `src/core/cache/keys.ts` so `core/`'s job runner can use it (item 273(c)); `summaryCache.ts` re-exports it. `06-…` §11.2 readings 3 and 8 carry the reasoning.
+
 ### 9.2 TTLs and size caps
 
 | Namespace | TTL | Size cap | Notes |
@@ -3996,7 +4073,7 @@ Four triggers, all implemented as tag-based bulk invalidation so they are one st
 
 Every entry carries tags: `promptVersion:<v>`, `model:<id>`, `provider:<id>`, `source:<id>`, `work:<workKey>`, `schema:<n>`.
 
-1. **Prompt version change.** `12-prompt-library.md` assigns every prompt a version string. On startup, the plugin compares shipped prompt versions to the last-seen set stored in prefs; for each changed prompt it calls `cache.invalidateByTag('promptVersion:<old>')`. Summaries are *not* deleted from Zotero notes — only the cache entry — so the user's existing notes survive and are regenerated on request.
+1. **Prompt version change.** `12-prompt-library.md` assigns every prompt a version string. On startup, the plugin compares shipped prompt versions to the last-seen set stored in prefs; for each changed prompt it calls `cache.invalidateByTag('promptVersion:<old>')`. Summaries are *not* deleted from Zotero notes — only the cache entry — so the user's existing notes survive and are regenerated on request. *(Corrected 2026-10-23, owner, `plan/00` §6 item 273(a): built as `reconcilePromptVersions` in `src/pipeline/summarize/summaryCache.ts`. The tag is `promptVersion:<promptId>@<MAJOR>.<MINOR>` — qualified by the prompt, and naming the prompt's cache line rather than its full version, because the summary key carries `cacheEpoch`, which is one per MAJOR.MINOR line (`06-summarization-and-trend-report.md` §11.2 readings 3 and 8). A prompt is invalidated only when its MAJOR.MINOR changed or it is no longer shipped; a PATCH-only change invalidates nothing (`12-prompt-library.md` §17.2) but the last-seen set, which still holds full version strings, is rewritten.)*
 2. **Model change.** Switching the summarization model invalidates by `model:<oldId>` for the `summary` and `llm-completion` namespaces only. Embeddings are keyed separately and a change in embedding model invalidates all `embedding` entries plus every `CollectionProfile`'s `centroids` (all k of them, not just the first).
 3. **Item modification.** A `Zotero.Notifier` observer on `item` `modify` events extracts the item's `dateModified`; since `sourceVersion` is part of `summaryKey`, a modified item simply *misses* rather than needing explicit deletion. The stale entry is later evicted by LRU. Explicit `invalidateByTag('work:<key>')` is used on item **delete** and on user-triggered "refresh metadata".
 4. **Schema version bump.** `CACHE_SCHEMA_VERSION` is in every key, so a bump makes the entire cache miss; `prune()` then reclaims it. A migration also drops rows whose `tags` lack the current `schema:<n>` tag, so the space is reclaimed immediately rather than over time.
@@ -4249,7 +4326,7 @@ Mapping of common conditions to user text:
 | `AuthenticationError` (401) | "Your OpenAI API key was rejected." | "Open settings" + the key is marked invalid in prefs and its "Test" state reset (see doc 09 §2 on 401 handling) |
 | `RateLimitError` | "PubMed is rate-limiting requests. Slowing down." | Automatic; only surfaced if it persists past the retry budget |
 | `OfflineError` | "No internet connection." | "Retry" |
-| `BudgetExceededError` | "Stopped at the $2.00 limit you set for this task." | "Raise limit and continue" / "Stop" |
+| `BudgetExceededError` | ~~"Stopped at the $2.00 limit you set for this task."~~ "Paused at the *limit* spending limit. *spent* is spent so far, and summaries already made are kept." | "Raise limit and continue" / "Stop" — the cost dialog's ceiling question; "continue" raises the limit for this run only. *(Corrected 2026-10-23, `P3-T16`: a ceiling pauses rather than stops (owner, `plan/00` §6 item 234); the text is the `en-US` bundle's `rh-error-budget`.)* |
 | `ContentFilterError` | "The model declined to summarize this paper." | Item marked skipped, job continues |
 | `PrivacyRoutingError` (OpenRouter's guardrail 404) | "OpenRouter has no provider for *model* that meets your privacy mode." | Choose a different model, or change the privacy mode from Strict to Balanced (the full text is in the `en-US` bundle's `rh-error-privacy-routing`). *(Added 2026-10-21, `plan/00` §6 item 262(c).)* |
 | `OutputTruncatedError` (`finishReason` `"length"`) | "The summary was cut off by the output length limit of *model*." | Item counted as failed; the job continues. *(Decided 2026-10-21 (owner; `plan/00` §6 item 265(c)); the text is the `en-US` bundle's `rh-error-output-truncated`.)* |

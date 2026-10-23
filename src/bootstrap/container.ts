@@ -219,6 +219,11 @@ import type { SecretStore } from "../core/secretStore";
 import type { SecretBackendChoice } from "../ui/dialogs/secretBackendDialog";
 import type { PipelineRegistry } from "../pipeline/registry";
 import { createPrivacyPolicy } from "../pipeline/shared/privacyPolicy";
+import { UNWIRED_BUDGET_GUARD } from "../pipeline/shared/budget";
+import {
+  createSkipCachedGuard,
+  reconcilePromptVersions,
+} from "../pipeline/summarize/summaryCache";
 import type { LLMRouter, PipelineContext, PipelineId } from "../pipeline/types";
 import { getPref, setPrefStore } from "../prefs";
 import { createArxivSource } from "../sources/arxiv/arxivSource";
@@ -695,6 +700,14 @@ export interface ServiceGraphOptions {
    * queue stays storeless and the cache stores nothing.
    */
   readonly pluginDatabase?: PluginDatabaseSource;
+  /**
+   * The shipped prompt versions (`PROMPT_VERSIONS`, `src/prompts/bundled.ts`),
+   * for `docs/07` §9.3 trigger 1 (`P3-T26`). A loader, because `bundled.ts`
+   * imports the `.md` prompt files and no unit test's module graph may reach
+   * it; `src/bootstrap/registerUI.ts` passes a lazy `import()`. Omitted in a
+   * unit test of the graph: then the startup comparison does not run.
+   */
+  readonly promptVersions?: () => Promise<Readonly<Record<string, string>>>;
   /** Defaults to {@link createSystemClock}. A test passes `createManualClock()`. */
   readonly clock?: Clock;
   /**
@@ -1269,10 +1282,14 @@ function createPipelineContextFactory(
         // global mode alone could be looser than a collection's override, so
         // the placeholder fails closed. No shipped pipeline reads it yet.
         privacy: createPrivacyPolicy("strict"),
+        // `docs/07` §4.3's `BudgetGuard` (`P3-T16`). A placeholder that fails
+        // closed — every reservation throws, so no LLM request can be sent —
+        // until `P3-T35` builds each job's guard with `createBudgetGuard`
+        // over the one session counter. No shipped pipeline reaches it.
+        budget: UNWIRED_BUDGET_GUARD,
         // See this function's doc comment: members doc 07 declares and no
         // card has implemented yet (`llm` left this list in `P3-T06`, `cache`
-        // in `P3-T33`, `privacy` in `P3-T15`).
-        budget: undefined,
+        // in `P3-T33`, `privacy` in `P3-T15`, `budget` in `P3-T16`).
         tts: undefined,
         zotero: undefined,
         config: undefined,
@@ -1676,11 +1693,12 @@ export async function installServices(
 
   // 8. The job queue's persistent half (`P3-T34`). Its store is attached by
   //    `database.attachJobs` below once the plugin database is open (`P3-T33`
-  //    moved the open here). No resume guard and no notifier is passed yet,
-  //    so `recover()` resumes nothing: every resumable interrupted job waits
-  //    for `P3-T26` (cached items — it needs `summaryKey`; `P3-T33` left it),
-  //    `P3-T15` and `P3-T16` to fill `resumeGuards` here (`plan/00` §6 item
-  //    250).
+  //    moved the open here). `skipCached` is `P3-T26`'s; until it has a probe
+  //    (the summarize pipeline, `P3-T29`) it skips nothing, so the spend
+  //    guards after it may over-count and never under-count. The other guards
+  //    and the notifier are not passed yet, so `recover()` resumes nothing:
+  //    every resumable interrupted job waits for `P3-T15` and `P3-T16` to fill
+  //    `resumeGuards` here (`plan/00` §6 item 250).
   const jobs = createJobQueue({
     clock,
     logger: logger.child({ surface: "jobQueue" }),
@@ -1689,10 +1707,46 @@ export async function installServices(
       pipelines
         .list()
         .some((pipeline) => pipeline.id === pipelineId && pipeline.resumable),
+    resumeGuards: {
+      skipCached: createSkipCachedGuard({
+        logger: logger.child({ surface: "summaryCache" }),
+      }),
+    },
   });
   // The `job` store on the one connection, then §7.6's startup recovery —
   // both once the migrations are done, neither awaited by startup.
   database.attachJobs(jobs);
+
+  // 8b. `docs/07` §9.3 trigger 1 (`P3-T26`): once the cache is usable,
+  //     compare the shipped prompt versions with `cache.lastSeenPromptVersions`,
+  //     invalidate by tag the cache entries of each prompt whose MAJOR.MINOR
+  //     changed (never a Zotero note; a PATCH-only change keeps them, item
+  //     273(a)), then write the new set once. Not awaited by startup; this
+  //     teardown waits for it, so it never runs against a closing cache.
+  //     Skipped without a database: the prompt's `cacheEpoch` is in every
+  //     summary key, so a skipped run serves nothing stale and the next start
+  //     does the work.
+  const loadPromptVersions = options.promptVersions;
+  if (loadPromptVersions !== undefined) {
+    const versionLogger = logger.child({ surface: "summaryCache" });
+    const promptVersionCheck = (async () => {
+      if ((await database.ready) === undefined) return;
+      await reconcilePromptVersions({
+        cache: database.cache,
+        shipped: await loadPromptVersions(),
+        logger: versionLogger,
+      });
+    })().catch((error: unknown) => {
+      versionLogger.error(
+        "prompt-version check failed; the next start tries again",
+        { error: error instanceof Error ? error.name : typeof error },
+      );
+    });
+    scope.defer(
+      "prompt-version check (docs/07 §9.3)",
+      () => promptVersionCheck,
+    );
+  }
 
   logger.info("services installed", {
     hosts: limiters.hosts.length,

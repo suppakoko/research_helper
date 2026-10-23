@@ -540,8 +540,17 @@ export interface PromptRegistry {
   get(id: PromptId): PromptTemplate;
   /** A specific version of `id`, if its file was supplied. */
   getVersion(id: PromptId, version: string): PromptTemplate | undefined;
-  /** Each prompt's active version string. `P3-T26` keys and tags on these. */
+  /**
+   * Each prompt's active version string: the provenance a cached output
+   * records, and what the startup comparison stores (`P3-T26`).
+   */
   readonly versions: Readonly<Record<PromptId, string>>;
+  /**
+   * Each prompt's active `cacheEpoch`: what the summary cache keys on, so a
+   * PATCH bump keeps cached outputs (`docs/12` §17.2; owner, 2026-10-23,
+   * `plan/00` §6 item 273(a)).
+   */
+  readonly cacheEpochs: Readonly<Record<PromptId, number>>;
 }
 
 function compareVersions(a: string, b: string): number {
@@ -554,7 +563,17 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-function majorMinor(version: string): string {
+/**
+ * A version's cache line, `MAJOR.MINOR`: the versions that share one
+ * `cacheEpoch` ({@link createPromptRegistry} holds one epoch per line, and a
+ * higher line a strictly higher epoch). The summary cache tags its entries
+ * with it, so a PATCH bump changes neither the key nor the tag (`docs/06`
+ * §11.2, reading 8, corrected 2026-10-23).
+ *
+ * @param version - `MAJOR.MINOR.PATCH`; anything else is returned with its
+ *   first two dot-separated parts, so a malformed version still names a line
+ */
+export function promptCacheLine(version: string): string {
   return version.split(".").slice(0, 2).join(".");
 }
 
@@ -609,7 +628,8 @@ export function createPromptRegistry(
       const prev = list[i - 1];
       const next = list[i];
       if (prev === undefined || next === undefined) continue;
-      const sameLine = majorMinor(prev.version) === majorMinor(next.version);
+      const sameLine =
+        promptCacheLine(prev.version) === promptCacheLine(next.version);
       if (sameLine && next.cacheEpoch !== prev.cacheEpoch) {
         problems.push(
           `${next.fileName}: a PATCH bump must keep cacheEpoch ${prev.cacheEpoch}`,
@@ -630,6 +650,14 @@ export function createPromptRegistry(
       PROMPT_IDS.map((id) => [id, (active.get(id) as PromptTemplate).version]),
     ) as Record<PromptId, string>,
   );
+  const cacheEpochs = Object.freeze(
+    Object.fromEntries(
+      PROMPT_IDS.map((id) => [
+        id,
+        (active.get(id) as PromptTemplate).cacheEpoch,
+      ]),
+    ) as Record<PromptId, number>,
+  );
 
   return Object.freeze({
     get(id: PromptId): PromptTemplate {
@@ -639,6 +667,7 @@ export function createPromptRegistry(
       return byId.get(id)?.find((t) => t.version === version);
     },
     versions,
+    cacheEpochs,
   });
 }
 

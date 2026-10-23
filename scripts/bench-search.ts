@@ -104,6 +104,7 @@ import {
 } from "../src/pipeline/searchImport/stages";
 import type { SearchImportWriter } from "../src/pipeline/searchImport/types";
 import type { PipelineContext } from "../src/pipeline/types";
+import { UNWIRED_BUDGET_GUARD } from "../src/pipeline/shared/budget";
 import { createPrivacyPolicy } from "../src/pipeline/shared/privacyPolicy";
 import { createArxivSource } from "../src/sources/arxiv/arxivSource";
 import { createArxivRecordMapper } from "../src/sources/arxiv/mapper";
@@ -589,7 +590,7 @@ async function main(): Promise<number> {
     clock,
     sources,
     cache: NO_CACHE,
-    budget: undefined,
+    budget: UNWIRED_BUDGET_GUARD,
     llm: mockLLMRouter(),
     tts: undefined,
     zotero: undefined,

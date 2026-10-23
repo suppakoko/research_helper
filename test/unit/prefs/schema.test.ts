@@ -326,7 +326,8 @@ const SECTION_8_5: readonly Section85Row[] = [
   // Runtime & concurrency
   row("concurrency", "concurrency", "integer", 3, { min: 1, max: 8 }),
   row("runMaxSpendCents", "run.maxSpendCents", "integer", 0, { min: 0 }),
-  row("runMaxSessionSpendCents", "run.maxSessionSpendCents", "integer", 0, {
+  // 500 since the owner answered gate G-20 (2026-10-23, item 271(b)).
+  row("runMaxSessionSpendCents", "run.maxSessionSpendCents", "integer", 500, {
     min: 0,
   }),
   // Non-secret key-presence flags
@@ -549,9 +550,9 @@ describe("PREFS transcribes docs/07 §8.5", () => {
     expect(marked).toEqual(["prefsSchemaVersion", "secretBackend"]);
   });
 
-  it("ships both spend ceilings off at 0 (gate G-20)", () => {
+  it("ships the per-run ceiling off at 0 and the session ceiling at 500 cents (gate G-20, owner 2026-10-23, item 271(b))", () => {
     expect(PREFS.runMaxSpendCents.default).toBe(0);
-    expect(PREFS.runMaxSessionSpendCents.default).toBe(0);
+    expect(PREFS.runMaxSessionSpendCents.default).toBe(500);
   });
 
   it("declares no number row, because Gecko stores no fraction (P3-T39)", () => {
@@ -775,18 +776,20 @@ describe("getPref coerces and falls back", () => {
     );
     expect(getPref("summaryConfirmAboveCents")).toBe(200);
     expect(getPref("runMaxSpendCents")).toBe(0);
-    expect(getPref("runMaxSessionSpendCents")).toBe(0);
+    // The session ceiling's default is 500 since 2026-10-23 (item 271(b)).
+    expect(getPref("runMaxSessionSpendCents")).toBe(500);
   });
 
-  it("falls back to 0 (off) for a negative spend ceiling rather than reading it (P3-T32)", () => {
+  it("falls back to the default for a negative spend ceiling rather than reading it (P3-T32)", () => {
     setPrefStore(
       createMemoryPrefStore({
         "run.maxSpendCents": -1,
         "run.maxSessionSpendCents": "-5",
       }),
     );
+    // 0 (off) for the per-run ceiling; 500 for the session one (item 271(b)).
     expect(getPref("runMaxSpendCents")).toBe(0);
-    expect(getPref("runMaxSessionSpendCents")).toBe(0);
+    expect(getPref("runMaxSessionSpendCents")).toBe(500);
   });
 
   it("holds the two JSON rows as strings and leaves parsing to their readers (P3-T32)", () => {

@@ -9,6 +9,7 @@ import {
   createPromptRegistry,
   escapeSourceText,
   parsePromptFile,
+  promptCacheLine,
   PROMPT_FILE_NAMES,
   PROMPT_IDS,
   PROMPT_SCHEMAS,
@@ -173,6 +174,38 @@ describe("the five shipped prompt files", () => {
       expect(registry.get(id).id).toBe(id);
       expect(registry.get(id).cacheEpoch).toBe(1);
     }
+  });
+
+  it("exposes each active prompt's cacheEpoch, the summary cache's key component (item 273(a))", () => {
+    const patch = build({
+      front: { version: "1.0.1" },
+      fileName: "chunk-map.v1.0.1.md",
+    });
+    const registry = createPromptRegistry([...shippedFiles(), patch]);
+    expect(registry.cacheEpochs).toStrictEqual(
+      Object.fromEntries(
+        PROMPT_IDS.map((id) => [id, registry.get(id).cacheEpoch]),
+      ),
+    );
+    expect(Object.isFrozen(registry.cacheEpochs)).toBe(true);
+    // Read from the active file, not assumed: an active file at epoch 3.
+    const raised = createPromptRegistry(
+      shippedFiles().map((f) =>
+        f.fileName === PROMPT_FILE_NAMES.CHUNK_MAP
+          ? { ...f, text: f.text.replace("cacheEpoch: 1", "cacheEpoch: 3") }
+          : f,
+      ),
+    );
+    expect(raised.cacheEpochs.CHUNK_MAP).toBe(3);
+    expect(raised.cacheEpochs.CHUNK_REDUCE).toBe(1);
+    // A PATCH sibling shares its line's epoch; the line is MAJOR.MINOR.
+    expect(registry.getVersion("CHUNK_MAP", "1.0.1")?.cacheEpoch).toBe(
+      registry.cacheEpochs.CHUNK_MAP,
+    );
+    expect(promptCacheLine("1.0.1")).toBe("1.0");
+    expect(promptCacheLine("1.0.0")).toBe(promptCacheLine("1.0.9"));
+    expect(promptCacheLine("1.1.0")).not.toBe(promptCacheLine("1.0.0"));
+    expect(promptCacheLine("12.3.4")).toBe("12.3");
   });
 
   it.each(PROMPT_IDS)(

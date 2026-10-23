@@ -1,5 +1,5 @@
 /**
- * The preference pane's controller (P1-T44).
+ * The preference pane's controller (P1-T44; the LLM provider blocks, P3-T04).
  *
  * Loaded by Zotero's preferences window through
  * `Zotero.PreferencePanes.register({ scripts })`, which evaluates it with
@@ -29,8 +29,13 @@
  *   `placeholder` and nowhere else — not into a log line, not into an error.
  * - **No clipboard.** Nothing here reads or writes the clipboard, there is no
  *   copy button, and `copy` / `cut` on a key field are refused (rule 7/8).
- * - **No `Zotero.Prefs` write.** The host reads the one non-secret row the
- *   badge needs; this file writes no preference at all (rule 9, decision D5).
+ * - **No `Zotero.Prefs` write.** This file writes no preference at all (rule
+ *   9, decision D5). The non-secret rows the markup binds — `llmProvider`,
+ *   each `<provider>.model`, `gemini.paidTier` — are written by Zotero's own
+ *   `preference=` binding; each `<provider>.baseUrl` is written by the host's
+ *   `setBaseUrl`, which validates first (`docs/03` §14.4).
+ * - **No LLM Test yet.** The four LLM blocks' Test buttons stay disabled until
+ *   `P3-T14` wires them; the host refuses to test an LLM key.
  * - **No literal human-readable string.** Every visible string is a Fluent id
  *   from `research-helper-mainWindow.ftl`; the ids are listed in
  *   {@link RHPreferences.l10n} and `test/unit/ui/preferencesPane.test.ts`
@@ -54,15 +59,39 @@ var RHPreferences = {
     backend: "rh-prefs-backend",
     removeAll: "rh-prefs-remove-all",
     removeAllStatus: "rh-prefs-remove-all-status",
+    restoreNote: "rh-prefs-restore-note",
+    /** docs/09 §1.8's first paragraph, swapped for tier 2's sentence. */
+    riskOpening: "rh-prefs-risk-1",
+    /** docs/09 §1.8's fourth paragraph, swapped for tier 2's replacement. */
+    riskOwnAccount: "rh-prefs-risk-4",
     /**
      * One entry per credential block, keyed by `SecretId`. The element ids are
      * `<prefix>-key`, `-reveal`, `-test`, `-clear`, `-backend`, `-status`
-     * (`SOURCE_CREDENTIALS` in src/ui/prefs/preferencesPane.ts).
+     * (`PANE_CREDENTIALS` in src/ui/prefs/preferencesPane.ts).
      */
     credentials: {
       "source.ncbi": "rh-ncbi",
       "source.semanticscholar": "rh-s2",
+      "llm.openrouter": "rh-or",
+      "llm.openai": "rh-openai",
+      "llm.gemini": "rh-gemini",
+      "llm.anthropic": "rh-anthropic",
     },
+    /** The credentials the host can Test (`isTestableCredential`). */
+    testable: ["source.ncbi", "source.semanticscholar"],
+    /**
+     * The four LLM provider blocks (`LLM_CREDENTIALS`), keyed by `ProviderId`.
+     * Each block is `rh-provider-<provider>`; its base-URL field and status
+     * are `<prefix>-base-url` and `<prefix>-base-url-status`.
+     */
+    providers: {
+      openrouter: "rh-or",
+      openai: "rh-openai",
+      gemini: "rh-gemini",
+      anthropic: "rh-anthropic",
+    },
+    providerMenu: "rh-provider",
+    providerBlockPrefix: "rh-provider-",
     s2Request: "rh-s2-request",
   },
 
@@ -75,6 +104,10 @@ var RHPreferences = {
     backendMac: "research-helper-prefs-backend-mac",
     backendIndeterminate: "research-helper-prefs-backend-indeterminate",
     backendUnavailable: "research-helper-prefs-backend-unavailable",
+    risk1: "research-helper-prefs-risk-1",
+    risk1Session: "research-helper-prefs-risk-1-session",
+    risk4: "research-helper-prefs-risk-4",
+    risk4Session: "research-helper-prefs-risk-4-session",
     removeAllDone: "research-helper-prefs-remove-all-done",
     keyAbsent: "research-helper-prefs-key-absent",
     keyAbsentOs: "research-helper-prefs-key-absent-os",
@@ -89,6 +122,12 @@ var RHPreferences = {
     testForbidden: "research-helper-prefs-test-forbidden",
     testAbsent: "research-helper-prefs-test-absent",
     testUnavailable: "research-helper-prefs-test-unavailable",
+    backendSession: "research-helper-prefs-backend-session",
+    baseUrlSaved: "research-helper-prefs-base-url-saved",
+    baseUrlDefault: "research-helper-prefs-base-url-default",
+    baseUrlNotHttps: "research-helper-prefs-base-url-not-https",
+    baseUrlTrailingSlash: "research-helper-prefs-base-url-trailing-slash",
+    baseUrlInvalid: "research-helper-prefs-base-url-invalid",
   },
 
   /**
@@ -97,6 +136,9 @@ var RHPreferences = {
    * by the unit test.
    */
   OS_KEYSTORE: "oskeystore",
+
+  /** Tier 2's value, as `SESSION_PREF_VALUE` (P3-T03's dialog writes it). */
+  SESSION: "session",
 
   /** The privileged host, or `{}` when nothing published one. */
   host: null,
@@ -115,10 +157,20 @@ var RHPreferences = {
      *
      * @param {string} backendPref
      * @param {"win"|"mac"|"linux"|"other"} platform
-     * @param {{ OS_KEYSTORE: string, l10n: object }} ctx
+     * @param {{ OS_KEYSTORE: string, SESSION: string, l10n: object }} ctx
      * @returns {{ messageId: string, warning: boolean, canStore: boolean, osStore: boolean }}
      */
     badge(backendPref, platform, ctx) {
+      if (backendPref === ctx.SESSION) {
+        // docs/09 §1.9 item 3's tier-2 state: a warning, and keys still store
+        // (into memory only, as the user chose in P3-T03's dialog).
+        return {
+          messageId: ctx.l10n.backendSession,
+          warning: true,
+          canStore: true,
+          osStore: false,
+        };
+      }
       if (backendPref !== ctx.OS_KEYSTORE) {
         return {
           messageId: ctx.l10n.backendUnavailable,
@@ -149,6 +201,73 @@ var RHPreferences = {
         canStore: true,
         osStore: false,
       };
+    },
+
+    /**
+     * `riskOpeningMessageId()`'s rule (docs/09 §1.8, owner 2026-10-23, plan/00
+     * §6 item 274(a)): under the tier-2 badge, the sentence that keys are held
+     * in memory only replaces paragraph 1, which would claim an
+     * operating-system store; every other badge keeps paragraph 1.
+     *
+     * @param {string} backendPref - the value `badge()` was given
+     * @param {{ SESSION: string, l10n: object }} ctx
+     * @returns {string} the Fluent id for the first risk paragraph
+     */
+    riskOpening(backendPref, ctx) {
+      return backendPref === ctx.SESSION
+        ? ctx.l10n.risk1Session
+        : ctx.l10n.risk1;
+    },
+
+    /**
+     * `riskOwnAccountMessageId()`'s rule (docs/09 §1.8, owner 2026-10-23,
+     * plan/00 §6 item 275(b)): under the tier-2 badge, the sentence that even
+     * keys held in memory can be read by any program running as the user
+     * replaces paragraph 4, which presumes encryption; every other badge keeps
+     * paragraph 4.
+     *
+     * @param {string} backendPref - the value `badge()` was given
+     * @param {{ SESSION: string, l10n: object }} ctx
+     * @returns {string} the Fluent id for the fourth risk paragraph
+     */
+    riskOwnAccount(backendPref, ctx) {
+      return backendPref === ctx.SESSION
+        ? ctx.l10n.risk4Session
+        : ctx.l10n.risk4;
+    },
+
+    /**
+     * `showRestoreNotice()`'s rule (docs/09 §1.9 item 8): no key is stored at
+     * all, the plugin database already holds data, and the badge names an
+     * operating-system store.
+     *
+     * @param {{ anyKeyStored?: boolean, pluginDataPresent?: boolean }} state
+     * @param {{ osStore: boolean }} badge
+     * @returns {boolean}
+     */
+    restoreNotice(state, badge) {
+      return (
+        badge.osStore &&
+        state.pluginDataPresent === true &&
+        state.anyKeyStored === false
+      );
+    },
+
+    /**
+     * The base-URL status message for `setBaseUrl`'s answer.
+     *
+     * @param {{ stored: boolean, cleared?: boolean, reason?: string }} result
+     * @param {object} l10n
+     * @returns {{ id: string }}
+     */
+    baseUrlMessage(result, l10n) {
+      if (result && result.stored) {
+        return { id: result.cleared ? l10n.baseUrlDefault : l10n.baseUrlSaved };
+      }
+      const reason = result && result.reason;
+      if (reason === "not-https") return { id: l10n.baseUrlNotHttps };
+      if (reason === "trailing-slash") return { id: l10n.baseUrlTrailingSlash };
+      return { id: l10n.baseUrlInvalid };
     },
 
     /**
@@ -242,6 +361,43 @@ var RHPreferences = {
     return (api && api.preferences) || {};
   },
 
+  /**
+   * The Usage host (P3-T16 step 6; `USAGE_API_PROPERTY` in
+   * src/ui/dialogs/costConfirmDialog.ts), or `{}` when none was published.
+   *
+   * @returns {object}
+   */
+  resolveUsageHost() {
+    const instance =
+      typeof Zotero === "undefined" ? undefined : Zotero.__addonInstance__;
+    const api = instance && instance.api;
+    return (api && api.usage) || {};
+  },
+
+  /**
+   * Paint the Usage section: one paragraph per line the host returns, each a
+   * Fluent id with arguments the host already formatted (this Zotero
+   * session's spend and its ceiling). With no host the section stays empty.
+   */
+  paintUsage() {
+    const container = this.el("rh-prefs-usage-lines");
+    const host = this.resolveUsageHost();
+    if (!container || typeof host.readout !== "function") return;
+    let lines;
+    try {
+      lines = host.readout() || [];
+    } catch (error) {
+      this.report("usage", error);
+      return;
+    }
+    while (container.firstChild) container.firstChild.remove();
+    for (const line of lines) {
+      const p = document.createElementNS("http://www.w3.org/1999/xhtml", "p");
+      this.localize(p, line.id, line.args);
+      container.appendChild(p);
+    }
+  },
+
   /** @returns {boolean} whether the resolved host has the method */
   can(method) {
     return !!this.host && typeof this.host[method] === "function";
@@ -285,13 +441,22 @@ var RHPreferences = {
     for (const id of Object.keys(this.spec.credentials)) {
       this.wireCredentialBlock(id, this.spec.credentials[id]);
     }
-    await this.refresh();
+    this.wireProviderBlocks();
+    const state = await this.refresh();
+    this.paintProviders(state);
+    this.paintUsage();
     if (root && typeof root.setAttribute === "function") {
       root.setAttribute("data-rh-initialized", "true");
     }
   },
 
-  /** Re-read the host's state and repaint every block. */
+  /**
+   * Re-read the host's state and repaint the badge and every credential
+   * block. The base-URL fields are painted once, by `init`, so a refresh
+   * after a key store does not overwrite an address the user is editing.
+   *
+   * @returns {Promise<object>} the state painted
+   */
   async refresh() {
     let state;
     if (this.can("readState")) {
@@ -310,14 +475,36 @@ var RHPreferences = {
           present: false,
           lastTest: undefined,
         })),
+        activeProvider: "openrouter",
+        providers: [],
+        pluginDataPresent: false,
+        anyKeyStored: false,
       };
     }
+    const backendPref = state.storeAvailable ? state.backendPref : "";
     const badge = this.logic.badge(
-      state.storeAvailable ? state.backendPref : "",
+      backendPref,
       this.logic.platform(typeof Zotero === "undefined" ? undefined : Zotero),
       this,
     );
     this.paintBadge(this.el(this.spec.backend), badge);
+    // docs/09 §1.8: tier 2's sentence stands in for paragraph 1.
+    const riskOpening = this.el(this.spec.riskOpening);
+    if (riskOpening) {
+      this.localize(riskOpening, this.logic.riskOpening(backendPref, this));
+    }
+    // docs/09 §1.8 (item 275(b)): and tier 2's replacement for paragraph 4.
+    const riskOwnAccount = this.el(this.spec.riskOwnAccount);
+    if (riskOwnAccount) {
+      this.localize(
+        riskOwnAccount,
+        this.logic.riskOwnAccount(backendPref, this),
+      );
+    }
+    const restoreNote = this.el(this.spec.restoreNote);
+    if (restoreNote) {
+      restoreNote.hidden = !this.logic.restoreNotice(state, badge);
+    }
     for (const credential of state.credentials) {
       const prefix = this.spec.credentials[credential.id];
       if (!prefix) continue;
@@ -326,6 +513,45 @@ var RHPreferences = {
     }
     const removeAll = this.el(this.spec.removeAll);
     if (removeAll) removeAll.disabled = !badge.canStore;
+    return state;
+  },
+
+  /**
+   * Paint the provider choice and each block's stored base URL.
+   *
+   * @param {{ activeProvider?: string, providers?: { provider: string, baseUrl: string }[] }} state
+   */
+  paintProviders(state) {
+    for (const entry of state.providers || []) {
+      const prefix = this.spec.providers[entry.provider];
+      const input = prefix && this.el(prefix + "-base-url");
+      if (input) input.value = entry.baseUrl;
+    }
+    const canWrite = this.can("setBaseUrl");
+    for (const provider of Object.keys(this.spec.providers)) {
+      const input = this.el(this.spec.providers[provider] + "-base-url");
+      if (input) input.disabled = !canWrite;
+    }
+    this.showProvider(state.activeProvider);
+  },
+
+  /**
+   * docs/08 §7.5 rule 4: show only the active provider's block. The others
+   * are hidden, never cleared — their stored keys stay.
+   *
+   * @param {string|undefined} provider
+   */
+  showProvider(provider) {
+    const active = Object.prototype.hasOwnProperty.call(
+      this.spec.providers,
+      provider,
+    )
+      ? provider
+      : "openrouter";
+    for (const name of Object.keys(this.spec.providers)) {
+      const block = this.el(this.spec.providerBlockPrefix + name);
+      if (block) block.hidden = name !== active;
+    }
   },
 
   /**
@@ -363,7 +589,12 @@ var RHPreferences = {
       if (!credential.present) input.placeholder = "";
     }
     if (reveal) reveal.disabled = !badge.canStore;
-    if (test) test.disabled = !badge.canStore || !credential.present;
+    if (test) {
+      test.disabled =
+        !badge.canStore ||
+        !credential.present ||
+        !this.spec.testable.includes(credential.id);
+    }
     if (clear) clear.disabled = !badge.canStore || !credential.present;
     const message = this.logic.statusMessage(
       credential,
@@ -469,6 +700,48 @@ var RHPreferences = {
   },
 
   /**
+   * The provider choice and the four base-URL fields. The menulist and the
+   * model fields are bound by Zotero; this only follows the choice and writes
+   * a base URL through the host.
+   */
+  wireProviderBlocks() {
+    const menu = this.el(this.spec.providerMenu);
+    if (menu) {
+      const follow = () => this.showProvider(menu.value);
+      // `command`: the user picked one. `syncfrompreference`: Zotero painted
+      // the stored value, which it does after the pane's `load`.
+      menu.addEventListener("command", follow);
+      menu.addEventListener("syncfrompreference", follow);
+    }
+    for (const provider of Object.keys(this.spec.providers)) {
+      const prefix = this.spec.providers[provider];
+      const input = this.el(prefix + "-base-url");
+      if (!input) continue;
+      // On `change` (blur or Enter), never per keystroke: one validated write.
+      input.addEventListener("change", () => {
+        this.settle(this.storeBaseUrl(provider, prefix, input));
+      });
+    }
+  },
+
+  /**
+   * @param {string} provider
+   * @param {string} prefix
+   * @param {HTMLInputElement} input
+   */
+  async storeBaseUrl(provider, prefix, input) {
+    if (!this.can("setBaseUrl")) return;
+    const result = await this.host.setBaseUrl(provider, input.value);
+    // A refused value stays in the field, unchanged, beside the reason: the
+    // pane never rewrites what the user typed (P3-T04 step 3).
+    if (result && result.stored) input.value = input.value.trim();
+    this.localize(
+      this.el(prefix + "-base-url-status"),
+      this.logic.baseUrlMessage(result, this.l10n).id,
+    );
+  },
+
+  /**
    * The display-side half of rule 7 — the host's `normalizeKeyInput` is the
    * one that decides what is stored.
    *
@@ -513,6 +786,7 @@ var RHPreferences = {
    * @param {string} prefix
    */
   async testKey(id, prefix) {
+    if (!this.spec.testable.includes(id)) return;
     if (!this.can("testKey") || this.busy[id]) return;
     this.busy[id] = true;
     const button = this.el(prefix + "-test");

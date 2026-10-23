@@ -25,12 +25,17 @@ import {
   type SecretStore,
 } from "../../../src/core/secretStore";
 import { MAIN_WINDOW_MESSAGE_IDS } from "../../../src/i18n/keys";
+import { DEFAULT_BASE_URLS } from "../../../src/llm/shared/baseUrl";
+import type { ProviderId } from "../../../src/model/ids";
+import { PREF_KEYS, qualifiedPrefKey } from "../../../src/prefs/keys";
 import { PREFS } from "../../../src/prefs/schema";
 import {
+  LLM_CREDENTIALS,
   MIN_DIGEST_KEY_LENGTH,
   NCBI_TEST_PMID,
   NCBI_TEST_URL,
   OS_KEYSTORE_PREF_VALUE,
+  PANE_CREDENTIALS,
   PREFERENCES_L10N,
   PREFERENCES_PANE_ID,
   PREFERENCES_PANE_SCRIPT,
@@ -38,18 +43,25 @@ import {
   PREFERENCES_ROOT_ID,
   SEMANTIC_SCHOLAR_RETRY_DELAY_MS,
   SEMANTIC_SCHOLAR_TEST_URL,
+  SESSION_PREF_VALUE,
   SOURCE_CREDENTIALS,
   backendBadge,
+  checkBaseUrlInput,
   classifyFailure,
   classifyNcbiResponse,
   classifySemanticScholarResponse,
   createPreferencesHost,
   isPaneCredential,
+  isTestableCredential,
   keyDigest,
   ncbiTestRequest,
   normalizeKeyInput,
   preferencePaneOptions,
+  riskOpeningMessageId,
+  riskOwnAccountMessageId,
   semanticScholarTestRequest,
+  showRestoreNotice,
+  type BaseUrlResult,
   type TestReport,
 } from "../../../src/ui/prefs/preferencesPane";
 
@@ -185,6 +197,10 @@ interface HostHarness {
   readonly sink: ReturnType<typeof recordingSink>;
   readonly clock: ReturnType<typeof createManualClock>;
   readonly host: ReturnType<typeof createPreferencesHost>;
+  /** The `<provider>.baseUrl` rows the host wrote, as `src/prefs` would hold them. */
+  readonly baseUrls: Map<ProviderId, string>;
+  /** Every `setBaseUrl` write the port received, in order. */
+  readonly baseUrlWrites: [ProviderId, string][];
 }
 
 function hostHarness(
@@ -192,12 +208,16 @@ function hostHarness(
   options: {
     readonly secrets?: SecretStore | undefined;
     backend?: string;
+    activeProvider?: string;
+    hasPluginData?: () => Promise<boolean>;
   } = {},
 ): HostHarness {
   const store = memoryStore();
   const requests: HttpRequest[] = [];
   const sink = recordingSink();
   const clock = createManualClock(1_760_000_000_000);
+  const baseUrls = new Map<ProviderId, string>();
+  const baseUrlWrites: [ProviderId, string][] = [];
   const host = createPreferencesHost({
     secrets: "secrets" in options ? options.secrets : store,
     request: (request) => {
@@ -205,10 +225,21 @@ function hostHarness(
       return respond(request, requests.length);
     },
     getBackendPref: () => options.backend ?? OS_KEYSTORE_PREF_VALUE,
+    providerPrefs: {
+      getActiveProvider: () => options.activeProvider ?? "openrouter",
+      getBaseUrl: (provider) => baseUrls.get(provider) ?? "",
+      setBaseUrl: (provider, value) => {
+        baseUrlWrites.push([provider, value]);
+        baseUrls.set(provider, value);
+      },
+    },
+    ...(options.hasPluginData !== undefined && {
+      hasPluginData: options.hasPluginData,
+    }),
     clock,
     logger: createLogger({ sink, clock, level: "debug" }),
   });
-  return { store, requests, sink, clock, host };
+  return { store, requests, sink, clock, host, baseUrls, baseUrlWrites };
 }
 
 /* ---------------------------------------------------- 1. the registration */
@@ -250,17 +281,35 @@ describe("P1-T44 — registration", () => {
     );
   });
 
-  it("holds exactly the two literature-source credentials and refuses every other id", () => {
+  it("holds the two source credentials and the four LLM ones, and refuses every other id (P3-T04)", () => {
     expect(SOURCE_CREDENTIALS.map((entry) => entry.id)).toEqual([
       "source.ncbi",
       "source.semanticscholar",
     ]);
+    expect(LLM_CREDENTIALS.map((entry) => [entry.id, entry.provider])).toEqual([
+      ["llm.openrouter", "openrouter"],
+      ["llm.openai", "openai"],
+      ["llm.gemini", "gemini"],
+      ["llm.anthropic", "anthropic"],
+    ]);
+    // In docs/07 §8.5's llmProvider value order, so the menulist and the
+    // blocks follow the schema.
+    expect(LLM_CREDENTIALS.map((entry) => entry.provider)).toEqual(
+      PREFS.llmProvider.values,
+    );
+    expect(PANE_CREDENTIALS).toEqual([
+      ...SOURCE_CREDENTIALS,
+      ...LLM_CREDENTIALS,
+    ]);
+    expect(new Set(PANE_CREDENTIALS.map((c) => c.elementPrefix)).size).toBe(6);
+    // docs/08 §7.3 fixes the OpenRouter prefix itself.
+    expect(LLM_CREDENTIALS[0]?.elementPrefix).toBe("rh-or");
     for (const id of SECRET_IDS) {
-      expect(isPaneCredential(id)).toBe(
+      expect(isPaneCredential(id), id).toBe(id !== "tts.gemini");
+      expect(isTestableCredential(id), id).toBe(
         id === "source.ncbi" || id === "source.semanticscholar",
       );
     }
-    expect(isPaneCredential("llm.openai")).toBe(false);
     expect(isPaneCredential("not-an-id")).toBe(false);
   });
 });
@@ -312,9 +361,11 @@ describe("P1-T44 — rule 2, keyDigest", () => {
 /* ------------------------------------------------------ 4. rule 3: the badge */
 
 describe("P1-T44 — rule 3, backendBadge", () => {
-  it("uses docs/07 §8.5's spelling of the tier-1 preference value", () => {
+  it("uses docs/07 §8.5's spellings of the tier-1 and tier-2 preference values", () => {
     expect(PREFS.secretBackend.values).toContain(OS_KEYSTORE_PREF_VALUE);
     expect(OS_KEYSTORE_PREF_VALUE).toBe("oskeystore");
+    expect(PREFS.secretBackend.values).toContain(SESSION_PREF_VALUE);
+    expect(SESSION_PREF_VALUE).toBe("session");
   });
 
   it("names the operating-system store on Windows and macOS, and allows storing", () => {
@@ -323,12 +374,14 @@ describe("P1-T44 — rule 3, backendBadge", () => {
       messageId: PREFERENCES_L10N.backendWindows,
       warning: false,
       canStore: true,
+      osStore: true,
     });
     expect(backendBadge("oskeystore", "mac")).toEqual({
       state: "mac",
       messageId: PREFERENCES_L10N.backendMac,
       warning: false,
       canStore: true,
+      osStore: true,
     });
   });
 
@@ -337,12 +390,28 @@ describe("P1-T44 — rule 3, backendBadge", () => {
     expect(badge.state).toBe("indeterminate");
     expect(badge.warning).toBe(true);
     expect(badge.canStore).toBe(true);
+    expect(badge.osStore).toBe(false);
     expect(badge.messageId).toBe(PREFERENCES_L10N.backendIndeterminate);
     expect(backendBadge("oskeystore", "other").state).toBe("indeterminate");
   });
 
-  it("says plainly that nothing is available, and refuses to store, when the probe did not record tier 1", () => {
-    for (const value of ["", "session", "passphrase", "garbage"]) {
+  it("paints tier 2 as docs/09 §1.9 item 3's 'Not saved between sessions', warning-coloured, and still lets keys be stored (P3-T04)", () => {
+    expect(ftlValue(PREFERENCES_L10N.backendSession)).toBe(
+      "Not saved between sessions",
+    );
+    for (const platform of ["win", "mac", "linux", "other"] as const) {
+      expect(backendBadge("session", platform)).toEqual({
+        state: "session",
+        messageId: PREFERENCES_L10N.backendSession,
+        warning: true,
+        canStore: true,
+        osStore: false,
+      });
+    }
+  });
+
+  it("says plainly that nothing is available, and refuses to store, when no store was recorded", () => {
+    for (const value of ["", "passphrase", "garbage", "Session"]) {
       for (const platform of ["win", "mac", "linux", "other"] as const) {
         const badge = backendBadge(value, platform);
         expect(badge).toEqual({
@@ -350,8 +419,113 @@ describe("P1-T44 — rule 3, backendBadge", () => {
           messageId: PREFERENCES_L10N.backendUnavailable,
           warning: true,
           canStore: false,
+          osStore: false,
         });
       }
+    }
+  });
+});
+
+/* ------------------------------ 4b. docs/09 §1.9 item 8: the restore notice */
+
+describe("P3-T04 — the empty-key-after-restore notice (docs/09 §1.9 item 8)", () => {
+  const os = { osStore: true };
+
+  it("shows only when no key is stored, the plugin database holds data and the badge names an OS store", () => {
+    expect(
+      showRestoreNotice({ anyKeyStored: false, pluginDataPresent: true }, os),
+    ).toBe(true);
+    // A first start: nothing in the database yet.
+    expect(
+      showRestoreNotice({ anyKeyStored: false, pluginDataPresent: false }, os),
+    ).toBe(false);
+    // One key of any SecretId is enough to say this is not a restore.
+    expect(
+      showRestoreNotice({ anyKeyStored: true, pluginDataPresent: true }, os),
+    ).toBe(false);
+    // Under any non-OS badge the sentence is not known to be true.
+    for (const [pref, platform] of [
+      ["oskeystore", "linux"],
+      ["session", "win"],
+      ["", "win"],
+    ] as const) {
+      expect(
+        showRestoreNotice(
+          { anyKeyStored: false, pluginDataPresent: true },
+          backendBadge(pref, platform),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("counts a key with no block of its own: a lone tts.gemini key keeps the notice off", async () => {
+    const h = hostHarness(() => Promise.reject(new Error("unused")), {
+      hasPluginData: () => Promise.resolve(true),
+    });
+    let state = await h.host.readState();
+    expect(state.anyKeyStored).toBe(false);
+    expect(showRestoreNotice(state, os)).toBe(true);
+    await h.store.set("tts.gemini", syntheticKey());
+    state = await h.host.readState();
+    expect(state.credentials.every((c) => !c.present)).toBe(true);
+    expect(state.anyKeyStored).toBe(true);
+    expect(showRestoreNotice(state, os)).toBe(false);
+  });
+
+  it("carries docs/09 §1.9 item 8's sentence word for word", () => {
+    expect(ftlValue(PREFERENCES_L10N.restoreNote)).toContain(
+      "API keys are stored in this computer's credential store and do not travel with your Zotero data folder.",
+    );
+  });
+});
+
+/* ------------------------------------- 4c. docs/03 §14.4: base-URL override */
+
+describe("P3-T04 — checkBaseUrlInput refuses rather than normalizes (docs/03 §14.4, docs/07 §8.5)", () => {
+  it("rejects the card's two bad values and accepts its good one, unchanged", () => {
+    expect(checkBaseUrlInput("http://proxy.example/v1")).toEqual({
+      ok: false,
+      reason: "not-https",
+    });
+    expect(checkBaseUrlInput("https://proxy.example/v1/")).toEqual({
+      ok: false,
+      reason: "trailing-slash",
+    });
+    expect(checkBaseUrlInput("https://proxy.example/v1")).toEqual({
+      ok: true,
+      value: "https://proxy.example/v1",
+    });
+  });
+
+  it("accepts empty (the documented base URL) and every documented default", () => {
+    expect(checkBaseUrlInput("")).toEqual({ ok: true, value: "" });
+    expect(checkBaseUrlInput("   ")).toEqual({ ok: true, value: "" });
+    for (const url of Object.values(DEFAULT_BASE_URLS)) {
+      expect(checkBaseUrlInput(url)).toEqual({ ok: true, value: url });
+    }
+    expect(checkBaseUrlInput("  https://gw.example:8443/llm  ")).toEqual({
+      ok: true,
+      value: "https://gw.example:8443/llm",
+    });
+  });
+
+  it("does not add a scheme, does not strip a slash, and refuses credentials, queries and fragments", () => {
+    for (const [raw, reason] of [
+      ["proxy.example/v1", "not-https"],
+      ["//proxy.example/v1", "not-https"],
+      ["ftp://proxy.example/v1", "not-https"],
+      ["https:proxy.example/v1", "not-https"],
+      ["https://", "invalid"],
+      ["https://proxy.example/", "trailing-slash"],
+      ["https://proxy.example/v1//", "trailing-slash"],
+      ["https://user:pw@proxy.example/v1", "invalid"],
+      ["https://user@proxy.example/v1", "invalid"],
+      ["https://proxy.example/v1?key=x", "invalid"],
+      ["https://proxy.example/v1?", "invalid"],
+      ["https://proxy.example/v1#frag", "invalid"],
+      ["https://proxy example/v1", "invalid"],
+    ] as const) {
+      expect(checkBaseUrlInput(raw), raw).toEqual({ ok: false, reason });
     }
   });
 });
@@ -509,10 +683,13 @@ describe("P1-T44 — the host over an in-memory store", () => {
     let state = await h.host.readState();
     expect(state.storeAvailable).toBe(true);
     expect(state.backendPref).toBe(OS_KEYSTORE_PREF_VALUE);
-    expect(state.credentials).toEqual([
-      { id: "source.ncbi", present: true, lastTest: undefined },
-      { id: "source.semanticscholar", present: false, lastTest: undefined },
-    ]);
+    expect(state.credentials).toEqual(
+      PANE_CREDENTIALS.map(({ id }) => ({
+        id,
+        present: id === "source.ncbi",
+        lastTest: undefined,
+      })),
+    );
 
     const second = syntheticKey();
     const replaced = await h.host.storeKey("source.ncbi", second);
@@ -553,22 +730,145 @@ describe("P1-T44 — the host over an in-memory store", () => {
 
   it("rejects an id the pane has no block for, before touching the store", async () => {
     const h = hostHarness(() => Promise.reject(new Error("unused")));
-    await expect(h.host.storeKey("llm.openai", syntheticKey())).rejects.toThrow(
+    await expect(h.host.storeKey("tts.gemini", syntheticKey())).rejects.toThrow(
       RangeError,
     );
     await expect(h.host.testKey("nonsense")).rejects.toThrow(RangeError);
     await expect(h.host.clearKey("tts.gemini")).rejects.toThrow(RangeError);
+    await expect(
+      h.host.setBaseUrl("mistral", "https://proxy.example/v1"),
+    ).rejects.toThrow(RangeError);
     expect(h.store.values.size).toBe(0);
+    expect(h.baseUrlWrites).toEqual([]);
   });
 
-  it("Remove all clears every stored SecretId, not only the pane's two, and reports the count", async () => {
+  it("Remove all clears every stored SecretId through the port's one sweep, not only the pane's six, and reports the count", async () => {
     const h = hostHarness(() => Promise.reject(new Error("unused")));
-    await h.store.set("llm.openai", syntheticKey());
+    let sweeps = 0;
+    const sweep = h.store.clearAll.bind(h.store);
+    (h.store as { clearAll: () => Promise<number> }).clearAll = () => {
+      sweeps += 1;
+      return sweep();
+    };
+    await h.store.set("tts.gemini", syntheticKey());
+    await h.host.storeKey("llm.openai", syntheticKey());
     await h.host.storeKey("source.ncbi", syntheticKey());
     await h.host.storeKey("source.semanticscholar", syntheticKey(40));
-    expect(await h.host.clearAllKeys()).toBe(3);
+    expect(await h.host.clearAllKeys()).toBe(4);
+    expect(sweeps).toBe(1);
     expect(h.store.values.size).toBe(0);
     expect(await h.host.clearAllKeys()).toBe(0);
+  });
+
+  for (const { id, provider } of LLM_CREDENTIALS) {
+    it(`${provider}: stores a normalised synthetic key under ${id}, masks it, shows presence and clears it (P3-T04)`, async () => {
+      const h = hostHarness(() => Promise.reject(new Error("unused")));
+      const key = `sk-rhsyn-${syntheticKey(40)}`;
+      expect(await h.host.storeKey(id, `  Bearer ${key}\n`)).toEqual({
+        stored: true,
+        digest: keyDigest(key),
+      });
+      expect(h.store.values.get(id)).toBe(key);
+      expect([...h.store.values.keys()]).toEqual([id]);
+      let state = await h.host.readState();
+      expect(
+        state.credentials.filter((c) => c.present).map((c) => c.id),
+      ).toEqual([id]);
+      expect(await h.host.clearKey(id)).toBe(true);
+      expect(h.store.values.size).toBe(0);
+      state = await h.host.readState();
+      expect(state.credentials.every((c) => !c.present)).toBe(true);
+      // Nothing about the key reached a log line.
+      const lines = h.sink.lines.join("\n");
+      expect(lines.includes(key)).toBe(false);
+      expect(lines.includes(keyDigest(key))).toBe(false);
+      expect(lines.includes(key.slice(-4))).toBe(false);
+    });
+  }
+
+  it("Test refuses an LLM key before reading it, and sends no request (its Test is P3-T14's)", async () => {
+    const h = hostHarness(() => Promise.reject(new Error("unused")));
+    let reads = 0;
+    const get = h.store.get.bind(h.store);
+    (h.store as { get: SecretStore["get"] }).get = (id) => {
+      reads += 1;
+      return get(id);
+    };
+    for (const { id } of LLM_CREDENTIALS) {
+      await h.host.storeKey(id, syntheticKey());
+      await expect(h.host.testKey(id)).rejects.toThrow(RangeError);
+    }
+    expect(reads).toBe(0);
+    expect(h.requests).toEqual([]);
+  });
+
+  it("readState reports the active provider, every stored base URL and whether the plugin database holds data", async () => {
+    const h = hostHarness(() => Promise.reject(new Error("unused")), {
+      activeProvider: "gemini",
+      hasPluginData: () => Promise.resolve(true),
+    });
+    h.baseUrls.set("openai", "https://gw.example/v1");
+    const state = await h.host.readState();
+    expect(state.activeProvider).toBe("gemini");
+    expect(state.providers).toEqual([
+      { provider: "openrouter", baseUrl: "" },
+      { provider: "openai", baseUrl: "https://gw.example/v1" },
+      { provider: "gemini", baseUrl: "" },
+      { provider: "anthropic", baseUrl: "" },
+    ]);
+    expect(state.pluginDataPresent).toBe(true);
+
+    // An llmProvider value the pane has no block for reads as the §8.5 default;
+    // no database probe, or a failing one, reads as "no data".
+    const odd = hostHarness(() => Promise.reject(new Error("unused")), {
+      activeProvider: "mistral",
+    });
+    const oddState = await odd.host.readState();
+    expect(oddState.activeProvider).toBe("openrouter");
+    expect(oddState.pluginDataPresent).toBe(false);
+    const failing = hostHarness(() => Promise.reject(new Error("unused")), {
+      hasPluginData: () => Promise.reject(new Error("db closed")),
+    });
+    expect((await failing.host.readState()).pluginDataPresent).toBe(false);
+  });
+
+  it("setBaseUrl writes only a valid value, refuses the card's two bad ones without writing, and never logs the value", async () => {
+    const h = hostHarness(() => Promise.reject(new Error("unused")));
+    const good = "https://proxy.example/v1";
+    expect(await h.host.setBaseUrl("openai", good)).toEqual<BaseUrlResult>({
+      stored: true,
+      cleared: false,
+    });
+    expect(h.baseUrls.get("openai")).toBe(good);
+    expect((await h.host.readState()).providers[1]).toEqual({
+      provider: "openai",
+      baseUrl: good,
+    });
+    for (const [bad, reason] of [
+      ["http://proxy.example/v1", "not-https"],
+      ["https://proxy.example/v1/", "trailing-slash"],
+      ["https://secret-user:secret-pw@proxy.example/v1", "invalid"],
+    ] as const) {
+      expect(await h.host.setBaseUrl("openai", bad)).toEqual<BaseUrlResult>({
+        stored: false,
+        reason,
+      });
+      // The previous value is kept.
+      expect(h.baseUrls.get("openai")).toBe(good);
+    }
+    expect(await h.host.setBaseUrl("openai", "  ")).toEqual<BaseUrlResult>({
+      stored: true,
+      cleared: true,
+    });
+    expect(h.baseUrls.get("openai")).toBe("");
+    expect(h.baseUrlWrites).toEqual([
+      ["openai", good],
+      ["openai", ""],
+    ]);
+    const lines = h.sink.lines.join("\n");
+    expect(lines).not.toContain("proxy.example");
+    expect(lines).not.toContain("secret-pw");
+    expect(lines).toContain("base URL refused");
   });
 
   it("Test: absent key reports absent without a request", async () => {
@@ -777,12 +1077,178 @@ describe("P1-T44 — rule 4, docs/09 §1.8 verbatim in the bundle", () => {
   });
 });
 
+/**
+ * docs/09 §1.8's tier-2 replacement for a paragraph: the quoted line under its
+ * bold label. Paragraph 1's (item 274(a)) and paragraph 4's (item 275(b)).
+ */
+function tierTwoRiskSentence(paragraph: 1 | 4 = 1): string {
+  const label = `> **Tier 2 (session-only), in place of paragraph ${paragraph}:**`;
+  const start = DOC09.indexOf(label);
+  expect(start).toBeGreaterThan(DOC09.indexOf("### 1.8 Residual risk"));
+  expect(start).toBeLessThan(DOC09.indexOf("### 1.9 How the UI"));
+  const lines = DOC09.slice(start + label.length)
+    .split("\n")
+    .map((line) => line.replace(/\r$/, ""));
+  const quoted: string[] = [];
+  for (const line of lines.slice(1)) {
+    if (!line.startsWith(">")) break;
+    quoted.push(line.replace(/^>\s?/, "").trim());
+  }
+  return quoted.join(" ").replaceAll("**", "");
+}
+
+describe("item 274(a) — docs/09 §1.8's tier-2 sentence replaces paragraph 1 under the session badge", () => {
+  it("ships the sentence word for word, and it says what tier 2 does", () => {
+    const sentence = tierTwoRiskSentence();
+    expect(ftlValue(PREFERENCES_L10N.risk1Session)).toBe(sentence);
+    expect(sentence).toContain("held in memory only");
+    expect(sentence).toContain("written nowhere");
+    expect(sentence).toContain("gone when Zotero closes");
+    // It is not a sixth paragraph of the statement the five-paragraph test reads.
+    expect(residualRiskParagraphs()).toHaveLength(5);
+    expect(residualRiskParagraphs()).not.toContain(sentence);
+  });
+
+  it("riskOpeningMessageId picks it only for the session badge", () => {
+    for (const platform of ["win", "mac", "linux", "other"] as const) {
+      expect(riskOpeningMessageId(backendBadge("session", platform))).toBe(
+        PREFERENCES_L10N.risk1Session,
+      );
+      for (const pref of ["oskeystore", "", "passphrase", "Session"]) {
+        expect(riskOpeningMessageId(backendBadge(pref, platform))).toBe(
+          PREFERENCES_L10N.risk1,
+        );
+      }
+    }
+  });
+
+  it("the controller's rule is the same rule, and refresh paints it into paragraph 1's element", async () => {
+    const h = paneHarness({});
+    for (const platform of ["win", "mac", "linux", "other"] as const) {
+      for (const pref of ["oskeystore", "", "session", "passphrase"]) {
+        expect(h.controller.logic.riskOpening(pref, h.controller)).toBe(
+          riskOpeningMessageId(backendBadge(pref, platform)),
+        );
+      }
+    }
+    expect(h.controller.l10n["risk1Session"]).toBe(
+      PREFERENCES_L10N.risk1Session,
+    );
+    expect(XHTML_CODE).toMatch(
+      /<html:p\s+id="rh-prefs-risk-1"\s+class="rh-hint rh-risk"\s+data-l10n-id="research-helper-prefs-risk-1"/,
+    );
+
+    const session = paneHarness({
+      host: fakeHost({ backendPref: SESSION_PREF_VALUE }),
+    });
+    await session.controller.init(session.root);
+    expect(session.byId("rh-prefs-risk-1").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.risk1Session,
+    );
+
+    const os = paneHarness({ host: fakeHost({}) });
+    await os.controller.init(os.root);
+    expect(os.byId("rh-prefs-risk-1").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.risk1,
+    );
+    // A session preference with no live store is "unavailable": paragraph 1.
+    const noStore = paneHarness({
+      host: fakeHost({
+        backendPref: SESSION_PREF_VALUE,
+        storeAvailable: false,
+      }),
+    });
+    await noStore.controller.init(noStore.root);
+    expect(noStore.byId("rh-prefs-risk-1").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.risk1,
+    );
+  });
+});
+
+describe("item 275(b) — docs/09 §1.8's tier-2 replacement for paragraph 4 under the session badge", () => {
+  it("ships the sentence word for word, and it says what tier 2 does not protect", () => {
+    const sentence = tierTwoRiskSentence(4);
+    expect(sentence).toBe(
+      "Even held in memory, the keys are not protected from software running under your own user account: any program you run — including any other Zotero plugin — can read them. Zotero does not isolate plugins from each other.",
+    );
+    expect(ftlValue(PREFERENCES_L10N.risk4Session)).toBe(sentence);
+    expect(sentence).toContain("including any other Zotero plugin");
+    // It presumes no encryption, which is the point of the replacement.
+    expect(sentence).not.toContain("decrypt");
+    expect(sentence).not.toBe(tierTwoRiskSentence(1));
+    // It is not a sixth paragraph of the statement the five-paragraph test reads.
+    expect(residualRiskParagraphs()).toHaveLength(5);
+    expect(residualRiskParagraphs()).not.toContain(sentence);
+  });
+
+  it("riskOwnAccountMessageId picks it only for the session badge", () => {
+    for (const platform of ["win", "mac", "linux", "other"] as const) {
+      expect(riskOwnAccountMessageId(backendBadge("session", platform))).toBe(
+        PREFERENCES_L10N.risk4Session,
+      );
+      for (const pref of ["oskeystore", "", "passphrase", "Session"]) {
+        expect(riskOwnAccountMessageId(backendBadge(pref, platform))).toBe(
+          PREFERENCES_L10N.risk4,
+        );
+      }
+    }
+  });
+
+  it("the controller's rule is the same rule, and refresh paints it into paragraph 4's element", async () => {
+    const h = paneHarness({});
+    for (const platform of ["win", "mac", "linux", "other"] as const) {
+      for (const pref of ["oskeystore", "", "session", "passphrase"]) {
+        expect(h.controller.logic.riskOwnAccount(pref, h.controller)).toBe(
+          riskOwnAccountMessageId(backendBadge(pref, platform)),
+        );
+      }
+    }
+    expect(h.controller.l10n["risk4"]).toBe(PREFERENCES_L10N.risk4);
+    expect(h.controller.l10n["risk4Session"]).toBe(
+      PREFERENCES_L10N.risk4Session,
+    );
+    expect(XHTML_CODE).toMatch(
+      /<html:p\s+id="rh-prefs-risk-4"\s+class="rh-hint rh-risk"\s+data-l10n-id="research-helper-prefs-risk-4"/,
+    );
+
+    const session = paneHarness({
+      host: fakeHost({ backendPref: SESSION_PREF_VALUE }),
+    });
+    await session.controller.init(session.root);
+    expect(session.byId("rh-prefs-risk-4").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.risk4Session,
+    );
+    // Both swaps happen together under tier 2.
+    expect(session.byId("rh-prefs-risk-1").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.risk1Session,
+    );
+
+    const os = paneHarness({ host: fakeHost({}) });
+    await os.controller.init(os.root);
+    expect(os.byId("rh-prefs-risk-4").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.risk4,
+    );
+    // A session preference with no live store is "unavailable": paragraph 4.
+    const noStore = paneHarness({
+      host: fakeHost({
+        backendPref: SESSION_PREF_VALUE,
+        storeAvailable: false,
+      }),
+    });
+    await noStore.controller.init(noStore.root);
+    expect(noStore.byId("rh-prefs-risk-4").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.risk4,
+    );
+  });
+});
+
 /* ------------------------------------------------------- 10. the markup rules */
 
 describe("P1-T44 — the fragment carries the markup rules", () => {
-  const keyInputs = [...XHTML_CODE.matchAll(/<html:input\b[^>]*>/g)].map(
+  const allInputs = [...XHTML_CODE.matchAll(/<html:input\b[^>]*>/g)].map(
     (m) => m[0],
   );
+  const keyInputs = allInputs.filter((tag) => /class="rh-key"/.test(tag));
 
   it("is a fragment: no DOCTYPE, no html wrapper, XUL default namespace, the root id the script waits for", () => {
     expect(XHTML_CODE).not.toMatch(/<!DOCTYPE/i);
@@ -809,20 +1275,134 @@ describe("P1-T44 — the fragment carries the markup rules", () => {
   });
 
   it("rule 1 and 9: every key field is a password input with no preference attribute", () => {
-    expect(keyInputs).toHaveLength(SOURCE_CREDENTIALS.length);
-    for (const input of keyInputs) {
+    expect(keyInputs).toHaveLength(PANE_CREDENTIALS.length);
+    for (const { elementPrefix } of PANE_CREDENTIALS) {
+      const input = keyInputs.find((tag) =>
+        tag.includes(`id="${elementPrefix}-key"`),
+      );
+      expect(input, `${elementPrefix}-key is a key input`).toBeDefined();
       expect(input).toMatch(/type="password"/);
       expect(input).not.toMatch(/\bpreference=/);
-      expect(input).toMatch(/class="rh-key"/);
       expect(input).toMatch(/autocomplete="off"/);
     }
-    // No `preference=` anywhere in this pane at all, yet: the only bindings it
-    // may ever carry are non-secret rows, and this card adds none.
-    expect(XHTML_CODE).not.toMatch(/\bpreference="/);
+    // Every password input is a key field; nothing else is masked.
+    expect(allInputs.filter((tag) => /type="password"/.test(tag))).toEqual(
+      keyInputs,
+    );
+  });
+
+  it("every preference= names a key in src/prefs/keys.ts, fully qualified, and no key or base-URL input carries one (P3-T04)", () => {
+    const bound = [
+      ...XHTML_CODE.matchAll(/<([\w:]+)\b([^>]*?)\bpreference="([^"]+)"/g),
+    ].map((m) => ({ tag: m[0], name: m[3]! }));
+    const qualified = new Set<string>(
+      Object.values(PREF_KEYS).map((key) => qualifiedPrefKey(key)),
+    );
+    for (const { name } of bound) {
+      expect(qualified.has(name), `${name} is a PREF_KEYS row`).toBe(true);
+    }
+    // Exactly the non-secret rows docs/08 §7.3 binds, and no others.
+    expect(bound.map((b) => b.name).sort()).toEqual(
+      [
+        PREF_KEYS.llmProvider,
+        PREF_KEYS.openrouterModel,
+        PREF_KEYS.openaiModel,
+        PREF_KEYS.geminiModel,
+        PREF_KEYS.anthropicModel,
+        PREF_KEYS.geminiPaidTier,
+      ]
+        .map((key) => qualifiedPrefKey(key))
+        .sort(),
+    );
+    for (const { tag } of bound) {
+      expect(tag).not.toMatch(/class="rh-key"|type="password"|rh-base-url/);
+      expect(tag).not.toMatch(/KeyPresent|keyPresent|secretBackend/);
+    }
+    // No `*.keyPresent`, `*.baseUrl` or secret row is bound anywhere.
+    expect(XHTML_CODE).not.toMatch(/preference="[^"]*(keyPresent|baseUrl)"/);
+    for (const def of Object.values(PREFS)) {
+      if ((def as { secret?: boolean }).secret === true) {
+        expect(XHTML_CODE).not.toContain(qualifiedPrefKey(def.key));
+      }
+    }
+  });
+
+  it("the LLM block: a provider menulist bound to llmProvider, whose literal labels are the never-translated provider names", () => {
+    const menu =
+      /<menulist\b[^>]*id="rh-provider"[^>]*>([\s\S]*?)<\/menulist>/.exec(
+        XHTML_CODE,
+      );
+    expect(menu, "the provider menulist").not.toBeNull();
+    expect(menu![0]).toMatch(
+      new RegExp(`preference="${qualifiedPrefKey(PREF_KEYS.llmProvider)}"`),
+    );
+    const items = [
+      ...menu![1]!.matchAll(/<menuitem value="([^"]+)" label="([^"]+)"/g),
+    ].map((m) => [m[1]!, m[2]!]);
+    expect(items.map(([value]) => value)).toEqual(PREFS.llmProvider.values);
+    for (const [value, label] of items) {
+      // docs/08 §10.3: provider names are not translated, so the literal must
+      // be exactly the en-US (and KO_PRESENT) display name.
+      expect(label).toBe(ftlValue(`research-helper-provider-${value}`));
+    }
+  });
+
+  it("the LLM block: per provider, a model input bound to <provider>.model and an unbound base-URL input whose placeholder is the documented base URL", () => {
+    for (const { provider, elementPrefix } of LLM_CREDENTIALS) {
+      expect(XHTML_CODE).toMatch(
+        new RegExp(`<vbox\\s+id="rh-provider-${provider}"`),
+      );
+      const model = allInputs.find((tag) =>
+        tag.includes(`id="${elementPrefix}-model"`),
+      );
+      expect(model, `${elementPrefix}-model`).toBeDefined();
+      expect(model).toContain(
+        `preference="${qualifiedPrefKey(PREF_KEYS[`${provider}Model`])}"`,
+      );
+      const base = allInputs.find((tag) =>
+        tag.includes(`id="${elementPrefix}-base-url"`),
+      );
+      expect(base, `${elementPrefix}-base-url`).toBeDefined();
+      expect(base).not.toMatch(/\bpreference=/);
+      expect(base).toContain(`placeholder="${DEFAULT_BASE_URLS[provider]}"`);
+      expect(XHTML_CODE).toMatch(
+        new RegExp(`id="${elementPrefix}-base-url-status"[^>]*role="status"`),
+      );
+    }
+    // The Gemini block, and only it, carries the paid-tier declaration.
+    const checkboxes = [...XHTML_CODE.matchAll(/<checkbox\b[^>]*>/g)].map(
+      (m) => m[0],
+    );
+    expect(checkboxes).toHaveLength(1);
+    expect(checkboxes[0]).toContain(
+      `preference="${qualifiedPrefKey(PREF_KEYS.geminiPaidTier)}"`,
+    );
+    expect(checkboxes[0]).toContain(
+      `data-l10n-id="${PREFERENCES_L10N.geminiPaidTier}"`,
+    );
+    const gemini = /<vbox\s+id="rh-provider-gemini"[\s\S]*?<\/vbox>/.exec(
+      XHTML_CODE,
+    );
+    expect(gemini![0]).toContain('id="rh-gemini-paid-tier"');
+    expect(gemini![0]).toContain(PREFERENCES_L10N.geminiPaidTierNote);
+    // §8.5: the declaration is off by default and has no pref() line, so the
+    // binding reads it as false.
+    expect(PREFS.geminiPaidTier.default).toBe(false);
+  });
+
+  it("the paid-tier label states it is the user's own declaration about billing", () => {
+    const label =
+      /research-helper-prefs-gemini-paid-tier =\n\s+\.label = (.*)/.exec(FTL);
+    expect(label).not.toBeNull();
+    expect(label![1]).toMatch(/^I declare/);
+    expect(label![1]).toMatch(/billing-linked/);
+    expect(ftlValue(PREFERENCES_L10N.geminiPaidTierNote)).toMatch(
+      /your own statement/,
+    );
   });
 
   it("rule 1: a reveal button per field, labelled as hold-to-show, and no sticky toggle", () => {
-    for (const { elementPrefix } of SOURCE_CREDENTIALS) {
+    for (const { elementPrefix } of PANE_CREDENTIALS) {
       expect(XHTML_CODE).toMatch(
         new RegExp(
           `id="${elementPrefix}-reveal"\\s+data-l10n-id="${PREFERENCES_L10N.reveal}"`,
@@ -839,7 +1419,7 @@ describe("P1-T44 — the fragment carries the markup rules", () => {
 
   it("rules 3, 5, 6: a badge, a status row and Test / Clear per credential, one Remove all", () => {
     expect(XHTML_CODE).toMatch(/id="rh-prefs-backend"[^>]*role="status"/);
-    for (const { elementPrefix } of SOURCE_CREDENTIALS) {
+    for (const { elementPrefix } of PANE_CREDENTIALS) {
       expect(XHTML_CODE).toMatch(new RegExp(`id="${elementPrefix}-backend"`));
       expect(XHTML_CODE).toMatch(
         new RegExp(`id="${elementPrefix}-status"[^>]*role="status"`),
@@ -915,6 +1495,7 @@ class FakeElement {
   value = "";
   placeholder = "";
   disabled = false;
+  hidden = false;
   textContent = "";
   constructor(readonly id: string) {}
   get classList() {
@@ -953,16 +1534,34 @@ class FakeElement {
 }
 
 interface PaneController {
-  spec: { root: string; credentials: Record<string, string> };
+  spec: {
+    root: string;
+    credentials: Record<string, string>;
+    testable: string[];
+    providers: Record<string, string>;
+    providerMenu: string;
+    providerBlockPrefix: string;
+    restoreNote: string;
+  };
   l10n: Record<string, string>;
   OS_KEYSTORE: string;
+  SESSION: string;
   host: Record<string, unknown> | null;
   logic: {
     badge: (
       pref: string,
       platform: string,
       ctx: unknown,
-    ) => { messageId: string; warning: boolean; canStore: boolean };
+    ) => {
+      messageId: string;
+      warning: boolean;
+      canStore: boolean;
+      osStore: boolean;
+    };
+    restoreNotice: (state: unknown, badge: { osStore: boolean }) => boolean;
+    riskOpening: (pref: string, ctx: unknown) => string;
+    riskOwnAccount: (pref: string, ctx: unknown) => string;
+    baseUrlMessage: (result: unknown, l10n: unknown) => { id: string };
     platform: (z: unknown) => string;
     formatTime: (iso: string) => string;
   };
@@ -1045,28 +1644,56 @@ function paneHarness(options: {
 /** A fake host with the shipped API's shape and a recording of every call. */
 function fakeHost(options: {
   storeAvailable?: boolean;
+  backendPref?: string;
   present?: Partial<Record<string, boolean>>;
   test?: (id: string) => Promise<TestReport>;
+  activeProvider?: string;
+  baseUrls?: Partial<Record<ProviderId, string>>;
+  pluginDataPresent?: boolean;
 }) {
   const calls: { method: string; args: unknown[] }[] = [];
-  const present: Record<string, boolean> = {
-    "source.ncbi": false,
-    "source.semanticscholar": false,
-    ...options.present,
+  const present: Record<string, boolean> = Object.fromEntries(
+    PANE_CREDENTIALS.map(({ id }) => [id, options.present?.[id] === true]),
+  );
+  const baseUrls: Partial<Record<ProviderId, string>> = {
+    ...options.baseUrls,
   };
   const host = {
     paneId: PREFERENCES_PANE_ID,
     calls,
+    baseUrls,
     readState: () => {
       calls.push({ method: "readState", args: [] });
       return Promise.resolve({
-        backendPref: OS_KEYSTORE_PREF_VALUE,
+        backendPref: options.backendPref ?? OS_KEYSTORE_PREF_VALUE,
         storeAvailable: options.storeAvailable ?? true,
         credentials: Object.entries(present).map(([id, isPresent]) => ({
           id,
           present: isPresent,
           lastTest: undefined,
         })),
+        activeProvider: options.activeProvider ?? "openrouter",
+        providers: LLM_CREDENTIALS.map(({ provider }) => ({
+          provider,
+          baseUrl: baseUrls[provider] ?? "",
+        })),
+        pluginDataPresent: options.pluginDataPresent ?? false,
+        anyKeyStored: Object.values(present).some(Boolean),
+      });
+    },
+    setBaseUrl: (provider: ProviderId, raw: string) => {
+      calls.push({ method: "setBaseUrl", args: [provider, raw] });
+      const checked = checkBaseUrlInput(raw);
+      if (!checked.ok) {
+        return Promise.resolve<BaseUrlResult>({
+          stored: false,
+          reason: checked.reason,
+        });
+      }
+      baseUrls[provider] = checked.value;
+      return Promise.resolve<BaseUrlResult>({
+        stored: true,
+        cleared: checked.value === "",
       });
     },
     storeKey: (id: string, raw: string) => {
@@ -1112,9 +1739,16 @@ describe("P1-T44 — the controller, evaluated from the shipped bytes", () => {
     const h = paneHarness({});
     expect(h.controller.spec.root).toBe(PREFERENCES_ROOT_ID);
     expect(h.controller.OS_KEYSTORE).toBe(OS_KEYSTORE_PREF_VALUE);
+    expect(h.controller.SESSION).toBe(SESSION_PREF_VALUE);
     expect(h.controller.spec.credentials).toEqual(
+      Object.fromEntries(PANE_CREDENTIALS.map((c) => [c.id, c.elementPrefix])),
+    );
+    expect(h.controller.spec.testable).toEqual(
+      PANE_CREDENTIALS.map((c) => c.id).filter(isTestableCredential),
+    );
+    expect(h.controller.spec.providers).toEqual(
       Object.fromEntries(
-        SOURCE_CREDENTIALS.map((c) => [c.id, c.elementPrefix]),
+        LLM_CREDENTIALS.map((c) => [c.provider, c.elementPrefix]),
       ),
     );
     const known = new Set<string>(Object.values(PREFERENCES_L10N));
@@ -1125,12 +1759,26 @@ describe("P1-T44 — the controller, evaluated from the shipped bytes", () => {
     }
     // The badge table is the same table.
     for (const platform of ["win", "mac", "linux", "other"]) {
-      for (const pref of ["oskeystore", "", "session"]) {
+      for (const pref of ["oskeystore", "", "session", "passphrase"]) {
         const expected = backendBadge(pref, platform as "win");
         const actual = h.controller.logic.badge(pref, platform, h.controller);
-        expect(actual.messageId).toBe(expected.messageId);
-        expect(actual.warning).toBe(expected.warning);
-        expect(actual.canStore).toBe(expected.canStore);
+        expect(actual).toEqual({
+          messageId: expected.messageId,
+          warning: expected.warning,
+          canStore: expected.canStore,
+          osStore: expected.osStore,
+        });
+      }
+    }
+    // So is the restore rule.
+    for (const pluginDataPresent of [true, false]) {
+      for (const anyPresent of [true, false]) {
+        for (const osStore of [true, false]) {
+          const state = { anyKeyStored: anyPresent, pluginDataPresent };
+          expect(h.controller.logic.restoreNotice(state, { osStore })).toBe(
+            showRestoreNotice(state, { osStore }),
+          );
+        }
       }
     }
   });
@@ -1397,5 +2045,194 @@ describe("P1-T44 — the controller, evaluated from the shipped bytes", () => {
     h.byId("rh-prefs-remove-all").fire("command");
     await flush();
     expect(h.debugLines).toEqual([]);
+  });
+});
+
+describe("P3-T04 — the controller's LLM provider blocks, evaluated from the shipped bytes", () => {
+  it("tier 2: paints 'Not saved between sessions' as a warning and keeps every key field usable", async () => {
+    const h = paneHarness({
+      host: fakeHost({ backendPref: SESSION_PREF_VALUE }),
+      platform: "win",
+    });
+    await h.controller.init(h.root);
+    const badge = h.byId("rh-prefs-backend");
+    expect(badge.getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.backendSession,
+    );
+    expect(badge.classes.has("rh-warning")).toBe(true);
+    for (const { elementPrefix } of PANE_CREDENTIALS) {
+      expect(
+        h.byId(`${elementPrefix}-backend`).getAttribute("data-l10n-id"),
+      ).toBe(PREFERENCES_L10N.backendSession);
+      expect(h.byId(`${elementPrefix}-key`).disabled).toBe(false);
+      expect(h.byId(`${elementPrefix}-reveal`).disabled).toBe(false);
+      // Not an OS store: the "does not travel" sentence is not used.
+      expect(
+        h.byId(`${elementPrefix}-status`).getAttribute("data-l10n-id"),
+      ).toBe(PREFERENCES_L10N.keyAbsent);
+    }
+    expect(h.byId("rh-prefs-remove-all").disabled).toBe(false);
+  });
+
+  it("stores, masks and clears a synthetic key in each LLM block through the host", async () => {
+    const host = fakeHost({});
+    const h = paneHarness({ host });
+    await h.controller.init(h.root);
+    for (const { id, elementPrefix } of LLM_CREDENTIALS) {
+      const input = h.byId(`${elementPrefix}-key`);
+      const key = `sk-rhsyn-${syntheticKey(40)}`;
+      input.value = key;
+      input.fire("change");
+      await flush();
+      await flush();
+      expect(
+        host.calls.filter((c) => c.method === "storeKey").at(-1)?.args,
+      ).toEqual([id, key]);
+      expect(input.value).toBe("");
+      expect(input.type).toBe("password");
+      expect(input.placeholder).toBe(keyDigest(key));
+      expect(
+        h.byId(`${elementPrefix}-status`).getAttribute("data-l10n-id"),
+      ).toBe(PREFERENCES_L10N.keyPresent);
+      expect(h.byId(`${elementPrefix}-clear`).disabled).toBe(false);
+      expect(input.fire("copy").defaultPrevented).toBe(true);
+      h.byId(`${elementPrefix}-clear`).fire("command");
+      await flush();
+      await flush();
+      expect(
+        host.calls.filter((c) => c.method === "clearKey").at(-1)?.args,
+      ).toEqual([id]);
+      expect(input.placeholder).toBe("");
+    }
+  });
+
+  it("keeps every LLM Test button disabled, even with a key stored, and never asks the host to test one", async () => {
+    const host = fakeHost({
+      present: Object.fromEntries(LLM_CREDENTIALS.map(({ id }) => [id, true])),
+    });
+    const h = paneHarness({ host });
+    await h.controller.init(h.root);
+    for (const { elementPrefix } of LLM_CREDENTIALS) {
+      const test = h.byId(`${elementPrefix}-test`);
+      expect(test.disabled).toBe(true);
+      test.fire("command");
+    }
+    await flush();
+    expect(host.calls.filter((c) => c.method === "testKey")).toEqual([]);
+  });
+
+  it("rule 4: shows only the active provider's block, and follows the menulist", async () => {
+    const h = paneHarness({ host: fakeHost({ activeProvider: "gemini" }) });
+    await h.controller.init(h.root);
+    const visible = () =>
+      LLM_CREDENTIALS.map(({ provider }) => provider).filter(
+        (provider) => !h.byId(`rh-provider-${provider}`).hidden,
+      );
+    expect(visible()).toEqual(["gemini"]);
+    const menu = h.byId("rh-provider");
+    menu.value = "anthropic";
+    menu.fire("command");
+    expect(visible()).toEqual(["anthropic"]);
+    // Zotero paints the stored value after the pane's load.
+    menu.value = "openai";
+    menu.fire("syncfrompreference");
+    expect(visible()).toEqual(["openai"]);
+    // A value the pane has no block for falls back to docs/07 §8.5's default.
+    menu.value = "mistral";
+    menu.fire("command");
+    expect(visible()).toEqual(["openrouter"]);
+  });
+
+  it("paints each stored base URL once, and writes a changed one through the host with the outcome inline", async () => {
+    const host = fakeHost({
+      baseUrls: { anthropic: "https://gw.example/anthropic" },
+    });
+    const h = paneHarness({ host });
+    await h.controller.init(h.root);
+    expect(h.byId("rh-anthropic-base-url").value).toBe(
+      "https://gw.example/anthropic",
+    );
+    expect(h.byId("rh-or-base-url").value).toBe("");
+    expect(h.byId("rh-or-base-url").disabled).toBe(false);
+
+    const input = h.byId("rh-openai-base-url");
+    const status = h.byId("rh-openai-base-url-status");
+    const cases: [string, string, string | undefined][] = [
+      ["http://proxy.example/v1", PREFERENCES_L10N.baseUrlNotHttps, undefined],
+      [
+        "https://proxy.example/v1/",
+        PREFERENCES_L10N.baseUrlTrailingSlash,
+        undefined,
+      ],
+      [
+        "https://u:p@proxy.example/v1",
+        PREFERENCES_L10N.baseUrlInvalid,
+        undefined,
+      ],
+      [
+        " https://proxy.example/v1 ",
+        PREFERENCES_L10N.baseUrlSaved,
+        "https://proxy.example/v1",
+      ],
+      ["", PREFERENCES_L10N.baseUrlDefault, ""],
+    ];
+    for (const [typed, message, stored] of cases) {
+      input.value = typed;
+      input.fire("change");
+      await flush();
+      await flush();
+      expect(status.getAttribute("data-l10n-id"), typed).toBe(message);
+      expect(
+        host.calls.filter((c) => c.method === "setBaseUrl").at(-1)?.args,
+      ).toEqual(["openai", typed]);
+      if (stored === undefined) {
+        // Refused: the field keeps exactly what the user typed.
+        expect(input.value).toBe(typed);
+      } else {
+        expect(host.baseUrls.openai).toBe(stored);
+        expect(input.value).toBe(stored);
+      }
+    }
+    // A key store refreshes the pane but does not repaint the base URLs.
+    input.value = "https://half-typed";
+    h.byId("rh-openai-key").value = syntheticKey();
+    h.byId("rh-openai-key").fire("change");
+    await flush();
+    await flush();
+    expect(input.value).toBe("https://half-typed");
+  });
+
+  it("with no host, the base-URL fields are disabled and nothing is written", async () => {
+    const h = paneHarness({});
+    await h.controller.init(h.root);
+    for (const { elementPrefix } of LLM_CREDENTIALS) {
+      expect(h.byId(`${elementPrefix}-base-url`).disabled).toBe(true);
+      expect(h.byId(`${elementPrefix}-key`).disabled).toBe(true);
+    }
+    expect(h.byId("rh-provider-openrouter").hidden).toBe(false);
+    expect(h.byId("rh-prefs-restore-note").hidden).toBe(true);
+  });
+
+  it("docs/09 §1.9 item 8: shows the restore notice only for no keys, plugin data and an OS store", async () => {
+    const shown = async (
+      options: Parameters<typeof fakeHost>[0],
+      platform: "win" | "linux" = "win",
+    ) => {
+      const h = paneHarness({ host: fakeHost(options), platform });
+      await h.controller.init(h.root);
+      return !h.byId("rh-prefs-restore-note").hidden;
+    };
+    expect(await shown({ pluginDataPresent: true })).toBe(true);
+    expect(await shown({ pluginDataPresent: false })).toBe(false);
+    expect(
+      await shown({
+        pluginDataPresent: true,
+        present: { "llm.anthropic": true },
+      }),
+    ).toBe(false);
+    expect(await shown({ pluginDataPresent: true }, "linux")).toBe(false);
+    expect(
+      await shown({ pluginDataPresent: true, backendPref: SESSION_PREF_VALUE }),
+    ).toBe(false);
   });
 });

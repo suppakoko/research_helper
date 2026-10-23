@@ -529,14 +529,15 @@ export const PREFS = {
   },
 
   /**
-   * Per-Zotero-session spend ceiling in whole US cents (NFR-5). Ships off at
-   * `0`, as `runMaxSpendCents`; the running total lives in memory and is never
-   * persisted.
+   * Per-Zotero-session spend ceiling in whole US cents (NFR-5). Ships at
+   * `500`, US $5.00 (owner, 2026-10-23, `plan/00` §6 item 271(b); gate
+   * `G-20`; §8.5 moved first); `0` turns it off. The running total lives in
+   * memory and is never persisted.
    */
   runMaxSessionSpendCents: {
     key: PREF_KEYS.runMaxSessionSpendCents,
     type: "integer",
-    default: 0,
+    default: 500,
     min: 0,
   },
 

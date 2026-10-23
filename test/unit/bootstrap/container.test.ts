@@ -522,14 +522,14 @@ describe("installServices wires the graph Phase 1 built", () => {
 
   // `P3-T34` (`plan/00` §6 item 250): the root builds the job queue with no
   // store when no database is passed (P3-T33 attaches it from the database
-  // installServices opens) and, until P3-T15/T16/T26 fill them, no
+  // installServices opens) and, until P3-T15/T16 fill them, no other
   // resume guard and no notifier — so no interrupted job can resume.
-  it("builds the job queue storeless, with every resume prerequisite still missing", async () => {
+  // `skipCached` is P3-T26's, passed since 2026-10-23.
+  it("builds the job queue storeless, with every resume prerequisite but skipCached still missing", async () => {
     const h = harness();
     const graph = await installServices(h.scope, h.options);
     expect(graph.jobs.attached).toBe(false);
     expect(graph.jobs.missingResumePrerequisites()).toStrictEqual([
-      "skipCached",
       "egress",
       "confirm",
       "ceilings",
@@ -2371,6 +2371,47 @@ describe("P3-T33 — installServices opens the plugin database once and shares i
     await h.scope.unregisterAll();
     expect(graph.jobs.attached).toBe(false);
     expect(database.events).toStrictEqual(["open", "close"]);
+  });
+
+  // `P3-T26`: `docs/07` §9.3 trigger 1, run once the cache is usable.
+  it("compares the shipped prompt versions once the database is ready, invalidates a MINOR-bumped prompt's entries, keeps a PATCH-bumped one's, and writes the set once", async () => {
+    const database = sqliteDatabase();
+    let release: (versions: Record<string, string>) => void = () => undefined;
+    const loaded = new Promise<Record<string, string>>((resolve) => {
+      release = resolve;
+    });
+    const h = harness(
+      { pluginDatabase: database.source, promptVersions: () => loaded },
+      {
+        "cache.lastSeenPromptVersions": JSON.stringify({
+          PAPER_SUMMARY_ABSTRACT: "1.0.0",
+          CHUNK_MAP: "1.0.0",
+        }),
+      },
+    );
+    const graph = await installServices(h.scope, h.options);
+    await graph.database.ready;
+    // The summary cache tags by MAJOR.MINOR line (item 273(a)).
+    await graph.cache.set("summary", "old", 1, {
+      tags: ["promptVersion:PAPER_SUMMARY_ABSTRACT@1.0"],
+    });
+    await graph.cache.set("summary", "kept", 2, {
+      tags: ["promptVersion:CHUNK_MAP@1.0"],
+    });
+
+    // A MINOR bump goes; a PATCH bump keeps its entries (docs/12 §17.2).
+    const shipped = { PAPER_SUMMARY_ABSTRACT: "1.1.0", CHUNK_MAP: "1.0.1" };
+    release(shipped);
+    await settle();
+    expect(await graph.cache.get("summary", "old")).toBeUndefined();
+    expect(await graph.cache.get("summary", "kept")).toBe(2);
+    expect(
+      JSON.parse(String(h.prefs.get("cache.lastSeenPromptVersions"))),
+    ).toStrictEqual(shipped);
+
+    await h.scope.unregisterAll();
+    expect(database.events).toStrictEqual(["open", "close"]);
+    expect(h.errors).toStrictEqual([]);
   });
 
   it("keeps startup standing when the database cannot open: no job store, an inert cache, one error line", async () => {

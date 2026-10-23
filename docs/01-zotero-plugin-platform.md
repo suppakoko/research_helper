@@ -1901,8 +1901,10 @@ pref("extensions.zotero.research-helper.cache.maxSizeMB", 500);
 // Every surface shows and accepts dollars. Neither is bound by a control; both are listed
 // here so they are visible in about:config. Corrected 2026-10-20 (plan/00 §6 item 245;
 // owner: store as integer cents): these were run.maxSpendUSD and run.maxSessionSpendUSD.
+// Decided 2026-10-23 (owner, plan/00 §6 item 271(b); gate G-20): the session ceiling ships
+// at 500 cents (US $5.00); the per-run ceiling stays 0 (off). The session line read 0 before.
 pref("extensions.zotero.research-helper.run.maxSpendCents", 0);
-pref("extensions.zotero.research-helper.run.maxSessionSpendCents", 0);
+pref("extensions.zotero.research-helper.run.maxSessionSpendCents", 500);
 // General contact address, NOT NCBI-specific: it is sent only as Crossref's `mailto`
 // parameter. NCBI always receives the maintainer address per NBK25497. See
 // 02-literature-database-apis.md §2.2.

@@ -3,10 +3,13 @@
  * {@link CACHE_SCHEMA_VERSION}, and one generic key helper (`P3-T33`).
  *
  * The per-purpose key builders §9.1 also sketches (`sourceResponseKey`,
- * `summaryKey`, `embeddingKey`, `llmCompletionKey`) belong to the cards that
- * cache those things; `summaryKey` is `P3-T26`'s, and with it the choice
- * between the full prompt version string and `cacheEpoch` (`plan/00` §6
- * item 239(a)). Nothing here takes a view on that choice.
+ * `embeddingKey`, `llmCompletionKey`) belong to the cards that cache those
+ * things. {@link summaryKey} is `P3-T26`'s: `docs/06` §11.2's components,
+ * read as that section's "Decided 2026-10-23" note records — each keyed
+ * prompt's `cacheEpoch`, not its full version string, so a PATCH bump keeps
+ * cached summaries (corrected 2026-10-23, owner, `plan/00` §6 item 273(a)).
+ * {@link encodeTagValue} is the one escape for a cache tag's value: the
+ * summary cache and the job runner's pinned tags both use it (item 273(c)).
  *
  * ## Why SHA-256 is computed here, synchronously
  *
@@ -17,6 +20,9 @@
  * `test/unit/core/cache.test.ts` against Node's `crypto` and the standard
  * test vectors. It is a cache key, not a security boundary.
  */
+
+import type { ProviderId } from "../../model/ids";
+import type { SourceTier } from "../../model/summary";
 
 /** Bumped whenever the shape of a cached value changes. */
 export const CACHE_SCHEMA_VERSION = 1;
@@ -105,6 +111,151 @@ export function cacheKey(kind: string, ...parts: readonly unknown[]): string {
   return sha256Hex(
     stableStringify([`v${String(CACHE_SCHEMA_VERSION)}`, kind, ...parts]),
   );
+}
+
+// ---------------------------------------------------------------------------
+// The summary key — docs/06 §11.2 (`P3-T26`)
+// ---------------------------------------------------------------------------
+
+/** {@link summaryKey}'s `kind`: §11.2's `'ps'` namespace component. */
+export const SUMMARY_KEY_KIND = "ps";
+
+/**
+ * Everything `docs/06` §11.2 keys a paper summary on, read as that section's
+ * "Decided 2026-10-23" note records. Every member is load-bearing: changing
+ * any one of them must miss.
+ */
+export interface SummaryKeyInput {
+  readonly libraryID: number;
+  /** The Zotero item key of the summarized (parent) item. */
+  readonly itemKey: string;
+  /**
+   * `AcquiredSource.contentHash`: the hash of the **cleaned** text actually
+   * sent (`docs/06` §4.1 runs before it is taken), never of the file, the raw
+   * extractor text or `dateModified`. If a later stage cuts the text again
+   * before sending it, this must be the hash of the cut text.
+   */
+  readonly contentHash: string;
+  /** §11.2's `src.tier`: an abstract summary never satisfies a full-text request. */
+  readonly tier: SourceTier;
+  /**
+   * `docs/07` §5.2's `SummaryInputScope["kind"]` — what the privacy policy
+   * let the model see (`P3-T15`'s `planInputScopeKind`).
+   */
+  readonly inputScopeKind: string;
+  /** `PAPER_SUMMARY_ABSTRACT` | `PAPER_SUMMARY_FULLTEXT` | `CHUNK_REDUCE`. */
+  readonly promptId: string;
+  /**
+   * The `cacheEpoch` of every prompt whose output the summary contains:
+   * `promptId`'s own (required), and `CHUNK_MAP`'s too for a `CHUNK_REDUCE`
+   * summary. Not the full version string: the registry holds `cacheEpoch`
+   * equal across a PATCH bump, so a PATCH bump keeps the key (`docs/12`
+   * §17.2; owner, 2026-10-23, `plan/00` §6 item 273(a); this was
+   * `promptVersions`, keyed on the version strings).
+   */
+  readonly promptCacheEpochs: Readonly<Record<string, number>>;
+  /**
+   * Every user-message variable of the prompt except the acquired text —
+   * title, authors, year, venue, item type, DOI, tags, tier, completeness
+   * note — because the model is shown them too.
+   */
+  readonly promptMetadata: Readonly<Record<string, string>>;
+  /** `PaperSummary`'s schema version, e.g. `"paper-summary-v1"`. */
+  readonly schemaVersion: string;
+  readonly providerId: ProviderId;
+  /** The pinned, dated model identifier the request names. */
+  readonly modelId: string;
+  /** The sampling temperature the request sends. */
+  readonly temperature: number;
+}
+
+/** How {@link summaryKey} is asked for its key. */
+export interface SummaryKeyOptions {
+  /**
+   * `cache.ignoreModel`'s key: the model component is replaced by `null`, a
+   * value no model identifier (a string) can equal. The provider stays.
+   */
+  readonly anyModel?: boolean;
+}
+
+function requireText(name: string, value: string): void {
+  if (value === "") {
+    throw new RangeError(`[research-helper] summaryKey: ${name} is empty`);
+  }
+}
+
+/**
+ * The summary cache key: SHA-256 of `stableStringify` over
+ * `["v<CACHE_SCHEMA_VERSION>", "ps", …§11.2's components]`, in §11.2's
+ * order, with the input scope kind after the tier and the prompt metadata
+ * after the schema version.
+ *
+ * Not `StoredSummary.id` (`workKey:promptVersion:modelId`, `docs/07` §5.2):
+ * that id names "the current summary of this work"; this key names one exact
+ * input.
+ *
+ * @throws RangeError for an empty identifying component, a
+ *   `promptCacheEpochs` map without a positive integer for `promptId`, or a
+ *   non-finite temperature — a key built from a hole would match another hole
+ */
+export function summaryKey(
+  input: SummaryKeyInput,
+  options: SummaryKeyOptions = {},
+): string {
+  requireText("itemKey", input.itemKey);
+  requireText("contentHash", input.contentHash);
+  requireText("promptId", input.promptId);
+  requireText("schemaVersion", input.schemaVersion);
+  requireText("modelId", input.modelId);
+  const ownEpoch = input.promptCacheEpochs[input.promptId];
+  if (ownEpoch === undefined || !Number.isInteger(ownEpoch) || ownEpoch < 1) {
+    throw new RangeError(
+      `[research-helper] summaryKey: no cacheEpoch for ${input.promptId}`,
+    );
+  }
+  if (!Number.isFinite(input.temperature)) {
+    throw new RangeError(
+      "[research-helper] summaryKey: temperature is not finite",
+    );
+  }
+  return cacheKey(
+    SUMMARY_KEY_KIND,
+    input.libraryID,
+    input.itemKey,
+    input.contentHash,
+    input.tier,
+    input.inputScopeKind,
+    input.promptId,
+    input.promptCacheEpochs,
+    input.schemaVersion,
+    input.promptMetadata,
+    input.providerId,
+    options.anyModel === true ? null : input.modelId,
+    input.temperature,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tag values — docs/07 §9.3, docs/06 §11.2 reading 8
+// ---------------------------------------------------------------------------
+
+/**
+ * A tag value with `%` and `,` escaped: `cache_entry.tags` is comma-joined,
+ * so a comma inside a value (a DOI may hold one) would split the tag, and the
+ * cache refuses a tag that contains one.
+ *
+ * The one escape for a tag's value. It lives here, in `core/`, so that both
+ * the summary cache (`src/pipeline/summarize/summaryCache.ts`, which
+ * re-exports it) and the job runner's pinned tags (`RunningWork.pinnedTags`
+ * in `src/core/jobQueue/queue.ts`) apply it: a `work:` tag written one way
+ * and pinned another would leave a running job's entries evictable
+ * (owner, 2026-10-23, `plan/00` §6 item 273(c)).
+ *
+ * @param value - any string
+ * @returns `value` with `%` written `%25` and `,` written `%2C`
+ */
+export function encodeTagValue(value: string): string {
+  return value.replace(/%/g, "%25").replace(/,/g, "%2C");
 }
 
 // ---------------------------------------------------------------------------

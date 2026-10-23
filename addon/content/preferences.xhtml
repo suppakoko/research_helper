@@ -11,10 +11,22 @@
   sandbox (Zotero 8+) and an inline `onload="X.init()"` would resolve X in the
   window's scope, not the script's.
 
-  Scope: the storage block and the TWO literature-source credential blocks, and
-  nothing else. Every summarizing-provider control, base URL and spend ceiling is
-  P3-T04's; the general contact address (`contactEmail`) is Phase 2's Crossref
-  work. The card's `Retires` line is deliberately narrow.
+  Scope: the storage block, the LLM providers block (P3-T04: the provider
+  choice, one block per provider with its key, model and base URL, and the
+  Gemini paid-tier declaration) and the TWO literature-source credential
+  blocks. Spend ceilings, the Search, Report, Privacy and Advanced groups and
+  the general contact address (`contactEmail`) are other cards'.
+
+  `preference=` bindings (P3-T04): only non-secret rows of docs/07 §8.5 —
+  `llmProvider`, each `<provider>.model` and `gemini.paidTier` — each the
+  full key, as docs/08 §7.2 requires. The base-URL inputs are NOT bound:
+  Zotero's binding writes every keystroke and cannot refuse a value, and
+  docs/03 §14.4 requires validation at write time, so preferences.js writes
+  them through the host (docs/08 §7.3, note dated 2026-10-23). The model
+  fields are inputs, not editable menulists, for the reason that note gives.
+  The provider names in the menulist are literal `label`s, as docs/08 §7.3
+  draws them: they are never translated (docs/08 §10.3), and the unit test
+  asserts each equals its `research-helper-provider-<id>` en-US value.
 
   docs/09 §1.9's nine rules, as this markup carries them:
     1. every key field is type="password"; the reveal button is hold-to-show
@@ -31,10 +43,11 @@
     9. NO `preference` attribute on any key field — decision D5. The only
        `preference=` binding this pane will ever carry is a non-secret row.
 
-  No literal human-readable string: every visible string is a `data-l10n-id`
-  resolved from research-helper-mainWindow.ftl (see that bundle's header for
-  why this pane uses it). `class`, `id` and `data-l10n-id` are all namespaced
-  `rh-` / `research-helper-` (Zotero 7 for Developers).
+  No literal human-readable string except the four provider names above:
+  every other visible string is a `data-l10n-id` resolved from
+  research-helper-mainWindow.ftl (see that bundle's header for why this pane
+  uses it). `class`, `id` and `data-l10n-id` are all namespaced `rh-` /
+  `research-helper-` (Zotero 7 for Developers).
 -->
 <vbox
   xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
@@ -59,9 +72,24 @@
          src/ui/prefs/preferencesPane.ts for the four states and for why Linux
          is "indeterminate" rather than "System keyring". -->
     <html:p id="rh-prefs-backend" class="rh-backend-badge" role="status" />
-
-    <!-- Rule 4. docs/09 §1.8, verbatim. Always visible. -->
+    <!-- docs/09 §1.9 item 8: shown by preferences.js only when no credential
+         holds a key, the plugin database already holds data and the badge
+         names an operating-system store (showRestoreNotice). -->
     <html:p
+      id="rh-prefs-restore-note"
+      class="rh-hint"
+      role="status"
+      data-l10n-id="research-helper-prefs-restore-note"
+      hidden="true"
+    />
+
+    <!-- Rule 4. docs/09 §1.8, verbatim. Always visible. Under the tier-2
+         ("session") badge, preferences.js swaps paragraph 1 for §1.8's tier-2
+         sentence, research-helper-prefs-risk-1-session (2026-10-23, plan/00
+         §6 item 274(a)), and paragraph 4 for its tier-2 replacement,
+         research-helper-prefs-risk-4-session (2026-10-23, item 275(b)). -->
+    <html:p
+      id="rh-prefs-risk-1"
       class="rh-hint rh-risk"
       data-l10n-id="research-helper-prefs-risk-1"
     />
@@ -74,6 +102,7 @@
       data-l10n-id="research-helper-prefs-risk-3"
     />
     <html:p
+      id="rh-prefs-risk-4"
       class="rh-hint rh-risk"
       data-l10n-id="research-helper-prefs-risk-4"
     />
@@ -90,6 +119,315 @@
       />
     </hbox>
     <html:p id="rh-prefs-remove-all-status" class="rh-hint" role="status" />
+  </groupbox>
+
+  <!-- ============ LLM providers (P3-T04; docs/08 §7.3) ============ -->
+  <groupbox id="rh-prefs-providers" aria-labelledby="rh-prefs-providers-title">
+    <label>
+      <html:h2
+        id="rh-prefs-providers-title"
+        data-l10n-id="research-helper-prefs-providers"
+      />
+    </label>
+    <hbox align="center">
+      <label
+        data-l10n-id="research-helper-prefs-active-provider"
+        control="rh-provider"
+      />
+      <menulist
+        id="rh-provider"
+        preference="extensions.zotero.research-helper.llmProvider"
+        native="true"
+      >
+        <menupopup>
+          <menuitem value="openrouter" label="OpenRouter" />
+          <menuitem value="openai" label="OpenAI" />
+          <menuitem value="gemini" label="Google Gemini" />
+          <menuitem value="anthropic" label="Anthropic" />
+        </menupopup>
+      </menulist>
+    </hbox>
+
+    <!-- llm.openrouter. docs/08 §7.5 rule 4: preferences.js shows only the active
+         provider's block and keeps the others' stored keys. -->
+    <vbox id="rh-provider-openrouter" class="rh-provider-block">
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-api-key"
+          control="rh-or-key"
+        />
+        <!-- Rules 1, 2, 9: password, digest in the placeholder, NO preference
+             attribute. -->
+        <html:input
+          id="rh-or-key"
+          class="rh-key"
+          type="password"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="rh-or-reveal" data-l10n-id="research-helper-prefs-reveal" />
+        <!-- Wired by P3-T14; disabled until then. -->
+        <button id="rh-or-test" data-l10n-id="research-helper-prefs-test-key" />
+        <button
+          id="rh-or-clear"
+          data-l10n-id="research-helper-prefs-clear-key"
+        />
+      </hbox>
+      <html:span id="rh-or-backend" class="rh-backend-badge" />
+      <html:p id="rh-or-status" class="rh-hint" role="status" />
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-model"
+          control="rh-or-model"
+        />
+        <html:input
+          id="rh-or-model"
+          class="rh-model"
+          type="text"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+          preference="extensions.zotero.research-helper.openrouter.model"
+        />
+      </hbox>
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-base-url"
+          control="rh-or-base-url"
+        />
+        <!-- NOT bound: written through the host after checkBaseUrlInput. The
+             placeholder is docs/03's documented base URL for this provider. -->
+        <html:input
+          id="rh-or-base-url"
+          class="rh-base-url"
+          type="url"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="https://openrouter.ai/api/v1"
+        />
+      </hbox>
+      <html:p id="rh-or-base-url-status" class="rh-hint" role="status" />
+    </vbox>
+
+    <!-- llm.openai. docs/08 §7.5 rule 4: preferences.js shows only the active
+         provider's block and keeps the others' stored keys. -->
+    <vbox id="rh-provider-openai" class="rh-provider-block">
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-api-key"
+          control="rh-openai-key"
+        />
+        <!-- Rules 1, 2, 9: password, digest in the placeholder, NO preference
+             attribute. -->
+        <html:input
+          id="rh-openai-key"
+          class="rh-key"
+          type="password"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button
+          id="rh-openai-reveal"
+          data-l10n-id="research-helper-prefs-reveal"
+        />
+        <!-- Wired by P3-T14; disabled until then. -->
+        <button
+          id="rh-openai-test"
+          data-l10n-id="research-helper-prefs-test-key"
+        />
+        <button
+          id="rh-openai-clear"
+          data-l10n-id="research-helper-prefs-clear-key"
+        />
+      </hbox>
+      <html:span id="rh-openai-backend" class="rh-backend-badge" />
+      <html:p id="rh-openai-status" class="rh-hint" role="status" />
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-model"
+          control="rh-openai-model"
+        />
+        <html:input
+          id="rh-openai-model"
+          class="rh-model"
+          type="text"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+          preference="extensions.zotero.research-helper.openai.model"
+        />
+      </hbox>
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-base-url"
+          control="rh-openai-base-url"
+        />
+        <!-- NOT bound: written through the host after checkBaseUrlInput. The
+             placeholder is docs/03's documented base URL for this provider. -->
+        <html:input
+          id="rh-openai-base-url"
+          class="rh-base-url"
+          type="url"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="https://api.openai.com/v1"
+        />
+      </hbox>
+      <html:p id="rh-openai-base-url-status" class="rh-hint" role="status" />
+    </vbox>
+
+    <!-- llm.gemini. docs/08 §7.5 rule 4: preferences.js shows only the active
+         provider's block and keeps the others' stored keys. -->
+    <vbox id="rh-provider-gemini" class="rh-provider-block">
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-api-key"
+          control="rh-gemini-key"
+        />
+        <!-- Rules 1, 2, 9: password, digest in the placeholder, NO preference
+             attribute. -->
+        <html:input
+          id="rh-gemini-key"
+          class="rh-key"
+          type="password"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button
+          id="rh-gemini-reveal"
+          data-l10n-id="research-helper-prefs-reveal"
+        />
+        <!-- Wired by P3-T14; disabled until then. -->
+        <button
+          id="rh-gemini-test"
+          data-l10n-id="research-helper-prefs-test-key"
+        />
+        <button
+          id="rh-gemini-clear"
+          data-l10n-id="research-helper-prefs-clear-key"
+        />
+      </hbox>
+      <html:span id="rh-gemini-backend" class="rh-backend-badge" />
+      <html:p id="rh-gemini-status" class="rh-hint" role="status" />
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-model"
+          control="rh-gemini-model"
+        />
+        <html:input
+          id="rh-gemini-model"
+          class="rh-model"
+          type="text"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+          preference="extensions.zotero.research-helper.gemini.model"
+        />
+      </hbox>
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-base-url"
+          control="rh-gemini-base-url"
+        />
+        <!-- NOT bound: written through the host after checkBaseUrlInput. The
+             placeholder is docs/03's documented base URL for this provider. -->
+        <html:input
+          id="rh-gemini-base-url"
+          class="rh-base-url"
+          type="url"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="https://generativelanguage.googleapis.com"
+        />
+      </hbox>
+      <html:p id="rh-gemini-base-url-status" class="rh-hint" role="status" />
+      <!-- docs/07 §8.5 gemini.paidTier (owner, plan/00 §6 items 269(b), 270):
+           the user's own declaration, off by default; docs/09 §3.5, §3.6 item 3. -->
+      <checkbox
+        id="rh-gemini-paid-tier"
+        data-l10n-id="research-helper-prefs-gemini-paid-tier"
+        preference="extensions.zotero.research-helper.gemini.paidTier"
+      />
+      <html:p
+        class="rh-hint"
+        data-l10n-id="research-helper-prefs-gemini-paid-tier-note"
+      />
+    </vbox>
+
+    <!-- llm.anthropic. docs/08 §7.5 rule 4: preferences.js shows only the active
+         provider's block and keeps the others' stored keys. -->
+    <vbox id="rh-provider-anthropic" class="rh-provider-block">
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-api-key"
+          control="rh-anthropic-key"
+        />
+        <!-- Rules 1, 2, 9: password, digest in the placeholder, NO preference
+             attribute. -->
+        <html:input
+          id="rh-anthropic-key"
+          class="rh-key"
+          type="password"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button
+          id="rh-anthropic-reveal"
+          data-l10n-id="research-helper-prefs-reveal"
+        />
+        <!-- Wired by P3-T14; disabled until then. -->
+        <button
+          id="rh-anthropic-test"
+          data-l10n-id="research-helper-prefs-test-key"
+        />
+        <button
+          id="rh-anthropic-clear"
+          data-l10n-id="research-helper-prefs-clear-key"
+        />
+      </hbox>
+      <html:span id="rh-anthropic-backend" class="rh-backend-badge" />
+      <html:p id="rh-anthropic-status" class="rh-hint" role="status" />
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-model"
+          control="rh-anthropic-model"
+        />
+        <html:input
+          id="rh-anthropic-model"
+          class="rh-model"
+          type="text"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+          preference="extensions.zotero.research-helper.anthropic.model"
+        />
+      </hbox>
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-base-url"
+          control="rh-anthropic-base-url"
+        />
+        <!-- NOT bound: written through the host after checkBaseUrlInput. The
+             placeholder is docs/03's documented base URL for this provider. -->
+        <html:input
+          id="rh-anthropic-base-url"
+          class="rh-base-url"
+          type="url"
+          size="46"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="https://api.anthropic.com"
+        />
+      </hbox>
+      <html:p id="rh-anthropic-base-url-status" class="rh-hint" role="status" />
+    </vbox>
   </groupbox>
 
   <!-- ============ NCBI (PubMed) — SecretId "source.ncbi" ============ -->
@@ -157,5 +495,19 @@
       href="https://www.semanticscholar.org/product/api#api-key-form"
       data-l10n-id="research-helper-prefs-s2-request"
     />
+  </groupbox>
+
+  <!-- ============ Usage (P3-T16 step 6; docs/06 §11.4) ============ -->
+  <groupbox id="rh-prefs-usage" aria-labelledby="rh-prefs-usage-title">
+    <label>
+      <html:h2
+        id="rh-prefs-usage-title"
+        data-l10n-id="research-helper-prefs-usage"
+      />
+    </label>
+    <!-- Output only: painted by preferences.js from api.usage (this Zotero
+         session's calls, tokens and dollars, and run.maxSessionSpendCents).
+         No preference attribute; nothing here is written. -->
+    <html:div id="rh-prefs-usage-lines" class="rh-hint" role="status" />
   </groupbox>
 </vbox>
