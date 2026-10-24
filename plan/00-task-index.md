@@ -2105,6 +2105,18 @@ the caller of what the card builds; if it does not, the caller is added with a d
     line per text block (D-06-4's BMC observation from 10.0.2 no longer holds); XR2 is dated December 1974, not 1972.
     **Labelling page published 2026-10-24** (item 280(b)): https://claude.ai/artifact/Lv5nnG4rtocWc5Yd8us2YR, db collection
     `imrad`, doc id = paper id, in the shape `scripts/build-imrad-fixtures.ts ingest` reads (`plan/reports/P3-T20.md`).
+    **DONE 2026-10-24** (`plan/reports/followups-281.md`): (b) and (c) built; wave 8 landed as a416529. **CONFIRMED the same
+    day (owner):** a title pair differing by an inner number is flagged for review, not called distinct; the search
+    window's screening confirmation keeps its readings (an unknown price asks; Cancel starts no search; no estimate or no
+    dialog means an unscreened search with the "could not run" line; the dialog reuses the summary run's wording). The
+    review page now holds 147 ids.
+
+### 6.60 Where Phase 3 waits, 2026-10-24
+
+282. **Recorded.** Every remaining Phase 3 card now waits on the owner: `P3-T22` needs the labels from the labelling page
+    (item 280(b)), and `P3-T23` → `P3-T25` → `P3-T28` / `P3-T29` → `P3-T31` follow it; `P3-T30` needs the owner's
+    recordings with keys and a stated spend; `P3-T37` needs a Linux machine (G-09); gates `G-18` (keys in the pane) and
+    `G-21` (first real spend, after `P3-T29`) are the owner's. Phase 2 still waits on `P2-T13`'s labels.
 
 ## 7. Regenerating this file
 
