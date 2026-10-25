@@ -882,7 +882,10 @@ export const STEP3_MINIMUMS: Readonly<Partial<Record<FamilyId, number>>> = {
   "prefix-10.64898": 5,
 };
 
-/** `P2-T13` step 2's floor on the number of labelled pairs. */
+/**
+ * `P2-T13` step 2's floor on the label set's size. Since 2026-10-25 (`plan/00` §6 item 284(c)) the owner labels
+ * a recorded sample of 60 of these pairs (`scripts/dedup-label-sample.ts`), not 200 of them.
+ */
 export const MIN_LABELLED_PAIRS = 200;
 
 /** `docs/02` §11.3.3 guard 1: "Titles under 5 normalized tokens". */
@@ -1923,7 +1926,7 @@ export function summarize(built: BuiltCorpus): string {
   const labelled = inLabelSet.filter((r) => r.label !== "").length;
   lines.push(
     `Labelled pairs: ${String(labelled)} of the ${String(inLabelSet.length)} in the label set ` +
-      `(step 2 asks for ≥ ${String(MIN_LABELLED_PAIRS)})`,
+      `(the owner labels the 60-pair sample, plan/00 §6 item 284(c))`,
   );
   return lines.join("\n");
 }

@@ -51,10 +51,9 @@
       "referencesCut": true,
       "referencesShare": 0.11339449200197046,
       "supplementaryCharsRemoved": 0,
-      "ocrAlnumPunctShare": 0.8487650438210257,
-      "ocrLetterShare": 0.7554094854698704,
-      "ocrChars": 95388,
-      "ocrFailed": "",
+      "ocrWords": 11958,
+      "ocrSplits": 3,
+      "ocrSplitShare": 0.0002508780732563974,
       "nonLatinShare": 0,
       "warnings": ""
     },

@@ -133,14 +133,25 @@ const ID_CONSTANTS = {
 const NON_ID_L10N_CONSTANTS = ["L10N_EXPORT_TAKES_NO_PATH"];
 
 /**
+ * The lists allowed to be empty. `KO_PENDING_REVIEW` emptied on 2026-10-25,
+ * when the owner reviewed the last of the coordinator's Korean drafts in chat
+ * (`G-41`, `plan/00` §6 item 284(a)): "nothing waits for review" is then the
+ * true state, and every assertion over it still reads the other two lists
+ * through the guard. A new string goes back onto it, as its stub does.
+ */
+const MAY_BE_EMPTY: readonly ListName[] = ["KO_PENDING_REVIEW"];
+
+/**
  * A list from {@link LISTS}, having first failed the test if it is empty.
  *
  * This is the "impossible by construction" half of `P1-T40`'s `Do` step 2: no
  * assertion below can read a list without going through here, so no assertion
- * below can be vacuously true for want of members.
+ * below can be vacuously true for want of members — except a list on
+ * {@link MAY_BE_EMPTY}.
  */
 function read(name: ListName): readonly string[] {
   const list: readonly string[] = LISTS[name];
+  if (MAY_BE_EMPTY.includes(name)) return list;
   expect(
     list.length,
     `${name} is empty, so every partition and inclusion assertion over it ` +
@@ -207,6 +218,7 @@ describe("src/i18n/keys.ts — the relations between its lists", () => {
     ).toEqual(sorted(Object.keys(LISTS)));
 
     for (const name of Object.keys(LISTS) as ListName[]) {
+      if (MAY_BE_EMPTY.includes(name)) continue;
       // `read` carries the assertion; calling it is the check.
       expect(read(name).length).toBeGreaterThan(0);
     }
@@ -828,9 +840,9 @@ describe("src/i18n/keys.ts — P3-T14's LLM Test, model suggestions and price ta
     expect(sharedBy(all, read("ERROR_MESSAGE_IDS"))).toEqual([]);
   });
 
-  it("puts all twenty on KO_PENDING_REVIEW until the owner reviews the Korean (G-41), never on KO_PRESENT", () => {
-    expect(notIn(all, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(all, read("KO_PRESENT"))).toEqual([]);
+  it("puts all twenty on KO_PRESENT once the owner reviewed the Korean (2026-10-25, G-41), never pending", () => {
+    expect(notIn(all, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(all, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 });
 
@@ -843,10 +855,10 @@ describe("src/i18n/keys.ts — the out-of-credit Test line (owner, 2026-10-23, p
     expect(sharedBy([id], read("ERROR_MESSAGE_IDS"))).toEqual([]);
   });
 
-  it("puts it, and the reworded key-present line (item 279(d)), on KO_PENDING_REVIEW, never on KO_PRESENT (G-41)", () => {
-    const pending = [id, "research-helper-prefs-key-present"];
-    expect(notIn(pending, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(pending, read("KO_PRESENT"))).toEqual([]);
+  it("puts it, and the reworded key-present line (item 279(d)), on KO_PRESENT once the owner reviewed the Korean (2026-10-25, G-41)", () => {
+    const reviewed = [id, "research-helper-prefs-key-present"];
+    expect(notIn(reviewed, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(reviewed, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 });
 
@@ -876,9 +888,9 @@ describe("src/i18n/keys.ts — P3-T27's relevance-screening strings (docs/08 §4
     expect(sharedBy(all, read("ERROR_MESSAGE_IDS"))).toEqual([]);
   });
 
-  it("puts all eight on KO_PENDING_REVIEW until the owner reviews the Korean (G-41), never on KO_PRESENT", () => {
-    expect(notIn(all, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(all, read("KO_PRESENT"))).toEqual([]);
+  it("puts all eight on KO_PRESENT once the owner reviewed the Korean (2026-10-25, G-41), never pending", () => {
+    expect(notIn(all, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(all, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 });
 
@@ -895,8 +907,8 @@ describe("src/i18n/keys.ts — the screening cost line (owner, 2026-10-24, plan/
     expect(sharedBy(both, read("ERROR_MESSAGE_IDS"))).toEqual([]);
   });
 
-  it("puts both on KO_PENDING_REVIEW until the owner reviews the Korean (G-41), never on KO_PRESENT", () => {
-    expect(notIn(both, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(both, read("KO_PRESENT"))).toEqual([]);
+  it("puts both on KO_PRESENT once the owner reviewed the Korean (2026-10-25, G-41), never pending", () => {
+    expect(notIn(both, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(both, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 });

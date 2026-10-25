@@ -65,6 +65,7 @@ in this plan.
 | Phase 4 | G-23 | Curate the 3 evaluation collections and expected themes | Phase 4 DoD | Days of domain time |
 | Phase 4 | G-24 | Domain spot-check of a generated trend report | Phase 4 DoD, R-6/R-7 | Hours |
 | Phase 4 | G-25 | Approve any write into a group library | Group-library paths | Minutes |
+| Phase 4 | G-42 | Approve the first real report run's cost estimate, and each paid Phase 4 run after it | Phase 4 DoD (`P4-T23`, `P4-T24`, `P4-T25`) | Minutes per run; **added 2026-10-26** (`plan/00` §6 item 286) |
 | Phase 5 | G-26 | Enter the Semantic Scholar key, or decide to ship degraded | Phase 5 scope | Minutes once G-03 resolves |
 | Phase 5 | G-27 | Judge a collection profile and its recommendations | Phase 5 DoD | Hours of domain time |
 | Before Phase 6 | G-28 | Decide the audio register and the Korean-script source | Script prompts | Product-owner turnaround |
@@ -996,6 +997,8 @@ cover.
 **Blocks:** `docs/11` §1 Phase 2's DoD, which requires precision ≥ 0.99 and recall
 ≥ 0.90 measured on a hand-labelled corpus.
 
+*(Corrected 2026-10-26 (owner, `plan/00` §6 items 284(c) and 288(c)): the owner labels the recorded random sample of 60 of the 267 label-set pairs (`test/fixtures/dedup/label-sample.json`), not ≥ 200; the figures carry 95 % Wilson intervals, and Phase 2 may close on no false merge in the sample. The text below is the original wording.)*
+
 **What the human must do.** Hand-label ≥ 200 record pairs as true or false
 duplicates, including the hard cases — preprint/published pairs, corrigenda,
 same-title different-cohort papers.
@@ -1147,7 +1150,7 @@ requires, before the first call.
 ### G-22 — Decide the R-19b outcome if the section detector misses its threshold
 
 **Blocks:** Phase 3's ship; the shape of Phase 4's W4-1 and W4-4
-(`05-phases-4-7-outline.md` §1).
+(`07-phase-4-trend-report.md` §5.1; `05-phases-4-7-outline.md` §1 until 2026-10-26).
 
 **What the human must do.** If the 40-PDF measurement falls below `docs/06`
 §4.3's ≥ 85 % target, choose between the two options `docs/11` R-19b names:
@@ -1247,6 +1250,43 @@ library, and `docs/06` §16 item 7's question stays open.
 
 **Agent behaviour on reaching it.** Stop before the write. Name the group, the
 item count, and that the content will be visible to every member.
+
+---
+
+### G-42 — Approve the first real report run's cost estimate, and each paid Phase 4 run after it
+
+**Added 2026-10-26** by the owner's decision on `plan/07`'s spend-gate line (`plan/00` §6 item 286),
+modelled on `G-21`. The number is the next free one; `G-26`–`G-41` were already allocated.
+
+**Blocks:** the three `plan/07` cards that spend — `P4-T23`'s baseline evaluation run, `P4-T24`'s
+three determinism runs and `P4-T25`'s acceptance reports (and a live 400-item run there, only if
+the owner asks for one) — and through them `docs/11` §1 Phase 4's DoD. No other Phase 4 card may
+make a live call (`plan/07` §0.2 item 16).
+
+**What the human must do.** Before each paid run, read the pre-flight dialog — the item count, the
+missing summaries the run will make, every model the run sends to (map, report and critique), the
+token and USD estimate with output priced at each call's ceiling, the destination host, the content
+scope and privacy mode, and the report's egress notice (`plan/07` `P4-T16`; `docs/09` §3 row "3b.
+Trend report") — compare it with the expected spend stated on the card's **Human gate** cell, and
+approve or decline. The first approval is the first spend on the strong (`reportModel`) tier, so it
+comes after `G-21` and `P3-T31`'s measured map phase; afterwards, compare the estimate with the
+provider's reported usage, as `G-21` does for summaries.
+
+**Why an agent cannot do it.** It spends the human's money on the most expensive action in the
+product, and it sends the human's derived content — summaries, titles, years, venues and cluster
+statistics — to a third party. `docs/09` §7 marks "no content is sent to any provider without an
+explicit user action" a `[BLOCKER]`.
+
+**Lead time.** Minutes per run.
+
+**If it is not done.** `P4-T23`'s baseline score, `P4-T24`'s determinism verdict and `P4-T25`'s
+live acceptance lines stay unmeasured, and Phase 4's DoD is unmet. **Degraded path:** only for the
+400-item line, whose proof is `P4-T22`'s offline run (decided 2026-10-26); none for the others,
+because each measurement requires the spend.
+
+**Agent behaviour on reaching it.** Stop before the first call. Report the dialog's exact contents,
+the card's expected spend and `P4-T16`'s estimate side by side, and which run this is (baseline,
+determinism, acceptance); never start a paid run, and never reuse one approval for a later run.
 
 ---
 

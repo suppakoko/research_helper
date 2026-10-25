@@ -36,14 +36,18 @@ and report**, never work around it.
 | [`02-phase-1-pubmed.md`](02-phase-1-pubmed.md) | Phase 1 — keyword → PubMed → Zotero collection |
 | [`03-phase-2-multi-source-dedup.md`](03-phase-2-multi-source-dedup.md) | Phase 2 — six more sources, normalization, deduplication |
 | [`04-phase-3-llm-summaries.md`](04-phase-3-llm-summaries.md) | Phase 3 — provider adapters, key storage, per-paper summaries |
-| [`05-phases-4-7-outline.md`](05-phases-4-7-outline.md) | Phases 4–7 — outline only, deliberately not decomposed yet |
+| [`05-phases-4-7-outline.md`](05-phases-4-7-outline.md) | Phases 5–7 — outline only, deliberately not decomposed yet (Phase 4's section is a pointer to `07`) |
 | [`06-human-gates.md`](06-human-gates.md) | Every point where a human must act, and what happens if they don't |
+| [`07-phase-4-trend-report.md`](07-phase-4-trend-report.md) | Phase 4 — synthesis pipeline, citations, report note and window, evaluation (numbered `07` because `05` and `06` were taken) |
 
 **Phases 4–7 are outlined, not decomposed.** Nineteen unvalidated spikes sit in
 Phase 0 and their outcomes change the shape of everything after Phase 3 — most
 sharply the IMRaD section detector (`V-8b`), which decision D7 put on the
 critical path. Decomposing Phase 4 today would mostly produce work that gets
 thrown away. Decompose each phase at the end of the phase before it.
+*Updated 2026-10-26:* Phase 4 is decomposed — the owner pulled it forward while Phase 3 waits on
+labels and keys (`plan/00` §6 items 283(c), 286) — so this paragraph now holds for Phases 5–7;
+`07-phase-4-trend-report.md` §0 records which of Phase 4's entry conditions are still open.
 
 ## 3. Task ID scheme
 
@@ -351,6 +355,13 @@ string counts each had to learn separately.
 **Phases 4–7 are not decomposed**, so for them `docs/11` remains authoritative:
 its figures there are the old ones scaled by the ×1.50 correction factor these
 four decompositions measured, and `docs/11` flags them as inference (risk R-23).
+*Updated 2026-10-26: Phases 5–7 now. Phase 4 is decomposed (`07-phase-4-trend-report.md`, 25
+cards, 23.75 d) and joins Phases 0–3 under the rule above — its cards are the measurement and
+`docs/11` records it; its sum landed 44 % above the scaled low end, as the next sentence predicted,
+and `docs/11` §1 was re-estimated rather than the cards shaved. The five-site checklist applies to it;
+in site 5 its row is `plan/00` §1's Phase 4 row, which sits outside the Phases 0–3 total, and in
+sites 2–3 its row moves `docs/11` §1's Phases 4–7 subtotal and the project total, not the Phases 0–3
+subtotal.*
 When one of those phases is decomposed, expect its per-task sum to land above
 the scaled figure — decomposition surfaces work that a phase-level guess hides.
 If a phase's task sum diverges from `docs/11` by more than ~30%, that is a

@@ -17,7 +17,9 @@
 > with its **basis** — and every one of the four is currently ⚠ *scaled ×1.50,
 > not decomposed*, i.e. inference rather than measurement. `docs/11` §1 and its
 > effort-summary table remain authoritative; if they move, these four lines move
-> with them.
+> with them. *Updated 2026-10-26: Phase 4 is decomposed (`plan/07`), so §1 is a
+> pointer and its band is measured (23.75–33 d); the three of §2–§4 are still
+> scaled.*
 >
 > **The ×1.50 factor and where it comes from.** `docs/11` §1's preamble owns the
 > derivation and this file does not restate it: the factor is the Phases 0–3 card
@@ -36,7 +38,8 @@
 > together — neither is to be changed without the other.
 >
 > **Last updated:** 2026-09-09 · **Status:** outline only; no task IDs allocated
-> in the `P4-*`–`P7-*` ranges.
+> in the `P4-*`–`P7-*` ranges. *Updated 2026-10-26: Phase 4's cards `P4-T01`–`P4-T25`
+> are in `plan/07`; this file is the outline of Phases 5–7 only, and §1 is a pointer.*
 
 ---
 
@@ -110,112 +113,21 @@ to be re-derived from it.
 
 ## 1. Phase 4 — Trend report
 
-**Goal, deliverables, definition of done:** `docs/11` §1, Phase 4.
-**Effort:** 16.5–23 developer-days — ⚠ **scaled ×1.50, not decomposed**
-(`docs/11` §1, Phase 4, and the effort summary table; re-derived 2026-09-09 from
-the old 8–11 band, not measured). Replace with a card sum when this phase is
-decomposed, per §0 and `docs/11` R-23.
-**Risks retired:** R-7, and R-6 completes here (`docs/11` §3.1 maps Phase 4 to
-R-6 and R-7; §1's phase entry says "R-7, part of R-6").
-**Upstream:** Phases 2 and 3 both (`docs/11` §2).
+**Decomposed — see [`07-phase-4-trend-report.md`](07-phase-4-trend-report.md).** Reduced to this
+pointer on **2026-10-26**, as §0 "Exit from outline into cards" requires: Phase 4 was decomposed into
+25 task cards on 2026-10-25 (owner decision, `plan/00-task-index.md` §6 item 283(c)), reviewed the
+same day, and its open lines decided on 2026-10-26 (item 286). It was decomposed at the owner's
+direction (item 283(c)) before §0's exit conditions (a) and (c) held — Phase 3 is not `DONE` and
+several entry conditions are open; `plan/07` §0 records which are met.
 
-### 1.1 Work areas
+**Effort:** **23.75–33 developer-days — measured**, the sum of `plan/07`'s 25 cards (23.75 × 1.4 =
+33.25 → 33), replacing the 16.5–23 d **scaled ×1.50, not decomposed** figure this section quoted
+from 2026-09-09 to 2026-10-26 (`docs/11` §1, Phase 4, and the effort summary table carry the change).
 
-| # | Work area | One sentence |
-|---|---|---|
-| W4-1 | **Digest projection** | The deterministic, no-LLM compression of a `StoredSummary` into the ~90–140-token digest that clustering runs on (`docs/06` §8.2) — the design's load-bearing trick and the cheapest thing in the phase to get wrong. |
-| W4-2 | **Hierarchical synthesis engine** | The L0–L4 map-reduce driver with its pass counter, two-stage clustering for large N, per-theme sub-batching, and the depth-2 recursion cap (`docs/06` §8.3–§8.5); FR-27's reported pass count comes from here. |
-| W4-3 | **Prompt wiring and structured-output validation** | Binding `THEME_CLUSTER`, `CLUSTER_REDUCE`, `TREND_REPORT_EN`/`_KO` and their client-side validators (`docs/12` §8–§11) to the Phase 3 provider layer under `docs/12` §18's model-agnostic rules and §17's prompt versioning. |
-| W4-4 | **Client-generated report scaffolding** | Everything the model must not produce: the title block, the year table, the study-design frequency table, and Appendices A and B (`docs/06` §9.1) — generated in code precisely to remove a class of hallucination. |
-| W4-5 | **Citation binding, validation, and bibliography** | The `[[itemKey]]` convention, the pre-render validator that resolves every marker against the run's valid set, and bibliography rendering through Zotero's own citation processor rather than the model (`docs/06` §10.1, §10.3); this is the whole of R-7's mitigation. |
-| W4-6 | **Note rendering, saving, and Markdown export** | Markdown → Zotero note HTML with the correct `data-schema-version` wrapper, the save path, and the "Export as Markdown" action (`docs/06` §14.1–§14.3). |
-| W4-7 | **Self-critique pass** | The `SELF_CRITIQUE` call and the revise/pass loop (`docs/06` §12.2, `docs/12` §12), plus the quality rubric it is scored against (`docs/06` §12.3). |
-| W4-8 | **Korean report path** | `TREND_REPORT_KO` end to end (`docs/12` §11), including the requirement that titles, authors and venues stay in original script (`docs/11` §1 Phase 4 DoD). |
-| W4-9 | **Report dialog and progress** | The modeless dialog, per-pass determinate progress, cancellation, and the spend counter — shaped by whether V-8 says streaming is usable (`docs/11` R-14). |
-| W4-10 | **Evaluation set and determinism guard** | Three curated collections with human-checked expected themes, plus the fixed-temperature repeat-run check that `docs/11` §1's DoD requires across 3 runs (`docs/06` §11.1, §12.3). |
-
-### 1.2 Entry conditions
-
-Phase 4 cannot be decomposed into task cards until all of the following are true.
-
-- **Phase 3 is `DONE`** and a real corpus of `StoredSummary` rows exists
-  (`docs/07` §8.3). Phase 4 reduces summaries; it cannot be specified against a
-  hypothetical summary shape.
-- **V-8b has an answer, and R-19b has been closed one way or the other.**
-  `docs/11` R-19b requires the 40-PDF fixture measurement before Phase 3 ships.
-  Whether section provenance survives determines the digest's fields (W4-1) and
-  the honesty section's analysis-depth split (W4-4). The `> **Unverified:**` in
-  `docs/06` §3.3 (the serialization of `getStructuredDocumentText`) and the one
-  in `docs/06` §4.3 (detector accuracy unmeasured, with the ≥ 85 % action item)
-  are the two markers to check as closed.
-- **V-8 has an answer.** Streaming usable or not usable decides W4-9's design
-  (`docs/11` §4.2 V-8, R-14; `docs/01` §8.4 carries the matching
-  `> **Unverified:**` about `res.body` being a live `ReadableStream`).
-- **The bibliography entry point is confirmed or its fallback accepted.**
-  `docs/06` §10.3 marks the programmatic citeproc entry point
-  `> **Unverified:**` and asks whether `docs/01` or `docs/06` owns the
-  verification (`docs/06` §16 question 3). W4-5 cannot name its files until that
-  is answered.
-- **The cache-key hash primitive is confirmed.** `docs/06` §11.2 marks
-  `crypto.subtle` availability in the bootstrapped-plugin scope
-  `> **Unverified:**`, with `Zotero.Utilities.Internal.md5` as the collision-risk
-  fallback.
-- **The note-HTML surface is confirmed.** `docs/01` §5.7 marks the sanitisation
-  whitelist and the absence of a public Markdown→HTML helper
-  `> **Unverified:**` — W4-6 depends on both.
-- **Progress-UI API shapes are confirmed.** `docs/07` §7.7 marks the
-  `Zotero.ProgressWindow` / `ItemProgress` signatures `> **Unverified:**`, and
-  `docs/01` §10.4 records the decision *not* to use `Zotero.ProgressQueue`;
-  W4-9 needs both settled.
-- **`docs/10` §5 questions 7, 11, 12 and 19 are answered** (see §5 for what each
-  gates), and question 6's residual half — whether either ceiling ships non-zero
-  — is answered, because a trend-report run is the single most expensive action
-  in the product.
-- **Token-estimation ratios have been replaced by measurements.** `docs/06` §5.1
-  marks the ratios `> **Unverified:**` with an action item to derive a rolling
-  per-model correction factor from real `usage` blocks. Phase 3 produces those
-  blocks; Phase 4's cost preview is only as good as they are.
-
-### 1.3 Decisions required before decomposition
-
-| Decision | Recorded in |
-|---|---|
-| Report re-run behaviour — always a new note, or "update in place" with a diff | `docs/06` §14.2 (with the pref key, if any, in `docs/07` §8.5); the question is `docs/06` §16 item 6 |
-| Whether a generated note may be overwritten when the user has edited it (hash mismatch) | `docs/07` §8.5 for the pref; the question is `docs/10` §5 question 11 |
-| Group-library report visibility — shared note by default or private | `docs/09` §3 and `docs/07` §8.5; questions are `docs/06` §16 item 7 and `docs/10` §5 question 12 |
-| Bibliography path — Zotero's citation processor, or the `itemToCSLJSON` fixed-format fallback that ignores the user's style | `docs/01` (the confirmed API) with `docs/06` §10.3 updated to point at it |
-| Whether the report claims section provenance for full-text-derived findings | `docs/06` §4.3, following the R-19b outcome in `docs/11` §3 |
-| Whether the self-critique pass runs by default, given it is an extra call on every report | `docs/07` §8.5 for the shipped default; semantics stay in `docs/06` §12.2 |
-| Backlinks from cited items to the report note — on or off by default | `docs/06` §10.4 names the pref gate; the value belongs in `docs/07` §8.5 |
-
-### 1.4 What would change the plan
-
-- **V-8b fails (no usable geometry).** `auto` degrades to whole-document chunking
-  and the summary prompt drops section provenance (`docs/11` R-19b). W4-1 loses
-  its section-labelled digest fields, W4-4's §2 disclosure becomes coarser, and
-  W4-3's prompts change. If the product owner instead flips D7's default back to
-  abstracts, the map stage's cost drops by the 8×–32× factor named in `docs/00`
-  §3 D7 and NFR-5's headroom changes — which is a Phase 3 re-plan that Phase 4
-  inherits.
-- **Streaming turns out to be unavailable.** W4-9 is built around determinate
-  per-pass progress instead of token-level streaming, which `docs/11` R-14
-  already names as an acceptable substitute. This *shrinks* the phase.
-- **The citeproc entry point does not exist as a plugin-facing API.** W4-5 splits:
-  the validator stays, the bibliography falls back to a fixed format built from
-  `itemToCSLJSON`, and "honours the user's citation style" leaves v1 and becomes
-  a README limitation (`docs/13` §7.3 item 7).
-- **The determinism DoD fails** — three runs at fixed temperature not producing
-  substantively equivalent themes. Either the temperature policy (`docs/06`
-  §11.1) tightens, or clustering moves partly client-side onto the digests. Both
-  are new work areas, not variations of existing ones.
-- **`crypto.subtle` is unavailable.** The cache key falls back to
-  `Zotero.Utilities.Internal.md5` with the collision caveat `docs/06` §11.2
-  states, which changes cache-invalidation semantics and therefore W4-2's resume
-  behaviour.
-- **Cross-lingual summary quality proves poor.** `docs/06` §13.2 marks
-  Korean/Chinese/Japanese source → English summary quality `> **Unverified:**`
-  with a 20-paper multilingual fixture action item. A bad result adds a screening
-  rule and shrinks the corpus a report may claim to cover.
+**Where this section's contents went.** The work areas `W4-1`–`W4-10` (§1.1), the entry conditions
+(§1.2), the decisions required before decomposition (§1.3) and what would change the plan (§1.4) are
+`plan/07` §5.1–§5.4, moved verbatim; `plan/07` §0's table tracks the entry conditions, and every
+§1.3 decision is made. §5.1 below, Phase 4's gating list, is kept as the record it was.
 
 ---
 
@@ -564,6 +476,11 @@ before decomposition. None of them is unblocked by writing code, and most are
 resolved by one measurement, one API call, or one answer from a human.
 
 ### 5.1 Phase 4 — Trend report
+
+*Kept as the 2026-09-09 record, 2026-10-26.* Phase 4 is decomposed: `plan/07` §0's entry-condition
+table is the live status of these items, and the four `docs/10` §5 questions below — Q7 (built by
+`P3-T15`/`P3-T16`), Q11, Q12 and Q19 (`plan/00` §6 item 286) — are marked decided in `docs/10` §5.
+The `W4-*` work areas named here are `plan/07` §5.1's.
 
 | Gating item | Where | Why it gates Phase 4 |
 |---|---|---|

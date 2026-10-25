@@ -26,7 +26,11 @@
  * `AcquiredSource.text`, byte for byte (UTF-8, no BOM). The parent item has
  * no abstract, DOI or `extra`, and Tier 3 is switched off, so the text is the
  * cleaned attachment text with no preamble. `<id>.run.json` holds Zotero's
- * version and the acquisition's cleaning and OCR-probe diagnostics. The
+ * version and the acquisition's cleaning and OCR-probe diagnostics.
+ * `<id>.raw.txt` is the attachment text **before** the cleaning pass, so a
+ * change to `cleanFullText` can be measured offline on every paper (`plan/00`
+ * §6 item 283(a)); it stays in the work directory and the Node half never
+ * copies it into the repository. The
  * acquisition also runs `docs/06` §4.3's section detector internally; its
  * output (`sections`, `sectionAware` and the diagnostics' section fields) is
  * **discarded and never written**, because the ground truth must not be seen
@@ -38,7 +42,10 @@
 import type { Logger } from "../../src/core/logger";
 import { setPrefStore } from "../../src/prefs";
 import { acquireZoteroSource } from "../../src/pipeline/summarize/acquire";
-import { getStructuredDocumentText } from "../../src/zotero/fulltext";
+import {
+  getAttachmentText,
+  getStructuredDocumentText,
+} from "../../src/zotero/fulltext";
 import { createZoteroPrefStore } from "../../src/zotero/prefStore";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml.
@@ -125,10 +132,9 @@ const KEPT_DIAGNOSTICS = [
   "referencesCut",
   "referencesShare",
   "supplementaryCharsRemoved",
-  "ocrAlnumPunctShare",
-  "ocrLetterShare",
-  "ocrChars",
-  "ocrFailed",
+  "ocrWords",
+  "ocrSplits",
+  "ocrSplitShare",
   "nonLatinShare",
   "warnings",
 ] as const;
@@ -301,6 +307,11 @@ describe("P3-T20 IMRaD fixture extraction (scripts/build-imrad-fixtures.ts)", fu
       await IOUtils.writeUTF8(
         PathUtils.join(WORK_DIR, `${id}.txt`),
         source.text,
+      );
+      const raw = await getAttachmentText(entry.attachment);
+      await IOUtils.writeUTF8(
+        PathUtils.join(WORK_DIR, `${id}.raw.txt`),
+        raw ?? "",
       );
       await IOUtils.writeUTF8(
         PathUtils.join(WORK_DIR, `${id}.run.json`),

@@ -2606,6 +2606,41 @@ Korean titles, so the non-Latin path §11.3.2 now preserves is measured rather t
 > `npm run dedup:report`'s figures cannot move once the owner's labels are in. Its output today is
 > unchanged too: the corpus is still unlabelled and the script measures nothing.
 
+> **Decided 2026-10-25 (owner, `plan/00` §6 item 284(c)): the accuracy is measured on a random
+> sample of 60 label-set pairs and stated with its sampling error.** The owner labels **60** of
+> `P2-T13`'s 267 label-set pairs, not all of them. **How the 60 are drawn**
+> (`scripts/dedup-label-sample.ts`): the 267 are split by the engine's outcome for the pair —
+> *merged*, *linked*, *flagged* or *distinct*, exactly as `npm run dedup:report` defines them — and
+> each outcome gets a share of the 60 in proportion to its share of the 267, the fractional parts
+> settled by largest remainder (ties in that order of outcomes) with at least one pair for every
+> outcome that has any. Within an outcome the pairs kept are those with the smallest SHA-256 of
+> `seed + "\n" + pairId`, ties by pair id, under the fixed seed **`P2-T13 label sample 2026-10-25`**.
+> The draw is committed with its seed as `test/fixtures/dedup/label-sample.json` and is **not**
+> redrawn when the engine changes: later tuning is measured on the same 60 pairs. The engine's
+> outcome only chooses which pairs are shown; the labelling page shows neither the outcome nor the
+> stratum and lists the 60 in a second hash order (`seed + "\ndisplay\n" + pairId`) that mixes the
+> strata, so the labels stay independent of the code under test. **How it is reported:**
+> `npm run dedup:report` measures the labelled pairs of the sample and states precision and recall
+> each with a **95 % Wilson score interval** — chosen over the normal approximation because it stays
+> inside [0, 1] and keeps its coverage at small counts and at proportions near 1, which is where a
+> precision target of 0.99 sits. Allocation in proportion makes the sample self-weighting, so the
+> sample's counts are used as they are; the interval leaves out the finite-population correction
+> (60 of 267 drawn without replacement), which makes it slightly wider than it needs to be. A
+> target is **met** when the interval's lower end reaches it, **not met** when its upper end falls
+> below it, and otherwise the report says the sample is too small to decide. `--full` keeps the
+> measurement over every labelled label-set pair. **What a sample this size can decide:** with no
+> error at all, the lower end reaches a target `t` only once the denominator holds at least
+> `t·z²/(1 − t)` pairs (z = 1.96) — **381** merged pairs for precision ≥ 0.99 and **35** true
+> duplicates for recall ≥ 0.90. So this sample can refute the precision target but never confirm
+> it; the recall target is decidable only if the sample holds 35 or more duplicates. *Measured the
+> same day:* the 267 split merged 103, linked 65, flagged 22, distinct 77, and the 60 drawn are
+> **merged 23, linked 15, flagged 5, distinct 17** (weights `N_h/n_h` 4.33–4.53 against 267/60 =
+> 4.45, so the sample is self-weighting to within 3 %). Over 23 merged pairs, no false merge gives
+> [0.857, 1] (width 0.143), one gives [0.790, 0.992] — still undecided — and two give
+> [0.732, 0.976], not met. A recall of 0.90 over about 25 duplicates (22 of 25) gives
+> [0.700, 0.958], width 0.258. Labelling all 267 would not have confirmed 0.99 either: 103 merged
+> pairs with no false merge give a low end of 0.964.
+
 ### 11.4 Preprint ↔ published-version linking
 
 These are **different works** with different DOIs, and a user may legitimately want both. **Link

@@ -177,7 +177,11 @@
  *   passing and failing runs: `restored intl.locale.requested (user value
  *   false); app ["ko-KR","en-US"]` in both. Worth knowing on its own — every
  *   later spec renders through a chain that falls back to `en-US` for every id
- *   the Korean bundle lacks — but it does not discriminate.
+ *   the Korean bundle lacks — but it does not discriminate. *Updated
+ *   2026-10-26:* that was the state on 2026-10-07, when the Korean bundle
+ *   lacked nearly every id these windows draw. It now lacks none of them
+ *   (`plan/00` §6 item 284(a)), and both window blocks pin `en-US` for their
+ *   duration — see "The UI locale" below.
  *
  * Fixing this means changing what `P1-T22`'s tests wait **on** — a view-state
  * tap rather than rendered text, for the states that are transient — and that is
@@ -247,6 +251,25 @@
  * `marks the imported records as already in the library`, because the shipped
  * default is still `true` — flipping it needs `addon/prefs.js`, `docs/07` §8.5
  * and two unit tests outside this card's `Files`, and is reported with the card.
+ *
+ * ## The UI locale (2026-10-26)
+ *
+ * **Both window blocks pin the UI locale to `en-US` for their duration**, through
+ * `pinUILocale` and `restoreUILocale` in `support/uiLocale.ts`: the pin is the
+ * first step of each block's `before()`, so the window opens on the en-US
+ * chain, and the restore is the last step of its `after()`, once the window is
+ * closed. Many assertions here are English literals (`"PubMed"`, `"3 results"`,
+ * `"Imported"`, `"Already in library"`, `"0 of 1 databases"`).
+ *
+ * Why it is needed now: the test Zotero starts in the machine's locale, which
+ * is `ko-KR` on the machine this suite is run on. Until the owner approved the
+ * 147 pending Korean strings (`plan/00` §6 item 284(a)), nearly every message
+ * these windows draw had no Korean entry and fell back to `en-US`, so the
+ * English literals passed there by accident. With the Korean entries live,
+ * fourteen tests in this file (and one in `preferences.spec.ts`) failed with
+ * Korean on screen (`plan/reports/followup-285b.md`, finding 1). With the pin, the file passes on a `ko-KR` machine and on an
+ * `en-US` one. The Korean itself is checked in `l10n.spec.ts`. The `P2-T25`
+ * block opens no window and reads no UI text, so it is not pinned.
  *
  * ## What this file does not check
  *
@@ -388,6 +411,11 @@ import {
   recordedEsearchRequest,
 } from "../support/pubmedRecordedRequests";
 import { sha256Hex, toHex } from "../support/sha256";
+import {
+  pinUILocale,
+  restoreUILocale,
+  type UILocaleSnapshot,
+} from "./support/uiLocale";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -2320,8 +2348,15 @@ describe("P2-T25: the replay harness inside Zotero — real adapter, real client
 });
 
 describe("P1-T35: the host the composition root published", () => {
+  /** The UI locale this block found, put back in `after()`. */
+  let localeBefore: UILocaleSnapshot | undefined;
+
   before(async function () {
     this.timeout(90_000);
+
+    // English, for the block's duration: see "The UI locale" in this file's
+    // header. Before the window opens, so it starts on the en-US chain.
+    localeBefore = await pinUILocale(["en-US"], log35);
 
     const api = publishedApi();
     const services = api.services;
@@ -2405,6 +2440,11 @@ describe("P1-T35: the host the composition root published", () => {
     // The window is a singleton (`SEARCH_WINDOW_NAME`), so the next block's
     // `openSearchWindow` must not find this one still closing.
     await Zotero.Promise.delay(250);
+    // After the window is gone, so nothing re-translates a closing document.
+    if (localeBefore) {
+      await restoreUILocale(localeBefore, log35);
+      localeBefore = undefined;
+    }
   });
 
   // =========================================================================
@@ -2503,10 +2543,13 @@ describe("P1-T35: the host the composition root published", () => {
 
   it("item 206: every deduplication tier name resolves in this window to words, never to its id", async function () {
     // The duplicate badge's `{ $tier }` is handed this text by the view
-    // model, which resolves it through this same `document.l10n`. The window
-    // runs on the `ko-KR` chain, where the names are commented stubs, so the
-    // answer is the en-US fallback — asserted as "some text that is not the
-    // id", never as an English literal.
+    // model, which resolves it through this same `document.l10n`. Asserted as
+    // "some text that is not the id", never as an English literal, so it holds
+    // in every locale. *Updated 2026-10-26:* this said the window runs on the
+    // `ko-KR` chain, where the names were commented stubs answered by the
+    // en-US fallback. The Korean names are real entries since `plan/00` §6
+    // item 284(a), and this block now pins the window to `en-US` (this file's
+    // header, "The UI locale").
     for (const [tier, id] of Object.entries(DEDUP_TIER_NAME_KEYS)) {
       const text = await resolved({ id, args: undefined });
       assert.notStrictEqual(text.trim(), tier, `${id} resolves to its id`);
@@ -2533,9 +2576,12 @@ describe("P1-T35: the host the composition root published", () => {
       assert.fail("bioRxiv's row has no role detail");
     }
     // Locale-independent (2026-10-16): the role row's Korean is owner-reviewed
-    // and live, and this window runs on the `ko-KR` chain `l10n.spec.ts`
-    // leaves behind, so the expected text is the bundle's own answer rather
-    // than the English literal.
+    // and live, so the expected text is the bundle's own answer rather than
+    // the English literal. *Updated 2026-10-26:* when this was written the
+    // window ran on the `ko-KR` chain `l10n.spec.ts` leaves behind on a Korean
+    // machine; this block now pins `en-US` (this file's header, "The UI
+    // locale"). The assertion stays locale-independent on purpose, so it holds
+    // whichever chain the window is on.
     const expectedText = await resolved({
       id: "research-helper-search-source-role",
       args: undefined,
@@ -3266,8 +3312,15 @@ describe("P1-T35: the host the composition root published", () => {
 // ---------------------------------------------------------------------------
 
 describe("P1-T22: the Search & Import window driving the pipeline", () => {
+  /** The UI locale this block found, put back in `after()`. */
+  let localeBefore: UILocaleSnapshot | undefined;
+
   before(async function () {
     this.timeout(90_000);
+
+    // English, for the block's duration: see "The UI locale" in this file's
+    // header. Before the window opens, so it starts on the en-US chain.
+    localeBefore = await pinUILocale(["en-US"], log);
 
     const bytes: number = await Zotero.File.getContentsFromURLAsync(
       SEARCH_WINDOW_URL,
@@ -3416,6 +3469,11 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
     // the run (`test/integration/zotero/importer.spec.ts`'s discipline).
     await eraseCollections(createdCollections, "P1-T22");
     await Zotero.Promise.delay(100);
+    // After the window is gone, so nothing re-translates a closing document.
+    if (localeBefore) {
+      await restoreUILocale(localeBefore, log);
+      localeBefore = undefined;
+    }
   });
 
   // =========================================================================
@@ -3607,9 +3665,11 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
     // the request (nothing is retrying when the window sees it), and the
     // seconds are not carried. Item 232 (owner, 2026-10-21): the window shows
     // "too many requests, refused · try again in a moment" with the database
-    // name instead. Asserted against the window's own bundle text, which on
-    // this profile's ko-KR chain is the en-US fallback until the Korean is
-    // reviewed.
+    // name instead. Asserted against the window's own bundle text, so it holds
+    // in every locale. *Updated 2026-10-26:* this said the profile's ko-KR
+    // chain was "the en-US fallback until the Korean is reviewed"; the Korean
+    // is reviewed and live (`plan/00` §6 item 284(a)), and this block pins the
+    // window to `en-US` (this file's header, "The UI locale").
     assert.isFalse(
       UNRENDERABLE_ERROR_ROWS.includes("RATE_LIMIT"),
       "item 232 gave RATE_LIMIT a row",

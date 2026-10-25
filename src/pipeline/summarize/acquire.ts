@@ -103,6 +103,7 @@ import { parseExtra } from "../../zotero/extraField";
 import {
   zoteroFullTextPort,
   type DocumentStructure,
+  type HunspellFiles,
   type IndexedPageCounts,
   type PdfFullText,
 } from "../../zotero/fulltext";
@@ -127,6 +128,7 @@ import {
 } from "./jats";
 import { detectLanguage, LANGUAGE_NON_ENGLISH_WARNING } from "./languageDetect";
 import { normalizeAbstract } from "./normalizeAbstract";
+import { expandHunspellWordList, type WordList } from "./wordList";
 
 // ---------------------------------------------------------------------------
 // Ports
@@ -166,6 +168,14 @@ export interface FullTextPort<I, A extends AcquirableAttachment> {
    * line-scan fallback alone.
    */
   getDocumentStructure?(attachment: A): Promise<DocumentStructure | null>;
+  /**
+   * §4.1 step 8's word list (decided 2026-10-25, owner, `plan/00` §6 item
+   * 285(b)): the two files of Zotero's en-US Hunspell dictionary, which
+   * {@link loadWordList} expands. Optional; `null` or a rejection when they
+   * cannot be read, and either way the OCR probe then judges nothing and
+   * Tier 2 goes on.
+   */
+  readEnglishDictionary?(): Promise<HunspellFiles | null>;
   md5Hex(text: string): string;
 }
 
@@ -227,7 +237,8 @@ export interface AcquireOptions<I = unknown> {
 /**
  * The warnings `P3-T19` adds to {@link AcquisitionWarning}'s.
  *
- * - `ocr_suspected` — §4.1 step 8's probe failed a threshold. Warns only.
+ * - `ocr_suspected` — §4.1 step 8's stray-space split share is above its
+ *   threshold (decided 2026-10-25, item 285(b)). Warns only.
  * - `language_non_english` — §4.2: counted scripts above 15 % of letters.
  * - `epmc_fulltext_failed` — Tier 3 was tried and failed (not merely
  *   unavailable); the ladder went on.
@@ -421,6 +432,33 @@ async function readStructure<I, A extends AcquirableAttachment>(
 
 type WarningSink = (AcquisitionWarning | AcquisitionStageWarning)[];
 
+/** Each port's expanded word list, built once (about 130,000 forms). */
+const WORD_LISTS = new WeakMap<object, Promise<WordList | null>>();
+
+/**
+ * §4.1 step 8's word list through the port, expanded once per port object
+ * and kept for the session. A port without a reader, or a read that fails,
+ * gives `null`: the probe then judges nothing, and Tier 2 is never lost over
+ * it.
+ */
+function loadWordList<I, A extends AcquirableAttachment>(
+  port: FullTextPort<I, A>,
+): Promise<WordList | null> {
+  const read = port.readEnglishDictionary;
+  if (read === undefined) return Promise.resolve(null);
+  let list = WORD_LISTS.get(port);
+  if (list === undefined) {
+    list = read
+      .call(port)
+      .then((files) =>
+        files === null ? null : expandHunspellWordList(files.aff, files.dic),
+      )
+      .catch(() => null);
+    WORD_LISTS.set(port, list);
+  }
+  return list;
+}
+
 /** Tier 2: read, then §4.1's cleaning pass and OCR probe. */
 async function tryTier2<I, A extends AcquirableAttachment>(
   item: I,
@@ -436,7 +474,7 @@ async function tryTier2<I, A extends AcquirableAttachment>(
       warnings.push("attachment_text_empty");
       return null;
     }
-    const cleaned = cleanFullText(read.text);
+    const cleaned = cleanFullText(read.text, await loadWordList(port));
     if (cleaned.text.trim() === "") {
       warnings.push("attachment_text_empty");
       return null;
@@ -635,10 +673,9 @@ export async function acquireSource<
       referencesCut: body.clean.references.applied,
       referencesShare: body.clean.references.removedShare,
       supplementaryCharsRemoved: body.clean.supplementaryCharsRemoved,
-      ocrAlnumPunctShare: body.clean.ocr.alnumPunctShare,
-      ocrLetterShare: body.clean.ocr.letterShare,
-      ocrChars: body.clean.ocr.chars,
-      ocrFailed: body.clean.ocr.failed.join(","),
+      ocrWords: body.clean.ocr.words,
+      ocrSplits: body.clean.ocr.splits,
+      ocrSplitShare: body.clean.ocr.splitShare,
     }),
     sectionAware: sections.sectionAware,
     sectionsRecognized: sections.recognized,

@@ -266,10 +266,11 @@ describe("contentHash (P3-T18 step 6)", () => {
     const { port } = fakePort({});
     const source = await acquireSource(fakeItem(ABSTRACT), OPTIONS, port);
     expect(source.contentHash).toBe(sha256(source.text));
-    // P3-T19: the 58-character BODY now also draws `ocr_suspected` (it is
-    // under the probe's 1,500-character PROPOSAL minimum); only the hash
-    // fallback matters to this test.
-    expect(source.warnings).not.toContain("content_hash_md5");
+    // P3-T19 made the 58-character BODY draw `ocr_suspected` (under the old
+    // probe's 1,500-character minimum). Since item 285(b), 2026-10-25, a body
+    // under 250 words is never warned on (and this port reads no word list),
+    // so nothing warns at all.
+    expect(source.warnings).toEqual([]);
   });
 
   it("changes with the text and not with dateModified", async () => {

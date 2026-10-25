@@ -40,6 +40,18 @@
  *    and for its digest. The sweep is proven non-vacuous: the host logged
  *    something, and the request that went out did carry the key.
  *
+ * ## The UI locale is pinned to `en-US` (2026-10-26)
+ *
+ * Section 2 asserts one English sentence on screen ("including any other
+ * Zotero plugin"). The test Zotero starts in the machine's locale, `ko-KR` on
+ * the machine this suite is run on, and since the owner approved the pending
+ * Korean strings (`plan/00` §6 item 284(a)) the pane renders that paragraph in
+ * Korean there. So the block pins `en-US` in its `before()`, before any
+ * preferences window opens, and puts the locale back as it found it in its
+ * `after()`, as soon as the window is closed (`support/uiLocale.ts`). The
+ * other paragraph checks compare against what the window's own Fluent
+ * resolves, so they hold in any locale.
+ *
  * Sandbox caveats (`docs/01` §2.3): no `console`, no `performance`.
  */
 
@@ -77,6 +89,11 @@ import {
   setPref as setRawPref,
   type PrefScalar,
 } from "../../src/zotero/prefStore";
+import {
+  pinUILocale,
+  restoreUILocale,
+  type UILocaleSnapshot,
+} from "./support/uiLocale";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -88,6 +105,7 @@ declare function it(
   title: string,
   body: (this: TestContext) => Promise<void>,
 ): void;
+declare function before(body: () => Promise<void>): void;
 declare function after(body: () => Promise<void>): void;
 declare const assert: {
   strictEqual<T>(actual: T, expected: T, message?: string): void;
@@ -383,6 +401,13 @@ describe("P1-T44 — the preference pane", function () {
   let prefsWindow: Window | null = null;
   /** The ids this spec stored and must remove again. */
   const stored = new Set<SecretId>();
+  /** The UI locale as found, put back in `after()`. */
+  let localeBefore: UILocaleSnapshot | undefined;
+
+  // See "The UI locale is pinned to `en-US`" in this file's header.
+  before(async function () {
+    localeBefore = await pinUILocale(["en-US"], log);
+  });
 
   // This spec is bundled separately from the plugin and so has its own copy of
   // `src/prefs`' module state. The shipped store's `set`/`clear` re-derive
@@ -407,6 +432,11 @@ describe("P1-T44 — the preference pane", function () {
     }
     if (prefsWindow && !prefsWindow.closed) {
       prefsWindow.close();
+    }
+    // Once no preferences window is open, and before anything below can throw.
+    if (localeBefore) {
+      await restoreUILocale(localeBefore, log);
+      localeBefore = undefined;
     }
     const wrapper = await researchHelperAddon();
     if (!wrapper.isActive) {

@@ -2074,6 +2074,29 @@ pairs; every step-3 family meets its minimum (sets 11/10, preprint 27/5, short t
 same-title-other-year 15/5, `10.64898/` 11/5 with bioRxiv 4 and medRxiv 4). No label written; no verdict looked at.
 Full report at `plan/reports/P2-T13-partB-targeted.md`.
 
+**Decided 2026-10-25 (owner, `plan/00` §6 item 284(c)): the owner labels a random sample of 60 of the 267 label-set
+pairs, and the report states its figures with their sampling error.** This supersedes step 2's "≥ 200 labelled pairs"
+and the first and fourth Done-when items: the corpus stays at 267 label-set pairs (the step-3 family minimums are
+still asserted over all of them), the owner labels the 60 pairs of `test/fixtures/dedup/label-sample.json`, and
+"measured precision ≥ 0.99 and recall ≥ 0.90" becomes the interval verdict below. The draw, the seed and the
+interval are `docs/02` §11.3's note of the same date; in short: stratified by the engine's outcome (merged / linked /
+flagged / distinct) in proportion to the 267, largest-remainder rounding with at least one pair per outcome, the
+smallest SHA-256 of `"P2-T13 label sample 2026-10-25\n" + pairId` within each outcome; drawn once and not redrawn
+when step 6 moves a threshold. `npm run dedup:report` measures the labelled sampled pairs and prints precision and
+recall with a 95 % Wilson interval, and calls a target met only when the interval's lower end reaches it, not met when
+its upper end falls below it, and otherwise **undecided — sample too small**; `--full` measures every labelled
+label-set pair as before. No label is written by code, and the labelling page shows the 60 in a hash order that
+mixes the outcomes, with no outcome shown. Files added: `create scripts/dedup-label-sample.ts`,
+`create test/fixtures/dedup/label-sample.json`, `create test/unit/sources/dedupeLabelSample.test.ts`, and
+`modify test/unit/sources/dedupeCorpus.test.ts` (its report test names `--full`). **Open for the owner:** a sample of
+60 cannot confirm precision ≥ 0.99 — with no false merge the interval's lower end reaches 0.99 only from 381 merged
+pairs, and the draw holds 23 (merged 23, linked 15, flagged 5, distinct 17) — and confirms recall ≥ 0.90 only if
+the owner's labels find 35 or more duplicates among the 60 with none missed, so step 5's blocking test needs a
+criterion the sample can meet (for instance "no false merge in the sample",
+with the interval reported beside it); this card does not choose one. **Decided 2026-10-26 (owner, `plan/00` §6
+item 288(c)):** step 5's blocking test asserts **no false merge among the sample's merged pairs**, and prints the
+Wilson interval beside it; it does not assert the 0.99 or 0.90 targets themselves.
+
 ---
 
 ### P2-T14 — Search & Import window: chips, badges, per-source status
@@ -3021,6 +3044,16 @@ npm run typecheck && npm run lint:check && npm run test:unit && npm run test:con
 
 **Notes.** This card is the phase gate, not new functionality. If it uncovers work, that work becomes
 a new `P2-T17`+ card per `README.md` §3, not a silent fix inside this one.
+
+**Decided 2026-10-25 (owner, `plan/00` §6 item 284(c)): Part B waits on 60 labels, not 267, and states its figures
+with sampling error.** The owner labels the 60 pairs of `test/fixtures/dedup/label-sample.json` (`P2-T13`'s note of
+the same date, `docs/02` §11.3). Step 5 and the fourth Done-when item now read: `npm run dedup:report` prints
+precision and recall over the labelled sampled pairs, each with its 95 % Wilson interval and a verdict of met / not
+met / undecided against 0.99 and 0.90, and the phase sign-off records those figures with their intervals. Whether an
+"undecided" precision verdict can close the phase is the owner's call at sign-off: the sample can refute
+precision ≥ 0.99 but cannot confirm it (`docs/02` §11.3's note gives the arithmetic). **Decided 2026-10-26 (owner,
+`plan/00` §6 item 288(c)):** an "undecided" precision verdict with no false merge in the sample may close the phase;
+the sign-off states the interval and that the sample can refute the target but not confirm it.
 
 ---
 

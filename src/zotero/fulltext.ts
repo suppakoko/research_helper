@@ -17,6 +17,11 @@
  * here only because `Zotero.Utilities` may be named nowhere else) and the port
  * object.
  *
+ * Item 285(b) (owner, 2026-10-25) added {@link readEnglishDictionary}: the
+ * two files of the en-US Hunspell dictionary Zotero ships, which `docs/06`
+ * §4.1 step 8's OCR probe expands into its word list. It reads two `resource:`
+ * URLs and decodes them by the `.aff`'s `SET` line; the expansion is not here.
+ *
  * `P3-T21` added the structure reader — {@link getStructuredDocumentText},
  * {@link narrowStructuredDocument} and {@link getDocumentStructure} — which
  * `docs/06` §4.3's PDF section detector is built on (owner, 2026-10-23,
@@ -582,6 +587,67 @@ export async function getDocumentStructure(
   return doc === null ? null : narrowStructuredDocument(doc);
 }
 
+// ---------------------------------------------------------------------------
+// The en-US word list (`docs/06` §4.1 step 8, decided 2026-10-25, owner,
+// `plan/00` §6 item 285(b))
+// ---------------------------------------------------------------------------
+
+/** A Hunspell dictionary's two files, decoded to text. */
+export interface HunspellFiles {
+  readonly aff: string;
+  readonly dic: string;
+}
+
+/**
+ * The en-US Hunspell dictionary Zotero ships in its GRE `omni.ja`
+ * (`dictionaries/en-US.aff` and `.dic`, read from Zotero 10.0.3's install,
+ * 2026-10-25). It is the word list item 283(b) measured the stray-space split
+ * share with; the plugin ships none of its own.
+ */
+const EN_US_AFF_URL = "resource://gre/dictionaries/en-US.aff";
+const EN_US_DIC_URL = "resource://gre/dictionaries/en-US.dic";
+
+/** Bytes to a string one code unit per byte: ISO-8859-1 exactly. */
+function decodeLatin1(bytes: Uint8Array): string {
+  const chunk = 0x8000;
+  let out = "";
+  for (let at = 0; at < bytes.length; at += chunk) {
+    out += String.fromCharCode(...bytes.subarray(at, at + chunk));
+  }
+  return out;
+}
+
+async function readBytes(url: string): Promise<Uint8Array> {
+  const response = await fetch(url);
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+/**
+ * Read the two dictionary files, decoded as the `.aff`'s `SET` line says
+ * (`ISO8859-1` for Zotero 10.0.3's en-US; `UTF-8` is accepted too). `null`
+ * when either file is empty or the encoding is another one. Reads only;
+ * the expansion is the pipeline's (`src/pipeline/summarize/wordList.ts`).
+ * The sandbox's `fetch` reads `resource:` URLs (`addon/bootstrap.js` lists
+ * it among the sandbox globals).
+ */
+export async function readEnglishDictionary(): Promise<HunspellFiles | null> {
+  const [affBytes, dicBytes] = await Promise.all([
+    readBytes(EN_US_AFF_URL),
+    readBytes(EN_US_DIC_URL),
+  ]);
+  if (affBytes.length === 0 || dicBytes.length === 0) return null;
+  const aff = decodeLatin1(affBytes);
+  const set = /^SET[ \t]+(\S+)/mu.exec(aff)?.[1]?.toUpperCase() ?? "";
+  if (set === "UTF-8") {
+    return {
+      aff: new TextDecoder("utf-8").decode(affBytes),
+      dic: new TextDecoder("utf-8").decode(dicBytes),
+    };
+  }
+  if (set === "ISO8859-1") return { aff, dic: decodeLatin1(dicBytes) };
+  return null;
+}
+
 /**
  * Everything `acquireSource` needs from the platform, as one object, so the
  * pipeline module never names the `Zotero` global (`docs/07` §2.3).
@@ -595,5 +661,6 @@ export const zoteroFullTextPort = {
   getFullTextAllPages,
   getFullTextFirstPages,
   getDocumentStructure,
+  readEnglishDictionary,
   md5Hex,
 } as const;

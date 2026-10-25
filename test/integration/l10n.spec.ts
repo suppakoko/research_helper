@@ -142,6 +142,13 @@ import {
   L10N_MENU_SPIKE_CREATE_ITEM,
 } from "../../src/ui/menus/toolsMenu";
 import type { FluentMessageId as GeneratedMessageId } from "../../typings/i10n";
+import {
+  captureUILocale,
+  describeUILocale,
+  requestUILocale,
+  restoreUILocale,
+  type UILocaleSnapshot,
+} from "./support/uiLocale";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -189,7 +196,6 @@ const UNION_IS_GENERATED: UnionIsGenerated = true;
 
 const LOG_PREFIX = "[P1-T18]";
 const PLUGIN_L10N_SOURCE = "zotero-plugins";
-const LOCALE_PREF = "intl.locale.requested";
 const TOOLS_POPUP_ID = "menu_ToolsPopup";
 const TOOLS_TARGET = "main/menubar/tools";
 const STEP_TIMEOUT_MS = 20_000;
@@ -399,25 +405,6 @@ async function toolsMenuLabels(
   return labels;
 }
 
-/**
- * Request `locales` as the UI locale and wait until the negotiated app locale
- * chain leads with the first of them.
- */
-async function requestUILocale(locales: string[]): Promise<void> {
-  Services.locale.requestedLocales = locales;
-  await waitUntil(
-    () => Services.locale.appLocalesAsBCP47[0] === locales[0],
-    `app locales to lead with ${locales[0]}`,
-  );
-  // The windows' DOM localizations re-translate on intl:app-locales-changed;
-  // let that settle before anything is read.
-  await idle(Zotero.getMainWindow());
-  log(
-    `requested ${JSON.stringify(Services.locale.requestedLocales)} -> app ` +
-      `${JSON.stringify(Services.locale.appLocalesAsBCP47)}`,
-  );
-}
-
 /** Every read a Korean or English UI must agree on, in one place. */
 async function readUnderCurrentLocale(): Promise<{
   unpinned: MenuLabels;
@@ -483,47 +470,27 @@ function everyErrorInstance(): ResearchHelperError[] {
 }
 
 describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
-  const original = {
-    hadUserValue: false,
-    requested: "",
-    appLocales: [] as string[],
-  };
+  /** The runner profile's UI locale as found, put back in `after()`. */
+  let original: UILocaleSnapshot | undefined;
 
   before(async function () {
     await waitUntil(
       pluginInitialized,
       `Zotero.${config.addonInstance}.data.initialized`,
     );
-    original.hadUserValue = Services.prefs.prefHasUserValue(LOCALE_PREF);
-    original.requested = Services.prefs.getCharPref(LOCALE_PREF, "");
-    original.appLocales = [...Services.locale.appLocalesAsBCP47];
+    original = captureUILocale();
     log(
       `Zotero ${Zotero.version}, Gecko ${Services.appinfo.platformVersion}, ` +
-        `Zotero.locale ${Zotero.locale}; ${LOCALE_PREF} ` +
-        `${original.hadUserValue ? JSON.stringify(original.requested) : "(default)"}; ` +
-        `app locales ${JSON.stringify(original.appLocales)}; ` +
+        `Zotero.locale ${Zotero.locale}; ${describeUILocale(original)}; ` +
         `ko-KR available ${String(Services.locale.availableLocales.includes("ko-KR"))}`,
     );
   });
 
   after(async function () {
     // Put the runner profile's UI locale back exactly as it was.
-    if (original.hadUserValue) {
-      Services.prefs.setCharPref(LOCALE_PREF, original.requested);
-    } else {
-      Services.prefs.clearUserPref(LOCALE_PREF);
+    if (original) {
+      await restoreUILocale(original, log);
     }
-    await waitUntil(
-      () =>
-        JSON.stringify(Services.locale.appLocalesAsBCP47) ===
-        JSON.stringify(original.appLocales),
-      "app locales to return to their original value",
-    );
-    log(
-      `restored ${LOCALE_PREF} (user value ` +
-        `${String(Services.prefs.prefHasUserValue(LOCALE_PREF))}); app ` +
-        `${JSON.stringify(Services.locale.appLocalesAsBCP47)}`,
-    );
   });
 
   /* ---------------------------------------------- layer 1: the vocabulary */
@@ -928,7 +895,7 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
   /* ---------------------------------------------- layer 5: the real UI locale */
 
   it("renders the Tools menu from Fluent with the UI locale set to en-US", async function () {
-    await requestUILocale(["en-US"]);
+    await requestUILocale(["en-US"], log);
     const read = await readUnderCurrentLocale();
     const expected = { root: EN.root, spike: EN.spike };
     assert.deepEqual(read.menu, expected, "Tools menu labels");
@@ -937,7 +904,7 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
   });
 
   it("renders Korean, with English for the missing key, with the UI locale set to ko-KR", async function () {
-    await requestUILocale(["ko-KR"]);
+    await requestUILocale(["ko-KR"], log);
     assert.deepEqual(
       [...Services.locale.appLocalesAsBCP47].slice(-1),
       ["en-US"],

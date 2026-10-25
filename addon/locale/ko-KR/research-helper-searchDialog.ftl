@@ -55,72 +55,24 @@
 
 ## Window
 ##
-# NEEDS REVIEW. en-US: "Research Helper — Search & Import"
-# research-helper-search-window-title =
 
 
 ## Query row (docs/08 §4.2, §4.5)
 ##
-# NEEDS REVIEW. en-US `.value`: "Keyword"
-# research-helper-search-keyword-label =
-#
-# NEEDS REVIEW. en-US `.aria-label`: "Search keyword"
-# research-helper-search-keyword-input =
-#
-# NEEDS REVIEW. en-US `.label`: "Search"; `.tooltiptext`: "Run the search
-# across selected databases"
-# research-helper-search-run =
-#
-# NEEDS REVIEW. en-US `.value`: "Keyword"  (the read-only mode chip)
-# research-helper-search-mode-keyword =
-#
-# (P2-T17) Reviewed by the owner 2026-10-16 (G-41). en-US `.value`: "Re-run: { $collection }"  (the
-# read-only mode chip for FR-12's re-run; `$collection` is the collection's
-# own name and is not translated)
 research-helper-search-mode-rerun =
     .value = 다시 실행: { $collection }
 
 
 ## Date range (docs/08 §4.2, FR-3)
 ##
-# NEEDS REVIEW. en-US `.value`: "Years"
-# research-helper-search-years-label =
-#
-# NEEDS REVIEW. en-US, a `{ $years }` selector: "{ $from } – { $to } (last
-# calendar year)" / "{ $from } – { $to } (last { $years } calendar years)".
-# Keep the selector with only `*[other]`.
-# research-helper-search-years-span =
-#
-# NEEDS REVIEW. en-US `.aria-label`: "Earliest publication year"
-# research-helper-search-years-from =
-#
-# NEEDS REVIEW. en-US `.aria-label`: "Latest publication year"
-# research-helper-search-years-to =
-#
-# NEEDS REVIEW. en-US `.label`: "Custom…"
-# research-helper-search-years-custom =
 
 
 ## Per-database result limit (docs/08 §4.2)
 ##
-# NEEDS REVIEW. en-US `.value`: "Max per database"
-# research-helper-search-max-results-label =
-#
-# NEEDS REVIEW. en-US `.aria-label`: "Maximum results per database"
-# research-helper-search-max-results-input =
 
 
 ## Database selection (docs/08 §4.2, FR-2)
 ##
-# NEEDS REVIEW. en-US `.value`: "Databases"
-# research-helper-search-databases-label =
-#
-# NEEDS REVIEW. en-US: "Select at least one database to search."
-# research-helper-search-databases-none =
-#
-# (P2-T14) Reviewed by the owner 2026-10-16 (G-41). en-US: "Semantic Scholar has no API key, so its
-# requests share an anonymous pool that is heavily rate-limited."
-# "Semantic Scholar" and "API" are not translated.
 research-helper-search-s2-no-key = Semantic Scholar에 API 키가 없어, 요청이 익명 공용 한도를 함께 쓰므로 제한이 심합니다.
 #
 # (P2-T14) Reviewed by the owner 2026-10-16 (G-41). en-US: "Request a free API key"
@@ -129,60 +81,15 @@ research-helper-search-s2-no-key-request = 무료 API 키 신청
 
 ## Client-side filtering (docs/08 §4.2, §4.5)
 ##
-# NEEDS REVIEW. en-US `.value`: "Filter"
-# research-helper-search-filter-label =
-#
-# NEEDS REVIEW. en-US `.aria-label`: "Filter the results already fetched"
-# research-helper-search-filter-input =
-#
-# NEEDS REVIEW. en-US `.label`: "Hide items already in my library"
-# research-helper-search-hide-existing =
-#
-# NEEDS REVIEW. en-US: "{ $total } results · { $new } new"
-# research-helper-search-result-count =
 
 
 ## Result table (docs/08 §4.2, §4.3, §9)
 ##
-# NEEDS REVIEW. en-US `.aria-label`: "Search results"
-# research-helper-search-table =
-#
-# NEEDS REVIEW. en-US `.aria-label`: "Select"
-# research-helper-search-col-select =
-#
-# NEEDS REVIEW. en-US `.label`: "Title"
-# research-helper-search-col-title =
-#
-# NEEDS REVIEW. en-US `.label`: "Authors"
-# research-helper-search-col-authors =
-#
-# NEEDS REVIEW. en-US `.label`: "Year"
-# research-helper-search-col-year =
-#
-# NEEDS REVIEW. en-US `.label`: "Source"
-# research-helper-search-col-source =
-#
-# NEEDS REVIEW. en-US `.label`: "Type"
-# research-helper-search-col-type =
 
 # Not translated (docs/08 §10.3). The one message this bundle ships.
 research-helper-search-col-doi =
     .label = DOI
 
-# NEEDS REVIEW. en-US: "{ $names } +{ $count }"
-# research-helper-search-authors-overflow =
-#
-# NEEDS REVIEW. en-US: "Already in library: { $title }"
-# research-helper-search-row-existing =
-#
-# NEEDS REVIEW. en-US `.aria-label`: "Already in my library"
-# research-helper-search-row-existing-badge =
-#
-# (P2-T14) Reviewed by the owner 2026-10-16 (G-41). en-US: "Possible duplicate"; `.title`: "Possible
-# duplicate of another row ({ $tier }, { $score }% similar). Nothing was
-# merged: review both rows and untick the one you do not want." `{ $tier }`
-# is not translated here: since 2026-10-19 (plan/00 §6 item 206) it is the
-# already-resolved `research-helper-search-tier-*` name below.
 research-helper-search-row-duplicate = 중복 가능성
     .title = 다른 행과 중복일 수 있습니다({ $tier }, 유사도 { $score }%). 합친 것은 없습니다. 두 행을 확인하고 원하지 않는 행의 체크를 해제하세요.
 #
@@ -207,60 +114,15 @@ research-helper-search-tier-version-link = 알려진 프리프린트–출판본
 
 ## Selection controls (docs/08 §4.5, FR-5)
 ##
-# NEEDS REVIEW. en-US `.label`: "Select all"
-# research-helper-search-select-all =
-#
-# NEEDS REVIEW. en-US `.label`: "Select none"
-# research-helper-search-select-none =
-#
-# NEEDS REVIEW. en-US `.label`: "Invert"
-# research-helper-search-select-invert =
-#
-# NEEDS REVIEW. en-US, a `{ $count }` selector: "1 selected" /
-# "{ $count } selected". Keep the selector with only `*[other]`.
-# research-helper-search-selected-count =
 
 
 ## Import target and duplicate policy (docs/08 §4.2, §4.4, §4.5, FR-51)
 ##
-# NEEDS REVIEW. en-US `.value`: "Import into"
-# research-helper-search-target-label =
-#
-# NEEDS REVIEW. en-US `.aria-label`: "Target collection"
-# research-helper-search-target-picker =
-#
-# NEEDS REVIEW. en-US `.label`: "New collection…"
-# research-helper-search-target-new =
-#
-# NEEDS REVIEW. en-US `.value`: "Duplicates"
-# research-helper-search-duplicates-label =
-#
-# NEEDS REVIEW. en-US `.label`: "Skip"
-# research-helper-search-duplicates-skip =
-#
-# NEEDS REVIEW. en-US `.label`: "Add existing item to collection"
-# research-helper-search-duplicates-link =
-#
-# NEEDS REVIEW. en-US `.label`: "Import anyway"
-# research-helper-search-duplicates-import =
-#
-# (P2-T11) Reviewed by the owner 2026-10-16 (G-41). en-US value: "A preprint and its published version
-# are kept as two items, linked as Related; the preprint is tagged
-# research_helper/superseded-by-published." The tag name stays verbatim.
 research-helper-search-preprint-policy = 프리프린트와 정식 출판본은 두 항목으로 유지되며 '관련 항목'으로 연결됩니다. 프리프린트에는 research_helper/superseded-by-published 태그가 붙습니다.
 
 
 ## Window buttons (docs/08 §4.5, FR-1, NFR-13)
 ##
-# NEEDS REVIEW. en-US `.label`: "Close"
-# research-helper-search-close =
-#
-# NEEDS REVIEW. en-US `.label`: "Cancel"
-# research-helper-search-cancel =
-#
-# NEEDS REVIEW. en-US `.label`, a `{ $count }` selector: "Import 1 item" /
-# "Import { $count } items". Keep the selector with only `*[other]`.
-# research-helper-search-import =
 
 
 ## Provenance export (FR-8, P1-T45)
@@ -269,23 +131,10 @@ research-helper-search-preprint-policy = 프리프린트와 정식 출판본은 
 ## does not name the file that was written — `docs/09` §2.2 forbids the chosen
 ## path leaving the window. Do not add the path when translating.
 ##
-# NEEDS REVIEW. en-US `.label`: "Export provenance as JSON…". "JSON" is not
-# translated (`docs/08` §10.3, the same rule as "DOI").
-# research-helper-search-export =
-#
-# NEEDS REVIEW. en-US: "Provenance record exported."
-# research-helper-search-export-written =
-#
-# NEEDS REVIEW. en-US: "Could not export the provenance record. Try a
-# different location."
-# research-helper-search-export-failed =
 
 
 ## 1. INITIAL (docs/08 §8.4)
 ##
-# NEEDS REVIEW. en-US: "Enter a keyword and press Search to query the selected
-# databases for papers from the last { $years } calendar years."
-# research-helper-search-state-initial =
 
 
 ## 1a. Re-run, pre-filled from provenance (docs/08 §4.6, FR-12; P2-T17)
@@ -331,68 +180,20 @@ research-helper-search-import-summary-rerun = 가져옴 { $imported } · 이미 
 
 ## 2. LOADING (docs/08 §4.6, §8.4)
 ##
-# NEEDS REVIEW. en-US: "Searching…"
-# research-helper-search-source-searching =
-#
-# NEEDS REVIEW. en-US, a `{ $count }` selector: "1 result" /
-# "{ $count } results". Keep the selector with only `*[other]`.
-# research-helper-search-source-results =
-#
-# NEEDS REVIEW. en-US: "Failed — { $reason }". `{ $reason }` arrives already
-# localized from `research-helper-mainWindow.ftl`'s `rh-error-*` block.
-# research-helper-search-source-failed =
-#
-# NEEDS REVIEW. en-US: "{ $done } of { $total } databases"
-# research-helper-search-progress-databases =
-#
-# NEEDS REVIEW. en-US: "Searching { $database }…". `{ $database }` is a source
-# display name and is not translated.
-# research-helper-search-status-searching =
-#
-# NEEDS REVIEW. en-US: "Importing { $done } of { $total }…"
-# research-helper-search-status-importing =
-#
-# (P2-T14) Reviewed by the owner 2026-10-16 (G-41). en-US: "ID lookup · preprint matching"; `.title`:
-# "This server has no keyword search, so it looks up identifiers and matches
-# preprints to their published versions; keyword search of preprints happens
-# through Europe PMC (SRC:PPR) and Crossref (type:posted-content)." "SRC:PPR"
-# and "type:posted-content" are query syntax and are not translated.
 research-helper-search-source-role = ID 조회 · 프리프린트 대조
     .title = 이 서버는 키워드 검색이 없어 식별번호를 조회하고 프리프린트를 정식 출판본과 대조합니다. 프리프린트의 키워드 검색은 Europe PMC(SRC:PPR)와 Crossref(type:posted-content)에서 이루어집니다.
 
 
 ## 3. EMPTY (docs/08 §4.6, §8.4)
 ##
-# NEEDS REVIEW. en-US: "No papers found for “{ $query }” in { $from }–{ $to }."
-# research-helper-search-state-empty =
-#
-# NEEDS REVIEW. en-US: "Try broadening the year range, removing quotation
-# marks, or enabling more databases."
-# research-helper-search-state-empty-suggestions =
-#
-# NEEDS REVIEW. en-US: "No abstract or indexed full text — skipped."
-# research-helper-search-row-no-content =
 
 
 ## 4. PARTIAL (docs/08 §8.4, FR-9)
 ##
-# NEEDS REVIEW. en-US, a `{ $failed }` selector: "1 database could not be
-# searched. The results below come from the other { $succeeded }." /
-# "{ $failed } databases could not be searched. The results below come from the
-# other { $succeeded }." Keep the selector with only `*[other]`.
-# research-helper-search-state-partial =
 
 
 ## 5. ERROR (docs/08 §4.6, §8.4)
 ##
-# NEEDS REVIEW. en-US: "Could not reach any database."
-# research-helper-search-state-error =
-#
-# NEEDS REVIEW. en-US `.label`: "Open Preferences…"
-# research-helper-search-state-error-open-preferences =
-#
-# NEEDS REVIEW. en-US `.label`: "Retry"
-# research-helper-search-state-error-retry =
 
 # Item 232: a source refused with HTTP 429 after the client's retries.
 # `{ $database }` is a source display name and is not translated. Drafted by
@@ -402,42 +203,153 @@ research-helper-search-error-rate-limit = { $database }: 요청이 너무 많아
 
 ## Error detail disclosure (NFR-14)
 ##
-# NEEDS REVIEW. en-US `.label`: "Show details"
-# research-helper-search-details-show =
-#
-# NEEDS REVIEW. en-US `.label`: "Hide details"
-# research-helper-search-details-hide =
 
 ## Relevance screening (P3-T27; docs/08 §4.2, docs/12 §3)
 ##
-# NEEDS REVIEW (P3-T27, 2026-10-24). en-US `.label`: "Screen results for relevance with the AI model"
-# research-helper-search-screening-enable =
-#
-# NEEDS REVIEW (P3-T27, 2026-10-24). en-US `.value`: "Relevance threshold"
-# research-helper-search-screening-threshold-label =
-#
-# NEEDS REVIEW (P3-T27, 2026-10-24). en-US `.aria-label`: "Relevance threshold, from 0 to 100"
-# research-helper-search-screening-threshold-input =
-#
-# NEEDS REVIEW (P3-T27, 2026-10-24). en-US `.label`: "Show excluded"
-# research-helper-search-screening-show-excluded =
-#
-# NEEDS REVIEW (P3-T27, 2026-10-24). en-US: "Importing { $kept } of { $total } results · { $excluded } below the threshold"
-# research-helper-search-screening-count =
-#
-# NEEDS REVIEW (P3-T27, 2026-10-24). en-US: "The AI model could not score { $count } results. They are shown without a score and are never hidden."
-# research-helper-search-screening-unscored =
-#
-# NEEDS REVIEW (P3-T27, 2026-10-24). en-US: "Relevance screening could not run, so no result was scored and none is hidden."
-# research-helper-search-screening-failed =
-#
-# NEEDS REVIEW (P3-T27, 2026-10-24). en-US: "Relevance { $score }"; `.title`: "Relevance score from the AI model, from 0 to 100. A row below the threshold is hidden unless Show excluded is ticked."
-# research-helper-search-row-relevance =
 
 ## The estimated cost of screening (owner, 2026-10-24, plan/00 §6 item 281(b))
 ##
-# NEEDS REVIEW (item 281(b), 2026-10-24). en-US: "Estimated cost of screening: up to about { $cost } for up to { $count } results"
-# research-helper-search-screening-cost =
-#
-# NEEDS REVIEW (item 281(b), 2026-10-24). en-US: "The price of { $model } is not known, so the cost of screening cannot be estimated."
-# research-helper-search-screening-cost-unpriced =
+
+
+## Owner-reviewed Korean, item 284(a), batches 5-7 (G-41)
+##
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-25 (G-41,
+# plan/00 §6 item 284(a), batches 5-7).
+
+research-helper-search-window-title = Research Helper — 검색 및 가져오기
+research-helper-search-keyword-label =
+    .value = 키워드
+research-helper-search-keyword-input =
+    .aria-label = 검색 키워드
+research-helper-search-run =
+    .label = 검색
+    .tooltiptext = 선택한 데이터베이스에서 검색합니다
+research-helper-search-mode-keyword =
+    .value = 키워드
+research-helper-search-years-label =
+    .value = 연도
+research-helper-search-years-span =
+    { $years ->
+       *[other] { $from } – { $to } (최근 { $years }년)
+    }
+research-helper-search-years-from =
+    .aria-label = 가장 이른 출판 연도
+research-helper-search-years-to =
+    .aria-label = 가장 늦은 출판 연도
+research-helper-search-years-custom =
+    .label = 직접 지정…
+research-helper-search-max-results-label =
+    .value = 데이터베이스별 최대
+research-helper-search-max-results-input =
+    .aria-label = 데이터베이스별 최대 결과 수
+research-helper-search-databases-label =
+    .value = 데이터베이스
+research-helper-search-databases-none = 검색할 데이터베이스를 하나 이상 선택하세요.
+research-helper-search-filter-label =
+    .value = 거르기
+research-helper-search-filter-input =
+    .aria-label = 이미 가져온 결과 안에서 거르기
+research-helper-search-hide-existing =
+    .label = 내 라이브러리에 이미 있는 항목 숨기기
+research-helper-search-result-count = 결과 { $total }건 · 새 항목 { $new }건
+research-helper-search-table =
+    .aria-label = 검색 결과
+research-helper-search-col-select =
+    .aria-label = 선택
+research-helper-search-col-title =
+    .label = 제목
+research-helper-search-col-authors =
+    .label = 저자
+research-helper-search-col-year =
+    .label = 연도
+research-helper-search-col-source =
+    .label = 출처
+research-helper-search-col-type =
+    .label = 유형
+research-helper-search-authors-overflow =
+    { $names } 외 { $count }명
+research-helper-search-row-existing = 이미 라이브러리에 있음: { $title }
+research-helper-search-row-existing-badge =
+    .aria-label = 내 라이브러리에 이미 있음
+research-helper-search-select-all =
+    .label = 모두 선택
+research-helper-search-select-none =
+    .label = 선택 해제
+research-helper-search-select-invert =
+    .label = 선택 반전
+research-helper-search-selected-count =
+    { $count ->
+       *[other] { $count }개 선택됨
+    }
+research-helper-search-target-label =
+    .value = 가져올 곳
+research-helper-search-target-picker =
+    .aria-label = 대상 컬렉션
+research-helper-search-target-new =
+    .label = 새 컬렉션…
+research-helper-search-duplicates-label =
+    .value = 중복 항목
+research-helper-search-duplicates-skip =
+    .label = 건너뛰기
+research-helper-search-duplicates-link =
+    .label = 기존 항목을 컬렉션에 추가
+research-helper-search-duplicates-import =
+    .label = 그래도 가져오기
+research-helper-search-close =
+    .label = 닫기
+research-helper-search-cancel =
+    .label = 취소
+research-helper-search-import =
+    .label =
+        { $count ->
+           *[other] { $count }개 항목 가져오기
+        }
+research-helper-search-export =
+    .label = 출처 기록을 JSON으로 내보내기…
+research-helper-search-export-written = 출처 기록을 내보냈습니다.
+research-helper-search-export-failed = 출처 기록을 내보내지 못했습니다. 다른 위치를 골라 보세요.
+research-helper-search-state-initial = 키워드를 입력하고 검색을 누르면 선택한 데이터베이스에서 최근 { $years }년 동안의 논문을 찾습니다.
+research-helper-search-source-searching = 검색하는 중…
+research-helper-search-source-results =
+    { $count ->
+       *[other] 결과 { $count }건
+    }
+research-helper-search-source-failed = 실패 — { $reason }
+research-helper-search-progress-databases = 데이터베이스 { $total }개 중 { $done }개 완료
+research-helper-search-status-searching =
+    { $database } 검색 중…
+research-helper-search-status-importing =
+    { $total }개 중 { $done }개 가져오는 중…
+research-helper-search-state-empty =
+    { $from }–{ $to } 기간에 “{ $query }”에 해당하는 논문이 없습니다.
+research-helper-search-state-empty-suggestions = 연도 범위를 넓히거나, 따옴표를 빼거나, 데이터베이스를 더 선택해 보세요.
+research-helper-search-row-no-content = 초록도, 색인된 본문도 없어 건너뜁니다.
+research-helper-search-state-partial =
+    { $failed ->
+       *[other] 데이터베이스 { $failed }개를 검색하지 못했습니다. 아래 결과는 나머지 { $succeeded }개에서 가져온 것입니다.
+    }
+research-helper-search-state-error = 어떤 데이터베이스에도 연결할 수 없습니다.
+research-helper-search-state-error-open-preferences =
+    .label = 설정 열기…
+research-helper-search-state-error-retry =
+    .label = 다시 시도
+research-helper-search-details-show =
+    .label = 자세히 보기
+research-helper-search-details-hide =
+    .label = 자세히 숨기기
+research-helper-search-screening-enable =
+    .label = AI 모델로 결과의 관련도 걸러내기
+research-helper-search-screening-threshold-label =
+    .value = 관련도 기준
+research-helper-search-screening-threshold-input =
+    .aria-label = 관련도 기준(0~100)
+research-helper-search-screening-show-excluded =
+    .label = 걸러낸 결과도 보기
+research-helper-search-screening-count = 결과 { $total }건 중 { $kept }건 가져옴 · 기준 미만 { $excluded }건
+research-helper-search-screening-unscored = AI 모델이 결과 { $count }건의 점수를 매기지 못했습니다. 이 결과는 점수 없이 보이며 숨기지 않습니다.
+research-helper-search-screening-failed = 관련도 걸러내기를 실행하지 못해, 어떤 결과에도 점수가 없고 숨긴 결과도 없습니다.
+research-helper-search-row-relevance =
+    관련도 { $score }
+    .title = AI 모델이 매긴 관련도 점수(0~100)입니다. 기준보다 낮은 줄은 ‘걸러낸 결과도 보기’를 켜야 보입니다.
+research-helper-search-screening-cost = 걸러내기 예상 비용: 결과 최대 { $count }건에 최대 약 { $cost }
+research-helper-search-screening-cost-unpriced = 모델 { $model }의 가격을 알 수 없어 걸러내기 비용을 어림할 수 없습니다.

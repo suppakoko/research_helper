@@ -791,12 +791,15 @@ describe("the labelling sheet", () => {
 });
 
 describe("scripts/dedup-report.ts", () => {
-  it("refuses the committed unlabelled corpus and exits non-zero", async () => {
+  it("refuses the committed unlabelled corpus and exits non-zero (--full; the sample mode is dedupeLabelSample.test.ts)", async () => {
     const err = vi
       .spyOn(process.stderr, "write")
       .mockImplementation(() => true);
     try {
-      const code = await reportMain([resolve(DEDUP_CORPUS_DIR, PAIRS_FILE)]);
+      const code = await reportMain([
+        resolve(DEDUP_CORPUS_DIR, PAIRS_FILE),
+        "--full",
+      ]);
       expect(code).toBe(1);
       const said = String(err.mock.calls[0]?.[0]);
       expect(said).toMatch(/is unlabelled: 267 of 267 label-set pairs/u);

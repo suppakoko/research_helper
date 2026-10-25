@@ -62,11 +62,6 @@ research-helper-menu-root =
 research-helper-menu-search-import =
     .label = 검색 및 가져오기…
 
-# NEEDS REVIEW. en-US: "Search & Import into This Collection…"
-# `docs/08` §10.2 supplies no Korean for this entry, and the id itself is new
-# (see the en-US bundle's note on the §2.4/§2.5 gap).
-# research-helper-menu-collection-search-import =
-#     .label =
 
 # FR-12's entry (P2-T17), taken verbatim from `docs/08` §10.2, which ships the
 # owner's Korean for it beside the en-US "Re-run This Search…".
@@ -95,25 +90,10 @@ research-helper-provider-gemini = Google Gemini
 
 ## Search provenance (FR-8)
 ##
-# NEEDS REVIEW. en-US: "Research Helper — search provenance { $timestamp }"
-# FR-8 fixes the *English* title format literally. Whether a Korean UI should
-# write a Korean note title at all, or keep FR-8's exact English string so the
-# notes of one library stay greppable, is an owner decision and not a
-# translator's — reported with the gate.
-# research-helper-provenance-note-title =
 
 
 ## Import outcome (docs/08 §4.4, FR-51)
 ##
-# NEEDS REVIEW. en-US: "Imported { $imported } · Linked { $linked } · Skipped
-# { $skipped } duplicates · { $failed } failed"
-# research-helper-import-summary =
-#
-# NEEDS REVIEW. en-US: "Abstracts present for { $percent }% of imported items"
-# research-helper-import-abstract-coverage =
-#
-# (P2-T18) Reviewed by the owner 2026-10-16 (G-41). en-US: "Through Zotero translators { $translated } ·
-# From search results { $handMapped }"
 research-helper-import-paths = Zotero 중계기로 { $translated } · 검색 결과에서 { $handMapped }
 #
 # (P2-T18) Reviewed by the owner 2026-10-16 (G-41). en-US, a `{ $cause }` selector over five tokens, each
@@ -141,7 +121,6 @@ research-helper-import-fallback-reason =
 ## product-name decision here, not two identical ones. Nothing was translated
 ## by that card; the reasoning is in `src/i18n/keys.ts`.
 ##
-# NEEDS REVIEW. en-US: "Research Helper"
 # The headline of the `Zotero.ProgressWindow` each job raises. `G-41` owns this
 # translation and `P1-T32` is forbidden to draft it: the en-US text is the
 # product name, `docs/08` §10.2 renders the product name as `리서치 헬퍼` in menu
@@ -151,7 +130,6 @@ research-helper-import-fallback-reason =
 # `en-US` through the second fallback layer `P0-T24` measured, which is a
 # visible gap and is the point: a plausible wrong translation is worse than
 # English. On `KO_PENDING_REVIEW` in `src/i18n/keys.ts`.
-# research-helper-progress-headline =
 
 
 ## User-facing error strings — `ResearchHelperError.messageKey`
@@ -167,57 +145,6 @@ research-helper-import-fallback-reason =
 ## may place them differently from English, which is exactly why a translator
 ## rather than a substitution is needed.
 ##
-# NEEDS REVIEW. en-US: "Research Helper is not configured correctly for this action."
-# rh-error-configuration =
-#
-# NEEDS REVIEW. en-US: "No API key configured for { $provider }."
-# rh-error-missing-credential =
-#
-# NEEDS REVIEW. en-US: "Could not reach { $host }."
-# rh-error-network =
-#
-# NEEDS REVIEW. en-US: "Zotero is offline."
-# rh-error-offline =
-#
-# NEEDS REVIEW. en-US: "{ $host } did not respond within { $seconds }s."
-# rh-error-timeout =
-#
-# NEEDS REVIEW. en-US: "{ $provider } rejected the API key (HTTP { $status })."
-# rh-error-auth =
-#
-# NEEDS REVIEW. en-US: "{ $provider } refused the request (HTTP { $status })."
-# rh-error-forbidden =
-#
-# NEEDS REVIEW. en-US: "{ $provider } rate limit reached. Retrying in { $seconds }s."
-# rh-error-rate-limit =
-#
-# NEEDS REVIEW. en-US: "{ $provider } reports the account is out of credit."
-# rh-error-quota =
-#
-# NEEDS REVIEW. en-US: "{ $database } is temporarily unavailable (HTTP { $status }). Other databases were still searched."
-# rh-error-upstream =
-#
-# NEEDS REVIEW. en-US: "Research Helper sent a request { $database } could not accept."
-# rh-error-bad-request =
-#
-# NEEDS REVIEW. en-US: "{ $database } could not complete the search."
-# rh-error-source =
-#
-# NEEDS REVIEW. en-US: "Could not read the response from { $database }."
-# rh-error-parse =
-#
-# NEEDS REVIEW. en-US: "Zotero could not complete the change."
-# rh-error-zotero =
-#
-# NEEDS REVIEW. en-US: "Research Helper could not write to storage."
-# rh-error-storage =
-#
-# NEEDS REVIEW. en-US, a `{ $imported }` selector: "Cancelled. 1 item was
-# already imported." / "Cancelled. { $imported } items were already imported."
-# Korean has a single plural category, so the Korean entry keeps the selector
-# with only `*[other]` (`docs/08` §10.2's note, §10.3).
-# rh-error-cancelled =
-#
 
 # `P3-T05` (2026-10-20): the four LLM error strings. Drafted by the
 # coordinator and reviewed by the owner on 2026-10-20 (G-41); nothing was
@@ -457,71 +384,117 @@ research-helper-prefs-risk-4-session = 메모리에 있는 키도 같은 사용�
 ## nothing was machine-translated. `$provider` and `$model` are names, never
 ## translated (docs/08 §10.3).
 
-# NEEDS REVIEW. en-US: "Key accepted. The provider is limiting requests right now (HTTP 429) · checked { $time }"
-# research-helper-prefs-test-ok-rate-limited =
-#
-# NEEDS REVIEW (owner, 2026-10-23, plan/00 §6 item 279(a)). en-US: "Key accepted, but the account has no credit left · checked { $time }"
-# research-helper-prefs-test-ok-no-credit =
-#
-# NEEDS REVIEW. en-US (.label): "Choose a suggested model…"
-# research-helper-prefs-model-suggestions =
-#     .label =
-#
-# NEEDS REVIEW. en-US: "Suggestions from the provider's model list as of { $date }. You can also type any model ID."
-# research-helper-prefs-models-as-of =
-#
-# NEEDS REVIEW. en-US: "The live model list could not be fetched. These suggestions are the built-in list of { $date } and may be out of date. You can also type any model ID."
-# research-helper-prefs-models-stale =
-#
-# NEEDS REVIEW. en-US: "Your model prices"
-# research-helper-prefs-prices =
-#
-# NEEDS REVIEW. en-US: "A price you enter here replaces the catalogue's price for that model when Research Helper estimates a cost. Enter US dollars per million tokens and the date you read the price. A new row is saved for the provider chosen above."
-# research-helper-prefs-prices-note =
-#
-# NEEDS REVIEW. en-US: "{ $provider } · { $model }: input { $input }, output { $output }, cached input { $cached } US dollars per million tokens · as of { $date }"
-# research-helper-prefs-price-row =
-#
-# NEEDS REVIEW. en-US: "{ $provider } · { $model }: input { $input }, output { $output } US dollars per million tokens · as of { $date }"
-# research-helper-prefs-price-row-no-cached =
-#
-# NEEDS REVIEW. en-US (.placeholder): "Model ID"
-# research-helper-prefs-price-model =
-#     .placeholder =
-#
-# NEEDS REVIEW. en-US (.placeholder): "Input price"
-# research-helper-prefs-price-input =
-#     .placeholder =
-#
-# NEEDS REVIEW. en-US (.placeholder): "Output price"
-# research-helper-prefs-price-output =
-#     .placeholder =
-#
-# NEEDS REVIEW. en-US (.placeholder): "Cached input price (optional)"
-# research-helper-prefs-price-cached =
-#     .placeholder =
-#
-# NEEDS REVIEW. en-US (.placeholder): "As of (YYYY-MM-DD)"
-# research-helper-prefs-price-as-of =
-#     .placeholder =
-#
-# NEEDS REVIEW. en-US: "Save price"
-# research-helper-prefs-price-save =
-#
-# NEEDS REVIEW. en-US: "Remove"
-# research-helper-prefs-price-remove =
-#
-# NEEDS REVIEW. en-US: "Price saved."
-# research-helper-prefs-price-saved =
-#
-# NEEDS REVIEW. en-US: "Price removed."
-# research-helper-prefs-price-removed =
-#
-# NEEDS REVIEW. en-US: "Not saved: enter a model ID, input and output prices of zero or more (such as 0.25), and a date such as 2026-10-23."
-# research-helper-prefs-price-invalid =
-#
-# NEEDS REVIEW. en-US: "Not saved: this row cannot be stored. Check that the model field holds a model name, not an API key."
-# research-helper-prefs-price-refused =
-#
-# NEEDS REVIEW. en-US: "The plugin database is not available, so prices cannot be saved."
-# research-helper-prefs-price-unavailable =
+
+## Owner-reviewed Korean, item 284(a), batches 1-4 (G-41)
+##
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-25 (G-41,
+# plan/00 §6 item 284(a), batches 1-4).
+
+research-helper-menu-collection-search-import =
+    .label = 이 컬렉션으로 검색 및 가져오기…
+research-helper-provenance-note-title = Research Helper — 검색 출처 기록 { $timestamp }
+research-helper-import-summary = 가져옴 { $imported } · 연결됨 { $linked } · 중복 건너뜀 { $skipped } · 실패 { $failed }
+research-helper-import-abstract-coverage = 가져온 항목 중 초록이 있는 비율: { $percent }%
+research-helper-progress-headline = Research Helper
+rh-error-configuration = 이 작업에 필요한 Research Helper 설정이 올바르지 않습니다.
+rh-error-missing-credential =
+    { $provider }의 API 키가 설정되어 있지 않습니다.
+rh-error-network =
+    { $host }에 연결할 수 없습니다.
+rh-error-offline = Zotero가 오프라인 상태입니다.
+rh-error-timeout =
+    { $host }에서 { $seconds }초 안에 응답이 없습니다.
+rh-error-auth =
+    { $provider }에서 API 키를 거부했습니다(HTTP { $status }).
+rh-error-forbidden =
+    { $provider }에서 요청을 거절했습니다(HTTP { $status }).
+rh-error-rate-limit =
+    { $provider } 요청 한도에 도달했습니다. { $seconds }초 뒤에 다시 시도합니다.
+rh-error-quota =
+    { $provider } 계정의 크레딧이 모두 소진되었습니다.
+rh-error-upstream =
+    { $database } 서비스를 일시적으로 사용할 수 없습니다(HTTP { $status }). 다른 데이터베이스는 계속 검색했습니다.
+rh-error-bad-request = Research Helper가 보낸 요청을 { $database }에서 받아들이지 못했습니다.
+rh-error-source =
+    { $database }에서 검색을 끝내지 못했습니다.
+rh-error-parse =
+    { $database }의 응답을 읽을 수 없습니다.
+rh-error-zotero = Zotero에서 변경을 완료하지 못했습니다.
+rh-error-storage = Research Helper가 저장소에 쓰지 못했습니다.
+rh-error-cancelled =
+    { $imported ->
+       *[other] 취소했습니다. 이미 { $imported }개 항목을 가져왔습니다.
+    }
+research-helper-prefs-storage = 저장된 API 키
+research-helper-prefs-backend-windows = Windows 자격 증명 관리자로 보호됨
+research-helper-prefs-backend-mac = macOS 키체인으로 보호됨
+research-helper-prefs-backend-unavailable = 이 컴퓨터에는 사용할 수 있는 자격 증명 저장소가 없습니다. 저장소가 생기기 전까지는 키를 저장할 수 없습니다.
+research-helper-prefs-risk-1 = API 키는 운영체제의 자격 증명 저장소로 암호화되어 Zotero의 로그인 관리자에 저장됩니다. 실제로 쓰이는 저장소는 설정 화면의 키 입력란 옆에 표시됩니다.
+research-helper-prefs-risk-2 = 그 저장소가 Windows 자격 증명 관리자, macOS 키체인 또는 Linux 시스템 키링이면 키는 Zotero 폴더 밖에 보관됩니다. 그 폴더를 복사하거나 백업에서 복원해도 키는 함께 옮겨지지 않으며, 이 컴퓨터의 다른 사용자 계정은 키를 읽을 수 없습니다.
+research-helper-prefs-risk-3 = 설정 화면에 키가 Zotero 자체 데이터베이스에 저장된다고 표시되면 이 보호가 적용되지 않습니다. 키가 Zotero 프로필 안에 있으므로 프로필을 복사하거나 백업하면 키도 함께 옮겨지고, Zotero 기본 비밀번호를 설정한 경우에만 그것으로 보호됩니다. 기본 비밀번호를 설정하거나, 그 컴퓨터에는 키를 저장하지 마세요.
+research-helper-prefs-risk-4 = 이 방식은 같은 사용자 계정에서 실행되는 소프트웨어로부터는 키를 보호하지 않습니다. 운영체제는 사용자 권한으로 실행되는 모든 프로그램에 키를 복호화해 주므로, 사용자가 실행하는 어떤 프로그램(다른 Zotero 플러그인 포함)도 키를 복호화할 수 있습니다. Zotero는 플러그인끼리 격리하지 않습니다.
+research-helper-prefs-risk-5 = 이 키는 브라우저에 저장한 비밀번호처럼 다루세요. 제공자 쪽에 지출 한도를 설정하고, 노출되었을 수 있는 키는 바꾸세요.
+research-helper-prefs-remove-all =
+    .label = 저장된 키 모두 지우기
+research-helper-prefs-remove-all-done =
+    { $count ->
+       *[other] 저장된 키 { $count }개를 지웠습니다.
+    }
+research-helper-prefs-ncbi = NCBI (PubMed)
+research-helper-prefs-ncbi-note = NCBI API 키가 있으면 초당 요청 한도가 3회에서 10회로 늘어납니다. 키가 없어도 검색은 되지만 더 느립니다.
+research-helper-prefs-ncbi-key =
+    .value = API 키
+research-helper-prefs-s2 = Semantic Scholar
+research-helper-prefs-s2-note = 관련 논문과 추천 기능에는 키가 필요합니다. 키 없이 쓰는 공용 한도는 거의 쓸 수 없을 만큼 제한되어 있습니다. 무료이지만 승인에 시간이 걸립니다.
+research-helper-prefs-s2-key =
+    .value = API 키
+research-helper-prefs-s2-request = API 키 신청하기
+research-helper-prefs-reveal =
+    .label = 누르고 있는 동안 보기
+research-helper-prefs-test-key =
+    .label = 시험
+research-helper-prefs-clear-key =
+    .label = 지우기
+research-helper-prefs-key-absent = 저장된 키가 없습니다.
+research-helper-prefs-key-absent-os = 저장된 키가 없습니다. API 키는 이 컴퓨터의 자격 증명 저장소에 저장되며 Zotero 데이터 폴더와 함께 옮겨지지 않습니다.
+research-helper-prefs-key-present = 키가 저장되어 있습니다. 아직 시험하지 않았습니다.
+research-helper-prefs-key-cleared = 키를 지웠습니다.
+research-helper-prefs-store-unavailable = 이 키는 저장되지 않았습니다. 이 컴퓨터에는 사용할 수 있는 자격 증명 저장소가 없습니다.
+research-helper-prefs-store-empty = 저장할 내용이 없습니다. 앞뒤 공백을 지우니 입력란이 비어 있습니다.
+research-helper-prefs-test-running = 시험하는 중…
+research-helper-prefs-test-ok = 키가 유효합니다 · { $time } 확인
+research-helper-prefs-test-inconclusive = 이 키를 확인하지 못했습니다 · { $time } 확인
+research-helper-prefs-test-rejected = 서비스가 이 키를 거부했습니다(HTTP 401) · { $time } 확인
+research-helper-prefs-test-forbidden = 서비스가 요청을 거절했습니다(HTTP 403) · { $time } 확인
+research-helper-prefs-test-absent = 시험하기 전에 키를 저장하세요.
+research-helper-prefs-test-unavailable = 사용할 수 있는 자격 증명 저장소가 없어 시험할 키가 없습니다.
+research-helper-prefs-test-ok-no-credit = 키는 유효하지만 계정 잔액이 없습니다 · { $time } 확인
+research-helper-prefs-test-ok-rate-limited = 키가 유효합니다. 제공자가 지금 요청을 제한하고 있습니다(HTTP 429) · { $time } 확인
+research-helper-prefs-model-suggestions =
+    .label = 추천 모델 고르기…
+research-helper-prefs-models-as-of =
+    { $date } 기준 제공자 모델 목록에서 가져온 추천입니다. 어떤 모델 ID든 직접 입력할 수도 있습니다.
+research-helper-prefs-models-stale = 실시간 모델 목록을 가져오지 못했습니다. 이 추천은 { $date } 기준 내장 목록이라 오래되었을 수 있습니다. 어떤 모델 ID든 직접 입력할 수도 있습니다.
+research-helper-prefs-prices = 직접 입력한 모델 가격
+research-helper-prefs-prices-note = 여기에 입력한 가격은 Research Helper가 비용을 어림할 때 해당 모델의 목록 가격 대신 쓰입니다. 100만 토큰당 미국 달러 가격과 그 가격을 확인한 날짜를 입력하세요. 새 항목은 위에서 고른 제공자에 저장됩니다.
+research-helper-prefs-price-row =
+    { $provider } · { $model }: 입력 { $input }, 출력 { $output }, 캐시된 입력 { $cached } (100만 토큰당 미국 달러) · { $date } 기준
+research-helper-prefs-price-row-no-cached =
+    { $provider } · { $model }: 입력 { $input }, 출력 { $output } (100만 토큰당 미국 달러) · { $date } 기준
+research-helper-prefs-price-model =
+    .placeholder = 모델 ID
+research-helper-prefs-price-input =
+    .placeholder = 입력 가격
+research-helper-prefs-price-output =
+    .placeholder = 출력 가격
+research-helper-prefs-price-cached =
+    .placeholder = 캐시된 입력 가격(선택)
+research-helper-prefs-price-as-of =
+    .placeholder = 기준일(YYYY-MM-DD)
+research-helper-prefs-price-save = 가격 저장
+research-helper-prefs-price-remove = 지우기
+research-helper-prefs-price-saved = 가격을 저장했습니다.
+research-helper-prefs-price-removed = 가격을 지웠습니다.
+research-helper-prefs-price-invalid = 저장하지 않았습니다. 모델 ID, 0 이상의 입력·출력 가격(예: 0.25), 2026-10-23 같은 날짜를 입력하세요.
+research-helper-prefs-price-refused = 저장하지 않았습니다. 이 항목은 저장할 수 없습니다. 모델 칸에 API 키가 아니라 모델 이름이 들어 있는지 확인하세요.
+research-helper-prefs-price-unavailable = 플러그인 데이터베이스를 쓸 수 없어 가격을 저장할 수 없습니다.

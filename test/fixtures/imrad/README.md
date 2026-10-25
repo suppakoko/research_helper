@@ -54,22 +54,22 @@ render of a Cell Press article, not the journal's own typesetting.
 
 | Id | Family | Venue | DOI or id | Licence | Pre-print | Columns (observed / expected) | Heading numbering | Candidate lines / lines |
 |---|---|---|---|---|---|---|---|---|
-| S1 | springer | BMC Bioinformatics 2011 | 10.1186/1471-2105-12-323 | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) | no | 2 / 2 | none | 157 / 307 |
-| S2 | springer | Journal of Cheminformatics 2019 | 10.1186/s13321-019-0393-0 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 94 / 236 |
+| S1 | springer | BMC Bioinformatics 2011 | 10.1186/1471-2105-12-323 | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) | no | 2 / 2 | none | 143 / 293 |
+| S2 | springer | Journal of Cheminformatics 2019 | 10.1186/s13321-019-0393-0 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 83 / 225 |
 | S4 | springer | EPJ Data Science 2024 | 10.1140/epjds/s13688-024-00474-1 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 1 / 1 | arabic | 435 / 549 |
 | S5 | springer | Nano Convergence 2024 | 10.1186/s40580-024-00435-4 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | arabic | 17 / 71 |
-| N1 | nature | Nature Communications 2024 | 10.1038/s41467-023-43860-5 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 150 / 250 |
-| N2 | nature | Nature Communications 2023 | 10.1038/s41467-023-37375-2 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 62 / 111 |
-| N3 | nature | Nature Communications 2024 | 10.1038/s41467-024-50436-4 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 168 / 367 |
+| N1 | nature | Nature Communications 2024 | 10.1038/s41467-023-43860-5 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 138 / 238 |
+| N2 | nature | Nature Communications 2023 | 10.1038/s41467-023-37375-2 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 58 / 107 |
+| N3 | nature | Nature Communications 2024 | 10.1038/s41467-024-50436-4 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 159 / 358 |
 | N6 | nature | Scientific Reports 2022 | 10.1038/s41598-022-22473-w | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 1 / ? | none | 110 / 242 |
-| E1 | elsevier | Heliyon 2023 | 10.1016/j.heliyon.2023.e23097 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 1 / 1 | arabic | 51 / 178 |
-| E2 | elsevier | iScience 2024 (Cell Press) | 10.1016/j.isci.2024.110552 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 1 / 2 | none | 188 / 295 |
-| E4 | elsevier | Ultrasonics Sonochemistry 2023 | 10.1016/j.ultsonch.2023.106712 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | arabic | 113 / 270 |
-| E5 | elsevier | eBioMedicine 2023 | 10.1016/j.ebiom.2023.104868 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 60 / 158 |
-| E6 | elsevier | Journal of Biological Chemistry 2023 | 10.1016/j.jbc.2023.105438 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 42 / 122 |
-| W1 | wiley | ChemistryOpen 2023 | 10.1002/open.202300112 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 76 / 156 |
-| W2 | wiley | Advanced Science 2023 | 10.1002/advs.202301332 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | arabic | 22 / 89 |
-| W3 | wiley | Advanced Science 2023 | 10.1002/advs.202302561 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | arabic | 25 / 96 |
+| E1 | elsevier | Heliyon 2023 | 10.1016/j.heliyon.2023.e23097 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 1 / 1 | arabic | 51 / 165 |
+| E2 | elsevier | iScience 2024 (Cell Press) | 10.1016/j.isci.2024.110552 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 1 / 2 | none | 116 / 206 |
+| E4 | elsevier | Ultrasonics Sonochemistry 2023 | 10.1016/j.ultsonch.2023.106712 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | arabic | 113 / 252 |
+| E5 | elsevier | eBioMedicine 2023 | 10.1016/j.ebiom.2023.104868 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 49 / 147 |
+| E6 | elsevier | Journal of Biological Chemistry 2023 | 10.1016/j.jbc.2023.105438 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 34 / 114 |
+| W1 | wiley | ChemistryOpen 2023 | 10.1002/open.202300112 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | none | 55 / 135 |
+| W2 | wiley | Advanced Science 2023 | 10.1002/advs.202301332 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | arabic | 15 / 82 |
+| W3 | wiley | Advanced Science 2023 | 10.1002/advs.202302561 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | arabic | 15 / 86 |
 | W4 | wiley | Brain and Behavior 2024 | 10.1002/brb3.3269 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | arabic | 393 / 495 |
 | W5 | wiley | MicrobiologyOpen 2022 | 10.1002/mbo3.1301 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | arabic | 489 / 580 |
 | P1 | plos | PLOS ONE 2026 | 10.1371/journal.pone.0354459 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 1 / 1 | none | 157 / 312 |
@@ -85,14 +85,14 @@ render of a Cell Press article, not the journal's own typesetting.
 | I4 | ieee | IEEE Journal of Translational Engineering in Health and Medicine 2023 | 10.1109/JTEHM.2023.3291925 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | roman | 48 / 152 |
 | I5 | ieee | IEEE Journal of Translational Engineering in Health and Medicine 2023 | 10.1109/JTEHM.2023.3290036 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | no | 2 / 2 | roman | 34 / 99 |
 | A1 | arxiv | arXiv (IEEE conference template, estimated) | arXiv:2405.00189v1 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | yes | 2 / 2 | roman | 392 / 461 |
-| A4 | arxiv | arXiv (AIP/REVTeX template, estimated) | arXiv:2405.00193v1 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | yes | 2 / 2 | roman | 726 / 948 |
+| A4 | arxiv | arXiv (AIP/REVTeX template, estimated) | arXiv:2405.00193v1 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | yes | 2 / 2 | roman | 726 / 938 |
 | A5 | arxiv | arXiv (ACM template, estimated) | arXiv:2405.00172v2 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | yes | 2 / 2 | arabic | 760 / 911 |
 | A6 | arxiv | arXiv (Springer LNCS template, estimated) | arXiv:2405.00123v1 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | yes | 1 / 1 | arabic | 111 / 208 |
-| B1 | biorxiv | bioRxiv 2024 v1 | 10.1101/2024.03.02.583133 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | yes | 1 / 1 | unknown | 67 / 313 |
-| B2 | biorxiv | bioRxiv v3 (2025-08-07) | 10.1101/2024.03.01.582837 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | yes | 1 / 1 | unknown | 36 / 126 |
-| B4 | biorxiv | bioRxiv v1 | 10.1101/2024.02.29.582831 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | yes | 1 / 1 | unknown | 58 / 215 |
-| X1 | us-government | J Res Natl Bur Stand 1980 | 10.6028/jres.085.024 | [US government work (17 U.S.C. 105)](https://www.copyright.gov/title17/92chap1.html#105) | no | 2 / 2 | arabic | 91 / 222 |
-| X2 | us-government | J Res Natl Bur Stand 1983 | 10.6028/jres.088.016 | [US government work (17 U.S.C. 105)](https://www.copyright.gov/title17/92chap1.html#105) | no | 2 / 2 | arabic | 212 / 490 |
+| B1 | biorxiv | bioRxiv 2024 v1 | 10.1101/2024.03.02.583133 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | yes | 1 / 1 | unknown | 67 / 261 |
+| B2 | biorxiv | bioRxiv v3 (2025-08-07) | 10.1101/2024.03.01.582837 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | yes | 1 / 1 | unknown | 36 / 102 |
+| B4 | biorxiv | bioRxiv v1 | 10.1101/2024.02.29.582831 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | yes | 1 / 1 | unknown | 58 / 189 |
+| X1 | us-government | J Res Natl Bur Stand 1980 | 10.6028/jres.085.024 | [US government work (17 U.S.C. 105)](https://www.copyright.gov/title17/92chap1.html#105) | no | 2 / 2 | arabic | 90 / 217 |
+| X2 | us-government | J Res Natl Bur Stand 1983 | 10.6028/jres.088.016 | [US government work (17 U.S.C. 105)](https://www.copyright.gov/title17/92chap1.html#105) | no | 2 / 2 | arabic | 211 / 480 |
 | XR2 | us-government | NASA Technical Note D-7812, December 1974 | NTRS 19750004163 | [US government work (17 U.S.C. 105)](https://www.copyright.gov/title17/92chap1.html#105) | no | 1 / 1 | unknown | 202 / 282 |
 
 ## Licences and attribution
@@ -214,9 +214,12 @@ the next non-empty line) and `page` (1-based, counted by `\f`). Each paper also 
 SHA-256, so decisions made on an older text are refused at ingestion.
 
 The rule errs towards too many lines, and the count varies with how each extractor laid the text
-out: **6,552 candidate lines in all, 17 to 760 per paper (median 94)**, out of 71 to 948 lines per
-paper. The long lists are papers whose text comes out a line per printed line or with many short
-table, equation or figure lines: A5 760 of 911 lines, A4 726 of 948, W5 489 of 580, S4 435 of 549,
+out: **6,371 candidate lines in all, 15 to 760 per paper (median 91)**, out of 71 to 938 lines per
+paper (rebuilt 2026-10-25 with the corrected cleaning pass, `plan/00` §6 item 283(a): 19 texts
+changed and the count fell from 6,552, because stacked page furniture and seven reference lists that
+used to survive are now removed — `docs/06` §4.1 steps 2, 6 and 7). The long lists are papers whose
+text comes out a line per printed line or with many short table, equation or figure lines: A5 760 of
+911 lines, A4 726 of 938, W5 489 of 580, S4 435 of 549,
 W4 393 of 495, A1 392 of 461, O3 320 of 651. Per-paper counts are in the composition table above.
 Body paragraphs mostly come out as single long lines, so most of a list is figure labels, table
 cells, author and affiliation lines, captions and the occasional short paragraph that has no full

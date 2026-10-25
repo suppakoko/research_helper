@@ -1,8 +1,8 @@
 # 00 — Task Index
 
-> **Generated from the task cards in `01`–`04`.** If a row here disagrees with a
-> card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-23 · **157 tasks: 112 `DONE`, 45 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**. **The plan has grown from the 98 cards the four independent decompositions produced (`docs/11` §1's own account) to 157, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Generated from the task cards in `01`–`04` and `07`** (Phase 4's file, read since 2026-10-26). If a
+> row here disagrees with a card, the card wins — then regenerate this file.
+> **Last updated:** 2026-10-26 · **182 tasks: 112 `DONE`, 70 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**. **The plan has grown from the 123 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25) to 182, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -25,7 +25,23 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 2 — Multi-source + dedup | 37 | 33.25 d | 33.25–47 d | 12–16 d (+108%) |
 | 3 — LLM + summaries | 39 | 29.50 d | 29.5–41 d | 12–15 d (+97%) |
 | **Phases 0–3** | **157** | **109.75 d** | **109.75–154 d** | 39–52 d (+111% over the top of the band) |
-| 4–7 | not decomposed | — | 73.5–102 d ⚠ **scaled, not measured** | 35–49 d |
+| 4 — Trend report | 25 | 23.75 d | 23.75–33 d | 8–11 d (+116%) |
+| 5–7 | not decomposed | — | 57–79 d ⚠ **scaled, not measured** | 27–38 d |
+
+**2026-10-26: Phase 4 decomposed, decided and propagated** (§6 items 283(c), 285(c), 286; `plan/07`).
+Its **25 cards sum to 23.75 d**, re-read from the cards' `Estimate` rows by script — the reviewed
+23.25 d plus `P4-T03` 0.75 → 1.0 and `P4-T16` 1.0 → 1.25, for work item 286's decisions put in them
+(`plan/07` §3). 23.75 × 1.4 = 33.25 → 33, so the band is 23.75–33 d, replacing the scaled 16.5–23 d.
+The last column follows this table's convention, the card sum against the top of the superseded
+pre-2026-09-09 band: 23.75 ÷ 11 = 2.16 → +116%; against the scaled figure it replaces, the low end is
++44% (23.75 ÷ 16.5 = 1.44). The scaled row is now Phases 5–7: 21 + 15 + 21 = 57 low and 29 + 21 + 29
+= 79 high, against 10–14 + 7–10 + 10–14 = 27–38 d superseded (it read 4–7, 73.5–102 d, 35–49 d). The
+Phases 0–3 row is unchanged. The project total is 109.75 + 23.75 + 57 = **190.50 d** low and 154 + 33 +
+79 = **266 d** high (was 183.25–256), ≈ 9–13 months at 21 working days (190.5 ÷ 21 ≈ 9.1; 266 ÷ 21 ≈
+12.7). The critical path P0 → P1 → P2 → P4 → P6 → P7 is 17.75 + 29.25 + 33.25 + 23.75 + 15 + 21 =
+**140.00** low and 25 + 41 + 47 + 33 + 21 + 29 = **196** high (was 132.75–186); the route through Phase
+3 is 136.25–190, still 3.75 d and 6 d short of it, because Phase 4 lies on both. `docs/11` §1–§2
+carry the rest, including Phase 5's float, now 17.75–25 d.
 
 **2026-10-23: `P3-T21` re-estimated 0.5 → 1.5 d** (§6 item 274(d)). Phase 3 is **39 cards and
 29.50 d**, re-read from the cards' `Estimate` rows by script; 29.5 × 1.4 = 41.3 → 41. The Phases
@@ -92,11 +108,12 @@ are therefore no longer a comparison: `docs/11` §1's Phases 0–3 bands are now
 `docs/11` §1 "Why these figures changed" for the derivation, the whole-plan
 total and the months figure — **this file does not restate them.**
 
-⚠ **Phases 4–7 are scaled, not measured.** They have no cards, so `docs/11`
+⚠ **Phases 5–7 are scaled, not measured.** They have no cards, so `docs/11`
 scaled their old figures by the ×1.50 correction factor observed here. Those
-four numbers are inference. When a phase is decomposed, its card sum replaces
+three numbers are inference. When a phase is decomposed, its card sum replaces
 the scaled figure in `docs/11` §1 and this table gains a row. Risk R-23 in
-`docs/11` §3 tracks the residual.
+`docs/11` §3 tracks the residual. *(Read "Phases 4–7" and "four numbers" until
+2026-10-26, when Phase 4's card sum replaced its scaled figure and gained its row.)*
 
 ## 2. How to use this file
 
@@ -118,7 +135,11 @@ queue is what gates Phase 5 months later (`docs/11` R-3).
 re-carding. Phase 3's terminal is still `P3-T31`, which now also waits on `P3-T37`.
 
 **Phase terminals** (a phase is done when its terminal is `DONE`):
-`P0-T28`, `P1-T23`, `P2-T15`/`P2-T16`, `P3-T31`.
+`P0-T28`, `P1-T23`, `P2-T15`/`P2-T16`, `P3-T31`, `P4-T25`.
+
+**Phase 4, added 2026-10-26** (read from `plan/07`'s cards): entry points `P4-T01`, `P4-T02` and
+`P4-T03`; terminal `P4-T25`. Phase 4's cards list only Phase 4 IDs in `Depends on`; what each needs
+from Phase 3 is in its `Notes` and in `plan/07` §0.3.
 
 `P2-T15` is both, and deliberately so: it records a decision that was settled
 upstream rather than building anything, so it waits on no card and no card waits
@@ -320,6 +341,36 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P3-T37` | Detect a keyring-less Linux backend (gate `G-09`) | `P3-T02`, `P3-T03` | 0.25 d | 🔒 |
 | `P3-T38` | Keep an LLM 429's body; never retry a parse failure | `P3-T05` | 0.5 d |  |
 | `P3-T39` | Store money preferences as whole cents | `P3-T32` | 0.5 d |  |
+
+### Phase 4
+
+| Task | Title | Depends on | Est. | Gate |
+|---|---|---|---|---|
+| `P4-T01` | Reconcile the trend types and state machine in `docs/07` | — | 0.75 d |  |
+| `P4-T02` | Preference rows Phase 4 reads | — | 0.5 d |  |
+| `P4-T03` | Synthesis prompt files and their JSON schemas | — | 1.0 d |  |
+| `P4-T04` | Digest projection (no LLM) | `P4-T01` | 0.5 d |  |
+| `P4-T05` | Theme clustering with client-side validation | `P4-T03`, `P4-T04` | 0.75 d |  |
+| `P4-T06` | Two-stage clustering and the theme-merge call | `P4-T05` | 0.75 d |  |
+| `P4-T07` | Per-theme analysis with sub-batching (depth ≤ 2) | `P4-T03`, `P4-T05` | 1.0 d |  |
+| `P4-T08` | Report composition call and structural validation | `P4-T03`, `P4-T04`, `P4-T07`, `P4-T10` | 1.25 d |  |
+| `P4-T09` | Self-critique pass, revision loop, warning banner | `P4-T02`, `P4-T08`, `P4-T12` | 1.0 d |  |
+| `P4-T10` | Citation validator and marker binding | `P4-T01` | 0.75 d |  |
+| `P4-T11` | Bibliography and citation nodes through Zotero | `P4-T10` | 1.25 d |  |
+| `P4-T12` | Client-generated title block, tables and appendices | `P4-T01`, `P4-T04` | 1.0 d |  |
+| `P4-T13` | Markdown → Zotero note HTML, sanitized | `P4-T10`, `P4-T11` | 1.25 d |  |
+| `P4-T14` | Report note writer, `report` table, report file | `P4-T13` | 1.25 d |  |
+| `P4-T15` | "Export as Markdown" | `P4-T10`, `P4-T11` | 0.5 d |  |
+| `P4-T16` | Synthesis cost estimate and the report's confirmation | `P4-T03` | 1.25 d |  |
+| `P4-T17` | Synthesis cache keys (`tc`, `cr`, `rp`) | `P4-T01` | 0.5 d |  |
+| `P4-T18` | Trend-report pipeline: stages, passes, cancel, resume | `P4-T02`, `P4-T06`, `P4-T09`, `P4-T12`, `P4-T14`, `P4-T16`, `P4-T17` | 2.0 d |  |
+| `P4-T19` | Report window surface, menu entry, `reportWindow` bundle | `P4-T02` | 1.0 d |  |
+| `P4-T20` | Report window: progress, streaming preview, delivery | `P4-T15`, `P4-T18`, `P4-T19` | 1.25 d |  |
+| `P4-T21` | Korean report path end to end | `P4-T08`, `P4-T12`, `P4-T18` | 0.75 d |  |
+| `P4-T22` | 400-item scale test on the mock provider | `P4-T18` | 0.75 d |  |
+| `P4-T23` | Evaluation set and regression harness | `P4-T20`, `P4-T21` | 1.25 d | 🔒 |
+| `P4-T24` | Determinism check across three runs | `P4-T23` | 0.75 d | 🔒 |
+| `P4-T25` | Phase-4 acceptance run against the definition of done | `P4-T21`, `P4-T22`, `P4-T24` | 0.75 d | 🔒 |
 
 ---
 
@@ -2118,10 +2169,92 @@ the caller of what the card builds; if it does not, the caller is added with a d
     recordings with keys and a stated spend; `P3-T37` needs a Linux machine (G-09); gates `G-18` (keys in the pane) and
     `G-21` (first real spend, after `P3-T29`) are the owner's. Phase 2 still waits on `P2-T13`'s labels.
 
+283. **While Phase 3 waits, 2026-10-25.** **DECIDED 2026-10-25 (owner):** (a) fix the cleaning pass **before** the owner
+    labels (`P3-T20` finding 5: W2's per-page publisher footer survives; the reference-list cut is skipped on X1, A4, X2,
+    W1, W2, E2 and W3), then rebuild the 40 fixture texts, `candidate-headings.json` and the labelling page; the owner
+    does not start labelling until told. (b) measure other scan-quality signals on the 40 texts (for example the share of
+    words broken by a stray space, the share of out-of-dictionary words) and report which, if any, separates the scans;
+    the owner then chooses. (c) start decomposing Phase 4 (trend report) into task cards (`plan/05` §0 scheduled it for
+    the end of Phase 3), drafted by one agent and reviewed by another before any estimate moves.
+
+284. **How the owner's reviews happen, 2026-10-25.** **DECIDED 2026-10-25 (owner):** (a) the 147 pending Korean strings are
+    reviewed in chat, in batches shown as previews ("as drafted" / "fix"), not on the review page (G-41 unchanged: the
+    coordinator drafts, the owner approves). (b) gate `G-18`: the owner will enter keys soon; the coordinator prepares a
+    fresh build and step-by-step instructions once the current build owner is done. (c) `P2-T13`/`P2-T16` Part B: the
+    owner labels a **random sample of 60** of the 267 label-set pairs instead of all of them, and the accuracy report
+    states its figures with their sampling error; the sample is drawn by a fixed, recorded seed (`docs/02`, `plan/03`
+    first).
+
+285. **After item 283, 2026-10-25** (`plan/reports/cleaning-283.md`, `plan/reports/phase4-draft.md`). **DECIDED 2026-10-25
+    (owner):** (a) the cleaning pass stays as rebuilt: an appendix after the reference list still goes with it (A5, W5),
+    and step 3's gutter rule still clips the first cell of 10 table rows on one W2 page — both recorded, not fixed; the
+    labelling page was rebuilt on the 2026-10-25 texts and the owner may label now. (b) the scan-quality probe changes to
+    the **stray-space split share** (a word broken by a space on the same line, e.g. "bas ic"): it warns (never demotes)
+    above a threshold chosen from the measurement (X1 5.00 %, every other paper ≤ 0.05 %; about 1 % proposed), and the
+    old 0.80 share and its two `PROPOSAL` thresholds go; `docs/06` §4.1 step 8 first. (c) the Phase 4 draft
+    (`plan/07-phase-4-trend-report.md`, 25 cards, 22.5 d) is reviewed by a second agent; its open lines then come to
+    the owner in grouped questions, and only after that does any estimate move.
+    **(a) and (c) DONE 2026-10-25** (`plan/reports/cleaning-283.md`; `plan/reports/phase4-review.md`: 25 cards, 23.25 d,
+    35 open lines in 34 questions). Item 284(c) DONE the same day (`plan/reports/dedup-sample-284c.md`: 60 pairs drawn by
+    a recorded seed, merged 23 / linked 15 / flagged 5 / distinct 17; the labelling page now shows only those 60). Item
+    284(a) DONE: all 147 pending Korean strings approved in chat as drafted and inserted; `KO_PENDING_REVIEW` is empty.
+    Recorded: the `research-helper-provenance-note-title` id carries owner-approved Korean, but `src/zotero/notes.ts`
+    writes FR-8's English title literally by design, so the Korean entry is never shown.
+
+286. **Phase 4's open lines, 2026-10-26.** **DECIDED 2026-10-26 (owner):** every one of the 35 open lines in
+    `plan/reports/phase4-review.md` (its 34 numbered questions in four themes) as **recommended**: a merge prompt and a
+    combine-partial-analyses prompt written into `docs/12` first with the owner approving their wording; the clustering
+    answer limit grows with the paper count and batches split only at the model or 60k-input limit; small themes go to
+    "unclustered"; reasoning effort medium for the four grouping and writing calls, low for the self-check; one fresh
+    regeneration for a missing heading, citations never model-repaired; critique on the same provider (critique-model
+    setting, else the summary model), no automatic pick; self-check sees only cited summaries, then per-section; the
+    banner states an unchecked revision; the report job summarizes missing items itself under one confirmation; `docs/07`
+    types replaced by the prompts' shapes; methods-section sources from search records, else catalogue, else "not
+    recorded"; a separate unnumbered retracted list; Appendix C added; report-language labels in a code table, Korean
+    drafted by the coordinator and approved in chat; no section-origin claims before `P3-T22` passes; the model writes
+    Notable Papers and code checks it; original-script check automatic plus the owner reading one Korean report; a
+    report-specific egress notice; re-runs always a new note; group libraries with a named confirmation; Markdown export
+    only; numeric markers with DOI links; a small in-house Markdown converter; no Better Notes, no backlinks in Phase 4;
+    menu "Generate Research Trends Report…"; the model shown as text and no Depth control; the first draft streamed as a
+    draft, then replaced; a Phase 4 spend gate modelled on G-21; the evaluation set is owner-written expected themes for
+    three collections; manual evaluation only; determinism by pair agreement ≥ 0.8 plus the owner reading the themes; the
+    400-paper proof is the offline mock run. The coordinator then propagates the estimate.
+    **DONE 2026-10-26:** every open line in `plan/07` now reads "Decided 2026-10-26"; gate `G-42` added
+    to `plan/06`; the estimate (23.75 d, two cards re-estimated for work the decisions put in them,
+    `plan/07` §3) propagated to the five places `plan/README.md` §7 names (§1 above); `plan/07` added to
+    `npm run index:derive` (§4's Phase 4 table); `docs/10` §5 Q7, Q11, Q12, Q19 and FR-25 updated.
+    The backlog the decisions send here is item 287.
+
+### 6.61 Sent to the backlog by item 286, 2026-10-26 — recorded under rule 9, none carded
+
+287. **Phase 4 items no finishing condition needs** (`plan/README.md` §5 rule 9), each tagged **Phase
+    4** and waiting: (a) backlinks from cited items to the report note, `report.addRelatedLinks`
+    (`docs/06` §10.4; `plan/07` `P4-T02`); (b) Better Notes' Markdown converter when that plugin is
+    installed (`docs/06` §14.1 D-06-9, §16 item 4; `P4-T13`); (c) the `.html` export and the "Save as
+    Markdown" attachment on the report note (`docs/06` §14.3 D-06-10, `docs/08` §6.3; `P4-T15`); (d) a
+    nightly opt-in prompt-quality evaluation job, which needs an API key in CI (`docs/13` §2.2;
+    `P4-T23`); (e) the 20-paper multilingual summary fixture (`docs/06` §13.2; `plan/04` §4 item 6;
+    `plan/07` §4).
+
+### 6.62 After the Phase 4 estimate and item 285(b), 2026-10-26
+
+288. **Four lines raised by `plan/reports/phase4-finalize-286.md` and `plan/reports/followup-285b.md`.**
+    **DECIDED 2026-10-26 (owner), each as recommended:** (a) Phase 4's card sum stands at **23.75 d** (band
+    23.75–33 d): `P4-T03` carries `CLUSTER_REDUCE_MERGE` beside `THEME_MERGE` (+0.25 d) and `P4-T16` carries the
+    report-specific egress notice (+0.25 d). (b) Phases 5–7 keep the **1.50** correction factor; each is re-measured
+    when it is decomposed into cards, and `docs/11` records only that Phase 4 measured 2.16 times its old top. (c)
+    `P2-T13` step 5's blocking criterion is **no false merge among the sample's merged pairs**; a precision verdict of
+    "undecided" with no false merge may close Phase 2, and the sample's limit (it can refute precision ≥ 0.99, never
+    confirm it) is written into the sign-off. (d) `docs/06` §5.4 DR-1 condition 2 is corrected to match items 258 and
+    285(b): the OCR probe only warns and never keeps full text out. Also recorded: the 15 integration failures of
+    `followup-285b.md` came from item 284(a)'s Korean on a machine whose test Zotero starts in Korean; the specs that
+    assert English are being pinned to `en-US`.
+
 ## 7. Regenerating this file
 
-**Run `npm run index:derive`.** Added 2026-10-12, because this section's rule could not be run and so
-was not: `P1-T23`'s report found the header counts stale, and measuring further found §4's tables
+**Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4
+table, so "all four tables" below is five.)* Added 2026-10-12, because this section's rule could not be
+run and so was not: `P1-T23`'s report found the header counts stale, and measuring further found §4's tables
 stale too — **Phase 1's held 23 of its 46 cards, Phase 2's 18 of 25, Phase 0's 33 of 35, and Phase 1's
 `DONE` ticks had never been applied at all.** `scripts/derive-task-index.ts` rebuilds all four tables
 and every figure in §1's header from the cards, refuses to empty a table, and **fails loudly when one

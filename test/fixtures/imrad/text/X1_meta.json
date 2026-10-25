@@ -21,8 +21,8 @@
   "licenceEvidence": "scanned page 1 gives the authors' affiliation as the National Bureau of Standards (a US government work by authorship)",
   "sourceUrl": "https://europepmc.org/articles/PMC6756263?pdf=render",
   "landingUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6756263/",
-  "recordedAt": "2026-10-23T15:31:03.624Z",
-  "extractedAt": "2026-10-23T15:31:03.624Z",
+  "recordedAt": "2026-10-25T13:44:01.152Z",
+  "extractedAt": "2026-10-25T13:44:01.152Z",
   "tool": {
     "script": "scripts/build-imrad-fixtures.ts",
     "zotero": "10.0.3",
@@ -36,29 +36,30 @@
   },
   "text": {
     "file": "X1.txt",
-    "bytes": 32678,
-    "chars": 32650,
-    "sha256": "5fa16885236a0c24a74608ec18913f3743b07dc959bfc8289180ef652e63ac7b",
+    "bytes": 31016,
+    "chars": 30993,
+    "sha256": "a9296bb1e9b718145c49725c73a4387b9c0fb7fa6c47f823be2e13eb89524e81",
     "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
   },
   "extraction": {
-    "warnings": [],
+    "warnings": [
+      "ocr_suspected"
+    ],
     "diagnostics": {
       "tier": "fulltext_pdf",
-      "charCount": 32650,
+      "charCount": 30993,
       "truncated": false,
       "pages": 12,
       "runningHeadLinesRemoved": 10,
       "gutterPages": 0,
-      "referencesCut": false,
-      "referencesShare": null,
+      "referencesCut": true,
+      "referencesShare": 0.050719754977029095,
       "supplementaryCharsRemoved": 0,
-      "ocrAlnumPunctShare": 0.82260336906585,
-      "ocrLetterShare": 0.7515773353751914,
-      "ocrChars": 32650,
-      "ocrFailed": "",
+      "ocrWords": 4844,
+      "ocrSplits": 242,
+      "ocrSplitShare": 0.04995871180842279,
       "nonLatinShare": 0,
-      "warnings": ""
+      "warnings": "ocr_suspected"
     },
     "columnGeometry": {
       "pagesWithBody": 11,

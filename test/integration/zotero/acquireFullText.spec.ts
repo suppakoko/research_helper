@@ -52,10 +52,14 @@
  *   page body was deleted, and the page checks found no page. With the word
  *   no two pages strip alike and every page survives. {@link FOOT_LINE} is
  *   therefore kept too (logged as "foot lines left"); nothing asserts on it.
- * - **A fully indexed fixture now warns `ocr_suspected`.** The OCR probe's
- *   `OCR_PROBE_MIN_CHARS` (1,500) is far above a three-page generated PDF's
- *   cleaned body, so the probe correctly fires `too_short`. The spec expects
- *   exactly that one warning where it used to expect none.
+ * - **A fully indexed fixture warned `ocr_suspected` from 2026-10-22 to
+ *   2026-10-25.** The old OCR probe's `OCR_PROBE_MIN_CHARS` (1,500) was far
+ *   above a three-page generated PDF's cleaned body, so it fired
+ *   `too_short`. Item 285(b) (owner, 2026-10-25) replaced that probe with the
+ *   stray-space split share, which never warns on a body under 250 words
+ *   (`OCR_SPLIT_MIN_WORDS`) and finds no split in this generator's text, so
+ *   the spec again expects no warning at all. The last test reads Zotero's
+ *   own en-US dictionary through the port, the probe's word list.
  *
  * ## Leaving Zotero quiet for the next spec
  *
@@ -85,11 +89,16 @@
 import { config } from "../../../package.json";
 import { setPrefStore, setPref, clearPref } from "../../../src/prefs";
 import { acquireZoteroSource } from "../../../src/pipeline/summarize/acquire";
-import { OCR_SUSPECTED_WARNING } from "../../../src/pipeline/summarize/clean";
+import {
+  OCR_SUSPECTED_WARNING,
+  probeStraySpaceSplits,
+} from "../../../src/pipeline/summarize/clean";
+import { expandHunspellWordList } from "../../../src/pipeline/summarize/wordList";
 import {
   getIndexedPageCounts,
   getIndexedState,
   pickTextAttachment,
+  readEnglishDictionary,
 } from "../../../src/zotero/fulltext";
 import { createZoteroPrefStore } from "../../../src/zotero/prefStore";
 import { sha256Hex } from "../../support/sha256";
@@ -420,9 +429,10 @@ describe("P3-T18 text acquisition tiers 1-2", function () {
       2,
       "\\f appears totalPages - 1 times",
     );
-    // `[]` until P3-T19: the OCR probe now flags a body shorter than
-    // OCR_PROBE_MIN_CHARS, and nothing else may warn here.
-    assert.deepEqual(source.warnings, [OCR_SUSPECTED_WARNING]);
+    // `[]` again since item 285(b): the probe never warns under 250 words,
+    // and nothing else may warn here.
+    assert.deepEqual(source.warnings, []);
+    assert.notInclude(source.warnings, OCR_SUSPECTED_WARNING);
     assert.strictEqual(source.contentHash, sha256Hex(source.text));
   });
 
@@ -632,5 +642,37 @@ describe("P3-T18 text acquisition tiers 1-2", function () {
     assert.notStrictEqual(changed.contentHash, first.contentHash);
     assert.strictEqual(first.contentHash, sha256Hex(first.text));
     assert.notInclude(first.warnings, "content_hash_md5");
+  });
+
+  it("reads Zotero's en-US dictionary, the OCR probe's word list (item 285(b))", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const started = Date.now();
+    const files = await readEnglishDictionary();
+    const read = Date.now();
+    if (files === null) {
+      assert.fail(
+        "resource://gre/dictionaries/en-US.{aff,dic} could not be read",
+      );
+    }
+    const list = expandHunspellWordList(files.aff, files.dic);
+    const expanded = Date.now();
+    debug(
+      `${LOG} dictionary: aff ${files.aff.length} chars, dic ${files.dic.length} chars, ` +
+        `${list.size} forms; read ${read - started} ms, expanded ${expanded - read} ms`,
+    );
+    // The item 283(b) measurement's figures for Zotero 10.0.3's files.
+    assert.strictEqual(files.aff.length, 3074, ".aff size");
+    assert.strictEqual(
+      files.dic.length,
+      590727,
+      ".dic: one character per byte",
+    );
+    assert.strictEqual(list.size, 129510, "expanded forms");
+    assert.isTrue(list.has("asunción"), "ISO-8859-1 decoded as such");
+    const probe = probeStraySpaceSplits(
+      "The mechani sm of the bas ic junction was studied.",
+      list,
+    );
+    assert.deepEqual([probe.words, probe.splits], [10, 2]);
   });
 });

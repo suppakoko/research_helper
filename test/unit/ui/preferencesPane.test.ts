@@ -2970,26 +2970,26 @@ describe("P3-T14 — the controller: Test, stored status, model suggestions, pri
     expect(markupIds.has("rh-prefs-providers")).toBe(true);
   });
 
-  it("every P3-T14 string is in the en-US bundle, and only a commented stub in ko-KR (G-41)", () => {
+  it("every P3-T14 string is in the en-US bundle and, owner-reviewed (2026-10-25, G-41), in ko-KR", () => {
     expect(P3T14_IDS).toHaveLength(20);
     for (const id of P3T14_IDS) {
       expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+      expect(KO_FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^# ${id} =`, "m"));
     }
     // docs/09 §2.3's wording: a 429 is a pass, and the line says so.
     expect(ftlValue(PREFERENCES_L10N.testOkRateLimited)).toContain("HTTP 429");
   });
 
-  it("item 279(a) and (d): the out-of-credit line and the key-present line, in en-US with a ko-KR stub or pending", () => {
+  it("item 279(a) and (d): the out-of-credit line and the key-present line, in en-US and, owner-reviewed, in ko-KR", () => {
     // The owner's wording (plan/00 §6 item 279(a)), with the time placed.
     expect(ftlValue(PREFERENCES_L10N.testOkNoCredit)).toBe(
       "Key accepted, but the account has no credit left · checked { $time }",
     );
-    expect(KO_FTL).not.toMatch(
+    expect(KO_FTL).toMatch(
       new RegExp(`^${PREFERENCES_L10N.testOkNoCredit} =`, "m"),
     );
-    expect(KO_FTL).toMatch(
+    expect(KO_FTL).not.toMatch(
       new RegExp(`^# ${PREFERENCES_L10N.testOkNoCredit} =`, "m"),
     );
     // Item 279(d): results are stored now, so "this session" is gone.

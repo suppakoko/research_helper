@@ -462,12 +462,14 @@ The surface is `08-ui-ux-spec.md` §2.5 (the collection submenu entry, labelled 
 
 **FR-25 — Generate a "recent research trends" report.** (M)
 
-- **Given** a collection whose items have summaries,
-  **When** the user chooses "Research Helper → Write trends report…",
+- **Given** a collection (items that have no summary yet are summarized by the same run, priced in its one estimate and confirmed once),
+  **When** the user chooses "Research Helper → Generate Research Trends Report…",
   **Then** a report is produced covering at minimum: scope and method, volume/time distribution, dominant themes with representative citations, methodological shifts, contradictions/open questions, and limitations.
 - **Given** the report is generated,
   **When** it is stored,
   **Then** it is written as a standalone note in the collection, tagged `research_helper/trend-report`, with a header listing the item count, date range, model, and generation timestamp.
+
+*Corrected 2026-10-26 (owner, `plan/00-task-index.md` §6 item 286; `plan/07-phase-4-trend-report.md` `P4-T18`, `P4-T19`):* the first "Given" read "a collection whose items have summaries" — the report job now summarizes missing items itself, inside one job with one confirmation, rather than requiring them first or starting a second job; and the menu wording read "Write trends report…", which disagreed with `08-ui-ux-spec.md` §2.4 and §10.2, the document that owns UI text.
 
 ---
 
@@ -941,7 +943,8 @@ Each question has a **recommended default**. If no decision is made, the default
    *The residual question, and it is a real one:* should either ceiling ship non-zero, i.e. should a first run be able to stop itself rather than only warn? Turning them on protects a user who dismisses the estimate; leaving them off means no job ever aborts on a limit the user did not set. If the answer is yes, change the defaults in 07-architecture-and-data-model.md §8.5 — and nowhere else. Semantics for both are `06-summarization-and-trend-report.md` §11.4's.
    **Decided 2026-10-23 (owner, `plan/00` §6 item 271(b); gate `G-20`):** yes for the session ceiling — `run.maxSessionSpendCents` ships at `500` (US $5.00) — and no for the per-run ceiling, which stays `0` (off). The value lives in `07-architecture-and-data-model.md` §8.5; the sentence above that both ship off is no longer true.
 
-7. **Should the plugin ever call an LLM without an explicit per-run confirmation?**
+7. ~~**Should the plugin ever call an LLM without an explicit per-run confirmation?**~~
+   **DECIDED — built as recommended by `P3-T15` and `P3-T16`; marked decided 2026-10-26** (`plan/00-task-index.md` §6 item 286's propagation; the owner confirmed `P3-T16`'s readings on 2026-10-23, item 274(b)). Every LLM-invoking job is preceded by the pre-run confirmation showing the item count and the cost estimate. The *routine* confirmation is the one a collection's "don't ask again" may skip; a confirmation **forced by money** — an estimate above `summary.confirmAboveCents`, an unknown price, or a spend ceiling the estimate would pass — opens whatever "don't ask again" says, and when the dialog does not open the job's progress line still carries the number. The rule is `09-security-privacy-and-api-keys.md` §3.6's dated note of 2026-10-23; the code is `mustAskConfirmation` and `shouldOpenCostDialog`. Phase 4's report run uses the same dialog and the same rules (`plan/07` `P4-T16`).
    *Recommended default:* no. Every LLM-invoking action requires confirmation showing item count and cost estimate, with a "don't ask again for jobs under $X" opt-out.
 
 8. **Is a Semantic Scholar API key a hard requirement for relatedness features?**
@@ -954,10 +957,12 @@ Each question has a **recommended default**. If no decision is made, the default
 10. **Korean audio: translate the English report, or generate the Korean script natively?**
     *Recommended default:* generate the Korean spoken script natively from the summaries (not by translating the finished English report), because translated academic prose reads badly aloud. Keep titles/venues untranslated.
 
-11. **Should generated notes be editable by the user, and what happens on re-run?**
+11. ~~**Should generated notes be editable by the user, and what happens on re-run?**~~
+    **DECIDED 2026-10-26 (owner, `plan/00-task-index.md` §6 item 286) for the trend report:** the report note is the user's to edit, and a re-run **always creates a new note** with a dated title — nothing is overwritten or updated in place, so no hash check is needed (`06-summarization-and-trend-report.md` §14.2; `plan/07` `P4-T14`, which also answers `06` §16 item 6). This answer is the report's; it says nothing new about per-paper summary notes.
     *Recommended default:* editable. On re-run, if a note has been modified since generation (hash mismatch), do not overwrite — create a new note and warn.
 
-12. **Does the plugin write anything into group libraries?**
+12. ~~**Does the plugin write anything into group libraries?**~~
+    **DECIDED 2026-10-26 (owner, `plan/00-task-index.md` §6 item 286) — the recommended default:** yes, into an editable group collection, after an extra confirmation naming the group; no new preference. Tests use a personal library only, and the first real group write is gate `G-25` (`plan/06-human-gates.md`); `plan/07` `P4-T14` and `P4-T20` build it and answer `06-summarization-and-trend-report.md` §16 item 7.
     *Recommended default:* yes, if the user targets a group collection and has write permission — but show an extra confirmation naming the group, because generated content becomes visible to all members.
 
 13. **How aggressive should title-based deduplication be?**
@@ -979,7 +984,8 @@ Each question has a **recommended default**. If no decision is made, the default
     **DECIDED 2026-09-08 — decision D8 (`00-overview.md` §3): MIT.** The earlier recommendation of AGPL-3.0 (matching `zotero-plugin-scaffold`'s own license) was overruled; `zotero-plugin-scaffold` is a build-time tool, not a linked runtime dependency, so its license does not propagate.
     **The residual pre-release action is also closed. DECIDED 2026-09-09 by the project owner: institutional clearance to release under MIT exists, so no further sign-off is a precondition of first public release.** The earlier text here said "Confirm with the institution's IP office before first public release"; that condition is discharged and is no longer a release gate. *Reopen condition:* a change of licence away from MIT, or reassignment of the work to a different institution — either invalidates the clearance and this question reopens.
 
-19. **Should the trend report be a Zotero note, a markdown file export, or both?**
+19. ~~**Should the trend report be a Zotero note, a markdown file export, or both?**~~
+    **DECIDED 2026-10-26 (owner, `plan/00-task-index.md` §6 item 286) — both, as recommended:** the note is the primary artifact, and "Export as Markdown" writes a `.md` file to a location the user picks, with numeric markers and DOI links and no setting. The `.html` export and the "attach the Markdown file to the note" variant are deferred to the backlog (`plan/00` §6 item 287(c)); `plan/07` `P4-T15` builds the export.
     *Recommended default:* both — a note is the primary artifact (syncs, searchable), with an "Export as Markdown" action for pasting into a manuscript.
 
 20. **Do we pursue listing in the community plugin registry at v1.0 or wait?**

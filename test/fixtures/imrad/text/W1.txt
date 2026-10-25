@@ -12,10 +12,7 @@ At temperatures more than 550 °C, methane cracking is spontaneous and can happe
 [c] Dr. J. K. Abu-Dahrieh School of Chemistry and Chemical Engineering Queen’s University Belfast Belfast BT9 5AG, Northern Ireland (UK) E-mail: j.abudahrieh@qub.ac.uk
 Supporting information for this article is available on the WWW under https://doi.org/10.1002/open.202300112
 © 2023 The Authors. ChemistryOpen published by Wiley-VCH GmbH. This is an open access article under the terms of the Creative Commons Attribution License, which permits use, distribution and reproduction in any medium, provided the original work is properly cited.
-ChemistryOpen 2023, 12, e202300112 (1 of 9) © 2023 The Authors. ChemistryOpen published by Wiley-VCH GmbH
-ChemistryOpen
 www.chemistryopen.org
-Research Article
 
 
 COx emission levels and the advancement of Fe-based catalysts. The most recent developments in the kinetic analysis of metal catalyst reactions are described, the effects of several parameters, like metal loading effect and support influences, on CDM catalyst performance,[8] highlighted the need for a green alternative energy source because CH4 decomposition results in zero carbon emissions. They concentrate on the use of GAD reactors and discussed the impact of several parameters, including operation conditions, additives, geometric configuration, and catalysts on the performance.[15] Zirconia-based oxides offer acid/base properties, redox properties, and tunable phase composition that has attracted the interest of the scientific community. However, in the thermal decomposition of methane, there aren’t many studies that focus on the use of ZrO2-supported catalysts with Fe and Ni oxides.[16] Metal oxides like lanthanum, ceria, and zirconia were studied by Pudukudy et al.[17] as catalyst support for Ni catalyst. High catalytic activity and stability were shown by all of the catalysts for methane decomposition. At 700 °C, lanthanum, ceria, and zirconia, supported catalysts produced an initial hydrogen yields of 58, 62, and 61 %, respectively, and final carbon yields of 1360 wt. %, 1159 wt. %, and 1576 wt. %. Metal oxides doping to zirconia is a strategy used to enhance a number of characteristics and the presence of the additive causes zirconia to crystallize in the tetragonal phase, which has a higher specific surface area as compared with the more stable monoclinic ZrO2. Al-Fatesh et al.[18] studied the impact of doping lanthanum (La2O3) and tungsten oxide (WO3) to ZrO2 on the performance of Fe-containing catalysts. They found that the catalyst‘s stability was increased by the addition of La2O3, however, the use of WO3-ZrO2 as support material enhanced its stability significantly. The catalyst with the label 20 wt. % Fe/ WO3-ZrO2 maintained its activity for 240 min that was assigned to the stronger metal-support interaction, that is, interaction of Fe2O3 particles with the support (WO3-ZrO2). Silica is reported to prevent ZrO2 from crystallization at elevated temperatures that facilitates reservation of the higher specific surface area of the amorphous structure,[19] whereas yttrium oxide with a valence lower than + 4 favors the formation of oxygen vacancies, helping to store oxygen and return it at low temperatures.[20] Additionally, it was shown that adding MgO to the ZrO2 support serves as a thermally stable catalyst support while effectively preserving the tetragonal ZrO2 phase.[21] Gac et al.[22] studied the effect of MgO addition on the activity of Ni/Al2O3 and found that the active surface area of Ni/ Al2O3 increases as MgO is added to the system. The addition of MgO to the catalyst caused the growth of smaller nickel crystallites with more potent adsorption sites as a result of strong metal-support interaction and the microstructure organization of the catalyst. The rate of methane decomposition increased during the initial stages of the reaction as the content of MgO increased. TiO2 has poor thermal stability and a low specific surface area. In addition, under high-temperature and high-pressure conditions, the surface area of TiO2 would drastically decrease.[23] Fortunately, it has been established by numerous researchers that doping titania with a different metal (such as
@@ -26,9 +23,6 @@ The compositions of the prepared catalysts were verified by EDX. For Instance, F
 Textural properties
 The textural characteristics of the as-synthesized catalysts were evaluated using N2 adsorption/desorption isotherms as shown
 Figure 1. The textural properties of fresh supported Fe catalysts.
-ChemistryOpen 2023, 12, e202300112 (2 of 9) © 2023 The Authors. ChemistryOpen published by Wiley-VCH GmbH
-ChemistryOpen
-Research Article
 
 
 in Figure 1. According to IUPAC sorting, the catalysts showed a type IV isotherm with a type H3 hysteresis loop, which is typical of a mesoporous structure with slit-shaped pores of various sizes and shapes.[29] As shown in Table 1, Fe SiZr has a high surface area (127.2 m2/g) and an average pore size of 5.35 nm, which is beneficial in the metal additive‘s dispersion at high loading.[30] Compared with Fe Zr, the specific surface area and pore volume of Fe-mZr (m = Si, Ti, Y) is increased after SiO2, TiO2, and Y2O3 are added except Fe MgZr that shows a little decrease. Nevertheless, the Fe SiZr sample shows the highest surface area (127.2 m2/g) and lowest pore size (5.35 nm), while the Fe MgZr sample displays the lowest surface (19.1 m2/g) and highest pore size (36.3 nm). The surface area of the unmodified Fe Zr catalyst is 20.2 m2/g and remarkably increased to 22.8 m2/g and 50.9 m2/g for Fe TiZr and Fe YZr catalysts, respectively. Also, the pore volume of Fe TiZr is found to be 0.173 cm3/g, which is higher than that of the unmodified Fe Zr (0.157 cm3/g).
@@ -49,9 +43,6 @@ P.S. (nm)[a]
 30 %Fe/10 %Y2O3 ZrO2 Fe YZr 51 0.218 14.9
 [a] S.A. = surface area; P.V. = pore volume; P.S. = pore size, all evaluated from BET.
 Figure 2. XRD patterns of zirconia-supported Fe catalysts.
-ChemistryOpen 2023, 12, e202300112 (3 of 9) © 2023 The Authors. ChemistryOpen published by Wiley-VCH GmbH
-ChemistryOpen
-Research Article
 
 
 unmodified sample. The peak for Y2O3 modified sample exhibited the highest intensity, while the rest of the modified samples exhibited similar intensities. At around 800 °C temperature, a weak H2 consumption peak appeared related to the Fe TiZr sample. This could be attributed to the reduction of mixed oxide species to metallic species.[18] This further enhances the dispersion of the active metals.
@@ -63,9 +54,6 @@ The CDM reaction over Fe-based catalysts was carried out at 800 °C under atmosp
 1. Figure 5 shows the effect of different additives (Y2O3, MgO, SiO2, and TiO2) on the methane conversion for 180 min time on-stream (TOS) using 30 wt. % Fe supported on ZrO2 catalysts. The results exhibited that the Fe TiZr sample gave the highest conversions of methane at about 81.3 % and kept increasing over the period of the investigation (3 h). In contrast, Fe MgZr, Fe SiZr, and Fe Zr catalysts began with initial CH4 conversions of about 74 %, 38 % and 50 % respectively, but suffered fast deactivation to attain as low values as 29 %,17 % and 11.5 %, respectively after running 180 min of TOS (Figure 5). A high methane conversion of about 69 % was achieved in the Fe YZr catalyst at the temperature of 800 °C. The addition of yttria (Y2O3) in the catalyst structure led to an increase in its catalytic activity. However, its activity decreased with time to about 50.1 % due to carbon deposition on active Fe surfaces.[32] The catalytic activity of Fe Zr improved significantly by adding Titanium and the methane conversion of Fe TiZr increased from about 64 % to 81.3 % after 180 min time onstream. The high dispersion of Fe2O3 particles, which resulted from their proper interaction with the TiZr support, may be primarily responsible for the Fe TiZr catalyst‘s pronounced catalytic activity and durability. The addition of Titanium could also accelerate the growth of carbon fiber or carbon nanotubes
 Figure 3. H2-TPR of fresh supported Fe catalysts.
 Figure 4. TEM images of the fresh Fe TiZr catalyst. Figure 5. Methane conversion of fresh Fe-supported catalysts at 800 °C.
-ChemistryOpen 2023, 12, e202300112 (4 of 9) © 2023 The Authors. ChemistryOpen published by Wiley-VCH GmbH
-ChemistryOpen
-Research Article
 
 
 and stop the formation of amorphous carbon over active sites.[31] Consequently, the Fe TiZr catalyst‘s lifetime was prolonged, due to the availability of active sites with Fe Zr. The low methane conversion and hydrogen yield at the beginning of the reaction of Fe TiZr can be attributed to the in-situ consumption of H2 released during the decomposition of methane, which continued the reduction of unreduced Fe active sites left over from the pre-reduction step. This in-situ reduction increases the total number of active sites available for the reaction, which in turn promotes methane decomposition and carbon formation until equilibrium is reached.[33,34] From the results, it can be inferred that among all the dopants used with ZrO2, TiO2 enhanced the catalyst’s performance. On the other hand, the weak interaction between the catalyst‘s components can be used to explain the low catalytic activity and stability of other zirconia-supported catalysts. This behaviour causes a metal sintering that produces large metal particles, especially with higher calcination temperatures.[18] The performance comparison between the current work and others in the literature is summarized in Table 2. Furthermore, in contrast to Ref. [10], where 20 % Fe was sustained with Zr stabilized with La and W, in this work 30 % Fe was supported with Zr stabilized with Ti, Mg, Si, and Y. Alternatively, in Ref. [23], the CMD was performed using promoted 60 % Ni catalyst supported only by Al2O3.
@@ -94,9 +82,6 @@ Fe/Al/Si ratio (wt %: 100 : 0) 800 300 83 [38]
 30 %Fe/Y2O3 + ZrO2 800 180 69
 [a] TR = Reaction Temperature.; TOS = Time on stream; CH4 Conv. =
 methane conversion. Figure 6. TPO profiles of the spent supported Fe catalysts.
-ChemistryOpen 2023, 12, e202300112 (5 of 9) © 2023 The Authors. ChemistryOpen published by Wiley-VCH GmbH
-ChemistryOpen
-Research Article
 
 
 354 wt. %, and 174 wt. % was achieved using MgO, SiO2, TiO2, and Y2O3 modified over zirconia-supported catalysts respectively (Figure 8). The weight loss peak observed in the Fe YZr sample at around 900 °C is likely due to the weight gain resulting from the oxidation of residual Fe, which takes place after the oxidation of all carbon deposits.[33] The Fe TiZr catalyst showed the highest weight loss of deposited carbon, which was in good agreement with the catalyst‘s high activity. These findings infer that the TiO2 addition promoted the efficiency of the Fe/ZrO2 catalyst and thus increased the accumulation of carbon on the catalyst surface.
@@ -106,9 +91,6 @@ SEM and TEM study
 The microstructural changes and morphology of the deposited carbon over the most active Fe TiZr catalyst at 800 °C reaction temperature and 3 h time on stream were studied by SEM and TEM analysis and the images are shown in Figures 10 and 11, respectively. SEM image of Fe TiZr catalyst indicates the deposition of filamentous carbon during methane decomposition reaction. It is obvious that carbon nanomaterials with various aspect ratio are formed over Fe TiZr. Due to intermingled nanomaterials, it is challenging to identify the exact length and/or diameter of nanomaterials however, some of the nanomaterials were of millimeter range. As illustrated in Figure 11a, the deposited carbon material on the surface of Fe TiZr was multi-walled carbon nanotubes (MWCNTs) with different diameters. A mixture of large-diameter MWCNTs with hollow and full cores was obtained, Moreover, the MWCNTs have some defects in the outer walls (Figure 11a). [18] The dark spots shown in Figure 11b represent the metallic Fe nanoparticles with spherical shapes that were clearly observed inside
 Figure 7. The weight loss of the carbon deposits over zirconia-supported Fe catalysts.
 Figure 8. Carbon yield as a function of mixed metal oxide catalysts composition. Figure 9. Raman spectra of the used catalysts.
-ChemistryOpen 2023, 12, e202300112 (6 of 9) © 2023 The Authors. ChemistryOpen published by Wiley-VCH GmbH
-ChemistryOpen
-Research Article
 
 
 the hollow core of MWCNTs. The high-resolution TEM image in Figure 11c, further confirms the presence of MWCNTs with a clear hollow core, where the diameter of 25.5 nm, wall thickness of 8 nm and an internal channel space of 10 nm was observed.[46]
@@ -135,9 +117,6 @@ Wcat
 Figure 10. SEM images of the nanocarbon deposited over Fe TiZr catalyst.
 Figure 11. TEM images of the nanocarbon deposited over Fe TiZr catalyst.
 Figure 12. The scheme of the catalyst preparation.
-ChemistryOpen 2023, 12, e202300112 (7 of 9) © 2023 The Authors. ChemistryOpen published by Wiley-VCH GmbH
-ChemistryOpen
-Research Article
 
 
 Where CH4;in is methane in the feed, CH4;out is methane in the product, WP is the products weight after reaction and Wcat is the weight of the fresh catalyst.
