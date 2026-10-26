@@ -16,17 +16,34 @@ import { estTokens } from "../../../src/llm/shared/tokenEstimate";
 import { PREF_KEYS, setPrefStore } from "../../../src/prefs";
 import {
   CHUNK_OVERLAP_TOKENS,
+  CLUSTER_BATCH_SIZE,
   ESTIMATE_HEADROOM,
   MAP_CALL_BUDGETS,
+  SUMMARY_MAX_TOKENS,
+  SYNTHESIS_INPUT_BUDGETS,
+  THEME_COUNT_BANDS,
+  estimateReportRun,
   estimateRun,
+  isReportRunEstimate,
   planItem,
+  planSynthesis,
   secondAcknowledgementFor,
+  themeCountBandFor,
   toPipelineEstimate,
   withHeadroom,
   type EstimateItem,
+  type EstimateReportRunInput,
   type EstimateRunInput,
   type PromptOverheadTokens,
+  type SynthesisCall,
+  type SynthesisCallKind,
+  type SynthesisPlanInput,
 } from "../../../src/pipeline/shared/estimate";
+import {
+  PROMPT_FILE_NAMES,
+  PROMPT_IDS,
+  createPromptRegistry,
+} from "../../../src/prompts";
 
 afterEach(() => {
   setPrefStore(undefined);
@@ -364,5 +381,447 @@ describe("prices, headroom and the confirmation gate", () => {
       notesKeys: [],
     });
     expect(() => toPipelineEstimate(run.selected, 0)).toThrow(RangeError);
+  });
+});
+
+// ===========================================================================
+// P4-T16 — the trend report's estimate: missing summaries plus every
+// synthesis call (docs/06 §5.2, §5.4, §8.4, §9.2, §12.2). SYNTHETIC figures;
+// the prompt files are read from disk, as test/unit/prompts does.
+// ===========================================================================
+
+const PROMPTS = createPromptRegistry(
+  PROMPT_IDS.map((id) => ({
+    fileName: PROMPT_FILE_NAMES[id],
+    text: readFileSync(
+      resolve(process.cwd(), "src/prompts", PROMPT_FILE_NAMES[id]),
+      "utf8",
+    ),
+  })),
+);
+
+/** Each synthesis prompt's own tokens: a round 2 000, so the sums read. */
+const SYNTH_OVERHEAD: Readonly<Record<SynthesisCallKind, number>> = {
+  THEME_CLUSTER: 2_000,
+  THEME_MERGE: 2_000,
+  CLUSTER_REDUCE: 2_000,
+  CLUSTER_REDUCE_MERGE: 2_000,
+  TREND_REPORT_EN: 2_000,
+  TREND_REPORT_KO: 2_000,
+  SELF_CRITIQUE: 2_000,
+};
+
+/** docs/06 §5.4's 42 papers: 38 full text, 4 abstract only. */
+const EXAMPLE_ITEMS: readonly EstimateItem[] = [
+  ...Array.from({ length: 38 }, (_, i) => fullTextItem(`F${String(i)}`)),
+  ...Array.from({ length: 4 }, (_, i) => abstractItem(`A${String(i)}`)),
+];
+
+function synthesisInput(
+  overrides: Partial<SynthesisPlanInput> = {},
+): SynthesisPlanInput {
+  return {
+    papers: 42,
+    reportModel: {
+      modelId: "mock-strong",
+      prices: EXAMPLE_PRICES,
+      maxOutputTokens: 64_000,
+    },
+    critiqueModel: { modelId: "mock-small", prices: EXAMPLE_PRICES },
+    prompts: PROMPTS,
+    synthesisOverhead: SYNTH_OVERHEAD,
+    languages: ["en"],
+    critiqueRounds: 1,
+    ...overrides,
+  };
+}
+
+function reportInput(
+  overrides: Partial<EstimateReportRunInput> = {},
+): EstimateReportRunInput {
+  const { papers: _papers, ...synthesis } = synthesisInput();
+  return {
+    ...synthesis,
+    items: EXAMPLE_ITEMS,
+    fullTextMode: "auto",
+    mapModel: { modelId: "mock-small", prices: EXAMPLE_PRICES },
+    overhead: OVERHEAD,
+    fullTextAutoMaxPapers: 25,
+    atEpochMs: Date.UTC(2026, 9, 27),
+    countTokens: raw,
+    ...overrides,
+  };
+}
+
+const kinds = (calls: readonly SynthesisCall[]): SynthesisCallKind[] =>
+  calls.map((c) => c.kind);
+const countOf = (
+  calls: readonly SynthesisCall[],
+  kind: SynthesisCallKind,
+): number => calls.filter((c) => c.kind === kind).length;
+
+describe("P4-T16: the synthesis calls of docs/06 §5.4's 42-paper example", () => {
+  it("reserves 1 + 5 + 1 + 1 calls plus one possible rewrite with K fixed at 5 and rounds 1", () => {
+    const plan = planSynthesis(synthesisInput({ themeCount: 5 }));
+    expect(kinds(plan.calls)).toEqual([
+      "THEME_CLUSTER",
+      "CLUSTER_REDUCE",
+      "CLUSTER_REDUCE",
+      "CLUSTER_REDUCE",
+      "CLUSTER_REDUCE",
+      "CLUSTER_REDUCE",
+      "TREND_REPORT_EN",
+      "SELF_CRITIQUE",
+      "TREND_REPORT_EN",
+    ]);
+    expect(plan.calls.map((c) => c.conditional)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+    ]);
+    expect(plan).toMatchObject({
+      papers: 42,
+      themes: 5,
+      twoStageClustering: false,
+    });
+  });
+
+  it("reserves the 26–75 band's upper K, 7, when K is unset (§9.2)", () => {
+    const plan = planSynthesis(synthesisInput());
+    expect(plan.themes).toBe(7);
+    expect(countOf(plan.calls, "CLUSTER_REDUCE")).toBe(7);
+    expect(countOf(plan.calls, "CLUSTER_REDUCE_MERGE")).toBe(0);
+  });
+
+  it("prices each call at its §5.2 input budget with headroom and its prompt's output ceiling", () => {
+    const plan = planSynthesis(synthesisInput({ themeCount: 5 }));
+    const byKind = (kind: SynthesisCallKind) =>
+      plan.calls.find((c) => c.kind === kind) as SynthesisCall;
+    expect(byKind("THEME_CLUSTER")).toMatchObject({
+      modelId: "mock-strong",
+      rawInputTokens: 62_000,
+      inputTokens: withHeadroom(62_000),
+      // P4-T03's grown ceiling: 2 000 + 40 × 42.
+      outputTokens: 2_000 + 40 * 42,
+    });
+    expect(byKind("CLUSTER_REDUCE")).toMatchObject({
+      rawInputTokens: 42_000,
+      inputTokens: withHeadroom(42_000),
+      outputTokens: 3_000,
+    });
+    expect(byKind("TREND_REPORT_EN")).toMatchObject({
+      inputTokens: withHeadroom(62_000),
+      outputTokens: 6_000,
+      language: "en",
+    });
+    expect(byKind("SELF_CRITIQUE")).toMatchObject({
+      modelId: "mock-small",
+      inputTokens: withHeadroom(62_000),
+      outputTokens: 2_500,
+      language: "en",
+    });
+  });
+
+  it("never states less than the example's own whole-run figures", () => {
+    const run = estimateReportRun(reportInput({ themeCount: 5 }));
+    // 42 map calls + 9 synthesis reservations: the example's 50 and the rewrite.
+    expect(run.selected.calls).toBe(51);
+    // §5.4: input ~610 k, output ~71 k, ~$2.90 at typical fill.
+    expect(run.selected.rawInputTokens).toBeGreaterThan(610_000);
+    expect(run.selected.outputTokens).toBeGreaterThan(71_000);
+    expect(run.selected.costUsd as number).toBeGreaterThan(2.9);
+  });
+});
+
+describe("P4-T16: languages, critique rounds and models", () => {
+  it("doubles the report calls for both languages, from one set of theme analyses", () => {
+    const one = planSynthesis(synthesisInput({ themeCount: 5 }));
+    const both = planSynthesis(
+      synthesisInput({ themeCount: 5, languages: ["en", "ko"] }),
+    );
+    expect(countOf(both.calls, "TREND_REPORT_EN")).toBe(2);
+    expect(countOf(both.calls, "TREND_REPORT_KO")).toBe(2);
+    expect(countOf(both.calls, "SELF_CRITIQUE")).toBe(2);
+    expect(countOf(both.calls, "THEME_CLUSTER")).toBe(1);
+    expect(countOf(both.calls, "CLUSTER_REDUCE")).toBe(5);
+    expect(both.calls.length).toBe(one.calls.length + 3);
+    // TREND_REPORT_KO's ceiling is its own 7 000 (docs/06 §5.2), no factor.
+    const ko = both.calls.filter((c) => c.kind === "TREND_REPORT_KO");
+    expect(ko.map((c) => [c.outputTokens, c.language])).toEqual([
+      [7_000, "ko"],
+      [7_000, "ko"],
+    ]);
+  });
+
+  it("rounds 0 reserves no critique; rounds 2 adds two critique and two rewrite reservations", () => {
+    const zero = planSynthesis(
+      synthesisInput({ themeCount: 5, critiqueRounds: 0 }),
+    );
+    const two = planSynthesis(
+      synthesisInput({ themeCount: 5, critiqueRounds: 2 }),
+    );
+    expect(countOf(zero.calls, "SELF_CRITIQUE")).toBe(0);
+    expect(countOf(zero.calls, "TREND_REPORT_EN")).toBe(1);
+    expect(countOf(two.calls, "SELF_CRITIQUE")).toBe(2);
+    expect(countOf(two.calls, "TREND_REPORT_EN")).toBe(3);
+    expect(two.calls.length - zero.calls.length).toBe(4);
+    expect(
+      two.calls
+        .filter((c) => c.kind === "SELF_CRITIQUE")
+        .map((c) => c.conditional),
+    ).toEqual([false, true]);
+  });
+
+  it("prices map, report and critique calls each at its own model's prices", () => {
+    const strong: ModelPrices = {
+      ...EXAMPLE_PRICES,
+      inputPerMTokUsd: 5,
+      outputPerMTokUsd: 25,
+    };
+    const small: ModelPrices = {
+      ...EXAMPLE_PRICES,
+      inputPerMTokUsd: 1,
+      outputPerMTokUsd: 5,
+    };
+    const run = estimateReportRun(
+      reportInput({
+        themeCount: 5,
+        reportModel: {
+          modelId: "mock-strong",
+          prices: strong,
+          maxOutputTokens: 64_000,
+        },
+        critiqueModel: { modelId: "mock-critic", prices: small },
+      }),
+    );
+    const synthesisUsd = run.selected.synthesis.calls.reduce(
+      (sum, c) =>
+        sum +
+        (c.modelId === "mock-critic"
+          ? (c.inputTokens * 1 + c.outputTokens * 5) / 1e6
+          : (c.inputTokens * 5 + c.outputTokens * 25) / 1e6),
+      0,
+    );
+    expect(run.selected.costUsd).toBeCloseTo(
+      (run.selected.map.costUsd as number) + synthesisUsd,
+      10,
+    );
+    expect(run.selected.map.costUsd).toBeCloseTo(
+      estimateRun(input({ items: EXAMPLE_ITEMS })).selected.costUsd as number,
+      10,
+    );
+    expect(run.models).toEqual({
+      map: "mock-small",
+      report: "mock-strong",
+      critique: "mock-critic",
+    });
+    expect(run.modelId).toBe("mock-strong");
+    expect(isReportRunEstimate(run)).toBe(true);
+    expect(isReportRunEstimate(estimateRun(input({})))).toBe(false);
+  });
+
+  it("an unpriced report model makes the cost unknown and needs the second acknowledgement", () => {
+    const run = estimateReportRun(
+      reportInput({
+        reportModel: {
+          modelId: "mock-strong",
+          prices: undefined,
+          maxOutputTokens: 64_000,
+        },
+      }),
+    );
+    expect(run.selected.costUsd).toBeUndefined();
+    expect(run.selected.unpricedModelIds).toEqual(["mock-strong"]);
+    expect(secondAcknowledgementFor(run.selected, 200)).toBe("unknown-cost");
+    expect(secondAcknowledgementFor(run.abstractOnly, 200)).toBe(
+      "unknown-cost",
+    );
+  });
+
+  it("an unpriced model with no call in the plan leaves the cost known", () => {
+    // Every summary exists: the map model is never called.
+    const cached = EXAMPLE_ITEMS.map((item) => ({ ...item, cached: true }));
+    const run = estimateReportRun(
+      reportInput({
+        items: cached,
+        mapModel: { modelId: "mock-map", prices: undefined },
+        critiqueModel: { modelId: "mock-critic", prices: undefined },
+        critiqueRounds: 0,
+      }),
+    );
+    expect(run.selected.map.calls).toBe(0);
+    expect(run.selected.unpricedModelIds).toEqual([]);
+    expect(run.selected.costUsd).toBeGreaterThan(0);
+    expect(run.pricesAsOfEpochMs).toBe(EXAMPLE_PRICES.asOfEpochMs);
+  });
+
+  it("names every unpriced model in the order map, report, critique", () => {
+    const run = estimateReportRun(
+      reportInput({
+        mapModel: { modelId: "mock-map", prices: undefined },
+        reportModel: {
+          modelId: "mock-strong",
+          prices: undefined,
+          maxOutputTokens: 64_000,
+        },
+        critiqueModel: { modelId: "mock-critic", prices: undefined },
+      }),
+    );
+    expect(run.selected.unpricedModelIds).toEqual([
+      "mock-map",
+      "mock-strong",
+      "mock-critic",
+    ]);
+    expect(run.pricesAsOfEpochMs).toBeUndefined();
+  });
+
+  it("the abstract-only downgrade changes only the map phase", () => {
+    const run = estimateReportRun(reportInput({ themeCount: 5 }));
+    expect(run.abstractOnly.synthesis).toBe(run.selected.synthesis);
+    expect(run.abstractOnly.map.counts.abstractOnly).toBe(42);
+    expect(run.abstractOnly.calls).toBe(
+      run.abstractOnly.map.calls + run.selected.synthesis.calls.length,
+    );
+    expect(run.preselectDowngrade).toBe(true); // 42 > 25, as for summaries
+    expect(run.abstractOnly.costUsd as number).toBeLessThan(
+      run.selected.costUsd as number,
+    );
+  });
+
+  it("is docs/07 §4.5's PipelineEstimate like any plan", () => {
+    const run = estimateReportRun(reportInput({ themeCount: 5 }));
+    expect(toPipelineEstimate(run.selected, 5)).toMatchObject({
+      itemCount: 42,
+      externalRequests: 51,
+      estimatedInputTokens: run.selected.inputTokens,
+      estimatedOutputTokens: run.selected.outputTokens,
+      estimatedCostUsd: run.selected.costUsd,
+    });
+  });
+});
+
+describe("P4-T16: clustering's two stages and the theme stage's room (docs/06 §8.4)", () => {
+  it("takes two stages when THEME_CLUSTER's grown ceiling passes the report model's output limit", () => {
+    const limit = 2_000 + 40 * 150;
+    const single = planSynthesis(
+      synthesisInput({
+        papers: 150,
+        reportModel: {
+          modelId: "mock-strong",
+          prices: EXAMPLE_PRICES,
+          maxOutputTokens: limit,
+        },
+      }),
+    );
+    expect(single.twoStageClustering).toBe(false);
+    const split = planSynthesis(
+      synthesisInput({
+        papers: 151,
+        reportModel: {
+          modelId: "mock-strong",
+          prices: EXAMPLE_PRICES,
+          maxOutputTokens: limit,
+        },
+      }),
+    );
+    expect(split.twoStageClustering).toBe(true);
+    const clusters = split.calls.filter((c) => c.kind === "THEME_CLUSTER");
+    expect(CLUSTER_BATCH_SIZE).toBe(60);
+    expect(clusters.map((c) => c.outputTokens)).toEqual([
+      2_000 + 40 * 60,
+      2_000 + 40 * 60,
+      2_000 + 40 * 31,
+    ]);
+    expect(countOf(split.calls, "THEME_MERGE")).toBe(1);
+    expect(
+      split.calls.find((c) => c.kind === "THEME_MERGE")?.outputTokens,
+    ).toBe(4_000);
+  });
+
+  it("takes two stages when 140-token digests with headroom pass the 60 000-token input budget", () => {
+    expect(
+      planSynthesis(synthesisInput({ papers: 372 })).twoStageClustering,
+    ).toBe(false); // 372 × 140 × 1.15 = 59 892
+    const split = planSynthesis(synthesisInput({ papers: 373 })); // 60 053
+    expect(split.twoStageClustering).toBe(true);
+    expect(countOf(split.calls, "THEME_CLUSTER")).toBe(7);
+  });
+
+  it("reserves enough theme calls to carry every summary, and a merge for each theme that could split", () => {
+    const plan = planSynthesis(synthesisInput({ papers: 400 }));
+    expect(plan.themes).toBe(12);
+    const needed = Math.ceil(
+      withHeadroom(400 * SUMMARY_MAX_TOKENS) /
+        (SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE - SUMMARY_MAX_TOKENS),
+    );
+    expect(needed).toBe(20);
+    const reduces = plan.calls.filter((c) => c.kind === "CLUSTER_REDUCE");
+    expect(reduces).toHaveLength(20);
+    expect(reduces.filter((c) => c.conditional)).toHaveLength(8);
+    expect(countOf(plan.calls, "CLUSTER_REDUCE_MERGE")).toBe(8);
+    // Every summary fits the theme calls priced.
+    expect(
+      reduces.length * SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE,
+    ).toBeGreaterThan(400 * SUMMARY_MAX_TOKENS);
+  });
+
+  it("makes no synthesis call for no papers, and refuses a malformed count", () => {
+    expect(planSynthesis(synthesisInput({ papers: 0 })).calls).toEqual([]);
+    expect(() => planSynthesis(synthesisInput({ languages: [] }))).toThrow(
+      RangeError,
+    );
+    expect(() =>
+      planSynthesis(synthesisInput({ languages: ["en", "en"] })),
+    ).toThrow(RangeError);
+    expect(() =>
+      planSynthesis(synthesisInput({ critiqueRounds: 1.5 })),
+    ).toThrow(RangeError);
+    expect(() => planSynthesis(synthesisInput({ themeCount: 0 }))).toThrow(
+      RangeError,
+    );
+  });
+});
+
+describe("P4-T16: the tables it transcribes", () => {
+  const doc = readFileSync(
+    resolve(process.cwd(), "docs/06-summarization-and-trend-report.md"),
+    "utf8",
+  );
+
+  it("transcribes docs/06 §5.2's seven synthesis input budgets, and the fixed ceilings match the prompt files", () => {
+    for (const [kind, budget] of Object.entries(SYNTHESIS_INPUT_BUDGETS)) {
+      const row = new RegExp(
+        String.raw`^\| \`${kind}\`[^|]*\| ([\d ]+) \| (~~)?([\d ]+)`,
+        "m",
+      ).exec(doc);
+      expect(row, kind).not.toBeNull();
+      expect(Number(row?.[1]?.replace(/ /g, "")), kind).toBe(budget);
+      if (kind !== "THEME_CLUSTER") {
+        expect(Number(row?.[3]?.replace(/ /g, "")), kind).toBe(
+          PROMPTS.get(kind as SynthesisCallKind).defaultMaxTokens,
+        );
+      }
+    }
+  });
+
+  it("transcribes docs/06 §9.2's theme bands, and reads the first and last rows beyond the table", () => {
+    const rows = [
+      ...doc.matchAll(/^\| (\d+)–(\d+) \| [^|]+ \| (\d+)–(\d+) \|$/gm),
+    ].map((m) => ({
+      minPapers: Number(m[1]),
+      maxPapers: Number(m[2]),
+      minThemes: Number(m[3]),
+      maxThemes: Number(m[4]),
+    }));
+    expect(rows).toEqual(THEME_COUNT_BANDS);
+    expect(themeCountBandFor(5).maxThemes).toBe(5);
+    expect(themeCountBandFor(42).maxThemes).toBe(7);
+    expect(themeCountBandFor(1_000).maxThemes).toBe(12);
   });
 });

@@ -34,6 +34,19 @@
  *   question as the warning does. The preference is read on demand, each time
  *   a Gemini disclosure is built.
  *
+ * ## A report run's own notice (`P4-T16`)
+ *
+ * A trend-report run sends the **generated summaries** of the papers it
+ * analyses, their titles, years and venues and the cluster statistics
+ * (`docs/09` §3 row 3b), to up to three models of the one active provider —
+ * `summaryModel` for the summaries it still makes, `reportModel`, and the
+ * critique model. Given a `report` input, {@link buildEgressDisclosure} puts
+ * {@link L10N_EGRESS_REPORT_NOTICE} first among the notices and adds a
+ * {@link ReportEgressNotice} naming every model once (`docs/07` §4.5's note of
+ * 2026-10-27). The notice forces nothing on its own:
+ * {@link mustAskConfirmation} is unchanged. Without a `report` input — every
+ * other job — the disclosure is exactly what it was.
+ *
  * ## The egress log
  *
  * §3.6 item 4: the plugin's own job records say which provider received how
@@ -51,6 +64,7 @@ import {
   L10N_EGRESS_FIRST_JOB_NOTICE,
   L10N_EGRESS_GEMINI_DECLARED_PAID,
   L10N_EGRESS_GEMINI_FREE_TIER,
+  L10N_EGRESS_REPORT_NOTICE,
 } from "../../i18n/keys";
 import type { GeminiTier } from "../../llm/gemini/tierDetect";
 import type { BaseUrlResolver } from "../../llm/shared/baseUrl";
@@ -72,9 +86,34 @@ export type EgressContentScope = { readonly [K in InputScopeKind]: number };
 
 /** One notice the dialog shows, as its Fluent id. */
 export type EgressNoticeId =
+  | typeof L10N_EGRESS_REPORT_NOTICE
   | typeof L10N_EGRESS_FIRST_JOB_NOTICE
   | typeof L10N_EGRESS_GEMINI_FREE_TIER
   | typeof L10N_EGRESS_GEMINI_DECLARED_PAID;
+
+/** The models one report run sends to, all on the active provider. */
+export interface ReportEgressModels {
+  /** `summaryModel`, when the run makes a summary first; absent otherwise. */
+  readonly map?: string;
+  /** `reportModel`: clustering, theme analyses, the report and its rewrites. */
+  readonly report: string;
+  /** The critique model, when `report.maxCritiqueRounds` is above 0. */
+  readonly critique?: string;
+}
+
+/** What a report run's notice is built from (`docs/09` §3 row 3b). */
+export interface ReportEgressInput {
+  /** The summaries the synthesis sends: one per analysed paper. */
+  readonly papers: number;
+  readonly models: ReportEgressModels;
+}
+
+/** A report run's notice, as data: how many summaries, and every model. */
+export interface ReportEgressNotice {
+  readonly papers: number;
+  /** Distinct, in the order map, report, critique. */
+  readonly modelIds: readonly string[];
+}
 
 /** What a disclosure is built from. */
 export interface EgressDisclosureInput {
@@ -86,6 +125,12 @@ export interface EgressDisclosureInput {
   readonly items: readonly InputScopeKind[];
   /** The Gemini key's tier; absent counts as unknown, which is free. */
   readonly geminiTier?: GeminiTier;
+  /**
+   * A trend-report run (`P4-T16`): its own notice. For a report run,
+   * `modelId` is the report model and `items` the planned scopes of the
+   * summaries it still makes. Absent for every other job.
+   */
+  readonly report?: ReportEgressInput;
 }
 
 /** The disclosure, as data (`docs/09` §3.6 item 1). */
@@ -111,6 +156,8 @@ export interface EgressDisclosure {
   readonly geminiDeclaredPaidReminder: boolean;
   /** The notices to show, in order; none of them can be turned off here. */
   readonly noticeIds: readonly EgressNoticeId[];
+  /** A report run's notice; the member is absent for every other job. */
+  readonly report?: ReportEgressNotice;
 }
 
 /** What {@link buildEgressDisclosure} reads. */
@@ -136,13 +183,24 @@ function emptyScope(): Record<InputScopeKind, number> {
   };
 }
 
+/** A report run's notice: its paper count and its models, each once. */
+function reportNotice(input: ReportEgressInput): ReportEgressNotice {
+  const { map, report, critique } = input.models;
+  const modelIds: string[] = [];
+  for (const id of [map, report, critique]) {
+    if (id !== undefined && !modelIds.includes(id)) modelIds.push(id);
+  }
+  return { papers: input.papers, modelIds };
+}
+
 /**
  * Build the disclosure the cost dialog embeds (`docs/09` §3.6 item 1):
  * provider and model, the **effective** host, the item count, what is sent
  * per scope, and the mode in force — plus the first-job notice while
  * `privacy.egressAcknowledged` is `false`, and the Gemini warning whenever the
  * tier is free or unknown — or, when the user declared the key paid
- * (`gemini.paidTier`), the declared-paid reminder in its place.
+ * (`gemini.paidTier`), the declared-paid reminder in its place. A report run
+ * (`input.report`) also gets its own notice, first (`P4-T16`).
  *
  * @param input - the job's provider, model, mode and planned scopes
  * @param deps - see {@link EgressDisclosureDeps}
@@ -165,12 +223,14 @@ export function buildEgressDisclosure(
   const geminiFreeTierWarning =
     gemini && !geminiDeclaredPaidReminder && input.geminiTier !== "paid";
   const noticeIds: EgressNoticeId[] = [];
+  // Before the first-job notice, whose "the content listed above" includes it.
+  if (input.report !== undefined) noticeIds.push(L10N_EGRESS_REPORT_NOTICE);
   if (firstJobNotice) noticeIds.push(L10N_EGRESS_FIRST_JOB_NOTICE);
   if (geminiFreeTierWarning) noticeIds.push(L10N_EGRESS_GEMINI_FREE_TIER);
   if (geminiDeclaredPaidReminder) {
     noticeIds.push(L10N_EGRESS_GEMINI_DECLARED_PAID);
   }
-  return {
+  const disclosure: EgressDisclosure = {
     providerId: input.providerId,
     modelId: input.modelId,
     host: deps.baseUrls.effectiveHost(input.providerId),
@@ -182,6 +242,11 @@ export function buildEgressDisclosure(
     geminiDeclaredPaidReminder,
     noticeIds,
   };
+  // The member exists only for a report run, so every other disclosure is
+  // byte-identical to what it was before P4-T16.
+  return input.report === undefined
+    ? disclosure
+    : { ...disclosure, report: reportNotice(input.report) };
 }
 
 /** What {@link settleDisclosure} writes through. */
@@ -309,6 +374,8 @@ export interface EgressLogEntry {
   readonly scope: EgressContentScope;
   readonly privacyMode: PrivacyMode;
   readonly confirmedAtEpochMs: number;
+  /** A report run's notice: every model it sent to (`P4-T16`). */
+  readonly report?: ReportEgressNotice;
 }
 
 /**
@@ -322,7 +389,7 @@ export function egressLogEntry(
   disclosure: EgressDisclosure,
   confirmedAtEpochMs: number,
 ): EgressLogEntry {
-  return {
+  const entry: EgressLogEntry = {
     providerId: disclosure.providerId,
     host: disclosure.host,
     modelId: disclosure.modelId,
@@ -331,6 +398,15 @@ export function egressLogEntry(
     privacyMode: disclosure.privacyMode,
     confirmedAtEpochMs,
   };
+  return disclosure.report === undefined
+    ? entry
+    : {
+        ...entry,
+        report: {
+          papers: disclosure.report.papers,
+          modelIds: [...disclosure.report.modelIds],
+        },
+      };
 }
 
 /**

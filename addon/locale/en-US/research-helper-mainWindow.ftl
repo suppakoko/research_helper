@@ -645,6 +645,41 @@ research-helper-prefs-usage-limit = Spending limit for this Zotero session: { $l
 research-helper-prefs-usage-limit-off = No spending limit is set for this Zotero session.
 
 
+## The trend report's lines in the cost dialog, and its own egress notice
+## (P4-T16; docs/06 §5.2, §5.4; docs/09 §3 row 3b; docs/07 §4.5's note of
+## 2026-10-27)
+##
+## Shown in the same cost dialog as the two sections above, never in a second
+## one; built by `src/ui/dialogs/costConfirmDialog.ts` (`REPORT_COST_L10N`).
+## `$calls`, `$themes` and `$papers` are numbers. `$model` is a model ID and
+## `$models` a list of model IDs already joined with Intl.ListFormat over the
+## application locale (docs/08 §10.3): names, never translated. "Up to": the
+## counts include calls the run makes only when an earlier answer asks for
+## them (a rewrite after a check, a later check round, a theme too large for
+## one call). Korean pending review (G-41).
+
+research-helper-egress-report-notice =
+    To write the report, the summaries of { $papers ->
+        [one] 1 paper
+       *[other] { $papers } papers
+    }, with their titles, years and venues and statistics about the themes they fall into, are sent to { $models }. The papers themselves are not sent again.
+research-helper-cost-report-summaries =
+    { $calls ->
+        [one] Summaries still to make: 1 call to { $model }.
+       *[other] Summaries still to make: { $calls } calls to { $model }.
+    }
+research-helper-cost-report-writing =
+    { $calls ->
+        [one] Grouping the papers into up to { $themes } themes and writing the report: up to 1 call to { $model }.
+       *[other] Grouping the papers into up to { $themes } themes and writing the report: up to { $calls } calls to { $model }.
+    }
+research-helper-cost-report-review =
+    { $calls ->
+        [one] Checking the report against the summaries: up to 1 call to { $model }.
+       *[other] Checking the report against the summaries: up to { $calls } calls to { $model }.
+    }
+
+
 ## The LLM Test, the model suggestions and the user price table (P3-T14;
 ## docs/09 §2.3, docs/03 §9, plan/00 §6 item 265(b))
 ##

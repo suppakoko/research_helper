@@ -23,15 +23,23 @@ import {
   type EgressDisclosure,
 } from "../../../src/pipeline/shared/egressDisclosure";
 import {
+  estimateReportRun,
   estimateRun,
   type EstimateItem,
+  type ReportRunEstimate,
   type RunEstimate,
 } from "../../../src/pipeline/shared/estimate";
+import {
+  PROMPT_FILE_NAMES,
+  PROMPT_IDS,
+  createPromptRegistry,
+} from "../../../src/prompts";
 import { estTokens } from "../../../src/llm/shared/tokenEstimate";
 import type { ModelPrices } from "../../../src/llm/shared/pricing";
 import {
   COST_DIALOG_L10N,
   COST_DIALOG_URL,
+  REPORT_COST_L10N,
   USAGE_L10N,
   buildCostDialogModel,
   createUsageHost,
@@ -662,5 +670,263 @@ describe("item 281(b) — a run over no collection offers no 'Don't ask again' (
     const absent = paint(asPreflight(preflight({ offerDontAskAgain: false })));
     expect(absent.hidden).toBe(true);
     expect(absent.attrs.has("data-l10n-id")).toBe(false);
+  });
+});
+
+describe("P4-T16 — a report run's estimate in the same dialog", () => {
+  const prompts = createPromptRegistry(
+    PROMPT_IDS.map((id) => ({
+      fileName: PROMPT_FILE_NAMES[id],
+      text: readFileSync(
+        resolve(process.cwd(), "src/prompts", PROMPT_FILE_NAMES[id]),
+        "utf8",
+      ),
+    })),
+  );
+  const overhead = 2_000;
+
+  function reportEstimate(
+    options: { reportPriced?: boolean; cached?: boolean } = {},
+  ): ReportRunEstimate {
+    return estimateReportRun({
+      items: Array.from({ length: 4 }, (_, i) => ({
+        ...item(String(i), i % 2 === 0),
+        cached: options.cached ?? false,
+      })),
+      fullTextMode: "auto",
+      mapModel: { modelId: "vendor/small", prices: PRICES },
+      reportModel: {
+        modelId: "vendor/strong",
+        prices: options.reportPriced === false ? undefined : PRICES,
+        maxOutputTokens: 64_000,
+      },
+      critiqueModel: { modelId: "vendor/critic", prices: PRICES },
+      prompts,
+      synthesisOverhead: {
+        THEME_CLUSTER: overhead,
+        THEME_MERGE: overhead,
+        CLUSTER_REDUCE: overhead,
+        CLUSTER_REDUCE_MERGE: overhead,
+        TREND_REPORT_EN: overhead,
+        TREND_REPORT_KO: overhead,
+        SELF_CRITIQUE: overhead,
+      },
+      languages: ["en"],
+      critiqueRounds: 1,
+      themeCount: 3,
+      overhead: {
+        PAPER_SUMMARY_ABSTRACT: 3_000,
+        PAPER_SUMMARY_FULLTEXT: 3_000,
+        CHUNK_MAP: 3_000,
+        CHUNK_REDUCE: 3_000,
+      },
+      fullTextAutoMaxPapers: 25,
+      atEpochMs: Date.UTC(2026, 9, 27),
+      countTokens: (t) => estTokens(t),
+    });
+  }
+
+  function reportDisclosure(): EgressDisclosure {
+    return buildEgressDisclosure(
+      {
+        providerId: "openrouter",
+        modelId: "vendor/strong",
+        privacyMode: "balanced",
+        items: ["abstract+fulltext", "abstract"],
+        report: {
+          papers: 4,
+          models: {
+            map: "vendor/small",
+            report: "vendor/strong",
+            critique: "vendor/critic",
+          },
+        },
+      },
+      {
+        baseUrls: { effectiveHost: () => "proxy.example.invalid" },
+        egressAcknowledged: () => true,
+      },
+    );
+  }
+
+  it("shows the run's totals, then which model is paid for what", () => {
+    const run = reportEstimate();
+    const model = asPreflight(
+      preflight({ estimate: run, disclosure: reportDisclosure() }),
+    );
+    expect(model.selected.lines.slice(0, 4)).toEqual([
+      { id: COST_DIALOG_L10N.calls, args: { calls: 4 + 6 + 1 } },
+      {
+        id: REPORT_COST_L10N.summaries,
+        args: { calls: 4, model: "vendor/small" },
+      },
+      {
+        id: REPORT_COST_L10N.writing,
+        args: { calls: 6, themes: 3, model: "vendor/strong" },
+      },
+      {
+        id: REPORT_COST_L10N.review,
+        args: { calls: 1, model: "vendor/critic" },
+      },
+    ]);
+    expect(model.selected.lines).toContainEqual({
+      id: COST_DIALOG_L10N.total,
+      args: { cost: formatUsd(run.selected.costUsd as number, LOCALE) },
+    });
+  });
+
+  it("drops the summaries line when every summary exists", () => {
+    const model = asPreflight(
+      preflight({
+        estimate: reportEstimate({ cached: true }),
+        disclosure: reportDisclosure(),
+      }),
+    );
+    const ids = model.selected.lines.map((l) => l.id);
+    expect(ids).not.toContain(REPORT_COST_L10N.summaries);
+    expect(ids).toContain(REPORT_COST_L10N.writing);
+  });
+
+  it("places the report notice first, naming every model as a list", () => {
+    const model = asPreflight(
+      preflight({ estimate: reportEstimate(), disclosure: reportDisclosure() }),
+    );
+    expect(model.notices[0]).toEqual({
+      id: REPORT_COST_L10N.notice,
+      args: {
+        papers: 4,
+        models: "vendor/small, vendor/strong, and vendor/critic",
+      },
+    });
+  });
+
+  it("an unpriced report model names that model and demands the unpriced acknowledgement", () => {
+    const run = reportEstimate({ reportPriced: false });
+    const model = asPreflight(
+      preflight({ estimate: run, disclosure: reportDisclosure() }),
+    );
+    expect(model.selected.lines).toContainEqual({
+      id: COST_DIALOG_L10N.unpriced,
+      args: { model: "vendor/strong" },
+    });
+    expect(model.selected.acknowledge).toEqual({
+      id: COST_DIALOG_L10N.acknowledgeUnpriced,
+    });
+    expect(decideCostDialog(model, { accepted: true })).toEqual({
+      kind: "cancelled",
+    });
+    expect(
+      decideCostDialog(model, { accepted: true, acknowledged: true }).kind,
+    ).toBe("run");
+  });
+
+  it("'don't ask again' never skips a question forced by money (item 274(b))", () => {
+    const d = reportDisclosure();
+    const quiet = mustAskConfirmation(d, routineConfirmationFor(d));
+    expect(quiet.ask).toBe(false);
+    expect(
+      shouldOpenCostDialog({
+        confirmation: quiet,
+        plan: reportEstimate({ reportPriced: false }).selected,
+        confirmAboveCents: 200,
+        ceiling: undefined,
+      }).reasons,
+    ).toEqual(["unknown-cost"]);
+    const priced = reportEstimate();
+    expect(
+      shouldOpenCostDialog({
+        confirmation: quiet,
+        plan: priced.selected,
+        confirmAboveCents: 1,
+        ceiling: undefined,
+      }).reasons,
+    ).toEqual(["above-threshold"]);
+    expect(
+      shouldOpenCostDialog({
+        confirmation: quiet,
+        plan: priced.selected,
+        confirmAboveCents: 1_000_000,
+        ceiling: STOP,
+      }).reasons,
+    ).toEqual(["ceiling"]);
+  });
+
+  it("leaves a summarize run's model without a single report line", () => {
+    const model = asPreflight(preflight());
+    const ids = JSON.stringify(model);
+    for (const id of Object.values(REPORT_COST_L10N)) {
+      expect(ids).not.toContain(id);
+    }
+    expect(model.selected.lines.map((l) => l.id).slice(0, 3)).toEqual([
+      COST_DIALOG_L10N.calls,
+      COST_DIALOG_L10N.input,
+      COST_DIALOG_L10N.output,
+    ]);
+  });
+
+  it("declares the report's ids in en-US, and in ko-KR as the owner-reviewed Korean (2026-10-27, G-41, item 292(a)), not as stubs", () => {
+    const read = (path: string) =>
+      readFileSync(resolve(process.cwd(), path), "utf8");
+    const enUS = read("addon/locale/en-US/research-helper-mainWindow.ftl");
+    const koKR = read("addon/locale/ko-KR/research-helper-mainWindow.ftl");
+    for (const id of Object.values(REPORT_COST_L10N)) {
+      expect(enUS, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(koKR, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(koKR, id).not.toMatch(new RegExp(`^# ${id} =`, "m"));
+    }
+  });
+
+  it("ships the approved Korean of plan/00 §6 item 292(a) verbatim, taking every argument the dialog passes", () => {
+    const koKR = readFileSync(
+      resolve(
+        process.cwd(),
+        "addon/locale/ko-KR/research-helper-mainWindow.ftl",
+      ),
+      "utf8",
+    );
+    // The entry's text from its `=` up to the next entry, with Korean's one
+    // plural variant (`{ $calls -> *[other] … }`) unwrapped.
+    const entry = (id: string): string => {
+      const start = koKR.indexOf(`\n${id} =`);
+      expect(start, id).toBeGreaterThan(-1);
+      const end = koKR.indexOf("\nresearch-helper-", start + 1);
+      const body = koKR
+        .slice(start + id.length + 3, end === -1 ? undefined : end)
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "" && !line.startsWith("#"))
+        .join(" ");
+      const variant = /^\{ \$calls -> \*\[other\] (.*) \}$/.exec(body);
+      return variant?.[1] ?? body;
+    };
+    const approved: Record<string, string> = {
+      [REPORT_COST_L10N.notice]:
+        "보고서를 쓰기 위해 논문 { $papers }편의 요약과 각 논문의 제목, 연도, 게재처, 그리고 논문이 속한 주제에 대한 통계를 { $models }에 보냅니다. 논문 자체는 다시 보내지 않습니다.",
+      [REPORT_COST_L10N.summaries]:
+        "아직 만들 요약: { $model }에 { $calls }회 호출.",
+      [REPORT_COST_L10N.writing]:
+        "논문을 최대 { $themes }개 주제로 묶고 보고서 작성: { $model }에 최대 { $calls }회 호출.",
+      [REPORT_COST_L10N.review]:
+        "요약과 대조하는 보고서 검토: { $model }에 최대 { $calls }회 호출.",
+    };
+    expect(Object.keys(approved).sort()).toEqual(
+      Object.values(REPORT_COST_L10N).sort(),
+    );
+    for (const [id, text] of Object.entries(approved)) {
+      expect(entry(id), id).toBe(text);
+    }
+    // Every argument the model hands the window for these ids is placed.
+    const model = asPreflight(
+      preflight({ estimate: reportEstimate(), disclosure: reportDisclosure() }),
+    );
+    const placed = [...model.notices, ...model.selected.lines].filter((l) =>
+      Object.keys(approved).includes(l.id),
+    );
+    expect(new Set(placed.map((l) => l.id)).size).toBe(4);
+    for (const line of placed) {
+      for (const arg of Object.keys(line.args ?? {})) {
+        expect(entry(line.id), `${line.id} $${arg}`).toContain(`{ $${arg} }`);
+      }
+    }
   });
 });

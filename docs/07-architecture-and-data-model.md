@@ -1631,6 +1631,82 @@ export interface TTSProvider {
 > loosen anything by leaving the route out. The callers (`P3-T16`, `P3-T29`) pass the route of the
 > provider the router resolved. The disclosure's side is 09 §3.6 item 3.
 
+> **Decided 2026-10-27 (`P4-T16`, building `plan/00` §6 item 286's report-specific egress notice;
+> the card's readings, for the owner to confirm): the trend report's own notice.** A report run
+> sends what `09-security-privacy-and-api-keys.md` §3 row 3b lists — the **generated summaries** of
+> the papers it analyses (not the papers again), their titles, years and venues, and the cluster
+> statistics — and it can send to three models of the one active provider: `summaryModel` for the
+> summaries it still has to make, `reportModel` for every synthesis call but the critique, and the
+> critique model (`report.critiqueModel`, else `summaryModel`). The summary disclosure names one
+> model and counts items by input scope, which has no "generated summaries" kind, so a report run's
+> disclosure carries a notice of its own, built by `buildEgressDisclosure` from an optional `report`
+> input and shown in the same cost dialog (09 §3.6 item 1: never a second dialog), **before** the
+> first-job notice, whose "the content listed above" includes it. It names every model the run
+> sends to, once each, in the order map, report, critique; a model with no call in the run (no
+> summary missing, no critique round) is not named. The disclosure's own `modelId` is the report
+> model. The notice **forces nothing on its own**: whether the routine question is asked stays
+> `mustAskConfirmation`'s, unchanged, and a confirmation forced by money is asked whatever "don't
+> ask again" says (09 §3.6's note of 2026-10-23; `plan/00` §6 item 274(b)). *Decided 2026-10-27
+> (owner, `plan/00` §6 item 292(f)): "don't ask again" is recorded separately for report runs, so
+> a summarize run's record never skips a report run's question and only the report window's own
+> "don't ask again" does. `P4-T18` builds it: a record of its own in `collection_settings`, beside
+> `RoutineConfirmation`.* The egress log entry
+> (09 §3.6 item 4) carries the same `report` member, so a report job's record names every model. A
+> disclosure built without `report` — every other job's — and its log entry are unchanged, byte
+> for byte.
+>
+> ```ts
+> // src/pipeline/shared/egressDisclosure.ts
+> export type EgressNoticeId =
+>   | typeof L10N_EGRESS_REPORT_NOTICE        // "research-helper-egress-report-notice"
+>   | typeof L10N_EGRESS_FIRST_JOB_NOTICE | typeof L10N_EGRESS_GEMINI_FREE_TIER
+>   | typeof L10N_EGRESS_GEMINI_DECLARED_PAID;
+> /** The models one report run sends to, all on the active provider. */
+> export interface ReportEgressModels {
+>   readonly map?: string;        // summaryModel, when the run makes a summary first
+>   readonly report: string;      // reportModel
+>   readonly critique?: string;   // the critique model, when report.maxCritiqueRounds > 0
+> }
+> export interface ReportEgressInput {
+>   readonly papers: number;      // the summaries the synthesis sends: one per analysed paper
+>   readonly models: ReportEgressModels;
+> }
+> export interface ReportEgressNotice {
+>   readonly papers: number;
+>   readonly modelIds: readonly string[];   // distinct, in the order map, report, critique
+> }
+> // EgressDisclosureInput gains `readonly report?: ReportEgressInput`; EgressDisclosure and
+> // EgressLogEntry gain `readonly report?: ReportEgressNotice`, present only for a report run.
+> ```
+>
+> **Decided 2026-10-27 (`P4-T16`; the card's readings, ~~for the owner to confirm~~ confirmed —
+> Decided 2026-10-27 (owner, `plan/00` §6 item 292(e)): the estimate stays wide, because it never
+> under-states, and is revisited once `P3-T25`'s stored summaries, `P4-T04`'s digests and real runs
+> exist): the report run's estimate, shown beside that notice.** `estimateReportRun` in `src/pipeline/shared/estimate.ts`
+> returns the same `RunEstimate` the summarize run's dialog shows — `Pipeline.estimate()`'s
+> `PipelineEstimate` through `toPipelineEstimate` — so the threshold, the ceilings, the second
+> acknowledgement and "don't ask again" apply to it unchanged; its plans carry the summaries still
+> to make (`estimateRun` at `summaryModel`'s prices) plus every synthesis call (`planSynthesis`),
+> each priced through `costOf` at its own model's prices, and any unpriced model with a call makes
+> the plan's cost unknown. The estimate must never under-state, so: (1) **a synthesis call's input
+> is priced at its `06-…` §5.2 input budget** plus the prompt's own tokens, with D-06-5's 1.15×,
+> because the pipeline keeps every call inside that budget and the summaries it will carry do not
+> all exist yet; its output at the prompt's `max_tokens` ceiling (`resolveMaxTokens`). (2) **K is
+> the run's own, else the upper end of `06-…` §9.2's band**, whose first row also serves fewer than
+> 10 papers and whose last row more than 400. (3) Two-stage clustering is planned by `P4-T05`'s
+> rule, taking each digest at its 140-token cap (`P4-T04`) with the 1.15×, so near the line the
+> dearer path is priced. (4) When K theme calls could not carry every summary at 1 600 tokens (the
+> largest map output ceiling), the extra sub-batch calls and one `CLUSTER_REDUCE_MERGE` per theme
+> that could split are reserved too. (5) Per report language, the report call and, per critique
+> round, one critique and one possible rewrite. (6) **Not reserved, because nothing predicts
+> them:** a call that follows a malformed answer (`completeJSON`'s repair and retry, `P4-T05`'s
+> re-run, `P4-T08`'s one fresh generation for a missing heading) and `P4-T09`'s per-section
+> critique calls; each is reserved at dispatch by `withBudget`, so a ceiling it would pass pauses
+> the job and asks. On `06-…` §5.4's 42-paper example at its $3 / $15 prices, K = 5 and the unit
+> tests' synthetic prompt overheads (3 000 tokens per map call, 2 000 per synthesis call), the
+> estimate is 51 calls and about $4.68 — $2.60 of summaries and $2.08 of synthesis — where the
+> example's typical fill says ~$2.90 for the whole run: an over-quote, never an under-quote.
+
 > **`PipelineContext.config`. Decided 2026-10-23 (owner, plan/00 §6 item 272(a)).** The member's
 > type is `ConfigReader`, declared in `src/pipeline/types.ts`: a **read-only view of
 > `src/prefs/index.ts`'s `getPref`**, so a pipeline reads a preference through its context
@@ -4507,6 +4583,62 @@ Two rules that matter:
 > ```
 >
 > **Corrected 2026-10-23 (owner, `plan/00` §6 item 273(a)): the prompt component is `cacheEpoch`.** `SummaryKeyInput` read `promptVersions: Readonly<Record<string, string>>`, the full version strings; it is now `promptCacheEpochs`, each keyed prompt's `cacheEpoch` (`PromptTemplate.cacheEpoch`; `PROMPT_CACHE_EPOCHS` in `src/prompts/bundled.ts`), so a PATCH bump keeps cached summaries as `12-prompt-library.md` §17.2 says. `SummaryCacheDeps` gains `promptCacheEpochs` beside `promptVersions`; the full versions stay in `meta` for provenance, and a lookup compares `meta.promptCacheEpochs`, never `meta.promptVersions`. `encodeTagValue` (the tag-value escape) moved to `src/core/cache/keys.ts` so `core/`'s job runner can use it (item 273(c)); `summaryCache.ts` re-exports it. `06-…` §11.2 readings 3 and 8 carry the reasoning.
+
+> **Decided 2026-10-27 (`P4-T17`): the synthesis keys, `06-…` §11.2's `tc`, `cr` and `rp`.** Declared here first; `06-…` §11.2's dated readings of the same day say why each component is there. Built in `src/core/cache/keys.ts`, hashed by `cacheKey` with the namespace word as its `kind`. Caller: `trendReportPipeline.ts` (`P4-T18`), which probes before each stage and stores after it; until that card lands nothing calls them. Which `CacheNamespace` (§9.2) holds the entries is `P4-T18`'s to settle: §9.2 has no synthesis row, and the namespace is not a key component.
+>
+> ```ts
+> // src/core/cache/keys.ts
+> export type SynthesisKeyKind = "tc" | "cr" | "rp";
+> export const THEME_CLUSTERING_KEY_PROMPTS = ["THEME_CLUSTER", "THEME_MERGE"] as const;     // tc
+> export const THEME_ANALYSIS_KEY_PROMPTS = ["CLUSTER_REDUCE", "CLUSTER_REDUCE_MERGE"] as const; // cr
+> /** One input of a stage: an item key (or a theme id) and the hash of what the call is shown for it. */
+> export interface SynthesisInputHash { readonly id: string; readonly hash: string }
+> /** What every call of a stage sends besides its prompt text. */
+> export interface SynthesisCallSettings {
+>   readonly modelId: string; readonly temperature: number;
+>   readonly effort?: string;                // ChatRequest.effort as sent
+> }
+> /** Every other user-message variable of the stage's prompts, and any code-side setting that changes what they are shown. */
+> export type SynthesisStageInputs = Readonly<Record<string, string | number | boolean | null>>;
+> export interface ThemeBandKeyInput { readonly minThemes: number; readonly maxThemes: number; readonly minPapersPerTheme: number }
+> export interface ThemeClusteringKeyInput {
+>   readonly members: readonly SynthesisInputHash[];          // item key + hash of its digest block as sent
+>   readonly themeBand: ThemeBandKeyInput;
+>   readonly promptCacheEpochs: Readonly<Record<string, number>>; // the registry's cacheEpochs; the builder keys its stage's prompts only
+>   readonly providerId: ProviderId; readonly call: SynthesisCallSettings; readonly stageInputs: SynthesisStageInputs;
+> }
+> export interface ThemeAnalysisKeyInput {
+>   readonly themeId: string; readonly themeName: string; readonly themeDefinition: string;
+>   readonly members: readonly SynthesisInputHash[];          // item key + hash of its PaperSummary as sent
+>   readonly promptCacheEpochs: Readonly<Record<string, number>>;
+>   readonly providerId: ProviderId; readonly call: SynthesisCallSettings; readonly stageInputs: SynthesisStageInputs;
+> }
+> export interface ReportCritiqueKeyInput { readonly rounds: number; readonly call: SynthesisCallSettings }
+> export interface ReportKeyInput {
+>   readonly language: ReportLanguage;                        // picks TREND_REPORT_EN or TREND_REPORT_KO
+>   readonly themeAnalyses: readonly SynthesisInputHash[];    // theme id + hash of its ThemeAnalysis as sent
+>   readonly digests: readonly SynthesisInputHash[];          // as sent
+>   readonly summaries: readonly SynthesisInputHash[];        // every summary the critique may be shown; keyed only when rounds > 0
+>   readonly targetWords: number;                             // {{TARGET_WORDS}} as sent
+>   readonly critique: ReportCritiqueKeyInput;                // rounds 0: only the rounds are keyed
+>   readonly promptCacheEpochs: Readonly<Record<string, number>>;
+>   readonly providerId: ProviderId; readonly call: SynthesisCallSettings; readonly stageInputs: SynthesisStageInputs;
+> }
+> /** A key and what it carries, so its tags name exactly what was keyed. */
+> export interface SynthesisKey {
+>   readonly kind: SynthesisKeyKind; readonly key: string;    // 64 hex characters
+>   readonly promptIds: readonly string[]; readonly modelIds: readonly string[]; readonly providerId: ProviderId;
+> }
+> export function themeClusteringKey(input: ThemeClusteringKeyInput): SynthesisKey;
+> export function themeAnalysisKey(input: ThemeAnalysisKeyInput): SynthesisKey;
+> export function reportKey(input: ReportKeyInput): SynthesisKey;
+> /** `promptVersion:<promptId>@<line>`, the string summaryCache.ts's promptVersionTag writes. */
+> export function promptLineTag(promptId: string, line: string): string;
+> /** Prompt-line, model and provider tags; `promptLines` maps each prompt id to promptCacheLine(its version). */
+> export function synthesisTags(key: SynthesisKey, promptLines: Readonly<Record<string, string>>): readonly string[];
+> ```
+>
+> Each builder throws `RangeError` for an empty identifying string, a missing or non-positive-integer `cacheEpoch` for a prompt it keys, a non-finite temperature, an empty `members` or `themeAnalyses` list, or an id listed twice — a key built from a hole would match another hole, as `summaryKey` already refuses. `synthesisTags` throws `RangeError` when `promptLines` lacks a prompt the key carries.
 
 ### 9.2 TTLs and size caps
 

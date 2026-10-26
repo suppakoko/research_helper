@@ -318,6 +318,32 @@ research-helper-prefs-usage-limit = 이번 Zotero 세션의 지출 한도: { $li
 research-helper-prefs-usage-limit-off = 이번 Zotero 세션에는 지출 한도가 설정되어 있지 않습니다.
 
 
+## The trend report's lines in the cost dialog, and its own egress notice
+## (P4-T16; docs/06 §5.2, §5.4; docs/09 §3 row 3b)
+##
+## The coordinator drafts the Korean and the owner reviews it (G-41, plan/00 §6
+## item 291); nothing here was machine-translated. `$model` and `$models` are
+## model IDs, never translated (`docs/08` §10.3). Korean has one plural
+## category, so `$calls` keeps only `*[other]`, as the cost lines above do, and
+## `$papers` is a plain placeable, as `$items` is in research-helper-cost-items.
+##
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-27 (G-41, plan/00 §6 item 292(a)).
+
+research-helper-egress-report-notice = 보고서를 쓰기 위해 논문 { $papers }편의 요약과 각 논문의 제목, 연도, 게재처, 그리고 논문이 속한 주제에 대한 통계를 { $models }에 보냅니다. 논문 자체는 다시 보내지 않습니다.
+research-helper-cost-report-summaries =
+    { $calls ->
+       *[other] 아직 만들 요약: { $model }에 { $calls }회 호출.
+    }
+research-helper-cost-report-writing =
+    { $calls ->
+       *[other] 논문을 최대 { $themes }개 주제로 묶고 보고서 작성: { $model }에 최대 { $calls }회 호출.
+    }
+research-helper-cost-report-review =
+    { $calls ->
+       *[other] 요약과 대조하는 보고서 검토: { $model }에 최대 { $calls }회 호출.
+    }
+
+
 ## The key-storage degradation dialog (P3-T03; docs/09 §1.7, gate G-10)
 ##
 ## The coordinator drafts the Korean and the owner reviews it (G-41); nothing

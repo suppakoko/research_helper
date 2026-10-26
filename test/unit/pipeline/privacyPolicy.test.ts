@@ -35,6 +35,7 @@ import {
   L10N_EGRESS_FIRST_JOB_NOTICE,
   L10N_EGRESS_GEMINI_DECLARED_PAID,
   L10N_EGRESS_GEMINI_FREE_TIER,
+  L10N_EGRESS_REPORT_NOTICE,
 } from "../../../src/i18n/keys";
 import { readModelList } from "../../../src/llm/gemini/mapper";
 import { createOpenRouterProvider } from "../../../src/llm/openrouter/openRouterProvider";
@@ -1304,5 +1305,134 @@ describe("the declared-paid reminder's string (docs/09 §3.6 item 3; G-41)", () 
   it("carries it in ko-KR as the owner-reviewed Korean (2026-10-23, G-41), not as a stub", () => {
     expect(koKR).not.toContain(`# ${id} =`);
     expect(new RegExp(`^${id} =`, "m").test(koKR)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 11. A trend-report run's own notice (P4-T16; docs/09 §3 row 3b; docs/07
+//     §4.5's note of 2026-10-27)
+// ---------------------------------------------------------------------------
+
+describe("buildEgressDisclosure — a report run's own notice (P4-T16)", () => {
+  const THREE = {
+    map: "vendor/small-model",
+    report: "vendor/strong-model",
+    critique: "vendor/critic-model",
+  };
+
+  it("names all three models of a run whose map, report and critique models differ, in one notice, first", () => {
+    const d = disclosure(
+      {
+        modelId: THREE.report,
+        report: { papers: 42, models: THREE },
+      },
+      false,
+    );
+    expect(d.noticeIds).toEqual([
+      L10N_EGRESS_REPORT_NOTICE,
+      L10N_EGRESS_FIRST_JOB_NOTICE,
+    ]);
+    expect(
+      d.noticeIds.filter((id) => id === L10N_EGRESS_REPORT_NOTICE),
+    ).toHaveLength(1);
+    expect(d.report).toEqual({
+      papers: 42,
+      modelIds: [THREE.map, THREE.report, THREE.critique],
+    });
+    expect(d.modelId).toBe(THREE.report);
+  });
+
+  it("names a model once, and leaves out a role the run does not call", () => {
+    expect(
+      disclosure({
+        report: {
+          papers: 3,
+          models: { map: "m", report: "r", critique: "m" },
+        },
+      }).report?.modelIds,
+    ).toEqual(["m", "r"]);
+    expect(
+      disclosure({ report: { papers: 3, models: { report: "r" } } }).report
+        ?.modelIds,
+    ).toEqual(["r"]);
+  });
+
+  it("leaves a summarize run's disclosure byte-identical to what P3-T15 built", () => {
+    const d = disclosure({}, false);
+    expect("report" in d).toBe(false);
+    expect(JSON.stringify(d)).toBe(
+      JSON.stringify({
+        providerId: "openrouter",
+        modelId: "anthropic/claude-sonnet-5",
+        host: "openrouter.ai",
+        itemCount: 2,
+        scope: {
+          "metadata-only": 0,
+          abstract: 2,
+          "abstract+fulltext": 0,
+          "abstract+notes": 0,
+        },
+        privacyMode: "balanced",
+        firstJobNotice: true,
+        geminiFreeTierWarning: false,
+        geminiDeclaredPaidReminder: false,
+        noticeIds: [L10N_EGRESS_FIRST_JOB_NOTICE],
+      }),
+    );
+    const entry = egressLogEntry(d, 1);
+    expect("report" in entry).toBe(false);
+  });
+
+  it("forces nothing on its own: the routine question stays mustAskConfirmation's", () => {
+    const plain = disclosure({}, true);
+    const report = disclosure(
+      { report: { papers: 2, models: { report: "r" } } },
+      true,
+    );
+    const stored = routineConfirmationFor(plain);
+    expect(mustAskConfirmation(report, stored)).toEqual(
+      mustAskConfirmation(plain, stored),
+    );
+    expect(mustAskConfirmation(report, stored).ask).toBe(false);
+    expect(mustAskConfirmation(report, undefined).ask).toBe(true);
+  });
+
+  it("puts every model in the job's egress log (docs/09 §3.6 item 4)", () => {
+    const d = disclosure({ report: { papers: 42, models: THREE } }, true);
+    const entry = egressLogEntry(d, Date.UTC(2026, 9, 27));
+    expect(entry.report).toEqual({
+      papers: 42,
+      modelIds: [THREE.map, THREE.report, THREE.critique],
+    });
+    expect(entry.report?.modelIds).not.toBe(d.report?.modelIds);
+    expect(readEgressLog({ input: withEgressLog({}, entry) })?.report).toEqual(
+      entry.report,
+    );
+  });
+});
+
+describe("the report notice's string (P4-T16; G-41)", () => {
+  const enUS = read("addon/locale/en-US/research-helper-mainWindow.ftl");
+  const koKR = read("addon/locale/ko-KR/research-helper-mainWindow.ftl");
+
+  it("ships en-US with its two arguments, and ko-KR as the owner-reviewed Korean (2026-10-27, G-41, item 292(a)), not as a stub", () => {
+    const start = enUS.indexOf(`${L10N_EGRESS_REPORT_NOTICE} =`);
+    expect(start).toBeGreaterThan(-1);
+    const text = enUS.slice(
+      start,
+      enUS.indexOf("\nresearch-helper-", start + 1),
+    );
+    expect(text).toContain("{ $papers ->");
+    expect(text).toContain("{ $models }");
+    expect(text).toContain("not sent again");
+    expect(koKR).toMatch(new RegExp(`^${L10N_EGRESS_REPORT_NOTICE} =`, "m"));
+    expect(koKR).not.toMatch(
+      new RegExp(`^# ${L10N_EGRESS_REPORT_NOTICE} =`, "m"),
+    );
+    const ko = new RegExp(`^${L10N_EGRESS_REPORT_NOTICE} = (.+)$`, "m").exec(
+      koKR,
+    )?.[1];
+    expect(ko).toContain("{ $papers }");
+    expect(ko).toContain("{ $models }");
   });
 });

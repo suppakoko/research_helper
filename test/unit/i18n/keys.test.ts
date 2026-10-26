@@ -127,6 +127,8 @@ const ID_CONSTANTS = {
   L10N_EGRESS_GEMINI_FREE_TIER: keys.L10N_EGRESS_GEMINI_FREE_TIER,
   // Item 269(b): the reminder for a Gemini key declared paid (`docs/09` §3.6).
   L10N_EGRESS_GEMINI_DECLARED_PAID: keys.L10N_EGRESS_GEMINI_DECLARED_PAID,
+  // `P4-T16`: a trend-report run's own notice (`docs/09` §3 row 3b).
+  L10N_EGRESS_REPORT_NOTICE: keys.L10N_EGRESS_REPORT_NOTICE,
 } satisfies Record<string, string>;
 
 /** The exported `L10N_*` string constants that are not message identifiers. */
@@ -138,6 +140,10 @@ const NON_ID_L10N_CONSTANTS = ["L10N_EXPORT_TAKES_NO_PATH"];
  * (`G-41`, `plan/00` §6 item 284(a)): "nothing waits for review" is then the
  * true state, and every assertion over it still reads the other two lists
  * through the guard. A new string goes back onto it, as its stub does.
+ * *2026-10-27:* `P4-T16`'s four strings put it back to four members (item
+ * 291); the exemption stays, because the owner's next review empties it
+ * again. *Later on 2026-10-27:* the owner reviewed those four (item 292(a)),
+ * so the list is empty again.
  */
 const MAY_BE_EMPTY: readonly ListName[] = ["KO_PENDING_REVIEW"];
 
@@ -910,5 +916,27 @@ describe("src/i18n/keys.ts — the screening cost line (owner, 2026-10-24, plan/
   it("puts both on KO_PRESENT once the owner reviewed the Korean (2026-10-25, G-41), never pending", () => {
     expect(notIn(both, read("KO_PRESENT"))).toEqual([]);
     expect(sharedBy(both, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — P4-T16's report notice and cost-dialog lines (plan/00 §6 items 291, 292(a))", () => {
+  const four = [
+    "research-helper-egress-report-notice",
+    "research-helper-cost-report-summaries",
+    "research-helper-cost-report-writing",
+    "research-helper-cost-report-review",
+  ];
+
+  it("declares all four on the main window, with arguments, outside the error ids", () => {
+    expect(notIn(four, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(four, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(four, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(four, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+    expect(keys.L10N_EGRESS_REPORT_NOTICE).toBe(four[0]);
+  });
+
+  it("puts all four on KO_PRESENT once the owner reviewed the Korean (2026-10-27, G-41, item 292(a)), never pending", () => {
+    expect(notIn(four, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(four, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 });

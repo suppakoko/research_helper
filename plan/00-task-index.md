@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04` and `07`** (Phase 4's file, read since 2026-10-26). If a
 > row here disagrees with a card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-26 · **182 tasks: 112 `DONE`, 70 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**. **The plan has grown from the 123 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25) to 182, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-27 · **182 tasks: 112 `DONE`, 70 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**. **The plan has grown from the 123 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25) to 182, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -2270,6 +2270,28 @@ the caller of what the card builds; if it does not, the caller is added with a d
     read as `0` (automatic) by `P4-T08`; `PrefDef` is not extended. Also aligned with decisions already taken: `P4-T18`
     step 1 orders estimate and confirmation before ensuring summaries (FR-25, item 286), and `P4-T08` step 4 reads
     "check 1 regenerates once; check 2 is replaced visibly, with no model call" (`docs/12` §10).
+
+291. **Phase 4 wave 2, 2026-10-27.** **DECIDED 2026-10-27 (owner):** the three cards whose Phase 3 needs are all
+    built run together: `P4-T10`, `P4-T16`, `P4-T17`. `P4-T04`, `P4-T12` and `P4-T19` wait on `P3-T25`, `P3-T22` and
+    `P3-T29`. `P4-T16`'s new strings go on `KO_PENDING_REVIEW`; the coordinator drafts their Korean for the owner.
+
+292. **Seven lines raised by Phase 4 wave 2** (`plan/reports/P4-T10.md`, `P4-T16.md`, `P4-T17.md`). **DECIDED
+    2026-10-27 (owner), each as recommended:** (a) the Korean of `P4-T16`'s four strings is approved as the
+    coordinator drafted it in chat: `research-helper-egress-report-notice` "보고서를 쓰기 위해 논문 { $papers }편의
+    요약과 각 논문의 제목, 연도, 게재처, 그리고 논문이 속한 주제에 대한 통계를 { $models }에 보냅니다. 논문 자체는
+    다시 보내지 않습니다."; `research-helper-cost-report-summaries` "아직 만들 요약: { $model }에 { $calls }회 호출.";
+    `research-helper-cost-report-writing` "논문을 최대 { $themes }개 주제로 묶고 보고서 작성: { $model }에 최대
+    { $calls }회 호출."; `research-helper-cost-report-review` "요약과 대조하는 보고서 검토: { $model }에 최대
+    { $calls }회 호출." (G-41). (b) A Korean report replaces an invalid citation with "[인용 삭제: 잘못된 참조]",
+    from `P4-T12`'s report-label table. (c) A combined marker such as `[[KEY1, KEY2]]` is split by code into one
+    marker per part, and each part is checked on its own: a valid key is kept, an invalid one is replaced visibly. Code
+    never re-cases or invents a key and no model repairs anything. (d) `P4-T05`: a clustering answer with more themes
+    than `MAX_THEMES` is asked for once more; if it is still over, the run stops and says so. (e) The report estimate
+    stays wide (it never under-states). It is revisited once `P3-T25`'s stored summaries, `P4-T04`'s digests and real
+    runs exist. (f) "Don't ask again" is recorded separately for report runs: a summarize run's record never skips a
+    report run's question, and only the report window's own "don't ask again" does (`P4-T18`). (g) `P4-T17`'s cache-key
+    readings are confirmed as built: a re-summarized paper re-keys its theme grouping, and any difference in what is
+    sent, the model or a setting re-keys the stage.
 
 ## 7. Regenerating this file
 

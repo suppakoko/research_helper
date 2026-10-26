@@ -662,6 +662,12 @@ once, from one `THEME_CLUSTER` call when the digests fit.
 **Files.**
 - create `src/pipeline/trendReport/cluster.ts` (caller: `trendReportPipeline.ts`, `P4-T18`)
 - create `test/unit/pipeline/trendCluster.test.ts`
+- modify `addon/locale/en-US/research-helper-mainWindow.ftl` and
+  `addon/locale/ko-KR/research-helper-mainWindow.ftl` (step 6's message; the `ko-KR` entry a commented
+  stub), `src/i18n/keys.ts` (the id, on `KO_PENDING_REVIEW`) and `test/unit/i18n/keys.test.ts`.
+  *Added 2026-10-27 (owner, `plan/00` §6 item 292(d)). A guess, so verify it yourself: I believe the
+  main-window bundle, where the `rh-error-*` messages a stopped job shows live; if `P4-T19`'s
+  `reportWindow` bundle exists by then and shows the run's stop messages, that bundle instead.*
 
 **Do.**
 1. Choose single-stage when `estTokens` of the joined digests fits the 60 000-token input budget
@@ -676,6 +682,12 @@ once, from one `THEME_CLUSTER` call when the digests fit.
 4. Move the papers of every theme below `MIN_PAPERS_PER_THEME` to `unclustered` in code, and drop
    the emptied theme (decided below); they still count in the report's coverage figures.
 5. Count one pass for the call (FR-27's counter lives on the run, `P4-T18`).
+6. A clustering answer with more themes than `MAX_THEMES` is asked for once more; if still over, the
+   run stops and says so. *(Decided 2026-10-27, owner, `plan/00` §6 item 292(d): `P4-T16`'s
+   estimate reserves theme calls for at most `MAX_THEMES` themes, so an answer over it would make
+   calls nobody confirmed. The stop needs a user-visible message: this card adds its string to the
+   `en-US` bundle and a commented stub to the `ko-KR` bundle, with the id on `KO_PENDING_REVIEW`
+   (`G-41`); see the `Files` rows added with this step.)*
 
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286):** `docs/12` §8 says small themes are "merged
 > into the nearest theme or moved to `unclustered`, in code", without defining "nearest". **Decided:
@@ -696,6 +708,9 @@ once, from one `THEME_CLUSTER` call when the digests fit.
       `unclustered`, each still counted once.
 - [ ] A digest set inside the input budget whose grown output ceiling exceeds the model's output
       limit takes `P4-T06`'s path.
+- [ ] A scripted answer with `MAX_THEMES` + 1 themes triggers exactly one more request; a second
+      answer still over `MAX_THEMES` stops the run with its message and makes no further call, and
+      a second answer within it is used (step 6, item 292(d)).
 - [ ] `npm run typecheck` exits 0; `npm run test:unit -- trendCluster` passes.
 
 **Verify with.**
@@ -1106,7 +1121,10 @@ rendering; an invalid one is replaced visibly; a 100 % resolution figure is comp
 
 **Files.**
 - create `src/pipeline/trendReport/citations.ts` (callers: `compose.ts`, `P4-T08`; `noteHtml.ts`,
-  `P4-T13`; `exportMarkdown.ts`, `P4-T15`; the run's report, `P4-T18`)
+  `P4-T13`; `exportMarkdown.ts`, `P4-T15`; the run's report, `P4-T18`). *Noted 2026-10-27
+  (`P4-T10`, rule 10): nothing calls it yet; also `critique.ts`, `P4-T09`, for the cited keys
+  (`citedKeysOf`). Pure functions, so nothing constructs it; the logger comes from the caller's
+  `PipelineContext.logger`.*
 - create `test/unit/pipeline/trendCitations.test.ts`
 
 **Do.**
@@ -1140,6 +1158,10 @@ as-built note), so a marker to a retracted item is replaced like any other inval
 - [ ] Markers to a non-member, a malformed key and a key in a code fence are each handled and counted.
 - [ ] A duplicate's key is rewritten to the kept key and counted as resolved.
 - [ ] After the pass, every remaining marker resolves (the function returns 100 % or throws).
+- [ ] A combined marker (`[[KEY1, KEY2]]`, `[[KEY1; KEY2]]`) becomes one marker per part, each
+      checked on its own: a valid part kept, an invalid part replaced visibly, no key re-cased or
+      invented. *(Added 2026-10-27, owner, `plan/00` §6 item 292(c); the reading is `docs/06`
+      §10.1's note of that date.)*
 - [ ] `npm run typecheck` exits 0; `npm run test:unit -- trendCitations` passes.
 
 **Verify with.**
@@ -1243,7 +1265,8 @@ report's language.
 
 **Files.**
 - create `src/pipeline/trendReport/scaffold.ts` (caller: `trendReportPipeline.ts`, `P4-T18`)
-- create `src/pipeline/trendReport/reportLabels.ts` (callers: `scaffold.ts`; `critique.ts`, `P4-T09`)
+- create `src/pipeline/trendReport/reportLabels.ts` (callers: `scaffold.ts`; `critique.ts`, `P4-T09`;
+  `compose.ts` for the invalid-citation label, `P4-T21` — *added 2026-10-27, item 292(b)*)
 - create `test/unit/pipeline/trendScaffold.test.ts`
 - modify `docs/06-summarization-and-trend-report.md` (§9.1: Appendix C, the retracted list, the
   Notable Papers sentence; dated "Decided" notes)
@@ -1271,6 +1294,11 @@ report's language.
 6. Labels from `reportLabels.ts`, keyed by report language (`en`, `ko`). The `ko` table ships
    pending review; the coordinator drafts the Korean and the owner approves it in chat (decided
    below).
+7. The label table carries the invalid-citation text: `en` `[citation removed: invalid reference]`
+   (`INVALID_CITATION_TEXT`) and `ko` "[인용 삭제: 잘못된 참조]", which is passed to `P4-T10`'s
+   `CitationContext.replacement` for a `ko` report. *(Decided 2026-10-27, owner, `plan/00` §6 item
+   292(b): this one `ko` label is already approved, so it does not ship pending review. `P4-T21`
+   wires it; this card only puts it in the table.)*
 
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286):** where report-language labels live. They are
 > not UI strings (`docs/08` §10.4), so a Fluent bundle keyed by the UI locale is the wrong home, and
@@ -1786,6 +1814,12 @@ counting its reduction passes, and saves nothing when cancelled mid-synthesis.
   `plan/README.md` §5 rule 10; `buildPipelineSet`'s only caller is `installServices`, so without this
   row the pipeline would be constructed with nothing to call.*)
 - create `test/unit/pipeline/trendReportPipeline.test.ts`
+- modify `src/pipeline/shared/privacyPolicy.ts` (`CollectionPrivacySettings`,
+  `readCollectionPrivacySettings` and `writeCollectionPrivacySettings` gain the report run's own
+  `RoutineConfirmation` record, stored in `collection_settings`), `test/unit/pipeline/privacyPolicy.test.ts`,
+  and `docs/07-architecture-and-data-model.md` §4.5 (the `collection_settings.json` shape; a dated
+  note). *Added 2026-10-27 (owner, `plan/00` §6 item 292(f); step 7). No migration: the record is a
+  member of the existing `json` column.*
 
 **Do.**
 1. Stages in order: ~~screen, ensure summaries, estimate and confirm (`P4-T16`),~~ **screen,
@@ -1809,6 +1843,13 @@ counting its reduction passes, and saves nothing when cancelled mid-synthesis.
 6. §0.2 item 18 end to end: automatic resume after a restart from the last checkpoint (`docs/07`
    §12.4 "restart from the last completed stage"), every spend guard re-passed, the resume notice;
    budget and wall-clock pauses keep the stage pending; "stop" at a pause discards synthesis output.
+7. "Don't ask again" is recorded separately for report runs: a summarize run's record never skips a
+   report run's question; only the report window's own "don't ask again" does. Declare it in
+   `docs/07` §4.5 first: `collection_settings.json` gains a report run's record of the
+   `RoutineConfirmation` shape beside `routineConfirmation`. The report run passes that record, never
+   the summarize run's, to `mustAskConfirmation`, and stores `routineConfirmationFor` its own
+   disclosure there when the report's dialog is answered with "don't ask again". *(Decided
+   2026-10-27, owner, `plan/00` §6 item 292(f); `P4-T16`'s report, finding 5.)*
 
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286):** missing summaries. `docs/10` FR-25 started
 > "Given a collection whose items have summaries", while `docs/07` §12.4 has `EnsuringSummaries →
@@ -1848,11 +1889,15 @@ counting its reduction passes, and saves nothing when cancelled mid-synthesis.
       when no spend guard asks, and shows the resume notice.
 - [ ] A budget refusal during the theme stage pauses the job with that stage pending; answering
       "stop" saves no note, no `report` row and no file.
-- [ ] `npm run typecheck` exits 0; `npm run test:unit -- trendReportPipeline` passes.
+- [ ] A collection whose only stored record is a summarize run's "don't ask again" still asks the
+      report run's routine question; after the report's own "don't ask again", the next report run
+      under the same provider and mode does not ask, and the summarize run's record is unchanged
+      (step 7, item 292(f)).
+- [ ] `npm run typecheck` exits 0; `npm run test:unit -- trendReportPipeline privacyPolicy` passes.
 
 **Verify with.**
 ```bash
-npm run typecheck && npm run test:unit -- trendReportPipeline
+npm run typecheck && npm run test:unit -- trendReportPipeline privacyPolicy
 ```
 
 **Notes.** Needs from Phase 3: **`P3-T29` (NOT BUILT)** for the summarize step and the Zotero-read
@@ -2071,6 +2116,9 @@ the same theme analyses, with Korean headings validated and titles, authors and 
 2. Validate the Korean heading strings in order.
 3. Mechanical original-script check: every bibliography and Notable Papers entry is rendered from
    Zotero fields, so assert those match the item fields byte for byte.
+4. A `ko` report's `validateCitations` call gets `CitationContext.replacement` from the `ko`
+   invalid-citation label in `P4-T12`'s `reportLabels.ts`, "[인용 삭제: 잘못된 참조]"; an `en`
+   report keeps the default. *(Decided 2026-10-27, owner, `plan/00` §6 item 292(b).)*
 
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286):** the definition-of-done line "keeps
 > titles/authors/venues in original script" can be proved mechanically only where code renders them
@@ -2088,6 +2136,8 @@ the same theme analyses, with Korean headings validated and titles, authors and 
 - [ ] `ko` makes one `TREND_REPORT_KO` call; `both` makes one of each from one set of theme analyses.
 - [ ] A Korean draft missing `## 7. 상충과 논쟁 (Contradictions and Debates)` fails validation.
 - [ ] Bibliography strings equal the fixture items' fields.
+- [ ] An invalid marker in a `ko` report is replaced with "[인용 삭제: 잘못된 참조]", and in an `en`
+      report with `[citation removed: invalid reference]` (step 4, item 292(b)).
 - [ ] `npm run typecheck` exits 0; `npm run test:unit -- trendKorean` passes.
 
 **Verify with.**

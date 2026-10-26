@@ -11,6 +11,14 @@
  * {@link encodeTagValue} is the one escape for a cache tag's value: the
  * summary cache and the job runner's pinned tags both use it (item 273(c)).
  *
+ * The synthesis keys — {@link themeClusteringKey}, {@link themeAnalysisKey}
+ * and {@link reportKey}, `docs/06` §11.2's `tc`, `cr` and `rp` — are
+ * `P4-T17`'s, typed by `docs/07` §9.1's "Decided 2026-10-27" block and read
+ * as `docs/06` §11.2's readings of the same day. Their caller is
+ * `src/pipeline/trendReport/trendReportPipeline.ts` (`P4-T18`), which probes
+ * each key before its stage and stores after it; nothing calls them before
+ * that card lands.
+ *
  * ## Why SHA-256 is computed here, synchronously
  *
  * §9.1's builders are synchronous (`return sha256([...].join("|"))`), and
@@ -23,6 +31,7 @@
 
 import type { ProviderId } from "../../model/ids";
 import type { SourceTier } from "../../model/summary";
+import type { ReportLanguage } from "../../model/trend";
 
 /** Bumped whenever the shape of a cached value changes. */
 export const CACHE_SCHEMA_VERSION = 1;
@@ -256,6 +265,435 @@ export function summaryKey(
  */
 export function encodeTagValue(value: string): string {
   return value.replace(/%/g, "%25").replace(/,/g, "%2C");
+}
+
+// ---------------------------------------------------------------------------
+// The synthesis keys — docs/06 §11.2's `tc`, `cr`, `rp` (`P4-T17`)
+// ---------------------------------------------------------------------------
+
+/**
+ * `docs/06` §11.2's coarse namespaces — clustering, theme analysis, report —
+ * each used as its key's `kind` in {@link cacheKey}.
+ */
+export type SynthesisKeyKind = "tc" | "cr" | "rp";
+
+/**
+ * The prompts the clustering stage can call, and so the `cacheEpoch`s `tc`
+ * carries: `THEME_MERGE` too, because the stage may run two-stage (`docs/06`
+ * §8.4).
+ */
+export const THEME_CLUSTERING_KEY_PROMPTS = [
+  "THEME_CLUSTER",
+  "THEME_MERGE",
+] as const;
+
+/**
+ * The prompts one theme's analysis can call, and so the `cacheEpoch`s `cr`
+ * carries: `CLUSTER_REDUCE_MERGE` too, for a theme split into sub-batches
+ * (`docs/06` §8.4, last paragraph).
+ */
+export const THEME_ANALYSIS_KEY_PROMPTS = [
+  "CLUSTER_REDUCE",
+  "CLUSTER_REDUCE_MERGE",
+] as const;
+
+/** The report prompt each language runs (`docs/12` §10, §11). */
+const REPORT_PROMPT_BY_LANGUAGE: Readonly<Record<ReportLanguage, string>> = {
+  en: "TREND_REPORT_EN",
+  ko: "TREND_REPORT_KO",
+};
+
+/** The critique prompt; `rp` carries its epoch only when the critique runs. */
+const SELF_CRITIQUE_PROMPT = "SELF_CRITIQUE";
+
+/** `docs/07` §9.3's prompt tag prefix, as `summaryCache.ts` writes it. */
+const PROMPT_LINE_TAG_PREFIX = "promptVersion:";
+
+/**
+ * One input of a stage: an item key (or, for `rp`'s theme analyses, a theme
+ * id) and the hash of exactly what the stage's call is shown for it — the
+ * digest block for `tc`, the `PaperSummary` as put in `{{SUMMARIES_JSON}}`
+ * for `cr`, the `ThemeAnalysis` as put in `{{THEME_ANALYSES_JSON}}` for `rp`
+ * (`docs/06` §11.2, reading 2 of 2026-10-27). The caller hashes with
+ * {@link sha256Hex}.
+ */
+export interface SynthesisInputHash {
+  readonly id: string;
+  readonly hash: string;
+}
+
+/** What every call of a stage sends besides its prompt text. */
+export interface SynthesisCallSettings {
+  /** The pinned, dated model identifier the requests name. */
+  readonly modelId: string;
+  /** The sampling temperature the requests send. */
+  readonly temperature: number;
+  /** `ChatRequest.effort` as sent; absent when none is sent. */
+  readonly effort?: string;
+}
+
+/**
+ * Every other user-message variable of the stage's prompts (`USER_TOPIC`,
+ * the counts, `SOURCES`, …), and any code-side setting that changes what the
+ * calls are shown (`docs/06` §8.4's batch size, a sub-batch budget). Keyed as
+ * given; it is never a place for a credential.
+ */
+export type SynthesisStageInputs = Readonly<
+  Record<string, string | number | boolean | null>
+>;
+
+/** `THEME_CLUSTER`'s band variables, as sent (`docs/12` §8). */
+export interface ThemeBandKeyInput {
+  readonly minThemes: number;
+  readonly maxThemes: number;
+  readonly minPapersPerTheme: number;
+}
+
+/** Everything `tc` keys: one clustering stage's whole input. */
+export interface ThemeClusteringKeyInput {
+  /** Item key + hash of its digest block as sent; at least one. */
+  readonly members: readonly SynthesisInputHash[];
+  readonly themeBand: ThemeBandKeyInput;
+  /**
+   * The registry's `cacheEpochs` (`PROMPT_CACHE_EPOCHS`); the builder keys
+   * {@link THEME_CLUSTERING_KEY_PROMPTS} only.
+   */
+  readonly promptCacheEpochs: Readonly<Record<string, number>>;
+  readonly providerId: ProviderId;
+  readonly call: SynthesisCallSettings;
+  readonly stageInputs: SynthesisStageInputs;
+}
+
+/** Everything `cr` keys: one theme's analysis. */
+export interface ThemeAnalysisKeyInput {
+  readonly themeId: string;
+  /** `{{THEME_NAME}}`: a re-clustering that renames the theme re-runs it. */
+  readonly themeName: string;
+  /** `{{THEME_DEFINITION}}`. */
+  readonly themeDefinition: string;
+  /** Item key + hash of its `PaperSummary` as sent; at least one. */
+  readonly members: readonly SynthesisInputHash[];
+  /** As for `tc`; the builder keys {@link THEME_ANALYSIS_KEY_PROMPTS} only. */
+  readonly promptCacheEpochs: Readonly<Record<string, number>>;
+  readonly providerId: ProviderId;
+  readonly call: SynthesisCallSettings;
+  readonly stageInputs: SynthesisStageInputs;
+}
+
+/** The self-critique settings `rp` keys (`report.maxCritiqueRounds`, `report.critiqueModel`). */
+export interface ReportCritiqueKeyInput {
+  /** `0` disables the critique; then nothing else here is keyed. */
+  readonly rounds: number;
+  readonly call: SynthesisCallSettings;
+}
+
+/** Everything `rp` keys: one language's composed and critiqued report. */
+export interface ReportKeyInput {
+  /** Picks `TREND_REPORT_EN` or `TREND_REPORT_KO`. */
+  readonly language: ReportLanguage;
+  /** Theme id + hash of its `ThemeAnalysis` as sent; at least one. */
+  readonly themeAnalyses: readonly SynthesisInputHash[];
+  /** Item key + hash of its digest block, for the digests actually sent. */
+  readonly digests: readonly SynthesisInputHash[];
+  /**
+   * Item key + hash of every summary the critique may be shown — the cited
+   * set is not known before the draft exists. Keyed only when the critique
+   * runs.
+   */
+  readonly summaries: readonly SynthesisInputHash[];
+  /** `{{TARGET_WORDS}}` as sent. */
+  readonly targetWords: number;
+  readonly critique: ReportCritiqueKeyInput;
+  /** As for `tc`; the builder keys the language's report prompt, and `SELF_CRITIQUE` when the critique runs. */
+  readonly promptCacheEpochs: Readonly<Record<string, number>>;
+  readonly providerId: ProviderId;
+  /** The report model's settings. */
+  readonly call: SynthesisCallSettings;
+  readonly stageInputs: SynthesisStageInputs;
+}
+
+/** A key and what it carries, so {@link synthesisTags} names exactly what was keyed. */
+export interface SynthesisKey {
+  readonly kind: SynthesisKeyKind;
+  /** 64 hexadecimal characters. */
+  readonly key: string;
+  /** Every prompt whose `cacheEpoch` the key carries. */
+  readonly promptIds: readonly string[];
+  /** Every model the key carries, without repeats. */
+  readonly modelIds: readonly string[];
+  readonly providerId: ProviderId;
+}
+
+function synthesisError(builder: string, problem: string): RangeError {
+  return new RangeError(`[research-helper] ${builder}: ${problem}`);
+}
+
+function requireNonEmpty(builder: string, name: string, value: string): void {
+  if (value === "") throw synthesisError(builder, `${name} is empty`);
+}
+
+function requireFinite(builder: string, name: string, value: number): void {
+  if (!Number.isFinite(value)) {
+    throw synthesisError(builder, `${name} is not finite`);
+  }
+}
+
+/**
+ * The `cacheEpoch` of each of `promptIds`, picked from the registry's whole
+ * map so that a bump to any other prompt cannot move the key.
+ */
+function stageEpochs(
+  builder: string,
+  promptIds: readonly string[],
+  epochs: Readonly<Record<string, number>>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const id of promptIds) {
+    const epoch = epochs[id];
+    if (epoch === undefined || !Number.isInteger(epoch) || epoch < 1) {
+      throw synthesisError(builder, `no cacheEpoch for ${id}`);
+    }
+    out[id] = epoch;
+  }
+  return out;
+}
+
+/**
+ * `list` as `[id, hash]` pairs sorted by id, so the key is order-free.
+ *
+ * @throws RangeError for fewer than `minimum` entries, an empty id or hash,
+ *   or an id listed twice
+ */
+function sortedInputs(
+  builder: string,
+  name: string,
+  list: readonly SynthesisInputHash[],
+  minimum: number,
+): (readonly [string, string])[] {
+  if (list.length < minimum) throw synthesisError(builder, `${name} is empty`);
+  const seen = new Set<string>();
+  for (const { id, hash } of list) {
+    if (id === "" || hash === "") {
+      throw synthesisError(builder, `${name} has an empty id or hash`);
+    }
+    if (seen.has(id))
+      throw synthesisError(builder, `${name} lists ${id} twice`);
+    seen.add(id);
+  }
+  return list
+    .map(({ id, hash }) => [id, hash] as const)
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+}
+
+/**
+ * The call settings as a key component: only the three named fields, copied,
+ * so a property a caller's object happens to carry never enters the key.
+ */
+function callComponent(
+  builder: string,
+  name: string,
+  call: SynthesisCallSettings,
+): { modelId: string; temperature: number; effort: string | null } {
+  requireNonEmpty(builder, `${name}.modelId`, call.modelId);
+  requireFinite(builder, `${name}.temperature`, call.temperature);
+  return {
+    modelId: call.modelId,
+    temperature: call.temperature,
+    effort: call.effort ?? null,
+  };
+}
+
+/**
+ * The clustering key, `tc`: the digests the stage is shown (by item key and
+ * hash), the theme band, `THEME_CLUSTER`'s and `THEME_MERGE`'s `cacheEpoch`,
+ * the provider, the call settings and the other prompt variables.
+ *
+ * @throws RangeError for a hole in an identifying component (see
+ *   `docs/07` §9.1's 2026-10-27 block)
+ */
+export function themeClusteringKey(
+  input: ThemeClusteringKeyInput,
+): SynthesisKey {
+  const builder = "themeClusteringKey";
+  requireNonEmpty(builder, "providerId", input.providerId);
+  const members = sortedInputs(builder, "members", input.members, 1);
+  const epochs = stageEpochs(
+    builder,
+    THEME_CLUSTERING_KEY_PROMPTS,
+    input.promptCacheEpochs,
+  );
+  const { minThemes, maxThemes, minPapersPerTheme } = input.themeBand;
+  requireFinite(builder, "themeBand.minThemes", minThemes);
+  requireFinite(builder, "themeBand.maxThemes", maxThemes);
+  requireFinite(builder, "themeBand.minPapersPerTheme", minPapersPerTheme);
+  const call = callComponent(builder, "call", input.call);
+  return {
+    kind: "tc",
+    key: cacheKey(
+      "tc",
+      members,
+      { minThemes, maxThemes, minPapersPerTheme },
+      epochs,
+      input.providerId,
+      call,
+      input.stageInputs,
+    ),
+    promptIds: [...THEME_CLUSTERING_KEY_PROMPTS],
+    modelIds: [call.modelId],
+    providerId: input.providerId,
+  };
+}
+
+/**
+ * One theme's analysis key, `cr`: the theme's id, name and definition, its
+ * members' summaries (by item key and hash), `CLUSTER_REDUCE`'s and
+ * `CLUSTER_REDUCE_MERGE`'s `cacheEpoch`, the provider, the call settings and
+ * the other prompt variables. Another theme's members are not a component,
+ * so a change there leaves this key alone.
+ *
+ * @throws RangeError for a hole in an identifying component
+ */
+export function themeAnalysisKey(input: ThemeAnalysisKeyInput): SynthesisKey {
+  const builder = "themeAnalysisKey";
+  requireNonEmpty(builder, "providerId", input.providerId);
+  requireNonEmpty(builder, "themeId", input.themeId);
+  const members = sortedInputs(builder, "members", input.members, 1);
+  const epochs = stageEpochs(
+    builder,
+    THEME_ANALYSIS_KEY_PROMPTS,
+    input.promptCacheEpochs,
+  );
+  const call = callComponent(builder, "call", input.call);
+  return {
+    kind: "cr",
+    key: cacheKey(
+      "cr",
+      input.themeId,
+      input.themeName,
+      input.themeDefinition,
+      members,
+      epochs,
+      input.providerId,
+      call,
+      input.stageInputs,
+    ),
+    promptIds: [...THEME_ANALYSIS_KEY_PROMPTS],
+    modelIds: [call.modelId],
+    providerId: input.providerId,
+  };
+}
+
+/**
+ * The report key, `rp`: the language, the theme analyses and digests sent,
+ * the target length, the report prompt's `cacheEpoch`, the provider, the
+ * report call's settings, the other prompt variables and the critique — its
+ * rounds, and when it runs, `SELF_CRITIQUE`'s `cacheEpoch`, its call's
+ * settings and the summaries it may be shown.
+ *
+ * @throws RangeError for a hole in an identifying component, or a critique
+ *   round count that is not a non-negative integer
+ */
+export function reportKey(input: ReportKeyInput): SynthesisKey {
+  const builder = "reportKey";
+  requireNonEmpty(builder, "providerId", input.providerId);
+  const reportPrompt = REPORT_PROMPT_BY_LANGUAGE[input.language] as
+    string | undefined;
+  if (reportPrompt === undefined) {
+    throw synthesisError(builder, "language is not en or ko");
+  }
+  const { rounds } = input.critique;
+  if (!Number.isInteger(rounds) || rounds < 0) {
+    throw synthesisError(builder, "critique.rounds is not a whole number");
+  }
+  const critiques = rounds > 0;
+  const promptIds = critiques
+    ? [reportPrompt, SELF_CRITIQUE_PROMPT]
+    : [reportPrompt];
+  const epochs = stageEpochs(builder, promptIds, input.promptCacheEpochs);
+  const themeAnalyses = sortedInputs(
+    builder,
+    "themeAnalyses",
+    input.themeAnalyses,
+    1,
+  );
+  const digests = sortedInputs(builder, "digests", input.digests, 0);
+  requireFinite(builder, "targetWords", input.targetWords);
+  const call = callComponent(builder, "call", input.call);
+  const critiqueCall = critiques
+    ? callComponent(builder, "critique.call", input.critique.call)
+    : undefined;
+  const critique =
+    critiqueCall === undefined
+      ? { rounds }
+      : {
+          rounds,
+          call: critiqueCall,
+          summaries: sortedInputs(builder, "summaries", input.summaries, 0),
+        };
+  const modelIds = [call.modelId];
+  if (critiqueCall !== undefined && critiqueCall.modelId !== call.modelId) {
+    modelIds.push(critiqueCall.modelId);
+  }
+  return {
+    kind: "rp",
+    key: cacheKey(
+      "rp",
+      input.language,
+      themeAnalyses,
+      digests,
+      input.targetWords,
+      epochs,
+      input.providerId,
+      call,
+      critique,
+      input.stageInputs,
+    ),
+    promptIds,
+    modelIds,
+    providerId: input.providerId,
+  };
+}
+
+/**
+ * `promptVersion:<promptId>@<line>`, each part escaped by
+ * {@link encodeTagValue}: the string `promptVersionTag`
+ * (`src/pipeline/summarize/summaryCache.ts`) writes for a version on that
+ * line, so `reconcilePromptVersions`'s startup invalidation reaches synthesis
+ * entries too (`docs/06` §11.2, reading 8 and reading 4 of 2026-10-27).
+ *
+ * @param line - `promptCacheLine(version)`, `MAJOR.MINOR`
+ */
+export function promptLineTag(promptId: string, line: string): string {
+  return `${PROMPT_LINE_TAG_PREFIX}${encodeTagValue(promptId)}@${encodeTagValue(line)}`;
+}
+
+/**
+ * The tags a synthesis entry is written with: one {@link promptLineTag} per
+ * prompt the key carries, `model:<id>` per model it carries and
+ * `provider:<id>`. `work:` tags, which keep a running job's entries from
+ * eviction, are the caller's to add.
+ *
+ * @param promptLines - each prompt id's `promptCacheLine(version)`; taken
+ *   from the caller because `core/` may not import `prompts/`
+ * @throws RangeError when `promptLines` has no line for a prompt the key
+ *   carries
+ */
+export function synthesisTags(
+  key: SynthesisKey,
+  promptLines: Readonly<Record<string, string>>,
+): readonly string[] {
+  const tags = key.promptIds.map((id) => {
+    const line = promptLines[id];
+    if (line === undefined || line === "") {
+      throw synthesisError("synthesisTags", `no prompt line for ${id}`);
+    }
+    return promptLineTag(id, line);
+  });
+  for (const modelId of key.modelIds) {
+    tags.push(`model:${encodeTagValue(modelId)}`);
+  }
+  tags.push(`provider:${encodeTagValue(key.providerId)}`);
+  return tags;
 }
 
 // ---------------------------------------------------------------------------

@@ -15,7 +15,13 @@
  *   second dialog** (`docs/09` §3.6 item 1). When the estimate would pass a
  *   spend ceiling, the same dialog names that ceiling and says that running
  *   raises it for this run only: the job pauses before its first call and
- *   asks (`plan/00` §6 item 234).
+ *   asks (`plan/00` §6 item 234). A trend-report run's estimate
+ *   (`estimateReportRun`, `P4-T16`) is the same `RunEstimate` with the
+ *   summaries still to make and every synthesis call in its totals: the
+ *   dialog adds the report's own plan lines and egress notice
+ *   ({@link REPORT_COST_L10N}) and names each unpriced model, and applies the
+ *   same threshold, ceilings, second acknowledgement and "don't ask again"
+ *   rules, unchanged.
  * - `ceiling` — a `BudgetExceededError` mid-run paused the job (`budget-stop`).
  *   It shows the spend so far and asks: continue (raise the ceiling for this
  *   run) or stop. Every summary already made is kept either way.
@@ -42,7 +48,10 @@
  */
 
 import { config } from "../../../package.json";
-import type { MainWindowMessageId } from "../../i18n/keys";
+import {
+  L10N_EGRESS_REPORT_NOTICE,
+  type MainWindowMessageId,
+} from "../../i18n/keys";
 import {
   isEstimatedSpend,
   type CeilingKind,
@@ -54,7 +63,10 @@ import type {
   EgressDisclosure,
 } from "../../pipeline/shared/egressDisclosure";
 import {
+  isReportRunEstimate,
   secondAcknowledgementFor,
+  type ReportPlan,
+  type ReportRunModels,
   type RunEstimate,
   type RunPlan,
   type SecondAcknowledgementReason,
@@ -99,6 +111,22 @@ export const COST_DIALOG_L10N = {
   skippedNotice: "research-helper-cost-skipped-notice",
 } as const satisfies Record<string, MainWindowMessageId>;
 
+/**
+ * The trend report's own ids (`P4-T16`), placed only when the estimate is a
+ * report run's (`estimateReportRun`): its egress notice, with its arguments,
+ * and its three plan lines. Kept apart from {@link COST_DIALOG_L10N} because
+ * they are placed only for a report run; their Korean was reviewed by the
+ * owner on 2026-10-27 (`G-41`, plan/00 §6 item 292(a); `KO_PRESENT`). Every
+ * one arrives as an ordinary {@link FluentLine}, so the window script places
+ * it with no change of its own.
+ */
+export const REPORT_COST_L10N = {
+  notice: L10N_EGRESS_REPORT_NOTICE,
+  summaries: "research-helper-cost-report-summaries",
+  writing: "research-helper-cost-report-writing",
+  review: "research-helper-cost-report-review",
+} as const satisfies Record<string, MainWindowMessageId>;
+
 /** The document the window loads. */
 export const COST_DIALOG_URL = `chrome://${config.addonRef}/content/costConfirm.xhtml`;
 
@@ -139,6 +167,14 @@ export function formatUsd(usd: number, locale: string): string {
 /** A token count, grouped for the locale. */
 export function formatCount(n: number, locale: string): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(n);
+}
+
+/** Names joined as a list for the locale ("a, b, and c"); never translated. */
+export function formatList(names: readonly string[], locale: string): string {
+  return new Intl.ListFormat(locale, {
+    style: "long",
+    type: "conjunction",
+  }).format(names);
 }
 
 /** A price table's date, in UTC (the tables are dated, not timed). */
@@ -326,15 +362,57 @@ function usageLine(
   };
 }
 
+/**
+ * A report plan's own lines (`P4-T16`): the summaries it still makes, the
+ * synthesis calls on the report model with the themes reserved for, and the
+ * critique calls on the critique model — each naming its model, so the
+ * dialog shows which model is paid for what. A part with no call has no line.
+ */
+function reportPlanLines(
+  plan: ReportPlan,
+  models: ReportRunModels,
+): FluentLine[] {
+  const lines: FluentLine[] = [];
+  if (plan.map.calls > 0) {
+    lines.push({
+      id: REPORT_COST_L10N.summaries,
+      args: { calls: plan.map.calls, model: models.map },
+    });
+  }
+  const critique = plan.synthesis.calls.filter(
+    (call) => call.kind === "SELF_CRITIQUE",
+  ).length;
+  const writing = plan.synthesis.calls.length - critique;
+  if (writing > 0) {
+    lines.push({
+      id: REPORT_COST_L10N.writing,
+      args: {
+        calls: writing,
+        themes: plan.synthesis.themes,
+        model: models.report,
+      },
+    });
+  }
+  if (critique > 0) {
+    lines.push({
+      id: REPORT_COST_L10N.review,
+      args: { calls: critique, model: models.critique },
+    });
+  }
+  return lines;
+}
+
 function planView(
   plan: RunPlan,
-  modelId: string,
+  unpricedModelIds: readonly string[],
   confirmAboveCents: number,
   stop: CeilingStop | undefined,
   locale: string,
+  partLines: readonly FluentLine[] = [],
 ): PlanView {
   const lines: FluentLine[] = [
     { id: COST_DIALOG_L10N.calls, args: { calls: plan.calls } },
+    ...partLines,
     {
       id: COST_DIALOG_L10N.input,
       args: { tokens: formatCount(plan.inputTokens, locale) },
@@ -343,12 +421,17 @@ function planView(
       id: COST_DIALOG_L10N.output,
       args: { tokens: formatCount(plan.outputTokens, locale) },
     },
-    plan.costUsd === undefined
-      ? { id: COST_DIALOG_L10N.unpriced, args: { model: modelId } }
-      : {
-          id: COST_DIALOG_L10N.total,
-          args: { cost: formatUsd(plan.costUsd, locale) },
-        },
+    ...(plan.costUsd === undefined
+      ? unpricedModelIds.map((model): FluentLine => ({
+          id: COST_DIALOG_L10N.unpriced,
+          args: { model },
+        }))
+      : [
+          {
+            id: COST_DIALOG_L10N.total,
+            args: { cost: formatUsd(plan.costUsd, locale) },
+          },
+        ]),
   ];
   const reason = secondAcknowledgementFor(plan, confirmAboveCents);
   if (reason === "above-threshold") {
@@ -452,13 +535,47 @@ export function buildCostDialogModel(
       },
     },
   ];
-  const notices: FluentLine[] = disclosure.noticeIds.map((id) => ({ id }));
-  const selected = planView(
+  const notices: FluentLine[] = disclosure.noticeIds.map((id) =>
+    id === L10N_EGRESS_REPORT_NOTICE && disclosure.report !== undefined
+      ? {
+          id,
+          args: {
+            papers: disclosure.report.papers,
+            models: formatList(disclosure.report.modelIds, locale),
+          },
+        }
+      : { id },
+  );
+  // A report run's plans name each unpriced model and carry the report's own
+  // lines (P4-T16); a summarize run's lines are exactly what they were.
+  const report = isReportRunEstimate(estimate) ? estimate : undefined;
+  const viewOf = (
+    plan: RunPlan,
+    reportPlan: ReportPlan | undefined,
+    stop: CeilingStop | undefined,
+  ): PlanView =>
+    reportPlan === undefined || report === undefined
+      ? planView(
+          plan,
+          [estimate.modelId],
+          input.confirmAboveCents,
+          stop,
+          locale,
+        )
+      : planView(
+          plan,
+          reportPlan.unpricedModelIds.length > 0
+            ? reportPlan.unpricedModelIds
+            : [estimate.modelId],
+          input.confirmAboveCents,
+          stop,
+          locale,
+          reportPlanLines(reportPlan, report.models),
+        );
+  const selected = viewOf(
     estimate.selected,
-    estimate.modelId,
-    input.confirmAboveCents,
+    report?.selected,
     input.ceilingSelected,
-    locale,
   );
   const downgrade =
     estimate.selected.counts.fullText === 0
@@ -480,12 +597,10 @@ export function buildCostDialogModel(
                 args: { max: input.fullTextAutoMaxPapers },
               }
             : undefined,
-          plan: planView(
+          plan: viewOf(
             estimate.abstractOnly,
-            estimate.modelId,
-            input.confirmAboveCents,
+            report?.abstractOnly,
             input.ceilingDowngrade,
-            locale,
           ),
         };
   const footer: FluentLine[] = [

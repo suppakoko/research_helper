@@ -330,6 +330,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // (owner, 2026-10-22, plan/00 §6 item 269(b)). See
   // L10N_EGRESS_GEMINI_DECLARED_PAID.
   "research-helper-egress-gemini-declared-paid",
+  // P4-T16: a trend-report run's own notice (docs/09 §3 row 3b; docs/07 §4.5's
+  // note of 2026-10-27). See L10N_EGRESS_REPORT_NOTICE.
+  "research-helper-egress-report-notice",
   // P3-T16: the cost confirmation dialog (docs/06 §5.4, docs/10 FR-24,
   // docs/09 §3.6) and the preference pane's Usage section. See
   // COST_DIALOG_L10N and USAGE_L10N in src/ui/dialogs/costConfirmDialog.ts.
@@ -361,6 +364,11 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-prefs-usage",
   "research-helper-prefs-usage-limit",
   "research-helper-prefs-usage-limit-off",
+  // P4-T16: the trend report's lines in the cost dialog (docs/06 §5.2, §5.4).
+  // See REPORT_COST_L10N in src/ui/dialogs/costConfirmDialog.ts.
+  "research-helper-cost-report-summaries",
+  "research-helper-cost-report-writing",
+  "research-helper-cost-report-review",
   // Owner, 2026-10-23, plan/00 §6 item 279(a): an LLM key accepted by an
   // account with no credit left (QuotaExceededError).
   "research-helper-prefs-test-ok-no-credit",
@@ -550,6 +558,16 @@ export const L10N_EGRESS_GEMINI_FREE_TIER =
  */
 export const L10N_EGRESS_GEMINI_DECLARED_PAID =
   "research-helper-egress-gemini-declared-paid";
+
+/**
+ * A trend-report run's own egress notice (`P4-T16`; `docs/09` §3 row 3b;
+ * `docs/07` §4.5's note of 2026-10-27): the generated summaries of `$papers`
+ * papers, their titles, years and venues and the theme statistics, sent to
+ * `$models` — every model the run sends to. Carried as data by
+ * `src/pipeline/shared/egressDisclosure.ts`; placed with its arguments by the
+ * cost dialog's model.
+ */
+export const L10N_EGRESS_REPORT_NOTICE = "research-helper-egress-report-notice";
 
 /* ------------------------------------------------ searchDialog message ids */
 
@@ -915,6 +933,10 @@ export const KO_PENDING_REVIEW = [
   // English source, and nothing was machine-translated.
   // The screening cost line (owner, 2026-10-24, `plan/00` §6 item 281(b)); a
   // commented `ko-KR` stub each, nothing machine-translated (`G-41`).
+  // `P4-T16`'s report notice and the report's three cost-dialog lines
+  // (`plan/00` §6 item 291) left this list on 2026-10-27: the owner reviewed
+  // the coordinator's Korean (`G-41`, plan/00 §6 item 292(a)), so all four
+  // are on KO_PRESENT.
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -1222,6 +1244,13 @@ export const KO_PRESENT = [
   "research-helper-search-row-relevance",
   "research-helper-search-screening-cost",
   "research-helper-search-screening-cost-unpriced",
+  // `P4-T16`'s report notice and the report's three cost-dialog lines: Korean
+  // drafted by the coordinator and reviewed by the owner on 2026-10-27
+  // (`G-41`, plan/00 §6 item 292(a)).
+  "research-helper-egress-report-notice",
+  "research-helper-cost-report-summaries",
+  "research-helper-cost-report-writing",
+  "research-helper-cost-report-review",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -1332,6 +1361,18 @@ export interface FluentMessageArgsMap {
   };
   "research-helper-cost-skipped-notice": { cost: string; calls: number };
   "research-helper-prefs-usage-limit": { limit: string };
+  // P4-T16. `$papers`, `$calls` and `$themes` are numbers and plural
+  // selectors; `$model` is a model ID and `$models` a list of model IDs joined
+  // with `Intl.ListFormat` over the application locale — names, never
+  // translated (docs/08 §10.3).
+  "research-helper-egress-report-notice": { papers: number; models: string };
+  "research-helper-cost-report-summaries": { calls: number; model: string };
+  "research-helper-cost-report-writing": {
+    calls: number;
+    themes: number;
+    model: string;
+  };
+  "research-helper-cost-report-review": { calls: number; model: string };
   // The preference pane (P1-T44). `$count` is a plural selector; `$time` is a
   // clock time the pane script has already formatted with
   // `Intl.DateTimeFormat` over `Zotero.locale` (docs/08 §10.3). **No message
@@ -1533,6 +1574,11 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-cost-usage-session",
   "research-helper-cost-skipped-notice",
   "research-helper-prefs-usage-limit",
+  // mainWindow — the trend report's notice and cost-dialog lines (4, P4-T16)
+  "research-helper-egress-report-notice",
+  "research-helper-cost-report-summaries",
+  "research-helper-cost-report-writing",
+  "research-helper-cost-report-review",
 
   // searchDialog (20)
   "research-helper-search-years-span",

@@ -9,8 +9,9 @@
  * so the arithmetic can be checked against `docs/06` §5.4's worked example.
  *
  * **What is counted** (`docs/06` §5.4, DR-1, and §5.2's budget table). The map
- * phase only — one paper's summary per item; the synthesis calls of the trend
- * report are Phase 4's.
+ * phase — one paper's summary per item — in {@link estimateRun}; the trend
+ * report's synthesis calls, on top of the summaries it still has to make, in
+ * {@link estimateReportRun} (`P4-T16`, section 5 below).
  *
  * - An item already summarized (a cache hit) costs nothing and is counted as
  *   cached.
@@ -50,12 +51,14 @@
 
 import type { PipelineEstimate } from "../types";
 import type { AcquiredSource } from "../../model/summary";
+import type { ReportLanguage, TrendPromptId } from "../../model/trend";
 import {
   costAboveCents,
   costOf,
   type ModelPrices,
 } from "../../llm/shared/pricing";
 import { estTokens } from "../../llm/shared/tokenEstimate";
+import { resolveMaxTokens, type PromptRegistry } from "../../prompts";
 
 import type { FullTextMode, InputScopeKind } from "./privacyPolicy";
 
@@ -472,4 +475,503 @@ export function toPipelineEstimate(
     estimatedDurationSeconds: Math.ceil((plan.calls / callsPerMinute) * 60),
     notesKeys,
   };
+}
+
+// ===========================================================================
+// 5. The trend report: the summaries still to make, plus every synthesis call
+//    (P4-T16; docs/06 §5.2, §5.4, §8.3–§8.5, §9.2, §12.2)
+// ===========================================================================
+
+/**
+ * The synthesis prompts a report run calls: `docs/06` §5.2's rows after the
+ * map phase, which are `docs/07` §5.2's `TrendPromptId`.
+ */
+export type SynthesisCallKind = TrendPromptId;
+
+/**
+ * `docs/06` §5.2's "Input chunk budget" for each synthesis prompt, transcribed
+ * (a test reads the table from the document). The pipeline keeps every call
+ * inside its row — clustering hands over to two stages, a theme is split, the
+ * report's digests are trimmed, the critique's evidence is packed (`P4-T05`
+ * to `P4-T09`) — so the budget is an upper bound on what one call carries, and
+ * that bound is what is priced: before the run, the summaries the calls will
+ * carry do not all exist. The output ceilings are not repeated here; they are
+ * the prompt files' own (`resolveMaxTokens`), so `THEME_CLUSTER`'s grows with
+ * the papers it clusters (`P4-T03`).
+ */
+export const SYNTHESIS_INPUT_BUDGETS: Readonly<
+  Record<SynthesisCallKind, number>
+> = Object.freeze({
+  THEME_CLUSTER: 60_000,
+  THEME_MERGE: 60_000,
+  CLUSTER_REDUCE: 40_000,
+  CLUSTER_REDUCE_MERGE: 40_000,
+  TREND_REPORT_EN: 60_000,
+  TREND_REPORT_KO: 60_000,
+  SELF_CRITIQUE: 60_000,
+});
+
+/** `docs/06` §8.4 step 1: two-stage clustering's batch size `B`. */
+export const CLUSTER_BATCH_SIZE = 60;
+
+/**
+ * The most tokens one digest takes: `docs/06` §8.2's ~90–140-token block,
+ * which `P4-T04`'s fixed truncation caps at 140 by `estTokens`. Used only to
+ * decide whether the digests fit one `THEME_CLUSTER` call.
+ */
+export const DIGEST_MAX_TOKENS = 140;
+
+/**
+ * The most tokens one summary takes as synthesis sends it: the largest map
+ * call's output ceiling, 1 600 (`docs/06` §5.2; §8.1 puts a serialized summary
+ * at "900–1 600 tokens"). Used only to make sure the theme calls reserved can
+ * carry every summary.
+ */
+export const SUMMARY_MAX_TOKENS = Math.max(
+  ...Object.values(MAP_CALL_BUDGETS).map((budget) => budget.maxOutputTokens),
+);
+
+/** One row of `docs/06` §9.2's length table: corpus size → themes (K). */
+export interface ThemeCountBand {
+  readonly minPapers: number;
+  readonly maxPapers: number;
+  readonly minThemes: number;
+  readonly maxThemes: number;
+}
+
+/** `docs/06` §9.2's "Themes (K)" column, transcribed (a test reads the table). */
+export const THEME_COUNT_BANDS: readonly ThemeCountBand[] = Object.freeze([
+  { minPapers: 10, maxPapers: 25, minThemes: 3, maxThemes: 5 },
+  { minPapers: 26, maxPapers: 75, minThemes: 4, maxThemes: 7 },
+  { minPapers: 76, maxPapers: 150, minThemes: 6, maxThemes: 9 },
+  { minPapers: 151, maxPapers: 400, minThemes: 7, maxThemes: 12 },
+]);
+
+/**
+ * The §9.2 row for `papers`. The table starts at 10 and stops at 400; a
+ * smaller corpus reads its first row and a larger one its last.
+ *
+ * @param papers - the papers the report analyses
+ * @returns the row
+ */
+export function themeCountBandFor(papers: number): ThemeCountBand {
+  const last = THEME_COUNT_BANDS[
+    THEME_COUNT_BANDS.length - 1
+  ] as ThemeCountBand;
+  return THEME_COUNT_BANDS.find((band) => papers <= band.maxPapers) ?? last;
+}
+
+/** A model and its prices, as the cost dialog prices it (item 278(b)). */
+export interface PricedModel {
+  readonly modelId: string;
+  /** The graph's `modelPrices` for it; `undefined` when not known. */
+  readonly prices: ModelPrices | undefined;
+}
+
+/** One synthesis call the plan reserves. */
+export interface SynthesisCall {
+  readonly kind: SynthesisCallKind;
+  /** The model it is sent to: the report model, or the critique model. */
+  readonly modelId: string;
+  /** The prompt's own tokens plus its input budget, before headroom. */
+  readonly rawInputTokens: number;
+  /** `rawInputTokens` × {@link ESTIMATE_HEADROOM}, rounded up. */
+  readonly inputTokens: number;
+  /** The prompt's `max_tokens` ceiling (`resolveMaxTokens`). */
+  readonly outputTokens: number;
+  /**
+   * Made only when an earlier answer asks for it — a rewrite after a
+   * critique, a later critique round, a sub-batch of a theme too large for
+   * one call and its merge — and reserved all the same.
+   */
+  readonly conditional: boolean;
+  /** The report a composition or critique call is for. */
+  readonly language?: ReportLanguage;
+}
+
+/** Every synthesis call of one report run, in the order the stages run. */
+export interface SynthesisPlan {
+  /** The papers the synthesis covers (each sends one summary). */
+  readonly papers: number;
+  /** K, the themes reserved for: the run's own, or §9.2's upper end. */
+  readonly themes: number;
+  /** Whether the digests take `docs/06` §8.4's two-stage path. */
+  readonly twoStageClustering: boolean;
+  readonly calls: readonly SynthesisCall[];
+}
+
+/** What {@link planSynthesis} is given. */
+export interface SynthesisPlanInput {
+  /** The papers the report analyses, after screening. */
+  readonly papers: number;
+  /**
+   * `reportModel`: every `strong`-tier call (clustering, its merge, the theme
+   * analyses and their merges, the report and its rewrites). Its output limit
+   * (`ModelInfo.maxOutputTokens`) decides two-stage clustering (`P4-T05`).
+   */
+  readonly reportModel: PricedModel & { readonly maxOutputTokens: number };
+  /** `report.critiqueModel`, else `summaryModel` (`P4-T09` step 3). */
+  readonly critiqueModel: PricedModel;
+  /** The active templates, for their output ceilings. */
+  readonly prompts: Pick<PromptRegistry, "get">;
+  /**
+   * Each synthesis prompt's own tokens (system prompt, scaffold, serialized
+   * schema) without its variable text, measured by the caller with
+   * `estTokens(…, modelId)` over the template it will send, as
+   * {@link PromptOverheadTokens} is for the map phase.
+   */
+  readonly synthesisOverhead: Readonly<Record<SynthesisCallKind, number>>;
+  /** One per report written: `["en"]`, `["ko"]`, or both for `both`. */
+  readonly languages: readonly ReportLanguage[];
+  /** `report.maxCritiqueRounds`, 0–2. */
+  readonly critiqueRounds: number;
+  /**
+   * K when the run already knows it (a clustering read back on resume, a
+   * test); absent: the upper end of `papers`' §9.2 band.
+   */
+  readonly themeCount?: number;
+}
+
+function wholeNumber(name: string, value: number, min: number): number {
+  if (!Number.isInteger(value) || value < min) {
+    throw new RangeError(
+      `[research-helper] ${name} must be an integer of at least ${String(min)}, got ${String(value)}`,
+    );
+  }
+  return value;
+}
+
+function synthesisCall(
+  kind: SynthesisCallKind,
+  model: PricedModel,
+  input: SynthesisPlanInput,
+  options: {
+    readonly batchSize?: number;
+    readonly conditional?: boolean;
+    readonly language?: ReportLanguage;
+  } = {},
+): SynthesisCall {
+  const rawInputTokens =
+    input.synthesisOverhead[kind] + SYNTHESIS_INPUT_BUDGETS[kind];
+  const planned: SynthesisCall = {
+    kind,
+    modelId: model.modelId,
+    rawInputTokens,
+    inputTokens: withHeadroom(rawInputTokens),
+    outputTokens: resolveMaxTokens(input.prompts.get(kind), options.batchSize),
+    conditional: options.conditional ?? false,
+  };
+  return options.language === undefined
+    ? planned
+    : { ...planned, language: options.language };
+}
+
+/**
+ * Every synthesis call a report run may make, each at its §5.2 input budget
+ * and its prompt's output ceiling (`P4-T16` steps 1–2):
+ *
+ * - **L1, clustering.** One `THEME_CLUSTER` call when the digests fit its
+ *   input budget **and** its grown output ceiling for this many papers is
+ *   within the report model's output limit — `P4-T05` step 1's rule, never a
+ *   paper count. The digests are taken at {@link DIGEST_MAX_TOKENS} each with
+ *   the 1.15× headroom, so near the line the estimate takes the dearer path.
+ *   Otherwise `docs/06` §8.4's two stages: one call per batch of
+ *   {@link CLUSTER_BATCH_SIZE}, each at its own batch's ceiling, then one
+ *   `THEME_MERGE`.
+ * - **L2, themes.** One `CLUSTER_REDUCE` per theme, K from the run or the
+ *   upper end of §9.2's band. When K calls at the 40 000-token budget could
+ *   not carry every summary at {@link SUMMARY_MAX_TOKENS} (with headroom, and
+ *   one summary's room lost per call to packing), the extra sub-batch calls
+ *   that would, plus one `CLUSTER_REDUCE_MERGE` per theme that could need
+ *   splitting (at most K) — `docs/06` §8.4's last paragraph.
+ * - **L3 and L4, per report language** (`both` writes two, `P4-T21`): the
+ *   report call, then per critique round one `SELF_CRITIQUE` on the critique
+ *   model and one possible rewrite (a fresh report call, `docs/06` §12.2).
+ *
+ * Not reserved, because no estimate can predict them: a call that follows a
+ * malformed answer (`completeJSON`'s repair and retry; `P4-T05`'s re-run; the
+ * one fresh generation for a missing heading, `P4-T08`) and the per-section
+ * critique calls of an overflowing cited set (`P4-T09` step 4). Each is
+ * reserved at dispatch by `withBudget`, so a ceiling it would pass pauses the
+ * job and asks (`plan/07` §0.2 items 11, 12 and 18).
+ *
+ * @param input - see {@link SynthesisPlanInput}
+ * @returns the plan; no call at all for zero papers
+ * @throws RangeError for a count that is not a whole number, or no language
+ */
+export function planSynthesis(input: SynthesisPlanInput): SynthesisPlan {
+  const papers = wholeNumber("papers", input.papers, 0);
+  const rounds = wholeNumber("critiqueRounds", input.critiqueRounds, 0);
+  if (
+    input.languages.length === 0 ||
+    new Set(input.languages).size !== input.languages.length
+  ) {
+    throw new RangeError(
+      "[research-helper] a report run writes one report per language: at least one, each once",
+    );
+  }
+  if (papers === 0) {
+    return { papers, themes: 0, twoStageClustering: false, calls: [] };
+  }
+  const report = input.reportModel;
+  const calls: SynthesisCall[] = [];
+
+  // L1 — clustering (docs/06 §8.4; P4-T05 step 1, P4-T06).
+  const twoStageClustering =
+    withHeadroom(papers * DIGEST_MAX_TOKENS) >
+      SYNTHESIS_INPUT_BUDGETS.THEME_CLUSTER ||
+    resolveMaxTokens(input.prompts.get("THEME_CLUSTER"), papers) >
+      report.maxOutputTokens;
+  if (twoStageClustering) {
+    for (let start = 0; start < papers; start += CLUSTER_BATCH_SIZE) {
+      calls.push(
+        synthesisCall("THEME_CLUSTER", report, input, {
+          batchSize: Math.min(CLUSTER_BATCH_SIZE, papers - start),
+        }),
+      );
+    }
+    calls.push(synthesisCall("THEME_MERGE", report, input));
+  } else {
+    calls.push(
+      synthesisCall("THEME_CLUSTER", report, input, { batchSize: papers }),
+    );
+  }
+
+  // L2 — one analysis per theme, and room for every summary (docs/06 §8.4).
+  const themes =
+    input.themeCount === undefined
+      ? themeCountBandFor(papers).maxThemes
+      : wholeNumber("themeCount", input.themeCount, 1);
+  const carriedPerCall =
+    SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE - SUMMARY_MAX_TOKENS;
+  const reduceCalls = Math.max(
+    themes,
+    Math.ceil(withHeadroom(papers * SUMMARY_MAX_TOKENS) / carriedPerCall),
+  );
+  for (let at = 0; at < reduceCalls; at += 1) {
+    calls.push(
+      synthesisCall("CLUSTER_REDUCE", report, input, {
+        conditional: at >= themes,
+      }),
+    );
+  }
+  const merges = Math.min(themes, reduceCalls - themes);
+  for (let at = 0; at < merges; at += 1) {
+    calls.push(
+      synthesisCall("CLUSTER_REDUCE_MERGE", report, input, {
+        conditional: true,
+      }),
+    );
+  }
+
+  // L3 and L4 — per language: the report, then critique and rewrite rounds.
+  for (const language of input.languages) {
+    const kind = language === "ko" ? "TREND_REPORT_KO" : "TREND_REPORT_EN";
+    calls.push(synthesisCall(kind, report, input, { language }));
+    for (let round = 1; round <= rounds; round += 1) {
+      calls.push(
+        synthesisCall("SELF_CRITIQUE", input.critiqueModel, input, {
+          conditional: round > 1,
+          language,
+        }),
+      );
+      calls.push(
+        synthesisCall(kind, report, input, { conditional: true, language }),
+      );
+    }
+  }
+  return { papers, themes, twoStageClustering, calls };
+}
+
+/** One way of running the report, priced: the map phase plus the synthesis. */
+export interface ReportPlan extends RunPlan {
+  /** The summaries still to make, at the map model's prices. */
+  readonly map: RunPlan;
+  /** The same for both plans: the synthesis does not depend on the map's mode. */
+  readonly synthesis: SynthesisPlan;
+  /**
+   * Every model with a call in this plan whose price is not known, in the
+   * order map, report, critique. Not empty exactly when `costUsd` is
+   * `undefined`.
+   */
+  readonly unpricedModelIds: readonly string[];
+}
+
+/** The three models one report run can send to (`plan/07` `P4-T16` step 2). */
+export interface ReportRunModels {
+  /** `summaryModel`: the summaries still to make. */
+  readonly map: string;
+  /** `reportModel`: every synthesis call but the critique. */
+  readonly report: string;
+  /** `report.critiqueModel`, else `summaryModel`. */
+  readonly critique: string;
+}
+
+/** What {@link estimateReportRun} returns: a {@link RunEstimate}, for a report. */
+export interface ReportRunEstimate extends RunEstimate {
+  /** The report model; all three are in {@link ReportRunEstimate.models}. */
+  readonly modelId: string;
+  readonly selected: ReportPlan;
+  readonly abstractOnly: ReportPlan;
+  readonly models: ReportRunModels;
+}
+
+/** What {@link estimateReportRun} is given. */
+export interface EstimateReportRunInput extends Omit<
+  SynthesisPlanInput,
+  "papers"
+> {
+  /**
+   * The papers the report analyses, after screening; `cached` means the
+   * paper's summary exists, so only the others cost a map call.
+   */
+  readonly items: readonly EstimateItem[];
+  /** The run's mode after the privacy policy (`allowedInputScope`). */
+  readonly fullTextMode: FullTextMode;
+  /** `summaryModel`, which makes the missing summaries. */
+  readonly mapModel: PricedModel;
+  /** The map prompts' own tokens, as for {@link estimateRun}. */
+  readonly overhead: PromptOverheadTokens;
+  /** `summary.fullTextAutoMaxPapers`. */
+  readonly fullTextAutoMaxPapers: number;
+  /** When the run would start, for a promotion's end date (`costOf`). */
+  readonly atEpochMs: number;
+  /** The map phase's token counter; `estTokens(text, mapModel)` by default. */
+  readonly countTokens?: (text: string) => number;
+}
+
+function reportPlan(
+  map: RunPlan,
+  synthesis: SynthesisPlan,
+  input: EstimateReportRunInput,
+): ReportPlan {
+  const pricesOf = new Map<string, ModelPrices | undefined>([
+    [input.critiqueModel.modelId, input.critiqueModel.prices],
+    [input.reportModel.modelId, input.reportModel.prices],
+  ]);
+  const unpriced: string[] = [];
+  const noteUnpriced = (modelId: string): void => {
+    if (!unpriced.includes(modelId)) unpriced.push(modelId);
+  };
+  let { calls, rawInputTokens, inputTokens, outputTokens } = map;
+  // A map phase that makes no call costs nothing, whatever its model's price.
+  let costUsd: number | undefined = map.calls === 0 ? 0 : map.costUsd;
+  if (map.calls > 0 && map.costUsd === undefined) {
+    noteUnpriced(input.mapModel.modelId);
+  }
+  for (const planned of synthesis.calls) {
+    calls += 1;
+    rawInputTokens += planned.rawInputTokens;
+    inputTokens += planned.inputTokens;
+    outputTokens += planned.outputTokens;
+    const prices = pricesOf.get(planned.modelId);
+    const cost =
+      prices === undefined
+        ? undefined
+        : costOf(
+            prices,
+            {
+              inputTokens: planned.inputTokens,
+              outputTokens: planned.outputTokens,
+            },
+            input.atEpochMs,
+          ).costUsd;
+    if (cost === undefined) noteUnpriced(planned.modelId);
+    costUsd =
+      costUsd === undefined || cost === undefined ? undefined : costUsd + cost;
+  }
+  return {
+    fullTextMode: map.fullTextMode,
+    items: map.items,
+    counts: map.counts,
+    calls,
+    rawInputTokens,
+    inputTokens,
+    outputTokens,
+    costUsd,
+    map,
+    synthesis,
+    unpricedModelIds: unpriced,
+  };
+}
+
+/** The oldest price date among the priced models a plan calls, or `undefined`. */
+function oldestPriceDate(
+  plan: ReportPlan,
+  input: EstimateReportRunInput,
+): number | undefined {
+  const used = new Set(plan.synthesis.calls.map((c) => c.modelId));
+  const dates: number[] = [];
+  if (plan.map.calls > 0 && input.mapModel.prices !== undefined) {
+    dates.push(input.mapModel.prices.asOfEpochMs);
+  }
+  for (const model of [input.reportModel, input.critiqueModel]) {
+    if (used.has(model.modelId) && model.prices !== undefined) {
+      dates.push(model.prices.asOfEpochMs);
+    }
+  }
+  return dates.length === 0 ? undefined : Math.min(...dates);
+}
+
+/**
+ * `P4-T16`: one estimate for a report run — the summaries it still has to
+ * make (`estimateRun` at `summaryModel`'s prices, unchanged) plus every
+ * synthesis call ({@link planSynthesis}), each priced through `costOf` at its
+ * own model's prices (item 278(b)). An unknown price on any model the plan
+ * calls makes the plan's cost unknown, never zero, so the dialog demands the
+ * second acknowledgement (`secondAcknowledgementFor`). The abstract-only
+ * downgrade changes only the map phase.
+ *
+ * The result is a {@link RunEstimate}, so the cost dialog's threshold,
+ * ceilings, second acknowledgement and "don't ask again" rules apply to it
+ * unchanged; the report's own lines read {@link ReportPlan.synthesis}. The
+ * caller is the trend-report pipeline's estimate stage (`P4-T18`).
+ *
+ * @param input - see {@link EstimateReportRunInput}
+ * @returns both plans, priced
+ */
+export function estimateReportRun(
+  input: EstimateReportRunInput,
+): ReportRunEstimate {
+  const mapEstimate = estimateRun({
+    items: input.items,
+    fullTextMode: input.fullTextMode,
+    modelId: input.mapModel.modelId,
+    prices: input.mapModel.prices,
+    overhead: input.overhead,
+    fullTextAutoMaxPapers: input.fullTextAutoMaxPapers,
+    atEpochMs: input.atEpochMs,
+    ...(input.countTokens !== undefined && { countTokens: input.countTokens }),
+  });
+  const synthesis = planSynthesis({ ...input, papers: input.items.length });
+  const selected = reportPlan(mapEstimate.selected, synthesis, input);
+  const abstractOnly =
+    mapEstimate.abstractOnly === mapEstimate.selected
+      ? selected
+      : reportPlan(mapEstimate.abstractOnly, synthesis, input);
+  return {
+    modelId: input.reportModel.modelId,
+    selected,
+    abstractOnly,
+    preselectDowngrade: mapEstimate.preselectDowngrade,
+    pricesAsOfEpochMs: oldestPriceDate(selected, input),
+    isEstimate: true,
+    models: {
+      map: input.mapModel.modelId,
+      report: input.reportModel.modelId,
+      critique: input.critiqueModel.modelId,
+    },
+  };
+}
+
+/**
+ * Whether `estimate` is a report run's ({@link estimateReportRun}).
+ *
+ * @param estimate - either estimate
+ * @returns true for a report run's
+ */
+export function isReportRunEstimate(
+  estimate: RunEstimate,
+): estimate is ReportRunEstimate {
+  return "models" in estimate && "synthesis" in estimate.selected;
 }
