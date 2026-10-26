@@ -16,8 +16,13 @@
  * `plan/04` §0.2 item 2 makes `P3-T32` the only Phase 3 card that adds a row:
  * every other card reads through `getPref` / `setPref`. *(Updated 2026-10-22:
  * the owner added one more Phase 3 row, `gemini.paidTier`, by decision —
- * `plan/00` §6 item 269(b) — written into §8.5 first.)* Rows for later phases
- * (`reportLanguage`, `tts.*`, `background.enabled`, …) are not here. Every card
+ * `plan/00` §6 item 269(b) — written into §8.5 first.)* `P4-T02` added the
+ * five "Report & audio" rows Phase 4 reads (`reportLanguage`,
+ * `report.targetWords`, `report.maxCritiqueRounds`, `report.critiqueModel`,
+ * `report.saveNote`; 2026-10-26), and is the only Phase 4 card that adds a row.
+ * `report.addRelatedLinks` is deliberately absent: the owner kept backlinks out
+ * of Phase 4 (`plan/00` §6 items 286, 287(a)). Rows for later phases (`tts.*`,
+ * `background.enabled`, …) are not here. Every card
  * that adds rows is bound by the same rule: "do not add a preference that
  * `docs/07` §8.5 does not declare, and do not change a default". The ordering
  * rule §8.5 states is *§8.5 first, then `prefs.js`, then the pane*.
@@ -86,7 +91,7 @@ const VALIDATION_RESULT_VALUES = [
 ] as const;
 
 /**
- * Every preference Phases 1–3 read, one entry per `docs/07` §8.5 row.
+ * Every preference Phases 1–4 read, one entry per `docs/07` §8.5 row.
  *
  * The property name is what plugin code passes to `getPref`; `key` is the
  * branch-relative preference, and the two differ inside a dotted family
@@ -475,8 +480,79 @@ export const PREFS = {
   },
 
   // -------------------------------------------------------------------------
-  // Report & audio — docs/07 §8.5, "Report & audio" (P3-T32: this row only)
+  // Report & audio — docs/07 §8.5, "Report & audio" (P3-T32: perPaperNotes;
+  // P4-T02: the five rows the trend report reads). No `tts.*` row and no
+  // `report.addRelatedLinks` (backlinks stay out of Phase 4, plan/00 §6 item
+  // 287(a)).
   // -------------------------------------------------------------------------
+
+  /**
+   * The report's language (FR-28; semantics `docs/06` §7.7–7.8). `auto`
+   * follows `Zotero.locale`. Overridable per run in the report dialog. The one
+   * row of these five that `docs/01` §7.2 gives a `pref()` line; §8.5 places
+   * it in the prefs pane's "Report & audio" section.
+   */
+  reportLanguage: {
+    key: PREF_KEYS.reportLanguage,
+    type: "string",
+    default: "auto",
+    values: ["auto", "en", "ko", "both"],
+  },
+
+  /**
+   * The report's target length in words (`docs/06` §9.2). `0` means "derive
+   * from corpus size" with §9.2's table.
+   *
+   * **§8.5's value set is "`0`, or ≥ 400", and only its lower bound is
+   * declared here.** {@link PrefDef} (§8.5.1's interface, verbatim) has an
+   * inclusive `min`/`max` and a closed `values` list, and neither expresses a
+   * range with a hole in it, so `coerce` reads a stored `1`–`399` as given
+   * rather than falling back. The report's reader (`P4-T08`, through the
+   * pipeline's `ctx.config`) reads `1`–`399` as `0`, automatic; `PrefDef` is
+   * not extended (owner, 2026-10-26, `plan/00` §6 item 290(d)).
+   */
+  reportTargetWords: {
+    key: PREF_KEYS.reportTargetWords,
+    type: "integer",
+    default: 0,
+    min: 0,
+  },
+
+  /**
+   * Self-critique rounds (`docs/06` §12.2). §8.5: 0–2, default `1`; `0`
+   * disables the pass (`P4-T09`).
+   */
+  reportMaxCritiqueRounds: {
+    key: PREF_KEYS.reportMaxCritiqueRounds,
+    type: "integer",
+    default: 1,
+    min: 0,
+    max: 2,
+  },
+
+  /**
+   * The model the self-critique pass runs on (`docs/06` §12.2). A model ID, so
+   * no `values` and never a credential. The schema holds §8.5's `""`; what an
+   * empty value resolves to is `P4-T09`'s decided line (owner, 2026-10-26,
+   * `plan/00` §6 item 286: the summary model on the active provider, never an
+   * automatic pick), which that card writes into §8.5.
+   */
+  reportCritiqueModel: {
+    key: PREF_KEYS.reportCritiqueModel,
+    type: "string",
+    default: "",
+  },
+
+  /**
+   * Save the report as a Zotero note (`docs/06` §14.2). §8.5: default `true`;
+   * the report dialog shows it, and it is honoured only where the library is
+   * editable (`P4-T20`).
+   */
+  reportSaveNote: {
+    key: PREF_KEYS.reportSaveNote,
+    type: "boolean",
+    default: true,
+  },
 
   /** Write one child note per paper (`docs/06` §14.2). Opt-in. */
   reportPerPaperNotes: {

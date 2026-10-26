@@ -25,6 +25,7 @@ declare namespace _ZoteroTypes {
       "privacy.mode": string;
       "autoSummarize": boolean;
       "cache.maxSizeMB": number;
+      "reportLanguage": string;
       "concurrency": number;
       "timeoutSeconds": number;
       "run.maxSpendCents": number;

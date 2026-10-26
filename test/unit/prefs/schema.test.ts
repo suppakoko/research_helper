@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createMemoryPrefStore } from "../../../src/core/config";
-import { ConfigurationError } from "../../../src/core/errors";
+import {
+  ConfigurationError,
+  KEYISH_FIELD,
+  redact,
+} from "../../../src/core/errors";
 import {
   clearPref,
   coerce,
@@ -321,7 +325,20 @@ const SECTION_8_5: readonly Section85Row[] = [
     min: 100,
     max: 5000,
   }),
-  // Report & audio (this row only)
+  // Report & audio (P3-T32: perPaperNotes; P4-T02, 2026-10-26: the five rows
+  // the trend report reads, typed out from §8.5).
+  row("reportLanguage", "reportLanguage", "string", "auto", {
+    values: ["auto", "en", "ko", "both"],
+  }),
+  // §8.5: "`0`, or ≥ 400". Only the lower bound is a PrefDef bound; see the
+  // reportTargetWords coercion test below for the hole.
+  row("reportTargetWords", "report.targetWords", "integer", 0, { min: 0 }),
+  row("reportMaxCritiqueRounds", "report.maxCritiqueRounds", "integer", 1, {
+    min: 0,
+    max: 2,
+  }),
+  row("reportCritiqueModel", "report.critiqueModel", "string", ""),
+  row("reportSaveNote", "report.saveNote", "boolean", true),
   row("reportPerPaperNotes", "report.perPaperNotes", "boolean", false),
   // Runtime & concurrency
   row("concurrency", "concurrency", "integer", 3, { min: 1, max: 8 }),
@@ -415,6 +432,11 @@ const NO_PREF_LINE: readonly string[] = [
   "cache.ignoreModel",
   "cache.lastSeenPromptVersions",
   "report.perPaperNotes",
+  // P4-T02 (2026-10-26): §7.2 lists reportLanguage and none of these four.
+  "report.targetWords",
+  "report.maxCritiqueRounds",
+  "report.critiqueModel",
+  "report.saveNote",
   "openrouter.lastValidatedAt",
   "openai.lastValidatedAt",
   "gemini.lastValidatedAt",
@@ -495,15 +517,16 @@ function parseDefaultCell(cell: string): unknown {
 }
 
 describe("PREFS transcribes docs/07 §8.5", () => {
-  it("declares exactly the sixty-four §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty and the owner's gemini.paidTier — and no others", () => {
+  it("declares exactly the sixty-nine §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty, the owner's gemini.paidTier and P4-T02's five — and no others", () => {
     // The card's Do NOT: "do not add a preference that docs/07 §8.5 does not
     // declare". An extra entry fails here, not in review. Phase 1 pinned this
     // at twelve; `P2-T05` grew it by the one row `docs/07` §8.5 and §11.1
     // step 9 give a credential-holding source (2026-10-15); `P3-T32` grew it by
     // the fifty rows Phase 3 reads (2026-10-20); the owner added
-    // `gemini.paidTier` (2026-10-22, `plan/00` §6 item 269(b)).
-    expect(SECTION_8_5).toHaveLength(64);
-    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(64);
+    // `gemini.paidTier` (2026-10-22, `plan/00` §6 item 269(b)); `P4-T02` added
+    // the five "Report & audio" rows Phase 4 reads (2026-10-26).
+    expect(SECTION_8_5).toHaveLength(69);
+    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(69);
     expect([...PREF_NAMES].sort()).toEqual(
       SECTION_8_5.map((row) => row.name).sort(),
     );
@@ -845,6 +868,98 @@ describe("getPref coerces and falls back", () => {
     expect(getPref("concurrency")).toBe(8);
   });
 
+  // P4-T02 (2026-10-26): the five "Report & audio" rows Phase 4 reads.
+
+  it("reads the five Phase 4 report rows back as their §8.5 defaults on a clean profile (P4-T02)", () => {
+    setPrefStore(createMemoryPrefStore({}));
+    expect(getPref("reportLanguage")).toBe("auto");
+    expect(getPref("reportTargetWords")).toBe(0);
+    expect(getPref("reportMaxCritiqueRounds")).toBe(1);
+    expect(getPref("reportCritiqueModel")).toBe("");
+    expect(getPref("reportSaveNote")).toBe(true);
+  });
+
+  it("accepts every reportLanguage §8.5 lists and refuses any other (P4-T02)", () => {
+    for (const language of ["auto", "en", "ko", "both"] as const) {
+      setPrefStore(createMemoryPrefStore({ reportLanguage: language }));
+      expect(getPref("reportLanguage")).toBe(language);
+    }
+    // A locale tag is not a §8.5 value: `auto` is how the UI locale is followed.
+    for (const stored of ["ko-KR", "en-US", "kr", "fr", "", 1]) {
+      setPrefStore(createMemoryPrefStore({ reportLanguage: stored }));
+      expect(getPref("reportLanguage"), JSON.stringify(stored)).toBe("auto");
+    }
+  });
+
+  it("reads report.targetWords as a whole number ≥ 0 and refuses a negative, a fraction or a non-number (P4-T02)", () => {
+    for (const [stored, read] of [
+      [0, 0],
+      [400, 400],
+      ["1200", 1200],
+    ] as const) {
+      setPrefStore(createMemoryPrefStore({ "report.targetWords": stored }));
+      expect(getPref("reportTargetWords"), String(stored)).toBe(read);
+    }
+    for (const stored of [-1, "-400", 400.5, "auto", true]) {
+      setPrefStore(createMemoryPrefStore({ "report.targetWords": stored }));
+      expect(getPref("reportTargetWords"), JSON.stringify(stored)).toBe(0);
+    }
+  });
+
+  it("reads a report.targetWords in §8.5's 1–399 hole as stored, because PrefDef cannot declare the hole (P4-T02)", () => {
+    // §8.5's value set is "`0`, or ≥ 400". PrefDef (§8.5.1, verbatim) has an
+    // inclusive min/max and a closed `values` list, so the schema declares
+    // `min: 0` only and the reader (P4-T08) owns the hole. Pinned so that
+    // closing it in PrefDef is a visible change here, not a silent one.
+    setPrefStore(createMemoryPrefStore({ "report.targetWords": 200 }));
+    expect(getPref("reportTargetWords")).toBe(200);
+  });
+
+  it("reads report.maxCritiqueRounds only inside 0–2 (P4-T02)", () => {
+    for (const [stored, read] of [
+      [0, 0],
+      [2, 2],
+      ["2", 2],
+    ] as const) {
+      setPrefStore(
+        createMemoryPrefStore({ "report.maxCritiqueRounds": stored }),
+      );
+      expect(getPref("reportMaxCritiqueRounds"), String(stored)).toBe(read);
+    }
+    for (const stored of [3, -1, "1.5", false]) {
+      setPrefStore(
+        createMemoryPrefStore({ "report.maxCritiqueRounds": stored }),
+      );
+      expect(getPref("reportMaxCritiqueRounds"), JSON.stringify(stored)).toBe(
+        1,
+      );
+    }
+    setPrefStore(createMemoryPrefStore());
+    expect(() => setPref("reportMaxCritiqueRounds", 3)).toThrow(
+      ConfigurationError,
+    );
+  });
+
+  it("holds report.critiqueModel as any model ID string and refuses a non-string (P4-T02)", () => {
+    setPrefStore(
+      createMemoryPrefStore({
+        "report.critiqueModel": "anthropic/claude-sonnet-5",
+      }),
+    );
+    expect(getPref("reportCritiqueModel")).toBe("anthropic/claude-sonnet-5");
+    setPrefStore(createMemoryPrefStore({ "report.critiqueModel": 5 }));
+    expect(getPref("reportCritiqueModel")).toBe("");
+  });
+
+  it("reads report.saveNote as a boolean, stringified or not, and nothing else (P4-T02)", () => {
+    setPrefStore(createMemoryPrefStore({ "report.saveNote": false }));
+    expect(getPref("reportSaveNote")).toBe(false);
+    setPrefStore(createMemoryPrefStore({ "report.saveNote": "false" }));
+    expect(getPref("reportSaveNote")).toBe(false);
+    setPrefStore(createMemoryPrefStore({ "report.saveNote": "no" }));
+    expect(getPref("reportSaveNote")).toBe(true);
+  });
+
   it("never throws: no store installed", () => {
     // §8.5.1: "a corrupt pref must not be able to stop a job from starting."
     // This is also what lets a source-adapter unit test read a setting with no
@@ -1010,6 +1125,37 @@ describe("D5: no credential can reach a preference", () => {
     }
   });
 
+  it("gives Phase 4's five report rows no secret flag, no key-ish name and no credential-shaped default (P4-T02)", () => {
+    // The card's step 3: "the D5 block (no credential in any new row)".
+    // KEYISH_FIELD is the logger's field-name rule (`docs/09` §2.1); it is
+    // applied to these five only, because it also matches the `token` in the
+    // shipped `llm.tokenEstimateCalibration`, a token-count correction factor
+    // and not a secret.
+    const phase4 = [
+      "reportLanguage",
+      "reportTargetWords",
+      "reportMaxCritiqueRounds",
+      "reportCritiqueModel",
+      "reportSaveNote",
+    ] as const;
+    for (const name of phase4) {
+      const def: PrefDef<unknown> = PREFS[name];
+      expect(def.secret, `${def.key} must not be secret`).toBeUndefined();
+      expect(KEYISH_FIELD.test(def.key), `${def.key} is key-ish`).toBe(false);
+      expect(KEYISH_FIELD.test(name), `${name} is key-ish`).toBe(false);
+    }
+  });
+
+  it("ships no default that the logger's redaction would treat as a credential", () => {
+    // `redact` applies `docs/09` §2.1's KEY_PATTERNS; a default it changes is
+    // a credential shipped in source.
+    for (const name of PREF_NAMES) {
+      const def: PrefDef<unknown> = PREFS[name];
+      const text = String(def.default);
+      expect(redact(text), `${def.key} default`).toBe(text);
+    }
+  });
+
   it("declares no credential-shaped key in addon/prefs.js either", () => {
     const CREDENTIAL_SHAPED = /apikey|api_key|\.key$/i;
     for (const line of readPrefsJs()) {
@@ -1154,8 +1300,9 @@ describe("addon/prefs.js agrees with PREFS", () => {
 
   it("lists only real schema keys as having no pref() line", () => {
     const keys = new Set(SECTION_8_5.map((r) => r.key));
-    // 26 since 2026-10-22: `gemini.paidTier` (plan/00 §6 item 269(b)).
-    expect(NO_PREF_LINE).toHaveLength(26);
+    // 26 since 2026-10-22: `gemini.paidTier` (plan/00 §6 item 269(b)); 30
+    // since 2026-10-26: P4-T02's four `report.*` rows.
+    expect(NO_PREF_LINE).toHaveLength(30);
     for (const key of NO_PREF_LINE) expect(keys.has(key), key).toBe(true);
   });
 

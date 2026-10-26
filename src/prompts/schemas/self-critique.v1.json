@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SelfCritique",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "problems"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["pass", "revise", "reject"] },
+    "problems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "severity", "quote", "explanation"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "unsupported",
+              "misattributed",
+              "number_error",
+              "overgeneralized",
+              "outside_knowledge",
+              "missing_contradiction",
+              "abstract_overreach",
+              "broken_citation"
+            ]
+          },
+          "severity": { "type": "string", "enum": ["high", "medium", "low"] },
+          "section": { "type": "string", "maxLength": 200 },
+          "quote": { "type": "string", "maxLength": 800 },
+          "explanation": { "type": "string", "maxLength": 600 },
+          "suggestedFix": { "type": "string", "maxLength": 120 }
+        }
+      }
+    },
+    "citationCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "factualSentences": { "type": "integer", "minimum": 0 },
+        "citedSentences": { "type": "integer", "minimum": 0 },
+        "brokenCitations": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

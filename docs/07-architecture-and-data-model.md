@@ -189,7 +189,7 @@ research_helper/
 │   │   ├── canonicalWork.ts          # CanonicalWork, Author, WorkType
 │   │   ├── sourceRecord.ts           # SourceRecord, provenance
 │   │   ├── summary.ts                # StoredSummary (record); PaperSummary payload is 06-… §6.3
-│   │   ├── trend.ts                  # ThemeCluster, TrendReport
+│   │   ├── trend.ts                  # TrendReport and the trend stage outputs (§5.2; was ThemeCluster, TrendReport until 2026-10-26)
 │   │   ├── profile.ts                # CollectionProfile
 │   │   ├── recommendation.ts         # Recommendation
 │   │   ├── job.ts                    # JobRecord (re-export from core for convenience)
@@ -2207,62 +2207,415 @@ export type SummaryInputScope =
   | { readonly kind: "abstract+notes"; readonly noteCount: number };
 ```
 
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286; `P4-T01`):** the trend types below
+> **replace** the earlier `ThemeCluster` and `TrendReport` rather than sitting beside them. Those
+> predated the prompts: `ThemeCluster` declared `label`, `workKeys`, `exemplarWorkKeys` and a
+> `method` of `"llm-topic" | "embedding-kmeans" | "embedding-hdbscan" | "keyword-cooccurrence"`, and
+> `TrendReport` declared `emergingTopics`, `decliningTopics` and `citedWorkKeys`, while
+> `12-prompt-library.md` §8 has the model return `themeId`, `name`, `definition` and `itemKeys`, and
+> `06-summarization-and-trend-report.md` §10.1 cites by `[[itemKey]]`. What changed, and why:
+>
+> 1. **The stage outputs are the prompts' shapes.** `ThemeClustering`, `ThemeAnalysis` and
+>    `SelfCritique` are `12-…` §8, §9 and §12's "Expected output" schemas field for field — a field a
+>    schema requires is required here, every other field is optional, and the length and pattern
+>    limits are recorded as comments. `CLUSTER_REDUCE_MERGE` returns a `ThemeAnalysis`. `ThemeMerge`
+>    is `06-…` §8.4 steps 3–4's theme-merge output (global themes, and a mapping from each
+>    batch-local theme to a global one or to none), and follows `12-…` §20's schema, written by
+>    `P4-T03` as a draft awaiting the owner's approval (`plan/00` §6 item 289): if the approved
+>    schema differs, `ThemeMerge` changes with it, so the two agree field for field. `Digest` is
+>    `06-…` §8.2's line set. Docs 06 and 12 keep their JSON schemas as prompt contracts; this
+>    section owns the TypeScript.
+> 2. **Item keys, not work keys.** Every citation field is a Zotero item key (`citedItemKeys`),
+>    because a marker is `[[itemKey]]` (`06-…` §10.1).
+> 3. **`TrendReport` follows `06-…` §9.1:** eleven numbered `sections`; Appendix A (`excluded`);
+>    Appendix B (`summaryIds`, `qualityProxies` — `06-…` §12.3's automated proxies); Appendix C and
+>    the warning banner (`critique`, decided on `P4-T09`); §11's numbered `bibliography` and the
+>    unnumbered `retracted` list after it (decided on `P4-T10`); FR-27's `reductionPasses`; and
+>    `scope`, the counts `12-…` §10's report variables name. One record per language
+>    (`reportLanguage` `both` saves two, `P4-T21`).
+> 4. **Kept** for §8.3's `report` table and §6.5's note: `id`, `libraryID`, `collectionKey`,
+>    `title`, `generatedAtEpochMs`, `markdown`, `zoteroNoteKey`, `providerId`, `usage`, `warnings`;
+>    and Phase 6's `audioScripts` and `audioAttachmentKeys` as declared (§6.5, §12.4). Model and
+>    prompt identity moved from one `promptVersion` and one `modelId` to `prompts`, one entry per
+>    prompt the run called, because a run calls up to seven prompts on up to two models (the report
+>    model and the critique model).
+> 5. **Dropped:** `method` and its embedding values, which are Phase 5's (§13 item 5 leaves
+>    embeddings undecided); the per-cluster statistics (`share`, `growthRatio`, `yearHistogram`,
+>    `topKeywords`, `topAuthors`, `topVenues`), which no prompt returns and §9.1's client tables
+>    count at render time; `emergingTopics`, `decliningTopics`, `openQuestions` and
+>    `methodologicalTrends`, which are now prose in the model's §9, §5 ("what is fading"), §8 and §5;
+>    `workCount`, `summarizedCount`, `skippedCount` and `dateRange`, replaced by `scope`; and `html`,
+>    which the note holds and `P4-T13` renders from `markdown`.
+>
+> (The alternative not taken: keep the old shapes and add the new ones beside them.)
+
 ```ts
 // src/model/trend.ts
 
-export interface ThemeCluster {
-  readonly id: string;
-  /** Short label, e.g. "Spatial transcriptomics of tumour microenvironment". */
-  readonly label: string;
-  /** 2-4 sentence characterization of the theme. */
-  readonly description: string;
-  /** Member works, ordered by centrality/representativeness. */
-  readonly workKeys: readonly string[];
-  /** Works chosen as exemplars for the report narrative. */
-  readonly exemplarWorkKeys: readonly string[];
-  readonly size: number;
-  /** Share of the collection, 0..1. */
-  readonly share: number;
-  /** Publication-year histogram: year → count. */
-  readonly yearHistogram: Readonly<Record<number, number>>;
+import type { Doi, ProviderId } from "./ids";
+import type { Usage } from "./usage";
+
+// ---------------------------------------------------------------------------
+// The digest — `docs/06` §8.2
+// ---------------------------------------------------------------------------
+
+/**
+ * One line of `docs/06` §8.2's digest block, in the block's order:
+ * `[KEY] year | design: … | pop: …`, `Q:`, `Methods:`, `Findings:`,
+ * `Metrics:`, `Theme(first-pass):`, `Keywords:`, `Tier: … | Confidence: …`.
+ */
+export type DigestLineKind =
+  | "head"
+  | "question"
+  | "methods"
+  | "findings"
+  | "metrics"
+  | "theme"
+  | "keywords"
+  | "tier";
+
+export interface DigestLine {
+  readonly kind: DigestLineKind;
+  /** The line as sent, its label included (`"Q: …"`). */
+  readonly text: string;
+}
+
+/**
+ * A deterministic, no-LLM projection of one summary (`docs/06` §8.2). The
+ * block a prompt receives is the lines' `text`, joined by `"\n"`.
+ */
+export interface Digest {
+  readonly itemKey: string;
+  /** In {@link DigestLineKind}'s order. */
+  readonly lines: readonly DigestLine[];
+}
+
+// ---------------------------------------------------------------------------
+// `THEME_CLUSTER` — `docs/12` §8 "Expected output" (`ThemeClustering`)
+// ---------------------------------------------------------------------------
+
+export type ThemeFit = "strong" | "moderate" | "weak";
+
+export interface ClusteredTheme {
+  /** `^T[0-9]+$`. */
+  readonly themeId: string;
+  /** At most 80 characters. */
+  readonly name: string;
+  /** One sentence; at most 300 characters. */
+  readonly definition: string;
+  /** Zotero item keys, `^[A-Z0-9]{8}$`. */
+  readonly itemKeys: readonly string[];
+  /** At most 600 characters. */
+  readonly rationale?: string;
+}
+
+export interface ThemeAssignment {
+  readonly itemKey: string;
+  readonly primaryThemeId: string;
+  readonly secondaryThemeIds?: readonly string[];
+  readonly fit: ThemeFit;
+}
+
+export interface UnclusteredItem {
+  readonly itemKey: string;
+  /** At most 300 characters. */
+  readonly reason: string;
+}
+
+export interface ThemeClustering {
+  /** At least one. */
+  readonly themes: readonly ClusteredTheme[];
+  readonly assignments: readonly ThemeAssignment[];
+  readonly unclustered?: readonly UnclusteredItem[];
+  /** Each at most 400 characters. */
+  readonly crossCuttingObservations?: readonly string[];
+}
+
+// ---------------------------------------------------------------------------
+// `THEME_MERGE` — `docs/06` §8.4 steps 3–4 (`ThemeMerge`)
+// ---------------------------------------------------------------------------
+
+/** A global theme of a two-stage clustering. */
+export interface MergedTheme {
+  /** `^T[0-9]+$`, as in {@link ClusteredTheme.themeId}. */
+  readonly themeId: string;
+  /** At most 80 characters. */
+  readonly name: string;
+  /** At most 300 characters. */
+  readonly definition: string;
+  /** At most 600 characters. */
+  readonly rationale?: string;
+}
+
+export interface LocalThemeMapping {
+  /** The batch-qualified local theme id the merge call was given, `^B[0-9]+-T[0-9]+$`. */
+  readonly localThemeId: string;
   /**
-   * Growth signal: ratio of works in the most recent 12 months to the
-   * preceding 12 months. undefined when the denominator is 0.
+   * The global theme it joins (`^T[0-9]+$`); `null` when it maps nowhere,
+   * whose papers go to `unclustered` (`docs/06` §8.4 step 4).
    */
-  readonly growthRatio: number | undefined;
-  readonly topKeywords: readonly string[];
-  readonly topAuthors: readonly { name: string; count: number }[];
-  readonly topVenues: readonly { name: string; count: number }[];
-  /** How the cluster was formed, for reproducibility. */
-  readonly method: "llm-topic" | "embedding-kmeans" | "embedding-hdbscan" | "keyword-cooccurrence";
+  readonly globalThemeId: string | null;
+}
+
+export interface ThemeMerge {
+  /** At least one. */
+  readonly themes: readonly MergedTheme[];
+  /** One entry per local theme; at least one. */
+  readonly mapping: readonly LocalThemeMapping[];
+}
+
+// ---------------------------------------------------------------------------
+// `CLUSTER_REDUCE` and `CLUSTER_REDUCE_MERGE` — `docs/12` §9 (`ThemeAnalysis`)
+// ---------------------------------------------------------------------------
+
+export type FindingStrength = "strong" | "moderate" | "weak";
+
+export interface RepresentativePaper {
+  readonly itemKey: string;
+  /** At most 300 characters. */
+  readonly why: string;
+}
+
+export interface MethodologicalPattern {
+  /** At most 300 characters. */
+  readonly pattern: string;
+  readonly itemKeys: readonly string[];
+}
+
+export interface ConvergentFinding {
+  /** At most 500 characters. */
+  readonly statement: string;
+  /** At least one. */
+  readonly itemKeys: readonly string[];
+  readonly strength: FindingStrength;
+}
+
+export interface ContradictionSide {
+  /** At most 400 characters. */
+  readonly claim: string;
+  /** At least one. */
+  readonly itemKeys: readonly string[];
+}
+
+export interface Contradiction {
+  /** At most 500 characters. */
+  readonly statement: string;
+  readonly sideA: ContradictionSide;
+  readonly sideB: ContradictionSide;
+  /** At most 400 characters. */
+  readonly possibleExplanation?: string | null;
+}
+
+export interface ThemeGap {
+  /** At most 400 characters. */
+  readonly gap: string;
+  /** Why the corpus shows this gap; at most 400 characters. */
+  readonly basis: string;
+  readonly itemKeys?: readonly string[];
+}
+
+/** One theme's analysis; also `CLUSTER_REDUCE_MERGE`'s output. */
+export interface ThemeAnalysis {
+  readonly themeId: string;
+  /** At most 80 characters. */
+  readonly name: string;
+  /** Markdown with inline `[[itemKey]]` citations. */
+  readonly narrative: string;
+  /** One to six. */
+  readonly representativePapers: readonly RepresentativePaper[];
+  readonly methodologicalPatterns?: readonly MethodologicalPattern[];
+  readonly convergentFindings?: readonly ConvergentFinding[];
+  readonly contradictions?: readonly Contradiction[];
+  readonly gaps?: readonly ThemeGap[];
+  /** At most 900 characters. */
+  readonly trajectory: string;
+}
+
+// ---------------------------------------------------------------------------
+// `SELF_CRITIQUE` — `docs/12` §12 (`SelfCritique`)
+// ---------------------------------------------------------------------------
+
+export type CritiqueVerdict = "pass" | "revise" | "reject";
+
+export type CritiqueProblemType =
+  | "unsupported"
+  | "misattributed"
+  | "number_error"
+  | "overgeneralized"
+  | "outside_knowledge"
+  | "missing_contradiction"
+  | "abstract_overreach"
+  | "broken_citation";
+
+export type CritiqueSeverity = "high" | "medium" | "low";
+
+export interface CritiqueProblem {
+  readonly type: CritiqueProblemType;
+  readonly severity: CritiqueSeverity;
+  /** The section heading where it appears; at most 200 characters. */
+  readonly section?: string;
+  /** The offending sentence, verbatim; at most 800 characters. */
+  readonly quote: string;
+  /** At most 600 characters. */
+  readonly explanation: string;
+  /** At most 120 characters. */
+  readonly suggestedFix?: string;
+}
+
+export interface CitationCoverage {
+  /** A non-negative integer. */
+  readonly factualSentences?: number;
+  /** A non-negative integer. */
+  readonly citedSentences?: number;
+  readonly brokenCitations?: readonly string[];
+}
+
+export interface SelfCritique {
+  readonly verdict: CritiqueVerdict;
+  readonly problems: readonly CritiqueProblem[];
+  readonly citationCoverage?: CitationCoverage;
+}
+
+// ---------------------------------------------------------------------------
+// The report record — `docs/06` §9.1, stored in `docs/07` §8.3's `report` table
+// ---------------------------------------------------------------------------
+
+/** One record per language: `reportLanguage` `both` saves two. */
+export type ReportLanguage = "en" | "ko";
+
+/** `docs/06` §9.1's eleven level-2 sections, by number. */
+export type ReportSectionNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+
+export interface ReportSection {
+  readonly number: ReportSectionNumber;
+  /** The `## ` heading as the report shows it, in the report's language. */
+  readonly heading: string;
+  readonly markdown: string;
+  /** Item keys this section cites, after the citation pass. */
+  readonly citedItemKeys: readonly string[];
+}
+
+/** The prompts a report run can call (`docs/12` §1.2). */
+export type TrendPromptId =
+  | "THEME_CLUSTER"
+  | "THEME_MERGE"
+  | "CLUSTER_REDUCE"
+  | "CLUSTER_REDUCE_MERGE"
+  | "TREND_REPORT_EN"
+  | "TREND_REPORT_KO"
+  | "SELF_CRITIQUE";
+
+/** One prompt the run called, with the model and temperature it ran on. */
+export interface TrendPromptUse {
+  readonly promptId: TrendPromptId;
+  /** The full version string, not the cache line (`docs/12` §17.4). */
+  readonly promptVersion: string;
+  readonly modelId: string;
+  readonly temperature: number;
+}
+
+/** The counts `docs/12` §10's report variables name. */
+export interface ReportScope {
+  /** `{{N_TOTAL}}`. */
+  readonly totalCount: number;
+  /** `{{N_ANALYSED}}`. */
+  readonly analysedCount: number;
+  /** `{{N_EXCLUDED}}`. */
+  readonly excludedCount: number;
+  /** `{{N_FULLTEXT}}`. */
+  readonly fullTextCount: number;
+  /** `{{N_ABSTRACT}}`. */
+  readonly abstractCount: number;
+  /** `{{YEAR_MIN}}`; `undefined` when no analysed item has a year. */
+  readonly yearMin: number | undefined;
+  /** `{{YEAR_MAX}}`; `undefined` when no analysed item has a year. */
+  readonly yearMax: number | undefined;
+}
+
+/** One Appendix A row. */
+export interface ExcludedItem {
+  readonly itemKey: string;
+  /** `docs/06` §9.1's reason code, e.g. `retracted`, `duplicate_of:KEY`. */
+  readonly reason: string;
+}
+
+/** One numbered §11 Bibliography entry. */
+export interface BibliographyEntry {
+  readonly itemKey: string;
+  /** `[n]`, 1-based, in order of first appearance (`docs/06` §10.2). */
+  readonly index: number;
+  /** The entry as the bibliography formatter returned it, as plain text. */
+  readonly text: string;
+  readonly doi: Doi | undefined;
+}
+
+/** One entry of the unnumbered "Retracted — not used in this report" list. */
+export interface RetractedEntry {
+  readonly itemKey: string;
+  readonly text: string;
+  readonly doi: Doi | undefined;
+}
+
+/** `docs/06` §12.3's automated proxies, shown in Appendix B. */
+export interface ReportQualityProxies {
+  /** Cited factual sentences / factual sentences; `undefined` when none. */
+  readonly citationDensity: number | undefined;
+  /** Distinct cited items / analysed items. */
+  readonly coverageRatio: number;
+  readonly brokenCitationCount: number;
+  /** `undefined` when no summary has a grounding score. */
+  readonly meanGroundingScore: number | undefined;
+  readonly contradictionCount: number;
+  readonly unresolvedHighSeverityCount: number;
+}
+
+/** What the self-critique left: Appendix C and the warning banner. */
+export interface CritiqueOutcome {
+  /** Rounds run; `0` when `report.maxCritiqueRounds` is `0`. */
+  readonly rounds: number;
+  /** The last critique's problems the run did not resolve. */
+  readonly unresolved: readonly CritiqueProblem[];
+  /** A rewrite followed the last critique, so the shipped text was not re-checked. */
+  readonly revisedAfterLastCritique: boolean;
 }
 
 export interface TrendReport {
   readonly id: string;
   readonly libraryID: number;
   readonly collectionKey: string;
+  /** The title block's `{{COLLECTION_NAME}}`. */
+  readonly collectionName: string;
+  /** The note title, dated (`docs/06` §14.2). */
   readonly title: string;
+  readonly language: ReportLanguage;
   readonly generatedAtEpochMs: number;
+  /** The title block's `{{PLUGIN_VERSION}}`. */
+  readonly pluginVersion: string;
 
   /** Scope actually analysed. */
-  readonly workCount: number;
-  readonly summarizedCount: number;
-  readonly skippedCount: number;
-  readonly dateRange: { readonly fromIso: string; readonly toIso: string };
+  readonly scope: ReportScope;
+  /** FR-27's reduction pass count, shown in the header. */
+  readonly reductionPasses: number;
 
-  /** Narrative sections, in presentation order. */
+  /** The eleven sections, in order, after the citation pass. */
   readonly sections: readonly ReportSection[];
-  readonly clusters: readonly ThemeCluster[];
-  /** Cross-cutting observations that don't belong to one cluster. */
-  readonly emergingTopics: readonly string[];
-  readonly decliningTopics: readonly string[];
-  readonly openQuestions: readonly string[];
-  readonly methodologicalTrends: readonly string[];
+  /** The final theme assignment; after a two-stage merge, the reassigned one. */
+  readonly clustering: ThemeClustering;
+  /** §11, numbered. */
+  readonly bibliography: readonly BibliographyEntry[];
+  /** The unnumbered list after §11; empty under `exclude_entirely`. */
+  readonly retracted: readonly RetractedEntry[];
+  /** Appendix A. */
+  readonly excluded: readonly ExcludedItem[];
+  /** Appendix B: the `StoredSummary.id` of every summary the synthesis used. */
+  readonly summaryIds: readonly string[];
+  /** Appendix B. */
+  readonly qualityProxies: ReportQualityProxies;
+  /** Appendix C and the banner. */
+  readonly critique: CritiqueOutcome;
 
-  /** Rendered artifacts. */
+  /** The whole report as saved: title block, sections, appendices. */
   readonly markdown: string;
-  /** Sanitized HTML suitable for a Zotero note. */
-  readonly html: string;
   /** Flattened, speakable script per language, produced for TTS. */
   readonly audioScripts: Readonly<Partial<Record<"en" | "ko", string>>>;
 
@@ -2270,21 +2623,15 @@ export interface TrendReport {
   readonly zoteroNoteKey?: string;
   readonly audioAttachmentKeys?: Readonly<Partial<Record<"en" | "ko", string>>>;
 
-  readonly promptVersion: string;
+  /** The active provider; every call of the run went to it. */
   readonly providerId: ProviderId;
-  readonly modelId: string;
+  /** One entry per prompt the run called. */
+  readonly prompts: readonly TrendPromptUse[];
+  /** Summed over every call the run made, the summaries it made included. */
   readonly usage: Usage | undefined;
-  /** Every workKey cited in the narrative, so the UI can link them. */
-  readonly citedWorkKeys: readonly string[];
+  /** Every item key cited, in order of first appearance. */
+  readonly citedItemKeys: readonly string[];
   readonly warnings: readonly string[];
-}
-
-export interface ReportSection {
-  readonly key: string;
-  readonly heading: string;
-  readonly markdown: string;
-  /** Works referenced in this section. */
-  readonly citedWorkKeys: readonly string[];
 }
 ```
 
@@ -2677,7 +3024,7 @@ A summary is stored as a **child note** on the item, not in `extra`:
 
 ### 6.5 `TrendReport` → Zotero
 
-- Written as a **standalone note** inside the target collection, with marker `<!-- rh:report v=1 ... -->` and tag `research_helper/report`.
+- Written as a **standalone note** inside the target collection, with marker `<!-- rh:report v=1 ... -->` and tag `research_helper/trend-report`. *(Corrected 2026-10-26, `P4-T01`: the tag read `research_helper/report`; `10-requirements-and-user-stories.md` FR-25 and `11-implementation-roadmap.md` §1 Phase 4 both name `research_helper/trend-report`, and two requirement documents settle it against this one bullet.)*
 - Cited works are linked via `zotero://select/library/items/<key>` anchors so the narrative is clickable.
 - Audio is attached as a **child attachment of the report note** — an imported file attachment (`linkMode: "imported_file"`) with the audio MIME type, so it syncs and is deletable through normal Zotero UI. Filenames: `<collection-slug>-trends-<yyyymmdd>-<lang>.<ext>`.
 
@@ -4754,22 +5101,65 @@ Notes: this is the pipeline where resume matters most — 200 summaries is poten
 
 ### 12.4 Trend report (Feature 3b) and audio (Feature 5)
 
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286; `P4-T01`):** the diagram below is
+> `06-summarization-and-trend-report.md` §8.5's pipeline, stage for stage — screen (its step 0),
+> ensure summaries (step 1, the map), digest and cluster (step 2, with §8.4's two-stage merge),
+> per-theme analysis (step 3, with §8.4's sub-batch merge, depth ≤ 2), compose and
+> critique/revise (step 4), render (step 5), then the write. Three changes from the earlier
+> diagram:
+>
+> 1. **Ensure summaries runs inside the report job.** Missing summaries are summarized through the
+>    summarize pipeline's per-item function, priced in the report's one estimate under one
+>    confirmation, with no child job — so `EnsuringSummaries → RunningSummarize : summaries
+>    missing` and its return edge are gone (decided on `P4-T18`; `10-…` FR-25's first "Given" says
+>    the same). The estimate and its confirmation therefore come before anything is summarized.
+> 2. **The synthesis stages are the prompts' calls.** The earlier `Clustering → Labelling →
+>    Analysing` drew labelling and a growth/decline computation as stages of their own;
+>    `THEME_CLUSTER` returns named, defined themes in one call (`12-…` §8), and §8.5 has no
+>    growth/decline stage. `Composing → Composing : per-section generation` is gone too: the report
+>    is one `TREND_REPORT_*` call, regenerated whole when it fails its heading check (decided on
+>    `P4-T08`) or after a high-severity critique, and §8.5 step 4's critique loop is drawn.
+> 3. **A pause keeps its stage pending.** A budget refusal and the wall-clock budget pause and ask
+>    (§7.5; `plan/00` §6 items 274(c), 265(a)), as user and offline pauses do; "stop" at a pause is
+>    a cancel.
+>
+> Kept: a cancel discards partial synthesis output while the summaries stay (§7.4); an interrupted
+> run resumes from the last completed stage, every spend guard re-passed with the visible resume
+> notice (`plan/00` §6 item 250); the audio states after `Succeeded` are Phase 6's and unchanged.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Queued
-    Queued --> EnsuringSummaries
-    EnsuringSummaries --> RunningSummarize : summaries missing
-    RunningSummarize --> EnsuringSummaries : child summarize job completed
-    EnsuringSummaries --> Clustering : all (or enough) summaries present
-    EnsuringSummaries --> Failed : too few summarizable items
+    Queued --> Screening
+    Screening --> Estimating : retraction, duplicate and language decisions made
+    Estimating --> AwaitingConfirm : one estimate for missing summaries and synthesis
+    Estimating --> EnsuringSummaries : no confirmation required
+    AwaitingConfirm --> EnsuringSummaries : confirmed
+    AwaitingConfirm --> Cancelled : declined
 
-    Clustering --> Labelling : clusters formed
-    Labelling --> Analysing : cluster labels + descriptions
-    Analysing --> Composing : growth/decline signals computed
-    Composing --> Composing : per-section generation
-    Composing --> Rendering : narrative complete
-    Rendering --> WritingNote : markdown + sanitized HTML
-    WritingNote --> Succeeded
+    EnsuringSummaries --> EnsuringSummaries : summarize the next missing item, in this job
+    EnsuringSummaries --> Synthesis : all (or enough) summaries present
+    EnsuringSummaries --> Failed : too few summarizable items, or over 30 percent of papers failed
+
+    state Synthesis {
+        [*] --> Digesting
+        Digesting --> Clustering : digests built, no LLM
+        Clustering --> Clustering : next batch (two-stage)
+        Clustering --> MergingThemes : two-stage only
+        MergingThemes --> Analysing : global themes, papers reassigned
+        Clustering --> Analysing : themes validated
+        Analysing --> Analysing : next theme, or sub-batch merge (depth 2 at most)
+        Analysing --> Composing : one ThemeAnalysis per theme
+        Composing --> Composing : one fresh generation for a missing or misordered heading
+        Composing --> Critiquing : draft, critique rounds left
+        Critiquing --> Composing : high-severity problems, fresh generation with REVISION_NOTES
+        Critiquing --> [*] : pass, or no high-severity problem
+        Composing --> [*] : no critique rounds left
+    }
+
+    Synthesis --> Rendering : report Markdown, citations validated
+    Rendering --> WritingNote : title block, tables, appendices, sanitized HTML
+    WritingNote --> Succeeded : note (none in a read-only library), report row, Markdown file
 
     Succeeded --> AudioQueued : user requests audio
     AudioQueued --> ScriptBuilding : language chosen (en / ko)
@@ -4779,12 +5169,20 @@ stateDiagram-v2
     Concatenating --> AttachingAudio
     AttachingAudio --> AudioSucceeded
 
-    Composing --> Cancelling
-    Synthesizing --> Cancelling
-    Cancelling --> Cancelled : partial report / audio DISCARDED
+    EnsuringSummaries --> Paused : budget refusal, wall-clock budget, user, offline
+    Synthesis --> Paused : budget refusal, wall-clock budget, user, offline
+    Paused --> EnsuringSummaries : continue, the pending stage re-runs
+    Paused --> Synthesis : continue, the pending stage re-runs
+    Paused --> Cancelling : stop
 
-    Composing --> Interrupted : app quit
-    Interrupted --> EnsuringSummaries : restart from the last completed stage
+    EnsuringSummaries --> Cancelling
+    Synthesis --> Cancelling
+    Synthesizing --> Cancelling
+    Cancelling --> Cancelled : partial report / audio DISCARDED, summaries KEPT
+
+    EnsuringSummaries --> Interrupted : app quit
+    Synthesis --> Interrupted : app quit
+    Interrupted --> EnsuringSummaries : restart from the last completed stage, spend guards re-passed
     AudioSucceeded --> [*]
     Succeeded --> [*]
     Failed --> [*]

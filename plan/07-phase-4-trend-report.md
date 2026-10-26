@@ -539,9 +539,20 @@ validated by the existing registry; `docs/12` and `docs/06` carry every prompt-s
 - Do **not** add a provider-specific variant (`docs/12` §18.1 rule 1).
 - Do **not** put any `{{VAR}}` in a system text (`docs/12` §1.1 rule 2).
 
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 290(b)):** the first Do-NOT bullet's "stop and say
+> so" happened: `THEME_CLUSTER`'s system text (`docs/12` §8, rules 1 and 5) held `{{MIN_THEMES}}`,
+> `{{MAX_THEMES}}` and `{{MIN_PAPERS_PER_THEME}}`, against the last bullet. The owner approved in chat
+> the one change to an existing prompt's text: the three numbers move to the user text, and rules 1
+> and 5 refer to "the request". The version stays `1.0.0`, because no run has used the prompt.
+> `docs/12` §8 carries the wording; `theme-cluster.v1.0.0.md` is regenerated from it and registered.
+
 **Done when.**
 - [ ] `docs/12` and `docs/06` carry step 1's changes, each under a dated note.
 - [ ] The owner's approval of both new prompts' wording is recorded (the date and where).
+      *(Decided 2026-10-26 (owner, `plan/00` §6 item 290(a)): met. The owner approved both wordings
+      as drafted, their client-side validation and reasoning effort `medium` included, in chat on
+      2026-10-26; recorded in `plan/00` §6 item 290(a) and in `docs/12` §1.2, §20 and §21. The State
+      stays `TODO` until the owner sets it.)*
 - [ ] The registry loads all seven files with no `PromptRegistryError`.
 - [ ] Each schema file equals its `docs/12` block after Prettier, as `paper-summary.v1.json` does
       (item 238).
@@ -889,9 +900,21 @@ sections, every marker in the valid set, inside the 60 000-token budget at any N
    (§0.2, decided 2026-10-26), budgeted, through `chatStream` with deltas forwarded to the progress
    reporter.
 4. Validate per `docs/12` §10 checks 1–5 using `P4-T10`; compute density and coverage for
-   Appendix B. A heading failure (checks 1–2) triggers **one fresh generation** with the failure
+   Appendix B. ~~A heading failure (checks 1–2) triggers **one fresh generation** with the failure
    stated in `{{REVISION_NOTES}}`; an invalid marker is never repaired by a model — `P4-T10` replaces
-   it visibly (decided below).
+   it visibly (decided below).~~ **Check 1 regenerates once; check 2 is replaced visibly, with no
+   model call** (`docs/12` §10): a missing, extra or misordered heading triggers one fresh generation
+   with the failure stated in `{{REVISION_NOTES}}`, and `P4-T10` replaces an invalid marker visibly
+   (decided below). *(Aligned 2026-10-26, owner, `plan/00` §6 item 290: check 2 is the citation
+   check, not a heading check, so "checks 1–2" was wrong.)*
+5. Read a stored `report.targetWords` of 1–399 as `0`, automatic, so `TARGET_WORDS` comes from the
+   §9.2 table, with a unit test (decided below). Values 0 and ≥ 400 pass through unchanged.
+
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 290(d)):** `docs/07` §8.5 allows
+> `report.targetWords` to be "`0`, or ≥ 400", but `PrefDef` can state only an inclusive range or a
+> closed list, so the preference reader returns a stored 1–399 as stored (`P4-T02`'s finding, pinned
+> by a test in `test/unit/prefs/schema.test.ts`). **Decided: this card reads 1–399 as `0`
+> (automatic); `PrefDef` is not extended.** Built by step 5.
 
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286):** `docs/12` §10 says "Failures 1–2 trigger
 > a repair call", but the repair path it defines (§18.3) repairs **JSON** against a schema; nothing
@@ -921,6 +944,8 @@ sections, every marker in the valid set, inside the 60 000-token budget at any N
 - [ ] A scripted report missing `## 7.` triggers exactly one fresh generation with the failure named.
 - [ ] With 300 synthetic digests the rendered request stays within 60 000 tokens by `estTokens`.
 - [ ] Every computed variable is asserted against the fixture's real counts.
+- [ ] A stored `report.targetWords` of 1 and of 399 gives the §9.2 table's `TARGET_WORDS`; 0 does
+      too, and 400 gives 400 (item 290(d), step 5).
 - [ ] `npm run typecheck` exits 0; `npm run test:unit -- trendCompose` passes.
 
 **Verify with.**
@@ -1763,11 +1788,15 @@ counting its reduction passes, and saves nothing when cancelled mid-synthesis.
 - create `test/unit/pipeline/trendReportPipeline.test.ts`
 
 **Do.**
-1. Stages in order: screen, ensure summaries, estimate and confirm (`P4-T16`), digest, cluster
+1. Stages in order: ~~screen, ensure summaries, estimate and confirm (`P4-T16`),~~ **screen,
+   estimate and confirm (`P4-T16`), ensure summaries,** digest, cluster
    (`P4-T05`/`P4-T06`), analyse (`P4-T07`), compose (`P4-T08`), critique (`P4-T09`), scaffold
    (`P4-T12`), render (`P4-T13`), save (`P4-T14`). "Ensure summaries" summarizes the missing items
    inside this job through the summarize pipeline's per-item function (`P3-T29`), priced in
-   `P4-T16`'s one estimate under one confirmation — no child job (decided below).
+   `P4-T16`'s one estimate under one confirmation — no child job (decided below). *(Aligned
+   2026-10-26, owner, `plan/00` §6 item 290: the estimate and its confirmation come before anything
+   is summarized — FR-25 and item 286; `docs/07` §12.4's `Estimating → AwaitingConfirm →
+   EnsuringSummaries`.)*
 2. One pass counter for the run; the header shows it (FR-27).
 3. Probe `tc`/`cr`/`rp` before each stage and store after; checkpoint after each stage. A run input
    option skips the three probes (never set by the UI) for `P4-T24`'s determinism runs, which keep

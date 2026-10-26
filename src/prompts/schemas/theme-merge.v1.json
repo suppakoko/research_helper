@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ThemeMerge",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["themes", "mapping"],
+  "properties": {
+    "themes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["themeId", "name", "definition"],
+        "properties": {
+          "themeId": { "type": "string", "pattern": "^T[0-9]+$" },
+          "name": { "type": "string", "maxLength": 80 },
+          "definition": { "type": "string", "maxLength": 300 },
+          "rationale": { "type": "string", "maxLength": 600 }
+        }
+      }
+    },
+    "mapping": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["localThemeId", "globalThemeId"],
+        "properties": {
+          "localThemeId": { "type": "string", "pattern": "^B[0-9]+-T[0-9]+$" },
+          "globalThemeId": {
+            "type": ["string", "null"],
+            "pattern": "^T[0-9]+$"
+          }
+        }
+      }
+    }
+  }
+}

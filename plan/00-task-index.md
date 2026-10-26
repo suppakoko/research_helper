@@ -2250,6 +2250,27 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `followup-285b.md` came from item 284(a)'s Korean on a machine whose test Zotero starts in Korean; the specs that
     assert English are being pinned to `en-US`.
 
+289. **Phase 4 starts while Phase 3 waits, 2026-10-26.** **DECIDED 2026-10-26 (owner):** start Phase 4's three
+    entry cards, `P4-T01`, `P4-T02` and `P4-T03`, now, in one wave, while Phase 3 waits on labels and keys (item
+    282). `P4-T03`'s two new prompts (`THEME_MERGE`, `CLUSTER_REDUCE_MERGE`) and any Korean prompt text not
+    already owner-approved are drafted by the coordinator's agent and shown to the owner in chat; nothing is
+    committed with that wording until the owner approves it (item 286; G-41).
+
+290. **Four lines raised by the first Phase 4 wave** (`plan/reports/P4-T01.md`, `P4-T02.md`, `P4-T03.md`).
+    **DECIDED 2026-10-26 (owner), each as recommended:** (a) `THEME_MERGE` (`docs/12` §20) and `CLUSTER_REDUCE_MERGE`
+    (§21) are **approved as drafted**, including their code-side validation and reasoning effort `medium`. (b)
+    `THEME_CLUSTER`'s system prompt held three placeholders the registry rejects (§17.3's 2026-10-20 rule); the rule
+    stands and the numbers move to the user prompt. The owner approved this wording in chat: system rule 1 becomes
+    "Produce a number of themes within the range stated in the request." (its second sentence unchanged); rule 5's
+    first sentence becomes "A theme needs at least the minimum number of papers stated in the request." (the rest
+    unchanged); the user prompt gains, after the `USER TOPIC` line, `THEMES REQUIRED: between {{MIN_THEMES}} and
+    {{MAX_THEMES}}.` and `MINIMUM PAPERS PER THEME: {{MIN_PAPERS_PER_THEME}}`. The version stays 1.0.0, because no
+    run has used the prompt. (c) `TREND_REPORT_KO`'s file, a byte copy of `docs/12` §11, is committed now; its
+    native-speaker review stays gate G-31. (d) `report.targetWords` values 1–399, which `PrefDef` cannot refuse, are
+    read as `0` (automatic) by `P4-T08`; `PrefDef` is not extended. Also aligned with decisions already taken: `P4-T18`
+    step 1 orders estimate and confirmation before ensuring summaries (FR-25, item 286), and `P4-T08` step 4 reads
+    "check 1 regenerates once; check 2 is replaced visibly, with no model call" (`docs/12` §10).
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

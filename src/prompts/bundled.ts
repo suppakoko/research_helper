@@ -29,11 +29,19 @@
  * startup prompt-version comparison (`P3-T26`). Still to come:
  * `summarizeItem` (`P3-T25`), which passes {@link PROMPT_VERSIONS} and
  * {@link PROMPT_CACHE_EPOCHS} to the summary cache, and `relevanceScreen`
- * (`P3-T27`).
+ * (`P3-T27`). Phase 4's synthesis stages read the trend prompts through
+ * {@link PROMPT_REGISTRY}: `THEME_CLUSTER` (`P4-T05`), `THEME_MERGE`
+ * (`P4-T06`), `CLUSTER_REDUCE` and `CLUSTER_REDUCE_MERGE` (`P4-T07`),
+ * `TREND_REPORT_EN`/`_KO` (`P4-T08`) and `SELF_CRITIQUE` (`P4-T09`).
+ * `THEME_MERGE` and `CLUSTER_REDUCE_MERGE` are approved as drafted, and
+ * `THEME_CLUSTER`'s three numbers moved to its user text (decided
+ * 2026-10-26, owner, `plan/00` §6 item 290(a) and (b)).
  */
 
 import chunkMapV100 from "./chunk-map.v1.0.0.md" with { type: "text" };
 import chunkReduceV100 from "./chunk-reduce.v1.0.0.md" with { type: "text" };
+import clusterReduceMergeV100 from "./cluster-reduce-merge.v1.0.0.md" with { type: "text" };
+import clusterReduceV100 from "./cluster-reduce.v1.0.0.md" with { type: "text" };
 import {
   createPromptRegistry,
   type PromptId,
@@ -43,6 +51,11 @@ import {
 import paperSummaryAbstractV100 from "./paper-summary-abstract.v1.0.0.md" with { type: "text" };
 import paperSummaryFulltextV100 from "./paper-summary-fulltext.v1.0.0.md" with { type: "text" };
 import relevanceScreenV100 from "./relevance-screen.v1.0.0.md" with { type: "text" };
+import selfCritiqueV100 from "./self-critique.v1.0.0.md" with { type: "text" };
+import themeClusterV100 from "./theme-cluster.v1.0.0.md" with { type: "text" };
+import themeMergeV100 from "./theme-merge.v1.0.0.md" with { type: "text" };
+import trendReportEnV100 from "./trend-report-en.v1.0.0.md" with { type: "text" };
+import trendReportKoV100 from "./trend-report-ko.v1.0.0.md" with { type: "text" };
 
 /** Every bundled prompt file, active or superseded. */
 export const PROMPT_SOURCE_FILES: readonly PromptSourceFile[] = Object.freeze([
@@ -57,6 +70,16 @@ export const PROMPT_SOURCE_FILES: readonly PromptSourceFile[] = Object.freeze([
   },
   { fileName: "chunk-map.v1.0.0.md", text: chunkMapV100 },
   { fileName: "chunk-reduce.v1.0.0.md", text: chunkReduceV100 },
+  { fileName: "theme-cluster.v1.0.0.md", text: themeClusterV100 },
+  { fileName: "cluster-reduce.v1.0.0.md", text: clusterReduceV100 },
+  { fileName: "trend-report-en.v1.0.0.md", text: trendReportEnV100 },
+  { fileName: "trend-report-ko.v1.0.0.md", text: trendReportKoV100 },
+  { fileName: "self-critique.v1.0.0.md", text: selfCritiqueV100 },
+  { fileName: "theme-merge.v1.0.0.md", text: themeMergeV100 },
+  {
+    fileName: "cluster-reduce-merge.v1.0.0.md",
+    text: clusterReduceMergeV100,
+  },
 ]);
 
 /** The registry over {@link PROMPT_SOURCE_FILES}, built once. */

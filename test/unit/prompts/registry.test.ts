@@ -6,6 +6,11 @@ import { format, resolveConfig } from "prettier";
 import { describe, expect, it } from "vitest";
 
 import {
+  schemaProblems,
+  validateAgainstSchema,
+} from "../../../src/llm/shared/schemaValidate";
+import { reconcilePromptVersions } from "../../../src/pipeline/summarize/summaryCache";
+import {
   createPromptRegistry,
   escapeSourceText,
   parsePromptFile,
@@ -70,9 +75,31 @@ function docs12Section(id: string): string[] {
     (l) => l.startsWith("## ") && l.endsWith(`\`${id}\``),
   );
   expect(start, `docs/12 has no section for ${id}`).toBeGreaterThanOrEqual(0);
-  const end = lines.findIndex((l, i) => i > start && /^## \d+\. `/.test(l));
+  // The last numbered section (§21) ends where "## Sources" begins.
+  const end = lines.findIndex(
+    (l, i) => i > start && (/^## \d+\. `/.test(l) || l === "## Sources"),
+  );
+  expect(end, `docs/12 section ${id} has no end`).toBeGreaterThan(start);
   return lines.slice(start, end);
 }
+
+/** The ```json block under "### Expected output" in a docs/12 section. */
+function docs12SchemaBlock(id: string): string {
+  const section = docs12Section(id);
+  const at = section.indexOf("### Expected output");
+  const open = section.findIndex((l, i) => i > at && l === "```json");
+  const close = section.findIndex((l, i) => i > open && l === "```");
+  expect(at >= 0 && open > at && close > open).toBe(true);
+  return section.slice(open + 1, close).join("\n") + "\n";
+}
+
+/** Each schema file `P4-T03` ships, and the docs/12 section it transcribes. */
+const DOCS12_SCHEMAS = [
+  { file: "theme-clustering.v1.json", id: "THEME_CLUSTER" },
+  { file: "theme-analysis.v1.json", id: "CLUSTER_REDUCE" },
+  { file: "self-critique.v1.json", id: "SELF_CRITIQUE" },
+  { file: "theme-merge.v1.json", id: "THEME_MERGE" },
+] as const;
 
 /** The fenced `text` block following `heading` inside a docs/12 section. */
 function docs12Fence(id: string, heading: string): string {
@@ -160,7 +187,7 @@ function build(overrides: Partial<FileParts> = {}): PromptSourceFile {
 // The shipped files
 // ---------------------------------------------------------------------------
 
-describe("the five shipped prompt files", () => {
+describe("the shipped prompt files", () => {
   it("all load into one registry at version 1.0.0", () => {
     const registry = createPromptRegistry(shippedFiles());
     expect(registry.versions).toEqual({
@@ -169,6 +196,13 @@ describe("the five shipped prompt files", () => {
       PAPER_SUMMARY_FULLTEXT: "1.0.0",
       CHUNK_MAP: "1.0.0",
       CHUNK_REDUCE: "1.0.0",
+      THEME_CLUSTER: "1.0.0",
+      CLUSTER_REDUCE: "1.0.0",
+      TREND_REPORT_EN: "1.0.0",
+      TREND_REPORT_KO: "1.0.0",
+      SELF_CRITIQUE: "1.0.0",
+      THEME_MERGE: "1.0.0",
+      CLUSTER_REDUCE_MERGE: "1.0.0",
     });
     for (const id of PROMPT_IDS) {
       expect(registry.get(id).id).toBe(id);
@@ -219,18 +253,45 @@ describe("the five shipped prompt files", () => {
 
   it("carries docs/06 §11.1 and §5.2's temperatures and max_tokens", () => {
     const registry = createPromptRegistry(shippedFiles());
-    const expected: Record<PromptId, number | null> = {
-      RELEVANCE_SCREEN: null,
-      PAPER_SUMMARY_ABSTRACT: 1200,
-      PAPER_SUMMARY_FULLTEXT: 1600,
-      CHUNK_MAP: 900,
-      CHUNK_REDUCE: 1600,
+    // [temperature, defaultMaxTokens, outputFormat, maxTokensBase].
+    // THEME_MERGE and CLUSTER_REDUCE_MERGE take docs/12 §20 and §21's
+    // figures (docs/06 §5.2's rows); THEME_CLUSTER's ceiling is
+    // 2000 + 40 × N (docs/12 §8), so it has no defaultMaxTokens.
+    const expected: Record<
+      PromptId,
+      readonly [number, number | null, "json" | "markdown", number | null]
+    > = {
+      RELEVANCE_SCREEN: [0, null, "json", null],
+      PAPER_SUMMARY_ABSTRACT: [0, 1200, "json", null],
+      PAPER_SUMMARY_FULLTEXT: [0, 1600, "json", null],
+      CHUNK_MAP: [0, 900, "json", null],
+      CHUNK_REDUCE: [0, 1600, "json", null],
+      THEME_CLUSTER: [0.2, null, "json", 2000],
+      CLUSTER_REDUCE: [0.3, 3000, "json", null],
+      TREND_REPORT_EN: [0.3, 6000, "markdown", null],
+      TREND_REPORT_KO: [0.3, 7000, "markdown", null],
+      SELF_CRITIQUE: [0, 2500, "json", null],
+      THEME_MERGE: [0.2, 4000, "json", null],
+      CLUSTER_REDUCE_MERGE: [0.3, 3000, "json", null],
     };
     for (const id of PROMPT_IDS) {
       const t = registry.get(id);
-      expect(t.defaultTemperature, id).toBe(0);
-      expect(t.defaultMaxTokens, id).toBe(expected[id]);
-      expect(t.outputFormat, id).toBe("json");
+      const [temperature, maxTokens, format, maxTokensBase] = expected[id];
+      expect(t.defaultTemperature, id).toBe(temperature);
+      expect(t.defaultMaxTokens, id).toBe(maxTokens);
+      expect(t.outputFormat, id).toBe(format);
+      expect(t.maxTokensBase, id).toBe(maxTokensBase);
+    }
+  });
+
+  it("lists every registered prompt in docs/12 §1.2's index", () => {
+    const docs = readRepo("docs/12-prompt-library.md");
+    const index = docs.slice(
+      docs.indexOf("### 1.2 Prompt index"),
+      docs.indexOf("## 2. `QUERY_EXPAND`"),
+    );
+    for (const id of PROMPT_IDS) {
+      expect(index, id).toContain(`| [\`${id}\`](#`);
     }
   });
 
@@ -243,27 +304,295 @@ describe("the five shipped prompt files", () => {
     expect(() => resolveMaxTokens(t, 2.5)).toThrow(PromptRegistryError);
   });
 
+  it("adds maxTokensBase to the per-item part: THEME_CLUSTER's 2000 + 40 × N (docs/12 §8, §17.3)", () => {
+    // The rule on a synthetic file first; then THEME_CLUSTER's own file.
+    const grown = parsePromptFile(
+      build({
+        front: {
+          defaultMaxTokens: null,
+          maxTokensBase: "2000",
+          maxTokensPerItem: "40",
+        },
+      }),
+    );
+    expect(grown.maxTokensBase).toBe(2000);
+    expect(grown.maxTokensPerItem).toBe(40);
+    expect(grown.defaultMaxTokens).toBeNull();
+    expect(resolveMaxTokens(grown, 1)).toBe(2040);
+    expect(resolveMaxTokens(grown, 25)).toBe(3000);
+    expect(resolveMaxTokens(grown, 400)).toBe(18000);
+    expect(() => resolveMaxTokens(grown)).toThrow(PromptRegistryError);
+    expect(() => resolveMaxTokens(grown, 0)).toThrow(PromptRegistryError);
+    const cluster = createPromptRegistry(shippedFiles()).get("THEME_CLUSTER");
+    expect(cluster.maxTokensBase).toBe(2000);
+    expect(cluster.maxTokensPerItem).toBe(40);
+    expect(resolveMaxTokens(cluster, 1)).toBe(2040);
+    expect(() => resolveMaxTokens(cluster)).toThrow(PromptRegistryError);
+    // A per-item file without a fixed part is unchanged (RELEVANCE_SCREEN).
+    const screen = createPromptRegistry(shippedFiles()).get("RELEVANCE_SCREEN");
+    expect(screen.maxTokensBase).toBeNull();
+    expect(resolveMaxTokens(screen, 15)).toBe(1500);
+  });
+
   it("gives a fixed prompt its own max_tokens and refuses a batch size", () => {
     const t = createPromptRegistry(shippedFiles()).get("CHUNK_MAP");
     expect(resolveMaxTokens(t)).toBe(900);
     expect(() => resolveMaxTokens(t, 10)).toThrow(PromptRegistryError);
   });
 
-  it("attaches the PaperSummary schema to the three summary prompts only", () => {
+  it("attaches each prompt's schema: PaperSummary to the three summary prompts, ThemeAnalysis to both reduce prompts", () => {
     const registry = createPromptRegistry(shippedFiles());
-    const paperSummary = PROMPT_SCHEMAS["paper-summary.v1.json"];
-    for (const id of [
-      "PAPER_SUMMARY_ABSTRACT",
-      "PAPER_SUMMARY_FULLTEXT",
-      "CHUNK_REDUCE",
-    ] as const) {
-      expect(registry.get(id).schema).toBe(paperSummary);
-      expect(registry.get(id).schemaFile).toBe("paper-summary.v1.json");
+    const expected: Record<PromptId, string | null> = {
+      RELEVANCE_SCREEN: null,
+      PAPER_SUMMARY_ABSTRACT: "paper-summary.v1.json",
+      PAPER_SUMMARY_FULLTEXT: "paper-summary.v1.json",
+      CHUNK_MAP: null,
+      CHUNK_REDUCE: "paper-summary.v1.json",
+      THEME_CLUSTER: "theme-clustering.v1.json",
+      CLUSTER_REDUCE: "theme-analysis.v1.json",
+      TREND_REPORT_EN: null,
+      TREND_REPORT_KO: null,
+      SELF_CRITIQUE: "self-critique.v1.json",
+      THEME_MERGE: "theme-merge.v1.json",
+      // docs/12 §21: no schema of its own.
+      CLUSTER_REDUCE_MERGE: "theme-analysis.v1.json",
+    };
+    for (const id of PROMPT_IDS) {
+      const file = expected[id];
+      expect(registry.get(id).schemaFile, id).toBe(file);
+      expect(registry.get(id).schema, id).toBe(
+        file === null ? null : PROMPT_SCHEMAS[file],
+      );
     }
-    for (const id of ["RELEVANCE_SCREEN", "CHUNK_MAP"] as const) {
-      expect(registry.get(id).schema).toBeNull();
-      expect(registry.get(id).schemaFile).toBeNull();
+    expect(registry.get("CLUSTER_REDUCE_MERGE").schema).toBe(
+      registry.get("CLUSTER_REDUCE").schema,
+    );
+  });
+
+  it("CLUSTER_REDUCE_MERGE says it receives partial theme analyses, not paper summaries (item 286)", () => {
+    const registry = createPromptRegistry(shippedFiles());
+    const merge = registry.get("CLUSTER_REDUCE_MERGE");
+    expect(merge.user).toContain("PARTIAL THEME ANALYSES");
+    expect(merge.user).not.toContain("PAPER SUMMARIES");
+    expect(merge.variables).toContain("PARTIAL_ANALYSES_JSON");
+    expect(merge.variables).not.toContain("SUMMARIES_JSON");
+    expect(registry.get("CLUSTER_REDUCE").user).toContain("PAPER SUMMARIES");
+  });
+
+  it("no new system text holds a placeholder (docs/12 §1.1 rule 2)", () => {
+    const registry = createPromptRegistry(shippedFiles());
+    for (const id of PROMPT_IDS) {
+      expect(registry.get(id).system, id).not.toMatch(/\{\{|\}\}/);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THEME_CLUSTER — its three numbers moved to the user text (item 290(b))
+// ---------------------------------------------------------------------------
+
+describe("theme-cluster.v1.0.0.md", () => {
+  const text = readFileSync(
+    resolve(promptsDir, "theme-cluster.v1.0.0.md"),
+    "utf8",
+  );
+
+  /** The fenced block after `heading` in the raw file. */
+  function fileFence(heading: string): string {
+    const lines = text.split("\n");
+    const at = lines.indexOf(heading);
+    const open = lines.findIndex((l, i) => i > at && l === "```text");
+    const close = lines.findIndex((l, i) => i > open && l === "```");
+    expect(at >= 0 && open > at && close > open).toBe(true);
+    return lines.slice(open + 1, close).join("\n");
+  }
+
+  /** One value per declared variable; the three numbers are distinct. */
+  const VARS: Readonly<Record<string, string>> = {
+    N_PAPERS: "57",
+    YEAR_MIN: "2015",
+    YEAR_MAX: "2024",
+    USER_TOPIC: "Deep learning for ECG",
+    MIN_THEMES: "4",
+    MAX_THEMES: "7",
+    MIN_PAPERS_PER_THEME: "3",
+    DIGESTS: "[ABCD2345] 2021 · A digest line",
+  };
+
+  it("holds docs/12 §8's system and user text verbatim", () => {
+    expect(fileFence("## system")).toBe(
+      docs12Fence("THEME_CLUSTER", "### System prompt"),
+    );
+    expect(fileFence("## user")).toBe(
+      docs12Fence("THEME_CLUSTER", "### User prompt"),
+    );
+  });
+
+  it("carries the grown ceiling's two parts (docs/12 §8, decided 2026-10-26)", () => {
+    expect(text).toContain("\nmaxTokensBase: 2000\n");
+    expect(text).toContain("\nmaxTokensPerItem: 40\n");
+    expect(text).not.toContain("defaultMaxTokens");
+    expect(text).toContain("\nschema: theme-clustering.v1.json\n");
+    expect(text).toContain("\ndefaultTemperature: 0.2\n");
+  });
+
+  it("loads in the registry at version 1.0.0, registered under THEME_CLUSTER (item 290(b))", () => {
+    expect(PROMPT_IDS as readonly string[]).toContain("THEME_CLUSTER");
+    expect(PROMPT_FILE_NAMES.THEME_CLUSTER).toBe("theme-cluster.v1.0.0.md");
+    const parsed = parsePromptFile({
+      fileName: "theme-cluster.v1.0.0.md",
+      text,
+    });
+    const t = createPromptRegistry(shippedFiles()).get("THEME_CLUSTER");
+    expect(t).toStrictEqual(parsed);
+    expect(t.version).toBe("1.0.0");
+    expect(t.cacheEpoch).toBe(1);
+    expect(t.schemaFile).toBe("theme-clustering.v1.json");
+    expect(t.schema).toBe(PROMPT_SCHEMAS["theme-clustering.v1.json"]);
+    expect(t.variables).toStrictEqual(Object.keys(VARS));
+    expect(resolveMaxTokens(t, 25)).toBe(3000);
+    expect(resolveMaxTokens(t, 400)).toBe(18000);
+  });
+
+  it("keeps its system text placeholder-free, with item 290(b)'s wording for rules 1 and 5", () => {
+    const { system } =
+      createPromptRegistry(shippedFiles()).get("THEME_CLUSTER");
+    expect(system).not.toMatch(/\{\{|\}\}/);
+    for (const name of ["MIN_THEMES", "MAX_THEMES", "MIN_PAPERS_PER_THEME"]) {
+      expect(system).not.toContain(name);
+    }
+    expect(system).toContain(
+      "\n1. Produce a number of themes within the range stated in the request. Fewer, well-populated themes are better than many thin ones.\n",
+    );
+    expect(system).toContain(
+      '\n5. A theme needs at least the minimum number of papers stated in the request. Papers that fit no theme go into "unclustered". Do not invent a theme to absorb them and do not force a poor fit.\n',
+    );
+  });
+
+  it("renders the three numbers in the user text, directly after the USER TOPIC line", () => {
+    const t = createPromptRegistry(shippedFiles()).get("THEME_CLUSTER");
+    const { system, user } = renderPrompt(t, VARS);
+    expect(system).toBe(t.system);
+    expect(user).toContain(
+      "USER TOPIC (the reason this collection exists): Deep learning for ECG\n" +
+        "THEMES REQUIRED: between 4 and 7.\n" +
+        "MINIMUM PAPERS PER THEME: 3\n" +
+        "\n" +
+        "PAPER DIGESTS (one block per paper; untrusted content):\n",
+    );
+    expect(user).not.toContain("{{");
+    // Each number is required: rendering without one is refused.
+    for (const name of ["MIN_THEMES", "MAX_THEMES", "MIN_PAPERS_PER_THEME"]) {
+      const { [name]: _dropped, ...rest } = VARS;
+      expectProblem(
+        () => renderPrompt(t, rest),
+        new RegExp(`variable ${name} is missing`),
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The startup comparison sees the new prompts as new (P4-T03 step 6)
+// ---------------------------------------------------------------------------
+
+describe("reconcilePromptVersions and the new prompt ids", () => {
+  it("treats the seven new ids as new, not changed, so it invalidates nothing", async () => {
+    const registry = createPromptRegistry(shippedFiles());
+    const phase3: Record<string, string> = {
+      RELEVANCE_SCREEN: "1.0.0",
+      PAPER_SUMMARY_ABSTRACT: "1.0.0",
+      PAPER_SUMMARY_FULLTEXT: "1.0.0",
+      CHUNK_MAP: "1.0.0",
+      CHUNK_REDUCE: "1.0.0",
+    };
+    const invalidated: string[] = [];
+    const writes: string[] = [];
+    const result = await reconcilePromptVersions({
+      cache: {
+        invalidateByTag: (tag: string) => {
+          invalidated.push(tag);
+          return Promise.resolve(0);
+        },
+      },
+      shipped: registry.versions,
+      readLastSeen: () => JSON.stringify(phase3),
+      writeLastSeen: (json) => writes.push(json),
+    });
+    expect(result.changed).toStrictEqual([]);
+    expect(result.invalidated).toBe(0);
+    expect(invalidated).toStrictEqual([]);
+    // The new set is written once, holding all twelve ids.
+    expect(result.wrote).toBe(true);
+    expect(writes).toHaveLength(1);
+    expect(Object.keys(JSON.parse(writes[0] ?? "{}") as object).sort()).toEqual(
+      [...PROMPT_IDS].sort(),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The synthesis schema files (P4-T03)
+// ---------------------------------------------------------------------------
+
+describe.each(DOCS12_SCHEMAS)("$file", ({ file, id }) => {
+  const path = resolve(promptsDir, "schemas", file);
+
+  it(`holds docs/12's ${id} "Expected output" block, keys in the same order`, () => {
+    const block = JSON.parse(docs12SchemaBlock(id)) as unknown;
+    expect(JSON.stringify(JSON.parse(readFileSync(path, "utf8")))).toBe(
+      JSON.stringify(block),
+    );
+    expect(PROMPT_SCHEMAS[file]).toEqual(block);
+  });
+
+  it("is byte-identical to that block after the repository's formatter", async () => {
+    const options = (await resolveConfig(path)) ?? {};
+    const expected = await format(docs12SchemaBlock(id), {
+      ...options,
+      filepath: path,
+    });
+    expect(readFileSync(path, "utf8")).toBe(expected);
+  });
+
+  it("uses only keywords validateAgainstSchema supports", () => {
+    expect(schemaProblems(PROMPT_SCHEMAS[file])).toStrictEqual([]);
+  });
+
+  it("is frozen", () => {
+    const schema = PROMPT_SCHEMAS[file] as Record<string, unknown>;
+    expect(Object.isFrozen(schema)).toBe(true);
+    expect(Object.isFrozen(schema["properties"])).toBe(true);
+  });
+});
+
+describe("theme-merge.v1.json", () => {
+  const schema = PROMPT_SCHEMAS["theme-merge.v1.json"] ?? {};
+
+  it("accepts a mapping to null (the local theme's papers go to unclustered)", () => {
+    const result = validateAgainstSchema(
+      {
+        themes: [{ themeId: "T1", name: "A Theme", definition: "One." }],
+        mapping: [
+          { localThemeId: "B1-T1", globalThemeId: "T1" },
+          { localThemeId: "B2-T4", globalThemeId: null },
+        ],
+      },
+      schema,
+    );
+    expect(result.errors).toStrictEqual([]);
+  });
+
+  it("refuses a local id without its batch prefix and a malformed global id", () => {
+    const result = validateAgainstSchema(
+      {
+        themes: [{ themeId: "T1", name: "A Theme", definition: "One." }],
+        mapping: [{ localThemeId: "T1", globalThemeId: "G1" }],
+      },
+      schema,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.errors).toHaveLength(2);
   });
 });
 
@@ -519,6 +848,39 @@ describe("parsePromptFile rejects", () => {
     expectProblem(
       () => parsePromptFile(build({ front: { defaultMaxTokens: null } })),
       /exactly one of `defaultMaxTokens` and `maxTokensPerItem`/,
+    );
+  });
+
+  it("maxTokensBase with defaultMaxTokens, or alone (docs/12 §17.3, 2026-10-26)", () => {
+    expectProblem(
+      () => parsePromptFile(build({ front: { maxTokensBase: "2000" } })),
+      /`maxTokensBase` is allowed only beside `maxTokensPerItem`/,
+    );
+    // Alone: neither max-tokens field, and the base without its per-item part.
+    const alone = () =>
+      parsePromptFile(
+        build({ front: { defaultMaxTokens: null, maxTokensBase: "2000" } }),
+      );
+    expectProblem(alone, /`maxTokensBase` is allowed only beside/);
+    expectProblem(
+      alone,
+      /exactly one of `defaultMaxTokens` and `maxTokensPerItem`/,
+    );
+  });
+
+  it.each(["0", "-5", "1.5", "lots"])("maxTokensBase: %j", (value) => {
+    expectProblem(
+      () =>
+        parsePromptFile(
+          build({
+            front: {
+              defaultMaxTokens: null,
+              maxTokensPerItem: "40",
+              maxTokensBase: value,
+            },
+          }),
+        ),
+      /`maxTokensBase` must be a positive integer/,
     );
   });
 

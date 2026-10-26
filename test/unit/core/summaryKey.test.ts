@@ -64,6 +64,13 @@ const VERSIONS = {
   PAPER_SUMMARY_FULLTEXT: "1.0.0",
   CHUNK_MAP: "1.0.0",
   CHUNK_REDUCE: "1.0.0",
+  THEME_CLUSTER: "1.0.0",
+  CLUSTER_REDUCE: "1.0.0",
+  TREND_REPORT_EN: "1.0.0",
+  TREND_REPORT_KO: "1.0.0",
+  SELF_CRITIQUE: "1.0.0",
+  THEME_MERGE: "1.0.0",
+  CLUSTER_REDUCE_MERGE: "1.0.0",
 } as const satisfies Record<PromptId, string>;
 
 /** A partial override of {@link VERSIONS}. */
@@ -76,6 +83,13 @@ const EPOCHS = {
   PAPER_SUMMARY_FULLTEXT: 1,
   CHUNK_MAP: 1,
   CHUNK_REDUCE: 1,
+  THEME_CLUSTER: 1,
+  CLUSTER_REDUCE: 1,
+  TREND_REPORT_EN: 1,
+  TREND_REPORT_KO: 1,
+  SELF_CRITIQUE: 1,
+  THEME_MERGE: 1,
+  CLUSTER_REDUCE_MERGE: 1,
 } as const satisfies Record<PromptId, number>;
 
 /** A partial override of {@link EPOCHS}. */

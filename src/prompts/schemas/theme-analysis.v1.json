@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ThemeAnalysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "themeId",
+    "name",
+    "narrative",
+    "representativePapers",
+    "trajectory"
+  ],
+  "properties": {
+    "themeId": { "type": "string" },
+    "name": { "type": "string", "maxLength": 80 },
+    "narrative": { "type": "string" },
+    "representativePapers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["itemKey", "why"],
+        "properties": {
+          "itemKey": { "type": "string", "pattern": "^[A-Z0-9]{8}$" },
+          "why": { "type": "string", "maxLength": 300 }
+        }
+      }
+    },
+    "methodologicalPatterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pattern", "itemKeys"],
+        "properties": {
+          "pattern": { "type": "string", "maxLength": 300 },
+          "itemKeys": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Z0-9]{8}$" }
+          }
+        }
+      }
+    },
+    "convergentFindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["statement", "itemKeys", "strength"],
+        "properties": {
+          "statement": { "type": "string", "maxLength": 500 },
+          "itemKeys": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "pattern": "^[A-Z0-9]{8}$" }
+          },
+          "strength": {
+            "type": "string",
+            "enum": ["strong", "moderate", "weak"]
+          }
+        }
+      }
+    },
+    "contradictions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["statement", "sideA", "sideB"],
+        "properties": {
+          "statement": { "type": "string", "maxLength": 500 },
+          "sideA": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["claim", "itemKeys"],
+            "properties": {
+              "claim": { "type": "string", "maxLength": 400 },
+              "itemKeys": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "pattern": "^[A-Z0-9]{8}$" }
+              }
+            }
+          },
+          "sideB": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["claim", "itemKeys"],
+            "properties": {
+              "claim": { "type": "string", "maxLength": 400 },
+              "itemKeys": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "pattern": "^[A-Z0-9]{8}$" }
+              }
+            }
+          },
+          "possibleExplanation": {
+            "type": ["string", "null"],
+            "maxLength": 400
+          }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["gap", "basis"],
+        "properties": {
+          "gap": { "type": "string", "maxLength": 400 },
+          "basis": { "type": "string", "maxLength": 400 },
+          "itemKeys": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Z0-9]{8}$" }
+          }
+        }
+      }
+    },
+    "trajectory": { "type": "string", "maxLength": 900 }
+  }
+}

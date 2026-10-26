@@ -17,6 +17,8 @@
  * schema: paper-summary.v1.json        # or `none`
  * defaultTemperature: 0
  * defaultMaxTokens: 1200               # or `maxTokensPerItem: 100`, never both
+ *                                      # (`maxTokensBase: 2000` only beside
+ *                                      # `maxTokensPerItem`)
  * outputFormat: json
  * lastReviewed: 2026-09-09
  * variables:
@@ -33,7 +35,7 @@
  * (a fenced `text` block)
  * ```
  *
- * Two departures from `docs/12` §17.3's example, both forced:
+ * Three departures from `docs/12` §17.3's example, all forced:
  *
  * - **`variables`.** §17.3 requires "every `{{PLACEHOLDER}}` in the text is
  *   declared, and every declared variable is used", but its example front
@@ -41,6 +43,9 @@
  * - **`maxTokensPerItem`.** `RELEVANCE_SCREEN`'s `max_tokens` is
  *   `100 × batch size` (`docs/12` §3), not a constant, so it has no
  *   `defaultMaxTokens`; {@link resolveMaxTokens} does the multiplication.
+ * - **`maxTokensBase`.** `THEME_CLUSTER`'s ceiling is a fixed part for the
+ *   themes plus a part per paper (`docs/12` §8 and §17.3, decided 2026-10-26,
+ *   `plan/00` §6 item 286), so a per-item file may also carry a fixed part.
  *
  * The prompt text sits in fenced `text` blocks, as it does in `docs/12`, so a
  * future prompt that contains its own `## ` headings (the trend-report prompts
@@ -57,9 +62,9 @@
  * `./bundled.ts`, because Vitest cannot import a `.md` file; they read the
  * files from disk and pass their text in.
  *
- * The one schema file is imported as JSON, which esbuild, Vitest and `tsc`
+ * The schema files are imported as JSON, which esbuild, Vitest and `tsc`
  * all handle with no configuration (the tree already imports `package.json`
- * the same way), so it does not depend on the open line.
+ * the same way).
  *
  * ## Rendering
  *
@@ -74,18 +79,38 @@
 import { ConfigurationError } from "../core/errors";
 import paperSummarySchemaV1 from "./schemas/paper-summary.v1.json";
 import relevanceScreenSchemaV1 from "./schemas/relevance-screen.v1.json";
+import selfCritiqueSchemaV1 from "./schemas/self-critique.v1.json";
+import themeAnalysisSchemaV1 from "./schemas/theme-analysis.v1.json";
+import themeClusteringSchemaV1 from "./schemas/theme-clustering.v1.json";
+import themeMergeSchemaV1 from "./schemas/theme-merge.v1.json";
 
 // ---------------------------------------------------------------------------
 // Identifiers and the file list
 // ---------------------------------------------------------------------------
 
-/** The prompts this registry ships, in `docs/12` §1.2's order. */
+/**
+ * The prompts this registry ships, in `docs/12` §1.2's order.
+ *
+ * `THEME_CLUSTER`'s three numbers (`{{MIN_THEMES}}`, `{{MAX_THEMES}}`,
+ * `{{MIN_PAPERS_PER_THEME}}`) sit in its user text, not its system text, which
+ * {@link parsePromptFile} keeps placeholder-free (`docs/12` §1.1 rule 2, §8;
+ * decided 2026-10-26, owner, `plan/00` §6 item 290(b)). `THEME_MERGE` and
+ * `CLUSTER_REDUCE_MERGE` are approved as drafted (2026-10-26, owner,
+ * `plan/00` §6 item 290(a)).
+ */
 export const PROMPT_IDS = [
   "RELEVANCE_SCREEN",
   "PAPER_SUMMARY_ABSTRACT",
   "PAPER_SUMMARY_FULLTEXT",
   "CHUNK_MAP",
   "CHUNK_REDUCE",
+  "THEME_CLUSTER",
+  "CLUSTER_REDUCE",
+  "TREND_REPORT_EN",
+  "TREND_REPORT_KO",
+  "SELF_CRITIQUE",
+  "THEME_MERGE",
+  "CLUSTER_REDUCE_MERGE",
 ] as const;
 
 export type PromptId = (typeof PROMPT_IDS)[number];
@@ -103,6 +128,13 @@ export const PROMPT_FILE_NAMES: Readonly<Record<PromptId, string>> =
     PAPER_SUMMARY_FULLTEXT: "paper-summary-fulltext.v1.0.0.md",
     CHUNK_MAP: "chunk-map.v1.0.0.md",
     CHUNK_REDUCE: "chunk-reduce.v1.0.0.md",
+    THEME_CLUSTER: "theme-cluster.v1.0.0.md",
+    CLUSTER_REDUCE: "cluster-reduce.v1.0.0.md",
+    TREND_REPORT_EN: "trend-report-en.v1.0.0.md",
+    TREND_REPORT_KO: "trend-report-ko.v1.0.0.md",
+    SELF_CRITIQUE: "self-critique.v1.0.0.md",
+    THEME_MERGE: "theme-merge.v1.0.0.md",
+    CLUSTER_REDUCE_MERGE: "cluster-reduce-merge.v1.0.0.md",
   });
 
 /** A JSON Schema document, as parsed. */
@@ -132,6 +164,19 @@ export const PROMPT_SCHEMAS: Readonly<Record<string, JsonSchemaObject>> =
     "relevance-screen.v1.json": deepFreeze(
       relevanceScreenSchemaV1 as JsonSchemaObject,
     ),
+    // `docs/12` §8, §9, §12 and §20's "Expected output" blocks (`P4-T03`).
+    // `theme-analysis.v1.json` is `CLUSTER_REDUCE`'s and
+    // `CLUSTER_REDUCE_MERGE`'s; `theme-clustering.v1.json` is `THEME_CLUSTER`'s.
+    "theme-clustering.v1.json": deepFreeze(
+      themeClusteringSchemaV1 as JsonSchemaObject,
+    ),
+    "theme-analysis.v1.json": deepFreeze(
+      themeAnalysisSchemaV1 as JsonSchemaObject,
+    ),
+    "self-critique.v1.json": deepFreeze(
+      selfCritiqueSchemaV1 as JsonSchemaObject,
+    ),
+    "theme-merge.v1.json": deepFreeze(themeMergeSchemaV1 as JsonSchemaObject),
   });
 
 // ---------------------------------------------------------------------------
@@ -166,6 +211,13 @@ export interface PromptTemplate {
   readonly defaultMaxTokens: number | null;
   /** `null` exactly when {@link defaultMaxTokens} is set. */
   readonly maxTokensPerItem: number | null;
+  /**
+   * The fixed part of a growing ceiling, added to
+   * {@link maxTokensPerItem} × the item count; `null` when the file sets
+   * none (a fixed part of 0). Only ever set beside {@link maxTokensPerItem}
+   * (`docs/12` §17.3, decided 2026-10-26, `plan/00` §6 item 286).
+   */
+  readonly maxTokensBase: number | null;
   readonly outputFormat: PromptOutputFormat;
   readonly lastReviewed: string;
   /** The declared placeholders, in declaration order. */
@@ -207,6 +259,7 @@ const FRONT_MATTER_KEYS = [
   "defaultTemperature",
   "defaultMaxTokens",
   "maxTokensPerItem",
+  "maxTokensBase",
   "outputFormat",
   "lastReviewed",
   "variables",
@@ -443,6 +496,12 @@ export function parsePromptFile(
       "exactly one of `defaultMaxTokens` and `maxTokensPerItem` must be set",
     );
   }
+  // The fixed part of a growing ceiling (`docs/12` §17.3, 2026-10-26): only
+  // beside `maxTokensPerItem`, never with a fixed `defaultMaxTokens`.
+  const maxTokensBase = readInteger(scalars, "maxTokensBase", problems);
+  if (scalars.has("maxTokensBase") && !scalars.has("maxTokensPerItem")) {
+    problems.push("`maxTokensBase` is allowed only beside `maxTokensPerItem`");
+  }
 
   const outputFormat = scalars.get("outputFormat");
   if (outputFormat === undefined) problems.push("missing `outputFormat`");
@@ -532,6 +591,7 @@ export function parsePromptFile(
     defaultTemperature,
     defaultMaxTokens,
     maxTokensPerItem,
+    maxTokensBase,
     outputFormat: outputFormat as PromptOutputFormat,
     lastReviewed: lastReviewed as string,
     variables: Object.freeze([...declared]),
@@ -731,9 +791,13 @@ export function renderPrompt(
 
 /**
  * The `max_tokens` for one call: the file's `defaultMaxTokens`, or
- * `maxTokensPerItem × batchSize` for a batched prompt (`RELEVANCE_SCREEN`).
+ * `maxTokensBase + maxTokensPerItem × batchSize` for a prompt whose output
+ * grows with its items — `RELEVANCE_SCREEN` per candidate in the batch (no
+ * fixed part), `THEME_CLUSTER` per paper clustered (`docs/12` §8, decided
+ * 2026-10-26).
  *
- * @throws PromptRegistryError if a batched prompt gets no positive integer
+ * @param batchSize - the number of items the one call carries
+ * @throws PromptRegistryError if a per-item prompt gets no positive integer
  *   batch size, or a fixed one gets a batch size at all.
  */
 export function resolveMaxTokens(
@@ -750,7 +814,9 @@ export function resolveMaxTokens(
         `${template.id}: max_tokens needs a positive integer batch size`,
       ]);
     }
-    return template.maxTokensPerItem * batchSize;
+    return (
+      (template.maxTokensBase ?? 0) + template.maxTokensPerItem * batchSize
+    );
   }
   if (batchSize !== undefined) {
     throw new PromptRegistryError([

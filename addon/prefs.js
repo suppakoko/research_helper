@@ -20,17 +20,20 @@
 // pane — that order is §8.5's own rule.
 //
 // Phase 1's twelve keys (P1-T03 step 5), P2-T05's semanticscholar.keyPresent,
-// and the docs/01 §7.2 lines for the rows Phase 3 reads (P3-T32, 2026-10-20).
-// docs/01 §7.2 lists more (reportLanguage, tts.*) because it transcribes the
-// whole of §8.5; those rows arrive with the phases that read them. docs/01
+// and the docs/01 §7.2 lines for the rows Phase 3 reads (P3-T32, 2026-10-20),
+// and reportLanguage for Phase 4 (P4-T02, 2026-10-26). docs/01 §7.2 lists
+// more (tts.*) because it transcribes the whole of §8.5; those rows arrive
+// with the phases that read them. docs/01
 // §7.2 also notes that a row with no pane control needs no pref() line at all,
 // since the typed accessor falls back to the schema default — so the Phase 3
 // rows §7.2 gives no line (summaryModel, reportModel, screening.model,
 // privacy.egressAcknowledged, llm.tokenEstimateCalibration, the summary.*,
 // fullText.* and screening.* families, cache.enabled, cache.ignoreModel,
 // cache.lastSeenPromptVersions, report.perPaperNotes and every
-// *.lastValidatedAt) get none here. The four Phase 1 rows below that §7.2 does
-// not list (logRequestBodies, prefsSchemaVersion, secretBackend,
+// *.lastValidatedAt) get none here, and neither do the four Phase 4 rows §7.2
+// gives no line (report.targetWords, report.maxCritiqueRounds,
+// report.critiqueModel, report.saveNote). The four Phase 1 rows below that
+// §7.2 does not list (logRequestBodies, prefsSchemaVersion, secretBackend,
 // ncbi.keyPresent) are listed anyway because a setting the user cannot find in
 // about:config is a setting they cannot audit.
 //
@@ -107,6 +110,14 @@ pref("autoSummarize", false);
 // §9.2). Bound in the Advanced groupbox of docs/08 §7.3, so it needs a default
 // here or the field paints empty.
 pref("cache.maxSizeMB", 500);
+
+// ---------------------------------------------------------------------------
+// Report & audio — docs/07 §8.5, "Report & audio" (P4-T02)
+// ---------------------------------------------------------------------------
+
+// "auto" follows the Zotero UI locale; also accepts "en", "ko", "both".
+// The prefs pane (docs/08 §7.3) shows "Follow Zotero language" for "auto".
+pref("reportLanguage", "auto");
 
 // ---------------------------------------------------------------------------
 // Runtime & concurrency — docs/07 §8.5, "Runtime & concurrency"

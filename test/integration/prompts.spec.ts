@@ -1,7 +1,8 @@
 /**
  * `P3-T24` step 7: the prompt files reach a bundle, and the registry built
- * from the bundled copies loads all five prompts (`docs/12` §17.3, decided
- * 2026-10-20, `plan/00` §6 item 237).
+ * from the bundled copies loads every prompt (`docs/12` §17.3, decided
+ * 2026-10-20, `plan/00` §6 item 237). `P4-T03` added Phase 4's six
+ * synthesis prompts and their schemas (2026-10-26).
  *
  * `src/prompts/bundled.ts` imports each prompt file with
  * `with { type: "text" }`. The scaffold builds this spec with its own esbuild
@@ -48,7 +49,11 @@ function loadBundled(): Promise<Bundled> {
 /**
  * SHA-256 of each released file. A released prompt file is never edited
  * (`docs/12` §17.5), so these never change; a new version adds a line.
- * The unit test separately checks the text against `docs/12` §3–§7.
+ * The unit test separately checks the text against `docs/12` §3–§21.
+ * `theme-merge` and `cluster-reduce-merge` are approved as drafted, and
+ * `theme-cluster` was regenerated from `docs/12` §8 after its three numbers
+ * moved to the user text, still at 1.0.0 (decided 2026-10-26, owner,
+ * `plan/00` §6 item 290(a) and (b)).
  */
 const RELEASED_FILE_SHA256: Readonly<Record<string, string>> = {
   "relevance-screen.v1.0.0.md":
@@ -61,12 +66,58 @@ const RELEASED_FILE_SHA256: Readonly<Record<string, string>> = {
     "e622569a02f47b6460de33bf717cfa461d6803afcd553be2d26b840fa1f75d32",
   "chunk-reduce.v1.0.0.md":
     "11b20b47dd8e262c0b3bbb45961fa655dca18659e095a166183b869e52c4dc3e",
+  "theme-cluster.v1.0.0.md":
+    "0f39ee1d6fe2336df8bf2d3eae663352371e1b9d1ac8a415217dccb1d31ed599",
+  "cluster-reduce.v1.0.0.md":
+    "855ee315b10b48c5287edc52361b45784025215aa018b42f2d54b69566e07b37",
+  "trend-report-en.v1.0.0.md":
+    "924278144417429fd68254b7c6651bde3e282514d854ddd0b556005f5eb173f6",
+  "trend-report-ko.v1.0.0.md":
+    "7958173be07c29e4fd2501195ccd3bd6b24e8f14f9aa205ae29423fe21a67bae",
+  "self-critique.v1.0.0.md":
+    "9086b1efde2465d2c5bae00519ecbbaada19ec4235d0b9d43845b7fc7191f1f7",
+  "theme-merge.v1.0.0.md":
+    "dac9f1618602ed4561d8faa2a43463ccd606c5dbb7d781a811db355774745578",
+  "cluster-reduce-merge.v1.0.0.md":
+    "154a2754ebb4780aa0446a26b4b7cf058f0e29ec2bad02ef01cfd3901b0920b4",
+};
+
+/** Each prompt's schema file, or `null` (`docs/12` §3–§21). */
+const SCHEMA_FILES: Readonly<Record<PromptId, string | null>> = {
+  RELEVANCE_SCREEN: null,
+  PAPER_SUMMARY_ABSTRACT: "paper-summary.v1.json",
+  PAPER_SUMMARY_FULLTEXT: "paper-summary.v1.json",
+  CHUNK_MAP: null,
+  CHUNK_REDUCE: "paper-summary.v1.json",
+  THEME_CLUSTER: "theme-clustering.v1.json",
+  CLUSTER_REDUCE: "theme-analysis.v1.json",
+  TREND_REPORT_EN: null,
+  TREND_REPORT_KO: null,
+  SELF_CRITIQUE: "self-critique.v1.json",
+  THEME_MERGE: "theme-merge.v1.json",
+  CLUSTER_REDUCE_MERGE: "theme-analysis.v1.json",
+};
+
+/** Each prompt's temperature (`docs/06` §11.1; `docs/12` §8, §20, §21). */
+const TEMPERATURES: Readonly<Record<PromptId, number>> = {
+  RELEVANCE_SCREEN: 0,
+  PAPER_SUMMARY_ABSTRACT: 0,
+  PAPER_SUMMARY_FULLTEXT: 0,
+  CHUNK_MAP: 0,
+  CHUNK_REDUCE: 0,
+  THEME_CLUSTER: 0.2,
+  CLUSTER_REDUCE: 0.3,
+  TREND_REPORT_EN: 0.3,
+  TREND_REPORT_KO: 0.3,
+  SELF_CRITIQUE: 0,
+  THEME_MERGE: 0.2,
+  CLUSTER_REDUCE_MERGE: 0.3,
 };
 
 const SCHEMA_FILE = "paper-summary.v1.json";
 
 describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
-  it("loads all five prompts at version 1.0.0 from the bundled files", async function () {
+  it("loads every prompt at version 1.0.0 from the bundled files", async function () {
     const {
       PROMPT_REGISTRY,
       PROMPT_VERSIONS,
@@ -74,7 +125,8 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
       PROMPT_SOURCE_FILES,
     } = await loadBundled();
 
-    assert.strictEqual(PROMPT_SOURCE_FILES.length, 5);
+    assert.strictEqual(PROMPT_SOURCE_FILES.length, PROMPT_IDS.length);
+    assert.strictEqual(PROMPT_IDS.length, 12);
     const expected: Record<string, string> = {};
     // The summary cache keys on these (2026-10-23, plan/00 §6 item 273(a)).
     for (const id of PROMPT_IDS) {
@@ -148,8 +200,9 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
       const vars = Object.fromEntries(
         template.variables.map((name) => [name, `[value of ${name}]`]),
       );
-      const { user } = renderPrompt(template, vars);
+      const { system, user } = renderPrompt(template, vars);
       assert.notInclude(user, "{{", id);
+      assert.notInclude(system, "{{", `${id}: system text`);
       for (const name of template.variables) {
         assert.include(user, `[value of ${name}]`, `${id}: ${name}`);
       }
@@ -172,25 +225,48 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
       PROMPT_REGISTRY.get("RELEVANCE_SCREEN").system,
       "Scoring scale — use the whole range.",
     );
+    // And Hangul: TREND_REPORT_KO is docs/12 §11 verbatim, never translated.
+    const ko = PROMPT_REGISTRY.get("TREND_REPORT_KO");
+    assert.include(ko.user, "## 1. 요약 (Executive Summary)");
+    assert.include(ko.system, "절대 규칙:");
+    const koRendered = renderPrompt(
+      ko,
+      Object.fromEntries(ko.variables.map((name) => [name, "값"])),
+    );
+    assert.include(koRendered.user, "- 컬렉션: 값");
+
+    // THEME_CLUSTER's three numbers sit in the user text, after USER TOPIC
+    // (docs/12 §8, decided 2026-10-26, plan/00 §6 item 290(b)).
+    const cluster = PROMPT_REGISTRY.get("THEME_CLUSTER");
+    const clusterRendered = renderPrompt(cluster, {
+      N_PAPERS: "57",
+      YEAR_MIN: "2015",
+      YEAR_MAX: "2024",
+      USER_TOPIC: "topic",
+      MIN_THEMES: "4",
+      MAX_THEMES: "7",
+      MIN_PAPERS_PER_THEME: "3",
+      DIGESTS: "digest",
+    });
+    assert.include(
+      clusterRendered.user,
+      "USER TOPIC (the reason this collection exists): topic\nTHEMES REQUIRED: between 4 and 7.\nMINIMUM PAPERS PER THEME: 3\n",
+    );
+    assert.strictEqual(clusterRendered.system, cluster.system);
   });
 
   it("carries the schema and max_tokens each bundled prompt declares", async function () {
     const { PROMPT_REGISTRY } = await loadBundled();
-    const summaryIds: readonly PromptId[] = [
-      "PAPER_SUMMARY_ABSTRACT",
-      "PAPER_SUMMARY_FULLTEXT",
-      "CHUNK_REDUCE",
-    ];
-
     for (const id of PROMPT_IDS) {
       const template = PROMPT_REGISTRY.get(id);
-      if (summaryIds.includes(id)) {
-        assert.strictEqual(template.schemaFile, SCHEMA_FILE, id);
-        assert.strictEqual(template.schema, PROMPT_SCHEMAS[SCHEMA_FILE], id);
+      const schemaFile = SCHEMA_FILES[id];
+      if (schemaFile !== null) {
+        assert.strictEqual(template.schemaFile, schemaFile, id);
+        assert.strictEqual(template.schema, PROMPT_SCHEMAS[schemaFile], id);
       } else {
         assert.isNull(template.schema, id);
       }
-      assert.strictEqual(template.defaultTemperature, 0, id);
+      assert.strictEqual(template.defaultTemperature, TEMPERATURES[id], id);
     }
     assert.strictEqual(
       resolveMaxTokens(PROMPT_REGISTRY.get("RELEVANCE_SCREEN"), 10),
@@ -199,6 +275,19 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
     assert.strictEqual(
       resolveMaxTokens(PROMPT_REGISTRY.get("PAPER_SUMMARY_ABSTRACT")),
       1200,
+    );
+    assert.strictEqual(
+      resolveMaxTokens(PROMPT_REGISTRY.get("TREND_REPORT_KO")),
+      7000,
+    );
+    assert.strictEqual(
+      resolveMaxTokens(PROMPT_REGISTRY.get("THEME_MERGE")),
+      4000,
+    );
+    // THEME_CLUSTER grows with the papers: 2000 + 40 × N (docs/12 §8).
+    assert.strictEqual(
+      resolveMaxTokens(PROMPT_REGISTRY.get("THEME_CLUSTER"), 25),
+      3000,
     );
   });
 });

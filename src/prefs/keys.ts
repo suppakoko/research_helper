@@ -12,9 +12,9 @@
  * **Only the keys a shipped phase reads are here.** Phase 1's twelve came with
  * `P1-T03`; `P3-T32` added the fifty §8.5 rows Phase 3 reads and the
  * `semanticscholar.keyPresent` key `P2-T05` had spelled inline in the schema
- * (`plan/04` §0.2 item 2 makes `P3-T32` the only Phase 3 card that adds a key).
- * Rows for later phases (`reportLanguage`, `tts.*`, `background.enabled`, …)
- * are not here. Adding a row means adding it to `docs/07` §8.5 first, then
+ * (`plan/04` §0.2 item 2 makes `P3-T32` the only Phase 3 card that adds a key);
+ * `P4-T02` added the five "Report & audio" keys Phase 4 reads (2026-10-26).
+ * Rows for later phases (`tts.*`, `background.enabled`, …) are not here. Adding a row means adding it to `docs/07` §8.5 first, then
  * here, then to `addon/prefs.js`, then to the pane — §8.5's own ordering rule.
  *
  * ## The two call conventions
@@ -114,7 +114,13 @@ export const PREF_KEYS = {
   cacheLastSeenPromptVersions: "cache.lastSeenPromptVersions",
   cacheMaxSizeMB: "cache.maxSizeMB",
 
-  // Report & audio (docs/07 §8.5, "Report & audio"; P3-T32 — this row only).
+  // Report & audio (docs/07 §8.5, "Report & audio"; P3-T32 — perPaperNotes;
+  // P4-T02 — the five rows the trend report reads).
+  reportLanguage: "reportLanguage",
+  reportTargetWords: "report.targetWords",
+  reportMaxCritiqueRounds: "report.maxCritiqueRounds",
+  reportCritiqueModel: "report.critiqueModel",
+  reportSaveNote: "report.saveNote",
   reportPerPaperNotes: "report.perPaperNotes",
 
   // Runtime & concurrency (docs/07 §8.5, "Runtime & concurrency").

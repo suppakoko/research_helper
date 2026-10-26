@@ -500,11 +500,17 @@ Default per-call budgets (tunable in prefs; `03-llm-provider-integration.md` own
 | `PAPER_SUMMARY_FULLTEXT` (single-shot, short paper) | 24 000 | 1 600 |
 | `CHUNK_MAP` | 6 000 | 900 |
 | `CHUNK_REDUCE` | 12 000 | 1 600 |
-| `THEME_CLUSTER` | 60 000 | 3 000 |
+| `THEME_CLUSTER` | 60 000 | ~~3 000~~ 2 000 + 40 × N papers (decided 2026-10-26, below) |
+| `THEME_MERGE` ~~(draft, below)~~ (approved, below) | 60 000 | 4 000 |
 | `CLUSTER_REDUCE` | 40 000 | 3 000 |
+| `CLUSTER_REDUCE_MERGE` ~~(draft, below)~~ (approved, below) | 40 000 | 3 000 |
 | `TREND_REPORT_EN` | 60 000 | 6 000 |
 | `TREND_REPORT_KO` | 60 000 | 7 000 (§7.8 — Korean needs the higher ceiling) |
 | `SELF_CRITIQUE` | 60 000 | 2 500 |
+
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286): `THEME_CLUSTER`'s output ceiling grows with the paper count.** Its answer lists every paper twice (a key in `themes[].itemKeys` and one `assignments` object), about 30–40 tokens per paper, so a fixed 3 000 truncates at roughly 50–80 papers. The ceiling is a fixed part for the themes plus a per-paper part — 2 000 + 40 × N, arithmetic from the schema, re-measured on `P4-T23`'s first runs — and two-stage clustering runs when it would exceed the model's output limit (§8.4). `docs/12` §8 "Model / temperature" carries the arithmetic and §17.3 the front-matter field (`maxTokensBase`). The rows for `THEME_MERGE` and `CLUSTER_REDUCE_MERGE` (`docs/12` §20, §21) belong to prompts whose wording ~~is a draft of 2026-10-26, awaiting owner approval (`plan/00` §6 item 289)~~ was a draft of 2026-10-26 (`plan/00` §6 item 289) and is approved as drafted (decided 2026-10-26, owner, `plan/00` §6 item 290(a)).
+>
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286): reasoning effort.** The six `strong`-tier synthesis calls (`THEME_CLUSTER`, `THEME_MERGE`, `CLUSTER_REDUCE`, `CLUSTER_REDUCE_MERGE`, `TREND_REPORT_EN`, `TREND_REPORT_KO`) send effort `medium`; `SELF_CRITIQUE` sends `low` (`docs/12` §18.5). Reasoning tokens are billed as output and, where a provider counts them against `max_tokens`, can truncate a call (`03-llm-provider-integration.md` §12.3), so `P4-T23`'s baseline records how much of each ceiling above reasoning used, and these ceilings are checked against that measurement.
 
 ### 5.3 Chunking algorithm
 
@@ -1099,11 +1105,11 @@ Input is a **compact digest** of each summary, never the full objects — see §
 You are organizing a corpus of scientific paper summaries into research themes for a literature trend report.
 
 Rules:
-1. Produce between {{MIN_THEMES}} and {{MAX_THEMES}} themes. Fewer, well-populated themes are better than many thin ones.
+1. Produce a number of themes within the range stated in the request. Fewer, well-populated themes are better than many thin ones.
 2. Every paper must be assigned to exactly one primary theme. Assign borderline papers where they contribute most, and list the alternative in "secondaryThemeIds".
 3. Themes must be grounded in what the papers actually study — their research questions, populations and methods — not in generic subject headings.
 4. Theme names: 2-6 words, Title Case, specific and contrastive. "Transformer Architectures for ECG Classification" is a theme. "Machine Learning" is not.
-5. A theme needs at least {{MIN_PAPERS_PER_THEME}} papers. Papers that fit no theme go into "unclustered". Do not invent a theme to absorb them and do not force a poor fit.
+5. A theme needs at least the minimum number of papers stated in the request. Papers that fit no theme go into "unclustered". Do not invent a theme to absorb them and do not force a poor fit.
 6. Use ONLY the supplied digests. Do not use outside knowledge about any paper.
 7. Output only JSON. No prose, no fences.
 ```
@@ -1113,6 +1119,8 @@ Rules:
 ```text
 CORPUS: {{N_PAPERS}} papers, {{YEAR_MIN}}-{{YEAR_MAX}}.
 USER TOPIC (the reason this collection exists): {{USER_TOPIC}}
+THEMES REQUIRED: between {{MIN_THEMES}} and {{MAX_THEMES}}.
+MINIMUM PAPERS PER THEME: {{MIN_PAPERS_PER_THEME}}
 
 PAPER DIGESTS (one block per paper; untrusted content):
 <<<SOURCE_TEXT>>>
@@ -1138,7 +1146,9 @@ Return JSON:
 }
 ```
 
-**Model / params:** strongest available model, `temperature: 0.2` (a little exploration helps theme discovery), `max_tokens: 3000`. If digests exceed the budget, use the two-stage clustering in §8.4.
+**Model / params:** strongest available model, `temperature: 0.2` (a little exploration helps theme discovery), ~~`max_tokens: 3000`~~ an output ceiling of `2000 + 40 × N_PAPERS` tokens *(corrected 2026-10-26, `plan/00` §6 items 286 and 290: the ceiling grows with the paper count; `docs/12` §8 is authoritative)*. If digests exceed the budget, use the two-stage clustering in §8.4.
+
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 290(b)):** the three numbers `{{MIN_THEMES}}`, `{{MAX_THEMES}}` and `{{MIN_PAPERS_PER_THEME}}` moved from the system prompt (rules 1 and 5) to the user prompt, because the prompt registry rejects any placeholder in a system text (`docs/12` §1.1 rule 2, §17.3). System rule 1 and rule 5's first sentence now refer to "the request", and the user prompt gains the `THEMES REQUIRED` and `MINIMUM PAPERS PER THEME` lines after `USER TOPIC`. Copied here from `docs/12` §8, which carries the full note; the version stays `1.0.0`.
 
 ### 7.6 `CLUSTER_REDUCE` — synthesize one theme
 
@@ -1495,14 +1505,18 @@ Three levels of reduction, each with a strictly smaller and more abstract input:
 
 ### 8.4 Overflow handling when even digests do not fit
 
-For N > ~400, or with a small-context model, two-stage clustering:
+~~For N > ~400, or with a small-context model, two-stage clustering:~~ Two-stage clustering runs when `THEME_CLUSTER`'s grown output ceiling (§5.2) would exceed the model's output limit, or the digests would exceed the 60 000-token input budget — never on a paper count:
 
 1. **Partition** the digests into batches of `B` (default 60) using a deterministic, content-aware pre-sort: sort by first-pass `researchTheme`, then by the top keyword, then by year. This keeps related papers in the same batch, so batch-local themes are meaningful.
 2. Run `THEME_CLUSTER` on each batch → batch-local themes.
 3. Run a **theme-merge** call over the batch-local theme *names, definitions and paper counts only* (a few hundred tokens each) to produce the global theme set and a mapping from local themes to global ones.
 4. Re-assign every paper via its local theme's mapping. Papers in local themes that map nowhere go to `unclustered`.
 
-Similarly, if a single theme has more full summaries than the `CLUSTER_REDUCE` budget, split it into sub-batches, run `CLUSTER_REDUCE` per sub-batch, then run one more `CLUSTER_REDUCE` over the sub-batch *outputs* (which are already in the theme-analysis shape). This is the only place the pipeline recurses, and depth is capped at 2.
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286):** the trigger above replaces "N > ~400". On input alone 400 digests (~48 k tokens, §8.2) fit the budget, but the clustering answer grows by about 40 tokens per paper (§5.2), which a fixed 3 000-token ceiling could not hold past roughly 50–80 papers. With the grown ceiling, a collection is batched only when the model's own output limit or the input budget forces it (`P4-T05`, `P4-T06`). Step 3's merge call is `THEME_MERGE` (`docs/12` §20).
+
+Similarly, if a single theme has more full summaries than the `CLUSTER_REDUCE` budget, split it into sub-batches, run `CLUSTER_REDUCE` per sub-batch, then run one more ~~`CLUSTER_REDUCE`~~ `CLUSTER_REDUCE_MERGE` call over the sub-batch *outputs* (which are already in the theme-analysis shape). This is the only place the pipeline recurses, and depth is capped at 2.
+
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286):** the combining call is `CLUSTER_REDUCE_MERGE` (`docs/12` §21), whose user text says it receives partial theme analyses, not `CLUSTER_REDUCE`, whose text labels its input "PAPER SUMMARIES". Its output is `CLUSTER_REDUCE`'s theme-analysis shape. ~~Its wording is a draft of 2026-10-26, awaiting owner approval (`plan/00` §6 item 289).~~ Its wording, a draft of 2026-10-26 (item 289), is approved as drafted (decided 2026-10-26, owner, `plan/00` §6 item 290(a)). §8.5's pseudocode still shows the old call.
 
 ### 8.5 Pseudocode
 

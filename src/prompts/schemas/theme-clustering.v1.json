@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ThemeClustering",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["themes", "assignments"],
+  "properties": {
+    "themes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["themeId", "name", "definition", "itemKeys"],
+        "properties": {
+          "themeId": { "type": "string", "pattern": "^T[0-9]+$" },
+          "name": { "type": "string", "maxLength": 80 },
+          "definition": { "type": "string", "maxLength": 300 },
+          "itemKeys": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Z0-9]{8}$" }
+          },
+          "rationale": { "type": "string", "maxLength": 600 }
+        }
+      }
+    },
+    "assignments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["itemKey", "primaryThemeId", "fit"],
+        "properties": {
+          "itemKey": { "type": "string", "pattern": "^[A-Z0-9]{8}$" },
+          "primaryThemeId": { "type": "string" },
+          "secondaryThemeIds": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "fit": { "type": "string", "enum": ["strong", "moderate", "weak"] }
+        }
+      }
+    },
+    "unclustered": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["itemKey", "reason"],
+        "properties": {
+          "itemKey": { "type": "string", "pattern": "^[A-Z0-9]{8}$" },
+          "reason": { "type": "string", "maxLength": 300 }
+        }
+      }
+    },
+    "crossCuttingObservations": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 400 }
+    }
+  }
+}
