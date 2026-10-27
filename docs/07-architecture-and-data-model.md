@@ -3098,7 +3098,7 @@ export function toZoteroItemJSON(work: CanonicalWork): ZoteroItemJSON {
 A summary is stored as a **child note** on the item, not in `extra`:
 
 - Note HTML begins with a machine-readable marker comment: `<!-- rh:summary v=1 promptVersion=sum-v4 model=... generatedAt=... -->`. ~~The plugin finds its own note by scanning child notes for this marker, so the note can be freely renamed or reordered by the user.~~ *Decided 2026-10-27 (owner, `plan/00` §6 item 296(b)): the plugin finds its note by the note item key it stored and by the note's tag, never by this marker, because Zotero's note editor drops every HTML comment the first time it saves a note (`01-zotero-plugin-platform.md` §5.7, measured by `P4-T13`). The comment is still written, as information only; renaming or reordering the note still loses nothing, because neither the key nor the tag depends on the title or position.*
-- The note also carries a Zotero tag `research_helper/summary` for discoverability and bulk operations.
+- The note also carries a Zotero tag ~~`research_helper/summary`~~ `research_helper/ai-summary` for discoverability and bulk operations. *(Corrected 2026-10-27 (owner, `plan/00` §6 item 297): FR-20 in `10-requirements-and-user-stories.md`, `11-implementation-roadmap.md` §1, `13-testing-build-and-release.md` and `plan/04` `P3-T29` all name `research_helper/ai-summary`.)*
 - The authoritative structured copy lives in the plugin database (§8.3); the note is the human-readable projection. If the user edits the note, the plugin does not parse the edit back — it detects divergence via a stored hash and refuses to silently overwrite, offering "regenerate (overwrites)" / "keep mine".
 
 ### 6.5 `TrendReport` → Zotero

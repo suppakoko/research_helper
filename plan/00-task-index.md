@@ -2322,6 +2322,10 @@ the caller of what the card builds; if it does not, the caller is added with a d
     address become a link. (d) A marker followed directly by `(…)` never becomes a link in the export: `[n]` stays a
     plain number and the bracketed text stays visible as text.
 
+297. **The summary note's tag, 2026-10-27.** **DECIDED 2026-10-27 (owner):** the summary child note's tag is
+    `research_helper/ai-summary`, as FR-20 (`docs/10`), `docs/11` §1, `docs/13` and `P3-T29` already say; `docs/07` §6.4's
+    `research_helper/summary` is corrected (raised by `plan/reports/followup-296.md` finding 3).
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4
