@@ -2306,6 +2306,22 @@ the caller of what the card builds; if it does not, the caller is added with a d
     style is Quick Copy's, else `export.lastStyle`; a numeric style's own number is removed from
     `BibliographyEntry.text`, so the report prints one number.
 
+295. **Phase 4 wave 4, 2026-10-27.** **DECIDED 2026-10-27 (owner):** `P4-T13` (Markdown to note HTML, sanitized;
+    the build/Zotero owner) and `P4-T15` ("Export as Markdown"; unit tests only) run together. New strings go on
+    `KO_PENDING_REVIEW`; the coordinator drafts their Korean for the owner.
+
+296. **Four lines raised by `P4-T13` and `P4-T15`** (`plan/reports/P4-T13.md`, `P4-T15.md`). **DECIDED 2026-10-27
+    (owner), each as recommended:** (a) Notable Papers and the Bibliography keep Zotero citation nodes (D-06-7's live
+    citations). Zotero's note editor always draws a node's text itself, with "and" and "et al." in Zotero's interface
+    language, and replaces the stored text on its first save (measured, `docs/01` §5.11); the owner accepts that. Item
+    294(b) is narrowed to the stored HTML: the plugin writes the node's text with the bibliography's `en-US` CSL locale.
+    (b) The plugin finds its notes by the note item key it stored and by the note's tag, never by an HTML marker
+    comment, because the editor drops comments on its first save. This holds for the report note (`P4-T14`), the
+    summary note (`P3-T29`) and the shipped overflow note (`overflowNoteHtml`); the comments stay, as information only.
+    (c) The Markdown export escapes raw HTML in the model's prose so it shows as text, and never lets a `zotero://`
+    address become a link. (d) A marker followed directly by `(…)` never becomes a link in the export: `[n]` stays a
+    plain number and the bracketed text stays visible as text.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

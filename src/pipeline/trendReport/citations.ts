@@ -89,13 +89,15 @@ interface MarkerHit {
 
 /**
  * The fenced ranges of `markdown`, as `[start, end)` offsets covering the
- * fence lines themselves. A backtick fence's opening line holds no other
+ * fence lines themselves. Exported (2026-10-27, `P4-T13`) so the note
+ * renderer and the Markdown export treat exactly the text this module leaves
+ * alone as code. A backtick fence's opening line holds no other
  * backtick (CommonMark: ```` ```x``` ```` on one line is inline code, not a
  * fence). A fence closes on a line of the same character, at least as long,
  * with nothing after it but whitespace; an unclosed fence runs to the end of
  * the text.
  */
-function fencedRanges(
+export function fencedRanges(
   markdown: string,
 ): readonly (readonly [number, number])[] {
   const ranges: [number, number][] = [];

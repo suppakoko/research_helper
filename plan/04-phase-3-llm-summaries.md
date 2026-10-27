@@ -2773,6 +2773,12 @@ collection submenu exists in `registerMenus.ts`.
 > 2026-10-21 (item 265(c)): a truncated answer is `OutputTruncatedError` (`rh-error-output-truncated`), a failed
 > item like any other.
 
+> **Decided 2026-10-27 (owner, `plan/00` §6 item 296(b)):** the summary note is found by the note item key
+> the plugin stores and by its tag (step 5), **never by the `<!-- rh:summary … -->` marker
+> comment** of `docs/07` §6.4, because Zotero's note editor drops every HTML comment the first time it saves a
+> note (`docs/01` §5.7, measured by `P4-T13`). The comment is still written, as information only. The removal
+> command (step 6) already selects by tag.
+
 ---
 
 ### P3-T30 — LLM fixtures and contract tests

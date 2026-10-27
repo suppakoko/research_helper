@@ -1494,6 +1494,8 @@ Zotero note content is **HTML**, stored and sanitised by Zotero's note editor st
 
 > **Unverified:** the exact sanitisation whitelist Zotero applies to note HTML in version 10, and whether `Zotero.Notes` exposes a public Markdown→HTML helper. The [zotero-better-notes](https://github.com/windingwind/zotero-better-notes) plugin implements Markdown↔note-HTML conversion and is the reference implementation to study if you need fidelity.
 
+> **Measured 2026-10-27 (`P4-T13`) inside Zotero 10.0.3 (Windows, the integration runner's profile; `test/integration/zotero/reportNoteHtml.spec.ts`). This answers the whitelist half of the `Unverified` above: there are two layers, and only the second has a whitelist.** (1) **`setNote`/`getNote` keep everything.** A note holding the `data-citation-items` / `data-schema-version="9"` wrapper, `span.citation` nodes, an HTML comment, `class` and `title` on an anchor, inline `style` on `table`, `th` and `td`, `<pre><code>`, and a `p` with `class`, `title` and a `data-` attribute read back from `getNote()` byte for byte. (2) **Zotero's note editor applies its own schema, and only when it saves.** Opening the note in a note window and closing it unchanged left the stored HTML byte for byte as written (the editor reported no unsaved change, and saved nothing). When the editor does save — any edit, or a cited item changing while the note is open, which is how the spec triggers it — it writes the whole note again from its schema. **Kept:** the wrapper's two attributes (the citation payload refreshed from the library), `h1`–`h6`, `p`, `strong`, `em`, inline `code`, `<span style="text-decoration: line-through;">` (a `;` added), `ul`/`ol`/`li` (a `p` directly inside an `li` is unwrapped), `blockquote`, `pre` (its inner `code` dropped, the text kept), `table`/`tr`/`th`/`td` (a `tbody` added and each cell's content wrapped in a `p`), `a` with `href` (`zotero://select/…` and `https://…` both kept) and `title`, and `span.citation` with its `data-citation`. **Dropped:** the HTML comment, every `class` except the citation's, every inline style on the table and its cells, and every other attribute (`title` and `data-*` on a `p`). **Added:** `rel="noopener noreferrer nofollow"` on every link. So the conservative subset above holds with two additions, `span` (line-through; citation nodes, §5.11) and `div` (the wrapper), and anything outside it lasts only until the note is first saved in the editor. A citation node's visible text is a separate case: the editor replaces it (§5.11's note of the same day). Not measured: images, `sub`/`sup`, `hr`, math, a `javascript:` or `data:` link (the plugin never writes one), and the item-pane and tab editors (only the separate note window was opened; all three use the one `note-editor` element; not measured whether they behave alike). Read in support from 10.0.3's `omni.ja`, `resource/note-editor/editor.js`: the `link` mark carries only `href` and `title`, and `strike` parses `s`, `strike`, `del` and the line-through style. The Markdown-helper half was not looked for: v1 converts in-house (`06-summarization-and-trend-report.md` §14.1 D-06-9).
+
 ### 5.8 Transactions
 
 From the official docs — the batch pattern:
@@ -1648,6 +1650,28 @@ engine.free();
 > note editor does to that HTML when it opens the note was not measured (`P4-T13`). (11) A style with no bibliography
 > (`makeBibliography()` returning `false`) was not met: every bundled style has one.
 
+> **Measured 2026-10-27 (`P4-T13`; `test/integration/zotero/reportNoteHtml.spec.ts`): Zotero's note editor rewrites a
+> citation node's visible text, so item 294(b)'s reading — the text follows the report — holds only for the stored HTML,
+> and only until the editor first saves the note.** (1) **What the editor shows is never the stored text.** It renders
+> each node from the node's item data every time, as "(Family, year)", "(A and B, year)" or "(A et al., year)", with the
+> joiners from its own Fluent strings (`general-and`, `general-et-al`) in Zotero's UI language. With the UI locale pinned
+> (`test/integration/support/uiLocale.ts`), three nodes written with the English text "Kim et al., 2024",
+> "홍 and Brown, 2023" and "Smith, 2022" were shown under `en-US` as "(Kim et al., 2024)", "(홍 and Brown, 2023)",
+> "(Smith, 2022)", and under `ko-KR` as "(Kim 등, 2024)", "(홍 그리고 Brown, 2023)", "(Smith, 2022)". The language
+> followed the locale requested when the editor started, not `Zotero.locale` (which stayed `ko-KR` throughout). The
+> Korean "그리고" is not `formatCitation`'s "및" (item 9 above), so under `ko-KR` the editor's text matches neither the
+> plugin's English nor `formatCitation`'s. The one-author node read the same in both locales. (2) **The stored text
+> survives opening**: opening the note in a note window and closing it unchanged left `getNote()` byte for byte as
+> written. (3) **The first save replaces it**: when a cited item changed while the note was open (under `ko-KR`), the
+> editor saved the note, every node's text became its UI-language text ("Kim 등, 2024", "홍 그리고 Brown, 2023"), and
+> the wrapper's payload took the item's new data; the rest of what that save keeps and drops is in §5.7's note of the
+> same day. The anchor's `title` ("Kim et al., 2024") was kept as written. ~~**Open for the owner, raised by `P4-T13`**:
+> what the report's Notable Papers and Bibliography should carry, given (1)–(3); the note renderer is not built until it
+> is answered.~~ **Decided 2026-10-27 (owner, `plan/00` §6 item 296(a)):** Notable Papers and the Bibliography keep
+> Zotero citation nodes (D-06-7's live citations), and the owner accepts (1)–(3). Item 294(b) is narrowed to **the stored
+> HTML**: the plugin writes each node's text with the bibliography's CSL locale (`en-US`, item 294(a)); what the note
+> editor shows, and what it saves after its first save, is Zotero's.
+
 **As built (`src/zotero/bibliography.ts`), with the readings the measurement left to the code:**
 
 - **The user's style is Quick Copy's** (Settings ▸ Export ▸ Item Format, `export.quickCopy.setting`) when it names a
@@ -1660,7 +1684,8 @@ engine.free();
   report, Korean included, passes `en-US`; titles and names keep their original script. **Decided the same day (item
   294(b)):** a citation node's visible text is made by the plugin with that same CSL locale, not by
   `Zotero.EditorInstanceUtilities.formatCitation`, whose text follows Zotero's interface language; `P4-T13` measures
-  whether the note editor rewrites it when the note opens. **Confirmed the same day (item 294(c), (d)):** the
+  whether the note editor rewrites it when the note opens. *(Narrowed 2026-10-27, owner, `plan/00` §6 item 296(a): the
+  editor does rewrite it — note above — so this holds for the stored HTML only.)* **Confirmed the same day (item 294(c), (d)):** the
   first-appearance order below, the Quick Copy / `export.lastStyle` reading above, and the number removal below.
 - **Entries come back in the order of the keys given** — the report's `[n]`, first appearance — whatever order the style
   sorts in, matched through `bib[0].entry_ids`; `BibliographyEntry.index` is the position + 1.
@@ -1674,8 +1699,19 @@ engine.free();
 - **A style with no bibliography** gives each item's citation instead (`citationList: true`), as
   `makeFormattedBibliographyOrCitationList` does. Unmeasured, per item 11 above.
 - **Citation nodes** are the note editor's own markup (`06-…` §10.2 (b)): the payload carries `itemToCSLJSON` unchanged;
-  the visible text is `formatCitation`'s, computed from a copy whose names and title are HTML-escaped. The wrapper is
-  `noteWrapperOpenTag`, one payload per distinct URI.
+  ~~the visible text is `formatCitation`'s, computed from a copy whose names and title are HTML-escaped~~. The wrapper is
+  `noteWrapperOpenTag`, one payload per distinct URI. **Changed 2026-10-27 (`P4-T13`; owner, `plan/00` §6 item
+  296(a)):** the stored visible text is the plugin's (`citationPreviewText`), in the note editor's own shape — "Family,
+  year", "A and B, year", "A et al., year", the quoted title when there is no author — with "and" and "et al." taken
+  from the CSL engine of the request's style and locale (`getTerm("and")`, `getTerm("et-al")`), and HTML-escaped as a
+  whole. `citationNodes` therefore takes the same `BibliographyRequest` as the bibliography, and each node also carries
+  that text (`CitationNode.text`, for an inline anchor's `title`) and its `zotero://select` address
+  (`CitationNode.selectUri`, `06-…` §10.2 (a)). **Measured 2026-10-27 (`P4-T13`;
+  `test/integration/zotero/bibliography.spec.ts`, three full runs):** `getTerm` exists on the engine in 10.0.3; with APA,
+  `en-US` gave "Smith, 2022", "홍 and Brown, 2023", "Kim et al., 2024" (asserted), and `ko-KR` gave "홍 와/과 Brown,
+  2023" and "Kim 기타, 2024" (logged only; the CSL `ko-KR` "et-al" term is "기타", where the note editor's Korean is
+  "등"). `selectUri` for an item in the user's library was `zotero://select/library/items/<key>`; a group library's
+  form is unmeasured.
 - **No fixed-format fallback is built**: the processor works, so `06-…` §10.3's `itemToCSLJSON` fallback and the README
   limitation `plan/07` §5.4 names are not needed. A style that is not installed, or a key with no regular item, throws.
 - `automaticJournalAbbreviations` is off, as in Quick Copy.

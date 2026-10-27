@@ -1375,7 +1375,15 @@ inline anchors and citation nodes, and nothing outside the measured whitelist su
 - create `src/pipeline/trendReport/noteHtml.ts` (caller: `trendReportPipeline.ts`, `P4-T18`, which
   passes the finished HTML string to `writeReportNote` in `src/zotero/notes.ts`, `P4-T14`. *Review
   2026-10-25: the caller read "`writeReportNote`", but `zotero/` may not import `pipeline/`
-  (`docs/07` §2.3).*)
+  (`docs/07` §2.3).*) *Noted 2026-10-27 (`P4-T13`, rule 10): nothing calls it yet. The run calls
+  `renderReportNote` with the stored report, `zoteroBibliographyPort` and the bibliography's
+  `BibliographyRequest`; pure functions and one port, so nothing constructs it. Files outside this
+  list that the owner's decisions of 2026-10-27 (`plan/00` §6 item 296) put in the work:
+  `src/zotero/bibliography.ts` (`citationNodes` takes the request; `citationPreviewText`),
+  `test/integration/zotero/bibliography.spec.ts` (its two `citationNodes` calls),
+  `src/pipeline/trendReport/exportMarkdown.ts` and `test/unit/pipeline/trendExport.test.ts` (item
+  296(c), (d); `sectionRange`, `printedDoiAddress` shared), `src/pipeline/trendReport/citations.ts`
+  (`fencedRanges` exported), `src/zotero/itemMapper.ts` (a comment, item 296(b)).*
 - create `test/unit/pipeline/trendNoteHtml.test.ts`
 - create `test/integration/zotero/reportNoteHtml.spec.ts` (round trip `setNote`/`getNote`)
 - modify `docs/01-zotero-plugin-platform.md` §5.7 (the measured whitelist, dated)
@@ -1413,7 +1421,7 @@ inline anchors and citation nodes, and nothing outside the measured whitelist su
 - Do **not** emit images.
 - Do **not** trust model output: everything is escaped unless the converter produced the tag.
 
-*Decided 2026-10-27 (owner, `plan/00` §6 item 294(b)): a citation node's visible text follows the report, not Zotero's interface language. This card makes it with the bibliography's CSL locale (`en-US`, item 294(a)) through `P4-T11`'s `zoteroBibliographyPort` rather than `Zotero.EditorInstanceUtilities.formatCitation`, escapes it, and measures inside Zotero whether the note editor rewrites the nodes' text when the note opens; the measurement goes into `docs/01` §5.11 the same day.*
+*Decided 2026-10-27 (owner, `plan/00` §6 item 294(b)): a citation node's visible text follows the report, not Zotero's interface language. This card makes it with the bibliography's CSL locale (`en-US`, item 294(a)) through `P4-T11`'s `zoteroBibliographyPort` rather than `Zotero.EditorInstanceUtilities.formatCitation`, escapes it, and measures inside Zotero whether the note editor rewrites the nodes' text when the note opens; the measurement goes into `docs/01` §5.11 the same day.* *Narrowed 2026-10-27 (owner, `plan/00` §6 item 296(a)): the note editor does rewrite the text (`docs/01` §5.11, measured by this card), so 294(b) holds for **the stored HTML** only; Notable Papers and the Bibliography keep citation nodes, and what the editor shows is Zotero's.*
 
 **Done when.**
 - [ ] A fixture with `<script>`, `onclick`, `javascript:` and `data:` links renders with none of them.
@@ -1513,6 +1521,10 @@ redaction-gated `report` row with its Markdown file, and re-running never destro
 **Done when.**
 - [ ] Two runs on one collection leave two notes with distinct dated titles.
 - [ ] The note carries the tag and the marker (or the measured substitute, `P4-T13`).
+      *Decided 2026-10-27 (owner, `plan/00` §6 item 296(b)): the note is found by the note item key the
+      run stores (`TrendReport.zoteroNoteKey`) and by the tag `research_helper/trend-report`, never by the
+      marker comment, which Zotero's note editor drops on its first save (`docs/01` §5.7, measured by
+      `P4-T13`). The comment is still written, as information only; no lookup by it is built.*
 - [ ] A read-only library returns "export only" and writes nothing.
 - [ ] A group library without the confirmation answer is refused and writes nothing (unit-tested on
       the argument check; no test writes into a group library).
@@ -1559,7 +1571,11 @@ picks.
 
 **Files.**
 - create `src/pipeline/trendReport/exportMarkdown.ts` (caller: the Export action in
-  `src/ui/viewModels/reportViewModel.ts`, `P4-T20`)
+  `src/ui/viewModels/reportViewModel.ts`, `P4-T20`) *Noted 2026-10-27 (`P4-T15`, rule 10): nothing
+  calls it yet. The view model calls `exportReportMarkdown` with the window's path and the writer
+  `registerUI.ts` binds from `reportFileWriter()` (`P4-T20`), and suggests `reportExportFileName` in
+  the save dialog; a `ko` report passes `reportLabels.ts`'s retracted-list heading (`P4-T12`,
+  `P4-T21`). Pure functions and one port, so nothing constructs it.*
 - modify `src/zotero/notes.ts` (a report file writer beside `provenanceFileWriter`; it reaches the
   view model through the report window host in `src/bootstrap/registerUI.ts`, `P4-T20`, the way
   `provenanceFileWriter` reaches `searchImportViewModel.ts` — `ui/` may not import `zotero/`.
@@ -1601,6 +1617,10 @@ picks.
 
 **Done when.**
 - [ ] An export of a fixture report has no `[[`, numbered markers in order, and one DOI link per DOI.
+      *Scoped 2026-10-27 (`P4-T15`, `plan/reports/P4-T10.md` finding 1): "no `[[`" holds outside
+      code fences, because `P4-T10` leaves a fenced marker as written; the test checks a fence-free
+      fixture for no `[[` at all and a fenced one for none outside its fence (`docs/06` §14.3's note,
+      item 4).*
 - [ ] A collection name with `/` and `:` gives a safe filename.
 - [ ] `npm run typecheck` exits 0; `npm run test:unit -- trendExport` passes.
 
@@ -2139,7 +2159,7 @@ the same theme analyses, with Korean headings validated and titles, authors and 
 - Do **not** translate an English report (D-06-6).
 - Do **not** change the Korean prompt text (§0.2 item 14).
 
-*Decided 2026-10-27 (owner, `plan/00` §6 item 294(a)): a Korean report's bibliography and retracted list are formatted with the `en-US` CSL locale, like an English report's; titles and names keep their original script. Its citation nodes use the same locale (item 294(b)).*
+*Decided 2026-10-27 (owner, `plan/00` §6 item 294(a)): a Korean report's bibliography and retracted list are formatted with the `en-US` CSL locale, like an English report's; titles and names keep their original script. Its citation nodes use the same locale (item 294(b)).* *Narrowed 2026-10-27 (owner, `plan/00` §6 item 296(a)): in the stored HTML only — Zotero's note editor draws a node's text in its own interface language and saves that text on its first save (`docs/01` §5.11).*
 
 **Done when.**
 - [ ] `ko` makes one `TREND_REPORT_KO` call; `both` makes one of each from one set of theme analyses.

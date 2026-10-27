@@ -36,9 +36,18 @@
  *   `text` ({@link stripStyleNumbers}): `BibliographyEntry.index` carries it,
  *   and a renderer printing `[n]` would otherwise print it twice.
  *
- * Every other Zotero call is `Zotero.Utilities.Item.itemToCSLJSON`,
- * `Zotero.URI.getItemURI` and `Zotero.EditorInstanceUtilities.formatCitation`,
- * the three the note editor's own `_digestItems` uses (`docs/06` §10.2).
+ * - **A citation node's stored text is the plugin's** (owner, 2026-10-27,
+ *   `plan/00` §6 items 294(b) and 296(a)): {@link citationPreviewText} in the
+ *   note editor's own shape, with "and" and "et al." from the CSL engine of
+ *   the request's style and locale. Zotero's note editor draws a node's text
+ *   itself, in Zotero's interface language, and stores that text on its first
+ *   save (`docs/01` §5.11, measured by `P4-T13`); the plugin's text holds in
+ *   the stored HTML until then.
+ *
+ * The other Zotero calls are `Zotero.Utilities.Item.itemToCSLJSON` and
+ * `Zotero.URI.getItemURI`, two of the three the note editor's own
+ * `_digestItems` uses (`docs/06` §10.2); the third, `formatCitation`, is not
+ * used, because its text follows the interface language.
  */
 
 import type { BibliographyEntry, RetractedEntry } from "../model/trend";
@@ -107,10 +116,23 @@ export interface CitationNode {
   /** `Zotero.URI.getItemURI(item)`. */
   readonly uri: string;
   /**
-   * `<span class="citation" data-citation="…">(Author, Year)</span>`: the
-   * note editor's own markup. The visible text is
-   * `Zotero.EditorInstanceUtilities.formatCitation`'s, which is in Zotero's UI
-   * language ("Kim 등, 2024" in a Korean Zotero).
+   * The item's `zotero://select` address (`docs/06` §10.2 option (a)), for
+   * an inline anchor: `zotero://select/library/items/KEY` in the user's
+   * library, `zotero://select/groups/ID/items/KEY` in a group's.
+   */
+  readonly selectUri: string;
+  /**
+   * The node's visible text as plain text, without the parentheses
+   * ("Kim et al., 2024"): {@link citationPreviewText} in the request's CSL
+   * locale. Also an inline anchor's `title`.
+   */
+  readonly text: string;
+  /**
+   * `<span class="citation" data-citation="…">(<span
+   * class="citation-item">Kim et al., 2024</span>)</span>`: the note editor's
+   * own markup, {@link text} HTML-escaped. Zotero's note editor draws its own
+   * text in the interface language and stores that on its first save
+   * (`docs/01` §5.11); this text is what the plugin stores.
    */
   readonly html: string;
   readonly citationItem: CitationItemPayload;
@@ -136,10 +158,15 @@ export interface BibliographyPort {
     itemKeys: readonly string[],
     request: BibliographyRequest,
   ): Promise<readonly RetractedEntry[]>;
-  /** One citation node per key, in the given order. */
+  /**
+   * One citation node per key, in the given order, its text made with
+   * `request`'s style and CSL locale (item 296(a)).
+   *
+   * @throws Error when the style is not installed or a key names no item
+   */
   citationNodes(
-    libraryID: number,
     itemKeys: readonly string[],
+    request: BibliographyRequest,
   ): Promise<readonly CitationNode[]>;
 }
 
@@ -229,33 +256,63 @@ export function escapeHtml(text: string): string {
     .replace(/"/gu, "&quot;");
 }
 
+/** The CSL locale's words {@link citationPreviewText} joins names with. */
+export interface CitationTerms {
+  /** The `and` term: "and" in `en-US`. */
+  readonly and: string;
+  /** The `et-al` term: "et al." in `en-US`. */
+  readonly etAl: string;
+}
+
+/** A CSL name's display form: the family name, else the literal. */
+function nameOf(name: unknown): string {
+  if (typeof name !== "object" || name === null) return "";
+  const { family, literal } = name as { family?: unknown; literal?: unknown };
+  if (typeof family === "string" && family !== "") return family;
+  return typeof literal === "string" ? literal : "";
+}
+
 /**
- * A copy of CSL-JSON whose names and title are HTML-escaped, for display
- * only. `formatCitation` builds its text from these fields without escaping
- * (read from 10.0.3's `editorInstance.js`, `_formatCitationItemPreview`), so
- * the escaped copy goes to it and the unescaped data goes into the payload.
+ * A citation's text in the note editor's own shape (read from 10.0.3's
+ * `editorInstance.js` `_formatCitationItemPreview` and the note editor's
+ * bundle, `docs/01` §5.11): one author "Family", two "A and B", three or more
+ * "A et al.", no author the title in curly quotes; then ", year" when the item
+ * has one. The words come from `terms` — the CSL locale's, not Zotero's
+ * interface language (owner, 2026-10-27, `plan/00` §6 item 296(a)).
+ *
+ * @param itemData - CSL-JSON, as `itemToCSLJSON` returns it
+ * @returns plain text, not escaped, without parentheses
  */
-function displayCopy(
+export function citationPreviewText(
   itemData: Readonly<Record<string, unknown>>,
-): Record<string, unknown> {
-  const escapeName = (name: unknown): unknown => {
-    if (typeof name !== "object" || name === null) return name;
-    const out: Record<string, unknown> = { ...(name as object) };
-    for (const field of ["family", "given", "literal"]) {
-      if (typeof out[field] === "string") {
-        out[field] = escapeHtml(out[field]);
-      }
-    }
-    return out;
-  };
-  const copy: Record<string, unknown> = { ...itemData };
-  if (Array.isArray(copy["author"])) {
-    copy["author"] = (copy["author"] as unknown[]).map(escapeName);
+  terms: CitationTerms,
+): string {
+  const authors = Array.isArray(itemData["author"])
+    ? (itemData["author"] as readonly unknown[])
+    : [];
+  let text = "";
+  if (authors.length === 1) {
+    text = nameOf(authors[0]);
+  } else if (authors.length === 2) {
+    text = `${nameOf(authors[0])} ${terms.and} ${nameOf(authors[1])}`;
+  } else if (authors.length >= 3) {
+    text = `${nameOf(authors[0])} ${terms.etAl}`;
   }
-  if (typeof copy["title"] === "string") {
-    copy["title"] = escapeHtml(copy["title"]);
+  const title = itemData["title"];
+  if (text === "" && typeof title === "string" && title !== "") {
+    text = `“${title}”`;
   }
-  return copy;
+  const issued = itemData["issued"] as
+    { "date-parts"?: readonly (readonly unknown[])[] } | undefined;
+  const year = issued?.["date-parts"]?.[0]?.[0];
+  if (
+    (typeof year === "string" || typeof year === "number") &&
+    String(year) !== "" &&
+    String(year) !== "0000"
+  ) {
+    text += `, ${String(year)}`;
+  }
+  return text;
 }
 
 /**
@@ -374,6 +431,12 @@ interface CslEngine {
     citationsPost: readonly never[],
     format: "text" | "html",
   ): string;
+  /**
+   * A term of the engine's locale (citeproc-js `CSL.Engine.prototype.getTerm`,
+   * read from 10.0.3's `xpcom/citeproc.js`); `undefined` when the locale has
+   * none.
+   */
+  getTerm(term: string): string | undefined;
   free(): void;
 }
 
@@ -547,11 +610,45 @@ async function formatRetracted(
   }));
 }
 
+/** The words `request`'s style and CSL locale join names with. */
+async function citationTerms(
+  request: BibliographyRequest,
+): Promise<CitationTerms> {
+  const style = (await ensureStyles()).get(request.styleId);
+  if (style === false) {
+    throw new Error(`citation style not installed: ${request.styleId}`);
+  }
+  const engine = style.getCiteProc(request.locale, "text");
+  try {
+    // A CSL locale file defines both terms; the fallback is the en-US text,
+    // so a node never shows an empty joiner.
+    const and = engine.getTerm("and");
+    const etAl = engine.getTerm("et-al");
+    return {
+      and: typeof and === "string" && and !== "" ? and : "and",
+      etAl: typeof etAl === "string" && etAl !== "" ? etAl : "et al.",
+    };
+  } finally {
+    engine.free();
+  }
+}
+
+/** The item's `zotero://select` address (`docs/06` §10.2 option (a)). */
+function selectUriOf(item: Zotero.Item): string {
+  const library = Zotero.Libraries.get(item.libraryID) as unknown as
+    { readonly libraryType?: string; readonly groupID?: number } | false;
+  return library !== false && library.libraryType === "group"
+    ? `zotero://select/groups/${String(library.groupID)}/items/${item.key}`
+    : `zotero://select/library/items/${item.key}`;
+}
+
 async function citationNodes(
-  libraryID: number,
   itemKeys: readonly string[],
+  request: BibliographyRequest,
 ): Promise<readonly CitationNode[]> {
-  const items = await itemsFor(libraryID, itemKeys);
+  const items = await itemsFor(request.libraryID, itemKeys);
+  if (items.length === 0) return [];
+  const terms = await citationTerms(request);
   const toCSL = (
     Zotero.Utilities as unknown as {
       Item: { itemToCSLJSON(item: Zotero.Item): Record<string, unknown> };
@@ -561,14 +658,16 @@ async function citationNodes(
     const uri = String(Zotero.URI.getItemURI(item));
     const itemData = toCSL(item);
     const citationItem: CitationItemPayload = { uris: [uri], itemData };
-    const formatted = Zotero.EditorInstanceUtilities.formatCitation({
-      citationItems: [{ uris: [uri], itemData: displayCopy(itemData) }],
-      properties: {},
-    });
+    const text = citationPreviewText(itemData, terms);
     return {
       itemKey: item.key,
       uri,
-      html: citationSpan(citationItem, formatted),
+      selectUri: selectUriOf(item),
+      text,
+      html: citationSpan(
+        citationItem,
+        `(<span class="citation-item">${escapeHtml(text)}</span>)`,
+      ),
       citationItem,
     };
   });

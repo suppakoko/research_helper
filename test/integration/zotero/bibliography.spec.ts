@@ -374,10 +374,11 @@ describe("Bibliography and citation nodes through Zotero (P4-T11)", function () 
   });
 
   it("builds citation nodes that parse back to the same item URIs", async function () {
-    const nodes = await zoteroBibliographyPort.citationNodes(
-      libraryID(),
-      order,
-    );
+    const nodes = await zoteroBibliographyPort.citationNodes(order, {
+      libraryID: libraryID(),
+      styleId: APA,
+      locale: "en-US",
+    });
     assert.deepEqual(
       nodes.map((n) => n.itemKey),
       order,
@@ -400,10 +401,28 @@ describe("Bibliography and citation nodes through Zotero (P4-T11)", function () 
         `node ${node.itemKey}: uri ${node.uri}; html ${node.html.replace(/data-citation="[^"]*"/u, 'data-citation="…"')}`,
       );
     }
-    // Single author: no locale-dependent joiner in Zotero's preview text.
+    // The stored text is the plugin's, in the note editor's shape, with the
+    // en-US CSL locale's "and" and "et al." (owner, 2026-10-27, plan/00 §6
+    // item 296(a); P4-T13 changed citationNodes).
     assert.include(
       nodes[0]?.html ?? "",
       '>(<span class="citation-item">Smith, 2022</span>)</span>',
+    );
+    assert.deepEqual(
+      nodes.map((n) => n.text),
+      ["Smith, 2022", "홍 and Brown, 2023", "Kim et al., 2024"],
+    );
+    assert.deepEqual(
+      nodes.map((n) => n.selectUri),
+      order.map((key) => `zotero://select/library/items/${key}`),
+    );
+    const korean = await zoteroBibliographyPort.citationNodes(order, {
+      libraryID: libraryID(),
+      styleId: APA,
+      locale: "ko-KR",
+    });
+    log(
+      `ko-KR CSL terms in node text (logged, not asserted): ${JSON.stringify(korean.map((n) => n.text))}`,
     );
 
     // A note holding the wrapper and the nodes reads back byte for byte.
@@ -435,9 +454,11 @@ describe("Bibliography and citation nodes through Zotero (P4-T11)", function () 
   });
 
   it("escapes names and titles in the node text, not in the payload", async function () {
-    const [node] = await zoteroBibliographyPort.citationNodes(libraryID(), [
-      keys.markup,
-    ]);
+    const [node] = await zoteroBibliographyPort.citationNodes([keys.markup], {
+      libraryID: libraryID(),
+      styleId: APA,
+      locale: "en-US",
+    });
     if (node === undefined) assert.fail("one node");
     const visible = node.html.replace(/data-citation="[^"]*"/u, "");
     log(`markup node text: ${visible}`);

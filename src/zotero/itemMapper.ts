@@ -800,8 +800,15 @@ function escapeHtml(text: string): string {
  * §6.3 says what happens ("writes a child note instead and stores only
  * `rh-work-key` in `extra`") but not what the note contains, so it carries
  * exactly the deferred lines, in the order they would have had in `extra`, and
- * a marker comment in the shape §6.4 established for the plugin's other notes
- * so this one is findable and re-writable rather than duplicated.
+ * a marker comment in the shape §6.4 established for the plugin's other notes.
+ *
+ * **The marker is information only** (owner, 2026-10-27, `plan/00` §6 item
+ * 296(b); `docs/07` §6.4–§6.5): Zotero's note editor drops every HTML comment
+ * the first time it saves a note (`docs/01` §5.7, measured by `P4-T13`), so a
+ * note the user has edited no longer carries it. Nothing writes this note yet
+ * (`buildItem` in `importer.ts` leaves it out); the code that does must store
+ * the note item key and tag the note, and find it again by those, never by
+ * scanning for the marker. No lookup is built here.
  */
 function overflowNoteHtml(
   work: CanonicalWork,

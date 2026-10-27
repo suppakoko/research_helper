@@ -1409,6 +1409,10 @@ function safeBaseName(s) {
 const base = `${safeBaseName(collection.name)} — trends ${new Date().toISOString().slice(0, 10)}`;
 ```
 
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286; written here 2026-10-27 by `P4-T15`).** In v1, **"Save as Markdown" writes a file the user places** through a native save dialog. It is **not** an attachment on the report note: the `importFromFile` variant above waits in the backlog with the `.html` export (`plan/00` §6 item 287(c); `06-summarization-and-trend-report.md` §14.3 D-06-10), so "All three 'save' paths attach to a single report note" holds for the note and audio only. The file holds numeric `[n]` markers and DOI links, never `zotero://` links (`06-…` §14.3).
+
+> **Decided 2026-10-27 (`P4-T15`; `safeBaseName` and `reportExportFileName` in `src/pipeline/trendReport/exportMarkdown.ts`).** The save dialog's suggested name is `safeBaseName(collectionName)` + ` — trends ` + the date + `.md`. Three readings of the sketch above: (1) **the date is the report's generation date** (`TrendReport.generatedAtEpochMs`, UTC, as `toISOString` gives it), not the moment of export, so a report exported twice suggests one name; (2) **the 80-character cap counts code points**, not UTF-16 units, so a name is never cut inside a surrogate pair; (3) **the name is trimmed again after the cap**, so a cut never leaves a trailing space. The character class, the whitespace collapse and the `"report"` fallback are the sketch's, unchanged. The dialog itself is opened by the report window document and the chosen path handed inward (`P4-T20`), as `P1-T36` measured for FR-8's JSON export.
+
 ### 6.4 Wireframes
 
 **Stage 1–2, summarizing**

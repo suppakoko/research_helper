@@ -3097,13 +3097,13 @@ export function toZoteroItemJSON(work: CanonicalWork): ZoteroItemJSON {
 
 A summary is stored as a **child note** on the item, not in `extra`:
 
-- Note HTML begins with a machine-readable marker comment: `<!-- rh:summary v=1 promptVersion=sum-v4 model=... generatedAt=... -->`. The plugin finds its own note by scanning child notes for this marker, so the note can be freely renamed or reordered by the user.
+- Note HTML begins with a machine-readable marker comment: `<!-- rh:summary v=1 promptVersion=sum-v4 model=... generatedAt=... -->`. ~~The plugin finds its own note by scanning child notes for this marker, so the note can be freely renamed or reordered by the user.~~ *Decided 2026-10-27 (owner, `plan/00` §6 item 296(b)): the plugin finds its note by the note item key it stored and by the note's tag, never by this marker, because Zotero's note editor drops every HTML comment the first time it saves a note (`01-zotero-plugin-platform.md` §5.7, measured by `P4-T13`). The comment is still written, as information only; renaming or reordering the note still loses nothing, because neither the key nor the tag depends on the title or position.*
 - The note also carries a Zotero tag `research_helper/summary` for discoverability and bulk operations.
 - The authoritative structured copy lives in the plugin database (§8.3); the note is the human-readable projection. If the user edits the note, the plugin does not parse the edit back — it detects divergence via a stored hash and refuses to silently overwrite, offering "regenerate (overwrites)" / "keep mine".
 
 ### 6.5 `TrendReport` → Zotero
 
-- Written as a **standalone note** inside the target collection, with marker `<!-- rh:report v=1 ... -->` and tag `research_helper/trend-report`. *(Corrected 2026-10-26, `P4-T01`: the tag read `research_helper/report`; `10-requirements-and-user-stories.md` FR-25 and `11-implementation-roadmap.md` §1 Phase 4 both name `research_helper/trend-report`, and two requirement documents settle it against this one bullet.)*
+- Written as a **standalone note** inside the target collection, with marker `<!-- rh:report v=1 ... -->` and tag `research_helper/trend-report`. *(Corrected 2026-10-26, `P4-T01`: the tag read `research_helper/report`; `10-requirements-and-user-stories.md` FR-25 and `11-implementation-roadmap.md` §1 Phase 4 both name `research_helper/trend-report`, and two requirement documents settle it against this one bullet.)* *Decided 2026-10-27 (owner, `plan/00` §6 item 296(b)): the report note is found by its stored note item key (`TrendReport.zoteroNoteKey`) and its tag, never by the marker, which Zotero's note editor drops on its first save (`01-zotero-plugin-platform.md` §5.7); the marker stays as information only. The same holds for the overflow note of §6.3 (`overflowNoteHtml` in `src/zotero/itemMapper.ts`, marker `<!-- rh:extra v=1 … -->`). No lookup by any marker is built.*
 - Cited works are linked via `zotero://select/library/items/<key>` anchors so the narrative is clickable.
 - Audio is attached as a **child attachment of the report note** — an imported file attachment (`linkMode: "imported_file"`) with the audio MIME type, so it syncs and is deletable through normal Zotero UI. Filenames: `<collection-slug>-trends-<yyyymmdd>-<lang>.<ext>`.
 
@@ -3998,7 +3998,7 @@ Zotero notes / attachments
 | `CanonicalWork` | SQLite `work` | PK `work_key` | Queried by ID and joined constantly. |
 | `SourceRecord` | SQLite `source_record` | PK `id`, FK `work_key` | Enables re-merge without refetch. |
 | `StoredSummary` (authoritative) | SQLite `summary` | PK `id` (`workKey:promptVersion:modelId`) | Structured, queried by work + version. |
-| `StoredSummary` (presentation) | Zotero child note | marker comment + tag | User-visible, syncs. |
+| `StoredSummary` (presentation) | Zotero child note | stored note key + tag (the marker comment is information only; `plan/00` §6 item 296(b), 2026-10-27) | User-visible, syncs. |
 | Embeddings | SQLite `embedding`, `vector BLOB` | PK `(work_key, model)` | Float32Array as a BLOB; compact and fast. Never JSON. **No vector extension** — `loadExtension` is unsupported (§8.2), so similarity is a brute-force cosine scan in JS. |
 | `JobRecord` + checkpoints | SQLite `job` | PK `id` | Must survive crash; frequent small updates. |
 | User-edited model prices (`UserPriceOverride`) | SQLite `user_price` | PK `(provider_id, model_id)` | *Decided 2026-10-21 (owner; `plan/00` §6 item 265).* A table of user rows, not a scalar; fractional US dollars per million tokens (item 252). |

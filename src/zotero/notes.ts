@@ -1,6 +1,7 @@
 /**
  * The standalone provenance note FR-8 requires, and the file writer FR-8's JSON
- * export needs (`P1-T17`, `docs/07` §2.2).
+ * export needs (`P1-T17`, `docs/07` §2.2). Since `P4-T15`, also the file
+ * writer of the trend report's Markdown export ({@link reportFileWriter}).
  *
  * ## Why the note lives here and the record does not
  *
@@ -370,4 +371,40 @@ export async function exportProvenanceJson(
   provenance: SearchProvenance,
 ): Promise<void> {
   await exportJson(path, provenance, provenanceFileWriter());
+}
+
+// ---------------------------------------------------------------------------
+// 5. The trend report's Markdown export, platform half (`P4-T15`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The file-writing port of the trend report's "Export as Markdown"
+ * (`docs/06` §14.3, `docs/08` §6.3), the same shape as
+ * `src/core/provenance.ts`'s `ProvenanceFileWriter`.
+ *
+ * Declared here rather than in `src/pipeline/trendReport/exportMarkdown.ts`,
+ * which takes it, because `zotero/` may not import `pipeline/` (`docs/07`
+ * §2.3); `exportMarkdown.ts` re-exports it so `ui/` never names this file.
+ */
+export interface ReportFileWriter {
+  /** Write `text` to `path` as UTF-8, overwriting. */
+  writeTextFile(path: string, text: string): Promise<unknown>;
+}
+
+/**
+ * {@link ReportFileWriter} over `Zotero.File.putContentsAsync(path, data)`,
+ * exactly as {@link provenanceFileWriter} writes FR-8's JSON: the charset is
+ * left at Zotero's default, UTF-8, so a Korean report is written as it reads.
+ *
+ * **Callers.** Nothing calls it yet. The report window host in
+ * `src/bootstrap/registerUI.ts` binds it into the report view model
+ * (`src/ui/viewModels/reportViewModel.ts`), whose Export action hands it to
+ * `exportReportMarkdown` (`P4-T20`) — the way `provenanceFiles` reaches
+ * `searchImportViewModel.ts`. The path is the window's, never stored or logged
+ * (`docs/09` §2.2).
+ */
+export function reportFileWriter(): ReportFileWriter {
+  return {
+    writeTextFile: (path, text) => Zotero.File.putContentsAsync(path, text),
+  };
 }
