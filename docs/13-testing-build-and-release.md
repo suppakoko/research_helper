@@ -653,6 +653,21 @@ See §8. Manual QA is where UI, accessibility, real network behaviour, real cost
 | `refusal` | a safety refusal |
 | `models-list` | the model-listing endpoint response, for the model selector |
 
+> **Which LLM rows are recorded and which are written (added 2026-10-27, `P3-T30`, split by `plan/00`
+> §6 item 298(b)).** Eleven scenarios per provider, forty-four in all: `error-429` is two scenarios,
+> `error-429` (with `Retry-After`) and `error-429-no-retry-after`, as the card's Notes say. **Seven are
+> recorded live** — `models-list`, `chat-nonstream-ok`, `chat-stream-ok`, `chat-json-ok`,
+> `chat-json-malformed`, `error-truncated` and `error-401` (sent with a deliberately invalid,
+> key-shaped value built by the recorder, never the owner's key); five of them are billed. **Four are
+> written, not recorded**, each with `"synthetic": true` and a reason in its sidecar, as the literature
+> sources' 429s are: both `error-429`s (provoking a rate limit spends money and risks the account),
+> `error-context-length` (provoking it needs a prompt above the model's context window, up to about a
+> million tokens, whose window the bundled price table does not state) and `refusal` (provoking one
+> means sending a request the provider's policy forbids). Gemini's `refusal` uses the legacy
+> `generateContent` shape `docs/03` §11.5 documents and is driven through `chatViaGenerateContent`,
+> because the Interactions API's blocked shape is not documented (`plan/reports/P3-T05.md`). The list
+> is `LLM_SCENARIOS` in `scripts/record-fixtures.ts`.
+
 **Gemini TTS** — a short English response and a short Korean response, captured as base64/binary plus headers, sufficient to test the audio-assembly path (`src/tts/audio.ts`) without network access; plus a quota-exceeded error and a model-not-found error to exercise FR-43.
 
 ### 3.2 Recording and redaction
@@ -676,6 +691,31 @@ See §8. Manual QA is where UI, accessibility, real network behaviour, real cost
 
 Fixtures are committed to the repo. They are small (JSON/text), and having them in-repo is what makes CI hermetic and offline-capable.
 
+> **The LLM exception to "unauthenticated", and the LLM fixture name (added 2026-10-27, `P3-T30`, split
+> by `plan/00` §6 item 298(b)).** An LLM cannot be called unauthenticated, so the LLM scenarios are the
+> one exception to the first bullet above, and the exception is narrow. **The owner records them, never
+> an agent**, with the provider's key set in the process environment for that one recording session
+> only (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`); the recorder
+> reads no key from `.env` or any other file. Live mode needs three things at once — `FIXTURE_MODE=record`,
+> the `--live` flag and the key in the environment — and even then it only **prints the stated spend
+> and stops** with nothing sent, unless a second flag, `--confirm-spend-usd <amount>`, names an amount
+> at least that large. That amount then binds the run as a ceiling (the shipped `createBudgetGuard`),
+> settled at the tokens each answer reports. The stated spend is an upper bound, never an expectation:
+> each billed call is charged its whole `maxOutputTokens` and an input of one token per two characters
+> of its messages and schema plus 300, at the prices of the shipped price source
+> (`createModelPriceSource`, which until refreshed holds `docs/03` §12.1's table and its date). Before
+> any billed call the recorder lists the provider's models (free) and stops if the chosen model is not
+> there. Response headers are kept only from an allow-list (`content-type`, `retry-after`,
+> `retry-after-ms`, `x-ratelimit-*`, `anthropic-ratelimit-*`): organisation and project identifiers,
+> cookies and request ids never reach a file. Every exchange of the run passes the redaction pass and
+> `assertClean` before **any** file is written, so one surviving key-shaped value writes nothing at
+> all. **An LLM fixture is named by its scenario, not by a hash of the request** —
+> `test/fixtures/llm/<provider>/<scenario>.json` and `<scenario>_meta.json`, a further page of a
+> paginated model list `<scenario>-page-<n>.json` — because the request body carries the prompt and the
+> model: a hashed name would orphan every fixture at each prompt edit, while the bullet above wants a
+> prompt change to show as a reviewable snapshot diff. The request bodies are snapshotted from the
+> adapters themselves in `test/contract/llm/__snapshots__/`. The owner's steps are §3.4.
+
 ### 3.3 Keeping fixtures fresh
 
 Staleness is the known failure mode of record/replay: green tests against a two-year-old API shape. Mitigations:
@@ -685,6 +725,67 @@ Staleness is the known failure mode of record/replay: green tests against a two-
 3. **Re-record before every minor release** as a checklist item (§8), reviewing the diff — a large unexplained diff *is* the signal.
 4. **Never edit a fixture by hand** to make a test pass. Re-record, or add a new scenario.
 5. **LLM fixtures are re-recorded when a provider's API version changes**, not on a schedule, since model outputs vary run to run and diffs would be pure noise.
+
+### 3.4 Recording the LLM fixtures — the owner's runbook
+
+> **Added 2026-10-27 (`P3-T30`, split by `plan/00` §6 item 298(b)).** The recorder, the scenario list and
+> the contract tests are built; the recording is the owner's, after gate `G-18` and the owner's approval
+> of the stated spend below. **No agent runs these steps**: they put the owner's key in a process
+> environment and spend the owner's money. Until a provider is recorded, its seven recorded scenarios
+> are skipped by `npm run test:contract` with a message naming this section; its four synthetic ones
+> and its request snapshot run already.
+
+**The stated spend**, from `npm run fixtures:record -- --source <provider> --dry-run` on 2026-10-27. It
+is an upper bound (§3.2's note), at the shipped price source's prices — `docs/03` §12.1's table **as of
+2026-09-08**, which the owner checks against each provider's current price page first (gate `G-18`):
+
+| Provider | Model (cheapest priced) | $ / 1M in · out | Live requests | Billed | Input ≤ | Output ≤ | Stated spend ≤ |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| OpenRouter | `openai/gpt-5.6-luna` | 0.20 · 1.20 | 7 | 5 | 10,707 | 4,288 | $0.0073 |
+| OpenAI | `gpt-5.6-luna` | 0.20 · 1.20 | 7 | 5 | 10,707 | 4,288 | $0.0073 |
+| Anthropic | `claude-haiku-4-5` | 1.00 · 5.00 | 7 | 5 | 10,707 | 4,288 | $0.0322 |
+| Gemini | `gemini-3.1-flash-lite` | 0.25 · 1.50 | 7 | 5 | 10,707 | 4,288 | $0.0092 |
+| **All four** | | | **28** | **20** | | | **$0.0560** |
+
+The two free requests per provider are `models-list` and `error-401` (an invalid key the recorder
+builds). Anthropic's model list may take a second page, which is free too. OpenRouter adds no per-token
+mark-up (`docs/03` §12.1); its 5.5 % fee is charged on buying credit, not per call.
+
+**Steps, one provider at a time** (OpenAI shown; the others swap the name and the variable —
+`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`):
+
+1. **Read the plan.** `npm run fixtures:record -- --source openai --dry-run`. It reads no key and sends
+   nothing. Check the model and its prices; if the model is retired or a price has moved, stop: the
+   table in `docs/03` §12.1 is updated first (then `src/llm/shared/pricing.ts`), or another model in it is
+   named with `--model <id>` — an unpriced model is refused, because its spend cannot be bounded.
+2. **Open a new terminal for this one session** and put the key in its environment without echoing it
+   or writing it to the shell history. PowerShell (5.1 or 7):
+   `$env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new("", (Read-Host "OpenAI key" -AsSecureString)).Password`;
+   Git Bash: `read -rs OPENAI_API_KEY; export OPENAI_API_KEY`. Never put it in `.env` or any file: the
+   recorder would not read it there anyway. On this network also set `NODE_USE_SYSTEM_CA=1`
+   (PowerShell: `$env:NODE_USE_SYSTEM_CA = "1"`); never turn certificate checks off.
+3. **Set record mode and see the gate.** PowerShell: `$env:FIXTURE_MODE = "record"`, then
+   `npm run fixtures:record -- --source openai --live`. It prints the same plan and **stops with nothing
+   sent** (exit code 3). This proves the key is seen without spending anything.
+4. **Approve and record.** `npm run fixtures:record -- --source openai --live --confirm-spend-usd 0.0073`
+   (any amount at least the stated spend; it becomes the run's ceiling). The run lists the models first
+   (free) and stops before anything billed if the model is not listed; then sends each scenario once,
+   never retried, and writes `test/fixtures/llm/openai/<scenario>.json` and `_meta.json` only if every
+   exchange passed redaction — otherwise it writes nothing. It ends by printing what was spent, from the
+   tokens the answers reported, beside the stated figure.
+5. **Remove the key and close the terminal.** `Remove-Item Env:OPENAI_API_KEY; Remove-Item Env:FIXTURE_MODE`
+   (Git Bash: `unset OPENAI_API_KEY FIXTURE_MODE`), then close the window.
+6. **Check before committing.** `npm run test:unit -- recordFixturesRedaction` (scans every LLM fixture
+   for key shapes, addresses and credential headers) and `npm run test:contract` (the provider's recorded
+   block now runs). Read the new files' diff, including each sidecar's `redactions`. A failing recorded
+   test is a finding about the adapter — Gemini's stream shapes are assumptions until this recording
+   (`createGeminiStreamDecoder`) — to report, **not** a fixture to edit (§3.3 rule 4).
+
+**Exit codes:** 0 recorded; 1 a scenario failed, the model is not listed, the ceiling stopped the run, or
+a redaction check refused (each message says which, and whether anything was written); 2 a refused
+command (no `--live`, no key, an amount below the stated spend, an unpriced `--model`); 3 stopped at
+the spend gate with nothing sent. One scenario again: add `--only <scenario>` to steps 1, 3 and 4 and
+use the amount its own dry run states.
 
 ---
 

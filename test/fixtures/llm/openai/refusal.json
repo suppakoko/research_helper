@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\n  \"id\": \"resp_synthetic_refusal\",\n  \"object\": \"response\",\n  \"status\": \"completed\",\n  \"model\": \"synthetic-model\",\n  \"output\": [\n    {\n      \"type\": \"message\",\n      \"id\": \"msg_synthetic_refusal\",\n      \"status\": \"completed\",\n      \"role\": \"assistant\",\n      \"content\": [\n        {\n          \"type\": \"refusal\",\n          \"refusal\": \"I can't help with that. [synthetic fixture, P3-T30; not a recorded answer]\"\n        }\n      ]\n    }\n  ],\n  \"usage\": {\n    \"input_tokens\": 20,\n    \"output_tokens\": 8,\n    \"total_tokens\": 28\n  }\n}\n"
+}

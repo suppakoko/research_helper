@@ -1,0 +1,7 @@
+{
+  "status": 400,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\n  \"error\": {\n    \"message\": \"Your input exceeds the context window of this model. [synthetic fixture, P3-T30; not a recorded answer]\",\n    \"type\": \"invalid_request_error\",\n    \"param\": \"input\",\n    \"code\": \"context_length_exceeded\"\n  }\n}\n"
+}

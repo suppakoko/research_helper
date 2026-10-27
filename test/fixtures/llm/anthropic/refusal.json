@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\n  \"id\": \"msg_synthetic_refusal\",\n  \"type\": \"message\",\n  \"role\": \"assistant\",\n  \"model\": \"synthetic-model\",\n  \"content\": [],\n  \"stop_reason\": \"refusal\",\n  \"stop_sequence\": null,\n  \"usage\": {\n    \"input_tokens\": 20,\n    \"output_tokens\": 0\n  }\n}\n"
+}

@@ -1659,6 +1659,21 @@ window script, its caller and the pause path, none of which the card listed. If 
 error on the first real run exceeds ~25 %, that is a finding for `P3-T13`'s calibration, not a
 reason to widen the gate.
 
+> **Corrected 2026-10-27 (owner, `plan/00` §6 item 299(b)):** step 1's chunked count was the flat
+> path's ⌈(tokens − 250) ÷ 5 750⌉ `CHUNK_MAP` calls with no ceiling, which under-states a
+> section-aware paper (every section starts a chunk of its own) and over-states one past the 13-chunk
+> ceiling. `estimateRun` now asks `planChunks` (`P3-T23`, `src/llm/shared/chunking.ts`): with the
+> item's `sectionAware` and `sections` it prices exactly that plan; without them it prices the worst
+> case the chunker can produce — `MAX_CHUNKS` calls carrying at most what they can hold. The budget
+> constants (`MAP_CALL_BUDGETS`, `ESTIMATE_HEADROOM`, `CHUNK_OVERLAP_TOKENS`) are defined once in
+> `chunking.ts` and re-exported here; `EstimateItem.source` may carry `itemKey`, `sectionAware` and
+> `sections`, and `EstimateRunInput` / `EstimateReportRunInput` an optional `contextWindowTokens`.
+> Recorded in `docs/06` §5.4 ("Decided 2026-10-27"). Files: modify `src/pipeline/shared/estimate.ts`,
+> `src/llm/shared/chunking.ts`, `test/unit/pipeline/estimate.test.ts` and
+> `test/unit/llm/chunking.test.ts`; create `test/support/syntheticPaper.ts` (the synthetic papers
+> both tests use). Callers unchanged: `estimateRun` by `P3-T29`'s pipeline, `estimateReportRun` by
+> `P4-T18`, neither built yet; they pass the acquisitions' sections and the model's window.
+
 ---
 
 ### P3-T17 — `llm` worker pool: concurrency, cancel, pause, resume
@@ -2167,8 +2182,12 @@ fits the model's window, with the right things dropped first under budget pressu
 - `docs/06-summarization-and-trend-report.md` §13.5 — halve and retry once on context length
 
 **Files.**
-- create `src/llm/shared/chunking.ts` (caller: `summarizeItem` in `P3-T25`)
-- modify `src/pipeline/summarize/acquire.ts`
+- create `src/llm/shared/chunking.ts` (caller: `summarizeItem` in `P3-T25`, which constructs the plan
+  through `planChunks` and sends it through `runWithContextRetry`; nothing calls the module until
+  `P3-T25` is built)
+- ~~modify `src/pipeline/summarize/acquire.ts`~~ *Not modified (2026-10-27): no step needs it — the
+  chunker reads `sectionAware`, `sections` and `text` from the `AcquiredSource` it is given, and
+  measures the line shape itself.*
 - create `test/unit/llm/chunking.test.ts`
 
 **Do.**
@@ -2188,6 +2207,12 @@ fits the model's window, with the right things dropped first under budget pressu
 > `\n`-delimited segments of ≥ 200 characters is high, treat `\n` as a paragraph boundary; when it is
 > low, treat `\n` as a line break and pack by sentence — with the cut-off set from `P3-T20`'s corpus,
 > not invented here. Changes `docs/06` §5.3 step 3. (Review §4 item 14.)
+
+> **Decided 2026-10-27 (owner, `plan/00` §6 item 299(a)):** as recommended, with the cut-off at
+> **0.5** (`PARAGRAPH_LINE_SHARE_CUTOFF`): a text whose `\n`-delimited segments of at least 200
+> characters hold at least half its characters is cut by paragraph; otherwise `\n` is a line break
+> and the unit is the sentence. Measured on `P3-T20`'s 40 texts (6 at most 0.191, 34 at least 0.664);
+> `docs/06` §5.3 step 3 is corrected.
 
 **Do NOT.**
 - Do **not** assume `\n` marks a paragraph (corrected D-06-4); do not add a blank-line heuristic
@@ -2214,6 +2239,24 @@ npm run typecheck && npm run test:unit -- llm/chunking
 ```
 
 **Notes.** Step 3 depends on the open line; steps 1–2 and 4–6 do not.
+
+> **2026-10-27 (owner, `plan/00` §6 item 298(a)):** this card is built **before** `P3-T22`'s accuracy
+> measurement, so `P3-T22` stays in **Depends on** only for what is still its own: measuring the
+> detector against the owner's labels, setting `IMRAD_DETECTOR_VALIDATED` (and so whether `auto` may
+> pass `sectionAware: true` to this chunker or must degrade to the flat path), and gate `G-22`.
+> Nothing here assumes the detector passes 85 %: the chunker takes `sectionAware` as given.
+>
+> **As built 2026-10-27:** `planChunks(source, model, promptId, options)` — `options` carries the
+> prompt registry (`max_tokens` through `resolveMaxTokens`; optional since item 299(b), when the
+> estimate calls without one and `MAP_CALL_BUDGETS`' ceilings apply), the caller's measured prompt
+> overheads, an optional token counter and the retry's `budgetScale`. The readings `docs/06` §5.3
+> left open are recorded there ("Decided 2026-10-27"). Step 3 is built on the open line's
+> recommendation, with the cut-off of 0.5 (`PARAGRAPH_LINE_SHARE_CUTOFF`) measured on `P3-T20`'s 40
+> texts (`docs/06` §5.3, "Measured 2026-10-27"); ~~the owner's ruling is still open~~ ruled as
+> recommended the same day (owner, `plan/00` §6 item 299(a), the note under the open line). The "60 000-token
+> text's shares" check runs at the halved retry budget (13 chunks of 3 000 tokens), where the shares
+> decide what is sent; at the full budget the same paper loses only its lowest-value sections to the
+> 13-chunk ceiling (`docs/06` §5.3 note, item (1)), because the shares bind only under pressure.
 
 ---
 
@@ -2416,6 +2459,14 @@ that pin the schema version) and the redaction-gated persistence.
 > its `ChatRequest`. The member and the shared `Effort` type are declared in `docs/07` §4.3 (dated
 > note "`ChatRequest.effort` and the shared `Effort` type") and `src/llm/types.ts`; each adapter maps
 > it onto its provider's scale, so this card passes the one value and maps nothing itself.
+
+> **2026-10-27 (from `P3-T23`'s report, `plan/reports/P3-T23.md`; for this card, not built there):**
+> (1) on the section-aware path `planChunks` returns chunks in synthesis order, while `CHUNK_REDUCE`'s
+> user text says "CHUNK EXTRACTIONS (JSON array, in document order)"; every `TextChunk` carries
+> `start`, so sort the `CHUNK_MAP` answers by it before rendering `CHUNK_REDUCE`. (2) `docs/06`
+> §13.5's halve-and-retry (`runWithContextRetry`) does not help a context-length error raised by the
+> `CHUNK_REDUCE` call itself: halving the chunk budget makes more chunks and so a larger reduce input.
+> This card decides what such an error does.
 
 ---
 
@@ -2867,6 +2918,22 @@ Then stop at the gate with the scenario list and expected spend.
 **Notes.** Rewritten 2026-10-20: the card used to say "reading keys from `.env`", which contradicted
 D5, `.env.example` and the recorder's own header, and it had no gate although recording spends
 money. The `error-429` scenario is recorded twice (with and without `Retry-After`).
+
+*Split 2026-10-27 (owner, `plan/00` §6 item 298(b)); State stays `TODO`.* **Built, with no key and no live
+call:** the scenario list (`LLM_SCENARIOS` in `scripts/record-fixtures.ts`, eleven per provider, forty-four
+in all; seven recorded, four written as synthetic with a reason — `docs/13` §3.1's note), the stated spend
+(`stateLlmSpend`, an upper bound priced by `createModelPriceSource`; $0.0560 for all four providers at
+`docs/03` §12.1's prices of 2026-09-08 — the table is in `docs/13` §3.4), the gates (`runLlmRecorder`:
+`FIXTURE_MODE=record`, `--live`, the key in the environment, then a stop with nothing sent unless
+`--confirm-spend-usd` covers the stated spend, which then binds the run through `createBudgetGuard`), the
+LLM fixture key (`llmFixtureKey`, by scenario; `docs/13` §3.2's note), the replay
+(`createLlmReplayTransport`), the four contract files, the request snapshots, the sixteen synthetic
+fixtures, and the owner's runbook (`docs/13` §3.4). **Remains, the owner's:** gate `G-18` for each
+provider, approval of the stated spend, and the recording itself by `docs/13` §3.4's steps; until then the
+seven recorded scenarios of each contract file skip, saying so. Beyond `Files`: the shared suite
+`test/contract/llm/_llmContract.ts` and the snapshots in `test/contract/llm/__snapshots__/` were added;
+`.github/workflows/ci.yml` was not changed, because its contract step (`npx vitest run --dir
+test/contract`) already runs the new files. Report: `plan/reports/P3-T30.md` once the coordinator saves it.
 
 ---
 

@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\n  \"id\": \"gen-synthetic-refusal\",\n  \"object\": \"chat.completion\",\n  \"model\": \"synthetic-model\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"\"\n      },\n      \"finish_reason\": \"content_filter\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 20,\n    \"completion_tokens\": 0,\n    \"total_tokens\": 20\n  }\n}\n"
+}

@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"role\": \"model\",\n        \"parts\": []\n      },\n      \"finishReason\": \"SAFETY\",\n      \"index\": 0\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 20,\n    \"totalTokenCount\": 20\n  },\n  \"modelVersion\": \"synthetic-model\"\n}\n"
+}

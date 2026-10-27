@@ -34,16 +34,30 @@ import {
   type EstimateItem,
   type EstimateReportRunInput,
   type EstimateRunInput,
+  type ItemPlan,
   type PromptOverheadTokens,
   type SynthesisCall,
   type SynthesisCallKind,
   type SynthesisPlanInput,
 } from "../../../src/pipeline/shared/estimate";
 import {
+  MAX_CHUNKS,
+  labelReserveTokens,
+  planChunks,
+  type ChunkableSource,
+} from "../../../src/llm/shared/chunking";
+import {
   PROMPT_FILE_NAMES,
   PROMPT_IDS,
   createPromptRegistry,
 } from "../../../src/prompts";
+
+import {
+  SIXTY_K,
+  flowing,
+  paper,
+  sentence,
+} from "../../support/syntheticPaper";
 
 afterEach(() => {
   setPrefStore(undefined);
@@ -239,7 +253,7 @@ describe("DR-1 per item (docs/06 §5.4)", () => {
     });
   });
 
-  it("chunks a full text above the 24 000-token budget: CHUNK_MAP with 250 overlap, then one CHUNK_REDUCE", () => {
+  it("chunks a full text above the 24 000-token budget: the chunker's worst case when its sections are not known, then one CHUNK_REDUCE", () => {
     const body = 50_000;
     const long: EstimateItem = {
       workKey: "long",
@@ -247,23 +261,25 @@ describe("DR-1 per item (docs/06 §5.4)", () => {
       source: { tier: "fulltext_epmc", abstract: ABSTRACT, text: textOf(body) },
     };
     const planned = plan(long, "auto");
-    const chunks = Math.ceil(
-      (body - CHUNK_OVERLAP_TOKENS) / (6_000 - CHUNK_OVERLAP_TOKENS),
-    );
+    // Corrected 2026-10-27 (owner, plan/00 §6 item 299(b)): no longer the
+    // flat count ⌈(50 000 − 250) ÷ 5 750⌉ = 9, but MAX_CHUNKS.
     expect(planned.chunked).toBe(true);
     expect(planned.calls.filter((c) => c.kind === "CHUNK_MAP")).toHaveLength(
-      chunks,
+      MAX_CHUNKS,
     );
     const reduce = planned.calls.at(-1);
     expect(reduce?.kind).toBe("CHUNK_REDUCE");
-    expect(reduce?.rawInputTokens).toBe(3_000 + chunks * 900);
-    const mapBodies = planned.calls
+    expect(reduce?.rawInputTokens).toBe(3_000 + MAX_CHUNKS * 900);
+    const label = labelReserveTokens("long", raw);
+    const bodies = planned.calls
       .filter((c) => c.kind === "CHUNK_MAP")
-      .map((c) => c.rawInputTokens - 3_000);
-    expect(Math.max(...mapBodies)).toBeLessThanOrEqual(6_000);
-    expect(mapBodies.reduce((a, b) => a + b, 0)).toBe(
-      body + (chunks - 1) * CHUNK_OVERLAP_TOKENS,
+      .map((c) => c.rawInputTokens - 3_000 - label);
+    expect(Math.max(...bodies)).toBeLessThanOrEqual(6_000);
+    const sent = bodies.reduce((a, b) => a + b, 0);
+    expect(sent).toBeGreaterThanOrEqual(
+      body + (MAX_CHUNKS - 1) * CHUNK_OVERLAP_TOKENS,
     );
+    expect(sent).toBeLessThanOrEqual(MAX_CHUNKS * 6_000);
     // A text exactly at the budget is still one call.
     const atBudget: EstimateItem = {
       workKey: "edge",
@@ -275,6 +291,184 @@ describe("DR-1 per item (docs/06 §5.4)", () => {
       },
     };
     expect(plan(atBudget, "auto").calls).toHaveLength(1);
+  });
+});
+
+// ===========================================================================
+// Corrected 2026-10-27 (owner, plan/00 §6 item 299(b); docs/06 §5.4): a
+// chunked paper is priced as the chunker (P3-T23) would plan it. SYNTHETIC
+// papers from test/support/syntheticPaper.ts.
+// ===========================================================================
+
+/** The tokens each CHUNK_MAP call carries besides its overhead. */
+function mapBodies(item: ItemPlan): number[] {
+  return item.calls
+    .filter((c) => c.kind === "CHUNK_MAP")
+    .map((c) => c.rawInputTokens - OVERHEAD.CHUNK_MAP);
+}
+
+function sum(values: readonly number[]): number {
+  return values.reduce((a, b) => a + b, 0);
+}
+
+/** An item from a synthetic paper, with or without its sections. */
+function paperItem(
+  source: ChunkableSource,
+  withSections: boolean,
+): EstimateItem {
+  return {
+    workKey: "W",
+    cached: false,
+    source: withSections
+      ? { tier: "fulltext_pdf", ...source }
+      : { tier: "fulltext_pdf", abstract: source.abstract, text: source.text },
+  };
+}
+
+/** SIXTY_K's sections scaled to `factor` of their length. */
+function scaled(factor: number, sectionAware = true): ChunkableSource {
+  return paper(
+    sentence(9_999).repeat(20),
+    // The title block is headed "T", as in P3-T23's report, so factor 0.5 is
+    // its 30 830-token paper.
+    SIXTY_K.map((spec, i) => ({
+      ...spec,
+      heading: i === 0 ? "T" : spec.heading,
+      tokens: spec.tokens * factor,
+    })),
+    sectionAware,
+  );
+}
+
+describe("chunked papers as the chunker plans them (docs/06 §5.4, item 299(b))", () => {
+  const planOf = (item: EstimateItem, window?: number): ItemPlan =>
+    planItem(item, "always", OVERHEAD, raw, {
+      id: "mock-small",
+      contextWindowTokens: window,
+    });
+  const chunkerPlan = (source: ChunkableSource, window?: number) =>
+    planChunks(
+      source,
+      { id: "mock-small", contextWindowTokens: window },
+      "PAPER_SUMMARY_FULLTEXT",
+      { overhead: OVERHEAD, countTokens: raw },
+    );
+
+  it("never under-states the 30 830-token paper's section-aware plan, sections known or not", () => {
+    const source = scaled(0.5);
+    expect(raw(source.text)).toBe(30_830);
+    const chunker = chunkerPlan(source);
+    expect(chunker.kind).toBe("chunked");
+    const chunks = chunker.kind === "chunked" ? chunker.chunks : [];
+    expect(chunks).toHaveLength(12);
+    // The old flat count was ⌈(30 830 − 250) ÷ 5 750⌉ = 6.
+    const known = planOf(paperItem(source, true));
+    expect(mapBodies(known)).toEqual(
+      chunks.map((c) => raw(c.label) + c.tokens),
+    );
+    const unknown = planOf(paperItem(source, false));
+    expect(mapBodies(unknown)).toHaveLength(MAX_CHUNKS);
+    expect(mapBodies(unknown).length).toBeGreaterThanOrEqual(chunks.length);
+    expect(sum(mapBodies(unknown))).toBeGreaterThanOrEqual(
+      sum(mapBodies(known)),
+    );
+    for (const item of [known, unknown]) {
+      expect(item.calls.at(-1)?.kind).toBe("CHUNK_REDUCE");
+    }
+  });
+
+  it("prices exactly the flat plan when the item says it is not section-aware", () => {
+    const source = scaled(0.5, false);
+    const chunker = chunkerPlan(source);
+    const chunks = chunker.kind === "chunked" ? chunker.chunks : [];
+    expect(chunks).toHaveLength(6);
+    expect(mapBodies(planOf(paperItem(source, true)))).toEqual(
+      chunks.map((c) => raw(c.label) + c.tokens),
+    );
+  });
+
+  it.each([0.45, 0.5, 0.7, 1, 1.6])(
+    "prices a paper of %f × 60 000 tokens at least as high without its sections as with them",
+    (factor) => {
+      for (const sectionAware of [true, false]) {
+        const source = scaled(factor, sectionAware);
+        const known = planOf(paperItem(source, true));
+        const unknown = planOf(paperItem(source, false));
+        const input = (p: ItemPlan) => sum(p.calls.map((c) => c.inputTokens));
+        const output = (p: ItemPlan) => sum(p.calls.map((c) => c.outputTokens));
+        expect(unknown.calls.length).toBeGreaterThanOrEqual(known.calls.length);
+        expect(input(unknown)).toBeGreaterThanOrEqual(input(known));
+        expect(output(unknown)).toBeGreaterThanOrEqual(output(known));
+      }
+    },
+  );
+
+  it("never prices more than 13 chunks can carry, nor less than they do carry", () => {
+    const text = flowing(150_000);
+    const known = planOf({
+      workKey: "huge",
+      cached: false,
+      source: {
+        tier: "fulltext_pdf",
+        abstract: null,
+        text,
+        sectionAware: false,
+        sections: [],
+      },
+    });
+    expect(mapBodies(known)).toHaveLength(MAX_CHUNKS);
+    const unknown = planOf({
+      workKey: "huge",
+      cached: false,
+      source: { tier: "fulltext_pdf", abstract: null, text },
+    });
+    const label = labelReserveTokens("huge", raw);
+    // What can be sent: 13 chunks of 6 000 tokens and their labels.
+    expect(sum(mapBodies(unknown))).toBe(MAX_CHUNKS * (6_000 + label));
+    expect(sum(mapBodies(known))).toBeLessThanOrEqual(sum(mapBodies(unknown)));
+    // The old count priced all 150 000 tokens, in 27 calls.
+    expect(sum(mapBodies(unknown))).toBeLessThan(150_000);
+  });
+
+  it("follows the model's context window when the caller passes it", () => {
+    const source = scaled(0.5);
+    const wide = planOf(paperItem(source, true));
+    const narrow = planOf(paperItem(source, true), 6_000);
+    const narrowChunker = chunkerPlan(source, 6_000);
+    expect(mapBodies(narrow).length).toBe(
+      narrowChunker.kind === "chunked" ? narrowChunker.chunks.length : -1,
+    );
+    expect(Math.max(...mapBodies(narrow))).toBeLessThan(
+      Math.max(...mapBodies(wide)),
+    );
+    const run = estimateRun(
+      input({
+        items: [paperItem(source, true)],
+        contextWindowTokens: 6_000,
+        fullTextMode: "always",
+      }),
+    );
+    expect(run.selected.items[0]?.calls).toHaveLength(narrow.calls.length);
+  });
+
+  it("passes the map model's window through the report run's estimate (P4-T16)", () => {
+    const items = [paperItem(scaled(0.5), true)];
+    const wide = estimateReportRun(
+      reportInput({ items, fullTextMode: "always" }),
+    );
+    const narrow = estimateReportRun(
+      reportInput({
+        items,
+        fullTextMode: "always",
+        contextWindowTokens: 6_000,
+      }),
+    );
+    const narrowMap = planOf(paperItem(scaled(0.5), true), 6_000);
+    const wideMap = planOf(paperItem(scaled(0.5), true));
+    expect(narrow.selected.calls - wide.selected.calls).toBe(
+      narrowMap.calls.length - wideMap.calls.length,
+    );
+    expect(narrowMap.calls.length).toBeGreaterThan(wideMap.calls.length);
   });
 });
 

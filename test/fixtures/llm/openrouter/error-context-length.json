@@ -1,0 +1,7 @@
+{
+  "status": 400,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\n  \"error\": {\n    \"message\": \"This endpoint's maximum context length is 400000 tokens. However, you requested about 410000 tokens. [synthetic fixture, P3-T30; not a recorded answer]\",\n    \"code\": 400\n  }\n}\n"
+}

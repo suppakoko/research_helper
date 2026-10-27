@@ -1,0 +1,7 @@
+{
+  "status": 429,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\n  \"type\": \"error\",\n  \"error\": {\n    \"type\": \"rate_limit_error\",\n    \"message\": \"Number of requests has exceeded your rate limit. [synthetic fixture, P3-T30; not a recorded answer]\"\n  }\n}\n"
+}

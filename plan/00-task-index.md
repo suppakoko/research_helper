@@ -2326,6 +2326,21 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `research_helper/ai-summary`, as FR-20 (`docs/10`), `docs/11` §1, `docs/13` and `P3-T29` already say; `docs/07` §6.4's
     `research_helper/summary` is corrected (raised by `plan/reports/followup-296.md` finding 3).
 
+298. **Phase 3 work while the labels wait, 2026-10-27.** **DECIDED 2026-10-27 (owner), both as recommended:** (a)
+    `P3-T23` (the chunker's section-aware, flat and single-shot paths) is built before `P3-T22`'s accuracy
+    measurement. `P3-T22` and gate G-22 still decide which path is the default; nothing in `P3-T23` assumes the
+    detector passes 85 %. `P3-T25` may follow it. (b) `P3-T30` is split. The recorder and the scenario list are built
+    now, with no key and no live call. The recording itself waits for G-18 (the key test) and the owner's approval of
+    the stated spend, and the owner runs it.
+
+299. **Two lines raised by `P3-T23`** (`plan/reports/P3-T23.md`). **DECIDED 2026-10-27 (owner), both as
+    recommended:** (a) `P3-T23` step 3's open line is ruled as recommended. A text whose `\n`-delimited segments of at
+    least 200 characters hold at least half its characters is cut by paragraph. Otherwise `\n` is a line break and the
+    unit is the sentence (`PARAGRAPH_LINE_SHARE_CUTOFF` 0.5, measured on `P3-T20`'s 40 texts: 6 at most 0.191, 34 at
+    least 0.664). `docs/06` §5.3 step 3's "guaranteed by D-06-4" is corrected. (b) `P3-T16`'s pre-run estimate is fixed
+    now, so that it never under-states a chunked paper. It counts the chunks the chunker would actually plan,
+    section-aware or flat, with the same budget constants defined once.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

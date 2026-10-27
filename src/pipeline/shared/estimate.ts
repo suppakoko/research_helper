@@ -20,10 +20,13 @@
  *   {@link FULL_TEXT_MIN_RATIO} times the abstract's tokens; never in `never`
  *   mode. The `fullTextMode` passed in is the one **after** the privacy policy
  *   (`allowedInputScope`, which forces `never` in strict mode).
- * - A full text within `PAPER_SUMMARY_FULLTEXT`'s 24 000-token input budget is
- *   one call; a longer one is chunked: `CHUNK_MAP` calls of up to 6 000 tokens
- *   with the 250-token overlap of §5.3, then one `CHUNK_REDUCE` over the map
- *   outputs.
+ * - A full text the chunker plans as one call (`planChunks`,
+ *   `src/llm/shared/chunking.ts`, `P3-T23`) is one `PAPER_SUMMARY_FULLTEXT`
+ *   call; a longer one is the `CHUNK_MAP` calls the chunker would plan, then
+ *   one `CHUNK_REDUCE` over their outputs — exactly the plan's chunks when the
+ *   item carries its sections, the chunker's worst case when it does not
+ *   (section 3, {@link planItem}; owner, `plan/00` §6 item 299(b), `docs/06`
+ *   §5.4).
  * - An item with no abstract and no full text is `metadata-only`: **no call at
  *   all** (`docs/06` §3.5 — a stub summary, never an LLM call).
  *
@@ -57,6 +60,15 @@ import {
   costOf,
   type ModelPrices,
 } from "../../llm/shared/pricing";
+import {
+  CHUNK_OVERLAP_TOKENS,
+  ESTIMATE_HEADROOM,
+  MAP_CALL_BUDGETS,
+  planChunks,
+  type CallBudget,
+  type ChunkModel,
+  type MapCallKind,
+} from "../../llm/shared/chunking";
 import { estTokens } from "../../llm/shared/tokenEstimate";
 import { resolveMaxTokens, type PromptRegistry } from "../../prompts";
 
@@ -67,46 +79,16 @@ import type { FullTextMode, InputScopeKind } from "./privacyPolicy";
 // ===========================================================================
 
 /**
- * D-06-5 (`docs/06` §5.1): every token estimate is multiplied by 1.15 before
- * budgeting. Applied after `estTokens`' per-model calibration. `docs/03`
- * §10.2's "20 %" is not used: `docs/06` owns the budget model, and `P3-T13`'s
- * note in `docs/03` §10.2 already names this factor (`docs/07` §4.3's
- * `BudgetGuard` note, 2026-10-23).
+ * D-06-5's 1.15× headroom, §5.3's 250-token overlap and §5.2's per-call
+ * budgets are defined once, in the chunker (`src/llm/shared/chunking.ts`), so
+ * the plan and its price use one budget (owner, `plan/00` §6 item 299(b)).
+ * Re-exported for this module's callers.
  */
-export const ESTIMATE_HEADROOM = 1.15;
+export { CHUNK_OVERLAP_TOKENS, ESTIMATE_HEADROOM, MAP_CALL_BUDGETS };
+export type { CallBudget, MapCallKind };
 
 /** DR-1 condition 3: full text is worth sending at three times the abstract. */
 export const FULL_TEXT_MIN_RATIO = 3;
-
-/** `docs/06` §5.3 step 4: overlap carried between adjacent chunks. */
-export const CHUNK_OVERLAP_TOKENS = 250;
-
-/** The map-phase prompts of `docs/06` §5.2 (the synthesis ones are Phase 4's). */
-export type MapCallKind =
-  | "PAPER_SUMMARY_ABSTRACT"
-  | "PAPER_SUMMARY_FULLTEXT"
-  | "CHUNK_MAP"
-  | "CHUNK_REDUCE";
-
-/** One row of `docs/06` §5.2's table. */
-export interface CallBudget {
-  /** "Input chunk budget": the text the call may carry. */
-  readonly inputTokens: number;
-  /** "`max_tokens` out": the output ceiling the call is sent with. */
-  readonly maxOutputTokens: number;
-}
-
-/**
- * `docs/06` §5.2's per-call budgets for the four map-phase prompts,
- * transcribed (a test reads the table from the document).
- */
-export const MAP_CALL_BUDGETS: Readonly<Record<MapCallKind, CallBudget>> =
-  Object.freeze({
-    PAPER_SUMMARY_ABSTRACT: { inputTokens: 2_000, maxOutputTokens: 1_200 },
-    PAPER_SUMMARY_FULLTEXT: { inputTokens: 24_000, maxOutputTokens: 1_600 },
-    CHUNK_MAP: { inputTokens: 6_000, maxOutputTokens: 900 },
-    CHUNK_REDUCE: { inputTokens: 12_000, maxOutputTokens: 1_600 },
-  });
 
 /**
  * Each prompt's own tokens — system prompt, scaffold, serialized schema —
@@ -124,8 +106,14 @@ export type PromptOverheadTokens = Readonly<Record<MapCallKind, number>>;
 export interface EstimateItem {
   /** The item's work key; carried through for the dialog and the tests. */
   readonly workKey: string;
-  /** What acquisition found (`docs/06` §3.6): its tier, abstract and text. */
-  readonly source: Pick<AcquiredSource, "tier" | "abstract" | "text">;
+  /**
+   * What acquisition found (`docs/06` §3.6): its tier, abstract and text,
+   * and — when the caller has them — its item key, `sectionAware` and
+   * `sections`. With both of the last two the estimate prices the chunker's
+   * exact plan; without them, its worst case ({@link planItem}).
+   */
+  readonly source: Pick<AcquiredSource, "tier" | "abstract" | "text"> &
+    Partial<Pick<AcquiredSource, "itemKey" | "sectionAware" | "sections">>;
   /** A cache hit: already summarized, no call (`docs/07` §12.3 `CacheProbe`). */
   readonly cached: boolean;
 }
@@ -216,6 +204,12 @@ export interface EstimateRunInput {
    * with the model's stored calibration (`P3-T13`).
    */
   readonly countTokens?: (text: string) => number;
+  /**
+   * The model's context window, for the chunker's §5.2 inequality (`docs/06`
+   * §5.4, item 299(b)); omitted or `0` means not known, and §5.2's column
+   * applies alone, as in `planChunks`.
+   */
+  readonly contextWindowTokens?: number;
 }
 
 // ===========================================================================
@@ -241,42 +235,88 @@ function hasText(value: string | null): value is string {
 }
 
 /**
- * The calls one full text needs: one single-shot call within
- * `PAPER_SUMMARY_FULLTEXT`'s budget, else `CHUNK_MAP` calls of at most 6 000
- * tokens overlapping by 250, then one `CHUNK_REDUCE` over their outputs.
+ * The calls one full text needs, as the chunker would plan them (`planChunks`,
+ * `docs/06` §5.3; owner, `plan/00` §6 item 299(b), recorded in `docs/06`
+ * §5.4).
+ *
+ * - **Single-shot** — one `PAPER_SUMMARY_FULLTEXT` call carrying the text.
+ * - **Sections known** (the item carries `sectionAware` and `sections`) —
+ *   exactly the plan's chunks: one `CHUNK_MAP` call each, carrying its label
+ *   and its chunk, overlap included.
+ * - **Sections not known** — the chunker's worst case for this text: the
+ *   section-aware path with every section starting its own chunk, so
+ *   `maxChunks` (13) `CHUNK_MAP` calls. Between them they carry at most what
+ *   13 chunks hold, and at most the text plus every overlap plus one token of
+ *   rounding per chunk (a section boundary splits at most one unit, and each
+ *   unit's estimate is rounded up). That is never below the flat path's count
+ *   or tokens, and never above what can be sent.
+ *
+ * Then one `CHUNK_REDUCE` over the map outputs, each at its `max_tokens`.
  */
 function fullTextCalls(
-  textTokens: number,
+  source: EstimateItem["source"],
+  itemKey: string,
   overhead: PromptOverheadTokens,
+  count: (text: string) => number,
+  model: ChunkModel,
 ): { readonly calls: PlannedCall[]; readonly chunked: boolean } {
-  const single = MAP_CALL_BUDGETS.PAPER_SUMMARY_FULLTEXT.inputTokens;
-  if (textTokens <= single) {
+  const known =
+    source.sectionAware !== undefined && source.sections !== undefined;
+  const plan = planChunks(
+    {
+      itemKey,
+      abstract: source.abstract,
+      text: source.text,
+      sectionAware: known ? (source.sectionAware as boolean) : false,
+      sections: known ? (source.sections ?? []) : [],
+    },
+    model,
+    "PAPER_SUMMARY_FULLTEXT",
+    { overhead, countTokens: count },
+  );
+  if (plan.kind === "single-shot") {
     return {
       calls: [
         call(
           "PAPER_SUMMARY_FULLTEXT",
-          overhead.PAPER_SUMMARY_FULLTEXT + textTokens,
+          overhead.PAPER_SUMMARY_FULLTEXT + plan.textTokens,
         ),
       ],
       chunked: false,
     };
   }
-  const chunk = MAP_CALL_BUDGETS.CHUNK_MAP.inputTokens;
-  const stride = chunk - CHUNK_OVERLAP_TOKENS;
-  const chunks = Math.max(
-    1,
-    Math.ceil((textTokens - CHUNK_OVERLAP_TOKENS) / stride),
-  );
   const calls: PlannedCall[] = [];
-  let left = textTokens + (chunks - 1) * CHUNK_OVERLAP_TOKENS;
-  for (let i = 0; i < chunks; i += 1) {
-    const body = Math.min(chunk, left);
-    left -= body;
-    calls.push(call("CHUNK_MAP", overhead.CHUNK_MAP + body));
+  if (known) {
+    for (const chunk of plan.chunks) {
+      calls.push(
+        call(
+          "CHUNK_MAP",
+          overhead.CHUNK_MAP + count(chunk.label) + chunk.tokens,
+        ),
+      );
+    }
+  } else {
+    const n = plan.maxChunks;
+    const flatContent = plan.chunks.reduce(
+      (sum, chunk) => sum + chunk.tokens - chunk.overlapTokens,
+      0,
+    );
+    const total = Math.min(
+      n * plan.chunkBudgetTokens,
+      Math.max(plan.textTokens, flatContent) +
+        n +
+        (n - 1) * CHUNK_OVERLAP_TOKENS,
+    );
+    for (let i = 0; i < n; i += 1) {
+      const body = Math.floor(total / n) + (i < total % n ? 1 : 0);
+      calls.push(
+        call("CHUNK_MAP", overhead.CHUNK_MAP + plan.labelReserveTokens + body),
+      );
+    }
   }
   const reduceBody = Math.min(
     MAP_CALL_BUDGETS.CHUNK_REDUCE.inputTokens,
-    chunks * MAP_CALL_BUDGETS.CHUNK_MAP.maxOutputTokens,
+    calls.length * MAP_CALL_BUDGETS.CHUNK_MAP.maxOutputTokens,
   );
   calls.push(call("CHUNK_REDUCE", overhead.CHUNK_REDUCE + reduceBody));
   return { calls, chunked: true };
@@ -289,6 +329,8 @@ function fullTextCalls(
  * @param mode - the mode after the privacy policy
  * @param overhead - the prompts' own tokens
  * @param count - the token counter
+ * @param model - the map model's id and context window, for the chunker's
+ *   §5.2 inequality; an unknown window applies §5.2's column alone
  * @returns the plan
  */
 export function planItem(
@@ -296,6 +338,7 @@ export function planItem(
   mode: FullTextMode,
   overhead: PromptOverheadTokens,
   count: (text: string) => number,
+  model: ChunkModel = { id: "", contextWindowTokens: undefined },
 ): ItemPlan {
   const { source } = item;
   const fullTextTier =
@@ -309,7 +352,13 @@ export function planItem(
     const worthIt =
       mode === "always" || textTokens >= FULL_TEXT_MIN_RATIO * abstractTokens;
     if (worthIt) {
-      const { calls, chunked } = fullTextCalls(textTokens, overhead);
+      const { calls, chunked } = fullTextCalls(
+        source,
+        source.itemKey ?? item.workKey,
+        overhead,
+        count,
+        model,
+      );
       return {
         ...base,
         scope: "abstract+fulltext",
@@ -342,7 +391,10 @@ function planRun(
   count: (text: string) => number,
 ): RunPlan {
   const items = input.items.map((item) =>
-    planItem(item, mode, input.overhead, count),
+    planItem(item, mode, input.overhead, count, {
+      id: input.modelId,
+      contextWindowTokens: input.contextWindowTokens,
+    }),
   );
   let calls = 0;
   let rawInputTokens = 0;
@@ -838,6 +890,8 @@ export interface EstimateReportRunInput extends Omit<
   readonly atEpochMs: number;
   /** The map phase's token counter; `estTokens(text, mapModel)` by default. */
   readonly countTokens?: (text: string) => number;
+  /** The map model's context window, as {@link EstimateRunInput}'s. */
+  readonly contextWindowTokens?: number;
 }
 
 function reportPlan(
@@ -942,6 +996,9 @@ export function estimateReportRun(
     fullTextAutoMaxPapers: input.fullTextAutoMaxPapers,
     atEpochMs: input.atEpochMs,
     ...(input.countTokens !== undefined && { countTokens: input.countTokens }),
+    ...(input.contextWindowTokens !== undefined && {
+      contextWindowTokens: input.contextWindowTokens,
+    }),
   });
   const synthesis = planSynthesis({ ...input, papers: input.items.length });
   const selected = reportPlan(mapEstimate.selected, synthesis, input);

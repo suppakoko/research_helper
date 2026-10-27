@@ -27,7 +27,15 @@
  *                                                  # hand-written fixtures, no network
  * npm run fixtures:record -- --source pubmed --rescrub    # re-runs the redaction
  *                                                  # pass over committed fixtures, no network
+ * npm run fixtures:record -- --source openai --dry-run     # an LLM provider (P3-T30):
+ *                                                  # the scenario list and the stated spend
+ * FIXTURE_MODE=synthetic npm run fixtures:record -- --source openai   # its written
+ *                                                  # fixtures, no network, no key
  * ```
+ *
+ * **An LLM provider's live recording is the owner's, never an agent's**
+ * (`docs/13` §3.4): it needs `FIXTURE_MODE=record`, `--live`, the key in the
+ * environment and `--confirm-spend-usd`; see section 8b, {@link runLlmRecorder}.
  *
  * `FIXTURE_MODE` is `docs/13` §2.2's own spelling, and the default being a dry
  * run is deliberate: `npm run fixtures:record` typed by accident must not put
@@ -120,17 +128,27 @@
  * with no plaintext tier. Those cannot both be followed. This file follows D5:
  * it reads no key from anywhere, and uses the environment only to build the
  * redaction deny-list described above. Reported with the card.
+ *
+ * *Updated 2026-10-27 (`P3-T30`, `plan/00` §6 item 298(b); `docs/13` §3.2's
+ * note of that date):* "reads no key from anywhere" now holds for every
+ * literature source and has one exception, the LLM providers, which cannot be
+ * called unauthenticated. For them a key is read from the **process
+ * environment only** ({@link llmKeyFromEnvironment}) — never `.env` or any
+ * other file — and only in live mode, behind `--live` and the confirmed spend.
+ * (`docs/13` §3.2's `.env` sentence was corrected on 2026-10-15.)
  */
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 
-import { createSystemClock } from "../src/core/clock";
-import { KEYISH_FIELD, redact } from "../src/core/errors";
+import { type Clock, createSystemClock } from "../src/core/clock";
+import { BudgetExceededError, KEYISH_FIELD, redact } from "../src/core/errors";
 import {
   createHttpClient,
+  type HttpClient,
   type HttpExceptionClass,
   type HttpTransport,
   type HttpTransportXhr,
@@ -142,10 +160,60 @@ import {
   CROSSREF_HOST,
   EBI_HOST,
   HOST_POLICIES,
+  LLM_HOSTS,
   NCBI_HOST,
   SEMANTICSCHOLAR_HOST,
 } from "../src/core/rateLimit/hostLimiter";
 import { createCancellationTokenSource } from "../src/core/jobQueue/cancellation";
+import type { SecretId, SecretStore } from "../src/core/secretStore";
+import {
+  ANTHROPIC_SECRET_ID,
+  createAnthropicProvider,
+} from "../src/llm/anthropic/anthropicProvider";
+import {
+  chatViaGenerateContent,
+  createGeminiProvider,
+  GEMINI_SECRET_ID,
+} from "../src/llm/gemini/geminiProvider";
+import {
+  createOpenAiProvider,
+  OPENAI_SECRET_ID,
+} from "../src/llm/openai/openAiProvider";
+import {
+  createOpenRouterProvider,
+  OPENROUTER_SECRET_ID,
+} from "../src/llm/openrouter/openRouterProvider";
+import { createBaseUrlResolver } from "../src/llm/shared/baseUrl";
+import {
+  bundledCatalogue,
+  createModelPriceSource,
+  type ModelPriceSource,
+  modelsFor,
+} from "../src/llm/shared/modelCatalogue";
+import { costOf, type ModelPrices } from "../src/llm/shared/pricing";
+import { estTokens } from "../src/llm/shared/tokenEstimate";
+import type {
+  ChatRequest,
+  ChatResponse,
+  LLMCallContext,
+  LLMProvider,
+  ModelInfo,
+  Usage,
+} from "../src/llm/types";
+import type { ProviderId } from "../src/model/ids";
+import {
+  type BudgetReservation,
+  createBudgetGuard,
+  createSessionSpendCounter,
+} from "../src/pipeline/shared/budget";
+import { withHeadroom } from "../src/pipeline/shared/estimate";
+import {
+  parsePromptFile,
+  PROMPT_FILE_NAMES,
+  type PromptTemplate,
+  renderPrompt,
+  resolveMaxTokens,
+} from "../src/prompts/index";
 import { parseCrossrefWorksBody } from "../src/sources/crossref/crossrefSource";
 import { parseEuropePmcSearchBody } from "../src/sources/europepmc/europepmcSource";
 import { parseSearchBody as parseSemanticScholarSearchBody } from "../src/sources/semanticscholar/semanticscholarSource";
@@ -161,8 +229,11 @@ import {
 import type { SourceQuery } from "../src/sources/types";
 import {
   fixtureKey,
+  llmFixtureKey,
   META_SUFFIX,
   type FixtureMeta,
+  type LlmFixtureMeta,
+  type LlmFixtureProvider,
   type RecordedExchange,
 } from "../test/contract/_transport";
 import {
@@ -295,7 +366,8 @@ function isRecordableSource(value: string): value is RecordableSourceId {
 
 /** What `--source` and `--dry-run` resolved to. */
 export interface CliOptions {
-  readonly source: RecordableSourceId;
+  /** A literature source, or an LLM provider ({@link LLM_RECORDABLE_PROVIDERS}, `P3-T30`). */
+  readonly source: RecordableSourceId | LlmRecordableProvider;
   /** `--dry-run` was given. Wins over `FIXTURE_MODE`. */
   readonly dryRun: boolean;
   /**
@@ -314,6 +386,19 @@ export interface CliOptions {
    * wins over it.
    */
   readonly rescrub?: true;
+  /**
+   * `--live` (LLM providers only, `P3-T30`): the explicit opt-in that
+   * `FIXTURE_MODE=record` needs before an LLM recording sends anything.
+   */
+  readonly live?: true;
+  /**
+   * `--confirm-spend-usd <amount>` (LLM providers only): the second
+   * confirmation. Live mode prints the stated spend and stops unless this is
+   * given and at least that amount; it is then the run's spend ceiling.
+   */
+  readonly confirmSpendUsd?: number;
+  /** `--model <id>` (LLM providers only): record with this priced model. */
+  readonly model?: string;
 }
 
 /** A command-line mistake. Exit code 2, no plan printed. */
@@ -321,7 +406,10 @@ export class UsageError extends Error {}
 
 const USAGE =
   "usage: npm run fixtures:record -- [--source <id>] [--only <scenario,…>] " +
-  `[--dry-run] [--rescrub]   (sources: ${RECORDABLE_SOURCES.join(", ")})`;
+  `[--dry-run] [--rescrub]   (sources: ${RECORDABLE_SOURCES.join(", ")})\n` +
+  "       npm run fixtures:record -- --source <llm provider> [--only <scenario,…>] " +
+  "[--dry-run] [--model <id>] [--live] [--confirm-spend-usd <amount>]   " +
+  "(LLM providers: openrouter, openai, anthropic, gemini; docs/13 §3.4)";
 
 /**
  * Parse the arguments after the script path.
@@ -335,15 +423,54 @@ const USAGE =
  * @throws UsageError on an unknown argument, a missing value or an unknown source
  */
 export function parseCliArgs(argv: readonly string[]): CliOptions {
-  let source: RecordableSourceId = "pubmed";
+  let source: RecordableSourceId | LlmRecordableProvider = "pubmed";
   let dryRun = false;
   let only: string[] | undefined;
   let rescrub = false;
+  let live = false;
+  let confirmSpendUsd: number | undefined;
+  let model: string | undefined;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === undefined) continue;
     if (arg === "--dry-run") {
       dryRun = true;
+      continue;
+    }
+    if (arg === "--live") {
+      live = true;
+      continue;
+    }
+    if (
+      arg === "--confirm-spend-usd" ||
+      arg.startsWith("--confirm-spend-usd=")
+    ) {
+      if (arg === "--confirm-spend-usd") i += 1;
+      const raw = (
+        arg === "--confirm-spend-usd"
+          ? argv[i]
+          : arg.slice("--confirm-spend-usd=".length)
+      )
+        ?.trim()
+        .replace(/^\$/u, "");
+      const amount = raw === undefined || raw === "" ? NaN : Number(raw);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new UsageError(
+          `--confirm-spend-usd needs a positive number of US dollars.\n${USAGE}`,
+        );
+      }
+      confirmSpendUsd = amount;
+      continue;
+    }
+    if (arg === "--model" || arg.startsWith("--model=")) {
+      if (arg === "--model") i += 1;
+      const value = (
+        arg === "--model" ? argv[i] : arg.slice("--model=".length)
+      )?.trim();
+      if (value === undefined || value === "") {
+        throw new UsageError(`--model needs a model id.\n${USAGE}`);
+      }
+      model = value;
       continue;
     }
     if (arg === "--rescrub") {
@@ -379,18 +506,27 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     if (value === undefined || value === "") {
       throw new UsageError(`--source needs a value.\n${USAGE}`);
     }
-    if (!isRecordableSource(value)) {
+    if (!isRecordableSource(value) && !isLlmRecordableProvider(value)) {
       throw new UsageError(
         `No recording plan for source "${value}".\n${USAGE}`,
       );
     }
     source = value;
   }
+  const llmFlags = live || confirmSpendUsd !== undefined || model !== undefined;
+  if (llmFlags && !isLlmRecordableProvider(source)) {
+    throw new UsageError(
+      `--live, --confirm-spend-usd and --model are for an LLM provider only.\n${USAGE}`,
+    );
+  }
   return {
     source,
     dryRun,
     ...(only !== undefined && { only }),
     ...(rescrub && { rescrub: true as const }),
+    ...(live && { live: true as const }),
+    ...(confirmSpendUsd !== undefined && { confirmSpendUsd }),
+    ...(model !== undefined && { model }),
   };
 }
 
@@ -3265,11 +3401,1611 @@ function syntheticPlan(
 }
 
 // ---------------------------------------------------------------------------
+// 8b. LLM providers — `P3-T30`, split by `plan/00` §6 item 298(b)
+// ---------------------------------------------------------------------------
+
+/*
+ * The agent half of `P3-T30`: the scenario list, the stated spend, the gates
+ * and the recording path. **The recording itself is the owner's** (`docs/13`
+ * §3.4): it spends money against the owner's keys, so no agent runs it.
+ *
+ * What is different from the literature sources, and why:
+ *
+ * - **A key is needed**, so this is the one exception to `docs/13` §3.2's
+ *   "scenarios run unauthenticated". The key is read from the process
+ *   environment ({@link LLM_KEY_ENV_VARS}) and from nowhere else — never a file
+ *   — only in live mode, wrapped at once in a single-id store
+ *   ({@link singleKeyStore}) that the shipped adapter reads it from, exactly as
+ *   it reads the product keystore. Its value joins the deny-list, so it is
+ *   scrubbed literally from every byte that is written or printed.
+ * - **Live mode has three locks and a ceiling.** `FIXTURE_MODE=record`, the
+ *   `--live` flag and the key; then the run prints the stated spend and stops
+ *   with nothing sent ({@link LLM_EXIT_SPEND_GATE}) unless
+ *   `--confirm-spend-usd` names at least that amount. The confirmed amount is
+ *   then the ceiling of the shipped `createBudgetGuard`, reserved before and
+ *   settled after every billed call.
+ * - **The stated spend never under-states** ({@link stateLlmSpend}): every
+ *   billed call is charged its whole `maxOutputTokens`, and an input of the
+ *   larger of the shipped estimate with its headroom and one token per two
+ *   characters, plus {@link LLM_ESTIMATE_OVERHEAD_TOKENS}; the prices are the
+ *   shipped price source's ({@link llmPriceSource}).
+ * - **The model is chosen, not written down** (`plan/README.md` §5 rule 4):
+ *   the cheapest model the price source prices for the provider
+ *   ({@link chooseLlmModel}), or the owner's `--model`, which must be priced
+ *   too. Before any billed call the run lists the provider's models — free —
+ *   and stops if the model is not there.
+ * - **Fixtures are named by scenario**, not by a request hash (`docs/13` §3.2's
+ *   note of 2026-10-27; `llmFixtureKey` in `test/contract/_transport.ts`), and
+ *   **only response bodies are written** — the request bodies are snapshotted
+ *   from the adapters by `test/contract/llm/`.
+ * - **Headers come from an allow-list** ({@link LLM_HEADER_ALLOW}): account
+ *   and project identifiers, cookies and request ids never reach a file.
+ * - **Nothing is written unless everything is clean.** Every exchange of the
+ *   run is redacted and checked by {@link assertClean} first; one failure
+ *   writes no file at all.
+ */
+
+/** The LLM providers the recorder has a plan for: every `ProviderId`. */
+export const LLM_RECORDABLE_PROVIDERS = [
+  "openrouter",
+  "openai",
+  "anthropic",
+  "gemini",
+] as const satisfies readonly (ProviderId & LlmFixtureProvider)[];
+export type LlmRecordableProvider = (typeof LLM_RECORDABLE_PROVIDERS)[number];
+
+/** Whether `value` names an LLM provider rather than a literature source. */
+export function isLlmRecordableProvider(
+  value: string,
+): value is LlmRecordableProvider {
+  return (LLM_RECORDABLE_PROVIDERS as readonly string[]).includes(value);
+}
+
+/** Bump when a scenario's request changes, as {@link SCENARIO_VERSION}. */
+export const LLM_SCENARIO_VERSION = 1;
+
+/**
+ * `test/fixtures/llm/<provider>/` (`plan/04` card `P3-T30`'s `Files`).
+ *
+ * @param provider - the provider
+ * @returns the absolute directory
+ */
+export function llmFixtureDirFor(provider: LlmRecordableProvider): string {
+  return resolve(REPO_ROOT, "test/fixtures/llm", provider);
+}
+
+/**
+ * The one place a key is read from: an environment variable, set by the owner
+ * in the shell of one recording session (`docs/13` §3.2's note of
+ * 2026-10-27). The names are the providers' own conventional ones, which
+ * `docs/03` already uses in its `curl` examples, and every one matches
+ * `KEYISH_FIELD`, so {@link literalDenyList} scrubs its value anyway.
+ */
+export const LLM_KEY_ENV_VARS: Readonly<Record<LlmRecordableProvider, string>> =
+  Object.freeze({
+    openrouter: "OPENROUTER_API_KEY",
+    openai: "OPENAI_API_KEY",
+    anthropic: "ANTHROPIC_API_KEY",
+    gemini: "GEMINI_API_KEY",
+  });
+
+/**
+ * The provider's key from `env`, and from nothing else: no file, no `.env`, no
+ * preference. Called only in live mode, after `--live`.
+ *
+ * @param provider - the provider
+ * @param env - the process environment (a test passes its own record)
+ * @returns the trimmed value, or `undefined` when unset or blank
+ */
+export function llmKeyFromEnvironment(
+  provider: LlmRecordableProvider,
+  env: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const value = env[LLM_KEY_ENV_VARS[provider]]?.trim();
+  return value === undefined || value === "" ? undefined : value;
+}
+
+/** Each adapter's keystore id (`docs/09` §1.7), as the adapters export it. */
+const LLM_SECRET_IDS: Readonly<Record<LlmRecordableProvider, SecretId>> =
+  Object.freeze({
+    openrouter: OPENROUTER_SECRET_ID,
+    openai: OPENAI_SECRET_ID,
+    anthropic: ANTHROPIC_SECRET_ID,
+    gemini: GEMINI_SECRET_ID,
+  });
+
+/**
+ * A read-only `SecretStore` holding one value under the provider's id: how the
+ * shipped adapter receives the session's key (or the contract tests' synthetic
+ * one) without any change to the adapter.
+ *
+ * @param provider - whose id the value is stored under
+ * @param value - the key
+ * @returns the store
+ */
+export function singleKeyStore(
+  provider: LlmRecordableProvider,
+  value: string,
+): SecretStore {
+  const id = LLM_SECRET_IDS[provider];
+  const readOnly = (): Promise<never> =>
+    Promise.reject(new Error("the recorder's key store is read-only"));
+  return {
+    backend: "session-only",
+    unattended: true,
+    get: (asked) => Promise.resolve(asked === id ? value : undefined),
+    has: (asked) => Promise.resolve(asked === id),
+    set: readOnly,
+    clear: readOnly,
+    listStoredIds: () => Promise.resolve([id]),
+    clearAll: () => Promise.resolve(0),
+  };
+}
+
+/**
+ * The `error-401` scenario's key: shaped like the provider's keys so the host
+ * reads it as a wrong key rather than a malformed header, invalid by
+ * construction, and assembled at run time so no key-shaped literal sits in the
+ * source. It is never the owner's key, and it is on the deny-list too.
+ *
+ * @param provider - the provider
+ * @returns the invalid key
+ */
+export function invalidLlmKey(provider: LlmRecordableProvider): string {
+  const filler = `recorderinvalidkey${"0".repeat(40)}`;
+  switch (provider) {
+    case "openrouter":
+      return ["sk", "or", "v1", filler].join("-");
+    case "openai":
+      return ["sk", "proj", filler].join("-");
+    case "anthropic":
+      return ["sk", "ant", "api03", filler].join("-");
+    case "gemini":
+      return `${"AI"}za${filler.slice(0, 35)}`;
+  }
+}
+
+/** How one scenario drives the adapter. */
+export type LlmScenarioKind =
+  "list-models" | "chat" | "chat-stream" | "chat-legacy";
+
+/** One entry of the versioned scenario list. */
+export interface LlmScenario {
+  readonly scenario: string;
+  readonly kind: LlmScenarioKind;
+  /** `live`: the owner records it; `synthetic`: written, with a reason. */
+  readonly recording: "live" | "synthetic";
+  /** Whether a live request is charged for tokens. */
+  readonly billed: boolean;
+  /** Which key a live request carries. */
+  readonly key: "environment" | "synthetic-invalid" | "none";
+  readonly purpose: string;
+}
+
+/**
+ * `docs/13` §3.1's ten LLM rows, with `error-429` twice (card `P3-T30`'s
+ * Notes): eleven per provider, forty-four in all. Which are written rather
+ * than recorded, and why, is `docs/13` §3.1's note of 2026-10-27.
+ */
+export const LLM_SCENARIOS: readonly LlmScenario[] = Object.freeze([
+  {
+    scenario: "models-list",
+    kind: "list-models",
+    recording: "live",
+    billed: false,
+    key: "environment",
+    purpose:
+      "§3.1: the model-listing endpoint, for the model selector. Free; " +
+      "always sent first, and the run stops if the chosen model is absent",
+  },
+  {
+    scenario: "chat-nonstream-ok",
+    kind: "chat",
+    recording: "live",
+    billed: true,
+    key: "environment",
+    purpose: "§3.1: normal completion with a usage block",
+  },
+  {
+    scenario: "chat-stream-ok",
+    kind: "chat-stream",
+    recording: "live",
+    billed: true,
+    key: "environment",
+    purpose:
+      "§3.1: the full SSE chunk sequence, including the terminal event " +
+      "(settles Gemini's assumed stream shapes, plan/00 §6 item 268)",
+  },
+  {
+    scenario: "chat-json-ok",
+    kind: "chat",
+    recording: "live",
+    billed: true,
+    key: "environment",
+    purpose:
+      "§3.1: a structured answer — the shipped PAPER_SUMMARY_ABSTRACT prompt " +
+      "and its schema, over a short synthetic abstract",
+  },
+  {
+    scenario: "chat-json-malformed",
+    kind: "chat",
+    recording: "live",
+    billed: true,
+    key: "environment",
+    purpose:
+      "§3.1: JSON that nearly matches — inside a code fence, with prose after it",
+  },
+  {
+    scenario: "error-truncated",
+    kind: "chat",
+    recording: "live",
+    billed: true,
+    key: "environment",
+    purpose: "§3.1: a completion stopped by maxOutputTokens (16)",
+  },
+  {
+    scenario: "error-401",
+    kind: "chat",
+    recording: "live",
+    billed: false,
+    key: "synthetic-invalid",
+    purpose:
+      "§3.1: a bad key — a key-shaped invalid value the recorder builds, " +
+      "never the owner's key. Not billed",
+  },
+  {
+    scenario: "error-429",
+    kind: "chat",
+    recording: "synthetic",
+    billed: false,
+    key: "none",
+    purpose: "§3.1: rate limit, with Retry-After: 2",
+  },
+  {
+    scenario: "error-429-no-retry-after",
+    kind: "chat",
+    recording: "synthetic",
+    billed: false,
+    key: "none",
+    purpose: "§3.1: rate limit, without Retry-After",
+  },
+  {
+    scenario: "error-context-length",
+    kind: "chat",
+    recording: "synthetic",
+    billed: false,
+    key: "none",
+    purpose: "§3.1: the provider's over-length error shape (docs/03 §11.5)",
+  },
+  {
+    scenario: "refusal",
+    kind: "chat",
+    recording: "synthetic",
+    billed: false,
+    key: "none",
+    purpose: "§3.1: a safety refusal on HTTP 200 (docs/03 §11.5 trap 2)",
+  },
+] satisfies readonly LlmScenario[]);
+
+/**
+ * How `scenario` drives `provider`'s adapter: Gemini's `refusal` goes through
+ * `chatViaGenerateContent`, the legacy surface whose blocked shape `docs/03`
+ * §11.5 documents; every other scenario as listed.
+ *
+ * @param provider - the provider
+ * @param scenario - the scenario
+ * @returns the kind
+ */
+export function llmScenarioKind(
+  provider: LlmRecordableProvider,
+  scenario: LlmScenario,
+): LlmScenarioKind {
+  return provider === "gemini" && scenario.scenario === "refusal"
+    ? "chat-legacy"
+    : scenario.kind;
+}
+
+/**
+ * The scenarios `--only` keeps, in list order.
+ *
+ * @param only - the names, or `undefined` for every scenario
+ * @returns the scenarios
+ * @throws UsageError naming a scenario the list does not have
+ */
+export function selectLlmScenarios(
+  only: readonly string[] | undefined,
+): readonly LlmScenario[] {
+  if (only === undefined) return LLM_SCENARIOS;
+  const known = LLM_SCENARIOS.map((s) => s.scenario);
+  const unknown = only.filter((name) => !known.includes(name));
+  if (unknown.length > 0) {
+    throw new UsageError(
+      `--only names scenarios the LLM list does not have: ${unknown.join(", ")}. ` +
+        `Known: ${known.join(", ")}`,
+    );
+  }
+  return LLM_SCENARIOS.filter((s) => only.includes(s.scenario));
+}
+
+/** The correlation id of every recorded request; never sent upstream (`docs/07` §4.3). */
+const LLM_TRACE_ID = "p3-t30-recording";
+
+/** The short system message of the plain scenarios. */
+const PLAIN_SYSTEM =
+  "You are a terse assistant answering requests that record API test fixtures.";
+
+/**
+ * A short abstract written for this fixture, not taken from any paper, so the
+ * recorded answer quotes nothing anyone owns.
+ */
+const SYNTHETIC_ABSTRACT =
+  "Background: Coastal tide gauges drift as their benchmarks subside. " +
+  "Methods: We compared 12 gauges with co-located GNSS stations over 2015-2024 " +
+  "and fitted a linear drift per gauge. Results: Median vertical drift was " +
+  "1.8 mm/yr (range 0.4-3.1 mm/yr); correcting it reduced the regional " +
+  "sea-level trend from 4.9 to 3.2 mm/yr. Conclusions: Uncorrected gauge " +
+  "subsidence inflates local sea-level trends.";
+
+/** The shipped `PAPER_SUMMARY_ABSTRACT` prompt, read from its file as the unit tests read it. */
+function paperSummaryTemplate(): PromptTemplate {
+  const fileName = PROMPT_FILE_NAMES.PAPER_SUMMARY_ABSTRACT;
+  return parsePromptFile({
+    fileName,
+    text: readFileSync(resolve(REPO_ROOT, "src/prompts", fileName), "utf8"),
+  });
+}
+
+/** `chat-json-ok`'s request: the product's prompt, schema, temperature and output cap. */
+function paperSummaryRequest(model: string): ChatRequest {
+  const template = paperSummaryTemplate();
+  const schema = template.schema;
+  if (schema === null) {
+    throw new Error("PAPER_SUMMARY_ABSTRACT declares no schema");
+  }
+  const rendered = renderPrompt(template, {
+    ITEM_KEY: "RHFIXT01",
+    TITLE: "Benchmark drift in coastal tide gauges (synthetic test record)",
+    AUTHORS: "Test Author",
+    YEAR: "2025",
+    VENUE: "Synthetic Journal of Fixtures",
+    ITEM_TYPE: "journalArticle",
+    DOI: "none",
+    TAGS: "none",
+    ABSTRACT: SYNTHETIC_ABSTRACT,
+    JSON_SCHEMA: JSON.stringify(schema, null, 2),
+  });
+  return {
+    model,
+    messages: [
+      { role: "system", content: rendered.system },
+      { role: "user", content: rendered.user },
+    ],
+    temperature: template.defaultTemperature,
+    maxOutputTokens: resolveMaxTokens(template),
+    responseFormat: { kind: "json_schema", name: "paper_summary", schema },
+    traceId: LLM_TRACE_ID,
+  };
+}
+
+/** A plain two-message request. */
+function plainRequest(
+  model: string,
+  user: string,
+  maxOutputTokens: number,
+): ChatRequest {
+  return {
+    model,
+    messages: [
+      { role: "system", content: PLAIN_SYSTEM },
+      { role: "user", content: user },
+    ],
+    maxOutputTokens,
+    traceId: LLM_TRACE_ID,
+  };
+}
+
+/**
+ * The `ChatRequest` a scenario sends — the recorder's and the contract
+ * tests' one source, so the request snapshot is exactly what is recorded
+ * with. A synthetic scenario, which sends nothing, drives the adapter with
+ * `chat-nonstream-ok`'s request.
+ *
+ * @param scenario - a name from {@link LLM_SCENARIOS} other than `models-list`
+ * @param model - the model
+ * @returns the request
+ * @throws Error for `models-list` or an unknown name
+ */
+export function llmScenarioRequest(
+  scenario: string,
+  model: string,
+): ChatRequest {
+  switch (scenario) {
+    case "chat-nonstream-ok":
+    case "error-401":
+    case "error-429":
+    case "error-429-no-retry-after":
+    case "error-context-length":
+    case "refusal":
+      return plainRequest(model, "Reply with exactly one word: ready", 1024);
+    case "chat-stream-ok":
+      return plainRequest(
+        model,
+        "Count from one to twenty in English words, separated by commas, " +
+          "and write nothing else.",
+        1024,
+      );
+    case "chat-json-ok":
+      return paperSummaryRequest(model);
+    case "chat-json-malformed":
+      return plainRequest(
+        model,
+        'Write the JSON object {"ok": true, "n": 3} inside a Markdown code ' +
+          "block marked json, then write one short sentence after the code " +
+          "block. Write nothing before the code block.",
+        1024,
+      );
+    case "error-truncated":
+      return plainRequest(
+        model,
+        "Write a 300-word paragraph about ocean tides.",
+        16,
+      );
+    default:
+      throw new Error(`No LLM request for scenario "${scenario}"`);
+  }
+}
+
+/** Every adapter's request path, as the snapshot and the sidecar name it. */
+const LLM_BASE_URLS = createBaseUrlResolver({ override: () => "" });
+
+/** What {@link createLlmAdapter} needs: the shipped adapters' own dependencies. */
+export interface LlmAdapterDeps {
+  readonly http: HttpClient;
+  readonly secrets: SecretStore;
+  readonly clock: Clock;
+}
+
+/**
+ * The shipped adapter for `provider`, on the documented base URL (no
+ * override: a fixture is about the documented API), over the given client and
+ * key store. The recorder and the contract tests both build it here.
+ *
+ * @param provider - the provider
+ * @param deps - client, key store, clock
+ * @returns the adapter
+ */
+export function createLlmAdapter(
+  provider: LlmRecordableProvider,
+  deps: LlmAdapterDeps,
+): LLMProvider {
+  const shared = {
+    http: deps.http,
+    secrets: deps.secrets,
+    baseUrls: LLM_BASE_URLS,
+    clock: deps.clock,
+  };
+  switch (provider) {
+    case "openrouter":
+      return createOpenRouterProvider(shared);
+    case "openai":
+      return createOpenAiProvider(shared);
+    case "anthropic":
+      return createAnthropicProvider(shared);
+    case "gemini":
+      return createGeminiProvider(shared);
+  }
+}
+
+/**
+ * Gemini's legacy `generateContent` call (`chat-legacy`), with the same
+ * dependencies {@link createLlmAdapter} gives the Gemini adapter.
+ *
+ * @param deps - client, key store, clock
+ * @param request - the request
+ * @param ctx - the call context
+ * @returns the answer
+ */
+export function geminiLegacyChat(
+  deps: LlmAdapterDeps,
+  request: ChatRequest,
+  ctx: LLMCallContext,
+): Promise<ChatResponse> {
+  return chatViaGenerateContent(
+    {
+      http: deps.http,
+      secrets: deps.secrets,
+      baseUrls: LLM_BASE_URLS,
+      clock: deps.clock,
+    },
+    request,
+    ctx,
+  );
+}
+
+// --- The stated spend --------------------------------------------------------
+
+/** One token per this many characters: below every script `docs/06` §5.1 prices but Hangul and CJK, which the larger-of rule covers. */
+export const LLM_ESTIMATE_CHARS_PER_TOKEN = 2;
+
+/** Added to every billed call's input, for the provider's own framing and schema wrapping. */
+export const LLM_ESTIMATE_OVERHEAD_TOKENS = 300;
+
+/**
+ * An upper bound on one request's input tokens: the larger of the shipped
+ * estimate with its headroom (`estTokens`, `withHeadroom`) and one token per
+ * {@link LLM_ESTIMATE_CHARS_PER_TOKEN} characters, over the messages **and**
+ * a structured-output schema (which the provider counts as input too), plus
+ * {@link LLM_ESTIMATE_OVERHEAD_TOKENS}.
+ *
+ * @param request - the request
+ * @returns the bound
+ */
+export function llmInputTokenBound(request: ChatRequest): number {
+  const parts = request.messages.map((m) => m.content);
+  if (request.responseFormat?.kind === "json_schema") {
+    parts.push(JSON.stringify(request.responseFormat.schema));
+  }
+  const text = parts.join("\n");
+  return (
+    Math.max(
+      withHeadroom(estTokens(text)),
+      Math.ceil(text.length / LLM_ESTIMATE_CHARS_PER_TOKEN),
+    ) + LLM_ESTIMATE_OVERHEAD_TOKENS
+  );
+}
+
+/** One scenario's share of the stated spend. */
+export interface LlmScenarioBound {
+  readonly scenario: string;
+  readonly recording: "live" | "synthetic";
+  readonly billed: boolean;
+  /** Requests this scenario sends: 0 synthetic, else 1 (a model list may page). */
+  readonly requests: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  /** Fractional US dollars, never rounded; 0 when not billed. */
+  readonly costUsd: number;
+}
+
+/** What the dry run prints and live mode is confirmed against. */
+export interface LlmSpendStatement {
+  readonly provider: LlmRecordableProvider;
+  readonly model: string;
+  readonly prices: ModelPrices;
+  /** The prices' date, `YYYY-MM-DD`. */
+  readonly pricesAsOf: string;
+  readonly scenarios: readonly LlmScenarioBound[];
+  /** Live requests, counting a model list once. */
+  readonly requests: number;
+  readonly billedCalls: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  /** The upper bound, fractional US dollars, never rounded. */
+  readonly costUsd: number;
+}
+
+/**
+ * The stated spend: every billed live scenario at its bounds, priced with
+ * `costOf` at `atEpochMs` (a promotion's end and a long-context tier both
+ * apply), cached tokens assumed none — a cached price is never above the
+ * input price, so that can only over-state.
+ *
+ * @param provider - the provider
+ * @param model - the model
+ * @param prices - its prices
+ * @param scenarios - the selected scenarios
+ * @param atEpochMs - now
+ * @returns the statement
+ * @throws UsageError when a price the bound needs is not published
+ */
+export function stateLlmSpend(
+  provider: LlmRecordableProvider,
+  model: string,
+  prices: ModelPrices,
+  scenarios: readonly LlmScenario[],
+  atEpochMs: number,
+): LlmSpendStatement {
+  const bounds: LlmScenarioBound[] = [];
+  for (const s of scenarios) {
+    if (s.recording === "synthetic") {
+      bounds.push({ ...zeroBound(s), requests: 0 });
+      continue;
+    }
+    if (!s.billed) {
+      bounds.push({ ...zeroBound(s), requests: 1 });
+      continue;
+    }
+    const request = llmScenarioRequest(s.scenario, model);
+    const inputTokens = llmInputTokenBound(request);
+    const outputTokens = request.maxOutputTokens ?? 0;
+    const cost = costOf(prices, { inputTokens, outputTokens }, atEpochMs);
+    if (cost.costUsd === undefined) {
+      throw new UsageError(
+        `${provider} model "${model}" has no published price for ` +
+          `${s.scenario}'s tokens: refusing to state a spend it cannot bound.`,
+      );
+    }
+    bounds.push({
+      scenario: s.scenario,
+      recording: s.recording,
+      billed: true,
+      requests: 1,
+      inputTokens,
+      outputTokens,
+      costUsd: cost.costUsd,
+    });
+  }
+  const sum = (pick: (b: LlmScenarioBound) => number): number =>
+    bounds.reduce((acc, b) => acc + pick(b), 0);
+  return {
+    provider,
+    model,
+    prices,
+    pricesAsOf: new Date(prices.asOfEpochMs).toISOString().slice(0, 10),
+    scenarios: bounds,
+    requests: sum((b) => b.requests),
+    billedCalls: bounds.filter((b) => b.billed).length,
+    inputTokens: sum((b) => b.inputTokens),
+    outputTokens: sum((b) => b.outputTokens),
+    costUsd: sum((b) => b.costUsd),
+  };
+}
+
+function zeroBound(s: LlmScenario): Omit<LlmScenarioBound, "requests"> {
+  return {
+    scenario: s.scenario,
+    recording: s.recording,
+    billed: false,
+    inputTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+  };
+}
+
+/**
+ * The shipped price source (`createModelPriceSource`), never refreshed: the
+ * recorder sends nothing before the confirmation, so it holds what the
+ * product holds before its first refresh — `docs/03` §12.1's table with its
+ * date, `stale: true` (`bundledCatalogue`).
+ *
+ * @returns the source
+ */
+export function llmPriceSource(): ModelPriceSource {
+  return createModelPriceSource({
+    catalogue: { get: () => Promise.resolve(bundledCatalogue()) },
+    userPriceOverrides: () => [],
+  });
+}
+
+/**
+ * The model to record with: `override` when given — it must be priced — else
+ * the model with the lowest stated spend among those the source prices for
+ * `provider` with both an input and an output price (ties by id). "Capable"
+ * beyond that is the owner's check at `G-18`; the live run also stops when the
+ * provider does not list the model.
+ *
+ * @param provider - the provider
+ * @param source - the price source
+ * @param atEpochMs - now
+ * @param override - `--model`
+ * @returns the model and its prices
+ * @throws UsageError when the override is unpriced or nothing is priced
+ */
+export function chooseLlmModel(
+  provider: LlmRecordableProvider,
+  source: ModelPriceSource,
+  atEpochMs: number,
+  override?: string,
+): { readonly model: string; readonly prices: ModelPrices } {
+  const billed = LLM_SCENARIOS.filter((s) => s.billed);
+  if (override !== undefined) {
+    const prices = source.pricesFor(provider, override);
+    if (
+      prices?.inputPerMTokUsd === undefined ||
+      prices.outputPerMTokUsd === undefined
+    ) {
+      throw new UsageError(
+        `--model "${override}" has no ${provider} price in the price source ` +
+          `(docs/03 §12.1's table until it is refreshed): a spend that cannot ` +
+          `be bounded is not stated, and not recorded.`,
+      );
+    }
+    return { model: override, prices };
+  }
+  let best: { model: string; prices: ModelPrices; costUsd: number } | undefined;
+  const models = modelsFor(source.current(), provider)
+    .map((m) => m.id)
+    .sort();
+  for (const model of models) {
+    const prices = source.pricesFor(provider, model);
+    if (
+      prices?.inputPerMTokUsd === undefined ||
+      prices.outputPerMTokUsd === undefined
+    ) {
+      continue;
+    }
+    const { costUsd } = stateLlmSpend(
+      provider,
+      model,
+      prices,
+      billed,
+      atEpochMs,
+    );
+    if (best === undefined || costUsd < best.costUsd) {
+      best = { model, prices, costUsd };
+    }
+  }
+  if (best === undefined) {
+    throw new UsageError(
+      `The price source prices no ${provider} model: name one with --model.`,
+    );
+  }
+  return { model: best.model, prices: best.prices };
+}
+
+/** A dollar figure rounded **up** to 4 decimals, so a printed bound is never below the bound. */
+export function usdUp(usd: number): string {
+  return `$${(Math.ceil(usd * 10_000 - 1e-9) / 10_000).toFixed(4)}`;
+}
+
+// --- Synthetic fixtures ------------------------------------------------------
+
+const SYNTHETIC_NOTE = "[synthetic fixture, P3-T30; not a recorded answer]";
+
+/** `docs/03` §11.5's shapes, one body per provider and synthetic scenario. */
+function syntheticLlmBody(
+  provider: LlmRecordableProvider,
+  scenario: string,
+): { readonly status: number; readonly body: unknown } {
+  const rateLimit =
+    scenario === "error-429" || scenario === "error-429-no-retry-after";
+  switch (provider) {
+    case "openai":
+      if (rateLimit) {
+        return {
+          status: 429,
+          body: {
+            error: {
+              message: `Rate limit reached for requests per min. ${SYNTHETIC_NOTE}`,
+              type: "requests",
+              param: null,
+              code: "rate_limit_exceeded",
+            },
+          },
+        };
+      }
+      if (scenario === "error-context-length") {
+        return {
+          status: 400,
+          body: {
+            error: {
+              message: `Your input exceeds the context window of this model. ${SYNTHETIC_NOTE}`,
+              type: "invalid_request_error",
+              param: "input",
+              code: "context_length_exceeded",
+            },
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          id: "resp_synthetic_refusal",
+          object: "response",
+          status: "completed",
+          model: "synthetic-model",
+          output: [
+            {
+              type: "message",
+              id: "msg_synthetic_refusal",
+              status: "completed",
+              role: "assistant",
+              content: [
+                {
+                  type: "refusal",
+                  refusal: `I can't help with that. ${SYNTHETIC_NOTE}`,
+                },
+              ],
+            },
+          ],
+          usage: { input_tokens: 20, output_tokens: 8, total_tokens: 28 },
+        },
+      };
+    case "anthropic":
+      if (rateLimit) {
+        return {
+          status: 429,
+          body: {
+            type: "error",
+            error: {
+              type: "rate_limit_error",
+              message: `Number of requests has exceeded your rate limit. ${SYNTHETIC_NOTE}`,
+            },
+          },
+        };
+      }
+      if (scenario === "error-context-length") {
+        return {
+          status: 400,
+          body: {
+            type: "error",
+            error: {
+              type: "invalid_request_error",
+              message: `prompt is too long: 210000 tokens > 200000 maximum ${SYNTHETIC_NOTE}`,
+            },
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          id: "msg_synthetic_refusal",
+          type: "message",
+          role: "assistant",
+          model: "synthetic-model",
+          content: [],
+          stop_reason: "refusal",
+          stop_sequence: null,
+          usage: { input_tokens: 20, output_tokens: 0 },
+        },
+      };
+    case "gemini":
+      if (rateLimit) {
+        return {
+          status: 429,
+          body: {
+            error: {
+              code: 429,
+              message: `Resource has been exhausted (e.g. check quota). ${SYNTHETIC_NOTE}`,
+              status: "RESOURCE_EXHAUSTED",
+            },
+          },
+        };
+      }
+      if (scenario === "error-context-length") {
+        return {
+          status: 400,
+          body: {
+            error: {
+              code: 400,
+              message:
+                "The input token count (1100000) exceeds the maximum number of " +
+                `tokens allowed (1048576). ${SYNTHETIC_NOTE}`,
+              status: "INVALID_ARGUMENT",
+            },
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          candidates: [
+            {
+              content: { role: "model", parts: [] },
+              finishReason: "SAFETY",
+              index: 0,
+            },
+          ],
+          usageMetadata: { promptTokenCount: 20, totalTokenCount: 20 },
+          modelVersion: "synthetic-model",
+        },
+      };
+    case "openrouter":
+      if (rateLimit) {
+        return {
+          status: 429,
+          body: {
+            error: {
+              message: `Rate limit exceeded. ${SYNTHETIC_NOTE}`,
+              code: 429,
+            },
+          },
+        };
+      }
+      if (scenario === "error-context-length") {
+        return {
+          status: 400,
+          body: {
+            error: {
+              message:
+                "This endpoint's maximum context length is 400000 tokens. " +
+                `However, you requested about 410000 tokens. ${SYNTHETIC_NOTE}`,
+              code: 400,
+            },
+          },
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          id: "gen-synthetic-refusal",
+          object: "chat.completion",
+          model: "synthetic-model",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "" },
+              finish_reason: "content_filter",
+            },
+          ],
+          usage: { prompt_tokens: 20, completion_tokens: 0, total_tokens: 20 },
+        },
+      };
+  }
+}
+
+/** Why each synthetic scenario is written rather than recorded (`docs/13` §3.1's note). */
+const SYNTHETIC_LLM_REASONS: Readonly<Record<string, string>> = Object.freeze({
+  "error-429":
+    "Hand-written from docs/03 §11.5's rate_limit row: provoking a rate limit " +
+    "spends money and risks the owner's account. Status and Retry-After: 2 are " +
+    "the assertable parts; the body is the documented envelope.",
+  "error-429-no-retry-after":
+    "As error-429, without Retry-After (card P3-T30's Notes: recorded twice). " +
+    "Exercises the client's no-header path for this adapter.",
+  "error-context-length":
+    "Hand-written from docs/03 §11.5's context_length row: provoking it needs " +
+    "a prompt above the model's context window (up to about a million tokens), " +
+    "whose window the bundled price table does not state.",
+  refusal:
+    "Hand-written from docs/03 §11.5's content_filter row: provoking a refusal " +
+    "means sending a request the provider's policy forbids, which risks the " +
+    "owner's account. Gemini's uses the legacy generateContent shape, because " +
+    "the Interactions API's blocked shape is not documented (P3-T05 report).",
+});
+
+/** A synthetic scenario's exchange, endpoint and reason. */
+export interface SyntheticLlmFixture {
+  readonly scenario: string;
+  readonly method: string;
+  readonly endpoint: string;
+  readonly exchange: RecordedExchange;
+  readonly reason: string;
+}
+
+/**
+ * One synthetic LLM fixture, built with no network and no key.
+ *
+ * @param provider - the provider
+ * @param scenario - a synthetic scenario of {@link LLM_SCENARIOS}
+ * @returns the fixture
+ */
+export function syntheticLlmFixture(
+  provider: LlmRecordableProvider,
+  scenario: LlmScenario,
+): SyntheticLlmFixture {
+  const reason = SYNTHETIC_LLM_REASONS[scenario.scenario];
+  if (scenario.recording !== "synthetic" || reason === undefined) {
+    throw new Error(`"${scenario.scenario}" is not a synthetic LLM scenario`);
+  }
+  const { status, body } = syntheticLlmBody(provider, scenario.scenario);
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (scenario.scenario === "error-429") headers["retry-after"] = "2";
+  return {
+    scenario: scenario.scenario,
+    method: "POST",
+    endpoint: llmEndpointFor(provider, llmScenarioKind(provider, scenario)),
+    exchange: { status, headers, body: `${JSON.stringify(body, null, 2)}\n` },
+    reason,
+  };
+}
+
+/** The documented endpoint a chat scenario is sent to, with no query. */
+function llmEndpointFor(
+  provider: LlmRecordableProvider,
+  kind: LlmScenarioKind,
+): string {
+  const base = LLM_BASE_URLS.resolveBaseUrl(provider);
+  switch (provider) {
+    case "openai":
+      return `${base}/responses`;
+    case "anthropic":
+      return `${base}/v1/messages`;
+    case "openrouter":
+      return `${base}/chat/completions`;
+    case "gemini":
+      return kind === "chat-legacy"
+        ? `${base}/v1beta/models/{model}:generateContent`
+        : `${base}/v1beta/interactions`;
+  }
+}
+
+// --- Redaction, the LLM part -------------------------------------------------
+
+/**
+ * Response headers an LLM fixture may keep: what the client and the error map
+ * read (`Retry-After`, the rate-limit headers `docs/03` §11 names) and the
+ * content type. Everything else is dropped by name — organisation and project
+ * identifiers (`openai-organization`, `anthropic-organization-id`), cookies,
+ * request and trace ids — because a fixture needs none of them and a
+ * committed file should not carry an account's identifiers.
+ */
+export const LLM_HEADER_ALLOW: readonly RegExp[] = Object.freeze([
+  /^content-type$/u,
+  /^retry-after(?:-ms)?$/u,
+  /^x-ratelimit-[a-z0-9-]+$/u,
+  /^anthropic-ratelimit-[a-z0-9-]+$/u,
+]);
+
+/** Whether an LLM fixture may keep the (lower-cased) header `name`. */
+export function llmHeaderAllowed(name: string): boolean {
+  return LLM_HEADER_ALLOW.some((re) => re.test(name.toLowerCase()));
+}
+
+/**
+ * {@link redactExchange} for an LLM answer: the headers not on
+ * {@link LLM_HEADER_ALLOW} are dropped first (and noted by name), then the
+ * shared pass scrubs what is left, body included.
+ *
+ * @param raw - the exchange as received
+ * @param deny - the deny-list, the session's key and the invalid key included
+ * @returns the writable exchange and its notes
+ */
+export function redactLlmExchange(
+  raw: {
+    readonly status: number;
+    readonly headers: Readonly<Record<string, string>>;
+    readonly body: string;
+  },
+  deny: readonly string[],
+): { readonly exchange: RecordedExchange; readonly notes: readonly string[] } {
+  const kept: Record<string, string> = {};
+  const dropped: string[] = [];
+  for (const [name, value] of Object.entries(raw.headers)) {
+    if (llmHeaderAllowed(name)) kept[name.toLowerCase()] = value;
+    else dropped.push(name.toLowerCase());
+  }
+  const shared = redactExchange(
+    { status: raw.status, headers: kept, body: raw.body },
+    deny,
+  );
+  const notes =
+    dropped.length === 0
+      ? shared.notes
+      : [
+          `dropped ${String(dropped.length)} header(s) not on the LLM allow-list: ` +
+            dropped.sort().join(", "),
+          ...shared.notes,
+        ];
+  return { exchange: shared.exchange, notes };
+}
+
+/**
+ * {@link assertClean} plus the LLM rule: no header outside
+ * {@link LLM_HEADER_ALLOW} may be written.
+ *
+ * @param scenario - for the message
+ * @param exchange - the redacted exchange
+ * @param text - its JSON, exactly as it will be written
+ * @param deny - the deny-list
+ * @throws Error naming what matched, never quoting it
+ */
+export function assertCleanLlmFixture(
+  scenario: string,
+  exchange: RecordedExchange,
+  text: string,
+  deny: readonly string[],
+): void {
+  const stray = Object.keys(exchange.headers).filter(
+    (name) => !llmHeaderAllowed(name),
+  );
+  if (stray.length > 0) {
+    throw new Error(
+      `Refusing to write fixture "${scenario}": header(s) ${stray.join(", ")} ` +
+        `are not on the LLM allow-list (docs/13 §3.2).`,
+    );
+  }
+  assertClean(scenario, text, deny);
+}
+
+/**
+ * `text` with every deny-list value and every credential shape removed: what
+ * the LLM path prints, so nothing it writes to a terminal can carry a key.
+ */
+function scrubForPrinting(text: string, deny: readonly string[]): string {
+  let out = text;
+  for (const literal of deny) {
+    if (literal !== "") out = out.split(literal).join(SECRET_PLACEHOLDER);
+  }
+  return redact(out);
+}
+
+// --- The run -----------------------------------------------------------------
+
+/** Exit code: stopped at the spend gate, nothing sent (`docs/13` §3.4). */
+export const LLM_EXIT_SPEND_GATE = 3;
+
+/** What {@link runLlmRecorder} reads and writes through; a test passes fakes. */
+export interface LlmRunEnvironment {
+  /** The process environment; the only place a key is read from. */
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly stdout: (text: string) => void;
+  readonly stderr: (text: string) => void;
+  /** Where fixtures go; {@link llmFixtureDirFor} in the product. */
+  readonly fixtureDir: string;
+  /**
+   * The `Zotero.HTTP` stand-in to send through: `fetch`, paced, in the
+   * product; a fake in a test. Called only after every gate has passed.
+   */
+  readonly transport: () => HttpTransport;
+  readonly clock: Clock;
+  readonly toolVersion: string;
+}
+
+/** One exchange as the capturing transport saw it. */
+interface CapturedLlmExchange {
+  readonly scenario: string;
+  readonly page: number;
+  readonly method: string;
+  readonly url: string;
+  readonly status: number;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: string;
+}
+
+/** A CRLF header block as a lower-cased record. */
+function parseHeaderBlock(block: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of block.split(/\r?\n/u)) {
+    const colon = line.indexOf(":");
+    if (colon <= 0) continue;
+    const name = line.slice(0, colon).trim().toLowerCase();
+    const value = line.slice(colon + 1).trim();
+    out[name] = name in out ? `${String(out[name])}, ${value}` : value;
+  }
+  return out;
+}
+
+/** `base`, remembering every answer it resolves with. */
+function capturingTransport(
+  base: HttpTransport,
+  onAnswer: (method: string, url: string, xhr: HttpTransportXhr) => void,
+): HttpTransport {
+  return {
+    UnexpectedStatusException: base.UnexpectedStatusException,
+    TimeoutException: base.TimeoutException,
+    BrowserOfflineException: base.BrowserOfflineException,
+    SecurityException: base.SecurityException,
+    CancelledException: base.CancelledException,
+    async request(method, url, options): Promise<HttpTransportXhr> {
+      const xhr = await base.request(method, url, options);
+      onAnswer(method, url, xhr);
+      return xhr;
+    },
+  };
+}
+
+const NO_USAGE: Usage = Object.freeze({
+  inputTokens: undefined,
+  outputTokens: undefined,
+  totalTokens: undefined,
+  costUsd: undefined,
+});
+
+/** The dry run's and the gate's account of the spend. */
+function statementText(
+  statement: LlmSpendStatement,
+  only: readonly string[] | undefined,
+): string {
+  const p = statement.prices;
+  const rows = statement.scenarios
+    .map(
+      (b) =>
+        `  ${b.scenario.padEnd(26)}${b.recording.padEnd(11)}` +
+        `${(b.billed ? "yes" : "no").padEnd(8)}` +
+        `${String(b.inputTokens).padStart(7)}  ${String(b.outputTokens).padStart(7)}  ` +
+        `${b.billed ? usdUp(b.costUsd) : "$0"}\n`,
+    )
+    .join("");
+  const onlyFlag = only === undefined ? "" : ` --only ${only.join(",")}`;
+  return (
+    `Model: ${statement.model}, ${statement.provider}'s cheapest priced model ` +
+    `unless --model named it.\n` +
+    `Prices: $${String(p.inputPerMTokUsd)} in / $${String(p.outputPerMTokUsd)} ` +
+    `out per 1M tokens, ${p.source}, as of ${statement.pricesAsOf}. ` +
+    `Check them before approving (gate G-18).\n\n` +
+    `  ${"scenario".padEnd(26)}${"recording".padEnd(11)}${"billed".padEnd(8)}` +
+    `${"input<=".padStart(7)}  ${"output<=".padStart(7)}  cost<=\n` +
+    rows +
+    `\nStated spend (an upper bound, never an expectation): ` +
+    `${String(statement.requests)} live request(s), ` +
+    `${String(statement.billedCalls)} billed, at most ` +
+    `${String(statement.inputTokens)} input + ${String(statement.outputTokens)} ` +
+    `output tokens, at most ${usdUp(statement.costUsd)}.\n` +
+    `To record (the owner only, docs/13 §3.4), with ${LLM_KEY_ENV_VARS[statement.provider]} ` +
+    `set in this shell for this session only:\n` +
+    `  FIXTURE_MODE=record npm run fixtures:record -- --source ${statement.provider}` +
+    `${onlyFlag} --live --confirm-spend-usd ${usdUp(statement.costUsd).slice(1)}\n`
+  );
+}
+
+/**
+ * The LLM path of `npm run fixtures:record -- --source <provider>`.
+ *
+ * - **dry run** (the default): prints the scenario list and the stated spend.
+ *   Reads no key and sends nothing.
+ * - **synthetic**: writes the four synthetic fixtures. No key, no network.
+ * - **record**: refused without `--live` (exit 2) or without the key in the
+ *   environment (exit 2); prints the stated spend and stops with nothing sent
+ *   without `--confirm-spend-usd` ({@link LLM_EXIT_SPEND_GATE}); refused when
+ *   the confirmed amount is below the stated spend (exit 2). Then: the model
+ *   list (free) and a stop if the model is absent; each selected live scenario
+ *   once, never retried, each billed one reserved against a budget guard
+ *   whose ceiling is the confirmed amount; every exchange redacted and checked
+ *   before **any** file is written (exit 1 and nothing written on a failure).
+ *
+ * @param cli - the parsed options; `source` is an LLM provider
+ * @param mode - dry run, synthetic or record
+ * @param run - the environment, streams, directory, transport and clock
+ * @returns the exit code
+ */
+export async function runLlmRecorder(
+  cli: CliOptions & { readonly source: LlmRecordableProvider },
+  mode: Mode,
+  run: LlmRunEnvironment,
+): Promise<number> {
+  const provider = cli.source;
+  let scenarios: readonly LlmScenario[];
+  let statement: LlmSpendStatement;
+  try {
+    if (cli.rescrub === true) {
+      throw new UsageError("--rescrub is for the literature sources only.");
+    }
+    scenarios = selectLlmScenarios(cli.only);
+    const chosen = chooseLlmModel(
+      provider,
+      llmPriceSource(),
+      run.clock.now(),
+      cli.model,
+    );
+    statement = stateLlmSpend(
+      provider,
+      chosen.model,
+      chosen.prices,
+      scenarios,
+      run.clock.now(),
+    );
+  } catch (error) {
+    if (error instanceof UsageError) {
+      run.stderr(`fixtures:record: ${error.message}\n`);
+      return 2;
+    }
+    throw error;
+  }
+
+  if (mode === "dry-run") {
+    run.stdout(
+      `fixtures:record — dry run for ${provider} (LLM). Nothing was ` +
+        `requested, no key was read and nothing was written.\n` +
+        `LLM scenario list version ${String(LLM_SCENARIO_VERSION)}; ` +
+        `${String(scenarios.length)} scenario(s), fixtures in ` +
+        `test/fixtures/llm/${provider}/.\n` +
+        statementText(statement, cli.only),
+    );
+    return 0;
+  }
+
+  const base = literalDenyList(run.env);
+
+  if (mode === "synthetic") {
+    await mkdir(run.fixtureDir, { recursive: true });
+    const staged = scenarios
+      .filter((s) => s.recording === "synthetic")
+      .map((s) => {
+        const fixture = syntheticLlmFixture(provider, s);
+        const meta: LlmFixtureMeta = {
+          scenario: s.scenario,
+          scenarioVersion: LLM_SCENARIO_VERSION,
+          recordedAt: new Date(run.clock.now()).toISOString(),
+          endpoint: fixture.endpoint,
+          method: fixture.method,
+          toolVersion: run.toolVersion,
+          synthetic: true,
+          syntheticReason: fixture.reason,
+          redactions: ["synthetic: nothing was received, nothing to redact"],
+          provider,
+          page: 1,
+        };
+        return stageLlmFixture(s.scenario, fixture.exchange, meta, base);
+      });
+    for (const file of staged) await writeStaged(run.fixtureDir, file);
+    run.stdout(
+      staged.map((f) => `  ${f.key}  (synthetic)\n`).join("") +
+        `Wrote ${String(staged.length)} synthetic fixtures to ` +
+        `test/fixtures/llm/${provider}/. Zero requests, no key read.\n`,
+    );
+    return 0;
+  }
+
+  // --- record: the gates, in order, before anything is sent -----------------
+  if (cli.live !== true) {
+    run.stderr(
+      `fixtures:record: recording ${provider} spends money against a real ` +
+        `key, so FIXTURE_MODE=record needs --live as well. Nothing was sent. ` +
+        `See docs/13 §3.4.\n`,
+    );
+    return 2;
+  }
+  const key = llmKeyFromEnvironment(provider, run.env);
+  if (key === undefined) {
+    run.stderr(
+      `fixtures:record: ${LLM_KEY_ENV_VARS[provider]} is not set in this ` +
+        `shell. Set it for this session only; the recorder reads a key from ` +
+        `the environment and from nowhere else. Nothing was sent.\n`,
+    );
+    return 2;
+  }
+  const invalidKey = invalidLlmKey(provider);
+  const deny = [...new Set([...base, key, invalidKey])].sort(
+    (a, b) => b.length - a.length,
+  );
+  const out = (text: string): void => {
+    run.stdout(scrubForPrinting(text, deny));
+  };
+  const err = (text: string): void => {
+    run.stderr(scrubForPrinting(text, deny));
+  };
+
+  out(
+    `fixtures:record — LIVE recording for ${provider}.\n` +
+      statementText(statement, cli.only),
+  );
+  const confirmed = cli.confirmSpendUsd;
+  if (confirmed === undefined) {
+    out(
+      `\nStopped at the spend gate: nothing was sent. To approve the stated ` +
+        `spend, run the command above (it adds --confirm-spend-usd).\n`,
+    );
+    return LLM_EXIT_SPEND_GATE;
+  }
+  if (!(confirmed >= statement.costUsd)) {
+    err(
+      `fixtures:record: --confirm-spend-usd ${String(confirmed)} is below the ` +
+        `stated spend of ${usdUp(statement.costUsd)}. Nothing was sent.\n`,
+    );
+    return 2;
+  }
+
+  // --- record: sending --------------------------------------------------------
+  const captured: CapturedLlmExchange[] = [];
+  let current: string | undefined;
+  let page = 0;
+  const transport = capturingTransport(run.transport(), (method, url, xhr) => {
+    if (current === undefined) return;
+    page += 1;
+    let body: string;
+    try {
+      body = xhr.responseText ?? "";
+    } catch {
+      body = ""; // `responseText` throws for a non-text responseType
+    }
+    captured.push({
+      scenario: current,
+      page,
+      method,
+      url,
+      status: xhr.status,
+      headers: parseHeaderBlock(xhr.getAllResponseHeaders()),
+      body,
+    });
+  });
+  const http = createHttpClient({
+    transport,
+    userAgent: buildUserAgent(run.toolVersion),
+    clock: run.clock,
+  });
+  const valid: LlmAdapterDeps = {
+    http,
+    secrets: singleKeyStore(provider, key),
+    clock: run.clock,
+  };
+  const invalid: LlmAdapterDeps = {
+    http,
+    secrets: singleKeyStore(provider, invalidKey),
+    clock: run.clock,
+  };
+  const adapter = createLlmAdapter(provider, valid);
+  const wrongKeyAdapter = createLlmAdapter(provider, invalid);
+  const guard = createBudgetGuard({
+    session: createSessionSpendCounter(),
+    limits: { run: () => confirmed * 100, session: () => 0 },
+    prices: statement.prices,
+    now: () => run.clock.now(),
+  });
+  const token = createCancellationTokenSource().token;
+  const notes: string[] = [];
+  const failures: string[] = [];
+  const begin = (scenario: string): void => {
+    current = scenario;
+    page = 0;
+  };
+
+  // The model list first, always: it is free, and it is the check that the
+  // model the spend was stated for exists before anything is billed.
+  begin("models-list");
+  let listed: readonly ModelInfo[];
+  try {
+    listed = await adapter.listModels({ token });
+  } catch (error) {
+    err(
+      `fixtures:record: the model list failed (${describe(error)}). Nothing ` +
+        `billed was sent and nothing was written.\n`,
+    );
+    return 1;
+  }
+  if (!listed.some((m) => m.id === statement.model)) {
+    const priced = listed
+      .map((m) => m.id)
+      .filter((id) => llmPriceSource().pricesFor(provider, id) !== undefined)
+      .sort();
+    err(
+      `fixtures:record: ${provider} does not list "${statement.model}". ` +
+        `Nothing billed was sent and nothing was written. Listed and priced: ` +
+        `${priced.length === 0 ? "(none)" : priced.join(", ")}. Re-run the dry ` +
+        `run with --model <id> to state the spend for one of them.\n`,
+    );
+    return 1;
+  }
+
+  for (const s of scenarios) {
+    if (s.recording !== "live" || s.kind === "list-models") continue;
+    const bound = statement.scenarios.find((b) => b.scenario === s.scenario);
+    begin(s.scenario);
+    let reservation: BudgetReservation | undefined;
+    if (s.billed && bound !== undefined) {
+      try {
+        reservation = guard.reserveCall({
+          inputTokens: bound.inputTokens,
+          outputTokens: bound.outputTokens,
+          costUsd: bound.costUsd,
+          prices: statement.prices,
+        });
+      } catch (error) {
+        if (!(error instanceof BudgetExceededError)) throw error;
+        failures.push(
+          `${s.scenario}: not sent — the confirmed ceiling of ` +
+            `${usdUp(confirmed)} would be passed (spent so far ` +
+            `${usdUp(guard.spentUsd)}). Nothing after it was sent.`,
+        );
+        break;
+      }
+    }
+    const target = s.key === "synthetic-invalid" ? wrongKeyAdapter : adapter;
+    const request = llmScenarioRequest(s.scenario, statement.model);
+    try {
+      if (s.kind === "chat-stream") {
+        const stream = target.chatStream?.(request, { token });
+        if (stream === undefined)
+          throw new Error("the adapter has no chatStream");
+        let usage: Usage | undefined;
+        for await (const chunk of stream) {
+          if (chunk.usage !== undefined) usage = chunk.usage;
+        }
+        reservation?.settle(usage ?? NO_USAGE);
+      } else {
+        const answer = await target.chat(request, { token });
+        reservation?.settle(answer.usage);
+      }
+      if (s.scenario === "error-401") {
+        failures.push("error-401: the invalid key was accepted");
+      }
+    } catch (error) {
+      // A billed call that failed is counted at its bound, never at zero.
+      reservation?.settle(NO_USAGE);
+      notes.push(`${s.scenario}: the adapter answered ${describe(error)}`);
+    }
+    if (!captured.some((c) => c.scenario === s.scenario)) {
+      failures.push(`${s.scenario}: nothing was captured`);
+    }
+  }
+  current = undefined;
+
+  // --- record: redact and check everything, then write ----------------------
+  const selected = new Set(scenarios.map((s) => s.scenario));
+  let staged: StagedLlmFixture[];
+  try {
+    staged = captured
+      .filter((c) => selected.has(c.scenario))
+      .map((c) => {
+        const { exchange, notes: redactions } = redactLlmExchange(c, deny);
+        const u = new URL(c.url);
+        const meta: LlmFixtureMeta = {
+          scenario: c.scenario,
+          scenarioVersion: LLM_SCENARIO_VERSION,
+          recordedAt: new Date(run.clock.now()).toISOString(),
+          endpoint: `${u.origin}${u.pathname}`,
+          method: c.method,
+          toolVersion: run.toolVersion,
+          synthetic: false,
+          redactions,
+          provider,
+          model: statement.model,
+          page: c.page,
+        };
+        return stageLlmFixture(
+          llmFixtureKey(c.scenario, c.page),
+          exchange,
+          meta,
+          deny,
+        );
+      });
+  } catch (error) {
+    err(
+      `fixtures:record: ${describe(error)}\nNothing was written: one ` +
+        `exchange failed the redaction check, so none is kept.\n`,
+    );
+    return 1;
+  }
+  await mkdir(run.fixtureDir, { recursive: true });
+  for (const file of staged) await writeStaged(run.fixtureDir, file);
+
+  const spent = guard.usage().run;
+  out(
+    staged
+      .map(
+        (f) => `  ${f.key}  status=${String(f.status)} ${String(f.bytes)}B\n`,
+      )
+      .join("") +
+      notes.map((n) => `  note: ${n}\n`).join("") +
+      `\n${String(captured.length)} request(s) answered; ${String(staged.length)} ` +
+      `fixture(s) written to test/fixtures/llm/${provider}/.\n` +
+      `Spent, from the tokens the answers reported: ${usdUp(spent.costUsd)} over ` +
+      `${String(spent.calls)} billed call(s)` +
+      `${spent.estimatedCalls > 0 ? ` (${String(spent.estimatedCalls)} counted at their bound)` : ""}; ` +
+      `stated ${usdUp(statement.costUsd)}.\n`,
+  );
+  if (failures.length > 0) {
+    err(
+      `${String(failures.length)} scenario(s) failed:\n  ${failures.join("\n  ")}\n`,
+    );
+    return 1;
+  }
+  return 0;
+}
+
+/** One fixture and its sidecar, checked and serialised, not yet written. */
+interface StagedLlmFixture {
+  readonly key: string;
+  readonly status: number;
+  readonly bytes: number;
+  readonly fixtureText: string;
+  readonly metaText: string;
+}
+
+/** Serialise and check one fixture and its sidecar; throws, writing nothing, when either is not clean. */
+function stageLlmFixture(
+  key: string,
+  exchange: RecordedExchange,
+  meta: LlmFixtureMeta,
+  deny: readonly string[],
+): StagedLlmFixture {
+  const fixtureText = toJson(exchange);
+  assertCleanLlmFixture(meta.scenario, exchange, fixtureText, deny);
+  const metaText = toJson(meta);
+  assertClean(`${meta.scenario} (metadata)`, metaText, deny);
+  return {
+    key,
+    status: exchange.status,
+    bytes: exchange.body.length,
+    fixtureText,
+    metaText,
+  };
+}
+
+/** Write one staged fixture and its sidecar. */
+async function writeStaged(dir: string, file: StagedLlmFixture): Promise<void> {
+  await writeFile(`${dir}/${file.key}.json`, file.fixtureText, "utf8");
+  await writeFile(`${dir}/${file.key}${META_SUFFIX}`, file.metaText, "utf8");
+}
+
+// ---------------------------------------------------------------------------
 // 9. main
 // ---------------------------------------------------------------------------
 
 /** `FIXTURE_MODE`, as `docs/13` §2.2 spells it. */
-type Mode = "record" | "synthetic" | "dry-run";
+export type Mode = "record" | "synthetic" | "dry-run";
 
 function readMode(raw: string | undefined): Mode {
   if (raw === "record") return "record";
@@ -3304,7 +5040,21 @@ async function main(argv: readonly string[]): Promise<number> {
   const mode: Mode = cli.dryRun
     ? "dry-run"
     : readMode(process.env["FIXTURE_MODE"]);
-  const plan = planFor(cli.source);
+  const source = cli.source;
+  if (isLlmRecordableProvider(source)) {
+    // `P3-T30`: the LLM path, with its own gates (`runLlmRecorder`).
+    return runLlmRecorder({ ...cli, source }, mode, {
+      env: process.env,
+      stdout: (text) => process.stdout.write(text),
+      stderr: (text) => process.stderr.write(text),
+      fixtureDir: llmFixtureDirFor(source),
+      transport: () =>
+        createFetchTransport(spacingMsFor(LLM_HOSTS[source]), () => undefined),
+      clock: createSystemClock(),
+      toolVersion: await toolVersion(),
+    });
+  }
+  const plan = planFor(source);
   const deny = literalDenyList();
   const version = await toolVersion();
   const spacingMs = spacingMsFor(plan.host);

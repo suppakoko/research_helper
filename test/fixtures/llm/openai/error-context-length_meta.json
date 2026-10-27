@@ -1,0 +1,15 @@
+{
+  "scenario": "error-context-length",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-10-27T07:08:14.912Z",
+  "endpoint": "https://api.openai.com/v1/responses",
+  "method": "POST",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written from docs/03 §11.5's context_length row: provoking it needs a prompt above the model's context window (up to about a million tokens), whose window the bundled price table does not state.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ],
+  "provider": "openai",
+  "page": 1
+}
