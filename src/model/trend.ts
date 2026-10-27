@@ -311,7 +311,10 @@ export interface BibliographyEntry {
   readonly itemKey: string;
   /** `[n]`, 1-based, in order of first appearance (`docs/06` §10.2). */
   readonly index: number;
-  /** The entry as the bibliography formatter returned it, as plain text. */
+  /**
+   * The entry as the bibliography formatter returned it, as plain text, trimmed; a numeric style's own
+   * number is removed, because the report prints `index` (owner, 2026-10-27, `plan/00` §6 item 294(d)).
+   */
   readonly text: string;
   readonly doi: Doi | undefined;
 }

@@ -2293,6 +2293,19 @@ the caller of what the card builds; if it does not, the caller is added with a d
     readings are confirmed as built: a re-summarized paper re-keys its theme grouping, and any difference in what is
     sent, the model or a setting re-keys the stage.
 
+293. **Phase 4 wave 3, 2026-10-27.** **DECIDED 2026-10-27 (owner):** `P4-T11` (bibliography and citation nodes
+    through Zotero; measurement only, no spend, no network) runs next, alone. `P4-T13` and `P4-T15` follow it.
+
+294. **Four lines raised by `P4-T11`** (`plan/reports/P4-T11.md`). **DECIDED 2026-10-27 (owner), each as
+    recommended:** (a) every report, Korean included, formats its bibliography and retracted list with the `en-US`
+    CSL locale; titles and names keep their original script (Zotero's `ko-KR` CSL locale writes "와/과" with no
+    spaces). (b) A citation node's visible text follows the report, not Zotero's interface language: the plugin makes it
+    with the same CSL locale as the bibliography instead of `Zotero.EditorInstanceUtilities.formatCitation`, and
+    `P4-T13` measures whether the note editor rewrites it when the note opens. (c) The bibliography keeps first-appearance
+    order with the report's `[n]`, in every style, APA included. (d) `P4-T11`'s two readings are confirmed: the user's
+    style is Quick Copy's, else `export.lastStyle`; a numeric style's own number is removed from
+    `BibliographyEntry.text`, so the report prints one number.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

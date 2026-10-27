@@ -59,7 +59,7 @@ that does not exist yet (§0.3). Their status on 2026-10-25, by grep of the docu
 | Phase 3 `DONE`, a real `StoredSummary` corpus | **Not met.** `StoredSummary` is not declared yet (`src/model/summary.ts` header: "`P3-T25` adds it"); no `summary` table (migrations stop at version 5) | `P4-T04`, `P4-T07`, `P4-T12`, `P4-T14`, `P4-T25` |
 | V-8b answered, R-19b closed | **Not met.** `P3-T22` is unbuilt; `P3-T20`'s labels wait on the owner (items 280(b), 283(a)) | `P4-T12` (§2 analysis-depth disclosure), `P4-T25` |
 | V-8 answered (streaming) | **Met.** `docs/01` §8.4 records the measured sandbox XHR path (`P0-T16`/`P0-T17`); `P3-T11` built `LLMRouter.chatStream` | `P4-T20` |
-| Bibliography entry point confirmed or fallback accepted | **Not met.** `docs/06` §10.3 `Unverified`; `docs/06` §16 item 3 unanswered | `P4-T11` measures it |
+| Bibliography entry point confirmed or fallback accepted | ~~**Not met.** `docs/06` §10.3 `Unverified`; `docs/06` §16 item 3 unanswered~~ **Met 2026-10-27 (`P4-T11`):** `Zotero.Styles.get(id).getCiteProc` measured inside Zotero 10.0.3 and recorded in `docs/01` §5.11; `docs/06` §10.3 points there and §16 item 3 is answered | `P4-T11` measures it |
 | Cache-key hash primitive confirmed | **Met.** `docs/06` §11.2 "Measured 2026-10-21 … (`P3-T18`)": `crypto.subtle.digest` works in the sandbox | `P4-T17` |
 | Note-HTML surface confirmed | **Not met.** `docs/01` §5.7 `Unverified` (sanitisation whitelist, no Markdown helper) | `P4-T13` measures it |
 | Progress-UI API shapes confirmed | **Met.** `docs/07` §7.7 "Verified 2026-10-01 (`P1-T29`), marker retired" | `P4-T20` |
@@ -1199,7 +1199,10 @@ recorded fallback), and the Notable Papers and Bibliography entries are real Zot
 
 **Files.**
 - create `src/zotero/bibliography.ts` (callers: `noteHtml.ts`, `P4-T13`, and `exportMarkdown.ts`,
-  `P4-T15`, through a port passed in by `trendReportPipeline.ts`, `P4-T18`)
+  `P4-T15`, through a port passed in by `trendReportPipeline.ts`, `P4-T18`) *Noted 2026-10-27
+  (`P4-T11`, rule 10): nothing calls it yet. The port is the constant `zoteroBibliographyPort`, so
+  nothing constructs it; `trendReportPipeline.ts` (`P4-T18`) passes it to `noteHtml.ts` (`P4-T13`) and
+  `exportMarkdown.ts` (`P4-T15`), and builds the report's `bibliography` and `retracted` lists with it.*
 - create `test/integration/zotero/bibliography.spec.ts`
 - modify `docs/01-zotero-plugin-platform.md` (a new subsection recording the measured entry point)
 - modify `docs/06-summarization-and-trend-report.md` §10.3 (pointer to `docs/01`, dated)
@@ -1409,6 +1412,8 @@ inline anchors and citation nodes, and nothing outside the measured whitelist su
 - Do **not** use the legacy `zotero-note znv1` wrapper (`docs/06` §10.2).
 - Do **not** emit images.
 - Do **not** trust model output: everything is escaped unless the converter produced the tag.
+
+*Decided 2026-10-27 (owner, `plan/00` §6 item 294(b)): a citation node's visible text follows the report, not Zotero's interface language. This card makes it with the bibliography's CSL locale (`en-US`, item 294(a)) through `P4-T11`'s `zoteroBibliographyPort` rather than `Zotero.EditorInstanceUtilities.formatCitation`, escapes it, and measures inside Zotero whether the note editor rewrites the nodes' text when the note opens; the measurement goes into `docs/01` §5.11 the same day.*
 
 **Done when.**
 - [ ] A fixture with `<script>`, `onclick`, `javascript:` and `data:` links renders with none of them.
@@ -1879,6 +1884,8 @@ counting its reduction passes, and saves nothing when cancelled mid-synthesis.
 - Do **not** call `Zotero.*` from `pipeline/`; Zotero reads arrive as ports (verify how `P3-T29`
   receives them — `PipelineContext.zotero` stays `undefined` in `createPipelineContextFactory`).
 
+*Decided 2026-10-27 (owner, `plan/00` §6 item 294): the run passes `BibliographyRequest.locale` `en-US` for every report language (294(a)), registers the cited keys in first-appearance order for every style (294(c)), and uses `userCitationStyle`'s reading of the user's style (294(d)).*
+
 **Done when.**
 - [ ] A mock run over 30 items saves one report whose header pass count equals the calls made at
       L1–L4.
@@ -2131,6 +2138,8 @@ the same theme analyses, with Korean headings validated and titles, authors and 
 **Do NOT.**
 - Do **not** translate an English report (D-06-6).
 - Do **not** change the Korean prompt text (§0.2 item 14).
+
+*Decided 2026-10-27 (owner, `plan/00` §6 item 294(a)): a Korean report's bibliography and retracted list are formatted with the `en-US` CSL locale, like an English report's; titles and names keep their original script. Its citation nodes use the same locale (item 294(b)).*
 
 **Done when.**
 - [ ] `ko` makes one `TREND_REPORT_KO` call; `both` makes one of each from one set of theme analyses.

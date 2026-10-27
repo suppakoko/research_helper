@@ -1590,6 +1590,96 @@ Zotero.Promise.delay(ms)
 Zotero.initializationPromise / Zotero.unlockPromise / Zotero.uiReadyPromise
 ```
 
+### 5.11 Formatting a bibliography and building citation nodes
+
+*Added 2026-10-27 (`P4-T11`). This is the confirmed entry point `06-summarization-and-trend-report.md` §10.3 asked
+this document to own; the code is `src/zotero/bibliography.ts` (`zoteroBibliographyPort`), the check is
+`test/integration/zotero/bibliography.spec.ts`.*
+
+**The entry point is a citeproc-js engine from the style:**
+
+```javascript
+if (!Zotero.Styles.initialized()) await Zotero.Styles.init();   // loaded lazily
+const style  = Zotero.Styles.get(styleID);                      // false when not installed
+const engine = style.getCiteProc(locale, 'text');               // CSL.Engine; locale: e.g. 'en-US'
+engine.updateItems(items.map(i => i.id));                       // registration order
+const bib = engine.makeBibliography();                          // false when the style has none
+// bib[0].entry_ids[i] = the item ids entry i formats (strings), bib[1][i] = its text
+engine.free();
+```
+
+> **Measured 2026-10-27 (`P4-T11`) inside Zotero 10.0.3 (Windows, the integration runner's fresh profile, `Zotero.locale`
+> `ko-KR`), on three local fixture articles — one with a Korean title, journal and first author.** (1) **All three
+> candidates exist and work**: `Zotero.Styles.get(id).getCiteProc(locale, format)`,
+> `Zotero.Cite.makeFormattedBibliographyOrCitationList(engine, items, format)` (one string, the style's order) and
+> `Zotero.QuickCopy.getContentFromItems(items, setting)` (`{ text, html }`, the style's order; HTML adds COinS spans). The
+> last two are built on the first (read from 10.0.3's `xpcom/cite.js` and `xpcom/quickCopy.js`). The engine is used
+> directly because only `makeBibliography()` says which entry belongs to which item, and the report needs its own order.
+> (2) **`Zotero.Styles` may not be loaded yet when a plugin asks**: `initialized()` was `false` when the spec started in
+> this card's first two runs, where the first `init()` took 3.2 s and about 1.7 s, and `true` in the eleven runs after
+> them (Zotero loads the style list itself at some point after startup; when is not measured). `get()` throws
+> `UnloadedDataException` before then (read from `xpcom/style.js`), so code awaits `init()` first; a second `init()`
+> returns the first one's promise. 15 styles
+> are visible (ACS, AMA, APA, APSA, ASA, Chicago author-date, Chicago notes, Chicago shortened notes, Cite Them Right
+> Harvard, Elsevier Harvard, IEEE, MHRA notes, MLA, Nature, NLM citation-sequence); 63 CSL locales, `ko-KR` among them.
+> (3) **Preferences as the profile ships them**: `export.quickCopy.setting` =
+> `bibliography=http://www.zotero.org/styles/chicago-shortened-notes-bibliography`; `export.quickCopy.locale` and
+> `export.lastLocale` unset; `export.lastStyle` = the same Chicago style; `cite.useCiteprocRs` = `false`. (4) **Two
+> styles, different strings**: APA gave "Smith, A. (2022). A survey of graph neural networks. Journal of Machine Learning
+> Research, 23, 1–40. https://doi.org/10.1000/rh.p4t11.b" and IEEE "[1] A. Smith, “A survey of graph neural networks,”
+> Journal of Machine Learning Research, vol. 23, pp. 1–40, 2022, doi: 10.1000/rh.p4t11.b." for the same item, `en-US`.
+> (5) **Order**: APA sorts its entries (in `en-US` Kim, Smith, 홍; in `ko-KR` 홍 first); IEEE and Nature keep
+> registration order and number in it, so registering the items in `[n]` order makes the style's numbers equal the
+> report's. 5 of the 15 bundled styles number their entries — ACS, AMA, IEEE, Nature, NLM — with labels such as `[1]`
+> (IEEE) and `1.` (Nature) at the start of each text entry. (6) **The CSL locale changes the text, and Zotero's default
+> is the UI locale**: with no locale, `getCiteProc` used `Zotero.locale` (`ko-KR` here). In `ko-KR`, IEEE wrote
+> "홍길동와/과C. Brown, “단백질 구조 예측의 최근 동향”, …, vol 5, pp 12–20" — the `ko-KR` CSL locale's "and" is the
+> literal "와/과" with no spaces — and Chicago wrote "(2023년)". Nature declares `default-locale="en-GB"` and gave the
+> same text in both locales. (7) **The original script survives**: the Korean title appeared unchanged in all 15 styles.
+> (8) **Speed**: 3 items took 10–61 ms per style including `getCiteProc`; 100 items took 173 ms (APA) and 54 ms (IEEE).
+> (9) **Citation nodes**: `Zotero.Utilities.Item.itemToCSLJSON(item)` and `Zotero.URI.getItemURI(item)`
+> (`http://zotero.org/users/local/<localUserKey>/items/<itemKey>`) exist, `await Zotero.URI.getURIItem(uri)` returns the
+> same item, and `Zotero.EditorInstanceUtilities.formatCitation(citation)` returns
+> `(<span class="citation-item">Smith, 2022</span>)`. **Its text is in Zotero's UI language**, not the report's: under
+> `ko-KR` it wrote "(홍 및 Brown, 2023)" and "(Kim 등, 2024)" (`Zotero.getString('general.andJoiner')` and
+> `'general.etAl'`), and it **does not escape** names or titles (read from `_formatCitationItemPreview`). (10) A note
+> whose HTML is the `data-citation-items` / `data-schema-version="9"` wrapper around `span.citation` nodes reads back
+> from `getNote()` byte for byte after `saveTx()` and a reload, and its `getNoteTitle()` is the first heading. What the
+> note editor does to that HTML when it opens the note was not measured (`P4-T13`). (11) A style with no bibliography
+> (`makeBibliography()` returning `false`) was not met: every bundled style has one.
+
+**As built (`src/zotero/bibliography.ts`), with the readings the measurement left to the code:**
+
+- **The user's style is Quick Copy's** (Settings ▸ Export ▸ Item Format, `export.quickCopy.setting`) when it names a
+  style, else `export.lastStyle` (the last style used to create a bibliography) when that is installed, else none
+  (`userCitationStyle`). Quick Copy's own language, when the user set one, is reported but not applied.
+- **The CSL locale is always passed by the caller** (`BibliographyRequest.locale`), because Zotero's default is the UI
+  language. Which locale a report uses is the run's choice (`P4-T18`, `P4-T21`). ~~**Open for the owner:** an English report
+  passing `en-US` is the obvious reading; for a Korean report, `ko-KR` gives the "와/과" text above, so the choice
+  between `ko-KR` and `en-US` there is not obvious.~~ **Decided 2026-10-27 (owner, `plan/00` §6 item 294(a)):** every
+  report, Korean included, passes `en-US`; titles and names keep their original script. **Decided the same day (item
+  294(b)):** a citation node's visible text is made by the plugin with that same CSL locale, not by
+  `Zotero.EditorInstanceUtilities.formatCitation`, whose text follows Zotero's interface language; `P4-T13` measures
+  whether the note editor rewrites it when the note opens. **Confirmed the same day (item 294(c), (d)):** the
+  first-appearance order below, the Quick Copy / `export.lastStyle` reading above, and the number removal below.
+- **Entries come back in the order of the keys given** — the report's `[n]`, first appearance — whatever order the style
+  sorts in, matched through `bib[0].entry_ids`; `BibliographyEntry.index` is the position + 1.
+- **A numeric style's own number is removed from `BibliographyEntry.text`** (`stripStyleNumbers`), and
+  `FormattedBibliography.styleNumbered` says so: the index carries the number, and a renderer printing `[n]` would
+  otherwise print it twice. Removed only when every entry starts with a label of one shape (`[n]`, `(n)`, `n.`, `n)`) and
+  the numbers are exactly 1…k, so an author-date entry that starts with a number is untouched. `text` is otherwise the
+  formatter's plain text, trimmed — the reading of `07-architecture-and-data-model.md` §5.2's "as the bibliography
+  formatter returned it".
+- **The retracted list** (`formatRetracted`) uses the same formatter, in the order given, numbers removed.
+- **A style with no bibliography** gives each item's citation instead (`citationList: true`), as
+  `makeFormattedBibliographyOrCitationList` does. Unmeasured, per item 11 above.
+- **Citation nodes** are the note editor's own markup (`06-…` §10.2 (b)): the payload carries `itemToCSLJSON` unchanged;
+  the visible text is `formatCitation`'s, computed from a copy whose names and title are HTML-escaped. The wrapper is
+  `noteWrapperOpenTag`, one payload per distinct URI.
+- **No fixed-format fallback is built**: the processor works, so `06-…` §10.3's `itemToCSLJSON` fallback and the README
+  limitation `plan/07` §5.4 names are not needed. A style that is not installed, or a key with no regular item, throws.
+- `automaticJournalAbbreviations` is off, as in Quick Copy.
+
 ---
 
 ## 6. Translating external metadata into Zotero items
