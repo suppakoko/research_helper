@@ -1023,6 +1023,44 @@ export function describeCollectionForSummary(
   };
 }
 
+/**
+ * The collections one item belongs to, as `{ libraryID, collectionKey }`
+ * (owner, `plan/00` §6 item 305(a)): the item pane's one-item run takes the
+ * strictest privacy mode of these and the global setting (`docs/09` §3.5's
+ * note of 2026-10-29). `Zotero.Item.getCollections()`: the collections not in
+ * the trash. Reads only.
+ *
+ * @param libraryID - the item's library
+ * @param itemKey - the item's key
+ * @throws Error when the key names no item, so the run stops before
+ *   anything is sent rather than running under a looser mode
+ */
+export function collectionsOfItem(
+  libraryID: number,
+  itemKey: string,
+): { readonly libraryID: number; readonly collectionKey: string }[] {
+  const found: unknown = Zotero.Items.getByLibraryAndKey(libraryID, itemKey);
+  if (!isObject(found)) {
+    throw new Error(
+      `[research-helper] no item ${itemKey} in library ${String(libraryID)}`,
+    );
+  }
+  const refs: { readonly libraryID: number; readonly collectionKey: string }[] =
+    [];
+  for (const id of (found as Zotero.Item).getCollections()) {
+    const collection: unknown = Zotero.Collections.get(id);
+    if (!isObject(collection)) {
+      throw new Error(
+        `[research-helper] item ${itemKey} names collection ${String(id)}, ` +
+          "which cannot be read",
+      );
+    }
+    const { libraryID: lib, key } = collection as Zotero.Collection;
+    refs.push({ libraryID: lib, collectionKey: key });
+  }
+  return refs;
+}
+
 /** What {@link readCollectionForSummary} returns. */
 export interface SummaryRunCollection {
   readonly name: string;

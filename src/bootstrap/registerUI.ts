@@ -161,6 +161,7 @@ import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
 import { provenanceFileWriter, writeProvenanceNote } from "../zotero/notes";
 // `P3-T29`: the summarize window, the removal command and their notes.
 import {
+  collectionsOfItem,
   describeCollectionForSummary,
   removeGeneratedNotes,
   renderSummaryExportHtml,
@@ -1326,17 +1327,21 @@ declare module "../addon" {
  * The item pane's one-item run over the graph (`runItemSummary`; owner,
  * `plan/00` §6 item 303(a)): the same pipeline, job contexts, record and
  * confirmation as the summarize window's session ({@link createSummarizeSession}),
- * over no collection — the global privacy mode (item 278(c)) and no "don't ask
- * again" record.
+ * over no collection — no "don't ask again" record — and under the strictest
+ * privacy mode of the item's collections and the global setting
+ * (`collectionsOfItem`, passed to `openJob` as `itemCollections`; owner,
+ * `plan/00` §6 item 305(a); was the global mode alone, item 278(c)).
  */
 function itemSummaryDeps(graph: ServiceGraph): ItemSummaryDeps {
   return {
     pipeline: graph.pipelines.get("summarize") as SummarizePipeline | undefined,
-    openJob: async (record, token) => {
+    collectionsOf: collectionsOfItem,
+    openJob: async (record, token, itemCollections) => {
       const job = await graph.pipelineContext.openJob({
         pipelineId: "summarize",
         token,
         ...(record !== undefined && { record }),
+        itemCollections,
         openOn: "completion",
       });
       return {
@@ -1409,7 +1414,7 @@ async function showNoteNotWritten(
  * | `isConfigured` | the registry's `isConfigured` for the active provider — the presence flag, never the key (D5) |
  * | `autoSummarize` | `getPref("autoSummarize")`, read per render; ships `false` (`docs/07` §8.5) |
  * | `load` | the newest `summary` row of `fromZoteroItem(item).workKey`, through `graph.database.summaries()` — the store `P3-T29` constructs in `installPluginDatabase`; no request |
- * | `generate` | a one-item run of the summarize pipeline: {@link itemSummaryDeps} under `runItemSummary` (owner, `plan/00` §6 item 303(a)); `regenerate` → `resummarize` |
+ * | `generate` | a one-item run of the summarize pipeline: {@link itemSummaryDeps} under `runItemSummary` (owner, `plan/00` §6 item 303(a)); `regenerate` → `resummarize`; `bypassCache` (Regenerate only) → `SummarizeInput.bypassCache` (item 305(c)) |
  * | `saveAsNote` | `saveSummaryNoteOnce` (`src/zotero/notes.ts`; item 303(b)): no second note; the written note's key stored on the row; otherwise {@link showNoteNotWritten} |
  * | `onError` | `reportError`, the debug log |
  * | `locale` | {@link appLocale} |
@@ -1442,11 +1447,17 @@ async function publishSummarySection(
       const rows = await store.listForWork(workKey);
       return rows[0];
     },
-    generate: (item, { regenerate }) => {
+    generate: (item, { regenerate, bypassCache }) => {
       const source = createCancellationTokenSource();
       const done = runItemSummary(
         itemSummaryDeps(graph),
-        { libraryID: item.libraryID, itemKey: item.key, regenerate },
+        {
+          libraryID: item.libraryID,
+          itemKey: item.key,
+          regenerate,
+          // Regenerate's bypass (item 305(c)); Retry never sets it.
+          ...(bypassCache === true && { bypassCache: true }),
+        },
         source.token,
       ).finally(() => {
         source.dispose();

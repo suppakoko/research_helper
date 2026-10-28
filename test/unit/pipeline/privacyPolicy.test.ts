@@ -59,6 +59,7 @@ import {
   createPrivacyPolicy,
   effectiveMode,
   loadPrivacyPolicy,
+  loadStrictestPrivacyPolicy,
   type ModelRoute,
   modelRouteFor,
   planInputScopeKind,
@@ -914,6 +915,88 @@ describe("loadPrivacyPolicy — the job's policy, failing closed", () => {
         await loadPrivacyPolicy(
           { globalMode: () => "full", store, logger },
           COLLECTION,
+        )
+      ).mode,
+    ).toBe("strict");
+    expect(warnings).toHaveLength(2);
+  });
+});
+
+describe("loadStrictestPrivacyPolicy — an item's collections (plan/00 §6 item 305(a))", () => {
+  const STRICT = { libraryID: 1, collectionKey: "STRICT23" };
+  const LOOSE = { libraryID: 1, collectionKey: "LOOSE234" };
+  const BALANCED = { libraryID: 1, collectionKey: "BALAN234" };
+  const NOROW = { libraryID: 1, collectionKey: "NOROW234" };
+
+  async function seeded() {
+    const migrated = await migratedStore();
+    await writeCollectionPrivacySettings(migrated.store, STRICT, {
+      privacyMode: "strict",
+    });
+    await writeCollectionPrivacySettings(migrated.store, LOOSE, {
+      privacyMode: "full",
+    });
+    await writeCollectionPrivacySettings(migrated.store, BALANCED, {
+      privacyMode: "balanced",
+    });
+    return migrated;
+  }
+
+  it("an item in a strict collection is strict under a balanced global mode", async () => {
+    const { store } = await seeded();
+    expect(
+      (
+        await loadStrictestPrivacyPolicy(
+          { globalMode: () => "balanced", store },
+          [STRICT],
+        )
+      ).mode,
+    ).toBe("strict");
+  });
+
+  it("an item in two collections takes the stricter, in either order; an override never loosens", async () => {
+    const { store } = await seeded();
+    const modeOf = async (
+      globalMode: "strict" | "balanced" | "full",
+      collections: readonly (typeof STRICT)[],
+    ) =>
+      (
+        await loadStrictestPrivacyPolicy(
+          { globalMode: () => globalMode, store },
+          collections,
+        )
+      ).mode;
+    expect(await modeOf("full", [BALANCED, STRICT])).toBe("strict");
+    expect(await modeOf("full", [STRICT, BALANCED])).toBe("strict");
+    expect(await modeOf("full", [LOOSE, BALANCED])).toBe("balanced");
+    expect(await modeOf("full", [BALANCED, LOOSE])).toBe("balanced");
+    expect(await modeOf("balanced", [LOOSE, NOROW])).toBe("balanced");
+    expect(await modeOf("strict", [LOOSE])).toBe("strict");
+    expect(await modeOf("full", [])).toBe("full");
+  });
+
+  it("fails closed: one unreadable row among several gives strict, and so does a missing store", async () => {
+    const warnings: string[] = [];
+    const logger = { warn: (msg: string) => warnings.push(msg) } as never;
+    const { connection, store } = await seeded();
+    connection.db
+      .prepare(
+        "INSERT INTO collection_settings VALUES (1, 'BROKEN23', 'not json')",
+      )
+      .run();
+    expect(
+      (
+        await loadStrictestPrivacyPolicy(
+          { globalMode: () => "full", store, logger },
+          [LOOSE, { libraryID: 1, collectionKey: "BROKEN23" }],
+        )
+      ).mode,
+    ).toBe("strict");
+    expect(
+      (
+        await loadStrictestPrivacyPolicy(
+          { globalMode: () => "full", store: undefined, logger },
+          [LOOSE],
         )
       ).mode,
     ).toBe("strict");

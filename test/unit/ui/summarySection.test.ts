@@ -20,6 +20,7 @@ import {
   SUMMARY_PANE_ID,
   SUMMARY_SECTION_ICON,
   SUMMARY_SECTION_L10N,
+  SUMMARY_SECTION_PARTS,
   deriveState,
   SUMMARY_RESULT_L10N,
   SummaryNotStoredError,
@@ -569,6 +570,66 @@ describe("summarySection — the hooks, with fake props", () => {
       event: {} as Event,
     } as never);
     expect(calls.generate).toEqual([]);
+  });
+
+  it("only Regenerate asks for the bypass; Retry and Generate keep the cache rule (plan/00 §6 item 305(c))", async () => {
+    const seen: { regenerate: boolean; bypassCache?: boolean }[] = [];
+    const { host } = fakeHost({
+      generate: (_item, options) => {
+        seen.push({ ...options });
+        return { done: Promise.resolve(), cancel: () => undefined };
+      },
+    });
+    const options = summarySectionOptions("p", host);
+    const body = fakeBody();
+    const rec = newRecorded();
+    options.onInit?.({
+      ...props(body, item(1), rec),
+      refresh: () => Promise.resolve(),
+    } as never);
+    options.onRender?.(props(body, item(1), rec));
+    options.sectionButtons?.[0]?.onClick({
+      ...props(body, item(1), rec),
+      event: {} as Event,
+    } as never);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(seen).toEqual([{ regenerate: true, bypassCache: true }]);
+
+    // Retry and Generate, through the body's own buttons: no bypass.
+    const listeners = new Map<string, () => void>();
+    const button = (name: string) =>
+      new Proxy(
+        {
+          addEventListener: (_type: string, listener: () => void) => {
+            listeners.set(name, listener);
+          },
+        } as Record<string, unknown>,
+        {
+          get: (target, key) =>
+            key in target ? target[key as string] : () => undefined,
+          set: () => true,
+        },
+      );
+    const wired = {
+      querySelector: (selector: string) =>
+        selector === `.${SUMMARY_SECTION_PARTS.retry}`
+          ? button("retry")
+          : selector === `.${SUMMARY_SECTION_PARTS.generate}`
+            ? button("generate")
+            : null,
+      ownerDocument: {},
+    } as unknown as HTMLDivElement;
+    options.onInit?.({
+      ...props(wired, item(2), rec),
+      refresh: () => Promise.resolve(),
+    } as never);
+    options.onRender?.(props(wired, item(2), rec));
+    seen.length = 0;
+    listeners.get("retry")?.();
+    await vi.advanceTimersByTimeAsync(0);
+    listeners.get("generate")?.();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(seen).toEqual([{ regenerate: true }, { regenerate: false }]);
   });
 
   it("Regenerate starts a run with regenerate: true and refreshes through the captured refresh", async () => {

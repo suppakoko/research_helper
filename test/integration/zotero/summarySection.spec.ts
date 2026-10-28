@@ -78,7 +78,9 @@ import {
   type SummaryGenerateRun,
   type SummarySectionHost,
 } from "../../../src/ui/panes/summarySection";
+import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import { createSummaryStore } from "../../../src/zotero/db";
+import { collectionsOfItem } from "../../../src/zotero/notes";
 import { chatResponse, mockModel } from "../../helpers/mockLLM";
 import { PLUGIN_USER_AGENT_PREFIX } from "../support/startupRequests";
 
@@ -797,6 +799,8 @@ describe("P3-T28 item-pane AI summary section", function () {
       countTokens: (text) => Math.ceil(text.length / 4),
     };
     const regenerates: boolean[] = [];
+    // Regenerate's bypass (plan/00 §6 item 305(c)): never Generate's or Retry's.
+    const bypasses: (boolean | undefined)[] = [];
     // The host's caught failures, for the log (redacted, as the banner is).
     const realOnError = host.onError;
     host.onError = (message, error) => {
@@ -805,6 +809,7 @@ describe("P3-T28 item-pane AI summary section", function () {
     };
     host.generate = (item, options) => {
       regenerates.push(options.regenerate);
+      bypasses.push(options.bypassCache);
       return realGenerate(item, options);
     };
     registry.get = (id) => (id === active ? fake : realGet.call(registry, id));
@@ -890,6 +895,11 @@ describe("P3-T28 item-pane AI summary section", function () {
         );
       });
       assert.deepEqual(regenerates, [false, true], "Generate, then Retry");
+      assert.deepEqual(
+        bypasses,
+        [undefined, undefined],
+        "neither Generate nor Retry bypasses the stored result",
+      );
       assert.strictEqual(calls, 2, "one model call per run");
       assert.deepEqual(requests, [], "the plugin sent no request");
     } finally {
@@ -900,6 +910,76 @@ describe("P3-T28 item-pane AI summary section", function () {
       restorePref(keyPresentPref, keyPresentBefore);
       restorePref(acknowledgedPref, acknowledgedBefore);
       for (const dialog of costDialogs()) dialog.close();
+    }
+  });
+
+  it("reads an item's collections, and a one-item job over them takes the strictest privacy mode (plan/00 §6 item 305(a))", async function () {
+    this.timeout(30000);
+    const instance = await initializedInstance();
+    const graph = instance.api.services!;
+    await graph.database.ready;
+    const libraryID = Zotero.Libraries.userLibraryID;
+    const modePref = `${config.prefsPrefix}.privacy.mode`;
+    const modeBefore = Zotero.Prefs.get(modePref, true) as unknown;
+    const strict = new Zotero.Collection({
+      libraryID,
+      name: "RH 305(a) strict (SYNTHETIC)",
+    });
+    await strict.saveTx();
+    const plain = new Zotero.Collection({
+      libraryID,
+      name: "RH 305(a) plain (SYNTHETIC)",
+    });
+    await plain.saveTx();
+    const itemID = await regularItem("RH 305(a) item", "rh:305a");
+    const item = Zotero.Items.get(itemID) as Zotero.Item;
+    const source = createCancellationTokenSource();
+    try {
+      item.addToCollection(strict.id);
+      item.addToCollection(plain.id);
+      await item.saveTx();
+      const refs = collectionsOfItem(libraryID, item.key);
+      assert.deepEqual(
+        refs.map((ref) => ref.collectionKey).sort(),
+        [strict.key, plain.key].sort(),
+        "collectionsOfItem names both collections",
+      );
+      assert.isTrue(
+        refs.every((ref) => ref.libraryID === libraryID),
+        "in the item's library",
+      );
+      Zotero.Prefs.set(modePref, "balanced", true);
+      await graph.collectionSettings.put(libraryID, strict.key, {
+        privacyMode: "strict",
+      });
+      const modeOf = async (
+        itemCollections: readonly {
+          libraryID: number;
+          collectionKey: string;
+        }[],
+      ): Promise<string> => {
+        const job = await graph.pipelineContext.openJob({
+          pipelineId: "summarize",
+          token: source.token,
+          itemCollections,
+        });
+        job.dispose();
+        return job.context.privacy.mode;
+      };
+      assert.strictEqual(await modeOf(refs), "strict", "both: the stricter");
+      assert.strictEqual(
+        await modeOf(refs.filter((ref) => ref.collectionKey === plain.key)),
+        "balanced",
+        "the plain collection alone: the global mode",
+      );
+      assert.strictEqual(await modeOf([]), "balanced", "none: the global mode");
+    } finally {
+      source.dispose();
+      await graph.collectionSettings.delete(libraryID, strict.key);
+      restorePref(modePref, modeBefore);
+      await item.eraseTx();
+      await strict.eraseTx();
+      await plain.eraseTx();
     }
   });
 

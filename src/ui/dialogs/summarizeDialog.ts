@@ -509,12 +509,21 @@ export interface ItemSummaryDeps {
   /** The graph's summarize pipeline, or `undefined` when there is none. */
   readonly pipeline: Pick<SummarizePipeline, "prepare" | "execute"> | undefined;
   /**
-   * A job context over no collection (the global privacy mode, `plan/00` §6
-   * item 278(c)): with no record for `prepare`, in the record's for `execute`.
+   * The collections the item belongs to (`collectionsOfItem` in the
+   * product). Read once, before the first job context; a throw stops the run
+   * before anything is sent.
+   */
+  collectionsOf(libraryID: number, itemKey: string): readonly CollectionRef[];
+  /**
+   * A job context over no collection, under the strictest privacy mode of
+   * `itemCollections`' overrides and the global setting (owner, `plan/00` §6
+   * item 305(a); was the global mode alone, item 278(c)): with no record for
+   * `prepare`, in the record's for `execute`.
    */
   openJob(
     record: JobRecord | undefined,
     token: CancellationToken,
+    itemCollections: readonly CollectionRef[],
   ): Promise<ItemSummaryJob>;
   /** Enqueue the record, with the confirmed disclosure's egress log. */
   enqueue(
@@ -535,6 +544,13 @@ export interface ItemSummaryRequest {
   readonly itemKey: string;
   /** Regenerate (and Retry): FR-19's "Re-summarize existing". */
   readonly regenerate: boolean;
+  /**
+   * Regenerate only (owner, `plan/00` §6 item 305(c)): the item's stored row
+   * and cache entry are not served; a real call, after the cost confirmation,
+   * replaces both. Retry leaves it unset and keeps the cache rule. Ignored
+   * unless {@link ItemSummaryRequest.regenerate} is set.
+   */
+  readonly bypassCache?: boolean | undefined;
 }
 
 type RowStatus = SummarizeRunView["rows"][number]["status"];
@@ -558,7 +574,9 @@ function reasonForRow(status: RowStatus | undefined): NotSummarizedReason {
 /**
  * The item pane's Generate, Retry and Regenerate (`docs/08` §3.2's and
  * `docs/07` §12.3's notes of 2026-10-29): `P3-T29`'s summarize pipeline over
- * this one item, its two halves exactly as the summarize window's session
+ * this one item, under the strictest privacy mode of the item's collections
+ * and the global setting (item 305(a)), its two halves exactly as the
+ * summarize window's session
  * runs them — `prepare` (the estimate, and the cost and egress confirmation)
  * in a context with no record; then, only on "run", the record enqueued with
  * its egress log and `execute` (the key check, the `llm` pool, the spending
@@ -566,7 +584,7 @@ function reasonForRow(status: RowStatus | undefined): NotSummarizedReason {
  *
  * Where its questions go: the confirmation is {@link confirmSummarizeRun}
  * with no collection (no "don't ask again" record or box; money still asks,
- * item 274(b)); a ceiling asks the cost dialog's question; the key and
+ * item 274(b); asked every time, item 305(b)); a ceiling asks the cost dialog's question; the key and
  * wall-clock questions, which a collection run asks as lines in its window,
  * have no window here and are answered "stop", as `HEADLESS_SUMMARIZE_SURFACE`
  * answers them, so nothing more is sent.
@@ -586,10 +604,16 @@ export async function runItemSummary(
 ): Promise<void> {
   const pipeline = deps.pipeline;
   if (pipeline === undefined) throw new SummaryNotStoredError("other");
+  // The strictest privacy mode of the item's collections and the global
+  // setting (item 305(a)): read once, for both halves.
+  const collections = deps.collectionsOf(request.libraryID, request.itemKey);
   const input: SummarizeInput = {
     libraryID: request.libraryID,
     itemKeys: [request.itemKey],
     resummarize: request.regenerate,
+    // Regenerate's bypass (item 305(c)); `bypassesStoredResult` reads it.
+    ...(request.regenerate &&
+      request.bypassCache === true && { bypassCache: true }),
     // The section's explicit "Save as child note" is the only way a summary
     // becomes a note (`docs/08` §3.2).
     writeNotes: false,
@@ -619,7 +643,7 @@ export async function runItemSummary(
   ): RowStatus | undefined =>
     [...rows].find((row) => row.itemKey === request.itemKey)?.status;
 
-  const before = await deps.openJob(undefined, token);
+  const before = await deps.openJob(undefined, token, collections);
   let prepared: PreparedSummarizeRun;
   try {
     prepared = await pipeline.prepare(input, before.context, surface);
@@ -638,7 +662,7 @@ export async function runItemSummary(
   }
 
   const record = await deps.enqueue(input, prepared.disclosure);
-  const job = await deps.openJob(record, token);
+  const job = await deps.openJob(record, token, collections);
   let output: SummarizeOutput | undefined;
   try {
     output = await pipeline.execute(prepared, job.context, surface);

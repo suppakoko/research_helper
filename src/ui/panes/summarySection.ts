@@ -229,7 +229,9 @@ export interface SummarySectionHost {
   /**
    * Summarize the item and store the result. In the product, a one-item run
    * of the summarize pipeline (`runItemSummary`; owner, `plan/00` §6 item
-   * 303(a)), with `regenerate` as its `resummarize`. `done` rejects with a
+   * 303(a)), with `regenerate` as its `resummarize`; `bypassCache`, set by
+   * Regenerate alone, asks the model again instead of serving the stored
+   * result (item 305(c)). `done` rejects with a
    * {@link SummaryNotStoredError} when the run stored nothing for a reason of
    * its own, and resolves when the user declined the cost dialog. When it is
    * absent the section offers no Generate, Retry or Regenerate, rather than a
@@ -238,7 +240,10 @@ export interface SummarySectionHost {
   generate?:
     | ((
         item: SectionItem,
-        options: { readonly regenerate: boolean },
+        options: {
+          readonly regenerate: boolean;
+          readonly bypassCache?: boolean;
+        },
       ) => SummaryGenerateRun)
     | undefined;
   /**
@@ -838,6 +843,8 @@ export function summarySectionOptions(
     body: HTMLDivElement,
     item: SectionItem | undefined,
     regenerate: boolean,
+    // Regenerate only (item 305(c)); Retry and Generate keep the cache rule.
+    bypassCache = false,
   ): void => {
     const generate = host.generate;
     const state = stateOf(body);
@@ -847,7 +854,10 @@ export function summarySectionOptions(
     const itemID = item.id;
     let run: SummaryGenerateRun;
     try {
-      run = generate(item, { regenerate });
+      run = generate(
+        item,
+        bypassCache ? { regenerate, bypassCache: true } : { regenerate },
+      );
     } catch (error) {
       state.error = {
         itemID,
@@ -909,7 +919,7 @@ export function summarySectionOptions(
         // No `refresh` in these props (`docs/08` §3.1): the captured one is
         // used, through the body's state.
         onClick: ({ body, item }) => {
-          startGenerate(body, item, true);
+          startGenerate(body, item, true, true);
         },
       },
       {

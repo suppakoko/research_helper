@@ -836,6 +836,21 @@ Three modes, selectable globally and overridable per collection. The global defa
 
 **Per-collection opt-in.** The intended workflow: a researcher keeps a "Manuscripts under review" or "Confidential — collaborator drafts" collection set to **strict** or to local-only, while their general reading collection runs **balanced**. The collection's privacy state must be visible in the collection context menu and in the pre-flight confirmation dialog for every job, so it is never a surprise.
 
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 305(a)); built the same day: a one-item run takes the strictest
+> mode of the item's collections.** A run over one item rather than a collection — the item pane's Generate, Retry
+> and Regenerate (`runItemSummary`, `src/ui/dialogs/summarizeDialog.ts`) — runs under the **strictest** of the global
+> `privacy.mode` and the override of **every collection the item belongs to**, so a collection set to strict is never
+> summarized more loosely from the item pane. "Strictest" is the order the code already declares: `PRIVACY_MODES`
+> (`src/pipeline/shared/privacyPolicy.ts`), strictest first — strict, balanced, full — which `effectiveMode` applies
+> to one override; `loadStrictestPrivacyPolicy` folds `effectiveMode` over the item's collections, so an override still
+> only tightens. It fails closed as `loadPrivacyPolicy` does: no store, or a row that cannot be read, gives strict. The
+> item's collections are read when the run starts (`collectionsOfItem`, `src/zotero/notes.ts`: `Zotero.Item`'s
+> `getCollections()`, the collections not in the trash); if they cannot be read, the run stops before anything is sent.
+> They reach the job context through `QueuedPipelineJobOptions.itemCollections` (`openJob`,
+> `src/bootstrap/container.ts`), for both halves of the run. This replaces, for that run only, item 278(c)'s "a job
+> over no collection follows the global privacy mode"; a job over no collection and no item (the search's screening)
+> keeps the global mode, and a collection job keeps the stricter of the global mode and its own override.
+
 ### 3.6 Disclosure at the point of action
 
 Consent obtained once at install time is not meaningful consent for an action taken three months later. The plugin discloses at the moment of egress:

@@ -207,7 +207,9 @@ export const CALLS_PER_MINUTE_PER_PERMIT = 6;
  * Decided 2026-10-29 (owner, `plan/00` §6 item 303(a); `docs/07` §12.3's note
  * of that date): a run takes a collection, an item list, or both. With a list
  * and no collection it reads exactly the listed regular items and works on no
- * collection — the global privacy mode, no "don't ask again" record; with both,
+ * collection — the global privacy mode (for the item pane's run, the
+ * strictest of it and the item's collections' overrides, which its job
+ * context carries: item 305(a)), no "don't ask again" record; with both,
  * the collection's items are narrowed to the list. {@link SUMMARIZE_INPUT_VERSION}
  * stays 1: both members are optional.
  */
@@ -221,6 +223,15 @@ export interface SummarizeInput {
   readonly resummarize: boolean;
   /** `report.perPaperNotes` for this run (opt-in; `docs/07` §8.5). */
   readonly writeNotes: boolean;
+  /**
+   * The item pane's Regenerate (owner, `plan/00` §6 item 305(c); `docs/07`
+   * §12.3's note of 2026-10-29): the listed items' stored row and cache entry
+   * are not served, so each is priced, confirmed and summarized by a real
+   * call whose answer replaces both. Honoured only by
+   * {@link bypassesStoredResult} — a run over an item list, with no
+   * collection and `resummarize` on; `validate` reports it anywhere else.
+   */
+  readonly bypassCache?: boolean | undefined;
 }
 
 /** The end-of-job counts (`P3-T29` step 7) and the rest the window shows. */
@@ -602,6 +613,27 @@ export function summarizeExclusivityKey(
   return `summarize:${library}/items:${keys}`;
 }
 
+/**
+ * Whether this run bypasses the stored result (owner, `plan/00` §6 item
+ * 305(c)): `bypassCache` on a run over an item list, with no collection and
+ * `resummarize` on — the item pane's Regenerate, and nothing else. The one
+ * place the member is read, so a collection run, a Retry or a Generate keeps
+ * the cache rule whatever its input carries.
+ */
+export function bypassesStoredResult(
+  input: Pick<
+    SummarizeInput,
+    "bypassCache" | "collectionKey" | "itemKeys" | "resummarize"
+  >,
+): boolean {
+  return (
+    input.bypassCache === true &&
+    input.collectionKey === undefined &&
+    input.itemKeys !== undefined &&
+    input.resummarize
+  );
+}
+
 /** The run's collection, when it has one. */
 function collectionOf(input: SummarizeInput): CollectionRef | undefined {
   return input.collectionKey === undefined
@@ -954,6 +986,7 @@ export function createSummarizePipeline(
 
     // Input scope under the privacy policy, and the cache probe.
     stage = "estimating";
+    const bypass = bypassesStoredResult(input);
     const planned: PlannedItem[] = [];
     for (const candidate of candidates) {
       const decision = decisions.get(candidate.item.itemKey);
@@ -974,7 +1007,10 @@ export function createSummarizePipeline(
       const row = await store.get(
         `${candidate.item.workKey}:${promptVersion}:${model.modelId}`,
       );
+      // Regenerate's bypass (item 305(c)): nothing stored is served, so the
+      // call is priced and confirmed.
       const cached =
+        !bypass &&
         row !== undefined &&
         row.contentHash === candidate.acquired.source.contentHash;
       planned.push({
@@ -1361,6 +1397,8 @@ export function createSummarizePipeline(
             costGateBlocksFullText: prepared.costGateBlocksFullText,
             pageCounts: p.acquired.pageCounts,
             sourceItemVersion: p.item.dateModified,
+            // Regenerate's bypass (item 305(c)): no cache lookup, a real call.
+            ...(bypassesStoredResult(prepared.input) && { bypassCache: true }),
             nonEnglish:
               p.decision?.nonEnglishPolicy === undefined
                 ? undefined
@@ -1570,6 +1608,17 @@ export function createSummarizePipeline(
         input.itemKeys.some((key) => typeof key !== "string" || key === ""))
     ) {
       errors.push({ field: "itemKeys", messageKey: "rh-error-configuration" });
+    }
+    // Regenerate's bypass belongs to an item run only (item 305(c)).
+    if (
+      input.bypassCache !== undefined &&
+      input.bypassCache !== false &&
+      !bypassesStoredResult(input)
+    ) {
+      errors.push({
+        field: "bypassCache",
+        messageKey: "rh-error-configuration",
+      });
     }
     return { ok: errors.length === 0, errors };
   };

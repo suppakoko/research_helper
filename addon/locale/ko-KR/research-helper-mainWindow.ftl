@@ -634,9 +634,20 @@ research-helper-itempane-btn-save-note =
 
 ## The item pane's result lines (plan/00 §6 item 303(a), (b); docs/08 §3.2)
 ##
-## NEEDS REVIEW (G-41). Each message below is a commented stub carrying its
-## en-US source; nothing was machine-translated, and both are on
-## KO_PENDING_REVIEW in src/i18n/keys.ts.
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-29 (G-41, plan/00 §6 item 305(d)).
 
-# NEEDS REVIEW research-helper-itempane-not-summarized — en-US: { $reason -> / [no-text] This item has no abstract or full text to summarize, so nothing was sent. / [retracted] This item is marked as retracted, so it was not summarized. / [language] This item is not in English, so it was not summarized. / [existing] This item already has a summary note. Use Regenerate to summarize it again. / [no-key] No API key is available for the AI provider. Add it in Research Helper's preferences, then press Retry. Nothing was sent. / [time-limit] The run reached its time limit and was stopped before the summary was stored. Press Retry to try again. / *[other] The run stopped before a summary was stored. / }
-# NEEDS REVIEW research-helper-itempane-note-not-written — en-US: { $reason -> / [read-only] This library is read-only, so the summary was not saved as a note. / *[exists] This item already has a summary note, so no second note was written. / }
+research-helper-itempane-not-summarized =
+    { $reason ->
+        [no-text] 이 논문에는 요약할 초록도 본문도 없어 아무것도 보내지 않았습니다.
+        [retracted] 이 논문은 철회된 것으로 표시되어 있어 요약하지 않았습니다.
+        [language] 이 논문은 영어가 아니라 요약하지 않았습니다.
+        [existing] 이 논문에는 이미 요약 노트가 있습니다. 다시 요약하려면 '요약 다시 만들기'를 누르세요.
+        [no-key] AI 제공자의 API 키가 없습니다. Research Helper 설정에서 키를 추가한 뒤 '다시 시도'를 누르세요. 아무것도 보내지 않았습니다.
+        [time-limit] 시간 제한에 걸려 요약을 저장하기 전에 멈췄습니다. 다시 하려면 '다시 시도'를 누르세요.
+       *[other] 요약을 저장하기 전에 실행이 멈췄습니다.
+    }
+research-helper-itempane-note-not-written =
+    { $reason ->
+        [read-only] 이 라이브러리는 읽기 전용이라 요약을 노트로 저장하지 않았습니다.
+       *[exists] 이 논문에는 이미 요약 노트가 있어 두 번째 노트를 만들지 않았습니다.
+    }

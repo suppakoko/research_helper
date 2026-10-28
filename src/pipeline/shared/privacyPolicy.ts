@@ -509,21 +509,55 @@ export async function loadPrivacyPolicy(
   deps: LoadPrivacyPolicyDeps,
   collection: CollectionRef | undefined,
 ): Promise<PrivacyPolicy> {
+  return loadStrictestPrivacyPolicy(
+    deps,
+    collection === undefined ? [] : [collection],
+  );
+}
+
+/**
+ * The policy for a job over several collections at once: the **strictest**
+ * of the global mode and every listed collection's override, by the order of
+ * {@link PRIVACY_MODES} — {@link effectiveMode} folded over the list, so each
+ * override can still only tighten (`docs/09` §3.5's note of 2026-10-29). The
+ * item pane's one-item run passes every collection its item belongs to
+ * (owner, `plan/00` §6 item 305(a)); {@link loadPrivacyPolicy} passes one or
+ * none.
+ *
+ * Fails **closed** as {@link loadPrivacyPolicy} does: with at least one
+ * collection, a missing store or any row that cannot be read gives strict
+ * and one `warn` line. An empty list gives the global mode.
+ *
+ * @param deps - see {@link LoadPrivacyPolicyDeps}
+ * @param collections - the job's collections; empty for none
+ * @returns the policy
+ */
+export async function loadStrictestPrivacyPolicy(
+  deps: LoadPrivacyPolicyDeps,
+  collections: readonly CollectionRef[],
+): Promise<PrivacyPolicy> {
   const globalMode = deps.globalMode();
-  if (collection === undefined) return createPrivacyPolicy(globalMode);
-  if (deps.store === undefined) {
+  if (collections.length === 0) return createPrivacyPolicy(globalMode);
+  const store = deps.store;
+  if (store === undefined) {
     deps.logger?.warn(
       "no collection_settings store: the job runs in strict privacy mode",
     );
     return createPrivacyPolicy("strict");
   }
   try {
-    const stored = await deps.store.get(
-      collection.libraryID,
-      collection.collectionKey,
-    );
-    const settings = readCollectionPrivacySettings(stored);
-    return createPrivacyPolicy(globalMode, settings.privacyMode);
+    let mode = effectiveMode(globalMode, undefined);
+    for (const collection of collections) {
+      const stored = await store.get(
+        collection.libraryID,
+        collection.collectionKey,
+      );
+      mode = effectiveMode(
+        mode,
+        readCollectionPrivacySettings(stored).privacyMode,
+      );
+    }
+    return createPrivacyPolicy(mode);
   } catch (error) {
     deps.logger?.warn(
       "could not read the collection's privacy settings: the job runs in " +

@@ -1739,7 +1739,10 @@ export interface TTSProvider {
 >   run counter from the record's `usage`.
 > - `privacy` is `loadPrivacyPolicy`: the global `privacy.mode` and the collection's override from
 >   `collection_settings` (§8.3). A job over no collection runs under the global mode; a store that
->   cannot answer gives strict.
+>   cannot answer gives strict. *(Decided 2026-10-29 (owner, `plan/00` §6 item 305(a)): a job opened
+>   with `QueuedPipelineJobOptions.itemCollections` — the item pane's one-item run — takes the strictest
+>   of the global mode and every listed collection's override, through `loadStrictestPrivacyPolicy`;
+>   see §12.3's note of that date.)*
 > - `checkpoint`: a job with a `JobRecord` writes to that record through `createCheckpointWriter`
 >   (§7.6's 2-second throttle) and reads `resumeState` from it; a job with no record (Phase 1's
 >   directly run `searchImport`) keeps the no-op.
@@ -5377,7 +5380,9 @@ Notes: this is the pipeline where resume matters most — 200 summaries is poten
 > `resummarize`; screening over the run's items only, so a one-item run finds no duplicate; the estimate; the cost
 > confirmation and the egress notice (`P3-T16`, `P3-T15`); the key check; the `llm` pool; the spending ceilings and
 > their question; cancel, with nothing rolled back. **A run over no collection** runs under the global privacy mode
-> (`plan/00` §6 item 278(c)), reads and writes no `routineConfirmation` record, and its cost dialog offers no "don't
+> (`plan/00` §6 item 278(c)) *(superseded for the item pane's run — Decided 2026-10-29 (owner, `plan/00` §6 item
+> 305(a)): the strictest of the global mode and the override of every collection the item belongs to; see the note
+> below)*, reads and writes no `routineConfirmation` record, and its cost dialog offers no "don't
 > ask again" box (`confirmSummarizeRun`; the confirmation request's `collection` is `undefined`); a question forced
 > by money is asked as on every run (item 274(b)). Its exclusivity key is
 > `summarize:<libraryID>/items:<the keys, sorted, comma-joined>`, so one run per item list; a collection run and an
@@ -5386,6 +5391,33 @@ Notes: this is the pipeline where resume matters most — 200 summaries is poten
 > call's own message. `SUMMARIZE_INPUT_VERSION` stays 1: both members are optional and no record is resumed (item 13
 > above). The item pane's Generate is such a run of one item with `writeNotes` off (`runItemSummary` in
 > `src/ui/dialogs/summarizeDialog.ts`; `08-ui-ux-spec.md` §3.2's note of this date).
+
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 305(a), (c)); built the same day: the item run's privacy mode, and
+> Regenerate's bypass.**
+> (a) **Privacy.** The item pane's run takes the strictest of the global `privacy.mode` and the override of every
+> collection its item belongs to (`09-security-privacy-and-api-keys.md` §3.5's note of this date). The job context
+> carries it: `QueuedPipelineJobOptions.itemCollections` (`src/bootstrap/container.ts`) lists the item's collections,
+> and `openJob` builds the policy with `loadStrictestPrivacyPolicy` over the job's collection (if any) and those, so
+> `PipelineContext.privacy.mode` — which `Planning` reads for the input scope, the egress disclosure records and
+> `routingHints` sends — is the strictest. `SummarizeInput` does not carry the collections and the record stores no
+> mode; no record is resumed (item 13 above), so nothing needs to re-read them.
+> (c) **Regenerate's bypass, and how it is keyed.** `SummarizeInput` gains an optional `bypassCache`. It is read in
+> one place, `bypassesStoredResult(input)` (`src/pipeline/summarize/summarizePipeline.ts`), which is `true` only when
+> `bypassCache` is `true` **and** the run has an item list, **no** collection and `resummarize` on; any other run
+> carrying it gets the ordinary rules, and `validate` reports it (`field: "bypassCache"`). When it is true: `CacheProbe`
+> counts none of the run's items cached, so each is priced and the cost confirmation is asked before any call; and
+> `execute` passes `bypassCache: true` to `summarizeItem` (`SummarizeItemInput.bypassCache`,
+> `src/pipeline/summarize/summarizeItem.ts`), which skips `SummaryCache.lookup` on every path (abstract, single-shot
+> and chunked) and makes the real call. The answer is stored under the **same** cache key (`SummaryCache.store`
+> overwrites the entry and its `cache.ignoreModel` pointer) and the **same** row id `workKey:promptVersion:modelId`
+> (`SummaryStore.put` upserts), so the new answer replaces the old one; a row another model or prompt version made
+> stays, as it would after any run. The bypass therefore lives only in the run's own input (and the record that
+> stores it): it is not a preference, not a cache flag and not shared state, so it cannot reach a collection run, a
+> Retry, a Generate or another item. Only the item pane's **Regenerate** sets it (`SummarySectionHost.generate`'s
+> `bypassCache` option → `ItemSummaryRequest.bypassCache` → `SummarizeInput.bypassCache`). **Retry** keeps the cache
+> rule (`resummarize` without the bypass: an unchanged text is a cache hit, with no call), and the collection run's
+> "Re-summarize existing" keeps reading 3 above and `06-summarization-and-trend-report.md` §11.2's cache, unchanged.
+> `SUMMARIZE_INPUT_VERSION` stays 1: the member is optional.
 ### 12.4 Trend report (Feature 3b) and audio (Feature 5)
 
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286; `P4-T01`):** the diagram below is

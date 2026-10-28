@@ -2755,6 +2755,15 @@ the lifecycle assertion. The section shares `item-details` with the reader conte
 > `instanceof Error`, and with it this card's integration test, 3 of 3), and a run that stores nothing shows
 > `research-helper-itempane-not-summarized` with its reason. The integration test now drives the real binding with
 > a fake provider (`test/integration/zotero/summarySection.spec.ts`).
+>
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 305(a)–(d)); built the same day, State stays `TODO`.** (a) The
+> one-item run takes the strictest privacy mode of the item's collections and the global setting
+> (`loadStrictestPrivacyPolicy`, `QueuedPipelineJobOptions.itemCollections`, `ItemSummaryDeps.collectionsOf`,
+> `collectionsOfItem`). (b) It keeps asking the cost question every time. (c) Regenerate bypasses the stored result
+> (`bypassCache` on `SummarySectionHost.generate`'s options, `ItemSummaryRequest` and `SummarizeInput`;
+> `bypassesStoredResult`; `SummarizeItemInput.bypassCache`); Retry keeps the cache rule. (d) The two result lines'
+> Korean is in the `ko-KR` bundle and both ids are on `KO_PRESENT`. The rules are `docs/09` §3.5's, `docs/08` §3.2's,
+> `docs/07` §12.3's and `docs/06` §11.2's notes of this date.
 
 ---
 

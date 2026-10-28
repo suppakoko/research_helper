@@ -229,7 +229,7 @@ import {
 import {
   createPrivacyPolicy,
   isPrivacyMode,
-  loadPrivacyPolicy,
+  loadStrictestPrivacyPolicy,
   type CollectionRef,
   type LoadPrivacyPolicyDeps,
   type PrivacyMode,
@@ -1062,6 +1062,16 @@ export interface QueuedPipelineJobOptions extends PipelineJobOptions {
    * the global mode), and a store that cannot answer gives a strict policy.
    */
   readonly collection?: CollectionRef;
+  /**
+   * The collections a job's one item belongs to, for a job over items rather
+   * than a collection — the item pane's one-item run (owner, `plan/00` §6
+   * item 305(a); `docs/09` §3.5's note of 2026-10-29). The policy is then the
+   * strictest of the global mode, {@link QueuedPipelineJobOptions.collection}'s
+   * override and every listed collection's override
+   * (`loadStrictestPrivacyPolicy`); with any row unreadable, strict. Absent
+   * or empty: no further collection.
+   */
+  readonly itemCollections?: readonly CollectionRef[];
 }
 
 /**
@@ -1370,7 +1380,10 @@ interface PipelineContextDeps {
  *   same session total.
  * - `privacy` — `loadPrivacyPolicy`: a job over a collection gets the stricter
  *   of the global mode and the collection's override, and strict when the
- *   override cannot be read; a job over none gets the global mode.
+ *   override cannot be read; a job over none gets the global mode, unless it
+ *   names its item's collections (`itemCollections`, item 305(a)), when it
+ *   gets the strictest of those overrides and the global mode
+ *   (`loadStrictestPrivacyPolicy`).
  * - `checkpoint` / `resumeState` — bound to the job's `JobRecord` when it has
  *   one ({@link PipelineContextFactory.openJob}); the no-op otherwise.
  *
@@ -1503,14 +1516,19 @@ function createPipelineContextFactory(
     },
 
     async openJob(options: QueuedPipelineJobOptions): Promise<PipelineJob> {
-      const { record, collection } = options;
+      const { record, collection, itemCollections } = options;
       if (record !== undefined && record.pipelineId !== options.pipelineId) {
         throw new ConfigurationError(
           `[research-helper] job ${record.id} is a "${record.pipelineId}" ` +
             `record; it cannot be opened as "${options.pipelineId}"`,
         );
       }
-      const privacy = await loadPrivacyPolicy(deps.privacy, collection);
+      // The stricter of the global mode and the collection's override; with
+      // an item's collections (item 305(a)), the strictest of them all.
+      const privacy = await loadStrictestPrivacyPolicy(deps.privacy, [
+        ...(collection === undefined ? [] : [collection]),
+        ...(itemCollections ?? []),
+      ]);
       return build(options, privacy, record);
     },
   };

@@ -989,12 +989,9 @@ export const KO_PENDING_REVIEW = [
   // `P3-T29`'s summarize window and removal command (24) left this list on
   // 2026-10-29: the owner approved the coordinator's Korean (`G-41`, plan/00
   // §6 item 304), so all twenty-four are on KO_PRESENT.
-  // The item pane's two result lines (owner, plan/00 §6 item 303(a), (b)).
-  // `G-41` owns the translation; the `ko-KR` bundle carries each as a
-  // `# NEEDS REVIEW` commented stub with its English source, and nothing
-  // was machine-translated.
-  "research-helper-itempane-not-summarized",
-  "research-helper-itempane-note-not-written",
+  // The item pane's two result lines (owner, plan/00 §6 item 303(a), (b))
+  // left this list on 2026-10-29: the owner approved the coordinator's Korean
+  // (`G-41`, plan/00 §6 item 305(d)), so both are on KO_PRESENT.
   // --- searchDialog (62) ---
   // `P1-T45`. On this list and not on `KO_PRESENT`: the `ko-KR` bundle carries
   // all three as commented stubs with their English source, which the
@@ -1373,6 +1370,12 @@ export const KO_PRESENT = [
   "research-helper-remove-notes-confirm",
   "research-helper-remove-notes-none",
   "research-helper-remove-notes-done",
+  // The item pane's two result lines (plan/00 §6 item 303(a), (b)): Korean
+  // drafted by the coordinator and reviewed by the owner on 2026-10-29
+  // (`G-41`, plan/00 §6 item 305(d)), inserted byte for byte from
+  // plan/reports/ko-review-305.ftl.
+  "research-helper-itempane-not-summarized",
+  "research-helper-itempane-note-not-written",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

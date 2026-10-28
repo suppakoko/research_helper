@@ -56,9 +56,12 @@ import type { EgressDisclosure } from "../../../src/pipeline/shared/egressDisclo
 import type { RunEstimate } from "../../../src/pipeline/shared/estimate";
 import {
   createPrivacyPolicy,
+  loadStrictestPrivacyPolicy,
+  type PrivacyMode,
   type RoutineConfirmation,
 } from "../../../src/pipeline/shared/privacyPolicy";
 import {
+  bypassesStoredResult,
   createJobNoticeRouter,
   createSummarizePipeline,
   isOutage,
@@ -93,6 +96,7 @@ import { notStoredReason } from "../../../src/ui/panes/summarySection";
 import {
   createJobStore,
   createSummaryStore,
+  type CollectionSettingsStore,
   type SqlConnection,
   type SqlParam,
   type SummaryStore,
@@ -1146,19 +1150,54 @@ function itemRun(
   options: {
     dialog?: "run" | "cancel";
     ceiling?: "resume" | "cancel";
+    /** The item's collections (`collectionsOf`); none by default. */
+    collections?: readonly CollectionRefLike[];
+    /**
+     * When set, each job context's policy is `loadStrictestPrivacyPolicy`
+     * over these overrides (by collection key) and `global`, as `openJob`
+     * builds it in the product; otherwise the harness's balanced policy.
+     */
+    privacy?: {
+      readonly global: PrivacyMode;
+      readonly overrides: Readonly<Record<string, PrivacyMode>>;
+    };
   } = {},
 ) {
   const dialogs: CostDialogInput[] = [];
   const routineReads: unknown[] = [];
   const routineWrites: unknown[] = [];
+  const opened: (readonly CollectionRefLike[])[] = [];
+  const modes: string[] = [];
   const source = createCancellationTokenSource();
+  const privacy = options.privacy;
+  const settings = {
+    get: (_libraryID: number, collectionKey: string) => {
+      const mode = privacy?.overrides[collectionKey];
+      return Promise.resolve(
+        mode === undefined ? undefined : { privacyMode: mode },
+      );
+    },
+    put: () => Promise.resolve(),
+  } as unknown as CollectionSettingsStore;
   const deps: ItemSummaryDeps = {
     pipeline: h.pipeline,
-    openJob: (record) =>
-      Promise.resolve({
-        context: h.context(record?.id ?? "prepare-only", source),
+    collectionsOf: () => options.collections ?? [],
+    openJob: async (record, _token, itemCollections) => {
+      opened.push(itemCollections);
+      const context = h.context(record?.id ?? "prepare-only", source);
+      const policy =
+        privacy === undefined
+          ? context.privacy
+          : await loadStrictestPrivacyPolicy(
+              { globalMode: () => privacy.global, store: settings },
+              itemCollections,
+            );
+      modes.push(policy.mode);
+      return {
+        context: { ...context, privacy: policy },
         finish: () => Promise.resolve(),
-      }),
+      };
+    },
     enqueue: (input) =>
       h.jobs.enqueue("summarize", input, {
         priority: "normal",
@@ -1194,9 +1233,20 @@ function itemRun(
     dialogs,
     routineReads,
     routineWrites,
+    opened,
+    modes,
     source,
-    run: (itemKey: string, regenerate: boolean) =>
-      runItemSummary(deps, { libraryID: 1, itemKey, regenerate }, source.token),
+    run: (itemKey: string, regenerate: boolean, bypassCache?: boolean) =>
+      runItemSummary(
+        deps,
+        {
+          libraryID: 1,
+          itemKey,
+          regenerate,
+          ...(bypassCache !== undefined && { bypassCache }),
+        },
+        source.token,
+      ),
   };
 }
 
@@ -1241,7 +1291,7 @@ describe("runItemSummary — the item pane's one-item run (item 303(a))", () => 
     expect(await h.jobs.list()).toEqual([]);
   });
 
-  it("Generate skips a stored item; Regenerate maps to resummarize and summarizes it again", async () => {
+  it("Generate skips a stored item; Retry maps to resummarize and keeps the cache rule (item 305(c))", async () => {
     const h = await harness(["abstract"]);
     await h.run({ writeNotes: false });
     const before = h.provider.calls.length;
@@ -1249,12 +1299,72 @@ describe("runItemSummary — the item pane's one-item run (item 303(a))", () => 
     expect(await reasonOf(t.run("K0000", false))).toBe("existing");
     expect(h.provider.calls.length).toBe(before);
     expect(t.dialogs).toHaveLength(0);
+    // Retry: regenerate without the bypass.
     expect(await reasonOf(t.run("K0000", true))).toBe("resolved");
     // The text is unchanged, so the planned call is a cache hit: nothing to
     // pay, no dialog (shouldOpenCostDialog), and the row is stored again.
     expect(t.dialogs).toHaveLength(0);
     expect(h.provider.calls.length).toBe(before);
     expect(summaryRows(h)).toBe(1);
+  });
+
+  it("Regenerate bypasses the stored result: priced, confirmed, one real call, and the new answer replaces the row and the cache entry (item 305(c))", async () => {
+    let answers = 0;
+    const h = await harness(["abstract"], {
+      script: [
+        answering(() => {
+          answers += 1;
+          return answers === 1
+            ? undefined
+            : chatResponse(
+                summaryJson("abstract").replace(
+                  "Does the intervention reduce the primary outcome?",
+                  "Regenerated question?",
+                ),
+              );
+        }),
+      ],
+    });
+    await h.run({ writeNotes: false });
+    const workKey = itemOf(0, "abstract").workKey;
+    const [old] = await h.store.listForWork(workKey);
+    expect(old?.content.researchQuestion).toBe(
+      "Does the intervention reduce the primary outcome?",
+    );
+    const before = h.provider.calls.length;
+    const t = itemRun(h);
+
+    expect(await reasonOf(t.run("K0000", true, true))).toBe("resolved");
+    // Priced (no cache hit) and asked before the call.
+    expect(t.dialogs).toHaveLength(1);
+    const dialog = t.dialogs[0];
+    expect(dialog?.mode === "preflight" && dialog.estimate.selected.calls).toBe(
+      1,
+    );
+    expect(h.provider.calls.length).toBe(before + 1);
+    // Replaced, not added: one row, same id, the new answer.
+    expect(summaryRows(h)).toBe(1);
+    const [fresh] = await h.store.listForWork(workKey);
+    expect(fresh?.id).toBe(old?.id);
+    expect(fresh?.content.researchQuestion).toBe("Regenerated question?");
+
+    // The cache entry was replaced too: with the row gone, a Retry is served
+    // from the cache (no call) and rebuilds the new answer.
+    h.connection.db.prepare("DELETE FROM summary").run();
+    expect(await reasonOf(t.run("K0000", true))).toBe("resolved");
+    expect(h.provider.calls.length).toBe(before + 1);
+    const [rebuilt] = await h.store.listForWork(workKey);
+    expect(rebuilt?.content.researchQuestion).toBe("Regenerated question?");
+  });
+
+  it("the bypass needs Regenerate: a Generate carrying it still skips the stored item", async () => {
+    const h = await harness(["abstract"]);
+    await h.run({ writeNotes: false });
+    const before = h.provider.calls.length;
+    const t = itemRun(h);
+    expect(await reasonOf(t.run("K0000", false, true))).toBe("existing");
+    expect(h.provider.calls.length).toBe(before);
+    expect(t.dialogs).toHaveLength(0);
   });
 
   it("rejects with the failed call's own error", async () => {
@@ -1279,6 +1389,158 @@ describe("runItemSummary — the item pane's one-item run (item 303(a))", () => 
     expect(await reasonOf(t.run("K0000", false))).toBe("no-text");
     expect(t.dialogs).toHaveLength(0);
     expect(h.provider.calls).toHaveLength(0);
+  });
+});
+
+describe("runItemSummary — the strictest privacy mode of the item's collections (item 305(a))", () => {
+  const STRICT = { libraryID: 1, collectionKey: "STRICT23" };
+  const LOOSE = { libraryID: 1, collectionKey: "LOOSE234" };
+  const overrides = { STRICT23: "strict", LOOSE234: "balanced" } as const;
+
+  async function inputScope(h: Harness): Promise<string | undefined> {
+    const [row] = await h.store.listForWork(itemOf(0, "fulltext").workKey);
+    return row?.inputScope.kind;
+  }
+
+  it("runs an item in a strict collection in strict mode under a balanced global mode: no full text sent", async () => {
+    const h = await harness(["fulltext"]);
+    const t = itemRun(h, {
+      collections: [STRICT],
+      privacy: { global: "balanced", overrides },
+    });
+    await t.run("K0000", false);
+    // Both halves were opened over the item's collections, and both strict.
+    expect(t.opened).toEqual([[STRICT], [STRICT]]);
+    expect(t.modes).toEqual(["strict", "strict"]);
+    const dialog = t.dialogs[0];
+    expect(dialog?.mode === "preflight" && dialog.disclosure.privacyMode).toBe(
+      "strict",
+    );
+    expect(await inputScope(h)).toBe("abstract");
+    expect(h.provider.calls.length).toBeGreaterThan(0);
+    for (const call of h.provider.calls) {
+      expect(userOf(call.request)).not.toContain("Paragraph 3 of study");
+    }
+  });
+
+  it("the same item in no strict collection follows the balanced global mode and sends its full text", async () => {
+    const h = await harness(["fulltext"]);
+    const t = itemRun(h, {
+      collections: [LOOSE],
+      privacy: { global: "balanced", overrides },
+    });
+    await t.run("K0000", false);
+    expect(t.modes).toEqual(["balanced", "balanced"]);
+    expect(await inputScope(h)).toBe("abstract+fulltext");
+  });
+
+  it("an item in two collections takes the stricter, in either order, under a full global mode", async () => {
+    for (const collections of [
+      [LOOSE, STRICT],
+      [STRICT, LOOSE],
+    ]) {
+      const h = await harness(["fulltext"]);
+      const t = itemRun(h, {
+        collections,
+        privacy: { global: "full", overrides },
+      });
+      await t.run("K0000", false);
+      expect(t.opened).toEqual([collections, collections]);
+      expect(t.modes).toEqual(["strict", "strict"]);
+      expect(await inputScope(h)).toBe("abstract");
+    }
+    const h = await harness(["fulltext"]);
+    const t = itemRun(h, {
+      collections: [LOOSE],
+      privacy: { global: "full", overrides },
+    });
+    await t.run("K0000", false);
+    expect(t.modes).toEqual(["balanced", "balanced"]);
+  });
+
+  it("stops before anything is sent when the item's collections cannot be read", async () => {
+    const h = await harness(["abstract"]);
+    const t = itemRun(h);
+    const deps = {
+      pipeline: h.pipeline,
+      collectionsOf: () => {
+        throw new Error("no item");
+      },
+    } as unknown as ItemSummaryDeps;
+    await expect(
+      runItemSummary(
+        deps,
+        { libraryID: 1, itemKey: "K0000", regenerate: false },
+        t.source.token,
+      ),
+    ).rejects.toThrow("no item");
+    expect(h.provider.calls).toHaveLength(0);
+    expect(await h.jobs.list()).toEqual([]);
+  });
+});
+
+describe("bypassesStoredResult — Regenerate's bypass is keyed to an item run (item 305(c))", () => {
+  const base = { libraryID: 1, resummarize: true, writeNotes: false };
+
+  it("holds only for bypassCache on an item list, with no collection and resummarize on", () => {
+    expect(
+      bypassesStoredResult({ ...base, itemKeys: ["K0000"], bypassCache: true }),
+    ).toBe(true);
+    expect(bypassesStoredResult({ ...base, itemKeys: ["K0000"] })).toBe(false);
+    expect(
+      bypassesStoredResult({
+        ...base,
+        itemKeys: ["K0000"],
+        bypassCache: true,
+        resummarize: false,
+      }),
+    ).toBe(false);
+    expect(
+      bypassesStoredResult({
+        ...base,
+        collectionKey: "COLLKEY1",
+        bypassCache: true,
+      }),
+    ).toBe(false);
+    expect(
+      bypassesStoredResult({
+        ...base,
+        collectionKey: "COLLKEY1",
+        itemKeys: ["K0000"],
+        bypassCache: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("validate reports it on any other run", async () => {
+    const h = await harness(["abstract"]);
+    expect(
+      h.pipeline.validate({ ...base, itemKeys: ["K0000"], bypassCache: true })
+        .ok,
+    ).toBe(true);
+    const wrong = h.pipeline.validate({
+      ...base,
+      collectionKey: "COLLKEY1",
+      bypassCache: true,
+    });
+    expect(wrong.ok).toBe(false);
+    expect(wrong.errors.map((e) => e.field)).toEqual(["bypassCache"]);
+  });
+
+  it("a collection run's Re-summarize keeps the cache rule, even if its input carried the bypass", async () => {
+    const h = await harness(Array<Kind>(2).fill("abstract"));
+    await h.run({ writeNotes: false });
+    const before = h.provider.calls.length;
+    const plain = await h.run({ writeNotes: false, resummarize: true });
+    expect(plain.view.counts.cached).toBe(2);
+    expect(h.provider.calls.length).toBe(before);
+    const carried = await h.run({
+      writeNotes: false,
+      resummarize: true,
+      bypassCache: true,
+    });
+    expect(carried.view.counts.cached).toBe(2);
+    expect(h.provider.calls.length).toBe(before);
   });
 });
 

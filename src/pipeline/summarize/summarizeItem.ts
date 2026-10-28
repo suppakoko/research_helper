@@ -33,7 +33,9 @@
  *    chunker runs **flat** until `P3-T22` and gate `G-22` rule (`plan/00` §6
  *    item 300): {@link SummarizeItemDeps.imradDetectorValidated}.
  * 5. **The cache first** (`P3-T26`): every plan's key is looked up before any
- *    call; a hit makes none.
+ *    call; a hit makes none. Under the item pane's Regenerate
+ *    ({@link SummarizeItemInput.bypassCache}, item 305(c)) nothing is looked
+ *    up and the call is made.
  * 6. Every request goes through `completeJSON` at the prompt's temperature
  *    (0), `top_p: 1`, a fixed seed, `effort: "low"` on the summary prompts,
  *    the mode's routing hints and `budget: deps.budget`.
@@ -120,6 +122,7 @@ import {
   createSummaryCache,
   type CachedSummary,
   type SummaryCache,
+  type SummaryCacheLookup,
   type SummaryCacheRequest,
   type SummaryPromptId,
 } from "./summaryCache";
@@ -303,6 +306,13 @@ export interface SummarizeItemInput {
   /** `P3-T27`'s decision for a non-English item, applied to the stored row. */
   readonly nonEnglish?:
     Pick<ScreenDecision, "nonEnglishPolicy" | "sourceLanguage"> | undefined;
+  /**
+   * The item pane's Regenerate (owner, `plan/00` §6 item 305(c)): no
+   * {@link SummaryCache.lookup} on any path, so the call is made; its answer
+   * is stored under the same key and row id, replacing both. Set by the
+   * summarize pipeline only when `bypassesStoredResult` holds.
+   */
+  readonly bypassCache?: boolean | undefined;
 }
 
 /** What {@link summarizeItem} needs: the job's context, in pieces. */
@@ -597,6 +607,17 @@ export async function summarizeItem(
 ): Promise<SummarizeItemResult> {
   const { source } = input;
   deps.token.throwIfCancelled();
+  // Regenerate's bypass (item 305(c)): a lookup that always misses.
+  const lookup = (
+    request: SummaryCacheRequest,
+  ): Promise<SummaryCacheLookup<PaperSummary>> =>
+    input.bypassCache === true
+      ? Promise.resolve({
+          hit: false,
+          key: deps.summaryCache.keyOf(request),
+          reason: "miss",
+        })
+      : deps.summaryCache.lookup<PaperSummary>(request);
 
   const stub = (): SummarizeItemResult => ({
     kind: "stub",
@@ -832,9 +853,7 @@ export async function summarizeItem(
       vars,
       plan: undefined,
     };
-    const found = await deps.summaryCache.lookup<PaperSummary>(
-      prepared.request,
-    );
+    const found = await lookup(prepared.request);
     if (found.hit) {
       entry = found.entry;
       fromCache = true;
@@ -1042,7 +1061,7 @@ export async function summarizeItem(
       planAt,
       async (plan) => {
         const p = prepare(plan);
-        const found = await deps.summaryCache.lookup<PaperSummary>(p.request);
+        const found = await lookup(p.request);
         if (found.hit) {
           return { prepared: p, hit: found.entry, warnings: found.warnings };
         }

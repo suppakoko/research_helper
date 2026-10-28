@@ -2795,6 +2795,45 @@ describe("P3-T35 — every job's PipelineContext carries a real cache, budget, l
     expect(h.errors).toStrictEqual([]);
   });
 
+  it("gives a job over an item's collections the strictest of their overrides and the global mode (plan/00 §6 item 305(a))", async () => {
+    const database = sqliteDatabase();
+    const h = harness(
+      { pluginDatabase: database.source },
+      { "privacy.mode": "balanced" },
+    );
+    const graph = await installServices(h.scope, h.options);
+    await graph.database.ready;
+    const token = createCancellationTokenSource().token;
+    await graph.collectionSettings.put(1, "STRICT23", {
+      privacyMode: "strict",
+    });
+    await graph.collectionSettings.put(1, "LOOSE234", { privacyMode: "full" });
+    const modeOf = async (...keys: string[]): Promise<string> => {
+      const job = await graph.pipelineContext.openJob({
+        pipelineId: "summarize",
+        token,
+        itemCollections: keys.map((collectionKey) => ({
+          libraryID: 1,
+          collectionKey,
+        })),
+      });
+      job.dispose();
+      return job.context.privacy.mode;
+    };
+
+    // A strict collection under a balanced global mode: strict.
+    expect(await modeOf("STRICT23")).toBe("strict");
+    // Two collections: the stricter, in either order.
+    expect(await modeOf("LOOSE234", "STRICT23")).toBe("strict");
+    expect(await modeOf("STRICT23", "LOOSE234")).toBe("strict");
+    // An override never loosens; no collection is the global mode.
+    expect(await modeOf("LOOSE234", "NOROW234")).toBe("balanced");
+    expect(await modeOf()).toBe("balanced");
+
+    await h.scope.unregisterAll();
+    expect(h.errors).toStrictEqual([]);
+  });
+
   it("gives a collection job a strict policy when there is no database, and writes nothing", async () => {
     const h = harness({}, { "privacy.mode": "full" });
     const graph = await installServices(h.scope, h.options);

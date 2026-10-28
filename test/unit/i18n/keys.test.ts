@@ -154,7 +154,10 @@ const NON_ID_L10N_CONSTANTS = ["L10N_EXPORT_TAKES_NO_PATH"];
  * *2026-10-27:* `P4-T16`'s four strings put it back to four members (item
  * 291); the exemption stays, because the owner's next review empties it
  * again. *Later on 2026-10-27:* the owner reviewed those four (item 292(a)),
- * so the list is empty again.
+ * so the list is empty again. *2026-10-29:* `P3-T28`'s and `P3-T29`'s
+ * strings and the item pane's two result lines put it back (items 302, 303);
+ * the owner reviewed all of them that day (items 304, 305(d)), so it is empty
+ * again.
  */
 const MAY_BE_EMPTY: readonly ListName[] = ["KO_PENDING_REVIEW"];
 
@@ -1043,8 +1046,9 @@ describe("src/i18n/keys.ts — the item pane's result lines (plan/00 §6 item 30
     expect(sharedBy(two, read("ERROR_MESSAGE_IDS"))).toEqual([]);
   });
 
-  it("puts both on KO_PENDING_REVIEW, en-US only until the owner reviews the Korean (G-41)", () => {
-    expect(notIn(two, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(two, read("KO_PRESENT"))).toEqual([]);
+  // Moved 2026-10-29: the owner approved the Korean (G-41, plan/00 §6 item 305(d)).
+  it("puts both on KO_PRESENT now the owner reviewed the Korean (G-41, item 305(d)), neither still pending", () => {
+    expect(notIn(two, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(two, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 });

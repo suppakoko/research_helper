@@ -2374,6 +2374,15 @@ the caller of what the card builds; if it does not, the caller is added with a d
     batches. The approved entries are recorded byte for byte in `plan/reports/ko-review-304.ftl`. They replace each
     id's "NEEDS REVIEW" stub, and the 39 ids move from `KO_PENDING_REVIEW` to `KO_PRESENT`.
 
+305. **Four lines raised by `plan/reports/followup-303-304.md`.** **DECIDED 2026-10-29 (owner), each as
+    recommended:** (a) A one-item run from the item pane uses the strictest privacy mode among the item's
+    collections' overrides and the global setting. A collection set to strict is therefore never summarized more
+    loosely from the item pane. (b) A one-item run keeps asking the routine cost question every time, with no "don't
+    ask again" record. (c) Regenerate really asks the model again: it bypasses the stored result for that item, passes
+    the cost confirmation, and its new answer replaces the old row. Retry keeps the cache rule. (d) The Korean of the two
+    new item-pane strings is approved as drafted in chat, recorded byte for byte in
+    `plan/reports/ko-review-305.ftl` (G-41).
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4
