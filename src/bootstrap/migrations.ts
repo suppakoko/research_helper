@@ -19,7 +19,11 @@
  * (`plan/00` §6 item 265 (b), owner, 2026-10-21). Version 5 is §8.3's
  * `collection_settings` table: the per-collection privacy override and the
  * "don't ask again for this collection" record (`P3-T15`; `docs/09` §3.5,
- * §3.6 item 2).
+ * §3.6 item 2). Version 6 is §8.3's `summary` table and `idx_summary_work`,
+ * without the `REFERENCES work(work_key)` clause (`P3-T25`; owner, `plan/00`
+ * §6 item 272(b): no phase writes `work` yet, and whether
+ * `Zotero.DBConnection` enforces foreign keys is unverified — the migration
+ * that first populates `work` adds it).
  *
  * ## The bookkeeping
  *
@@ -156,6 +160,30 @@ export const COLLECTION_SETTINGS_DDL = `CREATE TABLE collection_settings (
   PRIMARY KEY (library_id, collection_key)
 )`;
 
+/**
+ * `docs/07` §8.3's `summary` table (`P3-T25`), byte for byte, as corrected
+ * 2026-10-28: no `REFERENCES work(work_key) ON DELETE CASCADE` on `work_key`
+ * (owner, `plan/00` §6 item 272(b)). One row per `StoredSummary`
+ * (`docs/07` §5.2); `src/zotero/db.ts`'s `createSummaryStore` is its only
+ * reader and writer.
+ */
+export const SUMMARY_DDL = `CREATE TABLE summary (
+  id                  TEXT PRIMARY KEY,
+  work_key            TEXT NOT NULL,
+  zotero_item_key     TEXT,
+  prompt_version      TEXT NOT NULL,
+  provider_id         TEXT NOT NULL,
+  model_id            TEXT NOT NULL,
+  input_scope         TEXT NOT NULL,
+  source_item_version TEXT,
+  json                TEXT NOT NULL,
+  generated_at        INTEGER NOT NULL
+)`;
+
+/** `docs/07` §8.3's index for "queried by work + version". */
+export const SUMMARY_WORK_INDEX_DDL =
+  "CREATE INDEX idx_summary_work ON summary(work_key)";
+
 /** One schema step. */
 export interface Migration {
   /** The version the file is at once this migration has run. */
@@ -189,6 +217,11 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 5,
     statements: [COLLECTION_SETTINGS_DDL],
+  },
+  // `P3-T25`: the stored summaries (`docs/07` §5.2, §8.3).
+  {
+    version: 6,
+    statements: [SUMMARY_DDL, SUMMARY_WORK_INDEX_DDL],
   },
 ];
 

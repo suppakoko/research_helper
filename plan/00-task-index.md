@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04` and `07`** (Phase 4's file, read since 2026-10-26). If a
 > row here disagrees with a card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-27 · **182 tasks: 112 `DONE`, 70 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**. **The plan has grown from the 123 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25) to 182, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-29 · **182 tasks: 112 `DONE`, 70 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**. **The plan has grown from the 123 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25) to 182, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -2340,6 +2340,14 @@ the caller of what the card builds; if it does not, the caller is added with a d
     least 0.664). `docs/06` §5.3 step 3's "guaranteed by D-06-4" is corrected. (b) `P3-T16`'s pre-run estimate is fixed
     now, so that it never under-states a chunked paper. It counts the chunks the chunker would actually plan,
     section-aware or flat, with the same budget constants defined once.
+
+300. **`P3-T25` before the labels, 2026-10-28.** **DECIDED 2026-10-28 (owner):** `P3-T25` (per-paper summarizer,
+    DR-1, grounding check) is built now on `P3-T23`, with a fake model only. Until `P3-T22` and G-22 rule, `auto` mode
+    sends full text by the flat path (`IMRAD_DETECTOR_VALIDATED` stays false), as `docs/06` §4.3 already requires.
+
+301. **`P3-T25`'s grounding-retry instruction, 2026-10-29.** **DECIDED 2026-10-29 (owner):** `GROUNDING_RETRY_INSTRUCTION`
+    (`src/pipeline/summarize/summarizeItem.ts`; quoted in `docs/06` §12.1's note of 2026-10-28) is approved as drafted
+    (`plan/reports/P3-T25.md`).
 
 ## 7. Regenerating this file
 

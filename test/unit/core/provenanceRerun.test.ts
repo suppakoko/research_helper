@@ -45,6 +45,8 @@ import {
   PROVENANCE_COLLECTION_INDEX_DDL,
   SCHEMA_VERSION_DDL,
   SEARCH_PROVENANCE_DDL,
+  SUMMARY_DDL,
+  SUMMARY_WORK_INDEX_DDL,
   USER_PRICE_DDL,
   runMigrations,
 } from "../../../src/bootstrap/migrations";
@@ -262,9 +264,10 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
   // appended version 4 (`user_price`; its checks are in
   // test/unit/zotero/userPriceStore.test.ts), and with P3-T15, which appended
   // version 5 (`collection_settings`; its checks are in
-  // test/unit/pipeline/privacyPolicy.test.ts).
-  it("is version 1 of exactly those two statements, then P3-T34's job table as version 2, P3-T33's cache_entry as version 3, user_price as version 4 and collection_settings as version 5", () => {
-    expect(LATEST_SCHEMA_VERSION).toBe(5);
+  // test/unit/pipeline/privacyPolicy.test.ts), and with P3-T25, which appended
+  // version 6 (`summary`; its byte-for-byte check is the next test).
+  it("is version 1 of exactly those two statements, then P3-T34's job table as version 2, P3-T33's cache_entry as version 3, user_price as version 4, collection_settings as version 5 and summary as version 6", () => {
+    expect(LATEST_SCHEMA_VERSION).toBe(6);
     expect(MIGRATIONS).toStrictEqual([
       {
         version: 1,
@@ -290,17 +293,31 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
         version: 5,
         statements: [COLLECTION_SETTINGS_DDL],
       },
+      {
+        version: 6,
+        statements: [SUMMARY_DDL, SUMMARY_WORK_INDEX_DDL],
+      },
     ]);
   });
 
-  it("brings a fresh file to schema_version 5 with §8.3's columns and index, read back", async () => {
+  // P3-T25: `summary` is docs/07 §8.3's statement as corrected 2026-10-28 —
+  // no REFERENCES work(work_key) clause (owner, plan/00 §6 item 272(b)).
+  it("copies summary and idx_summary_work from docs/07 §8.3 byte for byte, with no foreign key", () => {
+    expect(SUMMARY_DDL).toBe(docsStatement("CREATE TABLE summary ("));
+    expect(SUMMARY_WORK_INDEX_DDL).toBe(
+      docsStatement("CREATE INDEX idx_summary_work"),
+    );
+    expect(SUMMARY_DDL).not.toContain("REFERENCES");
+  });
+
+  it("brings a fresh file to schema_version 6 with §8.3's columns and index, read back", async () => {
     const connection = sqlite();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 5 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 6 });
     const { db } = connection;
 
     expect(
       db.prepare("SELECT version FROM schema_version").all().map(plain),
-    ).toStrictEqual([{ version: 5 }]);
+    ).toStrictEqual([{ version: 6 }]);
     expect(
       columns(db, "search_provenance").map(({ name, type, notnull, pk }) => [
         name,
@@ -338,18 +355,20 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
       "index:idx_cache_lru",
       "index:idx_job_status",
       "index:idx_provenance_collection",
+      "index:idx_summary_work",
       "table:cache_entry",
       "table:collection_settings",
       "table:job",
       "table:schema_version",
       "table:search_provenance",
+      "table:summary",
       "table:user_price",
     ]);
   });
 
   it("is idempotent: a second run reads the version and changes nothing", async () => {
     const connection = await migrated();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 5, to: 5 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 6, to: 6 });
     expect(
       one(connection.db, "SELECT COUNT(*) AS n FROM schema_version"),
     ).toStrictEqual({ n: 1 });

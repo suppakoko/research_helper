@@ -41,6 +41,9 @@
  *   (`src/pipeline/shared/privacyPolicy.ts`), because `zotero/` may not import
  *   `pipeline/` (`docs/07` §2.3); the store keeps a JSON object and the
  *   pipeline gives it meaning.
+ * - {@link createSummaryStore} — {@link SummaryStore} over the `summary`
+ *   table (`P3-T25`; `docs/07` §5.2, §8.3), on the same connection; every
+ *   row passes the redaction gate ({@link gateStoredSummary}).
  * - {@link createCacheBlobStore} — `src/core/cache/sqliteCache.ts`'s
  *   `CacheBlobStore` port: `docs/07` §9.2's blob directory for cache values
  *   over 256 KB (`P3-T33`). The `cache_entry` rows themselves are written by
@@ -79,6 +82,7 @@ import {
   type UserPriceStore,
 } from "../llm/shared/pricing";
 import type { ProviderId } from "../model/ids";
+import type { StoredRedactionMark, StoredSummary } from "../model/summary";
 
 /** The name `Zotero.DBConnection` resolves in the data directory (§8.2). */
 export const PLUGIN_DATABASE_NAME = "research-helper";
@@ -589,6 +593,200 @@ export function createCollectionSettingsStore(
     async delete(libraryID: number, collectionKey: string): Promise<void> {
       const key = collectionRowKey(libraryID, collectionKey);
       await db.queryAsync(DELETE_COLLECTION_SETTINGS, key, QUIET);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Stored summaries (`P3-T25`)
+// ---------------------------------------------------------------------------
+
+/**
+ * `StoredSummary`'s identifier fields, copied through the redaction gate
+ * unchanged (`docs/07` §5.2's note of 2026-10-28, item 6): a 64-character
+ * `contentHash` or a `hash:` work key is exactly what `redact()`'s catch-all
+ * would otherwise destroy. Never a field a user or a model writes free text
+ * into; `warnings` is gated.
+ */
+export const STORED_SUMMARY_VERBATIM_KEYS: readonly string[] = Object.freeze([
+  "id",
+  "workKey",
+  "zoteroItemKey",
+  "contentHash",
+  "promptId",
+  "promptVersion",
+  "providerId",
+  "modelId",
+  "sourceItemVersion",
+  "itemKey",
+  "schemaVersion",
+  "sourceTier",
+]);
+
+/** A `StoredSummary` before its own pass through the gate. */
+export type UngatedStoredSummary = Omit<StoredSummary, "redaction"> & {
+  /** A mark an earlier pass produced (the summary cache's), summed in. */
+  readonly redaction?: StoredRedactionMark | undefined;
+};
+
+/**
+ * The one gate (`redactRecord`, `src/core/provenance.ts`; `P3-T36`) applied to
+ * a whole row, `content` included, with {@link STORED_SUMMARY_VERBATIM_KEYS}
+ * copied unchanged. The returned mark is the earlier one plus this pass's.
+ *
+ * @param row - the row about to be stored
+ * @returns the row as it may be stored, with its mark
+ */
+export function gateStoredSummary(row: UngatedStoredSummary): StoredSummary {
+  const { redaction: earlier, ...rest } = row;
+  const gated = redactRecord(rest, {
+    verbatimKeys: STORED_SUMMARY_VERBATIM_KEYS,
+  });
+  const before = earlier ?? {
+    partlyRedacted: false,
+    redactedStrings: 0,
+    droppedFields: 0,
+  };
+  return {
+    ...gated.record,
+    redaction: {
+      partlyRedacted: before.partlyRedacted || gated.mark.partlyRedacted,
+      redactedStrings: before.redactedStrings + gated.mark.redactedStrings,
+      droppedFields: before.droppedFields + gated.mark.droppedFields,
+    },
+  };
+}
+
+/**
+ * The `summary` table (`docs/07` §8.3, migration version 6), one
+ * `StoredSummary` per row. The port is declared here, as
+ * {@link CollectionSettingsStore} is, because `zotero/` may not import
+ * `pipeline/` (`docs/07` §2.3).
+ *
+ * Writer: `summarizeItem` (`src/pipeline/summarize/summarizeItem.ts`,
+ * `P3-T25`), called by the summarize pipeline (`P3-T29`) and the item pane's
+ * Generate (`P3-T28`). Readers: the item pane (`P3-T28`) and the trend report
+ * (Phase 4).
+ */
+export interface SummaryStore {
+  /**
+   * Gate `record` again (idempotent; its mark is kept and summed) and write
+   * it, replacing a row with the same `id`.
+   *
+   * @returns the row as written
+   * @throws RangeError, writing nothing, for an empty `id` or `workKey`
+   */
+  put(record: StoredSummary): Promise<StoredSummary>;
+  /**
+   * The row with `id`, or `undefined`.
+   *
+   * @throws StorageError when the stored text is not a summary row
+   */
+  get(id: string): Promise<StoredSummary | undefined>;
+  /**
+   * Every row of one work, newest first.
+   *
+   * @throws StorageError when a stored text is not a summary row
+   */
+  listForWork(workKey: string): Promise<readonly StoredSummary[]>;
+}
+
+const UPSERT_SUMMARY =
+  "INSERT INTO summary (id, work_key, zotero_item_key, prompt_version, provider_id, " +
+  "model_id, input_scope, source_item_version, json, generated_at) " +
+  "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+  "ON CONFLICT(id) DO UPDATE SET work_key = excluded.work_key, " +
+  "zotero_item_key = excluded.zotero_item_key, prompt_version = excluded.prompt_version, " +
+  "provider_id = excluded.provider_id, model_id = excluded.model_id, " +
+  "input_scope = excluded.input_scope, source_item_version = excluded.source_item_version, " +
+  "json = excluded.json, generated_at = excluded.generated_at";
+
+const SELECT_SUMMARY = "SELECT json FROM summary WHERE id = ?";
+
+const SELECT_SUMMARIES_FOR_WORK =
+  "SELECT json FROM summary WHERE work_key = ? ORDER BY generated_at DESC, rowid DESC";
+
+/** A parsed `json` column, checked for the members every reader needs. */
+function storedSummaryFrom(result: unknown): StoredSummary {
+  const json = (result as Record<string, unknown>)["json"];
+  let value: unknown;
+  try {
+    value = JSON.parse(String(json));
+  } catch {
+    value = undefined;
+  }
+  const row = value as Partial<StoredSummary> | undefined;
+  if (
+    row === undefined ||
+    row === null ||
+    typeof row !== "object" ||
+    typeof row.id !== "string" ||
+    typeof row.workKey !== "string" ||
+    typeof row.content !== "object" ||
+    row.content === null ||
+    typeof row.contentHash !== "string" ||
+    !Array.isArray(row.warnings)
+  ) {
+    throw new StorageError(
+      "[research-helper] a summary row is not a stored summary",
+    );
+  }
+  return row as StoredSummary;
+}
+
+/**
+ * {@link SummaryStore} over the plugin's database (`P3-T25`; `docs/07` §5.2,
+ * §8.3). Every row passes {@link gateStoredSummary} on the way in, so a row
+ * holds only what the gate lets through whatever the caller handed in. Every
+ * statement is {@link QUIET}: the `json` parameter is a whole summary.
+ *
+ * Constructed on the one shared connection by `installPluginDatabase`
+ * (`src/bootstrap/pluginDatabase.ts`) — wired by `P3-T29`, the first card that
+ * runs `summarizeItem` in the product.
+ *
+ * @param db - the connection {@link openPluginDatabase} returned, migrated
+ * @returns the store
+ */
+export function createSummaryStore(db: SqlConnection): SummaryStore {
+  return {
+    async put(record: StoredSummary): Promise<StoredSummary> {
+      if (record.id === "" || record.workKey === "") {
+        throw new RangeError(
+          "[research-helper] a summary row needs an id and a work key; " +
+            "nothing was stored",
+        );
+      }
+      const row = gateStoredSummary(record);
+      await db.queryAsync(
+        UPSERT_SUMMARY,
+        [
+          row.id,
+          row.workKey,
+          row.zoteroItemKey ?? null,
+          row.promptVersion,
+          row.providerId,
+          row.modelId,
+          JSON.stringify(row.inputScope),
+          row.sourceItemVersion ?? null,
+          JSON.stringify(row),
+          row.generatedAtEpochMs,
+        ],
+        QUIET,
+      );
+      return row;
+    },
+
+    async get(id: string): Promise<StoredSummary | undefined> {
+      const rows = resultRows(await db.queryAsync(SELECT_SUMMARY, [id], QUIET));
+      const first = rows[0];
+      return first === undefined ? undefined : storedSummaryFrom(first);
+    },
+
+    async listForWork(workKey: string): Promise<readonly StoredSummary[]> {
+      const rows = resultRows(
+        await db.queryAsync(SELECT_SUMMARIES_FOR_WORK, [workKey], QUIET),
+      );
+      return rows.map(storedSummaryFrom);
     },
   };
 }

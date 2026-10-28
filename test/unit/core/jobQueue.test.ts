@@ -282,7 +282,7 @@ describe("P3-T34 — the job table is docs/07 §8.3's, as migration version 2", 
       },
     ]);
     connection.db.exec("INSERT INTO search_provenance VALUES ('kept')");
-    expect(await runMigrations(connection)).toStrictEqual({ from: 1, to: 5 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 1, to: 6 });
     expect(
       connection.db
         .prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'job'")

@@ -706,7 +706,8 @@ describe("collection_settings — migration version 5, docs/07 §8.3's statement
     expect(COLLECTION_SETTINGS_DDL).toBe(
       docs.slice(start, docs.indexOf(";", start)),
     );
-    expect(LATEST_SCHEMA_VERSION).toBe(5);
+    // 6 since P3-T25 appended `summary` after it.
+    expect(LATEST_SCHEMA_VERSION).toBe(6);
     const { connection } = await migratedStore();
     expect(
       connection.db
@@ -728,13 +729,13 @@ describe("collection_settings — migration version 5, docs/07 §8.3's statement
     ]);
   });
 
-  it("brings a version-4 file to version 5 without touching user_price", async () => {
+  it("brings a version-4 file through version 5 without touching user_price", async () => {
     const connection = sqlite();
     await runMigrations(connection, [
       { version: 4, statements: ["CREATE TABLE user_price (model_id TEXT)"] },
     ]);
     connection.db.exec("INSERT INTO user_price VALUES ('kept')");
-    expect(await runMigrations(connection)).toStrictEqual({ from: 4, to: 5 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 4, to: 6 });
     expect(
       connection.db.prepare("SELECT * FROM user_price").all(),
     ).toHaveLength(1);

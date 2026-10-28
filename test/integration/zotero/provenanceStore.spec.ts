@@ -75,8 +75,10 @@ import {
   createSearchImportViewModel,
   type SearchImportViewModel,
 } from "../../../src/ui/viewModels/searchImportViewModel";
+import type { StoredSummary } from "../../../src/model/summary";
 import {
   createCollectionSettingsStore,
+  createSummaryStore,
   PLUGIN_DATABASE_FILE,
 } from "../../../src/zotero/db";
 
@@ -466,8 +468,9 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
   // table and `idx_job_status` as migration version 2, to 3 by P3-T33,
   // which appended `cache_entry` and its two indexes as version 3, and to 4
   // by plan/00 §6 item 265 (b), which appended `user_price` as version 4, and
-  // to 5 by P3-T15, which appended `collection_settings` as version 5.
-  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 5, with docs/07 §8.3's tables and indexes", async function () {
+  // to 5 by P3-T15, which appended `collection_settings` as version 5, and
+  // to 6 by P3-T25, which appended `summary` and `idx_summary_work` as version 6.
+  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 6, with docs/07 §8.3's tables and indexes", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     const store = await provenance();
     const expected = PathUtils.join(
@@ -482,7 +485,7 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       "never Zotero's own database",
     );
     assert.isTrue(await IOUtils.exists(store.path), "the file exists");
-    assert.strictEqual(store.schemaVersion, 5);
+    assert.strictEqual(store.schemaVersion, 6);
 
     const { database } = store;
     assert.strictEqual(
@@ -491,8 +494,8 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
           "SELECT MAX(version) FROM schema_version",
         ),
       ),
-      5,
-      "schema_version reads 5",
+      6,
+      "schema_version reads 6",
     );
     assert.strictEqual(
       Number(
@@ -540,11 +543,13 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
         "index:idx_cache_lru",
         "index:idx_job_status",
         "index:idx_provenance_collection",
+        "index:idx_summary_work",
         "table:cache_entry",
         "table:collection_settings",
         "table:job",
         "table:schema_version",
         "table:search_provenance",
+        "table:summary",
         "table:user_price",
       ],
       "no table or index docs/07 §8.3 does not declare",
@@ -617,6 +622,113 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       ],
       "docs/07 §8.3's collection_settings columns, read back",
     );
+    // P3-T25: summary's columns and types, in §8.3's order, and no foreign
+    // key (owner, plan/00 §6 item 272(b)).
+    const summaryColumns = (await database.queryAsync(
+      "SELECT name, type, \"notnull\" AS nn, pk FROM pragma_table_info('summary') ORDER BY cid",
+    )) as Record<string, unknown>[];
+    assert.deepEqual(
+      summaryColumns.map((row) => [
+        String(row["name"]),
+        String(row["type"]),
+        Number(row["nn"]),
+        Number(row["pk"]),
+      ]),
+      [
+        ["id", "TEXT", 0, 1],
+        ["work_key", "TEXT", 1, 0],
+        ["zotero_item_key", "TEXT", 0, 0],
+        ["prompt_version", "TEXT", 1, 0],
+        ["provider_id", "TEXT", 1, 0],
+        ["model_id", "TEXT", 1, 0],
+        ["input_scope", "TEXT", 1, 0],
+        ["source_item_version", "TEXT", 0, 0],
+        ["json", "TEXT", 1, 0],
+        ["generated_at", "INTEGER", 1, 0],
+      ],
+      "docs/07 §8.3's summary columns, read back",
+    );
+    const summaryKeys = (await database.queryAsync(
+      "SELECT COUNT(*) AS n FROM pragma_foreign_key_list('summary')",
+    )) as Record<string, unknown>[];
+    assert.strictEqual(Number(summaryKeys[0]?.["n"]), 0, "no foreign key");
+  });
+
+  // P3-T25: a StoredSummary row through the redaction gate, on the one shared
+  // connection inside Zotero 10.0.3 — the ON CONFLICT(id) upsert, and no
+  // synthetic key planted in a warning reaching the file.
+  it("round-trips a StoredSummary row through the redaction gate, replacing it by id", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const { database } = await provenance();
+    const store = createSummaryStore(database);
+    const planted = "sk-ant-" + "x".repeat(30);
+    const workKey = `${TAG}-w`;
+    const row: StoredSummary = {
+      id: `${workKey}:1.0.0:mock-model-2026-01-01`,
+      workKey,
+      zoteroItemKey: "ABCD2345",
+      content: {
+        schemaVersion: "paper-summary-v1",
+        itemKey: "ABCD2345",
+        sourceTier: "abstract",
+        confidence: "medium",
+        researchQuestion: null,
+        studyDesign: { label: null, detail: null },
+        population: { kind: null, description: null, size: null },
+        methods: [],
+        keyFindings: [],
+        effectSizes: [],
+        limitations: [],
+        novelty: null,
+        keywords: [],
+        researchTheme: null,
+        citationWorthiness: { score: 0, reason: "" },
+      },
+      inputScope: { kind: "abstract" },
+      promptId: "PAPER_SUMMARY_ABSTRACT",
+      promptVersion: "1.0.0",
+      providerId: "openrouter",
+      modelId: "mock-model-2026-01-01",
+      temperature: 0,
+      usage: undefined,
+      generatedAtEpochMs: 1,
+      sourceItemVersion: undefined,
+      contentHash: "a".repeat(64),
+      truncated: false,
+      groundingScore: undefined,
+      warnings: [`a header carried ${planted}`],
+      redaction: {
+        partlyRedacted: false,
+        redactedStrings: 0,
+        droppedFields: 0,
+      },
+    };
+    try {
+      const written = await store.put(row);
+      assert.isTrue(written.redaction.partlyRedacted, "the row is marked");
+      assert.strictEqual(written.contentHash, row.contentHash, "kept verbatim");
+      await store.put({ ...written, generatedAtEpochMs: 2 });
+      const stored = (await database.queryAsync(
+        "SELECT json, generated_at FROM summary WHERE work_key = ?",
+        [workKey],
+      )) as Record<string, unknown>[];
+      assert.strictEqual(stored.length, 1, "one row per id");
+      assert.strictEqual(Number(stored[0]?.["generated_at"]), 2, "replaced");
+      assert.isFalse(
+        String(stored[0]?.["json"]).includes(planted),
+        "no planted key in the file",
+      );
+      const read = await store.get(row.id);
+      assert.strictEqual(read?.workKey, workKey);
+      assert.deepEqual(
+        (await store.listForWork(workKey)).map((r) => r.id),
+        [row.id],
+      );
+    } finally {
+      await database
+        .queryAsync("DELETE FROM summary WHERE work_key LIKE ?", [`${TAG}%`])
+        .catch(() => undefined);
+    }
   });
 
   // P3-T33 (plan/00 §6 item 249): the database installServices opened is the

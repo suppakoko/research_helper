@@ -2222,6 +2222,8 @@ export function deriveTldr(content: PaperSummary): string;
 // src/model/summary.ts
 
 import type { PaperSummary } from "./paperSummarySchema";  // 06-… §6.3, v1
+// Corrected 2026-10-28 (P3-T25): no card creates ./paperSummarySchema; `PaperSummary` and its
+// member types are transcribed from 06-… §6.3 into this same file, src/model/summary.ts.
 
 export interface StoredSummary {
   /**
@@ -2243,8 +2245,12 @@ export interface StoredSummary {
 
   /** What the model was actually shown — critical for privacy auditing. */
   readonly inputScope: SummaryInputScope;
-  /** Which prompt produced `content`. Semantics owned by `06-…` §7. */
-  readonly promptId: "PAPER_SUMMARY_ABSTRACT" | "PAPER_SUMMARY_FULLTEXT";
+  /**
+   * Which prompt produced `content`. Semantics owned by `06-…` §7. Corrected 2026-10-28
+   * (P3-T25): `CHUNK_REDUCE` added — on 06-… §5.3's chunked path it is the prompt whose answer
+   * is the payload (`CHUNK_MAP`'s answers are only its input), and 06-… §11.2 keys it so.
+   */
+  readonly promptId: "PAPER_SUMMARY_ABSTRACT" | "PAPER_SUMMARY_FULLTEXT" | "CHUNK_REDUCE";
   readonly promptVersion: string;
   readonly providerId: ProviderId;
   readonly modelId: string;
@@ -2270,6 +2276,20 @@ export interface StoredSummary {
    */
   readonly groundingScore: number | undefined;
   readonly warnings: readonly string[];
+  /**
+   * Added 2026-10-28 (P3-T25; plan/00 §6 item 242): what the redaction gate (`redactRecord`,
+   * src/core/provenance.ts) changed in this row, `content` included — the "partly redacted"
+   * mark as data. Structurally core/'s `RedactionMark`, declared here because model/ imports
+   * nothing but model/ (§2.3).
+   */
+  readonly redaction: StoredRedactionMark;
+}
+
+/** `RedactionMark`'s three members (src/core/provenance.ts), for `StoredSummary.redaction`. */
+export interface StoredRedactionMark {
+  readonly partlyRedacted: boolean;
+  readonly redactedStrings: number;
+  readonly droppedFields: number;
 }
 // This is the ONLY envelope around a `PaperSummary`. `06-…` §6.3 previously declared a second
 // one (`CachedPaperSummary`); it was removed, and no third variant may be added.
@@ -2282,6 +2302,29 @@ export type SummaryInputScope =
   | { readonly kind: "abstract+fulltext"; readonly charsSent: number; readonly chunks: number }
   | { readonly kind: "abstract+notes"; readonly noteCount: number };
 ```
+
+> **As built 2026-10-28 (`P3-T25`; `summarizeItem` in `src/pipeline/summarize/summarizeItem.ts`,
+> `createSummaryStore` in `src/zotero/db.ts`) — readings the block above leaves open.** (1) **Only a
+> model's answer becomes a row.** A Tier 4 item gets `06-…` §3.5's stub and **no** row: a stub has
+> no prompt, provider or model, and this interface requires all three. (2) **`id`** is
+> `${workKey}:${promptVersion}:${modelId}` with `promptVersion` the producing prompt's version string
+> exactly as `promptVersion` holds it; under `cache.ignoreModel` a hit served by another model keeps
+> that model's id. (3) **`zoteroItemKey`** is the key of the regular item summarized — the item the
+> summary belongs to — set when the row is written. (4) **`inputScope`** is the scope DR-1 chose
+> (`06-…` §5.4), not merely the scope the privacy mode allowed: a full-text item summarized from its
+> abstract records `abstract`. `chunks` is `1` for a single-shot call, else the number of
+> `CHUNK_MAP` calls; `charsSent` is the UTF-16 length of the text those calls carried (overlap
+> counted once). (5) **`usage`** is the sum over every request the summary cost in this run, the
+> repair, retry and grounding retry included; a cache hit costs nothing, and the row already stored
+> for the same `id` and `contentHash` is returned unchanged, so its `usage` still says what the
+> summary cost when it was made. (6) **`redaction`** is the sum of the cache's gate pass over the
+> payload and the row's own pass; the identifiers (`id`, `workKey`, `zoteroItemKey`, `contentHash`,
+> `promptId`, `promptVersion`, `providerId`, `modelId`, `sourceItemVersion`, and `itemKey`,
+> `schemaVersion` and `sourceTier` inside `content`) are named to the gate as fields to copy
+> unchanged; everything else, `warnings` included, is gated. The store gates the row again on write
+> (the gate is idempotent) and keeps the row's mark. (7) **Columns** (§8.3's `summary`, migration
+> version 6): `input_scope` holds `inputScope` as JSON, `json` the whole gated row, `generated_at`
+> `generatedAtEpochMs`; a write with an existing `id` replaces the row.
 
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286; `P4-T01`):** the trend types below
 > **replace** the earlier `ThemeCluster` and `TrendReport` rather than sitting beside them. Those
@@ -2913,7 +2956,8 @@ export interface SerializedError {
 > next to the record; ~~**no member above holds it yet**~~ — the card that stores the row adds that
 > member and updates this section (`P3-T25` for `StoredSummary`, `P3-T34` for `JobRecord`).
 > *Corrected 2026-10-21 (`P3-T34`):* `JobRecord.redaction` now holds it, one mark per gated field,
-> and `warnings` passes the gate too. `pipelineId` is a `string` in `src/core/jobQueue/jobRecord.ts`
+> and `warnings` passes the gate too. *Corrected 2026-10-28 (`P3-T25`):* `StoredSummary.redaction`
+> holds it, one mark for the whole row (its type `StoredRedactionMark`, §5.2 above). `pipelineId` is a `string` in `src/core/jobQueue/jobRecord.ts`
 > because `core/` may not import `PipelineId` from `pipeline/` (§2.3). `checkpoint` does not pass
 > the gate: it records work keys, and a `hash:` work key is one of the identifiers above.
 > `contentHash` and `workKey` are identifiers that `KEY_PATTERNS` would replace, so the storing
@@ -4041,9 +4085,14 @@ CREATE TABLE source_record (
   retrieved_at  INTEGER NOT NULL
 );
 
+-- Decided 2026-10-23 (owner, plan/00 §6 item 272(b)); built 2026-10-28 by P3-T25 as migration
+-- version 6, this statement and idx_summary_work byte for byte: work_key carries no
+-- REFERENCES work(work_key) ON DELETE CASCADE clause, because no phase writes the work table yet
+-- and whether Zotero.DBConnection enforces foreign keys is unverified. The migration that first
+-- populates work adds it.
 CREATE TABLE summary (
   id                  TEXT PRIMARY KEY,
-  work_key            TEXT NOT NULL REFERENCES work(work_key) ON DELETE CASCADE,
+  work_key            TEXT NOT NULL,
   zotero_item_key     TEXT,
   prompt_version      TEXT NOT NULL,
   provider_id         TEXT NOT NULL,

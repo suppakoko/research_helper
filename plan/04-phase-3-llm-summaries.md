@@ -2468,6 +2468,20 @@ that pin the schema version) and the redaction-gated persistence.
 > `CHUNK_REDUCE` call itself: halving the chunk budget makes more chunks and so a larger reduce input.
 > This card decides what such an error does.
 
+> **As built 2026-10-28 (`plan/00` §6 item 300; fake model only):**
+> `summarizeItem(input, deps)` and `decideDr1` in `summarizeItem.ts`; `checkGrounding`, `tokenOverlap`
+> and `checkNumeralInvariants` in `grounding.ts`; `PaperSummary`, `StoredSummary` and `deriveTldr` in
+> `src/model/summary.ts`; `createSummaryStore` and `gateStoredSummary` in `src/zotero/db.ts`; the
+> `summary` table as migration version 6, without the `REFERENCES` clause (item 272(b)). **Callers
+> (rule 10):** `summarizePipeline.ts` (`P3-T29`), through `summarizeItemDepsFrom(ctx, extras)`, and the
+> item pane's Generate (`P3-T28`). **Constructing file:** `P3-T29` constructs the store with
+> `createSummaryStore` on the shared connection in `installPluginDatabase`
+> (`src/bootstrap/pluginDatabase.ts`) and passes `PROMPT_REGISTRY`. Note (1): the map answers are
+> sorted by `start`. Note (2): a `CHUNK_REDUCE` context-length error fails the item and is not
+> retried (`docs/06` §5.3's note of 2026-10-28). The chunker runs flat until `P3-T22` sets
+> `imradDetectorValidated`. Readings are in `docs/06` §5.3, §5.4, §11.2 and §12.1, `docs/07` §5.2 and
+> `docs/12` §5, all dated 2026-10-28.
+
 ---
 
 ### P3-T26 — Summary cache keyed per `docs/06` §11.2
