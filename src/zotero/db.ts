@@ -612,6 +612,8 @@ export const STORED_SUMMARY_VERBATIM_KEYS: readonly string[] = Object.freeze([
   "id",
   "workKey",
   "zoteroItemKey",
+  // `P3-T29` (`docs/07` §5.2's note of 2026-10-29): the summary note's key.
+  "zoteroNoteKey",
   "contentHash",
   "promptId",
   "promptVersion",

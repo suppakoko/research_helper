@@ -254,6 +254,10 @@ import {
   createSkipCachedGuard,
   reconcilePromptVersions,
 } from "../pipeline/summarize/summaryCache";
+import {
+  createJobNoticeRouter,
+  type JobNoticeRouter,
+} from "../pipeline/summarize/summarizePipeline";
 import type {
   ConfigReader,
   LLMRouter,
@@ -984,6 +988,12 @@ export interface ServiceGraph {
    * it too, so the dialog and the reservations agree.
    */
   readonly modelPrices: ModelPriceSource;
+  /**
+   * The job queue's `JobNotifier` (`P3-T29`; owner, item 251): routes a pause
+   * to the run that owns the job; `src/bootstrap/registerUI.ts` installs the
+   * visible "jobs resumed" notice through `setResumedNotice`.
+   */
+  readonly jobNotices: JobNoticeRouter;
 }
 
 /** What {@link PipelineContextFactory.forJob} is asked for. */
@@ -2014,6 +2024,9 @@ export async function installServices(
   };
 
   // 7. The pipelines (`P1-T16`) and the per-job context factory.
+  // `P3-T29`: the queue's `JobNotifier`, before the pipelines that register
+  // for their jobs' pauses and the queue (step 8) that notifies through it.
+  const jobNotices = createJobNoticeRouter();
   const pipelines = registerPipelines({
     // `http`: Strategy B's PMCID route (the NCBI ID Converter, owner
     // 2026-10-19, `plan/00` §6 item 214) goes through the one client, so
@@ -2026,6 +2039,24 @@ export async function installServices(
     screening: {
       modelInfo: (providerId, modelId) =>
         providers.registry.get(providerId)?.getModel(modelId),
+    },
+    // `P3-T29`: the summarize pipeline's store (the one connection), the
+    // queue (built in step 8, read through the getter), its pause notices,
+    // the one price source, the effective host, the adapters' model
+    // descriptions and the key check (`docs/09` §1.7).
+    summarize: {
+      store: () => database.summaries(),
+      jobs: () => jobs,
+      pauseNotices: jobNotices,
+      prices: (providerId, modelId) =>
+        modelPrices.pricesFor(providerId, modelId),
+      baseUrls: providers.baseUrls,
+      modelInfo: (providerId, modelId) =>
+        providers.registry.get(providerId)?.getModel(modelId),
+      credentials: {
+        hasKey: async (providerId) =>
+          (await secrets?.has(`llm.${providerId}`)) === true,
+      },
     },
   });
   // The per-job context factory is built after step 8, because a queued
@@ -2045,13 +2076,19 @@ export async function installServices(
   //    guards after it may over-count and never under-count. `egress` is
   //    `P3-T15`'s, installed by `P3-T35`. `confirm` and `ceilings` (`P3-T16`)
   //    need the summarize pipeline's remaining-work estimate, which `P3-T29`
-  //    passes to {@link createSpendResumeGuards}; until then they, and the
-  //    notifier (`P3-T29`), are absent, so `recover()` resumes nothing: every
-  //    resumable interrupted job waits (`plan/00` §6 item 250).
+  //    passes to {@link createSpendResumeGuards}; until then they are absent,
+  //    so `recover()` resumes nothing: every resumable interrupted job waits
+  //    (`plan/00` §6 item 250). *(Updated 2026-10-29, `P3-T29`: the notifier
+  //    is now `jobNotices`' — a pause reaches the run that owns the job —
+  //    and the summarize pipeline declares `resumable: false`, because
+  //    nothing runs a queued job without its window yet; `docs/07` §12.3's
+  //    note of 2026-10-29, item 13. Neither `remaining` nor the `skipCached`
+  //    probe is supplied.)*
   const jobs = createJobQueue({
     clock,
     logger: logger.child({ surface: "jobQueue" }),
     pluginVersion: options.version,
+    notifier: jobNotices.notifier,
     isResumable: (pipelineId) =>
       pipelines
         .list()
@@ -2147,6 +2184,7 @@ export async function installServices(
     sessionSpend,
     collectionSettings,
     modelPrices,
+    jobNotices,
   };
 }
 

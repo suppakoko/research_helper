@@ -18,7 +18,7 @@ import zotero from "@zotero-plugin/eslint-config";
  *    reference `Zotero.*`", and the compatibility-isolation argument for risk
  *    R-1 (docs/11 §3) rests on that being true, not merely documented.
  *
- * 3. FR-56 (P0-T31): the four platform registration APIs may only be called
+ * 3. FR-56 (P0-T31): the five platform registration APIs may only be called
  *    from `src/zotero/registrations.ts`, which pairs each one with the
  *    teardown that undoes it. Rule 2 is not enough on its own — it permits
  *    every file in `src/zotero/**`, and P0-T10 is about to add three more.
@@ -50,12 +50,14 @@ function forbidLayers(layers, message) {
 const RULE = "docs/07 §2.3 dependency rule:";
 
 /**
- * The four platform registration APIs of `docs/01` §2.4, each with the
+ * The platform registration APIs of `docs/01` §2.4, each with the
  * `src/zotero/registrations.ts` factory that replaces it.
  *
- * `Zotero.ItemPaneManager.registerSection` is deliberately absent: it leaks
- * the same way, but no card registers one yet and `docs/08` has not settled
- * where the section lives. Phase 2 adds it (`P0-T31`).
+ * `Zotero.ItemPaneManager.registerSection` joined on 2026-10-29 (`P3-T28`),
+ * with the first section that registers one (`docs/08` §3): it leaks the same
+ * way the other four do, and `itemPaneSectionRegistration` pairs it with
+ * `unregisterSection`. Until then it was deliberately absent because no card
+ * registered a section (`P0-T31`).
  */
 const REGISTRATION_APIS = [
   { manager: "MenuManager", method: "registerMenu", via: "menuRegistration" },
@@ -73,6 +75,11 @@ const REGISTRATION_APIS = [
     manager: "Prefs",
     method: "registerObserver",
     via: "prefObserverRegistration",
+  },
+  {
+    manager: "ItemPaneManager",
+    method: "registerSection",
+    via: "itemPaneSectionRegistration",
   },
 ];
 

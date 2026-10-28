@@ -16,8 +16,10 @@
  * `Zotero.Notifier` expose no equivalent enumeration in `zotero-types@4.1.3`,
  * so for those two there is no runtime audit at all. This file plus
  * `eslint.config.js`'s `research-helper/scoped-registration` rule are the
- * compile-time substitute: the rule makes naming one of the four APIs anywhere
+ * compile-time substitute: the rule makes naming one of the five APIs anywhere
  * else a lint error, and the factories here are the sanctioned way through.
+ * (The fifth, `Zotero.ItemPaneManager.registerSection`, joined on 2026-10-29
+ * with {@link itemPaneSectionRegistration}, `P3-T28`.)
  *
  * Each factory does one thing: it pairs a `register` call with the exact
  * `unregister` that undoes it, once, so the pairing cannot be half-written at
@@ -112,6 +114,61 @@ export function notifierRegistration(
     },
     unregister(observerID) {
       Zotero.Notifier.unregisterObserver(observerID);
+    },
+  });
+}
+
+/**
+ * `Zotero.ItemPaneManager.registerSection`'s options (`docs/08` §3.1), as
+ * `zotero-types@4.1.3` declares them. `T` is the bare `paneID`, which the
+ * type refuses when it names one of Zotero's nine built-in panes.
+ */
+export type ItemPaneSectionOptions<T extends string> =
+  _ZoteroTypes.ItemPaneManagerSection.ItemDetailsSectionOptions<T>;
+
+/**
+ * Register an item-pane section for the lifetime of a scope (`P3-T28`).
+ *
+ * `registerSection` returns `string | false`: the namespaced pane id —
+ * `CSS.escape(pluginID + "-" + paneID)` — or `false` when the options fail
+ * validation (a built-in or duplicate `paneID`, a missing icon). That is
+ * thrown, as {@link menuRegistration} throws, because a section that silently
+ * did not appear is the failure a disable/enable cycle would otherwise chase.
+ * The handle is the returned id, which is what `unregisterSection` takes.
+ *
+ * Read 2026-10-29 from Zotero 10.0.3's `omni.ja`
+ * (`xpcom/pluginAPI/pluginAPIBase.mjs`): `register` validates a shallow copy
+ * of `options`, so one options object can be registered again after a
+ * teardown; and Zotero also removes a plugin's sections from its own
+ * `Zotero.Plugins` shutdown observer, as it does menus — so the section
+ * disappearing on disable proves nothing about this pairing, and
+ * `liveHandles()` is the check that does.
+ *
+ * Application-scoped: Zotero propagates one registration to every main
+ * window's item pane and to the reader's context pane (`docs/08` §3.1), so it
+ * belongs in the startup scope, never in a window's.
+ *
+ * @param description - stable and unique within its scope
+ * @param options - passed to `registerSection` unchanged
+ */
+export function itemPaneSectionRegistration<T extends string>(
+  description: string,
+  options: ItemPaneSectionOptions<T>,
+): ScopedRegistration {
+  return registration<string>({
+    description,
+    register() {
+      const paneID = Zotero.ItemPaneManager.registerSection(options);
+      if (paneID === false) {
+        throw new Error(
+          `[research-helper] Zotero rejected the item-pane section ` +
+            `registration for "${description}" (paneID "${options.paneID}").`,
+        );
+      }
+      return paneID;
+    },
+    unregister(paneID) {
+      Zotero.ItemPaneManager.unregisterSection(paneID);
     },
   });
 }

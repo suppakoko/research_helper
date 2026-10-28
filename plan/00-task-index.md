@@ -2349,6 +2349,31 @@ the caller of what the card builds; if it does not, the caller is added with a d
     (`src/pipeline/summarize/summarizeItem.ts`; quoted in `docs/06` §12.1's note of 2026-10-28) is approved as drafted
     (`plan/reports/P3-T25.md`).
 
+302. **Wave after `P3-T25`, 2026-10-29.** **DECIDED 2026-10-29 (owner):** `P3-T29` (summarize-collection pipeline, notes,
+    remove-notes command; the build/Zotero owner), `P3-T28` (item-pane AI summary section) and `P4-T04` (digest
+    projection) run together, fake model only. New strings go on `KO_PENDING_REVIEW`; the coordinator drafts their
+    Korean for the owner.
+
+303. **Four lines raised by the wave of item 302** (`plan/reports/P3-T28.md`, `P3-T29.md`, `P4-T04.md`). **DECIDED
+    2026-10-29 (owner), each as recommended:** (a) The item pane's Generate (and Retry) runs `P3-T29`'s summarize
+    pipeline for that one item. The pipeline gains an optional item list, so the cost confirmation, the egress notice,
+    the spending ceilings and cancelling follow the collection run's rules. Regenerate maps to `resummarize`. (b) "Save
+    as child note" writes no second note when the item already has a summary note: it says so instead, and the key
+    of the note it writes is stored (`writeSummaryNote`; item 296(b)). (c) `P3-T29`'s readings are confirmed:
+    - a missing key pauses the run on any storage tier;
+    - the outage stop needs at least 10 settled items and more than 30 % failed;
+    - removal moves notes to the trash;
+    - re-summarizing never overwrites an existing note;
+    - the model tag is `research_helper/model:<provider>/<model>`;
+    - an interrupted summarize job is not resumed after a restart, and a re-run skips what is already stored;
+    - the `zoteroNoteKey` reading of item 296(b).
+    (d) `P4-T04`'s digest withholds findings and metrics when confidence is `none` as well as `low`.
+
+304. **Korean for the wave of item 302, 2026-10-29.** **DECIDED 2026-10-29 (owner, G-41):** the Korean of
+    `P3-T28`'s 15 strings and `P3-T29`'s 24 strings is approved in chat as the coordinator drafted it, in two
+    batches. The approved entries are recorded byte for byte in `plan/reports/ko-review-304.ftl`. They replace each
+    id's "NEEDS REVIEW" stub, and the 39 ids move from `KO_PENDING_REVIEW` to `KO_PRESENT`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

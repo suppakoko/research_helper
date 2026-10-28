@@ -51,7 +51,10 @@
  * `-summarize-all` and `-recommend`, which are Phases 2–3 (`docs/11` §1) and
  * are not registered. The fourth, `-rerun`, is `P2-T17`'s and **is** here —
  * see {@link rerunItem}. The item-context menu (`main/library/item`) is a
- * later phase's and is not registered.
+ * later phase's and is not registered. *(Updated 2026-10-29, `P3-T29`:
+ * `-summarize-all` is here now, with FR-20's `-remove-notes` beside it and
+ * the separator below them — {@link llmJobItems}; `docs/08` §2.5's note of
+ * that date. `-report` and `-recommend` are still later cards'.)*
  *
  * ### Where the re-run entry sits, and why there is no separator above it
  *
@@ -79,8 +82,10 @@
 
 import { config } from "../../../package.json";
 import {
+  L10N_MENU_COLLECTION_REMOVE_NOTES,
   L10N_MENU_COLLECTION_RERUN,
   L10N_MENU_COLLECTION_SEARCH_IMPORT,
+  L10N_MENU_COLLECTION_SUMMARIZE_ALL,
   L10N_MENU_ROOT,
   L10N_MENU_SEARCH_IMPORT,
 } from "../../i18n/keys";
@@ -139,6 +144,25 @@ export interface SearchMenuCommands {
    * work hides … never behind a broken menu item".
    */
   readonly provenance?: CollectionRunLookup;
+  /**
+   * FR-19's "Summarize All Papers in Collection" (`P3-T29`): opens the
+   * summarize window for the collection. `src/bootstrap/registerUI.ts` binds
+   * it to `openSummarizeWindow` (`src/ui/dialogs/summarizeDialog.ts`).
+   * Absent, the entry is not in the submenu.
+   */
+  readonly openSummarizeWindow?: (
+    host: MenuHostWindow,
+    collectionID: number,
+  ) => unknown;
+  /**
+   * FR-20's "Remove Generated Notes from Collection…" (`P3-T29`): counts,
+   * asks with the exact count, and moves the notes to the trash. Absent, the
+   * entry is not in the submenu.
+   */
+  readonly removeGeneratedNotes?: (
+    host: MenuHostWindow,
+    collectionID: number,
+  ) => unknown;
 }
 
 /**
@@ -425,6 +449,87 @@ function rerunItem(
 }
 
 /**
+ * One of the two LLM-job entries above the separator (`P3-T29`; `docs/08`
+ * §2.5's note of 2026-10-29): the command with the one selected collection
+ * and the window that owns the clicked element. The same exactly-one refusal
+ * as the Search & Import entry, because the selection can change between
+ * `popupshowing` and the click; every failure ends at `onError`.
+ */
+function collectionCommandItem(
+  commands: SearchMenuCommands,
+  l10nID: string,
+  label: string,
+  command: (host: MenuHostWindow, collectionID: number) => unknown,
+): _ZoteroTypes.MenuManager.MenuData<_ZoteroTypes.MenuManager.LibraryMenuContext> {
+  return {
+    menuType: "menuitem",
+    l10nID,
+    onCommand: (_event, context) => {
+      try {
+        const ids = selectedCollectionIds(context);
+        const [collectionID, ...extra] = ids;
+        const host = hostWindow(context);
+        if (collectionID === undefined || extra.length > 0 || !host) {
+          commands.onError(
+            `${label} needs exactly one selected collection and its window; ` +
+              `the selection holds ${String(ids.length)}`,
+            new Error(
+              "[research-helper] ZoteroPane.getSelectedCollections() " +
+                `returned ${String(ids.length)} collection(s).`,
+            ),
+          );
+          return;
+        }
+        const result: unknown = command(host, collectionID);
+        if (result instanceof Promise) {
+          result.catch((error: unknown) => {
+            commands.onError(`${label} failed`, error);
+          });
+        }
+      } catch (error) {
+        commands.onError(`${label} threw`, error);
+      }
+    },
+  };
+}
+
+/**
+ * The two LLM-job entries and their separator, for the commands this build
+ * was given (`P3-T29`). Empty when neither is, so a submenu built without
+ * them keeps Phase 1's shape.
+ */
+function llmJobItems(
+  commands: SearchMenuCommands,
+): _ZoteroTypes.MenuManager.MenuData<_ZoteroTypes.MenuManager.LibraryMenuContext>[] {
+  const items: _ZoteroTypes.MenuManager.MenuData<_ZoteroTypes.MenuManager.LibraryMenuContext>[] =
+    [];
+  if (commands.openSummarizeWindow !== undefined) {
+    items.push(
+      collectionCommandItem(
+        commands,
+        L10N_MENU_COLLECTION_SUMMARIZE_ALL,
+        "Summarize All Papers in Collection",
+        commands.openSummarizeWindow,
+      ),
+    );
+  }
+  if (commands.removeGeneratedNotes !== undefined) {
+    items.push(
+      collectionCommandItem(
+        commands,
+        L10N_MENU_COLLECTION_REMOVE_NOTES,
+        "Remove Generated Notes from Collection",
+        commands.removeGeneratedNotes,
+      ),
+    );
+  }
+  // `docs/08` §2.5: the separator divides the LLM jobs from the entries that
+  // open the Search & Import window. Legal inside a submenu (§2.3).
+  if (items.length > 0) items.push({ menuType: "separator" });
+  return items;
+}
+
+/**
  * Right-click a collection ▸ Research Helper ▸ Search & Import into This
  * Collection… (`docs/08` §2.4, §2.5; `P1-T19` Goal).
  *
@@ -469,6 +574,8 @@ export function collectionMenuOptions(
           }
         },
         menus: [
+          // `P3-T29`: summarize and remove-notes, then the separator.
+          ...llmJobItems(commands),
           {
             menuType: "menuitem",
             l10nID: L10N_MENU_COLLECTION_SEARCH_IMPORT,

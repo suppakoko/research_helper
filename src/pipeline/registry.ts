@@ -143,4 +143,14 @@ export function registerPipelines(
 export interface PipelineSet {
   /** Phase 1's only pipeline. `P1-T16` builds it. */
   readonly searchImport: ErasedPipeline;
+  /**
+   * "Summarize collection…" (`P3-T29`): `createSummarizePipeline` in
+   * `./summarize/summarizePipeline.ts`. Erased here like every member; the
+   * summarize window's host (`src/bootstrap/registerUI.ts`) narrows it to
+   * `SummarizePipeline` at its one construction site, as the search window's
+   * host does for `searchImport`. Optional so a registry test can register
+   * one pipeline alone (`test/unit/pipeline/searchImport.test.ts`);
+   * `buildPipelineSet` always supplies it.
+   */
+  readonly summarize?: ErasedPipeline;
 }

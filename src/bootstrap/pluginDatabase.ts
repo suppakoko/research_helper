@@ -10,7 +10,8 @@
  * store the plugin keeps in the file is built over it: the provenance store
  * (`P2-T17`), the cache (`P3-T33`), the job store (`P3-T34`), the user price
  * table (`user_price`, `plan/00` §6 item 265 (b), owner, 2026-10-21) and the
- * summary store when `P3-T26` adds it.
+ * summary store (`createSummaryStore`, built here by `P3-T29`; this line
+ * said "when `P3-T26` adds it" until 2026-10-29).
  *
  * ## Why the open is synchronous and the migrations are not
  *
@@ -57,8 +58,10 @@ import type { UserPriceStore } from "../llm/shared/pricing";
 import {
   createJobStore,
   createProvenanceStore,
+  createSummaryStore,
   createUserPriceStore,
   type SqlConnection,
+  type SummaryStore,
 } from "../zotero/db";
 import type { Scope } from "./container";
 import { runMigrations } from "./migrations";
@@ -87,6 +90,12 @@ export interface OpenPluginDatabase {
   readonly provenance: ProvenanceStore;
   /** The user price table (`plan/00` §6 item 265 (b)), on the connection. */
   readonly prices: UserPriceStore;
+  /**
+   * The `summary` table (`P3-T25`'s `createSummaryStore`), on the connection
+   * — built here by `P3-T29`, the first card that runs `summarizeItem` in the
+   * product.
+   */
+  readonly summaries: SummaryStore;
 }
 
 /** {@link installPluginDatabase}'s answer, held on the service graph. */
@@ -107,6 +116,14 @@ export interface PluginDatabase {
    * reads it as `userPriceOverrides: () => graph.database.prices.list()`.
    */
   readonly prices: UserPriceStore;
+  /**
+   * The summary store (`P3-T29`) once the database is open: each call waits
+   * for {@link ready}, and resolves `undefined` without a database or once
+   * teardown has begun. Every call made through the store it returns is
+   * tracked, and teardown waits for it before the connection closes. The
+   * summarize pipeline reads it as `store`; the item pane may too.
+   */
+  readonly summaries: () => Promise<SummaryStore | undefined>;
   /**
    * Attach the job queue's store once the database is ready, then run
    * `docs/07` §7.6's startup recovery (not awaited; teardown awaits it).
@@ -175,6 +192,7 @@ export function installPluginDatabase(
         schemaVersion: outcome.to,
         provenance: createProvenanceStore(connection),
         prices: createUserPriceStore(connection),
+        summaries: createSummaryStore(connection),
       };
     } catch (error) {
       logger.error(
@@ -296,10 +314,24 @@ export function installPluginDatabase(
     },
   );
 
+  // The summary store (`P3-T29`): handed out per call, each call tracked like
+  // the price table's, and nothing once teardown has begun.
+  const summaries = async (): Promise<SummaryStore | undefined> => {
+    const open = await ready;
+    if (open === undefined || closing) return undefined;
+    const store = open.summaries;
+    return {
+      put: (record) => tracked(store.put(record)),
+      get: (id) => tracked(store.get(id)),
+      listForWork: (workKey) => tracked(store.listForWork(workKey)),
+    };
+  };
+
   return {
     ready,
     cache,
     prices,
+    summaries,
     attachJobs(jobs: JobQueue): void {
       recovering = ready.then(async (open) => {
         if (open === undefined) return;

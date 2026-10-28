@@ -165,6 +165,34 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // FR-12's "Re-run This Search…" (P2-T17), docs/08 §2.4 and §10.2.
   "research-helper-menu-collection-rerun",
   "research-helper-menu-spike-create-item",
+  // P3-T29: the collection submenu's two LLM-job entries (docs/08 §2.5's
+  // note of 2026-10-29), the summarize window and the removal command.
+  // See SUMMARIZE_DIALOG_L10N in src/ui/dialogs/summarizeDialog.ts.
+  "research-helper-menu-collection-summarize-all",
+  "research-helper-menu-collection-remove-notes",
+  "research-helper-summarize-title",
+  "research-helper-summarize-collection",
+  "research-helper-summarize-resummarize",
+  "research-helper-summarize-write-notes",
+  "research-helper-summarize-notes-readonly",
+  "research-helper-summarize-start",
+  "research-helper-summarize-cancel",
+  "research-helper-summarize-close",
+  "research-helper-summarize-export",
+  "research-helper-summarize-stage",
+  "research-helper-summarize-progress",
+  "research-helper-summarize-remaining",
+  "research-helper-summarize-row",
+  "research-helper-summarize-counts",
+  "research-helper-summarize-outcome",
+  "research-helper-summarize-key-needed",
+  "research-helper-summarize-continue",
+  "research-helper-summarize-stop",
+  "research-helper-summarize-export-outcome",
+  "research-helper-remove-notes-title",
+  "research-helper-remove-notes-confirm",
+  "research-helper-remove-notes-none",
+  "research-helper-remove-notes-done",
 
   // LiteratureSource.displayNameKey (docs/07 §4.2). Never translated. One
   // per registered source, in SOURCE_IDS order (P2-T32 added Europe PMC,
@@ -403,6 +431,27 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-secret-backend-none",
   "research-helper-secret-backend-accept",
   "research-helper-secret-backend-decline",
+  // P3-T28: the item pane's AI summary section (docs/08 §3). See
+  // SUMMARY_SECTION_L10N in src/ui/panes/summarySection.ts.
+  "research-helper-itempane-header",
+  "research-helper-itempane-sidenav",
+  "research-helper-itempane-empty",
+  "research-helper-itempane-generate",
+  "research-helper-itempane-loading",
+  "research-helper-itempane-cancel",
+  "research-helper-itempane-failed",
+  "research-helper-itempane-retry",
+  "research-helper-itempane-no-key",
+  "research-helper-itempane-open-preferences",
+  "research-helper-itempane-research-question",
+  "research-helper-itempane-key-findings",
+  "research-helper-itempane-limitations",
+  "research-helper-itempane-btn-regenerate",
+  "research-helper-itempane-btn-save-note",
+  // The item pane's result lines (owner, plan/00 §6 item 303(a), (b)). See
+  // SUMMARY_RESULT_L10N in src/ui/panes/summarySection.ts.
+  "research-helper-itempane-not-summarized",
+  "research-helper-itempane-note-not-written",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -445,6 +494,22 @@ export const L10N_MENU_COLLECTION_SEARCH_IMPORT =
  */
 export const L10N_MENU_COLLECTION_RERUN =
   "research-helper-menu-collection-rerun";
+
+/**
+ * Collection context menu ▸ Research Helper ▸ Summarize All Papers in
+ * Collection (`P3-T29`, FR-19). `docs/08` §2.4 registers it under this id and
+ * §10.2 ships its strings in both locales, owner-written.
+ */
+export const L10N_MENU_COLLECTION_SUMMARIZE_ALL =
+  "research-helper-menu-collection-summarize-all";
+
+/**
+ * Collection context menu ▸ Research Helper ▸ Remove Generated Notes from
+ * Collection… (`P3-T29`, FR-20). Not in the corpus's §10.2; the `en-US`
+ * wording is provisional and the Korean is pending (`G-41`).
+ */
+export const L10N_MENU_COLLECTION_REMOVE_NOTES =
+  "research-helper-menu-collection-remove-notes";
 
 /**
  * The headline of the `Zotero.ProgressWindow` every job raises (`docs/07`
@@ -921,6 +986,15 @@ export const KO_PENDING_REVIEW = [
   // price table). `G-41` owns the translation; the `ko-KR` bundle carries each
   // as a commented stub with its English source, and nothing was
   // machine-translated.
+  // `P3-T29`'s summarize window and removal command (24) left this list on
+  // 2026-10-29: the owner approved the coordinator's Korean (`G-41`, plan/00
+  // §6 item 304), so all twenty-four are on KO_PRESENT.
+  // The item pane's two result lines (owner, plan/00 §6 item 303(a), (b)).
+  // `G-41` owns the translation; the `ko-KR` bundle carries each as a
+  // `# NEEDS REVIEW` commented stub with its English source, and nothing
+  // was machine-translated.
+  "research-helper-itempane-not-summarized",
+  "research-helper-itempane-note-not-written",
   // --- searchDialog (62) ---
   // `P1-T45`. On this list and not on `KO_PRESENT`: the `ko-KR` bundle carries
   // all three as commented stubs with their English source, which the
@@ -937,6 +1011,9 @@ export const KO_PENDING_REVIEW = [
   // (`plan/00` §6 item 291) left this list on 2026-10-27: the owner reviewed
   // the coordinator's Korean (`G-41`, plan/00 §6 item 292(a)), so all four
   // are on KO_PRESENT.
+  // `P3-T28`'s fifteen item-pane section strings (plan/00 §6 item 302) left
+  // this list on 2026-10-29: the owner approved the coordinator's Korean
+  // (`G-41`, plan/00 §6 item 304), so all fifteen are on KO_PRESENT.
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -961,6 +1038,8 @@ export const KO_PRESENT = [
   "research-helper-menu-search-import",
   // FR-12's entry: owner-written Korean in `docs/08` §10.2 (`P2-T17`).
   "research-helper-menu-collection-rerun",
+  // FR-19's entry: owner-written Korean in `docs/08` §10.2 (`P3-T29`).
+  "research-helper-menu-collection-summarize-all",
   "research-helper-source-pubmed",
   "research-helper-source-europepmc",
   "research-helper-source-crossref",
@@ -1251,6 +1330,49 @@ export const KO_PRESENT = [
   "research-helper-cost-report-summaries",
   "research-helper-cost-report-writing",
   "research-helper-cost-report-review",
+  // `P3-T28`'s fifteen item-pane strings and `P3-T29`'s twenty-four summarize
+  // window and removal strings: Korean drafted by the coordinator and reviewed
+  // by the owner on 2026-10-29 (`G-41`, plan/00 §6 item 304), inserted byte for
+  // byte from plan/reports/ko-review-304.ftl.
+  "research-helper-itempane-header",
+  "research-helper-itempane-sidenav",
+  "research-helper-itempane-empty",
+  "research-helper-itempane-generate",
+  "research-helper-itempane-loading",
+  "research-helper-itempane-cancel",
+  "research-helper-itempane-failed",
+  "research-helper-itempane-retry",
+  "research-helper-itempane-no-key",
+  "research-helper-itempane-open-preferences",
+  "research-helper-itempane-research-question",
+  "research-helper-itempane-key-findings",
+  "research-helper-itempane-limitations",
+  "research-helper-itempane-btn-regenerate",
+  "research-helper-itempane-btn-save-note",
+  "research-helper-menu-collection-remove-notes",
+  "research-helper-summarize-title",
+  "research-helper-summarize-collection",
+  "research-helper-summarize-resummarize",
+  "research-helper-summarize-write-notes",
+  "research-helper-summarize-notes-readonly",
+  "research-helper-summarize-start",
+  "research-helper-summarize-cancel",
+  "research-helper-summarize-close",
+  "research-helper-summarize-export",
+  "research-helper-summarize-stage",
+  "research-helper-summarize-progress",
+  "research-helper-summarize-remaining",
+  "research-helper-summarize-row",
+  "research-helper-summarize-counts",
+  "research-helper-summarize-outcome",
+  "research-helper-summarize-key-needed",
+  "research-helper-summarize-continue",
+  "research-helper-summarize-stop",
+  "research-helper-summarize-export-outcome",
+  "research-helper-remove-notes-title",
+  "research-helper-remove-notes-confirm",
+  "research-helper-remove-notes-none",
+  "research-helper-remove-notes-done",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -1418,6 +1540,43 @@ export interface FluentMessageArgsMap {
     done: number;
     total: number;
   };
+  // P3-T29: the summarize window and the removal command. `$stage`,
+  // `$status`, `$outcome` and the export's `$outcome` are selectors; the
+  // titles and the collection name are the user's own text.
+  "research-helper-summarize-collection": { name: string; count: number };
+  "research-helper-summarize-stage": { stage: string };
+  "research-helper-summarize-progress": {
+    done: number;
+    total: number;
+    cached: number;
+    fresh: number;
+  };
+  "research-helper-summarize-remaining": { minutes: number };
+  "research-helper-summarize-row": { status: string; title: string };
+  "research-helper-summarize-counts": {
+    fulltext: number;
+    abstract: number;
+    notext: number;
+    retracted: number;
+    duplicate: number;
+  };
+  "research-helper-summarize-outcome": {
+    outcome: string;
+    done: number;
+    total: number;
+    at: number;
+    failed: number;
+    notes: number;
+  };
+  "research-helper-summarize-key-needed": { provider: string };
+  "research-helper-summarize-export-outcome": { outcome: string };
+  "research-helper-remove-notes-confirm": { count: number; collection: string };
+  "research-helper-remove-notes-none": { collection: string };
+  "research-helper-remove-notes-done": { count: number };
+  // The item pane's result lines (plan/00 §6 item 303(a), (b)): `$reason`
+  // is a selector (NotSummarizedReason; "exists" / "read-only").
+  "research-helper-itempane-not-summarized": { reason: string };
+  "research-helper-itempane-note-not-written": { reason: string };
 
   // searchDialog
   "research-helper-search-years-span": {
@@ -1553,6 +1712,22 @@ export const ARGUMENT_MESSAGE_IDS = [
   // mainWindow — the job queue (2: P3-T34, item 265(a))
   "research-helper-job-resumed",
   "research-helper-job-wall-clock-budget",
+  // mainWindow — the summarize window and the removal command (12, P3-T29)
+  "research-helper-summarize-collection",
+  "research-helper-summarize-stage",
+  "research-helper-summarize-progress",
+  "research-helper-summarize-remaining",
+  "research-helper-summarize-row",
+  "research-helper-summarize-counts",
+  "research-helper-summarize-outcome",
+  "research-helper-summarize-key-needed",
+  "research-helper-summarize-export-outcome",
+  "research-helper-remove-notes-confirm",
+  "research-helper-remove-notes-none",
+  "research-helper-remove-notes-done",
+  // mainWindow — the item pane's result lines (2, plan/00 §6 item 303)
+  "research-helper-itempane-not-summarized",
+  "research-helper-itempane-note-not-written",
   // mainWindow — the budget error, the cost dialog and the Usage readout
   // (19, P3-T16)
   "rh-error-budget",

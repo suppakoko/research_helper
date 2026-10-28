@@ -217,6 +217,24 @@ function fluentLinkCount(win: _ZoteroTypes.MainWindow): number {
   ).length;
 }
 
+/**
+ * This plugin's item-pane sections as Zotero holds them (`P3-T28`): the
+ * registrations in `Zotero.ItemPaneManager.customSectionData`, which is what
+ * every item pane draws from. Counted in the registry rather than the DOM,
+ * because a section element is only drawn (and only removed) while an item is
+ * shown. Zotero's own plugin-shutdown observer also removes a plugin's
+ * sections, so `liveHandles()` above remains the check on the pairing.
+ */
+function summarySectionCount(): number {
+  const data = (
+    Zotero.ItemPaneManager as unknown as {
+      customSectionData: { options: { pluginID: string }[] };
+    }
+  ).customSectionData;
+  return data.options.filter((option) => option.pluginID === config.addonID)
+    .length;
+}
+
 async function assertEveryWindow(
   expected: ToolsMenuCount & { readonly fluentLinks: number },
   when: string,
@@ -250,6 +268,11 @@ describe("lifecycle (FR-56)", function () {
       { menus: 1, items: 1, fluentLinks: 1 },
       "after startup",
     );
+    assert.strictEqual(
+      summarySectionCount(),
+      1,
+      "exactly one item-pane section after startup (P3-T28)",
+    );
   });
 
   it("tears down on disable and registers exactly one item again on enable", async function () {
@@ -272,6 +295,11 @@ describe("lifecycle (FR-56)", function () {
       { menus: 0, items: 0, fluentLinks: 0 },
       "after disable",
     );
+    assert.strictEqual(
+      summarySectionCount(),
+      0,
+      "no item-pane section after disable (P3-T28)",
+    );
 
     await afterBootstrapCall("startup", () => wrapper.enable());
     const afterEnable = await initializedInstance();
@@ -289,6 +317,11 @@ describe("lifecycle (FR-56)", function () {
     await assertEveryWindow(
       { menus: 1, items: 1, fluentLinks: 1 },
       "after disable and enable",
+    );
+    assert.strictEqual(
+      summarySectionCount(),
+      1,
+      "exactly one item-pane section after disable and enable (P3-T28)",
     );
   });
 });

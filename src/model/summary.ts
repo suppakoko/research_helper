@@ -264,6 +264,12 @@ export interface StoredSummary {
   readonly workKey: string;
   /** Zotero item key this summary is attached to, once written. */
   readonly zoteroItemKey?: string;
+  /**
+   * The key of the child note written for this row, once written (`P3-T29`;
+   * `docs/07` §5.2's note of 2026-10-29, `plan/00` §6 item 296(b)): the
+   * summary note is found by this key and its tag, never by a marker.
+   */
+  readonly zoteroNoteKey?: string;
 
   /** The model's output, exactly as `docs/06` §6.2 defines it. Never widened here. */
   readonly content: PaperSummary;

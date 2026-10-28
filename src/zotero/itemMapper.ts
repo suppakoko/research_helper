@@ -1272,3 +1272,30 @@ export function fromZoteroItem(
 ): CanonicalWork {
   return canonicalWorkFromSnapshot(snapshotZoteroItem(item), options);
 }
+
+/**
+ * The work key of a regular item still loaded in Zotero, by item id — the
+ * `work:<workKey>` tag the item-pane section's notifier observer invalidates
+ * (`P3-T28`; `docs/07` §9.3 trigger 3). {@link fromZoteroItem}'s key: the
+ * stored `rh-work-key` when present, otherwise §5.1's derivation.
+ *
+ * `undefined` when the id names no loaded item, or a note, an attachment or
+ * an annotation. **Read 2026-10-29 from Zotero 10.0.3's `omni.ja`**
+ * (`xpcom/data/dataObject.js`, `_finalizeErase`; `xpcom/db.js`): an erased
+ * item is unloaded by a commit callback that runs before the notifier's
+ * `delete` is delivered, and that event's `extraData` carries only
+ * `libraryID` and `key` — so for a `delete` this answers `undefined`, while
+ * for a `trash` the item is still loaded and it answers the key.
+ *
+ * @param itemID - a `Zotero.Item` id from a notifier event
+ * @returns the work key, or `undefined`
+ */
+export function workKeyOfItemID(itemID: number): string | undefined {
+  const item = Zotero.Items.get(itemID);
+  if (!item || !item.isRegularItem()) return undefined;
+  try {
+    return fromZoteroItem(item).workKey;
+  } catch {
+    return undefined;
+  }
+}

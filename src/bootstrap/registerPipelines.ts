@@ -110,6 +110,33 @@ import type {
   SearchImportWriteSession,
   SearchImportWriter,
 } from "../pipeline/searchImport/types";
+import {
+  acquireZoteroSource,
+  readItemIdentifiers,
+  type ZoteroAcquirableItem,
+} from "../pipeline/summarize/acquire";
+import {
+  createSummarizePipeline,
+  type JobPauseNotices,
+  type SummarizeCollection,
+  type SummarizeLibrary,
+  type SummarizeLibraryItem,
+  type SummarizePipelineDeps,
+} from "../pipeline/summarize/summarizePipeline";
+import { estTokens } from "../llm/shared/tokenEstimate";
+import type { JobQueue } from "../core/jobQueue/queue";
+import { ConfigurationError } from "../core/errors";
+import {
+  EUROPE_PMC_SOURCE_NAME,
+  attachmentPageCounts,
+  attachmentTitle,
+  findSummaryNote,
+  readCollectionForSummary,
+  readItemsForSummary,
+  writeSummaryNote,
+  type SummaryRunCollection,
+  type SummaryRunItemSnapshot,
+} from "../zotero/notes";
 
 export { DEFAULT_CHUNK_SIZE };
 
@@ -371,6 +398,166 @@ export function createZoteroSearchImportWriter(
 }
 
 // ---------------------------------------------------------------------------
+// 1b. The summarize pipeline's Zotero port (`P3-T29`)
+// ---------------------------------------------------------------------------
+
+/** The four-digit year of a Zotero date string, when it has one. */
+function yearOf(date: string): number | undefined {
+  const match = /\b(\d{4})\b/.exec(date);
+  return match === null ? undefined : Number(match[1]);
+}
+
+/** A snapshot of `src/zotero/notes.ts`, as the pipeline's plain item. */
+function summarizeItemFrom(
+  snapshot: SummaryRunItemSnapshot,
+): SummarizeLibraryItem {
+  const ids = readItemIdentifiers({
+    getField: (field: string) =>
+      field === "DOI" ? snapshot.doi : field === "extra" ? snapshot.extra : "",
+  });
+  const year = yearOf(snapshot.date);
+  return {
+    itemID: snapshot.itemID,
+    itemKey: snapshot.key,
+    libraryID: snapshot.libraryID,
+    workKey: snapshot.workKey,
+    metadata: {
+      title: snapshot.title,
+      authors: snapshot.creators,
+      year,
+      venue:
+        snapshot.publicationTitle === ""
+          ? undefined
+          : snapshot.publicationTitle,
+      itemType: snapshot.itemType,
+      doi: ids.doi,
+      tags: snapshot.tags,
+    },
+    dateModified: snapshot.dateModified,
+    screen: {
+      key: snapshot.key,
+      itemID: snapshot.itemID,
+      itemType: snapshot.itemType,
+      title: snapshot.title,
+      year,
+      firstAuthorFamily: snapshot.firstAuthorFamily,
+      containerTitle: snapshot.publicationTitle,
+      doi: ids.doi,
+      pmid: ids.pmid,
+      pmcid: ids.pmcid,
+      abstractLength: snapshot.abstractLength,
+      hasFullText: snapshot.hasAttachment,
+      dateAdded: snapshot.dateAdded,
+      retraction: {
+        zotero: {
+          retracted: snapshot.retracted,
+          reasons: snapshot.retractionReasons,
+        },
+      },
+    },
+  };
+}
+
+/** What {@link createZoteroSummarizeLibrary} needs. */
+export interface ZoteroSummarizeLibraryDeps {
+  readonly logger?: Logger;
+  /**
+   * `docs/06` §3.4's Tier 3 (Europe PMC JATS). Default `true`, as
+   * `acquireZoteroSource`'s own default; never tried when the run's mode
+   * allows no full text.
+   */
+  readonly tryEuropePmc?: () => boolean;
+}
+
+/**
+ * The summarize pipeline's {@link SummarizeLibrary} over Zotero: the
+ * collection read and the notes through `src/zotero/notes.ts`, the text
+ * through `acquireZoteroSource` (`src/pipeline/summarize/acquire.ts`). Built
+ * here for the reason {@link createZoteroSearchImportWriter} is: it is the
+ * wiring of a `zotero/` capability onto a `pipeline/` port.
+ *
+ * Acquisition gets no §13.1 abstract recovery: that writes to the user's item
+ * and needs a per-run consent surface no card has built, so an item with no
+ * text stays Tier 4 and is counted "skipped: no text" (FR-21).
+ */
+export function createZoteroSummarizeLibrary(
+  deps: ZoteroSummarizeLibraryDeps = {},
+): SummarizeLibrary {
+  const live = new Map<string, ZoteroAcquirableItem>();
+  const keyOf = (libraryID: number, itemKey: string): string =>
+    `${String(libraryID)}/${itemKey}`;
+  // Every item a run has read, for its acquisition. Never cleared on a new
+  // read (item 303(a)): the item pane's one-item run may read while a
+  // collection run is still acquiring, and clearing would take that run's
+  // items away. It holds the items Zotero's own cache already holds.
+  const remember = (collection: SummaryRunCollection): SummarizeCollection => {
+    for (const snapshot of collection.items) {
+      live.set(
+        keyOf(snapshot.libraryID, snapshot.key),
+        snapshot.item as unknown as ZoteroAcquirableItem,
+      );
+    }
+    return {
+      name: collection.name,
+      editable: collection.editable,
+      items: collection.items.map(summarizeItemFrom),
+    };
+  };
+  return {
+    async loadCollection(libraryID, collectionKey) {
+      return remember(await readCollectionForSummary(libraryID, collectionKey));
+    },
+
+    async loadItems(libraryID, itemKeys) {
+      return remember(await readItemsForSummary(libraryID, itemKeys));
+    },
+
+    async acquire(item, options) {
+      const zoteroItem = live.get(keyOf(item.libraryID, item.itemKey));
+      if (zoteroItem === undefined) {
+        throw new Error(
+          "[research-helper] an item to summarize was not read with its collection",
+        );
+      }
+      const source = await acquireZoteroSource(zoteroItem, {
+        estimateTokens: (text) => estTokens(text),
+        includeFullText: options.includeFullText,
+        tryEuropePmc:
+          options.includeFullText && (deps.tryEuropePmc?.() ?? true),
+        token: options.token,
+        ...(deps.logger !== undefined && { logger: deps.logger }),
+      });
+      const pageCounts =
+        source.truncated && source.attachmentKey !== null
+          ? await attachmentPageCounts(source.libraryID, source.attachmentKey)
+          : undefined;
+      const sourceName =
+        source.tier === "fulltext_epmc"
+          ? EUROPE_PMC_SOURCE_NAME
+          : source.attachmentKey === null
+            ? undefined
+            : attachmentTitle(source.libraryID, source.attachmentKey);
+      return { source, pageCounts, sourceName };
+    },
+
+    findSummaryNote(item, storedNoteKey) {
+      return Promise.resolve(
+        findSummaryNote(item.libraryID, item.itemKey, storedNoteKey),
+      );
+    },
+
+    writeSummaryNote(item, stored, sourceName) {
+      return writeSummaryNote({
+        libraryID: item.libraryID,
+        parentItemKey: item.itemKey,
+        stored,
+        sourceName,
+      });
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 2. The pipelines
 // ---------------------------------------------------------------------------
 
@@ -401,6 +588,30 @@ export interface PipelineConstructionDeps {
    * data policy is judged `unknown`.
    */
   readonly screening?: SearchScreeningDeps;
+  /**
+   * The summarize pipeline's dependencies (`P3-T29`) that only the
+   * composition root holds: the summary store, the job queue (read through a
+   * getter, because `installServices` builds it after the pipelines), the
+   * pause notices, the price source, the base URLs, the adapters' model
+   * descriptions and the key check. Absent in a unit test of the graph that
+   * builds no queue: then `summarize` refuses to run (`ConfigurationError`)
+   * before anything is read or sent.
+   */
+  readonly summarize?: SummarizeConstructionDeps;
+}
+
+/** {@link PipelineConstructionDeps.summarize}. */
+export interface SummarizeConstructionDeps extends Pick<
+  SummarizePipelineDeps,
+  "store" | "prices" | "baseUrls" | "modelInfo" | "credentials"
+> {
+  /** `PROMPT_REGISTRY`, imported lazily by default. */
+  readonly prompts?: SummarizePipelineDeps["prompts"];
+  /** `installServices`' queue, built after the pipelines. */
+  readonly jobs: () => JobQueue;
+  readonly pauseNotices?: JobPauseNotices;
+  /** The Zotero port; {@link createZoteroSummarizeLibrary} by default. */
+  readonly library?: SummarizeLibrary;
 }
 
 /** `docs/07` §7.2's worker pools and job admission, one each per plugin lifetime. */
@@ -441,8 +652,8 @@ export function buildWorkerPools(deps: PipelineConstructionDeps): WorkerPools {
  * nothing at run time.
  */
 export function buildPipelineSet(deps: PipelineConstructionDeps): PipelineSet {
-  // `llm`, `admission` and `runningWork` have no taker until the summarize
-  // pipeline (`P3-T29`) is constructed here from the same `pools`.
+  // `llm`, `admission` and `runningWork` are the summarize pipeline's
+  // (`P3-T29`), from the same `pools` as the search pipeline's.
   const pools = buildWorkerPools(deps);
   return {
     searchImport: createSearchImportPipeline({
@@ -450,6 +661,61 @@ export function buildPipelineSet(deps: PipelineConstructionDeps): PipelineSet {
       writeBatchSize: deps.writeBatchSize ?? DEFAULT_CHUNK_SIZE,
       pool: pools.networkMetadata,
       ...(deps.screening !== undefined && { screening: deps.screening }),
+    }),
+    summarize: createSummarizePipeline(
+      summarizeDepsFrom(deps.summarize, pools),
+    ),
+  };
+}
+
+/**
+ * The summarize pipeline's deps from the composition root's. Without them
+ * (a graph built with no queue) every queue call and the store refuse with
+ * `ConfigurationError`, so a run fails before anything is read or sent.
+ */
+function summarizeDepsFrom(
+  given: SummarizeConstructionDeps | undefined,
+  pools: WorkerPools,
+): SummarizePipelineDeps {
+  const jobs = (): JobQueue => {
+    if (given === undefined) {
+      throw new ConfigurationError(
+        "the summarize pipeline was built without a job queue; nothing was sent",
+      );
+    }
+    return given.jobs();
+  };
+  return {
+    library: given?.library ?? createZoteroSummarizeLibrary(),
+    store:
+      given?.store ?? ((): Promise<undefined> => Promise.resolve(undefined)),
+    // A lazy import, as the search pipeline's `Screening` stage does:
+    // `../prompts/bundled` imports the `.md` prompt files.
+    prompts:
+      given?.prompts ??
+      (async () => (await import("../prompts/bundled")).PROMPT_REGISTRY),
+    // Through a getter: `installServices` builds the queue after this.
+    queue: {
+      start: (id) => jobs().start(id),
+      pause: (id, reason) => jobs().pause(id, reason),
+      resume: (id) => jobs().resume(id),
+      cancel: (id) => jobs().cancel(id),
+      finishCancel: (id) => jobs().finishCancel(id),
+      succeed: (id, ref) => jobs().succeed(id, ref),
+      fail: (id, error) => jobs().fail(id, error),
+      get: (id) => jobs().get(id),
+    },
+    pool: pools.llm,
+    admission: pools.admission,
+    runningWork: pools.runningWork,
+    prices: given?.prices ?? (() => undefined),
+    baseUrls: given?.baseUrls ?? { effectiveHost: () => "" },
+    ...(given?.pauseNotices !== undefined && {
+      pauseNotices: given.pauseNotices,
+    }),
+    ...(given?.modelInfo !== undefined && { modelInfo: given.modelInfo }),
+    ...(given?.credentials !== undefined && {
+      credentials: given.credentials,
     }),
   };
 }

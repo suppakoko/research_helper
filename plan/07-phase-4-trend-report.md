@@ -635,6 +635,21 @@ lands the test cannot compile against the real type. `plan/05` §1.2 and §1.4 (
 digest's fields (W4-1)", but `docs/06` §8.2's digest carries no section field — V-8b reaches Phase 4
 through the summaries and `P4-T12`'s §2 disclosure only (reported as a finding, not fixed).
 
+*As built 2026-10-29 (`plan/00` §6 item 302; no model, no network; `P3-T25`'s types are built, so the
+first sentence above no longer holds).* `src/pipeline/trendReport/digest.ts` declares `toDigest`,
+`digestText`, `digestTokens`, `withholdsFindings`, `DigestInput`, `DIGEST_LINE_BUDGETS`,
+`DIGEST_HEAD_CAPS`, `DIGEST_TIER_CAPS`, `DIGEST_WITHHELD` and `DIGEST_NO_YEAR`, and re-exports
+`DIGEST_MAX_TOKENS` from `estimate.ts`; its readings are `docs/06` §8.2's note of 2026-10-29. Callers
+(rule 10): nothing calls it yet. `trendReportPipeline.ts` (`P4-T18`) builds the digests at its "digest"
+stage, because it holds each item's year; `cluster.ts` (`P4-T05`) joins `digestText` into
+`{{DIGESTS}}`; `compose.ts` (`P4-T08`) and `scaffold.ts` (`P4-T12`) read the same blocks. Nothing is
+constructed: the module is pure functions and constants. Step 3 needed no code, because `renderPrompt`
+already escapes every variable.
+
+*Decided 2026-10-29 (owner, `plan/00` §6 item 303(d)):* the card's "low-confidence" is read as `confidence`
+`low` **or `none`** — `withholdsFindings` withholds findings and metrics for both, as `docs/06` §8.2's note of
+2026-10-29 says. That reading is confirmed.
+
 ---
 
 ### P4-T05 — Theme clustering with client-side validation

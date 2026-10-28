@@ -1,0 +1,93 @@
+<?xml version="1.0"?>
+<!--
+  The summarize window (P3-T29; FR-19, FR-23, FR-53; docs/08 §2.5's note of
+  2026-10-29 and §6.4's "Stage 1–2" layout).
+
+  Opened by src/ui/dialogs/summarizeDialog.ts's openSummarizeWindow. A
+  modeless window: the run itself happens on the privileged side
+  (src/bootstrap/registerUI.ts), never here. Every line is placed by
+  summarize.js from the model the privileged side built; nothing here is a
+  literal human-readable string.
+
+  Shape copied from costConfirm.xhtml: `<window>` outside, every script from a
+  chrome:// path, no inline script, no width/height attributes. The
+  main-window bundle carries every string (docs/08 §10.1).
+-->
+<?xml-stylesheet href="chrome://global/skin/" type="text/css"?> <?xml-stylesheet
+href="chrome://zotero/skin/zotero.css" type="text/css"?> <?xml-stylesheet
+href="chrome://zotero-platform/content/zotero.css"?>
+<window
+  id="rh-summarize-window"
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+  xmlns:html="http://www.w3.org/1999/xhtml"
+  onload="RHSummarizeWindow.init()"
+>
+  <script src="chrome://global/content/globalOverlay.js" />
+  <script src="chrome://zotero/content/include.js" />
+  <script src="chrome://__addonRef__/content/summarize.js" />
+  <linkset>
+    <html:link rel="localization" href="__addonRef__-mainWindow.ftl" />
+  </linkset>
+
+  <vbox flex="1" style="padding: 1em; min-width: 36em; max-width: 52em">
+    <html:p id="rh-summarize-header" />
+    <checkbox
+      id="rh-summarize-resummarize"
+      data-l10n-id="research-helper-summarize-resummarize"
+    />
+    <checkbox
+      id="rh-summarize-write-notes"
+      data-l10n-id="research-helper-summarize-write-notes"
+    />
+    <html:p
+      id="rh-summarize-notes-readonly"
+      data-l10n-id="research-helper-summarize-notes-readonly"
+      hidden="hidden"
+    />
+    <html:hr />
+    <html:p id="rh-summarize-stage" role="status" />
+    <html:p id="rh-summarize-progress" />
+    <html:p id="rh-summarize-remaining" />
+    <html:p id="rh-summarize-notice" />
+    <html:div id="rh-summarize-question" hidden="hidden" role="alert">
+      <html:p id="rh-summarize-question-text" />
+      <hbox>
+        <button
+          id="rh-summarize-continue"
+          data-l10n-id="research-helper-summarize-continue"
+        />
+        <button
+          id="rh-summarize-stop"
+          data-l10n-id="research-helper-summarize-stop"
+        />
+      </hbox>
+    </html:div>
+    <html:div
+      id="rh-summarize-rows"
+      style="max-height: 20em; overflow-y: auto"
+    />
+    <html:p id="rh-summarize-counts" />
+    <html:p id="rh-summarize-outcome" role="status" />
+    <html:p id="rh-summarize-export-status" hidden="hidden" />
+    <hbox pack="end">
+      <button
+        id="rh-summarize-export"
+        data-l10n-id="research-helper-summarize-export"
+        hidden="true"
+      />
+      <button
+        id="rh-summarize-start"
+        data-l10n-id="research-helper-summarize-start"
+      />
+      <button
+        id="rh-summarize-cancel"
+        data-l10n-id="research-helper-summarize-cancel"
+        disabled="true"
+      />
+      <button
+        id="rh-summarize-close"
+        data-l10n-id="research-helper-summarize-close"
+      />
+    </hbox>
+  </vbox>
+</window>

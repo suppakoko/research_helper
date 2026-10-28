@@ -83,7 +83,11 @@ import {
 } from "./container";
 import type { Logger } from "../core/logger";
 import { formatValue } from "../i18n/ftl";
-import { L10N_PROGRESS_HEADLINE, type FluentMessageId } from "../i18n/keys";
+import {
+  L10N_JOB_RESUMED,
+  L10N_PROGRESS_HEADLINE,
+  type FluentMessageId,
+} from "../i18n/keys";
 import { merge } from "../model/merge";
 import type { SourceRecord } from "../model/sourceRecord";
 import type {
@@ -138,7 +142,10 @@ import {
   type ModelSuggestions,
   type PreferencesHostApi,
 } from "../ui/prefs/preferencesPane";
-import { createCancellationTokenSource } from "../core/jobQueue/cancellation";
+import {
+  createCancellationTokenSource,
+  type CancellationTokenSource,
+} from "../core/jobQueue/cancellation";
 import {
   modelsFor,
   reloadingUserPriceStore,
@@ -152,6 +159,49 @@ import {
 } from "../ui/viewModels/searchImportViewModel";
 import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
 import { provenanceFileWriter, writeProvenanceNote } from "../zotero/notes";
+// `P3-T29`: the summarize window, the removal command and their notes.
+import {
+  describeCollectionForSummary,
+  removeGeneratedNotes,
+  renderSummaryExportHtml,
+  renderSummaryNoteHtml,
+  reportFileWriter,
+  saveSummaryNoteOnce,
+} from "../zotero/notes";
+import { openZoteroProgressWindow } from "../zotero/progressWindow";
+import {
+  REMOVE_NOTES_L10N,
+  buildSummarizeWindowModel,
+  confirmSummarizeRun,
+  openSummarizeWindow,
+  pauseQuestionLine,
+  runItemSummary,
+  type ItemSummaryDeps,
+  type SummarizeConfirmDeps,
+  type SummarizeWindowOutcome,
+  type SummarizeWindowSession,
+  type SummarizeWindowSink,
+} from "../ui/dialogs/summarizeDialog";
+import {
+  SUMMARIZE_INPUT_VERSION,
+  summarizeExclusivityKey,
+  type SummarizeInput,
+  type SummarizePipeline,
+  type SummarizeQuestion,
+  type SummarizeRunView,
+  type SummarizeSurface,
+  type SummaryRef,
+} from "../pipeline/summarize/summarizePipeline";
+import {
+  egressLogEntry,
+  withEgressLog,
+} from "../pipeline/shared/egressDisclosure";
+import {
+  readCollectionPrivacySettings,
+  writeCollectionPrivacySettings,
+} from "../pipeline/shared/privacyPolicy";
+import { ConfigurationError } from "../core/errors";
+import type { FluentLine } from "../ui/dialogs/costConfirmDialog";
 import {
   createProvenanceIndex,
   type ProvenanceIndex,
@@ -177,9 +227,21 @@ import {
 import { createZoteroPrefStore } from "../zotero/prefStore";
 import {
   fluentResourceRegistration,
+  itemPaneSectionRegistration,
   menuRegistration,
+  notifierRegistration,
   preferencePaneRegistration,
 } from "../zotero/registrations";
+import {
+  SUMMARY_NOTIFIER_DESCRIPTION,
+  SUMMARY_NOTIFIER_ID,
+  SUMMARY_RESULT_L10N,
+  SUMMARY_SECTION_DESCRIPTION,
+  summaryInvalidationObserver,
+  summarySectionOptions,
+  type SummarySectionHost,
+} from "../ui/panes/summarySection";
+import { fromZoteroItem, workKeyOfItemID } from "../zotero/itemMapper";
 import {
   createSpikeArticle,
   createZoteroHttpTransport,
@@ -224,6 +286,12 @@ const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
     hasRunForCollection: (collectionID) => knownRun(collectionID),
     lookupRunForCollection: (collectionID) => lookupRun(collectionID),
   } satisfies CollectionRunLookup,
+  // `P3-T29`: FR-19's summarize window and FR-20's removal command, over the
+  // graph {@link publishSummarizeCommands} holds.
+  openSummarizeWindow: (host, collectionID) =>
+    openSummarizeWindowCommand(host, collectionID),
+  removeGeneratedNotes: (host, collectionID) =>
+    removeGeneratedNotesCommand(host, collectionID),
 };
 
 // ---------------------------------------------------------------------------
@@ -1239,6 +1307,635 @@ async function publishUsageHost(scope: Scope): Promise<void> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// The item pane's AI summary section (`P3-T28`)
+// ---------------------------------------------------------------------------
+
+declare module "../addon" {
+  interface PluginApi {
+    /**
+     * The item-pane summary section's host (`P3-T28`): the object the section
+     * reads on every render, published so an integration spec — bundled
+     * separately — can reach the same instance.
+     */
+    summarySection?: SummarySectionHost;
+  }
+}
+
+/**
+ * The item pane's one-item run over the graph (`runItemSummary`; owner,
+ * `plan/00` §6 item 303(a)): the same pipeline, job contexts, record and
+ * confirmation as the summarize window's session ({@link createSummarizeSession}),
+ * over no collection — the global privacy mode (item 278(c)) and no "don't ask
+ * again" record.
+ */
+function itemSummaryDeps(graph: ServiceGraph): ItemSummaryDeps {
+  return {
+    pipeline: graph.pipelines.get("summarize") as SummarizePipeline | undefined,
+    openJob: async (record, token) => {
+      const job = await graph.pipelineContext.openJob({
+        pipelineId: "summarize",
+        token,
+        ...(record !== undefined && { record }),
+        openOn: "completion",
+      });
+      return {
+        context: job.context,
+        finish: async (outcome) => {
+          try {
+            if (outcome !== undefined) job.progress.reporter.done(outcome);
+            await job.checkpoints?.flush().catch(() => undefined);
+          } finally {
+            job.dispose();
+          }
+        },
+      };
+    },
+    enqueue: (input, disclosure) =>
+      graph.jobs.enqueue(
+        "summarize",
+        disclosure === undefined
+          ? input
+          : withEgressLog(input, egressLogEntry(disclosure, graph.clock.now())),
+        {
+          priority: "normal",
+          exclusivityKey: summarizeExclusivityKey(input),
+          libraryID: input.libraryID,
+          inputVersion: SUMMARIZE_INPUT_VERSION,
+        },
+      ),
+    confirm: summarizeConfirmDeps(graph),
+    askCeiling: async (question) => {
+      const outcome = await confirmRunCost({
+        mode: "ceiling",
+        stop: question.stop,
+        remainingUsd: question.remainingUsd,
+        raiseToUsd: question.raiseToUsd,
+        usage: question.usage,
+      });
+      return outcome.kind === "continue" ? "resume" : "cancel";
+    },
+  };
+}
+
+/**
+ * "Save as child note" wrote nothing: say why in a `Zotero.ProgressWindow`
+ * popup (`docs/08` §8.1's mechanism for a short action; item 303(b)).
+ */
+async function showNoteNotWritten(
+  reason: "exists" | "read-only",
+): Promise<void> {
+  const text = await formatValue(
+    new Localization([MAIN_WINDOW_FTL]),
+    SUMMARY_RESULT_L10N.noteNotWritten,
+    { reason },
+  );
+  if (text === undefined) {
+    throw new Error("[research-helper] the note line has no text");
+  }
+  const popup = openZoteroProgressWindow();
+  popup.changeHeadline(text);
+  popup.show();
+  popup.startCloseTimer(8000);
+}
+
+/**
+ * Register the item pane's AI summary section (`docs/08` §3) and its
+ * delete/trash observer, each through its `src/zotero/registrations.ts`
+ * factory, after publishing the host both read.
+ *
+ * | host member | bound to |
+ * |---|---|
+ * | `isConfigured` | the registry's `isConfigured` for the active provider — the presence flag, never the key (D5) |
+ * | `autoSummarize` | `getPref("autoSummarize")`, read per render; ships `false` (`docs/07` §8.5) |
+ * | `load` | the newest `summary` row of `fromZoteroItem(item).workKey`, through `graph.database.summaries()` — the store `P3-T29` constructs in `installPluginDatabase`; no request |
+ * | `generate` | a one-item run of the summarize pipeline: {@link itemSummaryDeps} under `runItemSummary` (owner, `plan/00` §6 item 303(a)); `regenerate` → `resummarize` |
+ * | `saveAsNote` | `saveSummaryNoteOnce` (`src/zotero/notes.ts`; item 303(b)): no second note; the written note's key stored on the row; otherwise {@link showNoteNotWritten} |
+ * | `onError` | `reportError`, the debug log |
+ * | `locale` | {@link appLocale} |
+ *
+ * **Generate runs the summarize job for the one item** (decided 2026-10-29,
+ * owner, `plan/00` §6 item 303(a); `docs/08` §3.2's and §3.3's notes of that
+ * date), so the pre-run estimate and confirmation (`P3-T16`), the first-job
+ * egress notice (`P3-T15`), acquisition, the `llm` pool, the spending
+ * ceilings and cancel apply to it as to a collection run. Its progress is the
+ * section's loading state; its questions are the cost dialog's.
+ *
+ * Teardown is last-in-first-out: the section goes first, then the observer,
+ * then the host.
+ */
+async function publishSummarySection(
+  scope: Scope,
+  graph: ServiceGraph,
+): Promise<void> {
+  const logger = graph.logger.child({ surface: "itemPane" });
+  const host: SummarySectionHost = {
+    isConfigured: () =>
+      graph.llm.registry.isConfigured(graph.llm.registry.activeProviderId()),
+    autoSummarize: () => getPref("autoSummarize"),
+    load: async (item) => {
+      // `P3-T29`'s store on the one connection (`installPluginDatabase`):
+      // tracked, so teardown waits for a read in flight.
+      const store = await graph.database.summaries();
+      if (store === undefined) return undefined;
+      const workKey = fromZoteroItem(item).workKey;
+      const rows = await store.listForWork(workKey);
+      return rows[0];
+    },
+    generate: (item, { regenerate }) => {
+      const source = createCancellationTokenSource();
+      const done = runItemSummary(
+        itemSummaryDeps(graph),
+        { libraryID: item.libraryID, itemKey: item.key, regenerate },
+        source.token,
+      ).finally(() => {
+        source.dispose();
+      });
+      return {
+        done,
+        cancel: () => {
+          source.cancel({ kind: "user" });
+        },
+      };
+    },
+    saveAsNote: async (item, stored) => {
+      const store = await graph.database.summaries();
+      if (store === undefined) {
+        throw new ConfigurationError(
+          "the plugin database is not open, so no note was written",
+        );
+      }
+      const outcome = await saveSummaryNoteOnce(
+        {
+          libraryID: item.libraryID,
+          parentItemKey: item.key,
+          stored,
+          sourceName: undefined,
+        },
+        { put: (row) => store.put(row) },
+      );
+      if (outcome.kind !== "written") await showNoteNotWritten(outcome.kind);
+    },
+    onError: (message, error) => {
+      logger.warn(message, {
+        reason: error instanceof Error ? error.name : typeof error,
+      });
+      reportError(message, error);
+    },
+    locale: appLocale,
+  };
+
+  // Captured once, for the reason {@link publishServiceGraph} gives.
+  const api = addon.api;
+  await scope.use({
+    description: "the item-pane summary section host (api.summarySection)",
+    register: () => {
+      api.summarySection = host;
+      return "api.summarySection";
+    },
+    unregister: () => {
+      delete api.summarySection;
+    },
+  });
+  await notifierRegistration(SUMMARY_NOTIFIER_DESCRIPTION, {
+    notify: summaryInvalidationObserver({
+      workKeyOf: workKeyOfItemID,
+      invalidateByTag: (tag) => graph.cache.invalidateByTag(tag),
+      onError: host.onError,
+    }),
+    types: ["item"],
+    id: SUMMARY_NOTIFIER_ID,
+  })(scope);
+  await itemPaneSectionRegistration(
+    SUMMARY_SECTION_DESCRIPTION,
+    summarySectionOptions(config.addonID, host),
+  )(scope);
+}
+
+// ---------------------------------------------------------------------------
+// The summarize window and the removal command (`P3-T29`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The graph the two collection commands run over: set by
+ * {@link publishSummarizeCommands}, cleared in its teardown. Module state, as
+ * {@link provenanceState} is, because `SEARCH_MENU_COMMANDS` is built before
+ * any graph exists.
+ */
+const summarizeState: { graph: ServiceGraph | undefined } = {
+  graph: undefined,
+};
+
+/** The menu's "Summarize All Papers in Collection": open its window. */
+function openSummarizeWindowCommand(
+  host: Parameters<NonNullable<SearchMenuCommands["openSummarizeWindow"]>>[0],
+  collectionID: number,
+): void {
+  const graph = summarizeState.graph;
+  if (graph === undefined) {
+    throw new Error("[research-helper] the summarize window has no services");
+  }
+  openSummarizeWindow(
+    host,
+    collectionID,
+    createSummarizeSession(graph, collectionID),
+  );
+}
+
+/**
+ * FR-20's "Remove Generated Notes from Collection…": count, ask with the
+ * exact count (`Services.prompt.confirm`, over the window the menu was clicked
+ * in), move to the trash, say how many. Nothing is asked or moved at 0.
+ */
+async function removeGeneratedNotesCommand(
+  host: Parameters<NonNullable<SearchMenuCommands["removeGeneratedNotes"]>>[0],
+  collectionID: number,
+): Promise<void> {
+  const l10n = new Localization([MAIN_WINDOW_FTL]);
+  const title =
+    (await formatValue(l10n, REMOVE_NOTES_L10N.title)) ?? "Research Helper";
+  const parent = host as unknown as mozIDOMWindowProxy;
+  const result = await removeGeneratedNotes(
+    collectionID,
+    async (count, collection) => {
+      const message = await formatValue(l10n, REMOVE_NOTES_L10N.confirm, {
+        count,
+        collection,
+      });
+      return Services.prompt.confirm(parent, title, message ?? title);
+    },
+  );
+  if (result.found === 0) {
+    const none = await formatValue(l10n, REMOVE_NOTES_L10N.none, {
+      collection: result.collectionName,
+    });
+    Services.prompt.alert(parent, title, none ?? title);
+  } else if (result.confirmed) {
+    const done = await formatValue(l10n, REMOVE_NOTES_L10N.done, {
+      count: result.moved,
+    });
+    Services.prompt.alert(parent, title, done ?? title);
+  }
+}
+
+/** The run's confirmation over the graph (`P3-T16`'s dialog; item 292(f)). */
+function summarizeConfirmDeps(graph: ServiceGraph): SummarizeConfirmDeps {
+  return {
+    readRoutine: async (collection) =>
+      readCollectionPrivacySettings(
+        await graph.collectionSettings.get(
+          collection.libraryID,
+          collection.collectionKey,
+        ),
+      ).routineConfirmation,
+    writeRoutine: (collection, record) =>
+      writeCollectionPrivacySettings(graph.collectionSettings, collection, {
+        routineConfirmation: record,
+      }),
+    openDialog: confirmRunCost,
+    settle: (disclosure, outcome) => {
+      settleDisclosure(disclosure, outcome);
+    },
+    confirmAboveCents: () => getPref("summaryConfirmAboveCents"),
+    fullTextAutoMaxPapers: () => getPref("summaryFullTextAutoMaxPapers"),
+    providerName: (disclosure) =>
+      providerDisplayName(graph, disclosure.providerId),
+    locale: appLocale,
+  };
+}
+
+/**
+ * A paused run's question: the money one in the cost dialog's ceiling mode,
+ * the others in the window (`P3-T29`; owner, item 265(a)).
+ */
+async function askPausedRun(
+  graph: ServiceGraph,
+  sink: SummarizeWindowSink,
+  question: SummarizeQuestion,
+): Promise<"resume" | "cancel"> {
+  if (question.reason === "budget-stop") {
+    const outcome = await confirmRunCost({
+      mode: "ceiling",
+      stop: question.stop,
+      remainingUsd: question.remainingUsd,
+      raiseToUsd: question.raiseToUsd,
+      usage: question.usage,
+    });
+    return outcome.kind === "continue" ? "resume" : "cancel";
+  }
+  if (question.reason === "credential-required") {
+    return sink.ask(
+      pauseQuestionLine({
+        reason: "credential-required",
+        provider: await providerDisplayName(graph, question.providerId),
+      }),
+    );
+  }
+  return sink.ask(
+    pauseQuestionLine({
+      reason:
+        question.reason === "wall-clock-budget" ? "wall-clock-budget" : "other",
+      done: question.done,
+      total: question.total,
+      minutes: question.minutes,
+    }),
+  );
+}
+
+/** A view of a collection before any run. */
+function idleView(
+  name: string,
+  total: number,
+  notesWritable: boolean,
+): SummarizeRunView {
+  return {
+    stage: "loading",
+    collectionName: name,
+    total,
+    toSummarize: 0,
+    settled: 0,
+    rows: [],
+    counts: {
+      fullText: 0,
+      abstractOnly: 0,
+      noText: 0,
+      retracted: 0,
+      duplicate: 0,
+      language: 0,
+      existing: 0,
+      cached: 0,
+      fresh: 0,
+      failed: 0,
+      notesWritten: 0,
+      notesFailed: 0,
+    },
+    notesWritable,
+  };
+}
+
+/**
+ * One summarize window's privileged side (`P3-T29`;
+ * `src/ui/dialogs/summarizeDialog.ts`'s `SummarizeWindowSession`).
+ *
+ * `start` runs the pipeline's two halves (`docs/07` §12.3's note of
+ * 2026-10-29, item 1): `prepare` in a job context with no record; then, only
+ * when it says "run", the record is enqueued with the confirmed disclosure's
+ * egress log (`docs/09` §3.6 item 4) and `execute` runs in its context. Cancel
+ * — or the window closing — cancels the run's token; nothing is rolled back.
+ * The export path is used once and never kept or logged (`docs/09` §2.2).
+ */
+function createSummarizeSession(
+  graph: ServiceGraph,
+  collectionID: number,
+): SummarizeWindowSession {
+  const logger = graph.logger.child({ surface: "summarizeWindow" });
+  let running: CancellationTokenSource | undefined;
+  let summaries: readonly SummaryRef[] = [];
+  let collectionName = "";
+  return {
+    describe() {
+      const header = describeCollectionForSummary(collectionID);
+      collectionName = header?.name ?? "";
+      const model = buildSummarizeWindowModel(
+        idleView(
+          collectionName,
+          header?.regularItems ?? 0,
+          header?.editable === true,
+        ),
+        { running: false },
+      );
+      return Promise.resolve({
+        model: { ...model, stage: undefined },
+        writeNotesDefault: getPref("reportPerPaperNotes"),
+      });
+    },
+
+    async start(options, sink) {
+      if (running !== undefined) return;
+      const header = describeCollectionForSummary(collectionID);
+      const pipeline = graph.pipelines.get("summarize") as
+        SummarizePipeline | undefined;
+      const source = createCancellationTokenSource();
+      running = source;
+      let view = idleView(
+        header?.name ?? "",
+        header?.regularItems ?? 0,
+        header?.editable === true,
+      );
+      let notice: FluentLine | undefined;
+      let eta: number | undefined;
+      const draw = (): void => {
+        sink.render(
+          buildSummarizeWindowModel(view, {
+            running: true,
+            etaSeconds: eta,
+            notice,
+          }),
+        );
+      };
+      const surface: SummarizeSurface = {
+        update: (next) => {
+          view = next;
+          draw();
+        },
+        confirm: async (request) => {
+          const result = await confirmSummarizeRun(
+            summarizeConfirmDeps(graph),
+            request,
+          );
+          notice = result.notice;
+          draw();
+          return result.answer;
+        },
+        ask: (question) => askPausedRun(graph, sink, question),
+      };
+      let outcome: SummarizeWindowOutcome;
+      let stoppedAt: number | undefined;
+      try {
+        if (header === undefined || pipeline === undefined) {
+          throw new ConfigurationError(
+            "the collection or the summarize pipeline is not available",
+          );
+        }
+        collectionName = header.name;
+        const collection = {
+          libraryID: header.libraryID,
+          collectionKey: header.collectionKey,
+        };
+        const input: SummarizeInput = {
+          ...collection,
+          resummarize: options.resummarize,
+          writeNotes: options.writeNotes && header.editable,
+        };
+        const before = await graph.pipelineContext.openJob({
+          pipelineId: "summarize",
+          token: source.token,
+          collection,
+          openOn: "completion",
+        });
+        let prepared;
+        try {
+          prepared = await pipeline.prepare(input, before.context, surface);
+        } finally {
+          before.dispose();
+        }
+        summaries = prepared.state.summaries;
+        if (prepared.status === "declined") {
+          outcome = "declined";
+        } else if (
+          prepared.state.planned.length === 0 &&
+          prepared.state.fromStore.length === 0
+        ) {
+          outcome =
+            prepared.state.counts.existing > 0 ? "nothing" : "succeeded";
+        } else {
+          const record = await graph.jobs.enqueue(
+            "summarize",
+            prepared.disclosure === undefined
+              ? input
+              : withEgressLog(
+                  input,
+                  egressLogEntry(prepared.disclosure, graph.clock.now()),
+                ),
+            {
+              priority: "normal",
+              exclusivityKey: summarizeExclusivityKey(input),
+              libraryID: input.libraryID,
+              inputVersion: SUMMARIZE_INPUT_VERSION,
+            },
+          );
+          const job = await graph.pipelineContext.openJob({
+            pipelineId: "summarize",
+            token: source.token,
+            record,
+            collection,
+            openOn: "completion",
+          });
+          const unsubscribe = job.progress.events.subscribe((snapshot) => {
+            eta = snapshot.etaSeconds;
+          });
+          try {
+            const output = await pipeline.execute(
+              prepared,
+              job.context,
+              surface,
+            );
+            outcome = output.outcome;
+            stoppedAt = output.stoppedAt;
+            summaries = output.summaries;
+            view = output.view;
+            job.progress.reporter.done(
+              output.outcome === "succeeded"
+                ? "succeeded"
+                : output.outcome === "failed"
+                  ? "failed"
+                  : "cancelled",
+            );
+          } finally {
+            unsubscribe();
+            await job.checkpoints?.flush().catch(() => undefined);
+            job.dispose();
+          }
+        }
+      } catch (error) {
+        outcome = source.token.isCancellationRequested
+          ? "cancelled"
+          : error instanceof ConfigurationError
+            ? "unavailable"
+            : "failed";
+        logger.warn("the summarize run stopped", {
+          reason: error instanceof Error ? error.name : typeof error,
+        });
+      } finally {
+        running = undefined;
+        source.dispose();
+      }
+      sink.render(
+        buildSummarizeWindowModel(
+          { ...view, stage: "done" },
+          {
+            running: false,
+            notice,
+            outcome: { kind: outcome, stoppedAt },
+            exportAvailable: !view.notesWritable && summaries.length > 0,
+          },
+        ),
+      );
+    },
+
+    cancel() {
+      running?.cancel({ kind: "user" });
+    },
+
+    async exportSummaries(path) {
+      try {
+        const store = await graph.database.summaries();
+        if (store === undefined) return "failed";
+        const entries: { title: string; noteHtml: string }[] = [];
+        for (const ref of summaries) {
+          const row = await store.get(ref.storedId);
+          if (row === undefined) continue;
+          entries.push({
+            title: ref.title,
+            noteHtml: renderSummaryNoteHtml(row, ref.sourceName),
+          });
+        }
+        await reportFileWriter().writeTextFile(
+          path,
+          renderSummaryExportHtml(collectionName, entries),
+        );
+        return "written";
+      } catch (error) {
+        // The name only: a file error's message can quote the path.
+        logger.warn("the summary export failed", {
+          reason: error instanceof Error ? error.name : typeof error,
+        });
+        return "failed";
+      }
+    },
+
+    closed() {
+      running?.cancel({ kind: "user" });
+    },
+  };
+}
+
+/**
+ * Hold the graph for the two collection commands (`P3-T29`), and install the
+ * queue's visible "jobs resumed" notice (`research-helper-job-resumed`, owner
+ * item 250) on the graph's `JobNotifier`; both undone on teardown.
+ */
+async function publishSummarizeCommands(
+  scope: Scope,
+  graph: ServiceGraph,
+): Promise<void> {
+  await scope.use({
+    description: "the summarize window's services and the resumed-jobs notice",
+    register: () => {
+      summarizeState.graph = graph;
+      graph.jobNotices.setResumedNotice(async (records) => {
+        const text = await formatValue(
+          new Localization([MAIN_WINDOW_FTL]),
+          L10N_JOB_RESUMED,
+          { count: records.length },
+        );
+        if (text === undefined) {
+          throw new Error("[research-helper] the resumed notice has no text");
+        }
+        const popup = openZoteroProgressWindow();
+        popup.changeHeadline(text);
+        popup.show();
+        popup.startCloseTimer(8000);
+      });
+      return "summarizeState";
+    },
+    unregister: () => {
+      graph.jobNotices.setResumedNotice(undefined);
+      summarizeState.graph = undefined;
+    },
+  });
+}
+
 /**
  * Run the composition root, then the application-scoped registrations, into
  * the root scope.
@@ -1324,6 +2021,12 @@ export async function registerUI(scope: Scope): Promise<void> {
   // The pane's Usage section (`P3-T16`), before the pane is registered, for
   // the same reason.
   await publishUsageHost(scope);
+  // The item pane's AI summary section and its cache-invalidation observer
+  // (`P3-T28`), after the services it reads.
+  await publishSummarySection(scope, graph);
+  // The summarize window's services and the resumed-jobs notice (`P3-T29`),
+  // before the collection menu that opens the window is registered.
+  await publishSummarizeCommands(scope, graph);
 
   for (const register of APP_REGISTRATIONS) {
     await register(scope);

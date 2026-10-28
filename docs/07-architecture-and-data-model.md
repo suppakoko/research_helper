@@ -2239,6 +2239,12 @@ export interface StoredSummary {
   readonly workKey: string;
   /** Zotero item key this summary is attached to, once written. */
   readonly zoteroItemKey?: string;
+  /**
+   * Added 2026-10-29 (P3-T29; plan/00 §6 item 296(b)): the key of the child note written for
+   * this row, set when the note is written; absent when none was (notes are opt-in). The plugin
+   * finds its summary note by this key and by the note's tag, never by §6.4's marker comment.
+   */
+  readonly zoteroNoteKey?: string;
 
   /** The model's output, exactly as `06-…` §6.2 defines it. Never widened here. */
   readonly content: PaperSummary;
@@ -2325,6 +2331,16 @@ export type SummaryInputScope =
 > (the gate is idempotent) and keeps the row's mark. (7) **Columns** (§8.3's `summary`, migration
 > version 6): `input_scope` holds `inputScope` as JSON, `json` the whole gated row, `generated_at`
 > `generatedAtEpochMs`; a write with an existing `id` replaces the row.
+
+> **Added 2026-10-29 (`P3-T29`; the card's reading of `plan/00` §6 item 296(b), ~~for the owner to
+> confirm~~ *confirmed: Decided 2026-10-29 (owner, `plan/00` §6 item 303(c))*): `zoteroNoteKey`.** Item 296(b) has the plugin find its summary note "by the note item key
+> it stored", and this interface had nowhere to store it, so it gains the optional member above — the
+> shape of `TrendReport.zoteroNoteKey`. The summarize pipeline
+> (`src/pipeline/summarize/summarizePipeline.ts`) writes the row, then the note, then the row again
+> with the key; a run that writes no note leaves it absent. It is an identifier, so the redaction
+> gate copies it unchanged (`STORED_SUMMARY_VERBATIM_KEYS` in `src/zotero/db.ts`). A stored key whose
+> note is gone, is in the trash, is not a note, has another parent or lacks the tag is not trusted:
+> the item's child notes are then searched by the tag (`findSummaryNote` in `src/zotero/notes.ts`).
 
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286; `P4-T01`):** the trend types below
 > **replace** the earlier `ThemeCluster` and `TrendReport` rather than sitting beside them. Those
@@ -3144,6 +3160,34 @@ A summary is stored as a **child note** on the item, not in `extra`:
 - Note HTML begins with a machine-readable marker comment: `<!-- rh:summary v=1 promptVersion=sum-v4 model=... generatedAt=... -->`. ~~The plugin finds its own note by scanning child notes for this marker, so the note can be freely renamed or reordered by the user.~~ *Decided 2026-10-27 (owner, `plan/00` §6 item 296(b)): the plugin finds its note by the note item key it stored and by the note's tag, never by this marker, because Zotero's note editor drops every HTML comment the first time it saves a note (`01-zotero-plugin-platform.md` §5.7, measured by `P4-T13`). The comment is still written, as information only; renaming or reordering the note still loses nothing, because neither the key nor the tag depends on the title or position.*
 - The note also carries a Zotero tag ~~`research_helper/summary`~~ `research_helper/ai-summary` for discoverability and bulk operations. *(Corrected 2026-10-27 (owner, `plan/00` §6 item 297): FR-20 in `10-requirements-and-user-stories.md`, `11-implementation-roadmap.md` §1, `13-testing-build-and-release.md` and `plan/04` `P3-T29` all name `research_helper/ai-summary`.)*
 - The authoritative structured copy lives in the plugin database (§8.3); the note is the human-readable projection. If the user edits the note, the plugin does not parse the edit back — it detects divergence via a stored hash and refuses to silently overwrite, offering "regenerate (overwrites)" / "keep mine".
+
+> **As built 2026-10-29 (`P3-T29`; `renderSummaryNoteHtml`, `writeSummaryNote`, `findSummaryNote`,
+> `findGeneratedNotes` and `trashGeneratedNotes` in `src/zotero/notes.ts`) — the card's readings of
+> what this section and FR-19–FR-21 leave open, ~~for the owner to confirm~~ *confirmed: Decided 2026-10-29 (owner, `plan/00` §6 item 303(c))*.** (1) **Order.** FR-20 makes
+> the disclaimer the note's first line, so the HTML starts with it — `Machine-generated summary
+> (Research Helper). Provider: <id> · Model: <id> · Generated <ISO-8601 UTC>. Not reviewed by a person;
+> check it against the paper.` (the note's title is this line cut at Zotero's 120 characters,
+> `06-…` §14.2; measured 2026-10-29) — and the marker comment follows it, as information only (item
+> 296(b)), as `<!-- rh:summary v=1 promptVersion=… model=… generatedAt=… -->`. The second line is
+> FR-21's header, verbatim: `Source: abstract only`, or `Source: full text (<N> chars extracted from
+> <attachment name>)` with `N` = `inputScope.charsSent` and the attachment's title (a Europe PMC text
+> names `Europe PMC`). The structured fields follow as `docs/01` §5.7's subset (headings, paragraphs,
+> lists). Like FR-8's provenance note, the note is **not localized**: FR-20 and FR-21 fix its
+> header text. (2) **Tags.** `research_helper/ai-summary` and, for FR-20's "provider/model tag",
+> `research_helper/model:<providerId>/<modelId>` — both automatic (type 1), both inside the
+> `research_helper/` namespace, so the removal command covers both. (3) **Write.** A child note:
+> `libraryID`, then `parentKey`, then `setNote`, then one `saveTx` (`06-…` §14.2), only for an item
+> whose summary is a stored row — never for a Tier 4 stub — and only when the library is editable
+> (`Zotero.Libraries.get(id).editable`). (4) **Re-summarizing never overwrites.** An item that already
+> has a summary note (by stored key, then by tag) keeps it untouched and gets no second note; the
+> divergence check and "regenerate (overwrites)" above are not built. (5) **Removal** ("Remove
+> Generated Notes from Collection…"): every note in the collection — standalone notes that are
+> members of it, and child notes of its regular items — carrying at least one tag that starts with
+> `research_helper/`. The plain `research_helper` tag of FR-8's provenance note is not in that
+> namespace and is never matched; a note with only user tags is never matched. The exact count is
+> confirmed first, and confirmed notes are moved to Zotero's trash (`Zotero.Items.trashTx`), from
+> which the user can restore them; nothing is erased. No other path deletes a note: a cache clear
+> never does.
 
 ### 6.5 `TrendReport` → Zotero
 
@@ -4716,7 +4760,7 @@ Every entry carries tags: `promptVersion:<v>`, `model:<id>`, `provider:<id>`, `s
 
 1. **Prompt version change.** `12-prompt-library.md` assigns every prompt a version string. On startup, the plugin compares shipped prompt versions to the last-seen set stored in prefs; for each changed prompt it calls `cache.invalidateByTag('promptVersion:<old>')`. Summaries are *not* deleted from Zotero notes — only the cache entry — so the user's existing notes survive and are regenerated on request. *(Corrected 2026-10-23, owner, `plan/00` §6 item 273(a): built as `reconcilePromptVersions` in `src/pipeline/summarize/summaryCache.ts`. The tag is `promptVersion:<promptId>@<MAJOR>.<MINOR>` — qualified by the prompt, and naming the prompt's cache line rather than its full version, because the summary key carries `cacheEpoch`, which is one per MAJOR.MINOR line (`06-summarization-and-trend-report.md` §11.2 readings 3 and 8). A prompt is invalidated only when its MAJOR.MINOR changed or it is no longer shipped; a PATCH-only change invalidates nothing (`12-prompt-library.md` §17.2) but the last-seen set, which still holds full version strings, is rewritten.)*
 2. **Model change.** Switching the summarization model invalidates by `model:<oldId>` for the `summary` and `llm-completion` namespaces only. Embeddings are keyed separately and a change in embedding model invalidates all `embedding` entries plus every `CollectionProfile`'s `centroids` (all k of them, not just the first).
-3. **Item modification.** A `Zotero.Notifier` observer on `item` `modify` events extracts the item's `dateModified`; since `sourceVersion` is part of `summaryKey`, a modified item simply *misses* rather than needing explicit deletion. The stale entry is later evicted by LRU. Explicit `invalidateByTag('work:<key>')` is used on item **delete** and on user-triggered "refresh metadata".
+3. **Item modification.** A `Zotero.Notifier` observer on `item` `modify` events extracts the item's `dateModified`; since `sourceVersion` is part of `summaryKey`, a modified item simply *misses* rather than needing explicit deletion. The stale entry is later evicted by LRU. Explicit `invalidateByTag('work:<key>')` is used on item **delete** and on user-triggered "refresh metadata". *(Read 2026-10-29, `P3-T28`, from Zotero 10.0.3's `omni.ja`, `dataObject.js` `_finalizeErase` and `db.js`: an erased item is unloaded by a commit callback that runs before the notifier delivers `delete`, and that event's `extraData` carries only `libraryID` and `key`, so the work key cannot be read on a **delete**. Built as `summaryInvalidationObserver` in `src/ui/panes/summarySection.ts` with `workKeyOfItemID` in `src/zotero/itemMapper.ts`: it invalidates on **trash**, when the item is still loaded, and on a delete only if the item still resolves. In the product a delete follows a trash; an entry missed this way is reclaimed by `prune()`. The `summary` table's rows are not touched.)*
 4. **Schema version bump.** `CACHE_SCHEMA_VERSION` is in every key, so a bump makes the entire cache miss; `prune()` then reclaims it. A migration also drops rows whose `tags` lack the current `schema:<n>` tag, so the space is reclaimed immediately rather than over time.
 
 ### 9.4 Eviction
@@ -5283,6 +5327,65 @@ stateDiagram-v2
 
 Notes: this is the pipeline where resume matters most — 200 summaries is potentially an hour and several dollars. Because each summary is persisted to cache and to a note as it completes, resume after a crash re-runs only the incomplete tail. `BudgetStop` is deliberately not `Failed`: the user set the cap, so hitting it is an expected outcome with an offered continuation.
 
+> **As built 2026-10-29 (`P3-T29`; `createSummarizePipeline` in
+> `src/pipeline/summarize/summarizePipeline.ts`, wired by `buildPipelineSet` and driven by the
+> summarize window's host in `src/bootstrap/registerUI.ts`) — the card's readings of what the diagram
+> leaves open, ~~for the owner to confirm~~ *confirmed: Decided 2026-10-29 (owner, `plan/00` §6 item 303(c))*.** (1) **Two halves around the job record.** `prepare` runs
+> `LoadingItems` → `Estimating` and the confirmation in a job context with **no** record; only once the
+> user confirms (or `shouldOpenCostDialog` skips the routine question) does the host enqueue the record,
+> with the egress log in its input (`09-…` §3.6 item 4, `withEgressLog`), and `execute` runs the rest in
+> that record's context. A declined confirmation leaves no record. `Pipeline.run` on a record does both
+> halves; with no surface its confirmation is declined, so nothing spends. (2) **`LoadingItems`**: the
+> collection's regular items, not in the trash; notes, attachments and annotations are not items.
+> (3) **Skip existing** (FR-19): an item with a stored row for its work key, or a summary note, is skipped
+> unless "Re-summarize existing" is ticked; with notes on, a skipped item that has a row but no note gets
+> its note from the row, with no call. (4) **`Planning`**: each remaining item is acquired (`includeFullText`
+> off when the mode allows no full text) and screened (`screenItems`); a Tier 4 item (no abstract, no
+> text) is skipped with no call (FR-21). (5) **`CacheProbe`** counts an item cached only when the row its
+> path would produce is stored with the acquisition's `contentHash`; otherwise it is priced, so the
+> estimate never under-states. (6) **`Estimating`** passes each acquisition's `sectionAware` and
+> `sections` and the model's context window to `estimateRun` (`plan/reports/followup-299.md` finding 1).
+> (7) **Confirmation**: the summarize run's "don't ask again" record is `collection_settings`'
+> `routineConfirmation`, separate from the report run's (`plan/00` §6 item 292(f)); a question forced by
+> money is asked whatever it says (item 274(b)); when the dialog is skipped the window shows the number
+> (`skippedNoticeLine`). "Use abstracts instead" sets DR-1's cost gate in `auto` and `fullTextMode: never`
+> in `always`. A raise applies to the record's guard before the first call. (8) **Key** (`P3-T29` step 3):
+> before the first dispatch, when the active provider's key is absent — on any tier; tier 2 loses every
+> key at a restart — the job pauses with `credential-required` after zero requests and asks; Continue
+> checks again. (9) **`Summarizing`**: `runPooledItems` under the `llm` pool, priority `normal`,
+> exclusivity key `summarize:<libraryID>/<collectionKey>`; each result is persisted as it arrives (the row
+> by `summarizeItem`, then the note). A pause (`wall-clock-budget`, `budget-stop`, `credential-required`)
+> reaches the window through the queue's `JobNotifier` (`createJobNoticeRouter`); `budget-stop` asks with
+> the cost dialog's ceiling question and raises to `suggestedLimitUsd`. (10) **Outage** (`06-…` §13.5):
+> once at least 10 items have settled and more than 30 % of them failed, the run stops — cancelled, every
+> row kept — with one message. (11) **Counts** (step 7): *full text used* = stored with
+> `abstract+fulltext`; *fell back to abstract* = stored from the abstract alone; *skipped: no text* = Tier 4
+> or DR-1's metadata choice; *skipped: retracted* and *skipped: duplicate* = `screenItems`' decisions.
+> (12) **A read-only library** writes no note; the window offers "Export Summaries…" (one HTML file of the
+> same projection, to a path the user picks, never logged). (13) **No automatic resumption after a restart
+> yet**: the queue's notifier now exists (`createJobNoticeRouter`), but nothing runs a queued summarize job
+> without its window, and neither `ResumeGuardDeps.remaining` nor the `skipCached` probe is supplied, so the
+> pipeline declares `resumable: false` and `recover()` fails an interrupted summarize job as `not-resumable`
+> (`plan/00` §6 item 250); re-running from the menu resumes by skipping what is stored (FR-23: "job state need
+> not survive restart in v1, but completed work must").
+
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 303(a)); built the same day: an optional item list.**
+> `SummarizeInput` gains `itemKeys`, and `collectionKey` becomes optional; `validate` asks for a collection or a
+> non-empty item list. With a list and no collection, `LoadingItems` reads exactly the listed regular items that are
+> not in the trash (`SummarizeLibrary.loadItems`; `readItemsForSummary` in `src/zotero/notes.ts`); with both, the
+> collection's items are narrowed to the list. Everything after is the collection run's: skip existing (FR-19) unless
+> `resummarize`; screening over the run's items only, so a one-item run finds no duplicate; the estimate; the cost
+> confirmation and the egress notice (`P3-T16`, `P3-T15`); the key check; the `llm` pool; the spending ceilings and
+> their question; cancel, with nothing rolled back. **A run over no collection** runs under the global privacy mode
+> (`plan/00` §6 item 278(c)), reads and writes no `routineConfirmation` record, and its cost dialog offers no "don't
+> ask again" box (`confirmSummarizeRun`; the confirmation request's `collection` is `undefined`); a question forced
+> by money is asked as on every run (item 274(b)). Its exclusivity key is
+> `summarize:<libraryID>/items:<the keys, sorted, comma-joined>`, so one run per item list; a collection run and an
+> item run over the same item do not exclude each other, and both may store that item's row. The surface gains an
+> optional `itemFailed(itemKey, error)`, called once for each item that fails, so the item pane can show the failed
+> call's own message. `SUMMARIZE_INPUT_VERSION` stays 1: both members are optional and no record is resumed (item 13
+> above). The item pane's Generate is such a run of one item with `writeNotes` off (`runItemSummary` in
+> `src/ui/dialogs/summarizeDialog.ts`; `08-ui-ux-spec.md` §3.2's note of this date).
 ### 12.4 Trend report (Feature 3b) and audio (Feature 5)
 
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286; `P4-T01`):** the diagram below is

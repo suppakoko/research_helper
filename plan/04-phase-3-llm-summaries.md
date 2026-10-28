@@ -2726,6 +2726,36 @@ npm run typecheck && npm run lint:check && npm run test:unit -- keys && npm run 
 the lifecycle assertion. The section shares `item-details` with the reader context pane; use
 `tabType` if the layouts must differ.
 
+> **As built 2026-10-29 (`plan/00` §6 item 302; fake model only; not committed).** `itemPaneSectionRegistration`
+> and `ItemPaneSectionOptions` in `src/zotero/registrations.ts`, and `ItemPaneManager.registerSection` on
+> `REGISTRATION_APIS` (`eslint.config.js`); `summarySectionOptions`, `summaryInvalidationObserver`, `sectionView`,
+> `deriveState`, `summaryView`, `truncateGist`, `mayAutoSummarize`, `failureText`, `paintBody` and `SummarySectionHost`
+> in `src/ui/panes/summarySection.ts`; `workKeyOfItemID` in `src/zotero/itemMapper.ts` (outside `Files`: `src/ui/` may not
+> name `Zotero.Items`, and the observer needs an item's work key by id). **Caller and constructing file (rule 10):**
+> `publishSummarySection` in `src/bootstrap/registerUI.ts` builds the host, publishes it as `api.summarySection`,
+> and registers the observer and the section; the section reads rows through `graph.database.summaries()`, the store
+> `P3-T29` constructs in `installPluginDatabase`. Readings are in `docs/08` §3.1, §3.2, §3.3 and §10.2 and `docs/07`
+> §9.3, all dated 2026-10-29. Also outside `Files`: `test/unit/ui/summarySection.test.ts` (the pane's unit tests).
+>
+> **Open — for the owner (the card and the documents do not settle it):** what Generate runs. `docs/08` §3.3 starts
+> the summarize *job* for the one item (`summarizeItems([item.id])`), so the estimate and confirmation (`P3-T16`), the
+> first-job egress notice (`P3-T15`), acquisition and the `llm` pool apply; `P3-T25`'s note names the pane as a direct
+> caller of `summarizeItem`, which would rebuild those stages in the composition root; and `P3-T29`'s
+> `SummarizeInput` takes a collection, not items. *Recommended:* `P3-T29`'s pipeline gains an optional item list,
+> and `publishSummarySection` binds `generate` to a one-item run of it (`regenerate` → `resummarize`). Until then
+> `generate` is unbound and the section offers no Generate, Retry or Regenerate. "Save as child note" is unbound for
+> the same reason: `P3-T29`'s `writeSummaryNote` exists, but whether the pane's action skips an item that already has a
+> summary note, and records the note key, is that card's rule.>
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 303(a), (b)); built the same day, State stays `TODO`.** The open
+> line above is settled as recommended. `publishSummarySection` binds `generate` to `runItemSummary`
+> (`src/ui/dialogs/summarizeDialog.ts`), a one-item run of `P3-T29`'s pipeline (`regenerate` → `resummarize`), and
+> `saveAsNote` to `saveSummaryNoteOnce` (`src/zotero/notes.ts`), which writes no second note and stores the key of
+> the note it writes. The rules are `docs/08` §3.2's and §3.3's notes and `docs/07` §12.3's note of this date. Also
+> changed: `failureText` reads any error-shaped object's message (an error from another global failed
+> `instanceof Error`, and with it this card's integration test, 3 of 3), and a run that stores nothing shows
+> `research-helper-itempane-not-summarized` with its reason. The integration test now drives the real binding with
+> a fake provider (`test/integration/zotero/summarySection.spec.ts`).
+
 ---
 
 ### P3-T29 — Summarize-collection pipeline, notes, remove-notes command
@@ -2843,6 +2873,37 @@ collection submenu exists in `registerMenus.ts`.
 > comment** of `docs/07` §6.4, because Zotero's note editor drops every HTML comment the first time it saves a
 > note (`docs/01` §5.7, measured by `P4-T13`). The comment is still written, as information only. The removal
 > command (step 6) already selects by tag.
+
+> **As built 2026-10-29 (`plan/00` §6 item 302; fake model only; State stays `TODO`).** The open line is settled
+> by item 272(c) and written into `docs/11` §1's definition of done. The readings are in `docs/07` §5.2's note
+> (`zoteroNoteKey`), §6.4's note (the note's order, tags, re-summarize never overwrites, removal to the trash) and
+> §12.3's note (two halves around the record, skip existing, the key check, outage at ≥ 10 settled and > 30 %,
+> the five counts, `resumable: false`), and in `docs/08` §2.5's note (menu order, the modeless window). Declarations:
+> `createSummarizePipeline`, `createJobNoticeRouter`, `measureOverhead`, `isOutage`, `summarizeExclusivityKey` and
+> `HEADLESS_SUMMARIZE_SURFACE` in `summarizePipeline.ts`; `renderSummaryNoteHtml`, `writeSummaryNote`,
+> `findSummaryNote`, `findGeneratedNotes`, `trashGeneratedNotes`, `removeGeneratedNotes`, `readCollectionForSummary`,
+> `describeCollectionForSummary` and `attachmentPageCounts` in `notes.ts`; `buildSummarizeWindowModel`,
+> `confirmSummarizeRun` and `openSummarizeWindow` in `summarizeDialog.ts`; `createZoteroSummarizeLibrary` in
+> `registerPipelines.ts`. **Caller and constructing file (rule 10):** `buildPipelineSet` constructs the pipeline;
+> the summarize window's session in `registerUI.ts` (`createSummarizeSession`) calls `prepare` and `execute`;
+> `installServices` (`container.ts`) builds the router and passes the store, queue, prices, base URLs, model
+> descriptions and key check. **Files outside the list, each a small edit forced by the wiring:** modify
+> `src/bootstrap/container.ts` (the router as the queue's notifier, the pipeline's deps, `ServiceGraph.jobNotices`),
+> `src/bootstrap/pluginDatabase.ts` (`createSummaryStore` on the one connection, `PluginDatabase.summaries`, as
+> `P3-T25`'s notes assigned to this card), `src/model/summary.ts` and `src/zotero/db.ts` (`zoteroNoteKey`, a
+> verbatim key), and `test/unit/bootstrap/container.test.ts` (the notifier is no longer missing).
+> `test/integration/lifecycle.spec.ts` needed no change: it counts the Tools menu only. `P3-T25`'s findings for this
+> card: (1) page counts are read by the Zotero port for a page-capped text (`attachmentPageCounts`); (8) each item's
+> screening decision reaches `summarizeItem` as `input.nonEnglish`; (9) warnings lost on a cache hit are **not**
+> fixed here — the cache's `meta` (`summaryCache.ts`) is outside this card. `followup-299` finding 1: each
+> acquisition's `sectionAware` and `sections`, and the model's context window, are passed to `estimateRun`.
+
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 303(a)–(c)); built the same day, State stays `TODO`.** The readings
+> named in the note above are confirmed (item 303(c); the notes in `docs/07` §5.2, §6.4 and §12.3 are marked so).
+> The pipeline gains an optional item list (`SummarizeInput.itemKeys`, `SummarizeLibrary.loadItems`,
+> `readItemsForSummary`; `collectionKey` optional), so the item pane's Generate runs it for one item under the
+> collection run's rules (`docs/07` §12.3's note of this date); "Save as child note" never writes a second note
+> (`saveSummaryNoteOnce`).
 
 ---
 

@@ -519,6 +519,25 @@ Two concrete hazards make that more than a style preference:
 
 **"Re-run This Search…" is FR-12's control**, and it is the only entry in this submenu that can be *absent* rather than merely disabled: it is shown only when the collection has a stored `SearchProvenance` row (`07-architecture-and-data-model.md` §5.3, the `search_provenance` table indexed by target collection). A collection the user built by hand has no such row and gets no entry. It is grouped with "Recommend New Papers…" because both open the Search & Import window (§4) rather than starting a job; the two entries above the separator are the LLM jobs. The pre-filled window state it opens is §4.6's **Re-run (pre-filled from provenance)**.
 
+> **As built 2026-10-29 (`P3-T29`; the card's readings, for the owner to confirm).** "Summarize All
+> Papers in Collection" (`research-helper-menu-collection-summarize-all`, §10.2's wording) and FR-20's
+> "Remove Generated Notes from Collection…" (`research-helper-menu-collection-remove-notes`, a new id;
+> its `en-US` wording is provisional, `G-41`) are the first two entries of the submenu, above the
+> separator, followed by "Search & Import into This Collection…" and "Re-run This Search…". Neither is
+> disabled when no key is set: the summarize window says what is missing and pauses before any request
+> (`P3-T29` step 3). The summarize entry opens a **modeless** window of its own,
+> `chrome://research-helper/content/summarize.xhtml` (`src/ui/dialogs/summarizeDialog.ts`): §6.4's
+> "Stage 1–2" layout without the report's language, model and depth rows — the collection and its
+> paper count, "Re-summarize existing" (off), "Save a summary note on each paper" (from
+> `report.perPaperNotes`, per run; disabled with a line saying why when the library is read-only), a
+> stage line, the progress line with `cached`/`new` counts and FR-53's remaining time, one row per paper
+> (§6.4's ✓ ⟳ ⚠ ·, with the skip reason), the end-of-job counts, and Summarize / Cancel / Close
+> buttons. The job runs on the privileged side (`src/bootstrap/registerUI.ts`), never inside the
+> window; Cancel, or closing the window while the job runs, cancels it, keeping every summary made. The cost
+> question is `P3-T16`'s dialog, raised over the main window; the wall-clock and key questions are
+> asked inside the window. The removal entry asks with `Services.prompt` naming the exact count and the
+> collection, and does nothing when the count is 0.
+
 **Item context menu** (right-click one or more items)
 
 ```
@@ -621,6 +640,8 @@ Other details not in the published docs:
 * `sidenav.orderable` defaults to `true` — set `false` to pin the section's position.
 * Sections render in **both** the library item pane and the reader context pane (they share the `item-details` element). Use `tabType` to tell them apart.
 
+> **Read 2026-10-29 (`P3-T28`) from Zotero 10.0.3's `omni.ja`** (`xpcom/pluginAPI/itemPaneManager.js`, `pluginAPIBase.mjs`, `elements/itemPaneCustomSection.js`, `itemDetails.js`, `itemPaneContainerBase.mjs`, `collapsibleSection.js`, `itemPane.js`) — source reading, not yet a run; `test/integration/zotero/summarySection.spec.ts` is the measurement. (1) **`onItemChange`'s return value is discarded** (`_handleItemChange` calls the hook and ignores what it returns): the section is hidden only by `setEnabled(false)`, which sets the element's `hidden`. The plugin calls `setEnabled` and returns the same boolean. (2) `registerSection` returns the namespaced id `CSS.escape(pluginID + "-" + paneID)` or `false`, and validates a shallow copy of the options. (3) Zotero removes a plugin's sections from its own `Zotero.Plugins` shutdown observer, as it does menus, so a section vanishing on disable does not prove the plugin unregistered it; the scope's `liveHandles()` does. (4) `onAsyncRender` runs only for a pane scrolled into view (`isPaneVisible`), awaited at most 500 ms per pane, and again when a pane scrolls in. (5) `setSectionSummary` writes the collapsed header's `summary` attribute, which `collapsible-section` draws with `textContent`. (6) Selecting a note shows the note editor, not `item-details` (`itemPane.js`, `renderNoteEditor`), so for a note the section is never drawn rather than hidden; an attachment goes through `onItemChange`. (7) The section is drawn once in the library pane and once in the reader's context pane **of the same document**, so the body must not use element ids: `P3-T28` uses classes.
+
 ### 3.2 Behaviour specification
 
 | Situation | Section behaviour |
@@ -634,6 +655,14 @@ Other details not in the published docs:
 | Multiple items selected | Zotero shows no item pane sections for multi-select; nothing to do |
 
 The summary is **not** written as a note unless the user asks: "Save as child note" is an explicit user action, never automatic, so the plugin does not pollute the user's notes. Where the cached copy lives is **owned by `07-architecture-and-data-model.md` §8.3**, which selected the plugin's own SQLite `summary` table (`StoredSummary`, keyed `workKey:promptVersion:modelId`) with blobs over 256 KB in `<data dir>/research-helper/cache/blobs/`. This section does not choose a store; an earlier draft of it proposed a per-item JSON cache file, and §8.3 wins. Invalidation on `item` `delete`/`trash` is a `Zotero.Notifier` observer (see `01-zotero-plugin-platform.md` §5.9) that calls `cache.invalidateByTag('work:<key>')` (`07-architecture-and-data-model.md` §9.3, trigger 3 — qualified because this document's own §9 is Accessibility and has no such subsection).
+
+> **As built 2026-10-29 (`P3-T28`; `src/ui/panes/summarySection.ts`).** Choices this section left open: (a) **What a stored summary shows**: the research question, the key findings and the limitations, each under a heading, then `<modelId> · <localized time>` — §3.4's populated wireframe (a lead paragraph, "Key findings", the meta line). Every string from the row is model output and is written with `textContent` only, never `innerHTML` and never as a Fluent argument; a failure message is passed through `redact` first. (b) **The gist** is `deriveTldr(stored.content)` with whitespace collapsed, cut at the last word break inside 60 UTF-16 units, with "…". (c) **The read**: the newest row of the item's work key (`fromZoteroItem(item).workKey`, which trusts `rh-work-key`) from the `summary` table, in `onAsyncRender` only. (d) **A failure** stays with its item; selecting another item and coming back reads the table again. (e) **Generate, Retry and Regenerate are offered only when a Generate is bound**, and **Save as child note only when a note writer is bound** — never a button that does nothing. In the no-key state Generate is shown disabled either way. As of this date neither is bound: the summarize job `P3-T29` builds takes a collection, and which code runs a one-item summary is the open question in `plan/04` `P3-T28`'s note of 2026-10-29.
+
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 303(a), (b)); built the same day.** Item (e) of the note above no longer holds: Generate, Retry and Regenerate are bound, and so is Save as child note.
+> - **What runs.** Generate runs `P3-T29`'s summarize pipeline for this one item (`SummarizeInput.itemKeys`; `07-architecture-and-data-model.md` §12.3's note of this date) through `runItemSummary` (`src/ui/dialogs/summarizeDialog.ts`). Regenerate runs it with `resummarize`, and so does Retry, which `P3-T28` built as a regenerate: it repeats a run that stored nothing. The run never writes a note (`writeNotes` off): a summary becomes a note only through Save as child note, the explicit action this section requires.
+> - **Where its progress and its questions appear.** Progress is the section's own loading state — "Summarizing…" and Cancel, the header buttons disabled — as the table above says; the summarize window of §2.5 is the collection command's and is not opened. Each question is asked where a collection run asks it when it is not a line in that window: the pre-run cost and egress confirmation is `P3-T16`'s cost dialog over the main window (`confirmRunCost`), and a spend ceiling reached mid-run asks that dialog's ceiling question. A one-item run works on no collection, so it runs under the global privacy mode (`plan/00` §6 item 278(c)), reads no "don't ask again" record and offers no box to store one, as the search's screening dialog does (§4.2's note of 2026-10-24); the dialog therefore opens on every Generate that will make a call, and a question forced by money is asked as on any run (item 274(b)). The two questions a collection run asks as lines in its window — the key is missing (Continue), and the 30-minute wall-clock limit — have no window to appear in: the run answers them as a run with no surface does (`HEADLESS_SUMMARIZE_SURFACE`: stop, nothing more is sent), and the section shows the failure banner with the reason and **Retry** (the table's "Generation failed" row).
+> - **What the banner says.** A failed call shows its own message, redacted — `failureText` reads the message of any error-shaped object, because an error made in another global fails `instanceof Error` (found 2026-10-29 by the failing `summarySection.spec.ts` test). A run that ends without a stored summary shows `research-helper-itempane-not-summarized` with its reason: no abstract or full text, retracted, not in English, an existing summary note, no key, the time limit, or another stop. Cancelling the cost dialog shows no banner: the user chose to send nothing, and the section returns to its empty state.
+> - **Save as child note** (item 303(b)). It writes the stored summary as `P3-T29`'s note (`writeSummaryNote`) only when the item has no summary note — found by the stored `zoteroNoteKey`, then by the tag (item 296(b), `findSummaryNote`) — and then stores the new note's key on the row (`StoredSummary.zoteroNoteKey`). When the item already has one, or its library is read-only, it writes nothing and says so in a `Zotero.ProgressWindow` popup (`research-helper-itempane-note-not-written`; §8.1's mechanism for a short action). The logic is `saveSummaryNoteOnce` in `src/zotero/notes.ts`.
 
 Summaries are never stored in preferences, in any form: `07-architecture-and-data-model.md` §8.5.2 rules cached summaries out of `Zotero.Prefs` explicitly, so `zotero-plugin-toolkit`'s `LargePrefHelper` — which chunks large values across preferences — is not a candidate here regardless of how well it works.
 
@@ -788,6 +817,10 @@ export function unregisterSummarySection() {
 ```
 
 > ⚠️ **Do not auto-summarize on every selection by default.** `onAsyncRender` fires whenever a user clicks through their library; an unconditional LLM call there would burn the user's API credits by arrow-keying down a list. The `autoSummarize` preference above must default to **off**, and even when on should be debounced (300–500 ms) and rate-limited.
+
+> **As built 2026-10-29 (`P3-T28`).** Where this block and the build differ, the build is the reading: (1) the code is `src/ui/panes/summarySection.ts` (`summarySectionOptions`), registered by `publishSummarySection` in `src/bootstrap/registerUI.ts` through `itemPaneSectionRegistration` (`src/zotero/registrations.ts`) — never a bare `registerSection`, which `eslint.config.js`'s `REGISTRATION_APIS` now forbids; (2) **both icons are `chrome://research-helper/content/icons/favicon@0.5x.png`**, with no `darkIcon`: the four SVGs above do not exist and `addon/content/icons/README.md` forbids another icon size, and the placeholder mark is its own tile, legible in either theme; (3) the body uses classes, not ids (§3.1's note, item 7); (4) the delete/trash observer is application-scoped, registered once through `notifierRegistration` beside the section rather than per body in `onInit`, so teardown removes it once; (5) `autoSummarize` (off by default) is debounced **400 ms**, starts at most one run per section at a time, and tries each item at most once per section — the rate limit this block asks for.
+
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 303(a), (b)); built the same day.** The block's `RH.jobs.summarizeItems([item.id])` is now real: `publishSummarySection` (`src/bootstrap/registerUI.ts`) binds the host's `generate` to a one-item run of the summarize pipeline (`runItemSummary` in `src/ui/dialogs/summarizeDialog.ts`; `regenerate` → `resummarize`), with its own cancellation token for the section's Cancel: the prepare half runs in a job context with no record, and only after the confirmation is the record enqueued with its egress log and the execute half run in its context — as the summarize window's session (`createSummarizeSession`) does. The jobs open with `openOn: "completion"`, as that session's do, so a run that ends while the user looks at another item still leaves its completion popup. `saveAsNote` is bound to `saveSummaryNoteOnce` (`src/zotero/notes.ts`). §3.2's note of this date has the rules.
 
 ### 3.4 Wireframes
 
@@ -2441,6 +2474,8 @@ research-helper-itempane-btn-regenerate =
 research-helper-itempane-btn-save-note =
     .tooltiptext = 요약을 하위 노트로 저장
 ```
+
+> **Corrected 2026-10-29 (`P3-T28`).** The body's buttons in §3.3 are `html:button`s, and Fluent does not draw a `.label` attribute on an HTML button, so `research-helper-itempane-generate` and `-retry` ship with a message **value** ("Generate summary", "Retry"), not `.label`. `P3-T28` also ships `-cancel`, `-failed`, `-no-key` (§3.4's unconfigured wording), `-open-preferences` and three headings (`-research-question`, `-key-findings`, `-limitations`). The Korean above is a draft nobody has reviewed: all fifteen ids are on `KO_PENDING_REVIEW` with commented stubs in the `ko-KR` bundle (gate `G-41`).
 
 Korean has a single plural category, so Fluent selectors need only `*[other]` — but keep the selector rather than a flat string, so the English source and Korean translation stay structurally parallel.
 

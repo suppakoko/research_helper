@@ -23,6 +23,14 @@ import {
   COST_DIALOG_L10N,
   USAGE_L10N,
 } from "../../../src/ui/dialogs/costConfirmDialog";
+import {
+  SUMMARY_RESULT_L10N,
+  SUMMARY_SECTION_L10N,
+} from "../../../src/ui/panes/summarySection";
+import {
+  REMOVE_NOTES_L10N,
+  SUMMARIZE_DIALOG_L10N,
+} from "../../../src/ui/dialogs/summarizeDialog";
 import { mockSettings } from "../../helpers/mockLLM";
 
 /**
@@ -116,6 +124,9 @@ const ID_CONSTANTS = {
   L10N_MENU_COLLECTION_SEARCH_IMPORT: keys.L10N_MENU_COLLECTION_SEARCH_IMPORT,
   // `P2-T17`: FR-12's "Re-run This Search…".
   L10N_MENU_COLLECTION_RERUN: keys.L10N_MENU_COLLECTION_RERUN,
+  // `P3-T29`: FR-19's summarize entry and FR-20's removal entry.
+  L10N_MENU_COLLECTION_SUMMARIZE_ALL: keys.L10N_MENU_COLLECTION_SUMMARIZE_ALL,
+  L10N_MENU_COLLECTION_REMOVE_NOTES: keys.L10N_MENU_COLLECTION_REMOVE_NOTES,
   L10N_MENU_SPIKE_CREATE_ITEM: keys.L10N_MENU_SPIKE_CREATE_ITEM,
   L10N_PROGRESS_HEADLINE: keys.L10N_PROGRESS_HEADLINE,
   // `P3-T34`: the notice that interrupted jobs resumed (`docs/07` §7.6).
@@ -938,5 +949,102 @@ describe("src/i18n/keys.ts — P4-T16's report notice and cost-dialog lines (pla
   it("puts all four on KO_PRESENT once the owner reviewed the Korean (2026-10-27, G-41, item 292(a)), never pending", () => {
     expect(notIn(four, read("KO_PRESENT"))).toEqual([]);
     expect(sharedBy(four, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — P3-T28's item-pane summary section (docs/08 §3; plan/00 §6 item 302)", () => {
+  const fifteen = Object.values(SUMMARY_SECTION_L10N);
+
+  it("names fifteen distinct ids, every one the section's own", () => {
+    expect(new Set(fifteen).size).toBe(15);
+    for (const id of fifteen) {
+      expect(id.startsWith("research-helper-itempane-")).toBe(true);
+    }
+  });
+
+  it("declares all fifteen on the main-window surface, taking no argument and outside the error ids", () => {
+    expect(notIn(fifteen, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(fifteen, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    // Model output never reaches a Fluent argument (summarySection.ts).
+    expect(sharedBy(fifteen, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(fifteen, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  // Moved 2026-10-29: the owner approved the Korean (G-41, plan/00 §6 item 304).
+  it("puts all fifteen on KO_PRESENT now the owner reviewed the Korean (G-41, item 304), none still pending", () => {
+    expect(notIn(fifteen, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(fifteen, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — P3-T29's summarize window and removal command (docs/08 §2.5; plan/00 §6 item 302)", () => {
+  const window = Object.values(SUMMARIZE_DIALOG_L10N).filter(
+    (id) => id !== keys.L10N_JOB_WALL_CLOCK_BUDGET,
+  );
+  const removal = Object.values(REMOVE_NOTES_L10N);
+  const pending = [
+    keys.L10N_MENU_COLLECTION_REMOVE_NOTES,
+    ...window,
+    ...removal,
+  ];
+  const withArguments = [
+    "research-helper-summarize-collection",
+    "research-helper-summarize-stage",
+    "research-helper-summarize-progress",
+    "research-helper-summarize-remaining",
+    "research-helper-summarize-row",
+    "research-helper-summarize-counts",
+    "research-helper-summarize-outcome",
+    "research-helper-summarize-key-needed",
+    "research-helper-summarize-export-outcome",
+    "research-helper-remove-notes-confirm",
+    "research-helper-remove-notes-none",
+    "research-helper-remove-notes-done",
+  ];
+
+  it("names twenty-four new ids, plus the summarize-all label docs/08 §10.2 already gives", () => {
+    expect(new Set(pending).size).toBe(24);
+    expect(keys.L10N_MENU_COLLECTION_SUMMARIZE_ALL).toBe(
+      "research-helper-menu-collection-summarize-all",
+    );
+  });
+
+  it("declares all twenty-five on the main-window surface, outside the error ids; twelve take arguments", () => {
+    const all = [...pending, keys.L10N_MENU_COLLECTION_SUMMARIZE_ALL];
+    expect(notIn(all, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(all, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(all, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(withArguments, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(all, read("ARGUMENT_MESSAGE_IDS"))).toHaveLength(12);
+  });
+
+  // Moved 2026-10-29: the owner approved the Korean (G-41, plan/00 §6 item 304).
+  it("puts the twenty-four and the owner-written menu label on KO_PRESENT now the owner reviewed the Korean (G-41, item 304)", () => {
+    expect(notIn(pending, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(pending, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(read("KO_PRESENT")).toContain(
+      keys.L10N_MENU_COLLECTION_SUMMARIZE_ALL,
+    );
+  });
+});
+
+describe("src/i18n/keys.ts — the item pane's result lines (plan/00 §6 item 303(a), (b))", () => {
+  const two = Object.values(SUMMARY_RESULT_L10N);
+
+  it("names two distinct ids, neither one of the section's fifteen", () => {
+    expect(new Set(two).size).toBe(2);
+    expect(sharedBy(two, Object.values(SUMMARY_SECTION_L10N))).toEqual([]);
+  });
+
+  it("declares both on the main-window surface, each taking $reason, outside the error ids", () => {
+    expect(notIn(two, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(two, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(two, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(two, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("puts both on KO_PENDING_REVIEW, en-US only until the owner reviews the Korean (G-41)", () => {
+    expect(notIn(two, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(two, read("KO_PRESENT"))).toEqual([]);
   });
 });

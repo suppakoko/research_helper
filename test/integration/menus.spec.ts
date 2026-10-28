@@ -39,8 +39,10 @@
 import type Addon from "../../src/addon";
 import { config } from "../../package.json";
 import {
+  L10N_MENU_COLLECTION_REMOVE_NOTES,
   L10N_MENU_COLLECTION_RERUN,
   L10N_MENU_COLLECTION_SEARCH_IMPORT,
+  L10N_MENU_COLLECTION_SUMMARIZE_ALL,
   L10N_MENU_ROOT,
   L10N_MENU_SEARCH_IMPORT,
   L10N_MENU_SPIKE_CREATE_ITEM,
@@ -564,12 +566,22 @@ describe("menu entry points and the window opener (P1-T19)", function () {
     );
     assert.deepEqual(
       [...shape.entries],
-      [L10N_MENU_COLLECTION_SEARCH_IMPORT, L10N_MENU_COLLECTION_RERUN],
-      "Search & Import, then FR-12's Re-run This Search… (P2-T17); the " +
-        "report, summarize-all and recommend entries of docs/08 §2.4 are " +
-        "later cards'",
+      [
+        L10N_MENU_COLLECTION_SUMMARIZE_ALL,
+        L10N_MENU_COLLECTION_REMOVE_NOTES,
+        "",
+        L10N_MENU_COLLECTION_SEARCH_IMPORT,
+        L10N_MENU_COLLECTION_RERUN,
+      ],
+      "P3-T29's two LLM-job entries and the separator below them (docs/08 " +
+        "§2.5's note of 2026-10-29), then Search & Import and FR-12's Re-run " +
+        "This Search… (P2-T17); the report and recommend entries of docs/08 " +
+        "§2.4 are later cards'",
     );
-    assert.deepEqual([...shape.kinds], ["menuitem", "menuitem"]);
+    assert.deepEqual(
+      [...shape.kinds],
+      ["menuitem", "menuitem", "menuseparator", "menuitem", "menuitem"],
+    );
 
     // The real `onShowing` ran, reading the live selection through
     // menuElem -> ownerDocument -> defaultView -> ZoteroPane. Whatever is
@@ -650,6 +662,46 @@ describe("menu entry points and the window opener (P1-T19)", function () {
       win,
       "the window that owns the clicked element is the one opened from",
     );
+  });
+
+  it("gives the summarize and removal entries the right-clicked collection (P3-T29)", async function () {
+    const rec = recorder();
+    const calls: { what: string; host: unknown; collectionID: number }[] = [];
+    const commands: SearchMenuCommands = {
+      ...rec.commands,
+      openSummarizeWindow: (host, collectionID) => {
+        calls.push({ what: "summarize", host, collectionID });
+        return undefined;
+      },
+      removeGeneratedNotes: (host, collectionID) => {
+        calls.push({ what: "remove", host, collectionID });
+        return undefined;
+      },
+    };
+    const entries = collectionMenuOptions(commands).menus[0]?.menus ?? [];
+    assert.deepEqual(
+      entries.map((entry) => entry.menuType),
+      ["menuitem", "menuitem", "separator", "menuitem", "menuitem"],
+    );
+    const win = stubWindow([4243]);
+    for (const entry of entries.slice(0, 2)) {
+      if (!entry.onCommand) assert.fail("an LLM-job entry has no onCommand");
+      entry.onCommand(new Event("command"), libraryContext(win, {}));
+    }
+    assert.strictEqual(rec.errors.length, 0, rec.errors.join("; "));
+    assert.deepEqual(
+      calls.map(({ what, collectionID }) => [what, collectionID]),
+      [
+        ["summarize", 4243],
+        ["remove", 4243],
+      ],
+    );
+    assert.strictEqual(calls[0]?.host, win, "the clicked window is the host");
+    // Two selected collections: refused through onError, nothing called.
+    const two = stubWindow([1, 2]);
+    entries[0]?.onCommand?.(new Event("command"), libraryContext(two, {}));
+    assert.strictEqual(calls.length, 2, "nothing runs for two collections");
+    assert.strictEqual(rec.errors.length, 1, "one reported refusal");
   });
 
   it("opens nothing when the collection selection is not exactly one", async function () {
