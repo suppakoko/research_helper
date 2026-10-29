@@ -137,7 +137,8 @@ export const UNANALYSED_REASONS = Object.freeze({
 
 /**
  * The stop message when every theme ended unanalysed (owner, `plan/00` §6
- * item 309(g)). No argument. On `KO_PENDING_REVIEW` (`G-41`).
+ * item 309(g)). No argument. On `KO_PRESENT` since the owner reviewed its
+ * Korean (`G-41`, `plan/00` §6 item 310(a)).
  */
 export const NO_THEME_ANALYSED_L10N =
   "research-helper-report-stopped-no-theme-analysed" as const satisfies MainWindowMessageId;

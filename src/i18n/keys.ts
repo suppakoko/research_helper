@@ -1067,13 +1067,10 @@ export const KO_PENDING_REVIEW = [
   // `P4-T05`'s stop message for no theme left (plan/00 §6 item 307(c)) left
   // this list on 2026-10-29: the owner approved the coordinator's Korean
   // (`G-41`, plan/00 §6 item 309(a)), so it is on KO_PRESENT.
-  // The two stops of plan/00 §6 item 309: two-stage clustering's merge input
-  // over its budget (309(e)) and no theme analysed (309(g)). `G-41` owns the
-  // translation; the `ko-KR` bundle carries each as a commented stub with its
-  // English source, and nothing was machine-translated. The coordinator
-  // drafts the Korean for the owner.
-  "research-helper-report-stopped-merge-too-large",
-  "research-helper-report-stopped-no-theme-analysed",
+  // The two stops of plan/00 §6 item 309, two-stage clustering's merge input
+  // over its budget (309(e)) and no theme analysed (309(g)), left this list on
+  // 2026-10-29: the owner approved the coordinator's Korean (`G-41`, plan/00
+  // §6 item 310(a)), so both are on KO_PRESENT.
   // --- searchDialog (62) ---
   // `P1-T45`. On this list and not on `KO_PRESENT`: the `ko-KR` bundle carries
   // all three as commented stubs with their English source, which the
@@ -1483,6 +1480,11 @@ export const KO_PRESENT = [
   // and reviewed by the owner on 2026-10-29 (`G-41`, plan/00 §6 item 309(a)),
   // inserted byte for byte from plan/reports/ko-review-309.ftl.
   "research-helper-report-stopped-no-themes",
+  // The two stops of plan/00 §6 item 309(e), (g): Korean drafted by the
+  // coordinator and reviewed by the owner on 2026-10-29 (`G-41`, plan/00 §6
+  // item 310(a)), inserted byte for byte from plan/reports/ko-review-310.ftl.
+  "research-helper-report-stopped-merge-too-large",
+  "research-helper-report-stopped-no-theme-analysed",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

@@ -2427,6 +2427,12 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (g) When every theme is unanalysed, the report run stops before writing anything and says why. Summaries and
       cached stage results are kept, as with `stopped-no-themes`.
 
+310. **After item 309, 2026-10-29.** **DECIDED 2026-10-29 (owner), both as recommended:** (a) the Korean of
+    `research-helper-report-stopped-merge-too-large` and `research-helper-report-stopped-no-theme-analysed` is
+    approved as drafted in chat, recorded byte for byte in `plan/reports/ko-review-310.ftl` (G-41). (b) `P4-T08`
+    (report composition call and structural validation) runs next, alone, with a fake model only. It inserts (a)'s
+    Korean, since it is the only agent editing the bundles.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

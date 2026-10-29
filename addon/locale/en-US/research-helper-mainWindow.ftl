@@ -917,13 +917,13 @@ research-helper-report-stopped-no-themes = The report was stopped before it was 
 ## batch answer over its own band is no longer a stop, so the batches' local
 ## themes can outgrow THEME_MERGE's 60 000-token input budget; the run then ends
 ## before the merge request and before anything is written. No argument. Korean
-## pending review (G-41).
+## reviewed by the owner on 2026-10-29 (G-41, plan/00 §6 item 310(a)).
 
 research-helper-report-stopped-merge-too-large = The report was stopped before it was written: the papers were sorted into themes in several parts, and the themes the parts found were too many, or described at too much length, to combine in one request. Every summary already made is kept.
 
 ## The trend report run's stop when no theme could be analysed (P4-T07; plan/00
 ## §6 item 309(g); docs/12 §9). Every theme of the clustering ended unanalysed,
-## so the run ends before anything is written. No argument. Korean pending
-## review (G-41).
+## so the run ends before anything is written. No argument. Korean reviewed by
+## the owner on 2026-10-29 (G-41, plan/00 §6 item 310(a)).
 
 research-helper-report-stopped-no-theme-analysed = The report was stopped before it was written: none of the themes the model found could be analysed, so no theme was left to write about. Every summary already made is kept.

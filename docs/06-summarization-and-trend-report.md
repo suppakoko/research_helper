@@ -1711,6 +1711,8 @@ The report should not scale linearly with N — at 200 papers the reader wants *
 
 The "Target report length" column is also the input to the audio report's automatic duration: when `tts.targetMinutes` is `0`, `04-audio-report-tts.md` §12 derives the spoken length from this figure. That derivation — the speaking rate and the briefing compression — is doc 04's, not this section's; this table owns only the word target.
 
+> **As built 2026-10-29 (`P4-T08`; `TARGET_WORD_BANDS`, `targetWordsFor` and `resolveTargetWords` in `src/pipeline/trendReport/compose.ts`).** `{{TARGET_WORDS}}` (`12-prompt-library.md` §10) is one number, so the automatic setting sends the middle of the row's "Target report length", rounded to the nearest 50: 1 500, 2 300, 3 400 and 4 250 words. The row is read for the analysed papers, as K is (`07-architecture-and-data-model.md` §4.5): the first row also serves fewer than 10 papers and the last more than 400. A stored `report.targetWords` of 1–399 is read as `0`, automatic (owner, `plan/00` §6 item 290(d)); `0` is automatic, and 400 or more is sent as stored. **Recorded, not changed:** at roughly 1.3 tokens an English word, 4 250 words is about 5 500 tokens, close to `TREND_REPORT_EN`'s 6 000-token ceiling before any reasoning tokens, and a Korean report of the same length (`12-…` §11's 1.4–2.0× note) may pass `TREND_REPORT_KO`'s 7 000; a cut-off answer is `OutputTruncatedError` and is not retried.
+
 ---
 
 ## 10. Citation mapping back to Zotero

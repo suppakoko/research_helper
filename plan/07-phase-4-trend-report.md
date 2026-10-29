@@ -861,7 +861,8 @@ to the merge, whose answer is still checked against the run's `MAX_THEMES`. Befo
 the stage measures `{{LOCAL_THEMES}}` as rendered against `THEME_MERGE`'s 60 000-token budget and,
 when it is over, ends with the new outcome `stopped-merge-over-budget` (`MergeOverBudgetOutcome`,
 message `MERGE_TOO_LARGE_L10N`, `research-helper-report-stopped-merge-too-large`, on
-`KO_PENDING_REVIEW`) and no merge request. The "[open line, as built]" test now pins the decided
+`KO_PENDING_REVIEW` until the owner approved its Korean on 2026-10-29, `plan/00` §6 item 310(a), and on
+`KO_PRESENT` since) and no merge request. The "[open line, as built]" test now pins the decided
 behaviour. `docs/12` §20's note of this date. `P4-T18` maps the new stop to the job's end.
 
 ---
@@ -965,7 +966,8 @@ reading (4).
 *Decided 2026-10-29 (owner, `plan/00` §6 item 309(g)):* when every theme is unanalysed,
 `analyseThemes` returns the outcome `stopped-no-theme-analysed` (`NoThemeAnalysedOutcome`, message
 `NO_THEME_ANALYSED_L10N`, `research-helper-report-stopped-no-theme-analysed`, on
-`KO_PENDING_REVIEW`) instead of an `analysed` one; the summaries and cached stage results are
+`KO_PENDING_REVIEW` until the owner approved its Korean on 2026-10-29, `plan/00` §6 item 310(a), and on
+`KO_PRESENT` since) instead of an `analysed` one; the summaries and cached stage results are
 untouched. `ThemeAnalysisOutcome` is now that union, each member with a `status`. `P4-T18` maps it to
 the job's end. `docs/12` §9's note of this date.
 
@@ -1077,6 +1079,24 @@ FR-25 list six required topics ("scope and method, volume/time distribution, dom
 methodological shifts, contradictions/open questions, and limitations"); `docs/06` §9.1's eleven
 sections cover all six, with limitations inside §2 Scope and Method. `P4-T25` records that mapping
 against FR-25.
+
+*As built 2026-10-29 (`plan/00` §6 item 310(b); fake model only).* `src/pipeline/trendReport/compose.ts`
+declares `composeReport`, `prepareComposition`, `reportVariables`, `reportScopeOf`, `resolveTargetWords`,
+`targetWordsFor`, `exclusionReasons`, `sourcesOf`, `searchStrategyOf`, `expectedHeadings`, `checkHeadings`,
+`structureRevisionNote`, `splitSections` and `citationDensity`, with the types `ComposeInput`,
+`ComposeDeps`, `ComposeOutcome` (`ComposedReport` or `StructureInvalidOutcome`), `CompositionPlan`,
+`HeadingCheck`, `ComposeQuality`, `DraftDelta`, `AnalysedPaper`, `ComposeTheme` and `SearchRunSummary`;
+its readings are `docs/12` §10's note and `docs/06` §9.2's note of this date. Callers (rule 10):
+`trendReportPipeline.ts` (`P4-T18`) at its compose stage, calling `prepareComposition` first when it
+builds the `rp` key (`targetWords`, the digests sent); `critique.ts` (`P4-T09`) for a rewrite, passing
+its notes as `revisionNotes`; `P4-T21` for a Korean report (`TREND_REPORT_KO`,
+`citationReplacement`). Constructing file: `src/bootstrap/registerPipelines.ts` (`P4-T18`); nothing is
+constructed here. The module does not pack with `packByTokens`: it trims `{{DIGESTS}}` instead, so
+`P4-T09` reaches `packByTokens` directly. **Open for the owner (2026-10-29):** (1) what a regeneration that
+fails check 1 again does — built provisionally as the outcome `stopped-structure-invalid` with no
+message id; recommended: stop before anything is written, with a new message on
+`KO_PENDING_REVIEW`; (2) the structure note's wording (`structureRevisionNote`), new prompt text sent in
+English to both prompts.
 
 ---
 
@@ -2079,6 +2099,12 @@ written and shows its `messageId`, every summary and every cached stage result (
 stored theme analysis) is kept, and no note, `report` row or file is saved. The cluster stage's
 two-stage path gains `stopped-merge-over-budget` (`MERGE_TOO_LARGE_L10N`, no `args`), handled as the
 two stops above. `docs/12` §9's and §20's notes of this date.
+
+*Noted 2026-10-29 (`P4-T08`, rule 10):* the compose stage calls `composeReport`
+(`src/pipeline/trendReport/compose.ts`). It returns `composed` or `stopped-structure-invalid` (the one
+fresh generation failed the section check again), whose handling is open for the owner (`docs/12`
+§10's note of this date, reading (3)). Its `onDraft` callback carries each streamed delta with its
+generation number for `P4-T20`'s draft preview; a second generation replaces the first.
 
 ---
 

@@ -172,7 +172,8 @@ export const NO_THEMES_L10N =
 /**
  * Two stages' stop when the merge input, `{{LOCAL_THEMES}}` as rendered, is
  * over `THEME_MERGE`'s input budget (owner, `plan/00` §6 item 309(e)). No
- * argument. On `KO_PENDING_REVIEW` (`G-41`).
+ * argument. On `KO_PRESENT` since the owner reviewed its Korean (`G-41`,
+ * `plan/00` §6 item 310(a)).
  */
 export const MERGE_TOO_LARGE_L10N =
   "research-helper-report-stopped-merge-too-large" as const satisfies MainWindowMessageId;

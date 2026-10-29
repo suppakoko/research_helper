@@ -674,17 +674,13 @@ research-helper-report-stopped-no-themes = 보고서를 쓰기 전에 멈췄습�
 ## The trend report run's stop when the theme merge's input is too large
 ## (P4-T06; plan/00 §6 item 309(e))
 ##
-## NEEDS REVIEW (G-41). The message below is a commented stub carrying its
-## en-US source; nothing was machine-translated, and it is on
-## KO_PENDING_REVIEW in src/i18n/keys.ts.
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-29 (G-41, plan/00 §6 item 310(a)).
 
-# NEEDS REVIEW research-helper-report-stopped-merge-too-large — en-US: The report was stopped before it was written: the papers were sorted into themes in several parts, and the themes the parts found were too many, or described at too much length, to combine in one request. Every summary already made is kept.
+research-helper-report-stopped-merge-too-large = 보고서를 쓰기 전에 멈췄습니다. 논문을 여러 묶음으로 나눠 주제를 찾았는데, 묶음들이 찾은 주제가 너무 많거나 설명이 너무 길어 한 번의 요청으로 합칠 수 없었습니다. 이미 만든 요약은 모두 남아 있습니다.
 
 ## The trend report run's stop when no theme could be analysed (P4-T07; plan/00
 ## §6 item 309(g))
 ##
-## NEEDS REVIEW (G-41). The message below is a commented stub carrying its
-## en-US source; nothing was machine-translated, and it is on
-## KO_PENDING_REVIEW in src/i18n/keys.ts.
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-29 (G-41, plan/00 §6 item 310(a)).
 
-# NEEDS REVIEW research-helper-report-stopped-no-theme-analysed — en-US: The report was stopped before it was written: none of the themes the model found could be analysed, so no theme was left to write about. Every summary already made is kept.
+research-helper-report-stopped-no-theme-analysed = 보고서를 쓰기 전에 멈췄습니다. 모델이 찾은 주제 가운데 분석할 수 있는 것이 하나도 없어, 다룰 주제가 남지 않았습니다. 이미 만든 요약은 모두 남아 있습니다.

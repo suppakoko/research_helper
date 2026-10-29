@@ -1138,9 +1138,10 @@ describe("src/i18n/keys.ts — the two stops of plan/00 §6 item 309(e), (g)", (
     expect(sharedBy(two, read("ERROR_MESSAGE_IDS"))).toEqual([]);
   });
 
-  it("puts both on KO_PENDING_REVIEW, not KO_PRESENT, until the owner reviews the Korean (G-41)", () => {
-    expect(notIn(two, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(two, read("KO_PRESENT"))).toEqual([]);
+  // Moved 2026-10-29: the owner approved the Korean (G-41, plan/00 §6 item 310(a)).
+  it("puts both on KO_PRESENT now the owner reviewed the Korean (G-41, item 310(a)), not still pending", () => {
+    expect(notIn(two, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(two, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 });
 

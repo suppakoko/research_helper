@@ -1004,7 +1004,9 @@ describe("analyseThemes — every theme unanalysed stops the run (plan/00 §6 it
     expect(outcome.status).toBe("analysed");
   });
 
-  it("names a message id the en-US bundle declares with no argument, and a ko-KR NEEDS REVIEW stub", () => {
+  // Changed 2026-10-29: the owner approved the Korean (G-41, plan/00 §6 item
+  // 310(a)), inserted byte for byte from plan/reports/ko-review-310.ftl.
+  it("names a message id the en-US bundle declares with no argument, and the ko-KR bundle carries the owner-approved Korean", () => {
     const en = readFileSync(
       resolve(repo, "addon/locale/en-US/research-helper-mainWindow.ftl"),
       "utf8",
@@ -1018,10 +1020,15 @@ describe("analyseThemes — every theme unanalysed stops the run (plan/00 §6 it
       resolve(repo, "addon/locale/ko-KR/research-helper-mainWindow.ftl"),
       "utf8",
     );
-    expect(ko).toContain(`# NEEDS REVIEW ${NO_THEME_ANALYSED_L10N} — en-US: `);
-    expect(
-      ko.split("\n").some((l) => l.startsWith(`${NO_THEME_ANALYSED_L10N} =`)),
-    ).toBe(false);
+    expect(ko).not.toContain(`# NEEDS REVIEW ${NO_THEME_ANALYSED_L10N} `);
+    const approved = readFileSync(
+      resolve(repo, "plan/reports/ko-review-310.ftl"),
+      "utf8",
+    )
+      .split("\n")
+      .find((l) => l.startsWith(`${NO_THEME_ANALYSED_L10N} =`));
+    expect(approved).toBeDefined();
+    expect(ko.split("\n")).toContain(approved);
   });
 });
 
