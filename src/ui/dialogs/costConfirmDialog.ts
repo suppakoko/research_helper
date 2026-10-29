@@ -367,6 +367,9 @@ function usageLine(
  * synthesis calls on the report model with the themes reserved for, and the
  * critique calls on the critique model — each naming its model, so the
  * dialog shows which model is paid for what. A part with no call has no line.
+ * `$themes` is `SynthesisPlan.themes`, the themes the estimate reserved:
+ * K + 1 with `Other` when K comes from the band, not K (owner, `plan/00` §6
+ * item 309(c)).
  */
 function reportPlanLines(
   plan: ReportPlan,

@@ -30,6 +30,7 @@ import {
   type PromptTemplate,
 } from "../../../src/prompts";
 import {
+  packThemeMembers,
   planSynthesis,
   SUMMARY_MAX_TOKENS,
   SYNTHESIS_INPUT_BUDGETS,
@@ -41,6 +42,7 @@ import {
   ECHO_CORRECTED_WARNING,
   jsonArrayTokens,
   KEYS_REMOVED_WARNING,
+  NO_THEME_ANALYSED_L10N,
   maxPartialsPerMerge,
   packThemeSummaries,
   removeForeignKeys,
@@ -932,6 +934,98 @@ describe("analyseThemes — one failed theme does not abort the run (docs/06 §8
 });
 
 // ---------------------------------------------------------------------------
+// 5b. No theme analysed is a stop (owner, plan/00 §6 item 309(g))
+// ---------------------------------------------------------------------------
+
+describe("analyseThemes — every theme unanalysed stops the run (plan/00 §6 item 309(g); docs/12 §9)", () => {
+  it("returns stopped-no-theme-analysed with its message, each theme's result and the stage's counts", async () => {
+    const { provider, deps } = setup(() =>
+      chatResponse("not json", { usage: USAGE }),
+    );
+    const given = smallInput();
+    const before = structuredClone(given);
+    const outcome = await analyseThemes(given, deps);
+    expect(outcome.status).toBe("stopped-no-theme-analysed");
+    if (outcome.status !== "stopped-no-theme-analysed") return;
+    expect(outcome.messageId).toBe(NO_THEME_ANALYSED_L10N);
+    expect(outcome.messageId).toBe(
+      "research-helper-report-stopped-no-theme-analysed",
+    );
+    expect(outcome.themes.map((t) => [t.themeId, t.status])).toEqual([
+      ["T1", "unanalysed"],
+      ["T2", "unanalysed"],
+    ]);
+    expect(outcome.themes.map((t) => unanalysed(t).reason)).toEqual([
+      "STRUCTURED_OUTPUT",
+      "STRUCTURED_OUTPUT",
+    ]);
+    expect(outcome.calls).toBe(6);
+    expect(provider.calls).toHaveLength(6);
+    expect(outcome.passes).toBe(1);
+    // Nothing given is changed: the summaries are kept as they were.
+    expect(given).toEqual(before);
+  });
+
+  it("stops when every theme is too large, before any request", async () => {
+    const big = Array.from({ length: 12 }, (_, i) =>
+      stored(sized(i + 1, 30_000)),
+    );
+    const { provider, deps } = setup();
+    const outcome = await analyseThemes(
+      input([theme("T1", keys(1, 12))], big),
+      deps,
+    );
+    expect(outcome.status).toBe("stopped-no-theme-analysed");
+    expect(unanalysed(outcome.themes[0]).reason).toBe(
+      UNANALYSED_REASONS.tooLarge,
+    );
+    expect(provider.calls).toHaveLength(0);
+    expect(outcome.requests).toBe(0);
+  });
+
+  it("is analysed when one theme is: the others are reported unanalysed, not a stop", async () => {
+    const { deps } = setup((call) => {
+      if (isRepair(call.request) || themeIdOf(call.request) === "T1") {
+        return chatResponse("not json", { usage: USAGE });
+      }
+      return echo(call);
+    });
+    const outcome = await analyseThemes(smallInput(), deps);
+    expect(outcome.status).toBe("analysed");
+    expect(outcome.themes.map((t) => t.status)).toEqual([
+      "unanalysed",
+      "analysed",
+    ]);
+  });
+
+  it("returns an analysed outcome for a clustering with no theme, which cannot reach this stage", async () => {
+    const { deps } = setup();
+    const outcome = await analyseThemes(input([], []), deps);
+    expect(outcome.status).toBe("analysed");
+  });
+
+  it("names a message id the en-US bundle declares with no argument, and a ko-KR NEEDS REVIEW stub", () => {
+    const en = readFileSync(
+      resolve(repo, "addon/locale/en-US/research-helper-mainWindow.ftl"),
+      "utf8",
+    );
+    const line = en
+      .split("\n")
+      .find((l) => l.startsWith(`${NO_THEME_ANALYSED_L10N} =`));
+    expect(line).toBeDefined();
+    expect(line).not.toContain("{ $");
+    const ko = readFileSync(
+      resolve(repo, "addon/locale/ko-KR/research-helper-mainWindow.ftl"),
+      "utf8",
+    );
+    expect(ko).toContain(`# NEEDS REVIEW ${NO_THEME_ANALYSED_L10N} — en-US: `);
+    expect(
+      ko.split("\n").some((l) => l.startsWith(`${NO_THEME_ANALYSED_L10N} =`)),
+    ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 6. Input checks
 // ---------------------------------------------------------------------------
 
@@ -979,7 +1073,7 @@ describe("analyseThemes — input checks, before any request", () => {
 // 7. How the sub-batching relates to planSynthesis (plan/reports/followup-307.md finding 1)
 // ---------------------------------------------------------------------------
 
-describe("packThemeSummaries against planSynthesis's theme-stage reservation (recorded, not changed)", () => {
+describe("packThemeSummaries against planSynthesis's theme-stage reservation (estimate ≥ actual, plan/00 §6 item 309(b))", () => {
   /** Summaries at the estimate's own per-summary figure: 1 600 × 1.15 = 1 840 tokens. */
   const WORST = Math.ceil(SUMMARY_MAX_TOKENS * 1.15);
 
@@ -1042,8 +1136,18 @@ describe("packThemeSummaries against planSynthesis's theme-stage reservation (re
     };
   }
 
-  it("one call carries 21 summaries at 1 840 tokens, more than the 20.9 per call the estimate assumes", () => {
+  it("one call carries 21 summaries at 1 840 tokens, as packThemeMembers counts them for the estimate", () => {
     expect(WORST).toBe(1_840);
+    for (const n of [21, 22, 43, 60]) {
+      const measured = packThemeSummaries(
+        Array.from({ length: n }, (_, i) => sized(i + 1, WORST)),
+      ).map((batch) => batch.length);
+      const counted = packThemeMembers(
+        Array<number>(n).fill(WORST),
+        (t) => t,
+      ).map((batch) => batch.length);
+      expect(measured, String(n)).toEqual(counted);
+    }
     expect(
       packThemeSummaries(
         Array.from({ length: 21 }, (_, i) => sized(i + 1, WORST)),
@@ -1056,18 +1160,25 @@ describe("packThemeSummaries against planSynthesis's theme-stage reservation (re
     ).toHaveLength(2);
   });
 
-  it("followup-307's 150-paper mix (six themes of 22, three of 6) needs 15 + 6 calls where the estimate reserves 10 + 0", () => {
-    expect(stageCalls([22, 22, 22, 22, 22, 22, 6, 6, 6])).toEqual({
-      reduce: 15,
-      merge: 6,
-    });
-    expect(reserved(150)).toEqual({ reduce: 10, merge: 0 });
+  // Changed 2026-10-29 (owner, plan/00 §6 item 309(b)): these pinned the
+  // under-statement (10 + 0 and 20 + 8 reserved); they now pin estimate ≥ actual.
+  it("followup-307's 150-paper mix (six themes of 22, three of 6) needs 15 + 6 calls; the estimate reserves 16 + 6, never less", () => {
+    const actual = stageCalls([22, 22, 22, 22, 22, 22, 6, 6, 6]);
+    expect(actual).toEqual({ reduce: 15, merge: 6 });
+    const estimate = reserved(150);
+    expect(estimate).toEqual({ reduce: 16, merge: 6 });
+    expect(estimate.reduce).toBeGreaterThanOrEqual(actual.reduce);
+    expect(estimate.merge).toBeGreaterThanOrEqual(actual.merge);
   });
 
-  it("an even 400-paper mix (twelve themes of 33, one of 4) needs 25 + 12 calls where the estimate reserves 20 + 8", () => {
+  it("an even 400-paper mix (twelve themes of 33, one of 4) needs 25 + 12 calls; the estimate reserves 31 + 13, never less", () => {
     const mix = [...Array<number>(12).fill(33), 4];
     expect(mix.reduce((a, b) => a + b, 0)).toBe(400);
-    expect(stageCalls(mix)).toEqual({ reduce: 25, merge: 12 });
-    expect(reserved(400)).toEqual({ reduce: 20, merge: 8 });
+    const actual = stageCalls(mix);
+    expect(actual).toEqual({ reduce: 25, merge: 12 });
+    const estimate = reserved(400);
+    expect(estimate).toEqual({ reduce: 31, merge: 13 });
+    expect(estimate.reduce).toBeGreaterThanOrEqual(actual.reduce);
+    expect(estimate.merge).toBeGreaterThanOrEqual(actual.merge);
   });
 });

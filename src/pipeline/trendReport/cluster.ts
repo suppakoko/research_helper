@@ -24,7 +24,13 @@
  * call over the batch-local themes' names, definitions and paper counts
  * ({@link mergeProblems}); then re-assignment in code and the same
  * `finalizeClustering`, so the result has the one-stage shape. A pass per
- * batch call and one for the merge. Never a third stage.
+ * batch call and one for the merge. Never a third stage. A batch answer over
+ * its own band's `MAX_THEMES` after its one re-run is not a stop: its local
+ * themes go to the merge, whose answer is checked against the run's
+ * `MAX_THEMES`; and the merge input (`{{LOCAL_THEMES}}`, as rendered) is
+ * measured against `THEME_MERGE`'s 60 000-token budget first, the stage
+ * ending with {@link MERGE_TOO_LARGE_L10N} when it is over (owner, `plan/00`
+ * §6 item 309(e)).
  *
  * ## What one stage does (`plan/07` `P4-T05` steps 1–6)
  *
@@ -149,19 +155,27 @@ export const THEME_MERGE_SCHEMA_NAME = "ThemeMerge";
 
 /**
  * Step 6's stop message (owner, `plan/00` §6 item 292(d)); `$themes` is the
- * second answer's theme count and `$max` is `MAX_THEMES`. On
- * `KO_PENDING_REVIEW` (`G-41`).
+ * second answer's theme count and `$max` is `MAX_THEMES`. On `KO_PRESENT`
+ * since the owner reviewed its Korean (`G-41`, `plan/00` §6 item 307(f)).
  */
 export const TOO_MANY_THEMES_L10N =
   "research-helper-report-stopped-too-many-themes" as const satisfies MainWindowMessageId;
 
 /**
  * Step 7's stop message: every theme fell below `MIN_PAPERS_PER_THEME` and none
- * remains (owner, `plan/00` §6 item 307(c)). No argument. On
- * `KO_PENDING_REVIEW` (`G-41`).
+ * remains (owner, `plan/00` §6 item 307(c)). No argument. On `KO_PRESENT`
+ * since the owner reviewed its Korean (`G-41`, `plan/00` §6 item 309(a)).
  */
 export const NO_THEMES_L10N =
   "research-helper-report-stopped-no-themes" as const satisfies MainWindowMessageId;
+
+/**
+ * Two stages' stop when the merge input, `{{LOCAL_THEMES}}` as rendered, is
+ * over `THEME_MERGE`'s input budget (owner, `plan/00` §6 item 309(e)). No
+ * argument. On `KO_PENDING_REVIEW` (`G-41`).
+ */
+export const MERGE_TOO_LARGE_L10N =
+  "research-helper-report-stopped-merge-too-large" as const satisfies MainWindowMessageId;
 
 // ---------------------------------------------------------------------------
 // 2. Types
@@ -287,8 +301,28 @@ export interface NoThemesOutcome extends ClusterOutcomeBase {
   readonly droppedThemeIds: readonly string[];
 }
 
+/**
+ * Two stages only: the batches' local themes, as `{{LOCAL_THEMES}}` renders
+ * them, measured over `THEME_MERGE`'s input budget, so no merge request was
+ * sent. The run stops before anything is written; the summaries are kept
+ * (owner, `plan/00` §6 item 309(e)). `P4-T18` ends the job on it.
+ */
+export interface MergeOverBudgetOutcome extends ClusterOutcomeBase {
+  readonly status: "stopped-merge-over-budget";
+  readonly messageId: typeof MERGE_TOO_LARGE_L10N;
+  /** The local themes the batches kept. */
+  readonly localThemes: number;
+  /** `digestTokens` of `{{LOCAL_THEMES}}`. */
+  readonly mergeInputTokens: number;
+  /** The budget it was measured against: `THEME_MERGE`'s 60 000. */
+  readonly mergeInputBudget: number;
+}
+
 export type ClusterOutcome =
-  ClusteredOutcome | TooManyThemesOutcome | NoThemesOutcome;
+  | ClusteredOutcome
+  | TooManyThemesOutcome
+  | NoThemesOutcome
+  | MergeOverBudgetOutcome;
 
 /** What {@link clusteringProblems} found in one answer. */
 export interface ClusteringProblems {
@@ -998,21 +1032,18 @@ interface BatchDone {
   readonly leftovers: readonly string[];
 }
 
-/** A batch's second answer still over its band's `MAX_THEMES`. */
-interface BatchStopped {
-  readonly kind: "stopped";
-  readonly themes: number;
-  readonly max: number;
-}
-
-/** A batch that sent no further request because another stopped or failed. */
+/**
+ * A batch that sent no further request because another failed. (A batch's
+ * second answer over its band's `MAX_THEMES` no longer stops the stage:
+ * owner, `plan/00` §6 item 309(e).)
+ */
 interface BatchHalted {
   readonly kind: "halted";
 }
 
-type BatchResult = BatchDone | BatchStopped | BatchHalted;
+type BatchResult = BatchDone | BatchHalted;
 
-/** Thrown inside the stage only, when another batch has stopped or failed. */
+/** Thrown inside the stage only, when another batch has failed. */
 class StageHalted extends Error {
   override readonly name = "StageHalted";
 }
@@ -1094,13 +1125,12 @@ export async function clusterThemesTwoStage(
 
   /**
    * One request under a pool permit; refused once the stage has halted. A
-   * failure, or an answer `halts` says ends the stage, halts it **before the
-   * permit is given back**, so no waiting batch sends after it.
+   * failure halts the stage **before the permit is given back**, so no
+   * waiting batch sends after it. (No answer halts it since item 309(e).)
    */
   const send = async <T>(
     tally: CallTally,
     build: (request: number) => StructuredRequest,
-    halts: (value: T) => boolean = () => false,
   ): Promise<T> => {
     const release = await deps.pool.acquire(deps.token);
     try {
@@ -1115,7 +1145,6 @@ export async function clusterThemesTwoStage(
       );
       tally.usages.push(completed.usage);
       tally.calls += completed.calls;
-      if (halts(completed.value)) halt.halted = true;
       return completed.value;
     } catch (error) {
       if (!(error instanceof StageHalted)) halt.halted = true;
@@ -1146,31 +1175,26 @@ export async function clusterThemesTwoStage(
     });
     const ceiling = resolveMaxTokens(prompt, keys.length);
     const tally = batchTallies[index] as CallTally;
-    // Only a re-run's answer over the band ends the stage (rule (5)).
-    const ask = (rerun: boolean): Promise<ThemeClustering> =>
-      send<ThemeClustering>(
-        tally,
-        (request) => ({
-          model: model.modelId,
-          messages: [
-            { role: "system", content: rendered.system },
-            { role: "user", content: rendered.user },
-          ],
-          temperature: prompt.defaultTemperature,
-          maxOutputTokens: ceiling,
-          effort: THEME_CLUSTER_EFFORT,
-          responseFormat: {
-            kind: "json_schema",
-            name: THEME_CLUSTER_SCHEMA_NAME,
-            schema,
-          },
-          ...(deps.routing !== undefined && { routing: deps.routing }),
-          traceId: `${trace}:batch-${String(batch)}:request-${String(request)}`,
-        }),
-        (value) => rerun && value.themes.length > batchBand.maxThemes,
-      );
+    const ask = (): Promise<ThemeClustering> =>
+      send<ThemeClustering>(tally, (request) => ({
+        model: model.modelId,
+        messages: [
+          { role: "system", content: rendered.system },
+          { role: "user", content: rendered.user },
+        ],
+        temperature: prompt.defaultTemperature,
+        maxOutputTokens: ceiling,
+        effort: THEME_CLUSTER_EFFORT,
+        responseFormat: {
+          kind: "json_schema",
+          name: THEME_CLUSTER_SCHEMA_NAME,
+          schema,
+        },
+        ...(deps.routing !== undefined && { routing: deps.routing }),
+        traceId: `${trace}:batch-${String(batch)}:request-${String(request)}`,
+      }));
     try {
-      let answer = await ask(false);
+      let answer = await ask();
       const first = clusteringProblems(answer, keys);
       if (isMiss(first) || answer.themes.length > batchBand.maxThemes) {
         // docs/12 §8 rules (3) and (5), per batch: one shared re-run.
@@ -1188,13 +1212,19 @@ export async function clusterThemesTwoStage(
             duplicateThemeIds: first.duplicateThemeIds.length,
           },
         );
-        answer = await ask(true);
+        answer = await ask();
+        // Owner, plan/00 §6 item 309(e): a re-run still over the batch's band
+        // is not a stop; its local themes go to the merge, which the run's
+        // MAX_THEMES bounds.
         if (answer.themes.length > batchBand.maxThemes) {
-          return {
-            kind: "stopped",
-            themes: answer.themes.length,
-            max: batchBand.maxThemes,
-          };
+          deps.logger?.warn(
+            "theme clustering: a batch answer is still over its band; its themes go to the merge",
+            {
+              batch,
+              themes: answer.themes.length,
+              maxThemes: batchBand.maxThemes,
+            },
+          );
         }
       }
       // A local theme is dropped only when it has no paper (reading (2)).
@@ -1222,9 +1252,7 @@ export async function clusterThemesTwoStage(
   const settled = await Promise.allSettled(
     batches.map(async (digests, index) => {
       try {
-        const result = await runBatch(index, digests);
-        if (result.kind === "stopped") halt.halted = true;
-        return result;
+        return await runBatch(index, digests);
       } catch (error) {
         halt.halted = true;
         throw error;
@@ -1258,26 +1286,11 @@ export async function clusterThemesTwoStage(
     };
   };
 
-  // The first failure in batch order, else the first stop, ends the stage.
+  // The first failure in batch order ends the stage.
   const results: BatchResult[] = [];
   for (const outcome of settled) {
     if (outcome.status === "rejected") throw outcome.reason;
     results.push(outcome.value);
-  }
-  const stopped = results.find(
-    (result): result is BatchStopped => result.kind === "stopped",
-  );
-  if (stopped !== undefined) {
-    deps.logger?.warn(
-      "theme clustering: a batch still has more themes than MAX_THEMES; the run stops",
-      { themes: stopped.themes, maxThemes: stopped.max },
-    );
-    return {
-      ...base(),
-      status: "stopped-too-many-themes",
-      messageId: TOO_MANY_THEMES_L10N,
-      args: { themes: stopped.themes, max: stopped.max },
-    };
   }
   const done = results.filter(
     (result): result is BatchDone => result.kind === "done",
@@ -1293,6 +1306,30 @@ export async function clusterThemesTwoStage(
   const localIds = locals.map((local) => local.id);
   let merge: ThemeMerge | undefined;
   if (locals.length > 0) {
+    // Owner, plan/00 §6 item 309(e): the batches' local themes are unbounded,
+    // so {{LOCAL_THEMES}} is measured as rendered, as {{DIGESTS}} is, against
+    // THEME_MERGE's input budget before the merge request.
+    const localThemes = localThemesVariable(locals);
+    const mergeInputTokens = digestTokens(localThemes);
+    const mergeInputBudget = SYNTHESIS_INPUT_BUDGETS.THEME_MERGE;
+    if (mergeInputTokens > mergeInputBudget) {
+      deps.logger?.warn(
+        "theme clustering: the merge input is over its budget; the run stops",
+        {
+          localThemes: locals.length,
+          mergeInputTokens,
+          mergeInputBudget,
+        },
+      );
+      return {
+        ...base(),
+        status: "stopped-merge-over-budget",
+        messageId: MERGE_TOO_LARGE_L10N,
+        localThemes: locals.length,
+        mergeInputTokens,
+        mergeInputBudget,
+      };
+    }
     const rendered = renderPrompt(mergePrompt, {
       N_PAPERS: String(papers),
       N_BATCHES: String(batches.length),
@@ -1300,7 +1337,7 @@ export async function clusterThemesTwoStage(
       MIN_THEMES: String(band.minThemes),
       MAX_THEMES: String(band.maxThemes),
       MIN_PAPERS_PER_THEME: String(band.minPapersPerTheme),
-      LOCAL_THEMES: localThemesVariable(locals),
+      LOCAL_THEMES: localThemes,
     });
     const askMerge = (): Promise<ThemeMerge> =>
       send<ThemeMerge>(mergeTally, (request) => ({

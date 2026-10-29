@@ -908,6 +908,22 @@ research-helper-report-stopped-too-many-themes = The report was stopped before i
 ## 307(c); docs/12 §8). Every theme the clustering answer made, the
 ## client-generated `Other` included, fell below MIN_PAPERS_PER_THEME and was
 ## dropped, so the run ends before anything is written. No argument. Korean
-## pending review (G-41).
+## reviewed by the owner on 2026-10-29 (G-41, plan/00 §6 item 309(a)).
 
 research-helper-report-stopped-no-themes = The report was stopped before it was written: every theme the model found had too few papers, so no theme was left to write about. Every summary already made is kept.
+
+## The trend report run's stop when the theme merge's input is too large
+## (P4-T06; plan/00 §6 item 309(e); docs/12 §20). In two-stage clustering a
+## batch answer over its own band is no longer a stop, so the batches' local
+## themes can outgrow THEME_MERGE's 60 000-token input budget; the run then ends
+## before the merge request and before anything is written. No argument. Korean
+## pending review (G-41).
+
+research-helper-report-stopped-merge-too-large = The report was stopped before it was written: the papers were sorted into themes in several parts, and the themes the parts found were too many, or described at too much length, to combine in one request. Every summary already made is kept.
+
+## The trend report run's stop when no theme could be analysed (P4-T07; plan/00
+## §6 item 309(g); docs/12 §9). Every theme of the clustering ended unanalysed,
+## so the run ends before anything is written. No argument. Korean pending
+## review (G-41).
+
+research-helper-report-stopped-no-theme-analysed = The report was stopped before it was written: none of the themes the model found could be analysed, so no theme was left to write about. Every summary already made is kept.

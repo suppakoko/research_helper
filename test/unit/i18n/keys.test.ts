@@ -1114,9 +1114,33 @@ describe("src/i18n/keys.ts — P4-T05's stop when no theme is left (plan/00 §6 
     expect(sharedBy(one, read("ERROR_MESSAGE_IDS"))).toEqual([]);
   });
 
-  it("puts it on KO_PENDING_REVIEW, not KO_PRESENT, until the owner reviews the Korean (G-41)", () => {
-    expect(notIn(one, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(one, read("KO_PRESENT"))).toEqual([]);
+  // Moved 2026-10-29: the owner approved the Korean (G-41, plan/00 §6 item 309(a)).
+  it("puts it on KO_PRESENT now the owner reviewed the Korean (G-41, item 309(a)), not still pending", () => {
+    expect(notIn(one, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(one, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — the two stops of plan/00 §6 item 309(e), (g)", () => {
+  // MERGE_TOO_LARGE_L10N (cluster.ts) and NO_THEME_ANALYSED_L10N
+  // (themeAnalysis.ts); trendCluster.test.ts and trendThemeAnalysis.test.ts
+  // pin each equal to its id.
+  const two = [
+    "research-helper-report-stopped-merge-too-large",
+    "research-helper-report-stopped-no-theme-analysed",
+  ];
+
+  it("declares both on the main window beside the other report stops, with no argument, outside the error ids", () => {
+    expect(notIn(two, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(two, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(two, read("REPORT_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(two, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(two, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("puts both on KO_PENDING_REVIEW, not KO_PRESENT, until the owner reviews the Korean (G-41)", () => {
+    expect(notIn(two, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(two, read("KO_PRESENT"))).toEqual([]);
   });
 });
 

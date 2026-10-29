@@ -161,6 +161,8 @@ export type FluentMessageId =
   | 'research-helper-report-language-label'
   | 'research-helper-report-model'
   | 'research-helper-report-model-none'
+  | 'research-helper-report-stopped-merge-too-large'
+  | 'research-helper-report-stopped-no-theme-analysed'
   | 'research-helper-report-stopped-no-themes'
   | 'research-helper-report-stopped-too-many-themes'
   | 'research-helper-report-title'

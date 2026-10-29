@@ -51,6 +51,7 @@ import {
   finalizeClustering,
   isMergeMiss,
   isMiss,
+  MERGE_TOO_LARGE_L10N,
   mergeProblems,
   minPapersPerThemeFor,
   NO_THEMES_L10N,
@@ -1039,7 +1040,9 @@ describe("clusterThemes — step 7: every theme below MIN_PAPERS_PER_THEME, none
     expectWellFormed(outcome.clustering, keys(1, 10));
   });
 
-  it("names a message id the en-US bundle declares with no argument, and a ko-KR NEEDS REVIEW stub", () => {
+  // Changed 2026-10-29: the owner approved the Korean (G-41, plan/00 §6 item
+  // 309(a)), inserted byte for byte from plan/reports/ko-review-309.ftl.
+  it("names a message id the en-US bundle declares with no argument, and the ko-KR bundle carries the owner-approved Korean", () => {
     const en = readFileSync(
       resolve(repo, "addon/locale/en-US/research-helper-mainWindow.ftl"),
       "utf8",
@@ -1053,10 +1056,15 @@ describe("clusterThemes — step 7: every theme below MIN_PAPERS_PER_THEME, none
       resolve(repo, "addon/locale/ko-KR/research-helper-mainWindow.ftl"),
       "utf8",
     );
-    expect(ko).toContain(`# NEEDS REVIEW ${NO_THEMES_L10N} — en-US: `);
-    expect(
-      ko.split("\n").some((l) => l.startsWith(`${NO_THEMES_L10N} =`)),
-    ).toBe(false);
+    expect(ko).not.toContain(`# NEEDS REVIEW ${NO_THEMES_L10N} `);
+    const approved = readFileSync(
+      resolve(repo, "plan/reports/ko-review-309.ftl"),
+      "utf8",
+    )
+      .split("\n")
+      .find((l) => l.startsWith(`${NO_THEMES_L10N} =`));
+    expect(approved).toBeDefined();
+    expect(ko.split("\n")).toContain(approved);
   });
 });
 
@@ -1695,9 +1703,11 @@ describe("P4-T06 — each batch is validated as docs/12 §8", () => {
     ]);
   });
 
-  it("[open line, as built] a batch answer over its band's MAX_THEMES, asked once more and still over, stops the run with no merge", async () => {
+  // Decided 2026-10-29 (owner, plan/00 §6 item 309(e)): this was the
+  // "[open line, as built]" test pinning a stop; a batch answer is no longer one.
+  it("[decided, item 309(e)] a batch answer over its band's MAX_THEMES, asked once more and still over, goes to the merge", async () => {
     // Batch 1: ten themes of five, twice; themeBandFor(50) allows seven.
-    // Batch 2 misses keys on its first answer, so it would ask again.
+    // Batch 2 misses keys on its first answer, so it asks again too.
     const { provider, deps } = setup(
       [
         twoStageResponder({
@@ -1705,28 +1715,74 @@ describe("P4-T06 — each batch is validated as docs/12 §8", () => {
             k[0] === key(1)
               ? groupedAnswer(k, 5)
               : groupedAnswer(k.slice(0, 40)),
+          // Fourteen local themes onto five global ones, within the run's nine.
+          merge: (ids) =>
+            mergeAnswer(ids, (id) => {
+              const n = Number(/-T([0-9]+)$/.exec(id)?.[1]);
+              return `T${String(((n - 1) % 5) + 1)}`;
+            }),
         }),
       ],
       { pool: createLlmPool(() => 1) },
     );
-    const outcome = await clusterThemes(twoStageInput(), deps);
-    expect(outcome.status).toBe("stopped-too-many-themes");
-    if (outcome.status !== "stopped-too-many-themes") return;
-    expect(outcome.messageId).toBe(TOO_MANY_THEMES_L10N);
-    expect(outcome.args).toEqual({ themes: 10, max: 7 });
-    // Pool of one, first come first served: batch 1, batch 2, batch 1's
-    // re-run, which stops the stage — so batch 2's re-run is never sent.
+    const outcome = clustered(await clusterThemes(twoStageInput(), deps));
+    // Pool of one, first come first served: both batches, both re-runs, then
+    // the merge — the batch over its band no longer halts the others.
     expect(
-      provider.calls.map((c) => [batchKeysOf(c)[0], c.request.traceId]),
+      provider.calls.map((c) =>
+        isMergeCall(c)
+          ? ["merge", c.request.traceId]
+          : [batchKeysOf(c)[0], c.request.traceId],
+      ),
     ).toEqual([
       [key(1), "theme-cluster:batch-1:request-1"],
       [key(51), "theme-cluster:batch-2:request-1"],
       [key(1), "theme-cluster:batch-1:request-2"],
+      [key(51), "theme-cluster:batch-2:request-2"],
+      ["merge", "theme-cluster:merge:request-1"],
     ]);
-    expect(outcome.requests).toBe(3);
-    expect(outcome.passes).toBe(2);
+    const mergeCall = provider.calls.find(isMergeCall) as MockCall;
+    expect(localIdsOf(mergeCall)).toEqual([
+      ...Array.from({ length: 10 }, (_, i) => `B1-T${String(i + 1)}`),
+      ...["B2-T1", "B2-T2", "B2-T3", "B2-T4"],
+    ]);
+    expect(outcome.requests).toBe(5);
+    expect(outcome.passes).toBe(3);
     expect(outcome.batches).toBe(2);
-    expect(outcome.mergePrompt).toBeUndefined();
+    expect(outcome.mergePrompt?.promptId).toBe("THEME_MERGE");
+    // Global T1–T5 and Other (T6) holding batch 2's ten leftovers.
+    expect(outcome.clustering.themes.map((t) => t.themeId)).toEqual([
+      "T1",
+      "T2",
+      "T3",
+      "T4",
+      "T5",
+      "T6",
+    ]);
+    expectWellFormed(outcome.clustering, keys(1, 100));
+  });
+
+  it("[item 309(e)] keeps the merge answer's own check against the run's MAX_THEMES: still over after its re-run, the run stops", async () => {
+    // Batch 1 keeps ten local themes; the default merge maps each to its own
+    // number, so ten global themes against the run's nine (themeBandFor(100)).
+    const { provider, deps } = setup([
+      twoStageResponder({
+        batch: (k) =>
+          k[0] === key(1) ? groupedAnswer(k, 5) : groupedAnswer(k),
+      }),
+    ]);
+    const outcome = await clusterThemes(twoStageInput(), deps);
+    expect(outcome.status).toBe("stopped-too-many-themes");
+    if (outcome.status !== "stopped-too-many-themes") return;
+    expect(outcome.messageId).toBe(TOO_MANY_THEMES_L10N);
+    expect(outcome.args).toEqual({
+      themes: 10,
+      max: themeBandFor(100).maxThemes,
+    });
+    expect(schemaNames(provider)).toEqual({
+      ThemeClustering: 3,
+      ThemeMerge: 2,
+    });
   });
 
   it("uses a batch's re-run when it is within its band", async () => {
@@ -1742,6 +1798,102 @@ describe("P4-T06 — each batch is validated as docs/12 §8", () => {
     });
     expect(outcome.passes).toBe(3);
     expect(outcome.requests).toBe(5);
+  });
+});
+
+describe("P4-T06 under plan/00 §6 item 309(e): the merge input is measured against THEME_MERGE's budget", () => {
+  /**
+   * One local theme per paper, each at the schema's longest name (80) and
+   * definition (300), in CJK text, so a block costs about 390 tokens.
+   */
+  function onePerPaper(batchKeys: readonly string[]): ThemeClustering {
+    const base = answer(
+      batchKeys.map((k, i) => ({ id: `T${String(i + 1)}`, members: [k] })),
+    );
+    return {
+      ...base,
+      themes: base.themes.map((theme) => ({
+        ...theme,
+        name: "主".repeat(80),
+        definition: "題".repeat(300),
+      })),
+    };
+  }
+
+  it("stops before any merge request when {{LOCAL_THEMES}} is over 60 000 tokens, with its message", async () => {
+    // 200 papers in four batches of 50 (B = 60): 200 local themes.
+    const { provider, deps } = setup([
+      twoStageResponder({ batch: (k) => onePerPaper(k) }),
+    ]);
+    const outcome = await clusterThemes(
+      input({ digests: digests(200), outputLimit: 5_999 }),
+      deps,
+    );
+    expect(outcome.status).toBe("stopped-merge-over-budget");
+    if (outcome.status !== "stopped-merge-over-budget") return;
+    expect(outcome.messageId).toBe(MERGE_TOO_LARGE_L10N);
+    expect(outcome.messageId).toBe(
+      "research-helper-report-stopped-merge-too-large",
+    );
+    expect(outcome.localThemes).toBe(200);
+    expect(outcome.mergeInputBudget).toBe(60_000);
+    expect(outcome.mergeInputTokens).toBeGreaterThan(60_000);
+    // Each batch was over its band, asked once more, and used: eight requests,
+    // and no merge request.
+    expect(schemaNames(provider)).toEqual({ ThemeClustering: 8 });
+    expect(outcome.requests).toBe(8);
+    expect(outcome.passes).toBe(4);
+    expect(outcome.batches).toBe(4);
+    expect(outcome.mergePrompt).toBeUndefined();
+    expect("clustering" in outcome).toBe(false);
+  });
+
+  it("measures {{LOCAL_THEMES}} as rendered: the same blocks under the budget reach the merge", async () => {
+    // 100 papers in two batches: 100 local themes, about 39 000 tokens.
+    const { provider, deps } = setup([
+      twoStageResponder({
+        batch: (k) => onePerPaper(k),
+        merge: (ids) => mergeAnswer(ids, () => "T1"),
+      }),
+    ]);
+    const outcome = clustered(
+      await clusterThemes(
+        input({ digests: digests(100), outputLimit: 5_999 }),
+        deps,
+      ),
+    );
+    const mergeCall = provider.calls.find(isMergeCall) as MockCall;
+    const localThemes =
+      /<<<SOURCE_TEXT>>>\n([\s\S]*?)\n<<<END_SOURCE_TEXT>>>/.exec(
+        userText(mergeCall),
+      )?.[1] ?? "";
+    expect(localIdsOf(mergeCall)).toHaveLength(100);
+    const tokens = digestTokens(localThemes);
+    expect(tokens).toBeGreaterThan(30_000);
+    expect(tokens).toBeLessThanOrEqual(60_000);
+    expect(outcome.clustering.themes.map((t) => t.itemKeys.length)).toEqual([
+      100,
+    ]);
+  });
+
+  it("names a message id the en-US bundle declares with no argument, and a ko-KR NEEDS REVIEW stub", () => {
+    const en = readFileSync(
+      resolve(repo, "addon/locale/en-US/research-helper-mainWindow.ftl"),
+      "utf8",
+    );
+    const line = en
+      .split("\n")
+      .find((l) => l.startsWith(`${MERGE_TOO_LARGE_L10N} =`));
+    expect(line).toBeDefined();
+    expect(line).not.toContain("{ $");
+    const ko = readFileSync(
+      resolve(repo, "addon/locale/ko-KR/research-helper-mainWindow.ftl"),
+      "utf8",
+    );
+    expect(ko).toContain(`# NEEDS REVIEW ${MERGE_TOO_LARGE_L10N} — en-US: `);
+    expect(
+      ko.split("\n").some((l) => l.startsWith(`${MERGE_TOO_LARGE_L10N} =`)),
+    ).toBe(false);
   });
 });
 

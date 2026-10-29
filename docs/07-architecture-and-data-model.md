@@ -1733,6 +1733,56 @@ export interface TTSProvider {
 > least 1. The run makes ⌈N / that size⌉ batches, as the plan does, so the estimate still never
 > under-states (`06-…` §8.4's note of this date); a model that cannot hold one paper's ceiling is
 > planned at one paper per batch, an over-quote, and the run refuses it before any request.
+>
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 309(b)): point (4) counts the theme stage as
+> `P4-T07` packs it, at its worst.** Point (4) and item 307(b)'s note above counted the room every
+> summary needs as if the summaries packed across themes, but `P4-T07` packs each theme on its own, so
+> a theme just over one call's room takes two calls and a merge (`plan/reports/followup-307.md`
+> finding 1; `P4-T07` finding 3). `planSynthesis` now counts with the packer itself. **The figures.**
+> A summary is taken at its worst as the estimate already prices it, `SUMMARY_MAX_TOKENS` (1 600)
+> with D-06-5's 1.15×, 1 840 tokens, plus the packer's one token for its separator.
+> `packThemeMembers` in `src/pipeline/shared/estimate.ts` is the one packing rule — `packByTokens`
+> within `CLUSTER_REDUCE`'s 40 000 less one for the brackets — and `packThemeSummaries`
+> (`src/pipeline/trendReport/themeAnalysis.ts`) is that rule over the measured summaries; asked with
+> worst-size summaries, it carries **p = 21** in one call (found by asking the packer, not by
+> dividing). `maxPartialsPerMerge`, moved beside it so the estimate can call it without an import
+> cycle (`themeAnalysis.ts` re-exports it), gives **m = 11** sub-batches at most (`06-…` §8.4's note
+> of this date, reading (4)). **One theme of n members** takes at most min(⌈n ÷ p⌉, m)
+> `CLUSTER_REDUCE` calls and, when that is more than one, one `CLUSTER_REDUCE_MERGE`: the packer
+> closes a call only when the next summary does not fit, so with every summary at most 1 840 tokens
+> each call but the last holds at least p of them, and shorter summaries can only need fewer calls; a
+> theme the worst case makes too large (⌈n ÷ p⌉ > m, `theme_too_large`) can still pack into m calls
+> when its summaries are shorter, so it is counted at m, never at 0. **N summaries over at most T
+> themes,** T being K + 1 with K from §9.2's band (the `Other` theme, item 307(b)) or the run's own
+> `themeCount`: each theme needs a member, so there are at most t = min(T, N) themes; a theme of j
+> calls needs at least (j − 1)·p + 1 members, so one call per theme costs one summary and every
+> further call costs p more, at most m − 1 per theme. The most `CLUSTER_REDUCE` calls are therefore
+> **R = t + min(⌊(N − t) ÷ p⌋, t·(m − 1))**. A merge needs a theme of at least p + 1 members, so the
+> most merges are **M = min(t, ⌊N ÷ (p + 1)⌋)**. R and M are each the most any clustering of N
+> summaries into at most T themes can make — a unit test checks both against an exhaustive search over
+> clusterings, with the packer as its oracle — but they come from two different clusterings, so
+> reserving both can over-state, never under-state. Both only grow with T, so item 307(b)'s "work it
+> out for K and for K + 1 and keep the larger" is gone. The first K theme calls (the run's count, when
+> passed) stay unconditional, the rest and every merge conditional. `MIN_PAPERS_PER_THEME` is not used
+> to tighten the bound. **Followup-307's examples,** packed by `packThemeSummaries` in the tests:
+> 150 papers (K = 9) in six themes of 22 and three of 6 need 15 theme calls and 6 merges, where the
+> plan now reserves 16 and 6 — one theme call more than that clustering needs (it reserved 10 and 0);
+> 400 papers (K = 12) in twelve themes of 33 and one of 4 need 25 and 12, where the plan reserves 31
+> and 13 — six theme calls and one merge more (it reserved 20 and 8). **The 42-paper figure in
+> Note 2 changes:** with K = 5 passed, 38 of the 42 summaries can fall in one theme, which takes two
+> calls and a merge, so the plan reserves 6 theme calls and 1 merge — 1 + 6 + 1 + 1 + 1 plus the
+> possible rewrite, 11 synthesis calls and 53 in all, about $5.06 ($2.60 of summaries, $2.46 of
+> synthesis), where Note 2 says 1 + 5 + 1 + 1, 51 calls and $4.68; with K unset, 9 theme calls and 1
+> merge, about $5.63 (it was $5.06). The summary's worst size stays an assumption: a summary whose JSON
+> measures over 1 840 tokens can need more calls than R, and `withBudget` reserves those at dispatch,
+> as point (6)'s.
+>
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 309(c)): the dialog names the themes reserved.**
+> `SynthesisPlan.themes` is now the most themes the theme stage was reserved for, t above: K + 1 with
+> K from the band, the run's own `themeCount` when it passes one, and the paper count when that is
+> smaller, since a theme needs a paper. `reportPlanLines` in `src/ui/dialogs/costConfirmDialog.ts`
+> passes it as `$themes`, so "Grouping the papers into up to { $themes } themes…" names the number
+> the estimate reserved, `Other` included, rather than K.
 
 > **`PipelineContext.config`. Decided 2026-10-23 (owner, plan/00 §6 item 272(a)).** The member's
 > type is `ConfigReader`, declared in `src/pipeline/types.ts`: a **read-only view of
@@ -4422,7 +4472,7 @@ The allowed-value enumerations for `screening.retractionPolicy` and `screening.n
 | `report.saveNote` | boolean | `true` | — | `06-summarization-and-trend-report.md` §14.2 | Report dialog |
 | `report.perPaperNotes` | boolean | `false` | — | `06-summarization-and-trend-report.md` §14.2 | Report dialog (opt-in) |
 | `report.addRelatedLinks` | boolean | `false` | — | `06-summarization-and-trend-report.md` §10.4 | Report dialog (opt-in — it writes to N items) |
-| `report.enabled` | boolean | `false` | — | `11-implementation-roadmap.md` §0 principle 5 | **Not user-visible; not in the pane, and no `pref()` line** (`01-zotero-plugin-platform.md` §7.2). **Decided 2026-10-29 (owner, `plan/00` §6 item 307(d)):** the trend report stays hidden until `P4-T18` and `P4-T20` can generate a report — principle 5: "Feature flags in prefs hide incomplete work rather than leaving broken menu items". While `false`, the collection menu's "Generate Research Trends Report…" entry is not created (read when the menu is registered, at startup or enable) and the report window's opener opens no window (read on every call). Integration specs that exercise the entry turn it on for their duration and restore it. The key is the executing agent's proposal: no earlier hidden or feature preference existed to follow, so it takes the `report.*` family and the `.enabled` suffix of `cache.enabled` and `background.enabled`. It is removed, or its default turns `true`, once a report can be generated (`plan/07` `P4-T20`'s Done when). |
+| `report.enabled` | boolean | `false` | — | `11-implementation-roadmap.md` §0 principle 5 | **Not user-visible; not in the pane, and no `pref()` line** (`01-zotero-plugin-platform.md` §7.2). **Decided 2026-10-29 (owner, `plan/00` §6 item 307(d)):** the trend report stays hidden until `P4-T18` and `P4-T20` can generate a report — principle 5: "Feature flags in prefs hide incomplete work rather than leaving broken menu items". While `false`, the collection menu's "Generate Research Trends Report…" entry is not created (read when the menu is registered, at startup or enable) and the report window's opener opens no window (read on every call). Integration specs that exercise the entry turn it on for their duration and restore it. The key is the executing agent's proposal: no earlier hidden or feature preference existed to follow, so it takes the `report.*` family and the `.enabled` suffix of `cache.enabled` and `background.enabled`. **Decided 2026-10-29 (owner, `plan/00` §6 item 309(d)): the key `report.enabled` is confirmed.** It is removed, or its default turns `true`, once a report can be generated (`plan/07` `P4-T20`'s Done when). |
 | `tts.voice` | string | `"Charon"` | one of the 30 Gemini prebuilt voice names | `04-audio-report-tts.md` §2.7 | Prefs pane → Report & audio (menulist populated from the live voice list). `Charon` ("Informative") is `04-audio-report-tts.md` §2.7's recommended default narrator; an earlier draft shipped `Kore`, which appears in doc 04 only inside Google's own API examples. |
 | ⚠ `tts.language` | string | `"auto"` | `auto` (follow `reportLanguage`) \| `en` \| `ko` | `04-audio-report-tts.md` §9.4 | **Not in the pane.** Declared in this document's own §8.3 placement table and required by doc 04 §7.5 ("Present the choice in prefs as … **Language**"); the default is inferred from doc 04 §9.4's "defaulting from Zotero's UI locale (`Zotero.locale`) on first run". |
 | ⚠ `tts.provider` | string | `"gemini"` | `gemini` \| `openai` \| `system` | `04-audio-report-tts.md` §7.5 | **Not in the pane.** Doc 04 §7.5 says the TTS provider must be a prefs choice and ranks the three options, but no document names a key. |

@@ -851,9 +851,18 @@ the same date. Callers (rule 10): `clusterThemes` calls `clusterThemesTwoStage` 
 still `trendReportPipeline.ts` (`P4-T18`) through `clusterThemes`; it also passes the active
 `THEME_MERGE` template as `mergePrompt` and `WorkerPools.llm` (`buildWorkerPools`,
 `src/bootstrap/registerPipelines.ts`) as `pool`, and records `mergePrompt` among the run's prompts.
-Nothing is constructed. **Open for the owner (2026-10-29):** whether a batch answer over its own
+Nothing is constructed. ~~**Open for the owner (2026-10-29):** whether a batch answer over its own
 band's `MAX_THEMES`, asked once more and still over, stops the run; built, until the owner rules, as
-a stop (`docs/12` §20's note, "Open for the owner"), pinned by one "[open line, as built]" test.
+a stop (`docs/12` §20's note, "Open for the owner"), pinned by one "[open line, as built]" test.~~
+
+*Decided 2026-10-29 (owner, `plan/00` §6 item 309(e)):* a batch answer over its own band's
+`MAX_THEMES` after its one re-run is **not** a stop: `clusterThemesTwoStage` sends its local themes
+to the merge, whose answer is still checked against the run's `MAX_THEMES`. Before the merge request
+the stage measures `{{LOCAL_THEMES}}` as rendered against `THEME_MERGE`'s 60 000-token budget and,
+when it is over, ends with the new outcome `stopped-merge-over-budget` (`MergeOverBudgetOutcome`,
+message `MERGE_TOO_LARGE_L10N`, `research-helper-report-stopped-merge-too-large`, on
+`KO_PENDING_REVIEW`) and no merge request. The "[open line, as built]" test now pins the decided
+behaviour. `docs/12` §20's note of this date. `P4-T18` maps the new stop to the job's end.
 
 ---
 
@@ -941,12 +950,30 @@ summaries, its context's router, budget and token, the `llm` pool and the two te
 outcome's `passes` to the run's counter and lifts each analysed theme's `warnings`;
 `src/bootstrap/registerPipelines.ts` (`P4-T18`) is the constructing file, where the pool already
 exists (`buildPipelineSet`). `packByTokens`' other callers are `compose.ts` (`P4-T08`) and
-`critique.ts` (`P4-T09`). Nothing is constructed here. **Open for the owner (2026-10-29):** a theme
+`critique.ts` (`P4-T09`). Nothing is constructed here. ~~**Open for the owner (2026-10-29):**~~ a theme
 that would need more than 11 sub-batches (about 231 summaries at 1 840 tokens) is reported as
 unanalysed before any request, because one merge could not be sure to carry its partials (`docs/06`
 §8.4's note, reading (4)); the alternative is to send the sub-batches and fail only when the measured
-partials overflow. And what the run does when **every** theme is unanalysed is `P4-T18`'s to decide;
-no document says.
+partials overflow. ~~And what the run does when **every** theme is unanalysed is `P4-T18`'s to decide;
+no document says.~~
+
+*Decided 2026-10-29 (owner, `plan/00` §6 item 309(f)):* the depth-2 ceiling stays **as built**: a
+theme too large for one depth-2 merge is unanalysed before any request (`theme_too_large`). The
+report names it as too large to analyse; `P4-T12` builds that wording. `docs/06` §8.4's note,
+reading (4).
+
+*Decided 2026-10-29 (owner, `plan/00` §6 item 309(g)):* when every theme is unanalysed,
+`analyseThemes` returns the outcome `stopped-no-theme-analysed` (`NoThemeAnalysedOutcome`, message
+`NO_THEME_ANALYSED_L10N`, `research-helper-report-stopped-no-theme-analysed`, on
+`KO_PENDING_REVIEW`) instead of an `analysed` one; the summaries and cached stage results are
+untouched. `ThemeAnalysisOutcome` is now that union, each member with a `status`. `P4-T18` maps it to
+the job's end. `docs/12` §9's note of this date.
+
+*Decided 2026-10-29 (owner, `plan/00` §6 item 309(b)):* `maxPartialsPerMerge` moved to
+`src/pipeline/shared/estimate.ts` (this file re-exports it) beside the new `packThemeMembers`, which
+`packThemeSummaries` now calls, so `planSynthesis` counts theme calls with the same packer without an
+import cycle. The comparison tests against `planSynthesis` now pin "estimate ≥ actual". `docs/07`
+§4.5's note of this date.
 
 ---
 
@@ -1423,6 +1450,13 @@ npm run typecheck && npm run test:unit -- trendScaffold
 **Notes.** Needs from Phase 3: **`P3-T25` (NOT BUILT)** for `groundingScore`, `confidence`, usage per
 summary; **`P3-T22` (NOT BUILT)** for the provenance claim; `P3-T27`, `P3-T16` (built).
 
+*Decided 2026-10-29 (owner, `plan/00` §6 item 309(f)):* a theme `analyseThemes` reports unanalysed
+with the reason `theme_too_large` (`UNANALYSED_REASONS.tooLarge` in
+`src/pipeline/trendReport/themeAnalysis.ts`) is named in the report as **too large to analyse**. This
+card builds that wording, in the report's language, in `reportLabels.ts`' report-language label table
+(its `ko` entry follows this card's Korean rule, `plan/04` §0.2 item 15). `docs/06` §8.4's note,
+reading (4).
+
 ---
 
 ### P4-T13 — Markdown → Zotero note HTML, sanitized
@@ -1796,7 +1830,11 @@ use; its measurement stays `docs/12` §11's action item for the first Korean run
       1 + 5 + 1 + 1 calls plus one possible rewrite at rounds `1`; with K unset it reserves the
       26–75 band's upper K, 7 (§9.2). *(Review 2026-10-25: the line asked the example's figures to
       "reproduce at its stated prices", but the example prices output "at typical fill" and step 1
-      reserves the band's upper K, so the test could not pass as written.)*
+      reserves the band's upper K, so the test could not pass as written.)* *(Decided 2026-10-29,
+      owner, `plan/00` §6 item 309(b): the theme stage is now counted at the packer's worst, so with
+      K fixed at 5 the reservation is 1 + 6 theme calls + 1 merge + 1 + 1 plus the rewrite — 38 of the
+      42 summaries can fall in one theme, which takes two calls and a merge — and with K unset 9 theme
+      calls and 1 merge; `docs/07` §4.5's note of this date.)*
 - [ ] `both` doubles the report calls; rounds `2` adds two critique and two rewrite reservations.
 - [ ] An unpriced report model triggers the second acknowledgement, as for summaries.
 - [ ] A report run whose map, report and critique models differ shows one report notice naming all
@@ -1824,6 +1862,16 @@ make `MAX_THEMES` + 1 themes, so with K from §9.2's band `planSynthesis` reserv
 the larger. A `themeCount` the run passes is its finished clustering's count and gets none, so the
 Done-when's 1 + 5 + 1 + 1 figure stands; with K unset the 42-paper example now reserves 8 theme calls.
 `docs/07` §4.5's note of this date.
+
+*Decided 2026-10-29 (owner, `plan/00` §6 item 309(b), (c)):* `planSynthesis` counts the theme stage
+as `P4-T07` packs it, at its worst: for N summaries over at most T themes (T = K + 1 with K from the
+band, else the run's `themeCount`; t = min(T, N)), R = t + min(⌊(N − t) ÷ p⌋, t·(m − 1))
+`CLUSTER_REDUCE` calls and M = min(t, ⌊N ÷ (p + 1)⌋) merges, where p = 21 worst-size summaries per
+call is asked of `packThemeMembers` and m = 11 is `maxPartialsPerMerge` (both now in `estimate.ts`).
+This replaces item 307(b)'s "larger of K and K + 1" and changes the Done-when's 42-paper figure (noted
+there). `SynthesisPlan.themes` is now t, the themes reserved, and `reportPlanLines` passes it as
+`$themes`, so the dialog shows K + 1 (or the run's count, or the paper count when smaller). `docs/07`
+§4.5's notes of this date derive the count and pin followup-307's two mixes as "estimate ≥ actual".
 
 ---
 
@@ -2023,6 +2071,14 @@ outcomes, `stopped-too-many-themes` and `stopped-no-themes` (every theme below `
 none left). This card maps both to the job's end: the run stops before anything is written, shows the
 outcome's `messageId` (with its `args`, when it has them), keeps every summary, and saves no note, no
 `report` row and no file. `docs/12` §8's note of this date.
+
+*Decided 2026-10-29 (owner, `plan/00` §6 item 309(g), (e)):* two more stops end the job the same way.
+The analyse stage's `analyseThemes` returns `stopped-no-theme-analysed` (`NO_THEME_ANALYSED_L10N`)
+when every theme is unanalysed; this card maps it to the job's end — the run stops before anything is
+written and shows its `messageId`, every summary and every cached stage result (the clustering, any
+stored theme analysis) is kept, and no note, `report` row or file is saved. The cluster stage's
+two-stage path gains `stopped-merge-over-budget` (`MERGE_TOO_LARGE_L10N`, no `args`), handled as the
+two stops above. `docs/12` §9's and §20's notes of this date.
 
 ---
 

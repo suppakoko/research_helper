@@ -472,6 +472,14 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // MIN_PAPERS_PER_THEME and none remained (owner, plan/00 §6 item 307(c)).
   // See NO_THEMES_L10N in src/pipeline/trendReport/cluster.ts.
   "research-helper-report-stopped-no-themes",
+  // P4-T06: the report run stopped because two-stage clustering's merge input
+  // was over THEME_MERGE's budget (owner, plan/00 §6 item 309(e)). See
+  // MERGE_TOO_LARGE_L10N in src/pipeline/trendReport/cluster.ts.
+  "research-helper-report-stopped-merge-too-large",
+  // P4-T07: the report run stopped because no theme could be analysed (owner,
+  // plan/00 §6 item 309(g)). See NO_THEME_ANALYSED_L10N in
+  // src/pipeline/trendReport/themeAnalysis.ts.
+  "research-helper-report-stopped-no-theme-analysed",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -1056,11 +1064,16 @@ export const KO_PENDING_REVIEW = [
   // 306(b)) left this list on 2026-10-29: the owner approved the
   // coordinator's Korean (`G-41`, plan/00 §6 item 307(f)), so it is on
   // KO_PRESENT.
-  // `P4-T05`'s stop message for no theme left (plan/00 §6 item 307(c)).
-  // `G-41` owns the translation; the `ko-KR` bundle carries it as a
-  // commented stub with its English source, and nothing was
-  // machine-translated. The coordinator drafts the Korean for the owner.
-  "research-helper-report-stopped-no-themes",
+  // `P4-T05`'s stop message for no theme left (plan/00 §6 item 307(c)) left
+  // this list on 2026-10-29: the owner approved the coordinator's Korean
+  // (`G-41`, plan/00 §6 item 309(a)), so it is on KO_PRESENT.
+  // The two stops of plan/00 §6 item 309: two-stage clustering's merge input
+  // over its budget (309(e)) and no theme analysed (309(g)). `G-41` owns the
+  // translation; the `ko-KR` bundle carries each as a commented stub with its
+  // English source, and nothing was machine-translated. The coordinator
+  // drafts the Korean for the owner.
+  "research-helper-report-stopped-merge-too-large",
+  "research-helper-report-stopped-no-theme-analysed",
   // --- searchDialog (62) ---
   // `P1-T45`. On this list and not on `KO_PRESENT`: the `ko-KR` bundle carries
   // all three as commented stubs with their English source, which the
@@ -1466,6 +1479,10 @@ export const KO_PRESENT = [
   "research-helper-report-model-none",
   "research-helper-report-close",
   "research-helper-report-stopped-too-many-themes",
+  // `P4-T05`'s stop when no theme is left: Korean drafted by the coordinator
+  // and reviewed by the owner on 2026-10-29 (`G-41`, plan/00 §6 item 309(a)),
+  // inserted byte for byte from plan/reports/ko-review-309.ftl.
+  "research-helper-report-stopped-no-themes",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

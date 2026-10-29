@@ -2410,6 +2410,23 @@ the caller of what the card builds; if it does not, the caller is added with a d
     `P4-T06` (two-stage clustering and the theme-merge call) and `P4-T07` (per-theme analysis with sub-batching) run
     together, fake model only. They open `P4-T08`.
 
+309. **Lines raised by item 307's work, `P4-T06` and `P4-T07`** (`plan/reports/followup-307.md`, `P4-T06.md`,
+    `P4-T07.md`). **DECIDED 2026-10-29 (owner), each as recommended:**
+    - (a) The Korean of `research-helper-report-stopped-no-themes` is approved as drafted in chat, recorded byte for
+      byte in `plan/reports/ko-review-309.ftl` (G-41).
+    - (b) `P4-T16`'s estimate counts sub-batched themes as `P4-T07`'s `packThemeSummaries` actually packs them, so it
+      never under-states (followup-307 finding 1; `P4-T07` finding 3). When the themes' sizes are not yet known, it
+      takes the worst case the packer can produce.
+    - (c) The cost dialog's theme count includes `Other`: it shows K + 1, the number the estimate reserved.
+    - (d) The hidden preference's key `report.enabled` is confirmed.
+    - (e) A batch answer in two-stage clustering that is over its own band's `MAX_THEMES` after its re-run is **not**
+      a stop. It goes to the merge, which is bounded by the run's `MAX_THEMES` (item 292(d)). The merge input is
+      measured against `THEME_MERGE`'s 60 000-token budget, and the run stops if it is over.
+    - (f) A theme too large for one depth-2 merge stays unanalysed before any request (`theme_too_large`), as built.
+      The report says it was too large to analyse.
+    - (g) When every theme is unanalysed, the report run stops before writing anything and says why. Summaries and
+      cached stage results are kept, as with `stopped-no-themes`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

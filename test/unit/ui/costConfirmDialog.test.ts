@@ -25,6 +25,8 @@ import {
 import {
   estimateReportRun,
   estimateRun,
+  OTHER_THEME_RESERVE,
+  themeCountBandFor,
   type EstimateItem,
   type ReportRunEstimate,
   type RunEstimate,
@@ -686,10 +688,19 @@ describe("P4-T16 — a report run's estimate in the same dialog", () => {
   const overhead = 2_000;
 
   function reportEstimate(
-    options: { reportPriced?: boolean; cached?: boolean } = {},
+    options: {
+      reportPriced?: boolean;
+      cached?: boolean;
+      /** Default 4. */
+      papers?: number;
+      /** Default 3; `null` leaves K to the band (item 309(c)). */
+      themeCount?: number | null;
+    } = {},
   ): ReportRunEstimate {
+    const themeCount =
+      options.themeCount === undefined ? 3 : options.themeCount;
     return estimateReportRun({
-      items: Array.from({ length: 4 }, (_, i) => ({
+      items: Array.from({ length: options.papers ?? 4 }, (_, i) => ({
         ...item(String(i), i % 2 === 0),
         cached: options.cached ?? false,
       })),
@@ -713,7 +724,7 @@ describe("P4-T16 — a report run's estimate in the same dialog", () => {
       },
       languages: ["en"],
       critiqueRounds: 1,
-      themeCount: 3,
+      ...(themeCount !== null && { themeCount }),
       overhead: {
         PAPER_SUMMARY_ABSTRACT: 3_000,
         PAPER_SUMMARY_FULLTEXT: 3_000,
@@ -772,6 +783,22 @@ describe("P4-T16 — a report run's estimate in the same dialog", () => {
     expect(model.selected.lines).toContainEqual({
       id: COST_DIALOG_L10N.total,
       args: { cost: formatUsd(run.selected.costUsd as number, LOCALE) },
+    });
+  });
+
+  it("names K + 1 themes, the number the estimate reserved, when K comes from the band (plan/00 §6 item 309(c))", () => {
+    // 30 papers: the 26–75 band's K is 7, so 8 themes with Other; 1 cluster
+    // call, 9 theme calls and 1 merge (item 309(b)), the report and a rewrite.
+    const run = reportEstimate({ papers: 30, themeCount: null });
+    expect(run.selected.synthesis.themes).toBe(
+      themeCountBandFor(30).maxThemes + OTHER_THEME_RESERVE,
+    );
+    const model = asPreflight(
+      preflight({ estimate: run, disclosure: reportDisclosure() }),
+    );
+    expect(model.selected.lines).toContainEqual({
+      id: REPORT_COST_L10N.writing,
+      args: { calls: 1 + 9 + 1 + 1 + 1, themes: 8, model: "vendor/strong" },
     });
   });
 

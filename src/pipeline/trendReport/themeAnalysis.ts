@@ -21,7 +21,9 @@
  *    `keyFindings` and `effectSizes` emptied when `withholdsFindings` says
  *    `docs/06` §12.1 L3 keeps them out (`P4-T04`'s rule, one rule for every
  *    synthesis input).
- * 2. {@link packByTokens} (`src/llm/shared/chunking.ts`) packs the summaries
+ * 2. {@link packThemeSummaries} packs the summaries (`packByTokens` in
+ *    `src/llm/shared/chunking.ts`, by the rule `packThemeMembers` in
+ *    `src/pipeline/shared/estimate.ts` states for the estimate too)
  *    into the fewest calls within `CLUSTER_REDUCE`'s 40 000-token input
  *    budget. One batch: one `CLUSTER_REDUCE` call. More: one call per
  *    sub-batch, in parallel, then one `CLUSTER_REDUCE_MERGE` over the partial
@@ -37,6 +39,9 @@
  *    refusal, a rejected key, a configuration or privacy error ends the stage.
  * 5. Passes (FR-27): 1 for a theme made in one call, 2 for sub-batches and
  *    their merge; the stage's is the largest.
+ * 6. When every theme ends unanalysed, the stage returns the stop
+ *    `stopped-no-theme-analysed` with {@link NO_THEME_ANALYSED_L10N}; it
+ *    removes nothing (owner, `plan/00` §6 item 309(g)).
  *
  * The readings these steps needed are `docs/12` §9's and §21's notes of
  * 2026-10-29 and `docs/06` §8.4's.
@@ -60,7 +65,7 @@ import {
 import type { CancellationToken } from "../../core/jobQueue/cancellation";
 import type { LlmPool } from "../../core/jobQueue/queue";
 import type { Logger } from "../../core/logger";
-import { ESTIMATE_HEADROOM, packByTokens } from "../../llm/shared/chunking";
+import type { MainWindowMessageId } from "../../i18n/keys";
 import {
   completeJSON,
   type JsonChatTarget,
@@ -90,7 +95,11 @@ import {
   resolveMaxTokens,
   type PromptTemplate,
 } from "../../prompts";
-import { SYNTHESIS_INPUT_BUDGETS } from "../shared/estimate";
+import {
+  maxPartialsPerMerge,
+  packThemeMembers,
+  SYNTHESIS_INPUT_BUDGETS,
+} from "../shared/estimate";
 import { ITEM_KEY_RE } from "./citations";
 import { withholdsFindings } from "./digest";
 
@@ -125,6 +134,13 @@ export const UNANALYSED_REASONS = Object.freeze({
   /** The partial analyses, as measured, did not fit the merge's input budget. */
   mergeInputOverBudget: "merge_input_over_budget",
 });
+
+/**
+ * The stop message when every theme ended unanalysed (owner, `plan/00` §6
+ * item 309(g)). No argument. On `KO_PENDING_REVIEW` (`G-41`).
+ */
+export const NO_THEME_ANALYSED_L10N =
+  "research-helper-report-stopped-no-theme-analysed" as const satisfies MainWindowMessageId;
 
 /** A marker-shaped run, as `citations.ts` finds one: `[[`, one line without brackets, `]]`. */
 const MARKER_RE = /\[\[([^[\]\r\n]*)\]\]/g;
@@ -207,8 +223,8 @@ export interface UnanalysedTheme extends ThemeResultBase {
 
 export type ThemeResult = AnalysedTheme | UnanalysedTheme;
 
-/** The analyse stage's result. */
-export interface ThemeAnalysisOutcome {
+/** What every analyse-stage outcome reports. */
+interface ThemeAnalysisOutcomeBase {
   /** One per theme, in the clustering's order. */
   readonly themes: readonly ThemeResult[];
   /** Reduction passes (FR-27): the largest of the themes', 0 with no theme. */
@@ -220,6 +236,27 @@ export interface ThemeAnalysisOutcome {
   /** `CLUSTER_REDUCE`, and `CLUSTER_REDUCE_MERGE` when a merge was sent. */
   readonly prompts: readonly TrendPromptUse[];
 }
+
+/** At least one theme analysed (or no theme given); the others are reported unanalysed. */
+export interface ThemesAnalysedOutcome extends ThemeAnalysisOutcomeBase {
+  readonly status: "analysed";
+}
+
+/**
+ * Every theme ended unanalysed, so the report has nothing to write about: the
+ * run stops before anything is written and says why; the summaries and the
+ * cached stage results are kept (owner, `plan/00` §6 item 309(g); `docs/12`
+ * §9's note of 2026-10-29). `P4-T18` ends the job on it. `themes` still holds
+ * each theme's result, its reason included.
+ */
+export interface NoThemeAnalysedOutcome extends ThemeAnalysisOutcomeBase {
+  readonly status: "stopped-no-theme-analysed";
+  readonly messageId: typeof NO_THEME_ANALYSED_L10N;
+}
+
+/** The analyse stage's result. */
+export type ThemeAnalysisOutcome =
+  ThemesAnalysedOutcome | NoThemeAnalysedOutcome;
 
 /** What {@link citedKeyProblems} found. */
 export interface CitedKeyProblems {
@@ -472,18 +509,19 @@ export function jsonArrayTokens(values: readonly unknown[]): number {
   return estTokens(escapeSourceText(JSON.stringify(values)));
 }
 
-/**
- * One member's cost inside a packed array: its own JSON, escaped, plus one
- * token for the separator. With the budget less one for the brackets, a
- * batch's sum is never below {@link jsonArrayTokens} of the batch.
- */
-function memberTokens(value: unknown): number {
-  return estTokens(escapeSourceText(JSON.stringify(value))) + 1;
+/** One member's own cost inside a packed array: its JSON, escaped. */
+function memberOwnTokens(value: unknown): number {
+  return estTokens(escapeSourceText(JSON.stringify(value)));
 }
 
 /**
  * Step 2's packing: the payloads in the fewest `CLUSTER_REDUCE` calls within
- * its input budget, order kept, evened (`packByTokens`).
+ * its input budget, order kept, evened — `packThemeMembers`
+ * (`src/pipeline/shared/estimate.ts`), the one packing rule, which
+ * `planSynthesis` also counts with (owner, `plan/00` §6 item 309(b)): each
+ * member its own escaped JSON plus one token for the separator, within the
+ * budget less one for the brackets, so a batch's sum is never below
+ * {@link jsonArrayTokens} of the batch.
  *
  * @param payloads - one theme's {@link summariesForReduce}
  * @returns the sub-batches; one batch when the theme fits one call
@@ -492,27 +530,16 @@ function memberTokens(value: unknown): number {
 export function packThemeSummaries(
   payloads: readonly PaperSummary[],
 ): readonly (readonly PaperSummary[])[] {
-  return packByTokens(
-    payloads,
-    memberTokens,
-    SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE - 1,
-  );
+  return packThemeMembers(payloads, memberOwnTokens);
 }
 
 /**
- * The most partial analyses one `CLUSTER_REDUCE_MERGE` call is sure to carry:
- * each taken at `CLUSTER_REDUCE`'s output ceiling with D-06-5's 1.15× and its
- * separator, within the merge's input budget less the brackets. With the
- * shipped 3 000-token ceiling: ⌊39 999 ÷ 3 451⌋ = 11.
- *
- * @param reducePrompt - the active `CLUSTER_REDUCE` template
+ * The most partial analyses one `CLUSTER_REDUCE_MERGE` call is sure to carry.
+ * Declared in `src/pipeline/shared/estimate.ts` since 2026-10-29, so
+ * `planSynthesis` can count with it without an import cycle (owner,
+ * `plan/00` §6 item 309(b)); re-exported here, where `P4-T07` declared it.
  */
-export function maxPartialsPerMerge(reducePrompt: PromptTemplate): number {
-  const partial = Math.ceil(resolveMaxTokens(reducePrompt) * ESTIMATE_HEADROOM);
-  return Math.floor(
-    (SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE_MERGE - 1) / (partial + 1),
-  );
-}
+export { maxPartialsPerMerge };
 
 /** Sum one `Usage` field; `undefined` if any usage lacked it. */
 function sumField(
@@ -658,7 +685,9 @@ interface ThemeCounters {
  * @param input - see {@link ThemeAnalysisInput}
  * @param deps - see {@link ThemeAnalysisDeps}
  * @returns one result per theme, in the clustering's order, with the passes,
- *   counts, usage and prompts of the stage
+ *   counts, usage and prompts of the stage: `analysed` when at least one
+ *   theme was, else the stop `stopped-no-theme-analysed` (owner, `plan/00`
+ *   §6 item 309(g))
  * @throws RangeError for a duplicate theme id, a member without a stored
  *   summary, a repeated or malformed summary key — before any request;
  *   ConfigurationError for a template that is not the expected prompt with
@@ -676,7 +705,9 @@ export async function analyseThemes(
   const themes = input.clustering.themes;
   checkThemes(themes, byKey);
   if (themes.length === 0) {
+    // Cannot come from a `clustered` outcome (docs/12 §8 step 7 stops first).
     return {
+      status: "analysed",
       themes: [],
       passes: 0,
       requests: 0,
@@ -977,7 +1008,7 @@ export async function analyseThemes(
     modelId: model.modelId,
     temperature: prompt.defaultTemperature,
   });
-  return {
+  const outcome: ThemeAnalysisOutcomeBase = {
     themes: results,
     passes: Math.max(0, ...results.map((r) => r.passes)),
     requests: totals.requests,
@@ -988,6 +1019,25 @@ export async function analyseThemes(
       ...(mergeSent ? [promptUse(deps.mergePrompt)] : []),
     ],
   };
+  // Owner, plan/00 §6 item 309(g): no theme analysed is a stop; nothing is
+  // removed, so the summaries and cached stage results stay as they are.
+  if (results.every((result) => result.status === "unanalysed")) {
+    deps.logger?.warn(
+      "theme analysis: no theme could be analysed; the run stops",
+      {
+        themes: results.length,
+        reasons: results.map((result) =>
+          result.status === "unanalysed" ? result.reason : "",
+        ),
+      },
+    );
+    return {
+      ...outcome,
+      status: "stopped-no-theme-analysed",
+      messageId: NO_THEME_ANALYSED_L10N,
+    };
+  }
+  return { ...outcome, status: "analysed" };
 }
 
 /** An analysed theme's result, from its final call and every call it made. */
