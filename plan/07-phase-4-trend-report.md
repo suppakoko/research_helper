@@ -748,12 +748,21 @@ replaces `clusterThemesTwoStage`. Nothing is constructed: the module is function
 message is `research-helper-report-stopped-too-many-themes`, in the main-window bundles: `P4-T19`'s
 `reportWindow` bundle shows no run message (its run messages are `P4-T20`'s).
 
-**Open for the owner (2026-10-29; `plan/reports/followup-292.md` finding 2):** whether step 3's re-run
+~~**Open for the owner (2026-10-29; `plan/reports/followup-292.md` finding 2):**~~ **Decided 2026-10-29
+(owner, `plan/00` §6 item 307(a)): as built.** Whether step 3's re-run
 and step 6's "asked for once more" share one request when the second answer shows the defect the first
-did not. Built, until the owner rules: one shared re-run (`CLUSTER_REQUESTS_MAX` 2), so missed keys then
+did not: ~~Built, until the owner rules:~~ one shared re-run (`CLUSTER_REQUESTS_MAX` 2), so missed keys then
 too many themes stops the run, and too many themes then missed keys sends the leftovers to `Other`. The
-alternative: one re-run per defect, up to three `THEME_CLUSTER` requests. `docs/12` §8's note of
+alternative not taken: one re-run per defect, up to three `THEME_CLUSTER` requests. `docs/12` §8's note of
 2026-10-29 carries both.
+
+**Decided 2026-10-29 (owner, `plan/00` §6 item 307(c)):** when every theme falls below
+`MIN_PAPERS_PER_THEME` and none remains, `clusterThemes` returns the outcome `stopped-no-themes`
+(`NoThemesOutcome`, message `research-helper-report-stopped-no-themes` = `NO_THEMES_L10N`, main-window
+bundle beside step 6's, `en-US` only and on `KO_PENDING_REVIEW`, `G-41`) instead of an empty
+clustering, and makes no further call; the run stops before writing anything and says why, keeping the
+summaries. `P4-T18` maps it to the job's end. `docs/12` §8's note of this date. *(Item 307(b), the
+`Other` theme making `MAX_THEMES` + 1 themes, is `P4-T16`'s estimate; see that card.)*
 
 ---
 
@@ -1777,6 +1786,13 @@ card already edits the dialog model and both bundles; `P4-T18` step 5 calls it. 
 analogue, `P3-T15`, was priced at 1.0 d for the privacy modes, the whole disclosure and the Gemini
 free-tier warning together.
 
+*Decided 2026-10-29 (owner, `plan/00` §6 item 307(b)):* `P4-T05`'s client-generated `Other` theme can
+make `MAX_THEMES` + 1 themes, so with K from §9.2's band `planSynthesis` reserves one more
+`CLUSTER_REDUCE` call, conditional, and works the sub-batch merges out for both theme counts, keeping
+the larger. A `themeCount` the run passes is its finished clustering's count and gets none, so the
+Done-when's 1 + 5 + 1 + 1 figure stands; with K unset the 42-paper example now reserves 8 theme calls.
+`docs/07` §4.5's note of this date.
+
 ---
 
 ### P4-T17 — Synthesis cache keys (`tc`, `cr`, `rp`)
@@ -1970,6 +1986,12 @@ is a shared file under the wave rules — small exact-string edits only. *Re-est
 resume and pause semantics and step 3's probe option; its nearest Phase 3 analogue, `P3-T29`, was
 itself raised 1.0 → 1.25 d for unpriced callers, and this pipeline has eleven stages to its seven.
 
+*Decided 2026-10-29 (owner, `plan/00` §6 item 307(c)):* the cluster stage's `clusterThemes` has two stop
+outcomes, `stopped-too-many-themes` and `stopped-no-themes` (every theme below `MIN_PAPERS_PER_THEME`,
+none left). This card maps both to the job's end: the run stops before anything is written, shows the
+outcome's `messageId` (with its `args`, when it has them), keeps every summary, and saves no note, no
+`report` row and no file. `docs/12` §8's note of this date.
+
 ---
 
 ### P4-T19 — Report window surface, menu entry, `reportWindow` bundle
@@ -2069,6 +2091,14 @@ left open (the model line's wording, the language labels, one window per collect
 shutdown, no `isConfigured` gate on the entry) are in `docs/08` §2.5's and §6.4's notes of this date,
 for the owner to confirm.
 
+*Decided 2026-10-29 (owner, `plan/00` §6 item 307(d)):* the entry and its window are hidden behind the
+hidden preference `report.enabled` (`docs/07` §8.5), default `false`, until `P4-T18` and `P4-T20` can
+generate a report (`docs/11` §0 principle 5). While it is off, `registerUI` builds the collection menu
+without `SearchMenuCommands.openReportWindow`, so the entry is not created, and `openReportWindowCommand`
+opens no window. `menus.spec.ts` and `lifecycle.spec.ts` turn it on for their duration and restore it.
+*(Item 307(e):* `publishSummarizeCommands` now closes the summarize window at shutdown, as
+`publishReportWindowCommands` does for this one.)
+
 ---
 
 ### P4-T20 — Report window: progress, streaming preview, delivery
@@ -2144,6 +2174,9 @@ report call, Cancel, the spend so far, and Save / Export / Copy on completion.
 - [ ] The preview shows the streamed text labelled "draft" and then the final text; a group-library
       save asks the named-group confirmation first, and "no" saves nothing.
 - [ ] The flow spec runs a mock job to "Report ready" and saves a note in the test library.
+- [ ] *(Added 2026-10-29, owner, `plan/00` §6 item 307(d).)* The hidden preference is removed (or
+      defaults on) once a report can be generated: `report.enabled` (`docs/07` §8.5), its row in
+      `src/prefs/schema.ts` and `src/prefs/keys.ts`, and the integration specs that turn it on.
 - [ ] `npm run typecheck` exits 0; `npm run test:unit -- reportViewModel keys` and the integration
       suite pass.
 

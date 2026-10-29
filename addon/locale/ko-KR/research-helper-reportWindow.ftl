@@ -5,31 +5,36 @@
 # the placement rule and the attribute each entry sets (`docs/01` §9.1, §9.3,
 # `docs/08` §10.1).
 #
-# ## This bundle carries NO message yet, and that is the human gate
+# ## The human gate, cleared for these ten
 #
 # `G-41`: a native Korean speaker reviews every `ko-KR` string, and an agent
 # may draft one but must not sign it off. Nothing here was machine-translated.
-# `docs/08` §10.2 ships no Korean for this surface, so every identifier of the
-# en-US bundle is listed below as a commented stub with its English source, and
-# all ten are on `KO_PENDING_REVIEW` in `src/i18n/keys.ts` (`P4-T19`, plan/00 §6
-# item 306(b): the coordinator drafts their Korean for the owner). Until then a
-# Korean UI shows this window in English, resolved from `en-US` through the
-# per-message fallback Gecko's `Localization` walks along the app-locale chain
-# (`docs/01` §9.1, `P0-T24`).
-#
-# The file exists although it holds no message, so that Zotero registers a
-# `ko-KR` file for this surface (`docs/01` §9.1: fallback is chosen per file,
-# per locale) and `test/integration/l10n.spec.ts` can state the gap exactly.
+# `docs/08` §10.2 ships no Korean for this surface. Until 2026-10-29 every
+# identifier of the en-US bundle was listed here as a commented stub with its
+# English source and was on `KO_PENDING_REVIEW` in `src/i18n/keys.ts`
+# (`P4-T19`, plan/00 §6 item 306(b)). The coordinator drafted the Korean and
+# the owner approved it as drafted (plan/00 §6 item 307(f)); the ten messages
+# below are inserted byte for byte from plan/reports/ko-review-307.ftl, and all
+# ten are on `KO_PRESENT`. A message `P4-T20` adds goes here as a commented
+# stub until its Korean is reviewed.
 
-## P4-T19: the report window — NEEDS REVIEW (G-41)
+## P4-T19: the report window (plan/00 §6 item 306(b))
 ##
-# NEEDS REVIEW research-helper-report-title — en-US: Research Helper — Collection Report
-# NEEDS REVIEW research-helper-report-collection — en-US: [one] { $name } — 1 paper / *[other] { $name } — { $count } papers
-# NEEDS REVIEW research-helper-report-language-label — en-US: .value = Language
-# NEEDS REVIEW research-helper-report-language-auto — en-US: .label = Same as Zotero's language
-# NEEDS REVIEW research-helper-report-language-en — en-US: .label = English
-# NEEDS REVIEW research-helper-report-language-ko — en-US: .label = 한국어
-# NEEDS REVIEW research-helper-report-language-both — en-US: .label = English and Korean
-# NEEDS REVIEW research-helper-report-model — en-US: Model: { $model } ({ $provider }) — set in Research Helper's preferences.
-# NEEDS REVIEW research-helper-report-model-none — en-US: No report model is set. Choose an AI provider and its model in Research Helper's preferences.
-# NEEDS REVIEW research-helper-report-close — en-US: .label = Close
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-29 (G-41, plan/00 §6 item 307(f)).
+
+research-helper-report-title = Research Helper — 컬렉션 보고서
+research-helper-report-collection = { $name } — 논문 { $count }편
+research-helper-report-language-label =
+    .value = 언어
+research-helper-report-language-auto =
+    .label = Zotero 언어와 같게
+research-helper-report-language-en =
+    .label = English
+research-helper-report-language-ko =
+    .label = 한국어
+research-helper-report-language-both =
+    .label = 영어와 한국어 모두
+research-helper-report-model = 모델: { $model } ({ $provider }) — Research Helper 설정에서 정합니다.
+research-helper-report-model-none = 보고서 모델이 정해져 있지 않습니다. Research Helper 설정에서 AI 제공자와 모델을 고르세요.
+research-helper-report-close =
+    .label = 닫기

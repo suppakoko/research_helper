@@ -415,6 +415,16 @@ export interface SummarizeWindowArgs {
   readonly l10n: typeof SUMMARIZE_DIALOG_L10N;
 }
 
+/**
+ * The opened window, as far as its opener needs it: raised on open, and
+ * closed at plugin shutdown (owner, `plan/00` §6 item 307(e)).
+ */
+export interface SummarizeWindowHandle {
+  focus(): void;
+  close?(): void;
+  readonly closed?: boolean;
+}
+
 /** The host window's one member this module calls. */
 export interface SummarizeWindowHost {
   openDialog(
@@ -422,7 +432,7 @@ export interface SummarizeWindowHost {
     name?: string,
     features?: string,
     ...extraArguments: unknown[]
-  ): { focus(): void } | null;
+  ): SummarizeWindowHandle | null;
 }
 
 /**
@@ -431,13 +441,14 @@ export interface SummarizeWindowHost {
  * @param host - the main window the menu was clicked in
  * @param collectionID - names the window, so a second open raises the first
  * @param session - the privileged side
+ * @returns the window, so its opener can close it at plugin shutdown
  * @throws when the window cannot be opened
  */
 export function openSummarizeWindow(
   host: SummarizeWindowHost,
   collectionID: number,
   session: SummarizeWindowSession,
-): void {
+): SummarizeWindowHandle {
   const args: SummarizeWindowArgs = { session, l10n: SUMMARIZE_DIALOG_L10N };
   const win = host.openDialog(
     SUMMARIZE_WINDOW_URL,
@@ -451,6 +462,7 @@ export function openSummarizeWindow(
     );
   }
   win.focus();
+  return win;
 }
 
 /**

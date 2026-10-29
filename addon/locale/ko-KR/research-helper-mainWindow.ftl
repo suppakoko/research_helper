@@ -660,8 +660,15 @@ research-helper-itempane-note-not-written =
 ## The trend report run's stop for too many themes (P4-T05; plan/00 §6 item
 ## 292(d))
 ##
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-29 (G-41, plan/00 §6 item 307(f)).
+
+research-helper-report-stopped-too-many-themes = 보고서를 쓰기 전에 멈췄습니다. 두 번 요청했지만 모델이 논문을 주제 { $themes }개로 묶어, 이번 실행에서 비용을 확인한 { $max }개를 넘었습니다. 이미 만든 요약은 모두 남아 있습니다.
+
+## The trend report run's stop when no theme is left (P4-T05; plan/00 §6 item
+## 307(c))
+##
 ## NEEDS REVIEW (G-41). The message below is a commented stub carrying its
 ## en-US source; nothing was machine-translated, and it is on
 ## KO_PENDING_REVIEW in src/i18n/keys.ts.
 
-# NEEDS REVIEW research-helper-report-stopped-too-many-themes — en-US: The report was stopped before it was written: asked twice, the model grouped the papers into { $themes } themes, more than the { $max } this run's cost was confirmed for. Every summary already made is kept.
+# NEEDS REVIEW research-helper-report-stopped-no-themes — en-US: The report was stopped before it was written: every theme the model found had too few papers, so no theme was left to write about. Every summary already made is kept.

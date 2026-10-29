@@ -1706,6 +1706,24 @@ export interface TTSProvider {
 > tests' synthetic prompt overheads (3 000 tokens per map call, 2 000 per synthesis call), the
 > estimate is 51 calls and about $4.68 — $2.60 of summaries and $2.08 of synthesis — where the
 > example's typical fill says ~$2.90 for the whole run: an over-quote, never an under-quote.
+>
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 307(b)): one more theme analysis for `Other`.** The
+> client-generated `Other` theme (`12-…` §8, rule (3)) can make `MAX_THEMES` + 1 themes, so when K is
+> the upper end of §9.2's band (point (2)), `planSynthesis` reserves K + 1 `CLUSTER_REDUCE` calls, the
+> last conditional. A K the run passes (`themeCount`) is its finished clustering's own count, `Other`
+> included, and gets no extra call, so the 42-paper figure above (K = 5 passed) is unchanged; with K
+> unset the same example reserves 8 theme calls, not 7. **Point (4) with the extra theme:** the plan
+> works the theme stage out for K themes and for K + 1 — at least one call per theme or enough calls
+> to carry every summary, whichever is more, plus one `CLUSTER_REDUCE_MERGE` per theme that could
+> split (no more than the theme count, nor than the calls beyond one per theme) — and keeps the larger
+> count of each kind. So the merges need the + 1 too, but only where the summaries need at least
+> 2K + 2 calls (from 522 papers at K = 12, by the 1 600-token rule): there `Other` is one more theme
+> that could split. Below that the extra theme can only lower the merge count, which is why the
+> larger is kept; it never raises the theme calls once the summaries already need more than K + 1.
+> *Not changed by this note, recorded for the owner:* point (4) counts the room every summary needs
+> as if the summaries packed across themes, while a split theme's last call is part-filled, so a
+> clustering with several themes each just over one call's room can need up to one more call per such
+> theme (and its merge) than (4) reserves; `withBudget` reserves those at dispatch, as (6)'s calls.
 
 > **`PipelineContext.config`. Decided 2026-10-23 (owner, plan/00 §6 item 272(a)).** The member's
 > type is `ConfigReader`, declared in `src/pipeline/types.ts`: a **read-only view of
@@ -4395,6 +4413,7 @@ The allowed-value enumerations for `screening.retractionPolicy` and `screening.n
 | `report.saveNote` | boolean | `true` | — | `06-summarization-and-trend-report.md` §14.2 | Report dialog |
 | `report.perPaperNotes` | boolean | `false` | — | `06-summarization-and-trend-report.md` §14.2 | Report dialog (opt-in) |
 | `report.addRelatedLinks` | boolean | `false` | — | `06-summarization-and-trend-report.md` §10.4 | Report dialog (opt-in — it writes to N items) |
+| `report.enabled` | boolean | `false` | — | `11-implementation-roadmap.md` §0 principle 5 | **Not user-visible; not in the pane, and no `pref()` line** (`01-zotero-plugin-platform.md` §7.2). **Decided 2026-10-29 (owner, `plan/00` §6 item 307(d)):** the trend report stays hidden until `P4-T18` and `P4-T20` can generate a report — principle 5: "Feature flags in prefs hide incomplete work rather than leaving broken menu items". While `false`, the collection menu's "Generate Research Trends Report…" entry is not created (read when the menu is registered, at startup or enable) and the report window's opener opens no window (read on every call). Integration specs that exercise the entry turn it on for their duration and restore it. The key is the executing agent's proposal: no earlier hidden or feature preference existed to follow, so it takes the `report.*` family and the `.enabled` suffix of `cache.enabled` and `background.enabled`. It is removed, or its default turns `true`, once a report can be generated (`plan/07` `P4-T20`'s Done when). |
 | `tts.voice` | string | `"Charon"` | one of the 30 Gemini prebuilt voice names | `04-audio-report-tts.md` §2.7 | Prefs pane → Report & audio (menulist populated from the live voice list). `Charon` ("Informative") is `04-audio-report-tts.md` §2.7's recommended default narrator; an earlier draft shipped `Kore`, which appears in doc 04 only inside Google's own API examples. |
 | ⚠ `tts.language` | string | `"auto"` | `auto` (follow `reportLanguage`) \| `en` \| `ko` | `04-audio-report-tts.md` §9.4 | **Not in the pane.** Declared in this document's own §8.3 placement table and required by doc 04 §7.5 ("Present the choice in prefs as … **Language**"); the default is inferred from doc 04 §9.4's "defaulting from Zotero's UI locale (`Zotero.locale`) on first run". |
 | ⚠ `tts.provider` | string | `"gemini"` | `gemini` \| `openai` \| `system` | `04-audio-report-tts.md` §7.5 | **Not in the pane.** Doc 04 §7.5 says the TTS provider must be a prefs choice and ranks the three options, but no document names a key. |

@@ -899,6 +899,15 @@ research-helper-itempane-note-not-written =
 ## `$max` themes, so a clustering answer over it, asked for once more and still
 ## over, ends the run. `$themes` and `$max` are numbers, `$themes` always the
 ## larger and both at least 5 in a real run, so neither needs a plural
-## selector. Korean pending review (G-41).
+## selector. Korean reviewed by the owner on 2026-10-29 (G-41, plan/00 §6 item
+## 307(f)).
 
 research-helper-report-stopped-too-many-themes = The report was stopped before it was written: asked twice, the model grouped the papers into { $themes } themes, more than the { $max } this run's cost was confirmed for. Every summary already made is kept.
+
+## The trend report run's stop when no theme is left (P4-T05; plan/00 §6 item
+## 307(c); docs/12 §8). Every theme the clustering answer made, the
+## client-generated `Other` included, fell below MIN_PAPERS_PER_THEME and was
+## dropped, so the run ends before anything is written. No argument. Korean
+## pending review (G-41).
+
+research-helper-report-stopped-no-themes = The report was stopped before it was written: every theme the model found had too few papers, so no theme was left to write about. Every summary already made is kept.

@@ -44,6 +44,7 @@ import {
   finalizeClustering,
   isMiss,
   minPapersPerThemeFor,
+  NO_THEMES_L10N,
   OTHER_THEME_DEFINITION,
   OTHER_THEME_NAME,
   SMALL_THEME_REASON,
@@ -873,9 +874,9 @@ describe("clusterThemes — step 6: an answer with more themes than MAX_THEMES",
     expect(provider.calls).toHaveLength(2);
   });
 
-  // Open for the owner (followup-292 finding 2; docs/12 §8's note of 2026-10-29):
-  // built with one shared re-run. These two pin that reading until the owner rules.
-  it("[open line, as built] missed keys and then too many themes stops the run after two requests", async () => {
+  // Decided as built (owner, plan/00 §6 item 307(a); followup-292 finding 2;
+  // docs/12 §8's note of 2026-10-29): one shared re-run. These two pin it.
+  it("[decided as built, item 307(a)] missed keys and then too many themes stops the run after two requests", async () => {
     const missing = answer([{ id: "T1", members: keys(1, 8) }]);
     const { provider, deps } = setup([
       reply(missing),
@@ -887,7 +888,7 @@ describe("clusterThemes — step 6: an answer with more themes than MAX_THEMES",
     expect(provider.calls).toHaveLength(CLUSTER_REQUESTS_MAX);
   });
 
-  it("[open line, as built] too many themes and then missed keys sends the leftovers to Other after two requests", async () => {
+  it("[decided as built, item 307(a)] too many themes and then missed keys sends the leftovers to Other after two requests", async () => {
     const missing = answer([
       { id: "T1", members: keys(1, 4) },
       { id: "T2", members: keys(5, 8) },
@@ -902,7 +903,7 @@ describe("clusterThemes — step 6: an answer with more themes than MAX_THEMES",
     expect(outcome.otherThemeId).toBe("T3");
   });
 
-  it("names a message id the en-US bundle declares with $themes and $max, and a ko-KR NEEDS REVIEW stub", () => {
+  it("names a message id both bundles declare with $themes and $max: the owner's Korean since item 307(f)", () => {
     expect(TOO_MANY_THEMES_L10N).toBe(
       "research-helper-report-stopped-too-many-themes",
     );
@@ -920,9 +921,109 @@ describe("clusterThemes — step 6: an answer with more themes than MAX_THEMES",
       resolve(repo, "addon/locale/ko-KR/research-helper-mainWindow.ftl"),
       "utf8",
     );
-    expect(ko).toContain(`# NEEDS REVIEW ${TOO_MANY_THEMES_L10N} — en-US: `);
+    expect(ko).not.toContain(`# NEEDS REVIEW ${TOO_MANY_THEMES_L10N} `);
+    const koLine = ko
+      .split("\n")
+      .find((l) => l.startsWith(`${TOO_MANY_THEMES_L10N} =`));
+    expect(koLine).toBeDefined();
+    expect(koLine).toContain("{ $themes }");
+    expect(koLine).toContain("{ $max }");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5b. Step 7 — no theme left (owner, plan/00 §6 item 307(c))
+// ---------------------------------------------------------------------------
+
+describe("clusterThemes — step 7: every theme below MIN_PAPERS_PER_THEME, none left", () => {
+  /** Ten papers in five 2-paper themes: at a minimum of 3 every theme is dropped. */
+  function fivePairs(): ThemeClustering {
+    return answer([
+      { id: "T1", members: keys(1, 2) },
+      { id: "T2", members: keys(3, 4) },
+      { id: "T3", members: keys(5, 6) },
+      { id: "T4", members: keys(7, 8) },
+      { id: "T5", members: keys(9, 10) },
+    ]);
+  }
+  const minThree = {
+    band: { minThemes: 3, maxThemes: 5, minPapersPerTheme: 3 },
+  } as const;
+
+  it("stops with its message after the one request, and makes no further call", async () => {
+    const { provider, deps } = setup([reply(fivePairs()), reply(cleanTen())]);
+    const outcome = await clusterThemes(input(minThree), deps);
+    expect(provider.calls).toHaveLength(1);
+    expect(outcome.status).toBe("stopped-no-themes");
+    if (outcome.status !== "stopped-no-themes") return;
+    expect(outcome.messageId).toBe("research-helper-report-stopped-no-themes");
+    expect(outcome.messageId).toBe(NO_THEMES_L10N);
+    expect(outcome.droppedThemeIds).toEqual(["T1", "T2", "T3", "T4", "T5"]);
+    expect(outcome.requests).toBe(1);
+    expect(outcome.passes).toBe(1);
+    expect(outcome.usage.costUsd).toBeCloseTo(0.01, 10);
+    expect("clustering" in outcome).toBe(false);
+  });
+
+  it("stops when every theme, Other included, is too small after the re-run", async () => {
+    // One theme of one paper and nine papers missed twice, so Other holds
+    // nine; at a minimum of 10 both are dropped.
+    const missing = answer([{ id: "T1", members: keys(1, 1) }]);
+    const { provider, deps } = setup([reply(missing), reply(missing)]);
+    const outcome = await clusterThemes(
+      input({ band: { minThemes: 1, maxThemes: 5, minPapersPerTheme: 10 } }),
+      deps,
+    );
+    expect(provider.calls).toHaveLength(CLUSTER_REQUESTS_MAX);
+    expect(outcome.status).toBe("stopped-no-themes");
+    if (outcome.status !== "stopped-no-themes") return;
+    expect(outcome.droppedThemeIds).toEqual(["T1", "T2"]);
+  });
+
+  it("stops when the model left every paper unclustered", async () => {
+    const none = answer([{ id: "T1", members: [] }], {
+      unclustered: keys(1, 10).map((itemKey) => ({
+        itemKey,
+        reason: "Synthetic: fits no theme.",
+      })),
+    });
+    const { provider, deps } = setup([reply(none)]);
+    const outcome = await clusterThemes(input(), deps);
+    expect(provider.calls).toHaveLength(1);
+    expect(outcome.status).toBe("stopped-no-themes");
+  });
+
+  it("still clusters when one theme survives the minimum", async () => {
+    const a = answer([
+      { id: "T1", members: keys(1, 3) },
+      { id: "T2", members: keys(4, 5) },
+      { id: "T3", members: keys(6, 7) },
+      { id: "T4", members: keys(8, 9) },
+      { id: "T5", members: keys(10, 10) },
+    ]);
+    const { deps } = setup([reply(a)]);
+    const outcome = clustered(await clusterThemes(input(minThree), deps));
+    expect(outcome.clustering.themes.map((t) => t.themeId)).toEqual(["T1"]);
+    expectWellFormed(outcome.clustering, keys(1, 10));
+  });
+
+  it("names a message id the en-US bundle declares with no argument, and a ko-KR NEEDS REVIEW stub", () => {
+    const en = readFileSync(
+      resolve(repo, "addon/locale/en-US/research-helper-mainWindow.ftl"),
+      "utf8",
+    );
+    const line = en
+      .split("\n")
+      .find((l) => l.startsWith(`${NO_THEMES_L10N} =`));
+    expect(line).toBeDefined();
+    expect(line).not.toContain("{ $");
+    const ko = readFileSync(
+      resolve(repo, "addon/locale/ko-KR/research-helper-mainWindow.ftl"),
+      "utf8",
+    );
+    expect(ko).toContain(`# NEEDS REVIEW ${NO_THEMES_L10N} — en-US: `);
     expect(
-      ko.split("\n").some((l) => l.startsWith(`${TOO_MANY_THEMES_L10N} =`)),
+      ko.split("\n").some((l) => l.startsWith(`${NO_THEMES_L10N} =`)),
     ).toBe(false);
   });
 });

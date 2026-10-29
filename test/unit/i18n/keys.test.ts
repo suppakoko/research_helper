@@ -167,7 +167,9 @@ const NON_ID_L10N_CONSTANTS = ["L10N_EXPORT_TAKES_NO_PATH"];
  * so the list is empty again. *2026-10-29:* `P3-T28`'s and `P3-T29`'s
  * strings and the item pane's two result lines put it back (items 302, 303);
  * the owner reviewed all of them that day (items 304, 305(d)), so it is empty
- * again.
+ * again. *Later on 2026-10-29:* `P4-T05`'s and `P4-T19`'s eleven strings
+ * put it back (item 306(b)); the owner reviewed them (item 307(f)), and
+ * `P4-T05`'s stop when no theme is left (item 307(c)) is its one member.
  */
 const MAY_BE_EMPTY: readonly ListName[] = ["KO_PENDING_REVIEW"];
 
@@ -1093,6 +1095,25 @@ describe("src/i18n/keys.ts — P4-T05's stop for too many themes (plan/00 §6 it
     expect(sharedBy(one, read("ERROR_MESSAGE_IDS"))).toEqual([]);
   });
 
+  // Moved 2026-10-29: the owner approved the Korean (G-41, plan/00 §6 item 307(f)).
+  it("puts it on KO_PRESENT now the owner reviewed the Korean (G-41, item 307(f)), not still pending", () => {
+    expect(notIn(one, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(one, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — P4-T05's stop when no theme is left (plan/00 §6 item 307(c))", () => {
+  // NO_THEMES_L10N in src/pipeline/trendReport/cluster.ts; trendCluster.test.ts pins the two equal.
+  const one = ["research-helper-report-stopped-no-themes"];
+
+  it("declares it on the main window beside the too-many-themes stop, with no argument, outside the error ids", () => {
+    expect(notIn(one, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(one, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(one, read("REPORT_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(one, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(one, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
   it("puts it on KO_PENDING_REVIEW, not KO_PRESENT, until the owner reviews the Korean (G-41)", () => {
     expect(notIn(one, read("KO_PENDING_REVIEW"))).toEqual([]);
     expect(sharedBy(one, read("KO_PRESENT"))).toEqual([]);
@@ -1118,9 +1139,10 @@ describe("src/i18n/keys.ts — P4-T19's report window and its menu entry (docs/0
     );
   });
 
-  it("puts all ten on KO_PENDING_REVIEW, not KO_PRESENT, until the owner reviews the Korean (G-41)", () => {
-    expect(notIn(ten, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(ten, read("KO_PRESENT"))).toEqual([]);
+  // Moved 2026-10-29: the owner approved the Korean (G-41, plan/00 §6 item 307(f)).
+  it("puts all ten on KO_PRESENT now the owner reviewed the Korean (G-41, item 307(f)), none still pending", () => {
+    expect(notIn(ten, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(ten, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 
   it("puts the menu label on the main window and on KO_PRESENT: docs/08 §10.2 gives the owner's Korean", () => {

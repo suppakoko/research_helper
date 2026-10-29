@@ -2390,6 +2390,26 @@ the caller of what the card builds; if it does not, the caller is added with a d
     entry, `reportWindow` bundle; the build/Zotero owner) run together, fake model only. New strings go on
     `KO_PENDING_REVIEW`; the coordinator drafts their Korean for the owner.
 
+307. **Lines raised by `P4-T05` and `P4-T19`** (`plan/reports/P4-T05.md`, `P4-T19.md`). **DECIDED 2026-10-29 (owner),
+    each as recommended:**
+    - (a) A clustering answer that misses keys and one with more themes than `MAX_THEMES` share one re-run, so at
+      most two `THEME_CLUSTER` requests are sent, as built.
+    - (b) The client-generated `Other` theme may make `MAX_THEMES` + 1 themes. `P4-T16`'s estimate therefore
+      reserves one more theme-analysis call for it, so the estimate never under-states.
+    - (c) When every theme falls below the minimum and none remains, the report run stops before writing anything and
+      says why. Summaries already made are kept.
+    - (d) Under `docs/11` §0 principle 5, the "Generate Research Trends Report…" entry and its window are hidden
+      behind a hidden preference, default off, until `P4-T18` and `P4-T20` can generate a report. Tests turn the
+      preference on.
+    - (e) The coordinator also records a defect found by `P4-T19` (finding 4): the summarize window is not closed at
+      plugin shutdown, unlike the report window. It is fixed with the rest.
+    - (f) The Korean of the 11 new strings is approved as drafted in chat, recorded byte for byte in
+      `plan/reports/ko-review-307.ftl` (G-41).
+
+308. **Phase 4 wave after item 307, 2026-10-29.** **DECIDED 2026-10-29 (owner):** once item 307's work is committed,
+    `P4-T06` (two-stage clustering and the theme-merge call) and `P4-T07` (per-theme analysis with sub-batching) run
+    together, fake model only. They open `P4-T08`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

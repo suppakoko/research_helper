@@ -23,8 +23,10 @@
 # `reportWindow.js` formats them and sets them itself, as `searchDialog.js`
 # does.
 #
-# Every wording here is provisional (`G-41`); its Korean is pending review
-# (`KO_PENDING_REVIEW` in `src/i18n/keys.ts`). `P4-T20` adds the stage rows,
+# Every wording here is provisional (`G-41`); the owner reviewed the Korean of
+# these ten on 2026-10-29 (plan/00 §6 item 307(f)), so they are on `KO_PRESENT`
+# in `src/i18n/keys.ts`, and a new string goes on `KO_PENDING_REVIEW` until its
+# Korean is reviewed. `P4-T20` adds the stage rows,
 # the preview and the delivery buttons to this file.
 
 ## The window's chrome (docs/08 §6.4's wireframe title)

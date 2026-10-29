@@ -546,6 +546,17 @@ Two concrete hazards make that more than a style preference:
 > `setEnabled(RH.llm.isConfigured())` is not used: the report window names the resolved model or says
 > that none is set (§6.4's note of 2026-10-29), and a missing key is the job's to report before any
 > request (`P4-T18`, `P4-T20`). The entry opens the modeless report window (§6.4) and starts no job.
+>
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 307(d)): hidden until a report can be generated.**
+> Under `11-implementation-roadmap.md` §0 principle 5, the entry and its window are behind the hidden
+> preference `report.enabled` (`07-architecture-and-data-model.md` §8.5), default `false`: while it is
+> off the entry is not created and the window's opener opens nothing, so the submenu starts with
+> "Summarize All Papers in Collection". `P4-T20` removes the preference, or turns it on, once a report
+> can be generated.
+>
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 307(e)):** the summarize window, like the report
+> window, is closed at plugin shutdown (`publishSummarizeCommands` in `src/bootstrap/registerUI.ts`);
+> closing it cancels a running job, keeping every summary made, as above.
 
 **Item context menu** (right-click one or more items)
 

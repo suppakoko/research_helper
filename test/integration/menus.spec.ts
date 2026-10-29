@@ -210,6 +210,28 @@ function idle(win: _ZoteroTypes.MainWindow): Promise<void> {
   });
 }
 
+/* ------------------------------------------- the hidden report preference */
+
+/**
+ * The hidden `report.enabled` preference (owner, `plan/00` §6 item 307(d);
+ * `docs/07` §8.5): off by default, so the report entry and window exist only
+ * while a spec turns it on. Every spec that does restores it.
+ */
+const REPORT_ENABLED_PREF = qualifiedPrefName("report.enabled");
+
+function reportEnabledStored(): boolean {
+  return Zotero.Prefs.get(REPORT_ENABLED_PREF, true) === true;
+}
+
+/** Put `report.enabled` back as it was before a spec changed it. */
+function restoreReportEnabled(saved: unknown): void {
+  if (typeof saved === "boolean") {
+    Zotero.Prefs.set(REPORT_ENABLED_PREF, saved, true);
+  } else {
+    Zotero.Prefs.clear(REPORT_ENABLED_PREF, true);
+  }
+}
+
 /* ------------------------------------------------------------ menu reading */
 
 /** One top-level plugin submenu, and the entries inside it. */
@@ -582,31 +604,31 @@ describe("menu entry points and the window opener (P1-T19)", function () {
       1,
       "exactly one collection-context submenu of ours",
     );
+    // Owner, plan/00 §6 item 307(d): the hidden `report.enabled` ships off,
+    // so the live menu, registered at startup, has no report entry. The next
+    // test turns it on and sees the entry first.
+    assert.isFalse(
+      reportEnabledStored(),
+      "report.enabled is off in the test profile",
+    );
     assert.deepEqual(
       [...shape.entries],
       [
-        L10N_MENU_COLLECTION_REPORT,
         L10N_MENU_COLLECTION_SUMMARIZE_ALL,
         L10N_MENU_COLLECTION_REMOVE_NOTES,
         "",
         L10N_MENU_COLLECTION_SEARCH_IMPORT,
         L10N_MENU_COLLECTION_RERUN,
       ],
-      "P4-T19's report entry first, then P3-T29's two LLM-job entries and " +
-        "the separator below them (docs/08 §2.5's notes of 2026-10-29), then " +
-        "Search & Import and FR-12's Re-run This Search… (P2-T17); the " +
-        "recommend entry of docs/08 §2.4 is a later card's",
+      "P3-T29's two LLM-job entries and the separator below them (docs/08 " +
+        "§2.5's notes of 2026-10-29), then Search & Import and FR-12's Re-run " +
+        "This Search… (P2-T17); P4-T19's report entry is hidden behind " +
+        "report.enabled (item 307(d)); the recommend entry of docs/08 §2.4 " +
+        "is a later card's",
     );
     assert.deepEqual(
       [...shape.kinds],
-      [
-        "menuitem",
-        "menuitem",
-        "menuitem",
-        "menuseparator",
-        "menuitem",
-        "menuitem",
-      ],
+      ["menuitem", "menuitem", "menuseparator", "menuitem", "menuitem"],
     );
 
     // The real `onShowing` ran, reading the live selection through
@@ -644,6 +666,56 @@ describe("menu entry points and the window opener (P1-T19)", function () {
       again.hiddenOnBuild,
       shape.hidden,
       "building the popup re-uses the element and does not re-apply the guard",
+    );
+  });
+
+  it("creates the report entry only while report.enabled is on, first in the submenu (item 307(d))", async function () {
+    this.timeout(90_000);
+    const wrapper = await researchHelperAddon();
+    const saved: unknown = Zotero.Prefs.get(REPORT_ENABLED_PREF, true);
+    const entriesNow = async (): Promise<readonly string[]> =>
+      (
+        await readMenu(
+          Zotero.getMainWindow(),
+          COLLECTION_POPUP_ID,
+          COLLECTION_TARGET,
+          true,
+        )
+      ).entries;
+    const cycle = async (): Promise<void> => {
+      await afterBootstrapCall("shutdown", () => wrapper.disable());
+      await afterBootstrapCall("startup", () => wrapper.enable());
+      await initializedInstance();
+    };
+    try {
+      Zotero.Prefs.set(REPORT_ENABLED_PREF, true, true);
+      // The menu reads the preference when it is registered: enable again.
+      await cycle();
+      const on = await entriesNow();
+      log(`collection submenu with report.enabled on ${JSON.stringify(on)}`);
+      assert.deepEqual(
+        [...on],
+        [
+          L10N_MENU_COLLECTION_REPORT,
+          L10N_MENU_COLLECTION_SUMMARIZE_ALL,
+          L10N_MENU_COLLECTION_REMOVE_NOTES,
+          "",
+          L10N_MENU_COLLECTION_SEARCH_IMPORT,
+          L10N_MENU_COLLECTION_RERUN,
+        ],
+        "P4-T19's report entry first, as docs/08 §2.5 draws it",
+      );
+    } finally {
+      restoreReportEnabled(saved);
+      await cycle();
+    }
+    const off = await entriesNow();
+    log(
+      `collection submenu with report.enabled restored ${JSON.stringify(off)}`,
+    );
+    assert.isFalse(
+      off.includes(L10N_MENU_COLLECTION_REPORT),
+      "no report entry once report.enabled is off again",
     );
   });
 
@@ -868,6 +940,17 @@ describe("menu entry points and the window opener (P1-T19)", function () {
     const modelPref = qualifiedPrefName("reportModel");
     const savedLanguage: unknown = Zotero.Prefs.get(languagePref, true);
     const savedModel: unknown = Zotero.Prefs.get(modelPref, true);
+    const savedEnabled: unknown = Zotero.Prefs.get(REPORT_ENABLED_PREF, true);
+    // Item 307(d): while report.enabled is off the opener opens nothing.
+    assert.isFalse(reportEnabledStored(), "report.enabled starts off");
+    let refused = "";
+    try {
+      commands.open(Zotero.getMainWindow(), 2_000_000_003);
+    } catch (error) {
+      refused = String(error);
+    }
+    assert.include(refused, "report.enabled is off");
+    assert.strictEqual(commands.openCount(), 0, "no window while it is off");
     const collection = new Zotero.Collection({
       libraryID,
       name: "P4-T19 report window",
@@ -880,6 +963,8 @@ describe("menu entry points and the window opener (P1-T19)", function () {
     await item.saveTx();
     let opened: Window | undefined;
     try {
+      // Item 307(d): on for this test's duration, restored below.
+      Zotero.Prefs.set(REPORT_ENABLED_PREF, true, true);
       Zotero.Prefs.set(languagePref, "ko", true);
       Zotero.Prefs.set(modelPref, "p4t19-test-model", true);
       const main = Zotero.getMainWindow();
@@ -971,6 +1056,7 @@ describe("menu entry points and the window opener (P1-T19)", function () {
       assert.strictEqual(commands.openCount(), 1);
     } finally {
       opened?.close();
+      restoreReportEnabled(savedEnabled);
       if (typeof savedLanguage === "string") {
         Zotero.Prefs.set(languagePref, savedLanguage, true);
       } else {

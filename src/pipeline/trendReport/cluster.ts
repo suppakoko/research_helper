@@ -30,10 +30,13 @@
  * 6. An answer with more themes than `MAX_THEMES` is asked for once more; a
  *    second answer over it ends the stage with a message and no further call
  *    (owner, `plan/00` §6 item 292(d)).
+ * 7. When step 4 leaves no theme at all, the stage ends with a message and no
+ *    further call, before anything is written (owner, `plan/00` §6 item
+ *    307(c)).
  *
  * The readings these steps leave open are `docs/12` §8's note of 2026-10-29.
- * **Open for the owner** (`plan/reports/followup-292.md` finding 2): steps 3
- * and 6 share one re-run here ({@link CLUSTER_REQUESTS_MAX}); see that note.
+ * Steps 3 and 6 share one re-run ({@link CLUSTER_REQUESTS_MAX}), as built and
+ * decided by the owner (`plan/00` §6 item 307(a)); see that note.
  *
  * **Model output is untrusted.** `completeJSON` validates the answer against
  * `theme-clustering.v1.json`; this module then checks every key against the
@@ -87,8 +90,9 @@ export const THEME_CLUSTER_SCHEMA_NAME = "ThemeClustering";
 /**
  * `THEME_CLUSTER` requests one stage may send, `completeJSON`'s repair and
  * retry aside: the answer, and one re-run shared by step 3's miss and step 6's
- * theme count. **Open for the owner** (`docs/12` §8's note of 2026-10-29): the
- * alternative is one re-run per defect, which would make this 3.
+ * theme count. Decided as built (owner, `plan/00` §6 item 307(a); `docs/12`
+ * §8's note of 2026-10-29); the alternative not taken was one re-run per
+ * defect, which would have made this 3.
  */
 export const CLUSTER_REQUESTS_MAX = 2;
 
@@ -117,6 +121,14 @@ export const SMALL_THEME_REASON =
  */
 export const TOO_MANY_THEMES_L10N =
   "research-helper-report-stopped-too-many-themes" as const satisfies MainWindowMessageId;
+
+/**
+ * Step 7's stop message: every theme fell below `MIN_PAPERS_PER_THEME` and none
+ * remains (owner, `plan/00` §6 item 307(c)). No argument. On
+ * `KO_PENDING_REVIEW` (`G-41`).
+ */
+export const NO_THEMES_L10N =
+  "research-helper-report-stopped-no-themes" as const satisfies MainWindowMessageId;
 
 // ---------------------------------------------------------------------------
 // 2. Types
@@ -203,7 +215,20 @@ export interface TooManyThemesOutcome extends ClusterOutcomeBase {
   readonly args: { readonly themes: number; readonly max: number };
 }
 
-export type ClusterOutcome = ClusteredOutcome | TooManyThemesOutcome;
+/**
+ * Step 7: step 4 dropped every theme, `Other` included, so none remains. The
+ * run stops before anything is written; the summaries are kept (owner,
+ * `plan/00` §6 item 307(c)). `P4-T18` ends the job on it.
+ */
+export interface NoThemesOutcome extends ClusterOutcomeBase {
+  readonly status: "stopped-no-themes";
+  readonly messageId: typeof NO_THEMES_L10N;
+  /** Every theme step 4 dropped, `Other` included, in the answer's order. */
+  readonly droppedThemeIds: readonly string[];
+}
+
+export type ClusterOutcome =
+  ClusteredOutcome | TooManyThemesOutcome | NoThemesOutcome;
 
 /** What {@link clusteringProblems} found in one answer. */
 export interface ClusteringProblems {
@@ -604,7 +629,8 @@ export function clusterThemesTwoStage(
  *
  * @param input - see {@link ClusterInput}
  * @param deps - see {@link ClusterDeps}
- * @returns the validated clustering, or step 6's stop
+ * @returns the validated clustering (at least one theme), or step 6's or
+ *   step 7's stop
  * @throws RangeError for an empty, malformed or repeated key, a bad year,
  *   band or output limit; ConfigurationError for a template that is not
  *   `THEME_CLUSTER` with its schema, and from {@link clusterThemesTwoStage};
@@ -736,6 +762,23 @@ export async function clusterThemes(
     inputKeys,
     band.minPapersPerTheme,
   );
+  // Step 7 (owner, plan/00 §6 item 307(c)): no theme left, nothing to analyse.
+  if (finalized.clustering.themes.length === 0) {
+    deps.logger?.warn(
+      "theme clustering: every theme fell below the minimum; the run stops",
+      {
+        papers,
+        minPapersPerTheme: band.minPapersPerTheme,
+        dropped: finalized.droppedThemeIds.length,
+      },
+    );
+    return {
+      ...base(),
+      status: "stopped-no-themes",
+      messageId: NO_THEMES_L10N,
+      droppedThemeIds: finalized.droppedThemeIds,
+    };
+  }
   return {
     ...base(),
     status: "clustered",

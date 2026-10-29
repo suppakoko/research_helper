@@ -1513,6 +1513,8 @@ Three levels of reduction, each with a strictly smaller and more abstract input:
 | L3 report | K theme analyses + N digests | Markdown report | 1 | no |
 | L4 critique | report + full summaries | problem list | 1 | no |
 
+> **Decided 2026-10-29 (owner, `plan/00` §6 item 307(b)):** L2's K counts the client-generated `Other` theme too (`12-prompt-library.md` §8, rule (3)), which can make it `MAX_THEMES` + 1. The cost estimate reserves that one more `CLUSTER_REDUCE` call (`07-architecture-and-data-model.md` §4.5's note of this date). And when every theme falls below `MIN_PAPERS_PER_THEME` so that none remains, the run stops before L2 and writes nothing, keeping the summaries (item 307(c), `12-prompt-library.md` §8).
+
 **The final report call never sees full summaries.** It sees theme analyses (which already carry citations, quotes and numbers) plus digests (for the Notable Papers table and Bibliography). That holds L3 to roughly 30–50 k tokens for a 75–200-paper corpus — the theme-analysis half is bounded by K, but the digest half still grows linearly with N (§8.2: ~120 tokens each), so above ~250 papers L3 approaches the 60 k `TREND_REPORT_*` budget and the digests must be trimmed to the cited-and-notable subset.
 
 ### 8.4 Overflow handling when even digests do not fit

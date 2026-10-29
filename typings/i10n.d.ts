@@ -161,6 +161,7 @@ export type FluentMessageId =
   | 'research-helper-report-language-label'
   | 'research-helper-report-model'
   | 'research-helper-report-model-none'
+  | 'research-helper-report-stopped-no-themes'
   | 'research-helper-report-stopped-too-many-themes'
   | 'research-helper-report-title'
   | 'research-helper-search-authors-overflow'

@@ -19,6 +19,7 @@ import {
   CLUSTER_BATCH_SIZE,
   ESTIMATE_HEADROOM,
   MAP_CALL_BUDGETS,
+  OTHER_THEME_RESERVE,
   SUMMARY_MAX_TOKENS,
   SYNTHESIS_INPUT_BUDGETS,
   THEME_COUNT_BANDS,
@@ -686,10 +687,11 @@ describe("P4-T16: the synthesis calls of docs/06 §5.4's 42-paper example", () =
     });
   });
 
-  it("reserves the 26–75 band's upper K, 7, when K is unset (§9.2)", () => {
+  it("reserves the 26–75 band's upper K, 7, when K is unset (§9.2), plus one for Other (item 307(b))", () => {
     const plan = planSynthesis(synthesisInput());
     expect(plan.themes).toBe(7);
-    expect(countOf(plan.calls, "CLUSTER_REDUCE")).toBe(7);
+    expect(OTHER_THEME_RESERVE).toBe(1);
+    expect(countOf(plan.calls, "CLUSTER_REDUCE")).toBe(8);
     expect(countOf(plan.calls, "CLUSTER_REDUCE_MERGE")).toBe(0);
   });
 
@@ -979,6 +981,79 @@ describe("P4-T16: clustering's two stages and the theme stage's room (docs/06 §
     expect(() => planSynthesis(synthesisInput({ themeCount: 0 }))).toThrow(
       RangeError,
     );
+  });
+});
+
+describe("P4-T16 under plan/00 §6 item 307(b): one more theme analysis for P4-T05's Other theme", () => {
+  /** The calls carrying every summary takes, as planSynthesis counts them. */
+  const needed = (papers: number): number =>
+    Math.ceil(
+      withHeadroom(papers * SUMMARY_MAX_TOKENS) /
+        (SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE - SUMMARY_MAX_TOKENS),
+    );
+
+  it("reserves MAX_THEMES + 1 theme calls with K from the band, the extra one conditional", () => {
+    for (const papers of [5, 42, 100, 200]) {
+      const plan = planSynthesis(synthesisInput({ papers }));
+      const maxThemes = themeCountBandFor(papers).maxThemes;
+      expect(plan.themes, String(papers)).toBe(maxThemes);
+      expect(needed(papers), String(papers)).toBeLessThanOrEqual(maxThemes);
+      const reduces = plan.calls.filter((c) => c.kind === "CLUSTER_REDUCE");
+      expect(reduces, String(papers)).toHaveLength(maxThemes + 1);
+      expect(
+        reduces.map((c) => c.conditional),
+        String(papers),
+      ).toEqual([...Array(maxThemes).fill(false), true]);
+      expect(countOf(plan.calls, "CLUSTER_REDUCE_MERGE")).toBe(0);
+    }
+  });
+
+  it("adds no theme for a K the run passes: its clustering already counts Other", () => {
+    const passed = planSynthesis(synthesisInput({ themeCount: 6 }));
+    expect(countOf(passed.calls, "CLUSTER_REDUCE")).toBe(6);
+    // The band's upper K for 10–25 papers is 5; unset, the plan holds 5 + 1.
+    const unset = planSynthesis(synthesisInput({ papers: 20 }));
+    expect(unset.themes).toBe(5);
+    expect(countOf(unset.calls, "CLUSTER_REDUCE")).toBe(6);
+  });
+
+  it("costs one more theme call than K alone, and never less (the estimate never under-states)", () => {
+    const priced = (plan: ReturnType<typeof planSynthesis>): number =>
+      plan.calls.reduce((sum, c) => sum + c.inputTokens + c.outputTokens, 0);
+    const unset = planSynthesis(synthesisInput());
+    const fixed = planSynthesis(synthesisInput({ themeCount: 7 }));
+    const reduce = unset.calls.find((c) => c.kind === "CLUSTER_REDUCE");
+    expect(reduce).toBeDefined();
+    expect(unset.calls.length).toBe(fixed.calls.length + 1);
+    expect(priced(unset) - priced(fixed)).toBe(
+      (reduce?.inputTokens ?? 0) + (reduce?.outputTokens ?? 0),
+    );
+  });
+
+  it("adds no theme call once carrying the summaries already needs more than K + 1 calls", () => {
+    const plan = planSynthesis(synthesisInput({ papers: 400 }));
+    expect(needed(400)).toBe(20);
+    expect(countOf(plan.calls, "CLUSTER_REDUCE")).toBe(20);
+    // The merges stay K's 8: with Other there are 13 themes but only 7 calls
+    // beyond one per theme, so the larger of the two counts is K's.
+    expect(countOf(plan.calls, "CLUSTER_REDUCE_MERGE")).toBe(8);
+  });
+
+  it("reserves a merge for Other too where the summaries need 2K + 2 calls or more (522 papers at K = 12)", () => {
+    expect(needed(521)).toBe(25); // 2K + 1: Other adds no merge
+    expect(needed(522)).toBe(26); // 2K + 2: Other could split as well
+    const below = planSynthesis(synthesisInput({ papers: 521 }));
+    expect(countOf(below.calls, "CLUSTER_REDUCE")).toBe(25);
+    expect(countOf(below.calls, "CLUSTER_REDUCE_MERGE")).toBe(12);
+    const at = planSynthesis(synthesisInput({ papers: 522 }));
+    expect(at.themes).toBe(12);
+    expect(countOf(at.calls, "CLUSTER_REDUCE")).toBe(26);
+    expect(countOf(at.calls, "CLUSTER_REDUCE_MERGE")).toBe(13);
+    // With K passed as 12 (no Other reserve) the merges stop at 12.
+    const passed = planSynthesis(
+      synthesisInput({ papers: 522, themeCount: 12 }),
+    );
+    expect(countOf(passed.calls, "CLUSTER_REDUCE_MERGE")).toBe(12);
   });
 });
 

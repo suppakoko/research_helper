@@ -645,7 +645,11 @@ export interface SynthesisCall {
 export interface SynthesisPlan {
   /** The papers the synthesis covers (each sends one summary). */
   readonly papers: number;
-  /** K, the themes reserved for: the run's own, or §9.2's upper end. */
+  /**
+   * K, the themes the model may make: the run's own, or §9.2's upper end.
+   * With the latter one more theme analysis is reserved beyond K for the
+   * client-generated `Other` theme ({@link OTHER_THEME_RESERVE}).
+   */
   readonly themes: number;
   /** Whether the digests take `docs/06` §8.4's two-stage path. */
   readonly twoStageClustering: boolean;
@@ -679,7 +683,8 @@ export interface SynthesisPlanInput {
   readonly critiqueRounds: number;
   /**
    * K when the run already knows it (a clustering read back on resume, a
-   * test); absent: the upper end of `papers`' §9.2 band.
+   * test) — the finished clustering's count, `Other` included; absent: the
+   * upper end of `papers`' §9.2 band, plus {@link OTHER_THEME_RESERVE}.
    */
   readonly themeCount?: number;
 }
@@ -691,6 +696,41 @@ function wholeNumber(name: string, value: number, min: number): number {
     );
   }
   return value;
+}
+
+/**
+ * The theme analyses reserved for the client-generated `Other` theme beyond
+ * §9.2's upper K: `P4-T05` adds it after counting the model's themes against
+ * `MAX_THEMES`, so a clustering can hold `MAX_THEMES` + 1 themes (owner,
+ * `plan/00` §6 item 307(b); `docs/07` §4.5's note of 2026-10-29).
+ */
+export const OTHER_THEME_RESERVE = 1;
+
+/** The theme stage's reservation for one theme count. */
+interface ThemeStage {
+  /** `CLUSTER_REDUCE` calls: one per theme, or enough to carry every summary. */
+  readonly reduceCalls: number;
+  /** `CLUSTER_REDUCE_MERGE` calls: one per theme that could split. */
+  readonly merges: number;
+}
+
+/**
+ * `docs/06` §8.4's theme stage for `themes` themes when carrying every
+ * summary takes `neededCalls` calls: at least one call per theme, and one
+ * merge per theme that could split — no more than the themes, nor than the
+ * calls beyond one per theme.
+ */
+function themeStage(themes: number, neededCalls: number): ThemeStage {
+  const reduceCalls = Math.max(themes, neededCalls);
+  return { reduceCalls, merges: Math.min(themes, reduceCalls - themes) };
+}
+
+/** The larger count of each kind, so neither theme count is under-stated. */
+function largerThemeStage(a: ThemeStage, b: ThemeStage): ThemeStage {
+  return {
+    reduceCalls: Math.max(a.reduceCalls, b.reduceCalls),
+    merges: Math.max(a.merges, b.merges),
+  };
 }
 
 function synthesisCall(
@@ -735,7 +775,13 @@ function synthesisCall(
  *   not carry every summary at {@link SUMMARY_MAX_TOKENS} (with headroom, and
  *   one summary's room lost per call to packing), the extra sub-batch calls
  *   that would, plus one `CLUSTER_REDUCE_MERGE` per theme that could need
- *   splitting (at most K) — `docs/06` §8.4's last paragraph.
+ *   splitting (at most K) — `docs/06` §8.4's last paragraph. With K from the
+ *   band, one more theme is reserved for `P4-T05`'s client-generated `Other`
+ *   ({@link OTHER_THEME_RESERVE}, conditional): the stage is worked out for K
+ *   and for K + 1 themes and the larger count of each kind is kept, so the
+ *   merges reach K + 1 where `Other` too could split (owner, `plan/00` §6
+ *   item 307(b)). A K the run passes is its finished clustering's own count,
+ *   `Other` included, and gets no extra theme.
  * - **L3 and L4, per report language** (`both` writes two, `P4-T21`): the
  *   report call, then per critique round one `SELF_CRITIQUE` on the critique
  *   model and one possible rewrite (a fresh report call, `docs/06` §12.2).
@@ -796,10 +842,21 @@ export function planSynthesis(input: SynthesisPlanInput): SynthesisPlan {
       : wholeNumber("themeCount", input.themeCount, 1);
   const carriedPerCall =
     SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE - SUMMARY_MAX_TOKENS;
-  const reduceCalls = Math.max(
-    themes,
-    Math.ceil(withHeadroom(papers * SUMMARY_MAX_TOKENS) / carriedPerCall),
+  const neededCalls = Math.ceil(
+    withHeadroom(papers * SUMMARY_MAX_TOKENS) / carriedPerCall,
   );
+  // Owner, plan/00 §6 item 307(b): P4-T05's client-generated `Other` theme can
+  // make MAX_THEMES + 1 themes, so a K from the band reserves for both counts
+  // and keeps the larger of each; a K the run passes already counts `Other`.
+  const bare = themeStage(themes, neededCalls);
+  const stage =
+    input.themeCount === undefined
+      ? largerThemeStage(
+          bare,
+          themeStage(themes + OTHER_THEME_RESERVE, neededCalls),
+        )
+      : bare;
+  const reduceCalls = stage.reduceCalls;
   for (let at = 0; at < reduceCalls; at += 1) {
     calls.push(
       synthesisCall("CLUSTER_REDUCE", report, input, {
@@ -807,7 +864,7 @@ export function planSynthesis(input: SynthesisPlanInput): SynthesisPlan {
       }),
     );
   }
-  const merges = Math.min(themes, reduceCalls - themes);
+  const merges = stage.merges;
   for (let at = 0; at < merges; at += 1) {
     calls.push(
       synthesisCall("CLUSTER_REDUCE_MERGE", report, input, {

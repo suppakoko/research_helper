@@ -122,6 +122,8 @@ export const PREF_KEYS = {
   reportCritiqueModel: "report.critiqueModel",
   reportSaveNote: "report.saveNote",
   reportPerPaperNotes: "report.perPaperNotes",
+  // The hidden switch for the trend report (owner, plan/00 §6 item 307(d)).
+  reportEnabled: "report.enabled",
 
   // Runtime & concurrency (docs/07 §8.5, "Runtime & concurrency").
   concurrency: "concurrency",

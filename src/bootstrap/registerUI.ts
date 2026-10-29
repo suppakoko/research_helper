@@ -179,6 +179,7 @@ import {
   runItemSummary,
   type ItemSummaryDeps,
   type SummarizeConfirmDeps,
+  type SummarizeWindowHandle,
   type SummarizeWindowOutcome,
   type SummarizeWindowSession,
   type SummarizeWindowSink,
@@ -306,6 +307,23 @@ const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
   openReportWindow: (host, collectionID) =>
     openReportWindowCommand(host, collectionID),
 };
+
+/**
+ * {@link SEARCH_MENU_COMMANDS} as the collection menu is built from it: without
+ * the report entry while the hidden `report.enabled` preference is off (owner,
+ * `plan/00` §6 item 307(d); `docs/11` §0 principle 5). `collectionMenuOptions`
+ * creates no entry for an absent command, so the entry does not exist, rather
+ * than existing hidden. Read once, when the menu is registered — at startup or
+ * enable; the opener reads the preference again on every call
+ * ({@link openReportWindowCommand}).
+ *
+ * @param reportEnabled - `getPref("reportEnabled")`
+ */
+function collectionMenuCommands(reportEnabled: boolean): SearchMenuCommands {
+  if (reportEnabled) return SEARCH_MENU_COMMANDS;
+  const { openReportWindow: _hidden, ...commands } = SEARCH_MENU_COMMANDS;
+  return commands;
+}
 
 // ---------------------------------------------------------------------------
 // FR-12's provenance store (`P2-T17`)
@@ -444,7 +462,9 @@ async function publishProvenanceStore(
  * `collectionMenuOptions()` all run at module-evaluation time and none touches
  * the platform: the first returns a closure, the rest plain objects. Nothing
  * reaches `Zotero.MenuManager` until `registerUI()` feeds this array to a live
- * `Scope`.
+ * `Scope`. *(Since 2026-10-29 the collection menu's two calls run when its
+ * entry is registered instead, to read `report.enabled`; owner, `plan/00` §6
+ * item 307(d).)*
  *
  * Two registrations, one per target (`P1-T19`), because `docs/08` §2.3 allows
  * exactly one top-level item per context and
@@ -465,10 +485,15 @@ const APP_REGISTRATIONS: readonly ScopedRegistration[] = [
       SEARCH_MENU_COMMANDS,
     ),
   ),
-  menuRegistration(
-    COLLECTION_MENU_DESCRIPTION,
-    collectionMenuOptions(SEARCH_MENU_COMMANDS),
-  ),
+  // Built when `registerUI()` registers it — after `installServices` installed
+  // the preference store — rather than at module evaluation, because whether
+  // it holds the report entry is the hidden `report.enabled` preference's
+  // (owner, `plan/00` §6 item 307(d); see {@link collectionMenuCommands}).
+  (scope) =>
+    menuRegistration(
+      COLLECTION_MENU_DESCRIPTION,
+      collectionMenuOptions(collectionMenuCommands(getPref("reportEnabled"))),
+    )(scope),
   // The preference pane (`P1-T44`). Application-scoped: `docs/01` §2.4 lists
   // `Zotero.PreferencePanes.register` with the once-per-startup registrations,
   // and Zotero propagates it to every open `zotero:pref` window itself. Through
@@ -1545,24 +1570,35 @@ async function publishSummarySection(
  * {@link provenanceState} is, because `SEARCH_MENU_COMMANDS` is built before
  * any graph exists.
  */
-const summarizeState: { graph: ServiceGraph | undefined } = {
-  graph: undefined,
-};
+const summarizeState: {
+  graph: ServiceGraph | undefined;
+  /**
+   * Every summarize window this instance opened, closed at shutdown as the
+   * report window's are (owner, `plan/00` §6 item 307(e)).
+   */
+  readonly windows: Set<SummarizeWindowHandle>;
+} = { graph: undefined, windows: new Set() };
 
 /** The menu's "Summarize All Papers in Collection": open its window. */
 function openSummarizeWindowCommand(
   host: Parameters<NonNullable<SearchMenuCommands["openSummarizeWindow"]>>[0],
   collectionID: number,
-): void {
+): SummarizeWindowHandle {
   const graph = summarizeState.graph;
   if (graph === undefined) {
     throw new Error("[research-helper] the summarize window has no services");
   }
-  openSummarizeWindow(
+  // A window the user closed is forgotten here (item 307(e)).
+  for (const win of summarizeState.windows) {
+    if (win.closed === true) summarizeState.windows.delete(win);
+  }
+  const win = openSummarizeWindow(
     host,
     collectionID,
     createSummarizeSession(graph, collectionID),
   );
+  summarizeState.windows.add(win);
+  return win;
 }
 
 /**
@@ -1924,18 +1960,32 @@ function createSummarizeSession(
 }
 
 /**
- * Hold the graph for the two collection commands (`P3-T29`), and install the
+ * Hold the graph for the two collection commands (`P3-T29`), publish the
+ * summarize window's opener on `addon.api.summarizeWindow`, and install the
  * queue's visible "jobs resumed" notice (`research-helper-job-resumed`, owner
- * item 250) on the graph's `JobNotifier`; both undone on teardown.
+ * item 250) on the graph's `JobNotifier`; all undone on teardown, which also
+ * closes every summarize window still open, as
+ * {@link publishReportWindowCommands} does for the report window (owner,
+ * `plan/00` §6 item 307(e)).
  */
 async function publishSummarizeCommands(
   scope: Scope,
   graph: ServiceGraph,
 ): Promise<void> {
+  // Captured once, for the reason {@link publishServiceGraph} gives.
+  const api = addon.api;
   await scope.use({
-    description: "the summarize window's services and the resumed-jobs notice",
+    description:
+      "the summarize window's services, open windows and the resumed-jobs notice",
     register: () => {
       summarizeState.graph = graph;
+      api.summarizeWindow = {
+        open: (host, collectionID) =>
+          openSummarizeWindowCommand(host, collectionID),
+        openCount: () =>
+          [...summarizeState.windows].filter((win) => win.closed !== true)
+            .length,
+      };
       graph.jobNotices.setResumedNotice(async (records) => {
         const text = await formatValue(
           new Localization([MAIN_WINDOW_FTL]),
@@ -1953,6 +2003,14 @@ async function publishSummarizeCommands(
       return "summarizeState";
     },
     unregister: () => {
+      delete api.summarizeWindow;
+      // Item 307(e): a summarize window left open must not outlive the plugin,
+      // as `publishReportWindowCommands` does for the report window. Closing
+      // it runs the window's `closed()`, which cancels a running job.
+      for (const win of summarizeState.windows) {
+        if (win.closed !== true) win.close?.();
+      }
+      summarizeState.windows.clear();
       graph.jobNotices.setResumedNotice(undefined);
       summarizeState.graph = undefined;
     },
@@ -1973,7 +2031,26 @@ declare module "../addon" {
      * shutdown.
      */
     reportWindow?: ReportWindowCommands;
+    /**
+     * The summarize window's opener over the live graph (`P3-T29`), the
+     * command the collection menu's "Summarize All Papers in Collection"
+     * runs. Published, as {@link reportWindow} is, so an integration spec can
+     * open the real window and see it closed at shutdown (owner, `plan/00` §6
+     * item 307(e)).
+     */
+    summarizeWindow?: SummarizeWindowCommands;
   }
+}
+
+/** {@link PluginApi.summarizeWindow}. */
+export interface SummarizeWindowCommands {
+  /** Open, or raise, the summarize window for one collection. */
+  open(
+    host: Parameters<NonNullable<SearchMenuCommands["openSummarizeWindow"]>>[0],
+    collectionID: number,
+  ): SummarizeWindowHandle;
+  /** How many summarize windows this instance opened that are still open. */
+  openCount(): number;
 }
 
 /** {@link PluginApi.reportWindow}. */
@@ -2004,6 +2081,13 @@ function openReportWindowCommand(
   host: ReportWindowHost,
   collectionID: number,
 ): ReportWindowHandle {
+  // Owner, plan/00 §6 item 307(d): hidden until a report can be generated.
+  // Read on every call, so a spec can turn it on for its duration.
+  if (!getPref("reportEnabled")) {
+    throw new Error(
+      "[research-helper] the trend report is hidden: report.enabled is off",
+    );
+  }
   const graph = reportWindowState.graph;
   if (graph === undefined) {
     throw new Error("[research-helper] the report window has no services");

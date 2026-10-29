@@ -36,7 +36,9 @@ import {
   L10N_MENU_ROOT,
   L10N_MENU_SPIKE_CREATE_ITEM,
 } from "../../src/ui/menus/toolsMenu";
+import { SUMMARIZE_WINDOW_NAME_PREFIX } from "../../src/ui/dialogs/summarizeDialog";
 import { REPORT_WINDOW_NAME_PREFIX } from "../../src/ui/panes/reportWindow";
+import { qualifiedPrefName } from "../../src/zotero/prefStore";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -237,22 +239,42 @@ function summarySectionCount(): number {
 }
 
 /**
- * The report windows open anywhere in the application (`P4-T19`), found by the
- * window name `openReportWindow` gives them. Read from the window mediator,
- * not from the plugin, so a window the plugin forgot is still counted.
+ * The windows open anywhere in the application whose name starts with
+ * `prefix`. Read from the window mediator, not from the plugin, so a window the
+ * plugin forgot is still counted.
  */
-function openReportWindowCount(): number {
+function openWindowCount(prefix: string): number {
   let count = 0;
   // `null` is every window type; the typings ask for a string.
   const windows = Services.wm.getEnumerator(null as unknown as string);
   while (windows.hasMoreElements()) {
     const win = windows.getNext() as unknown as Window;
-    if (!win.closed && win.name.startsWith(REPORT_WINDOW_NAME_PREFIX)) {
+    if (!win.closed && win.name.startsWith(prefix)) {
       count += 1;
     }
   }
   return count;
 }
+
+/** The report windows (`P4-T19`), by the name `openReportWindow` gives them. */
+function openReportWindowCount(): number {
+  return openWindowCount(REPORT_WINDOW_NAME_PREFIX);
+}
+
+/**
+ * The summarize windows (`P3-T29`), by the name `openSummarizeWindow` gives
+ * them; closed at shutdown since `plan/00` §6 item 307(e).
+ */
+function openSummarizeWindowCount(): number {
+  return openWindowCount(SUMMARIZE_WINDOW_NAME_PREFIX);
+}
+
+/**
+ * The hidden `report.enabled` preference (owner, `plan/00` §6 item 307(d)):
+ * the report window opens only while it is on, so this spec turns it on to
+ * open one and restores it straight after.
+ */
+const REPORT_ENABLED_PREF = qualifiedPrefName("report.enabled");
 
 async function assertEveryWindow(
   expected: ToolsMenuCount & { readonly fluentLinks: number },
@@ -306,11 +328,36 @@ describe("lifecycle (FR-56)", function () {
     if (!reportWindows) {
       assert.fail("registerUI() published no api.reportWindow");
     }
-    reportWindows.open(Zotero.getMainWindow(), 2_000_000_001);
+    // Item 307(d): the opener refuses while report.enabled is off, so turn it
+    // on for the open and put it back straight after.
+    const savedEnabled: unknown = Zotero.Prefs.get(REPORT_ENABLED_PREF, true);
+    try {
+      Zotero.Prefs.set(REPORT_ENABLED_PREF, true, true);
+      reportWindows.open(Zotero.getMainWindow(), 2_000_000_001);
+    } finally {
+      if (typeof savedEnabled === "boolean") {
+        Zotero.Prefs.set(REPORT_ENABLED_PREF, savedEnabled, true);
+      } else {
+        Zotero.Prefs.clear(REPORT_ENABLED_PREF, true);
+      }
+    }
     await waitUntil(
       () => openReportWindowCount() === 1,
       "the report window to open",
     );
+
+    // Item 307(e): a summarize window left open must not survive the disable
+    // either. Opened the same way, for another collection id no library holds.
+    const summarizeWindows = before.api.summarizeWindow;
+    if (!summarizeWindows) {
+      assert.fail("registerUI() published no api.summarizeWindow");
+    }
+    summarizeWindows.open(Zotero.getMainWindow(), 2_000_000_002);
+    await waitUntil(
+      () => openSummarizeWindowCount() === 1,
+      "the summarize window to open",
+    );
+    assert.strictEqual(summarizeWindows.openCount(), 1);
 
     await afterBootstrapCall("shutdown", () => wrapper.disable());
     await waitUntil(
@@ -342,6 +389,15 @@ describe("lifecycle (FR-56)", function () {
       undefined,
       "the report window's opener is withdrawn with the instance (P4-T19)",
     );
+    await waitUntil(
+      () => openSummarizeWindowCount() === 0,
+      "no summarize window after disable (item 307(e))",
+    );
+    assert.strictEqual(
+      before.api.summarizeWindow,
+      undefined,
+      "the summarize window's opener is withdrawn with the instance (item 307(e))",
+    );
 
     await afterBootstrapCall("startup", () => wrapper.enable());
     const afterEnable = await initializedInstance();
@@ -369,6 +425,11 @@ describe("lifecycle (FR-56)", function () {
       openReportWindowCount(),
       0,
       "enable opens no report window (P4-T19)",
+    );
+    assert.strictEqual(
+      openSummarizeWindowCount(),
+      0,
+      "enable opens no summarize window (item 307(e))",
     );
   });
 });
