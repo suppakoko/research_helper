@@ -243,6 +243,14 @@ import {
   type SummarySectionHost,
 } from "../ui/panes/summarySection";
 import { fromZoteroItem, workKeyOfItemID } from "../zotero/itemMapper";
+// `P4-T19`: the report window's opener and the model it draws.
+import {
+  buildReportWindowModel,
+  openReportWindow,
+  type ReportWindowHandle,
+  type ReportWindowHost,
+  type ReportWindowSession,
+} from "../ui/panes/reportWindow";
 import {
   createSpikeArticle,
   createZoteroHttpTransport,
@@ -293,6 +301,10 @@ const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
     openSummarizeWindowCommand(host, collectionID),
   removeGeneratedNotes: (host, collectionID) =>
     removeGeneratedNotesCommand(host, collectionID),
+  // `P4-T19`: FR-25's report window, over the graph
+  // {@link publishReportWindowCommands} holds.
+  openReportWindow: (host, collectionID) =>
+    openReportWindowCommand(host, collectionID),
 };
 
 // ---------------------------------------------------------------------------
@@ -1947,6 +1959,155 @@ async function publishSummarizeCommands(
   });
 }
 
+// ---------------------------------------------------------------------------
+// The report window (`P4-T19`)
+// ---------------------------------------------------------------------------
+
+declare module "../addon" {
+  interface PluginApi {
+    /**
+     * The report window's opener over the live graph (`P4-T19`), the command
+     * the collection menu's "Generate Research Trends Report…" runs.
+     * Published so an integration spec — bundled separately — can open the
+     * real window through the plugin's own state and see it closed at
+     * shutdown.
+     */
+    reportWindow?: ReportWindowCommands;
+  }
+}
+
+/** {@link PluginApi.reportWindow}. */
+export interface ReportWindowCommands {
+  /** Open, or raise, the report window for one collection. */
+  open(host: ReportWindowHost, collectionID: number): ReportWindowHandle;
+  /** How many report windows this instance opened that are still open. */
+  openCount(): number;
+}
+
+/**
+ * The graph the report window reads, and every window this instance opened:
+ * set by {@link publishReportWindowCommands}, which closes the windows and
+ * clears the graph in its teardown, so a disable leaves no report window
+ * behind (`P4-T19` Done when). Module state, as {@link summarizeState} is,
+ * because `SEARCH_MENU_COMMANDS` is built before any graph exists.
+ */
+const reportWindowState: {
+  graph: ServiceGraph | undefined;
+  readonly windows: Set<ReportWindowHandle>;
+} = { graph: undefined, windows: new Set() };
+
+/**
+ * The menu's "Generate Research Trends Report…": open, or raise, the
+ * collection's report window. A window the user closed is forgotten here.
+ */
+function openReportWindowCommand(
+  host: ReportWindowHost,
+  collectionID: number,
+): ReportWindowHandle {
+  const graph = reportWindowState.graph;
+  if (graph === undefined) {
+    throw new Error("[research-helper] the report window has no services");
+  }
+  for (const win of reportWindowState.windows) {
+    if (win.closed === true) reportWindowState.windows.delete(win);
+  }
+  const win = openReportWindow(
+    host,
+    collectionID,
+    createReportWindowSession(graph, collectionID),
+  );
+  reportWindowState.windows.add(win);
+  return win;
+}
+
+/**
+ * The report window's privileged side (`P4-T19`): what it draws on open.
+ *
+ * **Unbound until later cards, on purpose.** The run — start, cancel, stage
+ * rows, the streamed draft and its replacement, the cost confirmation and the
+ * delivery buttons — is `P4-T20`'s, which adds those members to
+ * {@link ReportWindowSession} and builds them here over the queue and
+ * `P4-T18`'s trend-report pipeline (`PipelineSet.trendReport`, constructed by
+ * `buildPipelineSet` in `./registerPipelines.ts`). Neither exists yet, so
+ * nothing here can start a job; the window is the shell `docs/08` §6.4's note
+ * of 2026-10-29 describes.
+ *
+ * The model is the `strong` chain's answer (`reportModel`, then
+ * `<provider>.model`; `docs/07` §8.5) — the owner's "resolved report model as
+ * text" (`plan/00` §6 item 286). A chain with every setting empty is a
+ * `ConfigurationError` from the router, drawn as "no report model is set";
+ * any other failure rejects `describe()`, which the window logs by name.
+ */
+function createReportWindowSession(
+  graph: ServiceGraph,
+  collectionID: number,
+): ReportWindowSession {
+  return {
+    async describe() {
+      const header = describeCollectionForSummary(collectionID);
+      let model: { modelId: string; providerName: string } | undefined;
+      try {
+        const resolved = graph.llm.router.resolveModel("strong");
+        model = {
+          modelId: resolved.modelId,
+          providerName: await providerDisplayName(graph, resolved.providerId),
+        };
+      } catch (error) {
+        if (!(error instanceof ConfigurationError)) throw error;
+        model = undefined;
+      }
+      return buildReportWindowModel({
+        collection:
+          header === undefined
+            ? undefined
+            : { name: header.name, regularItems: header.regularItems },
+        language: getPref("reportLanguage"),
+        model,
+      });
+    },
+
+    closed() {
+      // Nothing runs yet. `P4-T20`: a running job is cancelled here, as the
+      // summarize window's session does.
+    },
+  };
+}
+
+/**
+ * Hold the graph for the report window (`P4-T19`) and publish its opener on
+ * `addon.api.reportWindow`; on teardown, close every report window still open
+ * and withdraw both.
+ */
+async function publishReportWindowCommands(
+  scope: Scope,
+  graph: ServiceGraph,
+): Promise<void> {
+  // Captured once, for the reason {@link publishServiceGraph} gives.
+  const api = addon.api;
+  await scope.use({
+    description: "the report window's services and open windows",
+    register: () => {
+      reportWindowState.graph = graph;
+      api.reportWindow = {
+        open: (host, collectionID) =>
+          openReportWindowCommand(host, collectionID),
+        openCount: () =>
+          [...reportWindowState.windows].filter((win) => win.closed !== true)
+            .length,
+      };
+      return "reportWindowState";
+    },
+    unregister: () => {
+      delete api.reportWindow;
+      for (const win of reportWindowState.windows) {
+        if (win.closed !== true) win.close?.();
+      }
+      reportWindowState.windows.clear();
+      reportWindowState.graph = undefined;
+    },
+  });
+}
+
 /**
  * Run the composition root, then the application-scoped registrations, into
  * the root scope.
@@ -2038,6 +2199,9 @@ export async function registerUI(scope: Scope): Promise<void> {
   // The summarize window's services and the resumed-jobs notice (`P3-T29`),
   // before the collection menu that opens the window is registered.
   await publishSummarizeCommands(scope, graph);
+  // The report window's services (`P4-T19`), before the collection menu that
+  // opens it; its teardown closes any report window still open.
+  await publishReportWindowCommands(scope, graph);
 
   for (const register of APP_REGISTRATIONS) {
     await register(scope);

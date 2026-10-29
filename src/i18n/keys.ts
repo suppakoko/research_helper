@@ -138,8 +138,17 @@ export const ERROR_MESSAGE_PREFIX = "rh-error-";
 export type FluentSurface =
   "mainWindow" | "searchDialog" | "reportWindow" | "preferences";
 
-/** The surfaces that have a bundle in `addon/locale/` today. */
-export const SHIPPED_SURFACES = ["mainWindow", "searchDialog"] as const;
+/**
+ * The surfaces that have a bundle in `addon/locale/` today. `reportWindow`
+ * since `P4-T19` (2026-10-29): the report window owns a window, so it owns a
+ * bundle (`docs/08` §10.1). `preferences` never will — its strings are in the
+ * main-window bundle (`docs/08` §10.1, corrected 2026-10-15).
+ */
+export const SHIPPED_SURFACES = [
+  "mainWindow",
+  "searchDialog",
+  "reportWindow",
+] as const;
 
 export type ShippedSurface = (typeof SHIPPED_SURFACES)[number];
 
@@ -164,6 +173,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-menu-collection-search-import",
   // FR-12's "Re-run This Search…" (P2-T17), docs/08 §2.4 and §10.2.
   "research-helper-menu-collection-rerun",
+  // FR-25's "Generate Research Trends Report…" (P4-T19), docs/08 §2.4 and
+  // §10.2. The window it opens has its own bundle: REPORT_WINDOW_MESSAGE_IDS.
+  "research-helper-menu-collection-report",
   "research-helper-menu-spike-create-item",
   // P3-T29: the collection submenu's two LLM-job entries (docs/08 §2.5's
   // note of 2026-10-29), the summarize window and the removal command.
@@ -452,6 +464,10 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // SUMMARY_RESULT_L10N in src/ui/panes/summarySection.ts.
   "research-helper-itempane-not-summarized",
   "research-helper-itempane-note-not-written",
+  // P4-T05: the report run stopped by a clustering answer with more themes
+  // than MAX_THEMES (owner, plan/00 §6 item 292(d)). See TOO_MANY_THEMES_L10N
+  // in src/pipeline/trendReport/cluster.ts.
+  "research-helper-report-stopped-too-many-themes",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -510,6 +526,15 @@ export const L10N_MENU_COLLECTION_SUMMARIZE_ALL =
  */
 export const L10N_MENU_COLLECTION_REMOVE_NOTES =
   "research-helper-menu-collection-remove-notes";
+
+/**
+ * Collection context menu ▸ Research Helper ▸ Generate Research Trends
+ * Report… (`P4-T19`, FR-25). `docs/08` §2.4 registers it under this id and
+ * §10.2 ships its strings in both locales, owner-written; FR-25's wording was
+ * corrected to match on 2026-10-26 (owner, `plan/00` §6 item 286).
+ */
+export const L10N_MENU_COLLECTION_REPORT =
+  "research-helper-menu-collection-report";
 
 /**
  * The headline of the `Zotero.ProgressWindow` every job raises (`docs/07`
@@ -804,6 +829,35 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
 
 export type SearchDialogMessageId = (typeof SEARCH_DIALOG_MESSAGE_IDS)[number];
 
+/* ------------------------------------------------ reportWindow message ids */
+
+/**
+ * `research-helper-reportWindow.ftl` — everything the report window's own
+ * document resolves (`docs/08` §6.4, §10.1; `P4-T19`). The window owns a
+ * window, so it owns a bundle; `addon/content/reportWindow.xhtml` links this
+ * file and no other. See `REPORT_WINDOW_L10N` in `src/ui/panes/reportWindow.ts`.
+ *
+ * Order matches the file. `satisfies readonly FluentMessageId[]`, for the
+ * reason {@link MAIN_WINDOW_MESSAGE_IDS} gives.
+ */
+export const REPORT_WINDOW_MESSAGE_IDS = [
+  "research-helper-report-title",
+  "research-helper-report-collection",
+  // The per-run language override (docs/08 §6.4, §10.4): the label and the
+  // four values of `reportLanguage` (docs/07 §8.5).
+  "research-helper-report-language-label",
+  "research-helper-report-language-auto",
+  "research-helper-report-language-en",
+  "research-helper-report-language-ko",
+  "research-helper-report-language-both",
+  // The resolved report model as text (owner, plan/00 §6 item 286).
+  "research-helper-report-model",
+  "research-helper-report-model-none",
+  "research-helper-report-close",
+] as const satisfies readonly FluentMessageId[];
+
+export type ReportWindowMessageId = (typeof REPORT_WINDOW_MESSAGE_IDS)[number];
+
 /**
  * Why none of `P1-T45`'s three export ids is in {@link FluentMessageArgsMap},
  * and why the absence is a security property rather than an omission.
@@ -835,7 +889,8 @@ export const L10N_EXPORT_TAKES_NO_PATH =
  * but *not* the same type: this one carries the surface partition, which the
  * generator cannot express.
  */
-export type DeclaredMessageId = MainWindowMessageId | SearchDialogMessageId;
+export type DeclaredMessageId =
+  MainWindowMessageId | SearchDialogMessageId | ReportWindowMessageId;
 
 /**
  * The ids the bundles declare that this file assigns to no surface. **Must be
@@ -857,6 +912,7 @@ export const MESSAGE_IDS_BY_SURFACE: {
 } = {
   mainWindow: MAIN_WINDOW_MESSAGE_IDS,
   searchDialog: SEARCH_DIALOG_MESSAGE_IDS,
+  reportWindow: REPORT_WINDOW_MESSAGE_IDS,
 };
 
 /** Which bundle declares `id`, or `undefined` if nothing does. */
@@ -992,6 +1048,11 @@ export const KO_PENDING_REVIEW = [
   // The item pane's two result lines (owner, plan/00 §6 item 303(a), (b))
   // left this list on 2026-10-29: the owner approved the coordinator's Korean
   // (`G-41`, plan/00 §6 item 305(d)), so both are on KO_PRESENT.
+  // `P4-T05`'s stop message for too many themes (plan/00 §6 items 292(d),
+  // 306(b)). `G-41` owns the translation; the `ko-KR` bundle carries it as a
+  // commented stub with its English source, and nothing was
+  // machine-translated. The coordinator drafts the Korean for the owner.
+  "research-helper-report-stopped-too-many-themes",
   // --- searchDialog (62) ---
   // `P1-T45`. On this list and not on `KO_PRESENT`: the `ko-KR` bundle carries
   // all three as commented stubs with their English source, which the
@@ -1011,6 +1072,21 @@ export const KO_PENDING_REVIEW = [
   // `P3-T28`'s fifteen item-pane section strings (plan/00 §6 item 302) left
   // this list on 2026-10-29: the owner approved the coordinator's Korean
   // (`G-41`, plan/00 §6 item 304), so all fifteen are on KO_PRESENT.
+  // --- reportWindow (10) ---
+  // `P4-T19`'s report window (plan/00 §6 item 306(b)). `G-41` owns the
+  // translation; the `ko-KR` bundle carries each as a commented stub with its
+  // English source, and nothing was machine-translated. The coordinator drafts
+  // the Korean for the owner.
+  "research-helper-report-title",
+  "research-helper-report-collection",
+  "research-helper-report-language-label",
+  "research-helper-report-language-auto",
+  "research-helper-report-language-en",
+  "research-helper-report-language-ko",
+  "research-helper-report-language-both",
+  "research-helper-report-model",
+  "research-helper-report-model-none",
+  "research-helper-report-close",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -1037,6 +1113,8 @@ export const KO_PRESENT = [
   "research-helper-menu-collection-rerun",
   // FR-19's entry: owner-written Korean in `docs/08` §10.2 (`P3-T29`).
   "research-helper-menu-collection-summarize-all",
+  // FR-25's entry: owner-written Korean in `docs/08` §10.2 (`P4-T19`).
+  "research-helper-menu-collection-report",
   "research-helper-source-pubmed",
   "research-helper-source-europepmc",
   "research-helper-source-crossref",
@@ -1580,6 +1658,12 @@ export interface FluentMessageArgsMap {
   // is a selector (NotSummarizedReason; "exists" / "read-only").
   "research-helper-itempane-not-summarized": { reason: string };
   "research-helper-itempane-note-not-written": { reason: string };
+  // P4-T05 (plan/00 §6 item 292(d)): `$themes` is the second answer's theme
+  // count, `$max` is MAX_THEMES.
+  "research-helper-report-stopped-too-many-themes": {
+    themes: number;
+    max: number;
+  };
 
   // searchDialog
   "research-helper-search-years-span": {
@@ -1646,6 +1730,11 @@ export interface FluentMessageArgsMap {
     present: number;
     failed: number;
   };
+  // reportWindow (P4-T19). `$name` is the user's own text; `$count` selects
+  // the plural; `$model` is a model id and `$provider` a provider's display
+  // name, neither translated (docs/08 §10.3).
+  "research-helper-report-collection": { name: string; count: number };
+  "research-helper-report-model": { model: string; provider: string };
 }
 
 /**
@@ -1731,6 +1820,8 @@ export const ARGUMENT_MESSAGE_IDS = [
   // mainWindow — the item pane's result lines (2, plan/00 §6 item 303)
   "research-helper-itempane-not-summarized",
   "research-helper-itempane-note-not-written",
+  // mainWindow — the report run's stop for too many themes (1, P4-T05)
+  "research-helper-report-stopped-too-many-themes",
   // mainWindow — the budget error, the cost dialog and the Usage readout
   // (19, P3-T16)
   "rh-error-budget",
@@ -1786,6 +1877,10 @@ export const ARGUMENT_MESSAGE_IDS = [
   // Item 281(b).
   "research-helper-search-screening-cost",
   "research-helper-search-screening-cost-unpriced",
+
+  // reportWindow (2, P4-T19)
+  "research-helper-report-collection",
+  "research-helper-report-model",
 ] as const satisfies readonly (keyof FluentMessageArgsMap)[];
 
 /**

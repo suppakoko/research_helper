@@ -12,7 +12,8 @@
  * that no bundle declares.
  *
  * The plugin under test is the real, built one. Its bundles are
- * `locale/{en-US,ko-KR}/research-helper-{mainWindow,searchDialog}.ftl`.
+ * `locale/{en-US,ko-KR}/research-helper-{mainWindow,searchDialog}.ftl`, and since
+ * `P4-T19` `research-helper-reportWindow.ftl` in both locales.
  *
  * ## The layers, and why they are separate `it` blocks
  *
@@ -131,6 +132,7 @@ import {
   MAIN_WINDOW_MESSAGE_IDS,
   MESSAGE_IDS_BY_SURFACE,
   MESSAGE_PREFIX,
+  REPORT_WINDOW_MESSAGE_IDS,
   SEARCH_DIALOG_MESSAGE_IDS,
   SHIPPED_SURFACES,
   surfaceOfMessage,
@@ -209,7 +211,28 @@ const STEP_TIMEOUT_MS = 20_000;
  */
 const MARKUP_URLS = [
   `chrome://${config.addonRef}/content/searchDialog.xhtml`,
+  // `P4-T19`: the report window, the second document with its own bundle.
+  `chrome://${config.addonRef}/content/reportWindow.xhtml`,
 ] as const;
+
+/**
+ * The surface whose bundle each document in {@link MARKUP_URLS} links, so the
+ * scrape can check a document names only its own bundle's ids (`docs/08`
+ * §10.1: a window's `<linkset>` names that window's own file and no other).
+ */
+const MARKUP_SURFACE: Readonly<
+  Record<(typeof MARKUP_URLS)[number], ShippedSurface>
+> = {
+  [MARKUP_URLS[0]]: "searchDialog",
+  [MARKUP_URLS[1]]: "reportWindow",
+};
+
+/** Every id any surface declares, in surface order. */
+const ALL_DECLARED_IDS: readonly FluentMessageId[] = [
+  ...MAIN_WINDOW_MESSAGE_IDS,
+  ...SEARCH_DIALOG_MESSAGE_IDS,
+  ...REPORT_WINDOW_MESSAGE_IDS,
+];
 
 /** The expected menu labels, copied from the two `.ftl` files by hand. */
 const EN = {
@@ -495,11 +518,12 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
 
   /* ---------------------------------------------- layer 1: the vocabulary */
 
-  it("declares one id set, with no duplicate across the two surfaces", async function () {
-    const all = [...MAIN_WINDOW_MESSAGE_IDS, ...SEARCH_DIALOG_MESSAGE_IDS];
+  it("declares one id set, with no duplicate across the three surfaces", async function () {
+    const all = ALL_DECLARED_IDS;
     log(
       `declared ids: mainWindow ${MAIN_WINDOW_MESSAGE_IDS.length}, ` +
-        `searchDialog ${SEARCH_DIALOG_MESSAGE_IDS.length}, total ${all.length}`,
+        `searchDialog ${SEARCH_DIALOG_MESSAGE_IDS.length}, ` +
+        `reportWindow ${REPORT_WINDOW_MESSAGE_IDS.length}, total ${all.length}`,
     );
     assert.strictEqual(
       new Set(all).size,
@@ -507,7 +531,11 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       "an id declared in two surfaces would be declared in two files, and " +
         "Fluent ids share one namespace per document (docs/01 §9.3)",
     );
-    assert.deepEqual(sorted(SHIPPED_SURFACES), ["mainWindow", "searchDialog"]);
+    assert.deepEqual(sorted(SHIPPED_SURFACES), [
+      "mainWindow",
+      "reportWindow",
+      "searchDialog",
+    ]);
     assert.strictEqual(FLUENT_PREFIX, "research-helper-");
     assert.strictEqual(MESSAGE_PREFIX, FLUENT_PREFIX);
     assert.isTrue(
@@ -521,6 +549,10 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
     assert.strictEqual(
       fluentResourceId("searchDialog"),
       "research-helper-searchDialog.ftl",
+    );
+    assert.strictEqual(
+      fluentResourceId("reportWindow"),
+      "research-helper-reportWindow.ftl",
     );
     // The two constants src/ui/menus/toolsMenu.ts declares for itself must be
     // the same strings keys.ts declares; that file predates keys.ts and is not
@@ -541,7 +573,7 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
     // criterion cannot pass while that conflict stands; this test states the
     // split exactly, so the day the conflict is resolved one side of it goes
     // to zero and this assertion is what fails.
-    const all = [...MAIN_WINDOW_MESSAGE_IDS, ...SEARCH_DIALOG_MESSAGE_IDS];
+    const all = ALL_DECLARED_IDS;
     const pluginPrefixed = all.filter((id) => id.startsWith(MESSAGE_PREFIX));
     const errorPrefixed = all.filter((id) =>
       id.startsWith(ERROR_MESSAGE_PREFIX),
@@ -591,10 +623,7 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       "keys.ts's FluentMessageId is typings/i10n.d.ts's generated union " +
         "(P1-T30); if this file stopped compiling, keys.ts restated the union",
     );
-    const all: readonly FluentMessageId[] = [
-      ...MAIN_WINDOW_MESSAGE_IDS,
-      ...SEARCH_DIALOG_MESSAGE_IDS,
-    ];
+    const all: readonly FluentMessageId[] = ALL_DECLARED_IDS;
     const unassigned = all.filter((id) => surfaceOfMessage(id) === undefined);
     log(`ids with no surface per surfaceOfMessage(): ${unassigned.length}`);
     assert.deepEqual(
@@ -668,22 +697,27 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       );
     }
     // And no id leaks across: an id declared for one surface must not also be
-    // in the other file, or the two would collide in any document that
-    // inserts both.
+    // in another file, or the two would collide in any document that inserts
+    // both. Every ordered pair of the three surfaces (P4-T19).
     for (const surface of SHIPPED_SURFACES) {
-      const other: ShippedSurface =
-        surface === "mainWindow" ? "searchDialog" : "mainWindow";
-      const bundle = await bundleFor(other, "en-US");
-      if (!bundle) {
-        assert.fail(`no en-US bundle for ${other}`);
+      for (const other of SHIPPED_SURFACES) {
+        if (other === surface) continue;
+        const bundle = await bundleFor(other, "en-US");
+        if (!bundle) {
+          assert.fail(`no en-US bundle for ${other}`);
+        }
+        const leaked = MESSAGE_IDS_BY_SURFACE[surface].filter((id) =>
+          bundle.hasMessage(id),
+        );
+        log(
+          `ids of ${surface} also present in ${other}: ${JSON.stringify(leaked)}`,
+        );
+        assert.deepEqual(
+          leaked,
+          [],
+          `${surface}'s ids are not also in ${other}`,
+        );
       }
-      const leaked = MESSAGE_IDS_BY_SURFACE[surface].filter((id) =>
-        bundle.hasMessage(id),
-      );
-      log(
-        `ids of ${surface} also present in ${other}: ${JSON.stringify(leaked)}`,
-      );
-      assert.deepEqual(leaked, [], `${surface}'s ids are not also in ${other}`);
     }
   });
 
@@ -962,10 +996,7 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
     // a file that does not exist does **not** reject through
     // `Zotero.File.getContentsFromURLAsync` — it comes back as the empty
     // string — so absence is detected on the content, not on a throw.
-    const declared = new Set<string>([
-      ...MAIN_WINDOW_MESSAGE_IDS,
-      ...SEARCH_DIALOG_MESSAGE_IDS,
-    ]);
+    const declared = new Set<string>(ALL_DECLARED_IDS);
     let documentsFound = 0;
     for (const url of MARKUP_URLS) {
       let source: string;
@@ -993,6 +1024,23 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
         undeclared,
         [],
         `every data-l10n-id in ${url} is declared in src/i18n/keys.ts`,
+      );
+      // P4-T19: a window document links one bundle, its own, so an id of
+      // another surface would render blank there.
+      const surface = MARKUP_SURFACE[url];
+      if (surface === undefined) {
+        assert.fail(`no surface is recorded for ${url}`);
+      }
+      const own = new Set<string>(MESSAGE_IDS_BY_SURFACE[surface]);
+      const foreign = unique.filter((id) => !own.has(id));
+      log(
+        `markup ${url}: ${foreign.length} id(s) outside its own ` +
+          `${surface} bundle ${JSON.stringify(foreign)}`,
+      );
+      assert.deepEqual(
+        foreign,
+        [],
+        `every data-l10n-id in ${url} is in its own bundle`,
       );
       if (unique.length === 0) {
         // Not a failure of this card, but it is P1-T20's criterion failing, so

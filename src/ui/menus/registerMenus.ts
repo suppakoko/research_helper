@@ -55,6 +55,9 @@
  * `-summarize-all` is here now, with FR-20's `-remove-notes` beside it and
  * the separator below them — {@link llmJobItems}; `docs/08` §2.5's note of
  * that date. `-report` and `-recommend` are still later cards'.)*
+ * *(Updated 2026-10-29, `P4-T19`: `-report` is here too, first in the
+ * submenu, and opens the report window — `docs/08` §2.5's note of that
+ * date. `-recommend` is still a later card's.)*
  *
  * ### Where the re-run entry sits, and why there is no separator above it
  *
@@ -83,6 +86,7 @@
 import { config } from "../../../package.json";
 import {
   L10N_MENU_COLLECTION_REMOVE_NOTES,
+  L10N_MENU_COLLECTION_REPORT,
   L10N_MENU_COLLECTION_RERUN,
   L10N_MENU_COLLECTION_SEARCH_IMPORT,
   L10N_MENU_COLLECTION_SUMMARIZE_ALL,
@@ -160,6 +164,16 @@ export interface SearchMenuCommands {
    * entry is not in the submenu.
    */
   readonly removeGeneratedNotes?: (
+    host: MenuHostWindow,
+    collectionID: number,
+  ) => unknown;
+  /**
+   * FR-25's "Generate Research Trends Report…" (`P4-T19`): opens, or raises,
+   * the modeless report window for the collection; it starts no job.
+   * `src/bootstrap/registerUI.ts` binds it to `openReportWindow`
+   * (`src/ui/panes/reportWindow.ts`). Absent, the entry is not in the submenu.
+   */
+  readonly openReportWindow?: (
     host: MenuHostWindow,
     collectionID: number,
   ) => unknown;
@@ -494,8 +508,9 @@ function collectionCommandItem(
 }
 
 /**
- * The two LLM-job entries and their separator, for the commands this build
- * was given (`P3-T29`). Empty when neither is, so a submenu built without
+ * The LLM-job entries and their separator, for the commands this build was
+ * given (`P3-T29`; the report entry first since `P4-T19`, where `docs/08`
+ * §2.5's wireframe draws it). Empty when none is, so a submenu built without
  * them keeps Phase 1's shape.
  */
 function llmJobItems(
@@ -503,6 +518,16 @@ function llmJobItems(
 ): _ZoteroTypes.MenuManager.MenuData<_ZoteroTypes.MenuManager.LibraryMenuContext>[] {
   const items: _ZoteroTypes.MenuManager.MenuData<_ZoteroTypes.MenuManager.LibraryMenuContext>[] =
     [];
+  if (commands.openReportWindow !== undefined) {
+    items.push(
+      collectionCommandItem(
+        commands,
+        L10N_MENU_COLLECTION_REPORT,
+        "Generate Research Trends Report",
+        commands.openReportWindow,
+      ),
+    );
+  }
   if (commands.openSummarizeWindow !== undefined) {
     items.push(
       collectionCommandItem(
@@ -574,7 +599,8 @@ export function collectionMenuOptions(
           }
         },
         menus: [
-          // `P3-T29`: summarize and remove-notes, then the separator.
+          // `P4-T19`: the report; `P3-T29`: summarize and remove-notes; then
+          // the separator.
           ...llmJobItems(commands),
           {
             menuType: "menuitem",

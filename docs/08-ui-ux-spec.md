@@ -538,6 +538,15 @@ Two concrete hazards make that more than a style preference:
 > asked inside the window. The removal entry asks with `Services.prompt` naming the exact count and the
 > collection, and does nothing when the count is 0.
 
+> **As built 2026-10-29 (`P4-T19`; FR-25's wording, decided 2026-10-26 by the owner, `plan/00` §6 item
+> 286).** "Generate Research Trends Report…" (`research-helper-menu-collection-report`, with §10.2's
+> `en-US` and Korean) is now the **first** entry, above "Summarize All Papers in Collection", as the
+> wireframe above draws it. Like the summarize entry it is shown whenever the submenu is (exactly one
+> collection selected) and is not disabled when no key or model is set: the §2.4 block's
+> `setEnabled(RH.llm.isConfigured())` is not used: the report window names the resolved model or says
+> that none is set (§6.4's note of 2026-10-29), and a missing key is the job's to report before any
+> request (`P4-T18`, `P4-T20`). The entry opens the modeless report window (§6.4) and starts no job.
+
 **Item context menu** (right-click one or more items)
 
 ```
@@ -1461,8 +1470,8 @@ const base = `${safeBaseName(collection.name)} — trends ${new Date().toISOStri
 │  Collection  📁 CRISPR delivery / 2026 screen        47 papers (3 skipped:    │
 │                                                       notes & attachments)    │
 │                                                                               │
-│  Language  [ English ▾ ]     Model  [ claude-sonnet-5 ▾ ]                     │
-│  Depth     ( ) Brief   (•) Standard   ( ) Detailed                            │
+│  Language  [ English ▾ ]                                                      │
+│  Model: claude-sonnet-5 (Anthropic) — set in Research Helper's preferences.   │
 │                                                                               │
 │  ───────────────────────────────────────────────────────────────────────────  │
 │  Step 1 of 2 — Summarizing papers                                             │
@@ -1478,6 +1487,32 @@ const base = `${safeBaseName(collection.name)} — trends ${new Date().toISOStri
 │                                                             [   Cancel   ]    │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286); written here 2026-10-29 by `P4-T19`.** The
+> sketch above showed a per-run "Model" dropdown and "Depth ( ) Brief (•) Standard ( ) Detailed".
+> `07-architecture-and-data-model.md` §8.5 declares no depth setting and no per-run model. **The window
+> shows the resolved report model as text, changed in preferences, and has no Depth control;
+> `report.targetWords` stays the length control** (it is not user-visible). The alternative not taken:
+> add both as new settings. The sketch above is corrected to match.
+>
+> **As built 2026-10-29 (`P4-T19`; readings of points this document leaves open, for the owner to
+> confirm).** (1) **The model line** is the `strong` chain's answer (`reportModel`, then
+> `<provider>.model`; `07-…` §8.5) with the provider's display name, e.g. "Model: claude-sonnet-5
+> (Anthropic) — set in Research Helper's preferences."; when every setting in the chain is empty it
+> says that no report model is set. `reportModel` itself has no control in the preferences pane (§8.5:
+> "Not in the pane"), so "set in preferences" holds through `<provider>.model`. (2) **The language
+> selector** offers the four values of `reportLanguage` (`auto`, `en`, `ko`, `both`), starts on the
+> preference's value, and is a per-run override that is never written back to the preference (§10.4).
+> "English" and "한국어" are each language's own name, as §7.3's preference markup draws them; `auto`
+> and `both` read "Same as Zotero's language" and "English and Korean". (3) **The window** is modeless
+> and has its own document and bundle: `chrome://research-helper/content/reportWindow.xhtml` with
+> `research-helper-reportWindow.ftl` (§10.1), `<window><dialog>` as §4.1.1 draws it, one window per
+> collection (named `research-helper-report-<collection id>`, so a second click raises the first), its
+> title "Research Helper — Collection Report" as above, and one Close button (Escape closes too). It
+> is closed when the plugin shuts down. (4) **What `P4-T19` built is the shell only**: the collection
+> line, the language selector, the model line and Close. Generate, the stage rows, the streamed
+> preview, Cancel and the delivery buttons are `P4-T20`'s, which drives the job through the window's
+> host (`plan/07` `P4-T20`).
 
 **Stage 3, streaming**
 

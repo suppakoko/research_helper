@@ -40,6 +40,7 @@ import type Addon from "../../src/addon";
 import { config } from "../../package.json";
 import {
   L10N_MENU_COLLECTION_REMOVE_NOTES,
+  L10N_MENU_COLLECTION_REPORT,
   L10N_MENU_COLLECTION_RERUN,
   L10N_MENU_COLLECTION_SEARCH_IMPORT,
   L10N_MENU_COLLECTION_SUMMARIZE_ALL,
@@ -61,6 +62,23 @@ import {
   type SearchMenuCommands,
 } from "../../src/ui/menus/registerMenus";
 import { toolsMenuOptions } from "../../src/ui/menus/toolsMenu";
+import {
+  REPORT_LANGUAGE_L10N,
+  REPORT_WINDOW_FEATURES,
+  REPORT_WINDOW_L10N,
+  REPORT_WINDOW_NAME_PREFIX,
+  REPORT_WINDOW_URL,
+  buildReportWindowModel,
+  openReportWindow,
+  type ReportWindowArgs,
+  type ReportWindowSession,
+} from "../../src/ui/panes/reportWindow";
+import { qualifiedPrefName } from "../../src/zotero/prefStore";
+import {
+  pinUILocale,
+  restoreUILocale,
+  type UILocaleSnapshot,
+} from "./support/uiLocale";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -567,20 +585,28 @@ describe("menu entry points and the window opener (P1-T19)", function () {
     assert.deepEqual(
       [...shape.entries],
       [
+        L10N_MENU_COLLECTION_REPORT,
         L10N_MENU_COLLECTION_SUMMARIZE_ALL,
         L10N_MENU_COLLECTION_REMOVE_NOTES,
         "",
         L10N_MENU_COLLECTION_SEARCH_IMPORT,
         L10N_MENU_COLLECTION_RERUN,
       ],
-      "P3-T29's two LLM-job entries and the separator below them (docs/08 " +
-        "§2.5's note of 2026-10-29), then Search & Import and FR-12's Re-run " +
-        "This Search… (P2-T17); the report and recommend entries of docs/08 " +
-        "§2.4 are later cards'",
+      "P4-T19's report entry first, then P3-T29's two LLM-job entries and " +
+        "the separator below them (docs/08 §2.5's notes of 2026-10-29), then " +
+        "Search & Import and FR-12's Re-run This Search… (P2-T17); the " +
+        "recommend entry of docs/08 §2.4 is a later card's",
     );
     assert.deepEqual(
       [...shape.kinds],
-      ["menuitem", "menuitem", "menuseparator", "menuitem", "menuitem"],
+      [
+        "menuitem",
+        "menuitem",
+        "menuitem",
+        "menuseparator",
+        "menuitem",
+        "menuitem",
+      ],
     );
 
     // The real `onShowing` ran, reading the live selection through
@@ -702,6 +728,267 @@ describe("menu entry points and the window opener (P1-T19)", function () {
     entries[0]?.onCommand?.(new Event("command"), libraryContext(two, {}));
     assert.strictEqual(calls.length, 2, "nothing runs for two collections");
     assert.strictEqual(rec.errors.length, 1, "one reported refusal");
+  });
+
+  it("gives the report entry the right-clicked collection, first in the submenu (P4-T19)", async function () {
+    const rec = recorder();
+    const calls: { host: unknown; collectionID: number }[] = [];
+    const commands: SearchMenuCommands = {
+      ...rec.commands,
+      openReportWindow: (host, collectionID) => {
+        calls.push({ host, collectionID });
+        return undefined;
+      },
+      openSummarizeWindow: () => undefined,
+      removeGeneratedNotes: () => undefined,
+    };
+    const entries = collectionMenuOptions(commands).menus[0]?.menus ?? [];
+    assert.deepEqual(
+      entries.map((entry) =>
+        entry.menuType === "menuitem" ? entry.l10nID : entry.menuType,
+      ),
+      [
+        L10N_MENU_COLLECTION_REPORT,
+        L10N_MENU_COLLECTION_SUMMARIZE_ALL,
+        L10N_MENU_COLLECTION_REMOVE_NOTES,
+        "separator",
+        L10N_MENU_COLLECTION_SEARCH_IMPORT,
+        L10N_MENU_COLLECTION_RERUN,
+      ],
+      "docs/08 §2.5: the report entry is first, above summarize",
+    );
+    const report = entries[0];
+    if (!report?.onCommand) assert.fail("the report entry has no onCommand");
+    const win = stubWindow([4244]);
+    report.onCommand(new Event("command"), libraryContext(win, {}));
+    assert.strictEqual(rec.errors.length, 0, rec.errors.join("; "));
+    assert.deepEqual(
+      calls.map(({ collectionID }) => collectionID),
+      [4244],
+    );
+    assert.strictEqual(calls[0]?.host, win, "the clicked window is the host");
+    // Two selected collections: refused through onError, nothing opened.
+    report.onCommand(
+      new Event("command"),
+      libraryContext(stubWindow([1, 2]), {}),
+    );
+    assert.strictEqual(calls.length, 1, "nothing opens for two collections");
+    assert.strictEqual(rec.errors.length, 1, "one reported refusal");
+    // Without the command the entry is absent, never a dead menu item.
+    const without = collectionMenuOptions(rec.commands).menus[0]?.menus ?? [];
+    assert.isFalse(
+      without.some(
+        (entry) =>
+          entry.menuType === "menuitem" &&
+          entry.l10nID === L10N_MENU_COLLECTION_REPORT,
+      ),
+      "no report entry when no opener is bound",
+    );
+  });
+
+  it("asks openDialog for a modeless report window per collection, passing the session (P4-T19)", async function () {
+    const win = stubWindow([]);
+    const session: ReportWindowSession = {
+      describe: () => Promise.reject(new Error("not called here")),
+      closed: () => undefined,
+    };
+    const opened = openReportWindow(win, 31, session);
+    assert.strictEqual(win.dialogs.length, 1, "one openDialog call");
+    const call = win.dialogs[0];
+    assert.strictEqual(call?.url, REPORT_WINDOW_URL);
+    assert.strictEqual(
+      call?.url,
+      `chrome://${config.addonRef}/content/reportWindow.xhtml`,
+      "the window's own document, under the hyphenated chrome package",
+    );
+    assert.strictEqual(call?.name, `${REPORT_WINDOW_NAME_PREFIX}31`);
+    assert.strictEqual(call?.features, REPORT_WINDOW_FEATURES);
+    assert.include(call?.features ?? "", "dialog=no", "modeless");
+    assert.isFalse(
+      (call?.features ?? "").includes("modal"),
+      "never a modal window (P4-T19 Do NOT)",
+    );
+    const args = call?.extra[0] as ReportWindowArgs | undefined;
+    assert.strictEqual(args?.session, session, "the session is the argument");
+    assert.strictEqual(args?.l10n, REPORT_WINDOW_L10N);
+    assert.isAbove(win.focuses.length, 0, "the window is focused");
+    assert.strictEqual(opened, openReportWindow(win, 31, session));
+    assert.strictEqual(
+      win.dialogs[1]?.name,
+      win.dialogs[0]?.name,
+      "the same collection names the same window, so Gecko raises it",
+    );
+    openReportWindow(win, 32, session);
+    assert.strictEqual(
+      win.dialogs[2]?.name,
+      `${REPORT_WINDOW_NAME_PREFIX}32`,
+      "another collection gets its own window",
+    );
+
+    // The model the window draws: the resolved model as text, or "none".
+    const set = buildReportWindowModel({
+      collection: { name: "C", regularItems: 3 },
+      language: "both",
+      model: { modelId: "m-1", providerName: "OpenRouter" },
+    });
+    assert.deepEqual(set, {
+      collection: {
+        id: REPORT_WINDOW_L10N.collection,
+        args: { name: "C", count: 3 },
+      },
+      language: "both",
+      model: {
+        id: REPORT_WINDOW_L10N.model,
+        args: { model: "m-1", provider: "OpenRouter" },
+      },
+    });
+    const unset = buildReportWindowModel({
+      collection: undefined,
+      language: "fr",
+      model: undefined,
+    });
+    assert.deepEqual(unset, {
+      collection: undefined,
+      language: "auto",
+      model: { id: REPORT_WINDOW_L10N.modelNone },
+    });
+  });
+
+  it("opens the real report window with the collection, the language and the model as text (P4-T19)", async function () {
+    this.timeout(90_000);
+    const instance = await initializedInstance();
+    const commands = instance.api.reportWindow;
+    if (!commands) {
+      assert.fail("registerUI() published no api.reportWindow");
+    }
+    // English assertions below: pin the UI locale (support/uiLocale.ts).
+    const locale: UILocaleSnapshot = await pinUILocale(["en-US"], log);
+    const libraryID = Zotero.Libraries.userLibraryID;
+    const languagePref = qualifiedPrefName("reportLanguage");
+    const modelPref = qualifiedPrefName("reportModel");
+    const savedLanguage: unknown = Zotero.Prefs.get(languagePref, true);
+    const savedModel: unknown = Zotero.Prefs.get(modelPref, true);
+    const collection = new Zotero.Collection({
+      libraryID,
+      name: "P4-T19 report window",
+    });
+    await collection.saveTx();
+    const item = new Zotero.Item("journalArticle");
+    item.libraryID = libraryID;
+    item.setField("title", "P4-T19 paper");
+    item.setCollections([collection.id]);
+    await item.saveTx();
+    let opened: Window | undefined;
+    try {
+      Zotero.Prefs.set(languagePref, "ko", true);
+      Zotero.Prefs.set(modelPref, "p4t19-test-model", true);
+      const main = Zotero.getMainWindow();
+      opened = commands.open(main, collection.id) as unknown as Window;
+      const win = opened as unknown as Window & {
+        RHReportWindow?: {
+          state: { initialized: boolean };
+          ready?: Promise<void>;
+          selectedLanguage(): string;
+        };
+      };
+      await waitUntil(
+        () =>
+          win.document?.readyState === "complete" &&
+          win.RHReportWindow?.state.initialized === true,
+        "the report window to load and initialize",
+      );
+      await win.RHReportWindow?.ready;
+      const doc = win.document;
+      await doc.l10n?.translateRoots();
+      await waitUntil(
+        () =>
+          doc.title.length > 0 &&
+          (doc.getElementById("rh-report-model")?.textContent ?? "") !== "" &&
+          (doc.getElementById("rh-report-collection")?.textContent ?? "") !==
+            "",
+        "the window title, the collection and the model line from Fluent",
+      );
+      const text = (id: string): string =>
+        (doc.getElementById(id)?.textContent ?? "").trim();
+      const languageList = doc.getElementById(
+        "rh-report-language",
+      ) as unknown as { value: string };
+      const shown = {
+        title: doc.title,
+        collection: text("rh-report-collection"),
+        model: text("rh-report-model"),
+        language: languageList.value,
+        close:
+          doc
+            .getElementById("rh-report-dialog")
+            ?.getAttribute("buttonlabelcancel") ?? "",
+        menulists: doc.querySelectorAll("menulist").length,
+        languageItems: [
+          ...doc.querySelectorAll("#rh-report-language menuitem"),
+        ].map((el) => el.getAttribute("value")),
+        languageIds: Object.fromEntries(
+          [...doc.querySelectorAll("#rh-report-language menuitem")].map(
+            (el) => [el.getAttribute("value"), el.getAttribute("data-l10n-id")],
+          ),
+        ),
+      };
+      log(`report window ${JSON.stringify(shown)}`);
+      assert.strictEqual(shown.title, "Research Helper — Collection Report");
+      assert.strictEqual(shown.collection, "P4-T19 report window — 1 paper");
+      assert.include(shown.model, "Model: p4t19-test-model (");
+      assert.include(shown.model, "set in Research Helper's preferences");
+      assert.strictEqual(
+        shown.language,
+        "ko",
+        "the selector starts on reportLanguage",
+      );
+      assert.strictEqual(win.RHReportWindow?.selectedLanguage(), "ko");
+      assert.deepEqual(shown.languageItems, ["auto", "en", "ko", "both"]);
+      assert.deepEqual(
+        shown.languageIds,
+        { ...REPORT_LANGUAGE_L10N },
+        "each value carries the label id the opener names for it",
+      );
+      assert.strictEqual(
+        shown.menulists,
+        1,
+        "one selector — the language; no model dropdown (item 286)",
+      );
+      assert.strictEqual(
+        doc.querySelectorAll("radiogroup, radio").length,
+        0,
+        "no Depth control (item 286)",
+      );
+      assert.strictEqual(shown.close, "Close");
+      // The per-run choice is never written back to the preference.
+      languageList.value = "en";
+      assert.strictEqual(win.RHReportWindow?.selectedLanguage(), "en");
+      assert.strictEqual(Zotero.Prefs.get(languagePref, true), "ko");
+
+      // A second click on the same collection raises the same window.
+      const again = commands.open(main, collection.id) as unknown as Window;
+      assert.strictEqual(again, opened, "one window per collection");
+      assert.strictEqual(commands.openCount(), 1);
+    } finally {
+      opened?.close();
+      if (typeof savedLanguage === "string") {
+        Zotero.Prefs.set(languagePref, savedLanguage, true);
+      } else {
+        Zotero.Prefs.clear(languagePref, true);
+      }
+      if (typeof savedModel === "string") {
+        Zotero.Prefs.set(modelPref, savedModel, true);
+      } else {
+        Zotero.Prefs.clear(modelPref, true);
+      }
+      await item.eraseTx();
+      await collection.eraseTx();
+      await restoreUILocale(locale, log);
+    }
+    await waitUntil(
+      () => commands.openCount() === 0,
+      "the closed report window to be forgotten",
+    );
   });
 
   it("opens nothing when the collection selection is not exactly one", async function () {

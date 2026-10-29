@@ -2383,6 +2383,13 @@ the caller of what the card builds; if it does not, the caller is added with a d
     new item-pane strings is approved as drafted in chat, recorded byte for byte in
     `plan/reports/ko-review-305.ftl` (G-41).
 
+306. **After item 305, 2026-10-29.** **DECIDED 2026-10-29 (owner):** (a) a one-item run counts only the item's
+    collections that are not in the trash. A strict collection in the trash does not tighten the mode. The owner kept the
+    built behaviour; the coordinator had recommended counting trashed collections too (`plan/reports/followup-305.md`
+    finding 1). (b) `P4-T05` (theme clustering with client-side validation) and `P4-T19` (report window surface, menu
+    entry, `reportWindow` bundle; the build/Zotero owner) run together, fake model only. New strings go on
+    `KO_PENDING_REVIEW`; the coordinator drafts their Korean for the owner.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

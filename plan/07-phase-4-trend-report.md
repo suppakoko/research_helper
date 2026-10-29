@@ -735,6 +735,26 @@ npm run typecheck && npm run test:unit -- trendCluster
 
 **Notes.** Needs from Phase 3: `P3-T12`, `P3-T35` (built).
 
+*As built 2026-10-29 (`plan/00` §6 item 306(b); fake model only).* `src/pipeline/trendReport/cluster.ts`
+declares `clusterThemes`, `clusteringPath`, `clusteringProblems`, `isMiss`, `finalizeClustering`,
+`themeBandFor`, `minPapersPerThemeFor`, `clusterThemesTwoStage` (`P4-T06`'s stub, which throws) and the
+constants `THEME_CLUSTER_EFFORT`, `CLUSTER_REQUESTS_MAX`, `OTHER_THEME_NAME`, `OTHER_THEME_DEFINITION`,
+`SMALL_THEME_REASON` and `TOO_MANY_THEMES_L10N`; its readings are `docs/12` §8's note of 2026-10-29.
+Callers (rule 10): nothing calls it yet. `trendReportPipeline.ts` (`P4-T18`) calls `clusterThemes` at its
+cluster stage with the digests it built (`P4-T04`), the strong model's `maxOutputTokens` it also gives
+`planSynthesis`, and `ctx.llm`, `ctx.budget`, `ctx.token`; it ends the run and shows the message when the
+outcome is `stopped-too-many-themes`, and adds the outcome's `passes` to the run's counter. `P4-T06`
+replaces `clusterThemesTwoStage`. Nothing is constructed: the module is functions and constants. Step 6's
+message is `research-helper-report-stopped-too-many-themes`, in the main-window bundles: `P4-T19`'s
+`reportWindow` bundle shows no run message (its run messages are `P4-T20`'s).
+
+**Open for the owner (2026-10-29; `plan/reports/followup-292.md` finding 2):** whether step 3's re-run
+and step 6's "asked for once more" share one request when the second answer shows the defect the first
+did not. Built, until the owner rules: one shared re-run (`CLUSTER_REQUESTS_MAX` 2), so missed keys then
+too many themes stops the run, and too many themes then missed keys sends the leftovers to `Other`. The
+alternative: one re-run per defect, up to three `THEME_CLUSTER` requests. `docs/12` §8's note of
+2026-10-29 carries both.
+
 ---
 
 ### P4-T06 — Two-stage clustering and the theme-merge call
@@ -2034,6 +2054,20 @@ npm run typecheck && npm run test:unit -- keys && npm run test:integration -- --
 **Notes.** Needs from Phase 3: **`P3-T29` (NOT BUILT)** — it adds two entries to the same submenu and
 moves the same menu-count specs first. `docs/07` §2.2 places the report viewer under `src/ui/panes/`;
 the search window's controller sits in `src/ui/dialogs/`. This card follows `docs/07`.
+
+*As built 2026-10-29 (`P4-T19`, plan/00 §6 item 306(b); State stays `TODO`).* `P3-T29` is built now
+(`plan/reports/P3-T29.md`), so the Notes line above is history. The opener is `openReportWindow` in
+`src/ui/panes/reportWindow.ts` (with `REPORT_WINDOW_L10N`, `buildReportWindowModel`,
+`ReportWindowSession`); the caller is `SEARCH_MENU_COMMANDS.openReportWindow` → `openReportWindowCommand`
+in `src/bootstrap/registerUI.ts`, the constructing file, which builds the session
+(`createReportWindowSession`) and closes every report window in `publishReportWindowCommands`'s
+teardown; the entry is `SearchMenuCommands.openReportWindow`, first in `llmJobItems`
+(`src/ui/menus/registerMenus.ts`). **Left unbound for `P4-T20` and `P4-T18`:** the session has only
+`describe` and `closed`; start, cancel, the stage rows, the streamed draft, the cost question and
+delivery are `P4-T20`'s, over `P4-T18`'s pipeline, neither of which exists. The readings the documents
+left open (the model line's wording, the language labels, one window per collection, closing at
+shutdown, no `isConfigured` gate on the entry) are in `docs/08` §2.5's and §6.4's notes of this date,
+for the owner to confirm.
 
 ---
 

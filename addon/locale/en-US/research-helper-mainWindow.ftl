@@ -101,6 +101,13 @@ research-helper-menu-collection-search-import =
 research-helper-menu-collection-rerun =
     .label = Re-run This Search…
 
+# FR-25's entry (P4-T19), verbatim from `docs/08` §2.4 and §10.2; FR-25's
+# wording was corrected to match (owner, 2026-10-26, `plan/00` §6 item 286).
+# It opens the report window, whose strings are in
+# research-helper-reportWindow.ftl.
+research-helper-menu-collection-report =
+    .label = Generate Research Trends Report…
+
 # `P0-T10`'s spike command. Kept deliberately: `src/ui/menus/toolsMenu.ts`
 # names this id, and it is the key the ko-KR fallback assertion is built on
 # (see the header). Removing it breaks both.
@@ -886,3 +893,12 @@ research-helper-itempane-note-not-written =
         [read-only] This library is read-only, so the summary was not saved as a note.
        *[exists] This item already has a summary note, so no second note was written.
     }
+
+## The trend report run's stop for too many themes (P4-T05; plan/00 §6 item
+## 292(d); docs/12 §8). The run's estimate reserved theme calls for at most
+## `$max` themes, so a clustering answer over it, asked for once more and still
+## over, ends the run. `$themes` and `$max` are numbers, `$themes` always the
+## larger and both at least 5 in a real run, so neither needs a plural
+## selector. Korean pending review (G-41).
+
+research-helper-report-stopped-too-many-themes = The report was stopped before it was written: asked twice, the model grouped the papers into { $themes } themes, more than the { $max } this run's cost was confirmed for. Every summary already made is kept.

@@ -31,6 +31,12 @@ import {
   REMOVE_NOTES_L10N,
   SUMMARIZE_DIALOG_L10N,
 } from "../../../src/ui/dialogs/summarizeDialog";
+import {
+  REPORT_LANGUAGES,
+  REPORT_LANGUAGE_L10N,
+  REPORT_WINDOW_L10N,
+} from "../../../src/ui/panes/reportWindow";
+import { PREFS } from "../../../src/prefs/schema";
 import { mockSettings } from "../../helpers/mockLLM";
 
 /**
@@ -97,6 +103,8 @@ const LISTS = {
   SHIPPED_SURFACES: keys.SHIPPED_SURFACES,
   MAIN_WINDOW_MESSAGE_IDS: keys.MAIN_WINDOW_MESSAGE_IDS,
   SEARCH_DIALOG_MESSAGE_IDS: keys.SEARCH_DIALOG_MESSAGE_IDS,
+  // `P4-T19`: the report window's own bundle.
+  REPORT_WINDOW_MESSAGE_IDS: keys.REPORT_WINDOW_MESSAGE_IDS,
   ERROR_MESSAGE_IDS: keys.ERROR_MESSAGE_IDS,
   DEFERRED_ERROR_MESSAGE_IDS: keys.DEFERRED_ERROR_MESSAGE_IDS,
   KO_PENDING_REVIEW: keys.KO_PENDING_REVIEW,
@@ -127,6 +135,8 @@ const ID_CONSTANTS = {
   // `P3-T29`: FR-19's summarize entry and FR-20's removal entry.
   L10N_MENU_COLLECTION_SUMMARIZE_ALL: keys.L10N_MENU_COLLECTION_SUMMARIZE_ALL,
   L10N_MENU_COLLECTION_REMOVE_NOTES: keys.L10N_MENU_COLLECTION_REMOVE_NOTES,
+  // `P4-T19`: FR-25's report entry.
+  L10N_MENU_COLLECTION_REPORT: keys.L10N_MENU_COLLECTION_REPORT,
   L10N_MENU_SPIKE_CREATE_ITEM: keys.L10N_MENU_SPIKE_CREATE_ITEM,
   L10N_PROGRESS_HEADLINE: keys.L10N_PROGRESS_HEADLINE,
   // `P3-T34`: the notice that interrupted jobs resumed (`docs/07` §7.6).
@@ -181,11 +191,15 @@ function read(name: ListName): readonly string[] {
   return list;
 }
 
-/** The ids `keys.ts` assigns to a surface: the two surface lists, in order. */
+/**
+ * The ids `keys.ts` assigns to a surface: the surface lists, in order (three
+ * since `P4-T19` shipped the report window's bundle).
+ */
 function declaredIds(): readonly string[] {
   return [
     ...read("MAIN_WINDOW_MESSAGE_IDS"),
     ...read("SEARCH_DIALOG_MESSAGE_IDS"),
+    ...read("REPORT_WINDOW_MESSAGE_IDS"),
   ];
 }
 
@@ -254,20 +268,27 @@ describe("src/i18n/keys.ts — the relations between its lists", () => {
     }
   });
 
-  it("partitions the declared ids across the two surfaces, so no id belongs to both bundles", () => {
-    const mainWindow = read("MAIN_WINDOW_MESSAGE_IDS");
-    const searchDialog = read("SEARCH_DIALOG_MESSAGE_IDS");
-    const both = sharedBy(mainWindow, searchDialog);
-    expect(
-      both,
-      `MAIN_WINDOW_MESSAGE_IDS and SEARCH_DIALOG_MESSAGE_IDS must be ` +
-        `disjoint: an id in two surfaces is an id in two .ftl files, and ` +
-        `Fluent ids share one namespace per document, which shadows ` +
-        `silently rather than erroring (docs/01 §9.3); in both: ${show(both)}`,
-    ).toEqual([]);
+  it("partitions the declared ids across the three surfaces, so no id belongs to two bundles", () => {
+    const lists = [
+      "MAIN_WINDOW_MESSAGE_IDS",
+      "SEARCH_DIALOG_MESSAGE_IDS",
+      "REPORT_WINDOW_MESSAGE_IDS",
+    ] as const;
+    for (const [i, a] of lists.entries()) {
+      for (const b of lists.slice(i + 1)) {
+        const both = sharedBy(read(a), read(b));
+        expect(
+          both,
+          `${a} and ${b} must be disjoint: an id in two surfaces is an id ` +
+            `in two .ftl files, and Fluent ids share one namespace per ` +
+            `document, which shadows silently rather than erroring (docs/01 ` +
+            `§9.3); in both: ${show(both)}`,
+        ).toEqual([]);
+      }
+    }
   });
 
-  it("keeps SHIPPED_SURFACES and MESSAGE_IDS_BY_SURFACE in step with the two surface lists", () => {
+  it("keeps SHIPPED_SURFACES and MESSAGE_IDS_BY_SURFACE in step with the three surface lists", () => {
     const surfaces = read("SHIPPED_SURFACES");
     expect(
       sorted(Object.keys(keys.MESSAGE_IDS_BY_SURFACE)),
@@ -285,6 +306,14 @@ describe("src/i18n/keys.ts — the relations between its lists", () => {
       `MESSAGE_IDS_BY_SURFACE.searchDialog must expose the same ids as ` +
         `SEARCH_DIALOG_MESSAGE_IDS`,
     ).toEqual([...read("SEARCH_DIALOG_MESSAGE_IDS")]);
+    expect(
+      keys.MESSAGE_IDS_BY_SURFACE.reportWindow,
+      `MESSAGE_IDS_BY_SURFACE.reportWindow must expose the same ids as ` +
+        `REPORT_WINDOW_MESSAGE_IDS (P4-T19)`,
+    ).toEqual([...read("REPORT_WINDOW_MESSAGE_IDS")]);
+    expect(sorted(surfaces)).toEqual(
+      sorted(["mainWindow", "searchDialog", "reportWindow"]),
+    );
   });
 
   it("answers surfaceOfMessage() for every declared id, with the surface whose list holds it", () => {
@@ -1050,5 +1079,64 @@ describe("src/i18n/keys.ts — the item pane's result lines (plan/00 §6 item 30
   it("puts both on KO_PRESENT now the owner reviewed the Korean (G-41, item 305(d)), neither still pending", () => {
     expect(notIn(two, read("KO_PRESENT"))).toEqual([]);
     expect(sharedBy(two, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — P4-T05's stop for too many themes (plan/00 §6 items 292(d), 306(b))", () => {
+  // TOO_MANY_THEMES_L10N in src/pipeline/trendReport/cluster.ts; trendCluster.test.ts pins the two equal.
+  const one = ["research-helper-report-stopped-too-many-themes"];
+
+  it("declares it on the main window, taking $themes and $max, outside the error ids", () => {
+    expect(notIn(one, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(one, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(one, read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(one, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("puts it on KO_PENDING_REVIEW, not KO_PRESENT, until the owner reviews the Korean (G-41)", () => {
+    expect(notIn(one, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(one, read("KO_PRESENT"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — P4-T19's report window and its menu entry (docs/08 §2.5, §6.4; plan/00 §6 item 306(b))", () => {
+  const ten = Object.values(REPORT_WINDOW_L10N);
+
+  it("names ten distinct ids, exactly the report window's surface list", () => {
+    expect(new Set(ten).size).toBe(10);
+    expect(sorted(ten)).toEqual(sorted(read("REPORT_WINDOW_MESSAGE_IDS")));
+  });
+
+  it("declares them on the reportWindow surface only, outside the error ids; two take arguments", () => {
+    for (const id of ten)
+      expect(keys.surfaceOfMessage(id)).toBe("reportWindow");
+    expect(sharedBy(ten, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(ten, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(ten, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+    expect(sorted(sharedBy(ten, read("ARGUMENT_MESSAGE_IDS")))).toEqual(
+      sorted([REPORT_WINDOW_L10N.collection, REPORT_WINDOW_L10N.model]),
+    );
+  });
+
+  it("puts all ten on KO_PENDING_REVIEW, not KO_PRESENT, until the owner reviews the Korean (G-41)", () => {
+    expect(notIn(ten, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(ten, read("KO_PRESENT"))).toEqual([]);
+  });
+
+  it("puts the menu label on the main window and on KO_PRESENT: docs/08 §10.2 gives the owner's Korean", () => {
+    const label = keys.L10N_MENU_COLLECTION_REPORT;
+    expect(label).toBe("research-helper-menu-collection-report");
+    expect(keys.surfaceOfMessage(label)).toBe("mainWindow");
+    expect(read("KO_PRESENT")).toContain(label);
+    expect(read("KO_PENDING_REVIEW")).not.toContain(label);
+  });
+
+  it("offers exactly reportLanguage's values in the selector, each with its own label id", () => {
+    expect([...REPORT_LANGUAGES]).toEqual([...PREFS.reportLanguage.values]);
+    expect(Object.keys(REPORT_LANGUAGE_L10N)).toEqual([...REPORT_LANGUAGES]);
+    expect(new Set(Object.values(REPORT_LANGUAGE_L10N)).size).toBe(4);
+    for (const id of Object.values(REPORT_LANGUAGE_L10N)) {
+      expect(ten).toContain(id);
+    }
   });
 });

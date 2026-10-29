@@ -845,7 +845,7 @@ Three modes, selectable globally and overridable per collection. The global defa
 > to one override; `loadStrictestPrivacyPolicy` folds `effectiveMode` over the item's collections, so an override still
 > only tightens. It fails closed as `loadPrivacyPolicy` does: no store, or a row that cannot be read, gives strict. The
 > item's collections are read when the run starts (`collectionsOfItem`, `src/zotero/notes.ts`: `Zotero.Item`'s
-> `getCollections()`, the collections not in the trash); if they cannot be read, the run stops before anything is sent.
+> `getCollections()`, the collections not in the trash — *decided 2026-10-29 (owner, `plan/00` §6 item 306(a)): a collection in the trash does not tighten the mode*); if they cannot be read, the run stops before anything is sent.
 > They reach the job context through `QueuedPipelineJobOptions.itemCollections` (`openJob`,
 > `src/bootstrap/container.ts`), for both halves of the run. This replaces, for that run only, item 278(c)'s "a job
 > over no collection follows the global privacy mode"; a job over no collection and no item (the search's screening)

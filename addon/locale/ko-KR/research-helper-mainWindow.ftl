@@ -73,6 +73,11 @@ research-helper-menu-collection-rerun =
 research-helper-menu-collection-summarize-all =
     .label = 컬렉션의 모든 논문 요약
 
+# FR-25's entry (P4-T19), taken verbatim from `docs/08` §10.2, which ships the
+# owner's Korean for it beside the en-US "Generate Research Trends Report…".
+research-helper-menu-collection-report =
+    .label = 최신 연구 동향 보고서 생성…
+
 
 ## Literature source display names — never translated (docs/08 §10.3)
 
@@ -651,3 +656,12 @@ research-helper-itempane-note-not-written =
         [read-only] 이 라이브러리는 읽기 전용이라 요약을 노트로 저장하지 않았습니다.
        *[exists] 이 논문에는 이미 요약 노트가 있어 두 번째 노트를 만들지 않았습니다.
     }
+
+## The trend report run's stop for too many themes (P4-T05; plan/00 §6 item
+## 292(d))
+##
+## NEEDS REVIEW (G-41). The message below is a commented stub carrying its
+## en-US source; nothing was machine-translated, and it is on
+## KO_PENDING_REVIEW in src/i18n/keys.ts.
+
+# NEEDS REVIEW research-helper-report-stopped-too-many-themes — en-US: The report was stopped before it was written: asked twice, the model grouped the papers into { $themes } themes, more than the { $max } this run's cost was confirmed for. Every summary already made is kept.

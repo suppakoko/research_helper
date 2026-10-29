@@ -36,6 +36,7 @@ import {
   L10N_MENU_ROOT,
   L10N_MENU_SPIKE_CREATE_ITEM,
 } from "../../src/ui/menus/toolsMenu";
+import { REPORT_WINDOW_NAME_PREFIX } from "../../src/ui/panes/reportWindow";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -235,6 +236,24 @@ function summarySectionCount(): number {
     .length;
 }
 
+/**
+ * The report windows open anywhere in the application (`P4-T19`), found by the
+ * window name `openReportWindow` gives them. Read from the window mediator,
+ * not from the plugin, so a window the plugin forgot is still counted.
+ */
+function openReportWindowCount(): number {
+  let count = 0;
+  // `null` is every window type; the typings ask for a string.
+  const windows = Services.wm.getEnumerator(null as unknown as string);
+  while (windows.hasMoreElements()) {
+    const win = windows.getNext() as unknown as Window;
+    if (!win.closed && win.name.startsWith(REPORT_WINDOW_NAME_PREFIX)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 async function assertEveryWindow(
   expected: ToolsMenuCount & { readonly fluentLinks: number },
   when: string,
@@ -279,6 +298,20 @@ describe("lifecycle (FR-56)", function () {
     const wrapper = await researchHelperAddon();
     const before = await initializedInstance();
 
+    // P4-T19: a report window left open must not survive the disable. Opened
+    // through the plugin's own command, for a collection id no library holds
+    // (a missing collection only leaves the collection line empty), so the
+    // window's name cannot be one a later spec's real collection asks for.
+    const reportWindows = before.api.reportWindow;
+    if (!reportWindows) {
+      assert.fail("registerUI() published no api.reportWindow");
+    }
+    reportWindows.open(Zotero.getMainWindow(), 2_000_000_001);
+    await waitUntil(
+      () => openReportWindowCount() === 1,
+      "the report window to open",
+    );
+
     await afterBootstrapCall("shutdown", () => wrapper.disable());
     await waitUntil(
       () => pluginInstance() === undefined,
@@ -299,6 +332,15 @@ describe("lifecycle (FR-56)", function () {
       summarySectionCount(),
       0,
       "no item-pane section after disable (P3-T28)",
+    );
+    await waitUntil(
+      () => openReportWindowCount() === 0,
+      "no report window after disable (P4-T19)",
+    );
+    assert.strictEqual(
+      before.api.reportWindow,
+      undefined,
+      "the report window's opener is withdrawn with the instance (P4-T19)",
     );
 
     await afterBootstrapCall("startup", () => wrapper.enable());
@@ -322,6 +364,11 @@ describe("lifecycle (FR-56)", function () {
       summarySectionCount(),
       1,
       "exactly one item-pane section after disable and enable (P3-T28)",
+    );
+    assert.strictEqual(
+      openReportWindowCount(),
+      0,
+      "enable opens no report window (P4-T19)",
     );
   });
 });
