@@ -840,6 +840,21 @@ npm run typecheck && npm run test:unit -- trendCluster
 
 **Notes.** Needs from Phase 3: `P3-T17` (built) for the pool.
 
+*As built 2026-10-29 (`plan/00` §6 item 308; fake model only).* `src/pipeline/trendReport/cluster.ts`
+replaces `P4-T05`'s stub `clusterThemesTwoStage` and adds `presortDigests`, `partitionDigests`,
+`mergeProblems`, `isMergeMiss` and the constants `UNMAPPED_THEME_REASON`, `THEME_MERGE_EFFORT` and
+`THEME_MERGE_SCHEMA_NAME`; `ClusterDeps` gains `mergePrompt` and `pool`, `ClusterInput` gains
+`inputBudget`, and an outcome gains `batches` and `mergePrompt` after two stages.
+`src/pipeline/shared/estimate.ts` gains `clusterBatchSize`, which `planSynthesis` and the run share.
+The readings are `docs/06` §8.4's and `docs/12` §20's notes of 2026-10-29 and `docs/07` §4.5's note of
+the same date. Callers (rule 10): `clusterThemes` calls `clusterThemesTwoStage` itself, so the caller is
+still `trendReportPipeline.ts` (`P4-T18`) through `clusterThemes`; it also passes the active
+`THEME_MERGE` template as `mergePrompt` and `WorkerPools.llm` (`buildWorkerPools`,
+`src/bootstrap/registerPipelines.ts`) as `pool`, and records `mergePrompt` among the run's prompts.
+Nothing is constructed. **Open for the owner (2026-10-29):** whether a batch answer over its own
+band's `MAX_THEMES`, asked once more and still over, stops the run; built, until the owner rules, as
+a stop (`docs/12` §20's note, "Open for the owner"), pinned by one "[open line, as built]" test.
+
 ---
 
 ### P4-T07 — Per-theme analysis with sub-batching (depth ≤ 2)
@@ -915,6 +930,23 @@ npm run typecheck && npm run test:unit -- trendThemeAnalysis chunking
 **Notes.** Needs from Phase 3: **`P3-T23` (NOT BUILT)** for `chunking.ts`; **`P3-T25` (NOT BUILT)**
 for the summaries; `P3-T17` (built). `docs/11` §1 Phase 4 "Modules touched" names
 `src/llm/shared/chunking.ts`, which is why packing goes there rather than into `trendReport/`.
+
+*As built 2026-10-29 (`plan/00` §6 item 308; fake model only; `P3-T23` and `P3-T25` have since been
+built).* `analyseThemes`, `summariesForReduce`, `packThemeSummaries`, `citedKeyProblems`,
+`removeForeignKeys` and `maxPartialsPerMerge` in `src/pipeline/trendReport/themeAnalysis.ts`;
+`packByTokens` in `src/llm/shared/chunking.ts`. The readings are `docs/12` §9's and §21's notes and
+`docs/06` §8.4's, all of this date. Rule 10: nothing calls `analyseThemes` yet; `trendReportPipeline.ts`
+(`P4-T18`) calls it at its analyse stage with the `clustered` outcome's clustering, the stored
+summaries, its context's router, budget and token, the `llm` pool and the two templates, adds the
+outcome's `passes` to the run's counter and lifts each analysed theme's `warnings`;
+`src/bootstrap/registerPipelines.ts` (`P4-T18`) is the constructing file, where the pool already
+exists (`buildPipelineSet`). `packByTokens`' other callers are `compose.ts` (`P4-T08`) and
+`critique.ts` (`P4-T09`). Nothing is constructed here. **Open for the owner (2026-10-29):** a theme
+that would need more than 11 sub-batches (about 231 summaries at 1 840 tokens) is reported as
+unanalysed before any request, because one merge could not be sure to carry its partials (`docs/06`
+§8.4's note, reading (4)); the alternative is to send the sub-batches and fail only when the measured
+partials overflow. And what the run does when **every** theme is unanalysed is `P4-T18`'s to decide;
+no document says.
 
 ---
 

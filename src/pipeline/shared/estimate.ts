@@ -70,7 +70,11 @@ import {
   type MapCallKind,
 } from "../../llm/shared/chunking";
 import { estTokens } from "../../llm/shared/tokenEstimate";
-import { resolveMaxTokens, type PromptRegistry } from "../../prompts";
+import {
+  resolveMaxTokens,
+  type PromptRegistry,
+  type PromptTemplate,
+} from "../../prompts";
 
 import type { FullTextMode, InputScopeKind } from "./privacyPolicy";
 
@@ -567,6 +571,31 @@ export const SYNTHESIS_INPUT_BUDGETS: Readonly<
 export const CLUSTER_BATCH_SIZE = 60;
 
 /**
+ * `docs/06` §8.4 step 1's `B` for one model (`P4-T06`; `docs/06` §8.4's note of
+ * 2026-10-29): {@link CLUSTER_BATCH_SIZE}, or the largest smaller batch size
+ * whose `THEME_CLUSTER` ceiling (`resolveMaxTokens`) is within the model's
+ * output limit, because a 60-paper batch's 4 400 tokens may not be
+ * (`plan/reports/P4-T16.md` finding 6). At least 1: when not even one paper's
+ * ceiling fits, the plan prices one paper per batch (an over-quote) and the
+ * run refuses before any request (`clusterThemesTwoStage`). The run and
+ * {@link planSynthesis} both call this, so they make the same number of
+ * batches.
+ *
+ * @param prompt - the active `THEME_CLUSTER` template
+ * @param outputLimit - the report model's `ModelInfo.maxOutputTokens`
+ * @returns a whole number from 1 to {@link CLUSTER_BATCH_SIZE}
+ */
+export function clusterBatchSize(
+  prompt: PromptTemplate,
+  outputLimit: number,
+): number {
+  for (let size = CLUSTER_BATCH_SIZE; size > 1; size -= 1) {
+    if (resolveMaxTokens(prompt, size) <= outputLimit) return size;
+  }
+  return 1;
+}
+
+/**
  * The most tokens one digest takes: `docs/06` §8.2's ~90–140-token block,
  * which `P4-T04`'s fixed truncation caps at 140 by `estTokens`. Used only to
  * decide whether the digests fit one `THEME_CLUSTER` call.
@@ -768,7 +797,7 @@ function synthesisCall(
  *   paper count. The digests are taken at {@link DIGEST_MAX_TOKENS} each with
  *   the 1.15× headroom, so near the line the estimate takes the dearer path.
  *   Otherwise `docs/06` §8.4's two stages: one call per batch of
- *   {@link CLUSTER_BATCH_SIZE}, each at its own batch's ceiling, then one
+ *   {@link clusterBatchSize} papers, each at its own batch's ceiling, then one
  *   `THEME_MERGE`.
  * - **L2, themes.** One `CLUSTER_REDUCE` per theme, K from the run or the
  *   upper end of §9.2's band. When K calls at the 40 000-token budget could
@@ -821,10 +850,15 @@ export function planSynthesis(input: SynthesisPlanInput): SynthesisPlan {
     resolveMaxTokens(input.prompts.get("THEME_CLUSTER"), papers) >
       report.maxOutputTokens;
   if (twoStageClustering) {
-    for (let start = 0; start < papers; start += CLUSTER_BATCH_SIZE) {
+    // P4-T06: the run's own B, so a small output limit is priced as it runs.
+    const batchSize = clusterBatchSize(
+      input.prompts.get("THEME_CLUSTER"),
+      report.maxOutputTokens,
+    );
+    for (let start = 0; start < papers; start += batchSize) {
       calls.push(
         synthesisCall("THEME_CLUSTER", report, input, {
-          batchSize: Math.min(CLUSTER_BATCH_SIZE, papers - start),
+          batchSize: Math.min(batchSize, papers - start),
         }),
       );
     }

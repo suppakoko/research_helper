@@ -2,15 +2,29 @@
  * Theme clustering with client-side validation (`P4-T05`; `docs/12` §8,
  * `docs/06` §8.2–§8.4, §9.2): N digests become a validated
  * {@link ThemeClustering} in which every analysed paper appears exactly once,
- * from one `THEME_CLUSTER` call when the digests fit.
+ * from one `THEME_CLUSTER` call when the digests fit, else from `docs/06`
+ * §8.4's two stages (`P4-T06`).
  *
  * **Callers.** Nothing calls this module yet. The report run
  * (`trendReportPipeline.ts`, `P4-T18`) calls {@link clusterThemes} at its
  * cluster stage, with the digests it built (`toDigest`, `P4-T04`), the strong
  * model's `ModelInfo.maxOutputTokens` it also gives `planSynthesis` (`P4-T16`),
- * and its context's budgeted router, budget and token. `P4-T06` replaces
- * {@link clusterThemesTwoStage}. Nothing is constructed: every export is a
+ * its context's budgeted router, budget and token, the active `THEME_CLUSTER`
+ * and `THEME_MERGE` templates, and the `llm` pool (`WorkerPools`, `P3-T17`).
+ * {@link clusterThemes} hands over to {@link clusterThemesTwoStage} itself;
+ * nothing else calls that. Nothing is constructed: every export is a
  * function or a constant.
+ *
+ * ## Two stages (`plan/07` `P4-T06`; `docs/12` §20 and `docs/06` §8.4's notes
+ * of 2026-10-29)
+ *
+ * {@link presortDigests} and {@link partitionDigests} make ⌈N / B⌉ balanced
+ * batches (`clusterBatchSize`, shared with the estimate); one `THEME_CLUSTER`
+ * call per batch under the `llm` pool, validated as above; one `THEME_MERGE`
+ * call over the batch-local themes' names, definitions and paper counts
+ * ({@link mergeProblems}); then re-assignment in code and the same
+ * `finalizeClustering`, so the result has the one-stage shape. A pass per
+ * batch call and one for the merge. Never a third stage.
  *
  * ## What one stage does (`plan/07` `P4-T05` steps 1–6)
  *
@@ -47,6 +61,7 @@
 import type { ThemeBandKeyInput } from "../../core/cache/keys";
 import { ConfigurationError } from "../../core/errors";
 import type { CancellationToken } from "../../core/jobQueue/cancellation";
+import type { LlmPool } from "../../core/jobQueue/queue";
 import type { Logger } from "../../core/logger";
 import type { MainWindowMessageId } from "../../i18n/keys";
 import {
@@ -65,6 +80,7 @@ import type {
   Digest,
   ThemeAssignment,
   ThemeClustering,
+  ThemeMerge,
   TrendPromptUse,
   UnclusteredItem,
 } from "../../model/trend";
@@ -73,7 +89,11 @@ import {
   resolveMaxTokens,
   type PromptTemplate,
 } from "../../prompts";
-import { SYNTHESIS_INPUT_BUDGETS, themeCountBandFor } from "../shared/estimate";
+import {
+  clusterBatchSize,
+  SYNTHESIS_INPUT_BUDGETS,
+  themeCountBandFor,
+} from "../shared/estimate";
 import { ITEM_KEY_RE } from "./citations";
 import { DIGEST_NO_YEAR, digestText, digestTokens } from "./digest";
 
@@ -115,6 +135,19 @@ export const SMALL_THEME_REASON =
   "Its theme had fewer papers than the minimum per theme and was dropped.";
 
 /**
+ * Two stages: the `unclustered` reason of a paper whose batch-local theme the
+ * merge mapped to `null`, or left unmapped (`docs/12` §20).
+ */
+export const UNMAPPED_THEME_REASON =
+  "Its batch's theme matched no theme of the whole collection.";
+
+/** `plan/07` §0.2 (owner, `plan/00` §6 items 286, 290(a)): `THEME_MERGE`'s effort. */
+export const THEME_MERGE_EFFORT: Effort = "medium";
+
+/** The `json_schema` name sent with `THEME_MERGE`'s schema: its `title`. */
+export const THEME_MERGE_SCHEMA_NAME = "ThemeMerge";
+
+/**
  * Step 6's stop message (owner, `plan/00` §6 item 292(d)); `$themes` is the
  * second answer's theme count and `$max` is `MAX_THEMES`. On
  * `KO_PENDING_REVIEW` (`G-41`).
@@ -143,6 +176,13 @@ export interface ClusterDeps {
   readonly token: CancellationToken;
   /** The active `THEME_CLUSTER` template. */
   readonly prompt: PromptTemplate;
+  /** The active `THEME_MERGE` template; read only by two stages. */
+  readonly mergePrompt: PromptTemplate;
+  /**
+   * The `llm` pool (`WorkerPools.llm`, `P3-T17`): every two-stage request
+   * holds a permit while it runs (`plan/07` `P4-T06` step 3).
+   */
+  readonly pool: Pick<LlmPool, "acquire">;
   /** The privacy mode's routing hints (`routingHints`), when the run has them. */
   readonly routing?: ProviderRoutingHints;
   /** The `logRequestBodies` preference, for `completeJSON`'s error context. */
@@ -168,8 +208,18 @@ export interface ClusterInput {
    * same path.
    */
   readonly outputLimit: number;
-  /** The theme band; absent: {@link themeBandFor} the paper count. */
+  /**
+   * The theme band; absent: {@link themeBandFor} the paper count. In two
+   * stages it is the merge's and the final minimum's; each batch call uses
+   * {@link themeBandFor} its own size.
+   */
   readonly band?: ThemeBandKeyInput;
+  /**
+   * The clustering input budget: `docs/06` §5.2's 60 000 when absent. A
+   * smaller whole number forces two stages for one run (`plan/07` `P4-T06`'s
+   * Done-when, `P4-T22`'s simulated window); it is never raised above 60 000.
+   */
+  readonly inputBudget?: number;
 }
 
 /** Step 1's choice and the two measurements it rests on. */
@@ -186,9 +236,15 @@ export interface ClusteringPathChoice {
 /** What the stage reports beside its result. */
 interface ClusterOutcomeBase {
   readonly band: ThemeBandKeyInput;
-  /** Reduction passes (FR-27): 1 for the single-stage call. */
+  /**
+   * Reduction passes (FR-27): 1 for the single-stage call; in two stages, one
+   * per batch that sent a request and one for the merge call when made.
+   */
   readonly passes: number;
-  /** `THEME_CLUSTER` requests sent, the re-run included; at most {@link CLUSTER_REQUESTS_MAX}. */
+  /**
+   * `THEME_CLUSTER` and `THEME_MERGE` requests sent, re-runs included; at
+   * most {@link CLUSTER_REQUESTS_MAX} per call.
+   */
   readonly requests: number;
   /** Every chat request made, `completeJSON`'s repairs and retries included. */
   readonly calls: number;
@@ -196,6 +252,10 @@ interface ClusterOutcomeBase {
   readonly usage: Usage;
   /** The prompt, its version, the model and the temperature the stage ran on. */
   readonly prompt: TrendPromptUse;
+  /** Two stages only: the number of batches (`docs/06` §8.4 step 1). */
+  readonly batches?: number;
+  /** Two stages only, once the merge call was made: `THEME_MERGE`'s use. */
+  readonly mergePrompt?: TrendPromptUse;
 }
 
 /** A validated theme assignment. */
@@ -244,6 +304,20 @@ export interface ClusteringProblems {
   readonly duplicateThemeIds: readonly string[];
 }
 
+/** What {@link mergeProblems} found in one `THEME_MERGE` answer (`docs/12` §20). */
+export interface MergeProblems {
+  /** Local theme ids given and absent from `mapping`, in the order given. */
+  readonly missingLocalIds: readonly string[];
+  /** Local theme ids given and in `mapping` more than once, in the order given. */
+  readonly repeatedLocalIds: readonly string[];
+  /** `mapping` rows naming a local theme id that was not given. */
+  readonly foreignLocalIds: number;
+  /** `mapping` rows whose non-null `globalThemeId` names no (single) theme. */
+  readonly unresolvedGlobalRefs: number;
+  /** `themeId`s two or more global themes share. */
+  readonly duplicateThemeIds: readonly string[];
+}
+
 // ---------------------------------------------------------------------------
 // 3. Pure helpers
 // ---------------------------------------------------------------------------
@@ -289,15 +363,18 @@ function digestsVariable(digests: readonly Digest[]): string {
  * @param digests - the papers to cluster, at least one
  * @param prompt - the active `THEME_CLUSTER` template
  * @param outputLimit - the model's `maxOutputTokens`
+ * @param inputBudget - {@link ClusterInput.inputBudget}; `docs/06` §5.2's
+ *   60 000 by default
  */
 export function clusteringPath(
   digests: readonly Digest[],
   prompt: PromptTemplate,
   outputLimit: number,
+  inputBudget: number = SYNTHESIS_INPUT_BUDGETS.THEME_CLUSTER,
 ): ClusteringPathChoice {
   const tokens = digestTokens(digestsVariable(digests));
   const outputCeiling = resolveMaxTokens(prompt, digests.length);
-  const inputFits = tokens <= SYNTHESIS_INPUT_BUDGETS.THEME_CLUSTER;
+  const inputFits = tokens <= inputBudget;
   const outputFits = outputCeiling <= outputLimit;
   return {
     path: inputFits && outputFits ? "single-stage" : "two-stage",
@@ -309,7 +386,9 @@ export function clusteringPath(
 }
 
 /** The theme ids exactly one theme of `answer` uses. */
-function resolvableThemeIds(answer: ThemeClustering): Set<string> {
+function resolvableThemeIds(answer: {
+  readonly themes: readonly { readonly themeId: string }[];
+}): Set<string> {
   const seen = new Map<string, number>();
   for (const theme of answer.themes) {
     seen.set(theme.themeId, (seen.get(theme.themeId) ?? 0) + 1);
@@ -486,10 +565,12 @@ export function finalizeClustering(
   for (const key of inputKeys) {
     const row = primary.get(key);
     if (row === undefined) continue;
+    // `ids.has` too (P4-T06): a secondary id the answer's themes never used
+    // stays unresolved even when `Other` was given that number.
     const secondary = [
       ...new Set(
         (row.secondaryThemeIds ?? []).filter(
-          (id) => keptIds.has(id) && id !== row.primaryThemeId,
+          (id) => ids.has(id) && keptIds.has(id) && id !== row.primaryThemeId,
         ),
       ),
     ];
@@ -596,33 +677,755 @@ function inputKeysOf(digests: readonly Digest[]): readonly string[] {
   return keys;
 }
 
+/** What {@link checkStage} returns: the checked input, ready to render. */
+interface CheckedStage {
+  readonly inputKeys: readonly string[];
+  readonly band: ThemeBandKeyInput;
+  /** `THEME_CLUSTER`'s schema. */
+  readonly schema: NonNullable<PromptTemplate["schema"]>;
+  /** `{{YEAR_MIN}}` and `{{YEAR_MAX}}` as rendered. */
+  readonly yearMin: string;
+  readonly yearMax: string;
+  readonly inputBudget: number;
+}
+
+/** Every check made before any request, in one place for both paths. */
+function checkStage(input: ClusterInput, deps: ClusterDeps): CheckedStage {
+  const inputKeys = inputKeysOf(input.digests);
+  if (!Number.isInteger(input.outputLimit) || input.outputLimit < 1) {
+    throw new RangeError(
+      `[research-helper] the model's output limit must be a positive whole number, got ${String(input.outputLimit)}`,
+    );
+  }
+  const ceiling = SYNTHESIS_INPUT_BUDGETS.THEME_CLUSTER;
+  const inputBudget = input.inputBudget ?? ceiling;
+  if (
+    !Number.isInteger(inputBudget) ||
+    inputBudget < 1 ||
+    inputBudget > ceiling
+  ) {
+    throw new RangeError(
+      `[research-helper] the clustering input budget must be a whole number from 1 to ${String(ceiling)}, got ${String(inputBudget)}`,
+    );
+  }
+  const band = input.band ?? themeBandFor(inputKeys.length);
+  checkBand(band);
+  const prompt = deps.prompt;
+  if (prompt.id !== "THEME_CLUSTER" || prompt.schema === null) {
+    throw new ConfigurationError(
+      "clusterThemes needs the THEME_CLUSTER template with its schema",
+      { promptId: prompt.id },
+    );
+  }
+  return {
+    inputKeys,
+    band,
+    schema: prompt.schema,
+    yearMin: yearVariable("yearMin", input.yearMin),
+    yearMax: yearVariable("yearMax", input.yearMax),
+    inputBudget,
+  };
+}
+
 // ---------------------------------------------------------------------------
-// 4. The stage
+// 4. Two stages (`P4-T06`; `docs/06` §8.4, `docs/12` §20 and their notes of
+//    2026-10-29)
 // ---------------------------------------------------------------------------
 
+/** `P4-T04`'s labels for the lines the pre-sort reads (`toDigest`). */
+const THEME_LINE_LABEL = "Theme(first-pass): ";
+const KEYWORDS_LINE_LABEL = "Keywords: ";
+const KEYWORD_SEPARATOR = "; ";
+/** A digest head's year: `[KEY] 2024 | …`; `n.d.` does not match. */
+const HEAD_YEAR_RE = /^\[[^\]]*\] ([0-9]{1,4})(?: |$)/;
+/** Every run of whitespace or control characters (as `P4-T04`'s `oneLine`). */
+const BREAKING_RE = /[\s\p{Cc}]+/gu;
+
+/** One line of model text, so a name cannot start another `{{LOCAL_THEMES}}` block. */
+function flatLine(value: string): string {
+  return value.normalize("NFC").replace(BREAKING_RE, " ").trim();
+}
+
+/** The labelled content of a digest line; `undefined` when absent or empty. */
+function digestField(
+  digest: Digest,
+  kind: Digest["lines"][number]["kind"],
+  label: string,
+): string | undefined {
+  const line = digest.lines.find((candidate) => candidate.kind === kind);
+  if (line === undefined || !line.text.startsWith(label)) return undefined;
+  const text = line.text.slice(label.length).trim();
+  return text === "" ? undefined : text;
+}
+
+interface PresortKey {
+  readonly theme: string | undefined;
+  readonly keyword: string | undefined;
+  readonly year: number | undefined;
+  readonly itemKey: string;
+}
+
+function presortKey(digest: Digest): PresortKey {
+  const keywords = digestField(digest, "keywords", KEYWORDS_LINE_LABEL);
+  const keyword = keywords?.split(KEYWORD_SEPARATOR)[0]?.trim();
+  const head = digest.lines.find((line) => line.kind === "head");
+  const year = head === undefined ? undefined : HEAD_YEAR_RE.exec(head.text);
+  return {
+    theme: digestField(digest, "theme", THEME_LINE_LABEL),
+    keyword: keyword === "" ? undefined : keyword,
+    year: year?.[1] === undefined ? undefined : Number(year[1]),
+    itemKey: digest.itemKey,
+  };
+}
+
+/** Code-unit order: the same on every machine, unlike `localeCompare`. */
+function compareCodeUnits(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
 /**
- * `docs/06` §8.4's two stages: `P4-T06`'s. **A stub that throws until that
- * card lands**, so a corpus that needs it fails loudly before any request.
- *
- * @throws ConfigurationError always
+ * Lower-cased, so `Alpha` and `alpha` are one key and the next key decides;
+ * a missing value after every present one.
  */
-export function clusterThemesTwoStage(
-  input: ClusterInput,
-  _deps: ClusterDeps,
-  choice: ClusteringPathChoice,
-): Promise<never> {
-  return Promise.reject(
-    new ConfigurationError(
-      "two-stage theme clustering (docs/06 §8.4) is P4-T06's and not built yet",
-      {
-        papers: input.digests.length,
-        digestTokens: choice.digestTokens,
-        outputCeiling: choice.outputCeiling,
-        outputLimit: input.outputLimit,
-      },
-    ),
+function compareText(a: string | undefined, b: string | undefined): number {
+  if (a === b) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+  return compareCodeUnits(a.toLowerCase(), b.toLowerCase());
+}
+
+/** Earlier years first; `n.d.` after every year. */
+function compareYear(a: number | undefined, b: number | undefined): number {
+  if (a === b) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+  return a - b;
+}
+
+/**
+ * `docs/06` §8.4 step 1's deterministic, content-aware pre-sort: first-pass
+ * `researchTheme`, then the top keyword, then the year, each read from the
+ * digest's own lines; equal keys by item key, so the order does not depend
+ * on the order given (`docs/06` §8.4's note of 2026-10-29, reading (3)).
+ *
+ * @param digests - the run's digests
+ * @returns a sorted copy
+ */
+export function presortDigests(digests: readonly Digest[]): Digest[] {
+  return digests
+    .map((digest) => ({ digest, key: presortKey(digest) }))
+    .sort(
+      (a, b) =>
+        compareText(a.key.theme, b.key.theme) ||
+        compareText(a.key.keyword, b.key.keyword) ||
+        compareYear(a.key.year, b.key.year) ||
+        compareCodeUnits(a.key.itemKey, b.key.itemKey),
+    )
+    .map((entry) => entry.digest);
+}
+
+/** `items` in `count` consecutive runs whose sizes differ by at most one, the larger first. */
+function balancedRuns<T>(items: readonly T[], count: number): T[][] {
+  const base = Math.floor(items.length / count);
+  const larger = items.length % count;
+  const runs: T[][] = [];
+  let start = 0;
+  for (let at = 0; at < count; at += 1) {
+    const size = base + (at < larger ? 1 : 0);
+    runs.push(items.slice(start, start + size));
+    start += size;
+  }
+  return runs;
+}
+
+/**
+ * `docs/06` §8.4 step 1: the pre-sorted digests in ⌈N / `batchSize`⌉
+ * balanced batches, one more at a time while a batch's joined digests would
+ * exceed `inputBudget` (`docs/06` §8.4's note of 2026-10-29, reading (2)).
+ *
+ * @param digests - the run's digests, at least one
+ * @param batchSize - `B`, a whole number of at least 1 (`clusterBatchSize`)
+ * @param inputBudget - the most `digestTokens` one batch may carry
+ * @returns the batches, in order; each non-empty
+ * @throws RangeError for a bad batch size; ConfigurationError when one
+ *   digest alone exceeds `inputBudget`
+ */
+export function partitionDigests(
+  digests: readonly Digest[],
+  batchSize: number,
+  inputBudget: number = SYNTHESIS_INPUT_BUDGETS.THEME_CLUSTER,
+): Digest[][] {
+  if (!Number.isInteger(batchSize) || batchSize < 1) {
+    throw new RangeError(
+      `[research-helper] a batch size is a whole number of at least 1, got ${String(batchSize)}`,
+    );
+  }
+  const sorted = presortDigests(digests);
+  for (
+    let count = Math.ceil(sorted.length / batchSize);
+    count <= sorted.length;
+    count += 1
+  ) {
+    const batches = balancedRuns(sorted, count);
+    if (
+      batches.every(
+        (batch) => digestTokens(digestsVariable(batch)) <= inputBudget,
+      )
+    ) {
+      return batches;
+    }
+  }
+  throw new ConfigurationError(
+    "a single digest exceeds the clustering input budget",
+    { inputBudget },
   );
 }
+
+/**
+ * `docs/12` §20's checks on one schema-valid `THEME_MERGE` answer.
+ *
+ * @param answer - the answer, already valid against `theme-merge.v1.json`
+ * @param localIds - the local theme ids given, in `{{LOCAL_THEMES}}` order
+ */
+export function mergeProblems(
+  answer: ThemeMerge,
+  localIds: readonly string[],
+): MergeProblems {
+  const given = new Set(localIds);
+  const ids = resolvableThemeIds(answer);
+  const seen = new Map<string, number>();
+  let foreign = 0;
+  let unresolved = 0;
+  for (const row of answer.mapping) {
+    if (given.has(row.localThemeId)) {
+      seen.set(row.localThemeId, (seen.get(row.localThemeId) ?? 0) + 1);
+    } else {
+      foreign += 1;
+    }
+    if (row.globalThemeId !== null && !ids.has(row.globalThemeId)) {
+      unresolved += 1;
+    }
+  }
+  const counts = new Map<string, number>();
+  for (const theme of answer.themes) {
+    counts.set(theme.themeId, (counts.get(theme.themeId) ?? 0) + 1);
+  }
+  return {
+    missingLocalIds: localIds.filter((id) => (seen.get(id) ?? 0) === 0),
+    repeatedLocalIds: localIds.filter((id) => (seen.get(id) ?? 0) > 1),
+    foreignLocalIds: foreign,
+    unresolvedGlobalRefs: unresolved,
+    duplicateThemeIds: [...counts]
+      .filter(([, count]) => count > 1)
+      .map(([id]) => id),
+  };
+}
+
+/**
+ * Whether {@link mergeProblems} found anything the merge is re-run for.
+ *
+ * @param problems - one answer's problems
+ */
+export function isMergeMiss(problems: MergeProblems): boolean {
+  return (
+    problems.missingLocalIds.length > 0 ||
+    problems.repeatedLocalIds.length > 0 ||
+    problems.foreignLocalIds > 0 ||
+    problems.unresolvedGlobalRefs > 0 ||
+    problems.duplicateThemeIds.length > 0
+  );
+}
+
+/**
+ * The final answer's mapping: a local id exactly once in `mapping`, to `null`
+ * or to a global id that resolves, keeps it; every other local id is `null`.
+ */
+function finalMapping(
+  answer: ThemeMerge,
+  localIds: readonly string[],
+): Map<string, string | null> {
+  const ids = resolvableThemeIds(answer);
+  const rows = new Map<string, (string | null)[]>();
+  for (const row of answer.mapping) {
+    const list = rows.get(row.localThemeId) ?? [];
+    list.push(row.globalThemeId);
+    rows.set(row.localThemeId, list);
+  }
+  return new Map(
+    localIds.map((id) => {
+      const found = rows.get(id) ?? [];
+      const only = found.length === 1 ? found[0] : undefined;
+      return [
+        id,
+        only === undefined || only === null || !ids.has(only) ? null : only,
+      ];
+    }),
+  );
+}
+
+/** One batch-local theme as the merge is given it. */
+interface LocalTheme {
+  /** `B<batch>-<themeId>`. */
+  readonly id: string;
+  readonly theme: ClusteredTheme;
+}
+
+/** `{{LOCAL_THEMES}}`: one block per local theme (`docs/12` §20's note, reading (3)). */
+function localThemesVariable(locals: readonly LocalTheme[]): string {
+  return locals
+    .map(
+      (local) =>
+        `[${local.id}] papers: ${String(local.theme.itemKeys.length)}\n` +
+        `Name: ${flatLine(local.theme.name)}\n` +
+        `Definition: ${flatLine(local.theme.definition)}`,
+    )
+    .join("\n");
+}
+
+/** One batch's result, after its re-run (`docs/12` §20's note, reading (2)). */
+interface BatchDone {
+  readonly kind: "done";
+  /** 1-based. */
+  readonly batch: number;
+  /** The kept local themes, `Other` excluded; each with at least one paper. */
+  readonly themes: readonly ClusteredTheme[];
+  /** The primary assignments to those themes. */
+  readonly assignments: readonly ThemeAssignment[];
+  /** The model's own `unclustered` entries. */
+  readonly unclustered: readonly UnclusteredItem[];
+  /** Keys held for the global `Other` theme. */
+  readonly leftovers: readonly string[];
+}
+
+/** A batch's second answer still over its band's `MAX_THEMES`. */
+interface BatchStopped {
+  readonly kind: "stopped";
+  readonly themes: number;
+  readonly max: number;
+}
+
+/** A batch that sent no further request because another stopped or failed. */
+interface BatchHalted {
+  readonly kind: "halted";
+}
+
+type BatchResult = BatchDone | BatchStopped | BatchHalted;
+
+/** Thrown inside the stage only, when another batch has stopped or failed. */
+class StageHalted extends Error {
+  override readonly name = "StageHalted";
+}
+
+/** One call's counters: requests, chat calls and their usage. */
+interface CallTally {
+  requests: number;
+  calls: number;
+  readonly usages: Usage[];
+}
+
+function newTally(): CallTally {
+  return { requests: 0, calls: 0, usages: [] };
+}
+
+/**
+ * `docs/06` §8.4's two stages (`plan/07` `P4-T06`): batches of `THEME_CLUSTER`
+ * under the `llm` pool, one `THEME_MERGE`, then re-assignment in code. Called
+ * by {@link clusterThemes} when {@link clusteringPath} says `two-stage`.
+ *
+ * @param input - see {@link ClusterInput}
+ * @param deps - see {@link ClusterDeps}; `mergePrompt` and `pool` are read here
+ * @param choice - step 1's measurement, for the log
+ * @returns the validated clustering (at least one theme), or a stop
+ * @throws as {@link clusterThemes}; ConfigurationError, before any request,
+ *   for a `mergePrompt` that is not `THEME_MERGE` with its schema, or a model
+ *   whose output limit cannot hold one paper's `THEME_CLUSTER` ceiling or
+ *   `THEME_MERGE`'s, or a digest alone over the input budget
+ */
+export async function clusterThemesTwoStage(
+  input: ClusterInput,
+  deps: ClusterDeps,
+  choice: ClusteringPathChoice,
+): Promise<ClusterOutcome> {
+  const { inputKeys, band, schema, yearMin, yearMax, inputBudget } = checkStage(
+    input,
+    deps,
+  );
+  const papers = inputKeys.length;
+  const prompt = deps.prompt;
+  const mergePrompt = deps.mergePrompt;
+  if (mergePrompt.id !== "THEME_MERGE" || mergePrompt.schema === null) {
+    throw new ConfigurationError(
+      "two-stage clustering needs the THEME_MERGE template with its schema",
+      { promptId: mergePrompt.id },
+    );
+  }
+  const mergeSchema = mergePrompt.schema;
+  const batchSize = clusterBatchSize(prompt, input.outputLimit);
+  const mergeCeiling = resolveMaxTokens(mergePrompt);
+  if (
+    resolveMaxTokens(prompt, batchSize) > input.outputLimit ||
+    mergeCeiling > input.outputLimit
+  ) {
+    throw new ConfigurationError(
+      "the model's output limit cannot hold two-stage clustering's calls (docs/06 §8.4)",
+      {
+        outputLimit: input.outputLimit,
+        onePaperCeiling: resolveMaxTokens(prompt, 1),
+        mergeCeiling,
+      },
+    );
+  }
+  const batches = partitionDigests(input.digests, batchSize, inputBudget);
+  deps.logger?.info("theme clustering: two stages", {
+    papers,
+    batches: batches.length,
+    batchSize,
+    digestTokens: choice.digestTokens,
+    outputCeiling: choice.outputCeiling,
+    outputLimit: input.outputLimit,
+    inputBudget,
+  });
+
+  deps.token.throwIfCancelled();
+  const model = deps.llm.resolveModel("strong");
+  const trace = deps.traceId ?? "theme-cluster";
+  const halt = { halted: false };
+
+  /**
+   * One request under a pool permit; refused once the stage has halted. A
+   * failure, or an answer `halts` says ends the stage, halts it **before the
+   * permit is given back**, so no waiting batch sends after it.
+   */
+  const send = async <T>(
+    tally: CallTally,
+    build: (request: number) => StructuredRequest,
+    halts: (value: T) => boolean = () => false,
+  ): Promise<T> => {
+    const release = await deps.pool.acquire(deps.token);
+    try {
+      if (halt.halted) throw new StageHalted();
+      deps.token.throwIfCancelled();
+      tally.requests += 1;
+      const completed = await completeJSON<T>(
+        deps.llm,
+        build(tally.requests),
+        { token: deps.token, budget: deps.budget },
+        { includeBodies: deps.includeBodies ?? false },
+      );
+      tally.usages.push(completed.usage);
+      tally.calls += completed.calls;
+      if (halts(completed.value)) halt.halted = true;
+      return completed.value;
+    } catch (error) {
+      if (!(error instanceof StageHalted)) halt.halted = true;
+      throw error;
+    } finally {
+      release();
+    }
+  };
+
+  // Stage 1 — one THEME_CLUSTER call per batch (docs/06 §8.4 step 2).
+  const batchTallies = batches.map(newTally);
+  const runBatch = async (
+    index: number,
+    digests: readonly Digest[],
+  ): Promise<BatchResult> => {
+    const batch = index + 1;
+    const keys = digests.map((digest) => digest.itemKey);
+    const batchBand = themeBandFor(keys.length);
+    const rendered = renderPrompt(prompt, {
+      N_PAPERS: String(keys.length),
+      YEAR_MIN: yearMin,
+      YEAR_MAX: yearMax,
+      USER_TOPIC: input.userTopic,
+      MIN_THEMES: String(batchBand.minThemes),
+      MAX_THEMES: String(batchBand.maxThemes),
+      MIN_PAPERS_PER_THEME: String(batchBand.minPapersPerTheme),
+      DIGESTS: digestsVariable(digests),
+    });
+    const ceiling = resolveMaxTokens(prompt, keys.length);
+    const tally = batchTallies[index] as CallTally;
+    // Only a re-run's answer over the band ends the stage (rule (5)).
+    const ask = (rerun: boolean): Promise<ThemeClustering> =>
+      send<ThemeClustering>(
+        tally,
+        (request) => ({
+          model: model.modelId,
+          messages: [
+            { role: "system", content: rendered.system },
+            { role: "user", content: rendered.user },
+          ],
+          temperature: prompt.defaultTemperature,
+          maxOutputTokens: ceiling,
+          effort: THEME_CLUSTER_EFFORT,
+          responseFormat: {
+            kind: "json_schema",
+            name: THEME_CLUSTER_SCHEMA_NAME,
+            schema,
+          },
+          ...(deps.routing !== undefined && { routing: deps.routing }),
+          traceId: `${trace}:batch-${String(batch)}:request-${String(request)}`,
+        }),
+        (value) => rerun && value.themes.length > batchBand.maxThemes,
+      );
+    try {
+      let answer = await ask(false);
+      const first = clusteringProblems(answer, keys);
+      if (isMiss(first) || answer.themes.length > batchBand.maxThemes) {
+        // docs/12 §8 rules (3) and (5), per batch: one shared re-run.
+        deps.logger?.warn(
+          "theme clustering: a batch answer is asked for once more",
+          {
+            batch,
+            papers: keys.length,
+            themes: answer.themes.length,
+            maxThemes: batchBand.maxThemes,
+            missing: first.missingKeys.length,
+            repeated: first.repeatedKeys.length,
+            foreign: first.foreignKeyEntries,
+            unresolved: first.unresolvedThemeRefs,
+            duplicateThemeIds: first.duplicateThemeIds.length,
+          },
+        );
+        answer = await ask(true);
+        if (answer.themes.length > batchBand.maxThemes) {
+          return {
+            kind: "stopped",
+            themes: answer.themes.length,
+            max: batchBand.maxThemes,
+          };
+        }
+      }
+      // A local theme is dropped only when it has no paper (reading (2)).
+      const finalized = finalizeClustering(answer, keys, 1);
+      const other = finalized.otherThemeId;
+      return {
+        kind: "done",
+        batch,
+        themes: finalized.clustering.themes.filter(
+          (theme) => theme.themeId !== other,
+        ),
+        assignments: finalized.clustering.assignments.filter(
+          (row) => row.primaryThemeId !== other,
+        ),
+        unclustered: finalized.clustering.unclustered ?? [],
+        leftovers: finalized.clustering.assignments
+          .filter((row) => row.primaryThemeId === other)
+          .map((row) => row.itemKey),
+      };
+    } catch (error) {
+      if (error instanceof StageHalted) return { kind: "halted" };
+      throw error;
+    }
+  };
+  const settled = await Promise.allSettled(
+    batches.map(async (digests, index) => {
+      try {
+        const result = await runBatch(index, digests);
+        if (result.kind === "stopped") halt.halted = true;
+        return result;
+      } catch (error) {
+        halt.halted = true;
+        throw error;
+      }
+    }),
+  );
+
+  const mergeTally = newTally();
+  const mergeUse: TrendPromptUse = {
+    promptId: "THEME_MERGE",
+    promptVersion: mergePrompt.version,
+    modelId: model.modelId,
+    temperature: mergePrompt.defaultTemperature,
+  };
+  const base = (): ClusterOutcomeBase => {
+    const tallies = [...batchTallies, mergeTally];
+    return {
+      band,
+      passes: tallies.filter((tally) => tally.requests > 0).length,
+      requests: tallies.reduce((sum, tally) => sum + tally.requests, 0),
+      calls: tallies.reduce((sum, tally) => sum + tally.calls, 0),
+      usage: sumUsage(tallies.flatMap((tally) => tally.usages)),
+      prompt: {
+        promptId: "THEME_CLUSTER",
+        promptVersion: prompt.version,
+        modelId: model.modelId,
+        temperature: prompt.defaultTemperature,
+      },
+      batches: batches.length,
+      ...(mergeTally.requests > 0 && { mergePrompt: mergeUse }),
+    };
+  };
+
+  // The first failure in batch order, else the first stop, ends the stage.
+  const results: BatchResult[] = [];
+  for (const outcome of settled) {
+    if (outcome.status === "rejected") throw outcome.reason;
+    results.push(outcome.value);
+  }
+  const stopped = results.find(
+    (result): result is BatchStopped => result.kind === "stopped",
+  );
+  if (stopped !== undefined) {
+    deps.logger?.warn(
+      "theme clustering: a batch still has more themes than MAX_THEMES; the run stops",
+      { themes: stopped.themes, maxThemes: stopped.max },
+    );
+    return {
+      ...base(),
+      status: "stopped-too-many-themes",
+      messageId: TOO_MANY_THEMES_L10N,
+      args: { themes: stopped.themes, max: stopped.max },
+    };
+  }
+  const done = results.filter(
+    (result): result is BatchDone => result.kind === "done",
+  );
+
+  // Stage 2 — one THEME_MERGE call (docs/06 §8.4 step 3; docs/12 §20).
+  const locals: LocalTheme[] = done.flatMap((result) =>
+    result.themes.map((theme) => ({
+      id: `B${String(result.batch)}-${theme.themeId}`,
+      theme,
+    })),
+  );
+  const localIds = locals.map((local) => local.id);
+  let merge: ThemeMerge | undefined;
+  if (locals.length > 0) {
+    const rendered = renderPrompt(mergePrompt, {
+      N_PAPERS: String(papers),
+      N_BATCHES: String(batches.length),
+      USER_TOPIC: input.userTopic,
+      MIN_THEMES: String(band.minThemes),
+      MAX_THEMES: String(band.maxThemes),
+      MIN_PAPERS_PER_THEME: String(band.minPapersPerTheme),
+      LOCAL_THEMES: localThemesVariable(locals),
+    });
+    const askMerge = (): Promise<ThemeMerge> =>
+      send<ThemeMerge>(mergeTally, (request) => ({
+        model: model.modelId,
+        messages: [
+          { role: "system", content: rendered.system },
+          { role: "user", content: rendered.user },
+        ],
+        temperature: mergePrompt.defaultTemperature,
+        maxOutputTokens: mergeCeiling,
+        effort: THEME_MERGE_EFFORT,
+        responseFormat: {
+          kind: "json_schema",
+          name: THEME_MERGE_SCHEMA_NAME,
+          schema: mergeSchema,
+        },
+        ...(deps.routing !== undefined && { routing: deps.routing }),
+        traceId: `${trace}:merge:request-${String(request)}`,
+      }));
+    merge = await askMerge();
+    const first = mergeProblems(merge, localIds);
+    if (isMergeMiss(first) || merge.themes.length > band.maxThemes) {
+      // docs/12 §20's one re-run, shared with §8 rule (5) as item 307(a).
+      deps.logger?.warn("theme clustering: the merge is asked for once more", {
+        localThemes: localIds.length,
+        themes: merge.themes.length,
+        maxThemes: band.maxThemes,
+        missing: first.missingLocalIds.length,
+        repeated: first.repeatedLocalIds.length,
+        foreign: first.foreignLocalIds,
+        unresolved: first.unresolvedGlobalRefs,
+        duplicateThemeIds: first.duplicateThemeIds.length,
+      });
+      merge = await askMerge();
+      if (merge.themes.length > band.maxThemes) {
+        deps.logger?.warn(
+          "theme clustering: the merge still has more themes than MAX_THEMES; the run stops",
+          { themes: merge.themes.length, maxThemes: band.maxThemes },
+        );
+        return {
+          ...base(),
+          status: "stopped-too-many-themes",
+          messageId: TOO_MANY_THEMES_L10N,
+          args: { themes: merge.themes.length, max: band.maxThemes },
+        };
+      }
+    }
+  }
+
+  // Re-assignment (docs/06 §8.4 step 4; docs/12 §20's note, reading (5)).
+  const mapping =
+    merge === undefined
+      ? new Map<string, string | null>()
+      : finalMapping(merge, localIds);
+  const assignments: ThemeAssignment[] = [];
+  const unclustered: UnclusteredItem[] = [];
+  for (const result of done) {
+    const global = (localId: string): string | null =>
+      mapping.get(`B${String(result.batch)}-${localId}`) ?? null;
+    for (const row of result.assignments) {
+      const primary = global(row.primaryThemeId);
+      if (primary === null) {
+        unclustered.push({
+          itemKey: row.itemKey,
+          reason: UNMAPPED_THEME_REASON,
+        });
+        continue;
+      }
+      const secondary = (row.secondaryThemeIds ?? [])
+        .map(global)
+        .filter((id): id is string => id !== null);
+      assignments.push({
+        itemKey: row.itemKey,
+        primaryThemeId: primary,
+        ...(secondary.length > 0 && { secondaryThemeIds: secondary }),
+        fit: row.fit,
+      });
+    }
+    unclustered.push(...result.unclustered);
+  }
+  // The held leftovers are in neither list, so finalizeClustering gives them
+  // `Other` (docs/12 §8 rule (3)) and then applies the run's minimum, rule (6).
+  const finalized = finalizeClustering(
+    {
+      themes: (merge?.themes ?? []).map((theme) => ({
+        themeId: theme.themeId,
+        name: theme.name,
+        definition: theme.definition,
+        itemKeys: [],
+        ...(theme.rationale !== undefined && { rationale: theme.rationale }),
+      })),
+      assignments,
+      unclustered,
+    },
+    inputKeys,
+    band.minPapersPerTheme,
+  );
+  if (finalized.clustering.themes.length === 0) {
+    deps.logger?.warn(
+      "theme clustering: every theme fell below the minimum; the run stops",
+      {
+        papers,
+        minPapersPerTheme: band.minPapersPerTheme,
+        dropped: finalized.droppedThemeIds.length,
+      },
+    );
+    return {
+      ...base(),
+      status: "stopped-no-themes",
+      messageId: NO_THEMES_L10N,
+      droppedThemeIds: finalized.droppedThemeIds,
+    };
+  }
+  return {
+    ...base(),
+    status: "clustered",
+    clustering: finalized.clustering,
+    otherThemeId: finalized.otherThemeId,
+    droppedThemeIds: finalized.droppedThemeIds,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 5. The stage
+// ---------------------------------------------------------------------------
 
 /**
  * Cluster `input.digests` into themes (`plan/07` `P4-T05`).
@@ -641,27 +1444,16 @@ export async function clusterThemes(
   input: ClusterInput,
   deps: ClusterDeps,
 ): Promise<ClusterOutcome> {
-  const inputKeys = inputKeysOf(input.digests);
+  const { inputKeys, band, schema, yearMin, yearMax, inputBudget } = checkStage(
+    input,
+    deps,
+  );
   const papers = inputKeys.length;
-  if (!Number.isInteger(input.outputLimit) || input.outputLimit < 1) {
-    throw new RangeError(
-      `[research-helper] the model's output limit must be a positive whole number, got ${String(input.outputLimit)}`,
-    );
-  }
-  const band = input.band ?? themeBandFor(papers);
-  checkBand(band);
   const prompt = deps.prompt;
-  if (prompt.id !== "THEME_CLUSTER" || prompt.schema === null) {
-    throw new ConfigurationError(
-      "clusterThemes needs the THEME_CLUSTER template with its schema",
-      { promptId: prompt.id },
-    );
-  }
-  const schema = prompt.schema;
   const vars: Record<string, string> = {
     N_PAPERS: String(papers),
-    YEAR_MIN: yearVariable("yearMin", input.yearMin),
-    YEAR_MAX: yearVariable("yearMax", input.yearMax),
+    YEAR_MIN: yearMin,
+    YEAR_MAX: yearMax,
     USER_TOPIC: input.userTopic,
     MIN_THEMES: String(band.minThemes),
     MAX_THEMES: String(band.maxThemes),
@@ -670,7 +1462,12 @@ export async function clusterThemes(
   };
 
   // Step 1.
-  const choice = clusteringPath(input.digests, prompt, input.outputLimit);
+  const choice = clusteringPath(
+    input.digests,
+    prompt,
+    input.outputLimit,
+    inputBudget,
+  );
   if (choice.path === "two-stage") {
     return clusterThemesTwoStage(input, deps, choice);
   }

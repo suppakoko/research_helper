@@ -1724,6 +1724,15 @@ export interface TTSProvider {
 > as if the summaries packed across themes, while a split theme's last call is part-filled, so a
 > clustering with several themes each just over one call's room can need up to one more call per such
 > theme (and its merge) than (4) reserves; `withBudget` reserves those at dispatch, as (6)'s calls.
+>
+> **As built 2026-10-29 (`P4-T06`; `clusterBatchSize` in `src/pipeline/shared/estimate.ts`): point
+> (3)'s batch size.** Two-stage clustering's batches were planned at 60 papers each, whose
+> `THEME_CLUSTER` ceiling (4 400 tokens) a model with a smaller output limit cannot hold
+> (`plan/reports/P4-T16.md` finding 6). `planSynthesis` and the run now share `clusterBatchSize`: 60,
+> or the largest batch size whose ceiling is within the report model's `maxOutputTokens`, and at
+> least 1. The run makes ⌈N / that size⌉ batches, as the plan does, so the estimate still never
+> under-states (`06-…` §8.4's note of this date); a model that cannot hold one paper's ceiling is
+> planned at one paper per batch, an over-quote, and the run refuses it before any request.
 
 > **`PipelineContext.config`. Decided 2026-10-23 (owner, plan/00 §6 item 272(a)).** The member's
 > type is `ConfigReader`, declared in `src/pipeline/types.ts`: a **read-only view of

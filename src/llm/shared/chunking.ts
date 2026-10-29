@@ -2,7 +2,10 @@
  * The per-paper chunker — `docs/06` §5.2–§5.3 and §13.5 (`P3-T23`).
  *
  * Caller: `summarizeItem` in `src/pipeline/summarize/summarizeItem.ts`
- * (`P3-T25`, not built yet). Nothing calls this module before that card.
+ * (`P3-T25`). {@link packByTokens} (`P4-T07`, section 8) is the synthesis
+ * stages' packer: `analyseThemes` in `src/pipeline/trendReport/themeAnalysis.ts`
+ * calls it for a theme's sub-batches; `compose.ts` (`P4-T08`) and `critique.ts`
+ * (`P4-T09`, the cited summaries) are its other callers, not built yet.
  *
  * ## The three paths (`docs/06` §5.3)
  *
@@ -1015,4 +1018,91 @@ export async function runWithContextRetry<T>(
     if (samePlan(first, halved)) throw error;
     return run(halved);
   }
+}
+
+// ===========================================================================
+// 8. Packing items by tokens (`P4-T07`; docs/06 §8.4 last paragraph)
+// ===========================================================================
+
+/**
+ * Pack whole items into the fewest batches whose token sums stay within
+ * `budget`, keeping the items' order: the batches, concatenated, are `items`
+ * exactly, and no item is split or repeated. The synthesis stages use it where
+ * one call cannot carry every item — a theme's full summaries in
+ * `CLUSTER_REDUCE` sub-batches (`docs/06` §8.4's last paragraph), the report's
+ * digests and the critique's cited summaries (`P4-T08`, `P4-T09`).
+ *
+ * **Fewest, then even.** A greedy pass in order gives the fewest batches any
+ * order-keeping packing can (each batch is closed only when the next item does
+ * not fit). The items are then packed again towards an even share — at most
+ * the larger of the total ÷ that count and the largest item — and that packing
+ * is kept when it needs no more batches; otherwise the greedy one is. So 22
+ * equal items where 21 fit become 11 + 11, not 21 + 1: the same number of
+ * calls, and no call made from one paper.
+ *
+ * **Counting.** `tokensOf` is the caller's cost of one item as it will be
+ * sent, separator included; a batch's tokens are the sum of its items' costs.
+ * `estTokens` rounds up, so the sum of the parts is never below the estimate of
+ * the joined text (as {@link planChunks} counts a chunk).
+ *
+ * @param items - what to pack, in the order to keep
+ * @param tokensOf - one item's cost: a whole number, 0 or more
+ * @param budget - the most tokens one batch may hold: a whole number, 1 or more
+ * @returns the batches, in order; `[]` for no items
+ * @throws RangeError for a budget or a cost that is not such a whole number,
+ *   or for an item whose cost alone exceeds the budget — it can be neither
+ *   split nor sent, so the caller decides
+ */
+export function packByTokens<T>(
+  items: readonly T[],
+  tokensOf: (item: T) => number,
+  budget: number,
+): readonly (readonly T[])[] {
+  if (!Number.isInteger(budget) || budget < 1) {
+    throw new RangeError(
+      `[research-helper] a packing budget is a whole number of at least 1, got ${String(budget)}`,
+    );
+  }
+  const costs = items.map((item, index) => {
+    const cost = tokensOf(item);
+    if (!Number.isInteger(cost) || cost < 0) {
+      throw new RangeError(
+        `[research-helper] an item's token cost is a whole number of at least 0, got ${String(cost)} at ${String(index)}`,
+      );
+    }
+    if (cost > budget) {
+      throw new RangeError(
+        `[research-helper] item ${String(index)} alone takes ${String(cost)} tokens, over the budget of ${String(budget)}`,
+      );
+    }
+    return cost;
+  });
+  if (items.length === 0) return [];
+
+  /** Greedy in order under `cap`: the batches as index ranges. */
+  const greedy = (cap: number): readonly (readonly [number, number])[] => {
+    const ranges: [number, number][] = [];
+    let start = 0;
+    let sum = 0;
+    costs.forEach((cost, index) => {
+      if (index > start && sum + cost > cap) {
+        ranges.push([start, index]);
+        start = index;
+        sum = 0;
+      }
+      sum += cost;
+    });
+    ranges.push([start, costs.length]);
+    return ranges;
+  };
+
+  const fewest = greedy(budget);
+  const total = costs.reduce((a, b) => a + b, 0);
+  const evenCap = Math.min(
+    budget,
+    Math.max(Math.ceil(total / fewest.length), ...costs),
+  );
+  const even = greedy(evenCap);
+  const chosen = even.length === fewest.length ? even : fewest;
+  return chosen.map(([from, to]) => items.slice(from, to));
 }

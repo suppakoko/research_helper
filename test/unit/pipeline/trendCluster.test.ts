@@ -17,8 +17,13 @@ import {
   StructuredOutputError,
 } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
+import { createLlmPool } from "../../../src/core/jobQueue/queue";
 import type { BudgetGuard, Usage } from "../../../src/llm/types";
-import type { Digest, ThemeClustering } from "../../../src/model/trend";
+import type {
+  Digest,
+  ThemeClustering,
+  ThemeMerge,
+} from "../../../src/model/trend";
 import {
   createPromptRegistry,
   parsePromptFile,
@@ -33,6 +38,8 @@ import {
   withBudget,
 } from "../../../src/pipeline/shared/budget";
 import {
+  CLUSTER_BATCH_SIZE,
+  clusterBatchSize,
   planSynthesis,
   themeCountBandFor,
 } from "../../../src/pipeline/shared/estimate";
@@ -42,15 +49,21 @@ import {
   clusteringProblems,
   clusterThemes,
   finalizeClustering,
+  isMergeMiss,
   isMiss,
+  mergeProblems,
   minPapersPerThemeFor,
   NO_THEMES_L10N,
   OTHER_THEME_DEFINITION,
   OTHER_THEME_NAME,
+  partitionDigests,
+  presortDigests,
   SMALL_THEME_REASON,
   THEME_CLUSTER_EFFORT,
+  THEME_MERGE_EFFORT,
   themeBandFor,
   TOO_MANY_THEMES_L10N,
+  UNMAPPED_THEME_REASON,
   type ClusterDeps,
   type ClusterInput,
   type ClusterOutcome,
@@ -65,6 +78,7 @@ import {
   mockLLM,
   mockLLMRouter,
   mockSettings,
+  type MockCall,
   type MockStep,
 } from "../../helpers/mockLLM";
 
@@ -74,6 +88,15 @@ const PROMPT: PromptTemplate = parsePromptFile({
   fileName: "theme-cluster.v1.0.0.md",
   text: readFileSync(
     resolve(repo, "src/prompts/theme-cluster.v1.0.0.md"),
+    "utf8",
+  ),
+});
+
+/** `P4-T06`: the shipped `THEME_MERGE` file (`docs/12` §20). */
+const MERGE_PROMPT: PromptTemplate = parsePromptFile({
+  fileName: "theme-merge.v1.0.0.md",
+  text: readFileSync(
+    resolve(repo, "src/prompts/theme-merge.v1.0.0.md"),
     "utf8",
   ),
 });
@@ -214,6 +237,8 @@ function setup(
     budget,
     token: source.token,
     prompt: PROMPT,
+    mergePrompt: MERGE_PROMPT,
+    pool: createLlmPool(() => 4),
     ...overrides,
   };
   return { provider, budget, source, deps };
@@ -414,11 +439,18 @@ describe("clusteringPath — step 1, never a paper count", () => {
       outputFits: false,
       outputCeiling: 6_000,
     });
-    const { provider, deps } = setup([reply(cleanTen())]);
-    await expect(
-      clusterThemes(input({ digests: ds, outputLimit: 5_999 }), deps),
-    ).rejects.toBeInstanceOf(ConfigurationError);
-    expect(provider.calls).toHaveLength(0);
+    // P4-T06 replaced P4-T05's stub: the handover now sends two batch calls
+    // (100 papers in two batches of 50) and one merge.
+    const { provider, deps } = setup([twoStageResponder()]);
+    const outcome = clustered(
+      await clusterThemes(input({ digests: ds, outputLimit: 5_999 }), deps),
+    );
+    expect(schemaNames(provider)).toEqual({
+      ThemeClustering: 2,
+      ThemeMerge: 1,
+    });
+    expect(outcome.batches).toBe(2);
+    expect(outcome.passes).toBe(3);
   });
 
   it("fits a ceiling equal to the limit", () => {
@@ -1083,5 +1115,1033 @@ describe("clusterThemes — determinism", () => {
     const a = await clusterThemes(input(), setup([reply(missing)]).deps);
     const b = await clusterThemes(input(), setup([reply(missing)]).deps);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+});
+
+// ===========================================================================
+// P4-T06 — two-stage clustering and the theme-merge call (`docs/06` §8.4,
+// `docs/12` §20 and their notes of 2026-10-29; `plan/07` `P4-T06`)
+// ===========================================================================
+
+const DIGEST_HEAD_RE = /^\[(K[0-9]{7})\] /gm;
+const LOCAL_BLOCK_RE = /^\[(B[0-9]+-T[0-9]+)\] papers: ([0-9]+)$/gm;
+
+function userText(call: MockCall): string {
+  return call.request.messages.find((m) => m.role === "user")?.content ?? "";
+}
+
+function schemaName(call: MockCall): string | undefined {
+  const format = call.request.responseFormat;
+  return format?.kind === "json_schema" ? format.name : undefined;
+}
+
+function isMergeCall(call: MockCall): boolean {
+  return schemaName(call) === "ThemeMerge";
+}
+
+/** The item keys a batch call was sent, in `{{DIGESTS}}` order. */
+function batchKeysOf(call: MockCall): string[] {
+  return [...userText(call).matchAll(DIGEST_HEAD_RE)].map((m) => m[1] ?? "");
+}
+
+/** The local theme ids a merge call was sent, in `{{LOCAL_THEMES}}` order. */
+function localIdsOf(call: MockCall): string[] {
+  return [...userText(call).matchAll(LOCAL_BLOCK_RE)].map((m) => m[1] ?? "");
+}
+
+function schemaNames(provider: {
+  readonly calls: readonly MockCall[];
+}): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const call of provider.calls) {
+    const name = schemaName(call) ?? "none";
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function replyJSON(value: unknown): ReturnType<typeof chatResponse> {
+  return chatResponse(JSON.stringify(value), {
+    usage: {
+      inputTokens: 100,
+      outputTokens: 50,
+      totalTokens: 150,
+      costUsd: 0.01,
+    },
+  });
+}
+
+/** A batch answer: consecutive runs of `size` keys, themes T1, T2, … */
+function groupedAnswer(
+  batchKeys: readonly string[],
+  size = 10,
+): ThemeClustering {
+  const specs: ThemeSpec[] = [];
+  for (let at = 0; at < batchKeys.length; at += size) {
+    specs.push({
+      id: `T${String(at / size + 1)}`,
+      members: batchKeys.slice(at, at + size),
+    });
+  }
+  return answer(specs);
+}
+
+/** The local theme's own `T<n>`: the default merge maps each local theme there. */
+function ownNumber(localId: string): string | null {
+  return localId.split("-")[1] ?? null;
+}
+
+/** A merge answer mapping each local id through `map`. */
+function mergeAnswer(
+  localIds: readonly string[],
+  map: (localId: string) => string | null = ownNumber,
+): ThemeMerge {
+  const globals = [
+    ...new Set(localIds.map(map).filter((id): id is string => id !== null)),
+  ];
+  return {
+    themes: globals.map((id) => ({
+      themeId: id,
+      name: `Global Theme ${id}`,
+      definition: `Papers that study global topic ${id}.`,
+      rationale: "Shared synthetic questions.",
+    })),
+    mapping: localIds.map((localThemeId) => ({
+      localThemeId,
+      globalThemeId: map(localThemeId),
+    })),
+  };
+}
+
+/** Ten global themes from two batches of five: `B<b>-T<t>` → `T<5(b-1)+t>`. */
+function tenGlobals(localIds: readonly string[]): ThemeMerge {
+  return mergeAnswer(localIds, (id) => {
+    const match = /^B([0-9]+)-T([0-9]+)$/.exec(id);
+    return `T${String((Number(match?.[1]) - 1) * 5 + Number(match?.[2]))}`;
+  });
+}
+
+interface Responder {
+  /** A batch call's answer; `nth` counts that batch's requests from 1. */
+  readonly batch?: (
+    keys: readonly string[],
+    nth: number,
+  ) => ThemeClustering | Error;
+  /** The merge call's answer; `nth` counts merge requests from 1. */
+  readonly merge?: (localIds: readonly string[], nth: number) => ThemeMerge;
+  /** Wait this long before answering, so concurrent calls overlap. */
+  readonly delayMs?: number;
+}
+
+/** One function step answering every call by its content, so order does not matter. */
+function twoStageResponder(responder: Responder = {}): MockStep {
+  const perBatch = new Map<string, number>();
+  let merges = 0;
+  return async (call) => {
+    if (responder.delayMs !== undefined) {
+      await new Promise((done) => setTimeout(done, responder.delayMs));
+    }
+    if (isMergeCall(call)) {
+      merges += 1;
+      const ids = localIdsOf(call);
+      return replyJSON(
+        responder.merge === undefined
+          ? mergeAnswer(ids)
+          : responder.merge(ids, merges),
+      );
+    }
+    const batchKeys = batchKeysOf(call);
+    const id = batchKeys[0] ?? "";
+    const nth = (perBatch.get(id) ?? 0) + 1;
+    perBatch.set(id, nth);
+    const value =
+      responder.batch === undefined
+        ? groupedAnswer(batchKeys)
+        : responder.batch(batchKeys, nth);
+    return value instanceof Error ? value : reply(value);
+  };
+}
+
+/** A digest with the fields the pre-sort reads; no year prints `n.d.`. */
+function rich(
+  n: number,
+  fields: {
+    readonly theme?: string;
+    readonly keyword?: string;
+    readonly year?: number;
+  } = {},
+): Digest {
+  const itemKey = key(n);
+  const year = fields.year === undefined ? "n.d." : String(fields.year);
+  return {
+    itemKey,
+    lines: [
+      { kind: "head", text: `[${itemKey}] ${year} | design: rct` },
+      { kind: "question", text: `Q: Synthetic question ${String(n)}.` },
+      ...(fields.theme === undefined
+        ? []
+        : [
+            {
+              kind: "theme" as const,
+              text: `Theme(first-pass): ${fields.theme}`,
+            },
+          ]),
+      ...(fields.keyword === undefined
+        ? []
+        : [
+            {
+              kind: "keywords" as const,
+              text: `Keywords: ${fields.keyword}; second keyword`,
+            },
+          ]),
+      { kind: "tier", text: "Tier: abstract | Confidence: medium" },
+    ],
+  };
+}
+
+/** About 130–140 tokens per digest: P4-T04's cap. */
+const BIG_FILLER = " x".repeat(212);
+
+function bigDigests(count: number): Digest[] {
+  return Array.from({ length: count }, (_, i) => digest(i + 1, BIG_FILLER));
+}
+
+function allRegistry(): ReturnType<typeof createPromptRegistry> {
+  return createPromptRegistry(
+    PROMPT_IDS.map((id) => ({
+      fileName: PROMPT_FILE_NAMES[id],
+      text: readFileSync(
+        resolve(repo, "src/prompts", PROMPT_FILE_NAMES[id]),
+        "utf8",
+      ),
+    })),
+  );
+}
+
+/** Forces two stages by output: 100 papers need 6 000 tokens; batches of 50 need 4 000. */
+function twoStageInput(overrides: Partial<ClusterInput> = {}): ClusterInput {
+  return input({ digests: digests(100), outputLimit: 5_999, ...overrides });
+}
+
+describe("P4-T06 Done-when — 150 digests with a forced 20 000-token budget", () => {
+  it("make three batch calls, one merge call and four counted passes, every key exactly once", async () => {
+    const ds = bigDigests(150);
+    const joined = digestTokens(ds.map(digestText).join("\n"));
+    expect(joined).toBeGreaterThan(20_000);
+    const choice = clusteringPath(ds, PROMPT, 64_000, 20_000);
+    expect(choice).toMatchObject({
+      path: "two-stage",
+      inputFits: false,
+      outputFits: true,
+    });
+
+    const { provider, budget, deps } = setup([twoStageResponder()]);
+    const outcome = clustered(
+      await clusterThemes(
+        input({ digests: ds, outputLimit: 64_000, inputBudget: 20_000 }),
+        deps,
+      ),
+    );
+
+    expect(schemaNames(provider)).toEqual({
+      ThemeClustering: 3,
+      ThemeMerge: 1,
+    });
+    expect(outcome.passes).toBe(4);
+    expect(outcome.requests).toBe(4);
+    expect(outcome.calls).toBe(4);
+    expect(outcome.batches).toBe(3);
+    expect(outcome.usage.inputTokens).toBe(400);
+    expect(outcome.usage.outputTokens).toBe(200);
+    expect(outcome.usage.totalTokens).toBe(600);
+    expect(outcome.usage.costUsd).toBeCloseTo(0.04, 10);
+    expect(budget.reserved).toBe(4);
+    for (const call of provider.calls) expect(call.ctx.budget).toBe(budget);
+    expectWellFormed(
+      outcome.clustering,
+      ds.map((d) => d.itemKey),
+    );
+    // Three batches of 50, five local themes of 10 each, merged by number:
+    // five global themes of 30 papers.
+    expect(outcome.clustering.themes.map((t) => t.itemKeys.length)).toEqual([
+      30, 30, 30, 30, 30,
+    ]);
+    expect(outcome.clustering.unclustered).toEqual([]);
+  });
+
+  it("sends each batch call at its own size and band, and the merge at its own ceiling, temperature 0.2 and effort medium", async () => {
+    const { provider, deps } = setup([twoStageResponder()]);
+    const outcome = clustered(
+      await clusterThemes(
+        input({
+          digests: bigDigests(150),
+          outputLimit: 64_000,
+          inputBudget: 20_000,
+        }),
+        deps,
+      ),
+    );
+    const batchCalls = provider.calls.filter((c) => !isMergeCall(c));
+    const mergeCall = provider.calls.find(isMergeCall) as MockCall;
+    for (const call of batchCalls) {
+      expect(batchKeysOf(call)).toHaveLength(50);
+      expect(call.request.model).toBe("report-model");
+      expect(call.request.temperature).toBe(0.2);
+      expect(call.request.effort).toBe("medium");
+      expect(call.request.maxOutputTokens).toBe(2_000 + 40 * 50);
+      expect(userText(call)).toContain("CORPUS: 50 papers, 2019-2024.");
+      // themeBandFor(50): 4–7 themes, 2 papers each.
+      expect(userText(call)).toContain("THEMES REQUIRED: between 4 and 7.");
+      expect(userText(call)).toContain("MINIMUM PAPERS PER THEME: 2");
+    }
+    expect(mergeCall.request.model).toBe("report-model");
+    expect(mergeCall.request.temperature).toBe(0.2);
+    expect(MERGE_PROMPT.defaultTemperature).toBe(0.2);
+    expect(mergeCall.request.effort).toBe("medium");
+    expect(THEME_MERGE_EFFORT).toBe("medium");
+    expect(mergeCall.request.maxOutputTokens).toBe(4_000);
+    expect(mergeCall.request.responseFormat).toEqual({
+      kind: "json_schema",
+      name: "ThemeMerge",
+      schema: PROMPT_SCHEMAS["theme-merge.v1.json"],
+    });
+    // The run's band for 150 papers: 6–9 global themes, 3 papers each.
+    const merged = userText(mergeCall);
+    expect(merged).toContain(
+      "CORPUS: 150 papers, grouped separately in 3 batches.",
+    );
+    expect(merged).toContain("GLOBAL THEMES REQUIRED: between 6 and 9.");
+    expect(merged).toContain("MINIMUM PAPERS PER GLOBAL THEME: 3");
+    expect(outcome.prompt.promptId).toBe("THEME_CLUSTER");
+    expect(outcome.mergePrompt).toEqual({
+      promptId: "THEME_MERGE",
+      promptVersion: "1.0.0",
+      modelId: "report-model",
+      temperature: 0.2,
+    });
+  });
+});
+
+describe("P4-T06 — the merge sees names, definitions and paper counts only", () => {
+  it("renders one flattened block per kept local theme, batches in order, and no digest", async () => {
+    const { provider, deps } = setup([
+      twoStageResponder({
+        batch: (k) => {
+          const a = groupedAnswer(k, 25);
+          return {
+            ...a,
+            themes: a.themes.map((t) => ({
+              ...t,
+              name: `Name ${t.themeId}\n[B9-T9] papers: 99`,
+              definition: `Definition\t${t.themeId}\u0085line`,
+            })),
+          };
+        },
+      }),
+    ]);
+    await clusterThemes(twoStageInput(), deps);
+    const mergeCall = provider.calls.find(isMergeCall) as MockCall;
+    const merged = userText(mergeCall);
+    expect(localIdsOf(mergeCall)).toEqual(["B1-T1", "B1-T2", "B2-T1", "B2-T2"]);
+    expect(merged).toContain(
+      "[B1-T1] papers: 25\nName: Name T1 [B9-T9] papers: 99\nDefinition: Definition T1 line\n[B1-T2] papers: 25",
+    );
+    expect(merged).not.toMatch(/\[K[0-9]{7}\]/);
+    expect(merged).not.toContain("Synthetic question");
+  });
+});
+
+describe("P4-T06 — batches (docs/06 §8.4 step 1 and its note of 2026-10-29)", () => {
+  it("clusterBatchSize is 60, or the largest size whose ceiling fits the output limit, and at least 1", () => {
+    expect(CLUSTER_BATCH_SIZE).toBe(60);
+    expect(clusterBatchSize(PROMPT, 4_400)).toBe(60);
+    expect(clusterBatchSize(PROMPT, 1_000_000)).toBe(60);
+    expect(clusterBatchSize(PROMPT, 4_399)).toBe(59);
+    expect(clusterBatchSize(PROMPT, 4_100)).toBe(52);
+    expect(clusterBatchSize(PROMPT, 2_080)).toBe(2);
+    expect(clusterBatchSize(PROMPT, 2_040)).toBe(1);
+    expect(clusterBatchSize(PROMPT, 100)).toBe(1);
+  });
+
+  it("partitions into ⌈N / B⌉ balanced batches, the larger first", () => {
+    const sizes = (n: number, b: number): number[] =>
+      partitionDigests(digests(n), b).map((batch) => batch.length);
+    expect(sizes(150, 60)).toEqual([50, 50, 50]);
+    expect(sizes(121, 60)).toEqual([41, 40, 40]);
+    expect(sizes(61, 60)).toEqual([31, 30]);
+    expect(sizes(60, 60)).toEqual([60]);
+    expect(sizes(5, 1)).toEqual([1, 1, 1, 1, 1]);
+  });
+
+  it("adds a batch while one would exceed the input budget, and refuses a digest alone over it", () => {
+    const ds = bigDigests(10);
+    const one = digestTokens(digestText(ds[0] as Digest));
+    const budget = one * 3 + 10;
+    const batches = partitionDigests(ds, 10, budget);
+    expect(batches.length).toBe(4);
+    for (const batch of batches) {
+      expect(
+        digestTokens(batch.map(digestText).join("\n")),
+      ).toBeLessThanOrEqual(budget);
+    }
+    expect(() => partitionDigests(ds, 10, one - 1)).toThrow(ConfigurationError);
+    expect(() => partitionDigests(ds, 0)).toThrow(RangeError);
+    expect(() => partitionDigests(ds, 1.5)).toThrow(RangeError);
+  });
+
+  it("pre-sorts by first-pass theme, then top keyword, then year, case-folded, missing values last, ties by key", () => {
+    const ds = [
+      rich(1, { theme: "beta", keyword: "a", year: 2020 }),
+      rich(2, { theme: "Alpha", keyword: "b", year: 2020 }),
+      rich(3, { theme: "alpha", keyword: "a", year: 2022 }),
+      rich(4, { theme: "alpha", keyword: "a", year: 2021 }),
+      rich(5, { keyword: "a", year: 2019 }),
+      rich(6, { theme: "alpha", keyword: "a" }),
+      rich(7, { theme: "alpha", year: 2000 }),
+      rich(8, { theme: "alpha", keyword: "a", year: 2021 }),
+    ];
+    const order = presortDigests(ds).map((d) => d.itemKey);
+    // alpha/a by year (n.d. last), alpha/b, alpha with no keyword, beta, none.
+    expect(order).toEqual([4, 8, 3, 6, 2, 7, 1, 5].map(key));
+    // Independent of the order given.
+    expect(presortDigests([...ds].reverse()).map((d) => d.itemKey)).toEqual(
+      order,
+    );
+  });
+
+  it("keeps related papers in one batch: the batches follow the pre-sort, not the input order", async () => {
+    const ds = Array.from({ length: 100 }, (_, i) =>
+      rich(i + 1, {
+        theme: i % 2 === 0 ? "Even Theme" : "Odd Theme",
+        year: 2020,
+      }),
+    );
+    const { provider, deps } = setup([twoStageResponder()]);
+    await clusterThemes(input({ digests: ds, outputLimit: 5_999 }), deps);
+    const parities = provider.calls
+      .filter((c) => !isMergeCall(c))
+      .map((c) => new Set(batchKeysOf(c).map((k) => Number(k.slice(1)) % 2)));
+    expect(parities.map((set) => set.size)).toEqual([1, 1]);
+  });
+
+  it("shrinks B for a small output limit, and the estimate plans the same batches", async () => {
+    const { provider, deps } = setup([twoStageResponder()]);
+    const outcome = clustered(
+      await clusterThemes(
+        input({ digests: digests(160), outputLimit: 4_100 }),
+        deps,
+      ),
+    );
+    // B = 52, so ⌈160 / 52⌉ = 4 batches of 40, each at 3 600 tokens.
+    const batchCalls = provider.calls.filter((c) => !isMergeCall(c));
+    expect(batchCalls.map((c) => c.request.maxOutputTokens)).toEqual([
+      3_600, 3_600, 3_600, 3_600,
+    ]);
+    expect(outcome.batches).toBe(4);
+    const plan = planSynthesis({
+      papers: 160,
+      reportModel: { modelId: "m", prices: undefined, maxOutputTokens: 4_100 },
+      critiqueModel: { modelId: "m", prices: undefined },
+      prompts: allRegistry(),
+      synthesisOverhead: {
+        THEME_CLUSTER: 0,
+        THEME_MERGE: 0,
+        CLUSTER_REDUCE: 0,
+        CLUSTER_REDUCE_MERGE: 0,
+        TREND_REPORT_EN: 0,
+        TREND_REPORT_KO: 0,
+        SELF_CRITIQUE: 0,
+      },
+      languages: ["en"],
+      critiqueRounds: 0,
+    });
+    const planned = plan.calls.filter((c) => c.kind === "THEME_CLUSTER");
+    expect(planned).toHaveLength(4);
+    for (const call of planned) {
+      expect(call.outputTokens).toBeLessThanOrEqual(4_100);
+    }
+    expect(planned.reduce((sum, c) => sum + c.outputTokens, 0)).toBe(4 * 3_600);
+    expect(plan.calls.filter((c) => c.kind === "THEME_MERGE")).toHaveLength(1);
+  });
+});
+
+describe("P4-T06 — refused before any request", () => {
+  it("refuses a model whose output limit cannot hold THEME_MERGE's 4 000 tokens", async () => {
+    const { provider, deps } = setup([twoStageResponder()]);
+    await expect(
+      clusterThemes(input({ digests: digests(60), outputLimit: 3_999 }), deps),
+    ).rejects.toBeInstanceOf(ConfigurationError);
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it("refuses a model whose output limit cannot hold one paper's ceiling", async () => {
+    const { provider, deps } = setup([twoStageResponder()]);
+    await expect(
+      clusterThemes(input({ digests: digests(3), outputLimit: 2_039 }), deps),
+    ).rejects.toBeInstanceOf(ConfigurationError);
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it("refuses a merge template that is not THEME_MERGE", async () => {
+    const { provider, deps } = setup([twoStageResponder()], {
+      mergePrompt: { ...MERGE_PROMPT, id: "THEME_CLUSTER" },
+    });
+    await expect(clusterThemes(twoStageInput(), deps)).rejects.toBeInstanceOf(
+      ConfigurationError,
+    );
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  for (const bad of [0, 60_001, 1.5]) {
+    it(`throws RangeError for an input budget of ${String(bad)}`, async () => {
+      const { provider, deps } = setup([twoStageResponder()]);
+      await expect(
+        clusterThemes(input({ inputBudget: bad }), deps),
+      ).rejects.toBeInstanceOf(RangeError);
+      expect(provider.calls).toHaveLength(0);
+    });
+  }
+
+  it("throws OperationCancelledError on a cancelled token, with no request", async () => {
+    const { provider, source, deps } = setup([twoStageResponder()]);
+    source.cancel({ kind: "user" });
+    await expect(clusterThemes(twoStageInput(), deps)).rejects.toBeInstanceOf(
+      OperationCancelledError,
+    );
+    expect(provider.calls).toHaveLength(0);
+  });
+});
+
+describe("P4-T06 — each batch is validated as docs/12 §8", () => {
+  it("re-runs only the batch that missed keys, and its leftovers join one global Other, never the merge", async () => {
+    const { provider, deps } = setup([
+      twoStageResponder({
+        // The first batch always drops its last two keys.
+        batch: (k) =>
+          k[0] === key(1) ? groupedAnswer(k.slice(0, 48)) : groupedAnswer(k),
+      }),
+    ]);
+    // The run's minimum raised to 3, so the two leftovers' Other is too small.
+    const outcome = clustered(
+      await clusterThemes(
+        twoStageInput({
+          band: { minThemes: 4, maxThemes: 9, minPapersPerTheme: 3 },
+        }),
+        deps,
+      ),
+    );
+    const batchCalls = provider.calls.filter((c) => !isMergeCall(c));
+    expect(batchCalls).toHaveLength(3);
+    expect(batchCalls.filter((c) => batchKeysOf(c)[0] === key(1))).toHaveLength(
+      2,
+    );
+    expect(outcome.requests).toBe(4);
+    expect(outcome.passes).toBe(3);
+    const merged = userText(provider.calls.find(isMergeCall) as MockCall);
+    expect(merged).not.toContain("Name: Other");
+    expect(localIdsOf(provider.calls.find(isMergeCall) as MockCall)).toEqual([
+      ...["B1-T1", "B1-T2", "B1-T3", "B1-T4", "B1-T5"],
+      ...["B2-T1", "B2-T2", "B2-T3", "B2-T4", "B2-T5"],
+    ]);
+    // Global themes T1–T5; Other is T6, holding the two leftovers — and
+    // dropped by the run's minimum of 3.
+    expect(outcome.otherThemeId).toBeUndefined();
+    expect(outcome.droppedThemeIds).toEqual(["T6"]);
+    expect(outcome.clustering.unclustered).toEqual([
+      { itemKey: key(49), reason: SMALL_THEME_REASON },
+      { itemKey: key(50), reason: SMALL_THEME_REASON },
+    ]);
+    expectWellFormed(outcome.clustering, keys(1, 100));
+  });
+
+  it("puts leftovers from several batches into one Other theme that survives the minimum", async () => {
+    const { deps } = setup([
+      twoStageResponder({ batch: (k) => groupedAnswer(k.slice(0, 47)) }),
+    ]);
+    const outcome = clustered(await clusterThemes(twoStageInput(), deps));
+    expect(outcome.otherThemeId).toBe("T6");
+    const other = outcome.clustering.themes.find((t) => t.themeId === "T6");
+    expect(other?.name).toBe(OTHER_THEME_NAME);
+    expect(other?.definition).toBe(OTHER_THEME_DEFINITION);
+    expect(other?.itemKeys).toEqual([...keys(48, 50), ...keys(98, 100)]);
+    for (const k of other?.itemKeys ?? []) {
+      expect(
+        outcome.clustering.assignments.find((a) => a.itemKey === k)?.fit,
+      ).toBe("weak");
+    }
+    expect(outcome.clustering.themes.at(-1)?.themeId).toBe("T6");
+    expectWellFormed(outcome.clustering, keys(1, 100));
+  });
+
+  it("keeps a one-paper local theme for the merge, and drops a local theme with no paper", async () => {
+    const { provider, deps } = setup([
+      twoStageResponder({
+        batch: (k) =>
+          answer([
+            { id: "T1", members: k.slice(0, 49) },
+            { id: "T2", members: k.slice(49) },
+            { id: "T3", members: [] },
+          ]),
+        // Every local theme joins global T1.
+        merge: (ids) => mergeAnswer(ids, () => "T1"),
+      }),
+    ]);
+    const outcome = clustered(await clusterThemes(twoStageInput(), deps));
+    const mergeCall = provider.calls.find(isMergeCall) as MockCall;
+    expect(localIdsOf(mergeCall)).toEqual(["B1-T1", "B1-T2", "B2-T1", "B2-T2"]);
+    expect(userText(mergeCall)).toContain("[B1-T2] papers: 1");
+    expect(outcome.clustering.themes.map((t) => t.itemKeys.length)).toEqual([
+      100,
+    ]);
+  });
+
+  it("[open line, as built] a batch answer over its band's MAX_THEMES, asked once more and still over, stops the run with no merge", async () => {
+    // Batch 1: ten themes of five, twice; themeBandFor(50) allows seven.
+    // Batch 2 misses keys on its first answer, so it would ask again.
+    const { provider, deps } = setup(
+      [
+        twoStageResponder({
+          batch: (k) =>
+            k[0] === key(1)
+              ? groupedAnswer(k, 5)
+              : groupedAnswer(k.slice(0, 40)),
+        }),
+      ],
+      { pool: createLlmPool(() => 1) },
+    );
+    const outcome = await clusterThemes(twoStageInput(), deps);
+    expect(outcome.status).toBe("stopped-too-many-themes");
+    if (outcome.status !== "stopped-too-many-themes") return;
+    expect(outcome.messageId).toBe(TOO_MANY_THEMES_L10N);
+    expect(outcome.args).toEqual({ themes: 10, max: 7 });
+    // Pool of one, first come first served: batch 1, batch 2, batch 1's
+    // re-run, which stops the stage — so batch 2's re-run is never sent.
+    expect(
+      provider.calls.map((c) => [batchKeysOf(c)[0], c.request.traceId]),
+    ).toEqual([
+      [key(1), "theme-cluster:batch-1:request-1"],
+      [key(51), "theme-cluster:batch-2:request-1"],
+      [key(1), "theme-cluster:batch-1:request-2"],
+    ]);
+    expect(outcome.requests).toBe(3);
+    expect(outcome.passes).toBe(2);
+    expect(outcome.batches).toBe(2);
+    expect(outcome.mergePrompt).toBeUndefined();
+  });
+
+  it("uses a batch's re-run when it is within its band", async () => {
+    const { provider, deps } = setup([
+      twoStageResponder({
+        batch: (k, nth) => (nth === 1 ? groupedAnswer(k, 5) : groupedAnswer(k)),
+      }),
+    ]);
+    const outcome = clustered(await clusterThemes(twoStageInput(), deps));
+    expect(schemaNames(provider)).toEqual({
+      ThemeClustering: 4,
+      ThemeMerge: 1,
+    });
+    expect(outcome.passes).toBe(3);
+    expect(outcome.requests).toBe(5);
+  });
+});
+
+describe("P4-T06 — the merge's validation (docs/12 §20)", () => {
+  it("finds missing, repeated and foreign local ids, unresolved global refs and shared theme ids", () => {
+    const ids = ["B1-T1", "B1-T2", "B2-T1"];
+    expect(isMergeMiss(mergeProblems(mergeAnswer(ids), ids))).toBe(false);
+    const problems = mergeProblems(
+      {
+        themes: [
+          { themeId: "T1", name: "a", definition: "a" },
+          { themeId: "T2", name: "b", definition: "b" },
+          { themeId: "T2", name: "c", definition: "c" },
+        ],
+        mapping: [
+          { localThemeId: "B1-T1", globalThemeId: "T1" },
+          { localThemeId: "B1-T1", globalThemeId: "T1" },
+          { localThemeId: "B9-T9", globalThemeId: null },
+          { localThemeId: "B2-T1", globalThemeId: "T2" },
+          { localThemeId: "B2-T1", globalThemeId: "T7" },
+        ],
+      },
+      ids,
+    );
+    expect(problems).toEqual({
+      missingLocalIds: ["B1-T2"],
+      repeatedLocalIds: ["B1-T1", "B2-T1"],
+      foreignLocalIds: 1,
+      unresolvedGlobalRefs: 2,
+      duplicateThemeIds: ["T2"],
+    });
+    expect(isMergeMiss(problems)).toBe(true);
+  });
+
+  it("re-runs a merge that missed a local id once; a local id still missing goes to unclustered as mapped to null", async () => {
+    const { provider, deps } = setup([
+      twoStageResponder({
+        merge: (ids) => {
+          const a = mergeAnswer(ids);
+          return {
+            ...a,
+            mapping: a.mapping.filter((m) => m.localThemeId !== "B2-T5"),
+          };
+        },
+      }),
+    ]);
+    const outcome = clustered(await clusterThemes(twoStageInput(), deps));
+    expect(schemaNames(provider)).toEqual({
+      ThemeClustering: 2,
+      ThemeMerge: 2,
+    });
+    expect(outcome.passes).toBe(3);
+    expect(outcome.requests).toBe(4);
+    expect(outcome.clustering.unclustered).toEqual(
+      keys(91, 100).map((itemKey) => ({
+        itemKey,
+        reason: UNMAPPED_THEME_REASON,
+      })),
+    );
+    expectWellFormed(outcome.clustering, keys(1, 100));
+  });
+
+  it("sends a null mapping's papers to unclustered with no re-run", async () => {
+    const { provider, deps } = setup([
+      twoStageResponder({
+        merge: (ids) =>
+          mergeAnswer(ids, (id) => (id === "B1-T1" ? null : ownNumber(id))),
+      }),
+    ]);
+    const outcome = clustered(await clusterThemes(twoStageInput(), deps));
+    expect(schemaNames(provider)).toEqual({
+      ThemeClustering: 2,
+      ThemeMerge: 1,
+    });
+    expect(outcome.clustering.unclustered).toEqual(
+      keys(1, 10).map((itemKey) => ({
+        itemKey,
+        reason: UNMAPPED_THEME_REASON,
+      })),
+    );
+  });
+
+  it("treats a persisting unresolved global id, or one two themes share, as null", async () => {
+    const { provider, deps } = setup([
+      twoStageResponder({
+        merge: (ids) => {
+          const a = mergeAnswer(ids);
+          return {
+            themes: [
+              ...a.themes,
+              { themeId: "T1", name: "Twin", definition: "Twin." },
+            ],
+            mapping: a.mapping.map((m) =>
+              m.localThemeId === "B2-T2" ? { ...m, globalThemeId: "T42" } : m,
+            ),
+          };
+        },
+      }),
+    ]);
+    const outcome = clustered(await clusterThemes(twoStageInput(), deps));
+    expect(schemaNames(provider).ThemeMerge).toBe(2);
+    expect(outcome.clustering.themes.map((t) => t.themeId)).toEqual([
+      "T2",
+      "T3",
+      "T4",
+      "T5",
+    ]);
+    expect(outcome.clustering.unclustered?.map((u) => u.itemKey)).toEqual([
+      ...keys(1, 10),
+      ...keys(51, 70),
+    ]);
+    expectWellFormed(outcome.clustering, keys(1, 100));
+  });
+
+  it("drops a global theme no local theme maps to", async () => {
+    const { deps } = setup([
+      twoStageResponder({
+        merge: (ids) => {
+          const a = mergeAnswer(ids);
+          return {
+            ...a,
+            themes: [
+              ...a.themes,
+              { themeId: "T9", name: "Unused", definition: "Unused." },
+            ],
+          };
+        },
+      }),
+    ]);
+    const outcome = clustered(await clusterThemes(twoStageInput(), deps));
+    expect(outcome.clustering.themes.map((t) => t.themeId)).toEqual([
+      "T1",
+      "T2",
+      "T3",
+      "T4",
+      "T5",
+    ]);
+  });
+
+  it("asks a merge over the run's MAX_THEMES once more; still over stops the run with its message", async () => {
+    // 100 papers: band 6–9; ten global themes is over.
+    const { provider, deps } = setup([
+      twoStageResponder({ merge: tenGlobals }),
+    ]);
+    const outcome = await clusterThemes(twoStageInput(), deps);
+    expect(outcome.status).toBe("stopped-too-many-themes");
+    if (outcome.status !== "stopped-too-many-themes") return;
+    expect(outcome.messageId).toBe(TOO_MANY_THEMES_L10N);
+    expect(outcome.args).toEqual({ themes: 10, max: 9 });
+    expect(schemaNames(provider)).toEqual({
+      ThemeClustering: 2,
+      ThemeMerge: 2,
+    });
+    expect(outcome.passes).toBe(3);
+    expect(outcome.mergePrompt?.promptId).toBe("THEME_MERGE");
+  });
+
+  it("uses a second merge answer within MAX_THEMES, and shares one re-run between a miss and too many themes", async () => {
+    const missing = (ids: readonly string[]): ThemeMerge => {
+      const a = mergeAnswer(ids);
+      return { ...a, mapping: a.mapping.slice(1) };
+    };
+    const within = setup([
+      twoStageResponder({
+        merge: (ids, nth) => (nth === 1 ? tenGlobals(ids) : mergeAnswer(ids)),
+      }),
+    ]);
+    expect((await clusterThemes(twoStageInput(), within.deps)).status).toBe(
+      "clustered",
+    );
+    expect(schemaNames(within.provider).ThemeMerge).toBe(2);
+
+    const missThenOver = setup([
+      twoStageResponder({
+        merge: (ids, nth) => (nth === 1 ? missing(ids) : tenGlobals(ids)),
+      }),
+    ]);
+    const stopped = await clusterThemes(twoStageInput(), missThenOver.deps);
+    expect(stopped.status).toBe("stopped-too-many-themes");
+    expect(schemaNames(missThenOver.provider).ThemeMerge).toBe(2);
+  });
+});
+
+describe("P4-T06 — re-assignment (docs/06 §8.4 step 4)", () => {
+  it("maps secondary ids through the merge, dropping null and the paper's own primary, and keeps each row's fit", async () => {
+    const { deps } = setup([
+      twoStageResponder({
+        batch: (k) =>
+          answer(
+            [
+              {
+                id: "T1",
+                members: k.slice(0, 20),
+                secondary: { [k[0] ?? ""]: ["T2", "T3", "T4"] },
+              },
+              { id: "T2", members: k.slice(20, 30) },
+              { id: "T3", members: k.slice(30, 40) },
+              { id: "T4", members: k.slice(40) },
+            ],
+            {
+              crossCuttingObservations: [
+                "Batch-local: T1 and T2 share a method.",
+              ],
+            },
+          ),
+        // T2 joins T1 (the primary), T3 maps to null, T4 becomes T7.
+        merge: (ids) =>
+          mergeAnswer(ids, (id) => {
+            const local = ownNumber(id);
+            if (local === "T2") return "T1";
+            if (local === "T3") return null;
+            return local === "T4" ? "T7" : local;
+          }),
+      }),
+    ]);
+    const outcome = clustered(await clusterThemes(twoStageInput(), deps));
+    expect(
+      outcome.clustering.assignments.find((a) => a.itemKey === key(1)),
+    ).toEqual({
+      itemKey: key(1),
+      primaryThemeId: "T1",
+      secondaryThemeIds: ["T7"],
+      fit: "strong",
+    });
+    expect(outcome.clustering.crossCuttingObservations).toBeUndefined();
+    expectWellFormed(outcome.clustering, keys(1, 100));
+  });
+
+  it("keeps a batch's own unclustered reasons and applies the run's minimum after re-assignment", async () => {
+    const { deps } = setup([
+      twoStageResponder({
+        batch: (k) =>
+          answer(
+            [
+              { id: "T1", members: k.slice(0, 47) },
+              { id: "T2", members: k.slice(47, 49) },
+            ],
+            { unclustered: [{ itemKey: k[49] ?? "", reason: "Off topic." }] },
+          ),
+        // Batch 2's T2 maps to null, so global T2 holds batch 1's two papers.
+        merge: (ids) =>
+          mergeAnswer(ids, (id) => (id === "B2-T2" ? null : ownNumber(id))),
+      }),
+    ]);
+    const outcome = clustered(
+      await clusterThemes(
+        twoStageInput({
+          band: { minThemes: 2, maxThemes: 5, minPapersPerTheme: 3 },
+        }),
+        deps,
+      ),
+    );
+    expect(outcome.droppedThemeIds).toEqual(["T2"]);
+    const reasons = Object.fromEntries(
+      (outcome.clustering.unclustered ?? []).map((u) => [u.itemKey, u.reason]),
+    );
+    expect(reasons[key(48)]).toBe(SMALL_THEME_REASON);
+    expect(reasons[key(50)]).toBe("Off topic.");
+    expect(reasons[key(98)]).toBe(UNMAPPED_THEME_REASON);
+    expect(reasons[key(100)]).toBe("Off topic.");
+    expectWellFormed(outcome.clustering, keys(1, 100));
+  });
+
+  it("stops with no theme left when the merge maps every local theme to null", async () => {
+    const { provider, deps } = setup([
+      twoStageResponder({
+        merge: (ids) => ({
+          themes: [{ themeId: "T1", name: "Unused", definition: "Unused." }],
+          mapping: ids.map((localThemeId) => ({
+            localThemeId,
+            globalThemeId: null,
+          })),
+        }),
+      }),
+    ]);
+    const outcome = await clusterThemes(twoStageInput(), deps);
+    expect(outcome.status).toBe("stopped-no-themes");
+    if (outcome.status !== "stopped-no-themes") return;
+    expect(outcome.messageId).toBe(NO_THEMES_L10N);
+    expect(schemaNames(provider)).toEqual({
+      ThemeClustering: 2,
+      ThemeMerge: 1,
+    });
+    expect(outcome.passes).toBe(3);
+  });
+
+  it("makes no merge call when no batch kept a local theme", async () => {
+    const { provider, deps } = setup([
+      twoStageResponder({
+        batch: (k) => ({
+          themes: [
+            {
+              themeId: "T1",
+              name: "Empty",
+              definition: "Empty.",
+              itemKeys: [],
+            },
+          ],
+          assignments: [],
+          unclustered: k.map((itemKey) => ({ itemKey, reason: "Off topic." })),
+        }),
+      }),
+    ]);
+    const outcome = await clusterThemes(twoStageInput(), deps);
+    expect(outcome.status).toBe("stopped-no-themes");
+    expect(schemaNames(provider)).toEqual({ ThemeClustering: 2 });
+    expect(outcome.passes).toBe(2);
+    expect(outcome.mergePrompt).toBeUndefined();
+  });
+});
+
+describe("P4-T06 — under the llm pool, failures and determinism", () => {
+  it("holds a pool permit for every request, never more in flight than the pool allows", async () => {
+    const real = createLlmPool(() => 2);
+    let acquired = 0;
+    let maxInFlight = 0;
+    const pool: ClusterDeps["pool"] = {
+      acquire: async (token) => {
+        const release = await real.acquire(token);
+        acquired += 1;
+        maxInFlight = Math.max(maxInFlight, real.inFlight);
+        return release;
+      },
+    };
+    const { provider, deps } = setup([twoStageResponder({ delayMs: 5 })], {
+      pool,
+    });
+    await clusterThemes(
+      input({ digests: digests(200), outputLimit: 5_999 }),
+      deps,
+    );
+    // 200 papers, B = 60: four batches of 50, then the merge.
+    expect(provider.calls).toHaveLength(5);
+    expect(acquired).toBe(5);
+    expect(maxInFlight).toBe(2);
+    expect(real.inFlight).toBe(0);
+  });
+
+  it("propagates a batch's StructuredOutputError and sends nothing further", async () => {
+    const failure = new StructuredOutputError(
+      "openrouter",
+      "report-model",
+      "bad answer",
+    );
+    const { provider, deps } = setup(
+      [
+        twoStageResponder({
+          batch: (k) => (k[0] === key(1) ? failure : groupedAnswer(k)),
+        }),
+      ],
+      { pool: createLlmPool(() => 1) },
+    );
+    await expect(clusterThemes(twoStageInput(), deps)).rejects.toBe(failure);
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it("gives the same requests and outcome whatever order the digests come in", async () => {
+    const ds = Array.from({ length: 100 }, (_, i) =>
+      rich(i + 1, {
+        theme: `Theme ${String(i % 4)}`,
+        keyword: `kw ${String(i % 3)}`,
+        year: 2000 + (i % 7),
+      }),
+    );
+    const run = async (
+      given: readonly Digest[],
+    ): Promise<{ users: string[]; themes: unknown[] }> => {
+      const { provider, deps } = setup([twoStageResponder()]);
+      const outcome = clustered(
+        await clusterThemes(
+          input({ digests: given, outputLimit: 5_999 }),
+          deps,
+        ),
+      );
+      return {
+        users: provider.calls.map(userText).sort(),
+        themes: outcome.clustering.themes.map((t) => [
+          t.themeId,
+          [...t.itemKeys].sort(),
+        ]),
+      };
+    };
+    const forward = await run(ds);
+    const backward = await run([...ds].reverse());
+    expect(backward.users).toEqual(forward.users);
+    expect(backward.themes).toEqual(forward.themes);
+  });
+});
+
+describe("finalizeClustering — a secondary id the answer never used (found by P4-T06)", () => {
+  it("drops it even when Other is given that number", () => {
+    const a = answer([
+      { id: "T1", members: keys(1, 4), secondary: { [key(1)]: ["T2"] } },
+    ]);
+    // Key 5 is a leftover, so Other is T2: the secondary above must not name it.
+    const result = finalizeClustering(a, keys(1, 5), 1);
+    expect(result.otherThemeId).toBe("T2");
+    expect(
+      result.clustering.assignments.find((r) => r.itemKey === key(1))
+        ?.secondaryThemeIds,
+    ).toBeUndefined();
   });
 });

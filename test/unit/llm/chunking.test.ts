@@ -31,6 +31,7 @@ import {
   UNKNOWN_SECTION,
   chunkLabel,
   measureLineShape,
+  packByTokens,
   planChunks,
   runWithContextRetry,
   windowRoom,
@@ -843,5 +844,65 @@ describe("the context-length retry (docs/06 §13.5)", () => {
     const single = planAt(0.5);
     expect(single.kind).toBe("chunked");
     expect(() => planAt(0)).toThrow(RangeError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// packByTokens (`P4-T07`): whole items, order kept, fewest batches, evened
+// ---------------------------------------------------------------------------
+
+describe("packByTokens — P4-T07's packer for the synthesis stages", () => {
+  const id = (n: number): number => n;
+  const flat = (batches: readonly (readonly number[])[]): number[] =>
+    batches.flat();
+  const sums = (batches: readonly (readonly number[])[]): number[] =>
+    batches.map((b) => b.reduce((a, c) => a + c, 0));
+
+  it("returns no batch for no item, and one batch when everything fits", () => {
+    expect(packByTokens([], id, 10)).toEqual([]);
+    expect(packByTokens([3, 3, 4], id, 10)).toEqual([[3, 3, 4]]);
+  });
+
+  it("keeps every item once, in order, each batch within the budget", () => {
+    const items = [5, 1, 9, 2, 2, 7, 3, 8, 1, 1, 6];
+    const batches = packByTokens(items, id, 10);
+    expect(flat(batches)).toEqual(items);
+    for (const sum of sums(batches)) expect(sum).toBeLessThanOrEqual(10);
+  });
+
+  it("makes as few batches as the greedy order-keeping packing", () => {
+    // Greedy: [5,1] [9] [2,2] [7,3] [8,1,1] [6] — six batches.
+    const items = [5, 1, 9, 2, 2, 7, 3, 8, 1, 1, 6];
+    expect(packByTokens(items, id, 10)).toHaveLength(6);
+    expect(packByTokens(Array<number>(43).fill(1), id, 21)).toHaveLength(3);
+  });
+
+  it("evens the batches when that needs no more of them: 22 where 21 fit become 11 + 11", () => {
+    const batches = packByTokens(Array<number>(22).fill(1), id, 21);
+    expect(batches.map((b) => b.length)).toEqual([11, 11]);
+    const sixty = packByTokens(Array<number>(60).fill(1_801), id, 39_999);
+    expect(sixty.map((b) => b.length)).toEqual([20, 20, 20]);
+  });
+
+  it("keeps the greedy packing when evening would need one more batch", () => {
+    // Greedy [2,5] [2]; the even cap, max(⌈9 ÷ 2⌉, 5) = 5, would make [2] [5] [2].
+    expect(packByTokens([2, 5, 2], id, 7)).toEqual([[2, 5], [2]]);
+    // Greedy [9,1] [9,1]; the even cap 10 makes the same two.
+    expect(packByTokens([9, 1, 9, 1], id, 11)).toEqual([
+      [9, 1],
+      [9, 1],
+    ]);
+  });
+
+  it("refuses a bad budget, a bad cost, and an item over the budget alone", () => {
+    expect(() => packByTokens([1], id, 0)).toThrow(RangeError);
+    expect(() => packByTokens([1], id, 1.5)).toThrow(RangeError);
+    expect(() => packByTokens([-1], id, 5)).toThrow(RangeError);
+    expect(() => packByTokens([0.5], id, 5)).toThrow(RangeError);
+    expect(() => packByTokens([1, 6], id, 5)).toThrow(/alone takes 6 tokens/);
+  });
+
+  it("accepts items that cost nothing", () => {
+    expect(packByTokens([0, 0, 5, 0], id, 5)).toEqual([[0, 0, 5, 0]]);
   });
 });
