@@ -2484,6 +2484,17 @@ the caller of what the card builds; if it does not, the caller is added with a d
     for the owner's batched review (G-41). A transient 2-test unit failure that `P4-T14` saw once was not reproduced
     in six later full runs, and is watched.
 
+317. **Lines left open by `P4-T09`** (`plan/reports/P4-T09.md`). **DECIDED 2026-10-30 (coordinator, under item 313):**
+    - (a) The `REVISION_NOTES_INSTRUCTION` wording ships as drafted. It is kept on the list for the owner's next batched
+      review of prompt wording, with `P4-T09`'s other readings.
+    - (b) A rewrite error other than `stopped-structure-invalid` (truncation, network) is treated like "not applied":
+      the earlier draft ships with the existing banner. A failed critique request still fails the job, because no
+      "review failed" banner exists.
+    - (c) `critique_text_unchecked` gets an Appendix B line, a new report label whose `ko` is pending G-41.
+    - (d) The stale header of `src/llm/shared/chunking.ts` is corrected.
+    - (e) `P4-T18` (the trend-report pipeline: stages, passes, cancel, resume) runs next, alone, as the
+      build/Zotero owner, with (b) to (d) as its first small step.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

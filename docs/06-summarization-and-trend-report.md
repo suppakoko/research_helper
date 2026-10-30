@@ -1442,7 +1442,7 @@ Return JSON:
 }
 ```
 
-**Model / params:** where possible a **different model** from the one that wrote the report (§12.2), `temperature: 0`, `max_tokens: 2500`.
+**Model / params:** ~~where possible a **different model** from the one that wrote the report (§12.2)~~ `report.critiqueModel` when set, else `summaryModel`, on the active provider (decided 2026-10-26, owner, `plan/00` §6 item 286; corrected 2026-10-30 by `P4-T09`, §12.2's note), `temperature: 0`, reasoning effort `low`, `max_tokens: 2500`.
 
 ---
 
@@ -1603,33 +1603,42 @@ async function generateTrendReport(
     const batches = packByTokens(full, BUDGET.CLUSTER_REDUCE);
     const partials = await Promise.all(
       batches.map(b => llm.structured(PROMPTS.CLUSTER_REDUCE, themeVars(theme, b, opts), ThemeAnalysisSchema)));
-    return llm.structured(PROMPTS.CLUSTER_REDUCE, themeVars(theme, partials, opts), ThemeAnalysisSchema);
+    // Corrected 2026-10-30 (P4-T09; note below): the partial analyses are combined by
+    // CLUSTER_REDUCE_MERGE (docs/12 §21), not CLUSTER_REDUCE, whose text labels its input "PAPER SUMMARIES".
+    return llm.structured(PROMPTS.CLUSTER_REDUCE_MERGE, mergeVars(theme, partials, opts), ThemeAnalysisSchema);
   });
 
-  // ---------- 4. FINAL REPORT + CRITIQUE LOOP ----------
+  // ---------- 4. FINAL REPORT + CRITIQUE LOOP ----------  (corrected 2026-10-30, P4-T09; note below)
   const promptId = opts.language === 'ko' ? 'TREND_REPORT_KO' : 'TREND_REPORT_EN';
-  let markdown = await llm.text(PROMPTS[promptId], reportVars(themeAnalyses, digests, clustering, opts));
+  let draft = await composeReport(PROMPTS[promptId], reportVars(themeAnalyses, digests, clustering, opts)); // §9, docs/12 §10
   let lastCritique: Critique | null = null;
+  let revisedAfterLastCritique = false, revisionNotApplied = false;
+  const critiqueModel = opts.critiqueModel || opts.summaryModel;   // the active provider only; never an automatic pick
 
-  for (let attempt = 0; attempt < opts.maxCritiqueRounds /* default 1 */; attempt++) {
-    const critique = await llm.structured(PROMPTS.SELF_CRITIQUE,
-      { REPORT_MARKDOWN: markdown,
-        SUMMARIES_JSON: JSON.stringify(summaries.map(s => s.summary)),
-        VALID_ITEM_KEYS: summaries.map(s => s.summary.itemKey).join(', ') },
-      CritiqueSchema, { model: opts.critiqueModel /* prefer a different model */ });
-
-    const highs = critique.problems.filter(p => p.severity === 'high');
+  for (let round = 0; round < opts.maxCritiqueRounds /* default 1 */; round++) {
+    const cited = citedKeysOf(draft.sections.slice(0, 10));        // §1–§10's markers after the citation pass
+    // One call when the draft and the CITED summaries fit SELF_CRITIQUE's budget (packByTokens);
+    // otherwise one call per section, each with that section's cited summaries; problems combined.
+    const critique = await critiqueDraft(draft, cited, summaries, { model: critiqueModel, effort: 'low' });
     lastCritique = critique;
-    if (critique.verdict === 'pass' || highs.length === 0) break;
-    markdown = await llm.text(PROMPTS[promptId],
+    revisedAfterLastCritique = false;
+    const highs = critique.problems.filter(p => p.severity === 'high');   // the verdict decides nothing
+    if (highs.length === 0) break;
+    const rewrite = await composeReport(PROMPTS[promptId],
       { ...reportVars(themeAnalyses, digests, clustering, opts),
-        REVISION_NOTES: renderProblems(highs) });   // substituted into the {{REVISION_NOTES}} slot
+        REVISION_NOTES: renderProblems(highs) });   // a fresh generation, never an edit pass (§12.2)
+    if (rewrite.status === 'stopped-structure-invalid') { revisionNotApplied = true; break; }  // keep `draft`
+    draft = rewrite;
+    revisedAfterLastCritique = true;
   }
 
   // ---------- 5. RENDER ----------
-  return renderReport(markdown, summaries, clustering, screened, lastCritique, opts);   // §9, §10, §14
+  return renderReport(draft, summaries, clustering, screened,
+    { lastCritique, revisedAfterLastCritique, revisionNotApplied }, opts);   // §9, §10, §12.2, §14
 }
 ```
+
+> **Corrected 2026-10-30 (`P4-T09`; `critiqueReport` in `src/pipeline/trendReport/critique.ts`) — the two corrections `P4-T03` and `P4-T07` flagged, and the loop as built.** (1) The sub-batch merge of step 3 is `CLUSTER_REDUCE_MERGE` (§8.4's note of 2026-10-26; `P4-T07`'s `analyseThemes`); the block above read `CLUSTER_REDUCE`. (2) **The critique is shown the summaries of the items the draft cites, not every summary** (decided 2026-10-26, owner, `plan/00` §6 item 286): the block above read `SUMMARIES_JSON: JSON.stringify(summaries.map(s => s.summary))`, which overflows `SELF_CRITIQUE`'s 60 000-token budget (§5.2) above roughly 40–60 papers at §8.1's 900–1 600 tokens a summary. The cited set is §1–§10's markers after the citation pass (`P4-T10`) — the keys §11's bibliography numbers (`bibliographyKeys`, `P4-T12`) — packed to the budget by `packByTokens` (`P4-T07`); when they still do not fit, the draft is critiqued section by section, each call with that section's text and its cited summaries, and the problems are combined (§12.2's notes of this date). (3) The critique model is `report.critiqueModel`, else `summaryModel`, on the active provider (§12.2's note of this date); the block above read "prefer a different model". (4) The rewrite is `composeReport` again (`P4-T08`), so it carries §10's section check and its one fresh generation; when both fail, the earlier draft is kept and the loop ends (owner, `plan/00` §6 item 312(b); coordinator, item 314(a)). (5) The loop stops on the problems, not the verdict: a round with no `high` problem ends it, whatever the verdict says, and a `high` problem triggers the rewrite even under `pass` (§12.2's note of this date). `composeReport`, `critiqueDraft` and `mergeVars` are the pseudocode's names; the built declarations are named in §12.2's note.
 
 **Failure policy inside `mapWithConcurrency`:** an individual paper failing after retries does **not** abort the run. It is recorded with `status: 'failed'` and a reason, excluded from synthesis, and listed in the report appendix. The run aborts only if the failure rate exceeds 30 % (which almost always means a bad API key, an exhausted quota, or a provider outage — in which case the user should be told once, not 200 times).
 
@@ -1997,7 +2006,9 @@ Also verify mechanically:
 
 Run `SELF_CRITIQUE` once by default (`maxCritiqueRounds: 1`; configurable 0–2).
 
-**Use a different model for the critique where the user has more than one provider configured.** A model reviewing its own output is a weak check — it tends to ratify its own reasoning. A different model (or at minimum a different temperature and a fresh context) catches materially more. If only one provider is configured, still run it: a fresh context with an adversarial instruction catches broken citations and number errors reliably even from the same model.
+~~**Use a different model for the critique where the user has more than one provider configured.**~~ A model reviewing its own output is a weak check — it tends to ratify its own reasoning. ~~A different model (or at minimum a different temperature and a fresh context) catches materially more. If only one provider is configured, still run it:~~ A fresh context with an adversarial instruction catches broken citations and number errors reliably even from the same model.
+
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286); written 2026-10-30 (`P4-T09`): which model critiques.** The critique runs on the **active provider only**, with `report.critiqueModel` when it is set, else `summaryModel` — the `standard` tier (`12-prompt-library.md` §18.5), whose chain falls back to `<provider>.model` as a summary's does. **Never a model the plugin picks automatically, and never a second provider in v1**: a second provider would need a router change (`07-…` §4.3) and a second egress disclosure (`09-…` §3.4), `12-prompt-library.md` §19 item 1 rules that the plugin never calls a model the user did not choose, `LLMRouter.activeProvider` is "never a fallback to another provider", and `09-…` §3 row 3b sends report content to the "Same LLM provider". The critique model passes `assertModelAllowed` (`P3-T15`) like the report model, before the first critique request. The pass is sent at temperature 0 and reasoning effort `low` (`plan/07` §0.2). The struck sentences above are the alternative not taken: automatically use a different provider when two keys exist. The `report.critiqueModel` rows of §15 and `07-…` §8.5 say the same.
 
 **Revision loop:** only `severity: 'high'` problems trigger a rewrite, and the rewrite is a fresh generation with `REVISION_NOTES` appended — not an edit pass, which tends to produce patched-over prose. Cap at the configured rounds; if problems remain, **ship the report with a visible warning banner** listing them rather than silently shipping or silently failing:
 
@@ -2007,6 +2018,12 @@ Run `SELF_CRITIQUE` once by default (`maxCritiqueRounds: 1`; configurable 0–2)
 ```
 
 Never hide a failed check. The user's trust depends on the plugin telling the truth about its own output.
+
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286); written 2026-10-30 (`P4-T09`): the banner on an unchecked revision.** With `maxCritiqueRounds: 1`, the loop rewrites after the critique but never critiques the rewrite, so the banner would list problems of a draft the user never sees. **The banner lists the last critique's unresolved problems and states that the shipped text is a revision that was not re-checked** (`CritiqueOutcome.revisedAfterLastCritique`; the words are `P4-T12`'s `bannerNotRechecked` label). The alternative not taken: always one more paid check after a rewrite.
+
+> **Decided 2026-10-30 (owner, `plan/00` §6 item 312(b); coordinator, item 314(a)): a rewrite that fails the section check twice.** The rewrite is `composeReport` again (`P4-T08`), with `12-prompt-library.md` §10's check 1 and its one fresh generation. When both fail (`stopped-structure-invalid`), the run **keeps the earlier draft** — the one that passed check 1 and that the last critique read — and does not stop; the outcome's message is not shown; the failed rewrite's requests count in the run's usage; the loop **ends at that round** (a further round would send the same critique request at temperature 0 and lead to the same rewrite); and the banner lists the last critique's unresolved problems and states that **the review's revision could not be applied** (`CritiqueOutcome.revisionNotApplied`, `bannerRevisionNotApplied`), in place of the "not re-checked" sentence. The report window's streamed preview is then replaced by the kept draft (coordinator, item 314(c)): `critiqueReport` signals it, `P4-T20` shows it.
+
+> **As built 2026-10-30 (`P4-T09`; `critiqueReport`, `planCritique`, `draftForCritique`, `revisionNotesFor`, `combineCritiques`, `resolveCritiqueModel` and `critiqueRoundsOf` in `src/pipeline/trendReport/critique.ts`) — readings the decisions above and §8.5's leave open. DECIDED 2026-10-30 (coordinator, under `plan/00` §6 item 313), each in the direction the documents point:** (1) **What is critiqued.** §1–§10 of the draft after the citation pass, each under its `## ` heading: the text before `## 1.` and the model's own §11 are not sent, because the scaffold drops the one and replaces the other wholesale (§9.1's notes of this date), so no reader ever sees them. (2) **The cited set** is §1–§10's well-formed markers in first-appearance order (`bibliographyKeys`, the keys §11 numbers). Each cited item's summary is sent as the theme stage sends it (`summariesForReduce`, `P4-T07`): `keyFindings` and `effectSizes` emptied where §12.1 L3 withholds them, one rule for every synthesis input (`P4-T04`). (3) **The budget.** `SELF_CRITIQUE`'s 60 000 tokens (§5.2) cover what the call varies: the draft text and the key list (raw `estTokens` after `<<<` escaping) plus each summary's own compact JSON and one token for its separator, packed by `packByTokens` within what is left less one token for the brackets — `P4-T07`'s rule. The draft and its cited summaries go in **one call** when that packing makes one batch. (4) **`{{VALID_ITEM_KEYS}}`** is the keys whose summaries the call carries, comma-separated: the "supplied index" the prompt checks markers against. (5) **Per section.** Otherwise one call per non-empty section §1–§10, each with its `## ` heading, its text and its own cited summaries, in parallel under the `llm` pool. A section that does not fit alone is cut into runs of consecutive paragraphs (blank-line separated) that each fit, one call per run. A single paragraph whose own cited summaries cannot fit is **not critiqued**: it is logged and the result carries `CRITIQUE_TEXT_UNCHECKED_WARNING` (`critique_text_unchecked`) for `P4-T18` — it needs a paragraph citing roughly 35 or more papers at 1 600 tokens each. The calls' problems are combined in section order; a problem with no `section` is given the heading of the section it was found in; the combined verdict is the worst. (6) **The verdict decides nothing**: a round with any `high` problem rewrites, whatever the verdict, and a round with none ends the loop; this follows "only `severity: 'high'` problems trigger a rewrite" above and `plan/07` `P4-T09` step 5, where §8.5's old block also stopped on `pass`. (7) **`CritiqueOutcome.unresolved`** is every problem of the last critique, every severity, as the model listed them (the scaffold orders them by severity); nothing is dropped, not even a problem whose quote is not found in the draft. (8) **`{{REVISION_NOTES}}`** for a rewrite is a fixed English instruction (`REVISION_NOTES_INSTRUCTION`), sent to `TREND_REPORT_KO` too, followed by the `high` problems as compact JSON (type, section, quote, explanation, suggested fix) — model text, so it is framed as data and its `<<<` is escaped like every variable; nothing else of the review is sent back. **Its wording is new prompt text, as `GROUNDING_RETRY_INSTRUCTION` (item 301) and the structure note (item 311(b)) were, and is open for approval** (`plan/reports/P4-T09.md`). (9) **Rounds and model are read when the stage runs**: `critiqueRoundsOf` (`report.maxCritiqueRounds`) and `resolveCritiqueModel`, exported so `P4-T18` keys `rp` and prices the run with the same reading. (10) **Errors.** A cancel, a budget refusal (the job pauses with the stage pending, `plan/07` §0.2 items 12 and 18), a refused model and every error of a critique request or a rewrite other than `stopped-structure-invalid` leave the stage unchanged, as `composeReport`'s do; whether a failed critique or a truncated rewrite should instead ship the earlier draft with a banner is open (`plan/reports/P4-T09.md`). (11) **The signal to the window** is `CritiqueDeps.onRevision`: `rewrite-started` before a rewrite's stream (its deltas go to `onDraft` as `composeReport` sends them) and `rewrite-not-applied`, carrying the kept draft's Markdown, after a failed one; a callback that throws is logged and ignored.
 
 ### 12.3 Report quality rubric
 
@@ -2291,7 +2308,7 @@ Preferences whose semantics this feature owns (all on the `extensions.zotero.res
 | `reportLanguage` | `auto` | `auto` (follow the Zotero UI locale) \| `en` \| `ko` \| `both`. Schema row in `07-architecture-and-data-model.md` §8.5; shipped in `01-zotero-plugin-platform.md` §7.2's `prefs.js` and surfaced in `08-ui-ux-spec.md` §7.3. **Not** `report.language`, which an earlier draft of this table used. |
 | `report.targetWords` | `0` (= auto) | `0` means "derive from corpus size" using the §9.2 table. It is an integer pref, so the auto state is `0`, not the string `auto`. |
 | `report.maxCritiqueRounds` | `1` | 0 disables the self-critique pass. |
-| `report.critiqueModel` | `""` (= auto) | Empty means "pick a model different from the writer". It is a string pref, so the auto state is the empty string, not the word `auto`. |
+| `report.critiqueModel` | `""` (= auto) | ~~Empty means "pick a model different from the writer".~~ Empty means `summaryModel` (its chain falls back to `<provider>.model`), on the active provider; never an automatically picked model and never a second provider (decided 2026-10-26, owner, `plan/00` §6 item 286; written 2026-10-30 by `P4-T09`, §12.2). It is a string pref, so the auto state is the empty string, not the word `auto`. |
 | `report.saveNote` | `true` | Save the report as a Zotero note. |
 | `report.perPaperNotes` | `false` | Opt-in human-readable summary note per paper. |
 | `report.addRelatedLinks` | `false` | §10.4. |

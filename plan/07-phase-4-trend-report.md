@@ -1254,6 +1254,24 @@ step 4's per-section calls: verify yourself; I believe each extra call is reserv
 `withBudget` and a refusal pauses the job with the stage pending (§0.2 item 18), so the estimate
 need not price a path it cannot predict — if that is wrong, stop and say so.
 
+*As built 2026-10-30 (`plan/00` §6 item 316; fake provider only, no live call; `plan/reports/P4-T09.md`).*
+`src/pipeline/trendReport/critique.ts` declares `critiqueReport` (the stage), `planCritique`,
+`draftForCritique`, `combineCritiques`, `revisionNotesFor`, `resolveCritiqueModel`, `critiqueRoundsOf`, the
+types `CritiqueInput`, `CritiqueDeps`, `CritiqueResult`, `CritiquePlan`, `CritiqueUnit`, `RevisionSignal`, and
+the constants `CRITIQUE_EFFORT`, `CRITIQUE_SCHEMA_NAME`, `CRITIQUE_MODEL_PREF`, `CRITIQUE_PER_SECTION_WARNING`,
+`CRITIQUE_TEXT_UNCHECKED_WARNING`, `REVISION_NOTES_INSTRUCTION`, `REVISION_NOTES_LIST_LABEL`. It calls
+`packByTokens` directly, `bibliographyKeys` (`P4-T12`) for the cited set, `summariesForReduce` (`P4-T07`) for the
+evidence and `composeReport` (`P4-T08`) for each rewrite; `src/model/trend.ts` was not changed (it reads and
+writes `CritiqueOutcome`, `revisionNotApplied` included). The readings it needed are `docs/06` §12.2's note
+"As built 2026-10-30", each DECIDED 2026-10-30 (coordinator, under `plan/00` §6 item 313), except two left open
+there: the wording of `REVISION_NOTES_INSTRUCTION` (new prompt text, as items 301 and 311(b)) and whether a
+failed critique request or a rewrite error other than `stopped-structure-invalid` should ship the earlier draft
+rather than fail the job. Step 4's estimate question is answered as believed: `planSynthesis`'s comment in
+`src/pipeline/shared/estimate.ts` lists the per-section calls among those reserved at dispatch by `withBudget`.
+**Rule 10:** the caller is `trendReportPipeline.ts` (`P4-T18`) at its critique stage; the constructing file is
+`src/bootstrap/registerPipelines.ts` (`P4-T18`); nothing is constructed in the module. The signal of item 314(c) is
+`CritiqueDeps.onRevision` (`P4-T18` passes it through; `P4-T20` shows it).
+
 ---
 
 ### P4-T10 — Citation validator and marker binding
@@ -2217,6 +2235,24 @@ the earlier draft that passed the section check, the run goes on to the scaffold
 and the banner states that the review's revision could not be applied (`P4-T09` step 7). This card does
 not show that outcome's `messageId`. `docs/12` §10's note of this date, reading (3), and §12's.
 
+*Noted 2026-10-30 (`P4-T09`, rule 10; `plan/00` §6 item 314(c)):* the critique stage calls `critiqueReport`
+(`src/pipeline/trendReport/critique.ts`) with the compose stage's `composed` draft, the `ComposeInput` that made
+it, every analysed paper's `StoredSummary`, the run's budgeted router, budget, token, `llm` pool, privacy policy
+and config, the `SELF_CRITIQUE` and report templates, `modelInfo` and `modelConfirmed` (whether the run's
+confirmation covered a model the mode passes only after one), `onDraft` and `onRevision`. It hands
+`CritiqueResult.draft` and `.outcome` to `scaffoldReport` (`P4-T12`), adds `.usage` to the run's usage and
+`.prompts` to the report's, and lifts `.warnings` (`critique_per_section`, `critique_text_unchecked`) into the
+report's. Step 5's model check for the critique model is made inside `critiqueReport`, before its first request;
+this card still names the model in the egress notice. Keying `rp` (`P4-T17`) and pricing the run (`P4-T16`), it
+reads the rounds and the model with `critiqueRoundsOf` and `resolveCritiqueModel`, the same functions the stage
+uses. Every error of the stage — a budget refusal (the stage stays pending), a cancel, a refused model, a failed
+critique request or rewrite — reaches this card unchanged; only a rewrite's `stopped-structure-invalid` is
+handled inside the stage. **The signal for `P4-T20` (item 314(c))** is `CritiqueDeps.onRevision`:
+`{ kind: "rewrite-started", round }` before a rewrite's stream, whose deltas then arrive on `onDraft` as
+`composeReport` sends them (generation 1, and 2 after a failed section check), and
+`{ kind: "rewrite-not-applied", round, markdown }` after a rewrite that failed the section check twice, `markdown`
+being the kept draft's; this card passes both through to the report window.
+
 ---
 
 ### P4-T19 — Report window surface, menu entry, `reportWindow` bundle
@@ -2388,6 +2424,13 @@ report call, Cancel, the spend so far, and Save / Export / Copy on completion.
 > (§6.2's code also calls `RH.llm.streamReport` from the window, which `docs/07` §2.3 forbids:
 > "`ui/` never calls an adapter directly"); built by step 2. (The alternative not taken: progress
 > only, and the final text at the end.)
+
+*Noted 2026-10-30 (`P4-T09`; coordinator, `plan/00` §6 item 314(c)):* after a critique rewrite that fails the
+section check twice, the preview is replaced by the kept draft and the final report's banner says why. The
+signal is `CritiqueDeps.onRevision` in `src/pipeline/trendReport/critique.ts`, passed through by `P4-T18`:
+`rewrite-started` (a rewrite's deltas follow on `onDraft`) and `rewrite-not-applied`, whose `markdown` is the
+kept draft to paint again. Whether a rewrite's stream is shown at all is this card's choice under the decision
+above; when it is, `rewrite-not-applied` must put the kept draft back.
 
 **Do NOT.**
 - Do **not** import `llm/` or `zotero/` from `src/ui/` (`research-helper/layering/ui`).
