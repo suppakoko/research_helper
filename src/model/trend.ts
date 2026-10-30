@@ -20,6 +20,7 @@
  */
 
 import type { Doi, ProviderId } from "./ids";
+import type { StoredRedactionMark } from "./summary";
 import type { Usage } from "./usage";
 
 // ---------------------------------------------------------------------------
@@ -347,6 +348,13 @@ export interface CritiqueOutcome {
   readonly unresolved: readonly CritiqueProblem[];
   /** A rewrite followed the last critique, so the shipped text was not re-checked. */
   readonly revisedAfterLastCritique: boolean;
+  /**
+   * The review's revision could not be applied: the rewrite failed the
+   * section check twice, so the shipped text is the earlier draft the last
+   * critique read (owner, `plan/00` §6 item 312(b)). Absent means `false`.
+   * Added 2026-10-30 (`P4-T12`; `docs/07` §5.2's note of that date).
+   */
+  readonly revisionNotApplied?: boolean;
 }
 
 export interface TrendReport {
@@ -402,4 +410,11 @@ export interface TrendReport {
   /** Every item key cited, in order of first appearance. */
   readonly citedItemKeys: readonly string[];
   readonly warnings: readonly string[];
+  /**
+   * What the redaction gate changed when the record was stored (`docs/09`
+   * §2.1, "Persisted records pass one gate"); absent until the report store
+   * (`createReportStore`, `src/zotero/db.ts`) has gated it. Added 2026-10-30
+   * (`P4-T14`; `docs/07` §5.2's note of that date).
+   */
+  readonly redaction?: StoredRedactionMark;
 }

@@ -707,8 +707,8 @@ describe("collection_settings — migration version 5, docs/07 §8.3's statement
     expect(COLLECTION_SETTINGS_DDL).toBe(
       docs.slice(start, docs.indexOf(";", start)),
     );
-    // 6 since P3-T25 appended `summary` after it.
-    expect(LATEST_SCHEMA_VERSION).toBe(6);
+    // 6 since P3-T25 appended `summary` after it, 7 since P4-T14 appended `report`.
+    expect(LATEST_SCHEMA_VERSION).toBe(7);
     const { connection } = await migratedStore();
     expect(
       connection.db
@@ -736,7 +736,7 @@ describe("collection_settings — migration version 5, docs/07 §8.3's statement
       { version: 4, statements: ["CREATE TABLE user_price (model_id TEXT)"] },
     ]);
     connection.db.exec("INSERT INTO user_price VALUES ('kept')");
-    expect(await runMigrations(connection)).toStrictEqual({ from: 4, to: 6 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 4, to: 7 });
     expect(
       connection.db.prepare("SELECT * FROM user_price").all(),
     ).toHaveLength(1);

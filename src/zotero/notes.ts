@@ -6,7 +6,10 @@
  * "Remove generated notes from collection" (section 6 below; `docs/07` §6.4's
  * note of 2026-10-29). Callers: the summarize pipeline's Zotero port,
  * `createZoteroSummarizeLibrary` in `src/bootstrap/registerPipelines.ts`, and
- * the removal command's host in `src/bootstrap/registerUI.ts`.
+ * the removal command's host in `src/bootstrap/registerUI.ts`. Since
+ * `P4-T14`, also FR-25's trend-report note (section 8 below; `docs/06` §14.2's
+ * note of 2026-10-30): {@link writeReportNote}, called by the trend-report run
+ * (`trendReportPipeline.ts`, `P4-T18`), and {@link findReportNote}.
  *
  * ## Why the note lives here and the record does not
  *
@@ -60,6 +63,8 @@ import type {
   StoredSummary,
   SummaryInputScope,
 } from "../model/summary";
+import type { TrendReport } from "../model/trend";
+import { isReportId } from "./db";
 import { getIndexedPageCounts } from "./fulltext";
 import {
   AUTOMATIC_TAG_TYPE,
@@ -1201,4 +1206,323 @@ export async function attachmentPageCounts(
     return undefined;
   }
   return { indexedPages: counts.indexedPages, totalPages: counts.total };
+}
+
+// ---------------------------------------------------------------------------
+// 8. The trend report's note (`P4-T14`; FR-25; `docs/06` §14.2, `docs/07` §6.5)
+// ---------------------------------------------------------------------------
+
+/**
+ * FR-25's tag on every report note (`docs/07` §6.5). It is in
+ * {@link GENERATED_TAG_NAMESPACE}, so FR-20's "Remove Generated Notes from
+ * Collection…" ({@link findGeneratedNotes}) covers report notes unchanged.
+ */
+export const TREND_REPORT_TAG = `${GENERATED_TAG_NAMESPACE}trend-report`;
+
+/** `Zotero.Notes.MAX_TITLE_LENGTH` (`docs/06` §14.2, verified, `notes.js`). */
+export const NOTE_TITLE_MAX_LENGTH = 120;
+
+/**
+ * The report note's dated title (`docs/06` §14.2 and its note of 2026-10-30,
+ * item 3): `heading` — the title block's heading, in the report's language —
+ * then ` (YYYY-MM-DD HH:MM:SS UTC)`. The time is to the second, so a repeated
+ * run that finishes within the first one's minute still gets its own title;
+ * the heading is cut by code point, with `…`, so the whole fits
+ * {@link NOTE_TITLE_MAX_LENGTH} and the date is never what Zotero cuts off.
+ *
+ * Caller: the trend-report run (`trendReportPipeline.ts`, `P4-T18`), which
+ * stores the result as `TrendReport.title`.
+ *
+ * @param heading - e.g. `Research Trends: CRISPR delivery`
+ * @param generatedAtEpochMs - `TrendReport.generatedAtEpochMs`
+ * @returns the title
+ * @throws RangeError when the time is not a date
+ */
+export function datedReportTitle(
+  heading: string,
+  generatedAtEpochMs: number,
+): string {
+  const iso = new Date(generatedAtEpochMs).toISOString();
+  const suffix = ` (${iso.slice(0, 10)} ${iso.slice(11, 19)} UTC)`;
+  const text = heading.replace(/\s+/gu, " ").trim();
+  const room = NOTE_TITLE_MAX_LENGTH - suffix.length;
+  if (text.length <= room) return `${text}${suffix}`;
+  let cut = "";
+  for (const point of text) {
+    if (cut.length + point.length + 1 > room) break;
+    cut += point;
+  }
+  return `${cut.trimEnd()}…${suffix}`;
+}
+
+/** The members of a `TrendReport` the note writer reads. */
+export type ReportNoteSubject = Pick<
+  TrendReport,
+  | "id"
+  | "libraryID"
+  | "collectionKey"
+  | "title"
+  | "language"
+  | "generatedAtEpochMs"
+>;
+
+/**
+ * `docs/07` §6.5's marker, as information only (`plan/00` §6 item 296(b)):
+ * Zotero's note editor drops it on its first save, and nothing looks a note
+ * up by it. The id is one {@link isReportId} accepts, so it cannot hold `--`.
+ */
+export function reportMarkerComment(report: ReportNoteSubject): string {
+  const at = new Date(report.generatedAtEpochMs).toISOString();
+  return `<!-- rh:report v=1 id=${report.id} lang=${report.language} generatedAt=${at} -->`;
+}
+
+/** The text of an `h1`'s inner HTML: tags dropped, the five entities read. */
+function headingText(inner: string): string {
+  return inner
+    .replace(/<[^>]*>/gu, "")
+    .replace(/&lt;/gu, "<")
+    .replace(/&gt;/gu, ">")
+    .replace(/&quot;/gu, '"')
+    .replace(/&#39;/gu, "'")
+    .replace(/&amp;/gu, "&")
+    .trim();
+}
+
+/**
+ * The note's HTML: the rendered report (`renderReportNote`,
+ * `src/pipeline/trendReport/noteHtml.ts`, `P4-T13`) with the dated title as
+ * its first line, then the marker (`docs/06` §14.2's note of 2026-10-30, item
+ * 4). Zotero derives a note's title from its first line, so the title must be
+ * there. Inside the citation wrapper, when there is one: when the report
+ * opens with an `h1` whose text the dated title starts with — the title
+ * block's heading — that `h1` is replaced; otherwise the title is inserted.
+ *
+ * @param html - the rendered report
+ * @param report - its id, title, language and time
+ * @returns the HTML {@link writeReportNote} saves
+ */
+export function reportNoteHtml(
+  html: string,
+  report: ReportNoteSubject,
+): string {
+  const wrapper = /^<div\b[^>]*>/u.exec(html);
+  const head = wrapper?.[0] ?? "";
+  let body = html.slice(head.length);
+  const first = /^<h1>([\s\S]*?)<\/h1>/u.exec(body);
+  if (first !== null) {
+    const text = headingText(first[1] ?? "");
+    if (text !== "" && report.title.startsWith(text)) {
+      body = body.slice(first[0].length);
+    }
+  }
+  return `${head}<h1>${escapeHtml(report.title)}</h1>${reportMarkerComment(report)}${body}`;
+}
+
+/** What a library is, for the report note's checks. */
+export interface ReportLibrary {
+  readonly editable: boolean;
+  /** `user` (My Library), `group`, or anything else (a feed). */
+  readonly kind: "user" | "group" | "other";
+  /** The library's name, as a confirmation question shows it. */
+  readonly name: string;
+}
+
+/**
+ * `Zotero.Libraries.get(libraryID)` as a {@link ReportLibrary}; `undefined`
+ * when the id names no library.
+ */
+export function reportLibrary(libraryID: number): ReportLibrary | undefined {
+  const found: unknown = Zotero.Libraries.get(libraryID);
+  if (!isObject(found)) return undefined;
+  const library = found as {
+    editable?: unknown;
+    libraryType?: unknown;
+    name?: unknown;
+  };
+  return {
+    editable: library.editable === true,
+    kind:
+      library.libraryType === "user"
+        ? "user"
+        : library.libraryType === "group"
+          ? "group"
+          : "other",
+    name: typeof library.name === "string" ? library.name : "",
+  };
+}
+
+/** Whether `collectionKey` names a collection of the library, not in the trash. */
+function collectionInLibrary(
+  libraryID: number,
+  collectionKey: string,
+): boolean {
+  const found: unknown = Zotero.Collections.getByLibraryAndKey(
+    libraryID,
+    collectionKey,
+  );
+  return isObject(found) && (found as { deleted?: unknown }).deleted !== true;
+}
+
+/**
+ * The user's answer to the extra confirmation a group library needs
+ * (`docs/06` §16 item 7; owner, `plan/00` §6 item 286): it exists only when
+ * the user said yes to a question naming the group. The question is the
+ * report window's (`P4-T20`); this records which group it named.
+ */
+export interface GroupWriteConfirmation {
+  readonly confirmed: true;
+  readonly libraryID: number;
+  /** The group's name as the question showed it. */
+  readonly groupName: string;
+}
+
+/** The slice of `Zotero.Item` {@link writeReportNote} uses. */
+export interface ReportNoteItem {
+  libraryID: number;
+  readonly key: string;
+  setNote(content: string): boolean;
+  setCollections(collectionIDsOrKeys: Array<string | number>): void;
+  addTag(name: string, type?: number): boolean;
+  saveTx(options?: { notifierData?: unknown }): Promise<boolean | number>;
+}
+
+/** What {@link writeReportNote} writes. */
+export interface ReportNoteRequest {
+  /** The stored report: its id, library, collection, dated title, language, time. */
+  readonly report: ReportNoteSubject;
+  /** `renderReportNote`'s HTML (`P4-T13`). */
+  readonly html: string;
+  /** Required for a group library, refused when it names another group. */
+  readonly groupConfirmation?: GroupWriteConfirmation | undefined;
+}
+
+/** What {@link writeReportNote} did. Every kind but `written` wrote nothing. */
+export type ReportNoteOutcome =
+  | { readonly kind: "written"; readonly noteKey: string }
+  /** Unknown, read-only, or not a user or group library: offer the export. */
+  | { readonly kind: "export-only" }
+  /** A group library, and no answer naming it: ask, then call again. */
+  | {
+      readonly kind: "group-confirmation-required";
+      readonly libraryID: number;
+      readonly groupName: string;
+    }
+  /** The collection is gone or in the trash. */
+  | { readonly kind: "no-collection" };
+
+/** The platform calls {@link writeReportNote} makes; omit them outside a test. */
+export interface WriteReportNoteDeps {
+  readonly createNote?: () => ReportNoteItem;
+  readonly library?: (libraryID: number) => ReportLibrary | undefined;
+  readonly collectionExists?: (
+    libraryID: number,
+    collectionKey: string,
+  ) => boolean;
+  /** `Zotero.Notes.AUTO_SYNC_DELAY` outside a test. */
+  readonly autoSyncDelay?: () => number;
+}
+
+/**
+ * Save a finished report as FR-25's standalone note in its collection
+ * (`docs/06` §14.2 and its note of 2026-10-30; `docs/07` §6.5).
+ *
+ * Checks first, writing nothing when one fails: an unknown, read-only or
+ * non-user, non-group library gets `export-only` (`docs/06` §14.2); a group
+ * library needs `groupConfirmation` for that library, naming it as it is
+ * named now (`docs/06` §16 item 7); the collection must still exist. Then
+ * `libraryID` before anything else, the HTML ({@link reportNoteHtml}), the
+ * collection, {@link TREND_REPORT_TAG}, and one `saveTx` with Zotero's sync
+ * debounce. **Every call writes a new note** (`docs/06` §16 item 6): no
+ * earlier note is looked up, compared or overwritten.
+ *
+ * Caller: the trend-report run (`trendReportPipeline.ts`, `P4-T18`), which
+ * stores the report again with the returned key as `zoteroNoteKey`; the
+ * group question and the export-only path reach the user through the report
+ * window (`P4-T20`).
+ *
+ * @param request - the report, its HTML and the group answer
+ * @param deps - the platform calls; omit them outside a test
+ * @returns what was done
+ * @throws RangeError, writing nothing, when the report id is not one the
+ *   report store accepts
+ */
+export async function writeReportNote(
+  request: ReportNoteRequest,
+  deps: WriteReportNoteDeps = {},
+): Promise<ReportNoteOutcome> {
+  const { report } = request;
+  if (!isReportId(report.id)) {
+    throw new RangeError(
+      "[research-helper] a report note needs a stored report's id; nothing was written",
+    );
+  }
+  const library = (deps.library ?? reportLibrary)(report.libraryID);
+  if (library === undefined || !library.editable || library.kind === "other") {
+    return { kind: "export-only" };
+  }
+  if (library.kind === "group") {
+    const answer = request.groupConfirmation;
+    if (
+      answer?.confirmed !== true ||
+      answer.libraryID !== report.libraryID ||
+      answer.groupName !== library.name
+    ) {
+      return {
+        kind: "group-confirmation-required",
+        libraryID: report.libraryID,
+        groupName: library.name,
+      };
+    }
+  }
+  if (
+    !(deps.collectionExists ?? collectionInLibrary)(
+      report.libraryID,
+      report.collectionKey,
+    )
+  ) {
+    return { kind: "no-collection" };
+  }
+  const note = (deps.createNote ?? defaultCreateReportNote)();
+  note.libraryID = report.libraryID;
+  note.setNote(reportNoteHtml(request.html, report));
+  note.setCollections([report.collectionKey]);
+  note.addTag(TREND_REPORT_TAG, AUTOMATIC_TAG_TYPE);
+  const delay = (deps.autoSyncDelay ?? (() => Zotero.Notes.AUTO_SYNC_DELAY))();
+  await note.saveTx({ notifierData: { autoSyncDelay: delay } });
+  return { kind: "written", noteKey: note.key };
+}
+
+function defaultCreateReportNote(): ReportNoteItem {
+  return new Zotero.Item("note") as unknown as ReportNoteItem;
+}
+
+/**
+ * The report's note, found by the key the run stored and checked by its tag
+ * (`plan/00` §6 item 296(b); `docs/06` §14.2's note of 2026-10-30, item 5):
+ * the key when it names a note of the library that is not in the trash, has
+ * no parent and carries {@link TREND_REPORT_TAG}; otherwise `undefined`. No
+ * search by tag follows, because every run's report note carries that tag.
+ *
+ * Caller: the report window's "open the note" (`P4-T20`).
+ *
+ * @param libraryID - the report's library
+ * @param storedNoteKey - `TrendReport.zoteroNoteKey`
+ * @returns the note's key, or `undefined`
+ */
+export function findReportNote(
+  libraryID: number,
+  storedNoteKey: string | undefined,
+): string | undefined {
+  if (storedNoteKey === undefined || storedNoteKey === "") return undefined;
+  const found = Zotero.Items.getByLibraryAndKey(libraryID, storedNoteKey);
+  if (
+    found !== false &&
+    found.isNote() &&
+    !found.deleted &&
+    found.parentKey === false &&
+    hasTag(found, TREND_REPORT_TAG)
+  ) {
+    return found.key;
+  }
+  return undefined;
 }

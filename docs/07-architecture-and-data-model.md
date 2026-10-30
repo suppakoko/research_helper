@@ -2483,6 +2483,7 @@ export type SummaryInputScope =
 // src/model/trend.ts
 
 import type { Doi, ProviderId } from "./ids";
+import type { StoredRedactionMark } from "./summary"; // added 2026-10-30 (P4-T14), for TrendReport.redaction
 import type { Usage } from "./usage";
 
 // ---------------------------------------------------------------------------
@@ -2810,6 +2811,12 @@ export interface CritiqueOutcome {
   readonly unresolved: readonly CritiqueProblem[];
   /** A rewrite followed the last critique, so the shipped text was not re-checked. */
   readonly revisedAfterLastCritique: boolean;
+  /**
+   * The review's revision could not be applied: the rewrite failed the section check twice, so the
+   * shipped text is the earlier draft the last critique read (owner, `plan/00` §6 item 312(b)).
+   * Absent means `false`. Added 2026-10-30 (`P4-T12`).
+   */
+  readonly revisionNotApplied?: boolean;
 }
 
 export interface TrendReport {
@@ -2865,8 +2872,44 @@ export interface TrendReport {
   /** Every item key cited, in order of first appearance. */
   readonly citedItemKeys: readonly string[];
   readonly warnings: readonly string[];
+  /**
+   * What the redaction gate changed when the record was stored (`09-…` §2.1, "Persisted records pass one
+   * gate"); absent until the report store has gated it. Added 2026-10-30 (`P4-T14`).
+   */
+  readonly redaction?: StoredRedactionMark;
 }
 ```
+
+> **Added 2026-10-30 (`P4-T14`; `createReportStore`, `gateTrendReport` and `REPORT_VERBATIM_KEYS` in
+> `src/zotero/db.ts`): `redaction`, and how a `TrendReport` is stored.** `09-…` §2.1 has every stored record
+> carry the gate's "partly redacted" mark with its row, as `StoredSummary.redaction` does, and this interface
+> had nowhere to keep it, so it gains the optional member above (the `StoredRedactionMark` of
+> `src/model/summary.ts`; `src/model/trend.ts` imports it). Readings of §8.3's `report` table, *DECIDED
+> 2026-10-30 (coordinator, under `plan/00` §6 item 313)*: (1) **the whole record passes `redactRecord` once,
+> `markdown` included**, with the identifier fields `id`, `collectionKey`, `zoteroNoteKey`, `summaryIds`,
+> `citedItemKeys`, `doi`, `providerId`, `promptId`, `promptVersion`, `modelId` and `pluginVersion` copied
+> unchanged — a `summaryIds` entry carries a `hash:` work key of 40 hexadecimal characters that the catch-all
+> would destroy; every model- or user-written field is gated. (2) **The Markdown always goes to the file**, never
+> only when large: `<data dir>/research-helper/reports/<id>.md`, written first and atomically (a temporary
+> file renamed into place); `json` holds the gated record **without** `markdown`, and a read joins the two
+> again, refusing a row whose file is gone rather than returning a report with no text. (3)
+> **`markdown_path` is relative**, `reports/<id>.md` under `<data dir>/research-helper/`, because the data
+> directory can move (§8.4) and an absolute path would also store the account's folder name. (4) **The `id`
+> must be a file-name-safe identifier** — letters and digits in runs joined by single `-` or `_`, at most 128
+> characters (`REPORT_ID_RE`) — or nothing is written; the run makes one per run (`plan/07` `P4-T18`), so a
+> re-run is a new row and a new file, and a second write of one `id` (the run storing `zoteroNoteKey` after
+> the note is saved) replaces that row and its file. (5) A row write that fails after a new file was written
+> removes the file again.
+
+> **Added 2026-10-30 (`P4-T12`; `scaffoldReport` in `src/pipeline/trendReport/scaffold.ts`):
+> `CritiqueOutcome.revisionNotApplied`.** The owner decided on 2026-10-30 (`plan/00` §6 item 312(b)) that
+> when a `P4-T09` rewrite fails the section check twice the run ships the earlier draft and the banner says
+> the review's revision could not be applied. `revisedAfterLastCritique` cannot say that — the shipped text
+> is then *not* a revision — so the outcome gains the optional member above, set by `critique.ts` (`P4-T09`)
+> and read by the scaffold for the banner and Appendix C. It is optional so that a record stored without it
+> reads as `false`. The scaffold computes `title`, `markdown`, `sections`, `scope`, `reductionPasses`,
+> `bibliography`, `retracted`, `excluded`, `summaryIds`, `qualityProxies`, `critique`, `clustering`,
+> `citedItemKeys` and `warnings` (`ScaffoldedReport`); the run (`P4-T18`) adds the rest.
 
 ```ts
 // src/model/profile.ts
@@ -3287,6 +3330,7 @@ A summary is stored as a **child note** on the item, not in `extra`:
 ### 6.5 `TrendReport` → Zotero
 
 - Written as a **standalone note** inside the target collection, with marker `<!-- rh:report v=1 ... -->` and tag `research_helper/trend-report`. *(Corrected 2026-10-26, `P4-T01`: the tag read `research_helper/report`; `10-requirements-and-user-stories.md` FR-25 and `11-implementation-roadmap.md` §1 Phase 4 both name `research_helper/trend-report`, and two requirement documents settle it against this one bullet.)* *Decided 2026-10-27 (owner, `plan/00` §6 item 296(b)): the report note is found by its stored note item key (`TrendReport.zoteroNoteKey`) and its tag, never by the marker, which Zotero's note editor drops on its first save (`01-zotero-plugin-platform.md` §5.7); the marker stays as information only. The same holds for the overflow note of §6.3 (`overflowNoteHtml` in `src/zotero/itemMapper.ts`, marker `<!-- rh:extra v=1 … -->`). No lookup by any marker is built.*
+  *As built 2026-10-30 (`P4-T14`): `writeReportNote` in `src/zotero/notes.ts` writes it, `findReportNote` finds it by the stored key and the tag, and the marker reads `<!-- rh:report v=1 id=<report id> lang=<en|ko> generatedAt=<ISO-8601 UTC> -->`; every run writes a new note, a read-only library gets the export only, and a group library is written only with the user's answer to a confirmation naming the group (`06-summarization-and-trend-report.md` §14.2's note of that date, §16 items 6 and 7).*
 - Cited works are linked via `zotero://select/library/items/<key>` anchors so the narrative is clickable.
 - Audio is attached as a **child attachment of the report note** — an imported file attachment (`linkMode: "imported_file"`) with the audio MIME type, so it syncs and is deletable through normal Zotero UI. Filenames: `<collection-slug>-trends-<yyyymmdd>-<lang>.<ext>`.
 
@@ -4190,8 +4234,8 @@ Zotero notes / attachments
 | `CollectionProfile` | SQLite `collection_profile` | PK `id` | Invalidated by `membership_hash`. |
 | `Recommendation` + feedback | SQLite `recommendation` | PK `id` | Must remember rejections. |
 | `TrendReport` (structured) | SQLite `report` | PK `id` | |
-| `TrendReport` (markdown, if large) | File | `<data dir>/research-helper/reports/<id>.md` | Keeps the DB small. |
-| `TrendReport` (presentation) | Zotero standalone note | marker + tag | |
+| `TrendReport` (markdown, ~~if large~~ always — §5.2's note of 2026-10-30) | File | `<data dir>/research-helper/reports/<id>.md` | Keeps the DB small. |
+| `TrendReport` (presentation) | Zotero standalone note | ~~marker + tag~~ stored note key + tag (the marker comment is information only; `plan/00` §6 item 296(b); corrected 2026-10-30, `P4-T14`) | |
 | Audio | Zotero attachment | child of report note | Syncs, deletable through normal UI, no orphan files. |
 | Debug bundles | File | `<data dir>/research-helper/logs/` | Explicitly user-exported. |
 
@@ -4340,6 +4384,12 @@ CREATE TABLE recommendation (
 );
 CREATE INDEX idx_rec_profile ON recommendation(profile_id, score DESC);
 
+-- Built 2026-10-30 by P4-T14 as migration version 7, this statement byte for byte. No foreign key
+-- and no index, because none is declared: collection_key and note_key name Zotero objects outside
+-- this database, and the plan/00 §6 item 272(b) precedent keeps a REFERENCES clause off a table
+-- whose target no phase writes. json holds the gated TrendReport without its markdown, which is
+-- always in reports/<id>.md; markdown_path is that path relative to <data dir>/research-helper/
+-- (§5.2's note of 2026-10-30).
 CREATE TABLE report (
   id             TEXT PRIMARY KEY,
   library_id     INTEGER NOT NULL,

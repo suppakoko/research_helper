@@ -84,6 +84,7 @@ import type { SecretStore } from "../../../src/core/secretStore";
 import { L10N_PROGRESS_HEADLINE } from "../../../src/i18n/keys";
 import { reloadingUserPriceStore } from "../../../src/llm/shared/modelCatalogue";
 import type { ChatRequest } from "../../../src/llm/types";
+import type { TrendReport } from "../../../src/model/trend";
 import type { Usage } from "../../../src/model/usage";
 import {
   ceilingStopOf,
@@ -2341,8 +2342,9 @@ describe("P3-T33 — installServices opens the plugin database once and shares i
       path: "/data/research-helper.sqlite",
       schemaFrom: 0,
       // 4 since plan/00 §6 item 265 (b) appended `user_price`; 5 since P3-T15
-      // appended `collection_settings`; 6 since P3-T25 appended `summary`.
-      schemaVersion: 6,
+      // appended `collection_settings`; 6 since P3-T25 appended `summary`; 7
+      // since P4-T14 appended `report`.
+      schemaVersion: 7,
     });
     await settle();
     expect(graph.jobs.attached).toBe(true);
@@ -2392,6 +2394,53 @@ describe("P3-T33 — installServices opens the plugin database once and shares i
     await h.scope.unregisterAll();
     expect(graph.jobs.attached).toBe(false);
     expect(database.events).toStrictEqual(["open", "close"]);
+  });
+
+  // `P4-T14`: the report store is built on the one connection, beside the
+  // summary store, and handed out the same way — nothing once teardown began.
+  it("builds the report store on the one connection and hands out nothing after teardown (P4-T14)", async () => {
+    const database = sqliteDatabase();
+    const markdownFiles = new Map<string, string>();
+    const h = harness({
+      pluginDatabase: {
+        ...database.source,
+        reportFiles: {
+          write: (id, text) => {
+            markdownFiles.set(id, text);
+            return Promise.resolve();
+          },
+          read: (id) => Promise.resolve(markdownFiles.get(id)),
+          exists: (id) => Promise.resolve(markdownFiles.has(id)),
+          remove: (id) => {
+            markdownFiles.delete(id);
+            return Promise.resolve();
+          },
+        },
+      },
+    });
+    const graph = await installServices(h.scope, h.options);
+    const store = await graph.database.reports();
+    expect(store).toBeDefined();
+    const report = {
+      id: "rpt-container-1",
+      libraryID: 1,
+      collectionKey: "COLL2345",
+      generatedAtEpochMs: 5,
+      markdown: "# Research Trends: X\n",
+      sections: [],
+      bibliography: [],
+      warnings: [],
+    } as unknown as TrendReport;
+    await store?.put(report);
+    expect(
+      database.db.prepare("SELECT id, note_key FROM report").all(),
+    ).toMatchObject([{ id: "rpt-container-1", note_key: null }]);
+    expect((await store?.get("rpt-container-1"))?.markdown).toBe(
+      "# Research Trends: X\n",
+    );
+    expect(database.events).toStrictEqual(["open"]);
+    await h.scope.unregisterAll();
+    expect(await graph.database.reports()).toBeUndefined();
   });
 
   // `P3-T26`: `docs/07` §9.3 trigger 1, run once the cache is usable.

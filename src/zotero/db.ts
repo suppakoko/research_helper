@@ -44,6 +44,10 @@
  * - {@link createSummaryStore} — {@link SummaryStore} over the `summary`
  *   table (`P3-T25`; `docs/07` §5.2, §8.3), on the same connection; every
  *   row passes the redaction gate ({@link gateStoredSummary}).
+ * - {@link createReportStore} — {@link ReportStore} over the `report` table
+ *   and its Markdown files in `<data dir>/research-helper/reports/`
+ *   (`P4-T14`; `docs/07` §5.2, §8.3), on the same connection; every report
+ *   passes the redaction gate ({@link gateTrendReport}).
  * - {@link createCacheBlobStore} — `src/core/cache/sqliteCache.ts`'s
  *   `CacheBlobStore` port: `docs/07` §9.2's blob directory for cache values
  *   over 256 KB (`P3-T33`). The `cache_entry` rows themselves are written by
@@ -83,6 +87,7 @@ import {
 } from "../llm/shared/pricing";
 import type { ProviderId } from "../model/ids";
 import type { StoredRedactionMark, StoredSummary } from "../model/summary";
+import type { TrendReport } from "../model/trend";
 
 /** The name `Zotero.DBConnection` resolves in the data directory (§8.2). */
 export const PLUGIN_DATABASE_NAME = "research-helper";
@@ -789,6 +794,293 @@ export function createSummaryStore(db: SqlConnection): SummaryStore {
         await db.queryAsync(SELECT_SUMMARIES_FOR_WORK, [workKey], QUIET),
       );
       return rows.map(storedSummaryFrom);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Stored trend reports (`P4-T14`)
+// ---------------------------------------------------------------------------
+
+/**
+ * `TrendReport`'s identifier fields, copied through the redaction gate
+ * unchanged (`docs/07` §5.2's note of 2026-10-30, item 1). Each is computed by
+ * code or read from Zotero, never written by a model or typed by the user: a
+ * `summaryIds` entry carries a `hash:` work key of 40 hexadecimal characters,
+ * which `redact()`'s catch-all would otherwise destroy, and `id` names the
+ * Markdown file. Every other field — the Markdown, the sections, the
+ * clustering, the critique, the warnings — is gated.
+ */
+export const REPORT_VERBATIM_KEYS: readonly string[] = Object.freeze([
+  "id",
+  "collectionKey",
+  "zoteroNoteKey",
+  "summaryIds",
+  "citedItemKeys",
+  "doi",
+  "providerId",
+  "promptId",
+  "promptVersion",
+  "modelId",
+  "pluginVersion",
+]);
+
+/**
+ * A report id the store accepts (`docs/07` §5.2's note of 2026-10-30, item 4):
+ * runs of letters and digits joined by single `-` or `_` — no dot, no path
+ * separator, no `--` — so `<id>.md` is a file name on every platform, can
+ * reach no other directory, and fits inside the note's marker comment.
+ */
+export const REPORT_ID_RE = /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/;
+
+/** The longest report id the store accepts, in characters. */
+export const REPORT_ID_MAX_LENGTH = 128;
+
+/** Whether `id` is a report id the store accepts ({@link REPORT_ID_RE}). */
+export function isReportId(id: string): boolean {
+  return id.length <= REPORT_ID_MAX_LENGTH && REPORT_ID_RE.test(id);
+}
+
+/**
+ * `report.markdown_path` for a report: relative to
+ * `<data dir>/research-helper/`, because the data directory can move
+ * (`docs/07` §8.4) and an absolute path would also store the account's
+ * folder name.
+ */
+export function reportMarkdownPath(id: string): string {
+  return `reports/${id}.md`;
+}
+
+/**
+ * The one gate (`redactRecord`, `src/core/provenance.ts`) applied to a whole
+ * report, `markdown` included, with {@link REPORT_VERBATIM_KEYS} copied
+ * unchanged. The returned mark is the earlier one (a report gated before)
+ * plus this pass's, as {@link gateStoredSummary} does.
+ *
+ * @param report - the report about to be stored
+ * @returns the report as it may be stored, with its mark
+ */
+export function gateTrendReport(report: TrendReport): TrendReport {
+  const { redaction: earlier, ...rest } = report;
+  const gated = redactRecord(rest, { verbatimKeys: REPORT_VERBATIM_KEYS });
+  const before = earlier ?? {
+    partlyRedacted: false,
+    redactedStrings: 0,
+    droppedFields: 0,
+  };
+  return {
+    ...gated.record,
+    redaction: {
+      partlyRedacted: before.partlyRedacted || gated.mark.partlyRedacted,
+      redactedStrings: before.redactedStrings + gated.mark.redactedStrings,
+      droppedFields: before.droppedFields + gated.mark.droppedFields,
+    },
+  };
+}
+
+/**
+ * The report Markdown files, by report id, as a port: `IOUtils` in the
+ * product ({@link createReportMarkdownFiles}), a map in a unit test.
+ */
+export interface ReportMarkdownFiles {
+  /** Write the file, atomically: the old file or the new one, never half. */
+  write(id: string, text: string): Promise<void>;
+  /** The file's text, or `undefined` when there is no file. */
+  read(id: string): Promise<string | undefined>;
+  exists(id: string): Promise<boolean>;
+  /** Remove the file; no error when it is already gone. */
+  remove(id: string): Promise<void>;
+}
+
+/**
+ * `docs/07` §8.3 and `docs/06` §11.3 D-06-8: report Markdown lives in
+ * `<data dir>/research-helper/reports/`, beside the database in the data
+ * directory (§8.4) — `research-helper` with a hyphen.
+ */
+export function reportMarkdownDirectory(): string {
+  return PathUtils.join(Zotero.DataDirectory.dir, "research-helper", "reports");
+}
+
+/**
+ * {@link ReportMarkdownFiles} over `IOUtils`, the way
+ * {@link createCacheBlobStore} keeps cache blobs: a write goes to a temporary
+ * file renamed into place, the directory is made on the first write and
+ * resolved on every call (a relocated data directory is followed), and only
+ * an id {@link isReportId} accepts becomes a path. No path is logged.
+ *
+ * @param directory - the directory; {@link reportMarkdownDirectory} outside a test
+ * @returns the files
+ */
+export function createReportMarkdownFiles(
+  directory: () => string = reportMarkdownDirectory,
+): ReportMarkdownFiles {
+  const pathOf = (id: string): string => {
+    if (!isReportId(id)) {
+      throw new RangeError(
+        "[research-helper] a report id must be letters and digits joined by " +
+          "single - or _, at most 128 characters",
+      );
+    }
+    return PathUtils.join(directory(), `${id}.md`);
+  };
+  return {
+    async write(id: string, text: string): Promise<void> {
+      const path = pathOf(id);
+      await IOUtils.makeDirectory(directory(), {
+        createAncestors: true,
+        ignoreExisting: true,
+      });
+      await IOUtils.writeUTF8(path, text, { tmpPath: `${path}.tmp` });
+    },
+
+    async read(id: string): Promise<string | undefined> {
+      const path = pathOf(id);
+      if (!(await IOUtils.exists(path))) return undefined;
+      return IOUtils.readUTF8(path);
+    },
+
+    exists: (id: string): Promise<boolean> => IOUtils.exists(pathOf(id)),
+
+    async remove(id: string): Promise<void> {
+      await IOUtils.remove(pathOf(id), { ignoreAbsent: true });
+    },
+  };
+}
+
+/**
+ * The `report` table (`docs/07` §8.3, migration version 7) and its Markdown
+ * files, one `TrendReport` per row. The port is declared here, as
+ * {@link SummaryStore} is, because `zotero/` may not import `pipeline/`.
+ *
+ * Writer: the trend-report run (`trendReportPipeline.ts`, `P4-T18`), which
+ * stores the report, writes its note with `writeReportNote`
+ * (`src/zotero/notes.ts`), then stores it again with `zoteroNoteKey`.
+ * Reader: the report window (`P4-T20`), for the export.
+ */
+export interface ReportStore {
+  /**
+   * Gate `report` ({@link gateTrendReport}; idempotent, its mark kept and
+   * summed), write its Markdown file, then its row, replacing a row and a
+   * file with the same `id`. When the row write fails, a file this call
+   * created is removed again.
+   *
+   * @returns the report as written, with its mark
+   * @throws RangeError, writing nothing, for an id {@link isReportId}
+   *   refuses or an empty collection key
+   */
+  put(report: TrendReport): Promise<TrendReport>;
+  /**
+   * The report with `id`, its Markdown read back from the file; `undefined`
+   * when there is no such row.
+   *
+   * @throws StorageError when the row is not a report or its file is gone
+   */
+  get(id: string): Promise<TrendReport | undefined>;
+}
+
+const UPSERT_REPORT =
+  "INSERT INTO report (id, library_id, collection_key, json, markdown_path, " +
+  "note_key, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?) " +
+  "ON CONFLICT(id) DO UPDATE SET library_id = excluded.library_id, " +
+  "collection_key = excluded.collection_key, json = excluded.json, " +
+  "markdown_path = excluded.markdown_path, note_key = excluded.note_key, " +
+  "generated_at = excluded.generated_at";
+
+const SELECT_REPORT = "SELECT json FROM report WHERE id = ?";
+
+/** A parsed `json` column, checked for the members every reader needs. */
+function storedReportFrom(result: unknown): Omit<TrendReport, "markdown"> {
+  const json = (result as Record<string, unknown>)["json"];
+  let value: unknown;
+  try {
+    value = JSON.parse(String(json));
+  } catch {
+    value = undefined;
+  }
+  const row = value as Partial<TrendReport> | undefined;
+  if (
+    row === undefined ||
+    row === null ||
+    typeof row !== "object" ||
+    typeof row.id !== "string" ||
+    typeof row.libraryID !== "number" ||
+    typeof row.collectionKey !== "string" ||
+    !Array.isArray(row.sections) ||
+    !Array.isArray(row.bibliography) ||
+    !Array.isArray(row.warnings) ||
+    "markdown" in row
+  ) {
+    throw new StorageError(
+      "[research-helper] a report row is not a stored report",
+    );
+  }
+  return row as Omit<TrendReport, "markdown">;
+}
+
+/**
+ * {@link ReportStore} over the plugin's database and the report files
+ * (`P4-T14`; `docs/07` §5.2's note of 2026-10-30, §8.3). Every report passes
+ * {@link gateTrendReport} on the way in, so the row and the file hold only
+ * what the gate lets through, whatever the caller handed in. Every statement
+ * is {@link QUIET}: the `json` parameter is a whole report.
+ *
+ * Constructed on the one shared connection by `installPluginDatabase`
+ * (`src/bootstrap/pluginDatabase.ts`).
+ *
+ * @param db - the connection {@link openPluginDatabase} returned, migrated
+ * @param files - the Markdown files; {@link createReportMarkdownFiles} outside a test
+ * @returns the store
+ */
+export function createReportStore(
+  db: SqlConnection,
+  files: ReportMarkdownFiles = createReportMarkdownFiles(),
+): ReportStore {
+  return {
+    async put(report: TrendReport): Promise<TrendReport> {
+      if (!isReportId(report.id) || report.collectionKey === "") {
+        throw new RangeError(
+          "[research-helper] a report needs a file-name-safe id and a " +
+            "collection key; nothing was stored",
+        );
+      }
+      const row = gateTrendReport(report);
+      const { markdown, ...record } = row;
+      const existed = await files.exists(row.id);
+      await files.write(row.id, markdown);
+      try {
+        await db.queryAsync(
+          UPSERT_REPORT,
+          [
+            row.id,
+            row.libraryID,
+            row.collectionKey,
+            JSON.stringify(record),
+            reportMarkdownPath(row.id),
+            row.zoteroNoteKey ?? null,
+            row.generatedAtEpochMs,
+          ],
+          QUIET,
+        );
+      } catch (error) {
+        if (!existed) await files.remove(row.id).catch(() => undefined);
+        throw error;
+      }
+      return row;
+    },
+
+    async get(id: string): Promise<TrendReport | undefined> {
+      if (!isReportId(id)) return undefined;
+      const rows = resultRows(await db.queryAsync(SELECT_REPORT, [id], QUIET));
+      const first = rows[0];
+      if (first === undefined) return undefined;
+      const record = storedReportFrom(first);
+      const markdown = await files.read(id);
+      if (markdown === undefined) {
+        throw new StorageError(
+          "[research-helper] a stored report's Markdown file is missing",
+        );
+      }
+      return { ...record, markdown };
     },
   };
 }

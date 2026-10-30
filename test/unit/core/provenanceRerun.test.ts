@@ -43,6 +43,7 @@ import {
   LATEST_SCHEMA_VERSION,
   MIGRATIONS,
   PROVENANCE_COLLECTION_INDEX_DDL,
+  REPORT_DDL,
   SCHEMA_VERSION_DDL,
   SEARCH_PROVENANCE_DDL,
   SUMMARY_DDL,
@@ -70,10 +71,18 @@ import {
   collectionMenuOptions,
   type SearchMenuCommands,
 } from "../../../src/ui/menus/registerMenus";
+import { StorageError } from "../../../src/core/errors";
+import type { TrendReport } from "../../../src/model/trend";
 import {
   createProvenanceStore,
+  createReportStore,
+  gateTrendReport,
+  isReportId,
   PLUGIN_DATABASE_FILE,
   PLUGIN_DATABASE_NAME,
+  REPORT_VERBATIM_KEYS,
+  reportMarkdownPath,
+  type ReportMarkdownFiles,
   type SqlConnection,
   type SqlParam,
   type SqlQueryOptions,
@@ -265,9 +274,10 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
   // test/unit/zotero/userPriceStore.test.ts), and with P3-T15, which appended
   // version 5 (`collection_settings`; its checks are in
   // test/unit/pipeline/privacyPolicy.test.ts), and with P3-T25, which appended
-  // version 6 (`summary`; its byte-for-byte check is the next test).
-  it("is version 1 of exactly those two statements, then P3-T34's job table as version 2, P3-T33's cache_entry as version 3, user_price as version 4, collection_settings as version 5 and summary as version 6", () => {
-    expect(LATEST_SCHEMA_VERSION).toBe(6);
+  // version 6 (`summary`; its byte-for-byte check is the next test), and
+  // with P4-T14, which appended version 7 (`report`; checked below too).
+  it("is version 1 of exactly those two statements, then P3-T34's job table as version 2, P3-T33's cache_entry as version 3, user_price as version 4, collection_settings as version 5, summary as version 6 and report as version 7", () => {
+    expect(LATEST_SCHEMA_VERSION).toBe(7);
     expect(MIGRATIONS).toStrictEqual([
       {
         version: 1,
@@ -297,6 +307,10 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
         version: 6,
         statements: [SUMMARY_DDL, SUMMARY_WORK_INDEX_DDL],
       },
+      {
+        version: 7,
+        statements: [REPORT_DDL],
+      },
     ]);
   });
 
@@ -310,14 +324,21 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
     expect(SUMMARY_DDL).not.toContain("REFERENCES");
   });
 
-  it("brings a fresh file to schema_version 6 with §8.3's columns and index, read back", async () => {
+  // P4-T14: `report` is docs/07 §8.3's statement byte for byte, with no
+  // foreign key (none is declared; the plan/00 §6 item 272(b) precedent).
+  it("copies report from docs/07 §8.3 byte for byte, with no foreign key", () => {
+    expect(REPORT_DDL).toBe(docsStatement("CREATE TABLE report ("));
+    expect(REPORT_DDL).not.toContain("REFERENCES");
+  });
+
+  it("brings a fresh file to schema_version 7 with §8.3's columns and index, read back", async () => {
     const connection = sqlite();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 6 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 7 });
     const { db } = connection;
 
     expect(
       db.prepare("SELECT version FROM schema_version").all().map(plain),
-    ).toStrictEqual([{ version: 6 }]);
+    ).toStrictEqual([{ version: 7 }]);
     expect(
       columns(db, "search_provenance").map(({ name, type, notnull, pk }) => [
         name,
@@ -359,16 +380,37 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
       "table:cache_entry",
       "table:collection_settings",
       "table:job",
+      "table:report",
       "table:schema_version",
       "table:search_provenance",
       "table:summary",
       "table:user_price",
     ]);
+    // P4-T14: report's columns and types, in §8.3's order, and no foreign key.
+    expect(
+      columns(db, "report").map(({ name, type, notnull, pk }) => [
+        name,
+        type,
+        notnull,
+        pk,
+      ]),
+    ).toStrictEqual([
+      ["id", "TEXT", 0, 1],
+      ["library_id", "INTEGER", 1, 0],
+      ["collection_key", "TEXT", 1, 0],
+      ["json", "TEXT", 1, 0],
+      ["markdown_path", "TEXT", 0, 0],
+      ["note_key", "TEXT", 0, 0],
+      ["generated_at", "INTEGER", 1, 0],
+    ]);
+    expect(db.prepare("PRAGMA foreign_key_list(report)").all()).toStrictEqual(
+      [],
+    );
   });
 
   it("is idempotent: a second run reads the version and changes nothing", async () => {
     const connection = await migrated();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 6, to: 6 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 7, to: 7 });
     expect(
       one(connection.db, "SELECT COUNT(*) AS n FROM schema_version"),
     ).toStrictEqual({ n: 1 });
@@ -376,11 +418,11 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
 
   it("refuses a file a later plugin version wrote, and leaves it untouched", async () => {
     const connection = await migrated();
-    connection.db.exec("UPDATE schema_version SET version = 7");
+    connection.db.exec("UPDATE schema_version SET version = 8");
     await expect(runMigrations(connection)).rejects.toThrow(/newer/);
     expect(
       one(connection.db, "SELECT version FROM schema_version"),
-    ).toStrictEqual({ version: 7 });
+    ).toStrictEqual({ version: 8 });
   });
 
   it("rolls a failed migration back, leaving the file at its old version", async () => {
@@ -1009,5 +1051,269 @@ describe("P2-T17 — Re-run This Search… is hidden, not disabled, without a ro
       { mode: "rerun", collectionID: 4242 },
     ]);
     expect(menu.probe.errors).toStrictEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. P4-T14 — the report store: the `report` table and its Markdown files
+// ---------------------------------------------------------------------------
+
+/** A synthetic credential shape, never a real key (`docs/09` §2.1's Anthropic pattern). */
+const PLANTED = "sk-ant-" + "x".repeat(30);
+/** A `hash:` work key's 40 hexadecimal characters, which the catch-all would rewrite. */
+const HASH_SUMMARY_ID = `hash:${"a".repeat(40)}:1.0.0:mock-model-2026-01-01`;
+
+function trendReport(overrides: Partial<TrendReport> = {}): TrendReport {
+  return {
+    id: "rpt-20261030-a1",
+    libraryID: 1,
+    collectionKey: "COLL2345",
+    collectionName: "CRISPR delivery",
+    title: "Research Trends: CRISPR delivery (2026-10-30 05:00:00 UTC)",
+    language: "en",
+    generatedAtEpochMs: Date.UTC(2026, 9, 30, 5),
+    pluginVersion: "0.0.2",
+    scope: {
+      totalCount: 1,
+      analysedCount: 1,
+      excludedCount: 0,
+      fullTextCount: 0,
+      abstractCount: 1,
+      yearMin: 2023,
+      yearMax: 2023,
+    },
+    reductionPasses: 1,
+    sections: [
+      {
+        number: 1,
+        heading: "Executive Summary",
+        markdown: "- A finding [[ABCD2345]].",
+        citedItemKeys: ["ABCD2345"],
+      },
+    ],
+    clustering: { themes: [], assignments: [] },
+    bibliography: [
+      {
+        itemKey: "ABCD2345",
+        index: 1,
+        text: "Smith, J. (2023). A paper.",
+        doi: undefined,
+      },
+    ],
+    retracted: [],
+    excluded: [],
+    summaryIds: [HASH_SUMMARY_ID],
+    qualityProxies: {
+      citationDensity: undefined,
+      coverageRatio: 1,
+      brokenCitationCount: 0,
+      meanGroundingScore: undefined,
+      contradictionCount: 0,
+      unresolvedHighSeverityCount: 0,
+    },
+    critique: { rounds: 0, unresolved: [], revisedAfterLastCritique: false },
+    markdown:
+      "# Research Trends: CRISPR delivery\n\n## Executive Summary\n\n- A finding [[ABCD2345]].\n",
+    audioScripts: {},
+    providerId: "openrouter",
+    prompts: [
+      {
+        promptId: "TREND_REPORT_EN",
+        promptVersion: "1.0.0",
+        modelId: "mock-model-2026-01-01",
+        temperature: 0.3,
+      },
+    ],
+    usage: undefined,
+    citedItemKeys: ["ABCD2345"],
+    warnings: [],
+    ...overrides,
+  };
+}
+
+/** {@link ReportMarkdownFiles} over a map, with the writes counted. */
+function memoryFiles(): ReportMarkdownFiles & {
+  readonly files: Map<string, string>;
+  readonly writes: string[];
+} {
+  const files = new Map<string, string>();
+  const writes: string[] = [];
+  return {
+    files,
+    writes,
+    write(id, text) {
+      writes.push(id);
+      files.set(id, text);
+      return Promise.resolve();
+    },
+    read: (id) => Promise.resolve(files.get(id)),
+    exists: (id) => Promise.resolve(files.has(id)),
+    remove(id) {
+      files.delete(id);
+      return Promise.resolve();
+    },
+  };
+}
+
+function reportRows(db: DatabaseSync): Record<string, unknown>[] {
+  return db
+    .prepare(
+      "SELECT id, library_id, collection_key, json, markdown_path, note_key, generated_at " +
+        "FROM report ORDER BY rowid",
+    )
+    .all()
+    .map(plain);
+}
+
+describe("P4-T14 — createReportStore writes the report table and the reports/<id>.md file", () => {
+  it("writes one row with §8.3's columns, the Markdown only in the file, and a relative path", async () => {
+    const connection = await migrated();
+    const files = memoryFiles();
+    const store = createReportStore(connection, files);
+    const report = trendReport();
+    await store.put(report);
+
+    const rows = reportRows(connection.db);
+    expect(rows).toHaveLength(1);
+    const row = rows[0] ?? {};
+    expect(row["id"]).toBe(report.id);
+    expect(row["library_id"]).toBe(1);
+    expect(row["collection_key"]).toBe("COLL2345");
+    expect(row["markdown_path"]).toBe(`reports/${report.id}.md`);
+    expect(reportMarkdownPath(report.id)).toBe(`reports/${report.id}.md`);
+    expect(row["note_key"]).toBeNull();
+    expect(row["generated_at"]).toBe(report.generatedAtEpochMs);
+    const json = JSON.parse(String(row["json"])) as Record<string, unknown>;
+    expect("markdown" in json).toBe(false);
+    expect(json["title"]).toBe(report.title);
+    expect(files.files.get(report.id)).toBe(report.markdown);
+    // Every report statement keeps its bound values out of Zotero's debug log.
+    expect(connection.options.at(-1)).toStrictEqual({ debugParams: false });
+  });
+
+  it("gates the whole record, the Markdown included, and keeps the identifiers verbatim", async () => {
+    const connection = await migrated();
+    const files = memoryFiles();
+    const store = createReportStore(connection, files);
+    const written = await store.put(
+      trendReport({
+        warnings: [`a header carried ${PLANTED}`],
+        markdown: `# Research Trends: X\n\nA pasted ${PLANTED} line.\n`,
+      }),
+    );
+    expect(written.redaction?.partlyRedacted).toBe(true);
+    expect(written.redaction?.redactedStrings).toBe(2);
+    expect(written.summaryIds).toStrictEqual([HASH_SUMMARY_ID]);
+    const row = reportRows(connection.db)[0] ?? {};
+    expect(String(row["json"])).not.toContain(PLANTED);
+    expect(String(row["json"])).toContain(HASH_SUMMARY_ID);
+    expect(files.files.get(written.id)).not.toContain(PLANTED);
+    expect(files.files.get(written.id)).toContain("[redacted:");
+    // The gate on its own: idempotent, the earlier mark kept.
+    const again = gateTrendReport(written);
+    expect(again.markdown).toBe(written.markdown);
+    expect(again.redaction).toStrictEqual(written.redaction);
+    expect(REPORT_VERBATIM_KEYS).not.toContain("markdown");
+    expect(REPORT_VERBATIM_KEYS).not.toContain("warnings");
+  });
+
+  it("replaces the row and file of one id (the note key stored after the note), and reads it back whole", async () => {
+    const connection = await migrated();
+    const files = memoryFiles();
+    const store = createReportStore(connection, files);
+    const first = await store.put(trendReport());
+    await store.put({ ...first, zoteroNoteKey: "NOTE2345" });
+    const rows = reportRows(connection.db);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.["note_key"]).toBe("NOTE2345");
+    const read = await store.get(first.id);
+    expect(read?.zoteroNoteKey).toBe("NOTE2345");
+    expect(read?.markdown).toBe(trendReport().markdown);
+    expect(read?.redaction).toStrictEqual({
+      partlyRedacted: false,
+      redactedStrings: 0,
+      droppedFields: 0,
+    });
+    expect(read?.summaryIds).toStrictEqual([HASH_SUMMARY_ID]);
+  });
+
+  it("keeps an earlier run's row and file when a re-run stores its own report", async () => {
+    const connection = await migrated();
+    const files = memoryFiles();
+    const store = createReportStore(connection, files);
+    await store.put(trendReport());
+    await store.put(
+      trendReport({
+        id: "rpt-20261030-b2",
+        generatedAtEpochMs: Date.UTC(2026, 9, 30, 6),
+        markdown: "# Research Trends: CRISPR delivery\n\nSecond run.\n",
+      }),
+    );
+    expect(reportRows(connection.db).map((r) => r["id"])).toStrictEqual([
+      "rpt-20261030-a1",
+      "rpt-20261030-b2",
+    ]);
+    expect(files.files.get("rpt-20261030-a1")).toBe(trendReport().markdown);
+    expect((await store.get("rpt-20261030-b2"))?.markdown).toContain(
+      "Second run.",
+    );
+  });
+
+  it("refuses an id that is not file-name safe, or an empty collection key, writing nothing", async () => {
+    const connection = await migrated();
+    const files = memoryFiles();
+    const store = createReportStore(connection, files);
+    for (const id of [
+      "",
+      "../escape",
+      "a/b",
+      "a\\b",
+      "a.md",
+      "a--b",
+      "-a",
+      "a_",
+      "x".repeat(129),
+    ]) {
+      expect(isReportId(id), id).toBe(false);
+      await expect(store.put(trendReport({ id }))).rejects.toThrow(RangeError);
+    }
+    await expect(store.put(trendReport({ collectionKey: "" }))).rejects.toThrow(
+      RangeError,
+    );
+    expect(isReportId("x".repeat(128))).toBe(true);
+    expect(isReportId("0f8fad5b-d9cb-469f-a165-70867728950e")).toBe(true);
+    expect(reportRows(connection.db)).toStrictEqual([]);
+    expect(files.writes).toStrictEqual([]);
+  });
+
+  it("removes a file it created when the row write fails, and keeps one that was already there", async () => {
+    const connection = await migrated();
+    const files = memoryFiles();
+    const failing: SqlConnection = {
+      ...connection,
+      queryAsync(sql, params, options) {
+        if (sql.startsWith("INSERT INTO report")) {
+          return Promise.reject(new Error("disk full"));
+        }
+        return connection.queryAsync(sql, params, options);
+      },
+    };
+    const store = createReportStore(failing, files);
+    await expect(store.put(trendReport())).rejects.toThrow("disk full");
+    expect(files.files.has("rpt-20261030-a1")).toBe(false);
+    files.files.set("rpt-20261030-a1", "earlier text");
+    await expect(store.put(trendReport())).rejects.toThrow("disk full");
+    expect(files.files.has("rpt-20261030-a1")).toBe(true);
+  });
+
+  it("answers undefined for no row, and refuses a row whose file is gone", async () => {
+    const connection = await migrated();
+    const files = memoryFiles();
+    const store = createReportStore(connection, files);
+    expect(await store.get("rpt-missing")).toBeUndefined();
+    expect(await store.get("../escape")).toBeUndefined();
+    await store.put(trendReport());
+    files.files.delete("rpt-20261030-a1");
+    await expect(store.get("rpt-20261030-a1")).rejects.toThrow(StorageError);
   });
 });

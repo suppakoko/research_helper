@@ -1,0 +1,137 @@
+key	en	ko (coordinator's draft, awaiting owner approval, G-41)
+reportTitle	Research Trends: {collection} ({date})	연구 동향: {collection} ({date})
+headerScope	{analysed} papers analysed of {total} · {years} · generated {timestamp} by research_helper v{version}	논문 {total}편 중 {analysed}편 분석 · {years} · {timestamp}에 research_helper v{version}로 생성
+headerModels	Provider: {provider} · Models: {models}	제공자: {provider} · 모델: {models}
+headerPrompts	Prompts (version, temperature): {prompts}	지시문(버전, 온도): {prompts}
+headerAnalysis	Analysis: {fullText} full text, {abstract} abstract only · Reduction passes: {passes}	분석: 본문 {fullText}편, 초록만 {abstract}편 · 축약 단계: {passes}
+noYear	n.d.	연도 없음
+bannerTitle	Quality warning.	품질 경고.
+bannerFlaggedOne	The automated review flagged 1 unresolved issue in this report.	자동 검토가 이 보고서에서 해결되지 않은 문제 1건을 찾았습니다.
+bannerFlaggedMany	The automated review flagged {count} unresolved issues in this report.	자동 검토가 이 보고서에서 해결되지 않은 문제 {count}건을 찾았습니다.
+bannerSeeAppendix	See Appendix C. Verify the affected claims against the cited papers before using them.	부록 C를 보세요. 해당 주장은 쓰기 전에 인용된 논문과 대조해 확인하세요.
+bannerNotRechecked	The report text is a revision made after the last review, and it was not checked again.	이 보고서 본문은 마지막 검토 뒤에 고친 것이며, 다시 검토하지 않았습니다.
+bannerRevisionNotApplied	The review asked for a revision that could not be applied, so the report text is the earlier draft the review read.	검토가 요청한 고침을 반영하지 못해, 이 보고서 본문은 검토가 읽은 고치기 전 원고입니다.
+depthLine	Analysis depth, counted by research_helper: {fullText} papers from full text, {abstract} from the abstract only.	분석 깊이(research_helper 집계): 본문으로 {fullText}편, 초록만으로 {abstract}편.
+yearTableCaption	Papers by year, counted by research_helper.	연도별 논문 수(research_helper 집계).
+colYear	Year	연도
+colPapers	Papers	논문 수
+colDominantDesigns	Dominant designs	주요 연구 설계
+colDominantThemes	Dominant themes	주요 주제
+themeNotAnalysed	Theme “{theme}” ({papers} papers) was not analysed: {reason}.	주제 “{theme}”(논문 {papers}편)은 분석하지 못했습니다: {reason}.
+reasonTooLarge	too large to analyse	너무 커서 분석할 수 없음
+reasonNoRepresentative	no representative paper remained after its citations were checked	인용을 검사한 뒤 대표 논문이 남지 않음
+reasonMergeOverBudget	its partial analyses were too large to combine	부분 분석이 너무 커서 합칠 수 없음
+reasonAnalysisFailed	its analysis failed ({code})	분석 실패({code})
+designTableCaption	Study designs, counted by research_helper.	연구 설계별 분포(research_helper 집계).
+colStudyDesign	Study design	연구 설계
+colShare	Share	비율
+designRandomizedControlledTrial	Randomized controlled trial	무작위 대조 시험
+designNonRandomizedTrial	Non-randomized trial	비무작위 시험
+designProspectiveCohort	Prospective cohort	전향적 코호트
+designRetrospectiveCohort	Retrospective cohort	후향적 코호트
+designCaseControl	Case-control	환자-대조군 연구
+designCrossSectional	Cross-sectional	단면 연구
+designCaseSeries	Case series	증례 시리즈
+designCaseReport	Case report	증례 보고
+designSystematicReview	Systematic review	체계적 문헌고찰
+designMetaAnalysis	Meta-analysis	메타분석
+designScopingReview	Scoping review	주제 범위 고찰
+designNarrativeReview	Narrative review	서술적 문헌고찰
+designInVitro	In vitro	시험관 내(in vitro)
+designInVivoAnimal	In vivo (animal)	생체 내(동물)
+designExVivo	Ex vivo	생체 외(ex vivo)
+designComputationalSimulation	Computational simulation	컴퓨터 시뮬레이션
+designMethodDevelopment	Method development	방법 개발
+designBenchmarkStudy	Benchmark study	성능 비교 연구
+designRetrospectiveDatabaseAnalysis	Retrospective database analysis	후향적 데이터베이스 분석
+designQualitativeStudy	Qualitative study	질적 연구
+designProtocol	Protocol	연구 계획서
+designEditorialOrCommentary	Editorial or commentary	사설 또는 논평
+designOther	Other design	기타 설계
+designNotStated	Not stated	밝히지 않음
+retractedHeading	Retracted — not used in this report	철회됨 — 이 보고서에 쓰지 않음
+appendixAHeading	Appendix A — Excluded from synthesis	부록 A — 종합에서 제외된 논문
+appendixANone	No item was excluded from the synthesis.	종합에서 제외된 논문이 없습니다.
+colItem	Item	항목
+colTitle	Title	제목
+colReason	Reason	이유
+colCode	Code	코드
+exclusionRetracted	Retracted	철회됨
+exclusionRetractedBecause	Retracted: {reason}	철회됨: {reason}
+exclusionNoAbstractNoPdf	No abstract and no PDF	초록과 PDF가 없음
+exclusionNonEnglish	Not in English	영어가 아님
+exclusionNonEnglishUnsupported	Not in English, not supported	영어가 아니며 지원하지 않음
+exclusionDuplicateOf	Duplicate of {key}	{key}의 중복
+exclusionExtractionFailed	Text extraction failed	본문 추출 실패
+exclusionSummaryFailed	Summary failed after retries	여러 번 시도했으나 요약 실패
+exclusionOther	Other reason	기타 이유
+appendixBHeading	Appendix B — Provenance	부록 B — 출처와 작성 과정
+runParametersHeading	Run parameters	실행 설정
+paramProvider	Provider: {provider}	제공자: {provider}
+colPrompt	Prompt	지시문
+colVersion	Version	버전
+colModel	Model	모델
+colTemperature	Temperature	온도
+paramReductionPasses	Reduction passes: {passes}	축약 단계: {passes}
+paramReviewRounds	Review rounds: {rounds}	검토 횟수: {rounds}
+paramTargetWords	Target length sent to the model: {words} words	모델에 보낸 목표 길이: {words}단어
+targetWordsCapped	The target length setting was above {max} words, so the target was capped at {max} words, the longest the report's output limit is sized for.	목표 길이 설정이 {max}단어를 넘어, 보고서 출력 상한에 맞춘 최대 길이인 {max}단어로 줄였습니다.
+paramTokens	Tokens of this run: {input} in, {output} out	이번 실행의 토큰: 입력 {input}, 출력 {output}
+paramTotalCost	Total cost of this run: {cost}	이번 실행의 총비용: {cost}
+notReported	not reported	보고되지 않음
+qualityHeading	Automated quality figures	자동 품질 지표
+proxyCitationDensity	Citation density (cited factual sentences / factual sentences): {value}	인용 밀도(인용이 달린 사실 문장 / 사실 문장): {value}
+proxyCoverage	Coverage (distinct cited papers / analysed papers): {value}	포괄도(인용된 서로 다른 논문 / 분석한 논문): {value}
+proxyBroken	Citations removed as invalid: {count}	잘못되어 삭제한 인용: {count}
+proxySplit	Combined citation markers split: {count}	나눈 묶음 인용 표시: {count}
+proxyGrounding	Mean grounding score of the summaries: {value}	요약의 평균 근거 점수: {value}
+proxyContradictions	Contradictions found by the theme analyses: {count}	주제 분석에서 찾은 상충: {count}
+proxyUnresolvedHigh	Unresolved high-severity review findings: {count}	해결되지 않은 심각도 높음 검토 결과: {count}
+notMeasured	not measured	측정하지 않음
+notableRowCount	The Notable Papers table has {rows} rows; 8 to 15 are required.	'주목할 논문' 표의 행이 {rows}개입니다. 8개에서 15개가 필요합니다.
+notableInvalidRows	Rows of the Notable Papers table that cite no analysed paper: {rows}.	'주목할 논문' 표에서 분석한 논문을 인용하지 않은 행: {rows}.
+mixedModels	The summaries were made by more than one model: {models}.	요약을 여러 모델이 만들었습니다: {models}.
+mixedModelCache	Some summaries were reused from a cache entry another model made.	일부 요약은 다른 모델이 만든 저장 결과를 다시 쓴 것입니다.
+mixedPrompts	The summaries were made with more than one version of a prompt: {prompts}.	요약을 여러 버전의 지시문으로 만들었습니다: {prompts}.
+perPaperHeading	Per-paper summaries	논문별 요약
+colSource	Source	원문
+colConfidence	Confidence	신뢰도
+colGrounding	Grounding	근거 점수
+colTokensIn	Tokens in	입력 토큰
+colTokensOut	Tokens out	출력 토큰
+colCost	Cost (USD)	비용(USD)
+colTheme	Theme	주제
+tierAbstract	Abstract	초록
+tierFulltextPdf	Full text (attachment)	본문(첨부 파일)
+tierFulltextEpmc	Full text (Europe PMC)	본문(Europe PMC)
+tierMetadataOnly	Metadata only	서지 정보만
+confidenceHigh	High	높음
+confidenceMedium	Medium	보통
+confidenceLow	Low	낮음
+confidenceNone	None	없음
+noTheme	No theme: {reason}	주제 없음: {reason}
+unclusteredByModel	the clustering left it out	주제 묶기에서 빠짐
+smallTheme	Its theme had fewer papers than the minimum per theme and was dropped.	이 논문의 주제는 주제당 최소 논문 수보다 적어 제외되었습니다.
+unmappedTheme	Its batch's theme matched no theme of the whole collection.	묶음에서 찾은 주제가 컬렉션 전체의 어떤 주제와도 맞지 않았습니다.
+otherThemeName	Other	기타
+otherThemeDefinition	Papers the clustering did not place in any theme.	주제 묶기에서 어떤 주제에도 들어가지 않은 논문.
+appendixCHeading	Appendix C — Unresolved review findings	부록 C — 해결되지 않은 검토 결과
+appendixCNotRun	The automated review did not run for this report.	이 보고서에는 자동 검토를 하지 않았습니다.
+appendixCNone	The automated review left no unresolved finding.	자동 검토에서 해결되지 않은 결과가 없습니다.
+colSeverity	Severity	심각도
+colType	Type	종류
+colSection	Section	장
+colQuote	Quoted text	인용한 글
+colExplanation	Explanation	설명
+colSuggestedFix	Suggested fix	고침 제안
+severityHigh	High	높음
+severityMedium	Medium	보통
+severityLow	Low	낮음
+problemUnsupported	Unsupported claim	근거 없는 주장
+problemMisattributed	Misattributed	출처 잘못 붙임
+problemNumberError	Number error	숫자 오류
+problemOvergeneralized	Overgeneralized	지나친 일반화
+problemOutsideKnowledge	Outside knowledge	외부 지식 사용
+problemMissingContradiction	Missing contradiction	빠뜨린 상충
+problemAbstractOverreach	Claims more than an abstract supports	초록이 뒷받침하는 것보다 많이 주장함
+problemBrokenCitation	Broken citation	잘못된 인용

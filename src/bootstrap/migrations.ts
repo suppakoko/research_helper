@@ -23,7 +23,10 @@
  * without the `REFERENCES work(work_key)` clause (`P3-T25`; owner, `plan/00`
  * §6 item 272(b): no phase writes `work` yet, and whether
  * `Zotero.DBConnection` enforces foreign keys is unverified — the migration
- * that first populates `work` adds it).
+ * that first populates `work` adds it). Version 7 is §8.3's `report` table
+ * (`P4-T14`), with no foreign key and no index because §8.3 declares neither;
+ * the report's Markdown is a file beside the database, not a column
+ * (`docs/07` §5.2's note of 2026-10-30).
  *
  * ## The bookkeeping
  *
@@ -184,6 +187,22 @@ export const SUMMARY_DDL = `CREATE TABLE summary (
 export const SUMMARY_WORK_INDEX_DDL =
   "CREATE INDEX idx_summary_work ON summary(work_key)";
 
+/**
+ * `docs/07` §8.3's `report` table (`P4-T14`), byte for byte. One row per
+ * `TrendReport` (`docs/07` §5.2): `json` is the gated record without its
+ * Markdown, which is always in `<data dir>/research-helper/reports/<id>.md`.
+ * `src/zotero/db.ts`'s `createReportStore` is its only reader and writer.
+ */
+export const REPORT_DDL = `CREATE TABLE report (
+  id             TEXT PRIMARY KEY,
+  library_id     INTEGER NOT NULL,
+  collection_key TEXT NOT NULL,
+  json           TEXT NOT NULL,
+  markdown_path  TEXT,
+  note_key       TEXT,
+  generated_at   INTEGER NOT NULL
+)`;
+
 /** One schema step. */
 export interface Migration {
   /** The version the file is at once this migration has run. */
@@ -222,6 +241,11 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 6,
     statements: [SUMMARY_DDL, SUMMARY_WORK_INDEX_DDL],
+  },
+  // `P4-T14`: the stored trend reports (`docs/07` §5.2, §8.3).
+  {
+    version: 7,
+    statements: [REPORT_DDL],
   },
 ];
 

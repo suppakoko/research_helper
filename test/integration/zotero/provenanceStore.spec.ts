@@ -76,10 +76,14 @@ import {
   type SearchImportViewModel,
 } from "../../../src/ui/viewModels/searchImportViewModel";
 import type { StoredSummary } from "../../../src/model/summary";
+import type { TrendReport } from "../../../src/model/trend";
 import {
   createCollectionSettingsStore,
+  createReportMarkdownFiles,
+  createReportStore,
   createSummaryStore,
   PLUGIN_DATABASE_FILE,
+  reportMarkdownDirectory,
 } from "../../../src/zotero/db";
 
 /** The slice of Mocha's test context this file uses. */
@@ -469,8 +473,9 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
   // which appended `cache_entry` and its two indexes as version 3, and to 4
   // by plan/00 §6 item 265 (b), which appended `user_price` as version 4, and
   // to 5 by P3-T15, which appended `collection_settings` as version 5, and
-  // to 6 by P3-T25, which appended `summary` and `idx_summary_work` as version 6.
-  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 6, with docs/07 §8.3's tables and indexes", async function () {
+  // to 6 by P3-T25, which appended `summary` and `idx_summary_work` as version 6,
+  // and to 7 by P4-T14, which appended `report` as version 7.
+  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 7, with docs/07 §8.3's tables and indexes", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     const store = await provenance();
     const expected = PathUtils.join(
@@ -485,7 +490,7 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       "never Zotero's own database",
     );
     assert.isTrue(await IOUtils.exists(store.path), "the file exists");
-    assert.strictEqual(store.schemaVersion, 6);
+    assert.strictEqual(store.schemaVersion, 7);
 
     const { database } = store;
     assert.strictEqual(
@@ -494,8 +499,8 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
           "SELECT MAX(version) FROM schema_version",
         ),
       ),
-      6,
-      "schema_version reads 6",
+      7,
+      "schema_version reads 7",
     );
     assert.strictEqual(
       Number(
@@ -547,6 +552,7 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
         "table:cache_entry",
         "table:collection_settings",
         "table:job",
+        "table:report",
         "table:schema_version",
         "table:search_provenance",
         "table:summary",
@@ -652,6 +658,136 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       "SELECT COUNT(*) AS n FROM pragma_foreign_key_list('summary')",
     )) as Record<string, unknown>[];
     assert.strictEqual(Number(summaryKeys[0]?.["n"]), 0, "no foreign key");
+    // P4-T14: report's columns and types, in §8.3's order, and no foreign key.
+    const reportColumns = (await database.queryAsync(
+      "SELECT name, type, \"notnull\" AS nn, pk FROM pragma_table_info('report') ORDER BY cid",
+    )) as Record<string, unknown>[];
+    assert.deepEqual(
+      reportColumns.map((row) => [
+        String(row["name"]),
+        String(row["type"]),
+        Number(row["nn"]),
+        Number(row["pk"]),
+      ]),
+      [
+        ["id", "TEXT", 0, 1],
+        ["library_id", "INTEGER", 1, 0],
+        ["collection_key", "TEXT", 1, 0],
+        ["json", "TEXT", 1, 0],
+        ["markdown_path", "TEXT", 0, 0],
+        ["note_key", "TEXT", 0, 0],
+        ["generated_at", "INTEGER", 1, 0],
+      ],
+      "docs/07 §8.3's report columns, read back",
+    );
+    const reportKeys = (await database.queryAsync(
+      "SELECT COUNT(*) AS n FROM pragma_foreign_key_list('report')",
+    )) as Record<string, unknown>[];
+    assert.strictEqual(
+      Number(reportKeys[0]?.["n"]),
+      0,
+      "report: no foreign key",
+    );
+  });
+
+  // P4-T14: a TrendReport through the redaction gate, on the one shared
+  // connection inside Zotero 10.0.3, with its Markdown written through IOUtils
+  // to <data dir>/research-helper/reports/<id>.md (the hyphenated directory).
+  it("stores a TrendReport through the redaction gate, its Markdown under research-helper/reports, and replaces it by id", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const { database } = await provenance();
+    const files = createReportMarkdownFiles();
+    const store = createReportStore(database, files);
+    const planted = "sk-ant-" + "x".repeat(30);
+    const id = `rpt-${TAG}`;
+    const directory = PathUtils.join(
+      Zotero.DataDirectory.dir,
+      "research-helper",
+      "reports",
+    );
+    assert.strictEqual(reportMarkdownDirectory(), directory);
+    const directoryExisted = await IOUtils.exists(directory);
+    const report = {
+      id,
+      libraryID: Zotero.Libraries.userLibraryID,
+      collectionKey: "P4T14ABC",
+      collectionName: "P4-T14 fixture",
+      title: "Research Trends: P4-T14 fixture (2026-10-30 05:06:07 UTC)",
+      language: "en",
+      generatedAtEpochMs: 1,
+      pluginVersion: "0.0.2",
+      scope: {
+        totalCount: 0,
+        analysedCount: 0,
+        excludedCount: 0,
+        fullTextCount: 0,
+        abstractCount: 0,
+        yearMin: undefined,
+        yearMax: undefined,
+      },
+      reductionPasses: 0,
+      sections: [],
+      clustering: { themes: [], assignments: [] },
+      bibliography: [],
+      retracted: [],
+      excluded: [],
+      summaryIds: [`hash:${"b".repeat(40)}:1.0.0:mock-model`],
+      qualityProxies: {
+        citationDensity: undefined,
+        coverageRatio: 0,
+        brokenCitationCount: 0,
+        meanGroundingScore: undefined,
+        contradictionCount: 0,
+        unresolvedHighSeverityCount: 0,
+      },
+      critique: { rounds: 0, unresolved: [], revisedAfterLastCritique: false },
+      markdown: `# Research Trends: P4-T14 fixture\n\n한국어 줄 — ${planted}\n`,
+      audioScripts: {},
+      providerId: "openrouter",
+      prompts: [],
+      usage: undefined,
+      citedItemKeys: [],
+      warnings: [`a header carried ${planted}`],
+    } satisfies TrendReport;
+    try {
+      const written = await store.put(report);
+      assert.isTrue(written.redaction?.partlyRedacted === true, "marked");
+      const path = PathUtils.join(directory, `${id}.md`);
+      assert.isTrue(await IOUtils.exists(path), "the Markdown file exists");
+      const text = await IOUtils.readUTF8(path);
+      assert.isFalse(text.includes(planted), "no planted key in the file");
+      assert.isTrue(text.includes("한국어 줄"), "UTF-8 kept");
+      await store.put({ ...written, zoteroNoteKey: "NOTE2345" });
+      const rows = (await database.queryAsync(
+        "SELECT json, markdown_path, note_key FROM report WHERE id = ?",
+        [id],
+      )) as Record<string, unknown>[];
+      assert.strictEqual(rows.length, 1, "one row per id");
+      assert.strictEqual(String(rows[0]?.["note_key"]), "NOTE2345");
+      assert.strictEqual(
+        String(rows[0]?.["markdown_path"]),
+        `reports/${id}.md`,
+        "relative to <data dir>/research-helper/",
+      );
+      assert.isFalse(String(rows[0]?.["json"]).includes(planted));
+      assert.isFalse(
+        String(rows[0]?.["json"]).includes("한국어 줄"),
+        "no Markdown in json",
+      );
+      const read = await store.get(id);
+      assert.strictEqual(read?.markdown, text, "read back from the file");
+      assert.deepEqual(read?.summaryIds, report.summaryIds, "kept verbatim");
+    } finally {
+      await database
+        .queryAsync("DELETE FROM report WHERE id = ?", [id])
+        .catch(() => undefined);
+      await files.remove(id).catch(() => undefined);
+      if (!directoryExisted) {
+        await IOUtils.remove(directory, { ignoreAbsent: true }).catch(
+          () => undefined,
+        );
+      }
+    }
   });
 
   // P3-T25: a StoredSummary row through the redaction gate, on the one shared

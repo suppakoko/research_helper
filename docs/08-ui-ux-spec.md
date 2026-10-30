@@ -2548,6 +2548,8 @@ Korean has a single plural category, so Fluent selectors need only `*[other]` �
 
 A Korean-locale user reading English-language papers commonly wants an **English** report. Defaulting the report language to the UI language is correct, but it must be overridable both in preferences and per-run in the report window (§6.4).
 
+*Decided 2026-10-26 (owner, `plan/00-task-index.md` §6 item 286); written 2026-10-30 (`P4-T12`):* the words the plugin itself writes **inside a report** — the title block, table headings, appendix labels, the quality banner, the invalid-citation text — follow the **report language**, not the UI language, and live in `src/pipeline/trendReport/reportLabels.ts`, one table per report language (`en`, `ko`), never in a Fluent bundle; the coordinator drafts their Korean and the owner approves it in chat, and until then a `ko` label shows its English and is listed as pending review (`KO_REPORT_LABELS_PENDING_REVIEW`).
+
 ---
 
 ## 11. Implementation checklist

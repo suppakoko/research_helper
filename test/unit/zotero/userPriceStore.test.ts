@@ -142,11 +142,12 @@ describe("plan/00 §6 item 265 (b) — user_price is docs/07 §8.3's, as migrati
   });
 
   // Moved with P3-T15, which appended version 5 (`collection_settings`), and
-  // with P3-T25 (`summary`, version 6): a fresh file now ends at version 6.
+  // with P3-T25 (`summary`, version 6) and P4-T14 (`report`, version 7): a
+  // fresh file now ends at version 7.
   it("migrates a fresh file through version 4 to the latest (6) with user_price's columns, types and key, read back", async () => {
     const connection = sqlite();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 6 });
-    expect(LATEST_SCHEMA_VERSION).toBe(6);
+    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 7 });
+    expect(LATEST_SCHEMA_VERSION).toBe(7);
     expect(
       connection.db
         .prepare("PRAGMA table_info(user_price)")
@@ -178,7 +179,7 @@ describe("plan/00 §6 item 265 (b) — user_price is docs/07 §8.3's, as migrati
       { version: 3, statements: ["CREATE TABLE cache_entry (key TEXT)"] },
     ]);
     connection.db.exec("INSERT INTO cache_entry VALUES ('kept')");
-    expect(await runMigrations(connection)).toStrictEqual({ from: 3, to: 6 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 3, to: 7 });
     expect(
       connection.db.prepare("SELECT key FROM cache_entry").all(),
     ).toHaveLength(1);
@@ -422,8 +423,9 @@ describe("installPluginDatabase — the price table on the one shared connection
     const written = database.prices.upsert(TERRA);
     await written;
     const open = await database.ready;
-    // 5 since P3-T15 appended `collection_settings`; 6 since P3-T25 `summary`.
-    expect(open?.schemaVersion).toBe(6);
+    // 5 since P3-T15 appended `collection_settings`; 6 since P3-T25 `summary`;
+    // 7 since P4-T14 `report`.
+    expect(open?.schemaVersion).toBe(7);
     expect(held.events).toStrictEqual(["open"]);
     expect(await database.prices.list()).toStrictEqual([TERRA]);
     expect(await open?.prices.list()).toStrictEqual([TERRA]);

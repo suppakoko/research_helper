@@ -1526,6 +1526,32 @@ reading. `docs/06` §9.2's note of this date.
 the section check twice states that the review's revision could not be applied (`P4-T09` step 7). Its
 words are one more report-language label in `reportLabels.ts`, under this card's Korean rule.
 
+*As built 2026-10-30 (`plan/00` §6 item 315; no model, no network; `plan/reports/P4-T12.md`).*
+`src/pipeline/trendReport/scaffold.ts` declares `scaffoldReport`, `bibliographyKeys`,
+`checkNotablePapers`, `yearRows`, `designFrequencies`, `qualityProxiesOf`, `titleBlock`, `qualityBanner`,
+`appendixA`, `appendixB`, `appendixC`, `formatTimestamp`, `inertText`, the types `ScaffoldPaper`,
+`ScaffoldInput`, `ScaffoldedReport`, `NotablePapersCheck`, `YearRow`, `DesignCount`, and the constants
+`NOTABLE_PAPERS_MIN`, `NOTABLE_PAPERS_MAX`, `DOMINANT_PER_YEAR`, `PREAMBLE_DROPPED_WARNING`,
+`NOTABLE_PAPERS_INVALID_WARNING`; `src/pipeline/trendReport/reportLabels.ts` declares
+`EN_REPORT_LABELS`, `KO_REPORT_LABELS` (only "[인용 삭제: 잘못된 참조]", item 292(b)),
+`KO_REPORT_LABELS_PENDING_REVIEW` (every other key), `STUDY_DESIGN_LABEL_KEYS`, `ReportLabelKey`,
+`reportLabel`, `reportLabels`, `isKoLabelPending`, `fillLabel` and `labelPlaceholders`. The earlier
+cards' English (`OTHER_THEME_NAME`, `OTHER_THEME_DEFINITION`, `SMALL_THEME_REASON`,
+`UNMAPPED_THEME_REASON`, `INVALID_CITATION_TEXT`, `DEFAULT_RETRACTED_HEADING`, `DIGEST_NO_YEAR`) is
+referenced as the `en` values, not moved. The readings are `docs/06` §9.1's notes of this date,
+several *DECIDED 2026-10-30 (coordinator, under `plan/00` §6 item 313)*. Outside `Files`, two small
+additions the decided banner needed: `CritiqueOutcome.revisionNotApplied` (optional) in `docs/07` §5.2
+and `src/model/trend.ts`, with a dated note. **Callers (rule 10):** nothing calls it yet. The run
+(`trendReportPipeline.ts`, `P4-T18`) calls `bibliographyKeys` on the shipped draft's sections, formats
+those keys through `BibliographyPort.formatBibliography` and the retracted items through
+`formatRetracted`, then calls `scaffoldReport` with the current run's `CompositionPlan` (never a cached
+report's) and spreads the result into the stored `TrendReport`; `critique.ts` (`P4-T09`) sets
+`CritiqueOutcome.revisionNotApplied`; `P4-T21` passes `language: "ko"`, and `reportLabel("ko",
+"invalidCitation")` and the retracted heading to `compose.ts`, `exportMarkdown.ts` and `noteHtml.ts`. The
+constructing file is `src/bootstrap/registerPipelines.ts` (`P4-T18`); nothing is constructed — pure
+functions and constants. No section-origin claim is built (item 315): it would go in the header's analysis
+line and a per-paper column of Appendix B once `P3-T22` passes.
+
 ---
 
 ### P4-T13 — Markdown → Zotero note HTML, sanitized
@@ -1722,6 +1748,27 @@ shared file under the wave rules. Estimate risk *(review 2026-10-25)*: this card
 the note writer, the `report` store with its migration, and the report file — where `P3-T33` and
 `P3-T34` were priced at 1.0 d each for a store and its migration; expect 1.5–1.75 d, or split the
 store into its own card.
+
+> **As built 2026-10-30 (`plan/00` §6 item 315; fake model only, personal library only).** `P3-T25` and
+> `P3-T29` were built before this card, so the `report` table is **migration version 7** and the note
+> writer sits beside theirs. Built: `writeReportNote`, `datedReportTitle`, `reportNoteHtml`,
+> `reportMarkerComment`, `reportLibrary`, `findReportNote`, `TREND_REPORT_TAG` and the types
+> `ReportNoteRequest`, `ReportNoteOutcome`, `GroupWriteConfirmation` in `src/zotero/notes.ts`;
+> `createReportStore`, `ReportStore`, `gateTrendReport`, `REPORT_VERBATIM_KEYS`, `isReportId`,
+> `REPORT_ID_RE`, `createReportMarkdownFiles`, `reportMarkdownDirectory`, `reportMarkdownPath` in
+> `src/zotero/db.ts`; `REPORT_DDL` in `src/bootstrap/migrations.ts`; `OpenPluginDatabase.reports` and
+> `PluginDatabase.reports()` in `src/bootstrap/pluginDatabase.ts`. **Rule 10:** the constructing file is
+> `installPluginDatabase` (`createReportStore` on the one connection); the caller of the store, of
+> `datedReportTitle` and of `writeReportNote` is `trendReportPipeline.ts` (`P4-T18`), which receives
+> `graph.database.reports` through `installServices` (that card's `container.ts` row) — nothing calls
+> them before that card; the
+> group-library question, the "export only" path and `findReportNote` reach the user through the report
+> window (`P4-T20`). Outside `Files`, each forced: `src/model/trend.ts` (`TrendReport.redaction`,
+> declared in `docs/07` §5.2 first), `test/unit/zotero/reportNote.test.ts` (the argument checks), a
+> `container.test.ts` case for the store's wiring, and the schema-version pin moved 6 → 7 in five unit
+> tests as `P3-T25` did. Readings decided under item 313 are in `docs/06` §14.2's and `docs/07` §5.2's
+> notes of this date. Step 5 holds with no change: a report note is a standalone member of its
+> collection with a tag in the `research_helper/` namespace (asserted in `reportNote.spec.ts`).
 
 ---
 

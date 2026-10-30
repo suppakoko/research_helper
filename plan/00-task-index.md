@@ -2477,6 +2477,13 @@ the caller of what the card builds; if it does not, the caller is added with a d
     from, because item 286 decided there are no section-origin claims before `P3-T22` passes. New user-visible strings
     and report-language labels stay en-US until the owner reviews the Korean in a batch (G-41).
 
+316. **Phase 4 wave after item 315, 2026-10-30.** **DECIDED 2026-10-30 (coordinator, under item 313):** the
+    coordinator-level readings recorded by `P4-T12` and `P4-T14` (their reports' decision lists) stand. `P4-T09`
+    (self-critique pass, revision loop, warning banner) runs next, alone, as the build/Zotero owner. It is the last
+    card before `P4-T18`. The 136 pending `ko` report labels are drafted in `plan/reports/ko-draft-report-labels.tsv`
+    for the owner's batched review (G-41). A transient 2-test unit failure that `P4-T14` saw once was not reproduced
+    in six later full runs, and is watched.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

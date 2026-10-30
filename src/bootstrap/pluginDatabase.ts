@@ -11,7 +11,9 @@
  * (`P2-T17`), the cache (`P3-T33`), the job store (`P3-T34`), the user price
  * table (`user_price`, `plan/00` §6 item 265 (b), owner, 2026-10-21) and the
  * summary store (`createSummaryStore`, built here by `P3-T29`; this line
- * said "when `P3-T26` adds it" until 2026-10-29).
+ * said "when `P3-T26` adds it" until 2026-10-29) and the report store
+ * (`createReportStore`, `P4-T14`: the `report` table and the Markdown files
+ * in `<data dir>/research-helper/reports/`).
  *
  * ## Why the open is synchronous and the migrations are not
  *
@@ -58,8 +60,11 @@ import type { UserPriceStore } from "../llm/shared/pricing";
 import {
   createJobStore,
   createProvenanceStore,
+  createReportStore,
   createSummaryStore,
   createUserPriceStore,
+  type ReportMarkdownFiles,
+  type ReportStore,
   type SqlConnection,
   type SummaryStore,
 } from "../zotero/db";
@@ -74,6 +79,11 @@ export interface PluginDatabaseSource {
   path(): string;
   /** `src/zotero/db.ts`'s `createCacheBlobStore()`. */
   readonly blobs: CacheBlobStore;
+  /**
+   * The report Markdown files (`P4-T14`); absent, `src/zotero/db.ts`'s
+   * `createReportMarkdownFiles()` in `<data dir>/research-helper/reports/`.
+   */
+  readonly reportFiles?: ReportMarkdownFiles;
 }
 
 /** The database once it is open and migrated. */
@@ -96,6 +106,13 @@ export interface OpenPluginDatabase {
    * product.
    */
   readonly summaries: SummaryStore;
+  /**
+   * The `report` table and its Markdown files (`P4-T14`'s
+   * `createReportStore`), on the connection. The trend-report run
+   * (`trendReportPipeline.ts`, `P4-T18`) receives it through
+   * {@link PluginDatabase.reports}.
+   */
+  readonly reports: ReportStore;
 }
 
 /** {@link installPluginDatabase}'s answer, held on the service graph. */
@@ -124,6 +141,15 @@ export interface PluginDatabase {
    * summarize pipeline reads it as `store`; the item pane may too.
    */
   readonly summaries: () => Promise<SummaryStore | undefined>;
+  /**
+   * The report store (`P4-T14`) once the database is open, handed out as
+   * {@link summaries} is: each call waits for {@link ready}, resolves
+   * `undefined` without a database or once teardown has begun, and every
+   * call made through the store it returns is tracked, so teardown waits for
+   * a report being written before the connection closes. `installServices`
+   * passes it to the trend-report run (`P4-T18`).
+   */
+  readonly reports: () => Promise<ReportStore | undefined>;
   /**
    * Attach the job queue's store once the database is ready, then run
    * `docs/07` §7.6's startup recovery (not awaited; teardown awaits it).
@@ -193,6 +219,10 @@ export function installPluginDatabase(
         provenance: createProvenanceStore(connection),
         prices: createUserPriceStore(connection),
         summaries: createSummaryStore(connection),
+        reports:
+          source.reportFiles === undefined
+            ? createReportStore(connection)
+            : createReportStore(connection, source.reportFiles),
       };
     } catch (error) {
       logger.error(
@@ -327,11 +357,24 @@ export function installPluginDatabase(
     };
   };
 
+  // The report store (`P4-T14`), handed out and tracked as the summary
+  // store is.
+  const reports = async (): Promise<ReportStore | undefined> => {
+    const open = await ready;
+    if (open === undefined || closing) return undefined;
+    const store = open.reports;
+    return {
+      put: (report) => tracked(store.put(report)),
+      get: (id) => tracked(store.get(id)),
+    };
+  };
+
   return {
     ready,
     cache,
     prices,
     summaries,
+    reports,
     attachJobs(jobs: JobQueue): void {
       recovering = ready.then(async (open) => {
         if (open === undefined) return;
