@@ -726,7 +726,9 @@ describe("P4-T16: the synthesis calls of docs/06 §5.4's 42-paper example", () =
     });
     expect(byKind("TREND_REPORT_EN")).toMatchObject({
       inputTokens: withHeadroom(62_000),
-      outputTokens: 6_000,
+      // 23 000 since prompt 1.0.1 (owner, plan/00 §6 item 311(c)), read
+      // through the registry (was 6 000).
+      outputTokens: 23_000,
       language: "en",
     });
     expect(byKind("SELF_CRITIQUE")).toMatchObject({
@@ -761,11 +763,12 @@ describe("P4-T16: languages, critique rounds and models", () => {
     expect(countOf(both.calls, "THEME_CLUSTER")).toBe(1);
     expect(countOf(both.calls, "CLUSTER_REDUCE")).toBe(6); // item 309(b)
     expect(both.calls.length).toBe(one.calls.length + 3);
-    // TREND_REPORT_KO's ceiling is its own 7 000 (docs/06 §5.2), no factor.
+    // TREND_REPORT_KO's ceiling is its own 26 000 (docs/06 §5.2; 7 000 until
+    // prompt 1.0.1, owner, plan/00 §6 item 311(c)), no factor.
     const ko = both.calls.filter((c) => c.kind === "TREND_REPORT_KO");
     expect(ko.map((c) => [c.outputTokens, c.language])).toEqual([
-      [7_000, "ko"],
-      [7_000, "ko"],
+      [26_000, "ko"],
+      [26_000, "ko"],
     ]);
   });
 
@@ -1133,9 +1136,11 @@ describe("P4-T16: the tables it transcribes", () => {
   );
 
   it("transcribes docs/06 §5.2's seven synthesis input budgets, and the fixed ceilings match the prompt files", () => {
+    // A struck figure is skipped for the one after it: the report rows read
+    // "~~6 000~~ 23 000" since 2026-10-30 (owner, plan/00 §6 item 311(c)).
     for (const [kind, budget] of Object.entries(SYNTHESIS_INPUT_BUDGETS)) {
       const row = new RegExp(
-        String.raw`^\| \`${kind}\`[^|]*\| ([\d ]+) \| (~~)?([\d ]+)`,
+        String.raw`^\| \`${kind}\`[^|]*\| ([\d ]+) \| (~~[\d ]+~~ )?([\d ]+)`,
         "m",
       ).exec(doc);
       expect(row, kind).not.toBeNull();

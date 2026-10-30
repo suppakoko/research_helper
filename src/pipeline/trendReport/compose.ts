@@ -35,9 +35,13 @@
  *    with the failure named in `{{REVISION_NOTES}}`; check 2 is
  *    `validateCitations` (`P4-T10`), which replaces an invalid marker
  *    visibly, with no model call; checks 3–5 are measured for Appendix B.
+ *    When the one fresh generation fails check 1 again, the outcome is
+ *    `stopped-structure-invalid` with {@link STRUCTURE_INVALID_L10N}: the run
+ *    stops before anything is written (owner, `plan/00` §6 item 311(a)).
  *
  * The readings these steps needed are `docs/12` §10's note of 2026-10-29 and
- * `docs/06` §9.2's.
+ * `docs/06` §9.2's; `docs/12` §10's notes of 2026-10-30 record the owner's
+ * decisions on them (item 311).
  *
  * **Model output is untrusted.** The report text is checked, never trusted:
  * its headings against the template's, every marker against the valid set;
@@ -54,6 +58,7 @@ import type { ProgressReporter } from "../../core/jobQueue/progress";
 import type { LlmPool } from "../../core/jobQueue/queue";
 import type { Logger } from "../../core/logger";
 import type { SearchProvenance, SourceProvenance } from "../../core/provenance";
+import type { MainWindowMessageId } from "../../i18n/keys";
 import { estTokens } from "../../llm/shared/tokenEstimate";
 import type {
   BudgetGuard,
@@ -106,6 +111,15 @@ export const REPORT_GENERATIONS_MAX = 2;
 
 /** `docs/06` §9.1's eleven level-2 sections. */
 export const REPORT_SECTION_COUNT = 11;
+
+/**
+ * The stop message when the one fresh generation fails check 1 again (owner,
+ * `plan/00` §6 item 311(a); `docs/12` §10's note of 2026-10-30, reading (3)).
+ * No argument. Main-window bundle, beside the other report stops; its Korean
+ * is on `KO_PENDING_REVIEW` as a commented stub (`G-41`).
+ */
+export const STRUCTURE_INVALID_L10N =
+  "research-helper-report-stopped-structure-invalid" as const satisfies MainWindowMessageId;
 
 /** `{{SOURCES}}` when neither a search record nor a catalogue names one (item 286). */
 export const SOURCES_NOT_RECORDED = "not recorded";
@@ -447,13 +461,15 @@ export interface ComposedReport extends ComposeOutcomeBase {
 }
 
 /**
- * The regeneration failed check 1 too. **Open for the owner (2026-10-29,
- * `docs/12` §10's note of this date):** what the run then does and tells the
- * user. Built provisionally as an outcome with no report text and no
- * message id; `P4-T18` maps it once decided.
+ * The regeneration failed check 1 too. The run stops before anything is
+ * written and says why; the summaries and cached stage results are kept
+ * (owner, `plan/00` §6 item 311(a); `docs/12` §10's note of 2026-10-30,
+ * reading (3)). No third request and no report text. `P4-T18` ends the job on
+ * it, as on the other report stops.
  */
 export interface StructureInvalidOutcome extends ComposeOutcomeBase {
   readonly status: "stopped-structure-invalid";
+  readonly messageId: typeof STRUCTURE_INVALID_L10N;
   /** The second answer's check. */
   readonly structure: HeadingCheck;
 }
@@ -913,7 +929,8 @@ export function checkHeadings(
  * The structure note the one fresh generation adds to `{{REVISION_NOTES}}`
  * (`docs/12` §10's note of 2026-10-29, reading (2)). It names the missing
  * expected headings by their exact text and quotes nothing from the answer.
- * **Open for the owner (2026-10-29):** new prompt wording.
+ * The wording is approved as drafted (owner, `plan/00` §6 item 311(b),
+ * 2026-10-30).
  */
 export function structureRevisionNote(check: HeadingCheck): string {
   const problems: string[] = [];
@@ -1236,7 +1253,12 @@ export async function composeReport(
           outOfOrder: structure.outOfOrder,
         },
       );
-      return { ...base(), status: "stopped-structure-invalid", structure };
+      return {
+        ...base(),
+        status: "stopped-structure-invalid",
+        messageId: STRUCTURE_INVALID_L10N,
+        structure,
+      };
     }
   }
 

@@ -120,6 +120,11 @@ export type PromptId = (typeof PROMPT_IDS)[number];
  * here; a released file is never edited in place (`docs/12` §17.5). The old
  * file may stay in the source list handed to {@link createPromptRegistry}, which
  * keeps it readable through {@link PromptRegistry.getVersion}.
+ *
+ * `TREND_REPORT_EN` and `TREND_REPORT_KO` are at 1.0.1: a PATCH that raised
+ * only their output ceilings, 6 000 → 23 000 and 7 000 → 26 000, with the
+ * text byte for byte unchanged and `cacheEpoch` kept at 1 (owner, `plan/00`
+ * §6 item 311(c); `docs/12` §10 and §17.3, notes of 2026-10-30).
  */
 export const PROMPT_FILE_NAMES: Readonly<Record<PromptId, string>> =
   Object.freeze({
@@ -130,8 +135,8 @@ export const PROMPT_FILE_NAMES: Readonly<Record<PromptId, string>> =
     CHUNK_REDUCE: "chunk-reduce.v1.0.0.md",
     THEME_CLUSTER: "theme-cluster.v1.0.0.md",
     CLUSTER_REDUCE: "cluster-reduce.v1.0.0.md",
-    TREND_REPORT_EN: "trend-report-en.v1.0.0.md",
-    TREND_REPORT_KO: "trend-report-ko.v1.0.0.md",
+    TREND_REPORT_EN: "trend-report-en.v1.0.1.md",
+    TREND_REPORT_KO: "trend-report-ko.v1.0.1.md",
     SELF_CRITIQUE: "self-critique.v1.0.0.md",
     THEME_MERGE: "theme-merge.v1.0.0.md",
     CLUSTER_REDUCE_MERGE: "cluster-reduce-merge.v1.0.0.md",

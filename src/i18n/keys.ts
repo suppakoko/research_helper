@@ -480,6 +480,10 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // plan/00 §6 item 309(g)). See NO_THEME_ANALYSED_L10N in
   // src/pipeline/trendReport/themeAnalysis.ts.
   "research-helper-report-stopped-no-theme-analysed",
+  // P4-T08: the report run stopped because the one fresh generation failed
+  // the section check again (owner, plan/00 §6 item 311(a)). See
+  // STRUCTURE_INVALID_L10N in src/pipeline/trendReport/compose.ts.
+  "research-helper-report-stopped-structure-invalid",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -1071,6 +1075,12 @@ export const KO_PENDING_REVIEW = [
   // over its budget (309(e)) and no theme analysed (309(g)), left this list on
   // 2026-10-29: the owner approved the coordinator's Korean (`G-41`, plan/00
   // §6 item 310(a)), so both are on KO_PRESENT.
+  // `P4-T08`'s stop when the one fresh generation fails the section check
+  // again (owner, plan/00 §6 item 311(a), 2026-10-30). `G-41` owns the
+  // translation; the `ko-KR` bundle carries it as a commented stub with its
+  // English source, and nothing was machine-translated. The coordinator
+  // drafts the Korean for the owner.
+  "research-helper-report-stopped-structure-invalid",
   // --- searchDialog (62) ---
   // `P1-T45`. On this list and not on `KO_PRESENT`: the `ko-KR` bundle carries
   // all three as commented stubs with their English source, which the

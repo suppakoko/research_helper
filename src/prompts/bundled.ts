@@ -35,7 +35,10 @@
  * `TREND_REPORT_EN`/`_KO` (`P4-T08`) and `SELF_CRITIQUE` (`P4-T09`).
  * `THEME_MERGE` and `CLUSTER_REDUCE_MERGE` are approved as drafted, and
  * `THEME_CLUSTER`'s three numbers moved to its user text (decided
- * 2026-10-26, owner, `plan/00` §6 item 290(a) and (b)).
+ * 2026-10-26, owner, `plan/00` §6 item 290(a) and (b)). `TREND_REPORT_EN` and
+ * `TREND_REPORT_KO` are the first prompts with a superseded version in the
+ * bundle: 1.0.1 raised their output ceilings only (owner, `plan/00` §6 item
+ * 311(c), 2026-10-30).
  */
 
 import chunkMapV100 from "./chunk-map.v1.0.0.md" with { type: "text" };
@@ -55,7 +58,9 @@ import selfCritiqueV100 from "./self-critique.v1.0.0.md" with { type: "text" };
 import themeClusterV100 from "./theme-cluster.v1.0.0.md" with { type: "text" };
 import themeMergeV100 from "./theme-merge.v1.0.0.md" with { type: "text" };
 import trendReportEnV100 from "./trend-report-en.v1.0.0.md" with { type: "text" };
+import trendReportEnV101 from "./trend-report-en.v1.0.1.md" with { type: "text" };
 import trendReportKoV100 from "./trend-report-ko.v1.0.0.md" with { type: "text" };
+import trendReportKoV101 from "./trend-report-ko.v1.0.1.md" with { type: "text" };
 
 /** Every bundled prompt file, active or superseded. */
 export const PROMPT_SOURCE_FILES: readonly PromptSourceFile[] = Object.freeze([
@@ -74,6 +79,10 @@ export const PROMPT_SOURCE_FILES: readonly PromptSourceFile[] = Object.freeze([
   { fileName: "cluster-reduce.v1.0.0.md", text: clusterReduceV100 },
   { fileName: "trend-report-en.v1.0.0.md", text: trendReportEnV100 },
   { fileName: "trend-report-ko.v1.0.0.md", text: trendReportKoV100 },
+  // 1.0.1: the ceiling raised, a PATCH; 1.0.0 stays so a stored report naming
+  // it can be explained (owner, plan/00 §6 item 311(c); docs/12 §17.3, §17.5).
+  { fileName: "trend-report-en.v1.0.1.md", text: trendReportEnV101 },
+  { fileName: "trend-report-ko.v1.0.1.md", text: trendReportKoV101 },
   { fileName: "self-critique.v1.0.0.md", text: selfCritiqueV100 },
   { fileName: "theme-merge.v1.0.0.md", text: themeMergeV100 },
   {

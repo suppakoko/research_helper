@@ -1783,6 +1783,21 @@ export interface TTSProvider {
 > smaller, since a theme needs a paper. `reportPlanLines` in `src/ui/dialogs/costConfirmDialog.ts`
 > passes it as `$themes`, so "Grouping the papers into up to { $themes } themes…" names the number
 > the estimate reserved, `Other` included, rather than K.
+>
+> **Decided 2026-10-30 (owner, `plan/00` §6 item 311(c)): the report calls' ceilings rise, and the
+> estimate follows them.** `TREND_REPORT_EN`'s `max_tokens` is 23 000 (was 6 000) and
+> `TREND_REPORT_KO`'s 26 000 (was 7 000), at prompt version 1.0.1 (`12-prompt-library.md` §10 carries
+> the derivation, §17.3 the PATCH bump). Point (1) already prices a synthesis call's output at its
+> prompt's ceiling through the registry (`resolveMaxTokens`), so `planSynthesis` changes nothing in
+> code: each report reservation, and each rewrite reservation of point (5), now carries 23 000 or
+> 26 000 output tokens. **The 42-paper figures of item 309(b)'s note above, at the example's  / 5
+> and the same synthetic overheads:** with K = 5 passed, still 53 calls (11 synthesis), about **.57**
+> — .60 of summaries and **.97** of synthesis — where that note says .06 and .46; with K
+> unset, 56 calls and about **.14** (.54 of synthesis), where it says .63. The difference is the
+> two English report reservations, the report and its possible rewrite, each 17 000 output tokens
+> more at 5 per million: /usr/bin/bash.51. A run that also writes the Korean report reserves 2 × 26 000 more for
+> it. The figures are an over-quote by design, as before: the call is billed for what it writes, not
+> for its ceiling, and `withBudget` settles each reservation at the usage the answer reports.
 
 > **`PipelineContext.config`. Decided 2026-10-23 (owner, plan/00 §6 item 272(a)).** The member's
 > type is `ConfigReader`, declared in `src/pipeline/types.ts`: a **read-only view of

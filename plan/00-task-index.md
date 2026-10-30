@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04` and `07`** (Phase 4's file, read since 2026-10-26). If a
 > row here disagrees with a card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-29 · **182 tasks: 112 `DONE`, 70 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**. **The plan has grown from the 123 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25) to 182, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-10-30 · **182 tasks: 112 `DONE`, 70 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**. **The plan has grown from the 123 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25) to 182, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -2432,6 +2432,15 @@ the caller of what the card builds; if it does not, the caller is added with a d
     approved as drafted in chat, recorded byte for byte in `plan/reports/ko-review-310.ftl` (G-41). (b) `P4-T08`
     (report composition call and structural validation) runs next, alone, with a fake model only. It inserts (a)'s
     Korean, since it is the only agent editing the bundles.
+
+311. **Lines raised by `P4-T08`** (`plan/reports/P4-T08.md`). **DECIDED 2026-10-30 (owner), each as recommended:**
+    - (a) When the one fresh generation still fails the section check, the report run stops before anything is
+      written and says why. A new message is added, and summaries and cached stage results are kept.
+    - (b) The structure note (`structureRevisionNote`, quoted in `plan/reports/P4-T08.md`) is approved as drafted.
+    - (c) `TREND_REPORT_EN`'s and `TREND_REPORT_KO`'s output ceilings are raised so that the longest §9.2 target
+      (4 250 words) fits with room for reasoning tokens. The targets stay as built. The new ceilings are derived and
+      recorded in `docs/12` first, the prompt version is bumped by `docs/12` §17's rule, and `P4-T16`'s estimate
+      follows the new ceilings.
 
 ## 7. Regenerating this file
 

@@ -73,6 +73,25 @@ function shippedFiles(): PromptSourceFile[] {
   }));
 }
 
+/** The active version of `id`, as its shipped file name states it. */
+function shippedVersion(id: PromptId): string {
+  const match = /\.v(\d+\.\d+\.\d+)\.md$/.exec(PROMPT_FILE_NAMES[id]);
+  if (match?.[1] === undefined) {
+    throw new Error(`${id}: no version in its file name`);
+  }
+  return match[1];
+}
+
+/**
+ * The PATCH after `id`'s active version: 1.0.1 for a 1.0.0 file, 1.0.2 for
+ * `TREND_REPORT_EN` and `TREND_REPORT_KO`, active at 1.0.1 since 2026-10-30
+ * (owner, `plan/00` §6 item 311(c)).
+ */
+function patchOf(id: PromptId): string {
+  const [major, minor, patch] = shippedVersion(id).split(".").map(Number);
+  return `${String(major)}.${String(minor)}.${String((patch as number) + 1)}`;
+}
+
 /** A sibling of `id`'s shipped file at `version`, with `cacheEpoch` `epoch`. */
 function sibling(
   id: PromptId,
@@ -80,16 +99,17 @@ function sibling(
   epoch: number,
 ): PromptSourceFile {
   const shipped = PROMPT_FILE_NAMES[id];
+  const active = shippedVersion(id);
   const text = readFileSync(resolve(promptsDir, shipped), "utf8")
-    .replace(/^version: 1\.0\.0$/m, `version: ${version}`)
+    .replace(`\nversion: ${active}\n`, `\nversion: ${version}\n`)
     .replace(/^cacheEpoch: 1$/m, `cacheEpoch: ${String(epoch)}`);
-  return { fileName: shipped.replace("v1.0.0", `v${version}`), text };
+  return { fileName: shipped.replace(`v${active}`, `v${version}`), text };
 }
 
 const REGISTRY: PromptRegistry = createPromptRegistry([
   ...shippedFiles(),
   ...SYNTHESIS_PROMPTS.flatMap((id) => [
-    sibling(id, "1.0.1", 1),
+    sibling(id, patchOf(id), 1),
     sibling(id, "1.1.0", 2),
   ]),
 ]);
@@ -294,7 +314,9 @@ describe("synthesis keys (P4-T17)", () => {
   it("a PATCH-only prompt change keeps all three keys (same cacheEpoch, item 273(a))", () => {
     const before = runKeys();
     for (const id of SYNTHESIS_PROMPTS) {
-      expect(runKeys({}, epochsWith(id, "1.0.1")), id).toStrictEqual(before);
+      expect(runKeys({}, epochsWith(id, patchOf(id))), id).toStrictEqual(
+        before,
+      );
     }
   });
 
@@ -332,7 +354,7 @@ describe("synthesis keys (P4-T17)", () => {
 
   it("the registry really holds PATCH siblings at the active epoch and MINOR ones above it", () => {
     for (const id of SYNTHESIS_PROMPTS) {
-      expect(REGISTRY.getVersion(id, "1.0.1")?.cacheEpoch).toBe(
+      expect(REGISTRY.getVersion(id, patchOf(id))?.cacheEpoch).toBe(
         REGISTRY.cacheEpochs[id],
       );
       expect(REGISTRY.getVersion(id, "1.1.0")?.cacheEpoch).toBeGreaterThan(
@@ -787,7 +809,7 @@ describe("synthesis tags", () => {
   it("a PATCH keeps every tag; a MINOR moves only its own prompt's", () => {
     for (const id of SYNTHESIS_PROMPTS) {
       for (const key of Object.values(keys)) {
-        expect(synthesisTags(key, linesWith(id, "1.0.1"))).toStrictEqual(
+        expect(synthesisTags(key, linesWith(id, patchOf(id)))).toStrictEqual(
           synthesisTags(key, linesWith()),
         );
         const minor = synthesisTags(key, linesWith(id, "1.1.0"));

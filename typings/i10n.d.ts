@@ -164,6 +164,7 @@ export type FluentMessageId =
   | 'research-helper-report-stopped-merge-too-large'
   | 'research-helper-report-stopped-no-theme-analysed'
   | 'research-helper-report-stopped-no-themes'
+  | 'research-helper-report-stopped-structure-invalid'
   | 'research-helper-report-stopped-too-many-themes'
   | 'research-helper-report-title'
   | 'research-helper-search-authors-overflow'

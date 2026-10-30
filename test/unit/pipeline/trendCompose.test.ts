@@ -30,7 +30,11 @@ import type {
   Usage,
 } from "../../../src/llm/types";
 import type { Digest, ThemeAnalysis } from "../../../src/model/trend";
-import { parsePromptFile, type PromptTemplate } from "../../../src/prompts";
+import {
+  parsePromptFile,
+  PROMPT_FILE_NAMES,
+  type PromptTemplate,
+} from "../../../src/prompts";
 import { SYNTHESIS_INPUT_BUDGETS } from "../../../src/pipeline/shared/estimate";
 import {
   checkHeadings,
@@ -53,6 +57,7 @@ import {
   SOURCES_NOT_RECORDED,
   sourcesOf,
   splitSections,
+  STRUCTURE_INVALID_L10N,
   structureRevisionNote,
   TARGET_WORD_BANDS,
   targetWordsFor,
@@ -83,8 +88,9 @@ function promptFile(name: string): PromptTemplate {
   });
 }
 
-const EN = promptFile("trend-report-en.v1.0.0.md");
-const KO = promptFile("trend-report-ko.v1.0.0.md");
+// The active files: 1.0.1 since 2026-10-30 (owner, plan/00 §6 item 311(c)).
+const EN = promptFile(PROMPT_FILE_NAMES.TREND_REPORT_EN);
+const KO = promptFile(PROMPT_FILE_NAMES.TREND_REPORT_KO);
 const HEADINGS = expectedHeadings(EN);
 const KO_HEADINGS = expectedHeadings(KO);
 
@@ -642,7 +648,8 @@ describe("P4-T08 step 3 — one streamed, budgeted call on the strong model", ()
     const request = provider.calls[0]?.request;
     expect(request?.model).toBe("report-model");
     expect(request?.temperature).toBe(0.3);
-    expect(request?.maxOutputTokens).toBe(6_000);
+    // docs/12 §10's ceiling of 2026-10-30 (item 311(c)); 6 000 before.
+    expect(request?.maxOutputTokens).toBe(23_000);
     expect(request?.effort).toBe(REPORT_EFFORT);
     expect(REPORT_EFFORT).toBe("medium");
     expect(request?.messages[0]?.content).toBe(EN.system);
@@ -653,7 +660,7 @@ describe("P4-T08 step 3 — one streamed, budgeted call on the strong model", ()
     expect(outcome.usage).toEqual(USAGE);
     expect(outcome.prompt).toEqual({
       promptId: "TREND_REPORT_EN",
-      promptVersion: "1.0.0",
+      promptVersion: "1.0.1",
       modelId: "report-model",
       temperature: 0.3,
     });
@@ -810,7 +817,9 @@ describe("P4-T08 step 4 — check 1 regenerates once (docs/12 §10; item 290)", 
     );
   });
 
-  it("[open for the owner] a second failure returns stopped-structure-invalid with no third request", async () => {
+  // Changed 2026-10-30: the owner decided the stop and its message (plan/00
+  // §6 item 311(a)); until then the outcome carried no message id.
+  it("a second failure returns stopped-structure-invalid with its stop message and no third request (item 311(a))", async () => {
     const { provider, deps } = setup(() => reply(reportText(without7)));
     const outcome = await composeReport(fixture(), deps);
     expect(provider.calls).toHaveLength(2);
@@ -821,7 +830,53 @@ describe("P4-T08 step 4 — check 1 regenerates once (docs/12 §10; item 290)", 
     ]);
     expect(outcome.requests).toBe(2);
     expect("markdown" in outcome).toBe(false);
-    expect("messageId" in outcome).toBe(false);
+    expect("sections" in outcome).toBe(false);
+    expect(outcome.messageId).toBe(
+      "research-helper-report-stopped-structure-invalid",
+    );
+    expect(outcome.messageId).toBe(STRUCTURE_INVALID_L10N);
+    expect("args" in outcome).toBe(false);
+  });
+
+  it("a Korean report that fails twice stops with the same message", async () => {
+    const without7Ko = KO_HEADINGS.filter((h) => !h.startsWith("7. "));
+    const { provider, deps } = setup(() => reply(reportText(without7Ko)), {
+      reportPrompt: KO,
+    });
+    const outcome = await composeReport(fixture({ language: "ko" }), deps);
+    expect(provider.calls).toHaveLength(2);
+    expect(outcome).toMatchObject({
+      status: "stopped-structure-invalid",
+      messageId: STRUCTURE_INVALID_L10N,
+      language: "ko",
+    });
+  });
+
+  it("names a message id the en-US bundle declares with no argument, and a ko-KR NEEDS REVIEW stub carrying that English (item 311(a); G-41)", () => {
+    const en = readFileSync(
+      resolve(repo, "addon/locale/en-US/research-helper-mainWindow.ftl"),
+      "utf8",
+    );
+    const line = en
+      .split("\n")
+      .find((l) => l.startsWith(`${STRUCTURE_INVALID_L10N} = `));
+    expect(line).toBeDefined();
+    expect(line).not.toContain("{ $");
+    const english = (line as string).slice(
+      `${STRUCTURE_INVALID_L10N} = `.length,
+    );
+    expect(english).toMatch(/^The report was stopped before it was written: /);
+    expect(english).toMatch(/ Every summary already made is kept\.$/);
+    const ko = readFileSync(
+      resolve(repo, "addon/locale/ko-KR/research-helper-mainWindow.ftl"),
+      "utf8",
+    );
+    expect(ko.split("\n")).toContain(
+      `# NEEDS REVIEW ${STRUCTURE_INVALID_L10N} — en-US: ${english}`,
+    );
+    expect(
+      ko.split("\n").some((l) => l.startsWith(`${STRUCTURE_INVALID_L10N} =`)),
+    ).toBe(false);
   });
 
   it("checks a Korean report against TREND_REPORT_KO's own headings", async () => {
@@ -838,7 +893,8 @@ describe("P4-T08 step 4 — check 1 regenerates once (docs/12 §10; item 290)", 
       ),
     );
     expect(provider.calls).toHaveLength(1);
-    expect(provider.calls[0]?.request.maxOutputTokens).toBe(7_000);
+    // docs/12 §11's ceiling of 2026-10-30 (item 311(c)); 7 000 before.
+    expect(provider.calls[0]?.request.maxOutputTokens).toBe(26_000);
     expect(outcome.sections[0]?.heading).toBe("1. 요약 (Executive Summary)");
     expect(outcome.prompt.promptId).toBe("TREND_REPORT_KO");
   });

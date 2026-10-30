@@ -1092,11 +1092,20 @@ builds the `rp` key (`targetWords`, the digests sent); `critique.ts` (`P4-T09`) 
 its notes as `revisionNotes`; `P4-T21` for a Korean report (`TREND_REPORT_KO`,
 `citationReplacement`). Constructing file: `src/bootstrap/registerPipelines.ts` (`P4-T18`); nothing is
 constructed here. The module does not pack with `packByTokens`: it trims `{{DIGESTS}}` instead, so
-`P4-T09` reaches `packByTokens` directly. **Open for the owner (2026-10-29):** (1) what a regeneration that
+`P4-T09` reaches `packByTokens` directly. ~~**Open for the owner (2026-10-29):** (1) what a regeneration that
 fails check 1 again does — built provisionally as the outcome `stopped-structure-invalid` with no
 message id; recommended: stop before anything is written, with a new message on
 `KO_PENDING_REVIEW`; (2) the structure note's wording (`structureRevisionNote`), new prompt text sent in
-English to both prompts.
+English to both prompts.~~
+
+*Decided 2026-10-30 (owner, `plan/00` §6 item 311(a), (b), (c)):* (a) a regeneration that fails check 1
+again stops the run before anything is written and says why: `StructureInvalidOutcome` carries
+`messageId` `STRUCTURE_INVALID_L10N` (`research-helper-report-stopped-structure-invalid`, main-window
+bundle, no argument, its Korean a commented stub on `KO_PENDING_REVIEW`, `G-41`), and `P4-T18` ends the
+job on it, keeping summaries and cached stage results. (b) The structure note (`structureRevisionNote`)
+is approved as drafted. (c) `TREND_REPORT_EN`'s and `TREND_REPORT_KO`'s ceilings are 23 000 and 26 000
+(prompt version 1.0.1, a PATCH), so `composeReport`'s call sends them through `resolveMaxTokens` with no
+code change here. `docs/12` §10's, §11's and §17.3's notes of this date.
 
 ---
 
@@ -1212,7 +1221,10 @@ critique model too. The banner's words are report-language text (§0.2 item 15) 
 `P4-T12`'s label table, which is why this card depends on `P4-T12` *(edge added by the review,
 2026-10-25: `P4-T12` names `critique.ts` as a caller of `reportLabels.ts`)*. Whether the pass runs by
 default (`plan/05` §1.3, now §5.3) is settled: `report.maxCritiqueRounds` ships at `1` (`docs/07` §8.5).
-`packByTokens` is `P4-T07`'s, reached through `P4-T08`. Whether `P4-T16`'s estimate must reserve
+~~`packByTokens` is `P4-T07`'s, reached through `P4-T08`.~~ `packByTokens` is `P4-T07`'s, in
+`src/llm/shared/chunking.ts`; this card calls it directly, because `P4-T08`'s `composeReport` does not pack —
+it trims `{{DIGESTS}}` instead *(corrected 2026-10-30, `plan/00` §6 item 311; `plan/reports/P4-T08.md`
+finding 3)*. Whether `P4-T16`'s estimate must reserve
 step 4's per-section calls: verify yourself; I believe each extra call is reserved at dispatch by
 `withBudget` and a refusal pauses the job with the stage pending (§0.2 item 18), so the estimate
 need not price a path it cannot predict — if that is wrong, stop and say so.
@@ -2102,9 +2114,18 @@ two stops above. `docs/12` §9's and §20's notes of this date.
 
 *Noted 2026-10-29 (`P4-T08`, rule 10):* the compose stage calls `composeReport`
 (`src/pipeline/trendReport/compose.ts`). It returns `composed` or `stopped-structure-invalid` (the one
-fresh generation failed the section check again), whose handling is open for the owner (`docs/12`
-§10's note of this date, reading (3)). Its `onDraft` callback carries each streamed delta with its
+fresh generation failed the section check again), ~~whose handling is open for the owner (`docs/12`
+§10's note of this date, reading (3))~~ handled as below (decided 2026-10-30). Its `onDraft` callback carries each streamed delta with its
 generation number for `P4-T20`'s draft preview; a second generation replaces the first.
+
+*Decided 2026-10-30 (owner, `plan/00` §6 item 311(a)):* the compose stage's `stopped-structure-invalid`
+ends the job as the stops above do. The run stops before anything is written and shows the outcome's
+`messageId` (`STRUCTURE_INVALID_L10N` in `src/pipeline/trendReport/compose.ts`,
+`research-helper-report-stopped-structure-invalid`, no `args`); every summary and every cached stage
+result (the clustering, the theme analyses) is kept, and no note, `report` row or file is saved. `docs/12`
+§10's note of this date, reading (3). *Not decided by item 311:* whether a `P4-T09` rewrite (which also
+goes through `composeReport`) that returns this outcome stops the run too, or ships the draft that
+already passed check 1; raised for the owner on 2026-10-30.
 
 ---
 

@@ -684,3 +684,12 @@ research-helper-report-stopped-merge-too-large = 보고서를 쓰기 전에 멈�
 # Korean drafted by the coordinator and reviewed by the owner on 2026-10-29 (G-41, plan/00 §6 item 310(a)).
 
 research-helper-report-stopped-no-theme-analysed = 보고서를 쓰기 전에 멈췄습니다. 모델이 찾은 주제 가운데 분석할 수 있는 것이 하나도 없어, 다룰 주제가 남지 않았습니다. 이미 만든 요약은 모두 남아 있습니다.
+
+## The trend report run's stop when the report fails the section check twice
+## (P4-T08; plan/00 §6 item 311(a))
+##
+## NEEDS REVIEW (G-41). The message below is a commented stub carrying its
+## en-US source; nothing was machine-translated, and it is on
+## KO_PENDING_REVIEW in src/i18n/keys.ts.
+
+# NEEDS REVIEW research-helper-report-stopped-structure-invalid — en-US: The report was stopped before it was written: asked twice, the model did not return the report with its eleven required sections in order, so nothing was saved. Every summary already made is kept.

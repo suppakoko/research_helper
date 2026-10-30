@@ -53,7 +53,10 @@ function loadBundled(): Promise<Bundled> {
  * `theme-merge` and `cluster-reduce-merge` are approved as drafted, and
  * `theme-cluster` was regenerated from `docs/12` §8 after its three numbers
  * moved to the user text, still at 1.0.0 (decided 2026-10-26, owner,
- * `plan/00` §6 item 290(a) and (b)).
+ * `plan/00` §6 item 290(a) and (b)). The two 1.0.1 lines are the PATCH that
+ * raised `TREND_REPORT_EN`'s and `TREND_REPORT_KO`'s output ceilings only; the
+ * 1.0.0 lines are unchanged (owner, `plan/00` §6 item 311(c), 2026-10-30;
+ * `docs/12` §17.3).
  */
 const RELEASED_FILE_SHA256: Readonly<Record<string, string>> = {
   "relevance-screen.v1.0.0.md":
@@ -74,6 +77,10 @@ const RELEASED_FILE_SHA256: Readonly<Record<string, string>> = {
     "924278144417429fd68254b7c6651bde3e282514d854ddd0b556005f5eb173f6",
   "trend-report-ko.v1.0.0.md":
     "7958173be07c29e4fd2501195ccd3bd6b24e8f14f9aa205ae29423fe21a67bae",
+  "trend-report-en.v1.0.1.md":
+    "6c27e532b931d00faabf27f7ef436256b12312c464e4e7714c9405c2f9201488",
+  "trend-report-ko.v1.0.1.md":
+    "734b3b38f5ed7b37130e1e25ac68576bbd3b4678967c802862ca7a7985a2af84",
   "self-critique.v1.0.0.md":
     "9086b1efde2465d2c5bae00519ecbbaada19ec4235d0b9d43845b7fc7191f1f7",
   "theme-merge.v1.0.0.md":
@@ -117,7 +124,10 @@ const TEMPERATURES: Readonly<Record<PromptId, number>> = {
 const SCHEMA_FILE = "paper-summary.v1.json";
 
 describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
-  it("loads every prompt at version 1.0.0 from the bundled files", async function () {
+  // Changed 2026-10-30: TREND_REPORT_EN and TREND_REPORT_KO are at 1.0.1, a
+  // PATCH that kept cacheEpoch 1, with their 1.0.0 files still bundled (owner,
+  // plan/00 §6 item 311(c); docs/12 §17.3).
+  it("loads every prompt from the bundled files: 1.0.0, the two report prompts 1.0.1, every cacheEpoch 1", async function () {
     const {
       PROMPT_REGISTRY,
       PROMPT_VERSIONS,
@@ -125,7 +135,11 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
       PROMPT_SOURCE_FILES,
     } = await loadBundled();
 
-    assert.strictEqual(PROMPT_SOURCE_FILES.length, PROMPT_IDS.length);
+    const patched: readonly PromptId[] = ["TREND_REPORT_EN", "TREND_REPORT_KO"];
+    assert.strictEqual(
+      PROMPT_SOURCE_FILES.length,
+      PROMPT_IDS.length + patched.length,
+    );
     assert.strictEqual(PROMPT_IDS.length, 12);
     const expected: Record<string, string> = {};
     // The summary cache keys on these (2026-10-23, plan/00 §6 item 273(a)).
@@ -133,16 +147,33 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
       assert.strictEqual(PROMPT_CACHE_EPOCHS[id], 1, `${id}: cacheEpoch`);
     }
     for (const id of PROMPT_IDS) {
+      const version = patched.includes(id) ? "1.0.1" : "1.0.0";
       const template = PROMPT_REGISTRY.get(id);
       assert.strictEqual(template.id, id);
-      assert.strictEqual(template.version, "1.0.0", id);
+      assert.strictEqual(template.version, version, id);
       assert.strictEqual(template.cacheEpoch, 1, id);
       assert.strictEqual(template.fileName, PROMPT_FILE_NAMES[id], id);
       assert.include(template.system, " ", `${id}: system text present`);
       assert.include(template.user, "{{", `${id}: user text present`);
-      expected[id] = "1.0.0";
+      expected[id] = version;
     }
     assert.deepEqual({ ...PROMPT_VERSIONS }, expected);
+    // The superseded 1.0.0 files are still readable, with the same text.
+    for (const id of patched) {
+      const old = PROMPT_REGISTRY.getVersion(id, "1.0.0");
+      const active = PROMPT_REGISTRY.get(id);
+      assert.strictEqual(old?.cacheEpoch, 1, `${id} 1.0.0: cacheEpoch`);
+      assert.strictEqual(old?.system, active.system, `${id}: system text`);
+      assert.strictEqual(old?.user, active.user, `${id}: user text`);
+    }
+    assert.strictEqual(
+      PROMPT_REGISTRY.get("TREND_REPORT_EN").defaultMaxTokens,
+      23000,
+    );
+    assert.strictEqual(
+      PROMPT_REGISTRY.get("TREND_REPORT_KO").defaultMaxTokens,
+      26000,
+    );
   });
 
   it("bundles each prompt file byte for byte", async function () {
@@ -276,9 +307,10 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
       resolveMaxTokens(PROMPT_REGISTRY.get("PAPER_SUMMARY_ABSTRACT")),
       1200,
     );
+    // 26 000 since 1.0.1 (owner, plan/00 §6 item 311(c), 2026-10-30).
     assert.strictEqual(
       resolveMaxTokens(PROMPT_REGISTRY.get("TREND_REPORT_KO")),
-      7000,
+      26000,
     );
     assert.strictEqual(
       resolveMaxTokens(PROMPT_REGISTRY.get("THEME_MERGE")),

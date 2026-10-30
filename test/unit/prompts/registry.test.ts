@@ -188,7 +188,9 @@ function build(overrides: Partial<FileParts> = {}): PromptSourceFile {
 // ---------------------------------------------------------------------------
 
 describe("the shipped prompt files", () => {
-  it("all load into one registry at version 1.0.0", () => {
+  // Changed 2026-10-30: the two report prompts are at 1.0.1, a PATCH that
+  // raised only their ceilings (owner, plan/00 §6 item 311(c)).
+  it("all load into one registry at version 1.0.0, the two report prompts at 1.0.1", () => {
     const registry = createPromptRegistry(shippedFiles());
     expect(registry.versions).toEqual({
       RELEVANCE_SCREEN: "1.0.0",
@@ -198,8 +200,8 @@ describe("the shipped prompt files", () => {
       CHUNK_REDUCE: "1.0.0",
       THEME_CLUSTER: "1.0.0",
       CLUSTER_REDUCE: "1.0.0",
-      TREND_REPORT_EN: "1.0.0",
-      TREND_REPORT_KO: "1.0.0",
+      TREND_REPORT_EN: "1.0.1",
+      TREND_REPORT_KO: "1.0.1",
       SELF_CRITIQUE: "1.0.0",
       THEME_MERGE: "1.0.0",
       CLUSTER_REDUCE_MERGE: "1.0.0",
@@ -268,8 +270,9 @@ describe("the shipped prompt files", () => {
       CHUNK_REDUCE: [0, 1600, "json", null],
       THEME_CLUSTER: [0.2, null, "json", 2000],
       CLUSTER_REDUCE: [0.3, 3000, "json", null],
-      TREND_REPORT_EN: [0.3, 6000, "markdown", null],
-      TREND_REPORT_KO: [0.3, 7000, "markdown", null],
+      // docs/12 §10's derivation of 2026-10-30 (item 311(c)).
+      TREND_REPORT_EN: [0.3, 23000, "markdown", null],
+      TREND_REPORT_KO: [0.3, 26000, "markdown", null],
       SELF_CRITIQUE: [0, 2500, "json", null],
       THEME_MERGE: [0.2, 4000, "json", null],
       CLUSTER_REDUCE_MERGE: [0.3, 3000, "json", null],
@@ -390,6 +393,54 @@ describe("the shipped prompt files", () => {
 // ---------------------------------------------------------------------------
 // THEME_CLUSTER — its three numbers moved to the user text (item 290(b))
 // ---------------------------------------------------------------------------
+
+describe("the report prompts' 1.0.1 PATCH (owner, plan/00 §6 item 311(c), 2026-10-30)", () => {
+  const pairs = [
+    ["TREND_REPORT_EN", "trend-report-en", 6000, 23000],
+    ["TREND_REPORT_KO", "trend-report-ko", 7000, 26000],
+  ] as const;
+
+  it.each(pairs)(
+    "%s: 1.0.1 differs from 1.0.0 in its version and ceiling lines only, and is active",
+    (id, stem, before, after) => {
+      const old = readFileSync(resolve(promptsDir, `${stem}.v1.0.0.md`));
+      const next = readFileSync(resolve(promptsDir, `${stem}.v1.0.1.md`));
+      expect(PROMPT_FILE_NAMES[id]).toBe(`${stem}.v1.0.1.md`);
+      const expected = old
+        .toString("utf8")
+        .replace("\nversion: 1.0.0\n", "\nversion: 1.0.1\n")
+        .replace(
+          `\ndefaultMaxTokens: ${String(before)}\n`,
+          `\ndefaultMaxTokens: ${String(after)}\n`,
+        );
+      expect(Buffer.compare(next, Buffer.from(expected, "utf8"))).toBe(0);
+      expect(next.toString("utf8")).not.toBe(old.toString("utf8"));
+    },
+  );
+
+  it.each(pairs)(
+    "%s: both versions load together, the PATCH keeps cacheEpoch 1 and the text",
+    (id, stem, before, after) => {
+      const registry = createPromptRegistry([
+        ...shippedFiles(),
+        {
+          fileName: `${stem}.v1.0.0.md`,
+          text: readFileSync(resolve(promptsDir, `${stem}.v1.0.0.md`), "utf8"),
+        },
+      ]);
+      const old = registry.getVersion(id, "1.0.0");
+      const active = registry.get(id);
+      expect(active.version).toBe("1.0.1");
+      expect(active.defaultMaxTokens).toBe(after);
+      expect(old?.defaultMaxTokens).toBe(before);
+      expect(active.cacheEpoch).toBe(1);
+      expect(old?.cacheEpoch).toBe(active.cacheEpoch);
+      expect(old?.system).toBe(active.system);
+      expect(old?.user).toBe(active.user);
+      expect(resolveMaxTokens(active)).toBe(after);
+    },
+  );
+});
 
 describe("theme-cluster.v1.0.0.md", () => {
   const text = readFileSync(

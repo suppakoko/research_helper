@@ -927,3 +927,11 @@ research-helper-report-stopped-merge-too-large = The report was stopped before i
 ## the owner on 2026-10-29 (G-41, plan/00 §6 item 310(a)).
 
 research-helper-report-stopped-no-theme-analysed = The report was stopped before it was written: none of the themes the model found could be analysed, so no theme was left to write about. Every summary already made is kept.
+
+## The trend report run's stop when the report fails the section check twice
+## (P4-T08; plan/00 §6 item 311(a); docs/12 §10). The answer, and the one fresh
+## generation asked for with the failure named, both lacked the eleven required
+## level-2 sections in order, so the run ends before anything is written. No
+## argument. Korean pending review (G-41).
+
+research-helper-report-stopped-structure-invalid = The report was stopped before it was written: asked twice, the model did not return the report with its eleven required sections in order, so nothing was saved. Every summary already made is kept.

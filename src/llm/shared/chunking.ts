@@ -4,8 +4,12 @@
  * Caller: `summarizeItem` in `src/pipeline/summarize/summarizeItem.ts`
  * (`P3-T25`). {@link packByTokens} (`P4-T07`, section 8) is the synthesis
  * stages' packer: `analyseThemes` in `src/pipeline/trendReport/themeAnalysis.ts`
- * calls it for a theme's sub-batches; `compose.ts` (`P4-T08`) and `critique.ts`
- * (`P4-T09`, the cited summaries) are its other callers, not built yet.
+ * calls it for a theme's sub-batches, through `packThemeMembers` in
+ * `src/pipeline/shared/estimate.ts`, which the estimate shares; `critique.ts`
+ * (`P4-T09`, the cited summaries) is its other caller, not built yet.
+ * `compose.ts` (`P4-T08`) does not call it: the report trims `{{DIGESTS}}`
+ * to a cited subset instead of packing them (corrected 2026-10-30,
+ * `plan/00` §6 item 311; `plan/reports/P4-T08.md` finding 3).
  *
  * ## The three paths (`docs/06` §5.3)
  *
@@ -1029,8 +1033,9 @@ export async function runWithContextRetry<T>(
  * `budget`, keeping the items' order: the batches, concatenated, are `items`
  * exactly, and no item is split or repeated. The synthesis stages use it where
  * one call cannot carry every item — a theme's full summaries in
- * `CLUSTER_REDUCE` sub-batches (`docs/06` §8.4's last paragraph), the report's
- * digests and the critique's cited summaries (`P4-T08`, `P4-T09`).
+ * `CLUSTER_REDUCE` sub-batches (`docs/06` §8.4's last paragraph) and the
+ * critique's cited summaries (`P4-T09`). The report's digests are trimmed,
+ * not packed (`P4-T08`).
  *
  * **Fewest, then even.** A greedy pass in order gives the fewest batches any
  * order-keeping packing can (each batch is closed only when the next item does
