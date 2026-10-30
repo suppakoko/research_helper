@@ -1076,11 +1076,9 @@ export const KO_PENDING_REVIEW = [
   // 2026-10-29: the owner approved the coordinator's Korean (`G-41`, plan/00
   // §6 item 310(a)), so both are on KO_PRESENT.
   // `P4-T08`'s stop when the one fresh generation fails the section check
-  // again (owner, plan/00 §6 item 311(a), 2026-10-30). `G-41` owns the
-  // translation; the `ko-KR` bundle carries it as a commented stub with its
-  // English source, and nothing was machine-translated. The coordinator
-  // drafts the Korean for the owner.
-  "research-helper-report-stopped-structure-invalid",
+  // again (owner, plan/00 §6 item 311(a)) left this list on 2026-10-30: the
+  // owner approved the coordinator's Korean (`G-41`, plan/00 §6 item 312(a)),
+  // so it is on KO_PRESENT.
   // --- searchDialog (62) ---
   // `P1-T45`. On this list and not on `KO_PRESENT`: the `ko-KR` bundle carries
   // all three as commented stubs with their English source, which the
@@ -1495,6 +1493,11 @@ export const KO_PRESENT = [
   // item 310(a)), inserted byte for byte from plan/reports/ko-review-310.ftl.
   "research-helper-report-stopped-merge-too-large",
   "research-helper-report-stopped-no-theme-analysed",
+  // `P4-T08`'s stop when the report fails the section check twice: Korean
+  // drafted by the coordinator and reviewed by the owner on 2026-10-30
+  // (`G-41`, plan/00 §6 item 312(a)), inserted byte for byte from
+  // plan/reports/ko-review-312.ftl.
+  "research-helper-report-stopped-structure-invalid",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

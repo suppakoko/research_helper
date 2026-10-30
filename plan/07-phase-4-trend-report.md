@@ -1066,6 +1066,9 @@ sections, every marker in the valid set, inside the 60 000-token budget at any N
 - [ ] Every computed variable is asserted against the fixture's real counts.
 - [ ] A stored `report.targetWords` of 1 and of 399 gives the §9.2 table's `TARGET_WORDS`; 0 does
       too, and 400 gives 400 (item 290(d), step 5).
+- [ ] A stored 4 250 is sent as 4 250 with no warning; 4 251 and 8 000 are sent as 4 250 and the
+      composed report carries `TARGET_WORDS_CAPPED_WARNING` *(added 2026-10-30, owner, `plan/00` §6
+      item 312(c))*.
 - [ ] `npm run typecheck` exits 0; `npm run test:unit -- trendCompose` passes.
 
 **Verify with.**
@@ -1101,11 +1104,21 @@ English to both prompts.~~
 *Decided 2026-10-30 (owner, `plan/00` §6 item 311(a), (b), (c)):* (a) a regeneration that fails check 1
 again stops the run before anything is written and says why: `StructureInvalidOutcome` carries
 `messageId` `STRUCTURE_INVALID_L10N` (`research-helper-report-stopped-structure-invalid`, main-window
-bundle, no argument, its Korean a commented stub on `KO_PENDING_REVIEW`, `G-41`), and `P4-T18` ends the
+bundle, no argument, its Korean a commented stub on `KO_PENDING_REVIEW`, `G-41` — *on `KO_PRESENT` since
+decided 2026-10-30, owner, `plan/00` §6 item 312(a)*), and `P4-T18` ends the
 job on it, keeping summaries and cached stage results. (b) The structure note (`structureRevisionNote`)
 is approved as drafted. (c) `TREND_REPORT_EN`'s and `TREND_REPORT_KO`'s ceilings are 23 000 and 26 000
 (prompt version 1.0.1, a PATCH), so `composeReport`'s call sends them through `resolveMaxTokens` with no
 code change here. `docs/12` §10's, §11's and §17.3's notes of this date.
+
+*Decided 2026-10-30 (owner, `plan/00` §6 item 312(c)):* a stored `report.targetWords` above 4 250 is sent
+as 4 250, the longest target the ceilings are sized for; 400 to 4 250 is sent as stored. Built in
+`compose.ts`: `TARGET_WORDS_MAX` (4 250, read by a test from `docs/12` §10's derivation) caps the figure in
+`resolveTargetWords`; `isTargetWordsCapped` and `CompositionPlan.targetWordsCapped` record that the cap applied; a composed report's
+`warnings` carry `TARGET_WORDS_CAPPED_WARNING` (`report_target_words_capped`), which `P4-T12` turns into the
+appendix line. Pinned by unit tests: 4 250 is sent as stored with no warning, 4 251 and 8 000 are sent as
+4 250 with the warning. `docs/06` §9.2's and `docs/12` §10's notes of this date. *(item 312(d) confirms
+the 1.0.0 → 1.0.1 PATCH; `docs/12` §17.3.)*
 
 ---
 
@@ -1157,6 +1170,15 @@ generation; anything left unresolved ships with a visible banner, never hidden.
 6. After the last round, hand the remaining problems to `P4-T12` as the banner and Appendix C's
    rows. When a rewrite followed the last critique, the banner also states that the shipped text is
    a revision that was not re-checked.
+7. When a rewrite's `composeReport` returns `stopped-structure-invalid` (its first answer and its one
+   fresh generation both failed the section check), keep the earlier draft that passed it and do not
+   stop the run: do not show the outcome's `messageId`, end the critique loop at that round, count the
+   rewrite's usage, and hand `P4-T12` the last critique's unresolved problems with a banner that states
+   the review's revision could not be applied (in place of step 6's "not re-checked" statement).
+   *(Decided 2026-10-30, owner, `plan/00` §6 item 312(b); `docs/12` §10 reading (3) and §12, notes of
+   this date. Ending the loop at that round is the coordinator's reading, recorded in `docs/12` §12 for
+   the owner to confirm. `composeReport` needed no change: this card is the only caller that sends
+   `revisionNotes`, and it holds the earlier draft.)*
 
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286):** which model critiques. `docs/06` §15 and
 > `docs/07` §8.5 say
@@ -1209,6 +1231,9 @@ generation; anything left unresolved ships with a visible banner, never hidden.
 - [ ] `report.critiqueModel` set is used; empty resolves to `summaryModel` on the active provider.
 - [ ] Remaining problems produce the banner text and Appendix C rows; after a rewrite that followed
       the last critique, the banner says the text was not re-checked.
+- [ ] A rewrite scripted to fail the section check twice (`stopped-structure-invalid`) ships the earlier
+      draft byte for byte, makes no further critique call, does not stop the run, and the banner says
+      the review's revision could not be applied *(added 2026-10-30, owner, `plan/00` §6 item 312(b))*.
 - [ ] `npm run typecheck` exits 0; `npm run test:unit -- trendCritique` passes.
 
 **Verify with.**
@@ -1488,6 +1513,18 @@ with the reason `theme_too_large` (`UNANALYSED_REASONS.tooLarge` in
 card builds that wording, in the report's language, in `reportLabels.ts`' report-language label table
 (its `ko` entry follows this card's Korean rule, `plan/04` §0.2 item 15). `docs/06` §8.4's note,
 reading (4).
+
+*Decided 2026-10-30 (owner, `plan/00` §6 item 312(c)):* when the stored `report.targetWords` was above
+4 250 and was sent as 4 250, the report's appendix says the target was capped. This card builds that
+line, in the report's language, from `TARGET_WORDS_CAPPED_WARNING` (`report_target_words_capped`) on
+`composeReport`'s `warnings`, or `CompositionPlan.targetWordsCapped` (`src/pipeline/trendReport/compose.ts`),
+read from the current run's plan, not a cached report (the `rp` key keys the target as sent). Which
+appendix carries it is not decided; Appendix B, beside the run's other figures, is the coordinator's
+reading. `docs/06` §9.2's note of this date.
+
+*Decided 2026-10-30 (owner, `plan/00` §6 item 312(b)):* the banner `P4-T09` asks for when a rewrite failed
+the section check twice states that the review's revision could not be applied (`P4-T09` step 7). Its
+words are one more report-language label in `reportLabels.ts`, under this card's Korean rule.
 
 ---
 
@@ -2123,9 +2160,15 @@ ends the job as the stops above do. The run stops before anything is written and
 `messageId` (`STRUCTURE_INVALID_L10N` in `src/pipeline/trendReport/compose.ts`,
 `research-helper-report-stopped-structure-invalid`, no `args`); every summary and every cached stage
 result (the clustering, the theme analyses) is kept, and no note, `report` row or file is saved. `docs/12`
-§10's note of this date, reading (3). *Not decided by item 311:* whether a `P4-T09` rewrite (which also
+§10's note of this date, reading (3). ~~*Not decided by item 311:* whether a `P4-T09` rewrite (which also
 goes through `composeReport`) that returns this outcome stops the run too, or ships the draft that
-already passed check 1; raised for the owner on 2026-10-30.
+already passed check 1; raised for the owner on 2026-10-30.~~
+
+*Decided 2026-10-30 (owner, `plan/00` §6 item 312(b)):* only the compose stage's own
+`stopped-structure-invalid` ends the job. When a `P4-T09` rewrite returns it, the critique stage keeps
+the earlier draft that passed the section check, the run goes on to the scaffold stage with that draft,
+and the banner states that the review's revision could not be applied (`P4-T09` step 7). This card does
+not show that outcome's `messageId`. `docs/12` §10's note of this date, reading (3), and §12's.
 
 ---
 

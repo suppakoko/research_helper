@@ -2442,6 +2442,41 @@ the caller of what the card builds; if it does not, the caller is added with a d
       recorded in `docs/12` first, the prompt version is bumped by `docs/12` §17's rule, and `P4-T16`'s estimate
       follows the new ceilings.
 
+312. **Lines raised by item 311's work** (`plan/reports/followup-311.md`). **DECIDED 2026-10-30 (owner), each as
+    recommended:**
+    - (a) The Korean of `research-helper-report-stopped-structure-invalid` is approved as drafted in chat, recorded byte
+      for byte in `plan/reports/ko-review-312.ftl` (G-41).
+    - (b) When `P4-T09`'s rewrite fails the section check twice, the run keeps the earlier draft that passed it. The
+      banner says the review's revision could not be applied, in line with item 286's "the banner states an unchecked
+      revision". The run does not stop.
+    - (c) A stored `report.targetWords` above 4 250 is sent as 4 250, the longest target the ceilings are sized for, and
+      the report's appendix says so (`P4-T12` builds the line). Values from 400 to 4 250 are sent as stored.
+    - (d) The prompts' 1.0.0 → 1.0.1 PATCH with `cacheEpoch` kept at 1 is confirmed.
+
+313. **How decisions are taken from now on, 2026-10-30.** **DECIDED 2026-10-30 (owner):** unless a decision is big and
+    the program truly needs the owner, the coordinator takes the sensible direction and keeps going without asking.
+    From here on, the coordinator takes the recommended option on small and medium choices: open lines an agent
+    flags, readings the documents leave open, wave order, and which card next. Each one is recorded as "DECIDED
+    <date> (coordinator, under item 313)", so the owner can overturn it.
+
+    The owner is still asked, in batches, for real spend or keys (G-18, G-21, G-42), owner-only labels, Korean
+    wording (G-41; strings stay on `KO_PENDING_REVIEW` meanwhile), changes of scope, finishing conditions, privacy
+    or security rules, and anything irreversible.
+
+314. **Readings left open by item 312's work** (`plan/reports/followup-312.md`). **DECIDED 2026-10-30 (coordinator,
+    under item 313):**
+    - (a) After a rewrite fails the section check twice, the critique loop ends at that round, as recorded in
+      `docs/12` §12 and on `P4-T09`.
+    - (b) The "target was capped" line goes in Appendix B, as recorded on `P4-T12`.
+    - (c) After a failed rewrite, the report window's streamed preview is replaced by the kept draft, and the banner
+      says why. `P4-T09` signals it and `P4-T20` shows it. Recorded on both cards when they are built.
+
+315. **Phase 4 wave after item 314, 2026-10-30.** **DECIDED 2026-10-30 (coordinator, under item 313):** `P4-T12`
+    (client-generated title block, tables and appendices) and `P4-T14` (report note writer, `report` table, report file;
+    the build/Zotero owner) run together, fake model only. `P4-T12` builds nothing that claims where a section came
+    from, because item 286 decided there are no section-origin claims before `P3-T22` passes. New user-visible strings
+    and report-language labels stay en-US until the owner reviews the Korean in a batch (G-41).
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

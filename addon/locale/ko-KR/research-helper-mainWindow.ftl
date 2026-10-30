@@ -688,8 +688,6 @@ research-helper-report-stopped-no-theme-analysed = 보고서를 쓰기 전에 �
 ## The trend report run's stop when the report fails the section check twice
 ## (P4-T08; plan/00 §6 item 311(a))
 ##
-## NEEDS REVIEW (G-41). The message below is a commented stub carrying its
-## en-US source; nothing was machine-translated, and it is on
-## KO_PENDING_REVIEW in src/i18n/keys.ts.
+# Korean drafted by the coordinator and reviewed by the owner on 2026-10-30 (G-41, plan/00 §6 item 312(a)).
 
-# NEEDS REVIEW research-helper-report-stopped-structure-invalid — en-US: The report was stopped before it was written: asked twice, the model did not return the report with its eleven required sections in order, so nothing was saved. Every summary already made is kept.
+research-helper-report-stopped-structure-invalid = 보고서를 쓰기 전에 멈췄습니다. 두 번 요청했지만 모델이 필요한 11개 장을 순서대로 갖춘 보고서를 돌려주지 않아, 아무것도 저장하지 않았습니다. 이미 만든 요약은 모두 남아 있습니다.

@@ -26,6 +26,7 @@ import { estTokens } from "../../../src/llm/shared/tokenEstimate";
 import {
   escapeSourceText,
   parsePromptFile,
+  PROMPT_FILE_NAMES,
   PROMPT_SCHEMAS,
   type PromptTemplate,
 } from "../../../src/prompts";
@@ -1113,17 +1114,9 @@ describe("packThemeSummaries against planSynthesis's theme-stage reservation (es
             ? REDUCE
             : id === "CLUSTER_REDUCE_MERGE"
               ? MERGE
-              : promptFile(
-                  id === "THEME_CLUSTER"
-                    ? "theme-cluster.v1.0.0.md"
-                    : id === "THEME_MERGE"
-                      ? "theme-merge.v1.0.0.md"
-                      : id === "SELF_CRITIQUE"
-                        ? "self-critique.v1.0.0.md"
-                        : id === "TREND_REPORT_KO"
-                          ? "trend-report-ko.v1.0.0.md"
-                          : "trend-report-en.v1.0.0.md",
-                ),
+              : // The active files, not literal names, so a version bump
+                // cannot leave this on an old file (followup-311 finding 6).
+                promptFile(PROMPT_FILE_NAMES[id]),
       },
       synthesisOverhead: {
         THEME_CLUSTER: 0,

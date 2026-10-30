@@ -44,6 +44,7 @@ import {
   DIGESTS_TRIMMED_WARNING,
   exclusionReasons,
   expectedHeadings,
+  isTargetWordsCapped,
   MANUALLY_CURATED,
   NO_EXCLUSIONS,
   prepareComposition,
@@ -60,6 +61,8 @@ import {
   STRUCTURE_INVALID_L10N,
   structureRevisionNote,
   TARGET_WORD_BANDS,
+  TARGET_WORDS_CAPPED_WARNING,
+  TARGET_WORDS_MAX,
   targetWordsFor,
   type AnalysedPaper,
   type ComposeDeps,
@@ -71,6 +74,7 @@ import {
   type SearchRunSummary,
 } from "../../../src/pipeline/trendReport/compose";
 import { INVALID_CITATION_TEXT } from "../../../src/pipeline/trendReport/citations";
+import { KO_PENDING_REVIEW, KO_PRESENT } from "../../../src/i18n/keys";
 import {
   chatResponse,
   mockLLM,
@@ -493,14 +497,15 @@ describe("P4-T08 step 5 — report.targetWords and docs/06 §9.2 (item 290(d))",
     ]);
   });
 
-  it("reads a stored 1 and 399 as automatic, as 0 is, and sends 400 as stored", () => {
+  it("reads a stored 1 and 399 as automatic, as 0 is, sends 400 as stored and 6 000 as 4 250 (items 290(d), 312(c))", () => {
     for (const papers of [12, 42, 120, 300]) {
       const table = targetWordsFor(papers);
       expect(resolveTargetWords(1, papers)).toBe(table);
       expect(resolveTargetWords(399, papers)).toBe(table);
       expect(resolveTargetWords(0, papers)).toBe(table);
       expect(resolveTargetWords(400, papers)).toBe(400);
-      expect(resolveTargetWords(6_000, papers)).toBe(6_000);
+      // Sent as stored until 2026-10-30; capped since (owner, plan/00 §6 item 312(c)).
+      expect(resolveTargetWords(6_000, papers)).toBe(4_250);
     }
     expect(() => resolveTargetWords(-1, 12)).toThrow(RangeError);
     expect(() => resolveTargetWords(1.5, 12)).toThrow(RangeError);
@@ -519,6 +524,67 @@ describe("P4-T08 step 5 — report.targetWords and docs/06 §9.2 (item 290(d))",
         `- Target length: ${sent} words`,
       );
     }
+  });
+});
+
+describe("P4-T08 step 5 — a stored report.targetWords above 4 250 is sent as 4 250 (owner, plan/00 §6 item 312(c))", () => {
+  const doc12 = readFileSync(
+    resolve(repo, "docs/12-prompt-library.md"),
+    "utf8",
+  );
+
+  it("ties TARGET_WORDS_MAX to the Words row of docs/12 §10's ceiling derivation and to the last band's middle", () => {
+    const row = /^> \| Words \| ([\d ]+), the 151–400 row's middle \|/m.exec(
+      doc12,
+    );
+    expect(row).not.toBeNull();
+    expect(Number(row?.[1]?.replace(/ /g, ""))).toBe(TARGET_WORDS_MAX);
+    expect(TARGET_WORDS_MAX).toBe(4_250);
+    expect(targetWordsFor(400)).toBe(TARGET_WORDS_MAX);
+    expect(targetWordsFor(100_000)).toBe(TARGET_WORDS_MAX);
+  });
+
+  it("sends 4 250 as stored, and 4 251 and 8 000 as 4 250, flagging only the capped ones", () => {
+    for (const papers of [12, 300]) {
+      expect(resolveTargetWords(4_250, papers)).toBe(4_250);
+      expect(resolveTargetWords(4_251, papers)).toBe(4_250);
+      expect(resolveTargetWords(8_000, papers)).toBe(4_250);
+    }
+    expect(
+      [0, 399, 400, 4_250, 4_251, 8_000].map((stored) =>
+        isTargetWordsCapped(stored),
+      ),
+    ).toEqual([false, false, false, false, true, true]);
+  });
+
+  it("composes a stored 4 250 with no warning, and 4 251 and 8 000 at 4 250 with TARGET_WORDS_CAPPED_WARNING", async () => {
+    for (const [stored, capped] of [
+      [4_250, false],
+      [4_251, true],
+      [8_000, true],
+    ] as const) {
+      const { provider, deps } = setup();
+      const outcome = composed(
+        await composeReport(fixture({ targetWords: stored }), deps),
+      );
+      expect(userText(provider.calls[0])).toContain(
+        "- Target length: 4250 words",
+      );
+      expect(outcome.plan.targetWords).toBe(4_250);
+      expect(outcome.plan.targetWordsCapped).toBe(capped);
+      expect(outcome.warnings.includes(TARGET_WORDS_CAPPED_WARNING)).toBe(
+        capped,
+      );
+    }
+  });
+
+  it("records the cap on the plan before any request, so a stopped outcome carries it too", () => {
+    expect(
+      prepareComposition(fixture({ targetWords: 8_000 }), EN).targetWordsCapped,
+    ).toBe(true);
+    expect(
+      prepareComposition(fixture({ targetWords: 0 }), EN).targetWordsCapped,
+    ).toBe(false);
   });
 });
 
@@ -852,7 +918,8 @@ describe("P4-T08 step 4 — check 1 regenerates once (docs/12 §10; item 290)", 
     });
   });
 
-  it("names a message id the en-US bundle declares with no argument, and a ko-KR NEEDS REVIEW stub carrying that English (item 311(a); G-41)", () => {
+  // Rewritten 2026-10-30: the owner approved the Korean (G-41, plan/00 §6 item 312(a)); until then the ko-KR bundle held a NEEDS REVIEW stub.
+  it("names a message id the en-US bundle declares with no argument, and the owner-approved ko-KR line (items 311(a), 312(a); G-41)", () => {
     const en = readFileSync(
       resolve(repo, "addon/locale/en-US/research-helper-mainWindow.ftl"),
       "utf8",
@@ -871,12 +938,26 @@ describe("P4-T08 step 4 — check 1 regenerates once (docs/12 §10; item 290)", 
       resolve(repo, "addon/locale/ko-KR/research-helper-mainWindow.ftl"),
       "utf8",
     );
-    expect(ko.split("\n")).toContain(
-      `# NEEDS REVIEW ${STRUCTURE_INVALID_L10N} — en-US: ${english}`,
+    const approved = readFileSync(
+      resolve(repo, "plan/reports/ko-review-312.ftl"),
+      "utf8",
+    )
+      .split("\n")
+      .filter((l) => l.startsWith(`${STRUCTURE_INVALID_L10N} = `));
+    expect(approved).toHaveLength(1);
+    const koLines = ko
+      .split("\n")
+      .filter((l) => l.startsWith(`${STRUCTURE_INVALID_L10N} =`));
+    expect(koLines).toEqual(approved);
+    expect(koLines[0]).not.toContain("{ $");
+    expect(ko).not.toContain(`# NEEDS REVIEW ${STRUCTURE_INVALID_L10N}`);
+    expect(ko).toContain(
+      "# Korean drafted by the coordinator and reviewed by the owner on 2026-10-30 (G-41, plan/00 §6 item 312(a)).",
     );
-    expect(
-      ko.split("\n").some((l) => l.startsWith(`${STRUCTURE_INVALID_L10N} =`)),
-    ).toBe(false);
+    expect(KO_PRESENT as readonly string[]).toContain(STRUCTURE_INVALID_L10N);
+    expect(KO_PENDING_REVIEW as readonly string[]).not.toContain(
+      STRUCTURE_INVALID_L10N,
+    );
   });
 
   it("checks a Korean report against TREND_REPORT_KO's own headings", async () => {

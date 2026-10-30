@@ -25,7 +25,9 @@
  * 1. {@link reportVariables}: every computed variable, in code — the counts,
  *    `{{EXCLUSION_REASONS}}`, the year range, `{{SOURCES}}`,
  *    `{{SEARCH_STRATEGY}}` and `{{TARGET_WORDS}}` ({@link resolveTargetWords}:
- *    a stored 1–399 reads as `0`, automatic; owner, `plan/00` §6 item 290(d)).
+ *    a stored 1–399 reads as `0`, automatic, owner, `plan/00` §6 item 290(d);
+ *    a stored value above {@link TARGET_WORDS_MAX} is sent as it, with
+ *    {@link TARGET_WORDS_CAPPED_WARNING}, owner, item 312(c)).
  * 2. {@link prepareComposition}: `{{DIGESTS}}` trimmed when the full set
  *    would put the rendered request over the budget (`docs/06` §8.3).
  * 3. One `chatStream` call on `resolveModel("strong")`, the template's
@@ -37,7 +39,10 @@
  *    visibly, with no model call; checks 3–5 are measured for Appendix B.
  *    When the one fresh generation fails check 1 again, the outcome is
  *    `stopped-structure-invalid` with {@link STRUCTURE_INVALID_L10N}: the run
- *    stops before anything is written (owner, `plan/00` §6 item 311(a)).
+ *    stops before anything is written (owner, `plan/00` §6 item 311(a)). For
+ *    a `P4-T09` rewrite the same outcome does not stop the run: `critique.ts`
+ *    keeps the earlier draft (owner, item 312(b)); nothing here changes for
+ *    it, because only that caller sends `revisionNotes`.
  *
  * The readings these steps needed are `docs/12` §10's note of 2026-10-29 and
  * `docs/06` §9.2's; `docs/12` §10's notes of 2026-10-30 record the owner's
@@ -116,7 +121,8 @@ export const REPORT_SECTION_COUNT = 11;
  * The stop message when the one fresh generation fails check 1 again (owner,
  * `plan/00` §6 item 311(a); `docs/12` §10's note of 2026-10-30, reading (3)).
  * No argument. Main-window bundle, beside the other report stops; its Korean
- * is on `KO_PENDING_REVIEW` as a commented stub (`G-41`).
+ * was approved by the owner on 2026-10-30 and is on `KO_PRESENT` (`G-41`,
+ * item 312(a)).
  */
 export const STRUCTURE_INVALID_L10N =
   "research-helper-report-stopped-structure-invalid" as const satisfies MainWindowMessageId;
@@ -180,6 +186,16 @@ export const TARGET_WORD_BANDS: readonly TargetWordBand[] = Object.freeze([
 /** `docs/07` §8.5: `report.targetWords` is `0`, or at least this. */
 export const TARGET_WORDS_MIN = 400;
 
+/**
+ * The longest `{{TARGET_WORDS}}` sent (owner, `plan/00` §6 item 312(c)): the
+ * "Words" row of `docs/12` §10's ceiling derivation of 2026-10-30, so the
+ * longest target `TREND_REPORT_EN`'s and `TREND_REPORT_KO`'s output ceilings
+ * are sized for. A test reads it from that row; if the derivation is redone
+ * for a longer target, this follows it. Also the automatic setting's longest
+ * target, the last {@link TARGET_WORD_BANDS} row's middle.
+ */
+export const TARGET_WORDS_MAX = 4_250;
+
 /** On a composed report whose first answer failed check 1 and was generated afresh. */
 export const REGENERATED_WARNING = "report_regenerated_structure";
 
@@ -188,6 +204,13 @@ export const DIGESTS_TRIMMED_WARNING = "report_digests_trimmed";
 
 /** On a composed report in which check 2 replaced at least one marker. */
 export const CITATIONS_REPLACED_WARNING = "report_citations_replaced";
+
+/**
+ * On a composed report whose stored `report.targetWords` was above
+ * {@link TARGET_WORDS_MAX} and was sent as it (owner, `plan/00` §6 item
+ * 312(c)); `P4-T12` builds the appendix line that says the target was capped.
+ */
+export const TARGET_WORDS_CAPPED_WARNING = "report_target_words_capped";
 
 /** Every run of whitespace or control characters. */
 const BREAKING_RE = /[\s\p{Cc}]+/gu;
@@ -393,6 +416,8 @@ export interface CompositionPlan {
   readonly scope: ReportScope;
   /** `{{TARGET_WORDS}}` as sent. */
   readonly targetWords: number;
+  /** The stored `report.targetWords` was above {@link TARGET_WORDS_MAX} and was sent as it (item 312(c)). */
+  readonly targetWordsCapped: boolean;
   readonly digestSelection: DigestSelection;
   /** The digests sent, in order. */
   readonly digestKeys: readonly string[];
@@ -456,7 +481,10 @@ export interface ComposedReport extends ComposeOutcomeBase {
   /** Check 2's result over the whole answer. */
   readonly citations: CitationValidation;
   readonly quality: ComposeQuality;
-  /** {@link REGENERATED_WARNING}, {@link DIGESTS_TRIMMED_WARNING}, {@link CITATIONS_REPLACED_WARNING}. */
+  /**
+   * {@link REGENERATED_WARNING}, {@link DIGESTS_TRIMMED_WARNING},
+   * {@link CITATIONS_REPLACED_WARNING}, {@link TARGET_WORDS_CAPPED_WARNING}.
+   */
   readonly warnings: readonly string[];
 }
 
@@ -465,7 +493,9 @@ export interface ComposedReport extends ComposeOutcomeBase {
  * written and says why; the summaries and cached stage results are kept
  * (owner, `plan/00` §6 item 311(a); `docs/12` §10's note of 2026-10-30,
  * reading (3)). No third request and no report text. `P4-T18` ends the job on
- * it, as on the other report stops.
+ * it, as on the other report stops — on a first composition only: when a
+ * `P4-T09` rewrite returns it, `critique.ts` keeps the earlier draft that
+ * passed check 1 and the run goes on (owner, `plan/00` §6 item 312(b)).
  */
 export interface StructureInvalidOutcome extends ComposeOutcomeBase {
   readonly status: "stopped-structure-invalid";
@@ -503,7 +533,9 @@ export function targetWordsFor(papers: number): number {
 /**
  * `{{TARGET_WORDS}}` from the stored `report.targetWords` (`plan/07` `P4-T08`
  * step 5): `0`, and 1–399, which `PrefDef` cannot refuse, are automatic
- * (owner, `plan/00` §6 item 290(d)); 400 or more is sent as stored.
+ * (owner, `plan/00` §6 item 290(d)); 400 to {@link TARGET_WORDS_MAX} is sent
+ * as stored, and above it is sent as {@link TARGET_WORDS_MAX} (owner, item
+ * 312(c); {@link isTargetWordsCapped} says when).
  *
  * @throws RangeError for a value that is not a whole number of at least 0
  */
@@ -513,7 +545,16 @@ export function resolveTargetWords(stored: number, papers: number): number {
       `[research-helper] report.targetWords is a whole number of at least 0, not ${String(stored)}`,
     );
   }
-  return stored >= TARGET_WORDS_MIN ? stored : targetWordsFor(papers);
+  if (stored < TARGET_WORDS_MIN) return targetWordsFor(papers);
+  return Math.min(stored, TARGET_WORDS_MAX);
+}
+
+/**
+ * Whether {@link resolveTargetWords} capped the stored `report.targetWords`
+ * at {@link TARGET_WORDS_MAX} (owner, `plan/00` §6 item 312(c)).
+ */
+export function isTargetWordsCapped(stored: number): boolean {
+  return stored > TARGET_WORDS_MAX;
 }
 
 /**
@@ -627,6 +668,7 @@ export function reportVariables(input: ComposeInput): {
   readonly variables: Readonly<Record<string, string>>;
   readonly scope: ReportScope;
   readonly targetWords: number;
+  readonly targetWordsCapped: boolean;
 } {
   const scope = reportScopeOf(input);
   const targetWords = resolveTargetWords(
@@ -636,6 +678,7 @@ export function reportVariables(input: ComposeInput): {
   return {
     scope,
     targetWords,
+    targetWordsCapped: isTargetWordsCapped(input.targetWords),
     variables: {
       COLLECTION_NAME: oneLine(input.collectionName),
       USER_TOPIC: oneLine(input.userTopic),
@@ -796,7 +839,8 @@ export function prepareComposition(
 ): CompositionPlan {
   checkInput(input, prompt);
   expectedHeadings(prompt);
-  const { variables, scope, targetWords } = reportVariables(input);
+  const { variables, scope, targetWords, targetWordsCapped } =
+    reportVariables(input);
   const analyses = orderedThemes(input.themes);
   const themeIds = analyses.map((analysis) => analysis.themeId);
   const budget =
@@ -838,6 +882,7 @@ export function prepareComposition(
         variables: sent,
         scope,
         targetWords,
+        targetWordsCapped,
         digestSelection: selection,
         digestKeys: digests.map((digest) => digest.itemKey),
         themeIds,
@@ -1295,6 +1340,7 @@ export async function composeReport(
     ...(firstFailure !== undefined ? [REGENERATED_WARNING] : []),
     ...(plan.digestSelection !== "all" ? [DIGESTS_TRIMMED_WARNING] : []),
     ...(citations.removed.length > 0 ? [CITATIONS_REPLACED_WARNING] : []),
+    ...(plan.targetWordsCapped ? [TARGET_WORDS_CAPPED_WARNING] : []),
   ];
   return {
     ...base(),
