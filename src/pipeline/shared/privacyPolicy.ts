@@ -397,6 +397,39 @@ export interface CollectionPrivacySettings {
   /** The override, as stored; {@link effectiveMode} applies it. */
   readonly privacyMode?: PrivacyMode;
   readonly routineConfirmation?: RoutineConfirmation;
+  /**
+   * The trend-report run's own "don't ask again" (owner, `plan/00` §6 item
+   * 292(f); `docs/07` §4.5's note of 2026-11-01): a summarize run's
+   * {@link routineConfirmation} never skips a report run's question, and only
+   * this record does.
+   */
+  readonly reportRoutineConfirmation?: RoutineConfirmation;
+}
+
+/** The two "don't ask again" members of a collection's settings. */
+const ROUTINE_MEMBERS = [
+  "routineConfirmation",
+  "reportRoutineConfirmation",
+] as const;
+
+/** A stored record as a {@link RoutineConfirmation}, or `undefined` when malformed. */
+function readRoutine(routine: unknown): RoutineConfirmation | undefined {
+  if (typeof routine !== "object" || routine === null) return undefined;
+  const r = routine as Record<string, unknown>;
+  const providerId = r["providerId"];
+  if (
+    typeof providerId === "string" &&
+    (PROVIDER_IDS as readonly string[]).includes(providerId) &&
+    isPrivacyMode(r["privacyMode"]) &&
+    typeof r["fullText"] === "boolean"
+  ) {
+    return {
+      providerId: providerId as ProviderId,
+      privacyMode: r["privacyMode"],
+      fullText: r["fullText"],
+    };
+  }
+  return undefined;
 }
 
 const PROVIDER_IDS: readonly ProviderId[] = [
@@ -424,27 +457,15 @@ export function readCollectionPrivacySettings(
   const out: {
     privacyMode?: PrivacyMode;
     routineConfirmation?: RoutineConfirmation;
+    reportRoutineConfirmation?: RoutineConfirmation;
   } = {};
   const mode = settings["privacyMode"];
   if (mode !== undefined && mode !== null) {
     out.privacyMode = isPrivacyMode(mode) ? mode : "strict";
   }
-  const routine = settings["routineConfirmation"];
-  if (typeof routine === "object" && routine !== null) {
-    const r = routine as Record<string, unknown>;
-    const providerId = r["providerId"];
-    if (
-      typeof providerId === "string" &&
-      (PROVIDER_IDS as readonly string[]).includes(providerId) &&
-      isPrivacyMode(r["privacyMode"]) &&
-      typeof r["fullText"] === "boolean"
-    ) {
-      out.routineConfirmation = {
-        providerId: providerId as ProviderId,
-        privacyMode: r["privacyMode"],
-        fullText: r["fullText"],
-      };
-    }
+  for (const member of ROUTINE_MEMBERS) {
+    const routine = readRoutine(settings[member]);
+    if (routine !== undefined) out[member] = routine;
   }
   return out;
 }
@@ -469,12 +490,13 @@ export async function writeCollectionPrivacySettings(
   patch: {
     readonly privacyMode?: PrivacyMode | undefined;
     readonly routineConfirmation?: RoutineConfirmation | undefined;
+    readonly reportRoutineConfirmation?: RoutineConfirmation | undefined;
   },
 ): Promise<void> {
   const current =
     (await store.get(collection.libraryID, collection.collectionKey)) ?? {};
   const next: Record<string, unknown> = { ...current };
-  for (const member of ["privacyMode", "routineConfirmation"] as const) {
+  for (const member of ["privacyMode", ...ROUTINE_MEMBERS] as const) {
     if (!(member in patch)) continue;
     const value = patch[member];
     if (value === undefined) delete next[member];

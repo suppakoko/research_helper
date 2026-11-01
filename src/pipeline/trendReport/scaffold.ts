@@ -85,6 +85,9 @@ import {
   type ComposedReport,
   type CompositionPlan,
 } from "./compose";
+// A type import: critique.ts imports this module, so a value import would
+// make a cycle. The constant below is held to critique.ts's by its type.
+import type { CRITIQUE_TEXT_UNCHECKED_WARNING } from "./critique";
 import { doiUrl, printedDoiAddress } from "./exportMarkdown";
 import {
   fillLabel,
@@ -111,6 +114,13 @@ export const PREAMBLE_DROPPED_WARNING = "report_preamble_dropped";
 
 /** The Notable Papers table failed its check (coordinator, item 313). */
 export const NOTABLE_PAPERS_INVALID_WARNING = "report_notable_papers_invalid";
+
+/**
+ * critique.ts's `critique_text_unchecked`: a paragraph the review could not
+ * check; Appendix B says so (coordinator, `plan/00` §6 item 317(c)).
+ */
+const CRITIQUE_TEXT_UNCHECKED: typeof CRITIQUE_TEXT_UNCHECKED_WARNING =
+  "critique_text_unchecked";
 
 /** What an empty table cell shows. */
 const EMPTY_CELL = "—";
@@ -246,6 +256,13 @@ export interface ScaffoldInput {
   >;
   /** What the self-critique left (`P4-T09`). */
   readonly critique: CritiqueOutcome;
+  /**
+   * The critique stage's `CritiqueResult.warnings` (`critique_per_section`,
+   * `critique_text_unchecked`), carried into the report's warnings;
+   * `critique_text_unchecked` also writes Appendix B's line (coordinator,
+   * `plan/00` §6 item 317(c)). Absent: none.
+   */
+  readonly critiqueWarnings?: readonly string[];
   /** §11's numbered entries, formatted for {@link bibliographyKeys}' order. */
   readonly bibliography: readonly BibliographyEntry[];
   /** The retracted items' entries, formatted the same way. */
@@ -956,6 +973,9 @@ export function appendixB(
       }),
     );
   }
+  if (input.critiqueWarnings?.includes(CRITIQUE_TEXT_UNCHECKED) === true) {
+    notes.push(labels.critiqueTextUnchecked);
+  }
   const summaries = input.analysed.map((paper) => paper.summary);
   const models = distinct(summaries.map((s) => s.modelId));
   const mixedModel = models.length > 1;
@@ -1267,6 +1287,7 @@ export function scaffoldReport(input: ScaffoldInput): ScaffoldedReport {
   if (input.plan.targetWordsCapped) add(TARGET_WORDS_CAPPED_WARNING);
   if (input.composed.preamble.trim() !== "") add(PREAMBLE_DROPPED_WARNING);
   if (!notable.ok) add(NOTABLE_PAPERS_INVALID_WARNING);
+  for (const warning of input.critiqueWarnings ?? []) add(warning);
 
   return {
     title: head.title,

@@ -153,4 +153,12 @@ export interface PipelineSet {
    * `buildPipelineSet` always supplies it.
    */
   readonly summarize?: ErasedPipeline;
+  /**
+   * "Generate Research Trends Report…" (`P4-T18`): `createTrendReportPipeline`
+   * in `./trendReport/trendReportPipeline.ts`, erased like every member; the
+   * report window's host (`P4-T20`, `src/bootstrap/registerUI.ts`) narrows it
+   * to `TrendReportPipeline`. Optional for the reason `summarize` is;
+   * `buildPipelineSet` always supplies it.
+   */
+  readonly trendReport?: ErasedPipeline;
 }

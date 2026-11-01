@@ -44,7 +44,13 @@
  * 5. A rewrite that returns `stopped-structure-invalid` keeps the earlier
  *    draft, ends the loop at that round and sets
  *    `CritiqueOutcome.revisionNotApplied` (owner, item 312(b); coordinator,
- *    item 314(a)); the run goes on.
+ *    item 314(a)); the run goes on. A rewrite that throws an error of its own
+ *    — a truncated answer, a network or upstream failure, a content filter —
+ *    is handled the same way ({@link rewriteErrorEndsRun}; coordinator,
+ *    `plan/00` §6 item 317(b)); a cancel, a budget refusal, a rejected key, a
+ *    configuration or privacy error, or a defect still ends the stage. A
+ *    failed **critique** request still fails it: no banner says "the review
+ *    failed".
  *
  * The readings these steps needed are `docs/06` §12.2's note "As built
  * 2026-10-30", each decided under `plan/00` §6 item 313.
@@ -57,7 +63,16 @@
  * removes or edits the draft; only a fresh generation replaces it.
  */
 
-import { ConfigurationError, PolicyViolationError } from "../../core/errors";
+import {
+  AuthenticationError,
+  BudgetExceededError,
+  ConfigurationError,
+  OperationCancelledError,
+  PolicyViolationError,
+  PrivacyRoutingError,
+  ResearchHelperError,
+} from "../../core/errors";
+import type { CancellationToken } from "../../core/jobQueue/cancellation";
 import type { Logger } from "../../core/logger";
 import { packByTokens } from "../../llm/shared/chunking";
 import {
@@ -617,6 +632,34 @@ const SILENT_LOGGER: Logger = {
   time: (_msg, fn) => fn(),
 };
 
+/**
+ * Whether an error a **rewrite** threw ends the stage (and so the run), rather
+ * than leaving the earlier draft in place (coordinator, `plan/00` §6 item
+ * 317(b); `docs/06` §12.2's note of 2026-10-30, reading (12)). The split
+ * `themeAnalysis.ts` makes between one theme's failure and the stage's: a
+ * cancel, a budget refusal (the job pauses with the stage pending), a
+ * rejected key, a configuration or privacy error — each would fail any later
+ * request too — and anything that is not a `ResearchHelperError`, which only
+ * a defect throws. Everything else (`OutputTruncatedError`, a network or
+ * upstream error, a content filter, a request that no longer fits) is "not
+ * applied".
+ */
+export function rewriteErrorEndsRun(
+  error: unknown,
+  token: Pick<CancellationToken, "isCancellationRequested">,
+): boolean {
+  if (token.isCancellationRequested) return true;
+  if (!(error instanceof ResearchHelperError)) return true;
+  return (
+    error instanceof OperationCancelledError ||
+    error instanceof BudgetExceededError ||
+    error instanceof AuthenticationError ||
+    error instanceof ConfigurationError ||
+    error instanceof PolicyViolationError ||
+    error instanceof PrivacyRoutingError
+  );
+}
+
 // ---------------------------------------------------------------------------
 // 6. The stage
 // ---------------------------------------------------------------------------
@@ -633,10 +676,12 @@ const SILENT_LOGGER: Logger = {
  *   its schema, or a critique model that cannot be resolved; RangeError for
  *   an inconsistent input; PolicyViolationError when the privacy mode refuses
  *   the critique model, or needs a confirmation the run did not give — each
- *   before any request; and every error of a critique request or a rewrite
- *   unchanged (a cancel, a budget refusal, a schema failure after
- *   `completeJSON`'s repair and retry, `OutputTruncatedError`, a network
- *   error) — only a rewrite's `stopped-structure-invalid` is handled here
+ *   before any request; every error of a critique request unchanged (a
+ *   cancel, a budget refusal, a schema failure after `completeJSON`'s repair
+ *   and retry, `OutputTruncatedError`, a network error); and a rewrite's
+ *   error when {@link rewriteErrorEndsRun} says it ends the run — a rewrite's
+ *   `stopped-structure-invalid` and every other rewrite error keep the
+ *   earlier draft here
  */
 export async function critiqueReport(
   input: CritiqueInput,
@@ -827,21 +872,37 @@ export async function critiqueReport(
     // Step 5: one fresh generation with the problems in {{REVISION_NOTES}}.
     rewrites += 1;
     signal({ kind: "rewrite-started", round });
-    const rewrite = await composeReport(
-      { ...input.compose, revisionNotes: revisionNotesFor(highs) },
-      {
-        llm: deps.llm,
-        budget: deps.budget,
-        token: deps.token,
-        pool: deps.pool,
-        reportPrompt: deps.reportPrompt,
-        ...(deps.onDraft !== undefined && { onDraft: deps.onDraft }),
-        ...(deps.progress !== undefined && { progress: deps.progress }),
-        ...(deps.routing !== undefined && { routing: deps.routing }),
-        ...(deps.logger !== undefined && { logger: deps.logger }),
-        traceId: `${traceBase}:rewrite-${String(round)}`,
-      },
-    );
+    let rewrite: Awaited<ReturnType<typeof composeReport>>;
+    try {
+      rewrite = await composeReport(
+        { ...input.compose, revisionNotes: revisionNotesFor(highs) },
+        {
+          llm: deps.llm,
+          budget: deps.budget,
+          token: deps.token,
+          pool: deps.pool,
+          reportPrompt: deps.reportPrompt,
+          ...(deps.onDraft !== undefined && { onDraft: deps.onDraft }),
+          ...(deps.progress !== undefined && { progress: deps.progress }),
+          ...(deps.routing !== undefined && { routing: deps.routing }),
+          ...(deps.logger !== undefined && { logger: deps.logger }),
+          traceId: `${traceBase}:rewrite-${String(round)}`,
+        },
+      );
+    } catch (error) {
+      if (rewriteErrorEndsRun(error, deps.token)) throw error;
+      // Coordinator, plan/00 §6 item 317(b): as "not applied" — the earlier
+      // draft ships under the existing banner, and the loop ends here. The
+      // failed rewrite's spend is already on the budget guard; its usage is
+      // not known here.
+      revisionNotApplied = true;
+      logger.warn("critique: the rewrite failed; the earlier draft is kept", {
+        round,
+        code: error instanceof ResearchHelperError ? error.code : "UNKNOWN",
+      });
+      signal({ kind: "rewrite-not-applied", round, markdown: draft.markdown });
+      break;
+    }
     usages.push(rewrite.usage);
     calls += rewrite.requests;
     if (rewrite.status === "stopped-structure-invalid") {

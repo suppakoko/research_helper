@@ -2,7 +2,7 @@
 
 > **Generated from the task cards in `01`–`04` and `07`** (Phase 4's file, read since 2026-10-26). If a
 > row here disagrees with a card, the card wins — then regenerate this file.
-> **Last updated:** 2026-10-30 · **182 tasks: 112 `DONE`, 70 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**. **The plan has grown from the 123 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25) to 182, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-01 · **182 tasks: 112 `DONE`, 70 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**. **The plan has grown from the 123 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25) to 182, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -2494,6 +2494,91 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (d) The stale header of `src/llm/shared/chunking.ts` is corrected.
     - (e) `P4-T18` (the trend-report pipeline: stages, passes, cancel, resume) runs next, alone, as the
       build/Zotero owner, with (b) to (d) as its first small step.
+
+318. **Questions of 2026-11-01.** **DECIDED 2026-11-01 (owner), each as recommended:**
+    - (a) The 136 pending `ko` report labels (`plan/reports/ko-draft-report-labels.tsv`) are reviewed in chat, in
+      batches of about 30 (G-41).
+    - (b) `REVISION_NOTES_INSTRUCTION` (`P4-T09`; quoted in `plan/reports/P4-T09.md`) is approved as drafted.
+    - (c) While `P4-T18` runs, a second agent decomposes Phase 5 into cards as plan work only, with no code. It
+      follows the Phase 4 precedent: a draft as `plan/08-phase-5-related-papers.md`, an independent review, then
+      the owner's questions, and only after that does any estimate move.
+
+    The owner's standing instruction is reaffirmed: keep going without stopping on non-decisive choices, confirm
+    genuinely ambiguous points by asking (batched, while other work continues), and run independent work as parallel
+    agents.
+
+319. **Korean of the report labels, 2026-11-01.** **DECIDED 2026-11-01 (owner, G-41):** all 136 pending `ko` report
+    labels are approved as the coordinator drafted them, reviewed in chat in five batches (26, 24, 22, 39 and 23
+    labels). The approved text is the third column of `plan/reports/ko-draft-report-labels.tsv`, byte for byte. It
+    moves into `KO_REPORT_LABELS`, and `KO_REPORT_LABELS_PENDING_REVIEW` empties, except for labels added after this
+    review (the `critique_text_unchecked` line of item 317(c)), which wait for the next batch.
+
+320. **Phase 5 scope, first questions of 2026-11-01** (`plan/reports/phase5-draft.md`,
+    `plan/reports/phase5-review.md`). **DECIDED 2026-11-01 (owner), each as recommended:**
+    - (a) No Semantic Scholar key is required for Phase 5. Without a key, Phase 5's runs send no Semantic Scholar
+      request at all (no anonymous attempt; 12 refusals in a row were seen on 2026-10-16). `docs/10` Q8 is marked
+      decided, and the pane's "need a key" wording becomes "work better with a key".
+    - (b) Similarity: Semantic Scholar's SPECTER2 paper vectors when a key is set, otherwise local word overlap
+      (TF-IDF). No third-party embedding service.
+    - (c) The model is used only for the collection profile (`COLLECTION_PROFILE`), once per profile, cached until
+      the collection changes. `RECOMMEND_RANK` is not built in v1.
+    - (d) The profile call sends one metadata line per paper (item key, title, year, venue, top subject terms), with
+      no abstracts or summaries. `docs/09` §3 row 6 is corrected to say so.
+
+321. **Phase 5 scope, second questions of 2026-11-01.** **DECIDED 2026-11-01 (owner), each as recommended:**
+    - (a) A new gate `G-43`, modelled on `G-42`: the first real recommendation run's spend is approved by the owner
+      before it runs.
+    - (b) With several items selected, "find related papers" is disabled (a tooltip gives the reason where possible).
+    - (c) Co-citation is not built in Phase 5; it goes to the backlog.
+    - (d) All five candidate sources of the design are built, including the frequent-author watch.
+
+322. **`P4-T18` built, 2026-11-01** (`plan/reports/P4-T18.md`). **DECIDED 2026-11-01 (coordinator, under item 313):**
+    - (a) The agent's thirteen coordinator-level readings stand (its report's decision list and `docs/07` §12.4).
+    - (b) The pass counter stays as built (L1 + L2 as reported + 1 for the composition + 1 per critique round run).
+      `P4-T12`'s "the analyse stage's counter" is read as this counter.
+    - (c) The 30 % rule stops at 10 of 30: "more than 30 %" is what FR text and the stop string say; the card's 11
+      and 9 were examples on either side, not the boundary.
+    - (d) Findings 1 (long Fluent ids redacted in stored records) and 4 (`libraryCatalog` never filled) block no
+      finishing condition and are recorded only (rule 9). Finding 2 is resolved in the pipeline (`withDatedTitle`);
+      finding 6 is fixed in `docs/06` §12.2 reading (8).
+    - (e) Finding 3 (themes already analysed are paid for again after a budget pause) and finding 5 (a resumed
+      headless run has no cancel tied to plugin teardown; a paused resumed job has nothing to resume it) go to
+      `P4-T20`'s round as small first steps, because `P4-T20` binds the surfaces they need.
+    - (f) The estimate overran (about 3.5–4 d against 2.0 d); the card's estimate is left as planned and the overrun
+      is recorded in the report, as for earlier cards.
+
+323. **Phase 5 scope, third questions of 2026-11-01** (`plan/reports/phase5-review.md` lines 8, 28, 29, 33).
+    **DECIDED 2026-11-01 (owner), each as recommended:**
+    - (a) The literature databases receive what the design sends: search queries, the collection's paper
+      identifiers, dismissed paper identifiers and frequent author names. `docs/09` §3 row 6 is corrected to name
+      them, and the run window's notice shows them. All five candidate sources stay (item 321(d)).
+    - (b) Which recommendations the user adds or dismisses is not recorded in v1 (`docs/05` §8.4). "Not interested"
+      only hides a paper in that collection.
+    - (c) Semantic Scholar test responses are recorded by the owner, with the key in the process environment, at no
+      cost; the agent never sees the value. The recorder gets a keyed path for this.
+    - (d) No held-out evaluation tool in Phase 5 (backlog). The owner's expert judgement (`G-27`) is the finishing
+      condition.
+
+324. **`P4-T18`'s owner-level lines and new Korean, 2026-11-01.** **DECIDED 2026-11-01 (owner):**
+    - (a) A job resumed after a restart with no window open does not answer a pause with "stop". It stays paused,
+      and the report window asks when the user opens it. Nothing already paid for is discarded. (Recommended.)
+    - (b) A cancel keeps this run's paid-for synthesis cache entries (`tc`, `cr`, `rp`), as a stop does; the report,
+      note, row and file are not saved. (Recommended; this is how `P4-T18` built it.)
+    - (c) G-41: the Korean of `research-helper-report-stopped-papers-failed`,
+      `research-helper-report-stopped-no-papers` and the report label `critiqueTextUnchecked` is approved, byte for
+      byte as shown in chat:
+      - papers-failed: `보고서를 쓰기 전에 멈추었습니다. 논문 { $total }편 가운데 30%가 넘는 { $failed }편을 요약하지 못했습니다. 보통 API 키, 계정 잔액, 제공자에 문제가 있을 때 생깁니다. 이미 만든 요약은 모두 남아 있습니다.`
+      - no-papers: `보고서를 쓰기 전에 멈췄습니다. 이 컬렉션에는 분석할 수 있는 논문이 없습니다. 모든 논문이 제외되었거나 초록이나 본문이 없습니다. 아무것도 보내지 않았습니다.`
+      - critiqueTextUnchecked: `일부 문단은 자동 검토를 거치지 않았습니다. 그 문단이 인용한 요약이 너무 길어 한 번의 검토 요청으로 보낼 수 없었기 때문입니다.`
+
+      The first reads "멈추었습니다" where the other stops read "멈췄습니다"; it ships as approved, and the
+      one-syllable harmonisation is offered at the next Korean review.
+
+325. **Next round, 2026-11-01.** **DECIDED 2026-11-01 (coordinator, under item 313):** three agents run in parallel.
+    `P4-T20` (report window) is the build/Zotero owner and also takes item 322(e) and the Korean of item 324(c).
+    `P4-T22` (400-item scale test on the mock provider) runs unit tests only, with no build and no Zotero run. A
+    plan-only agent applies items 320, 321 and 323 and the review's coordinator lines to `plan/08` and propagates
+    Phase 5's estimate. `P4-T21` (Korean report path) follows `P4-T20`.
 
 ## 7. Regenerating this file
 

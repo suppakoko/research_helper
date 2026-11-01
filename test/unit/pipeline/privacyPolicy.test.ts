@@ -856,6 +856,47 @@ describe("collection_settings — migration version 5, docs/07 §8.3's statement
       },
     });
   });
+
+  it("keeps the report run's own record beside the summarize run's, each written and removed alone (P4-T18 step 7, item 292(f))", async () => {
+    const { store } = await migratedStore();
+    const summarize = {
+      providerId: "openai",
+      privacyMode: "balanced",
+      fullText: false,
+    } as const;
+    const report = {
+      providerId: "openai",
+      privacyMode: "balanced",
+      fullText: false,
+    } as const;
+    await writeCollectionPrivacySettings(store, COLLECTION, {
+      routineConfirmation: summarize,
+    });
+    expect(
+      readCollectionPrivacySettings(await store.get(1, "ABCD2345")),
+    ).toStrictEqual({ routineConfirmation: summarize });
+    await writeCollectionPrivacySettings(store, COLLECTION, {
+      reportRoutineConfirmation: report,
+    });
+    expect(
+      readCollectionPrivacySettings(await store.get(1, "ABCD2345")),
+    ).toStrictEqual({
+      routineConfirmation: summarize,
+      reportRoutineConfirmation: report,
+    });
+    await writeCollectionPrivacySettings(store, COLLECTION, {
+      reportRoutineConfirmation: undefined,
+    });
+    expect(
+      readCollectionPrivacySettings(await store.get(1, "ABCD2345")),
+    ).toStrictEqual({ routineConfirmation: summarize });
+    // A malformed report record reads as absent: the report run asks again.
+    expect(
+      readCollectionPrivacySettings({
+        reportRoutineConfirmation: { providerId: "openai" },
+      }),
+    ).toStrictEqual({});
+  });
 });
 
 describe("loadPrivacyPolicy — the job's policy, failing closed", () => {

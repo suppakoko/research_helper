@@ -1272,6 +1272,15 @@ rather than fail the job. Step 4's estimate question is answered as believed: `p
 `src/bootstrap/registerPipelines.ts` (`P4-T18`); nothing is constructed in the module. The signal of item 314(c) is
 `CritiqueDeps.onRevision` (`P4-T18` passes it through; `P4-T20` shows it).
 
+*Decided 2026-10-30 (coordinator, `plan/00` §6 item 317(b)–(d)); built by `P4-T18`'s first step:* the second
+open line above is settled. A rewrite that throws (`OutputTruncatedError`, a network or upstream failure, a
+content filter) is handled like a rewrite's `stopped-structure-invalid`: the earlier draft ships with
+`bannerRevisionNotApplied`, the loop ends, `rewrite-not-applied` is signalled. A cancel, a budget refusal, a
+rejected key, a configuration, policy or privacy error and a defect still end the stage (`rewriteErrorEndsRun`
+in `critique.ts`, the split `themeAnalysis.ts` makes). A failed critique request still fails the job.
+`critique_text_unchecked` gets Appendix B's line (`P4-T12`'s note of this date). `src/llm/shared/chunking.ts`'s
+header no longer calls `critique.ts` "not built yet". `docs/06` §12.2's note of this date, readings (12)–(13).
+
 ---
 
 ### P4-T10 — Citation validator and marker binding
@@ -1569,6 +1578,17 @@ report's) and spreads the result into the stored `TrendReport`; `critique.ts` (`
 constructing file is `src/bootstrap/registerPipelines.ts` (`P4-T18`); nothing is constructed — pure
 functions and constants. No section-origin claim is built (item 315): it would go in the header's analysis
 line and a per-paper column of Appendix B once `P3-T22` passes.
+
+*Decided 2026-10-30 (coordinator, `plan/00` §6 item 317(c)); built by `P4-T18`'s first step:* `ScaffoldInput`
+gains the optional `critiqueWarnings` (the critique stage's `CritiqueResult.warnings`). The scaffold carries them
+into the report's `warnings`, and when they hold `critique_text_unchecked` Appendix B writes the new label
+`critiqueTextUnchecked` among its notes; its `ko` is on `KO_REPORT_LABELS_PENDING_REVIEW` (`G-41`). `docs/06`
+§12.2's note of this date, reading (13).
+
+*Updated 2026-11-01 (owner, `plan/00` §6 item 319; moved by `P4-T18`):* the 136 drafted `ko` labels are approved
+and in `KO_REPORT_LABELS`, byte for byte from the third column of `plan/reports/ko-draft-report-labels.tsv`
+(placeholders checked equal by script, `headerScope`'s in another order); `KO_REPORT_LABELS_PENDING_REVIEW`
+holds only `critiqueTextUnchecked`, which waits for the next batch.
 
 ---
 
@@ -2252,6 +2272,33 @@ handled inside the stage. **The signal for `P4-T20` (item 314(c))** is `Critique
 `composeReport` sends them (generation 1, and 2 after a failed section check), and
 `{ kind: "rewrite-not-applied", round, markdown }` after a rewrite that failed the section check twice, `markdown`
 being the kept draft's; this card passes both through to the report window.
+
+*As built 2026-11-01 (`plan/00` §6 items 313, 317(e); fake provider only, no live call; `plan/reports/P4-T18.md`).*
+`src/pipeline/trendReport/trendReportPipeline.ts` declares `createTrendReportPipeline` (with `prepare`, `execute`,
+`run`, `estimate`, `validate`, `remaining`), `remainingFromCheckpoint`, `stageSpendOf`, `measureSynthesisOverhead`,
+`withDatedTitle`, `isTrendReportCheckpoint`, `tooManyPapersFailed`, `trendReportExclusivityKey`, `stopName`, the
+types `TrendReportInput`, `TrendReportOutput`, `TrendReportRunView`, `TrendReportStop`, `TrendReportSurface`,
+`TrendReportConfirmRequest`, `TrendReportConfirmAnswer`, `TrendReportLibrary`, `ReportRoutineStore`,
+`TrendReportPipelineDeps`, `TrendReportPipeline`, `PreparedTrendReport`, `PreparedTrendState`,
+`TrendReportCheckpoint`, `StageSpend`, and the constants `TREND_REPORT_STAGES`, `TREND_REPORT_STAGE_KEYS`,
+`FAILED_PAPERS_SHARE`, `PAPERS_FAILED_L10N`, `NO_PAPERS_L10N`, `STOPPED_CODE`, `REPORT_FALLBACK_STYLE_ID`,
+`REPORT_CSL_LOCALE`, `REPORT_OUTPUT_LIMIT_UNKNOWN`, `SYNTHESIS_CACHE_NAMESPACE`, `HEADLESS_TREND_REPORT_SURFACE`.
+The readings are `docs/07` §12.4's note of 2026-11-01, each DECIDED under item 313. **Rule 10:** the constructing file
+is `src/bootstrap/registerPipelines.ts` (`buildPipelineSet`, with `createZoteroTrendReportLibrary` and
+`TrendReportConstructionDeps`); `installServices` (`container.ts`) passes the report store, the report run's own
+"don't ask again" record, the collection's search record, the plugin version and the UTC offset, wires
+`remainingFromCheckpoint` into `createSpendResumeGuards`, and runs each job `recover()` re-queued (`runResumedJob`);
+the window's host is `P4-T20`'s, and nothing calls `prepare`/`execute` from a window yet (`report.enabled` stays off,
+item 307(d)). **Outside `Files`**, each forced: `src/i18n/keys.ts` and both `mainWindow` bundles (two stop strings,
+`ko` stubs on `KO_PENDING_REVIEW`), `typings/i10n.d.ts` (regenerated), `test/unit/bootstrap/container.test.ts` (the
+resume-prerequisites pin is now empty). **What `P4-T20` binds:** a `TrendReportSurface` (`update`, `confirm` — open
+`P4-T16`'s dialog when `shouldOpenCostDialog` says so, the `confirmation` decision being the report's own record's,
+and return `dontAskAgain` from the dialog's box — `ask`, `onDraft`, `onRevision`); the host's prepare → enqueue with
+`withEgressLog(input, egressLogEntry(prepared.disclosure, now))`, `priority: "normal"`,
+`exclusivityKey: trendReportExclusivityKey(input)`, `inputVersion: TREND_REPORT_INPUT_VERSION` → `openJob({ record,
+collection })` → `execute`, flushing `job.checkpoints` at the end; the output's `stop` (message id and args), `note`
+(`group-confirmation-required` → ask, then `writeReportNote` again and `ReportStore.put` with the key) and
+`report`; optionally `TrendReportConstructionDeps.surfaces` so a resumed job finds the window.
 
 ---
 

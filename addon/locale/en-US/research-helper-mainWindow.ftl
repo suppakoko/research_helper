@@ -935,3 +935,16 @@ research-helper-report-stopped-no-theme-analysed = The report was stopped before
 ## argument. Korean pending review (G-41).
 
 research-helper-report-stopped-structure-invalid = The report was stopped before it was written: asked twice, the model did not return the report with its eleven required sections in order, so nothing was saved. Every summary already made is kept.
+
+## The trend report run's stop when more than 30 % of the papers it would
+## analyse could not be summarized (P4-T18; docs/06 §8.5's failure policy).
+## $failed is the number of papers whose summary failed, $total the papers the
+## report would analyse. Korean pending review (G-41).
+
+research-helper-report-stopped-papers-failed = The report was stopped before it was written: { $failed } of { $total } papers could not be summarized, more than 30 percent, which usually means a problem with the API key, the account's credit or the provider. Every summary already made is kept.
+
+## The trend report run's stop when no paper of the collection can be analysed:
+## each was excluded (retracted, a duplicate, not in English) or has no abstract
+## or full text (P4-T18; docs/07 §12.4). No argument. Korean pending review (G-41).
+
+research-helper-report-stopped-no-papers = The report was stopped before it was written: no paper in this collection can be analysed, because each one was excluded or has no abstract or full text. Nothing was sent.

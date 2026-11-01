@@ -187,7 +187,10 @@ import {
 } from "../core/http/client";
 import { retryPolicyFromBudget, type RetryPolicy } from "../core/http/retry";
 import { buildUserAgent } from "../core/http/userAgent";
-import type { CancellationToken } from "../core/jobQueue/cancellation";
+import {
+  createCancellationTokenSource,
+  type CancellationToken,
+} from "../core/jobQueue/cancellation";
 import type { JobRecord } from "../core/jobQueue/jobRecord";
 import {
   createJobQueue,
@@ -230,6 +233,8 @@ import {
   createPrivacyPolicy,
   isPrivacyMode,
   loadStrictestPrivacyPolicy,
+  readCollectionPrivacySettings,
+  writeCollectionPrivacySettings,
   type CollectionRef,
   type LoadPrivacyPolicyDeps,
   type PrivacyMode,
@@ -258,9 +263,11 @@ import {
   createJobNoticeRouter,
   type JobNoticeRouter,
 } from "../pipeline/summarize/summarizePipeline";
+import { remainingFromCheckpoint } from "../pipeline/trendReport/trendReportPipeline";
 import type {
   ConfigReader,
   LLMRouter,
+  Pipeline,
   PipelineContext,
   PipelineId,
 } from "../pipeline/types";
@@ -2076,6 +2083,35 @@ export async function installServices(
           (await secrets?.has(`llm.${providerId}`)) === true,
       },
     },
+    // `P4-T18`: the report store (`P4-T14`), the report run's own "don't ask
+    // again" in `collection_settings` (item 292(f)), the collection's latest
+    // search record and the plugin version; the rest is the summarize deps'.
+    trendReport: {
+      reports: () => database.reports(),
+      routine: {
+        read: async (collection) =>
+          readCollectionPrivacySettings(
+            await collectionSettings.get(
+              collection.libraryID,
+              collection.collectionKey,
+            ),
+          ).reportRoutineConfirmation,
+        write: (collection, record) =>
+          writeCollectionPrivacySettings(collectionSettings, collection, {
+            reportRoutineConfirmation: record,
+          }),
+      },
+      searchRuns: async (libraryID, collectionKey) => {
+        const open = await database.ready;
+        const run = await open?.provenance.findProvenanceByCollection(
+          libraryID,
+          collectionKey,
+        );
+        return run === undefined ? [] : [run];
+      },
+      pluginVersion: options.version,
+      utcOffsetMinutes: (atEpochMs) => -new Date(atEpochMs).getTimezoneOffset(),
+    },
   });
   // The per-job context factory is built after step 8, because a queued
   // job's checkpoint writes through the queue (`P3-T35`).
@@ -2106,7 +2142,14 @@ export async function installServices(
     clock,
     logger: logger.child({ surface: "jobQueue" }),
     pluginVersion: options.version,
-    notifier: jobNotices.notifier,
+    // `P4-T18`: after the resume notice, each re-queued job is run (below).
+    notifier: {
+      paused: (record) => jobNotices.notifier.paused(record),
+      resumed: async (records) => {
+        await jobNotices.notifier.resumed(records);
+        for (const record of records) runResumedJob(record.id);
+      },
+    },
     isResumable: (pipelineId) =>
       pipelines
         .list()
@@ -2117,9 +2160,67 @@ export async function installServices(
       }),
       // Reads `privacy.egressAcknowledged` on every call (its default).
       egress: createEgressResumeGuard(),
-      ...createSpendResumeGuards({ session: sessionSpend }),
+      // `P4-T18`: the trend-report run is the one resumable pipeline; its
+      // checkpoint carries the confirmed estimate per stage, so a resumed
+      // job is priced from the stages still ahead. Any other record is one
+      // call of unknown cost, which the confirm guard asks about.
+      ...createSpendResumeGuards({
+        session: sessionSpend,
+        remaining: (record) => Promise.resolve(remainingFromCheckpoint(record)),
+      }),
     },
   });
+
+  /**
+   * `P4-T18` step 6 (`plan/07` §0.2 item 18; `docs/07` §12.4): a job
+   * `recover()` re-queued — every spend guard passed and the resume notice
+   * shown — is run from its checkpoint with no second confirmation. Scheduled
+   * from the notice and not awaited: the queue saves the record as `queued`
+   * after the notice resolves, and `jobs.get` waits behind that save. With
+   * no window watching, a pause during the resumed run is answered "stop"
+   * (the headless surface; `P4-T20` may register one), which discards the
+   * synthesis and keeps the summaries.
+   */
+  const runResumedJob = (jobId: string): void => {
+    void (async () => {
+      const record = await jobs.get(jobId);
+      if (record?.status !== "queued") return;
+      const pipeline = pipelines
+        .list()
+        .find((candidate) => candidate.id === record.pipelineId);
+      if (pipeline === undefined || !pipeline.resumable) return;
+      const input = record.input as {
+        readonly libraryID?: unknown;
+        readonly collectionKey?: unknown;
+      };
+      const collection =
+        typeof input.libraryID === "number" &&
+        typeof input.collectionKey === "string"
+          ? { libraryID: input.libraryID, collectionKey: input.collectionKey }
+          : undefined;
+      const job = await pipelineContext.openJob({
+        pipelineId: pipeline.id,
+        token: createCancellationTokenSource().token,
+        record,
+        ...(collection !== undefined && { collection }),
+        openOn: "completion",
+      });
+      try {
+        await (pipeline as Pipeline<unknown, unknown>).run(
+          record.input,
+          job.context,
+        );
+      } finally {
+        await job.checkpoints?.flush().catch(() => undefined);
+        job.dispose();
+      }
+    })().catch((error: unknown) => {
+      logger.warn("a resumed job could not be run", {
+        jobId,
+        reason: error instanceof Error ? error.name : typeof error,
+      });
+    });
+  };
   // The `job` store on the one connection, then §7.6's startup recovery —
   // both once the migrations are done, neither awaited by startup.
   database.attachJobs(jobs);

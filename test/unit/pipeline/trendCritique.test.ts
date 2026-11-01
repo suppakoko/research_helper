@@ -14,10 +14,14 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  AuthenticationError,
   BudgetExceededError,
   ConfigurationError,
+  NetworkError,
   OperationCancelledError,
+  OutputTruncatedError,
   PolicyViolationError,
+  UpstreamServerError,
 } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import type { Logger } from "../../../src/core/logger";
@@ -64,6 +68,7 @@ import {
   resolveCritiqueModel,
   REVISION_NOTES_INSTRUCTION,
   revisionNotesFor,
+  rewriteErrorEndsRun,
   type CritiqueDeps,
   type CritiqueInput,
   type RevisionSignal,
@@ -1071,6 +1076,108 @@ describe("P4-T09 step 5 — the rewrite is a fresh generation with the high prob
       withSection,
       { ...noSection, section: "4. Major Research Themes" },
     ]);
+  });
+});
+
+describe("item 317(b) — a rewrite's own error keeps the earlier draft; a critique error still fails", () => {
+  const notApplied: readonly [string, () => Error][] = [
+    [
+      "a truncated answer",
+      () => new OutputTruncatedError("openrouter", "report-model", "cut off"),
+    ],
+    ["a network error", () => new NetworkError("synthetic network failure")],
+    [
+      "an upstream 5xx",
+      () => new UpstreamServerError(503, "synthetic upstream failure"),
+    ],
+  ];
+  for (const [name, error] of notApplied) {
+    it(`${name} in the rewrite ships the earlier draft with the not-applied banner`, async () => {
+      const high = problem("high");
+      const { provider, deps, signals, logger } = setup(
+        { critique: () => critiqueAnswer([high]), report: () => error() },
+        { config: { reportMaxCritiqueRounds: 2 } },
+      );
+      const given = await input();
+      const result = await critiqueReport(given, deps);
+      expect(result.draft).toBe(given.draft);
+      expect(result.outcome).toEqual({
+        rounds: 1,
+        unresolved: [high],
+        revisedAfterLastCritique: false,
+        revisionNotApplied: true,
+      });
+      // No second round after a rewrite that was not applied.
+      expect(critiqueCalls(provider.calls)).toHaveLength(1);
+      expect(signals).toEqual([
+        { kind: "rewrite-started", round: 1 },
+        {
+          kind: "rewrite-not-applied",
+          round: 1,
+          markdown: given.draft.markdown,
+        },
+      ]);
+      expect(
+        logger.lines.some((line) => line.includes("the rewrite failed")),
+      ).toBe(true);
+      expect(qualityBanner(result.outcome, LABELS)).toContain(
+        LABELS.bannerRevisionNotApplied,
+      );
+    });
+  }
+
+  it("a cancel, a budget refusal, a rejected key or a defect in the rewrite still ends the stage", async () => {
+    const ending: (() => Error)[] = [
+      () => new BudgetExceededError("synthetic refusal"),
+      () => new AuthenticationError(401, "synthetic rejected key"),
+      () => new PolicyViolationError("synthetic policy refusal"),
+      () => new TypeError("synthetic defect"),
+    ];
+    for (const make of ending) {
+      const thrown = make();
+      const { deps } = setup({ report: () => thrown });
+      await expect(critiqueReport(await input(), deps)).rejects.toBe(thrown);
+    }
+    const { deps, source } = setup({
+      report: () => {
+        source.cancel({ kind: "user" });
+        return new NetworkError("synthetic failure after a cancel");
+      },
+    });
+    await expect(critiqueReport(await input(), deps)).rejects.toBeDefined();
+  });
+
+  it("rewriteErrorEndsRun: the stage-ending errors, and a cancelled token whatever the error", () => {
+    const live = { isCancellationRequested: false };
+    expect(
+      rewriteErrorEndsRun(new OperationCancelledError({ kind: "user" }), live),
+    ).toBe(true);
+    expect(rewriteErrorEndsRun(new BudgetExceededError("x"), live)).toBe(true);
+    expect(rewriteErrorEndsRun(new AuthenticationError(401, "x"), live)).toBe(
+      true,
+    );
+    expect(rewriteErrorEndsRun(new ConfigurationError("x"), live)).toBe(true);
+    expect(rewriteErrorEndsRun(new PolicyViolationError("x"), live)).toBe(true);
+    expect(rewriteErrorEndsRun(new Error("defect"), live)).toBe(true);
+    expect(
+      rewriteErrorEndsRun(new OutputTruncatedError("p", "m", "x"), live),
+    ).toBe(false);
+    expect(rewriteErrorEndsRun(new NetworkError("x"), live)).toBe(false);
+    expect(
+      rewriteErrorEndsRun(new NetworkError("x"), {
+        isCancellationRequested: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("a failed critique request still fails the stage: no banner says the review failed", async () => {
+    const { deps } = setup({
+      critique: () =>
+        new OutputTruncatedError("openrouter", "summary-model", "cut off"),
+    });
+    await expect(critiqueReport(await input(), deps)).rejects.toBeInstanceOf(
+      OutputTruncatedError,
+    );
   });
 });
 

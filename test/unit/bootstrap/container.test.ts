@@ -547,16 +547,16 @@ describe("installServices wires the graph Phase 1 built", () => {
   // `skipCached` is P3-T26's, passed since 2026-10-23; `egress` (P3-T15) is
   // installed by P3-T35. `confirm` and `ceilings` wait for P3-T29's
   // remaining-work estimate and the notifier is P3-T29's.
-  it("builds the job queue storeless, with confirm and ceilings still missing (the notifier is P3-T29's)", async () => {
+  it("builds the job queue storeless, with every resume guard and the notifier present (P4-T18)", async () => {
     const h = harness();
     const graph = await installServices(h.scope, h.options);
     expect(graph.jobs.attached).toBe(false);
     // `P3-T29` (2026-10-29) supplies the notifier (`createJobNoticeRouter`);
-    // `confirm` and `ceilings` still wait for a remaining-work estimate.
-    expect(graph.jobs.missingResumePrerequisites()).toStrictEqual([
-      "confirm",
-      "ceilings",
-    ]);
+    // `P4-T18` (2026-11-01) the remaining-work estimate `confirm` and
+    // `ceilings` judge by (`remainingFromCheckpoint`), so an interrupted
+    // report job can resume once they pass.
+    expect(graph.jobs.missingResumePrerequisites()).toStrictEqual([]);
+    expect(graph.pipelines.list().map((p) => p.id)).toContain("trendReport");
     await h.scope.unregisterAll();
   });
 

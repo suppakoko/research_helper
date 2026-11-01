@@ -123,6 +123,15 @@ import {
   type SummarizeLibraryItem,
   type SummarizePipelineDeps,
 } from "../pipeline/summarize/summarizePipeline";
+import {
+  createTrendReportPipeline,
+  type ReportRoutineStore,
+  type TrendReportLibrary,
+  type TrendReportPipelineDeps,
+  type TrendReportSurface,
+} from "../pipeline/trendReport/trendReportPipeline";
+import type { SearchRunSummary } from "../pipeline/trendReport/compose";
+import { zoteroBibliographyPort } from "../zotero/bibliography";
 import { estTokens } from "../llm/shared/tokenEstimate";
 import type { JobQueue } from "../core/jobQueue/queue";
 import { ConfigurationError } from "../core/errors";
@@ -133,6 +142,7 @@ import {
   findSummaryNote,
   readCollectionForSummary,
   readItemsForSummary,
+  writeReportNote,
   writeSummaryNote,
   type SummaryRunCollection,
   type SummaryRunItemSnapshot,
@@ -598,6 +608,35 @@ export interface PipelineConstructionDeps {
    * before anything is read or sent.
    */
   readonly summarize?: SummarizeConstructionDeps;
+  /**
+   * The trend-report pipeline's dependencies (`P4-T18`) that only the
+   * composition root holds: the report store (`P4-T14`), the report run's own
+   * "don't ask again" record (`collection_settings`), the collection's search
+   * records and the plugin version, beside the summarize pipeline's store,
+   * queue, notices, prices, base URLs, model descriptions and key check, which
+   * it shares. Absent in a unit test of the graph that builds no queue: then
+   * `trendReport` refuses to run (`ConfigurationError`) before anything is
+   * read or sent.
+   */
+  readonly trendReport?: TrendReportConstructionDeps;
+}
+
+/** {@link PipelineConstructionDeps.trendReport}. */
+export interface TrendReportConstructionDeps extends Pick<
+  TrendReportPipelineDeps,
+  "reports" | "pluginVersion" | "utcOffsetMinutes" | "wallClockBudgetMs"
+> {
+  /** `reportRoutineConfirmation` in `collection_settings`; absent: always asked. */
+  readonly routine?: ReportRoutineStore;
+  /** The collection's latest search record, for `{{SOURCES}}` and the topic. */
+  readonly searchRuns?: (
+    libraryID: number,
+    collectionKey: string,
+  ) => Promise<readonly SearchRunSummary[]>;
+  /** The window's surface for a job (`P4-T20`); absent: headless. */
+  readonly surfaces?: (jobId: string) => TrendReportSurface | undefined;
+  /** The Zotero port; {@link createZoteroTrendReportLibrary} by default. */
+  readonly library?: TrendReportLibrary;
 }
 
 /** {@link PipelineConstructionDeps.summarize}. */
@@ -665,6 +704,85 @@ export function buildPipelineSet(deps: PipelineConstructionDeps): PipelineSet {
     summarize: createSummarizePipeline(
       summarizeDepsFrom(deps.summarize, pools),
     ),
+    // `P4-T18`: the report run, from the same pools and the summarize
+    // pipeline's shared deps; this is its one construction site.
+    trendReport: createTrendReportPipeline(
+      trendReportDepsFrom(deps.trendReport, deps.summarize, pools),
+    ),
+  };
+}
+
+/**
+ * The trend-report pipeline's Zotero port (`P4-T18`): the collection read and
+ * acquisition of {@link createZoteroSummarizeLibrary}, `P4-T11`'s
+ * `zoteroBibliographyPort` and `P4-T14`'s `writeReportNote`, all from
+ * `src/zotero/`, so the pipeline names no `Zotero` global.
+ */
+export function createZoteroTrendReportLibrary(
+  deps: {
+    readonly summarize?: SummarizeLibrary;
+    readonly searchRuns?: TrendReportConstructionDeps["searchRuns"];
+  } = {},
+): TrendReportLibrary {
+  const reads = deps.summarize ?? createZoteroSummarizeLibrary();
+  return {
+    loadCollection: (libraryID, collectionKey) =>
+      reads.loadCollection(libraryID, collectionKey),
+    acquire: (item, options) => reads.acquire(item, options),
+    bibliography: zoteroBibliographyPort,
+    writeReportNote: (request) => writeReportNote(request),
+    ...(deps.searchRuns !== undefined && { searchRuns: deps.searchRuns }),
+  };
+}
+
+/**
+ * The trend-report pipeline's deps from the composition root's. Without them
+ * every queue call and both stores refuse with `ConfigurationError`, so a run
+ * fails before anything is read or sent.
+ */
+function trendReportDepsFrom(
+  given: TrendReportConstructionDeps | undefined,
+  shared: SummarizeConstructionDeps | undefined,
+  pools: WorkerPools,
+): TrendReportPipelineDeps {
+  const summarize = summarizeDepsFrom(shared, pools);
+  return {
+    library:
+      given?.library ??
+      createZoteroTrendReportLibrary({
+        ...(shared?.library !== undefined && { summarize: shared.library }),
+        ...(given?.searchRuns !== undefined && {
+          searchRuns: given.searchRuns,
+        }),
+      }),
+    summaries: summarize.store,
+    reports:
+      given?.reports ?? ((): Promise<undefined> => Promise.resolve(undefined)),
+    prompts: summarize.prompts,
+    queue: summarize.queue,
+    pool: pools.llm,
+    admission: pools.admission,
+    runningWork: pools.runningWork,
+    prices: summarize.prices,
+    baseUrls: summarize.baseUrls,
+    pluginVersion: given?.pluginVersion ?? "",
+    ...(summarize.pauseNotices !== undefined && {
+      pauseNotices: summarize.pauseNotices,
+    }),
+    ...(summarize.modelInfo !== undefined && {
+      modelInfo: summarize.modelInfo,
+    }),
+    ...(summarize.credentials !== undefined && {
+      credentials: summarize.credentials,
+    }),
+    ...(given?.routine !== undefined && { routine: given.routine }),
+    ...(given?.surfaces !== undefined && { surfaces: given.surfaces }),
+    ...(given?.utcOffsetMinutes !== undefined && {
+      utcOffsetMinutes: given.utcOffsetMinutes,
+    }),
+    ...(given?.wallClockBudgetMs !== undefined && {
+      wallClockBudgetMs: given.wallClockBudgetMs,
+    }),
   };
 }
 

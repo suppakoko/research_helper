@@ -45,6 +45,10 @@ import {
   TARGET_WORDS_CAPPED_WARNING,
   type ComposedReport,
 } from "../../../src/pipeline/trendReport/compose";
+import {
+  CRITIQUE_PER_SECTION_WARNING,
+  CRITIQUE_TEXT_UNCHECKED_WARNING,
+} from "../../../src/pipeline/trendReport/critique";
 import { DIGEST_NO_YEAR } from "../../../src/pipeline/trendReport/digest";
 import {
   DEFAULT_RETRACTED_HEADING,
@@ -1151,6 +1155,37 @@ describe("the capped-target line reads the current plan (item 312(c))", () => {
   });
 });
 
+describe("the critique's warnings (coordinator, item 317(c))", () => {
+  const line = EN_REPORT_LABELS.critiqueTextUnchecked;
+
+  it("writes Appendix B's line for critique_text_unchecked and carries every critique warning", () => {
+    const report = scaffoldReport(
+      input({
+        critiqueWarnings: [
+          CRITIQUE_PER_SECTION_WARNING,
+          CRITIQUE_TEXT_UNCHECKED_WARNING,
+        ],
+      }),
+    );
+    const appendixB = report.markdown.slice(
+      report.markdown.indexOf(EN_REPORT_LABELS.appendixBHeading),
+      report.markdown.indexOf(EN_REPORT_LABELS.appendixCHeading),
+    );
+    expect(appendixB).toContain(`\n\n${line}\n\n`);
+    expect(report.warnings).toContain(CRITIQUE_PER_SECTION_WARNING);
+    expect(report.warnings).toContain(CRITIQUE_TEXT_UNCHECKED_WARNING);
+  });
+
+  it("writes no line without it, a per-section warning alone included", () => {
+    expect(scaffoldReport(input()).markdown).not.toContain(line);
+    const report = scaffoldReport(
+      input({ critiqueWarnings: [CRITIQUE_PER_SECTION_WARNING] }),
+    );
+    expect(report.markdown).not.toContain(line);
+    expect(report.warnings).toContain(CRITIQUE_PER_SECTION_WARNING);
+  });
+});
+
 describe("the banner and Appendix C (owner, items 286, 312(b))", () => {
   const problem = CRITIQUE
     .unresolved[1] as CritiqueOutcome["unresolved"][number];
@@ -1407,11 +1442,28 @@ describe("reportLabels.ts", () => {
         KO_REPORT_LABELS_PENDING_REVIEW.includes(key),
       );
     }
-    // The one label the owner approved (plan/00 §6 item 292(b)).
-    expect(KO_REPORT_LABELS).toEqual({
-      invalidCitation: "[인용 삭제: 잘못된 참조]",
-    });
-    expect(KO_REPORT_LABELS_PENDING_REVIEW.length).toBe(KEYS.length - 1);
+    // Item 292(b)'s label, then item 319's 136 (owner, 2026-11-01, G-41),
+    // byte for byte from the reviewed TSV; only the line added after that
+    // review waits (item 317(c)).
+    expect(KO_REPORT_LABELS.invalidCitation).toBe("[인용 삭제: 잘못된 참조]");
+    const rows = readFileSync(
+      resolve(
+        import.meta.dirname,
+        "../../../plan/reports/ko-draft-report-labels.tsv",
+      ),
+      "utf8",
+    )
+      .split(/\r?\n/)
+      .slice(1)
+      .filter((line) => line !== "")
+      .map((line) => line.split("\t"));
+    expect(rows).toHaveLength(136);
+    for (const [key, en, ko] of rows) {
+      expect(EN_REPORT_LABELS[key as ReportLabelKey], key).toBe(en);
+      expect(KO_REPORT_LABELS[key as ReportLabelKey], key).toBe(ko);
+    }
+    expect(Object.keys(KO_REPORT_LABELS)).toHaveLength(137);
+    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual(["critiqueTextUnchecked"]);
   });
 
   it("gives a ko report its approved Korean and English for every pending label", () => {
@@ -1423,8 +1475,12 @@ describe("reportLabels.ts", () => {
     for (const key of KO_REPORT_LABELS_PENDING_REVIEW) {
       expect(ko[key]).toBe(EN_REPORT_LABELS[key]);
     }
-    // Until the owner approves the Korean, a ko report's own words are English.
-    expect(scaffoldReport(input({ language: "ko" })).markdown).toBe(EXPECTED);
+    // Since item 319, a ko report's own words are the owner's Korean.
+    const report = scaffoldReport(input({ language: "ko" })).markdown;
+    expect(report).not.toBe(EXPECTED);
+    expect(report).toContain(`## ${ko.appendixBHeading}`);
+    expect(report).not.toContain(EN_REPORT_LABELS.appendixBHeading);
+    expect(ko.appendixBHeading).toBe(KO_REPORT_LABELS.appendixBHeading);
   });
 
   it("references the code-side English of earlier cards, so each text has one source", () => {
@@ -1448,9 +1504,13 @@ describe("reportLabels.ts", () => {
       if (key !== "invalidCitation") expect(text, key).not.toMatch(/[[\]]/);
     }
     for (const [key, text] of Object.entries(KO_REPORT_LABELS)) {
-      expect(labelPlaceholders(text), key).toEqual(
-        labelPlaceholders(EN_REPORT_LABELS[key as ReportLabelKey]),
+      // The same placeholders; Korean word order may place them differently
+      // (`headerScope` names the total first).
+      expect([...labelPlaceholders(text)].sort(), key).toEqual(
+        [...labelPlaceholders(EN_REPORT_LABELS[key as ReportLabelKey])].sort(),
       );
+      expect(text, key).not.toMatch(/[\r\n|<>`*~\\]/);
+      if (key !== "invalidCitation") expect(text, key).not.toMatch(/[[\]]/);
     }
   });
 

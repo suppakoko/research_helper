@@ -691,3 +691,8 @@ research-helper-report-stopped-no-theme-analysed = 보고서를 쓰기 전에 �
 # Korean drafted by the coordinator and reviewed by the owner on 2026-10-30 (G-41, plan/00 §6 item 312(a)).
 
 research-helper-report-stopped-structure-invalid = 보고서를 쓰기 전에 멈췄습니다. 두 번 요청했지만 모델이 필요한 11개 장을 순서대로 갖춘 보고서를 돌려주지 않아, 아무것도 저장하지 않았습니다. 이미 만든 요약은 모두 남아 있습니다.
+
+## The trend report run's two stops of P4-T18 — NEEDS REVIEW (G-41)
+##
+# NEEDS REVIEW research-helper-report-stopped-papers-failed — en-US: The report was stopped before it was written: { $failed } of { $total } papers could not be summarized, more than 30 percent, which usually means a problem with the API key, the account's credit or the provider. Every summary already made is kept.
+# NEEDS REVIEW research-helper-report-stopped-no-papers — en-US: The report was stopped before it was written: no paper in this collection can be analysed, because each one was excluded or has no abstract or full text. Nothing was sent.

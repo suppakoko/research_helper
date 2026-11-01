@@ -5,8 +5,11 @@
  * (`P3-T25`). {@link packByTokens} (`P4-T07`, section 8) is the synthesis
  * stages' packer: `analyseThemes` in `src/pipeline/trendReport/themeAnalysis.ts`
  * calls it for a theme's sub-batches, through `packThemeMembers` in
- * `src/pipeline/shared/estimate.ts`, which the estimate shares; `critique.ts`
- * (`P4-T09`, the cited summaries) is its other caller, not built yet.
+ * `src/pipeline/shared/estimate.ts`, which the estimate shares; `planCritique`
+ * in `src/pipeline/trendReport/critique.ts` (`P4-T09`) is its other caller,
+ * through its private `fitsOneCall`, packing a critique request's cited
+ * summaries (corrected 2026-10-30,
+ * `plan/00` §6 item 317(d): this line said "not built yet").
  * `compose.ts` (`P4-T08`) does not call it: the report trims `{{DIGESTS}}`
  * to a cited subset instead of packing them (corrected 2026-10-30,
  * `plan/00` §6 item 311; `plan/reports/P4-T08.md` finding 3).

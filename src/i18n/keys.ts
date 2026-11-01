@@ -484,6 +484,12 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // the section check again (owner, plan/00 §6 item 311(a)). See
   // STRUCTURE_INVALID_L10N in src/pipeline/trendReport/compose.ts.
   "research-helper-report-stopped-structure-invalid",
+  // P4-T18: the report run stopped because more than 30 % of its papers'
+  // summaries failed (docs/06 §8.5), or because no paper of the collection
+  // can be analysed. See PAPERS_FAILED_L10N and NO_PAPERS_L10N in
+  // src/pipeline/trendReport/trendReportPipeline.ts.
+  "research-helper-report-stopped-papers-failed",
+  "research-helper-report-stopped-no-papers",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -1079,6 +1085,12 @@ export const KO_PENDING_REVIEW = [
   // again (owner, plan/00 §6 item 311(a)) left this list on 2026-10-30: the
   // owner approved the coordinator's Korean (`G-41`, plan/00 §6 item 312(a)),
   // so it is on KO_PRESENT.
+  // `P4-T18`'s two report stops (more than 30 % of the papers failed; no
+  // paper to analyse). `G-41` owns the translation; the `ko-KR` bundle
+  // carries each as a commented stub with its English source, and nothing was
+  // machine-translated.
+  "research-helper-report-stopped-papers-failed",
+  "research-helper-report-stopped-no-papers",
   // --- searchDialog (62) ---
   // `P1-T45`. On this list and not on `KO_PRESENT`: the `ko-KR` bundle carries
   // all three as commented stubs with their English source, which the
@@ -1708,6 +1720,11 @@ export interface FluentMessageArgsMap {
     themes: number;
     max: number;
   };
+  // P4-T18 (docs/06 §8.5): `$failed` papers of `$total`.
+  "research-helper-report-stopped-papers-failed": {
+    failed: number;
+    total: number;
+  };
 
   // searchDialog
   "research-helper-search-years-span": {
@@ -1866,6 +1883,8 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-itempane-note-not-written",
   // mainWindow — the report run's stop for too many themes (1, P4-T05)
   "research-helper-report-stopped-too-many-themes",
+  // mainWindow — the report run's stop for failed papers (1, P4-T18)
+  "research-helper-report-stopped-papers-failed",
   // mainWindow — the budget error, the cost dialog and the Usage readout
   // (19, P3-T16)
   "rh-error-budget",
