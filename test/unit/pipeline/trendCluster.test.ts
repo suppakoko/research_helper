@@ -1904,6 +1904,73 @@ describe("P4-T06 under plan/00 §6 item 309(e): the merge input is measured agai
   });
 });
 
+describe("P4-T22 under plan/00 §6 item 327(a): the window's clustering budgets", () => {
+  it("batchInputBudget partitions the batches, while inputBudget alone chooses the path", async () => {
+    const ds = bigDigests(150);
+    const { deps, provider } = setup([twoStageResponder()]);
+    const outcome = await clusterThemes(
+      input({
+        digests: ds,
+        outputLimit: 64_000,
+        inputBudget: 20_000,
+        batchInputBudget: 6_000,
+      }),
+      deps,
+    );
+    expect(clustered(outcome).clustering.themes.length).toBeGreaterThan(0);
+    expect(schemaNames(provider).ThemeClustering).toBe(
+      partitionDigests(ds, CLUSTER_BATCH_SIZE, 6_000).length,
+    );
+    expect(
+      partitionDigests(ds, CLUSTER_BATCH_SIZE, 6_000).length,
+    ).toBeGreaterThan(partitionDigests(ds, CLUSTER_BATCH_SIZE, 20_000).length);
+  });
+
+  it("a batch budget does not choose two stages: digests within inputBudget stay one call", async () => {
+    const { deps, provider } = setup([reply(cleanTen())]);
+    const outcome = await clusterThemes(input({ batchInputBudget: 1 }), deps);
+    expect(clustered(outcome).passes).toBe(1);
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it("mergeInputBudget stops the run before the merge request, with its message and the budget used", async () => {
+    const { deps, provider } = setup([twoStageResponder()]);
+    const outcome = await clusterThemes(
+      twoStageInput({ mergeInputBudget: 10 }),
+      deps,
+    );
+    expect(outcome.status).toBe("stopped-merge-over-budget");
+    if (outcome.status !== "stopped-merge-over-budget") return;
+    expect(outcome.messageId).toBe(MERGE_TOO_LARGE_L10N);
+    expect(outcome.mergeInputBudget).toBe(10);
+    expect(schemaNames(provider).ThemeMerge).toBeUndefined();
+  });
+
+  it("a batch budget that cannot hold one digest refuses before any request", async () => {
+    const { provider, deps } = setup([twoStageResponder()]);
+    await expect(
+      clusterThemes(twoStageInput({ batchInputBudget: 1 }), deps),
+    ).rejects.toBeInstanceOf(ConfigurationError);
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  for (const [name, bad] of [
+    ["batchInputBudget", 0],
+    ["batchInputBudget", 60_001],
+    ["batchInputBudget", 1.5],
+    ["mergeInputBudget", 0],
+    ["mergeInputBudget", 60_001],
+  ] as const) {
+    it(`throws RangeError for ${name} ${String(bad)}`, async () => {
+      const { provider, deps } = setup([twoStageResponder()]);
+      await expect(
+        clusterThemes(input({ [name]: bad }), deps),
+      ).rejects.toBeInstanceOf(RangeError);
+      expect(provider.calls).toHaveLength(0);
+    });
+  }
+});
+
 describe("P4-T06 — the merge's validation (docs/12 §20)", () => {
   it("finds missing, repeated and foreign local ids, unresolved global refs and shared theme ids", () => {
     const ids = ["B1-T1", "B1-T2", "B2-T1"];

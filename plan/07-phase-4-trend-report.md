@@ -2664,6 +2664,14 @@ note of this date), so its two Done-when lines are three `it.skip` tests named F
 `src/`, outside this card's `Files`, and the coordinator schedules it. With the fix on a scratch copy the three pass
 (12 passes). This card stays open until they run unskipped.
 
+*As built 2026-11-02 (`P4-T22`, the fix; owner, `plan/00` §6 item 327).* The three tests run unskipped and pass: 12 passes on
+both 32 000-token shapes, 5 on 128 000. `src/pipeline/shared/estimate.ts` declares `windowInputBudget`, `synthesisBudgets`,
+`ModelWindowLimits`, `SynthesisBudgets`, `SynthesisBudgetsInput` and `SynthesisModel` (callers: `execute` and `prepare` in
+`trendReportPipeline.ts`, `planSynthesis`; `limitsOf` and `windowLimitsOf` in the pipeline build the limits). `docs/06` §8.4's
+and `docs/07` §12.4's notes of this date hold the rule. **The Done-when lines pass on analyses of 84 tokens at most, the
+mock's size:** `docs/07` §12.4's FINDING P4-T22-2 gives where larger ones stop fitting a 32 000-token window, and the
+owner has that question before this card is called done.
+
 ---
 
 ### P4-T23 — Evaluation set and regression harness

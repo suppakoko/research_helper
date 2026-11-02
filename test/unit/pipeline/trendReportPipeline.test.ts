@@ -526,6 +526,8 @@ interface HarnessOptions {
     "connection" | "cacheBlobs" | "files" | "settings"
   >;
   readonly answer?: (q: SummarizeQuestion) => "resume" | "cancel";
+  /** The models' window in the catalogue; 200 000 when absent. */
+  readonly contextWindowTokens?: number;
 }
 
 interface Harness {
@@ -625,7 +627,7 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
     egressAcknowledged: () => true,
     modelInfo: (_provider, id) =>
       mockModel(id, {
-        contextWindowTokens: 200_000,
+        contextWindowTokens: options.contextWindowTokens ?? 200_000,
         maxOutputTokens: 64_000,
         dataPolicy: {
           trainsOnInputByDefault: "no",
@@ -879,6 +881,22 @@ describe("P4-T18 — a mock run over 30 items saves one report (Done when 1)", (
     expect(
       levels(h.provider.calls.slice(before)).filter((l) => l === "L0"),
     ).toHaveLength(0); // ps is kept
+  });
+
+  it("tc and cr carry the context window: a run under another window clusters and analyses again (plan/00 §6 item 327)", async () => {
+    const h = await harness();
+    await h.run();
+    const before = h.provider.calls.length;
+    const same = await harness({ reuse: h });
+    await same.run();
+    expect(same.provider.calls).toHaveLength(0);
+    const other = await harness({ reuse: h, contextWindowTokens: 150_000 });
+    const outcome = await other.run();
+    expect(outcome.outcome).toBe("succeeded");
+    const sent = levels(other.provider.calls);
+    expect(sent).toEqual(expect.arrayContaining(["L1", "L2"]));
+    expect(sent.filter((l) => l === "L0")).toHaveLength(0);
+    expect(before).toBeGreaterThan(0);
   });
 
   it("with report.saveNote off writes the row and the file and no note", async () => {

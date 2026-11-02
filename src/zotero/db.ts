@@ -48,6 +48,15 @@
  *   and its Markdown files in `<data dir>/research-helper/reports/`
  *   (`P4-T14`; `docs/07` §5.2, §8.3), on the same connection; every report
  *   passes the redaction gate ({@link gateTrendReport}).
+ * - {@link createCollectionProfileStore} — {@link CollectionProfileStore} over
+ *   the `collection_profile` table (`P5-T03`; `docs/07` §5.2, §8.3), on the same
+ *   connection; every profile passes the gate ({@link gateCollectionProfile}).
+ * - {@link createRecommendationStore} — {@link RecommendationStore} over the
+ *   `recommendation` table (`P5-T03`; `docs/07` §5.2, §8.3), on the same
+ *   connection; every row passes the gate ({@link gateRecommendation}).
+ * - {@link createEmbeddingStore} — {@link EmbeddingStore} over the `embedding`
+ *   table (`P5-T03`; `docs/07` §8.3, §9.2), on the same connection. No JSON
+ *   column, so nothing to gate; the table is capped ({@link EMBEDDING_CAP_BYTES}).
  * - {@link createCacheBlobStore} — `src/core/cache/sqliteCache.ts`'s
  *   `CacheBlobStore` port: `docs/07` §9.2's blob directory for cache values
  *   over 256 KB (`P3-T33`). The `cache_entry` rows themselves are written by
@@ -86,6 +95,8 @@ import {
   type UserPriceStore,
 } from "../llm/shared/pricing";
 import type { ProviderId } from "../model/ids";
+import type { CollectionProfile } from "../model/profile";
+import type { Recommendation } from "../model/recommendation";
 import type { StoredRedactionMark, StoredSummary } from "../model/summary";
 import type { TrendReport } from "../model/trend";
 
@@ -109,10 +120,21 @@ export const PLUGIN_DATABASE_FILE = `${PLUGIN_DATABASE_NAME}.sqlite`;
  */
 export interface SqlQueryOptions {
   readonly debugParams?: boolean;
+  /**
+   * Read out of Zotero 10.0.3's `db.js`: `queryAsync` uses `conn.execute`
+   * instead of `executeCached`, which keeps one prepared statement per distinct
+   * SQL text for the connection's life. For a statement whose placeholder count
+   * varies ({@link EMBEDDING_IN_LIST_MAX}).
+   */
+  readonly noCache?: boolean;
 }
 
-/** One bound parameter. `null` is SQL `NULL`. */
-export type SqlParam = string | number | null;
+/**
+ * One bound parameter. `null` is SQL `NULL`. A `Uint8Array` is a `BLOB`:
+ * `Sqlite.sys.mjs`'s `bindParam` binds one with `bindBlobByIndex` (read out of
+ * Zotero 10.0.3's `omni.ja`; `P5-T03`).
+ */
+export type SqlParam = string | number | null | Uint8Array;
 
 /**
  * The slice of `Zotero.DBConnection` this plugin uses, as a port.
@@ -1081,6 +1103,792 @@ export function createReportStore(
         );
       }
       return { ...record, markdown };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// `BLOB` columns (`P5-T03`)
+// ---------------------------------------------------------------------------
+
+/** A `Float32Array`'s own bytes, as a `BLOB` parameter ({@link SqlParam}). */
+function float32Blob(values: Float32Array): Uint8Array {
+  return new Uint8Array(values.buffer, values.byteOffset, values.byteLength);
+}
+
+/**
+ * A `BLOB` column's value as bytes in a buffer of their own, or `undefined`
+ * when it is not one.
+ *
+ * Inside Zotero 10.0.3 a `BLOB` reads back as an array of numbers
+ * (`test/integration/zotero/recommendStores.spec.ts` asserts it); `node:sqlite`
+ * hands back a `Uint8Array`, which may sit at an offset no `Float32Array` can
+ * start from. So the bytes are copied either way.
+ */
+function blobBytes(value: unknown): Uint8Array | undefined {
+  if (Array.isArray(value)) return Uint8Array.from(value as number[]);
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(
+      value.buffer,
+      value.byteOffset,
+      value.byteLength,
+    ).slice();
+  }
+  return undefined;
+}
+
+/** {@link blobBytes}' answer as floats; the length must be a multiple of 4. */
+function floatsOf(bytes: Uint8Array): Float32Array {
+  return new Float32Array(bytes.buffer, 0, bytes.length / 4);
+}
+
+/** The earlier mark plus one gate pass's, as `gateTrendReport` sums them. */
+function summedMark(
+  earlier: StoredRedactionMark | undefined,
+  mark: StoredRedactionMark,
+): StoredRedactionMark {
+  return {
+    partlyRedacted: (earlier?.partlyRedacted ?? false) || mark.partlyRedacted,
+    redactedStrings: (earlier?.redactedStrings ?? 0) + mark.redactedStrings,
+    droppedFields: (earlier?.droppedFields ?? 0) + mark.droppedFields,
+  };
+}
+
+/** `ExternalIds`' members, by name: each can hold a 40-character identifier. */
+const EXTERNAL_ID_VERBATIM_KEYS: readonly string[] = [
+  "doi",
+  "pmid",
+  "pmcid",
+  "arxivId",
+  "s2CorpusId",
+  "openAlexId",
+  "epmcId",
+  "url",
+];
+
+// ---------------------------------------------------------------------------
+// The collection profile (`P5-T03`)
+// ---------------------------------------------------------------------------
+
+/**
+ * `CollectionProfile`'s identifier fields, copied through the redaction gate
+ * unchanged (`docs/07` §5.2's note of 2026-11-02, with the measurement):
+ * without them `membershipHash` becomes `[redacted:64]`, a `hash:` entry of
+ * `knownWorkKeys` loses its 40 hexadecimal characters, and a seed's
+ * `ids.url` its paper id. Each is computed by code or read from a source's
+ * answer. `narrative`, `suggestedQueries`, the name, terms and authors are gated.
+ */
+export const COLLECTION_PROFILE_VERBATIM_KEYS: readonly string[] =
+  Object.freeze([
+    "id",
+    "collectionKey",
+    "membershipHash",
+    "knownWorkKeys",
+    "embeddingModel",
+    ...EXTERNAL_ID_VERBATIM_KEYS,
+  ]);
+
+/** `docs/07` §5.2: `CollectionProfile.id` is `${libraryID}:${collectionKey}`. */
+export function collectionProfileId(
+  libraryID: number,
+  collectionKey: string,
+): string {
+  return `${String(libraryID)}:${collectionKey}`;
+}
+
+/**
+ * The one gate (`redactRecord`, `src/core/provenance.ts`) applied to a whole
+ * profile, with {@link COLLECTION_PROFILE_VERBATIM_KEYS} copied unchanged. The
+ * returned mark is the earlier one plus this pass's. `centroids` hold numbers
+ * only, which the gate leaves alone.
+ *
+ * @param profile - the profile about to be stored
+ * @returns the profile as it may be stored, with its mark
+ */
+export function gateCollectionProfile(
+  profile: CollectionProfile,
+): CollectionProfile {
+  const { redaction: earlier, ...rest } = profile;
+  const gated = redactRecord(rest, {
+    verbatimKeys: COLLECTION_PROFILE_VERBATIM_KEYS,
+  });
+  return { ...gated.record, redaction: summedMark(earlier, gated.mark) };
+}
+
+/**
+ * The `collection_profile` table (`docs/07` §8.3, migration version 8), one
+ * `CollectionProfile` per collection. The port is declared here, as
+ * {@link SummaryStore} is, because `zotero/` may not import `pipeline/`.
+ *
+ * Writers: `buildProfileStats`' caller (`P5-T18`) and the recommend pipeline
+ * (`P5-T25`). Reader: the recommend pipeline, for its profile check.
+ */
+export interface CollectionProfileStore {
+  /**
+   * Gate `profile` ({@link gateCollectionProfile}) and write it, replacing the
+   * row with the same `id`. A rebuild therefore replaces `userEdits` too: the
+   * caller carries them over (`docs/07` §5.2).
+   *
+   * @returns the profile as {@link get} will read it: each centroid value as
+   *   the `Float32` it is stored as
+   * @throws RangeError, writing nothing, for an id that is not
+   *   {@link collectionProfileId}'s, an empty `membershipHash`, or centroids
+   *   that are not rectangular, finite and of `embeddingDim` (when given)
+   */
+  put(profile: CollectionProfile): Promise<CollectionProfile>;
+  /**
+   * The row with `id`, or `undefined`.
+   *
+   * @throws StorageError when the stored text is not a profile or the blob does
+   *   not divide by `centroid_count`
+   */
+  get(id: string): Promise<CollectionProfile | undefined>;
+}
+
+const UPSERT_COLLECTION_PROFILE =
+  "INSERT INTO collection_profile (id, library_id, collection_key, membership_hash, " +
+  "json, centroids, centroid_count, built_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+  "ON CONFLICT(id) DO UPDATE SET library_id = excluded.library_id, " +
+  "collection_key = excluded.collection_key, " +
+  "membership_hash = excluded.membership_hash, json = excluded.json, " +
+  "centroids = excluded.centroids, centroid_count = excluded.centroid_count, " +
+  "built_at = excluded.built_at";
+
+const SELECT_COLLECTION_PROFILE =
+  "SELECT json, centroids, centroid_count FROM collection_profile WHERE id = ?";
+
+/**
+ * The centroids as the `Float32` values the blob holds: k rows of one length.
+ *
+ * @throws RangeError when they are not rectangular, finite as `Float32`, or of
+ *   `embeddingDim`
+ */
+function centroidFloats(profile: CollectionProfile): Float32Array {
+  const { centroids, embeddingDim } = profile;
+  const dim = centroids[0]?.length ?? 0;
+  const floats = new Float32Array(centroids.length * dim);
+  centroids.forEach((centroid, row) => {
+    if (centroid.length !== dim || dim === 0) {
+      throw new RangeError(
+        "[research-helper] every centroid needs the same non-zero length; " +
+          "nothing was stored",
+      );
+    }
+    floats.set(centroid, row * dim);
+  });
+  if (
+    !floats.every(Number.isFinite) ||
+    (centroids.length > 0 && embeddingDim !== undefined && embeddingDim !== dim)
+  ) {
+    throw new RangeError(
+      "[research-helper] a centroid is not finite or disagrees with " +
+        "embeddingDim; nothing was stored",
+    );
+  }
+  return floats;
+}
+
+/** k rows of the blob's floats (`docs/07` §8.3: row-major). */
+function centroidRows(
+  floats: Float32Array,
+  count: number,
+): readonly (readonly number[])[] {
+  const dim = count === 0 ? 0 : floats.length / count;
+  const rows: number[][] = [];
+  for (let row = 0; row < count; row += 1) {
+    rows.push(Array.from(floats.subarray(row * dim, (row + 1) * dim)));
+  }
+  return rows;
+}
+
+/** A row's `json`, `centroids` and `centroid_count`, joined and checked. */
+function storedProfileFrom(result: unknown): CollectionProfile {
+  const source = result as Record<string, unknown>;
+  let value: unknown;
+  try {
+    value = JSON.parse(String(source["json"]));
+  } catch {
+    value = undefined;
+  }
+  const row = value as Partial<CollectionProfile> | undefined;
+  if (
+    row === undefined ||
+    row === null ||
+    typeof row !== "object" ||
+    typeof row.id !== "string" ||
+    typeof row.membershipHash !== "string" ||
+    !Array.isArray(row.knownWorkKeys) ||
+    !Array.isArray(row.seeds) ||
+    "centroids" in row
+  ) {
+    throw new StorageError(
+      "[research-helper] a collection_profile row is not a stored profile",
+    );
+  }
+  const count = Number(source["centroid_count"]);
+  if (count === 0) return { ...(row as CollectionProfile), centroids: [] };
+  const bytes = blobBytes(source["centroids"]);
+  if (
+    !Number.isInteger(count) ||
+    count < 0 ||
+    bytes === undefined ||
+    bytes.length === 0 ||
+    bytes.length % (4 * count) !== 0
+  ) {
+    throw new StorageError(
+      "[research-helper] a collection_profile row's centroids do not divide " +
+        "by its centroid_count",
+    );
+  }
+  return {
+    ...(row as CollectionProfile),
+    centroids: centroidRows(floatsOf(bytes), count),
+  };
+}
+
+/**
+ * {@link CollectionProfileStore} over the plugin's database (`P5-T03`; `docs/07`
+ * §5.2's note of 2026-11-02, §8.3). Every statement is {@link QUIET}: `json` is
+ * a whole profile.
+ *
+ * Constructed on the one shared connection by `installPluginDatabase`
+ * (`src/bootstrap/pluginDatabase.ts`).
+ *
+ * @param db - the connection {@link openPluginDatabase} returned, migrated
+ * @returns the store
+ */
+export function createCollectionProfileStore(
+  db: SqlConnection,
+): CollectionProfileStore {
+  return {
+    async put(profile: CollectionProfile): Promise<CollectionProfile> {
+      if (
+        !Number.isInteger(profile.libraryID) ||
+        profile.collectionKey === "" ||
+        profile.id !==
+          collectionProfileId(profile.libraryID, profile.collectionKey) ||
+        profile.membershipHash === ""
+      ) {
+        throw new RangeError(
+          "[research-helper] a profile needs the id of its library and " +
+            "collection and a membership hash; nothing was stored",
+        );
+      }
+      const floats = centroidFloats(profile);
+      const row = gateCollectionProfile(profile);
+      const { centroids, ...record } = row;
+      const count = centroids.length;
+      await db.queryAsync(
+        UPSERT_COLLECTION_PROFILE,
+        [
+          row.id,
+          row.libraryID,
+          row.collectionKey,
+          row.membershipHash,
+          JSON.stringify(record),
+          count === 0 ? null : float32Blob(floats),
+          count,
+          row.builtAtEpochMs,
+        ],
+        QUIET,
+      );
+      return { ...record, centroids: centroidRows(floats, count) };
+    },
+
+    async get(id: string): Promise<CollectionProfile | undefined> {
+      const rows = resultRows(
+        await db.queryAsync(SELECT_COLLECTION_PROFILE, [id], QUIET),
+      );
+      const first = rows[0];
+      return first === undefined ? undefined : storedProfileFrom(first);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The recommendations and their rejections (`P5-T03`)
+// ---------------------------------------------------------------------------
+
+/**
+ * `Recommendation`'s identifier fields, copied through the redaction gate
+ * unchanged (`docs/07` §5.2's note of 2026-11-02, with the measurement):
+ * without them the gate rewrites `work.provenance.recordIds` and `work.url` of
+ * every Semantic Scholar paper, and `id` and `work.workKey` of a `hash:` work.
+ * `title`, `abstract`, authors, `pdfUrl` and `landingPageUrl` are gated.
+ */
+export const RECOMMENDATION_VERBATIM_KEYS: readonly string[] = Object.freeze([
+  "id",
+  "profileId",
+  "workKey",
+  "recordIds",
+  ...EXTERNAL_ID_VERBATIM_KEYS,
+]);
+
+/** `docs/07` §5.2: `Recommendation.id` is `${profileId}:${workKey}`. */
+export function recommendationId(profileId: string, workKey: string): string {
+  return `${profileId}:${workKey}`;
+}
+
+/**
+ * The one gate (`redactRecord`) applied to a whole recommendation, with
+ * {@link RECOMMENDATION_VERBATIM_KEYS} copied unchanged. The returned mark is
+ * the earlier one plus this pass's.
+ *
+ * @param recommendation - the row about to be stored
+ * @returns the row as it may be stored, with its mark
+ */
+export function gateRecommendation(
+  recommendation: Recommendation,
+): Recommendation {
+  const { redaction: earlier, ...rest } = recommendation;
+  const gated = redactRecord(rest, {
+    verbatimKeys: RECOMMENDATION_VERBATIM_KEYS,
+  });
+  return { ...gated.record, redaction: summedMark(earlier, gated.mark) };
+}
+
+/**
+ * The `recommendation` table (`docs/07` §8.3, migration version 9). The port is
+ * declared here, as {@link SummaryStore} is, because `zotero/` may not import
+ * `pipeline/`.
+ *
+ * Writer: the recommend pipeline (`P5-T25`), `put` for a run's rows and
+ * `reject` for "Not interested". Readers of {@link listRejected}: seed selection
+ * (`P5-T21`, the newest 10 as negatives) and the filters (`P5-T24`, every
+ * rejected work). Nothing records what the user imports (`plan/00` §6 item 323(b)).
+ */
+export interface RecommendationStore {
+  /**
+   * Gate `recommendation` ({@link gateRecommendation}) and write it, replacing
+   * the row with the same `id` but keeping a rejection that row already has.
+   *
+   * @returns the row as written, with its mark
+   * @throws RangeError, writing nothing, for an id that is not
+   *   {@link recommendationId}'s, a score that is not finite, a `userAction`
+   *   other than `"rejected"`, or one with no finite time
+   */
+  put(recommendation: Recommendation): Promise<Recommendation>;
+  /**
+   * Record "Not interested". A row already rejected keeps its first time.
+   *
+   * @param id - {@link recommendationId}'s
+   * @param atEpochMs - when; `action_at`
+   * @returns whether the store holds that row; `false` wrote nothing
+   * @throws RangeError for a time that is not finite
+   */
+  reject(id: string, atEpochMs: number): Promise<boolean>;
+  /**
+   * The rejected rows of one profile, and so of one collection (`docs/07` §5.2's
+   * note of 2026-11-02, item 4), most recently rejected first.
+   *
+   * @param profileId - {@link collectionProfileId}'s
+   * @param limit - the most to return; absent, all of them
+   * @throws RangeError for a limit that is not a positive integer
+   * @throws StorageError when a stored text is not a recommendation
+   */
+  listRejected(
+    profileId: string,
+    limit?: number,
+  ): Promise<readonly Recommendation[]>;
+}
+
+/** The one `user_action` this plugin writes (`plan/00` §6 item 323(b)). */
+const USER_ACTION_REJECTED = "rejected";
+
+const UPSERT_RECOMMENDATION =
+  "INSERT INTO recommendation (id, profile_id, work_key, score, json, user_action, " +
+  "action_at, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+  "ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, " +
+  "work_key = excluded.work_key, score = excluded.score, json = excluded.json, " +
+  "user_action = COALESCE(recommendation.user_action, excluded.user_action), " +
+  "action_at = COALESCE(recommendation.action_at, excluded.action_at), " +
+  "generated_at = excluded.generated_at";
+
+const COUNT_RECOMMENDATION = "SELECT COUNT(*) FROM recommendation WHERE id = ?";
+
+const REJECT_RECOMMENDATION =
+  "UPDATE recommendation SET user_action = ?, action_at = ? " +
+  "WHERE id = ? AND user_action IS NULL";
+
+const SELECT_REJECTED_RECOMMENDATIONS =
+  "SELECT json, user_action, action_at FROM recommendation " +
+  "WHERE profile_id = ? AND user_action = ? " +
+  "ORDER BY action_at DESC, rowid DESC";
+
+/** A row's `json`, `user_action` and `action_at`, joined and checked. */
+function storedRecommendationFrom(result: unknown): Recommendation {
+  const source = result as Record<string, unknown>;
+  let value: unknown;
+  try {
+    value = JSON.parse(String(source["json"]));
+  } catch {
+    value = undefined;
+  }
+  const row = value as Partial<Recommendation> | undefined;
+  if (
+    row === undefined ||
+    row === null ||
+    typeof row !== "object" ||
+    typeof row.id !== "string" ||
+    typeof row.profileId !== "string" ||
+    typeof row.work !== "object" ||
+    row.work === null ||
+    typeof row.work.workKey !== "string"
+  ) {
+    throw new StorageError(
+      "[research-helper] a recommendation row is not a stored recommendation",
+    );
+  }
+  return {
+    ...(row as Recommendation),
+    ...(source["user_action"] === USER_ACTION_REJECTED && {
+      userAction: USER_ACTION_REJECTED,
+      userActionAtEpochMs: Number(source["action_at"]),
+    }),
+  };
+}
+
+/**
+ * {@link RecommendationStore} over the plugin's database (`P5-T03`; `docs/07`
+ * §5.2's note of 2026-11-02, §8.3). Every statement is {@link QUIET}: `json` is
+ * a whole recommendation.
+ *
+ * Constructed on the one shared connection by `installPluginDatabase`
+ * (`src/bootstrap/pluginDatabase.ts`).
+ *
+ * @param db - the connection {@link openPluginDatabase} returned, migrated
+ * @returns the store
+ */
+export function createRecommendationStore(
+  db: SqlConnection,
+): RecommendationStore {
+  return {
+    async put(recommendation: Recommendation): Promise<Recommendation> {
+      const action = recommendation.userAction as string | undefined;
+      const at = recommendation.userActionAtEpochMs;
+      if (
+        recommendation.profileId === "" ||
+        recommendation.work.workKey === "" ||
+        recommendation.id !==
+          recommendationId(
+            recommendation.profileId,
+            recommendation.work.workKey,
+          ) ||
+        !Number.isFinite(recommendation.score) ||
+        (action !== undefined && action !== USER_ACTION_REJECTED) ||
+        (action !== undefined && !Number.isFinite(at))
+      ) {
+        throw new RangeError(
+          "[research-helper] a recommendation needs the id of its profile and " +
+            "work, a finite score, and no user action but a dated rejection; " +
+            "nothing was stored",
+        );
+      }
+      const row = gateRecommendation(recommendation);
+      const { userAction, userActionAtEpochMs: actionAt, ...record } = row;
+      await db.queryAsync(
+        UPSERT_RECOMMENDATION,
+        [
+          row.id,
+          row.profileId,
+          row.work.workKey,
+          row.score,
+          JSON.stringify(record),
+          userAction ?? null,
+          userAction === undefined ? null : (actionAt ?? null),
+          row.generatedAtEpochMs,
+        ],
+        QUIET,
+      );
+      return row;
+    },
+
+    async reject(id: string, atEpochMs: number): Promise<boolean> {
+      if (!Number.isFinite(atEpochMs)) {
+        throw new RangeError(
+          "[research-helper] a rejection needs a time; nothing was stored",
+        );
+      }
+      const held = await db.valueQueryAsync(COUNT_RECOMMENDATION, [id], QUIET);
+      if (Number(held) === 0) return false;
+      await db.queryAsync(
+        REJECT_RECOMMENDATION,
+        [USER_ACTION_REJECTED, atEpochMs, id],
+        QUIET,
+      );
+      return true;
+    },
+
+    async listRejected(
+      profileId: string,
+      limit?: number,
+    ): Promise<readonly Recommendation[]> {
+      if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+        throw new RangeError(
+          "[research-helper] a limit must be a positive integer",
+        );
+      }
+      const rows = resultRows(
+        await db.queryAsync(
+          limit === undefined
+            ? SELECT_REJECTED_RECOMMENDATIONS
+            : `${SELECT_REJECTED_RECOMMENDATIONS} LIMIT ?`,
+          limit === undefined
+            ? [profileId, USER_ACTION_REJECTED]
+            : [profileId, USER_ACTION_REJECTED, limit],
+          QUIET,
+        ),
+      );
+      return rows.map(storedRecommendationFrom);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The stored paper vectors (`P5-T03`)
+// ---------------------------------------------------------------------------
+
+/**
+ * `docs/07` §9.2's 100 MB for the `embedding` table, in the unit
+ * `src/core/cache/cache.ts` uses (`plan/08` §0.4 line 31; §9.2's note of
+ * 2026-11-02): 34 133 vectors of 768 dimensions.
+ */
+export const EMBEDDING_CAP_BYTES = 100 * 1024 * 1024;
+
+/**
+ * The most work keys one statement names. Zotero 10.0.3's `db.js` declares
+ * `MAX_BOUND_PARAMETERS = 999`, and the model takes one more.
+ */
+export const EMBEDDING_IN_LIST_MAX = 500;
+
+/** One vector to store, tagged with the model that made it (`docs/05` §5.1). */
+export interface EmbeddingRow {
+  readonly workKey: string;
+  readonly model: string;
+  readonly vector: Float32Array;
+  /** `created_at`, the order {@link EmbeddingStore.evictToCap} deletes in. */
+  readonly createdAtEpochMs: number;
+}
+
+/** What {@link EmbeddingStore.evictToCap} did. */
+export interface EmbeddingEviction {
+  /** Vectors deleted. */
+  readonly evicted: number;
+  /** The table's size afterwards, `dim × 4` bytes per vector. */
+  readonly bytes: number;
+}
+
+/** {@link createEmbeddingStore}'s options. */
+export interface EmbeddingStoreOptions {
+  /** The table's cap in bytes; absent, {@link EMBEDDING_CAP_BYTES}. */
+  readonly capBytes?: number;
+}
+
+/**
+ * The `embedding` table (`docs/07` §8.3, migration version 10). Every read names
+ * one model, so two vector spaces are never mixed (`plan/08` §0.2 item 22).
+ *
+ * Caller: `ensureEmbeddings` (`src/pipeline/shared/embeddings.ts`, `P5-T20`),
+ * which also calls {@link evictToCap}, because this store cannot tell what is in
+ * the library.
+ */
+export interface EmbeddingStore {
+  /**
+   * Write the vectors in one transaction, replacing a row with the same work and
+   * model.
+   *
+   * @throws RangeError, writing nothing, for an empty `workKey` or `model`, an
+   *   empty vector or a value that is not finite, or a time that is not finite
+   */
+  putMany(rows: readonly EmbeddingRow[]): Promise<void>;
+  /**
+   * The stored vectors of these works under `model`, by work key. A work with no
+   * vector, or a row whose blob is not `dim × 4` bytes, is absent.
+   */
+  getMany(
+    workKeys: readonly string[],
+    model: string,
+  ): Promise<ReadonlyMap<string, Float32Array>>;
+  /** Every stored vector under `model`, by work key; {@link getMany}'s rule. */
+  allForModel(model: string): Promise<ReadonlyMap<string, Float32Array>>;
+  /**
+   * Bring the table to its cap (`docs/07` §9.2's note of 2026-11-02): nothing at
+   * or under it; over it, the oldest vectors of works `isInLibrary` rejects, then,
+   * if still over, the oldest of the rest. One transaction.
+   *
+   * @param isInLibrary - whether a work key names a paper in the library
+   * @returns how many went, and the size left
+   */
+  evictToCap(
+    isInLibrary: (workKey: string) => boolean,
+  ): Promise<EmbeddingEviction>;
+}
+
+const UPSERT_EMBEDDING =
+  "INSERT INTO embedding (work_key, model, dim, vector, created_at) " +
+  "VALUES (?, ?, ?, ?, ?) ON CONFLICT(work_key, model) DO UPDATE SET " +
+  "dim = excluded.dim, vector = excluded.vector, created_at = excluded.created_at";
+
+const SELECT_EMBEDDINGS_FOR_MODEL =
+  "SELECT work_key, dim, vector FROM embedding WHERE model = ?";
+
+const SUM_EMBEDDING_BYTES = "SELECT COALESCE(SUM(dim * 4), 0) FROM embedding";
+
+/** Oldest first; `rowid` breaks a tie. Never reads a vector. */
+const SELECT_EMBEDDINGS_OLDEST_FIRST =
+  "SELECT work_key, model, dim FROM embedding ORDER BY created_at, rowid";
+
+const DELETE_EMBEDDING =
+  "DELETE FROM embedding WHERE work_key = ? AND model = ?";
+
+/** A statement's text differs by list length, so it is not kept prepared. */
+const QUIET_UNCACHED: SqlQueryOptions = { ...QUIET, noCache: true };
+
+/** Rows into {@link EmbeddingStore.getMany}'s map; a bad blob reads as absent. */
+function addVectors(
+  into: Map<string, Float32Array>,
+  rows: readonly unknown[],
+): void {
+  for (const result of rows) {
+    const source = result as Record<string, unknown>;
+    const bytes = blobBytes(source["vector"]);
+    const dim = Number(source["dim"]);
+    if (bytes !== undefined && dim > 0 && bytes.length === dim * 4) {
+      into.set(String(source["work_key"]), floatsOf(bytes));
+    }
+  }
+}
+
+/**
+ * {@link EmbeddingStore} over the plugin's database (`P5-T03`; `docs/07` §8.3,
+ * §9.2's note of 2026-11-02). No JSON column, so `redactRecord` has nothing to
+ * gate. Every statement is {@link QUIET}: Zotero's debug log would otherwise
+ * print a vector's bytes.
+ *
+ * Constructed on the one shared connection by `installPluginDatabase`
+ * (`src/bootstrap/pluginDatabase.ts`).
+ *
+ * @param db - the connection {@link openPluginDatabase} returned, migrated
+ * @param options - the cap; a test lowers it
+ * @returns the store
+ */
+export function createEmbeddingStore(
+  db: SqlConnection,
+  options: EmbeddingStoreOptions = {},
+): EmbeddingStore {
+  const capBytes = options.capBytes ?? EMBEDDING_CAP_BYTES;
+  return {
+    async putMany(rows: readonly EmbeddingRow[]): Promise<void> {
+      for (const row of rows) {
+        if (
+          row.workKey === "" ||
+          row.model === "" ||
+          row.vector.length === 0 ||
+          !row.vector.every(Number.isFinite) ||
+          !Number.isFinite(row.createdAtEpochMs)
+        ) {
+          throw new RangeError(
+            "[research-helper] a vector needs a work key, a model, finite " +
+              "values and a time; nothing was stored",
+          );
+        }
+      }
+      if (rows.length === 0) return;
+      await db.executeTransaction(async () => {
+        for (const row of rows) {
+          await db.queryAsync(
+            UPSERT_EMBEDDING,
+            [
+              row.workKey,
+              row.model,
+              row.vector.length,
+              float32Blob(row.vector),
+              row.createdAtEpochMs,
+            ],
+            QUIET,
+          );
+        }
+      });
+    },
+
+    async getMany(
+      workKeys: readonly string[],
+      model: string,
+    ): Promise<ReadonlyMap<string, Float32Array>> {
+      const found = new Map<string, Float32Array>();
+      for (
+        let start = 0;
+        start < workKeys.length;
+        start += EMBEDDING_IN_LIST_MAX
+      ) {
+        const keys = workKeys.slice(start, start + EMBEDDING_IN_LIST_MAX);
+        addVectors(
+          found,
+          resultRows(
+            await db.queryAsync(
+              `${SELECT_EMBEDDINGS_FOR_MODEL} AND work_key IN (${keys
+                .map(() => "?")
+                .join(", ")})`,
+              [model, ...keys],
+              QUIET_UNCACHED,
+            ),
+          ),
+        );
+      }
+      return found;
+    },
+
+    async allForModel(
+      model: string,
+    ): Promise<ReadonlyMap<string, Float32Array>> {
+      const found = new Map<string, Float32Array>();
+      addVectors(
+        found,
+        resultRows(
+          await db.queryAsync(SELECT_EMBEDDINGS_FOR_MODEL, [model], QUIET),
+        ),
+      );
+      return found;
+    },
+
+    async evictToCap(
+      isInLibrary: (workKey: string) => boolean,
+    ): Promise<EmbeddingEviction> {
+      let bytes = Number(
+        await db.valueQueryAsync(SUM_EMBEDDING_BYTES, [], QUIET),
+      );
+      if (bytes <= capBytes) return { evicted: 0, bytes };
+      const rows = resultRows(
+        await db.queryAsync(SELECT_EMBEDDINGS_OLDEST_FIRST, [], QUIET),
+      ).map((result) => {
+        const source = result as Record<string, unknown>;
+        return {
+          workKey: String(source["work_key"]),
+          model: String(source["model"]),
+          bytes: Number(source["dim"]) * 4,
+        };
+      });
+      const outside: typeof rows = [];
+      const inside: typeof rows = [];
+      for (const row of rows) {
+        (isInLibrary(row.workKey) ? inside : outside).push(row);
+      }
+      const victims: typeof rows = [];
+      for (const row of [...outside, ...inside]) {
+        if (bytes <= capBytes) break;
+        victims.push(row);
+        bytes -= row.bytes;
+      }
+      await db.executeTransaction(async () => {
+        for (const victim of victims) {
+          await db.queryAsync(
+            DELETE_EMBEDDING,
+            [victim.workKey, victim.model],
+            QUIET,
+          );
+        }
+      });
+      return { evicted: victims.length, bytes };
     },
   };
 }

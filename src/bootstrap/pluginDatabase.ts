@@ -13,7 +13,9 @@
  * summary store (`createSummaryStore`, built here by `P3-T29`; this line
  * said "when `P3-T26` adds it" until 2026-10-29) and the report store
  * (`createReportStore`, `P4-T14`: the `report` table and the Markdown files
- * in `<data dir>/research-helper/reports/`).
+ * in `<data dir>/research-helper/reports/`) and the three stores Phase 5 reads
+ * (`P5-T03`: `createCollectionProfileStore`, `createRecommendationStore`,
+ * `createEmbeddingStore`).
  *
  * ## Why the open is synchronous and the migrations are not
  *
@@ -58,11 +60,17 @@ import type { Logger } from "../core/logger";
 import type { ProvenanceStore } from "../core/provenance";
 import type { UserPriceStore } from "../llm/shared/pricing";
 import {
+  createCollectionProfileStore,
+  createEmbeddingStore,
   createJobStore,
   createProvenanceStore,
+  createRecommendationStore,
   createReportStore,
   createSummaryStore,
   createUserPriceStore,
+  type CollectionProfileStore,
+  type EmbeddingStore,
+  type RecommendationStore,
   type ReportMarkdownFiles,
   type ReportStore,
   type SqlConnection,
@@ -113,6 +121,12 @@ export interface OpenPluginDatabase {
    * {@link PluginDatabase.reports}.
    */
   readonly reports: ReportStore;
+  /** The `collection_profile` table (`P5-T03`), on the connection. */
+  readonly collectionProfiles: CollectionProfileStore;
+  /** The `recommendation` table (`P5-T03`), on the connection. */
+  readonly recommendations: RecommendationStore;
+  /** The `embedding` table (`P5-T03`), on the connection. */
+  readonly embeddings: EmbeddingStore;
 }
 
 /** {@link installPluginDatabase}'s answer, held on the service graph. */
@@ -150,6 +164,25 @@ export interface PluginDatabase {
    * passes it to the trend-report run (`P4-T18`).
    */
   readonly reports: () => Promise<ReportStore | undefined>;
+  /**
+   * The collection profile store (`P5-T03`), handed out as {@link summaries}
+   * is. Its callers are the recommend pipeline's: `P5-T18` and `P5-T25`, which
+   * `installServices` wires (`P5-T25`).
+   */
+  readonly collectionProfiles: () => Promise<
+    CollectionProfileStore | undefined
+  >;
+  /**
+   * The recommendation store (`P5-T03`), handed out as {@link summaries} is.
+   * Its callers are `P5-T21`, `P5-T24` and `P5-T25`.
+   */
+  readonly recommendations: () => Promise<RecommendationStore | undefined>;
+  /**
+   * The vector store (`P5-T03`), handed out as {@link summaries} is, so teardown
+   * waits for a `putMany` or an eviction in flight. Its caller is
+   * `ensureEmbeddings` (`P5-T20`).
+   */
+  readonly embeddings: () => Promise<EmbeddingStore | undefined>;
   /**
    * Attach the job queue's store once the database is ready, then run
    * `docs/07` §7.6's startup recovery (not awaited; teardown awaits it).
@@ -223,6 +256,9 @@ export function installPluginDatabase(
           source.reportFiles === undefined
             ? createReportStore(connection)
             : createReportStore(connection, source.reportFiles),
+        collectionProfiles: createCollectionProfileStore(connection),
+        recommendations: createRecommendationStore(connection),
+        embeddings: createEmbeddingStore(connection),
       };
     } catch (error) {
       logger.error(
@@ -369,12 +405,53 @@ export function installPluginDatabase(
     };
   };
 
+  // The three stores Phase 5 reads (`P5-T03`), handed out and tracked as the
+  // summary store is.
+  const collectionProfiles = async (): Promise<
+    CollectionProfileStore | undefined
+  > => {
+    const open = await ready;
+    if (open === undefined || closing) return undefined;
+    const store = open.collectionProfiles;
+    return {
+      put: (profile) => tracked(store.put(profile)),
+      get: (id) => tracked(store.get(id)),
+    };
+  };
+  const recommendations = async (): Promise<
+    RecommendationStore | undefined
+  > => {
+    const open = await ready;
+    if (open === undefined || closing) return undefined;
+    const store = open.recommendations;
+    return {
+      put: (recommendation) => tracked(store.put(recommendation)),
+      reject: (id, atEpochMs) => tracked(store.reject(id, atEpochMs)),
+      listRejected: (profileId, limit) =>
+        tracked(store.listRejected(profileId, limit)),
+    };
+  };
+  const embeddings = async (): Promise<EmbeddingStore | undefined> => {
+    const open = await ready;
+    if (open === undefined || closing) return undefined;
+    const store = open.embeddings;
+    return {
+      putMany: (rows) => tracked(store.putMany(rows)),
+      getMany: (workKeys, model) => tracked(store.getMany(workKeys, model)),
+      allForModel: (model) => tracked(store.allForModel(model)),
+      evictToCap: (isInLibrary) => tracked(store.evictToCap(isInLibrary)),
+    };
+  };
+
   return {
     ready,
     cache,
     prices,
     summaries,
     reports,
+    collectionProfiles,
+    recommendations,
+    embeddings,
     attachJobs(jobs: JobQueue): void {
       recovering = ready.then(async (open) => {
         if (open === undefined) return;

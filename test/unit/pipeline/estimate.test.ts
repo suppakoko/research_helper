@@ -31,9 +31,11 @@ import {
   planItem,
   planSynthesis,
   secondAcknowledgementFor,
+  synthesisBudgets,
   themeCountBandFor,
   themeStageReservation,
   toPipelineEstimate,
+  windowInputBudget,
   withHeadroom,
   type EstimateItem,
   type EstimateReportRunInput,
@@ -1125,6 +1127,351 @@ describe("P4-T16 under plan/00 §6 items 307(b) and 309(b): the theme stage at t
         priced(fixed),
       );
       expect(unset.calls.length, String(papers)).toBe(plusOther.calls.length);
+    }
+  });
+});
+
+describe("P4-T22 under plan/00 §6 item 327(a): input budgets follow the context window", () => {
+  const REDUCE = PROMPTS.get("CLUSTER_REDUCE");
+
+  describe("windowInputBudget", () => {
+    it("is the §5.2 row when the window is not known, zero, or not finite", () => {
+      for (const contextWindowTokens of [undefined, 0, -1, Number.NaN]) {
+        expect(
+          windowInputBudget(
+            "CLUSTER_REDUCE",
+            contextWindowTokens === undefined ? {} : { contextWindowTokens },
+            3_000,
+            2_000,
+          ),
+        ).toBe(40_000);
+      }
+    });
+
+    it("is the largest x with ceil(1.15 x) ≤ window − output − 800, less the overhead", () => {
+      const budget = windowInputBudget(
+        "CLUSTER_REDUCE",
+        { contextWindowTokens: 32_000, maxOutputTokens: 8_192 },
+        3_000,
+        2_000,
+      );
+      // ⌊28 200 ÷ 1.15⌋ = 24 521, then the prompt's own 2 000.
+      expect(budget).toBe(22_521);
+      expect(withHeadroom(budget + 2_000)).toBeLessThanOrEqual(28_200);
+      expect(withHeadroom(budget + 2_001)).toBeGreaterThan(28_200);
+    });
+
+    it("takes the output as the provider sends it: the smaller of the ceiling and the limit, the ceiling whole when no limit is known", () => {
+      const window = { contextWindowTokens: 32_000 };
+      // ⌊(32 000 − 8 192 − 800) ÷ 1.15⌋ = 20 006.
+      expect(
+        windowInputBudget(
+          "TREND_REPORT_EN",
+          { ...window, maxOutputTokens: 8_192 },
+          23_000,
+          0,
+        ),
+      ).toBe(20_006);
+      // ⌊(32 000 − 23 000 − 800) ÷ 1.15⌋ = 7 130.
+      expect(
+        windowInputBudget(
+          "TREND_REPORT_EN",
+          { ...window, maxOutputTokens: 32_000 },
+          23_000,
+          0,
+        ),
+      ).toBe(7_130);
+      expect(windowInputBudget("TREND_REPORT_EN", window, 23_000, 0)).toBe(
+        7_130,
+      );
+    });
+
+    it("is never above the row and never below 1", () => {
+      expect(
+        windowInputBudget(
+          "CLUSTER_REDUCE",
+          { contextWindowTokens: 1_000_000 },
+          3_000,
+          2_000,
+        ),
+      ).toBe(SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE);
+      expect(
+        windowInputBudget(
+          "THEME_CLUSTER",
+          { contextWindowTokens: 1_000_000 },
+          3_000,
+          2_000,
+        ),
+      ).toBe(SYNTHESIS_INPUT_BUDGETS.THEME_CLUSTER);
+      expect(
+        windowInputBudget(
+          "CLUSTER_REDUCE",
+          { contextWindowTokens: 2_000 },
+          3_000,
+          2_000,
+        ),
+      ).toBe(1);
+      expect(
+        windowInputBudget(
+          "CLUSTER_REDUCE",
+          { contextWindowTokens: 5_000 },
+          3_000,
+          2_000,
+        ),
+      ).toBe(1);
+    });
+  });
+
+  describe("synthesisBudgets", () => {
+    const base = {
+      papers: 400,
+      outputLimit: 8_192,
+      prompts: PROMPTS,
+      synthesisOverhead: SYNTH_OVERHEAD,
+    };
+
+    it("is every §5.2 row with no limits", () => {
+      expect(synthesisBudgets(base)).toEqual({
+        clusterSingle: 60_000,
+        clusterBatch: 60_000,
+        clusterMerge: 60_000,
+        reduce: 40_000,
+        reduceMerge: 40_000,
+        report: { en: 60_000, ko: 60_000 },
+        critique: 60_000,
+      });
+    });
+
+    it("gives each call its own ceiling's room: the whole corpus's, a full batch's, the merge's, English's and Korean's", () => {
+      const limits = { contextWindowTokens: 32_000, maxOutputTokens: 32_000 };
+      const budgets = synthesisBudgets({
+        ...base,
+        outputLimit: 32_000,
+        reportLimits: limits,
+      });
+      // 2 000 + 40 × 400 = 18 000: ⌊13 200 ÷ 1.15⌋ − 2 000.
+      expect(budgets.clusterSingle).toBe(9_478);
+      // 2 000 + 40 × 60 = 4 400: ⌊26 800 ÷ 1.15⌋ − 2 000.
+      expect(budgets.clusterBatch).toBe(21_304);
+      // 4 000: ⌊27 200 ÷ 1.15⌋ − 2 000.
+      expect(budgets.clusterMerge).toBe(21_652);
+      // 3 000: ⌊28 200 ÷ 1.15⌋ − 2 000.
+      expect(budgets.reduce).toBe(22_521);
+      expect(budgets.reduceMerge).toBe(22_521);
+      // 23 000 and 26 000; the rendered request is measured, so no overhead.
+      expect(budgets.report).toEqual({ en: 7_130, ko: 4_521 });
+    });
+
+    it("a corpus smaller than a batch takes its own ceiling for the batch's", () => {
+      const budgets = synthesisBudgets({
+        ...base,
+        papers: 10,
+        outputLimit: 32_000,
+        reportLimits: { contextWindowTokens: 32_000 },
+      });
+      expect(budgets.clusterBatch).toBe(budgets.clusterSingle);
+    });
+
+    it("does not throw for no papers, which clusterThemes itself refuses", () => {
+      expect(
+        synthesisBudgets({
+          ...base,
+          papers: 0,
+          reportLimits: { contextWindowTokens: 32_000 },
+        }).clusterSingle,
+      ).toBeGreaterThan(0);
+    });
+
+    it("reads the critique model's limits for the critique, and only there", () => {
+      const budgets = synthesisBudgets({
+        ...base,
+        critiqueLimits: { contextWindowTokens: 16_000 },
+      });
+      // 2 500: ⌊12 700 ÷ 1.15⌋ − 2 000.
+      expect(budgets.critique).toBe(9_043);
+      expect(budgets.reduce).toBe(40_000);
+      const report = synthesisBudgets({
+        ...base,
+        reportLimits: { contextWindowTokens: 16_000 },
+      });
+      expect(report.critique).toBe(60_000);
+      expect(report.reduce).toBeLessThan(40_000);
+    });
+  });
+
+  describe("planSynthesis", () => {
+    const report = (window: number, limit: number) => ({
+      modelId: "mock-strong",
+      prices: EXAMPLE_PRICES,
+      maxOutputTokens: limit,
+      limits: { contextWindowTokens: window, maxOutputTokens: limit },
+    });
+
+    it("no limits and a large window plan the same calls, so nothing changes where nothing needed to", () => {
+      const none = planSynthesis(
+        synthesisInput({
+          papers: 400,
+          reportModel: {
+            modelId: "mock-strong",
+            prices: EXAMPLE_PRICES,
+            maxOutputTokens: 32_768,
+          },
+        }),
+      );
+      const large = planSynthesis(
+        synthesisInput({
+          papers: 400,
+          reportModel: report(128_000, 32_768),
+          critiqueModel: {
+            modelId: "mock-small",
+            prices: EXAMPLE_PRICES,
+            limits: { contextWindowTokens: 128_000 },
+          },
+        }),
+      );
+      expect(large).toEqual(none);
+    });
+
+    it("the window alone chooses two stages: 300 papers fit 60 000 and a 32 000 limit, but not a 32 000 window", () => {
+      const open = planSynthesis(
+        synthesisInput({
+          papers: 300,
+          reportModel: {
+            modelId: "mock-strong",
+            prices: EXAMPLE_PRICES,
+            maxOutputTokens: 32_000,
+          },
+        }),
+      );
+      expect(open.twoStageClustering).toBe(false);
+      const small = planSynthesis(
+        synthesisInput({ papers: 300, reportModel: report(32_000, 32_000) }),
+      );
+      expect(small.twoStageClustering).toBe(true);
+      expect(countOf(small.calls, "THEME_MERGE")).toBe(1);
+    });
+
+    it("prices each call at its window budget plus the prompt's own tokens, with the 1.15×", () => {
+      const plan = planSynthesis(
+        synthesisInput({ papers: 400, reportModel: report(32_000, 8_192) }),
+      );
+      const reduce = plan.calls.find((c) => c.kind === "CLUSTER_REDUCE");
+      expect(reduce?.rawInputTokens).toBe(2_000 + 22_521);
+      expect(reduce?.inputTokens).toBe(withHeadroom(2_000 + 22_521));
+      const composed = plan.calls.find((c) => c.kind === "TREND_REPORT_EN");
+      expect(composed?.rawInputTokens).toBe(2_000 + 20_006);
+    });
+
+    it("the window's budget can shrink a batch below B: 1 304 tokens hold eight worst-size digests", () => {
+      const plan = planSynthesis(
+        synthesisInput({ papers: 400, reportModel: report(9_000, 9_000) }),
+      );
+      expect(plan.twoStageClustering).toBe(true);
+      // ⌊(9 000 − 4 400 − 800) ÷ 1.15⌋ − 2 000 = 1 304; ⌊1 304 ÷ 161⌋ = 8.
+      expect(countOf(plan.calls, "THEME_CLUSTER")).toBe(50);
+    });
+
+    it("the critique's calls are priced on the critique model's window", () => {
+      const plan = planSynthesis(
+        synthesisInput({
+          critiqueModel: {
+            modelId: "mock-small",
+            prices: EXAMPLE_PRICES,
+            limits: { contextWindowTokens: 16_000 },
+          },
+        }),
+      );
+      const critique = plan.calls.find((c) => c.kind === "SELF_CRITIQUE");
+      expect(critique?.rawInputTokens).toBe(2_000 + 9_043);
+    });
+
+    it("never throws, however small the window: at least one call per theme is reserved, and no merge that could not hold two partials", () => {
+      for (const window of [
+        1, 100, 1_000, 2_000, 4_000, 6_000, 8_000, 10_000,
+      ]) {
+        const plan = planSynthesis(
+          synthesisInput({ papers: 400, reportModel: report(window, window) }),
+        );
+        expect(countOf(plan.calls, "CLUSTER_REDUCE")).toBeGreaterThanOrEqual(
+          themeCountBandFor(400).maxThemes + 1,
+        );
+        expect(plan.calls.every((c) => c.rawInputTokens >= 2_001)).toBe(true);
+      }
+      const stage = themeStageReservation(400, 13, REDUCE, {
+        reduce: 1,
+        reduceMerge: 1,
+      });
+      expect(stage).toEqual({
+        themes: 13,
+        reduceCalls: 13,
+        merges: 0,
+        perCall: 1,
+        mergeLimit: 0,
+      });
+    });
+  });
+
+  it("the reservation is at least an exhaustive search over clusterings, on window budgets too, the packer as oracle", () => {
+    const WORST = withHeadroom(SUMMARY_MAX_TOKENS);
+    const maxPapers = 120;
+    const maxThemes = 13;
+    for (const [window, limit] of [
+      [32_000, 8_192],
+      [24_000, 8_192],
+      [16_000, 8_192],
+      [12_000, 8_192],
+    ] as const) {
+      const budgets = synthesisBudgets({
+        papers: maxPapers,
+        outputLimit: limit,
+        reportLimits: { contextWindowTokens: window, maxOutputTokens: limit },
+        prompts: PROMPTS,
+        synthesisOverhead: SYNTH_OVERHEAD,
+      });
+      const mergeLimit = maxPartialsPerMerge(REDUCE, budgets.reduceMerge);
+      const calls = [0];
+      for (let n = 1; n <= maxPapers; n += 1) {
+        const packed = packThemeMembers(
+          Array<number>(n).fill(WORST),
+          (t) => t,
+          budgets.reduce,
+        ).length;
+        // Over the merge limit the theme is too large and makes no call at
+        // this size, but shorter summaries can pack it into the limit.
+        calls.push(
+          packed === 1 ? 1 : Math.min(packed, Math.max(1, mergeLimit)),
+        );
+      }
+      const merge = calls.map((c) => (c > 1 ? 1 : 0));
+      const search = (per: readonly number[]): number[][] => {
+        const best: number[][] = [Array<number>(maxPapers + 1).fill(0)];
+        for (let k = 1; k <= maxThemes; k += 1) {
+          const prev = best[k - 1] as number[];
+          const next = prev.slice();
+          for (let n = 1; n <= maxPapers; n += 1) {
+            for (let size = 1; size <= n; size += 1) {
+              const value = (prev[n - size] as number) + (per[size] as number);
+              if (value > (next[n] as number)) next[n] = value;
+            }
+          }
+          best.push(next);
+        }
+        return best;
+      };
+      const bestCalls = search(calls);
+      const bestMerges = search(merge);
+      for (let themes = 1; themes <= maxThemes; themes += 1) {
+        for (let papers = 1; papers <= maxPapers; papers += 1) {
+          const stage = themeStageReservation(papers, themes, REDUCE, budgets);
+          const where = `${String(window)}: ${String(papers)} papers, ${String(themes)} themes`;
+          expect(stage.reduceCalls, where).toBeGreaterThanOrEqual(
+            bestCalls[themes]?.[papers] as number,
+          );
+          expect(stage.merges, where).toBeGreaterThanOrEqual(
+            bestMerges[themes]?.[papers] as number,
+          );
+        }
+      }
     }
   });
 });

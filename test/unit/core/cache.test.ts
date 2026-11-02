@@ -273,11 +273,11 @@ describe("P3-T33 — cache_entry is docs/07 §8.3's, as migration version 3", ()
   // Moved with plan/00 §6 item 265 (b), which appended version 4
   // (`user_price`), and with P3-T15, which appended version 5
   // (`collection_settings`), and with P3-T25 (`summary`, version 6), and with
-  // P4-T14 (`report`, version 7): a fresh
-  // file now ends at version 7.
-  it("migrates a fresh file to the latest version (7) with cache_entry's columns and indexes, read back", async () => {
+  // P4-T14 (`report`, version 7), and with P5-T03 (versions 8 to 10): a fresh
+  // file now ends at version 10.
+  it("migrates a fresh file to the latest version (10) with cache_entry's columns and indexes, read back", async () => {
     const connection = sqlite();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 7 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 10 });
     expect(
       connection.db
         .prepare("PRAGMA table_info(cache_entry)")
@@ -323,7 +323,7 @@ describe("P3-T33 — cache_entry is docs/07 §8.3's, as migration version 3", ()
       { version: 2, statements: ["CREATE TABLE job (id TEXT)"] },
     ]);
     connection.db.exec("INSERT INTO job VALUES ('kept')");
-    expect(await runMigrations(connection)).toStrictEqual({ from: 2, to: 7 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 2, to: 10 });
     expect(connection.db.prepare("SELECT id FROM job").all()).toHaveLength(1);
     expect(count(connection)).toBe(0);
   });

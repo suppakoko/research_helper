@@ -130,8 +130,10 @@ import {
 } from "../shared/egressDisclosure";
 import {
   estimateReportRun,
+  synthesisBudgets,
   toPipelineEstimate,
   type EstimateItem,
+  type ModelWindowLimits,
   type ReportRunEstimate,
   type SynthesisCall,
   type SynthesisCallKind,
@@ -1086,6 +1088,8 @@ export function createTrendReportPipeline(
 
   const modelInfoOf = (model: ResolvedModel): ModelInfo | undefined =>
     deps.modelInfo?.(model.providerId, model.modelId);
+  const limitsOf = (model: ResolvedModel): ModelWindowLimits =>
+    windowLimitsOf(modelInfoOf(model));
 
   const prepare: TrendReportPipeline["prepare"] = async (
     input,
@@ -1285,10 +1289,12 @@ export function createTrendReportPipeline(
         modelId: reportModel.modelId,
         prices: priceOf(reportModel.modelId),
         maxOutputTokens: outputLimitOf(modelInfoOf(reportModel)),
+        limits: limitsOf(reportModel),
       },
       critiqueModel: {
         modelId: critiqueModel.modelId,
         prices: priceOf(critiqueModel.modelId),
+        limits: limitsOf(critiqueModel),
       },
       prompts,
       synthesisOverhead: measureSynthesisOverhead(prompts, (text) =>
@@ -1926,6 +1932,26 @@ export function createTrendReportPipeline(
       const clusterPrompt = prompts.get("THEME_CLUSTER");
       const band = themeBandFor(digests.length);
       const outputLimit = outputLimitOf(modelInfoOf(reportModel));
+      const critiqueModel = resolveCritiqueModel(ctx.llm, ctx.config);
+      const reportLimits = limitsOf(reportModel);
+      // Every stage's input budget, on the model's context window, from the
+      // function the estimate counts with (owner, plan/00 §6 item 327(a);
+      // docs/06 §8.4's note of 2026-11-02).
+      const budgets = synthesisBudgets({
+        papers: digests.length,
+        outputLimit,
+        reportLimits,
+        critiqueLimits: limitsOf(critiqueModel),
+        prompts,
+        synthesisOverhead: measureSynthesisOverhead(prompts, (text) =>
+          estTokens(text, reportModel.modelId),
+        ),
+      });
+      // In `tc` and `cr` only when known, so an unknown window keeps its keys.
+      const windowInput =
+        reportLimits.contextWindowTokens === undefined
+          ? {}
+          : { contextWindowTokens: reportLimits.contextWindowTokens };
       const tcKey = themeClusteringKey({
         members: digests.map((d) => ({
           id: d.itemKey,
@@ -1944,6 +1970,7 @@ export function createTrendReportPipeline(
           YEAR_MIN: years.length === 0 ? null : Math.min(...years),
           YEAR_MAX: years.length === 0 ? null : Math.max(...years),
           outputLimit,
+          ...windowInput,
         },
       });
       const clustered = await synthesisStage("Clustering", async () => {
@@ -1957,6 +1984,9 @@ export function createTrendReportPipeline(
             yearMax: years.length === 0 ? undefined : Math.max(...years),
             outputLimit,
             band,
+            inputBudget: budgets.clusterSingle,
+            batchInputBudget: budgets.clusterBatch,
+            mergeInputBudget: budgets.clusterMerge,
           },
           {
             llm: ctx.llm,
@@ -2018,7 +2048,7 @@ export function createTrendReportPipeline(
               temperature: reducePrompt.defaultTemperature,
               effort: THEME_ANALYSIS_EFFORT,
             },
-            stageInputs: { USER_TOPIC: userTopic },
+            stageInputs: { USER_TOPIC: userTopic, ...windowInput },
           }),
         ]),
       );
@@ -2051,6 +2081,8 @@ export function createTrendReportPipeline(
               clustering: { themes: misses },
               summaries,
               userTopic,
+              inputBudget: budgets.reduce,
+              mergeInputBudget: budgets.reduceMerge,
             },
             {
               llm: ctx.llm,
@@ -2144,6 +2176,7 @@ export function createTrendReportPipeline(
         targetWords: ctx.config.get("reportTargetWords"),
         duplicateOf: state.duplicateOf,
         citationReplacement: reportLabel(language, "invalidCitation"),
+        inputBudget: budgets.report[language],
       };
       // The current run's plan (never a cached report's, item 312(c)).
       const plan: CompositionPlan = prepareComposition(
@@ -2152,7 +2185,6 @@ export function createTrendReportPipeline(
         reportModel,
       );
       const rounds = critiqueRoundsOf(ctx.config);
-      const critiqueModel = resolveCritiqueModel(ctx.llm, ctx.config);
       const critiquePrompt = prompts.get("SELF_CRITIQUE");
       const rpKey = reportKey({
         language,
@@ -2220,7 +2252,12 @@ export function createTrendReportPipeline(
         await checkpoint("Composing");
         const critique = await synthesisStage("Critiquing", async () => {
           const result = await critiqueReport(
-            { draft, compose: composeInput, summaries },
+            {
+              draft,
+              compose: composeInput,
+              summaries,
+              inputBudget: budgets.critique,
+            },
             {
               llm: ctx.llm,
               budget: ctx.budget,
@@ -2560,6 +2597,21 @@ function outputLimitOf(info: ModelInfo | undefined): number {
   return limit !== undefined && Number.isInteger(limit) && limit > 0
     ? limit
     : REPORT_OUTPUT_LIMIT_UNKNOWN;
+}
+
+/**
+ * What the catalogue knows of a model's window and output limit, each only when
+ * positive: `unknownPolicyModel`-style zeros mean not known, and
+ * {@link REPORT_OUTPUT_LIMIT_UNKNOWN} is deliberately not used, since nothing
+ * clamps `max_tokens` to it (`windowInputBudget`).
+ */
+function windowLimitsOf(info: ModelInfo | undefined): ModelWindowLimits {
+  const window = info?.contextWindowTokens;
+  const output = info?.maxOutputTokens;
+  return {
+    ...(window !== undefined && window > 0 && { contextWindowTokens: window }),
+    ...(output !== undefined && output > 0 && { maxOutputTokens: output }),
+  };
 }
 
 /**

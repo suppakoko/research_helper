@@ -26,7 +26,10 @@
  * that first populates `work` adds it). Version 7 is §8.3's `report` table
  * (`P4-T14`), with no foreign key and no index because §8.3 declares neither;
  * the report's Markdown is a file beside the database, not a column
- * (`docs/07` §5.2's note of 2026-10-30).
+ * (`docs/07` §5.2's note of 2026-10-30). Versions 8, 9 and 10 are §8.3's
+ * `collection_profile`, `recommendation` with `idx_rec_profile`, and
+ * `embedding` with `idx_embedding_model` (`P5-T03`), one migration per table,
+ * with no `REFERENCES` clause.
  *
  * ## The bookkeeping
  *
@@ -203,6 +206,64 @@ export const REPORT_DDL = `CREATE TABLE report (
   generated_at   INTEGER NOT NULL
 )`;
 
+/**
+ * `docs/07` §8.3's `collection_profile` table (`P5-T03`), byte for byte with
+ * the comments inside the statement. One row per `CollectionProfile`
+ * (`docs/07` §5.2): `json` is the gated record without its centroids, which
+ * are the `centroids` blob, sliced by `centroid_count`. `src/zotero/db.ts`'s
+ * `createCollectionProfileStore` is its only reader and writer.
+ */
+export const COLLECTION_PROFILE_DDL = `CREATE TABLE collection_profile (
+  id              TEXT PRIMARY KEY,
+  library_id      INTEGER NOT NULL,
+  collection_key  TEXT NOT NULL,
+  membership_hash TEXT NOT NULL,
+  json            TEXT NOT NULL,
+  centroids       BLOB,              -- k × dim Float32Array bytes, row-major; NULL when k = 0
+  centroid_count  INTEGER NOT NULL DEFAULT 0,   -- k, so the blob can be sliced without dim math
+  built_at        INTEGER NOT NULL
+)`;
+
+/**
+ * `docs/07` §8.3's `recommendation` table (`P5-T03`), byte for byte. One row
+ * per `Recommendation` (`docs/07` §5.2): `json` is the gated record without
+ * `userAction` and `userActionAtEpochMs`, which are `user_action` and
+ * `action_at`. `src/zotero/db.ts`'s `createRecommendationStore` is its only
+ * reader and writer.
+ */
+export const RECOMMENDATION_DDL = `CREATE TABLE recommendation (
+  id           TEXT PRIMARY KEY,
+  profile_id   TEXT NOT NULL,
+  work_key     TEXT NOT NULL,
+  score        REAL NOT NULL,
+  json         TEXT NOT NULL,
+  user_action  TEXT,
+  action_at    INTEGER,
+  generated_at INTEGER NOT NULL
+)`;
+
+/** `docs/07` §8.3's index over one profile's rows. */
+export const RECOMMENDATION_PROFILE_INDEX_DDL =
+  "CREATE INDEX idx_rec_profile ON recommendation(profile_id, score DESC)";
+
+/**
+ * `docs/07` §8.3's `embedding` table (`P5-T03`), byte for byte with the
+ * comment inside the statement. `src/zotero/db.ts`'s `createEmbeddingStore`
+ * is its only reader and writer.
+ */
+export const EMBEDDING_DDL = `CREATE TABLE embedding (
+  work_key   TEXT NOT NULL,
+  model      TEXT NOT NULL,
+  dim        INTEGER NOT NULL,
+  vector     BLOB NOT NULL,          -- Float32Array bytes
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (work_key, model)
+)`;
+
+/** `docs/07` §8.3's index for "load every vector for embedding model X". */
+export const EMBEDDING_MODEL_INDEX_DDL =
+  "CREATE INDEX idx_embedding_model ON embedding(model)";
+
 /** One schema step. */
 export interface Migration {
   /** The version the file is at once this migration has run. */
@@ -246,6 +307,21 @@ export const MIGRATIONS: readonly Migration[] = [
   {
     version: 7,
     statements: [REPORT_DDL],
+  },
+  // `P5-T03`: the collection profile (`docs/07` §5.2, §8.3).
+  {
+    version: 8,
+    statements: [COLLECTION_PROFILE_DDL],
+  },
+  // `P5-T03`: the recommendations and their rejections (`docs/07` §5.2, §8.3).
+  {
+    version: 9,
+    statements: [RECOMMENDATION_DDL, RECOMMENDATION_PROFILE_INDEX_DDL],
+  },
+  // `P5-T03`: the stored paper vectors (`docs/07` §8.3, §9.2).
+  {
+    version: 10,
+    statements: [EMBEDDING_DDL, EMBEDDING_MODEL_INDEX_DDL],
   },
 ];
 

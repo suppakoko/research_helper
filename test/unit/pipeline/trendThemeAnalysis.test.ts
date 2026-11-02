@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import {
   BudgetExceededError,
   ConfigurationError,
+  ContextLengthExceededError,
   OperationCancelledError,
 } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
@@ -1036,6 +1037,162 @@ describe("analyseThemes — every theme unanalysed stops the run (plan/00 §6 it
 // ---------------------------------------------------------------------------
 // 6. Input checks
 // ---------------------------------------------------------------------------
+
+describe("analyseThemes — the window's budgets (owner, plan/00 §6 item 327)", () => {
+  function twenty(): StoredSummary[] {
+    return Array.from({ length: 20 }, (_, i) => stored(sized(i + 1, 1_800)));
+  }
+
+  it("packs to inputBudget, not the 40 000 row: 20 summaries of 1 800 tokens under 10 000 make four calls and a merge", async () => {
+    const { provider, deps } = setup();
+    const outcome = await analyseThemes(
+      {
+        ...input([theme("T1", keys(1, 20))], twenty()),
+        inputBudget: 10_000,
+      },
+      deps,
+    );
+    const reduces = provider.calls.filter((c) => !isMerge(c.request));
+    // ⌊9 999 ÷ 1 801⌋ = 5 per call.
+    expect(reduces.map((c) => keysSent(c.request).length)).toEqual([
+      5, 5, 5, 5,
+    ]);
+    expect(provider.calls.filter((c) => isMerge(c.request))).toHaveLength(1);
+    expect(analysed(outcome.themes[0]).subBatches).toBe(4);
+    expect(outcome.passes).toBe(2);
+  });
+
+  it("the same theme under the default budget is one call, so the budget is what split it", async () => {
+    const { provider, deps } = setup();
+    await analyseThemes(input([theme("T1", keys(1, 20))], twenty()), deps);
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it("mergeInputBudget lowers the partials one merge takes: three sub-batches over a limit of two is theme_too_large, with no request", async () => {
+    const { provider, deps } = setup();
+    const outcome = await analyseThemes(
+      {
+        ...input([theme("T1", keys(1, 15))], twenty().slice(0, 15)),
+        inputBudget: 10_000,
+        // ⌊6 999 ÷ 3 451⌋ = 2.
+        mergeInputBudget: 7_000,
+      },
+      deps,
+    );
+    expect(unanalysed(outcome.themes[0]).reason).toBe(
+      UNANALYSED_REASONS.tooLarge,
+    );
+    expect(unanalysed(outcome.themes[0]).subBatches).toBe(3);
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it("measures the partials against mergeInputBudget", async () => {
+    const { provider, deps } = setup((call) =>
+      reply(
+        analysisOf(themeIdOf(call.request), keysSent(call.request), {
+          narrativeTail: " x".repeat(8_000),
+        }),
+      ),
+    );
+    const outcome = await analyseThemes(
+      {
+        ...input([theme("T1", keys(1, 10))], twenty().slice(0, 10)),
+        inputBudget: 10_000,
+        mergeInputBudget: 7_000,
+      },
+      deps,
+    );
+    expect(provider.calls).toHaveLength(2);
+    expect(unanalysed(outcome.themes[0]).reason).toBe(
+      UNANALYSED_REASONS.mergeInputOverBudget,
+    );
+  });
+
+  it("a theme that fits one call is sent even when no merge could be made (a merge limit of 0)", async () => {
+    const { provider, deps } = setup();
+    const outcome = await analyseThemes(
+      {
+        ...input([theme("T1", keys(1, 3))], twenty().slice(0, 3)),
+        inputBudget: 10_000,
+        mergeInputBudget: 100,
+      },
+      deps,
+    );
+    expect(provider.calls).toHaveLength(1);
+    expect(analysed(outcome.themes[0]).passes).toBe(1);
+  });
+
+  it("one summary alone over the budget is that theme's failure, theme_too_large, not a RangeError, and the others go on", async () => {
+    const { provider, deps } = setup();
+    const outcome = await analyseThemes(
+      {
+        ...input(
+          [theme("T1", keys(1, 2)), theme("T2", keys(3, 4))],
+          [
+            stored(sized(1, 300)),
+            stored(sized(2, 1_800)),
+            stored(sized(3, 300)),
+            stored(sized(4, 300)),
+          ],
+        ),
+        inputBudget: 1_000,
+      },
+      deps,
+    );
+    expect(outcome.status).toBe("analysed");
+    expect(unanalysed(outcome.themes[0]).reason).toBe(
+      UNANALYSED_REASONS.tooLarge,
+    );
+    expect(analysed(outcome.themes[1]).themeId).toBe("T2");
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it("the smallest budget, 1, leaves every theme too large and stops the stage, with no request", async () => {
+    const { provider, deps } = setup();
+    const outcome = await analyseThemes(
+      { ...smallInput(), inputBudget: 1, mergeInputBudget: 1 },
+      deps,
+    );
+    expect(outcome.status).toBe("stopped-no-theme-analysed");
+    expect(outcome.themes.map((t) => unanalysed(t).reason)).toEqual([
+      UNANALYSED_REASONS.tooLarge,
+      UNANALYSED_REASONS.tooLarge,
+    ]);
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it("a theme a provider refuses for context length stays one theme's failure, and the run goes on (item 327(b))", async () => {
+    const { deps } = setup((call) =>
+      themeIdOf(call.request) === "T1"
+        ? new ContextLengthExceededError(
+            "openrouter",
+            call.request.model,
+            "over the window",
+          )
+        : echo(call),
+    );
+    const outcome = await analyseThemes(smallInput(), deps);
+    expect(outcome.status).toBe("analysed");
+    expect(unanalysed(outcome.themes[0]).reason).toBe("CONTEXT_LENGTH");
+    expect(analysed(outcome.themes[1]).themeId).toBe("T2");
+  });
+
+  for (const [name, bad] of [
+    ["inputBudget", 0],
+    ["inputBudget", 40_001],
+    ["inputBudget", 1.5],
+    ["mergeInputBudget", 0],
+    ["mergeInputBudget", 40_001],
+  ] as const) {
+    it(`throws RangeError for ${name} ${String(bad)}, before any request`, async () => {
+      const { provider, deps } = setup();
+      await expect(
+        analyseThemes({ ...smallInput(), [name]: bad }, deps),
+      ).rejects.toBeInstanceOf(RangeError);
+      expect(provider.calls).toHaveLength(0);
+    });
+  }
+});
 
 describe("analyseThemes — input checks, before any request", () => {
   it("refuses a member with no summary, a repeated summary, a repeated theme id, and the wrong templates", async () => {

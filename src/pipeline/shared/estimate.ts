@@ -66,6 +66,7 @@ import {
   MAP_CALL_BUDGETS,
   packByTokens,
   planChunks,
+  windowRoom,
   type CallBudget,
   type ChunkModel,
   type MapCallKind,
@@ -626,17 +627,21 @@ export const SUMMARY_MAX_TOKENS = Math.max(
  *
  * @param members - one theme's members, in the order to keep
  * @param ownTokens - one member's own tokens as sent, without its separator
+ * @param inputBudget - the call's input budget: `CLUSTER_REDUCE`'s row when
+ *   absent, the window's when the run has one ({@link synthesisBudgets}); at
+ *   least 2, which leaves one token beside the brackets
  * @returns the sub-batches; one batch when the theme fits one call
  * @throws RangeError when one member alone exceeds the budget
  */
 export function packThemeMembers<T>(
   members: readonly T[],
   ownTokens: (member: T) => number,
+  inputBudget: number = SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE,
 ): readonly (readonly T[])[] {
   return packByTokens(
     members,
     (member) => ownTokens(member) + 1,
-    SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE - 1,
+    inputBudget - 1,
   );
 }
 
@@ -644,18 +649,178 @@ export function packThemeMembers<T>(
  * The most partial analyses one `CLUSTER_REDUCE_MERGE` call is sure to carry
  * (`P4-T07`): each taken at `CLUSTER_REDUCE`'s output ceiling with D-06-5's
  * 1.15× and its separator, within the merge's input budget less the brackets.
- * With the shipped 3 000-token ceiling: ⌊39 999 ÷ 3 451⌋ = 11. A theme that
- * needs more sub-batches is unanalysed (`theme_too_large`). Moved here from
+ * With the shipped 3 000-token ceiling and §5.2's row: ⌊39 999 ÷ 3 451⌋ = 11;
+ * a small window's budget gives fewer, 0 included. A theme that needs more
+ * sub-batches is unanalysed (`theme_too_large`). Moved here from
  * `themeAnalysis.ts`, which re-exports it, so {@link planSynthesis} can count
  * with it (owner, `plan/00` §6 item 309(b)).
  *
  * @param reducePrompt - the active `CLUSTER_REDUCE` template
+ * @param mergeInputBudget - the merge's input budget: its §5.2 row when absent,
+ *   the window's when the run has one ({@link synthesisBudgets})
  */
-export function maxPartialsPerMerge(reducePrompt: PromptTemplate): number {
+export function maxPartialsPerMerge(
+  reducePrompt: PromptTemplate,
+  mergeInputBudget: number = SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE_MERGE,
+): number {
   const partial = Math.ceil(resolveMaxTokens(reducePrompt) * ESTIMATE_HEADROOM);
-  return Math.floor(
-    (SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE_MERGE - 1) / (partial + 1),
+  return Math.floor((mergeInputBudget - 1) / (partial + 1));
+}
+
+/**
+ * What a model's catalogue entry says about its window, each only when known
+ * (`ModelInfo.contextWindowTokens` and `maxOutputTokens`, positive). Built by
+ * `limitsOf` in `trendReportPipeline.ts`, read by {@link windowInputBudget}.
+ */
+export interface ModelWindowLimits {
+  readonly contextWindowTokens?: number;
+  /**
+   * The output limit the provider clamps `max_tokens` to (`docs/03` §14.3).
+   * Not `REPORT_OUTPUT_LIMIT_UNKNOWN`: nothing clamps a limit not known, so
+   * then the prompt's ceiling is taken whole.
+   */
+  readonly maxOutputTokens?: number;
+}
+
+/**
+ * One synthesis call's input budget on one model (owner, `plan/00` §6 item
+ * 327(a); `docs/06` §8.4's note of 2026-11-02): the smaller of its §5.2 row
+ * and what `windowRoom`'s inequality leaves beside the output, less the
+ * prompt's own tokens. At least 1, the smallest budget each stage accepts,
+ * which each then refuses cleanly; never above the row. A window not known
+ * returns the row.
+ *
+ * @param kind - the call, for its §5.2 row
+ * @param limits - the model the call is sent to
+ * @param outputCeiling - the prompt's `max_tokens` for this call
+ *   (`resolveMaxTokens`)
+ * @param overheadTokens - what the call carries beside the budgeted variable;
+ *   0 where the budget is measured over the whole rendered request
+ *   (`prepareComposition`)
+ * @returns a whole number from 1 to the row
+ */
+export function windowInputBudget(
+  kind: SynthesisCallKind,
+  limits: ModelWindowLimits,
+  outputCeiling: number,
+  overheadTokens: number,
+): number {
+  const row = SYNTHESIS_INPUT_BUDGETS[kind];
+  const window = limits.contextWindowTokens;
+  if (window === undefined || !Number.isFinite(window) || window <= 0) {
+    return row;
+  }
+  const output = Math.min(
+    outputCeiling,
+    limits.maxOutputTokens ?? outputCeiling,
   );
+  return Math.max(
+    1,
+    Math.min(row, windowRoom(window, output) - overheadTokens),
+  );
+}
+
+/** Every synthesis call's input budget for one run. */
+export interface SynthesisBudgets {
+  /** `THEME_CLUSTER` over every digest, at the whole corpus's ceiling. */
+  readonly clusterSingle: number;
+  /** `THEME_CLUSTER` over one batch, at a full batch's smaller ceiling. */
+  readonly clusterBatch: number;
+  readonly clusterMerge: number;
+  readonly reduce: number;
+  readonly reduceMerge: number;
+  /** `TREND_REPORT_EN` or `_KO`, by the report's language. */
+  readonly report: Readonly<Record<ReportLanguage, number>>;
+  readonly critique: number;
+}
+
+/** What {@link synthesisBudgets} is given. */
+export interface SynthesisBudgetsInput {
+  /** The digests the run clusters. */
+  readonly papers: number;
+  /** `ModelInfo.maxOutputTokens` or its fallback, as `clusterBatchSize` reads it. */
+  readonly outputLimit: number;
+  readonly reportLimits?: ModelWindowLimits | undefined;
+  readonly critiqueLimits?: ModelWindowLimits | undefined;
+  readonly prompts: Pick<PromptRegistry, "get">;
+  readonly synthesisOverhead: Readonly<Record<SynthesisCallKind, number>>;
+}
+
+/**
+ * The budgets the run hands its stages and {@link planSynthesis} counts with,
+ * from one place, so the run and the estimate cannot differ (owner, `plan/00`
+ * §6 item 327(a)). Callers: `execute` in `trendReportPipeline.ts` and
+ * {@link planSynthesis}. With no limits every budget is its §5.2 row.
+ *
+ * @param input - see {@link SynthesisBudgetsInput}
+ * @returns the budgets
+ */
+export function synthesisBudgets(
+  input: SynthesisBudgetsInput,
+): SynthesisBudgets {
+  const { prompts, synthesisOverhead: overhead } = input;
+  const report = input.reportLimits ?? {};
+  const critique = input.critiqueLimits ?? {};
+  const clusterPrompt = prompts.get("THEME_CLUSTER");
+  // A ceiling needs at least one paper; clusterThemes refuses none itself.
+  const papers = Math.max(1, input.papers);
+  const fullBatch = Math.min(
+    clusterBatchSize(clusterPrompt, input.outputLimit),
+    papers,
+  );
+  return {
+    clusterSingle: windowInputBudget(
+      "THEME_CLUSTER",
+      report,
+      resolveMaxTokens(clusterPrompt, papers),
+      overhead.THEME_CLUSTER,
+    ),
+    clusterBatch: windowInputBudget(
+      "THEME_CLUSTER",
+      report,
+      resolveMaxTokens(clusterPrompt, fullBatch),
+      overhead.THEME_CLUSTER,
+    ),
+    clusterMerge: windowInputBudget(
+      "THEME_MERGE",
+      report,
+      resolveMaxTokens(prompts.get("THEME_MERGE")),
+      overhead.THEME_MERGE,
+    ),
+    reduce: windowInputBudget(
+      "CLUSTER_REDUCE",
+      report,
+      resolveMaxTokens(prompts.get("CLUSTER_REDUCE")),
+      overhead.CLUSTER_REDUCE,
+    ),
+    reduceMerge: windowInputBudget(
+      "CLUSTER_REDUCE_MERGE",
+      report,
+      resolveMaxTokens(prompts.get("CLUSTER_REDUCE_MERGE")),
+      overhead.CLUSTER_REDUCE_MERGE,
+    ),
+    // prepareComposition measures the whole rendered request: no overhead.
+    report: {
+      en: windowInputBudget(
+        "TREND_REPORT_EN",
+        report,
+        resolveMaxTokens(prompts.get("TREND_REPORT_EN")),
+        0,
+      ),
+      ko: windowInputBudget(
+        "TREND_REPORT_KO",
+        report,
+        resolveMaxTokens(prompts.get("TREND_REPORT_KO")),
+        0,
+      ),
+    },
+    critique: windowInputBudget(
+      "SELF_CRITIQUE",
+      critique,
+      resolveMaxTokens(prompts.get("SELF_CRITIQUE")),
+      overhead.SELF_CRITIQUE,
+    ),
+  };
 }
 
 /** One row of `docs/06` §9.2's length table: corpus size → themes (K). */
@@ -734,6 +899,12 @@ export interface SynthesisPlan {
   readonly calls: readonly SynthesisCall[];
 }
 
+/** A model a synthesis call goes to: its prices, and its limits when known. */
+export interface SynthesisModel extends PricedModel {
+  /** Absent: the plan is at §5.2's rows, as a window not known is. */
+  readonly limits?: ModelWindowLimits;
+}
+
 /** What {@link planSynthesis} is given. */
 export interface SynthesisPlanInput {
   /** The papers the report analyses, after screening. */
@@ -743,9 +914,9 @@ export interface SynthesisPlanInput {
    * analyses and their merges, the report and its rewrites). Its output limit
    * (`ModelInfo.maxOutputTokens`) decides two-stage clustering (`P4-T05`).
    */
-  readonly reportModel: PricedModel & { readonly maxOutputTokens: number };
+  readonly reportModel: SynthesisModel & { readonly maxOutputTokens: number };
   /** `report.critiqueModel`, else `summaryModel` (`P4-T09` step 3). */
-  readonly critiqueModel: PricedModel;
+  readonly critiqueModel: SynthesisModel;
   /** The active templates, for their output ceilings. */
   readonly prompts: Pick<PromptRegistry, "get">;
   /**
@@ -803,12 +974,19 @@ export interface ThemeStageReservation {
  * asked of the packer itself ({@link packThemeMembers}), not worked out by a
  * second copy of its arithmetic: the largest n whose n summaries pack into
  * one batch. A summary's worst size is {@link SUMMARY_MAX_TOKENS} with
- * D-06-5's 1.15×, the figure the estimate already prices.
+ * D-06-5's 1.15×, the figure the estimate already prices. At least 1: when a
+ * small window's budget cannot hold a worst-size summary, a shorter one may
+ * still fit, one to a call, and the bound below then holds with p = 1.
  */
-function worstSummariesPerThemeCall(): number {
+function worstSummariesPerThemeCall(inputBudget: number): number {
   const worst = withHeadroom(SUMMARY_MAX_TOKENS);
+  if (worst + 1 > inputBudget - 1) return 1;
   const packs = (n: number): number =>
-    packThemeMembers(Array<number>(n).fill(worst), (tokens) => tokens).length;
+    packThemeMembers(
+      Array<number>(n).fill(worst),
+      (tokens) => tokens,
+      inputBudget,
+    ).length;
   let fit = 1;
   while (packs(fit + 1) === 1) fit += 1;
   return fit;
@@ -831,14 +1009,19 @@ function worstSummariesPerThemeCall(): number {
  * @param papers - N, the summaries the themes share
  * @param themeLimit - T, the most themes the clustering may hold
  * @param reducePrompt - the active `CLUSTER_REDUCE` template, for m
+ * @param budgets - the run's reduce and merge budgets: the §5.2 rows when
+ *   absent ({@link synthesisBudgets})
  */
 export function themeStageReservation(
   papers: number,
   themeLimit: number,
   reducePrompt: PromptTemplate,
+  budgets?: Pick<SynthesisBudgets, "reduce" | "reduceMerge">,
 ): ThemeStageReservation {
-  const perCall = worstSummariesPerThemeCall();
-  const mergeLimit = maxPartialsPerMerge(reducePrompt);
+  const perCall = worstSummariesPerThemeCall(
+    budgets?.reduce ?? SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE,
+  );
+  const mergeLimit = maxPartialsPerMerge(reducePrompt, budgets?.reduceMerge);
   const themes = Math.min(themeLimit, papers);
   const furtherCalls = Math.min(
     Math.floor((papers - themes) / perCall),
@@ -858,14 +1041,14 @@ function synthesisCall(
   kind: SynthesisCallKind,
   model: PricedModel,
   input: SynthesisPlanInput,
+  inputBudget: number,
   options: {
     readonly batchSize?: number;
     readonly conditional?: boolean;
     readonly language?: ReportLanguage;
   } = {},
 ): SynthesisCall {
-  const rawInputTokens =
-    input.synthesisOverhead[kind] + SYNTHESIS_INPUT_BUDGETS[kind];
+  const rawInputTokens = input.synthesisOverhead[kind] + inputBudget;
   const planned: SynthesisCall = {
     kind,
     modelId: model.modelId,
@@ -880,8 +1063,10 @@ function synthesisCall(
 }
 
 /**
- * Every synthesis call a report run may make, each at its §5.2 input budget
- * and its prompt's output ceiling (`P4-T16` steps 1–2):
+ * Every synthesis call a report run may make, each at its input budget
+ * ({@link synthesisBudgets}: its §5.2 row, or less on a small context window;
+ * owner, `plan/00` §6 item 327(a)) and its prompt's output ceiling (`P4-T16`
+ * steps 1–2):
  *
  * - **L1, clustering.** One `THEME_CLUSTER` call when the digests fit its
  *   input budget **and** its grown output ceiling for this many papers is
@@ -889,7 +1074,9 @@ function synthesisCall(
  *   paper count. The digests are taken at {@link DIGEST_MAX_TOKENS} each with
  *   the 1.15× headroom, so near the line the estimate takes the dearer path.
  *   Otherwise `docs/06` §8.4's two stages: one call per batch of
- *   {@link clusterBatchSize} papers, each at its own batch's ceiling, then one
+ *   {@link clusterBatchSize} papers, or fewer where the same worst-size digests
+ *   would not fit a small window's batch budget, so the plan makes at least
+ *   `partitionDigests`'s batches, each at its own batch's ceiling, then one
  *   `THEME_MERGE`.
  * - **L2, themes.** The theme stage as `P4-T07` packs it, at its worst
  *   ({@link themeStageReservation}; owner, `plan/00` §6 item 309(b)): the
@@ -933,30 +1120,50 @@ export function planSynthesis(input: SynthesisPlanInput): SynthesisPlan {
   }
   const report = input.reportModel;
   const calls: SynthesisCall[] = [];
+  const budgets = synthesisBudgets({
+    papers,
+    outputLimit: report.maxOutputTokens,
+    reportLimits: report.limits,
+    critiqueLimits: input.critiqueModel.limits,
+    prompts: input.prompts,
+    synthesisOverhead: input.synthesisOverhead,
+  });
 
   // L1 — clustering (docs/06 §8.4; P4-T05 step 1, P4-T06).
   const twoStageClustering =
-    withHeadroom(papers * DIGEST_MAX_TOKENS) >
-      SYNTHESIS_INPUT_BUDGETS.THEME_CLUSTER ||
+    withHeadroom(papers * DIGEST_MAX_TOKENS) > budgets.clusterSingle ||
     resolveMaxTokens(input.prompts.get("THEME_CLUSTER"), papers) >
       report.maxOutputTokens;
   if (twoStageClustering) {
-    // P4-T06: the run's own B, so a small output limit is priced as it runs.
-    const batchSize = clusterBatchSize(
-      input.prompts.get("THEME_CLUSTER"),
-      report.maxOutputTokens,
+    // P4-T06: the run's own B, so a small output limit is priced as it runs;
+    // a small window's batch budget can make it fewer (item 327(a)). Worst-size
+    // digests with headroom fit a batch of this size, separators included, so
+    // partitionDigests never needs more batches than this.
+    const batchSize = Math.min(
+      clusterBatchSize(
+        input.prompts.get("THEME_CLUSTER"),
+        report.maxOutputTokens,
+      ),
+      Math.max(
+        1,
+        Math.floor(budgets.clusterBatch / withHeadroom(DIGEST_MAX_TOKENS)),
+      ),
     );
     for (let start = 0; start < papers; start += batchSize) {
       calls.push(
-        synthesisCall("THEME_CLUSTER", report, input, {
+        synthesisCall("THEME_CLUSTER", report, input, budgets.clusterBatch, {
           batchSize: Math.min(batchSize, papers - start),
         }),
       );
     }
-    calls.push(synthesisCall("THEME_MERGE", report, input));
+    calls.push(
+      synthesisCall("THEME_MERGE", report, input, budgets.clusterMerge),
+    );
   } else {
     calls.push(
-      synthesisCall("THEME_CLUSTER", report, input, { batchSize: papers }),
+      synthesisCall("THEME_CLUSTER", report, input, budgets.clusterSingle, {
+        batchSize: papers,
+      }),
     );
   }
 
@@ -974,35 +1181,49 @@ export function planSynthesis(input: SynthesisPlanInput): SynthesisPlan {
       ? modelThemes + OTHER_THEME_RESERVE
       : modelThemes,
     input.prompts.get("CLUSTER_REDUCE"),
+    budgets,
   );
   for (let at = 0; at < stage.reduceCalls; at += 1) {
     calls.push(
-      synthesisCall("CLUSTER_REDUCE", report, input, {
+      synthesisCall("CLUSTER_REDUCE", report, input, budgets.reduce, {
         conditional: at >= modelThemes,
       }),
     );
   }
   for (let at = 0; at < stage.merges; at += 1) {
     calls.push(
-      synthesisCall("CLUSTER_REDUCE_MERGE", report, input, {
-        conditional: true,
-      }),
+      synthesisCall(
+        "CLUSTER_REDUCE_MERGE",
+        report,
+        input,
+        budgets.reduceMerge,
+        {
+          conditional: true,
+        },
+      ),
     );
   }
 
   // L3 and L4 — per language: the report, then critique and rewrite rounds.
   for (const language of input.languages) {
     const kind = language === "ko" ? "TREND_REPORT_KO" : "TREND_REPORT_EN";
-    calls.push(synthesisCall(kind, report, input, { language }));
+    const reportBudget = budgets.report[language];
+    calls.push(synthesisCall(kind, report, input, reportBudget, { language }));
     for (let round = 1; round <= rounds; round += 1) {
       calls.push(
-        synthesisCall("SELF_CRITIQUE", input.critiqueModel, input, {
-          conditional: round > 1,
-          language,
-        }),
+        synthesisCall(
+          "SELF_CRITIQUE",
+          input.critiqueModel,
+          input,
+          budgets.critique,
+          { conditional: round > 1, language },
+        ),
       );
       calls.push(
-        synthesisCall(kind, report, input, { conditional: true, language }),
+        synthesisCall(kind, report, input, reportBudget, {
+          conditional: true,
+          language,
+        }),
       );
     }
   }

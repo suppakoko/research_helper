@@ -25,7 +25,8 @@
  *    `src/llm/shared/chunking.ts`, by the rule `packThemeMembers` in
  *    `src/pipeline/shared/estimate.ts` states for the estimate too)
  *    into the fewest calls within `CLUSTER_REDUCE`'s 40 000-token input
- *    budget. One batch: one `CLUSTER_REDUCE` call. More: one call per
+ *    budget, or the less a small context window leaves
+ *    ({@link ThemeAnalysisInput.inputBudget}; owner, `plan/00` §6 item 327). One batch: one `CLUSTER_REDUCE` call. More: one call per
  *    sub-batch, in parallel, then one `CLUSTER_REDUCE_MERGE` over the partial
  *    analyses — never deeper ({@link THEME_ANALYSIS_DEPTH_MAX}). Every call on
  *    `resolveModel("strong")`, at the prompt's temperature (0.3), effort
@@ -129,7 +130,10 @@ export const ECHO_CORRECTED_WARNING = "theme_analysis_echo_corrected";
 export const UNANALYSED_REASONS = Object.freeze({
   /** Step 3's removal left no representative paper; `ThemeAnalysis` needs one. */
   noRepresentativePapers: "no_representative_papers",
-  /** More sub-batches than one merge can take: depth 3 would be needed. */
+  /**
+   * More sub-batches than one merge can take: depth 3 would be needed. Or, on
+   * a small context window, one summary alone over the input budget.
+   */
   tooLarge: "theme_too_large",
   /** The partial analyses, as measured, did not fit the merge's input budget. */
   mergeInputOverBudget: "merge_input_over_budget",
@@ -199,6 +203,14 @@ export interface ThemeAnalysisInput {
   readonly summaries: readonly StoredSummary[];
   /** `{{USER_TOPIC}}`: the collection's topic. Untrusted. */
   readonly userTopic: string;
+  /**
+   * `CLUSTER_REDUCE`'s input budget: `docs/06` §5.2's 40 000 when absent, never
+   * raised above it. The report run passes `synthesisBudgets`' `reduce`, which
+   * follows the model's context window (owner, `plan/00` §6 item 327(a)).
+   */
+  readonly inputBudget?: number;
+  /** `CLUSTER_REDUCE_MERGE`'s, the same way: `synthesisBudgets`' `reduceMerge`. */
+  readonly mergeInputBudget?: number;
 }
 
 interface ThemeResultBase {
@@ -535,13 +547,38 @@ function memberOwnTokens(value: unknown): number {
  * {@link jsonArrayTokens} of the batch.
  *
  * @param payloads - one theme's {@link summariesForReduce}
+ * @param inputBudget - {@link ThemeAnalysisInput.inputBudget}; the row by default
  * @returns the sub-batches; one batch when the theme fits one call
  * @throws RangeError when one summary alone exceeds the budget
  */
 export function packThemeSummaries(
   payloads: readonly PaperSummary[],
+  inputBudget?: number,
 ): readonly (readonly PaperSummary[])[] {
-  return packThemeMembers(payloads, memberOwnTokens);
+  return packThemeMembers(payloads, memberOwnTokens, inputBudget);
+}
+
+/**
+ * Whether one summary alone cannot go in a `CLUSTER_REDUCE` call on this budget
+ * (packing would refuse it). Only a small context window makes this happen; the
+ * theme is then `theme_too_large`, one theme's failure (owner, `plan/00` §6 item
+ * 327(b)), not a packing defect.
+ */
+function memberOverBudget(
+  payloads: readonly PaperSummary[],
+  inputBudget: number,
+): boolean {
+  return payloads.some((p) => memberOwnTokens(p) + 1 > inputBudget - 1);
+}
+
+/** A budget, or a RangeError: a whole number from 1 to its §5.2 row. */
+function checkedBudget(budget: number, row: number): number {
+  if (!Number.isInteger(budget) || budget < 1 || budget > row) {
+    throw new RangeError(
+      `[research-helper] a theme analysis input budget is a whole number from 1 to ${String(row)}, got ${String(budget)}`,
+    );
+  }
+  return budget;
 }
 
 /**
@@ -712,6 +749,14 @@ export async function analyseThemes(
 ): Promise<ThemeAnalysisOutcome> {
   checkPrompt(deps.reducePrompt, "CLUSTER_REDUCE");
   checkPrompt(deps.mergePrompt, "CLUSTER_REDUCE_MERGE");
+  const reduceBudget = checkedBudget(
+    input.inputBudget ?? SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE,
+    SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE,
+  );
+  const mergeBudget = checkedBudget(
+    input.mergeInputBudget ?? SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE_MERGE,
+    SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE_MERGE,
+  );
   const byKey = summariesByKey(input.summaries);
   const themes = input.clustering.themes;
   checkThemes(themes, byKey);
@@ -730,7 +775,7 @@ export async function analyseThemes(
 
   deps.token.throwIfCancelled();
   const model = deps.llm.resolveModel("strong");
-  const mergeLimit = maxPartialsPerMerge(deps.reducePrompt);
+  const mergeLimit = maxPartialsPerMerge(deps.reducePrompt, mergeBudget);
   let mergeSent = false;
 
   /** One `completeJSON` request under one pool permit, counted for its theme. */
@@ -885,9 +930,21 @@ export async function analyseThemes(
 
     try {
       const payloads = summariesForReduce(theme.itemKeys, byKey);
-      const batches = packThemeSummaries(payloads);
+      if (memberOverBudget(payloads, reduceBudget)) {
+        deps.logger?.warn(
+          "theme analysis: one summary alone is over the input budget; the theme is not analysed",
+          {
+            themeId: theme.themeId,
+            members: theme.itemKeys.length,
+            inputBudget: reduceBudget,
+          },
+        );
+        return result("unanalysed", UNANALYSED_REASONS.tooLarge);
+      }
+      const batches = packThemeSummaries(payloads, reduceBudget);
       subBatches = batches.length;
-      if (batches.length > mergeLimit) {
+      // One batch needs no merge, however small the merge's budget.
+      if (batches.length > 1 && batches.length > mergeLimit) {
         deps.logger?.warn(
           "theme analysis: more sub-batches than one merge can take; the theme is not analysed",
           {
@@ -909,7 +966,7 @@ export async function analyseThemes(
       });
       const fits = (vars: Readonly<Record<string, string>>, key: string) => {
         const tokens = estTokens(escapeSourceText(vars[key] ?? ""));
-        if (tokens > SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE) {
+        if (tokens > reduceBudget) {
           throw new RangeError(
             `[research-helper] ${key} measured ${String(tokens)} tokens, over its budget: a packing defect`,
           );
@@ -969,7 +1026,7 @@ export async function analyseThemes(
 
       const partialAnalyses = partials.map((p) => p.analysis);
       const partialTokens = jsonArrayTokens(partialAnalyses);
-      if (partialTokens > SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE_MERGE) {
+      if (partialTokens > mergeBudget) {
         deps.logger?.warn(
           "theme analysis: the partial analyses do not fit one merge; the theme is not analysed",
           { themeId: theme.themeId, partials: partials.length, partialTokens },

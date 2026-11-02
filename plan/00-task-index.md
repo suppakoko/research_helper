@@ -2732,6 +2732,32 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (i) `P5-T15` and `P5-T18` run next, one at a time as the build/Zotero owner frees up. Everything else in Phase 5
       waits on `P5-T31`, the owner's recording, except `P5-T22`, which follows `P5-T18`.
 
+333. **`P5-T03` built; `P4-T22`'s window fix built; `P5-T15` written, its Zotero proof still to run; 2026-11-02**
+    (`plan/reports/P5-T03.md`, `P4-T22-fix.md`, `P5-T15.md`).
+    **DECIDED 2026-11-02 (owner, G-41):** the 25 report window strings are approved in chat, in two batches, as drafted,
+    with "이번 실행에서 지금까지 쓴 금액: { $cost }" chosen over the draft's "쓴 비용" to match the other windows. Two pause
+    lines were matched to existing wording before the owner saw them: "지출 한도에 도달해" and "시간 제한에 걸려". They are
+    inserted byte for byte from `plan/reports/ko-review-333.ftl`. `KO_PENDING_REVIEW` is now `P5-T15`'s 12.
+
+    **DECIDED 2026-11-02 (coordinator, under item 313):**
+    - (a) `P5-T03`'s readings stand, as written in `docs/07` §5.2, §8.3 and §9.2. Whether "oldest" by creation time
+      satisfies NFR-8's "least recently used" goes to the owner.
+    - (b) The window fix's choices stand: the budget is the `windowRoom` inequality with its 1.15 headroom; `THEME_MERGE`
+      and each batch have their own ceilings; an unknown output limit takes the prompt's ceiling whole; the critique uses
+      its own model's window; one summary over the budget is that theme's `theme_too_large`; a theme that fits one call
+      is sent even with a merge limit of 0; the window enters the `tc` and `cr` keys only when known, so a model with a
+      known window misses its old entries once. `P4-T22` stays open: FINDING P4-T22-2, that composition has no room for
+      large analyses on a 32 000-token window, goes to the owner first.
+    - (c) `addon/prefs.js` keeps no line for the three Phase 5 rows (`P5-T02`), so `Zotero.Prefs.get` answers undefined.
+      `menus.spec.ts` was the side that was wrong and is corrected in `P5-T15`'s second pass. `P5-T03`'s three runs are
+      re-run there, because the only failures were `P5-T15`'s own two tests.
+    - (d) `P5-T15`'s readings stand, as written in `docs/08` §2.5 and §5.2, including that the search window now closes
+      at shutdown in every mode.
+    - (e) Commit `6dfbb06` put `docs/07` §8.5's "Related papers & recommendations" block about 20 lines off, because a
+      zero-context patch applied at its new line number. The next commit restores it, with nothing reworded.
+    - (f) Notes for later cards are placed in `plan/08`: `P5-T14`, `P5-T16`, `P5-T18`, `P5-T20`, `P5-T21`, `P5-T24`,
+      `P5-T25`, `P5-T26`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

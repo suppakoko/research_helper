@@ -38,11 +38,16 @@ import {
   COLLECTION_SETTINGS_DDL,
   CACHE_EXPIRY_INDEX_DDL,
   CACHE_LRU_INDEX_DDL,
+  COLLECTION_PROFILE_DDL,
+  EMBEDDING_DDL,
+  EMBEDDING_MODEL_INDEX_DDL,
   JOB_DDL,
   JOB_STATUS_INDEX_DDL,
   LATEST_SCHEMA_VERSION,
   MIGRATIONS,
   PROVENANCE_COLLECTION_INDEX_DDL,
+  RECOMMENDATION_DDL,
+  RECOMMENDATION_PROFILE_INDEX_DDL,
   REPORT_DDL,
   SCHEMA_VERSION_DDL,
   SEARCH_PROVENANCE_DDL,
@@ -242,11 +247,14 @@ const TODAY = new Date(2026, 9, 15, 10, 0, 0).getTime();
 // 3. The schema — docs/07 §8.3, column for column
 // ---------------------------------------------------------------------------
 
-/** `docs/07` §8.3's statement that starts with `head`, up to its `;`. */
+/**
+ * `docs/07` §8.3's statement that starts with `head`, up to the `;` that ends
+ * its line: `collection_profile` carries a `;` inside a comment (`P5-T03`).
+ */
 function docsStatement(head: string): string {
   const start = DOCS_07.indexOf(head);
   expect(start, `docs/07 carries "${head}"`).toBeGreaterThan(-1);
-  const end = DOCS_07.indexOf(";", start);
+  const end = DOCS_07.indexOf(";\n", start);
   return DOCS_07.slice(start, end);
 }
 
@@ -275,9 +283,10 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
   // version 5 (`collection_settings`; its checks are in
   // test/unit/pipeline/privacyPolicy.test.ts), and with P3-T25, which appended
   // version 6 (`summary`; its byte-for-byte check is the next test), and
-  // with P4-T14, which appended version 7 (`report`; checked below too).
-  it("is version 1 of exactly those two statements, then P3-T34's job table as version 2, P3-T33's cache_entry as version 3, user_price as version 4, collection_settings as version 5, summary as version 6 and report as version 7", () => {
-    expect(LATEST_SCHEMA_VERSION).toBe(7);
+  // with P4-T14, which appended version 7 (`report`; checked below too), and
+  // with P5-T03, which appended versions 8, 9 and 10 (checked below too).
+  it("is version 1 of exactly those two statements, then P3-T34's job table as version 2, P3-T33's cache_entry as version 3, user_price as version 4, collection_settings as version 5, summary as version 6, report as version 7, collection_profile as version 8, recommendation as version 9 and embedding as version 10", () => {
+    expect(LATEST_SCHEMA_VERSION).toBe(10);
     expect(MIGRATIONS).toStrictEqual([
       {
         version: 1,
@@ -311,6 +320,18 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
         version: 7,
         statements: [REPORT_DDL],
       },
+      {
+        version: 8,
+        statements: [COLLECTION_PROFILE_DDL],
+      },
+      {
+        version: 9,
+        statements: [RECOMMENDATION_DDL, RECOMMENDATION_PROFILE_INDEX_DDL],
+      },
+      {
+        version: 10,
+        statements: [EMBEDDING_DDL, EMBEDDING_MODEL_INDEX_DDL],
+      },
     ]);
   });
 
@@ -331,14 +352,39 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
     expect(REPORT_DDL).not.toContain("REFERENCES");
   });
 
-  it("brings a fresh file to schema_version 7 with §8.3's columns and index, read back", async () => {
+  // P5-T03: the three tables and two indexes are docs/07 §8.3's statements byte
+  // for byte, with no foreign key (the plan/00 §6 item 272(b) precedent).
+  it("copies collection_profile, recommendation, embedding and their indexes from docs/07 §8.3 byte for byte, with no foreign key", () => {
+    expect(COLLECTION_PROFILE_DDL).toBe(
+      docsStatement("CREATE TABLE collection_profile ("),
+    );
+    expect(RECOMMENDATION_DDL).toBe(
+      docsStatement("CREATE TABLE recommendation ("),
+    );
+    expect(RECOMMENDATION_PROFILE_INDEX_DDL).toBe(
+      docsStatement("CREATE INDEX idx_rec_profile"),
+    );
+    expect(EMBEDDING_DDL).toBe(docsStatement("CREATE TABLE embedding ("));
+    expect(EMBEDDING_MODEL_INDEX_DDL).toBe(
+      docsStatement("CREATE INDEX idx_embedding_model"),
+    );
+    for (const statement of [
+      COLLECTION_PROFILE_DDL,
+      RECOMMENDATION_DDL,
+      EMBEDDING_DDL,
+    ]) {
+      expect(statement).not.toContain("REFERENCES");
+    }
+  });
+
+  it("brings a fresh file to schema_version 10 with §8.3's columns and index, read back", async () => {
     const connection = sqlite();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 7 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 0, to: 10 });
     const { db } = connection;
 
     expect(
       db.prepare("SELECT version FROM schema_version").all().map(plain),
-    ).toStrictEqual([{ version: 7 }]);
+    ).toStrictEqual([{ version: 10 }]);
     expect(
       columns(db, "search_provenance").map(({ name, type, notnull, pk }) => [
         name,
@@ -374,12 +420,17 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
     ).toStrictEqual([
       "index:idx_cache_expiry",
       "index:idx_cache_lru",
+      "index:idx_embedding_model",
       "index:idx_job_status",
       "index:idx_provenance_collection",
+      "index:idx_rec_profile",
       "index:idx_summary_work",
       "table:cache_entry",
+      "table:collection_profile",
       "table:collection_settings",
+      "table:embedding",
       "table:job",
+      "table:recommendation",
       "table:report",
       "table:schema_version",
       "table:search_provenance",
@@ -410,7 +461,7 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
 
   it("is idempotent: a second run reads the version and changes nothing", async () => {
     const connection = await migrated();
-    expect(await runMigrations(connection)).toStrictEqual({ from: 7, to: 7 });
+    expect(await runMigrations(connection)).toStrictEqual({ from: 10, to: 10 });
     expect(
       one(connection.db, "SELECT COUNT(*) AS n FROM schema_version"),
     ).toStrictEqual({ n: 1 });
@@ -418,11 +469,11 @@ describe("P2-T17 — migrations.ts version 1 is docs/07 §8.3's DDL", () => {
 
   it("refuses a file a later plugin version wrote, and leaves it untouched", async () => {
     const connection = await migrated();
-    connection.db.exec("UPDATE schema_version SET version = 8");
+    connection.db.exec("UPDATE schema_version SET version = 11");
     await expect(runMigrations(connection)).rejects.toThrow(/newer/);
     expect(
       one(connection.db, "SELECT version FROM schema_version"),
-    ).toStrictEqual({ version: 8 });
+    ).toStrictEqual({ version: 11 });
   });
 
   it("rolls a failed migration back, leaving the file at its old version", async () => {

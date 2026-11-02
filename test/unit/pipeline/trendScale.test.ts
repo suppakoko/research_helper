@@ -57,6 +57,9 @@ import {
 import {
   clusterBatchSize,
   DIGEST_MAX_TOKENS,
+  planSynthesis,
+  synthesisBudgets,
+  type SynthesisCallKind,
 } from "../../../src/pipeline/shared/estimate";
 import {
   egressLogEntry,
@@ -72,7 +75,10 @@ import {
   createJobNoticeRouter,
   type SummarizeLibraryItem,
 } from "../../../src/pipeline/summarize/summarizePipeline";
-import { OTHER_THEME_NAME } from "../../../src/pipeline/trendReport/cluster";
+import {
+  OTHER_THEME_NAME,
+  partitionDigests,
+} from "../../../src/pipeline/trendReport/cluster";
 import { expectedHeadings } from "../../../src/pipeline/trendReport/compose";
 import {
   digestTokens,
@@ -81,7 +87,12 @@ import {
 } from "../../../src/pipeline/trendReport/digest";
 import { EN_REPORT_LABELS } from "../../../src/pipeline/trendReport/reportLabels";
 import {
+  maxPartialsPerMerge,
+  packThemeSummaries,
+} from "../../../src/pipeline/trendReport/themeAnalysis";
+import {
   createTrendReportPipeline,
+  measureSynthesisOverhead,
   type TrendReportConfirmRequest,
   type TrendReportInput,
   type TrendReportOutput,
@@ -166,6 +177,16 @@ interface WindowProfile {
   readonly name: string;
   readonly contextWindowTokens: number;
   readonly maxOutputTokens: number;
+  /**
+   * The critique model's window, when it is not the report model's. It goes to
+   * the catalogue only; the mock's enforced window stays the profile's.
+   */
+  readonly critiqueContextWindowTokens?: number;
+  /**
+   * Tokens added to each theme analysis's narrative. The answers are at most 84
+   * tokens without it, where a real analysis may reach 3 000 (FINDING P4-T22-2).
+   */
+  readonly analysisPadTokens?: number;
 }
 
 const WINDOW_128K: WindowProfile = {
@@ -348,7 +369,7 @@ function mergeAnswer(request: ChatRequest): string {
   });
 }
 
-function analysisAnswer(request: ChatRequest): string {
+function analysisAnswer(request: ChatRequest, padTokens = 0): string {
   const user = userOf(request);
   const themeId = /"themeId": "(T[0-9]+)"/.exec(user)?.[1] ?? "T1";
   const keys = unique(
@@ -363,7 +384,9 @@ function analysisAnswer(request: ChatRequest): string {
     narrative: `Work in this theme ${keys
       .slice(0, 3)
       .map((k) => `[[${k}]]`)
-      .join(" ")} reported a change in the outcome.`,
+      .join(
+        " ",
+      )} reported a change in the outcome.${" x".repeat(Math.ceil(padTokens * 1.85))}`,
     representativePapers: keys
       .slice(0, 2)
       .map((itemKey) => ({ itemKey, why: "Representative." })),
@@ -388,7 +411,7 @@ function reportAnswer(request: ChatRequest): string {
   }).join("\n");
 }
 
-function answerTo(request: ChatRequest): string {
+function answerTo(request: ChatRequest, profile: WindowProfile): string {
   switch (kindOf(request)) {
     case "THEME_CLUSTER":
       return clusteringAnswer(request);
@@ -396,7 +419,7 @@ function answerTo(request: ChatRequest): string {
       return mergeAnswer(request);
     case "CLUSTER_REDUCE":
     case "CLUSTER_REDUCE_MERGE":
-      return analysisAnswer(request);
+      return analysisAnswer(request, profile.analysisPadTokens);
     case "SELF_CRITIQUE":
       return JSON.stringify({ verdict: "pass", problems: [] });
     case "TREND_REPORT":
@@ -459,7 +482,7 @@ function windowedStep(
         `P4-T22 mock: ${String(inputTokens)} tokens exceed the ${String(profile.contextWindowTokens)}-token window`,
       );
     }
-    const text = answerTo(request);
+    const text = answerTo(request, profile);
     const answerTokens = estTokens(text);
     const ceiling = request.maxOutputTokens ?? profile.maxOutputTokens;
     if (answerTokens > ceiling) {
@@ -663,7 +686,10 @@ async function scaleRun(profile: WindowProfile): Promise<ScaleRun> {
   const log: CallRecord[] = [];
   const info = (id: string) =>
     mockModel(id, {
-      contextWindowTokens: profile.contextWindowTokens,
+      contextWindowTokens:
+        id === "summary-model"
+          ? (profile.critiqueContextWindowTokens ?? profile.contextWindowTokens)
+          : profile.contextWindowTokens,
       maxOutputTokens: profile.maxOutputTokens,
       dataPolicy: {
         trainsOnInputByDefault: "no",
@@ -1140,17 +1166,12 @@ describe("P4-T22 — a 400-item report on a 32 000-token window (Done when 1, 2)
     SCALE_TIMEOUT_MS,
   );
 
-  // FINDING P4-T22-1 (2026-11-01): the pipeline never reads the report
-  // model's context window. `createTrendReportPipeline`'s execute passes no
-  // `inputBudget` to `clusterThemes`, `composeReport` or `critiqueReport`,
-  // and `analyseThemes` packs to the fixed 40 000 of
-  // `SYNTHESIS_INPUT_BUDGETS.CLUSTER_REDUCE`. On this 32 000-token model the
-  // clustering is two-stage only because the output limit forces it (the test
-  // above); then ten `CLUSTER_REDUCE` sub-batches of 38 000–40 500 tokens
-  // are refused (each theme left unanalysed with CONTEXT_LENGTH) and the
-  // 53 000-token `TREND_REPORT_EN` request fails the run. Skipped until the
-  // fix described in plan/reports/P4-T22.md ("SRC FIXES NEEDED") lands.
-  it.skip(
+  // FINDING P4-T22-1 (2026-11-01), fixed 2026-11-02 (owner, plan/00 §6 item
+  // 327(a)): the pipeline did not read the report model's context window, so
+  // on this 32 000-token model ten `CLUSTER_REDUCE` sub-batches of 38 000–40 500
+  // tokens were refused and the 53 000-token `TREND_REPORT_EN` request failed
+  // the run. `synthesisBudgets` now gives every stage its window budget.
+  it(
     "finishes with no context-length error and no truncation; the header's pass count equals the call log's; every key is placed once (FINDING P4-T22-1)",
     async () => {
       const small = await scaleRun(WINDOW_32K);
@@ -1170,7 +1191,7 @@ describe("P4-T22 — a 400-item report on a 32 000-token window (Done when 1, 2)
   );
 
   // FINDING P4-T22-1, as above: needs the 32 000 run to finish.
-  it.skip(
+  it(
     "reports more passes than the 128 000 run, and each run's count equals its call log (FINDING P4-T22-1)",
     async () => {
       const small = await scaleRun(WINDOW_32K);
@@ -1187,8 +1208,8 @@ describe("P4-T22 — a 400-item report on a 32 000-token window (Done when 1, 2)
   // FINDING P4-T22-1, the plainest case: `parseCatalogueEntry` (OpenRouter) gives
   // a model with no stated completion limit its whole window as its output
   // limit, so nothing forces two stages, and the 52 000-token single
-  // `THEME_CLUSTER` request goes to a 32 000-token model.
-  it.skip(
+  // `THEME_CLUSTER` request went to a 32 000-token model.
+  it(
     "still clusters in two stages when the output limit does not force them: the window alone does (FINDING P4-T22-1)",
     async () => {
       const run = await scaleRun({
@@ -1200,6 +1221,291 @@ describe("P4-T22 — a 400-item report on a 32 000-token window (Done when 1, 2)
       expect(countOf(run.log, "THEME_MERGE")).toBeGreaterThanOrEqual(1);
       expect(run.output.outcome).toBe("succeeded");
       expect(run.output.passes).toBe(passesFromLog(run.log));
+    },
+    SCALE_TIMEOUT_MS,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 5. The window budgets at scale (owner, plan/00 §6 item 327(a))
+// ---------------------------------------------------------------------------
+
+/** The themes the report's §4 names as not analysed (`unanalysedLines`). */
+function themesGivenUp(run: ScaleRun): number {
+  const tail = EN_REPORT_LABELS.themeNotAnalysed.split("{papers}")[1] ?? "";
+  const marker = tail.split("{reason}")[0] ?? "";
+  return (run.output.report?.markdown ?? "").split(marker).length - 1;
+}
+
+/** Both 32 000-token shapes, and the ones each side of them. */
+const SMALL_WINDOWS: readonly WindowProfile[] = [
+  WINDOW_32K,
+  {
+    name: "32k-output-at-window",
+    contextWindowTokens: 32_000,
+    maxOutputTokens: 32_000,
+  },
+  { name: "48k", contextWindowTokens: 48_000, maxOutputTokens: 8_192 },
+  { name: "24k", contextWindowTokens: 24_000, maxOutputTokens: 8_192 },
+];
+
+/** What the provider sends: `max_tokens` clamped to the limit (docs/03 §14.3). */
+function clampedOutput(call: CallRecord, profile: WindowProfile): number {
+  return Math.min(call.maxOutputTokens ?? 0, profile.maxOutputTokens);
+}
+
+describe("P4-T22 — the estimate and the requests on small windows (plan/00 §6 item 327(a))", () => {
+  for (const profile of SMALL_WINDOWS) {
+    it(
+      `${profile.name}: the estimate reserves at least what the run made, at inputs no smaller, and every request with its clamped output fits the window`,
+      async () => {
+        const run = await scaleRun(profile);
+        expect(run.output.outcome).toBe("succeeded");
+        expect(run.log.filter((c) => c.refused !== undefined)).toEqual([]);
+        // No theme was given up to make it fit.
+        expect(themesGivenUp(run)).toBe(0);
+
+        const planned =
+          run.confirms[0]?.estimate.selected.synthesis.calls ?? [];
+        const reserved = reservedByKind(run);
+        // A clustering re-run is not reserved (`planSynthesis`' header).
+        const distinct = new Set(
+          run.log
+            .filter((c) => c.kind === "THEME_CLUSTER")
+            .map((c) => c.clusterKeys),
+        );
+        expect(distinct.size).toBeLessThanOrEqual(reserved.THEME_CLUSTER ?? 0);
+        for (const kind of [
+          "THEME_MERGE",
+          "CLUSTER_REDUCE",
+          "CLUSTER_REDUCE_MERGE",
+          "TREND_REPORT",
+        ] as const) {
+          expect(countOf(run.log, kind), kind).toBeLessThanOrEqual(
+            reserved[kind] ?? 0,
+          );
+        }
+        const largestPlanned = (kind: CallKind): number =>
+          Math.max(
+            0,
+            ...planned
+              .filter((c) =>
+                kind === "TREND_REPORT"
+                  ? c.kind.startsWith("TREND_REPORT")
+                  : c.kind === kind,
+              )
+              .map((c) => c.inputTokens),
+          );
+        for (const call of run.log) {
+          expect(call.inputTokens, call.kind).toBeLessThanOrEqual(
+            largestPlanned(call.kind),
+          );
+          expect(
+            call.inputTokens + clampedOutput(call, profile),
+            call.kind,
+          ).toBeLessThanOrEqual(profile.contextWindowTokens);
+        }
+      },
+      SCALE_TIMEOUT_MS,
+    );
+  }
+
+  it(
+    "the critique follows the critique model's own window, not the report model's",
+    async () => {
+      const whole = await scaleRun(WINDOW_128K);
+      const run = await scaleRun({
+        ...WINDOW_128K,
+        name: "128k-critique-16k",
+        critiqueContextWindowTokens: 16_000,
+      });
+      expect(run.output.outcome).toBe("succeeded");
+      expect(run.log.filter((c) => c.refused !== undefined)).toEqual([]);
+      const critiques = run.log.filter((c) => c.kind === "SELF_CRITIQUE");
+      // One call does not fit 16 000 any more, so it goes per section.
+      expect(countOf(whole.log, "SELF_CRITIQUE")).toBe(1);
+      expect(critiques.length).toBeGreaterThan(1);
+      for (const call of critiques) {
+        expect(
+          call.inputTokens + (call.maxOutputTokens ?? 0),
+        ).toBeLessThanOrEqual(16_000);
+      }
+      // The report model's window still shapes the other stages: as at 128 000.
+      expect(countOf(run.log, "THEME_MERGE")).toBe(0);
+      // And the estimate prices the critique on the same window.
+      const planned = run.confirms[0]?.estimate.selected.synthesis.calls ?? [];
+      const critique = planned.find((c) => c.kind === "SELF_CRITIQUE");
+      expect(critique?.rawInputTokens).toBeLessThanOrEqual(16_000);
+    },
+    SCALE_TIMEOUT_MS,
+  );
+
+  it("over the same 400 summaries, the plan makes at least the batches, sub-batches and merges the packers make, window by window", () => {
+    const papers = syntheticPapers({ count: PAPERS, seed: SEED });
+    const overhead = measureSynthesisOverhead(PROMPTS, (text) =>
+      estTokens(text),
+    );
+    const byTheme = new Map<
+      string,
+      (typeof papers)[number]["summary"]["content"][]
+    >();
+    for (const paper of papers) {
+      const theme = paper.topic?.theme ?? "none";
+      byTheme.set(theme, [
+        ...(byTheme.get(theme) ?? []),
+        paper.summary.content,
+      ]);
+    }
+    const digests = papers.map((paper) =>
+      toDigest({ summary: paper.summary, year: paper.year }),
+    );
+    let compared = 0;
+    for (const window of [
+      12_000, 16_000, 20_000, 24_000, 32_000, 48_000, 64_000, 96_000, 128_000,
+    ]) {
+      for (const limit of [8_192, window]) {
+        const report = {
+          modelId: "m",
+          prices: PRICES,
+          maxOutputTokens: limit,
+          limits: { contextWindowTokens: window, maxOutputTokens: limit },
+        };
+        const budgets = synthesisBudgets({
+          papers: PAPERS,
+          outputLimit: limit,
+          reportLimits: report.limits,
+          critiqueLimits: report.limits,
+          prompts: PROMPTS,
+          synthesisOverhead: overhead,
+        });
+        const plan = planSynthesis({
+          papers: PAPERS,
+          reportModel: report,
+          critiqueModel: report,
+          prompts: PROMPTS,
+          synthesisOverhead: overhead,
+          languages: ["en"],
+          critiqueRounds: 1,
+          themeCount: byTheme.size,
+        });
+        const planned = (kind: SynthesisCallKind): number =>
+          plan.calls.filter((c) => c.kind === kind).length;
+        const where = `${String(window)} / ${String(limit)}`;
+
+        const batches = partitionDigests(
+          digests,
+          clusterBatchSize(PROMPTS.get("THEME_CLUSTER"), limit),
+          budgets.clusterBatch,
+        );
+        expect(batches.length, where).toBeLessThanOrEqual(
+          planned("THEME_CLUSTER"),
+        );
+
+        const mergeLimit = maxPartialsPerMerge(
+          PROMPTS.get("CLUSTER_REDUCE"),
+          budgets.reduceMerge,
+        );
+        let reduces = 0;
+        let merges = 0;
+        for (const members of byTheme.values()) {
+          const count = packThemeSummaries(members, budgets.reduce).length;
+          if (count > 1 && count > mergeLimit) continue; // theme_too_large
+          reduces += count;
+          if (count > 1) merges += 1;
+        }
+        expect(reduces, where).toBeLessThanOrEqual(planned("CLUSTER_REDUCE"));
+        expect(merges, where).toBeLessThanOrEqual(
+          planned("CLUSTER_REDUCE_MERGE"),
+        );
+        compared += 1;
+      }
+    }
+    expect(compared).toBe(18);
+  });
+});
+
+describe("P4-T22 — a window too small ends the run cleanly (no RangeError, no refused request)", () => {
+  it(
+    "12 000 / 8 192: every theme too large, the run stops with the no-theme message and no report",
+    async () => {
+      const run = await scaleRun({
+        name: "12k",
+        contextWindowTokens: 12_000,
+        maxOutputTokens: 8_192,
+      });
+      expect(run.output.outcome).toBe("stopped");
+      expect(run.output.stop?.messageId).toBe(
+        "research-helper-report-stopped-no-theme-analysed",
+      );
+      expect(run.log.filter((c) => c.refused !== undefined)).toEqual([]);
+      expect(run.reportRows).toBe(0);
+    },
+    SCALE_TIMEOUT_MS,
+  );
+
+  it(
+    "7 500 / 7 500: the local themes are over THEME_MERGE's window budget, so the run stops with the merge's message, before the merge request",
+    async () => {
+      const run = await scaleRun({
+        name: "7.5k",
+        contextWindowTokens: 7_500,
+        maxOutputTokens: 7_500,
+      });
+      expect(run.output.outcome).toBe("stopped");
+      expect(run.output.stop?.messageId).toBe(
+        "research-helper-report-stopped-merge-too-large",
+      );
+      expect(countOf(run.log, "THEME_MERGE")).toBe(0);
+      expect(run.log.filter((c) => c.refused !== undefined)).toEqual([]);
+    },
+    SCALE_TIMEOUT_MS,
+  );
+
+  it(
+    "4 000 / 4 000: no room for one digest beside a batch's output, so the run fails before any request",
+    async () => {
+      const run = await scaleRun({
+        name: "4k",
+        contextWindowTokens: 4_000,
+        maxOutputTokens: 4_000,
+      });
+      expect(run.output.outcome).toBe("failed");
+      expect(run.output.error?.code).toBe("CONFIGURATION");
+      expect(run.log).toEqual([]);
+      expect(run.reportRows).toBe(0);
+    },
+    SCALE_TIMEOUT_MS,
+  );
+
+  // FINDING P4-T22-2 (2026-11-02): the budgets cover what the stages can
+  // split or trim, and the composition cannot trim the theme analyses. These
+  // tests pin what happens when they do not fit: no request, CONTEXT_LENGTH,
+  // no report. docs/07 §12.4's note of this date gives the measured limits.
+  it(
+    "32 000 / 8 192 with 2 500-token analyses: the composition does not fit, so CONTEXT_LENGTH before the report request, and no report (FINDING P4-T22-2)",
+    async () => {
+      const run = await scaleRun({ ...WINDOW_32K, analysisPadTokens: 2_500 });
+      expect(run.output.outcome).toBe("failed");
+      expect(run.output.error?.code).toBe("CONTEXT_LENGTH");
+      expect(countOf(run.log, "CLUSTER_REDUCE")).toBeGreaterThan(0);
+      expect(countOf(run.log, "TREND_REPORT")).toBe(0);
+      expect(run.log.filter((c) => c.refused !== undefined)).toEqual([]);
+      expect(run.reportRows).toBe(0);
+    },
+    SCALE_TIMEOUT_MS,
+  );
+
+  it(
+    "the same analyses fit on 64 000 / 8 192 (FINDING P4-T22-2)",
+    async () => {
+      const run = await scaleRun({
+        name: "64k-padded",
+        contextWindowTokens: 64_000,
+        maxOutputTokens: 8_192,
+        analysisPadTokens: 2_500,
+      });
+      expect(run.output.outcome).toBe("succeeded");
+      expect(countOf(run.log, "TREND_REPORT")).toBe(1);
     },
     SCALE_TIMEOUT_MS,
   );

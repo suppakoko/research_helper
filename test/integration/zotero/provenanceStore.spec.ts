@@ -474,8 +474,9 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
   // by plan/00 §6 item 265 (b), which appended `user_price` as version 4, and
   // to 5 by P3-T15, which appended `collection_settings` as version 5, and
   // to 6 by P3-T25, which appended `summary` and `idx_summary_work` as version 6,
-  // and to 7 by P4-T14, which appended `report` as version 7.
-  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 7, with docs/07 §8.3's tables and indexes", async function () {
+  // and to 7 by P4-T14, which appended `report` as version 7, and to 10 by
+  // P5-T03, which appended `collection_profile`, `recommendation` and `embedding`.
+  it("creates research-helper.sqlite under Zotero.DataDirectory.dir at schema_version 10, with docs/07 §8.3's tables and indexes", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     const store = await provenance();
     const expected = PathUtils.join(
@@ -490,7 +491,7 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       "never Zotero's own database",
     );
     assert.isTrue(await IOUtils.exists(store.path), "the file exists");
-    assert.strictEqual(store.schemaVersion, 7);
+    assert.strictEqual(store.schemaVersion, 10);
 
     const { database } = store;
     assert.strictEqual(
@@ -499,8 +500,8 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
           "SELECT MAX(version) FROM schema_version",
         ),
       ),
-      7,
-      "schema_version reads 7",
+      10,
+      "schema_version reads 10",
     );
     assert.strictEqual(
       Number(
@@ -546,12 +547,17 @@ describe("P2-T17: re-run a search from its stored provenance record", () => {
       [
         "index:idx_cache_expiry",
         "index:idx_cache_lru",
+        "index:idx_embedding_model",
         "index:idx_job_status",
         "index:idx_provenance_collection",
+        "index:idx_rec_profile",
         "index:idx_summary_work",
         "table:cache_entry",
+        "table:collection_profile",
         "table:collection_settings",
+        "table:embedding",
         "table:job",
+        "table:recommendation",
         "table:report",
         "table:schema_version",
         "table:search_provenance",

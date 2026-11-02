@@ -233,8 +233,21 @@ export interface ClusterInput {
    * The clustering input budget: `docs/06` §5.2's 60 000 when absent. A
    * smaller whole number forces two stages for one run (`plan/07` `P4-T06`'s
    * Done-when, `P4-T22`'s simulated window); it is never raised above 60 000.
+   * The report run passes `synthesisBudgets`' `clusterSingle`, so the model's
+   * context window can force two stages (owner, `plan/00` §6 item 327(a)).
    */
   readonly inputBudget?: number;
+  /**
+   * One two-stage batch's budget, measured at a batch's own ceiling, so it is
+   * never below {@link ClusterInput.inputBudget} in a report run; that budget
+   * when absent. `synthesisBudgets`' `clusterBatch`.
+   */
+  readonly batchInputBudget?: number;
+  /**
+   * `{{LOCAL_THEMES}}`'s budget: `docs/06` §5.2's 60 000 when absent.
+   * `synthesisBudgets`' `clusterMerge`.
+   */
+  readonly mergeInputBudget?: number;
 }
 
 /** Step 1's choice and the two measurements it rests on. */
@@ -722,6 +735,18 @@ interface CheckedStage {
   readonly yearMin: string;
   readonly yearMax: string;
   readonly inputBudget: number;
+  readonly batchInputBudget: number;
+  readonly mergeInputBudget: number;
+}
+
+/** A budget, or a RangeError: a whole number from 1 to its §5.2 row. */
+function checkedBudget(budget: number, row: number): number {
+  if (!Number.isInteger(budget) || budget < 1 || budget > row) {
+    throw new RangeError(
+      `[research-helper] the clustering input budget must be a whole number from 1 to ${String(row)}, got ${String(budget)}`,
+    );
+  }
+  return budget;
 }
 
 /** Every check made before any request, in one place for both paths. */
@@ -733,16 +758,15 @@ function checkStage(input: ClusterInput, deps: ClusterDeps): CheckedStage {
     );
   }
   const ceiling = SYNTHESIS_INPUT_BUDGETS.THEME_CLUSTER;
-  const inputBudget = input.inputBudget ?? ceiling;
-  if (
-    !Number.isInteger(inputBudget) ||
-    inputBudget < 1 ||
-    inputBudget > ceiling
-  ) {
-    throw new RangeError(
-      `[research-helper] the clustering input budget must be a whole number from 1 to ${String(ceiling)}, got ${String(inputBudget)}`,
-    );
-  }
+  const inputBudget = checkedBudget(input.inputBudget ?? ceiling, ceiling);
+  const batchInputBudget = checkedBudget(
+    input.batchInputBudget ?? inputBudget,
+    ceiling,
+  );
+  const mergeInputBudget = checkedBudget(
+    input.mergeInputBudget ?? SYNTHESIS_INPUT_BUDGETS.THEME_MERGE,
+    SYNTHESIS_INPUT_BUDGETS.THEME_MERGE,
+  );
   const band = input.band ?? themeBandFor(inputKeys.length);
   checkBand(band);
   const prompt = deps.prompt;
@@ -759,6 +783,8 @@ function checkStage(input: ClusterInput, deps: ClusterDeps): CheckedStage {
     yearMin: yearVariable("yearMin", input.yearMin),
     yearMax: yearVariable("yearMax", input.yearMax),
     inputBudget,
+    batchInputBudget,
+    mergeInputBudget,
   };
 }
 
@@ -1079,10 +1105,15 @@ export async function clusterThemesTwoStage(
   deps: ClusterDeps,
   choice: ClusteringPathChoice,
 ): Promise<ClusterOutcome> {
-  const { inputKeys, band, schema, yearMin, yearMax, inputBudget } = checkStage(
-    input,
-    deps,
-  );
+  const {
+    inputKeys,
+    band,
+    schema,
+    yearMin,
+    yearMax,
+    batchInputBudget,
+    mergeInputBudget,
+  } = checkStage(input, deps);
   const papers = inputKeys.length;
   const prompt = deps.prompt;
   const mergePrompt = deps.mergePrompt;
@@ -1108,7 +1139,7 @@ export async function clusterThemesTwoStage(
       },
     );
   }
-  const batches = partitionDigests(input.digests, batchSize, inputBudget);
+  const batches = partitionDigests(input.digests, batchSize, batchInputBudget);
   deps.logger?.info("theme clustering: two stages", {
     papers,
     batches: batches.length,
@@ -1116,7 +1147,7 @@ export async function clusterThemesTwoStage(
     digestTokens: choice.digestTokens,
     outputCeiling: choice.outputCeiling,
     outputLimit: input.outputLimit,
-    inputBudget,
+    batchInputBudget,
   });
 
   deps.token.throwIfCancelled();
@@ -1312,7 +1343,6 @@ export async function clusterThemesTwoStage(
     // THEME_MERGE's input budget before the merge request.
     const localThemes = localThemesVariable(locals);
     const mergeInputTokens = digestTokens(localThemes);
-    const mergeInputBudget = SYNTHESIS_INPUT_BUDGETS.THEME_MERGE;
     if (mergeInputTokens > mergeInputBudget) {
       deps.logger?.warn(
         "theme clustering: the merge input is over its budget; the run stops",

@@ -2346,8 +2346,8 @@ describe("P3-T33 — installServices opens the plugin database once and shares i
       schemaFrom: 0,
       // 4 since plan/00 §6 item 265 (b) appended `user_price`; 5 since P3-T15
       // appended `collection_settings`; 6 since P3-T25 appended `summary`; 7
-      // since P4-T14 appended `report`.
-      schemaVersion: 7,
+      // since P4-T14 appended `report`; 10 since P5-T03 appended its three tables.
+      schemaVersion: 10,
     });
     await settle();
     expect(graph.jobs.attached).toBe(true);

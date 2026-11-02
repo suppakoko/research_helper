@@ -747,6 +747,8 @@ this approval.
 
 ### G-41 — Review the Phase 1 `ko-KR` UI bundle (`KO_PENDING_REVIEW.length`, 82 as of 2026-10-08)
 
+> *Re-counted 2026-11-02 (`plan/00` §6 item 333): `KO_PENDING_REVIEW` holds 12 ids, all `P5-T15`'s; `P4-T20`'s 25 report window strings left it that day.*
+
 > **DEFERRED 2026-10-08, by the owner, to before the v1.0 release.** English only until then. Measured
 > the same day, by counting the lists in `src/i18n/keys.ts` rather than reading the figure off this
 > document: `KO_PENDING_REVIEW` is **82**, `KO_PRESENT` 4, `KO_DELIBERATELY_ABSENT` 1, over **87**
