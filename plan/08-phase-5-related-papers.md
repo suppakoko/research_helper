@@ -148,7 +148,7 @@ Checked against the tree on 2026-11-01.
 | Cache with per-entry TTL | `Cache`, `CacheSetOptions.ttlMs`, `CACHE_NAMESPACE_POLICIES`, `SOURCE_RESPONSE_LOOKUP_TTL_MS` (`src/core/cache/cache.ts`); `cacheKey`, `sha256Hex` (`keys.ts`) | `P3-T33` |
 | LLM path: prompts, JSON, budget, privacy, egress, cost dialog | `createPromptRegistry`, `PROMPT_IDS`, `PROMPT_FILE_NAMES`, `PROMPT_SCHEMAS`; `PROMPT_SOURCE_FILES`, `PROMPT_VERSIONS`, `PROMPT_CACHE_EPOCHS`; `completeJSON`, `validateAgainstSchema`; `withBudget`, `createBudgetGuard`; `allowedInputScope`, `InputScopeKind` (`"metadata-only"`); `buildEgressDisclosure`, `EgressNoticeId`, `mustAskConfirmation`; `estimateRun`; `confirmRunCost` | Phase 3, Phase 4 |
 | An optional embedding method on providers (no adapter implements it) | `LLMProvider.embed?` in `src/llm/types.ts` | `P3-T06` |
-| Hidden feature preference precedent | `report.enabled` (`reportEnabled` in `PREFS`), item 307(d) | `P4-T19` |
+| Hidden feature preference precedent | `report.enabled` (`reportEnabled` in `PREFS`), item 307(d); *removed 2026-11-02 by `P4-T20`, so the pattern is now read in `plan/07` `P4-T19`'s notes* | `P4-T19` |
 | The fixture recorder and replay | `scripts/record-fixtures.ts` (`--source`, unkeyed by construction); `fixtureKey` (`test/support/fixtureReplay.ts`: method, credential-redacted URL and body — no header is hashed), `replayTransport`, re-exported by `test/contract/_transport.ts`; `test/support/*RecordedRequests.ts` | `P1-T11`, `P2-T33` |
 | A key read from the process environment for a script, never printed | `SEMANTIC_SCHOLAR_API_KEY` in `scripts/spike-abstract-coverage.ts` (prints only whether a key was sent) — the precedent for `P5-T04`'s keyed recorder path | `P0-T21` |
 | Item snapshot fields the mapper does not read today | `SummaryRunItemSnapshot.dateAdded` in `src/zotero/notes.ts` is filled from `item.dateAdded`; `ZoteroItemSnapshot` in `src/zotero/itemMapper.ts` has no `dateAdded` (both grepped 2026-11-01) | `P3-T29` |
@@ -695,6 +695,8 @@ keyed Semantic Scholar path (item 323(c)) and +0.5 d for the five builders (revi
 - create `test/unit/sources/semanticscholarGraph.test.ts`
 - modify `test/unit/bootstrap/container.test.ts` (only if the flag invariant needs the new member named)
 
+> *Added 2026-11-02 (`plan/reports/P5-T09.md`, `P5-T07.md`, `P5-T04.md`; coordinator, under `plan/00` §6 item 313): `matchTitle(title, ctx)` returns a list of zero or one record, the shape `P5-T09` built, so `P5-T11` treats both sources alike. `semanticscholar.test.ts` pins the old flags and changes with this card. Correct the stale "records unauthenticated" in `semanticscholarSource.ts`'s header. A seed the source was asked about and does not hold throws `BadRequestError` with status 404; a seed lacking the identifier the source needs is an empty page with a warning and no request (item 332(c)).*
+
 **Do.**
 1. `findRelated` with `strategy: "references" | "citations"`: `limit` ≤ 1000, fields including
    `externalIds`, `year`, `title`, `citationCount`, and for citations `contexts,intents,isInfluential`;
@@ -1030,6 +1032,8 @@ a stated threshold, a list for the user to pick from, or an actionable error nam
 - create `src/pipeline/related/seed.ts` (`resolveSeed`; caller: `src/pipeline/related/relatedPipeline.ts`, `P5-T14`)
 - create `test/unit/pipeline/relatedSeed.test.ts`
 
+> *Added 2026-11-02 (`plan/reports/P5-T09.md`, `P5-T10.md`): call `CrossrefSource.matchTitle(title, ctx)`; the recorded title search returns non-papers (`component` items with `[[null]]` dates), so the threshold must reject them. Title matches are not cached: they have no signal kind and no row in `docs/05` §9.2.*
+
 **Do.**
 1. Documents first: write the threshold decided below into `docs/05` §6.1 (FR-14 says "per
    `05-related-work-discovery.md`", which states none).
@@ -1087,6 +1091,8 @@ their results are unioned and merged, and only survivors are hydrated.
 - create `test/unit/pipeline/relatedGenerators.test.ts`
 
 > *Added 2026-11-02 (`plan/reports/P5-T01.md`): map `SourceRecord.id` to a list of edges, because two calls to one source can return one record. Check whether `dedupeAndMergeAsync` tolerates a duplicate `SourceRecord.id`; it was not checked.*
+
+> *Added 2026-11-02 (`plan/reports/P5-T07.md`, `P5-T08.md`, `P5-T09.md`, `P5-T10.md`; coordinator, under `plan/00` §6 item 313). (1) `src/model/merge.ts` joins this card's Files: read `"other"` as absent when choosing `type`, because a Crossref reference record otherwise makes the merged work "other" even after it is filled in (measured by `P5-T09`). (2) Measure how many of `work-with-references`' 155 DOIs Europe PMC resolves; a keyless, non-biomedical seed's references otherwise have no route to a title. If the share is poor against the definition of done's "still returns useful candidates", add a Crossref `lookup` over `filter=doi:` with one free, unkeyed recording, and re-price this card. (3) Call `findRelated` once per named strategy inside `cachedRelated`, never `"auto"`, which hides a failed route in a warning and would cache the partial page. (4) Drop `raw` before caching. (5) Status rows: a rejected call with `BadRequestError` 404 is "not indexed"; an empty page with a warning is "could not ask" (item 332(c)). (6) PubMed's records arrive hydrated, and `lookupById` is empty there, so step 3 skips them. `PPR` rows have no identifiers: keep them as they are. A DOI-only Europe PMC seed costs one `lookup` per call, so pass a PMID when known. One record can appear under two seeds. (7) Choose a budget within `docs/05` §6.1's 5–8; `GENERATOR_VALUE_ORDER` has no Crossref row. `docs/05` §6.1's generator list gains Crossref here.*
 
 **Do.**
 1. Generators A–E of `docs/05` §6.1: S2 forpaper, references, citations (keyed only, §0.2 item 19);
@@ -1806,6 +1812,8 @@ and their union is merged; keyword queries go through Phase 2's `fanOut` with th
 - create `src/pipeline/recommend/generators.ts` (caller: `recommendPipeline.ts`, `P5-T25`)
 - create `test/unit/pipeline/recommendGenerators.test.ts`
 
+> *Added 2026-11-02 (`plan/reports/P5-T08.md`, `P5-T10.md`): `findSimilarForSeeds` throws above 10 seeds; count one `elink` plus its `efetch` batches (up to 5 at limit 100 over 10 seeds) against `RequestBudget`, and re-read "a budget of 12 runs (a) and (b) fully" against that. `fanOut` has no cache hook, so step 1(d) wraps one source and one query at a time. For one request over several seeds: `readRelated` per seed, `tryTake(1)`, then `writeRelated` or `writeRelatedMissing` per seed. Build cache keys from identifiers, never from a URL, which can hold a key.*
+
 **Do.**
 1. (a) S2 `recommend` with the seeds and negatives (keyed); (b) pmra over ≤ 10 PMID seeds; (c) forward
    citations of the top seeds (S2 keyed, else Europe PMC); (d) keyword queries — the profile's
@@ -1978,6 +1986,8 @@ profile, applies the user's edits, records dismissals, and is registered under `
 - create `test/unit/pipeline/recommendPipeline.test.ts`
 
 > *Added 2026-11-02 (`plan/reports/P5-T01.md`, finding 8 and decisions 5 and 11): `resumable: false`; a stored profile is fresh only with an equal `membershipHash` and the same `embeddingModel` as the run's space; apply `userEdits` at read time; declare the row type with `inLibrary`; decide the restart corners of `docs/07` §7.6.*
+
+> *Added 2026-11-02 (`plan/reports/P5-T10.md`; DECIDED, coordinator, under `plan/00` §6 item 313): this card constructs the run's one `RequestBudget` and passes it to the generators (`P5-T23`) and to hydration, so hydration is not left without one. `findSimilarForSeeds` is on `PubmedSource`, so it needs the typed instance from `installServices`; check the `pubmed` slot of `ShippedSourceAdapters`.*
 
 **Do.**
 1. Two input modes of one pipeline (decided below). **Profile only:** profile check (stored profile with

@@ -42,7 +42,7 @@
  * `findRelated`"; Europe PMC's declaration became `false` on that day.
  *
  * **`findRelated` returns a {@link RelatedPage} (`P5-T01`, 2026-11-02;
- * `plan/08` §0.4 line 30).** No adapter implements it yet: `P5-T05`–`P5-T09` do,
+ * `plan/08` §0.4 line 30).** Europe PMC, PubMed and Crossref implement it; `P5-T05` and `P5-T06` add S2,
  * each setting its own `relatedByWork` and `citationGraph`.
  *
  * ## Two transcription notes

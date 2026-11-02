@@ -2706,6 +2706,32 @@ the caller of what the card builds; if it does not, the caller is added with a d
     withdraw it and to use a new key only through the runbook in `docs/13` §3.5 or the preferences pane. `P5-T31` still
     waits on that.
 
+332. **`P5-T02`, `P5-T07`, `P5-T08`, `P5-T09` and `P5-T10` built, 2026-11-02** (`plan/reports/` under those names).
+    **DECIDED 2026-11-02 (owner), each as recommended:**
+    - (a) Korean papers' whole-word matching on a keyless run (`P5-T19`) goes to the backlog.
+    - (b) Closing the report window during a run cancels it, as the summarize window does: the draft is discarded, and
+      summaries and paid-for intermediate results stay. A report job left paused gets a one-time notice when Zotero
+      starts, at no cost, so that the user learns of it. That notice is built with `P4-T21`'s round. The 25 new report
+      window strings are reviewed in chat, in two batches (G-41).
+
+    **DECIDED 2026-11-02 (coordinator, under item 313):**
+    - (c) "This source cannot answer for this seed" reads two ways, both kept. A seed the source was asked about and does
+      not hold throws `BadRequestError` 404, which writes the 7-day negative entry (`P5-T07`). A seed lacking the
+      identifier the source needs is an empty page with a warning and no request, and writes nothing (`P5-T08`,
+      `P5-T09`). `P5-T12` shows them as different status rows.
+    - (d) `src/model/merge.ts` reads `"other"` as absent when choosing `type`, and this joins `P5-T12`'s Files.
+    - (e) Whether Crossref needs a `filter=doi:` lookup is measured first, by `P5-T12`; the card is re-priced only if it
+      is built. It bears on the definition of done's "still returns useful candidates" without a key.
+    - (f) `P5-T25` constructs the run's one `RequestBudget`. Title matches are not cached. "Permanent" in
+      `source-response` is 100 years, and nine of `docs/05` §9.2's ten rows pass through `cachedRelated`, the SPECTER2
+      row being the `embedding` table's.
+    - (g) `related.linkToSeed` has no pane control: the related window's checkbox is a per-run choice and writes nothing
+      back. FR-17's "preference" is read this way, and the owner may overturn it.
+    - (h) All five agents' other readings stand, as written in `docs/02` §3.6, §4.7 and §5.3, `docs/05` §2.1 and §4.3, and
+      `docs/07` §4.2, §8.5 and §9.2. Their notes for later cards are placed in `plan/08`.
+    - (i) `P5-T15` and `P5-T18` run next, one at a time as the build/Zotero owner frees up. Everything else in Phase 5
+      waits on `P5-T31`, the owner's recording, except `P5-T22`, which follows `P5-T18`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

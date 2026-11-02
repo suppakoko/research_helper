@@ -13,7 +13,8 @@
  * `P1-T03`; `P3-T32` added the fifty §8.5 rows Phase 3 reads and the
  * `semanticscholar.keyPresent` key `P2-T05` had spelled inline in the schema
  * (`plan/04` §0.2 item 2 makes `P3-T32` the only Phase 3 card that adds a key);
- * `P4-T02` added the five "Report & audio" keys Phase 4 reads (2026-10-26).
+ * `P4-T02` added the five "Report & audio" keys Phase 4 reads (2026-10-26);
+ * `P5-T02` added the three Phase 5 reads (2026-11-02).
  * Rows for later phases (`tts.*`, `background.enabled`, …) are not here. Adding a row means adding it to `docs/07` §8.5 first, then
  * here, then to `addon/prefs.js`, then to the pane — §8.5's own ordering rule.
  *
@@ -122,6 +123,11 @@ export const PREF_KEYS = {
   reportCritiqueModel: "report.critiqueModel",
   reportSaveNote: "report.saveNote",
   reportPerPaperNotes: "report.perPaperNotes",
+
+  // Related papers & recommendations (docs/07 §8.5; P5-T02).
+  relatedLinkToSeed: "related.linkToSeed",
+  relatedEnabled: "related.enabled",
+  recommendEnabled: "recommend.enabled",
 
   // Runtime & concurrency (docs/07 §8.5, "Runtime & concurrency").
   concurrency: "concurrency",

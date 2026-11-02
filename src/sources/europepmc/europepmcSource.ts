@@ -40,12 +40,15 @@
  * - **`rateLimitKey` is {@link EBI_HOST}**, imported, so `docs/07` §7.3's
  *   one-bucket-per-host rule is mechanical. The budget itself lives in
  *   `hostLimiter.ts` and nowhere else (`plan/README.md` §5 rule 4).
- * - **`citationGraph: false`** (`P2-T34`, 2026-10-15; owner review row 131).
- *   `docs/07` §4.2 now defines the flag as "this adapter exposes
- *   `findRelated`", and this file declares no `findRelated`. The service has
- *   `/citations` and `/references` (`docs/02` §4.7), which is why `P2-T03`
- *   had declared `true`; neither is called here, and the card that wires them
- *   sets the flag back with the method.
+ * - **`citationGraph: true` and `relatedByWork: true`, since `P5-T07`
+ *   (2026-11-02).** `docs/07` §4.2 defines `citationGraph` as "this adapter
+ *   exposes `findRelated`" (`P2-T34`, owner review row 131, which set it `false`
+ *   until this method arrived). `findRelated` calls `/citations` and
+ *   `/references` (`docs/02` §4.7) through `./citations.ts`; `docs/02` §4.7's
+ *   dated note holds its decisions. `databaseLinks` is never called (§4.7: it
+ *   links to molecular databases, not to papers). Its callers are
+ *   `src/pipeline/related/generators.ts` (`P5-T12`) and
+ *   `src/pipeline/recommend/generators.ts` (`P5-T23`).
  * - **`lookup()` is one `DOI:"…" OR DOI:"…"` search per 100 DOIs** (`P2-T12`,
  *   `docs/02` §10.4's backfill step 1, `resultType=core`, `pageSize=1000`),
  *   built by `./query.ts`'s `buildEuropePmcDoiLookupRequest` and sent through
@@ -78,6 +81,7 @@
 
 import type { Clock } from "../../core/clock";
 import {
+  BadRequestError,
   OperationCancelledError,
   ParseError,
   ResearchHelperError,
@@ -86,17 +90,33 @@ import {
 import type { HttpClient } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
 import { EBI_HOST } from "../../core/rateLimit/hostLimiter";
-import type { ExternalIds } from "../../model/ids";
+import { normalizeDoi, type ExternalIds } from "../../model/ids";
+import type { RelationEdge, RelationKind } from "../../model/related";
 import type { SourceRecord } from "../../model/sourceRecord";
 import type {
   LiteratureSource,
+  RelatedPage,
+  RelatedQuery,
   SourceCallContext,
   SourceCapabilities,
   SourceHealth,
   SourcePage,
   SourceQuery,
 } from "../types";
-import { EUROPEPMC_SOURCE_ID, type EuropePmcRecordMapper } from "./mapper";
+import {
+  buildEuropePmcCitationsRequest,
+  buildEuropePmcReferencesRequest,
+  parseEuropePmcRelationBody,
+  relationRowToCoreResult,
+  resolveEuropePmcSeed,
+  type EuropePmcRelation,
+  type EuropePmcRelationSeed,
+} from "./citations";
+import {
+  EUROPEPMC_SOURCE_ID,
+  readPartialDate,
+  type EuropePmcRecordMapper,
+} from "./mapper";
 import {
   buildEuropePmcDoiLookupRequest,
   buildEuropePmcSearchRequest,
@@ -157,14 +177,13 @@ export const EUROPEPMC_CAPABILITIES: SourceCapabilities = {
     phrase: true,
     fields: EUROPEPMC_RENDERED_FIELDS,
   },
-  relatedByWork: false,
+  relatedByWork: true,
   // `P2-T12`: `lookup` is the batched `DOI:"…" OR …` query of `docs/02`
   // §10.4's backfill step 1, and DOI is the only identifier it renders.
   lookupById: ["doi"],
   abstractsInSearch: true,
-  // `docs/07` §4.2 since 2026-10-15: "this adapter exposes `findRelated`" —
-  // and this one does not (`P2-T34`, owner review row 131).
-  citationGraph: false,
+  // `docs/07` §4.2: "this adapter exposes `findRelated`", and since `P5-T07` it does.
+  citationGraph: true,
   dateFilter: true,
   // The renderer's own object (`P2-T34`): `./query.ts` refuses from it.
   filters: EUROPEPMC_FILTERS,
@@ -194,7 +213,7 @@ export interface EuropePmcSearchPage extends SourcePage {
 
 /**
  * The adapter, with `search`'s return narrowed to {@link EuropePmcSearchPage}
- * and `lookup` declared present (`P2-T12`).
+ * and `lookup` (`P2-T12`) and `findRelated` (`P5-T07`) declared present.
  */
 export interface EuropePmcSource extends LiteratureSource {
   search(
@@ -205,6 +224,10 @@ export interface EuropePmcSource extends LiteratureSource {
     ids: readonly Partial<ExternalIds>[],
     ctx: SourceCallContext,
   ): Promise<readonly SourceRecord[]>;
+  findRelated(
+    query: RelatedQuery,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage>;
 }
 
 /** A validated `search` body. */
@@ -356,6 +379,48 @@ export function nextCursorAfter(
   return nextCursorMark;
 }
 
+/** Which way each route's rows point (`docs/07` §4.2's `RelationKind`). */
+const EDGE_KIND: Readonly<Record<EuropePmcRelation, RelationKind>> = {
+  citations: "citation",
+  references: "reference",
+};
+
+const RELATION_REQUEST = {
+  citations: buildEuropePmcCitationsRequest,
+  references: buildEuropePmcReferencesRequest,
+} as const;
+
+/**
+ * The routes a `RelatedQuery.strategy` asks for: `docs/02` §4.7's dated note.
+ *
+ * @throws RangeError for a strategy this source does not offer
+ */
+export function relationsForStrategy(
+  strategy: RelatedQuery["strategy"],
+): readonly EuropePmcRelation[] {
+  switch (strategy) {
+    case "citations":
+    case "references":
+      return [strategy];
+    case undefined:
+    case "auto":
+      return ["citations", "references"];
+    default:
+      throw new RangeError(
+        `[research-helper] Europe PMC's findRelated offers "citations" and ` +
+          `"references"; got ${JSON.stringify(strategy)}.`,
+      );
+  }
+}
+
+/** One route's list, read as far as the call needs. */
+interface RelationList {
+  readonly records: readonly SourceRecord[];
+  readonly edges: readonly RelationEdge[];
+  readonly hitCount: number | undefined;
+  readonly warnings: readonly string[];
+}
+
 /**
  * Build the Europe PMC adapter.
  *
@@ -500,6 +565,170 @@ export function createEuropePmcSource(
     return out;
   }
 
+  /**
+   * The route for this seed, in `docs/02` §4.7's order: its PMID, its PMCID, or
+   * what `lookup` returns for its DOI.
+   *
+   * @throws BadRequestError with status 404 when none resolves, which is how
+   *   `P5-T10`'s negative cache and `P5-T12`'s "not indexed" row see it
+   */
+  async function resolveSeed(
+    query: RelatedQuery,
+    ctx: SourceCallContext,
+  ): Promise<EuropePmcRelationSeed> {
+    const ids: Partial<ExternalIds> = { ...query.work?.ids, ...query.ids };
+    let seed = resolveEuropePmcSeed(ids);
+    const doi = normalizeDoi(ids.doi);
+    if (seed === undefined && doi !== null) {
+      for (const record of await lookup([{ doi }], ctx)) {
+        if (record.work.ids.doi !== doi) continue;
+        seed = resolveEuropePmcSeed(record.work.ids);
+        if (seed !== undefined) break;
+      }
+    }
+    if (seed === undefined) {
+      throw new BadRequestError(
+        404,
+        `[research-helper] Europe PMC has no MED or PMC record for this seed, ` +
+          `so /citations and /references cannot be asked (docs/02 §4.7).`,
+        { sourceId: EUROPEPMC_SOURCE_ID, seedNotIndexed: true },
+      );
+    }
+    return seed;
+  }
+
+  /** One route's list up to `limit`: `docs/02` §4.7's dated note, items 3 to 5. */
+  async function fetchRelation(
+    relation: EuropePmcRelation,
+    seed: EuropePmcRelationSeed,
+    query: RelatedQuery,
+    ctx: SourceCallContext,
+  ): Promise<RelationList> {
+    const limit = Number.isFinite(query.limit)
+      ? Math.max(0, Math.trunc(query.limit))
+      : 0;
+    const pageSize = clampPageSize(limit);
+    const fromYear = readPartialDate(query.fromDate)?.year;
+    const records: SourceRecord[] = [];
+    const edges: RelationEdge[] = [];
+    let hitCount: number | undefined;
+    let position = 0;
+    let read = 0;
+    let unusable = 0;
+
+    for (let page = 1; read < limit; page += 1) {
+      ctx.token.throwIfCancelled();
+      const request = RELATION_REQUEST[relation]({ ...seed, page, pageSize });
+      const response = await http.request(request.method, request.url, {
+        responseType: "text",
+        token: ctx.token,
+      });
+      deps.logger?.debug("europepmc relation", {
+        sourceId: EUROPEPMC_SOURCE_ID,
+        relation,
+        url: request.transmittedUrl,
+        status: response.status,
+      });
+      const parsed = parseEuropePmcRelationBody(
+        relation,
+        response.body,
+        request.transmittedUrl,
+      );
+      hitCount ??= parsed.hitCount;
+
+      for (const row of parsed.rows) {
+        if (read >= limit) break;
+        position += 1;
+        // One row at a time, so a row the mapper drops cannot shift an edge.
+        const [record] = mapRecords([relationRowToCoreResult(row)]);
+        if (record === undefined) {
+          unusable += 1;
+          continue;
+        }
+        read += 1;
+        const year = record.work.publishedDate?.year;
+        if (fromYear !== undefined && year !== undefined && year < fromYear) {
+          continue;
+        }
+        records.push(record);
+        edges.push({ kind: EDGE_KIND[relation], rank: position });
+      }
+
+      if (parsed.rows.length < pageSize) break;
+      if (hitCount !== undefined && page * pageSize >= hitCount) break;
+    }
+
+    return {
+      records,
+      edges,
+      hitCount,
+      warnings:
+        unusable === 0
+          ? []
+          : [
+              `Europe PMC: ${String(unusable)} row(s) of /${relation} had no ` +
+                `id or source and were left out.`,
+            ],
+    };
+  }
+
+  /**
+   * `docs/07` §4.2's `findRelated`, on `docs/02` §4.7's two routes. Its dated
+   * note holds what each strategy does. Called by `P5-T12` and `P5-T23`.
+   *
+   * @throws RangeError for a strategy this source does not offer
+   * @throws BadRequestError with status 404 for a seed it does not hold
+   * @throws whatever the route threw, unwrapped, when a named route fails or
+   *   both fail
+   */
+  async function findRelated(
+    query: RelatedQuery,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage> {
+    const relations = relationsForStrategy(query.strategy);
+    const seed = await resolveSeed(query, ctx);
+
+    const lists: RelationList[] = [];
+    const failures: { relation: EuropePmcRelation; error: unknown }[] = [];
+    for (const relation of relations) {
+      try {
+        lists.push(await fetchRelation(relation, seed, query, ctx));
+      } catch (error) {
+        if (
+          error instanceof OperationCancelledError ||
+          !(error instanceof ResearchHelperError)
+        ) {
+          throw error;
+        }
+        failures.push({ relation, error });
+      }
+    }
+    // A named route that failed lands here too: nothing answered, so it throws.
+    const [firstFailure] = failures;
+    if (lists.length === 0 && firstFailure !== undefined) {
+      throw firstFailure.error;
+    }
+
+    const hitCounts = lists.flatMap((list) => list.hitCount ?? []);
+    return {
+      records: lists.flatMap((list) => list.records),
+      edges: lists.flatMap((list) => list.edges),
+      totalAvailable:
+        hitCounts.length === 0
+          ? undefined
+          : hitCounts.reduce((sum, count) => sum + count, 0),
+      nextCursor: undefined,
+      warnings: [
+        ...lists.flatMap((list) => list.warnings),
+        ...failures.map(
+          ({ relation, error }) =>
+            `Europe PMC: /${relation} could not be read ` +
+            `(${(error as ResearchHelperError).code}); the other list was still used.`,
+        ),
+      ],
+    };
+  }
+
   /** One cheap `idlist` probe. Never throws except on cancellation. */
   async function healthCheck(ctx: SourceCallContext): Promise<SourceHealth> {
     const startedAtMs = clock.now();
@@ -540,6 +769,7 @@ export function createEuropePmcSource(
     search,
     searchAll,
     lookup,
+    findRelated,
     explainQuery: (query) => explainEuropePmcQuery(query),
   };
 }

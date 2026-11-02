@@ -75,6 +75,15 @@
  * characters and an NCBI key is shorter, so a form body is outside what the
  * pattern set can protect (reported with this card).
  *
+ * ## Related articles (`P5-T08`, as built 2026-11-02)
+ *
+ * `findSimilarForSeeds` sends one `elink` for up to
+ * {@link PUBMED_ELINK_MAX_SEEDS} seeds and hydrates the neighbours through the
+ * `efetch` path above, each distinct PMID once. `findRelated` is that call with
+ * one seed. `docs/07` §4.2 declares both. Callers: `P5-T12`'s pmra generator for
+ * `findRelated`, `P5-T23`'s generator (b) for `findSimilarForSeeds`, neither
+ * built yet. `src/bootstrap/container.ts` constructs the adapter.
+ *
  * ## Layering
  *
  * `sources/` may import `core/` and `model/` only (`docs/07` §2.3 / §4.2).
@@ -102,15 +111,25 @@ import type { Logger } from "../../core/logger";
 import { NCBI_HOST } from "../../core/rateLimit/hostLimiter";
 import type { SecretId, SecretStore } from "../../core/secretStore";
 import type { SourceId } from "../../model/ids";
+import type { RelationEdge } from "../../model/related";
 import type { SourceRecord } from "../../model/sourceRecord";
+import { applyClientRecencyFilter } from "../shared/recency";
 import type {
   LiteratureSource,
+  RelatedPage,
+  RelatedQuery,
   SourceCallContext,
   SourceCapabilities,
   SourceHealth,
   SourcePage,
   SourceQuery,
 } from "../types";
+import {
+  buildElinkNeighborScoreRequest,
+  parseElinkNeighborScoreBody,
+  PUBMED_ELINK_MAX_SEEDS,
+  rankElinkLinkset,
+} from "./elink";
 import {
   buildEsearchRequest,
   explainPubmedQuery,
@@ -188,12 +207,15 @@ export const PUBMED_HEALTH_FAILED_MESSAGE_KEY = "rh-error-source";
 /**
  * Capabilities, filled honestly — `docs/07` §4.2 and this card's step 1.
  *
- * `relatedByWork`, `citationGraph` and `lookupById` are all empty/false because
- * `elink`, `esummary` and the PMC ID Converter are **not** implemented here
- * (this card's **Do NOT**; they are Phase 2/5 work) and `findRelated` /
- * `lookup` are therefore not declared on the object this module builds. A
- * capability flag that promises a method nobody implements is the one thing
- * §4.2's "honestly" rules out.
+ * `lookupById` is empty because `esummary` and the PMC ID Converter are **not**
+ * called from this adapter, so `lookup` is not declared on the object this module
+ * builds. A capability flag that promises a method nobody implements is the one
+ * thing §4.2's "honestly" rules out.
+ *
+ * `relatedByWork` and `citationGraph` are true since `P5-T08` (2026-11-02,
+ * `plan/00` §6 items 184 and 326(f)): `findRelated` returns similar articles, and
+ * §4.2's flag means "relation edges". PubMed's citation lists
+ * (`pubmed_pubmed_refs`, `pubmed_pubmed_citedin`) are not built.
  *
  * `maxPageSize` is `esearch`'s own cap (§3.3, "max 10,000"), not the 200 of
  * `efetch`: `efetch` batching is this adapter's business and invisible to the
@@ -213,10 +235,10 @@ export const PUBMED_CAPABILITIES: SourceCapabilities = {
     phrase: true,
     fields: ["title", "abstract", "author", "journal"],
   },
-  relatedByWork: false,
+  relatedByWork: true,
   lookupById: [],
   abstractsInSearch: false,
-  citationGraph: false,
+  citationGraph: true,
   dateFilter: true,
   // The renderer's own object, not a copy (`P2-T34`): what this declares is
   // what `./query.ts` refuses from, so the two cannot drift.
@@ -238,6 +260,30 @@ export const PUBMED_TRUNCATION_WARNING =
   `PubMed paginates only the first ${PUBMED_MAX_TOTAL_RESULTS} records of a ` +
   `result set (retstart max ${PUBMED_RETSTART_MAX}); this result set was ` +
   `truncated at that ceiling and the remaining records were not retrieved.`;
+
+/** The warning on the empty page of a seed with no PMID (`docs/05` §4.4). */
+export const PUBMED_SIMILAR_NO_PMID_WARNING =
+  "PubMed's similar articles need a PMID, and this seed has none, so no request was sent.";
+
+/** The warning on the empty page of a strategy PubMed has no list for. */
+export function pubmedSimilarStrategyWarning(strategy: string): string {
+  return `PubMed offers similar articles only; strategy "${strategy}" was not requested from it.`;
+}
+
+/** The warning on the empty page of a seed `elink` sent no list for. */
+export function pubmedSimilarNoLinksetWarning(seedPmid: string): string {
+  return `PubMed's elink sent no list for PMID ${seedPmid}, so it has no similar articles here.`;
+}
+
+/** The warning when `elink` listed entries that could not be read. */
+export function pubmedSimilarMalformedLinksWarning(count: number): string {
+  return `PubMed's elink listed ${String(count)} entries with no usable id or score; they were left out.`;
+}
+
+/** The warning when `efetch` returned no record for some listed neighbours. */
+export function pubmedSimilarMissingRecordsWarning(count: number): string {
+  return `PubMed's efetch returned no record for ${String(count)} similar articles; they were left out.`;
+}
 
 // ---------------------------------------------------------------------------
 // 2. The `efetch` request
@@ -404,9 +450,38 @@ export interface PubmedSearchPage extends SourcePage {
   readonly sourceExtras: PubmedSourceExtras;
 }
 
+/** `docs/07` §4.2: options of {@link PubmedSource.findSimilarForSeeds}. */
+export interface PubmedSimilarOptions {
+  /** How many neighbours to keep per seed, after the seed itself is dropped. */
+  readonly limit: number;
+  /** As `RelatedQuery.fromDate`. `elink` has no date parameter, so it filters after hydration. */
+  readonly fromDate?: string;
+}
+
+/** `docs/07` §4.2: one seed's answer. `edges[i]` describes `records[i]`. */
+export interface PubmedSimilarPage extends RelatedPage {
+  readonly seedPmid: string;
+}
+
 /** The adapter, with `search`'s return narrowed to {@link PubmedSearchPage}. */
 export interface PubmedSource extends LiteratureSource {
   search(query: SourceQuery, ctx: SourceCallContext): Promise<PubmedSearchPage>;
+  /** `strategy` `"similar"` or `"auto"`, or none. Caller: `P5-T12`'s pmra generator. */
+  findRelated(
+    query: RelatedQuery,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage>;
+  /**
+   * One `elink` request for up to {@link PUBMED_ELINK_MAX_SEEDS} seeds, and one
+   * page per distinct seed in the order given. Caller: `P5-T23`'s generator (b).
+   *
+   * @throws RangeError for more seeds than that, or a seed that is not a PMID
+   */
+  findSimilarForSeeds(
+    seedPmids: readonly string[],
+    options: PubmedSimilarOptions,
+    ctx: SourceCallContext,
+  ): Promise<readonly PubmedSimilarPage[]>;
 }
 
 /** What {@link createPubmedSource} needs from the composition root. */
@@ -611,6 +686,127 @@ export function createPubmedSource(deps: PubmedSourceDeps): PubmedSource {
     return mapRecords(response.body);
   }
 
+  /** `docs/07` §4.2's several-seed call; see {@link PubmedSource}. */
+  async function findSimilarForSeeds(
+    seedPmids: readonly string[],
+    options: PubmedSimilarOptions,
+    ctx: SourceCallContext,
+  ): Promise<readonly PubmedSimilarPage[]> {
+    const seeds = [...new Set(seedPmids)];
+    if (seeds.length === 0) return [];
+    if (seeds.length > PUBMED_ELINK_MAX_SEEDS) {
+      throw new RangeError(
+        `[research-helper] elink takes at most ${String(PUBMED_ELINK_MAX_SEEDS)} ` +
+          `seeds per call (docs/05 §7.3); got ${String(seeds.length)}.`,
+      );
+    }
+
+    ctx.token.throwIfCancelled();
+    const apiKey = await resolveApiKey();
+    const request = buildElinkNeighborScoreRequest(seeds, apiKey);
+    const response = await http.request(request.method, request.url, {
+      responseType: "text",
+      token: ctx.token,
+    });
+    deps.logger?.debug("pubmed elink", {
+      sourceId: PUBMED_SOURCE_ID,
+      url: request.transmittedUrl,
+      seeds: seeds.length,
+      status: response.status,
+    });
+
+    const linksets = parseElinkNeighborScoreBody(
+      response.body,
+      request.transmittedUrl,
+    );
+    const limit = normalizeLimit(options.limit);
+    const lists = seeds.map((seedPmid) => {
+      const linkset = linksets.find((set) => set.seedPmid === seedPmid);
+      return {
+        seedPmid,
+        linkset,
+        ranked:
+          linkset === undefined ? undefined : rankElinkLinkset(linkset, limit),
+      };
+    });
+
+    // Each neighbour once, however many seeds listed it: `plan/08` §0.2 item 23.
+    const union = new Set(
+      lists
+        .flatMap(({ ranked }) => ranked?.neighbours ?? [])
+        .map((n) => n.pmid),
+    );
+    const byPmid = new Map<string, SourceRecord>();
+    for (const batch of chunk([...union], EFETCH_MAX_IDS_PER_CALL)) {
+      ctx.token.throwIfCancelled();
+      for (const record of await efetch(batch, ctx)) {
+        byPmid.set(record.nativeId, record);
+      }
+    }
+
+    return lists.map(({ seedPmid, linkset, ranked }) => {
+      const records: SourceRecord[] = [];
+      const edges: RelationEdge[] = [];
+      const warnings: string[] = [];
+      if (linkset === undefined) {
+        warnings.push(pubmedSimilarNoLinksetWarning(seedPmid));
+      } else if (linkset.malformedLinks > 0) {
+        warnings.push(
+          pubmedSimilarMalformedLinksWarning(linkset.malformedLinks),
+        );
+      }
+
+      let missing = 0;
+      for (const { pmid, rank, score } of ranked?.neighbours ?? []) {
+        const record = byPmid.get(pmid);
+        if (record === undefined) {
+          missing += 1;
+        } else {
+          records.push(record);
+          edges.push({ kind: "similar", rank, score });
+        }
+      }
+      if (missing > 0)
+        warnings.push(pubmedSimilarMissingRecordsWarning(missing));
+
+      return {
+        seedPmid,
+        ...keepFromDate(records, edges, options.fromDate),
+        totalAvailable: ranked?.listLength,
+        nextCursor: undefined,
+        warnings,
+      };
+    });
+  }
+
+  /** `docs/07` §4.2: the same call with one seed. */
+  async function findRelated(
+    query: RelatedQuery,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage> {
+    const { strategy } = query;
+    if (
+      strategy !== undefined &&
+      strategy !== "similar" &&
+      strategy !== "auto"
+    ) {
+      return emptyRelatedPage(pubmedSimilarStrategyWarning(strategy));
+    }
+    const seed = query.ids?.pmid ?? query.work?.ids.pmid;
+    if (seed === undefined) {
+      return emptyRelatedPage(PUBMED_SIMILAR_NO_PMID_WARNING);
+    }
+    const [page] = await findSimilarForSeeds(
+      [seed],
+      {
+        limit: query.limit,
+        ...(query.fromDate !== undefined && { fromDate: query.fromDate }),
+      },
+      ctx,
+    );
+    return page ?? emptyRelatedPage(pubmedSimilarNoLinksetWarning(seed));
+  }
+
   /**
    * Page until `limit` or exhaustion.
    *
@@ -714,6 +910,8 @@ export function createPubmedSource(deps: PubmedSourceDeps): PubmedSource {
     healthCheck,
     search,
     searchAll,
+    findRelated,
+    findSimilarForSeeds,
     explainQuery: (query) => explainPubmedQuery(query),
   };
 }
@@ -870,6 +1068,47 @@ function progressTotal(
 ): number | undefined {
   if (total === undefined) return undefined;
   return Math.min(total, limit, PUBMED_MAX_TOTAL_RESULTS);
+}
+
+/** A page with nothing on it and the one warning that says why. */
+function emptyRelatedPage(warning: string): RelatedPage {
+  return {
+    records: [],
+    edges: [],
+    totalAvailable: undefined,
+    nextCursor: undefined,
+    warnings: [warning],
+  };
+}
+
+/**
+ * Apply `fromDate`, keeping `records` and `edges` the same length.
+ *
+ * `applyClientRecencyFilter` needs both ends of a window and this has one, so the
+ * far end is left open. It reads only the two dates. An undated record is kept.
+ */
+function keepFromDate(
+  records: readonly SourceRecord[],
+  edges: readonly RelationEdge[],
+  fromDate: string | undefined,
+): Pick<RelatedPage, "records" | "edges"> {
+  if (fromDate === undefined) return { records, edges };
+  const kept = new Set(
+    applyClientRecencyFilter(records, {
+      fromYear: Number(fromDate.slice(0, 4)),
+      toYear: 9999,
+      fromDate,
+      toDate: "9999-12-31",
+      label: "",
+    }).kept,
+  );
+  return {
+    records: records.filter((record) => kept.has(record)),
+    edges: edges.filter((_, index) => {
+      const record = records[index];
+      return record !== undefined && kept.has(record);
+    }),
+  };
 }
 
 /** Split into runs of at most `size`. */

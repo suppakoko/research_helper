@@ -32,7 +32,9 @@
 // cache.lastSeenPromptVersions, report.perPaperNotes and every
 // *.lastValidatedAt) get none here, and neither do the four Phase 4 rows §7.2
 // gives no line (report.targetWords, report.maxCritiqueRounds,
-// report.critiqueModel, report.saveNote). The four Phase 1 rows below that
+// report.critiqueModel, report.saveNote), nor the three Phase 5 rows §7.2 gives
+// no line (related.linkToSeed, related.enabled, recommend.enabled; P5-T02,
+// 2026-11-02). The four Phase 1 rows below that
 // §7.2 does not list (logRequestBodies, prefsSchemaVersion, secretBackend,
 // ncbi.keyPresent) are listed anyway because a setting the user cannot find in
 // about:config is a setting they cannot audit.

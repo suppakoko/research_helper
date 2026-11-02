@@ -22,7 +22,10 @@
  * `report.saveNote`; 2026-10-26), and is the only Phase 4 card that adds a row.
  * *(Updated 2026-10-29: the owner added one more, the hidden `report.enabled`
  * switch — `plan/00` §6 item 307(d) — written into §8.5 first; removed
- * 2026-11-02 by `P4-T20`, once a report could be generated.)*
+ * 2026-11-02 by `P4-T20`, once a report could be generated.)* `P5-T02` added
+ * the three rows Phase 5 reads (`related.linkToSeed`, `related.enabled`,
+ * `recommend.enabled`; 2026-11-02), and is the only Phase 5 card that adds a
+ * row.
  * `report.addRelatedLinks` is deliberately absent: the owner kept backlinks out
  * of Phase 4 (`plan/00` §6 items 286, 287(a)). Rows for later phases (`tts.*`,
  * `background.enabled`, …) are not here. Every card
@@ -94,7 +97,7 @@ const VALIDATION_RESULT_VALUES = [
 ] as const;
 
 /**
- * Every preference Phases 1–4 read, one entry per `docs/07` §8.5 row.
+ * Every preference Phases 1–5 read, one entry per `docs/07` §8.5 row.
  *
  * The property name is what plugin code passes to `getPref`; `key` is the
  * branch-relative preference, and the two differ inside a dotted family
@@ -560,6 +563,44 @@ export const PREFS = {
   /** Write one child note per paper (`docs/06` §14.2). Opt-in. */
   reportPerPaperNotes: {
     key: PREF_KEYS.reportPerPaperNotes,
+    type: "boolean",
+    default: false,
+  },
+
+  // -------------------------------------------------------------------------
+  // Related papers & recommendations — docs/07 §8.5 (P5-T02). No exploration,
+  // peer-reviewed or embedding-provider row: those are per-run controls or not
+  // built. None of the three has a `pref()` line.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Add imported related papers to the seed item's *Related* list (FR-17). The
+   * related window's checkbox starts each run from it and writes nothing back.
+   * Reader: `P5-T17`.
+   */
+  relatedLinkToSeed: {
+    key: PREF_KEYS.relatedLinkToSeed,
+    type: "boolean",
+    default: true,
+  },
+
+  /**
+   * Hidden. Holds back the item menu's "Find Related Papers…" entry and its
+   * opener until the feature works (`docs/11` §0 principle 5). Reader: `P5-T15`.
+   * `P5-T30` turns the default on, `docs/07` §8.5 first.
+   */
+  relatedEnabled: {
+    key: PREF_KEYS.relatedEnabled,
+    type: "boolean",
+    default: false,
+  },
+
+  /**
+   * Hidden, as `relatedEnabled`, for the collection menu's recommend entry and
+   * its opener. Reader: `P5-T26`. `P5-T30` turns the default on.
+   */
+  recommendEnabled: {
+    key: PREF_KEYS.recommendEnabled,
     type: "boolean",
     default: false,
   },

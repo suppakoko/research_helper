@@ -936,10 +936,11 @@ describe("CROSSREF_CAPABILITIES", () => {
         phrase: false,
         fields: ["title", "author"],
       },
-      relatedByWork: false,
+      // `true` since `P5-T09` added `findRelated` (`crossrefReferences.test.ts`).
+      relatedByWork: true,
       lookupById: [],
       abstractsInSearch: true,
-      citationGraph: false,
+      citationGraph: true,
       dateFilter: true,
       filters: { languages: false, openAccess: false },
       maxPageSize: 1000,

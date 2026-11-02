@@ -8,8 +8,8 @@
  * `model/` cannot import `sources/` (`docs/07` §2.3).
  *
  * **Callers.** `RelatedPage` in `src/sources/types.ts` references
- * {@link RelationEdge}. Nothing constructs one yet: the adapter cards `P5-T05` to
- * `P5-T09` do, and `P5-T12` and `P5-T13` read them.
+ * {@link RelationEdge}. The adapters of `P5-T07`, `P5-T08` and `P5-T09` construct
+ * one, `P5-T05` and `P5-T06` will, and `P5-T12` and `P5-T13` read them.
  *
  * Types only: `model/` imports nothing but `model/`.
  */

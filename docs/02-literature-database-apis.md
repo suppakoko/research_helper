@@ -574,6 +574,8 @@ output. Normalise by dividing by the maximum score in the set before mixing with
 
 `elink` returns a **long list** (hundreds). Slice client-side.
 
+*Measured 2026-11-02 (`plan/08` `P5-T04`, fixture `elink-two-seeds`):* one run with two seeds returned exactly 100 links for each seed, against "hundreds" above, so whether 100 is a cap is unknown. Neither seed appeared in its own list; the adapter's filter stays. The shipped parser and call are `parseElinkNeighborScoreBody` in `src/sources/pubmed/elink.ts` and `findSimilarForSeeds` in `pubmedSource.ts` (`P5-T08`, as built 2026-11-02; details in doc 05 §4.3).
+
 ### 3.7 PMC ID Converter — **endpoint has moved**
 
 > **Verified 2026-09-08:** the classic `https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/` URL now
@@ -922,6 +924,54 @@ GET /MED/37258680/citations?page=1&pageSize=2&format=json
 > Europe PMC error body is not always JSON**, so the adapter must check `Content-Type` / attempt the
 > JSON parse defensively rather than assuming every response is a JSON envelope.
 
+> **Measured 2026-11-02 (`P5-T04`'s recording, `plan/reports/P5-T04.md` finding 2): `/references` was down on
+> 2026-09-08 and 2026-09-09 and was up on 2026-11-02.** `MED/37258680/references` answered 200 with `hitCount` 144
+> and 25 rows, so the outage above was temporary and its two lessons stand. The 503 fixture
+> (`references-503`, seed `MED/39220605`) is hand-written from the note above; a 5xx cannot be provoked on demand.
+> Three things the trimmed response above does not show, from the three recorded bodies:
+>
+> - **`request.offSet` is not comparable between the two routes:** for `page=1` it read 1 on `/references` and 0 on
+>   `/citations`. Read `hitCount` and the rows.
+> - **Rows are thinner than `search`'s `core` results.** There is no `authorList`, `abstractText` or `doi` member, and
+>   `pubYear` is a **number**, not `core`'s string. Both routes give `source`, `id`, `citationType`, `title`,
+>   `authorString` and `pubYear` on every row. `/citations` adds `citedByCount`; `/references` adds `citedOrder`,
+>   `match` (`"Y"` on all 25) and `issn`/`essn`. `journalAbbreviation`, `volume`, `issue` and `pageInfo` are on most
+>   rows, not all.
+> - **`/citations` rows can be preprints:** 3 of 25 had `source` `PPR` and `citationType` `preprint`, and carried
+>   only `source`, `id`, `citationType`, `title`, `authorString`, `pubYear` and `citedByCount`. Such a row has no
+>   identifier other than its `PPR` id.
+>
+> **Not recorded, so not known:** the body of a seed with no citations (`hitCount` 0), a second page, a row with
+> `match` other than `"Y"`, an unknown id's answer, and whether a `PPR` id works as a seed. The adapter below treats
+> the first as an empty page only when `hitCount` says 0 and the list member is absent.
+>
+> **As built 2026-11-02 (`P5-T07`):** `findRelated` on `createEuropePmcSource`, parsers in
+> `src/sources/europepmc/citations.ts`. Its caller is `src/pipeline/related/generators.ts` (`P5-T12`), and
+> `src/pipeline/recommend/generators.ts` (`P5-T23`) for the citation lists of the top seeds.
+> **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):**
+>
+> 1. **Strategy.** `"citations"` or `"references"` calls that one route and lets its failure propagate, so
+>    `P5-T10`'s `cachedRelated` never stores an outage as an empty answer. `"auto"` or no strategy calls both, one
+>    after the other, with `limit` applying to each list. A route that fails becomes one entry in `warnings` and the
+>    other route's records still return; if both fail, the citations failure is thrown. Any other strategy is a
+>    `RangeError`.
+> 2. **Seed.** PMID first (`MED`), then PMCID (`PMC`). A DOI-only seed costs one `lookup` per `findRelated` call.
+>    A seed that resolves to neither throws `BadRequestError` with status 404 and no request to these routes, because
+>    that is what `P5-T10`'s negative cache and `docs/05` §9.2's "404 / unresolvable ID" row expect.
+> 3. **Paging.** `pageSize` stays one value across a call, because `page=` is an offset in units of `pageSize`; it is
+>    `limit` clamped to `search`'s 1…1000. Paging stops at `limit`, at a short page, or once `hitCount` rows were read.
+>    `nextCursor` is always absent, because `RelatedQuery` has no cursor.
+> 4. **`RelationEdge.rank` is the row's position in the whole list**, skipped rows included. A row the mapper cannot
+>    use (no `id` or `source`) has no record and no edge, and the page warns with the count.
+> 5. **`fromDate` is applied here, to the year,** because these routes have no date parameter. It filters the rows
+>    already read and sends no further request, so a filtered call can return fewer than `limit`. An undated record is
+>    kept, as `applyClientRecencyFilter` keeps it.
+> 6. **Rows go through the shipped mapper,** reshaped to `core`'s members by `relationRowToCoreResult`, so a record's
+>    `missingFields` names what hydration should fill. `authorString` is split into family names and initials
+>    (`splitEuropePmcAuthorString`); across every Europe PMC fixture with both spellings, the family names agree with
+>    `authorList` (`test/unit/sources/europepmcCitations.test.ts`). `citationType` is not mapped: a row's `type` stays
+>    `"other"` and in `missingFields`, except a `PPR` row, which the mapper classifies as `"preprint"`.
+
 `databaseLinks` returned an empty result for the test article; it links to molecular databases
 (UniProt, PDB, ENA) rather than to other papers, so it is **not useful for related-work discovery**
 and can be skipped.
@@ -1129,6 +1179,14 @@ the maintainer address; the `mailto` parameter above carries the user's — §2.
 Note `title` and `container-title` are **arrays**, and `issued.date-parts` is an
 **array-of-arrays** whose inner array may have 1, 2, or 3 elements (`[[2026]]`, `[[2026,9]]`,
 `[[2026,9,3]]`). Handle all three.
+
+*Measured 2026-11-02 (`plan/08` `P5-T04`'s recordings, read by `P5-T09`):* `GET /works/{doi}` answers
+`"message-type":"work"` with the work itself as `message`, not `items`. Of the paper `10.1038/s41586-023-06139-9`'s 160
+`reference[]` entries, every one has `key` and `unstructured`; 155 have `DOI` and `doi-asserted-by` (`publisher` or
+`crossref`); 141 have `author`, `year`, `journal-title` and `volume`; 121 have `first-page`. No entry in that list has an
+article title, and `author` is one string such as `CV Theodoris`. A work with `references-count` 0
+(`10.1007/3-540-29835-5_2408`) has no `reference` member at all. One paper each, so this says nothing about how common
+either shape is.
 
 ### 5.4 Abstracts — the big caveat
 

@@ -349,14 +349,14 @@ describe("PubMed adapter identity", () => {
     expect(PUBMED_CAPABILITIES.dateFilter).toBe(true);
     expect(PUBMED_CAPABILITIES.maxPageSize).toBe(PUBMED_RETMAX_MAX);
 
-    // No `elink`, no `esummary`, no PMC ID Converter in this card, so nothing
-    // claims relatedness, citations or id lookup.
-    expect(PUBMED_CAPABILITIES.relatedByWork).toBe(false);
-    expect(PUBMED_CAPABILITIES.citationGraph).toBe(false);
+    // `P5-T08` (2026-11-02): `elink`'s similar articles turn these two on; no
+    // `esummary` and no PMC ID Converter here, so nothing claims id lookup.
+    expect(PUBMED_CAPABILITIES.relatedByWork).toBe(true);
+    expect(PUBMED_CAPABILITIES.citationGraph).toBe(true);
     expect(PUBMED_CAPABILITIES.lookupById).toStrictEqual([]);
 
     const { pubmed } = source(twoStep([]));
-    expect(pubmed.findRelated).toBeUndefined();
+    expect(pubmed.findRelated).toBeTypeOf("function");
     expect(pubmed.lookup).toBeUndefined();
     expect(pubmed.fetchAbstract).toBeUndefined();
   });

@@ -340,6 +340,10 @@ const SECTION_8_5: readonly Section85Row[] = [
   row("reportCritiqueModel", "report.critiqueModel", "string", ""),
   row("reportSaveNote", "report.saveNote", "boolean", true),
   row("reportPerPaperNotes", "report.perPaperNotes", "boolean", false),
+  // Related papers & recommendations (P5-T02, 2026-11-02, typed out from §8.5).
+  row("relatedLinkToSeed", "related.linkToSeed", "boolean", true),
+  row("relatedEnabled", "related.enabled", "boolean", false),
+  row("recommendEnabled", "recommend.enabled", "boolean", false),
   // Runtime & concurrency
   row("concurrency", "concurrency", "integer", 3, { min: 1, max: 8 }),
   row("runMaxSpendCents", "run.maxSpendCents", "integer", 0, { min: 0 }),
@@ -437,6 +441,10 @@ const NO_PREF_LINE: readonly string[] = [
   "report.maxCritiqueRounds",
   "report.critiqueModel",
   "report.saveNote",
+  // P5-T02 (2026-11-02): §7.2 lists none of the three Phase 5 rows.
+  "related.linkToSeed",
+  "related.enabled",
+  "recommend.enabled",
   "openrouter.lastValidatedAt",
   "openai.lastValidatedAt",
   "gemini.lastValidatedAt",
@@ -517,7 +525,7 @@ function parseDefaultCell(cell: string): unknown {
 }
 
 describe("PREFS transcribes docs/07 §8.5", () => {
-  it("declares exactly the sixty-nine §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty, the owner's gemini.paidTier and P4-T02's five — and no others", () => {
+  it("declares exactly the seventy-two §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty, the owner's gemini.paidTier, P4-T02's five and P5-T02's three — and no others", () => {
     // The card's Do NOT: "do not add a preference that docs/07 §8.5 does not
     // declare". An extra entry fails here, not in review. Phase 1 pinned this
     // at twelve; `P2-T05` grew it by the one row `docs/07` §8.5 and §11.1
@@ -527,8 +535,9 @@ describe("PREFS transcribes docs/07 §8.5", () => {
     // the five "Report & audio" rows Phase 4 reads (2026-10-26).
     // The owner added the hidden `report.enabled` (2026-10-29, item 307(d));
     // `P4-T20` removed it (2026-11-02), as that decision said it would.
-    expect(SECTION_8_5).toHaveLength(69);
-    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(69);
+    // `P5-T02` added the three rows Phase 5 reads (2026-11-02).
+    expect(SECTION_8_5).toHaveLength(72);
+    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(72);
     expect([...PREF_NAMES].sort()).toEqual(
       SECTION_8_5.map((row) => row.name).sort(),
     );
@@ -967,6 +976,61 @@ describe("getPref coerces and falls back", () => {
     expect(Object.values(PREF_KEYS)).not.toContain("report.enabled");
   });
 
+  // P5-T02 (2026-11-02): the three rows Phase 5 reads.
+
+  it("reads the three Phase 5 rows back as their §8.5 defaults on a clean profile: linking on, both features hidden (P5-T02)", () => {
+    setPrefStore(createMemoryPrefStore({}));
+    expect(getPref("relatedLinkToSeed")).toBe(true);
+    expect(getPref("relatedEnabled")).toBe(false);
+    expect(getPref("recommendEnabled")).toBe(false);
+  });
+
+  it("reads each Phase 5 row under its own key, stringified or not, and nothing but a boolean (P5-T02)", () => {
+    setPrefStore(
+      createMemoryPrefStore({
+        "related.linkToSeed": false,
+        "related.enabled": "true",
+      }),
+    );
+    expect(getPref("relatedLinkToSeed")).toBe(false);
+    expect(getPref("relatedEnabled")).toBe(true);
+    // One feature switched on does not switch on the other.
+    expect(getPref("recommendEnabled")).toBe(false);
+    setPrefStore(createMemoryPrefStore({ "recommend.enabled": true }));
+    expect(getPref("recommendEnabled")).toBe(true);
+    expect(getPref("relatedEnabled")).toBe(false);
+    setPrefStore(
+      createMemoryPrefStore({
+        "related.linkToSeed": "no",
+        "related.enabled": 1,
+        "recommend.enabled": "yes",
+      }),
+    );
+    expect(getPref("relatedLinkToSeed")).toBe(true);
+    expect(getPref("relatedEnabled")).toBe(false);
+    expect(getPref("recommendEnabled")).toBe(false);
+  });
+
+  it("adds no exploration, peer-reviewed or embedding-provider row: per-run controls or not built (P5-T02)", () => {
+    const forbidden = /exploration|exploratory|peer.?review|embedding/i;
+    for (const name of PREF_NAMES) {
+      const def: PrefDef<unknown> = PREFS[name];
+      expect(forbidden.test(def.key), def.key).toBe(false);
+      expect(forbidden.test(name), name).toBe(false);
+    }
+  });
+
+  it("binds no Phase 5 row in the preferences pane: two are hidden, and the third is the related window's checkbox (P5-T02)", () => {
+    const pane = readRepoFile("addon/content/preferences.xhtml");
+    for (const key of [
+      "related.linkToSeed",
+      "related.enabled",
+      "recommend.enabled",
+    ]) {
+      expect(pane.includes(key), key).toBe(false);
+    }
+  });
+
   it("never throws: no store installed", () => {
     // §8.5.1: "a corrupt pref must not be able to stop a job from starting."
     // This is also what lets a source-adapter unit test read a setting with no
@@ -1153,6 +1217,23 @@ describe("D5: no credential can reach a preference", () => {
     }
   });
 
+  it("gives Phase 5's three rows no secret flag, no key-ish name and only a boolean value (P5-T02)", () => {
+    // A boolean cannot carry a credential, which is the strongest form of the
+    // D5 block's rule; KEYISH_FIELD is applied as `P4-T02`'s test applies it.
+    const phase5 = [
+      "relatedLinkToSeed",
+      "relatedEnabled",
+      "recommendEnabled",
+    ] as const;
+    for (const name of phase5) {
+      const def: PrefDef<unknown> = PREFS[name];
+      expect(def.secret, `${def.key} must not be secret`).toBeUndefined();
+      expect(KEYISH_FIELD.test(def.key), `${def.key} is key-ish`).toBe(false);
+      expect(KEYISH_FIELD.test(name), `${name} is key-ish`).toBe(false);
+      expect(def.type, def.key).toBe("boolean");
+    }
+  });
+
   it("ships no default that the logger's redaction would treat as a credential", () => {
     // `redact` applies `docs/09` §2.1's KEY_PATTERNS; a default it changes is
     // a credential shipped in source.
@@ -1310,8 +1391,8 @@ describe("addon/prefs.js agrees with PREFS", () => {
     // 26 since 2026-10-22: `gemini.paidTier` (plan/00 §6 item 269(b)); 30
     // since 2026-10-26: P4-T02's four `report.*` rows; 31 on 2026-10-29: the
     // hidden `report.enabled` (item 307(d)); 30 again since 2026-11-02, when
-    // `P4-T20` removed it.
-    expect(NO_PREF_LINE).toHaveLength(30);
+    // `P4-T20` removed it; 33 the same day: P5-T02's three.
+    expect(NO_PREF_LINE).toHaveLength(33);
     for (const key of NO_PREF_LINE) expect(keys.has(key), key).toBe(true);
   });
 

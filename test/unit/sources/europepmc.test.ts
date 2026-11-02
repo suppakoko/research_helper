@@ -718,22 +718,23 @@ describe("EUROPEPMC_CAPABILITIES", () => {
       keywordSearch: true,
       abstractsInSearch: true,
       dateFilter: true,
-      // `P2-T34` (owner review row 131): "this adapter exposes `findRelated`".
-      citationGraph: false,
+      // `P2-T34` (owner review row 131): "this adapter exposes `findRelated`",
+      // which it has since `P5-T07` (`europepmcCitations.test.ts`).
+      citationGraph: true,
       benefitsFromApiKey: false,
       maxPageSize: 1000,
       maxTotalResults: undefined,
-      relatedByWork: false,
+      relatedByWork: true,
       // `P2-T12`: `lookup` is the batched DOI query of docs/02 §10.4 step 1.
       lookupById: ["doi"],
     });
     expect(EUROPEPMC_PAGE_SIZE_MAX).toBe(1000);
   });
 
-  it("P2-T34: citationGraph is false because this adapter exposes no findRelated (docs/07 §4.2)", () => {
+  it("P5-T07: citationGraph is true because this adapter exposes findRelated (docs/07 §4.2)", () => {
     const source = createSource(createStubHttp(() => response("", "")).client);
-    expect(source.findRelated).toBeUndefined();
-    expect(source.capabilities.citationGraph).toBe(false);
+    expect(typeof source.findRelated).toBe("function");
+    expect(source.capabilities.citationGraph).toBe(true);
     // The definition, applied: the flag is true exactly when the method exists.
     expect(source.capabilities.citationGraph).toBe(
       typeof source.findRelated === "function",
@@ -1474,10 +1475,11 @@ describe("createEuropePmcSource — identity and requests", () => {
       explainEuropePmcQuery(QUERY_TYPICAL),
     );
     // Not declared, so nothing promises a method nobody implements.
-    expect(source.findRelated).toBeUndefined();
     expect(source.fetchAbstract).toBeUndefined();
     // `P2-T12`: declared and implemented — docs/02 §10.4's backfill step 1.
     expect(typeof source.lookup).toBe("function");
+    // `P5-T07`: declared and implemented — docs/02 §4.7.
+    expect(typeof source.findRelated).toBe("function");
   });
 
   it("issues GET /search with resultType=core, a clamped pageSize and cursorMark=*", async () => {

@@ -66,6 +66,19 @@
  *   Scholar by DOI (§5.4's architectural consequence).
  * - **`rateLimitKey` is {@link CROSSREF_HOST}**, imported, so §7.3's
  *   one-bucket-per-host rule is mechanical.
+ * - **Related papers mean the deposited references, and only those** (`P5-T09`;
+ *   `docs/07` §4.2 as built by that card). `findRelated` reads `/works/{doi}`'s
+ *   `reference[]`, through `./references.ts`. Crossref cannot list citing papers:
+ *   `is-referenced-by-count` is an integer (`docs/05` §2.1), so `"citations"` and
+ *   every other strategy is an empty page with a warning and no request. A seed
+ *   with no DOI is the same. Its caller is `src/pipeline/related/generators.ts`
+ *   (`P5-T12`).
+ * - **`matchTitle` is a method of {@link CrossrefSource} only**, off
+ *   `LiteratureSource` (`docs/07` §4.2). It returns one title search's candidates
+ *   and applies no threshold; its caller, `resolveSeed` in
+ *   `src/pipeline/related/seed.ts` (`P5-T11`), does. The composition root's
+ *   `createCrossrefSource` call in `src/bootstrap/container.ts` already builds the
+ *   instance; `P5-T14` hands it to the pipeline.
  *
  * ## Errors
  *
@@ -93,21 +106,27 @@ import {
   OperationCancelledError,
   ParseError,
   ResearchHelperError,
-  SourceError,
 } from "../../core/errors";
-import type { HttpClient, HttpResponse } from "../../core/http/client";
+import type {
+  HttpClient,
+  HttpMethod,
+  HttpResponse,
+} from "../../core/http/client";
 import type { Logger } from "../../core/logger";
 import {
   adoptHeaderDrivenLimits,
   CROSSREF_HOST,
   type AdvertisedLimitTarget,
 } from "../../core/rateLimit/hostLimiter";
+import { normalizeDoi } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
 import { normalizeForSource } from "../shared/queryParse";
 import type {
   LiteratureSource,
   QueryField,
   QueryNode,
+  RelatedPage,
+  RelatedQuery,
   SourceCallContext,
   SourceCapabilities,
   SourceHealth,
@@ -124,8 +143,14 @@ import {
   CROSSREF_ROWS_MIN,
   explainCrossrefQuery,
   type CrossrefExcludedTerm,
-  type CrossrefWorksRequest,
 } from "./query";
+import {
+  buildCrossrefTitleSearchRequest,
+  buildCrossrefWorkRequest,
+  CROSSREF_TITLE_SEARCH_ROWS_MAX,
+  parseCrossrefEnvelope,
+  parseCrossrefReferences,
+} from "./references";
 
 export { CROSSREF_SOURCE_ID } from "./mapper";
 
@@ -175,10 +200,11 @@ export const CROSSREF_CAPABILITIES: SourceCapabilities = {
     phrase: false,
     fields: CROSSREF_RENDERED_FIELDS,
   },
-  relatedByWork: false,
+  // `findRelated` exists since `P5-T09` (`plan/00` §6 item 184's rule).
+  relatedByWork: true,
   lookupById: [],
   abstractsInSearch: true,
-  citationGraph: false,
+  citationGraph: true,
   dateFilter: true,
   // The renderer's own object (`P2-T34`): `./query.ts` refuses from it.
   filters: CROSSREF_FILTERS,
@@ -212,12 +238,30 @@ export interface CrossrefSearchPage extends SourcePage {
   readonly sourceExtras: CrossrefSourceExtras;
 }
 
-/** The adapter, with `search`'s return narrowed to {@link CrossrefSearchPage}. */
+/**
+ * The adapter, with `search`'s return narrowed to {@link CrossrefSearchPage},
+ * `findRelated` always present, and the one adapter-specific call `docs/07` §4.2
+ * declares for it.
+ */
 export interface CrossrefSource extends LiteratureSource {
   search(
     query: SourceQuery,
     ctx: SourceCallContext,
   ): Promise<CrossrefSearchPage>;
+  findRelated(
+    query: RelatedQuery,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage>;
+  /**
+   * One `query.bibliographic` search for a title: the mapped candidates, at most
+   * {@link CROSSREF_TITLE_SEARCH_ROWS_MAX}, in Crossref's order, unthresholded.
+   *
+   * @throws RangeError for a blank title or a DOI, before any request
+   */
+  matchTitle(
+    title: string,
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]>;
 }
 
 /** A validated `/works` body. */
@@ -244,43 +288,7 @@ export function parseCrossrefWorksBody(
   body: string,
   transmittedUrl: string,
 ): CrossrefWorksResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(body) as unknown;
-  } catch (cause) {
-    throw new ParseError(
-      CROSSREF_SOURCE_ID,
-      `[research-helper] Crossref returned a body that is not JSON.`,
-      { url: transmittedUrl, bodyLength: body.length },
-      { cause },
-    );
-  }
-  const envelope = asRecord(parsed);
-  if (envelope === undefined) {
-    throw new ParseError(
-      CROSSREF_SOURCE_ID,
-      `[research-helper] Crossref returned JSON that is not an object.`,
-      { url: transmittedUrl, bodyLength: body.length },
-    );
-  }
-
-  if (envelope.status !== "ok") {
-    const upstream = envelope.message;
-    const text =
-      typeof upstream === "string" ? upstream : JSON.stringify(upstream);
-    throw new SourceError(
-      CROSSREF_SOURCE_ID,
-      `[research-helper] Crossref answered status ${JSON.stringify(envelope.status)} ` +
-        `(${String(envelope["message-type"])}): ${text}`,
-      {
-        url: transmittedUrl,
-        status: envelope.status,
-        messageType: envelope["message-type"],
-        upstreamError: text,
-      },
-    );
-  }
-
+  const envelope = parseCrossrefEnvelope(body, transmittedUrl);
   const message = asRecord(envelope.message);
   const items = message?.items;
   if (!Array.isArray(items)) {
@@ -512,7 +520,61 @@ export function clampRows(limit: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// 5. The adapter
+// 5. Related papers — what `findRelated` says when it has nothing to return
+// ---------------------------------------------------------------------------
+
+/** The strategies a deposited reference list can answer. */
+const REFERENCE_STRATEGIES: ReadonlySet<RelatedQuery["strategy"]> = new Set([
+  undefined,
+  "references",
+  "auto",
+]);
+
+function unsupportedStrategyWarning(strategy: string | undefined): string {
+  return (
+    `Crossref can list only the references a publisher deposited, not ` +
+    `${String(strategy)}, so nothing was requested from it.`
+  );
+}
+
+const NO_DOI_SEED_WARNING =
+  "Crossref finds a paper's references by its DOI and this seed has none, so " +
+  "nothing was requested from it.";
+
+function noReferencesWarning(doi: string): string {
+  return (
+    `Crossref holds no reference list for ${doi}. Publishers deposit these by ` +
+    `choice, so this does not mean the paper cites nothing.`
+  );
+}
+
+function referencesWithoutDoiWarning(
+  withoutDoi: number,
+  deposited: number,
+): string {
+  return (
+    `Crossref: ${String(withoutDoi)} of ${String(deposited)} deposited ` +
+    `references have no DOI and were left out.`
+  );
+}
+
+const FROM_DATE_NOT_APPLIED_WARNING =
+  "Crossref's reference list carries no publication dates, so the date limit " +
+  "was not applied to it.";
+
+/** A page with nothing on it: one document, so no total and no next page. */
+function emptyRelatedPage(warnings: readonly string[]): RelatedPage {
+  return {
+    records: [],
+    edges: [],
+    totalAvailable: undefined,
+    nextCursor: undefined,
+    warnings,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 6. The adapter
 // ---------------------------------------------------------------------------
 
 /** What {@link createCrossrefSource} needs from the composition root. */
@@ -561,11 +623,15 @@ const HEALTH_PROBE_QUERY: SourceQuery = {
 export function createCrossrefSource(deps: CrossrefSourceDeps): CrossrefSource {
   const { http, clock, mapRecords } = deps;
 
-  /** One request, with the header-driven reconfiguration and the envelope check. */
-  async function fetchPage(
-    request: CrossrefWorksRequest,
+  /** One request, with the header-driven reconfiguration. */
+  async function send(
+    request: {
+      readonly method: HttpMethod;
+      readonly url: string;
+      readonly transmittedUrl: string;
+    },
     ctx: SourceCallContext,
-  ): Promise<{ result: CrossrefWorksResult; response: HttpResponse }> {
+  ): Promise<HttpResponse> {
     ctx.token.throwIfCancelled();
     // `responseType: "text"` is not optional: `HttpResponse.body` is `""` for
     // every other value.
@@ -596,10 +662,79 @@ export function createCrossrefSource(deps: CrossrefSourceDeps): CrossrefSource {
       status: response.status,
       apiPool: response.header("x-api-pool"),
     });
+    return response;
+  }
+
+  /** {@link send}, and the `/works` envelope check. */
+  async function fetchPage(
+    request: Parameters<typeof send>[0],
+    ctx: SourceCallContext,
+  ): Promise<{ result: CrossrefWorksResult; response: HttpResponse }> {
+    const response = await send(request, ctx);
     return {
       result: parseCrossrefWorksBody(response.body, request.transmittedUrl),
       response,
     };
+  }
+
+  /**
+   * The seed's deposited references, cut to `query.limit`. `totalAvailable` is
+   * how many the list could give at any limit; one document, so no next page.
+   * A transport failure propagates, as on `search`; `P5-T10`'s negative cache
+   * reads a 404 from it.
+   */
+  async function findRelated(
+    query: RelatedQuery,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage> {
+    if (!REFERENCE_STRATEGIES.has(query.strategy)) {
+      return emptyRelatedPage([unsupportedStrategyWarning(query.strategy)]);
+    }
+    const doi = normalizeDoi(query.ids?.doi ?? query.work?.ids.doi);
+    if (doi === null) return emptyRelatedPage([NO_DOI_SEED_WARNING]);
+
+    const request = buildCrossrefWorkRequest(doi, deps.userContactEmail?.());
+    const response = await send(request, ctx);
+    const list = parseCrossrefReferences(
+      response.body,
+      request.transmittedUrl,
+      clock.now(),
+    );
+
+    const warnings: string[] = [];
+    if (list.deposited === 0) warnings.push(noReferencesWarning(doi));
+    if (list.withoutDoi > 0) {
+      warnings.push(
+        referencesWithoutDoiWarning(list.withoutDoi, list.deposited),
+      );
+    }
+    if (query.fromDate !== undefined) {
+      warnings.push(FROM_DATE_NOT_APPLIED_WARNING);
+    }
+    const limit = Number.isFinite(query.limit)
+      ? Math.max(0, Math.trunc(query.limit))
+      : 0;
+    return {
+      records: list.records.slice(0, limit),
+      edges: list.edges.slice(0, limit),
+      totalAvailable: list.records.length,
+      nextCursor: undefined,
+      warnings,
+    };
+  }
+
+  /** {@link CrossrefSource.matchTitle}. */
+  async function matchTitle(
+    title: string,
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]> {
+    const request = buildCrossrefTitleSearchRequest({
+      title,
+      rows: CROSSREF_TITLE_SEARCH_ROWS_MAX,
+      userContactEmail: deps.userContactEmail?.(),
+    });
+    const { result } = await fetchPage(request, ctx);
+    return mapRecords(result.items);
   }
 
   /** One page. */
@@ -734,6 +869,8 @@ export function createCrossrefSource(deps: CrossrefSourceDeps): CrossrefSource {
     healthCheck,
     search,
     searchAll,
+    findRelated,
+    matchTitle,
     explainQuery: (query) => explainCrossrefQuery(query),
   };
 }
