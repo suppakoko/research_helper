@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"recommendedPapers\":[{\"paperId\":\"80d9424076edc70cb172f635db2fa7e23a42874a\",\"externalIds\":{\"DOI\":\"10.64898/2026.07.26.740813\",\"CorpusId\":290649021},\"title\":\"Interpretable gene networks from single-cell foundation models reveal conserved neurogenic dysfunction in Parkinson's disease\",\"venue\":\"bioRxiv\",\"year\":2026,\"citationCount\":0},{\"paperId\":\"e587694302b07b394e20e75be488cc4598ac4d41\",\"externalIds\":{\"DOI\":\"10.64898/2026.07.29.741565\",\"CorpusId\":290857895},\"title\":\"Multi-scale modeling of human tissues from spatial transcriptomics with TERRA\",\"venue\":\"bioRxiv\",\"year\":2026,\"citationCount\":2},{\"paperId\":\"d355eed61373d43a44aa34a6249acf4e8c05406b\",\"externalIds\":{\"DOI\":\"10.64898/2026.08.31.747784\",\"CorpusId\":291770057},\"title\":\"scRep: A Latent-Space Self-Distilled Foundation Model for Single-Cell Representation Learning\",\"year\":2026,\"citationCount\":0}]}"
+}

@@ -18,4 +18,13 @@ export interface Usage {
   readonly totalTokens: number | undefined;
   /** Provider-reported cost where available (OpenRouter reports this). */
   readonly costUsd: number | undefined;
+  /**
+   * The reasoning figure, where the provider reports one; absent, never 0,
+   * where it does not. Filled by each adapter's usage reader in `src/llm/*`;
+   * read by `createRunCallRecorder`
+   * (`src/pipeline/trendReport/runMeasurement.ts`). Whether it sits inside
+   * `outputTokens` is the provider's (`docs/07` §5.2's note of 2026-11-02).
+   * Added 2026-11-02 (`P4-T23`).
+   */
+  readonly reasoningTokens?: number;
 }

@@ -19,6 +19,12 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import {
+  formatMeasurement,
+  groupRuns,
+  measurementOf,
+  parseStoredReport,
+} from "../../../scripts/eval-trend-report";
 import { runMigrations } from "../../../src/bootstrap/migrations";
 import { sha256Hex } from "../../../src/core/cache/keys";
 import {
@@ -43,12 +49,14 @@ import {
 } from "../../../src/core/jobQueue/queue";
 import { createLogger, NULL_LOG_SINK } from "../../../src/core/logger";
 import type { ModelPrices } from "../../../src/llm/shared/pricing";
+import { estTokens } from "../../../src/llm/shared/tokenEstimate";
 import type { ChatRequest } from "../../../src/llm/types";
 import {
   PAPER_SUMMARY_SCHEMA_VERSION,
   type AcquiredSource,
   type PaperSummary,
 } from "../../../src/model/summary";
+import type { TrendReport } from "../../../src/model/trend";
 import {
   createBudgetGuard,
   createSessionSpendCounter,
@@ -765,6 +773,7 @@ async function harness(options: HarnessOptions = {}) {
       runOptions: {
         readonly source?: CancellationTokenSource;
         readonly surface?: Partial<TrendReportSurface>;
+        readonly resumeState?: unknown;
       } = {},
     ): Promise<TrendReportOutput & { readonly jobId: string }> {
       const input: TrendReportInput = { ...COLLECTION, language };
@@ -792,10 +801,18 @@ async function harness(options: HarnessOptions = {}) {
       const record = await jobs.enqueue("trendReport", input);
       const output = await pipeline.execute(
         prepared,
-        context(record.id, source),
+        { ...context(record.id, source), resumeState: runOptions.resumeState },
         surface,
       );
       return { ...output, jobId: record.id };
+    },
+    /** Every `report` row's `json` column, as the script reads it. */
+    storedJson(): string[] {
+      return (
+        connection.db.prepare("SELECT json FROM report").all() as {
+          json: string;
+        }[]
+      ).map((row) => row.json);
     },
     reportRows: () =>
       (
@@ -1422,5 +1439,283 @@ describe("P4-T21 — an invalid marker is replaced in the report's language", ()
     expect(english?.markdown).not.toContain("인용 삭제");
     expect(korean?.markdown).toContain("[인용 삭제: 잘못된 참조]");
     expect(korean?.markdown).not.toContain("[citation removed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// `P4-T23` step 4's data source, through whole runs (owner, `plan/00` §6 item
+// 335(k); `docs/07` §5.2's note of 2026-11-02)
+// ---------------------------------------------------------------------------
+
+describe("P4-T23 — each run's measurement", () => {
+  const MARKER = "MARKER-CONTENT-7f3a";
+
+  interface Given {
+    readonly input: number;
+    readonly output: number;
+    readonly total: number;
+    readonly reasoning: number | undefined;
+    readonly cost: number;
+    readonly level: Level;
+    readonly ceiling: number | undefined;
+  }
+
+  /**
+   * Answers as the harness's own, each with usage of its own, so a figure can
+   * be traced to its call. The reasoning figure is only on the strong tier's
+   * JSON calls, as a provider would differ from call to call.
+   */
+  function numbered(wrap: (text: string) => string = (text) => text): {
+    readonly override: Override;
+    readonly given: Given[];
+  } {
+    const given: Given[] = [];
+    const override: Override = (call, level) => {
+      const n = given.length + 1;
+      const reasoning = level === "L1" || level === "L2" ? n : undefined;
+      given.push({
+        input: 1_000 + n,
+        output: 100 + n,
+        total: 1_100 + 2 * n,
+        reasoning,
+        cost: n / 1_000,
+        level,
+        ceiling: call.request.maxOutputTokens,
+      });
+      const usage = {
+        inputTokens: 1_000 + n,
+        outputTokens: 100 + n,
+        totalTokens: 1_100 + 2 * n,
+        costUsd: n / 1_000,
+        ...(reasoning !== undefined && { reasoningTokens: reasoning }),
+      };
+      const answers: Record<Level, () => string> = {
+        L0: summaryAnswer,
+        L1: () => clusteringAnswer(call.request),
+        L2: () => analysisAnswer(call.request, 3),
+        L3: () => reportAnswer(call.request),
+        L4: () => JSON.stringify({ verdict: "pass", problems: [] }),
+      };
+      return chatResponse(wrap(answers[level]()), { usage });
+    };
+    return { override, given };
+  }
+
+  const LEVEL_PROMPTS: Readonly<Record<Level, readonly string[]>> = {
+    L0: ["PAPER_SUMMARY_ABSTRACT"],
+    L1: ["THEME_CLUSTER"],
+    L2: ["CLUSTER_REDUCE"],
+    L3: ["TREND_REPORT_EN", "TREND_REPORT_KO"],
+    L4: ["SELF_CRITIQUE"],
+  };
+
+  function measured(report: TrendReport | undefined) {
+    const measurement = report?.runMeasurement;
+    if (measurement === undefined) throw new Error("no measurement");
+    return measurement;
+  }
+
+  function sorted(values: readonly number[]): number[] {
+    return [...values].sort((a, b) => a - b);
+  }
+
+  it("a mock run's captured numbers match the mock's usage, call for call", async () => {
+    const { override, given } = numbered();
+    const h = await harness({ override });
+    const output = await h.run("en");
+    expect(output.outcome).toBe("succeeded");
+    const { calls } = measured(output.report);
+    expect(calls).toHaveLength(h.provider.calls.length);
+    expect(calls).toHaveLength(given.length);
+    // The pool answers in parallel, so each is found by its one input figure.
+    for (const one of given) {
+      const call = calls.find((c) => c.inputTokens === one.input);
+      expect(call?.outputTokens).toBe(one.output);
+      expect(call?.totalTokens).toBe(one.total);
+      expect(call?.reasoningTokens).toBe(one.reasoning);
+      expect(call?.costUsd).toBe(one.cost);
+      expect(call?.maxOutputTokens).toBe(one.ceiling);
+      expect(LEVEL_PROMPTS[one.level]).toContain(call?.promptId);
+    }
+    expect(sorted(calls.map((c) => c.inputTokens as number))).toEqual(
+      sorted(given.map((g) => g.input)),
+    );
+    const clustering = calls.filter((c) => c.promptId === "THEME_CLUSTER");
+    expect(clustering).toHaveLength(1);
+    expect(clustering[0]?.papers).toBe(30);
+    // Only THEME_CLUSTER's calls say how many papers they place.
+    expect(calls.filter((c) => c.papers !== undefined)).toHaveLength(1);
+    expect(calls.filter((c) => c.language === "en")).toHaveLength(2);
+    expect(calls.filter((c) => c.language === undefined)).toHaveLength(33);
+  });
+
+  it("each real analysis's size is the raw estimate of what the composition sent", async () => {
+    const { override } = numbered();
+    const h = await harness({ override });
+    const output = await h.run("en");
+    const sent = JSON.parse(
+      themeAnalysesOf(h.compositions()[0] as ChatRequest),
+    ) as { readonly narrative: string }[];
+    expect(measured(output.report).themeAnalyses).toStrictEqual(
+      sent.map((analysis) => ({
+        tokens: estTokens(JSON.stringify(analysis)),
+        narrativeTokens: estTokens(analysis.narrative),
+        papers: 15,
+      })),
+    );
+    expect(sent).toHaveLength(2);
+  });
+
+  it("a both run holds its measurement once, so no sum over its rows counts a shared stage twice", async () => {
+    const { override, given } = numbered();
+    const h = await harness({ override });
+    const output = await h.run("both");
+    const [english, korean] = (output.reports ?? []).map((r) => r.report);
+    const { calls, themeAnalyses } = measured(english);
+    expect(korean).not.toHaveProperty("runMeasurement");
+    expect(themeAnalyses).toHaveLength(2);
+
+    // Every call once: 30 summaries, 1 clustering, 2 themes, 2 × (report, critique).
+    expect(calls).toHaveLength(37);
+    expect(sorted(calls.map((c) => c.inputTokens as number))).toEqual(
+      sorted(given.map((g) => g.input)),
+    );
+    expect(calls.filter((c) => c.language === undefined)).toHaveLength(33);
+    expect(calls.filter((c) => c.language === "en")).toHaveLength(2);
+    expect(calls.filter((c) => c.language === "ko")).toHaveLength(2);
+    expect(
+      calls.filter((c) => c.language === "ko").map((c) => c.promptId),
+    ).toEqual(["TREND_REPORT_KO", "SELF_CRITIQUE"]);
+
+    // Shared plus a language's own is what that language's `usage` holds, and
+    // the run's total is less than the two added.
+    const inputOf = (language: string): number =>
+      calls
+        .filter((c) => c.language === undefined || c.language === language)
+        .reduce((sum, c) => sum + (c.inputTokens as number), 0);
+    expect(english?.usage?.inputTokens).toBe(inputOf("en"));
+    expect(korean?.usage?.inputTokens).toBe(inputOf("ko"));
+    const total = calls.reduce((sum, c) => sum + (c.inputTokens as number), 0);
+    expect(total).toBeLessThan(
+      (english?.usage?.inputTokens as number) +
+        (korean?.usage?.inputTokens as number),
+    );
+  });
+
+  it("a stored both run reads through the script: once, whichever row is read", async () => {
+    const { override, given } = numbered();
+    const h = await harness({ override });
+    await h.run("both");
+    const runs = groupRuns(h.storedJson().map(parseStoredReport));
+    expect(runs).toHaveLength(1);
+    const run = runs[0] as (typeof runs)[number];
+    expect(run.reports.map((r) => r.language)).toEqual(["en", "ko"]);
+    const shown = formatMeasurement(run);
+    const inputs = given.reduce((sum, g) => sum + g.input, 0);
+    expect(shown).toContain(`run total | calls 37 | input ${String(inputs)} |`);
+    expect(measurementOf(run)?.calls).toHaveLength(37);
+    expect(shown).not.toContain("합성");
+  });
+
+  it("no content reaches the stored field: a marker in every prompt and answer", async () => {
+    const { override } = numbered((text) =>
+      text.replace(/Synthetic|The intervention|Finding \d+/g, MARKER),
+    );
+    const h = await harness({ override });
+    const output = await h.run("both");
+    expect(output.outcome).toBe("succeeded");
+
+    // The marker did travel: in a later prompt, in the stored report and in
+    // the stored row, so its absence below is not for want of it.
+    expect(
+      h.provider.calls.some((call) =>
+        call.request.messages.some((m) => m.content.includes(MARKER)),
+      ),
+    ).toBe(true);
+    const rows = h.storedJson().map((json) => JSON.parse(json) as TrendReport);
+    expect(JSON.stringify(rows)).toContain(MARKER);
+
+    const stored = rows[0]?.runMeasurement;
+    const text = JSON.stringify(stored);
+    expect(text).not.toContain(MARKER);
+    expect(text).not.toContain("합성");
+    expect(text).not.toContain("KEY");
+    expect(text).not.toContain(output.jobId);
+    expect(Object.keys(stored ?? {}).sort()).toEqual([
+      "calls",
+      "themeAnalyses",
+    ]);
+    for (const call of stored?.calls ?? []) {
+      for (const [name, value] of Object.entries(call)) {
+        if (name === "promptId") expect(value).toMatch(/^[A-Z0-9_]+$/);
+        else if (name === "language") expect(["en", "ko"]).toContain(value);
+        else expect(typeof value).toBe("number");
+      }
+    }
+    for (const size of stored?.themeAnalyses ?? []) {
+      expect(Object.keys(size).sort()).toEqual([
+        "narrativeTokens",
+        "papers",
+        "tokens",
+      ]);
+    }
+    expect(output.reports?.[0]?.report.redaction?.partlyRedacted).toBe(false);
+  });
+
+  it("keeps the note's second write: the row still holds it after the note key is added", async () => {
+    const { override } = numbered();
+    const h = await harness({ override });
+    const output = await h.run("en");
+    expect(output.report?.zoteroNoteKey).toBe("NOTEKEY1");
+    const [row] = h.storedJson().map((json) => JSON.parse(json) as TrendReport);
+    expect(row?.zoteroNoteKey).toBe("NOTEKEY1");
+    expect(row?.runMeasurement?.calls).toHaveLength(35);
+  });
+
+  it("a Korean report that stopped leaves its paid calls on the English record", async () => {
+    const first = numbered();
+    const h = await harness({
+      override: (call, level) => {
+        const answer = first.override(call, level) as ReturnType<
+          typeof chatResponse
+        >;
+        return level === "L3" && languageOf(call.request) === "ko"
+          ? chatResponse("## 1. only one heading\n", { usage: answer.usage })
+          : answer;
+      },
+    });
+    const output = await h.run("both");
+    expect(output.reports).toHaveLength(1);
+    const { calls } = measured(output.report);
+    expect(calls).toHaveLength(first.given.length);
+    const korean = calls.filter((c) => c.language === "ko");
+    expect(korean.length).toBeGreaterThan(0);
+    expect(korean.every((c) => c.promptId === "TREND_REPORT_KO")).toBe(true);
+  });
+
+  it("a run whose every stage was cached has no calls, and still each analysis's size", async () => {
+    const h = await harness();
+    const first = await h.run("en");
+    const again = await h.run("en");
+    expect(again.outcome).toBe("succeeded");
+    const { calls, themeAnalyses } = measured(again.report);
+    expect(calls).toEqual([]);
+    expect(themeAnalyses).toStrictEqual(measured(first.report).themeAnalyses);
+    expect(themeAnalyses[0]?.tokens).toBeGreaterThan(0);
+  });
+
+  it("a job resumed after a restart says its calls are partial; a fresh one does not", async () => {
+    const h = await harness();
+    const resumed = await h.run("en", {
+      resumeState: {
+        version: 1,
+        stage: "Digesting",
+        choice: { fullTextMode: "never", costGateBlocksFullText: false },
+        spend: [],
+      },
+    });
+    expect(measured(resumed.report).resumed).toBe(true);
+    const fresh = await (await harness()).run("en");
+    expect(measured(fresh.report)).not.toHaveProperty("resumed");
   });
 });

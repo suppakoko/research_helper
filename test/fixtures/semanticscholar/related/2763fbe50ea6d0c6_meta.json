@@ -1,0 +1,13 @@
+{
+  "scenario": "match-title",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-02T00:00:00.000Z",
+  "endpoint": "https://api.semanticscholar.org/graph/v1/paper/search/match",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written, not recorded: stand-in until P5-T31 (plan/00 §6 item 335(a)), from docs/02 §6.7's paper; the data envelope is assumed, because docs/02 §6.2 records no response from this endpoint.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

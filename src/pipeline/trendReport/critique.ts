@@ -790,6 +790,7 @@ export async function critiqueReport(
       },
       routing,
       traceId: `${traceBase}:${input.draft.language}:critique-${String(round)}:${label}`,
+      accounting: { promptId: prompt.id },
     };
     const release = await deps.pool.acquire(deps.token);
     try {

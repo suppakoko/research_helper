@@ -20,22 +20,27 @@
  * compared with another. It calls no model and opens no network connection.
  * It reads no `usage`: a `both` run's two records each hold the shared stages
  * plus their own, so adding them would count the shared stages twice
- * (`plan/reports/P4-T21.md`).
+ * (`plan/reports/P4-T21.md`). `measure` reads `runMeasurement`, which a run
+ * holds once (`docs/07` §5.2's note of 2026-11-02).
  *
- * **What it prints.** Scores and identifiers: no theme name, definition,
- * collection name or report text reaches the terminal. Those are model text or
- * the owner's, and `sheet` writes them only to a file outside the repository.
+ * **What it prints.** Scores, measurements and identifiers: no theme name,
+ * definition, collection name or report text reaches the terminal. Those are
+ * model text or the owner's, and `sheet` writes them only to a file outside the
+ * repository.
  *
  * ## Running it
  *
  * ```sh
  * npx tsx scripts/eval-trend-report.ts sheet --set <expected-themes.json> --database <research-helper.sqlite> --out <file outside the repository> [--report <report id>]
  * npx tsx scripts/eval-trend-report.ts score --set <expected-themes.json> --database <research-helper.sqlite> --matches <export.json> --report <run id>
+ * npx tsx scripts/eval-trend-report.ts measure --database <research-helper.sqlite> [--report <report id>]
  * ```
  *
  * `sheet` writes what the review page shows the owner, for the set's latest
- * run or the run holding `--report`. `score` prints the scores. Exit codes: 0
- * done, 1 refused (with the reason, in identifiers only), 2 wrong arguments.
+ * run or the run holding `--report`. `score` prints the scores. `measure` prints
+ * `P4-T23` step 4's numbers for the latest run or the run holding `--report`,
+ * and needs no expected themes. Exit codes: 0 done, 1 refused (with the reason,
+ * in identifiers only), 2 wrong arguments.
  */
 
 import { readFile, writeFile } from "node:fs/promises";
@@ -45,8 +50,11 @@ import { fileURLToPath } from "node:url";
 
 import type {
   ClusteredTheme,
+  ReportCallUsage,
   ReportLanguage,
   ReportQualityProxies,
+  ReportRunMeasurement,
+  ThemeAnalysisSize,
   TrendReport,
 } from "../src/model/trend";
 import { readDecisionExport } from "./build-imrad-fixtures";
@@ -272,7 +280,77 @@ export type StoredReport = Pick<
   | "excluded"
   | "retracted"
   | "qualityProxies"
+  | "runMeasurement"
 >;
+
+const CALL_NUMBERS: readonly string[] = [
+  "inputTokens",
+  "outputTokens",
+  "totalTokens",
+  "reasoningTokens",
+  "costUsd",
+  "maxOutputTokens",
+  "papers",
+];
+const SIZE_NUMBERS: readonly string[] = ["tokens", "narrativeTokens", "papers"];
+const PROMPT_ID_RE = /^[A-Z][A-Z0-9_]*$/;
+
+function isCount(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isCallUsage(value: unknown): value is ReportCallUsage {
+  return (
+    isRecord(value) &&
+    typeof value.promptId === "string" &&
+    PROMPT_ID_RE.test(value.promptId) &&
+    (value.language === undefined ||
+      value.language === "en" ||
+      value.language === "ko") &&
+    Object.entries(value).every(
+      ([name, member]) =>
+        name === "promptId" ||
+        name === "language" ||
+        (CALL_NUMBERS.includes(name) && isCount(member)),
+    )
+  );
+}
+
+function isAnalysisSize(value: unknown): value is ThemeAnalysisSize {
+  return (
+    isRecord(value) &&
+    SIZE_NUMBERS.every((name) => isCount(value[name])) &&
+    Object.keys(value).every((name) => SIZE_NUMBERS.includes(name))
+  );
+}
+
+/**
+ * Check a record's `runMeasurement`. Strict on purpose, so that anything but
+ * numbers and a prompt's id stops here rather than reaching the terminal; the
+ * refusal names nothing it found.
+ *
+ * @param value - the member as stored
+ * @returns the measurement
+ * @throws EvalRefusal when it holds anything else
+ */
+function parseMeasurement(value: unknown): ReportRunMeasurement {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.calls) ||
+    !value.calls.every(isCallUsage) ||
+    !Array.isArray(value.themeAnalyses) ||
+    !value.themeAnalyses.every(isAnalysisSize) ||
+    (value.resumed !== undefined && typeof value.resumed !== "boolean") ||
+    !Object.keys(value).every((name) =>
+      ["calls", "themeAnalyses", "resumed"].includes(name),
+    )
+  ) {
+    throw new EvalRefusal(
+      "a report row's run measurement holds something other than its numbers",
+    );
+  }
+  return value as unknown as ReportRunMeasurement;
+}
 
 function isProxies(value: unknown): value is ReportQualityProxies {
   if (!isRecord(value)) return false;
@@ -353,6 +431,10 @@ export function parseStoredReport(json: unknown): StoredReport {
     excluded: value.excluded as TrendReport["excluded"],
     retracted: value.retracted as TrendReport["retracted"],
     qualityProxies: value.qualityProxies,
+    // Absent on a record from before 2026-11-02, and on a `both` run's second.
+    ...(value.runMeasurement !== undefined && {
+      runMeasurement: parseMeasurement(value.runMeasurement),
+    }),
   };
 }
 
@@ -685,6 +767,196 @@ export function formatScore(score: RunScore): string {
 }
 
 // ---------------------------------------------------------------------------
+// 5a. What the run measured (`P4-T23` step 4)
+// ---------------------------------------------------------------------------
+
+/**
+ * The tokens per paper `THEME_CLUSTER`'s grown ceiling assumes: its `max_tokens`
+ * per item (`P4-T06`). A test holds it against the prompt file.
+ */
+export const THEME_CLUSTER_ASSUMED_PER_PAPER = 40;
+
+const NOT_REPORTED = "not reported";
+
+/**
+ * A run's one measurement. A run holds it once, on its first report, so nothing
+ * here adds two rows; two measurements on one run are refused, because adding
+ * them is what `docs/07` §5.2's note of 2026-11-02 exists to prevent.
+ *
+ * @param run - from {@link groupRuns}
+ * @returns the measurement, or `undefined` when its records predate it
+ * @throws EvalRefusal when two of its rows hold one
+ */
+export function measurementOf(run: EvalRun): ReportRunMeasurement | undefined {
+  const held = run.reports.flatMap((report) =>
+    report.runMeasurement === undefined ? [] : [report.runMeasurement],
+  );
+  if (held.length > 1) {
+    throw new EvalRefusal(
+      `run ${run.runId}: two reports each hold a measurement, and they are not added`,
+    );
+  }
+  return held[0];
+}
+
+/** One answer's tokens without its reasoning, and how far that can be known. */
+export interface AnswerTokens {
+  readonly tokens: number;
+  /** `at-most`: no reasoning figure, so the whole output is the upper bound. */
+  readonly kind: "exact" | "at-most";
+}
+
+/**
+ * A call's answer tokens. Whether the reasoning figure sits inside the output is
+ * the provider's, so the call's own total decides, with no list of providers
+ * (`docs/07` §5.2's note of 2026-11-02, item 5).
+ *
+ * @param call - one call
+ * @returns the tokens, or `undefined` when they cannot be told apart
+ */
+export function answerTokensOf(
+  call: ReportCallUsage,
+): AnswerTokens | undefined {
+  const { inputTokens: input, outputTokens: output, totalTokens: total } = call;
+  const reasoning = call.reasoningTokens;
+  if (output === undefined) return undefined;
+  if (reasoning === undefined) return { tokens: output, kind: "at-most" };
+  if (reasoning === 0) return { tokens: output, kind: "exact" };
+  if (input === undefined || total === undefined) return undefined;
+  if (total === input + output) {
+    return { tokens: output - reasoning, kind: "exact" };
+  }
+  if (total === input + output + reasoning) {
+    return { tokens: output, kind: "exact" };
+  }
+  return undefined;
+}
+
+/**
+ * The sum of one member over some calls. Any call without it makes the sum "not
+ * reported", because a part of a total would read as the total.
+ */
+function sumOf(
+  calls: readonly ReportCallUsage[],
+  read: (call: ReportCallUsage) => number | undefined,
+): number | undefined {
+  let sum = 0;
+  for (const call of calls) {
+    const value = read(call);
+    if (value === undefined) return undefined;
+    sum += value;
+  }
+  return sum;
+}
+
+function reported(value: number | undefined): string {
+  return value === undefined ? NOT_REPORTED : String(value);
+}
+
+function reportedCost(value: number | undefined): string {
+  return value === undefined ? NOT_REPORTED : value.toFixed(6);
+}
+
+function callTotals(calls: readonly ReportCallUsage[]): string {
+  return (
+    `calls ${calls.length} | ` +
+    `input ${reported(sumOf(calls, (c) => c.inputTokens))} | ` +
+    `output ${reported(sumOf(calls, (c) => c.outputTokens))} | ` +
+    `reasoning ${reported(sumOf(calls, (c) => c.reasoningTokens))} | ` +
+    `cost ${reportedCost(sumOf(calls, (c) => c.costUsd))}`
+  );
+}
+
+function reasoningShare(call: ReportCallUsage): string {
+  return call.reasoningTokens === undefined ||
+    call.maxOutputTokens === undefined ||
+    call.maxOutputTokens === 0
+    ? NOT_REPORTED
+    : (call.reasoningTokens / call.maxOutputTokens).toFixed(3);
+}
+
+function answerLine(answer: AnswerTokens | undefined): string {
+  if (answer === undefined) return NOT_REPORTED;
+  return answer.kind === "exact"
+    ? String(answer.tokens)
+    : `at most ${answer.tokens}`;
+}
+
+function perPaperLine(calls: readonly ReportCallUsage[]): string {
+  const answers = calls.map(answerTokensOf);
+  const papers = sumOf(calls, (c) => c.papers);
+  if (papers === undefined || papers === 0 || answers.includes(undefined)) {
+    return `THEME_CLUSTER answer tokens per paper ${NOT_REPORTED}`;
+  }
+  const tokens = answers.reduce((sum, a) => sum + (a?.tokens ?? 0), 0);
+  const atMost = answers.some((answer) => answer?.kind === "at-most");
+  return (
+    `THEME_CLUSTER answer tokens per paper ${atMost ? "at most " : ""}` +
+    `${(tokens / papers).toFixed(2)} against ` +
+    `the ${THEME_CLUSTER_ASSUMED_PER_PAPER} its ceiling assumes`
+  );
+}
+
+/**
+ * The measurement as the terminal shows it: figures and identifiers, nothing
+ * else. Absent figures print as words, never as 0.
+ *
+ * @param run - from {@link groupRuns}
+ * @returns the lines, joined
+ * @throws EvalRefusal as {@link measurementOf} does
+ */
+export function formatMeasurement(run: EvalRun): string {
+  const head = `run ${run.runId} | reports ${run.reports
+    .map((report) => report.language)
+    .join(", ")}`;
+  const measured = measurementOf(run);
+  if (measured === undefined) return `${head} | ${NOT_MEASURED}`;
+  const { calls, themeAnalyses } = measured;
+  const promptIds = [...new Set(calls.map((call) => call.promptId))];
+  const clusterCalls = calls.filter((c) => c.promptId === "THEME_CLUSTER");
+  const largest = Math.max(0, ...themeAnalyses.map((t) => t.tokens));
+  const allTokens = themeAnalyses.reduce((sum, t) => sum + t.tokens, 0);
+  const allNarrative = themeAnalyses.reduce(
+    (sum, t) => sum + t.narrativeTokens,
+    0,
+  );
+  return [
+    head,
+    ...(measured.resumed === true
+      ? ["resumed after a restart: calls before it are not recorded"]
+      : []),
+    `run total | ${callTotals(calls)}`,
+    ...promptIds.map(
+      (id) =>
+        `${id} | ${callTotals(calls.filter((call) => call.promptId === id))}`,
+    ),
+    ...(clusterCalls.length > 0 ? [perPaperLine(clusterCalls)] : []),
+    ...calls.map(
+      (call, i) =>
+        `call ${i + 1} | ${call.promptId} | ${call.language ?? "shared"} | ` +
+        `input ${reported(call.inputTokens)} | ` +
+        `output ${reported(call.outputTokens)} | ` +
+        `total ${reported(call.totalTokens)} | ` +
+        `reasoning ${reported(call.reasoningTokens)} | ` +
+        `ceiling ${reported(call.maxOutputTokens)} | ` +
+        `reasoning share of ceiling ${reasoningShare(call)} | ` +
+        `answer ${answerLine(answerTokensOf(call))} | ` +
+        `cost ${reportedCost(call.costUsd)}` +
+        (call.papers === undefined ? "" : ` | papers ${call.papers}`),
+    ),
+    `theme analyses ${themeAnalyses.length} | largest ${largest} | ` +
+      `narrative share ${
+        allTokens === 0 ? NOT_REPORTED : (allNarrative / allTokens).toFixed(3)
+      }`,
+    ...themeAnalyses.map(
+      (theme, i) =>
+        `theme analysis ${i + 1} | tokens ${theme.tokens} | ` +
+        `narrative ${theme.narrativeTokens} | papers ${theme.papers}`,
+    ),
+  ].join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // 6. The sheet for the review page
 // ---------------------------------------------------------------------------
 
@@ -770,7 +1042,8 @@ export function isInside(path: string, root: string = REPO_ROOT): boolean {
 
 const USAGE =
   "Usage: eval-trend-report.ts sheet --set <expected-themes.json> --database <research-helper.sqlite> --out <file outside the repository> [--report <report id>]\n" +
-  "       eval-trend-report.ts score --set <expected-themes.json> --database <research-helper.sqlite> --matches <export.json> --report <run id>";
+  "       eval-trend-report.ts score --set <expected-themes.json> --database <research-helper.sqlite> --matches <export.json> --report <run id>\n" +
+  "       eval-trend-report.ts measure --database <research-helper.sqlite> [--report <report id>]";
 
 function argValue(args: readonly string[], name: string): string | undefined {
   const at = args.indexOf(name);
@@ -862,6 +1135,22 @@ export async function main(
         run.runId,
       );
       print(formatScore(scoreRun(set, run, answers)));
+      return 0;
+    }
+    if (command === "measure" && database !== undefined) {
+      const runs = groupRuns(readStoredReports(database));
+      const run =
+        report === undefined
+          ? runs[0]
+          : runs.find((r) => r.reports.some((x) => x.id === report));
+      if (run === undefined) {
+        throw new EvalRefusal(
+          report === undefined
+            ? "no report is stored"
+            : `no stored run holds report ${report}`,
+        );
+      }
+      print(formatMeasurement(run));
       return 0;
     }
   } catch (error) {

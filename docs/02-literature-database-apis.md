@@ -1298,6 +1298,18 @@ Confirmed against the live Swagger spec (`/graph/v1/swagger.json`, fetched 2026-
 | `/recommendations/v1/papers/` | POST | positive + negative example papers |
 | `/recommendations/v1/papers/forpaper/{paper_id}` | GET | single seed paper |
 
+> **As built 2026-11-02 (`plan/08` `P5-T05`, against stand-in fixtures: `plan/00` §6 item 335(a)).** **Not recorded, so
+> not known:** any response from `/paper/search/match`, and any from `/paper/{id}/references`. What the adapter assumes
+> until `P5-T31`:
+>
+> - **`/paper/search/match`, no match:** HTTP 404, read by status alone. A 200 with an empty `data` also reads as no match.
+> - **`/paper/search/match`, a match:** `{"data":[paper]}`; a bare paper object is read as well. More than one entry
+>   keeps the first, since the table above calls it the single best match. `matchTitle` on `createSemanticScholarSource`
+>   returns a list of zero or one record, and applies no threshold (`P5-T11` does).
+>
+> `findRelated`, `matchTitle` and `recommend` send **nothing** without a key: `07-architecture-and-data-model.md`
+> §4.2's note of this date. The keyword search path is unchanged.
+
 ### 6.3 Paper ID formats
 
 Every `{paper_id}` slot accepts:

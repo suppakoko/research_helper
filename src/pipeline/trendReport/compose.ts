@@ -1448,6 +1448,7 @@ export async function composeReport(
       responseFormat: { kind: "text" },
       ...(deps.routing !== undefined && { routing: deps.routing }),
       traceId: `${deps.traceId ?? "trend-report"}:${input.language}:generation-${String(generation)}`,
+      accounting: { promptId: prompt.id },
     };
     requests += 1;
     let text = "";

@@ -210,6 +210,11 @@ import {
 import { digestText, toDigest } from "./digest";
 import { renderReportNote } from "./noteHtml";
 import { reportLabel, fillLabel } from "./reportLabels";
+import {
+  createRunCallRecorder,
+  runMeasurementOf,
+  themeAnalysisSize,
+} from "./runMeasurement";
 import { bibliographyKeys, inertText, scaffoldReport } from "./scaffold";
 import {
   analyseThemes,
@@ -1542,6 +1547,10 @@ export function createTrendReportPipeline(
       ctx.token,
     );
     const unsubscribe: (() => void)[] = [];
+    // Every stage's router: each answered call's numbers, for the run's first
+    // record (plan/00 §6 item 335(k); docs/07 §5.2's note of 2026-11-02).
+    const recorder = createRunCallRecorder(ctx.llm);
+    const sharedLlm = recorder.llm();
     const guard = isRunBudgetGuard(ctx.budget) ? ctx.budget : undefined;
     const wallClockMs = deps.wallClockBudgetMs ?? WALL_CLOCK_BUDGET_DEFAULT_MS;
     let activeSince = ctx.clock.now();
@@ -1829,7 +1838,7 @@ export function createTrendReportPipeline(
                           }),
                         },
                 },
-                { ...itemDeps, token },
+                { ...itemDeps, llm: sharedLlm, token },
               );
             } catch (error) {
               const pending =
@@ -2051,7 +2060,7 @@ export function createTrendReportPipeline(
             mergeInputBudget: budgets.clusterMerge,
           },
           {
-            llm: ctx.llm,
+            llm: sharedLlm,
             budget: ctx.budget,
             token: ctx.token,
             prompt: clusterPrompt,
@@ -2147,7 +2156,7 @@ export function createTrendReportPipeline(
               mergeInputBudget: budgets.reduceMerge,
             },
             {
-              llm: ctx.llm,
+              llm: sharedLlm,
               budget: ctx.budget,
               token: ctx.token,
               pool: deps.pool,
@@ -2334,6 +2343,7 @@ export function createTrendReportPipeline(
       ): Promise<void> => {
         const { language, reportPrompt, composeInput, plan, rpKey } = one;
         const ownUsages: (Usage | undefined)[] = [];
+        const ownLlm = recorder.llm(language);
         // Only a two-report run names the language on a delta: a preview has
         // one report to follow otherwise.
         const forward = (delta: DraftDelta): void => {
@@ -2345,7 +2355,7 @@ export function createTrendReportPipeline(
         if (shipped === undefined) {
           const draft = await synthesisStage("Composing", async () => {
             const outcome = await composeReport(composeInput, {
-              llm: ctx.llm,
+              llm: ownLlm,
               budget: ctx.budget,
               token: ctx.token,
               pool: deps.pool,
@@ -2376,7 +2386,7 @@ export function createTrendReportPipeline(
                 inputBudget: budgets.critique,
               },
               {
-                llm: ctx.llm,
+                llm: ownLlm,
                 budget: ctx.budget,
                 token: ctx.token,
                 pool: deps.pool,
@@ -2537,6 +2547,18 @@ export function createTrendReportPipeline(
           providerId,
           prompts: one.prompts,
           usage: sumUsage(one.usages),
+          // The run's one measurement, on its first record: no sum over a
+          // `both` run's rows can count a shared stage twice. Every call of the
+          // run has been made by now.
+          ...(index === 0 && {
+            runMeasurement: runMeasurementOf(
+              recorder.calls(),
+              analysedThemes.map((t) =>
+                themeAnalysisSize(t.analysis, memberCount.get(t.themeId) ?? 0),
+              ),
+              isTrendReportCheckpoint(ctx.resumeState),
+            ),
+          }),
         };
       };
       const drafted: TrendReport[] = [];

@@ -39,10 +39,18 @@
  *   else**: not a URL (`transmittedUrl` is `redactUrl`'s and this module never
  *   logs a header), not a log line (the client logs `{method, host, path,
  *   status, ms, url}` and this file logs the redacted URL, the status and the
- *   boolean `keyed`), not a fixture (`scripts/record-fixtures.ts` records
- *   unauthenticated and its `HEADER_DENY_LIST` drops `x-api-key` on the
- *   response side). D5: no preference is written here or anywhere in
+ *   boolean `keyed`), not a fixture (`scripts/record-fixtures.ts`'s search
+ *   scenarios are unauthenticated, its relatedness scenarios are the owner's with
+ *   the key in the process environment, `docs/13` §3.2, and neither path writes
+ *   the header). *Corrected 2026-11-02 (`P5-T05`): this read "records
+ *   unauthenticated".* D5: no preference is written here or anywhere in
  *   `sources/`.
+ * - **Phase 5's calls send nothing without a key** (`P5-T05`, `P5-T06`; `plan/08`
+ *   §0.2 item 19; `docs/07` §4.2's note of 2026-11-02). {@link SemanticScholarSource.findRelated},
+ *   {@link SemanticScholarSource.matchTitle} and {@link SemanticScholarSource.recommend}
+ *   read the key first and, without one, return an empty answer and no request. That
+ *   is the opposite of the search path above, on purpose: the rule is Phase 5's
+ *   only, and no search calls these three.
  * - **The budget is the same with or without a key.** `docs/07` §7.3's
  *   `api.semanticscholar.org` row — 0.9/s in both modes, burst 1, max
  *   concurrent 1 — is enforced by the one bucket the HTTP client paces every
@@ -77,11 +85,9 @@
  *   error's own message key and leaves the enum to the pane.
  * - **Capabilities** are the card's step 7: `benefitsFromApiKey: true`,
  *   `lookupById` DOI / PMID / PMCID / arXiv, `abstractsInSearch: true`,
- *   `citationGraph: false` — `docs/07` §4.2 (`P2-T34`): the flag means "this
- *   adapter exposes `findRelated`", and it does not yet. §6.2's `citations` /
- *   `references` endpoints exist, but no card in the plan wires `findRelated`
- *   yet; the card that adds it flips the flag (owner, 2026-10-15, `plan/00` §6
- *   item 184). Then `maxPageSize: 100`, `dateFilter: true`, and `query` from `docs/02` §12.3's S2 bulk column: `+`, `|`, `-`
+ *   `relatedByWork` and `citationGraph` true since `P5-T05` (`docs/07` §4.2, `P2-T34`:
+ *   the flag means "this adapter exposes `findRelated`"; owner, 2026-10-15, `plan/00`
+ *   §6 item 184). Then `maxPageSize: 100`, `dateFilter: true`, and `query` from `docs/02` §12.3's S2 bulk column: `+`, `|`, `-`
  *   and quotes are real, every field cell is *n/a*.
  *
  * ## Errors
@@ -109,29 +115,43 @@
 
 import type { Clock } from "../../core/clock";
 import {
+  BadRequestError,
   OperationCancelledError,
   ParseError,
   RateLimitError,
   ResearchHelperError,
-  SourceError,
 } from "../../core/errors";
 import type { HttpClient, HttpResponse } from "../../core/http/client";
 import type { Logger } from "../../core/logger";
 import { SEMANTICSCHOLAR_HOST } from "../../core/rateLimit/hostLimiter";
 import type { SecretId, SecretStore } from "../../core/secretStore";
 import type { ExternalIds } from "../../model/ids";
+import type { RelationEdge } from "../../model/related";
 import type { SourceRecord } from "../../model/sourceRecord";
 import { normalizeForSource } from "../shared/queryParse";
 import type {
   LiteratureSource,
   QueryField,
   QueryNode,
+  RelatedPage,
+  RelatedQuery,
   SourceCallContext,
   SourceCapabilities,
   SourceHealth,
   SourcePage,
   SourceQuery,
 } from "../types";
+import {
+  buildCitationsRequest,
+  buildReferencesRequest,
+  buildTitleMatchRequest,
+  parseRelationBody,
+  parseSemanticScholarJson,
+  parseTitleMatchBody,
+  SEMANTICSCHOLAR_RELATION_EDGE_KIND,
+  SEMANTICSCHOLAR_RELATION_LIMIT_MAX,
+  type SemanticScholarRelation,
+} from "./graph";
 import {
   readTldr,
   SEMANTICSCHOLAR_SOURCE_ID,
@@ -155,6 +175,17 @@ import {
   type SemanticScholarExcludedTerm,
   type SemanticScholarRequest,
 } from "./query";
+import {
+  buildForPaperRequest,
+  buildRecommendRequest,
+  clampRecommendLimit,
+  identifierKeys,
+  isResponseTooLarge,
+  parseRecommendationsBody,
+  RECOMMEND_MAX_POSITIVES,
+  recommendFieldsFor,
+  SEMANTICSCHOLAR_SEED_CHECK_FIELDS,
+} from "./recommendations";
 
 export { SEMANTICSCHOLAR_SOURCE_ID } from "./mapper";
 
@@ -205,6 +236,76 @@ export const SEMANTICSCHOLAR_UNKEYED_NOTE =
   "HTTP 429. Add a free key under Preferences to improve results " +
   `(request one at ${SEMANTICSCHOLAR_KEY_REQUEST_URL}).`;
 
+/**
+ * What a Phase 5 call says when it sent nothing for want of a key (`plan/08` §0.2
+ * item 19). English, on the adapters' warning precedent above; the pipelines' "no
+ * key" row is `P5-T12`'s and `P5-T23`'s and reaches the user first.
+ */
+export const SEMANTICSCHOLAR_NO_KEY_WARNING =
+  "Semantic Scholar: no API key is configured, so nothing was requested from " +
+  "it for related papers or recommendations.";
+
+const NO_IDENTIFIER_SEED_WARNING =
+  "Semantic Scholar finds related papers by a DOI, PMID, PMCID, arXiv ID or " +
+  "corpus ID and this seed has none, so nothing was requested from it.";
+
+const NO_IDENTIFIER_POSITIVES_WARNING =
+  "Semantic Scholar recommends from example papers with a DOI, PMID, PMCID, " +
+  "arXiv ID or corpus ID and none was given, so nothing was requested from it.";
+
+function unsupportedStrategyWarning(strategy: string | undefined): string {
+  return (
+    `Semantic Scholar offers references, citations and recommendations, not ` +
+    `${String(strategy)}, so nothing was requested from it.`
+  );
+}
+
+function unusableRowsWarning(count: number, list: string): string {
+  return (
+    `Semantic Scholar: ${String(count)} row(s) of ${list} had no paper id and ` +
+    `were left out.`
+  );
+}
+
+function responseTooLargeWarning(limit: number, half: number): string {
+  return (
+    `Semantic Scholar refused ${String(limit)} recommendations as too large a ` +
+    `response, so ${String(half)} were asked for instead.`
+  );
+}
+
+function unusableSeedsWarning(count: number): string {
+  return (
+    `Semantic Scholar: ${String(count)} example paper(s) could not be resolved ` +
+    `and were left out of the recommendation request.`
+  );
+}
+
+function positivesCappedWarning(count: number): string {
+  return (
+    `Semantic Scholar: ${String(count)} example papers were usable and the ` +
+    `first ${String(RECOMMEND_MAX_POSITIVES)} were sent.`
+  );
+}
+
+/** A page with nothing on it: no list was read, so no total and no next page. */
+function emptyRelatedPage(warning?: string): RelatedPage {
+  return {
+    records: [],
+    edges: [],
+    totalAvailable: undefined,
+    nextCursor: undefined,
+    warnings: warning === undefined ? [] : [warning],
+  };
+}
+
+/**
+ * The batch's own answer when it can read none of the ids. Measured 2026-10-15
+ * for a lone `10.48550/arXiv.…` DOI (`test/support/semanticscholarRecordedRequests.ts`,
+ * `record-jats-abstract`).
+ */
+const NO_VALID_IDS_OPENING = "No valid paper ids";
+
 /** The first sentence of every Semantic Scholar lossiness notice. */
 export const SEMANTICSCHOLAR_APPROXIMATE_PREFIX =
   "Semantic Scholar results are approximate";
@@ -223,11 +324,11 @@ export const SEMANTICSCHOLAR_CAPABILITIES: SourceCapabilities = {
     phrase: true,
     fields: SEMANTICSCHOLAR_RENDERED_FIELDS,
   },
-  relatedByWork: false,
+  // `findRelated` exists since `P5-T05` (`plan/00` §6 item 184's rule).
+  relatedByWork: true,
   lookupById: ["doi", "pmid", "pmcid", "arxivId"],
   abstractsInSearch: true,
-  // No `findRelated` yet (`plan/00` §6 item 184); whichever card adds it sets this `true`.
-  citationGraph: false,
+  citationGraph: true,
   dateFilter: true,
   // The bulk renderer's own object (`P2-T34`): `./query.ts` refuses from it.
   filters: SEMANTICSCHOLAR_FILTERS,
@@ -294,46 +395,6 @@ function count(value: unknown): number | undefined {
     : undefined;
 }
 
-/** `JSON.parse`, or a {@link ParseError} naming the redacted URL. */
-function parseJson(body: string, transmittedUrl: string): unknown {
-  try {
-    return JSON.parse(body) as unknown;
-  } catch (cause) {
-    throw new ParseError(
-      SEMANTICSCHOLAR_SOURCE_ID,
-      `[research-helper] Semantic Scholar returned a body that is not JSON.`,
-      { url: transmittedUrl, bodyLength: body.length },
-      { cause },
-    );
-  }
-}
-
-/**
- * Semantic Scholar's two error envelopes inside an HTTP 200, if `parsed` is
- * one: `{"error": "…"}` (§6.10) or `{"message": "…", "code": "…"}` (§6.4's
- * 429 body, `code` a *string*). One decoder for both.
- */
-function throwIfErrorEnvelope(parsed: unknown, transmittedUrl: string): void {
-  const envelope = asRecord(parsed);
-  if (envelope === undefined) return;
-  const error =
-    typeof envelope.error === "string"
-      ? envelope.error
-      : typeof envelope.message === "string" && envelope.code !== undefined
-        ? envelope.message
-        : undefined;
-  if (error === undefined) return;
-  throw new SourceError(
-    SEMANTICSCHOLAR_SOURCE_ID,
-    `[research-helper] Semantic Scholar answered with an error: ${error}`,
-    {
-      url: transmittedUrl,
-      upstreamError: error,
-      ...(envelope.code !== undefined && { upstreamCode: envelope.code }),
-    },
-  );
-}
-
 /**
  * Validate one search body.
  *
@@ -346,9 +407,7 @@ export function parseSearchBody(
   body: string,
   transmittedUrl: string,
 ): SemanticScholarSearchResult {
-  const parsed = parseJson(body, transmittedUrl);
-  throwIfErrorEnvelope(parsed, transmittedUrl);
-  const envelope = asRecord(parsed);
+  const envelope = asRecord(parseSemanticScholarJson(body, transmittedUrl));
   const data = envelope?.data;
   if (envelope === undefined || !Array.isArray(data)) {
     throw new ParseError(
@@ -380,8 +439,7 @@ export function parseBatchBody(
   body: string,
   transmittedUrl: string,
 ): readonly unknown[] {
-  const parsed = parseJson(body, transmittedUrl);
-  throwIfErrorEnvelope(parsed, transmittedUrl);
+  const parsed = parseSemanticScholarJson(body, transmittedUrl);
   if (!Array.isArray(parsed)) {
     throw new ParseError(
       SEMANTICSCHOLAR_SOURCE_ID,
@@ -401,9 +459,7 @@ export function parseBatchBody(
  * @throws ParseError otherwise
  */
 export function parsePaperBody(body: string, transmittedUrl: string): Json {
-  const parsed = parseJson(body, transmittedUrl);
-  throwIfErrorEnvelope(parsed, transmittedUrl);
-  const paper = asRecord(parsed);
+  const paper = asRecord(parseSemanticScholarJson(body, transmittedUrl));
   if (paper === undefined || typeof paper.paperId !== "string") {
     throw new ParseError(
       SEMANTICSCHOLAR_SOURCE_ID,
@@ -565,6 +621,50 @@ export function clampPageSize(limit: number, offset = 0): number {
   );
 }
 
+/**
+ * `RelatedQuery.limit` → a relation list's `limit`: a whole number up to
+ * `docs/05` §2.1's 1000, or 0 for one that asks for nothing and sends no request.
+ */
+export function clampRelationLimit(limit: number): number {
+  if (!Number.isFinite(limit)) return 0;
+  return Math.min(
+    SEMANTICSCHOLAR_RELATION_LIMIT_MAX,
+    Math.max(0, Math.trunc(limit)),
+  );
+}
+
+/** Each entry's `docs/02` §6.3 id, once; `withoutId` counts those that have none. */
+function prefixedIds(entries: readonly Partial<ExternalIds>[]): {
+  readonly ids: readonly string[];
+  readonly withoutId: number;
+} {
+  const ids: string[] = [];
+  let withoutId = 0;
+  for (const entry of entries) {
+    const id = toSemanticScholarId(entry);
+    if (id === undefined) withoutId += 1;
+    else if (!ids.includes(id)) ids.push(id);
+  }
+  return { ids, withoutId };
+}
+
+/** Whether a record is one of the seeds, by paper id or by any identifier. */
+function isSeedRecord(
+  record: SourceRecord,
+  seedKeys: ReadonlySet<string>,
+): boolean {
+  return (
+    seedKeys.has(record.nativeId.toLowerCase()) ||
+    identifierKeys(record.work.ids).some((key) => seedKeys.has(key))
+  );
+}
+
+/** `fromDate`'s year, or `undefined` when there is none to apply. */
+function fromYearOf(fromDate: string | undefined): number | undefined {
+  const year = Number(fromDate?.slice(0, 4));
+  return Number.isInteger(year) ? year : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // 5. The adapter
 // ---------------------------------------------------------------------------
@@ -635,6 +735,52 @@ export interface SemanticScholarSource extends LiteratureSource {
    * `has()` that never decrypts (`docs/09` §1.7). `false` without a store.
    */
   hasApiKey(): Promise<boolean>;
+  /**
+   * `docs/07` §4.2: `"references"` and `"citations"` are `docs/05` §2.1's lists,
+   * `"recommendations"`, `"auto"` and no strategy are §3.1's `forpaper`. Sends
+   * nothing without a key. Callers: `src/pipeline/related/generators.ts`
+   * (`P5-T12`), `src/pipeline/recommend/generators.ts` (`P5-T23`).
+   *
+   * @throws BadRequestError with status 404 for a seed the service does not hold,
+   *   and every other transport failure unwrapped
+   */
+  findRelated(
+    query: RelatedQuery,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage>;
+  /**
+   * `/paper/search/match`: zero or one record, unthresholded, as
+   * `CrossrefSource.matchTitle` returns a list, so `resolveSeed`
+   * (`src/pipeline/related/seed.ts`, `P5-T11`) reads both alike. "No match" is an
+   * empty list, and so is having no key.
+   *
+   * @throws RangeError for a blank title, as Crossref's does
+   */
+  matchTitle(
+    title: string,
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]>;
+  /**
+   * `docs/05` §3.1's `POST /papers/`, after one `/paper/batch` that drops the
+   * seeds the service cannot resolve (§3.3 pitfall 2). Edges of kind
+   * `"recommendation"`. Sends nothing without a key. Caller:
+   * `src/pipeline/recommend/generators.ts` (`P5-T23`).
+   *
+   * @param positives - the example papers; the first {@link RECOMMEND_MAX_POSITIVES} that resolve are sent
+   * @param negatives - papers to steer away from; an id also in `positives` stays a positive
+   * @param limit - the most recommendations wanted, clamped to §3.3's 500
+   * @param ctx - the cancellation token
+   * @returns the page; a short list is normal (§3.3 pitfall 1)
+   * @throws BadRequestError with status 404 when no positive resolves, so no POST
+   *   was sent; with status 400 when the answer is too large twice (§3.3)
+   * @throws RangeError for more than `docs/02` §6.8's 500 ids in all
+   */
+  recommend(
+    positives: readonly Partial<ExternalIds>[],
+    negatives: readonly Partial<ExternalIds>[],
+    limit: number,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage>;
 }
 
 /**
@@ -687,15 +833,15 @@ export function createSemanticScholarSource(
   }
 
   /**
-   * One request: the key resolved and sent as a header, a 429 rethrown with
-   * its remedy, the redacted URL and the status logged — never a header.
+   * One request under a key already read, or none: a 429 rethrown with its remedy,
+   * the redacted URL and the status logged — never a header.
    */
-  async function issue(
+  async function send(
     request: SemanticScholarRequest,
+    apiKey: string | undefined,
     ctx: SourceCallContext,
   ): Promise<{ readonly response: HttpResponse; readonly keyed: boolean }> {
     ctx.token.throwIfCancelled();
-    const apiKey = await resolveApiKey();
     const keyed = apiKey !== undefined;
     let response: HttpResponse;
     try {
@@ -723,6 +869,15 @@ export function createSemanticScholarSource(
       keyed,
     });
     return { response, keyed };
+  }
+
+  /** One request with the key read for it, the search path's way. */
+  async function issue(
+    request: SemanticScholarRequest,
+    ctx: SourceCallContext,
+  ): Promise<{ readonly response: HttpResponse; readonly keyed: boolean }> {
+    ctx.token.throwIfCancelled();
+    return send(request, await resolveApiKey(), ctx);
   }
 
   /** The notice an unkeyed page carries, or nothing. */
@@ -910,6 +1065,319 @@ export function createSemanticScholarSource(
     return abstract ?? readTldr(paper);
   }
 
+  /**
+   * One relation list. `rank` is the row's position, a row with no paper id
+   * included. `fromDate` applies to the year, since `docs/05` §3.3 pitfall 3's "no
+   * date filter" is the graph's too, and an undated record is kept.
+   */
+  async function fetchRelation(
+    relation: SemanticScholarRelation,
+    paperId: string,
+    query: RelatedQuery,
+    apiKey: string,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage> {
+    const limit = clampRelationLimit(query.limit);
+    if (limit === 0) {
+      return emptyRelatedPage();
+    }
+    const request = (
+      relation === "references" ? buildReferencesRequest : buildCitationsRequest
+    )({ paperId, limit });
+    const { response } = await send(request, apiKey, ctx);
+    const rows = parseRelationBody(
+      relation,
+      response.body,
+      request.transmittedUrl,
+    );
+
+    const fromYear = fromYearOf(query.fromDate);
+    const records: SourceRecord[] = [];
+    const edges: RelationEdge[] = [];
+    let unusable = 0;
+    rows.forEach((row, index) => {
+      // One row at a time, so a row the mapper drops cannot shift an edge.
+      const [record] = mapRecords([row.paper ?? null]);
+      if (record === undefined) {
+        unusable += 1;
+        return;
+      }
+      const year = record.work.publishedDate?.year;
+      if (fromYear !== undefined && year !== undefined && year < fromYear) {
+        return;
+      }
+      records.push(record);
+      edges.push({
+        kind: SEMANTICSCHOLAR_RELATION_EDGE_KIND[relation],
+        rank: index + 1,
+        ...(row.contexts !== undefined && { contexts: row.contexts }),
+      });
+    });
+    return {
+      records,
+      edges,
+      totalAvailable: undefined,
+      nextCursor: undefined,
+      warnings:
+        unusable === 0 ? [] : [unusableRowsWarning(unusable, `/${relation}`)],
+    };
+  }
+
+  /**
+   * One Recommendations request, and `docs/05` §3.3's size cap: one retry at half
+   * the limit with the same fields, then the error propagates. Seeds are dropped
+   * from the answer before ranking (pitfall 4).
+   */
+  async function fetchRecommendations(
+    build: (limit: number, fields: readonly string[]) => SemanticScholarRequest,
+    limit: number,
+    seedKeys: ReadonlySet<string>,
+    fromYear: number | undefined,
+    apiKey: string,
+    earlierWarnings: readonly string[],
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage> {
+    const fields = recommendFieldsFor(limit);
+    const warnings = [...earlierWarnings];
+    let request = build(limit, fields);
+    let response: HttpResponse;
+    try {
+      ({ response } = await send(request, apiKey, ctx));
+    } catch (error) {
+      const half = Math.floor(limit / 2);
+      if (!isResponseTooLarge(error) || half < 1) throw error;
+      warnings.push(responseTooLargeWarning(limit, half));
+      request = build(half, fields);
+      ({ response } = await send(request, apiKey, ctx));
+    }
+    const papers = parseRecommendationsBody(
+      response.body,
+      request.transmittedUrl,
+    );
+
+    const records: SourceRecord[] = [];
+    const edges: RelationEdge[] = [];
+    let position = 0;
+    let unusable = 0;
+    for (const paper of papers) {
+      const [record] = mapRecords([paper]);
+      if (record === undefined) {
+        position += 1;
+        unusable += 1;
+        continue;
+      }
+      if (isSeedRecord(record, seedKeys)) continue;
+      position += 1;
+      const year = record.work.publishedDate?.year;
+      if (fromYear !== undefined && year !== undefined && year < fromYear) {
+        continue;
+      }
+      records.push(record);
+      edges.push({ kind: "recommendation", rank: position });
+    }
+    if (unusable > 0) {
+      warnings.push(unusableRowsWarning(unusable, "the recommendations"));
+    }
+    return {
+      records,
+      edges,
+      totalAvailable: undefined,
+      nextCursor: undefined,
+      warnings,
+    };
+  }
+
+  /** {@link SemanticScholarSource.findRelated}. */
+  async function findRelated(
+    query: RelatedQuery,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage> {
+    const strategy = query.strategy ?? "auto";
+    if (
+      strategy !== "references" &&
+      strategy !== "citations" &&
+      strategy !== "recommendations" &&
+      strategy !== "auto"
+    ) {
+      return emptyRelatedPage(unsupportedStrategyWarning(strategy));
+    }
+    ctx.token.throwIfCancelled();
+    const apiKey = await resolveApiKey();
+    if (apiKey === undefined) {
+      return emptyRelatedPage(SEMANTICSCHOLAR_NO_KEY_WARNING);
+    }
+    const ids: Partial<ExternalIds> = { ...query.work?.ids, ...query.ids };
+    const paperId = toSemanticScholarId(ids);
+    if (paperId === undefined) {
+      return emptyRelatedPage(NO_IDENTIFIER_SEED_WARNING);
+    }
+    if (strategy === "references" || strategy === "citations") {
+      return fetchRelation(strategy, paperId, query, apiKey, ctx);
+    }
+    const limit = clampRecommendLimit(query.limit);
+    if (limit === 0) {
+      return emptyRelatedPage();
+    }
+    return fetchRecommendations(
+      (asked, fields) =>
+        buildForPaperRequest({ paperId, limit: asked, fields }),
+      limit,
+      new Set(identifierKeys(ids)),
+      fromYearOf(query.fromDate),
+      apiKey,
+      [],
+      ctx,
+    );
+  }
+
+  /** {@link SemanticScholarSource.matchTitle}. */
+  async function matchTitle(
+    title: string,
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]> {
+    const request = buildTitleMatchRequest(title);
+    ctx.token.throwIfCancelled();
+    const apiKey = await resolveApiKey();
+    if (apiKey === undefined) return [];
+    let response: HttpResponse;
+    try {
+      ({ response } = await send(request, apiKey, ctx));
+    } catch (error) {
+      // `plan/08` `P5-T05` step 2: unverified until `P5-T31`, and read by status alone.
+      if (error instanceof BadRequestError && error.httpStatus === 404) {
+        return [];
+      }
+      throw error;
+    }
+    const paper = parseTitleMatchBody(response.body, request.transmittedUrl);
+    return paper === undefined ? [] : mapRecords([paper]);
+  }
+
+  /**
+   * `docs/05` §3.3 pitfall 2: one batch over every seed, index-matched. A row that
+   * is `null`, or a batch that could read no id at all, leaves that id out.
+   *
+   * @returns the ids that resolved, and the identifiers the service gave for them
+   */
+  async function resolveSeedIds(
+    wanted: readonly string[],
+    apiKey: string,
+    ctx: SourceCallContext,
+  ): Promise<{
+    readonly resolved: ReadonlySet<string>;
+    readonly seedKeys: readonly string[];
+  }> {
+    const request = buildBatchRequest(
+      wanted,
+      SEMANTICSCHOLAR_SEED_CHECK_FIELDS,
+    );
+    let answers: readonly unknown[];
+    try {
+      const { response } = await send(request, apiKey, ctx);
+      answers = parseBatchBody(response.body, request.transmittedUrl);
+    } catch (error) {
+      if (
+        error instanceof BadRequestError &&
+        error.httpStatus === 400 &&
+        error.body?.includes(NO_VALID_IDS_OPENING) === true
+      ) {
+        return { resolved: new Set(), seedKeys: [] };
+      }
+      throw error;
+    }
+    const resolved = new Set<string>();
+    const seedKeys: string[] = [];
+    wanted.forEach((id, index) => {
+      const [record] = mapRecords([answers[index] ?? null]);
+      if (record === undefined) return;
+      resolved.add(id);
+      seedKeys.push(
+        record.nativeId.toLowerCase(),
+        ...identifierKeys(record.work.ids),
+      );
+    });
+    return { resolved, seedKeys };
+  }
+
+  /** {@link SemanticScholarSource.recommend}. */
+  async function recommend(
+    positives: readonly Partial<ExternalIds>[],
+    negatives: readonly Partial<ExternalIds>[],
+    limit: number,
+    ctx: SourceCallContext,
+  ): Promise<RelatedPage> {
+    ctx.token.throwIfCancelled();
+    const apiKey = await resolveApiKey();
+    if (apiKey === undefined) {
+      return emptyRelatedPage(SEMANTICSCHOLAR_NO_KEY_WARNING);
+    }
+    const wantedPositives = prefixedIds(positives);
+    if (wantedPositives.ids.length === 0) {
+      return emptyRelatedPage(NO_IDENTIFIER_POSITIVES_WARNING);
+    }
+    const wantedNegatives = prefixedIds(negatives);
+    const negativeIds = wantedNegatives.ids.filter(
+      (id) => !wantedPositives.ids.includes(id),
+    );
+    const clamped = clampRecommendLimit(limit);
+    if (clamped === 0) {
+      return emptyRelatedPage();
+    }
+
+    const { resolved, seedKeys } = await resolveSeedIds(
+      [...wantedPositives.ids, ...negativeIds],
+      apiKey,
+      ctx,
+    );
+    const usablePositives = wantedPositives.ids.filter((id) =>
+      resolved.has(id),
+    );
+    if (usablePositives.length === 0) {
+      throw new BadRequestError(
+        404,
+        `[research-helper] Semantic Scholar resolved none of the ` +
+          `${String(wantedPositives.ids.length)} example paper(s), so nothing ` +
+          `was asked of Recommendations (docs/05 §3.3 pitfall 2).`,
+        { sourceId: SEMANTICSCHOLAR_SOURCE_ID, seedNotIndexed: true },
+      );
+    }
+    const usableNegatives = negativeIds.filter((id) => resolved.has(id));
+    const positivePaperIds = usablePositives.slice(0, RECOMMEND_MAX_POSITIVES);
+
+    const left =
+      wantedPositives.ids.length -
+      usablePositives.length +
+      negativeIds.length -
+      usableNegatives.length +
+      wantedPositives.withoutId +
+      wantedNegatives.withoutId;
+    const warnings = [
+      ...(left > 0 ? [unusableSeedsWarning(left)] : []),
+      ...(usablePositives.length > RECOMMEND_MAX_POSITIVES
+        ? [positivesCappedWarning(usablePositives.length)]
+        : []),
+    ];
+
+    return fetchRecommendations(
+      (asked, fields) =>
+        buildRecommendRequest({
+          positivePaperIds,
+          negativePaperIds: usableNegatives,
+          limit: asked,
+          fields,
+        }),
+      clamped,
+      new Set([
+        ...seedKeys,
+        ...[...positives, ...negatives].flatMap((ids) => identifierKeys(ids)),
+      ]),
+      undefined,
+      apiKey,
+      warnings,
+      ctx,
+    );
+  }
+
   /** `docs/09` §2.3's test call. Never throws except on cancellation. */
   async function healthCheck(ctx: SourceCallContext): Promise<SourceHealth> {
     const startedAtMs = clock.now();
@@ -968,6 +1436,9 @@ export function createSemanticScholarSource(
     lookup,
     fetchAbstract,
     hasApiKey,
+    findRelated,
+    matchTitle,
+    recommend,
     explainQuery: (query) => explainSemanticScholarQuery(query),
   };
 }

@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"offset\":0,\"data\":[{\"isInfluential\":false,\"contexts\":[\"A cellular expression profile can be represented as a set of gene-specific observations, with gene identity embeddings specifying which genes are present and expression embeddings describing their measured states [39, 8].\"],\"intents\":[],\"citedPaper\":{\"paperId\":\"d355eed61373d43a44aa34a6249acf4e8c05406b\",\"externalIds\":{\"DOI\":\"10.64898/2026.08.31.747784\",\"CorpusId\":291770057},\"title\":\"scRep: A Latent-Space Self-Distilled Foundation Model for Single-Cell Representation Learning\",\"year\":2026,\"citationCount\":0}},{\"isInfluential\":false,\"contexts\":[],\"intents\":[],\"citedPaper\":{\"paperId\":\"16c3dda48b58efe96d4cf4af9a5f69fd360ea5bd\",\"externalIds\":{\"DOI\":\"10.3390/biology15171527\",\"CorpusId\":291795393},\"title\":\"Biological Foundation Models for Complex Disease Research and Clinical Translation\",\"year\":2026,\"citationCount\":0}}]}"
+}

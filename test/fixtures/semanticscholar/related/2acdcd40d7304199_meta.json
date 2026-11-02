@@ -1,0 +1,13 @@
+{
+  "scenario": "match-title-absent",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-02T00:00:00.000Z",
+  "endpoint": "https://api.semanticscholar.org/graph/v1/paper/search/match",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written, not recorded: stand-in until P5-T31 (plan/00 §6 item 335(a)), from plan/08 P5-T05 step 2's belief and docs/02 §6.10's error shape; the status and the message are both unverified.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

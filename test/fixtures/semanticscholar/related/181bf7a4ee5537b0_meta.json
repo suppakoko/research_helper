@@ -1,0 +1,13 @@
+{
+  "scenario": "citations-unknown-field",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-02T00:00:00.000Z",
+  "endpoint": "https://api.semanticscholar.org/graph/v1/paper/{paper_id}/citations",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written, not recorded: stand-in until P5-T31 (plan/00 §6 item 335(a)), from docs/05 §2.2's measured 400 and docs/02 §6.10's row, with this request's field name.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

@@ -1224,6 +1224,35 @@ strategy read the list; any other strategy, or a seed with no PMID, is an empty 
 Crossref above. `fromDate` filters after hydration through `applyClientRecencyFilter`, so a page can hold fewer than
 `limit` records.
 
+**As built 2026-11-02 (`plan/08` `P5-T05`, `P5-T06`; against stand-in fixtures, `plan/00` §6 item 335(a)).** Semantic
+Scholar's two adapter-specific calls are declared on `SemanticScholarSource` in
+`src/sources/semanticscholar/semanticscholarSource.ts`, and `createSemanticScholarSource`, which `src/bootstrap/container.ts`
+constructs, builds them:
+
+```ts
+// zero or one record, unthresholded; "no match" is an empty list. Caller: `resolveSeed` (`P5-T11`).
+matchTitle(title: string, ctx: SourceCallContext): Promise<readonly SourceRecord[]>;
+
+// `05-…` §3.3's note says what it does with the seeds. Caller: `P5-T23`'s generator (a).
+recommend(
+  positives: readonly Partial<ExternalIds>[],
+  negatives: readonly Partial<ExternalIds>[],
+  limit: number,
+  ctx: SourceCallContext,
+): Promise<RelatedPage>;
+```
+
+`findRelated`'s caller is `src/pipeline/related/generators.ts` (`P5-T12`), and `P5-T23`'s generator (c). **DECIDED
+2026-11-02 (coordinator, under `plan/00` §6 item 313):** `"references"` and `"citations"` are one request of `limit`
+clamped to 1000, with no paging, because `RelatedQuery` has no cursor; `"recommendations"`, `"auto"` and no strategy are
+`forpaper`; any other strategy, or a seed with none of `toSemanticScholarId`'s identifiers, is an empty page with a warning
+and no request. `rank` on the two lists is the row's position, skipped rows included; `fromDate` is applied to the year,
+keeping an undated record. A seed the service does not hold propagates as `BadRequestError` 404 (`plan/00` §6 item 332(c)).
+**`plan/08` §0.2 item 19 is enforced here as well as in the pipelines:** `findRelated`, `matchTitle` and `recommend` read the
+key first and, without one, send nothing, returning an empty page with a warning (an empty list from `matchTitle`). A
+caller has no way to say "keyless" (`RelatedQuery` has no such member), and these three have no caller outside Phase 5, so
+the keyword search window, which still tries without a key, is untouched.
+
 ### 4.3 `LLMProvider`
 
 ```ts
@@ -1304,6 +1333,16 @@ export interface ChatRequest {
   readonly routing?: ProviderRoutingHints;
   /** Opaque correlation ID written into logs, never sent upstream. */
   readonly traceId: string;
+  /** What a report run's per-call record says about this call; never sent upstream. Added 2026-11-02 (`P4-T23`; §5.2). */
+  readonly accounting?: CallAccounting;
+}
+
+/** Which prompt a call belongs to, for `ReportCallUsage` (§5.2). An identifier and a count, never any text. */
+export interface CallAccounting {
+  /** The `PromptTemplate.id`. */
+  readonly promptId: string;
+  /** How many papers this call's answer places: `THEME_CLUSTER` only. */
+  readonly papers?: number;
 }
 
 export interface ProviderRoutingHints {
@@ -2234,6 +2273,11 @@ export interface Usage {
   readonly totalTokens: number | undefined;
   /** Provider-reported cost where available (OpenRouter reports this). */
   readonly costUsd: number | undefined;
+  /**
+   * The reasoning figure, where the provider reports one; absent, never 0, where it does not.
+   * Whether it sits inside `outputTokens` is the provider's: see §5.2's note of 2026-11-02. Added 2026-11-02 (`P4-T23`).
+   */
+  readonly reasoningTokens?: number;
 }
 ```
 
@@ -2961,6 +3005,44 @@ export interface CritiqueOutcome {
   readonly revisionNotApplied?: boolean;
 }
 
+/** One answered LLM call of a report run: an identifier, a language and numbers, never any text. Added 2026-11-02 (`P4-T23`). */
+export interface ReportCallUsage {
+  /** `CallAccounting.promptId`. */
+  readonly promptId: string;
+  /** The report this call wrote; absent on a stage every report of the run shares. */
+  readonly language?: ReportLanguage;
+  /** Each absent, never 0, when the provider did not report it. */
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly totalTokens?: number;
+  readonly reasoningTokens?: number;
+  readonly costUsd?: number;
+  /** `ChatRequest.maxOutputTokens` as the stage asked it, before an adapter clamps it to the model's limit. */
+  readonly maxOutputTokens?: number;
+  /** `CallAccounting.papers`. */
+  readonly papers?: number;
+}
+
+/** One analysed theme's size: numbers only. Added 2026-11-02 (`P4-T23`). */
+export interface ThemeAnalysisSize {
+  /** Raw `estTokens` of the analysis as JSON: what the composition measures it by (`P4T22_FIT_MATRIX`'s measure). */
+  readonly tokens: number;
+  /** Raw `estTokens` of its `narrative`, for §12.4's assumed 40%. */
+  readonly narrativeTokens: number;
+  /** The theme's members. */
+  readonly papers: number;
+}
+
+/** What one run measured. A run holds one of these, on its first report only. Added 2026-11-02 (`P4-T23`). */
+export interface ReportRunMeasurement {
+  /** Every call the run got an answer to, in the order the answers came. */
+  readonly calls: readonly ReportCallUsage[];
+  /** One per analysed theme, in the clustering's order. */
+  readonly themeAnalyses: readonly ThemeAnalysisSize[];
+  /** `true` on a job resumed after a restart: calls before the restart are not in `calls`. */
+  readonly resumed?: boolean;
+}
+
 export interface TrendReport {
   readonly id: string;
   readonly libraryID: number;
@@ -3011,6 +3093,12 @@ export interface TrendReport {
   readonly prompts: readonly TrendPromptUse[];
   /** Summed over every call the run made, the summaries it made included. */
   readonly usage: Usage | undefined;
+  /**
+   * Each call's counts and each theme analysis's size, on the run's first report only. Absent on the second
+   * report of a `both` run, and on every record stored before 2026-11-02, which reads as "not measured", never 0.
+   * Added 2026-11-02 (`P4-T23`; the note below).
+   */
+  readonly runMeasurement?: ReportRunMeasurement;
   /** Every item key cited, in order of first appearance. */
   readonly citedItemKeys: readonly string[];
   readonly warnings: readonly string[];
@@ -3052,6 +3140,60 @@ export interface TrendReport {
 > reads as `false`. The scaffold computes `title`, `markdown`, `sections`, `scope`, `reductionPasses`,
 > `bibliography`, `retracted`, `excluded`, `summaryIds`, `qualityProxies`, `critique`, `clustering`,
 > `citedItemKeys` and `warnings` (`ScaffoldedReport`); the run (`P4-T18`) adds the rest.
+
+> **As built 2026-11-02 (`P4-T23` step 4's data source; owner, `plan/00` §6 item 335(k): numbers only, before the first
+> paid run; `createRunCallRecorder`, `themeAnalysisSize` and `runMeasurementOf` in `src/pipeline/trendReport/runMeasurement.ts`,
+> called by `execute` in `trendReportPipeline.ts`): `TrendReport.runMeasurement`, `Usage.reasoningTokens` and
+> `ChatRequest.accounting`.** No table and no migration: the member lives in the `report` row's `json` column, so
+> `scripts/eval-trend-report.ts` reads it read-only with Zotero closed, and it passes `gateTrendReport`
+> (`redactRecord`) with the rest of the record; `redactRecord` keeps a key-named number, and `promptId` is already in
+> `REPORT_VERBATIM_KEYS`. *DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):*
+> (1) **A run has one measurement, on its first report's record; a `both` run's second record has none. So a shared
+> stage is written once and no sum over rows can count it twice.** A call's `language` says which report it wrote and
+> its absence says it is shared, so one report's share is the shared calls plus its own. A Korean report that failed
+> leaves its answered calls on the English record, because they were paid for. A reader who finds two measurements on one
+> run refuses rather than adds.
+> (2) **Recording happens at the router, not in the stages.** `execute` hands every stage a router that wraps `ctx.llm`
+> and, for each answered `chat` and the terminal chunk of each `chatStream`, writes down only what the list above names.
+> It never reads `messages`, `traceId`, the answer's text, `raw`, or a provider's route name. The stage's label arrives as `ChatRequest.accounting`, set at each
+> request where the template is in hand; an adapter builds its body field by field, so it is never sent. A repair
+> request carries the original's label. A call with no label would be written as `UNLABELLED`, and no call site lacks one.
+> (3) **A re-sent stage is counted.** A "continue" after a budget pause and a retried or repaired answer are real calls, so
+> `calls` can exceed what `usage` sums, which keeps its stage-level meaning. A cached stage makes no call and adds no entry.
+> (4) **`themeAnalyses` is every analysed theme, cached or not,** by the same raw `estTokens` the §12.4 grid used. It is
+> an estimate from the text, not a provider's count; a `CLUSTER_REDUCE` call's own `outputTokens` is the provider's.
+> (5) **`totalTokens` is kept per call so the record itself settles whether reasoning is inside `outputTokens`:** equal
+> to input plus output, it is inside; equal to input plus output plus reasoning, it is on top (`docs/03` §4.4 leaves
+> this open for Gemini, and its sample's figures add up the second way).
+> (6) **What each adapter reads** (absent stays absent). OpenAI: `usage.output_tokens_details.reasoning_tokens` (a
+> hand-written test response; `docs/03` §14.2). OpenRouter: `usage.completion_tokens_details.reasoning_tokens` (read
+> from OpenRouter's usage-accounting page on 2026-11-02; that page does not say whether `completion_tokens` includes it).
+> Gemini's Interactions answer: `usage.total_thought_tokens` (`docs/03` §4.4). Gemini's legacy `generateContent` path and Anthropic: none,
+> because no document or recording here names a figure, and Anthropic's §3.4 block has none. **No recorded response under
+> `test/fixtures/llm` holds a reasoning figure:** its only usage blocks are four synthetic refusals. So the field names
+> are confirmed only by the first paid run, and a wrong name reads as "not reported", never as a wrong number.
+> (7) **Limits.** A call that threw has no usage and no entry, which includes a streamed report the provider cut off
+> (`throwIfTruncated` throws before the terminal chunk). A run that ends before Saving stores no record, so no
+> measurement. A job resumed after a restart holds only the calls after it and says so (`resumed`).
+> `ReportCallUsage.costUsd` is `Usage.costUsd`, so it exists on OpenRouter only.
+>
+> **Measured 2026-11-02 in real Zotero 10.0.3, on a mock provider, in three consecutive runs
+> (`test/integration/reportMeasurement-flow.spec.ts`).** A `both` run on 30 papers answered 38 calls: 30
+> `PAPER_SUMMARY_ABSTRACT`, 1 `THEME_CLUSTER`, 3 `CLUSTER_REDUCE` (shared); 1 each of `TREND_REPORT_EN` and
+> `TREND_REPORT_KO`; and 2 `SELF_CRITIQUE`, one naming each language. The English row held 38 entries, each with its
+> call's own figures, and the Korean row held none. The row's json holding the note key, which only the second `put`
+> writes, still held them, so Zotero's real store keeps the member. After the harness quit Zotero, `measure` on a copy of
+> the file printed `calls 38`. A database from before the capture printed `not measured` and no 0. A job resumed from a
+> real run's checkpoint held only its 4 later calls, and still listed its 3 cached analyses, and `measure` printed the
+> resumed line. **Not measured:** a person quitting Zotero in the middle of a run and restarting it, because a restarted
+> Zotero has no mock provider; the resumed job here runs in the same process, through the runner `recover()`'s notice calls.
+>
+> **The report has always shown part of these figures.** Appendix B's row for each summary gives that summary call's
+> input and output tokens, and the report's header names each prompt with its version (`scaffold.ts`). They are the same
+> calls, so the same numbers appear in the note and the export; nothing there reads `runMeasurement`. The other figures
+> (every other stage's calls, totals, reasoning, ceilings, each cost at full precision, the analyses' sizes) and the
+> member names appear in no note, export or window. The windows' strings and Fluent ids, the notes and the exports, with
+> digits and identifiers folded, held nothing that the same run on a build from before the capture did not hold.
 
 > **Reconciled 2026-11-02 (`plan/08` `P5-T01`; decisions `plan/08` §0.4 lines 21, 23 and 27, owner items 320(c) and
 > 323(b)): the two blocks below are what Phase 5's cards build, and nothing constructs them yet.** The first constructor
@@ -4170,6 +4312,8 @@ This is the hardest requirement and the reason the queue is persistent.
 > egress acknowledgement, `P3-T16` for the confirm threshold and the ceilings) and its `JobNotifier` (the notice;
 > message `research-helper-job-resumed`). This reverses the recommendation `P3-T34`'s card carried and the
 > `autoResumeJobs` sentence below, which are corrected in place.
+
+> **Measured 2026-11-02 (`test/integration/reportMeasurement-flow.spec.ts`, five runs): "always flushed at stage boundaries" does not hold for `ctx.checkpoint`.** `PipelineContext.checkpoint` takes only the state, so the trend report's stage checkpoints pass through the 2-second throttle with no boundary flag. On a mock run of 6 papers, held in its first compose, the record's checkpoint named `EnsuringSummaries` in all five runs, three stages behind. A held state is written by the next call that may write, or on pause or stop. What a crash then costs is a resumed job priced from an earlier stage. The measured job made no repeat call for the stages already done, because they come from the cache. Nothing was changed.
 
 **Checkpointing.** `ctx.checkpoint(state)` writes an opaque JSON blob into `JobRecord.checkpoint`, throttled to at most once per 2 seconds and always flushed at stage boundaries. Each pipeline defines its own checkpoint shape, for example:
 

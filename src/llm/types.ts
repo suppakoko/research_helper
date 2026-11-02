@@ -117,6 +117,21 @@ export interface ChatRequest {
   readonly routing?: ProviderRoutingHints;
   /** Opaque correlation ID written into logs, never sent upstream. */
   readonly traceId: string;
+  /** What a report run's per-call record says about this call; never sent upstream. Added 2026-11-02 (`P4-T23`; §5.2). */
+  readonly accounting?: CallAccounting;
+}
+
+/**
+ * Which prompt a call belongs to, for `ReportCallUsage` (§5.2). An identifier
+ * and a count, never any text. Built at each request in
+ * `src/pipeline/trendReport/` and `src/pipeline/summarize/summarizeItem.ts`;
+ * read by `createRunCallRecorder`.
+ */
+export interface CallAccounting {
+  /** The `PromptTemplate.id`. */
+  readonly promptId: string;
+  /** How many papers this call's answer places: `THEME_CLUSTER` only. */
+  readonly papers?: number;
 }
 
 export interface ProviderRoutingHints {

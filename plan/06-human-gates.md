@@ -177,7 +177,7 @@ confirmed.
 >
 > **This blocks Phase 5 only**, and Phase 5 carries 10.5–15 days of float (`docs/11` §2), so nothing is
 > stalled today. `P2-T05` ships the adapter with unauthenticated degradation, so Phase 2 does not wait
-> either. *Updated 2026-11-02: that float is now ≈ 4.5–6 d (`docs/11` §2, re-priced by `plan/00` §6 item 335(g); ≈ 3–4 d before it; ≈ 17.75–25 d from
+> either. *Updated 2026-11-02: that float is now ≈ 5–7 d (`docs/11` §2, re-priced by `plan/00` §6 items 335(g) and 336(d); ≈ 4.5–6 d before the second, ≈ 3–4 d before the first; ≈ 17.75–25 d from
 > 2026-10-26), since Phase 5's card sum of 35.75–50 d replaced its scaled 21–29 d. The gate itself closed
 > on 2026-09-30; what still waits on the owner is the key's rotation, needed first by `P5-T31`, and its
 > entry (`G-26`).*
@@ -748,6 +748,8 @@ this approval.
 ### G-41 — Review the Phase 1 `ko-KR` UI bundle (`KO_PENDING_REVIEW.length`, 82 as of 2026-10-08)
 
 > *Re-counted 2026-11-02 (`plan/00` §6 items 333, 334): `P4-T20`'s 25, `P5-T15`'s 12 and `P4-T21`'s 2 left `KO_PENDING_REVIEW` that day. What it still holds is what cards in progress add; `src/i18n/keys.ts` is the count.*
+>
+> *Measured 2026-11-02 in Zotero 10.0.3, in five runs, after `plan/00` §6 item 335(l): `[P1-T18] ko-KR totals: 353 present, 1 absent; expected 353 / 1`. It read 350 / 4 before that item moved its three strings. So `KO_PENDING_REVIEW` is empty, and the 1 absent is `P0-T24`'s deliberate fallback fixture. The two report labels of that item are not Fluent ids and are not in this count; `KO_REPORT_LABELS_PENDING_REVIEW` is empty too. The figures of 2026-10-08 in this section's heading and in the summary table's row are that date's snapshot.*
 
 > **DEFERRED 2026-10-08, by the owner, to before the v1.0 release.** English only until then. Measured
 > the same day, by counting the lists in `src/i18n/keys.ts` rather than reading the figure off this

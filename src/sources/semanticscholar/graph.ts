@@ -2,11 +2,18 @@
  * Semantic Scholar's relation requests: references, citations and the title
  * match (`docs/05` §2.1, `docs/02` §6.2).
  *
- * **Scope.** `P5-T04` created this file with the three request builders only:
- * address and body, no parser and no adapter method. Callers today:
- * `test/support/semanticscholarRecordedRequests.ts`, which the recorder and the
- * shape tests read. `P5-T05` adds the parsers beside these builders and is the
- * product caller, through `semanticscholarSource.ts`.
+ * **Scope.** `P5-T04` created this file with the three request builders.
+ * `P5-T05` added {@link parseSemanticScholarJson},
+ * {@link parseRelationBody} and {@link parseTitleMatchBody} beside them. Callers:
+ * `semanticscholarSource.ts` (`findRelated`, `matchTitle`, and the search and
+ * batch parsers, for {@link parseSemanticScholarJson}), `./recommendations.ts`
+ * (the same), and `test/support/semanticscholarRecordedRequests.ts`, which the
+ * recorder and the shape tests read.
+ *
+ * **Two of the parsers read shapes nobody here has seen** (`plan/08` `P5-T05`'s
+ * dated note; `P5-T31` checks them): `citedPaper` on a `/references` row and the
+ * `/paper/search/match` envelope. `docs/05` §2.1 records only `citingPaper`, and
+ * `docs/02` §6.2 no response at all from the match endpoint.
  *
  * **Why the builders came before the adapter** (`plan/08` §0.4 line 32): a
  * fixture is found by the exact method, URL and body (`fixtureKey`), so the
@@ -31,8 +38,10 @@
  * here names the `Zotero` global, reads a preference or touches a file.
  */
 
-import { redactUrl } from "../../core/errors";
+import { ParseError, redactUrl, SourceError } from "../../core/errors";
+import type { RelationKind } from "../../model/related";
 
+import { SEMANTICSCHOLAR_SOURCE_ID } from "./mapper";
 import {
   encodePaperId,
   SEMANTICSCHOLAR_BULK_FIELDS,
@@ -191,4 +200,163 @@ export function buildTitleMatchRequest(
     transmittedUrl: redactUrl(url),
     endpointBaseUrl: SEMANTICSCHOLAR_TITLE_MATCH_URL,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Parsers (`P5-T05`)
+// ---------------------------------------------------------------------------
+
+/** `{...}` and not `null`, `[]` or a primitive. */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Semantic Scholar's two error envelopes inside an HTTP 200, if `parsed` is
+ * one: `{"error": "…"}` (`docs/02` §6.10) or `{"message": "…", "code": "…"}`
+ * (§6.4's 429 body, `code` a *string*). One decoder for both.
+ */
+function throwIfErrorEnvelope(parsed: unknown, transmittedUrl: string): void {
+  const envelope = asRecord(parsed);
+  if (envelope === undefined) return;
+  const error =
+    typeof envelope.error === "string"
+      ? envelope.error
+      : typeof envelope.message === "string" && envelope.code !== undefined
+        ? envelope.message
+        : undefined;
+  if (error === undefined) return;
+  throw new SourceError(
+    SEMANTICSCHOLAR_SOURCE_ID,
+    `[research-helper] Semantic Scholar answered with an error: ${error}`,
+    {
+      url: transmittedUrl,
+      upstreamError: error,
+      ...(envelope.code !== undefined && { upstreamCode: envelope.code }),
+    },
+  );
+}
+
+/**
+ * `JSON.parse`, then the error envelope check every 2xx body of this service
+ * goes through.
+ *
+ * @param body - the response text
+ * @param transmittedUrl - the **redacted** URL, for the thrown error's context
+ * @returns the parsed body
+ * @throws SourceError for Semantic Scholar's own error envelope
+ * @throws ParseError when the body is not JSON
+ */
+export function parseSemanticScholarJson(
+  body: string,
+  transmittedUrl: string,
+): unknown {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body) as unknown;
+  } catch (cause) {
+    throw new ParseError(
+      SEMANTICSCHOLAR_SOURCE_ID,
+      `[research-helper] Semantic Scholar returned a body that is not JSON.`,
+      { url: transmittedUrl, bodyLength: body.length },
+      { cause },
+    );
+  }
+  throwIfErrorEnvelope(parsed, transmittedUrl);
+  return parsed;
+}
+
+/** Which relation list. */
+export type SemanticScholarRelation = "references" | "citations";
+
+/** Where a row holds its paper. `citedPaper` is assumed: the module header. */
+const RELATION_PAPER_MEMBER: Readonly<Record<SemanticScholarRelation, string>> =
+  { references: "citedPaper", citations: "citingPaper" };
+
+/** `docs/07` §4.2: the edge is read from the seed's side. */
+export const SEMANTICSCHOLAR_RELATION_EDGE_KIND: Readonly<
+  Record<SemanticScholarRelation, RelationKind>
+> = { references: "reference", citations: "citation" };
+
+/** One row of a relation list, as the adapter needs it. */
+export interface SemanticScholarRelationRow {
+  /** The paper object, unmapped: the mapper's input. */
+  readonly paper: unknown;
+  /**
+   * `contexts` when the row has that array, an empty one included; every
+   * non-string entry is dropped. `docs/05` §2.1: its length is the signal.
+   */
+  readonly contexts: readonly string[] | undefined;
+}
+
+/**
+ * One `/paper/{id}/references` or `/citations` body → its rows, in order.
+ * `intents` and `isInfluential` are requested and not read: `RelationEdge` has
+ * no member for them, and `docs/05` §2.1 calls `intents` a bonus, never a filter.
+ *
+ * @param relation - which list was asked for
+ * @param body - the response text
+ * @param transmittedUrl - the **redacted** URL, for the thrown error's context
+ * @returns the rows
+ * @throws SourceError for Semantic Scholar's own error envelope
+ * @throws ParseError when the body is not JSON or has no `data` array
+ */
+export function parseRelationBody(
+  relation: SemanticScholarRelation,
+  body: string,
+  transmittedUrl: string,
+): readonly SemanticScholarRelationRow[] {
+  const parsed = parseSemanticScholarJson(body, transmittedUrl);
+  const data = asRecord(parsed)?.data;
+  if (!Array.isArray(data)) {
+    throw new ParseError(
+      SEMANTICSCHOLAR_SOURCE_ID,
+      `[research-helper] Semantic Scholar /${relation} returned JSON with no ` +
+        `data array; docs/05 §2.1 gives that array as the list.`,
+      { url: transmittedUrl, bodyLength: body.length },
+    );
+  }
+  return (data as readonly unknown[]).map((entry) => {
+    const row = asRecord(entry);
+    const contexts = row?.contexts;
+    return {
+      paper: row?.[RELATION_PAPER_MEMBER[relation]],
+      contexts: Array.isArray(contexts)
+        ? (contexts as readonly unknown[]).filter(
+            (text): text is string => typeof text === "string",
+          )
+        : undefined,
+    };
+  });
+}
+
+/**
+ * One `/paper/search/match` 2xx body → the paper it names, or `undefined` for no
+ * match. **Both envelopes are read because neither is recorded:** `{"data":[…]}`
+ * is what this file expects and `P5-T31` settles it; `docs/02` §6.2 says the
+ * endpoint gives the single best match, so a longer `data` keeps the first.
+ *
+ * @param body - the response text
+ * @param transmittedUrl - the **redacted** URL, for the thrown error's context
+ * @returns the paper object, unmapped, or `undefined`
+ * @throws SourceError for Semantic Scholar's own error envelope
+ * @throws ParseError when the body is not JSON, or is neither envelope
+ */
+export function parseTitleMatchBody(
+  body: string,
+  transmittedUrl: string,
+): unknown {
+  const parsed = asRecord(parseSemanticScholarJson(body, transmittedUrl));
+  if (Array.isArray(parsed?.data)) {
+    return (parsed.data as readonly unknown[])[0] ?? undefined;
+  }
+  if (typeof parsed?.paperId === "string") return parsed;
+  throw new ParseError(
+    SEMANTICSCHOLAR_SOURCE_ID,
+    `[research-helper] Semantic Scholar /paper/search/match returned JSON that ` +
+      `is neither a data array nor a paper.`,
+    { url: transmittedUrl, bodyLength: body.length },
+  );
 }

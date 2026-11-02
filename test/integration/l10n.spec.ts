@@ -141,6 +141,12 @@ import {
   type ShippedSurface,
 } from "../../src/i18n/keys";
 import {
+  fillLabel,
+  KO_REPORT_LABELS_PENDING_REVIEW,
+  labelPlaceholders,
+  reportLabel,
+} from "../../src/pipeline/trendReport/reportLabels";
+import {
   L10N_MENU_ROOT,
   L10N_MENU_SPIKE_CREATE_ITEM,
 } from "../../src/ui/menus/toolsMenu";
@@ -926,6 +932,104 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
         [...ids],
         "the owner's Korean is in the ko-KR file (G-41, item 334(f))",
       );
+    }
+  });
+
+  it("G-41: P4-T21's stop reason, P5-T22's two strings and FINDING P4-T22-2's two labels resolve in Korean, with no English behind them (plan/00 §6 item 335(l))", async function () {
+    const HANGUL = /[가-힣]/;
+    const isolated = (text: string): string => text.replace(/[⁨⁩]/g, "");
+    const korean = await bundleFor("mainWindow", "ko-KR");
+    // Each with what its message takes; pinned to ko-KR alone, so that a missing
+    // message or a broken pattern cannot be answered by the English file.
+    const reasons = ["no-room", "structure", "finishing", "request"] as const;
+    const asked: readonly {
+      readonly id: string;
+      readonly args?: Record<string, string | number>;
+      readonly holds?: readonly string[];
+    }[] = [
+      ...reasons.map((reason) => ({
+        id: "research-helper-report-stopped-korean",
+        args: { reason },
+      })),
+      {
+        id: "research-helper-egress-profile-notice",
+        args: { papers: 37, model: "p335-model" },
+        holds: ["37", "p335-model"],
+      },
+      { id: "research-helper-recommend-profile-unusable" },
+    ];
+    const render = (locale: string): Promise<(string | undefined)[]> =>
+      pinnedLocalization("mainWindow", [locale])
+        .formatMessages(
+          asked.map(({ id, args }) =>
+            args === undefined ? { id } : { id, args },
+          ),
+        )
+        .then((messages) =>
+          messages.map((message) =>
+            message?.value === undefined || message.value === null
+              ? undefined
+              : isolated(message.value),
+          ),
+        );
+    const inKorean = await render("ko-KR");
+    const inEnglish = await render("en-US");
+    log(
+      `item 335(l): the three ids in the ko-KR file ` +
+        `${JSON.stringify([...new Set(asked.map(({ id }) => id))].map((id) => korean?.hasMessage(id)))}, ` +
+        `${inKorean.filter((value) => value !== undefined).length} of ${asked.length} rendered`,
+    );
+    asked.forEach(({ id, args, holds }, index) => {
+      const value = inKorean[index];
+      const name = `${id} ${JSON.stringify(args ?? {})}`;
+      assert.isTrue(korean?.hasMessage(id) === true, `${id} in the ko-KR file`);
+      assert.isTrue(value !== undefined, `${name} resolves from ko-KR alone`);
+      assert.isTrue(HANGUL.test(value as string), `${name} is Korean`);
+      assert.isTrue(value !== inEnglish[index], `${name} is not the English`);
+      for (const held of holds ?? []) {
+        assert.isTrue(
+          (value as string).includes(held),
+          `${name} fills its argument`,
+        );
+      }
+    });
+    assert.strictEqual(
+      new Set(inKorean.slice(0, reasons.length)).size,
+      reasons.length,
+      "each stop reason has its own Korean sentence",
+    );
+
+    // The report labels are in the plugin's bundle, not in Fluent.
+    assert.deepEqual(
+      [...KO_REPORT_LABELS_PENDING_REVIEW],
+      [],
+      "no report label awaits review",
+    );
+    for (const [key, args] of [
+      ["fitOutputLowered", { output: 8192, words: 1390 }],
+      ["fitAnalysesShortened", { sections: "4.1" }],
+    ] as const) {
+      const label = reportLabel("ko", key);
+      const filled = fillLabel(label, args);
+      log(
+        `item 335(l): ${key} placeholders ${JSON.stringify(labelPlaceholders(label))}`,
+      );
+      assert.isTrue(HANGUL.test(label), `${key} is Korean`);
+      assert.isTrue(
+        label !== reportLabel("en", key),
+        `${key} is not the English`,
+      );
+      assert.deepEqual(
+        [...labelPlaceholders(label)].sort(),
+        [...labelPlaceholders(reportLabel("en", key))].sort(),
+        `${key} takes what the English takes`,
+      );
+      for (const value of Object.values(args)) {
+        assert.isTrue(
+          filled.includes(String(value)),
+          `${key} fills its placeholder`,
+        );
+      }
     }
   });
 

@@ -357,6 +357,61 @@ export interface CritiqueOutcome {
   readonly revisionNotApplied?: boolean;
 }
 
+/**
+ * One answered LLM call of a report run: an identifier, a language and numbers,
+ * never any text. Added 2026-11-02 (`P4-T23`). Built by
+ * `createRunCallRecorder` (`src/pipeline/trendReport/runMeasurement.ts`).
+ */
+export interface ReportCallUsage {
+  /** `CallAccounting.promptId`. */
+  readonly promptId: string;
+  /** The report this call wrote; absent on a stage every report of the run shares. */
+  readonly language?: ReportLanguage;
+  /** Each absent, never 0, when the provider did not report it. */
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly totalTokens?: number;
+  readonly reasoningTokens?: number;
+  readonly costUsd?: number;
+  /**
+   * `ChatRequest.maxOutputTokens` as the stage asked it, before an adapter
+   * clamps it to the model's limit.
+   */
+  readonly maxOutputTokens?: number;
+  /** `CallAccounting.papers`. */
+  readonly papers?: number;
+}
+
+/**
+ * One analysed theme's size: numbers only. Added 2026-11-02 (`P4-T23`). Built
+ * by `themeAnalysisSize` (`src/pipeline/trendReport/runMeasurement.ts`).
+ */
+export interface ThemeAnalysisSize {
+  /**
+   * Raw `estTokens` of the analysis as JSON: what the composition measures it
+   * by (`P4T22_FIT_MATRIX`'s measure).
+   */
+  readonly tokens: number;
+  /** Raw `estTokens` of its `narrative`, for `docs/07` §12.4's assumed 40%. */
+  readonly narrativeTokens: number;
+  /** The theme's members. */
+  readonly papers: number;
+}
+
+/**
+ * What one run measured. A run holds one of these, on its first report only.
+ * Added 2026-11-02 (`P4-T23`). Built by `runMeasurementOf`
+ * (`src/pipeline/trendReport/runMeasurement.ts`).
+ */
+export interface ReportRunMeasurement {
+  /** Every call the run got an answer to, in the order the answers came. */
+  readonly calls: readonly ReportCallUsage[];
+  /** One per analysed theme, in the clustering's order. */
+  readonly themeAnalyses: readonly ThemeAnalysisSize[];
+  /** `true` on a job resumed after a restart: calls before the restart are not in `calls`. */
+  readonly resumed?: boolean;
+}
+
 export interface TrendReport {
   readonly id: string;
   readonly libraryID: number;
@@ -407,6 +462,15 @@ export interface TrendReport {
   readonly prompts: readonly TrendPromptUse[];
   /** Summed over every call the run made, the summaries it made included. */
   readonly usage: Usage | undefined;
+  /**
+   * Each call's counts and each theme analysis's size, on the run's first
+   * report only. Absent on the second report of a `both` run, and on every
+   * record stored before 2026-11-02, which reads as "not measured", never 0.
+   * Added 2026-11-02 (`P4-T23`; `docs/07` §5.2's note of that date). Built by
+   * `runMeasurementOf`, attached by `execute`, read by
+   * `scripts/eval-trend-report.ts`.
+   */
+  readonly runMeasurement?: ReportRunMeasurement;
   /** Every item key cited, in order of first appearance. */
   readonly citedItemKeys: readonly string[];
   readonly warnings: readonly string[];

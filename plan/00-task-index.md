@@ -26,9 +26,19 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 2 — Multi-source + dedup | 37 | 33.25 d | 33.25–47 d | 12–16 d (+108%) |
 | 3 — LLM + summaries | 39 | 29.50 d | 29.5–41 d | 12–15 d (+97%) |
 | **Phases 0–3** | **157** | **109.75 d** | **109.75–154 d** | 39–52 d (+111% over the top of the band) |
-| 4 — Trend report | 25 | 25.25 d | 25.25–35 d | 8–11 d (+130%) |
+| 4 — Trend report | 25 | 25.75 d | 25.75–36 d | 8–11 d (+134%) |
 | 5 — Related + recommendations | 31 | 35.75 d | 35.75–50 d | 10–14 d (+155%) |
 | 6–7 | not decomposed | — | 36–50 d ⚠ **scaled, not measured** | 17–24 d |
+
+**2026-11-02, later still: `P4-T23` re-priced 1.25 → 1.75 d** (§6 item 336(d)). The extra 0.5 d is the per-call usage
+capture of item 335(k), by the coordinator's judgement after the fact and unmeasured. Phase 4 is **25 cards and 25.75 d**,
+re-read from the cards' `Estimate` rows by script; 25.75 × 1.4 = 36.05 → 36, so the band is 25.75–36 d (was 25.25–35). The
+last column is 25.75 ÷ 11 = 2.34 → +134% (it read +130%); against the scaled 16.5 the low end is +56% (25.75 ÷ 16.5 = 1.56;
+it read +53%). The project total is 109.75 + 25.75 + 35.75 + 36 = **207.25 d** low and 154 + 36 + 50 + 50 = **290 d** high
+(was 206.75–289), still ≈ 10–14 months at 21 working days (207.25 ÷ 21 ≈ 9.9; 290 ÷ 21 ≈ 13.8). The critical path
+P0 → P1 → P2 → P4 → P6 → P7 is 17.75 + 29.25 + 33.25 + 25.75 + 15 + 21 = **142.00** low and 25 + 41 + 47 + 36 + 21 + 29 =
+**199** high (was 141.50–198). The route P0 → P1 → P2 → P5 → P7 stays 137.00–192 because Phase 4 is not on it, so **Phase 5's
+float grows from 4.5–6 d to 5–7 d**. `docs/11` §1–§2 carry the rest.
 
 **2026-11-02, later: `P4-T22` re-priced 0.75 → 2.25 d** (§6 item 335(g)). 0.75 d is the card as drafted, about
 0.75 d the first fix (item 327(a), which priced it at "about 0.5–0.75 d, on top of `P4-T22`'s card" and never moved the
@@ -401,7 +411,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P4-T20` | Report window: progress, streaming preview, delivery | `P4-T15`, `P4-T18`, `P4-T19` | 1.25 d |  |
 | `P4-T21` | Korean report path end to end | `P4-T08`, `P4-T12`, `P4-T18` | 0.75 d |  |
 | `P4-T22` | 400-item scale test on the mock provider | `P4-T18` | 2.25 d |  |
-| `P4-T23` | Evaluation set and regression harness | `P4-T20`, `P4-T21` | 1.25 d | 🔒 |
+| `P4-T23` | Evaluation set and regression harness | `P4-T20`, `P4-T21` | 1.75 d | 🔒 |
 | `P4-T24` | Determinism check across three runs | `P4-T23` | 0.75 d | 🔒 |
 | `P4-T25` | Phase-4 acceptance run against the definition of done | `P4-T21`, `P4-T22`, `P4-T24` | 0.75 d | 🔒 |
 
@@ -2846,6 +2856,51 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (m) Item 334(l)'s round is clean: three consecutive runs of 254 passed on the final tree. Of six runs, one failed
       `phase1-dod.spec.ts`'s limit of 100 ms on the main thread at 177 ms; the other five measured 51 to 75 ms, so it is
       treated as an occasional timing failure and the assertion is unchanged. The two fixes were both in specs.
+
+336. **`P4-T23`'s step 4 data source written, 2026-11-02** (`plan/reports/P4-T23-capture.md`; item 335(k)).
+    **DECIDED 2026-11-02 (coordinator, under item 313):**
+    - (a) The agent's eight readings stand, as written in `docs/07` §4.3, §5.1 and §5.2, and `docs/06` §12.3. A report's first
+      record holds `runMeasurement`, numbers only. An old record prints "not measured", and a figure a provider did not
+      report stays absent.
+    - (b) A run that ends before saving stores no numbers, which includes a truncated report. This is accepted as a stated
+      limit for now, because what it loses is a measurement and not money or data. `P4-T24` and `P4-T25` report it if a paid
+      run ends that way, and the owner decides then whether the numbers are worth keeping for failed runs.
+    - (c) Whether Gemini's thinking tokens sit outside `total_output_tokens`, and whether OpenRouter's `completion_tokens`
+      includes reasoning, are unverified, and the cost figures for those two may read low until they are settled. The kept
+      `totalTokens` lets the first real answer settle both, and `P4-T25` records the answer. Nothing changes before then.
+    - (d) `P4-T23` is re-priced from 1.25 d to 1.75 d for this work, by judgement after the fact and unmeasured. Phase 4
+      becomes 25.75–36 d and the plan 207.25–290 d, through the five places `plan/README.md` §7 names.
+    - (e) The agent's parked spec runs in the next integration round, with the Korean of item 335(l).
+
+337. **`P5-T05` and `P5-T06` written on stand-in fixtures, 2026-11-02** (`plan/reports/P5-T05-T06.md`; item 335(a)).
+    **DECIDED 2026-11-02 (coordinator, under item 313):**
+    - (a) The agent's readings stand, as written in `docs/02` §6.2, `docs/05` §2.1 and §3.3, `docs/07` §4.2 and `docs/13` §3.1
+      and §3.5. Both cards pass against hand-written fixtures only, and neither is DONE before `P5-T31` re-checks them. The
+      report's "P5-T31 must check" list is that re-check.
+    - (b) Finding 1: `P5-T31`'s "fixture or stand-in" check passes on a scenario that was never recorded, because a stand-in
+      already sits under the key. The owner reads the sidecars' `synthetic` member; `P5-T31` carries the note.
+    - (c) Finding 3: an arXiv seed holding a `10.48550/arXiv.*` DOI goes out as `DOI:`, which `P2-T05` measured `/paper/batch`
+      does not resolve, and which `P5-T12` could cache as "not indexed" for 7 days. `P5-T12` prefers `ARXIV:` for those DOIs.
+      Its behaviour on `/references` is unmeasured, and `P5-T31` may settle it.
+    - (d) Finding 4: `intents` and `isInfluential` are requested and dropped, because `RelationEdge` has no member for them.
+      No finishing condition needs them (rule 9), and they stay as they are.
+    - (e) The next integration round runs `P5-T05`, `P5-T06`, item 336's spec and item 335(l)'s Korean together, and those
+      commit from that round. The next wave starts after that commit.
+
+338. **Item 337(e)'s integration round, 2026-11-02** (`plan/reports/integration-round-337.md`).
+    **DECIDED 2026-11-02 (coordinator, under item 313):**
+    - (a) The round is clean: three consecutive runs of 261 passed on the final tree, with no product code changed. The ko-KR
+      totals are 353 present and 1 absent, the one being the deliberate fallback fixture. `P5-T05` and `P5-T06` have no
+      integration spec and stay proved at unit level on stand-in fixtures.
+    - (b) "The note and the export show none of the numbers" is narrowed: Appendix B already prints each summary call's input
+      and output tokens, and the header names each prompt. The spec now holds that nothing else appears. A comparison with a
+      build from before the capture found no new text.
+    - (c) `docs/07` §7.6's "always flushed at stage boundaries" does not hold for `ctx.checkpoint`. A run held in its first
+      compose had a record three stages behind in all five runs. A crash then prices the resumed job from an earlier stage, and
+      the measured job made no repeat calls, because done stages came from the cache. No finishing condition needs it (rule 9),
+      so it is recorded only.
+    - (d) The proofs outside the suite (the comparison with the old build, `measure` on a copied file) live in the scratchpad
+      and are not kept; `docs/13` §2.3 says what they were.
 
 ## 7. Regenerating this file
 

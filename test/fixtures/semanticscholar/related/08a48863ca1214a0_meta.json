@@ -1,0 +1,13 @@
+{
+  "scenario": "recommend-size-cap",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-02T00:00:00.000Z",
+  "endpoint": "https://api.semanticscholar.org/recommendations/v1/papers/",
+  "method": "POST",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written, not recorded, and not evidence about the service: no recording has drawn this response. docs/05 §3.3 and docs/02 §6.10 give status 400 and quote the message with an ellipsis, so only the status and that opening are documented; the content type and the end of the message are assumptions. Drawing it live would need a response over 10 MB from a shared service. Match on the opening of the message, never on the whole of it.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

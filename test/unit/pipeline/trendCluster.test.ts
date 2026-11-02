@@ -1359,6 +1359,14 @@ describe("P4-T06 Done-when — 150 digests with a forced 20 000-token budget", (
     expect(outcome.requests).toBe(4);
     expect(outcome.calls).toBe(4);
     expect(outcome.batches).toBe(3);
+    // P4-T23: each request names its prompt, and each batch its own papers.
+    const labels = provider.calls.map((call) => call.request.accounting);
+    expect(labels.filter((a) => a?.promptId === "THEME_MERGE")).toEqual([
+      { promptId: "THEME_MERGE" },
+    ]);
+    const batchLabels = labels.filter((a) => a?.promptId === "THEME_CLUSTER");
+    expect(batchLabels).toHaveLength(3);
+    expect(batchLabels.reduce((sum, a) => sum + (a?.papers ?? 0), 0)).toBe(150);
     expect(outcome.usage.inputTokens).toBe(400);
     expect(outcome.usage.outputTokens).toBe(200);
     expect(outcome.usage.totalTokens).toBe(600);

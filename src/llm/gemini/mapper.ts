@@ -274,17 +274,20 @@ function modelOutputText(raw: Record<string, unknown>): string {
 /**
  * `usage`'s documented fields (`docs/03` §4.4) onto `docs/07` §5.1's `Usage`.
  *
- * `total_thought_tokens` has no `Usage` member and is not added to
+ * `total_thought_tokens` is kept as `reasoningTokens` since 2026-11-02
+ * (`P4-T23`), absent when the answer has none, and is not added to
  * `outputTokens`: §4.4 leaves open whether `total_output_tokens` already
  * includes it. Gemini reports no cost, so `costUsd` is `undefined`.
  */
 function interactionUsage(raw: Record<string, unknown>): Usage {
   const usage = recordAt(raw, "usage");
+  const reasoningTokens = countAt(usage, "total_thought_tokens");
   return {
     inputTokens: countAt(usage, "total_input_tokens"),
     outputTokens: countAt(usage, "total_output_tokens"),
     totalTokens: countAt(usage, "total_tokens"),
     costUsd: undefined,
+    ...(reasoningTokens !== undefined && { reasoningTokens }),
   };
 }
 

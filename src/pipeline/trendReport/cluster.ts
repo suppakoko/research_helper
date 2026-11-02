@@ -1224,6 +1224,7 @@ export async function clusterThemesTwoStage(
         },
         ...(deps.routing !== undefined && { routing: deps.routing }),
         traceId: `${trace}:batch-${String(batch)}:request-${String(request)}`,
+        accounting: { promptId: prompt.id, papers: keys.length },
       }));
     try {
       let answer = await ask();
@@ -1387,6 +1388,7 @@ export async function clusterThemesTwoStage(
         },
         ...(deps.routing !== undefined && { routing: deps.routing }),
         traceId: `${trace}:merge:request-${String(request)}`,
+        accounting: { promptId: mergePrompt.id },
       }));
     merge = await askMerge();
     const first = mergeProblems(merge, localIds);
@@ -1566,6 +1568,7 @@ export async function clusterThemes(
       },
       ...(deps.routing !== undefined && { routing: deps.routing }),
       traceId: `${deps.traceId ?? "theme-cluster"}:request-${String(requests)}`,
+      accounting: { promptId: prompt.id, papers: input.digests.length },
     };
     const completed = await completeJSON<ThemeClustering>(
       deps.llm,

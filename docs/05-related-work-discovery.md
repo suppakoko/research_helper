@@ -128,6 +128,8 @@ Three uses for `contexts` beyond ranking:
 `intents` (`background`, `methodology`, `result`) is frequently empty in practice — treat it as a
 bonus, never a filter.
 
+*As built 2026-11-02 (`plan/08` `P5-T05`, against stand-in fixtures, `plan/00` §6 item 335(a)):* `findRelated` copies `contexts` onto `RelationEdge.contexts`, an empty array included, and reads neither `intents` nor `isInfluential`, which `RelationEdge` has no member for. `/references` has no recorded response, so its row is **assumed** to match the sample above with `citedPaper` in place of `citingPaper` (`P5-T31` checks it).
+
 ### 2.2 Co-citation
 
 **Definition:** papers A and B are *co-cited* when some third paper C cites both. Co-citation
@@ -381,6 +383,26 @@ show a "preprint (not peer reviewed)" badge, and offer a "peer-reviewed only" fi
 > and 1 negative successfully. **Do not send a 500-paper collection in one call.** Cap at
 > **10–20 positives** — both to stay safely inside untested territory and because a broad,
 > heterogeneous seed set produces mushy recommendations (§7.2). Escalate cautiously and measure.
+
+> **As built 2026-11-02 (`plan/08` `P5-T06`, against stand-in fixtures, `plan/00` §6 item 335(a)).**
+> **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):**
+>
+> 1. **Limit and fields.** `limit` is clamped to 500. At 100 or below, `SEMANTICSCHOLAR_RECOMMEND_FIELDS` is sent,
+>    `abstract` included; above 100, the same list without `abstract`, so §6.1's `limit=200` returns no abstracts and
+>    hydration supplies them.
+> 2. **Pitfall 2.** `recommend` validates positives and negatives in one `/paper/batch` with `fields=paperId,externalIds`,
+>    index-matched. `RECOMMEND_MAX_POSITIVES` is 15 until `P5-T29` measures; the cap is applied after validation, so a bad
+>    id does not cost a seed. Negatives have no cap here: `P5-T21` sends at most 10. An id listed both ways stays a positive.
+> 3. **No seed left.** Positives that all fail validation throw `BadRequestError` with status 404, no POST sent, as
+>    `plan/00` §6 item 332(c) reads "asked and does not hold". So does the batch's own 400, `No valid paper ids given`,
+>    which `P2-T05` measured for a lone id it cannot read. No usable identifier at all is an empty page and a warning.
+> 4. **Pitfall 4.** The input ids, and every id the batch returned for them, are filtered out of the answer, on the paper
+>    id and on each identifier. `rank` is the position once the seeds are gone, as PubMed's is, so a seed in the list does
+>    not lower `recScore` for what follows; a row the mapper drops still counts.
+> 5. **The size cap.** Read off the response body's opening, `Response would exceed maximum size`, never the whole
+>    message. One retry at `floor(limit / 2)` with the same fields; success carries a warning, and a second refusal
+>    propagates as the `BadRequestError`. A `limit` of 1 is not retried.
+> 6. **`findRelated`'s `"auto"` and no strategy mean `"recommendations"`:** one request, and §3 calls it the best fit.
 
 ### 3.4 Why not build our own recommender instead
 

@@ -948,10 +948,10 @@ describe("SEMANTICSCHOLAR_CAPABILITIES", () => {
     expect(SEMANTICSCHOLAR_CAPABILITIES).toEqual({
       keywordSearch: true,
       query: { or: true, not: true, phrase: true, fields: [] },
-      relatedByWork: false,
+      relatedByWork: true,
       lookupById: ["doi", "pmid", "pmcid", "arxivId"],
       abstractsInSearch: true,
-      citationGraph: false,
+      citationGraph: true,
       dateFilter: true,
       filters: { languages: false, openAccess: false },
       maxPageSize: 100,
@@ -1583,7 +1583,7 @@ describe("createSemanticScholarSource — identity", () => {
     );
     expect(source.lookup).toBeDefined();
     expect(source.fetchAbstract).toBeDefined();
-    expect(source.findRelated).toBeUndefined();
+    expect(source.findRelated).toBeDefined();
   });
 
   it("P2-T34: capabilities.filters is the bulk renderer's own object, and equals what it does", () => {

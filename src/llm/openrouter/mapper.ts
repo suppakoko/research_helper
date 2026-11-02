@@ -291,16 +291,26 @@ export function mapFinishReason(raw: unknown): ChatResponse["finishReason"] {
  * call's actual credit cost in US dollars and is passed through **unrounded**
  * (`P3-T07` Done-when); every absent or non-numeric field is `undefined`.
  *
+ * `usage.completion_tokens_details.reasoning_tokens` becomes `reasoningTokens`
+ * (`P4-T23`, 2026-11-02), and stays absent when the answer has none. The name
+ * is from OpenRouter's usage-accounting page, read that day; no recorded
+ * response here holds it (`docs/07` §5.2's note of that date).
+ *
  * @param raw - the answer's `usage` object, if any
  * @returns the normalized usage
  */
 export function toUsage(raw: unknown): Usage {
   const usage = isRecord(raw) ? raw : {};
+  const details = isRecord(usage.completion_tokens_details)
+    ? usage.completion_tokens_details
+    : {};
+  const reasoningTokens = finiteNumber(details.reasoning_tokens);
   return {
     inputTokens: finiteNumber(usage.prompt_tokens),
     outputTokens: finiteNumber(usage.completion_tokens),
     totalTokens: finiteNumber(usage.total_tokens),
     costUsd: finiteNumber(usage.cost),
+    ...(reasoningTokens !== undefined && { reasoningTokens }),
   };
 }
 

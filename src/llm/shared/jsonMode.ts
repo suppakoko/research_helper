@@ -320,6 +320,9 @@ export function buildRepairRequest(
     ...(original.routing !== undefined && { routing: original.routing }),
     ...(original.seed !== undefined && { seed: original.seed }),
     traceId: original.traceId,
+    ...(original.accounting !== undefined && {
+      accounting: original.accounting,
+    }),
   };
 }
 

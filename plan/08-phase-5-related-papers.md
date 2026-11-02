@@ -699,6 +699,8 @@ keyed Semantic Scholar path (item 323(c)) and +0.5 d for the five builders (revi
 
 > *Added 2026-11-02 (`plan/00` §6 item 335(a); owner): built before `P5-T31` by the owner's choice, against stand-in fixtures built from `docs/02` §6's documented response shapes, each marked `"synthetic": true` with a reason. No key, no live call and no anonymous recording. The dependency on `P5-T31` stays, as the check: when the owner records, the stand-ins are replaced and this card is re-checked against what was recorded, and the card is not DONE before that.*
 
+> *Added 2026-11-02 (as built; the assumptions below are unverified, `plan/00` §6 item 335(a)): the stand-ins sit in `test/fixtures/semanticscholar/related/` under the fixture keys `semanticscholarRelatedPlan` names, so the owner's run overwrites each one and clears its `"synthetic": true`. No document or recording settles these, and `P5-T31` checks each: (a) step 2's no-match answer is HTTP 404 (any body), written as a 404 with `{"error":"Title match not found"}`, and a 200 with an empty `data` is read as no match too; (b) a match answers `{"data":[paper]}`, and `parseTitleMatchBody` also takes a bare paper object, because `docs/02` §6.2 records no response from this endpoint; (c) a `/references` row holds its paper under `citedPaper`, where `docs/05` §2.1 shows only `/citations`' `citingPaper`; (d) `/references` accepts `contexts`, `intents` and `isInfluential`, as `P5-T04` assumed when it asked for them; (e) a row can lack a `paperId`, which the adapter counts and leaves out. Where each decision is written: `docs/02` §6.2, `docs/05` §2.1, `docs/07` §4.2. `batch-embedding` and `batch-references` have no stand-in: neither card reads them.*
+
 **Do.**
 1. `findRelated` with `strategy: "references" | "citations"`: `limit` ≤ 1000, fields including
    `externalIds`, `year`, `title`, `citationCount`, and for citations `contexts,intents,isInfluential`;
@@ -757,6 +759,8 @@ with every seed ID validated before the POST.
 - create `test/unit/sources/semanticscholarRecommendations.test.ts`
 
 > *Added 2026-11-02 (`plan/00` §6 item 335(a); owner): built before `P5-T31` by the owner's choice, against stand-in fixtures built from `docs/02` §6's documented response shapes, each marked `"synthetic": true` with a reason. No key, no live call and no anonymous recording. The dependency on `P5-T31` stays, as the check: when the owner records, the stand-ins are replaced and this card is re-checked against what was recorded, and the card is not DONE before that.*
+
+> *Added 2026-11-02 (as built; the assumptions below are unverified, `plan/00` §6 item 335(a)): as on `P5-T05`, the stand-ins sit under the plan's fixture keys. Assumed, and `P5-T31` checks each: (a) `forpaper` answers `{"recommendedPapers":[…]}`, from `docs/05` §3.2's sample of its `all-cs` pool; (b) `batch-unresolvable`'s third row, whose `paperId` is a placeholder of zeros because no document records that paper's; (c) that `/paper/batch` answers `fields=paperId,externalIds` with both members. Step 3's size-cap 400 stays hand-written after `P5-T31` (`docs/13` §3.1), so the opening of its message stays unobserved. Step 2 needs a validation batch for the exact ids of each test, which no recorded scenario can be, so `semanticscholarRecommendations.test.ts` composes that answer from `batch-unresolvable`'s rows and reads the rest from fixtures. Decisions: `docs/05` §3.3, `docs/07` §4.2.*
 
 **Do.**
 1. `forpaper` with `from=recent`, `limit` ≤ 100 when `abstract` is requested, else up to the caller's
@@ -1038,6 +1042,8 @@ a stated threshold, a list for the user to pick from, or an actionable error nam
 
 > *Added 2026-11-02 (`plan/reports/P5-T09.md`, `P5-T10.md`): call `CrossrefSource.matchTitle(title, ctx)`; the recorded title search returns non-papers (`component` items with `[[null]]` dates), so the threshold must reject them. Title matches are not cached: they have no signal kind and no row in `docs/05` §9.2.*
 
+> *Added 2026-11-02 (`plan/reports/P5-T05-T06.md`; coordinator, under `plan/00` §6 item 313): `matchTitle(title, ctx)` returns zero or one record, with no threshold and no cache, returns `[]` without a key, and throws `RangeError` on a blank title.*
+
 **Do.**
 1. Documents first: write the threshold decided below into `docs/05` §6.1 (FR-14 says "per
    `05-related-work-discovery.md`", which states none).
@@ -1097,6 +1103,8 @@ their results are unioned and merged, and only survivors are hydrated.
 > *Added 2026-11-02 (`plan/reports/P5-T01.md`): map `SourceRecord.id` to a list of edges, because two calls to one source can return one record. Check whether `dedupeAndMergeAsync` tolerates a duplicate `SourceRecord.id`; it was not checked.*
 
 > *Added 2026-11-02 (`plan/reports/P5-T07.md`, `P5-T08.md`, `P5-T09.md`, `P5-T10.md`; coordinator, under `plan/00` §6 item 313). (1) `src/model/merge.ts` joins this card's Files: read `"other"` as absent when choosing `type`, because a Crossref reference record otherwise makes the merged work "other" even after it is filled in (measured by `P5-T09`). (2) Measure how many of `work-with-references`' 155 DOIs Europe PMC resolves; a keyless, non-biomedical seed's references otherwise have no route to a title. If the share is poor against the definition of done's "still returns useful candidates", add a Crossref `lookup` over `filter=doi:` with one free, unkeyed recording, and re-price this card. (3) Call `findRelated` once per named strategy inside `cachedRelated`, never `"auto"`, which hides a failed route in a warning and would cache the partial page. (4) Drop `raw` before caching. (5) Status rows: a rejected call with `BadRequestError` 404 is "not indexed"; an empty page with a warning is "could not ask" (item 332(c)). (6) PubMed's records arrive hydrated, and `lookupById` is empty there, so step 3 skips them. `PPR` rows have no identifiers: keep them as they are. A DOI-only Europe PMC seed costs one `lookup` per call, so pass a PMID when known. One record can appear under two seeds. (7) Choose a budget within `docs/05` §6.1's 5–8; `GENERATOR_VALUE_ORDER` has no Crossref row. `docs/05` §6.1's generator list gains Crossref here.*
+
+> *Added 2026-11-02 (`plan/reports/P5-T05-T06.md`; coordinator, under `plan/00` §6 items 313 and 337(c)): call `findRelated` once per named strategy, and check `hasApiKey` first for the "no key" row. A 404 means "not indexed"; an empty page with a warning means "could not ask". A forpaper limit of 200 returns no abstracts, so hydrate. Edges align with records by index and have the same length. `toSemanticScholarId` prefers `DOI:`, and `P2-T05` measured that `/paper/batch` does not resolve an arXiv seed's `10.48550/arXiv.*` DOI, so this card sends `ARXIV:` for those, with a test, and does not cache "not indexed" from a `DOI:` request on such a seed.*
 
 **Do.**
 1. Generators A–E of `docs/05` §6.1: S2 forpaper, references, citations (keyed only, §0.2 item 19);
@@ -1628,6 +1636,8 @@ L2-normalised once, stored with their model name, and compared only within that 
 
 > *Added 2026-11-02 (`plan/reports/P5-T03.md`): `createEmbeddingStore` does not evict on its own, so `ensureEmbeddings` calls `evictToCap(isInLibrary)` after each `putMany`, with a synchronous predicate over library work keys. Prefer `getMany` to `allForModel`: a read returns one JavaScript number per byte, measured only at 1 000 vectors.*
 
+> *Added 2026-11-02 (`plan/reports/P5-T05-T06.md`; coordinator, under `plan/00` §6 items 313 and 335(a)): `fetchEmbeddings` can use the source's private `send` with the same key gate. No `batch-embedding` stand-in exists, so this card writes one marked `"synthetic": true` from the documented shape, and `P5-T31` checks it.*
+
 **Do.**
 1. Documents first: answer `docs/07` §13 item 5 and align `docs/03` §16 with the decision below.
 2. `fetchEmbeddings`: `fields=embedding.specter_v2`, ≤ 200 ids per call, papers without a vector
@@ -1833,6 +1843,8 @@ and their union is merged; keyword queries go through Phase 2's `fanOut` with th
 > *Added 2026-11-02 (`plan/reports/P5-T08.md`, `P5-T10.md`): `findSimilarForSeeds` throws above 10 seeds; count one `elink` plus its `efetch` batches (up to 5 at limit 100 over 10 seeds) against `RequestBudget`, and re-read "a budget of 12 runs (a) and (b) fully" against that. `fanOut` has no cache hook, so step 1(d) wraps one source and one query at a time. For one request over several seeds: `readRelated` per seed, `tryTake(1)`, then `writeRelated` or `writeRelatedMissing` per seed. Build cache keys from identifiers, never from a URL, which can hold a key.*
 
 > *Added 2026-11-02 (`plan/reports/P5-T18.md`, `P5-T22.md`; coordinator, under `plan/00` §6 item 313): use `rankedTerms`, which fixes the order. `suggestedQueries` can be empty with `origin: "llm"` and has no cap, because the schema has no `maxItems`, so this card falls back to the top terms and sets its own cap.*
+
+> *Added 2026-11-02 (`plan/reports/P5-T05-T06.md`; coordinator, under `plan/00` §6 item 313): `recommend(positives, negatives, limit, ctx)` costs one batch plus one POST, or two POSTs with the retry, and these count against the budget. It throws 404 when no positive resolves and `RangeError` above 500 ids in all. `RECOMMEND_MAX_POSITIVES` is 15 until `P5-T29` measures it.*
 
 **Do.**
 1. (a) S2 `recommend` with the seeds and negatives (keyed); (b) pmra over ≤ 10 PMID seeds; (c) forward
@@ -2430,6 +2442,8 @@ key, checked by the agent, so `P5-T05` and `P5-T06` test against real bodies.
 - Do **not** ask for, read, print or store the key; do not run the keyed path.
 - Do **not** re-record a scenario the owner's run refused by trying the anonymous pool (item 320(a)).
 
+> *Added 2026-11-02 (`plan/00` §6 item 335(a)): `P5-T05` and `P5-T06` left ten stand-ins in `test/fixtures/semanticscholar/related/`, under the same fixture keys, so a scenario the run failed to record still has a file. After the run, the only `"synthetic": true` sidecar left should be `recommend-size-cap`; read the sidecars, because "has a fixture" alone passes on a stand-in. Then re-check both cards against the assumptions in their dated notes (`P5-T05` (a)–(e), `P5-T06` (a)–(c)) and run `npm run test:unit -- semanticscholar`.*
+
 **Done when.**
 - [ ] Every Semantic Scholar scenario of `P5-T04` step 2 has a committed fixture or a synthetic stand-in with its reason.
 - [ ] `grep -rli "x-api-key" test/fixtures/semanticscholar` prints nothing.
@@ -2554,7 +2568,7 @@ service, so the D6 default needs none), vector storage and its share of NFR-8 (`
 the per-run LLM confirmation (`P5-T22`, with `docs/10` §5 Q7 decided on 2026-10-26), preprint
 presentation (`P5-T24`, review line 24) and implicit feedback (item 323(b): not in v1). In §5.4, the
 float figure and the "re-sequence after Phase 6" lever are those of 2026-09-09: the key arrived on
-2026-09-30 (`plan/06` `G-03`), and `docs/11` §2 owns the float (4.5–6 d since `plan/00` §6 item 335(g), 2026-11-02; 3–4 d before it).
+2026-09-30 (`plan/06` `G-03`), and `docs/11` §2 owns the float (5–7 d since `plan/00` §6 item 336(d), 2026-11-02; 4.5–6 d since item 335(g), the same day; 3–4 d before it).
 
 ### 5.1 Work areas
 

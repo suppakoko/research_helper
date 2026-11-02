@@ -24,6 +24,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  answerTokensOf,
   answersFromExport,
   buildSheet,
   EVAL_SET_IDS,
@@ -31,10 +32,12 @@ import {
   type EvalRun,
   EXPECTED_THEMES_FORMAT,
   type ExpectedThemes,
+  formatMeasurement,
   formatScore,
   groupRuns,
   isInside,
   main,
+  measurementOf,
   parseExpectedThemes,
   parseStoredReport,
   pickRun,
@@ -43,6 +46,7 @@ import {
   scoreRun,
   type StoredReport,
   SYNTHETIC_SET_ID,
+  THEME_CLUSTER_ASSUMED_PER_PAPER,
 } from "../../../scripts/eval-trend-report";
 import { REPORT_DDL } from "../../../src/bootstrap/migrations";
 
@@ -88,6 +92,42 @@ function setFile(
 }
 
 const SET: ExpectedThemes = parseExpectedThemes(setFile());
+
+/** A hand-made `runMeasurement`: a shared call, then each language's own. */
+const MEASUREMENT = {
+  calls: [
+    {
+      promptId: "THEME_CLUSTER",
+      inputTokens: 100,
+      outputTokens: 200,
+      totalTokens: 300,
+      reasoningTokens: 50,
+      costUsd: 0.001,
+      maxOutputTokens: 2400,
+      papers: 10,
+    },
+    {
+      promptId: "TREND_REPORT_EN",
+      language: "en",
+      inputTokens: 200,
+      outputTokens: 400,
+      totalTokens: 600,
+      maxOutputTokens: 8192,
+    },
+    {
+      promptId: "TREND_REPORT_KO",
+      language: "ko",
+      inputTokens: 300,
+      outputTokens: 500,
+      totalTokens: 800,
+      costUsd: 0.002,
+    },
+  ],
+  themeAnalyses: [
+    { tokens: 1000, narrativeTokens: 400, papers: 12 },
+    { tokens: 3000, narrativeTokens: 1200, papers: 7 },
+  ],
+};
 
 /** A stored row's record, `usage` and the rest included, as the store writes it. */
 function record(
@@ -1195,6 +1235,385 @@ describe("reading the plugin's database", () => {
     expect(await cli.run([])).toBe(2);
     expect(await cli.run(["score", "--set", "x"])).toBe(2);
     expect(await cli.run(["sheet", "--set", "x", "--database", "y"])).toBe(2);
+    expect(await cli.run(["measure"])).toBe(2);
     expect(cli.errors[0]).toContain("Usage");
+    expect(cli.errors[0]).toContain("measure --database");
   });
+
+  it("measure prints the latest run's numbers, or the run holding --report, and no text", async () => {
+    const older = record({
+      id: "report-old",
+      generatedAtEpochMs: 500,
+      runMeasurement: {
+        calls: [{ promptId: "THEME_MERGE", inputTokens: 5 }],
+        themeAnalyses: [],
+      },
+    });
+    const newer = record({ runMeasurement: MEASUREMENT });
+    const database = await databaseWith([older, newer]);
+    const cli = capture();
+    expect(await cli.run(["measure", "--database", database])).toBe(0);
+    const shown = cli.lines.join("\n");
+    expect(shown).toContain("run report-en");
+    expect(shown).toContain("THEME_CLUSTER");
+    expect(shown).not.toContain("THEME_MERGE");
+    for (const text of [
+      COLLECTION_NAME,
+      PRODUCED_NAME_1,
+      PRODUCED_DEFINITION,
+      REPORT_TEXT,
+      database,
+    ]) {
+      expect(shown).not.toContain(text);
+    }
+
+    const picked = capture();
+    expect(
+      await picked.run([
+        "measure",
+        "--database",
+        database,
+        "--report",
+        "report-old",
+      ]),
+    ).toBe(0);
+    expect(picked.lines.join("\n")).toContain("THEME_MERGE");
+  });
+
+  it("measure says not measured for an old row, and refuses a report it does not hold or an empty table", async () => {
+    const database = await databaseWith([record()]);
+    const cli = capture();
+    expect(await cli.run(["measure", "--database", database])).toBe(0);
+    expect(cli.lines.join("\n")).toBe(
+      "run report-en | reports en | not measured",
+    );
+
+    const missing = capture();
+    expect(
+      await missing.run([
+        "measure",
+        "--database",
+        database,
+        "--report",
+        "nope",
+      ]),
+    ).toBe(1);
+    expect(missing.errors.join("\n")).toContain("nope");
+
+    const empty = capture();
+    expect(
+      await empty.run(["measure", "--database", await databaseWith([])]),
+    ).toBe(1);
+    expect(empty.errors.join("\n")).toContain("no report is stored");
+  });
+});
+
+describe("what a run measured (P4-T23 step 4)", () => {
+  it("an old record reads as not measured, never 0", () => {
+    const old = stored();
+    expect(old).not.toHaveProperty("runMeasurement");
+    const run = oneRun([old]);
+    expect(measurementOf(run)).toBeUndefined();
+    const shown = formatMeasurement(run);
+    expect(shown).toContain("not measured");
+    expect(shown).not.toMatch(/\b0\b/);
+  });
+
+  it("a measurement on one row of a both run is the run's; the other row's absence is not a second reading", () => {
+    const run = oneRun([
+      stored({ runMeasurement: MEASUREMENT }),
+      stored({ id: "report-ko", language: "ko" }),
+    ]);
+    expect(measurementOf(run)?.calls).toHaveLength(3);
+    const shown = formatMeasurement(run);
+    expect(shown).toContain("reports en, ko");
+    expect(shown).toContain("run total | calls 3 | input 600 |");
+    expect(shown).toContain("call 1 | THEME_CLUSTER | shared |");
+    expect(shown).toContain("call 3 | TREND_REPORT_KO | ko |");
+  });
+
+  it("two rows of one run each holding one are refused, not added", () => {
+    const run = oneRun([
+      stored({ runMeasurement: MEASUREMENT }),
+      stored({ id: "report-ko", language: "ko", runMeasurement: MEASUREMENT }),
+    ]);
+    expect(refusal(() => measurementOf(run))).toContain("not added");
+    expect(refusal(() => formatMeasurement(run))).toContain("not added");
+  });
+
+  it("the reasoning figure prints as a share of that call's ceiling, and absent as not reported", () => {
+    const shown = formatMeasurement(
+      oneRun([stored({ runMeasurement: MEASUREMENT })]),
+    );
+    const lines = shown.split("\n");
+    const first = lines.find((l) => l.startsWith("call 1 "));
+    const second = lines.find((l) => l.startsWith("call 2 "));
+    expect(first).toContain("reasoning 50 ");
+    expect(first).toContain("ceiling 2400 ");
+    expect(first).toContain("reasoning share of ceiling 0.021 ");
+    expect(second).toContain("reasoning not reported ");
+    expect(second).toContain("reasoning share of ceiling not reported ");
+    expect(second).toContain("cost not reported");
+  });
+
+  it("a ceiling of 0 gives no share to print, rather than Infinity", () => {
+    const shown = formatMeasurement(
+      oneRun([
+        stored({
+          runMeasurement: {
+            calls: [{ promptId: "P", reasoningTokens: 50, maxOutputTokens: 0 }],
+            themeAnalyses: [],
+          },
+        }),
+      ]),
+    );
+    expect(shown).toContain("reasoning share of ceiling not reported ");
+    expect(shown).not.toContain("Infinity");
+  });
+
+  it("a sum with any part missing is not reported, never a part presented as the whole", () => {
+    const shown = formatMeasurement(
+      oneRun([stored({ runMeasurement: MEASUREMENT })]),
+    );
+    expect(shown).toContain(
+      "run total | calls 3 | input 600 | output 1100 | reasoning not reported | cost not reported",
+    );
+    expect(shown).toContain(
+      "THEME_CLUSTER | calls 1 | input 100 | output 200 | reasoning 50 | cost 0.001000",
+    );
+  });
+
+  it("THEME_CLUSTER's answer tokens per paper print against the ceiling's assumption", () => {
+    const shown = formatMeasurement(
+      oneRun([stored({ runMeasurement: MEASUREMENT })]),
+    );
+    expect(shown).toContain(
+      "THEME_CLUSTER answer tokens per paper 15.00 against the 40 its ceiling assumes",
+    );
+    const atMost = formatMeasurement(
+      oneRun([
+        stored({
+          runMeasurement: {
+            calls: [
+              { promptId: "THEME_CLUSTER", outputTokens: 90, papers: 3 },
+              { promptId: "THEME_CLUSTER", outputTokens: 30, papers: 1 },
+            ],
+            themeAnalyses: [],
+          },
+        }),
+      ]),
+    );
+    expect(atMost).toContain(
+      "THEME_CLUSTER answer tokens per paper at most 30.00 against",
+    );
+    const unknown = formatMeasurement(
+      oneRun([
+        stored({
+          runMeasurement: {
+            calls: [{ promptId: "THEME_CLUSTER", papers: 3 }],
+            themeAnalyses: [],
+          },
+        }),
+      ]),
+    );
+    expect(unknown).toContain(
+      "THEME_CLUSTER answer tokens per paper not reported",
+    );
+    const noPapers = formatMeasurement(
+      oneRun([
+        stored({
+          runMeasurement: {
+            calls: [{ promptId: "THEME_CLUSTER", outputTokens: 9, papers: 0 }],
+            themeAnalyses: [],
+          },
+        }),
+      ]),
+    );
+    expect(noPapers).toContain(
+      "THEME_CLUSTER answer tokens per paper not reported",
+    );
+    const noCluster = formatMeasurement(
+      oneRun([
+        stored({
+          runMeasurement: {
+            calls: [{ promptId: "THEME_MERGE", outputTokens: 9 }],
+            themeAnalyses: [],
+          },
+        }),
+      ]),
+    );
+    expect(noCluster).not.toContain("per paper");
+  });
+
+  it("the 40 is what the prompt file sets", () => {
+    const prompt = readFileSync(
+      resolve(REPO_ROOT, "src/prompts/theme-cluster.v1.0.0.md"),
+      "utf8",
+    );
+    expect(prompt).toContain(
+      `maxTokensPerItem: ${String(THEME_CLUSTER_ASSUMED_PER_PAPER)}\n`,
+    );
+  });
+
+  it("answer tokens: the call's own total says whether reasoning is inside the output", () => {
+    const call = (
+      members: Partial<Record<string, number>>,
+    ): { promptId: string } & Record<string, number | string> =>
+      ({ promptId: "P", ...members }) as { promptId: string } & Record<
+        string,
+        number | string
+      >;
+    // Inside: 412 + 118 = 530.
+    expect(
+      answerTokensOf(
+        call({
+          inputTokens: 412,
+          outputTokens: 118,
+          totalTokens: 530,
+          reasoningTokens: 64,
+        }),
+      ),
+    ).toEqual({ tokens: 54, kind: "exact" });
+    // On top: docs/03 §4.4's Gemini sample, 412 + 118 + 44 = 574.
+    expect(
+      answerTokensOf(
+        call({
+          inputTokens: 412,
+          outputTokens: 118,
+          totalTokens: 574,
+          reasoningTokens: 44,
+        }),
+      ),
+    ).toEqual({ tokens: 118, kind: "exact" });
+    // Fits neither reading, or no total to read: not guessed.
+    expect(
+      answerTokensOf(
+        call({
+          inputTokens: 1,
+          outputTokens: 118,
+          totalTokens: 999,
+          reasoningTokens: 44,
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      answerTokensOf(call({ outputTokens: 118, reasoningTokens: 44 })),
+    ).toBeUndefined();
+    expect(
+      answerTokensOf(
+        call({ inputTokens: 1, outputTokens: 118, reasoningTokens: 44 }),
+      ),
+    ).toBeUndefined();
+    expect(
+      answerTokensOf(
+        call({ outputTokens: 118, totalTokens: 118, reasoningTokens: 44 }),
+      ),
+    ).toBeUndefined();
+    // A reported 0 settles it whatever the total says.
+    expect(
+      answerTokensOf(call({ outputTokens: 118, reasoningTokens: 0 })),
+    ).toEqual({ tokens: 118, kind: "exact" });
+    // No figure at all: the whole output is an upper bound.
+    expect(answerTokensOf(call({ outputTokens: 118 }))).toEqual({
+      tokens: 118,
+      kind: "at-most",
+    });
+    expect(answerTokensOf(call({}))).toBeUndefined();
+  });
+
+  it("each analysis's size and the narrative share print, and an empty list says so", () => {
+    const shown = formatMeasurement(
+      oneRun([stored({ runMeasurement: MEASUREMENT })]),
+    );
+    expect(shown).toContain(
+      "theme analyses 2 | largest 3000 | narrative share 0.400",
+    );
+    expect(shown).toContain(
+      "theme analysis 1 | tokens 1000 | narrative 400 | papers 12",
+    );
+    expect(shown).toContain(
+      "theme analysis 2 | tokens 3000 | narrative 1200 | papers 7",
+    );
+    const none = formatMeasurement(
+      oneRun([stored({ runMeasurement: { calls: [], themeAnalyses: [] } })]),
+    );
+    expect(none).toContain(
+      "theme analyses 0 | largest 0 | narrative share not reported",
+    );
+    expect(none).toContain("run total | calls 0 |");
+  });
+
+  it("a resumed run says what it lacks", () => {
+    const shown = formatMeasurement(
+      oneRun([
+        stored({
+          runMeasurement: { calls: [], themeAnalyses: [], resumed: true },
+        }),
+      ]),
+    );
+    expect(shown).toContain("resumed after a restart");
+    expect(
+      formatMeasurement(oneRun([stored({ runMeasurement: MEASUREMENT })])),
+    ).not.toContain("resumed");
+  });
+
+  it.each<[string, unknown]>([
+    ["a string", "nothing"],
+    ["no calls", { themeAnalyses: [] }],
+    ["no sizes", { calls: [] }],
+    [
+      "an extra member",
+      { calls: [], themeAnalyses: [], note: PRODUCED_NAME_1 },
+    ],
+    ["a resumed word", { calls: [], themeAnalyses: [], resumed: "yes" }],
+    [
+      "a call with text",
+      { calls: [{ promptId: "P", text: "x" }], themeAnalyses: [] },
+    ],
+    [
+      "a number under a name the record does not have",
+      { calls: [{ promptId: "P", other: 1 }], themeAnalyses: [] },
+    ],
+    [
+      "a figure as text",
+      { calls: [{ promptId: "P", inputTokens: "9" }], themeAnalyses: [] },
+    ],
+    [
+      "a negative figure",
+      { calls: [{ promptId: "P", inputTokens: -1 }], themeAnalyses: [] },
+    ],
+    [
+      "a prompt id holding prose",
+      {
+        calls: [{ promptId: PRODUCED_NAME_1.toLowerCase() }],
+        themeAnalyses: [],
+      },
+    ],
+    ["no prompt id", { calls: [{ inputTokens: 1 }], themeAnalyses: [] }],
+    [
+      "an unknown language",
+      { calls: [{ promptId: "P", language: "de" }], themeAnalyses: [] },
+    ],
+    [
+      "a size with a name",
+      {
+        calls: [],
+        themeAnalyses: [
+          { tokens: 1, narrativeTokens: 1, papers: 1, name: "x" },
+        ],
+      },
+    ],
+    [
+      "a size lacking a figure",
+      { calls: [], themeAnalyses: [{ tokens: 1, papers: 1 }] },
+    ],
+  ])(
+    "a measurement holding %s is refused, naming nothing it found",
+    (_what, value) => {
+      const message = refusal(() => stored({ runMeasurement: value }));
+      expect(message).toContain("run measurement");
+      expect(message).not.toContain(PRODUCED_NAME_1);
+      expect(message).not.toContain(PRODUCED_NAME_1.toLowerCase());
+    },
+  );
 });

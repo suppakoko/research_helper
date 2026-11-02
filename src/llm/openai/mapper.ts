@@ -239,7 +239,9 @@ export function extractOutputText(parsed: JsonRecord): string {
  * hidden reasoning tokens (`docs/03` §2.6), so it is taken whole: the
  * `output_tokens_details.reasoning_tokens` figure is neither subtracted (which
  * would under-cost the call 2–5× at high effort) nor added (which would count
- * them twice). OpenAI reports no cost, so `costUsd` is `undefined`.
+ * them twice). OpenAI reports no cost, so `costUsd` is `undefined`. Since
+ * 2026-11-02 (`P4-T23`) that figure is also kept as `reasoningTokens`, beside
+ * `outputTokens` and still inside it; absent when the answer has none.
  *
  * @param parsed - the parsed response
  * @returns the usage
@@ -254,7 +256,17 @@ export function extractUsage(parsed: JsonRecord): Usage {
     (inputTokens !== undefined && outputTokens !== undefined
       ? inputTokens + outputTokens
       : undefined);
-  return { inputTokens, outputTokens, totalTokens, costUsd: undefined };
+  const reasoningTokens = countOf(
+    recordOf(usage, "output_tokens_details"),
+    "reasoning_tokens",
+  );
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    costUsd: undefined,
+    ...(reasoningTokens !== undefined && { reasoningTokens }),
+  };
 }
 
 /** `incomplete_details.reason` for a truncated answer (`docs/03` §2.4). */

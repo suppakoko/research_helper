@@ -1,0 +1,7 @@
+{
+  "status": 404,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\"error\":\"Paper with id DOI:10.1234/research-helper-unknown-id not found\"}"
+}

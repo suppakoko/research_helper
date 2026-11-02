@@ -710,6 +710,7 @@ export async function summarizeItem(
       },
       routing,
       traceId: trace(options.step),
+      accounting: { promptId: template.id },
     };
   };
 

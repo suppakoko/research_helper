@@ -565,11 +565,13 @@ describe("the Responses API answer (P3-T08 steps 4–5)", () => {
     const { usage } = await h.provider.chat(request(), ctx());
 
     // 118 includes the 64 reasoning tokens (docs/03 §2.6): not 54, not 182.
+    // Since 2026-11-02 (P4-T23) the 64 is also kept, beside the 118.
     expect(usage).toStrictEqual({
       inputTokens: 412,
       outputTokens: 118,
       totalTokens: 530,
       costUsd: undefined,
+      reasoningTokens: 64,
     });
   });
 

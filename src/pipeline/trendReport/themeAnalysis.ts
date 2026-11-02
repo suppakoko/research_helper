@@ -807,6 +807,7 @@ export async function analyseThemes(
       },
       ...(deps.routing !== undefined && { routing: deps.routing }),
       traceId: `${deps.traceId ?? "cluster-reduce"}:${trace}:request-${String(counters.requests)}`,
+      accounting: { promptId: prompt.id },
     };
     const counted: JsonChatTarget = {
       activeProvider: () => deps.llm.activeProvider(),
