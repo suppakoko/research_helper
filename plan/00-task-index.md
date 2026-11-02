@@ -1,8 +1,9 @@
 # 00 — Task Index
 
-> **Generated from the task cards in `01`–`04` and `07`** (Phase 4's file, read since 2026-10-26). If a
-> row here disagrees with a card, the card wins — then regenerate this file.
-> **Last updated:** 2026-11-01 · **182 tasks: 112 `DONE`, 70 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**. **The plan has grown from the 123 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25) to 182, so 59 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Generated from the task cards in `01`–`04`, `07` and `08`** (Phase 4's file, read since 2026-10-26, and
+> Phase 5's, read since 2026-11-01). If a row here disagrees with a card, the card wins — then regenerate
+> this file.
+> **Last updated:** 2026-11-02 · **213 tasks: 112 `DONE`, 101 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**, Phase 5 **0 of 31**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 213, so 60 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -26,7 +27,22 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 3 — LLM + summaries | 39 | 29.50 d | 29.5–41 d | 12–15 d (+97%) |
 | **Phases 0–3** | **157** | **109.75 d** | **109.75–154 d** | 39–52 d (+111% over the top of the band) |
 | 4 — Trend report | 25 | 23.75 d | 23.75–33 d | 8–11 d (+116%) |
-| 5–7 | not decomposed | — | 57–79 d ⚠ **scaled, not measured** | 27–38 d |
+| 5 — Related + recommendations | 31 | 35.75 d | 35.75–50 d | 10–14 d (+155%) |
+| 6–7 | not decomposed | — | 36–50 d ⚠ **scaled, not measured** | 17–24 d |
+
+**2026-11-02: Phase 5 decomposed, decided and propagated** (§6 items 318(c), 320, 321, 323 and 325;
+`plan/08`). Its **31 cards sum to 35.75 d**, re-read from the cards' `Estimate` rows by script — the
+reviewed 34.0 d over 30 cards, plus `P5-T03` 1.0 → 1.5, `P5-T04` 1.0 → 1.75, `P5-T14` 1.5 → 1.75, `P5-T18`
+1.25 → 1.5 and the new `P5-T31` (0.25 d), less `P5-T05` 1.0 → 0.75 (`plan/08` §3). 35.75 × 1.4 = 50.05 →
+50, so the band is 35.75–50 d, replacing the scaled 21–29 d. The last column follows this table's
+convention, the card sum against the top of the superseded pre-2026-09-09 band: 35.75 ÷ 14 = 2.55 →
++155%; against the scaled figure it replaces, the low end is +70% (35.75 ÷ 21 = 1.70). The scaled row is
+now Phases 6–7: 15 + 21 = 36 low and 21 + 29 = 50 high, against 7–10 + 10–14 = 17–24 d superseded (it read
+5–7, 57–79 d, 27–38 d). The Phases 0–3 and Phase 4 rows are unchanged. The project total is 109.75 + 23.75
++ 35.75 + 36 = **205.25 d** low and 154 + 33 + 50 + 50 = **287 d** high (was 190.50–266), ≈ 10–14 months
+at 21 working days (205.25 ÷ 21 ≈ 9.8; 287 ÷ 21 ≈ 13.7). The critical path P0 → P1 → P2 → P4 → P6 → P7 stays
+140.00–196 because it does not run through Phase 5. The route that does, P0 → P1 → P2 → P5 → P7, is now
+137.00–192, so **Phase 5's float falls from 17.75–25 d to 3–4 d**. `docs/11` §1–§2 carry the rest.
 
 **2026-10-26: Phase 4 decomposed, decided and propagated** (§6 items 283(c), 285(c), 286; `plan/07`).
 Its **25 cards sum to 23.75 d**, re-read from the cards' `Estimate` rows by script — the reviewed
@@ -108,12 +124,13 @@ are therefore no longer a comparison: `docs/11` §1's Phases 0–3 bands are now
 `docs/11` §1 "Why these figures changed" for the derivation, the whole-plan
 total and the months figure — **this file does not restate them.**
 
-⚠ **Phases 5–7 are scaled, not measured.** They have no cards, so `docs/11`
+⚠ **Phases 6–7 are scaled, not measured.** They have no cards, so `docs/11`
 scaled their old figures by the ×1.50 correction factor observed here. Those
-three numbers are inference. When a phase is decomposed, its card sum replaces
+two numbers are inference. When a phase is decomposed, its card sum replaces
 the scaled figure in `docs/11` §1 and this table gains a row. Risk R-23 in
-`docs/11` §3 tracks the residual. *(Read "Phases 4–7" and "four numbers" until
-2026-10-26, when Phase 4's card sum replaced its scaled figure and gained its row.)*
+`docs/11` §3 tracks the residual. *(Read "Phases 5–7" and "three numbers" until
+2026-11-02, when Phase 5's card sum replaced its scaled figure and gained its row, and "Phases 4–7" and
+"four numbers" until 2026-10-26, when Phase 4's did.)*
 
 ## 2. How to use this file
 
@@ -135,11 +152,15 @@ queue is what gates Phase 5 months later (`docs/11` R-3).
 re-carding. Phase 3's terminal is still `P3-T31`, which now also waits on `P3-T37`.
 
 **Phase terminals** (a phase is done when its terminal is `DONE`):
-`P0-T28`, `P1-T23`, `P2-T15`/`P2-T16`, `P3-T31`, `P4-T25`.
+`P0-T28`, `P1-T23`, `P2-T15`/`P2-T16`, `P3-T31`, `P4-T25`, `P5-T30`.
 
 **Phase 4, added 2026-10-26** (read from `plan/07`'s cards): entry points `P4-T01`, `P4-T02` and
 `P4-T03`; terminal `P4-T25`. Phase 4's cards list only Phase 4 IDs in `Depends on`; what each needs
 from Phase 3 is in its `Notes` and in `plan/07` §0.3.
+
+**Phase 5, added 2026-11-02** (read from `plan/08`'s cards): entry points `P5-T01`, `P5-T02` and
+`P5-T04`; terminal `P5-T30`. Phase 5's cards list only Phase 5 IDs in `Depends on`; what each needs from
+earlier phases is in its `Notes` and in `plan/08` §0.3.
 
 `P2-T15` is both, and deliberately so: it records a decision that was settled
 upstream rather than building anything, so it waits on no card and no card waits
@@ -371,6 +392,42 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P4-T23` | Evaluation set and regression harness | `P4-T20`, `P4-T21` | 1.25 d | 🔒 |
 | `P4-T24` | Determinism check across three runs | `P4-T23` | 0.75 d | 🔒 |
 | `P4-T25` | Phase-4 acceptance run against the definition of done | `P4-T21`, `P4-T22`, `P4-T24` | 0.75 d | 🔒 |
+
+### Phase 5
+
+| Task | Title | Depends on | Est. | Gate |
+|---|---|---|---|---|
+| `P5-T01` | Reconcile Phase 5 types and state machines in `docs/07` | — | 1.0 d |  |
+| `P5-T02` | Preference rows Phase 5 reads | — | 0.5 d |  |
+| `P5-T03` | Profile, recommendation and embedding tables | `P5-T01` | 1.5 d |  |
+| `P5-T04` | Request builders and the relatedness fixtures | — | 1.75 d |  |
+| `P5-T05` | Semantic Scholar references, citations, title match | `P5-T01`, `P5-T31` | 0.75 d |  |
+| `P5-T06` | Semantic Scholar Recommendations, one seed and many | `P5-T01`, `P5-T31` | 1.25 d |  |
+| `P5-T07` | Europe PMC citations and references | `P5-T01`, `P5-T04` | 0.75 d |  |
+| `P5-T08` | PubMed related articles (`elink` pmra) | `P5-T01`, `P5-T04` | 1.0 d |  |
+| `P5-T09` | Crossref deposited references and title search | `P5-T01`, `P5-T04` | 0.75 d |  |
+| `P5-T10` | Relatedness cache, negative cache, request budget | `P5-T01` | 1.0 d |  |
+| `P5-T11` | Seed resolution with a title-match threshold | `P5-T05`, `P5-T09` | 1.25 d |  |
+| `P5-T12` | Related-paper generators, union and hydration | `P5-T05`, `P5-T06`, `P5-T07`, `P5-T08`, `P5-T09`, `P5-T10` | 1.25 d |  |
+| `P5-T13` | Related scoring, reason chips, recency de-emphasis | `P5-T12` | 1.0 d |  |
+| `P5-T14` | Related pipeline: stages, partial results, wiring | `P5-T11`, `P5-T12`, `P5-T13`, `P5-T19`, `P5-T20` | 1.75 d |  |
+| `P5-T15` | Item menu entry and the window's related mode | `P5-T02` | 1.25 d |  |
+| `P5-T16` | Related results: relation column, picker, key notice | `P5-T14`, `P5-T15` | 1.25 d |  |
+| `P5-T17` | Import from related results, optional *Related* link | `P5-T02`, `P5-T16` | 1.0 d |  |
+| `P5-T18` | Collection reader and statistical profile | `P5-T01`, `P5-T03` | 1.5 d |  |
+| `P5-T19` | Lexical similarity floor (TF-IDF) | `P5-T01` | 0.75 d |  |
+| `P5-T20` | SPECTER2 vectors: fetch, normalise, store | `P5-T03`, `P5-T05` | 1.25 d |  |
+| `P5-T21` | Centroids and seed selection with negatives | `P5-T18`, `P5-T19`, `P5-T20` | 1.0 d |  |
+| `P5-T22` | `COLLECTION_PROFILE` call with estimate and consent | `P5-T18` | 1.5 d |  |
+| `P5-T23` | Recommendation candidate generators | `P5-T06`, `P5-T07`, `P5-T08`, `P5-T10`, `P5-T21` | 1.75 d |  |
+| `P5-T24` | Recommendation filters, scoring, diversity, reasons | `P5-T19`, `P5-T20`, `P5-T21`, `P5-T23` | 1.5 d |  |
+| `P5-T25` | Recommend pipeline: profile check, stages, wiring | `P5-T03`, `P5-T22`, `P5-T23`, `P5-T24` | 2.0 d |  |
+| `P5-T26` | Recommend entry and the editable profile panel | `P5-T02`, `P5-T15`, `P5-T25` | 1.5 d |  |
+| `P5-T27` | Recommendation results: dismiss, clusters, import | `P5-T26` | 1.5 d |  |
+| `P5-T28` | Prove the no-key path end to end | `P5-T17`, `P5-T27` | 0.75 d |  |
+| `P5-T29` | Probe the positive-seed cap with the real key | `P5-T06` | 0.5 d | 🔒 |
+| `P5-T30` | Phase-5 acceptance run against the definition of done | `P5-T28`, `P5-T29` | 1.0 d | 🔒 |
+| `P5-T31` | Owner-recorded Semantic Scholar fixtures | `P5-T04` | 0.25 d | 🔒 |
 
 ---
 
@@ -2580,10 +2637,35 @@ the caller of what the card builds; if it does not, the caller is added with a d
     plan-only agent applies items 320, 321 and 323 and the review's coordinator lines to `plan/08` and propagates
     Phase 5's estimate. `P4-T21` (Korean report path) follows `P4-T20`.
 
+326. **Phase 5 accepted, 2026-11-02** (`plan/reports/phase5-accept.md`). **DECIDED 2026-11-02 (owner), each as
+    recommended:**
+    - (a) `plan/08`'s estimate is accepted: 31 cards, 35.75 d, band 35.75–50 d; the plan becomes 205.25–287 d while
+      the critical path stays 140.00–196 d. Phase 5's cards start now, alongside what remains of Phase 4.
+    - (b) "Similar papers" in v1 means PubMed's own list. Similarity search inside the local library and the offer
+      to fetch a published version go to the backlog (the review's line 12).
+    - (c) G-41: item 324(c)'s papers-failed text is changed from "멈추었습니다" to "멈췄습니다", to match the other
+      stops. Nothing else in it changes.
+    - (d) The owner rotates the Semantic Scholar key and records the fixtures after `P5-T04` finishes the recording
+      tool (`P5-T31`); the coordinator then gives the steps. The new key is entered only through the pane or the
+      process environment, never in chat.
+
+    **DECIDED 2026-11-02 (coordinator, under item 313):**
+    - (e) The agent's placements stand: the new gated card `P5-T31` (0.25 d, the agent's half of item 323(c)) and
+      `P5-T18`'s +0.25 d for the item mapper's `dateAdded`.
+    - (f) The review's line 18 stands: PubMed's `citationGraph` flag turns on, and `docs/07` §4.2 describes the flag
+      as "relation edges"; item 184's test is unchanged.
+    - (g) R-19's "validated at scale" claim, withdrawn from Phase 5 because no Phase 5 deliverable reads PDFs, is
+      carried to Phase 7's decomposition (hardening), where the check belongs.
+    - (h) Backlog from Phase 5's decisions: co-citation; a held-out evaluation tool; a log of the user's reactions
+      to recommendations; `RECOMMEND_RANK` and model-written reasons; similarity inside the local library; the
+      published-version offer; background prefetch.
+    - (i) First wave: `P5-T01` and `P5-T04` run now as non-build agents beside `P4-T20` and `P4-T22`. `P5-T02`
+      follows `P4-T20`'s commit, because both edit `src/prefs` neighbours and `addon/`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4
-table, so "all four tables" below is five.)* Added 2026-10-12, because this section's rule could not be
+table, and since 2026-11-01 `plan/08` and the Phase 5 table, so "all four tables" below is six.)* Added 2026-10-12, because this section's rule could not be
 run and so was not: `P1-T23`'s report found the header counts stale, and measuring further found §4's tables
 stale too — **Phase 1's held 23 of its 46 cards, Phase 2's 18 of 25, Phase 0's 33 of 35, and Phase 1's
 `DONE` ticks had never been applied at all.** `scripts/derive-task-index.ts` rebuilds all four tables

@@ -881,8 +881,10 @@ than one undifferentiated list.
 | **a. S2 Recommendations** | `POST /papers/` with 15 positives + 10 negatives, `limit=200` | 1 | 200 |
 | **b. pmra** | `elink&cmd=neighbor_score` per PMID seed (≤10 seeds) | ≤10 (fast host) | 500–2000 |
 | **c. Forward citations** | `/paper/batch` refs, then `/citations` on the top 10 seeds | ~11 | 300–1000 |
-| **d. Keyword search** | Top 5 profile terms → Europe PMC + arXiv, last 3 years | 2–4 | 200 |
+| **d. Keyword search** | Top 5 profile terms → the selected sources (FR-45), last 3 years | 2–4 | 200 |
 | **e. Author/venue watch** | Europe PMC `AUTH:"…" AND FIRST_PDATE:[…]` for top 5 authors | 1 (OR-combined) | 50–200 |
+
+*Corrected 2026-11-02 (`plan/reports/phase5-review.md`; `plan/08` `P5-T23`): row d read "Europe PMC + arXiv", but FR-45 says "the selected sources". A run without a Semantic Scholar key drops Semantic Scholar from that list (owner, `plan/00` §6 item 320(a)). The per-host budget below and `genKeywordSearch`'s host comment in §7.5 were worked out on the old row.*
 
 **Budget, per host:** ~15 S2-host requests (**~15 s**), ~10 NCBI requests (~1–3 s), ~5 Europe PMC
 requests (~1 s), plus 3 arXiv requests (**9 s**, forced by the 3-second rule).
@@ -1051,6 +1053,8 @@ async function recommendFromCollection(
   }).slice(0, settings.topK ?? 30);
 }
 ```
+
+*Corrected 2026-11-02 (`plan/reports/phase5-review.md`; `plan/08` `P5-T24`, `P5-T25`): `passesHardFilters` cannot run whole before `hydrateMetadata`, because a candidate's abstract and tldr are known only after it. The filters split: the identifier-level ones (in the source collection, dismissed, outside the date window, a preprint whose published version is owned) run where the sketch has them, and "no abstract and no tldr" runs after `hydrateMetadata` and `ensureEmbeddings`, before scoring. Without a Semantic Scholar key, neither step sends anything to Semantic Scholar (`plan/00` §6 item 320(a)): metadata comes from Europe PMC and PubMed, and similarity falls back to §5.5.*
 
 **`diversify` is not optional.** Without it, a collection focused on one lab returns ten papers from
 that lab, which the user experiences as a broken recommender even when every item scores highly.

@@ -19,7 +19,8 @@
 > effort-summary table remain authoritative; if they move, these four lines move
 > with them. *Updated 2026-10-26: Phase 4 is decomposed (`plan/07`), so §1 is a
 > pointer and its band is measured (23.75–33 d); the three of §2–§4 are still
-> scaled.*
+> scaled.* *Updated 2026-11-02: Phase 5 is decomposed (`plan/08`), so §2 is a pointer
+> too and its band is measured (35.75–50 d); the two of §3–§4 are still scaled.*
 >
 > **The ×1.50 factor and where it comes from.** `docs/11` §1's preamble owns the
 > derivation and this file does not restate it: the factor is the Phases 0–3 card
@@ -40,6 +41,8 @@
 > **Last updated:** 2026-09-09 · **Status:** outline only; no task IDs allocated
 > in the `P4-*`–`P7-*` ranges. *Updated 2026-10-26: Phase 4's cards `P4-T01`–`P4-T25`
 > are in `plan/07`; this file is the outline of Phases 5–7 only, and §1 is a pointer.*
+> *Updated 2026-11-02: Phase 5's cards `P5-T01`–`P5-T31` are in `plan/08`; this file is
+> the outline of Phases 6–7 only, and §1 and §2 are pointers.*
 
 ---
 
@@ -57,6 +60,7 @@ outline is the plan of record for these phases.
    included) as assumptions that "if wrong, invalidate parts of the
    architecture". Twelve of them — V-6, V-7, V-8, V-8b, V-9, V-10, V-11, V-14,
    V-15, V-16, V-17, V-18 — reach into Phases 4–7, and §§2.2, 3.2 and 4.2 below
+   (§2.2 is `plan/08` §5.2 since 2026-11-02)
    name V-14, V-10/V-11 and V-17/V-18 respectively as hard entry conditions for
    Phases 5, 6 and 7. A task card's `Files` and `Do NOT` fields are
    exactly the fields that a spike outcome rewrites, and the schema in
@@ -133,108 +137,21 @@ from 2026-09-09 to 2026-10-26 (`docs/11` §1, Phase 4, and the effort summary ta
 
 ## 2. Phase 5 — Related papers + recommendations
 
-**Goal, deliverables, definition of done:** `docs/11` §1, Phase 5.
-**Effort:** 21–29 developer-days — ⚠ **scaled ×1.50, not decomposed**
-(`docs/11` §1, Phase 5, and the effort summary table; re-derived 2026-09-09 from
-the old 10–14 band, not measured). `docs/11` §1's Phase 5 entry adds a second,
-opposite-signed uncertainty specific to this phase — see §2.4 below.
-**Risks retired:** R-3 fully, and R-19 validated at scale (`docs/11` §1 and §3.1).
-**Upstream:** Phase 2's fan-out and Phase 3's LLM client (`docs/11` §2).
+**Decomposed — see [`08-phase-5-related-papers.md`](08-phase-5-related-papers.md).** Reduced to this
+pointer on **2026-11-02**, as §0 "Exit from outline into cards" requires: Phase 5 was decomposed into
+cards on 2026-11-01 (owner decision, `plan/00-task-index.md` §6 item 318(c)), reviewed the same day, and
+its open lines decided the same day (items 320, 321 and 323, and the coordinator under item 313). It was
+decomposed at the owner's direction before §0's exit conditions (a) and (c) held — Phases 3 and 4 are not
+`DONE` and one entry condition, the positive-seed cap, is still open; `plan/08` §0 records which are met.
 
-### 2.1 Work areas
+**Effort:** **35.75–50 developer-days — measured**, the sum of `plan/08`'s 31 cards (35.75 × 1.4 =
+50.05 → 50), replacing the 21–29 d **scaled ×1.50, not decomposed** figure this section quoted from
+2026-09-09 to 2026-11-02 (`docs/11` §1, Phase 5, and the effort summary table carry the change).
 
-| # | Work area | One sentence |
-|---|---|---|
-| W5-1 | **Seed resolution** | DOI/PMID/arXiv → canonical record, with the title-match fallback, its confidence threshold, and the disambiguation UI that must appear rather than a silent guess (FR-13, FR-14; `docs/05` §6.1). |
-| W5-2 | **Citation-graph gathering** | References and citations from Crossref, Europe PMC and PubMed `elink`/pmra, which together are the path that must work with no Semantic Scholar key at all (`docs/05` §2, §4). |
-| W5-3 | **Semantic Scholar Recommendations adapter** | Both endpoints, `from=recent` only, batch validation of every seed ID before a POST, the 10 MB response cap, and the conservative positive-seed cap (`docs/05` §3). |
-| W5-4 | **Embedding layer** | SPECTER2 via Semantic Scholar as the default, a third-party embedding fallback, and the lexical floor when neither is available — with the never-mix-two-spaces rule and per-vector model tagging (`docs/05` §5.1, §5.3, §5.5). |
-| W5-5 | **Vector storage** | Where the vectors live client-side and how the cap interacts with NFR-8 (`docs/05` §5.4; the persisted shape is `docs/07` §5.2 and §8.3). |
-| W5-6 | **Collection profiler** | `CollectionProfileDraft` → the persisted `CollectionProfile`: IDF-weighted MeSH and keyword extraction, authors and venues, *k* centroids for the multi-topic case, and the editable profile UI (FR-44; `docs/05` §7.2). |
-| W5-7 | **Candidate generation** | LLM-assisted query generation with a heuristic fallback, reusing Phase 2's fan-out executor (FR-45; `docs/12` §15 `COLLECTION_PROFILE`). |
-| W5-8 | **Scoring, ranking and reason chips** | The blended score, the recency de-emphasis, and the human-readable reason attached to every candidate (FR-15, FR-47; `docs/05` §6.2, §7.4, `docs/12` §16 `RECOMMEND_RANK`). |
-| W5-9 | **Review, exclusion and import** | Owned-item exclusion, dismissed-candidate persistence, the "in library" marking, optional Zotero *Related* linkage, and import into the dated recommendation subcollection (FR-16, FR-17, FR-18, FR-46, FR-48, FR-49). |
-| W5-10 | **Rate-limit-aware batching, caching and evaluation** | The per-host budgeting, backoff and cache design that make the feature usable inside a 1 req/s ceiling (`docs/05` §9), plus the held-out precision@k harness and sanity checks that make its quality falsifiable (`docs/05` §8). |
-
-### 2.2 Entry conditions
-
-- **Phases 2 and 3 are `DONE`.** W5-7 reuses Phase 2's fan-out and Phase 3's
-  provider layer directly.
-- **V-14 has an answer.** `docs/11` §4.3 V-14 measures unauthenticated Semantic
-  Scholar behaviour *and* requires the key application to have been submitted.
-  The measurement decides whether the no-key path in W5-2/W5-3 is merely slower
-  or unusable.
-- **The Semantic Scholar key is either in hand or formally written off.** This is
-  the phase's real gate and it is an approval queue, not code — `docs/11` R-3
-  says issuance "can take weeks" and instructs applying in week 1 of Phase 0.
-  See [`06-human-gates.md`](06-human-gates.md) G-03 and G-26.
-- **`docs/10` §5 question 8 is answered** — whether a Semantic Scholar key is a
-  hard requirement. If the answer moves off the recommended "no", W5-2 and W5-4's
-  fallback tiers stop being optional politeness and become the phase.
-- **The embedding route is decided, and the default provider's capability is
-  known.** `docs/03` §13 marks OpenRouter's embedding coverage
-  `> **Unverified:**` and §16's capability matrix carries the same "Unverified"
-  in the OpenRouter column. D6 makes OpenRouter the default provider, so a user
-  on the default path may have no embedding endpoint at all; `docs/03` §16
-  already documents the Anthropic-only case as falling back to BM25.
-- **The positive-seed cap is probed.** `docs/05` §3.3 marks the maximum
-  `positivePaperIds`/`negativePaperIds` `> **Unverified:**` and instructs capping
-  at 10–20 pending measurement. W5-6's seed-selection strategy sits on that
-  number.
-- **Phase 2's preprint policy is settled** (`docs/10` §5 question 2). `docs/05`
-  §3.2 records that `from=recent` skews to preprints, so the recommendation UI
-  inherits whatever Phase 2 decided about preprint/published pairs — including
-  the `> **Unverified:**` in `docs/02` about whether legacy `10.1101/` DOIs are
-  being re-minted.
-- **Per-host limits used by W5-10 are as settled as they will get.** Europe PMC's
-  rate limit is `> **Unverified:**` in three places (`docs/02`, `docs/07` §7.3,
-  `docs/09` §5.5) and bioRxiv/medRxiv publish none at all (`docs/09` §5.6). These
-  do not block decomposition, but the cards must not pretend to a number the
-  documents do not have.
-
-### 2.3 Decisions required before decomposition
-
-| Decision | Recorded in |
-|---|---|
-| Does Phase 5 ship if no Semantic Scholar key was granted, and with what reduced DoD | `docs/11` §1 Phase 5 DoD and `docs/05` §3; the question is `docs/10` §5 question 8 |
-| Embedding route for v1 — SPECTER2 only, SPECTER2 + third-party fallback, or lexical only | `docs/05` §5 for the design, `docs/07` §8.5 for any pref |
-| What a user on the D6 default provider gets when that provider cannot embed | `docs/03` §16's recommended-defaults table, extended |
-| Vector storage layout and its share of the NFR-8 cap | `docs/05` §5.4 and `docs/07` §8.3/§8.5 |
-| Whether recommendation runs may spend LLM tokens under the standard pre-run confirmation, or need their own | `docs/10` §5 question 7's answer, reflected in `docs/08`'s consent flow |
-| Preprint presentation — badge, and whether a "peer-reviewed only" filter ships and defaults on | `docs/05` §3.2 and `docs/08` |
-| Whether implicit user feedback (`docs/05` §8.4) is collected locally in v1 | `docs/05` §8.4 and `docs/09` §3.7's clearable-data list |
-
-### 2.4 What would change the plan
-
-- **The key is denied, or arrives after Phase 5 would have started.** W5-3 and the
-  SPECTER2 half of W5-4 are deferred; W5-2's citation-graph path and W5-4's
-  lexical floor become the product. The phase's DoD reduces to the "with no
-  Semantic Scholar key" clause that `docs/11` §1 already states, and R-3 is
-  retired by proving the fallback rather than by using the key. Effort probably
-  drops toward the bottom of the 21–29-day band `docs/11` §1 now carries; quality
-  provably drops.
-- **V-14 shows unauthenticated access is unusable rather than slow.** Phase 5
-  cannot be validated at all without the key, and it should be re-sequenced after
-  Phase 6 so the key's queue has more calendar time. This is the single strongest
-  argument for keeping this phase in outline form. The re-sequencing lever is
-  weaker than it was, and that is good news rather than bad: `docs/11` §1's
-  2026-09-09 re-estimate already pushes Phase 5's earliest start to ≈ 3–4 months
-  in (`docs/11` R-3), so a week-1 application has most of that time to clear
-  before the question arises at all. `docs/11` §2 also notes that Phase 5's
-  ≈ **10.5–15 d** of float exists only if a second developer takes it in parallel;
-  under single-developer serial execution there is no float to trade. (That figure
-  was ≈ 13–18 d until the 2026-09-09 `P3-T04` / `P3-T20` re-estimate; `docs/11` §2
-  owns it and carries both routes into P5 and the arithmetic for each.)
-- **OpenRouter has no embedding endpoint.** Either a second key becomes a soft
-  requirement for W5-4 — which is a new human gate and a new first-run flow — or
-  BM25 (`docs/05` §5.5) is promoted from floor to default for the default
-  provider, which changes W5-8's scoring weights.
-- **The positive-seed cap is far below 10.** W5-6's centroid and seed-selection
-  design changes from "pick the 10–20 highest-signal seeds" to iterating small
-  batches, which multiplies W5-10's request budget under a 1 req/s ceiling.
-- **Held-out precision@k comes back at chance level.** `docs/05` §8 exists
-  precisely because "everything looks plausible"; a failing harness sends W5-8
-  back to design rather than shipping a recommender nobody can falsify.
+**Where this section's contents went.** The work areas `W5-1`–`W5-10` (§2.1), the entry conditions
+(§2.2), the decisions required before decomposition (§2.3) and what would change the plan (§2.4) are
+`plan/08` §5.1–§5.4, moved verbatim; `plan/08` §0's table tracks the entry conditions, and every §2.3
+decision is made. §5.2 below, Phase 5's gating list, is kept as the record it was.
 
 ---
 

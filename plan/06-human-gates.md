@@ -68,6 +68,7 @@ in this plan.
 | Phase 4 | G-42 | Approve the first real report run's cost estimate, and each paid Phase 4 run after it | Phase 4 DoD (`P4-T23`, `P4-T24`, `P4-T25`) | Minutes per run; **added 2026-10-26** (`plan/00` §6 item 286) |
 | Phase 5 | G-26 | Enter the Semantic Scholar key, or decide to ship degraded | Phase 5 scope | Minutes once G-03 resolves |
 | Phase 5 | G-27 | Judge a collection profile and its recommendations | Phase 5 DoD | Hours of domain time |
+| Phase 5 | G-43 | Approve the first real recommendation run's cost estimate, and each paid Phase 5 run after it | Phase 5 DoD (`P5-T30`) | Minutes per run; **added 2026-11-02** (`plan/00` §6 item 321(a)) |
 | Before Phase 6 | G-28 | Decide the audio register and the Korean-script source | Script prompts | Product-owner turnaround |
 | Phase 6 | G-29 | Approve the paid calibration call that measures the audio token rate | Phase 6 cost model | Minutes |
 | Phase 6 | G-30 | Rate 3 Korean audio samples | Phase 6 DoD | Hours, native speaker |
@@ -176,7 +177,10 @@ confirmed.
 >
 > **This blocks Phase 5 only**, and Phase 5 carries 10.5–15 days of float (`docs/11` §2), so nothing is
 > stalled today. `P2-T05` ships the adapter with unauthenticated degradation, so Phase 2 does not wait
-> either.
+> either. *Updated 2026-11-02: that float is now ≈ 3–4 d (`docs/11` §2; it was ≈ 17.75–25 d from
+> 2026-10-26), since Phase 5's card sum of 35.75–50 d replaced its scaled 21–29 d. The gate itself closed
+> on 2026-09-30; what still waits on the owner is the key's rotation, needed first by `P5-T31`, and its
+> entry (`G-26`).*
 
 **Blocks:** Phase 5 (`docs/11` §1 Phase 5; the `Source` adapter's keyed path in
 Phase 2).
@@ -1316,6 +1320,12 @@ that.
 (`05-phases-4-7-outline.md` §2.1 W5-3, W5-4) are affected, and that the fallback
 path must be built regardless because R-3's mitigation requires it.
 
+*Updated 2026-11-02:* `docs/10` §5 question 8 is decided (owner, `plan/00` §6 item 320(a)): no key is
+required, and Phase 5 ships both paths, so this gate no longer scopes the phase; it blocks `P5-T29` and
+`P5-T30`'s keyed lines. The key's rotation comes first and also blocks `P5-T31`, the owner's recording of the
+Semantic Scholar fixtures with the key in the process environment (item 323(c)). The work areas are
+`08-phase-5-related-papers.md` §5.1 since 2026-11-02.
+
 ---
 
 ### G-27 — Judge a collection profile and its recommendations
@@ -1336,10 +1346,42 @@ looks plausible — which is exactly why the judge must know the field.
 **If it is not done.** The DoD is unmet. **Partial degraded path:** the held-out
 precision@k harness (`docs/05` §8.1) gives a number without a human, but it
 measures re-finding papers the user already had, not whether new candidates are
-good.
+good. *Corrected 2026-11-02: there is no degraded path. The harness is not built in Phase 5 (owner, `plan/00`
+§6 item 323(d)), and this gate is the finishing condition.*
 
 **Agent behaviour on reaching it.** Stop. Report the profile, the top candidates
 with their reason chips, and the specific question the DoD asks.
+
+---
+
+### G-43 — Approve the first real recommendation run's cost estimate, and each paid Phase 5 run after it
+
+**Added 2026-11-02** by the owner's decision of 2026-11-01 on `plan/08`'s spend-gate line (`plan/00` §6
+item 321(a)), modelled on `G-42`. The number is the next free one.
+
+**Blocks:** the one `plan/08` card that spends, `P5-T30`, and through it `docs/11` §1 Phase 5's DoD. No
+other Phase 5 card may make a paid call (`plan/08` §0's definition of done). `P5-T04`, `P5-T29` and `P5-T31`
+make live literature-database requests and spend nothing.
+
+**What the human must do.** Before each paid run, read the pre-flight dialog — the paper count, the model,
+the token and USD estimate with output priced at the call's 2 500-token ceiling, the destination host, the
+content scope and privacy mode, and the egress notice (`plan/08` `P5-T22`; `docs/09` §3 row "6. Recommend") —
+compare it with the expected spend stated on `P5-T30`'s **Human gate** cell, and approve or decline.
+Afterwards, compare the estimate with the provider's reported usage, as `G-21` does for summaries.
+
+**Why an agent cannot do it.** It spends the human's money, and it sends one metadata line per paper of the
+human's collection — item key, title, year, venue and top subject terms — to a third party. `docs/09` §7
+marks "no content is sent to any provider without an explicit user action" a `[BLOCKER]`.
+
+**Lead time.** Minutes per run.
+
+**If it is not done.** `P5-T30`'s recommendation lines stay unmeasured and Phase 5's DoD is unmet. **Partial
+degraded path:** without a provider the profile is "heuristic" (FR-45 scenario 2; `P5-T22`), which spends
+nothing and proves that path only; the DoD's `G-27` judgement of the real profile still needs the spend.
+
+**Agent behaviour on reaching it.** Stop before the first call. Report the dialog's exact contents, the card's
+expected spend and `P5-T22`'s estimate side by side, and which run this is; never start a paid run, and never
+reuse one approval for a later run.
 
 ---
 

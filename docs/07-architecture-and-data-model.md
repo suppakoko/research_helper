@@ -919,8 +919,13 @@ export interface CacheStats {
 // adapter really honours, until then an ad-hoc `*_QUERY_FILTER_SUPPORT` table in each adapter's
 // `query.ts` — and `citationGraph` given one meaning: "this adapter exposes `findRelated`", not
 // "the service has citation endpoints". Europe PMC's declaration became `false` on that day.
+// Extended 2026-11-02 (`plan/08` §0.4 lines 18 and 30, decided 2026-11-01 by the coordinator under
+// `plan/00` §6 item 313): `citationGraph` reads "relation edges", `findRelated` returns a `RelatedPage`,
+// and `RelatedQuery.strategy` names `"recommendations"` and `"similar"`. `src/sources/types.ts` follows
+// in `plan/08` `P5-T01`; until then the code still returns a plain `SourcePage`.
 import type { CanonicalWork } from "../model/canonicalWork";
 import type { ExternalIds, SourceId } from "../model/ids";
+import type { RelationEdge } from "../model/related";
 import type { SourceRecord } from "../model/sourceRecord";
 import type { CancellationToken } from "../core/jobQueue/cancellation";
 import type { ProgressReporter } from "../core/jobQueue/progress";
@@ -963,9 +968,10 @@ export interface SourceCapabilities {
   /** Returns abstracts in search results (vs. requiring a second call). */
   readonly abstractsInSearch: boolean;
   /**
-   * This adapter exposes `findRelated` and returns references / citations edges
-   * through it. Describes the adapter, not the service: a database whose API has
-   * citation endpoints that this adapter does not call declares `false`.
+   * This adapter exposes `findRelated` and returns relation edges (references,
+   * citations, recommendations or similar articles) through it. Describes the
+   * adapter, not the service: a database whose API has such endpoints and whose
+   * adapter calls none of them declares `false`.
    */
   readonly citationGraph: boolean;
   /** Server-side date filtering (otherwise we filter client-side). */
@@ -1038,6 +1044,14 @@ export interface SourcePage {
   readonly warnings: readonly string[];
 }
 
+/**
+ * What `findRelated` returns: a page plus one edge per record. `edges[i]` describes
+ * `records[i]`, so the two arrays have the same length.
+ */
+export interface RelatedPage extends SourcePage {
+  readonly edges: readonly RelationEdge[];
+}
+
 export interface RelatedQuery {
   /** The seed. At least one of `ids` or `work` is required. */
   readonly ids?: Partial<ExternalIds>;
@@ -1045,7 +1059,9 @@ export interface RelatedQuery {
   readonly limit: number;
   readonly fromDate?: string;
   /** How the caller wants relatedness computed, if the source offers a choice. */
-  readonly strategy?: "citations" | "references" | "cocitation" | "embedding" | "auto";
+  readonly strategy?:
+    | "citations" | "references" | "recommendations" | "similar"
+    | "cocitation" | "embedding" | "auto";
 }
 
 export interface SourceCallContext {
@@ -1081,7 +1097,7 @@ export interface LiteratureSource {
   searchAll(query: SourceQuery, ctx: SourceCallContext): AsyncIterable<SourceRecord>;
 
   /** Only meaningful when capabilities.relatedByWork is true. */
-  findRelated?(query: RelatedQuery, ctx: SourceCallContext): Promise<SourcePage>;
+  findRelated?(query: RelatedQuery, ctx: SourceCallContext): Promise<RelatedPage>;
 
   /** Batch lookup by external identifier. Order of results is not guaranteed. */
   lookup?(
@@ -1106,6 +1122,31 @@ export interface SourceHealth {
   readonly quotaHint?: string;
 }
 ```
+
+**Added 2026-11-02 (`plan/08` §0.4 line 30, decided 2026-11-01 by the coordinator under `plan/00` §6 item
+313).** A plain `SourcePage` loses whether a record is a reference, a citation or a recommendation, its rank,
+PubMed's score and Semantic Scholar's citation contexts, which `05-related-work-discovery.md` §6.2's score
+and FR-15's reason chips need. The edge is a model type, because pipelines read it too:
+
+```ts
+// src/model/related.ts
+export type RelationKind = "reference" | "citation" | "recommendation" | "similar";
+
+export interface RelationEdge {
+  readonly kind: RelationKind;
+  /** 1-based position in this source's own list for this seed. */
+  readonly rank: number;
+  /** The source's own relevance, normalised to (0, 1], when it gives one (PubMed's similar articles). */
+  readonly score?: number;
+  /** Citation contexts, when the source returns them (Semantic Scholar). */
+  readonly contexts?: readonly string[];
+}
+```
+
+Calls that are specific to one adapter — the title match, the many-paper recommendation, the vector fetch —
+stay off `LiteratureSource`: a pipeline reaches them through the typed adapter instance `installServices`
+passes in, as it does for `SemanticScholarSource.hasApiKey`. `"cocitation"` and `"embedding"` stay declared
+and unimplemented in v1 (`plan/00` §6 items 320(b) and 321(c)).
 
 ### 4.3 `LLMProvider`
 
@@ -5681,6 +5722,8 @@ Notes: the trend report is the one pipeline that **discards** partial output on 
 > 10. **Resume after a restart.** `resumable: true`. The checkpoint (`TrendReportCheckpoint`) holds the last completed stage, the user's confirmed choice and the confirmed estimate per stage (`stageSpendOf`); `remainingFromCheckpoint` prices the stages after the checkpoint for `ResumeGuards.confirm` and `.ceilings` (a record of another pipeline, or one with no readable checkpoint, is one call of unknown cost, so the confirm guard asks). `installServices` passes it to `createSpendResumeGuards`, so every guard now exists, and runs each job `recover()` re-queued once the resume notice was shown, through `Pipeline.run` with no window: a pause during such a run is answered "stop" (the headless surface) until `P4-T20` registers a surface. A guard that asks leaves the job `paused`, and nothing runs it.
 > 11. **"Don't ask again"** is the report run's own `reportRoutineConfirmation` (§4.5's note of 2026-11-01): `prepare` passes it to `mustAskConfirmation`, hands the decision to the surface (`TrendReportConfirmRequest.confirmation`), and stores `routineConfirmationFor` the disclosure there when the answer carries `dontAskAgain`.
 > 12. **One report language per run.** `report.language`'s `auto` and `both` are resolved by the window (`P4-T20`, `P4-T21`); a `ko` run takes `TREND_REPORT_KO`, the Korean invalid-citation text and the Korean retracted-list heading.
+
+> **Measured 2026-11-02 (`P4-T22`, mock provider, 400 stored summaries; `test/unit/pipeline/trendScale.test.ts`): no synthesis stage reads the report model's context window.** Only the output limit and the fixed `SYNTHESIS_INPUT_BUDGETS` shape a request, and `execute` passes no `inputBudget` to `clusterThemes`, `composeReport` or `critiqueReport`; `analyseThemes` takes none. On a 128 000-token window the run succeeds (largest request 54 174 tokens). On a 32 000-token window it fails with `CONTEXT_LENGTH`: `CLUSTER_REDUCE` requests of 38 385–40 440 tokens and a `TREND_REPORT_EN` request of 53 280 are refused, and with an output limit that does not force two stages the first `THEME_CLUSTER` request, 52 427 tokens, is. A refused theme is left unanalysed with the code as its reason and the run goes on. `plan/07` `P4-T22` holds the skipped tests; the fix is not built.
 
 ### 12.5 Recommend (Feature 6)
 

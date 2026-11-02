@@ -926,7 +926,8 @@ Each question has a **recommended default**. If no decision is made, the default
    *Recommended default:* soft — default to 3 years, always overridable in the search dialog, and always recorded in provenance (FR-3). Persona C cannot use a hard window.
    *The width of the window is no longer open.* **DECIDED 2026-09-09 — three calendar years (the current year and the two before it), not a rolling 36 months.** The computation belongs to `08-ui-ux-spec.md` §4.2 and FR-3 defers to it. Only the hard-versus-soft question above remains open.
 
-2. **Preprint vs. published version: merge or keep both?**
+2. ~~**Preprint vs. published version: merge or keep both?**~~
+   **DECIDED 2026-10-14 (owner, gate `G-16`); marked here 2026-11-02 — keep both, linked.** A preprint and its published version stay two Zotero items connected through *Related*, the preprint tagged `research_helper/superseded-by-published`; no merge is offered in v1. Built by `P2-T10` and `P2-T11`.
    *Recommended default:* keep both by default, link them via Zotero *Related*, and mark the preprint with a `research_helper/superseded-by-published` tag when a DOI match is found. Merging loses the preprint's date, which matters for trend analysis.
 
 3. ~~**Where do per-paper summaries live: child notes, the `Extra` field, or a separate note per collection?**~~
@@ -947,7 +948,8 @@ Each question has a **recommended default**. If no decision is made, the default
    **DECIDED — built as recommended by `P3-T15` and `P3-T16`; marked decided 2026-10-26** (`plan/00-task-index.md` §6 item 286's propagation; the owner confirmed `P3-T16`'s readings on 2026-10-23, item 274(b)). Every LLM-invoking job is preceded by the pre-run confirmation showing the item count and the cost estimate. The *routine* confirmation is the one a collection's "don't ask again" may skip; a confirmation **forced by money** — an estimate above `summary.confirmAboveCents`, an unknown price, or a spend ceiling the estimate would pass — opens whatever "don't ask again" says, and when the dialog does not open the job's progress line still carries the number. The rule is `09-security-privacy-and-api-keys.md` §3.6's dated note of 2026-10-23; the code is `mustAskConfirmation` and `shouldOpenCostDialog`. Phase 4's report run uses the same dialog and the same rules (`plan/07` `P4-T16`).
    *Recommended default:* no. Every LLM-invoking action requires confirmation showing item count and cost estimate, with a "don't ask again for jobs under $X" opt-out.
 
-8. **Is a Semantic Scholar API key a hard requirement for relatedness features?**
+8. ~~**Is a Semantic Scholar API key a hard requirement for relatedness features?**~~
+   **DECIDED 2026-11-01 (owner, `plan/00-task-index.md` §6 item 320(a)); marked here 2026-11-02 — no.** Related papers and recommendations both work without a key, at lower quality, and say what a key adds. Without a key, Phase 5's runs send no Semantic Scholar request at all, because the shared unauthenticated access refused 12 requests in a row when measured (`02-literature-database-apis.md` §6.4; again on 2026-10-16). The search window's keyword search is unchanged. `08-ui-ux-spec.md` §7.4's "need a key" becomes "work better with a key" (`plan/08` `P5-T16`).
    *Recommended default:* no — degrade gracefully. Unauthenticated Semantic Scholar access is heavily rate-limited, so the plugin should be usable with reference/citation signals from Crossref and Europe PMC alone, and should tell the user what improves with a key.
 
 9. **What register should the audio report use?**

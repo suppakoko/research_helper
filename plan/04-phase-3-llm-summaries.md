@@ -140,9 +140,11 @@ And two that `docs/11` states as deliverables but which gate the phase as hard:
    the whole suite: `npm run test:integration -- --exit-on-finish --abort-on-fail`. The suite is
    load-sensitive: repeat a failing run three times before calling it a regression.
 4. **Migrations.** A new table is a new entry appended to `MIGRATIONS` in
-   `src/bootstrap/migrations.ts` with the next free `version`, never an edit to a shipped one. Two
-   tests pin the current version and must move with it: `test/unit/core/provenanceRerun.test.ts`
-   and `test/integration/zotero/provenanceStore.spec.ts`.
+   `src/bootstrap/migrations.ts` with the next free `version`, never an edit to a shipped one. Four
+   tests pin the current version and must move with it: `test/unit/core/provenanceRerun.test.ts`,
+   `test/integration/zotero/provenanceStore.spec.ts`, `test/unit/pipeline/privacyPolicy.test.ts` and
+   `test/unit/zotero/userPriceStore.test.ts`. *Corrected 2026-11-02 (`plan/reports/phase5-review.md`; by
+   grep): this item read "Two tests" and named the first two.*
 5. **One redaction gate.** Every new persisted record (`StoredSummary` JSON, job `input_json` and
    `error_json`, the egress log, `CredentialCheckResult`) passes through the gate `P3-T36` builds,
    modelled on `redactSearchProvenance`. No card adds a pattern or a second redaction rule; the
