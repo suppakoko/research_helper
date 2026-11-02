@@ -21,6 +21,11 @@
  * "Missing fixture" in the unit test, never as a network call.
  */
 
+import {
+  buildEuropePmcCitationsRequest,
+  buildEuropePmcReferencesRequest,
+  type EuropePmcRelationRequest,
+} from "../../src/sources/europepmc/citations";
 import { clampPageSize } from "../../src/sources/europepmc/europepmcSource";
 import {
   buildEuropePmcSearchRequest,
@@ -189,5 +194,42 @@ export function recordedEuropePmcRequest(
     pageSize: clampPageSize(query.limit),
     cursor: cursor ?? query.cursor ?? EUROPEPMC_FIRST_CURSOR,
     resultType: "core",
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The relatedness scenarios (`P5-T04`), in `test/fixtures/europepmc/related/`
+// ---------------------------------------------------------------------------
+
+/** `docs/02` §4.7's own example, and `docs/05`'s probe paper. */
+export const EUROPEPMC_RELATED_SEED_PMID = "37258680";
+/**
+ * The seed of `citations-outage-seed` and the hand-written `references-503`,
+ * so `P5-T07` can show, from fixtures alone, `/citations` working on the seed
+ * whose `/references` is down. It is PubMed's `record-jats-abstract` paper.
+ */
+export const EUROPEPMC_RELATED_OUTAGE_SEED_PMID = "39220605";
+/** Enough rows to show the shape, few enough to commit. */
+export const EUROPEPMC_RELATED_PAGE_SIZE = 25;
+
+/** `citations` and `citations-outage-seed`. */
+export function recordedEuropePmcCitationsRequest(
+  pmid: string = EUROPEPMC_RELATED_SEED_PMID,
+): EuropePmcRelationRequest {
+  return buildEuropePmcCitationsRequest({
+    source: "MED",
+    id: pmid,
+    pageSize: EUROPEPMC_RELATED_PAGE_SIZE,
+  });
+}
+
+/** `references` and the hand-written `references-503`. */
+export function recordedEuropePmcReferencesRequest(
+  pmid: string = EUROPEPMC_RELATED_SEED_PMID,
+): EuropePmcRelationRequest {
+  return buildEuropePmcReferencesRequest({
+    source: "MED",
+    id: pmid,
+    pageSize: EUROPEPMC_RELATED_PAGE_SIZE,
   });
 }

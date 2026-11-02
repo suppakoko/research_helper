@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "headers": {
+    "connection": "keep-alive",
+    "content-encoding": "gzip",
+    "content-type": "application/json;charset=UTF-8",
+    "date": "Mon, 02 Nov 2026 01:45:31 GMT",
+    "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "vary": "origin,access-control-request-method,access-control-request-headers,accept-encoding"
+  },
+  "body": "{\"version\":\"6.9\",\"hitCount\":1,\"request\":{\"id\":\"39220605\",\"source\":\"MED\",\"offSet\":0,\"pageSize\":25},\"citationList\":{\"citation\":[{\"source\":\"MED\",\"id\":\"41788111\",\"citationType\":\"review-article; review; journal article\",\"title\":\"Therapeutic and Diagnostic Landscape of Diabetic Neuropathy: A Systematic Review of Clinical Studies.\",\"authorString\":\"Rajput JPS, Deb R, Saiyad SS, Jamal Z, Sah SK, Vara AR, Sandhu N, Rochlani D, Saiyed TA, Pathan AA, Sagar A, Virola T.\",\"journalAbbreviation\":\"Cureus\",\"pubYear\":2026,\"volume\":\"18\",\"issue\":\"2\",\"pageInfo\":\"e102825\",\"citedByCount\":2}]}}"
+}

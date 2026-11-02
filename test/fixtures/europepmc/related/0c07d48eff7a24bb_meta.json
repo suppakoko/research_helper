@@ -1,0 +1,13 @@
+{
+  "scenario": "citations",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-02T01:45:30.602Z",
+  "endpoint": "https://www.ebi.ac.uk/europepmc/webservices/rest/{source}/{id}/citations",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "dropped header set-cookie",
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

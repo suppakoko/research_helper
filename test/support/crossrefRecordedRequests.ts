@@ -19,6 +19,12 @@
 
 import { clampRows } from "../../src/sources/crossref/crossrefSource";
 import {
+  buildCrossrefTitleSearchRequest,
+  buildCrossrefWorkRequest,
+  CROSSREF_TITLE_SEARCH_ROWS_MAX,
+  type CrossrefRelatedRequest,
+} from "../../src/sources/crossref/references";
+import {
   buildCrossrefWorksRequest,
   CROSSREF_FIRST_CURSOR,
   type CrossrefWorksRequest,
@@ -177,5 +183,38 @@ export function recordedCrossrefRequest(
     query,
     rows: clampRows(query.limit),
     cursor: cursor ?? query.cursor ?? CROSSREF_FIRST_CURSOR,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The relatedness scenarios (`P5-T04`), in `test/fixtures/crossref/related/`
+// ---------------------------------------------------------------------------
+
+/**
+ * `work-with-references`: `docs/05`'s probe paper. The committed `record-rich`
+ * fixture reads `references-count` 160 for it.
+ */
+export const CROSSREF_DOI_WITH_REFERENCES = "10.1038/s41586-023-06139-9";
+/**
+ * `work-without-references`. The committed `record-sparse` fixture reads
+ * `references-count` 0 for it; the recording shows what `/works/{doi}` answers.
+ */
+export const CROSSREF_DOI_WITHOUT_REFERENCES = "10.1007/3-540-29835-5_2408";
+/** `title-search`: the probe paper by its title, as `P5-T09` step 2 asks. */
+export const CROSSREF_RELATED_TITLE =
+  "Transfer learning enables predictions in network biology";
+
+/** `work-with-references` and `work-without-references`, with no `contactEmail`. */
+export function recordedCrossrefWorkRequest(
+  doi: string,
+): CrossrefRelatedRequest {
+  return buildCrossrefWorkRequest(doi);
+}
+
+/** `title-search`, at the most rows the builder takes, with no `contactEmail`. */
+export function recordedCrossrefTitleSearchRequest(): CrossrefRelatedRequest {
+  return buildCrossrefTitleSearchRequest({
+    title: CROSSREF_RELATED_TITLE,
+    rows: CROSSREF_TITLE_SEARCH_ROWS_MAX,
   });
 }

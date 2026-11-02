@@ -19,7 +19,7 @@
  * npm run fixtures:record -- --source europepmc --dry-run    # Europe PMC: prints the plan only
  * npm run fixtures:record -- --source crossref --dry-run     # Crossref: prints the plan only
  * npm run fixtures:record -- --source arxiv --dry-run        # arXiv: prints the plan only
- * npm run fixtures:record -- --source semanticscholar --dry-run   # Semantic Scholar, unkeyed
+ * npm run fixtures:record -- --source semanticscholar --dry-run   # Semantic Scholar: no key read
  * npm run fixtures:record -- --source biorxiv --dry-run     # bioRxiv: DOI lookups only
  * npm run fixtures:record -- --source medrxiv --dry-run     # medRxiv: DOI lookups only
  * FIXTURE_MODE=record npm run fixtures:record -- --source europepmc   # live
@@ -31,7 +31,16 @@
  *                                                  # the scenario list and the stated spend
  * FIXTURE_MODE=synthetic npm run fixtures:record -- --source openai   # its written
  *                                                  # fixtures, no network, no key
+ * npm run fixtures:record -- --source crossref --related --dry-run   # relatedness (P5-T04)
+ * FIXTURE_MODE=record npm run fixtures:record -- --source crossref --related   # live
  * ```
+ *
+ * **Semantic Scholar's recording is the owner's, never an agent's, and it is
+ * keyed** (`plan/00` §6 item 323(c), `P5-T04`, `P5-T31`, `docs/13` §3.5): since
+ * 2026-11-02 `FIXTURE_MODE=record` for that source is refused unless `--keyed` is
+ * given and `SEMANTIC_SCHOLAR_API_KEY` is in the process environment. See section
+ * 8c, {@link runRelatedRecorder}. The anonymous pool refused 12 of 12 calls on
+ * 2026-09-09 and 12 in a row on 2026-10-16, so nothing here tries it any more.
  *
  * **An LLM provider's live recording is the owner's, never an agent's**
  * (`docs/13` §3.4): it needs `FIXTURE_MODE=record`, `--live`, the key in the
@@ -136,6 +145,12 @@
  * environment only** ({@link llmKeyFromEnvironment}) — never `.env` or any
  * other file — and only in live mode, behind `--live` and the confirmed spend.
  * (`docs/13` §3.2's `.env` sentence was corrected on 2026-10-15.)
+ *
+ * *Updated 2026-11-02 (`P5-T04`, `plan/00` §6 item 323(c)):* a second exception,
+ * Semantic Scholar's keyed recording. Same rule: the **process environment
+ * only** ({@link semanticScholarKeyFromEnvironment}), the owner's run only. The
+ * key is sent as one request header, never printed, and is removed from
+ * everything stored ({@link stripKeyedExchange}, {@link assertNoKeyHeaderName}).
  */
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
@@ -215,6 +230,7 @@ import {
   resolveMaxTokens,
 } from "../src/prompts/index";
 import { parseCrossrefWorksBody } from "../src/sources/crossref/crossrefSource";
+import { SEMANTICSCHOLAR_API_KEY_HEADER } from "../src/sources/semanticscholar/semanticscholarSource";
 import { parseEuropePmcSearchBody } from "../src/sources/europepmc/europepmcSource";
 import { parseSearchBody as parseSemanticScholarSearchBody } from "../src/sources/semanticscholar/semanticscholarSource";
 import {
@@ -291,7 +307,11 @@ import {
   CROSSREF_QUERY_SYNTHETIC_MALFORMED,
   CROSSREF_QUERY_TYPICAL,
   CROSSREF_QUERY_UNICODE,
+  CROSSREF_DOI_WITH_REFERENCES,
+  CROSSREF_DOI_WITHOUT_REFERENCES,
   recordedCrossrefRequest,
+  recordedCrossrefTitleSearchRequest,
+  recordedCrossrefWorkRequest,
 } from "../test/support/crossrefRecordedRequests";
 import {
   EUROPEPMC_QUERY_CJK,
@@ -310,6 +330,9 @@ import {
   EUROPEPMC_QUERY_SYNTHETIC_MALFORMED,
   EUROPEPMC_QUERY_TYPICAL,
   EUROPEPMC_QUERY_UNICODE,
+  EUROPEPMC_RELATED_OUTAGE_SEED_PMID,
+  recordedEuropePmcCitationsRequest,
+  recordedEuropePmcReferencesRequest,
   recordedEuropePmcRequest,
 } from "../test/support/europepmcRecordedRequests";
 import {
@@ -321,12 +344,22 @@ import {
   PUBMED_TYPICAL_PMIDS,
   PUBMED_WINDOW_MAX_RESULTS,
   pubmedWindowQuery,
+  recordedPubmedElinkRequest,
 } from "../test/support/pubmedRecordedRequests";
 import {
   recordedSemanticScholarBatchRequest,
   recordedSemanticScholarBulkRequest,
+  recordedSemanticScholarCitationsRequest,
+  recordedSemanticScholarEmbeddingBatchRequest,
+  recordedSemanticScholarForPaperRequest,
   recordedSemanticScholarHealthRequest,
+  recordedSemanticScholarMatchRequest,
+  recordedSemanticScholarRecommendRequest,
+  recordedSemanticScholarReferencesBatchRequest,
+  recordedSemanticScholarReferencesRequest,
   recordedSemanticScholarRelevanceRequest,
+  recordedSemanticScholarUnknownFieldRequest,
+  recordedSemanticScholarUnresolvableBatchRequest,
   SEMANTICSCHOLAR_BATCH_DATACITE_ID,
   SEMANTICSCHOLAR_CORPUS_BATCH_IDS,
   SEMANTICSCHOLAR_QUERY_EMPTY,
@@ -342,6 +375,10 @@ import {
   SEMANTICSCHOLAR_QUERY_SYNTHETIC_MALFORMED,
   SEMANTICSCHOLAR_QUERY_TYPICAL,
   SEMANTICSCHOLAR_QUERY_UNICODE,
+  SEMANTICSCHOLAR_RELATED_LIMIT,
+  SEMANTICSCHOLAR_RELATED_UNKNOWN_ID,
+  SEMANTICSCHOLAR_TITLE_ABSENT,
+  SEMANTICSCHOLAR_TITLE_RICH,
 } from "../test/support/semanticscholarRecordedRequests";
 
 // ---------------------------------------------------------------------------
@@ -399,6 +436,18 @@ export interface CliOptions {
   readonly confirmSpendUsd?: number;
   /** `--model <id>` (LLM providers only): record with this priced model. */
   readonly model?: string;
+  /**
+   * `--related` (`P5-T04`): act on the source's relatedness scenarios
+   * ({@link relatedPlanFor}), in `test/fixtures/<source>/related/`, instead of
+   * its search scenarios. Implied by {@link keyed}.
+   */
+  readonly related?: true;
+  /**
+   * `--keyed` (Semantic Scholar only, `P5-T04`): the explicit opt-in that
+   * `FIXTURE_MODE=record` needs before anything is sent to that host. It reads
+   * the key from the process environment; see {@link runRelatedRecorder}.
+   */
+  readonly keyed?: true;
 }
 
 /** A command-line mistake. Exit code 2, no plan printed. */
@@ -406,7 +455,9 @@ export class UsageError extends Error {}
 
 const USAGE =
   "usage: npm run fixtures:record -- [--source <id>] [--only <scenario,…>] " +
-  `[--dry-run] [--rescrub]   (sources: ${RECORDABLE_SOURCES.join(", ")})\n` +
+  `[--dry-run] [--rescrub] [--related]   (sources: ${RECORDABLE_SOURCES.join(", ")})\n` +
+  "       npm run fixtures:record -- --source semanticscholar --keyed [--only <scenario,…>] " +
+  "[--dry-run]   (the owner's recording; docs/13 §3.5)\n" +
   "       npm run fixtures:record -- --source <llm provider> [--only <scenario,…>] " +
   "[--dry-run] [--model <id>] [--live] [--confirm-spend-usd <amount>]   " +
   "(LLM providers: openrouter, openai, anthropic, gemini; docs/13 §3.4)";
@@ -430,6 +481,8 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   let live = false;
   let confirmSpendUsd: number | undefined;
   let model: string | undefined;
+  let related = false;
+  let keyed = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === undefined) continue;
@@ -439,6 +492,14 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     }
     if (arg === "--live") {
       live = true;
+      continue;
+    }
+    if (arg === "--related") {
+      related = true;
+      continue;
+    }
+    if (arg === "--keyed") {
+      keyed = true;
       continue;
     }
     if (
@@ -519,6 +580,15 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
       `--live, --confirm-spend-usd and --model are for an LLM provider only.\n${USAGE}`,
     );
   }
+  if (keyed && source !== "semanticscholar") {
+    throw new UsageError(`--keyed is for semanticscholar only.\n${USAGE}`);
+  }
+  if ((related || keyed) && !isRelatedRecordableSource(source)) {
+    throw new UsageError(
+      `--related needs a source with relatedness scenarios: ` +
+        `${RELATED_RECORDABLE_SOURCES.join(", ")}.\n${USAGE}`,
+    );
+  }
   return {
     source,
     dryRun,
@@ -527,6 +597,8 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     ...(live && { live: true as const }),
     ...(confirmSpendUsd !== undefined && { confirmSpendUsd }),
     ...(model !== undefined && { model }),
+    ...((related || keyed) && { related: true as const }),
+    ...(keyed && { keyed: true as const }),
   };
 }
 
@@ -1141,8 +1213,21 @@ interface WriteRequest {
   readonly allow?: readonly string[];
 }
 
-/** Write one `<key>.json` and its `<key>_meta.json` into `dir`. Returns the key. */
-async function writeFixture(dir: string, req: WriteRequest): Promise<string> {
+/** One fixture and its sidecar, checked by {@link assertClean} and not yet written. */
+interface StagedFixture {
+  readonly key: string;
+  readonly fixtureText: string;
+  readonly metaText: string;
+}
+
+/**
+ * Build and check one `<key>.json` and its `<key>_meta.json`, writing nothing.
+ *
+ * @param req - the request and the exchange after redaction
+ * @returns the texts to write
+ * @throws Error when either text still matches a secret pattern
+ */
+function stageFixture(req: WriteRequest): StagedFixture {
   const key = fixtureKey({
     method: req.method,
     url: req.url,
@@ -1166,10 +1251,27 @@ async function writeFixture(dir: string, req: WriteRequest): Promise<string> {
   };
   const metaText = toJson(meta);
   assertClean(`${req.scenario} (metadata)`, metaText, req.deny);
+  return { key, fixtureText, metaText };
+}
 
-  await writeFile(`${dir}/${key}.json`, fixtureText, "utf8");
-  await writeFile(`${dir}/${key}${META_SUFFIX}`, metaText, "utf8");
-  return key;
+/** Write one staged fixture and its sidecar into `dir`. */
+async function writeStagedFixture(
+  dir: string,
+  staged: StagedFixture,
+): Promise<void> {
+  await writeFile(`${dir}/${staged.key}.json`, staged.fixtureText, "utf8");
+  await writeFile(
+    `${dir}/${staged.key}${META_SUFFIX}`,
+    staged.metaText,
+    "utf8",
+  );
+}
+
+/** Write one `<key>.json` and its `<key>_meta.json` into `dir`. Returns the key. */
+async function writeFixture(dir: string, req: WriteRequest): Promise<string> {
+  const staged = stageFixture(req);
+  await writeStagedFixture(dir, staged);
+  return staged.key;
 }
 
 /** What {@link rescrubFixtures} did to one directory. */
@@ -2524,6 +2626,12 @@ function semanticscholarPlanned(
  * reads §7.3's 0.9/s row. `docs/02` §6.4 measured the shared anonymous pool
  * answering HTTP 429 on every attempt during US business hours; a run that
  * meets that records the 429 under whatever scenario drew it and says so.
+ *
+ * *Updated 2026-11-02 (`P5-T04`):* this describes how the committed search
+ * fixtures were recorded. `FIXTURE_MODE=record` no longer sends them: for this
+ * source it is refused without `--keyed`, and `--keyed` records
+ * {@link semanticscholarRelatedPlan} only. Re-recording these under the key is
+ * not built; `--rescrub` and `FIXTURE_MODE=synthetic` still work.
  */
 export function semanticscholarIndependentPlan(): readonly PlannedRequest[] {
   return [
@@ -3272,6 +3380,299 @@ export function planFor(source: RecordableSourceId): SourcePlan {
         opaqueTokens: biorxivOpaqueTokens,
       };
     }
+  }
+}
+
+// --- 7h. The relatedness scenarios (`P5-T04`) ---------------------------------
+
+/*
+ * What Phase 5's adapters will send (`plan/08` card `P5-T04` step 2), planned
+ * apart from each source's search scenarios and written to a `related/`
+ * directory beside them. DECIDED 2026-11-02 (coordinator, under plan/00 §6 item
+ * 313): a subdirectory, because the search directories are pinned file by file
+ * (`test/unit/sources/crossref.test.ts` counts them; `semanticscholar.test.ts`
+ * and `test/contract/replayHarness.test.ts` assert "the keys on disk are exactly
+ * the plan"), and those test files are outside `P5-T04`'s `Files`. Every one of
+ * them filters on `.json`, so a directory beside the fixtures moves none of them.
+ */
+
+/** The sources with relatedness scenarios. */
+export const RELATED_RECORDABLE_SOURCES = [
+  "europepmc",
+  "pubmed",
+  "crossref",
+  "semanticscholar",
+] as const;
+export type RelatedRecordableSourceId =
+  (typeof RELATED_RECORDABLE_SOURCES)[number];
+
+/** Whether `value` names a source {@link relatedPlanFor} has a plan for. */
+export function isRelatedRecordableSource(
+  value: string,
+): value is RelatedRecordableSourceId {
+  return (RELATED_RECORDABLE_SOURCES as readonly string[]).includes(value);
+}
+
+/**
+ * `test/fixtures/<source>/related/`.
+ *
+ * @param source - the source
+ * @returns the absolute directory
+ */
+export function relatedFixtureDirFor(
+  source: RelatedRecordableSourceId,
+): string {
+  return resolve(fixtureDirFor(source), "related");
+}
+
+/** One source's relatedness scenarios. */
+export interface RelatedPlan {
+  readonly source: RelatedRecordableSourceId;
+  readonly host: string;
+  readonly fixtureDir: string;
+  /** Sent one by one, in this order; nothing depends on an earlier answer. */
+  readonly independent: () => readonly PlannedRequest[];
+  /** The hand-written ones, each `"synthetic": true` with its reason. */
+  readonly synthetic: () => readonly SyntheticFixture[];
+  readonly opaqueTokens?: (body: string) => readonly string[];
+  /** `true`: no request without `--keyed` and the key (`plan/00` §6 item 320(a)). */
+  readonly keyRequired: boolean;
+}
+
+/** A planned request from any of the `P5-T04` builders. */
+function relatedPlanned(
+  scenario: string,
+  purpose: string,
+  built: {
+    readonly method: string;
+    readonly url: string;
+    readonly endpointBaseUrl: string;
+    readonly body?: string;
+    readonly contentType?: string;
+  },
+): PlannedRequest {
+  return semanticscholarPlanned(scenario, purpose, built);
+}
+
+/** Europe PMC's: `docs/02` §4.7's two endpoints and its measured outage. */
+export function europepmcRelatedPlan(): RelatedPlan {
+  return {
+    source: "europepmc",
+    host: EBI_HOST,
+    fixtureDir: relatedFixtureDirFor("europepmc"),
+    independent: () => [
+      relatedPlanned(
+        "citations",
+        "docs/02 §4.7: GET /MED/37258680/citations, page 1 of 25",
+        recordedEuropePmcCitationsRequest(),
+      ),
+      relatedPlanned(
+        "references",
+        "docs/02 §4.7: GET /MED/37258680/references, page 1 of 25",
+        recordedEuropePmcReferencesRequest(),
+      ),
+      relatedPlanned(
+        "citations-outage-seed",
+        "P5-T07: /citations answering for the seed whose /references is the hand-written 503",
+        recordedEuropePmcCitationsRequest(EUROPEPMC_RELATED_OUTAGE_SEED_PMID),
+      ),
+    ],
+    synthetic: () => [
+      {
+        planned: relatedPlanned(
+          "references-503",
+          "docs/02 §4.7: the measured /references outage, text/plain",
+          recordedEuropePmcReferencesRequest(
+            EUROPEPMC_RELATED_OUTAGE_SEED_PMID,
+          ),
+        ),
+        exchange: {
+          status: 503,
+          headers: { "content-type": "text/plain" },
+          body: EUROPEPMC_SYNTHETIC_503_BODY,
+        },
+        reason:
+          "Hand-written, not recorded. Status, content type and body are " +
+          "docs/02 §4.7's measured outage of 2026-09-08 and 2026-09-09; a 5xx " +
+          "cannot be provoked on demand. Keyed under a seed whose /citations " +
+          "is recorded live, so the two endpoints can be seen failing apart.",
+      },
+    ],
+    keyRequired: false,
+  };
+}
+
+/** NCBI's: one `elink` with two seeds (`docs/05` §4.2–§4.3). */
+export function pubmedRelatedPlan(): RelatedPlan {
+  return {
+    source: "pubmed",
+    host: NCBI_HOST,
+    fixtureDir: relatedFixtureDirFor("pubmed"),
+    independent: () => [
+      relatedPlanned(
+        "elink-two-seeds",
+        "docs/05 §4.3: neighbor_score with two separate id parameters, one linkset per seed",
+        recordedPubmedElinkRequest(),
+      ),
+    ],
+    synthetic: () => [],
+    keyRequired: false,
+  };
+}
+
+/** Crossref's: `docs/05` §2.1's deposited references, and the title search. */
+export function crossrefRelatedPlan(): RelatedPlan {
+  return {
+    source: "crossref",
+    host: CROSSREF_HOST,
+    fixtureDir: relatedFixtureDirFor("crossref"),
+    independent: () => [
+      relatedPlanned(
+        "work-with-references",
+        "docs/05 §2.1: /works/{doi} with a deposited reference[]",
+        recordedCrossrefWorkRequest(CROSSREF_DOI_WITH_REFERENCES),
+      ),
+      relatedPlanned(
+        "work-without-references",
+        "docs/05 §2.1: /works/{doi} where references-count is 0 in the committed record-sparse",
+        recordedCrossrefWorkRequest(CROSSREF_DOI_WITHOUT_REFERENCES),
+      ),
+      relatedPlanned(
+        "title-search",
+        "P5-T09 step 2: query.bibliographic with rows 5",
+        recordedCrossrefTitleSearchRequest(),
+      ),
+    ],
+    synthetic: () => [],
+    opaqueTokens: crossrefOpaqueTokens,
+    keyRequired: false,
+  };
+}
+
+/**
+ * `recommend-size-cap`'s body. **Nobody on this project has seen this response.**
+ * `docs/05` §3.3 and `docs/02` §6.10 give the status and quote the message with
+ * an ellipsis ("Response would exceed maximum size…"), so this is that quotation
+ * without the ellipsis, and the rest of the real message is unknown.
+ */
+const SEMANTICSCHOLAR_SYNTHETIC_SIZE_CAP_BODY =
+  '{"error": "Response would exceed maximum size"}';
+
+/**
+ * Semantic Scholar's relatedness scenarios. **Recorded by the owner**, keyed
+ * (`plan/00` §6 item 323(c), `P5-T31`). `recommend-size-cap` is keyed under
+ * twice `recommend-post`'s limit, so `P5-T06`'s retry at half the limit lands on
+ * the recorded answer.
+ */
+export function semanticscholarRelatedPlan(): RelatedPlan {
+  return {
+    source: "semanticscholar",
+    host: SEMANTICSCHOLAR_HOST,
+    fixtureDir: relatedFixtureDirFor("semanticscholar"),
+    independent: () => [
+      relatedPlanned(
+        "references",
+        "docs/05 §2.1: /paper/{id}/references for the probe paper, limit 20",
+        recordedSemanticScholarReferencesRequest(),
+      ),
+      relatedPlanned(
+        "citations",
+        "docs/05 §2.1: /paper/{id}/citations with contexts, intents, isInfluential, limit 20",
+        recordedSemanticScholarCitationsRequest(),
+      ),
+      relatedPlanned(
+        "forpaper",
+        "docs/05 §3.1: /recommendations/v1/papers/forpaper/{id}?from=recent, limit 20",
+        recordedSemanticScholarForPaperRequest(),
+      ),
+      relatedPlanned(
+        "recommend-post",
+        "docs/05 §3.1: POST /recommendations/v1/papers/, 2 positives and 1 negative, limit 20",
+        recordedSemanticScholarRecommendRequest(),
+      ),
+      relatedPlanned(
+        "match-title",
+        "P5-T05 step 2: /paper/search/match for a title that exists",
+        recordedSemanticScholarMatchRequest(SEMANTICSCHOLAR_TITLE_RICH),
+      ),
+      relatedPlanned(
+        "match-title-absent",
+        "P5-T05 step 2: /paper/search/match for a title that does not; the status and body are not yet known",
+        recordedSemanticScholarMatchRequest(SEMANTICSCHOLAR_TITLE_ABSENT),
+      ),
+      relatedPlanned(
+        "batch-embedding",
+        "P5-T20: POST /paper/batch with embedding.specter_v2, two papers",
+        recordedSemanticScholarEmbeddingBatchRequest(),
+      ),
+      relatedPlanned(
+        "batch-references",
+        "P5-T04 step 2: POST /paper/batch with references.externalIds, two papers",
+        recordedSemanticScholarReferencesBatchRequest(),
+      ),
+      relatedPlanned(
+        "batch-unresolvable",
+        "docs/05 §3.3 pitfall 2: POST /paper/batch with one unresolvable id among valid ones",
+        recordedSemanticScholarUnresolvableBatchRequest(),
+      ),
+      relatedPlanned(
+        "seed-not-found",
+        "docs/02 §6.10: a 404 on a seed that resolves to nothing",
+        recordedSemanticScholarReferencesRequest(
+          SEMANTICSCHOLAR_RELATED_UNKNOWN_ID,
+        ),
+      ),
+      relatedPlanned(
+        "citations-unknown-field",
+        "docs/02 §6.10: a 400 naming an unknown field",
+        recordedSemanticScholarUnknownFieldRequest(),
+      ),
+    ],
+    synthetic: () => [
+      {
+        planned: relatedPlanned(
+          "recommend-size-cap",
+          "docs/05 §3.3: HAND-WRITTEN, never observed: the 400 for a response over the 10 MB cap",
+          recordedSemanticScholarRecommendRequest(
+            2 * SEMANTICSCHOLAR_RELATED_LIMIT,
+          ),
+        ),
+        exchange: {
+          status: 400,
+          headers: { "content-type": "application/json" },
+          body: SEMANTICSCHOLAR_SYNTHETIC_SIZE_CAP_BODY,
+        },
+        reason:
+          "Hand-written, not recorded, and not evidence about the service: no " +
+          "recording has drawn this response. docs/05 §3.3 and docs/02 §6.10 " +
+          "give status 400 and quote the message with an ellipsis, so only the " +
+          "status and that opening are documented; the content type and the " +
+          "end of the message are assumptions. Drawing it live would need a " +
+          "response over 10 MB from a shared service. Match on the opening of " +
+          "the message, never on the whole of it.",
+      },
+    ],
+    opaqueTokens: semanticscholarOpaqueTokens,
+    keyRequired: true,
+  };
+}
+
+/**
+ * The relatedness plan for one source.
+ *
+ * @param source - a {@link RelatedRecordableSourceId}
+ * @returns its plan
+ */
+export function relatedPlanFor(source: RelatedRecordableSourceId): RelatedPlan {
+  switch (source) {
+    case "europepmc":
+      return europepmcRelatedPlan();
+    case "pubmed":
+      return pubmedRelatedPlan();
+    case "crossref":
+      return crossrefRelatedPlan();
+    case "semanticscholar":
+      return semanticscholarRelatedPlan();
   }
 }
 
@@ -5001,6 +5402,487 @@ async function writeStaged(dir: string, file: StagedLlmFixture): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// 8c. The relatedness recording, and Semantic Scholar's keyed path — `P5-T04`
+// ---------------------------------------------------------------------------
+
+/*
+ * The agent records Europe PMC, NCBI and Crossref through this path, unkeyed.
+ * **Semantic Scholar's recording is the owner's** (`plan/00` §6 item 323(c),
+ * `docs/13` §3.5): no agent runs it or holds the key.
+ *
+ * The rules for the key, each of which a test in
+ * `test/unit/sources/relatedRequests.test.ts` holds with a fake value:
+ *
+ * - **Where it comes from:** {@link SEMANTICSCHOLAR_KEY_ENV_VAR} in the process
+ *   environment, read at run time ({@link semanticScholarKeyFromEnvironment}),
+ *   only in record mode and only behind `--keyed`. No file, ever.
+ * - **Where it goes:** the one request header, and nowhere else: not a URL, not a
+ *   body, so {@link fixtureKey}, which hashes the method, the URL and the body,
+ *   gives the same name with or without a key, and a keyed recording replays
+ *   unkeyed.
+ * - **What is printed:** whether a key is present. Never the value, its length or
+ *   any part of it. Anything printed from a failure goes through
+ *   {@link scrubForPrinting} first.
+ * - **What is stored:** {@link stripKeyedExchange} keeps only the response headers
+ *   a parser needs and takes the key header's name out of the body; the value joins
+ *   the literal deny-list whatever its length, so {@link scrub} removes it and
+ *   {@link assertClean} refuses a survivor; {@link assertNoKeyHeaderName} refuses a
+ *   fixture or sidecar still naming the header, which is `P5-T31`'s own check.
+ *   Everything is staged and checked before **any** file is written.
+ * - **What is not stored as if it were an answer:** the service refusing the key
+ *   (401, 403) stops the run and writes nothing; a 429 stops the requests, keeps
+ *   what was already answered and prints the `--only` command for the rest; a 5xx is
+ *   reported and not written. No status of these is what a parser should be tested
+ *   against, and the politeness rule says a 429 is not pushed against.
+ */
+
+/** The one variable the keyed path reads, as `scripts/spike-abstract-coverage.ts` does. */
+export const SEMANTICSCHOLAR_KEY_ENV_VAR = "SEMANTIC_SCHOLAR_API_KEY";
+
+/**
+ * The key from `env`, and from nothing else: no file, no preference.
+ *
+ * @param env - the process environment (a test passes its own record)
+ * @returns the trimmed value, or `undefined` when unset or blank
+ */
+export function semanticScholarKeyFromEnvironment(
+  env: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const value = env[SEMANTICSCHOLAR_KEY_ENV_VAR]?.trim();
+  return value === undefined || value === "" ? undefined : value;
+}
+
+/**
+ * The response headers a keyed fixture keeps: what `P5-T05` and `P5-T06` can read
+ * (`docs/02` §6.4 records `x-amzn-ErrorType` on a refusal). An allow-list, as
+ * {@link LLM_HEADER_ALLOW} is, because a gateway answering a keyed caller may say
+ * more about the account than it says to an anonymous one, and nobody has seen it.
+ */
+export const KEYED_RESPONSE_HEADER_ALLOW: readonly RegExp[] = Object.freeze([
+  /^content-type$/u,
+  /^retry-after$/u,
+  /^x-amzn-errortype$/u,
+  /^x-ratelimit-/u,
+]);
+
+/** The key header's name, in any case, wherever a response might echo it. */
+const KEY_HEADER_NAME = new RegExp(SEMANTICSCHOLAR_API_KEY_HEADER, "iu");
+
+/** What the key header's name becomes in a body. */
+const KEY_HEADER_NAME_PLACEHOLDER = "[redacted:key-header-name]";
+
+/**
+ * Remove the key's traces from one keyed exchange, before {@link redactExchange}.
+ *
+ * Keeps only {@link KEYED_RESPONSE_HEADER_ALLOW}'s headers, drops one of those
+ * whose value names the key header or holds the key, and replaces the key and
+ * the header's name in the body. The key goes first, before `redact()` can reach
+ * it, because that pass writes a match's length into the file. The notes never
+ * spell the name: a sidecar is stored too, and `P5-T31` greps every stored file
+ * for it.
+ *
+ * @param raw - the exchange as received
+ * @param key - the key this run sent
+ * @returns the exchange to pass on, and a note per thing removed
+ */
+export function stripKeyedExchange(
+  raw: {
+    readonly status: number;
+    readonly headers: Readonly<Record<string, string>>;
+    readonly body: string;
+  },
+  key: string,
+): {
+  readonly exchange: {
+    readonly status: number;
+    readonly headers: Readonly<Record<string, string>>;
+    readonly body: string;
+  };
+  readonly notes: readonly string[];
+} {
+  const headers: Record<string, string> = {};
+  let dropped = 0;
+  for (const [name, value] of Object.entries(raw.headers)) {
+    const lower = name.toLowerCase();
+    if (
+      KEYED_RESPONSE_HEADER_ALLOW.some((re) => re.test(lower)) &&
+      !KEY_HEADER_NAME.test(value) &&
+      !value.includes(key)
+    ) {
+      headers[lower] = value;
+    } else {
+      dropped += 1;
+    }
+  }
+  const body = raw.body
+    .split(key)
+    .join(SECRET_PLACEHOLDER)
+    .replace(
+      new RegExp(KEY_HEADER_NAME.source, "giu"),
+      KEY_HEADER_NAME_PLACEHOLDER,
+    );
+  const notes = [
+    `keyed recording: kept ${String(Object.keys(headers).length)} response ` +
+      `header(s) from the allow-list, dropped ${String(dropped)}`,
+  ];
+  if (body !== raw.body) notes.push("scrubbed body: what named the key");
+  return { exchange: { status: raw.status, headers, body }, notes };
+}
+
+/**
+ * `P5-T31`'s check, before writing: no stored text names the key header.
+ *
+ * @param scenario - the scenario, for the message
+ * @param text - the exact text about to be written
+ * @throws Error naming what matched, without quoting it
+ */
+export function assertNoKeyHeaderName(scenario: string, text: string): void {
+  if (KEY_HEADER_NAME.test(text)) {
+    throw new Error(
+      `Refusing to write fixture "${scenario}": it still names the key header ` +
+        `after the keyed pass (docs/13 §3.5). Nothing was written.`,
+    );
+  }
+}
+
+/** What {@link runRelatedRecorder} reads and writes through; a test passes fakes. */
+export interface RelatedRunEnvironment {
+  /** The process environment; the only place the key is read from. */
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly stdout: (text: string) => void;
+  readonly stderr: (text: string) => void;
+  /** Where fixtures go; {@link relatedFixtureDirFor} in the product. */
+  readonly fixtureDir: string;
+  /**
+   * The `Zotero.HTTP` stand-in to send through: `fetch`, paced, in the product;
+   * a fake in a test. Called only after every gate has passed.
+   */
+  readonly transport: () => HttpTransport;
+  readonly clock: Clock;
+  readonly toolVersion: string;
+}
+
+/** Exit code: refused before anything was sent (a command mistake or a gate). */
+const EXIT_REFUSED = 2;
+
+/** The owner's command, as the refusal and the dry run print it. */
+const SEMANTICSCHOLAR_KEYED_COMMAND =
+  "FIXTURE_MODE=record npm run fixtures:record -- --source semanticscholar --keyed";
+
+/** The dry run's account of one source's relatedness scenarios. */
+function relatedPlanText(
+  plan: RelatedPlan,
+  env: Readonly<Record<string, string | undefined>>,
+  keyed: boolean,
+  only: readonly string[] | undefined,
+): string {
+  const selected = selectScenarios(plan.independent(), only);
+  const synthetic = plan.synthetic();
+  const lines = selected.map((p) => planLine(p)).join("");
+  const written = synthetic.map((s) => planLine(s.planned, " (synthetic)"));
+  const how = plan.keyRequired
+    ? `Recording these is the owner's, never an agent's (docs/13 §3.5). No ` +
+      `anonymous attempt is made. With ${SEMANTICSCHOLAR_KEY_ENV_VAR} set in ` +
+      `this shell for this session only:\n  ${SEMANTICSCHOLAR_KEYED_COMMAND}\n`
+    : `Record them with: FIXTURE_MODE=record npm run fixtures:record -- ` +
+      `--source ${plan.source} --related\n`;
+  // Only with --keyed, and only whether: the value is not printed or measured.
+  const present = keyed
+    ? `Key present in ${SEMANTICSCHOLAR_KEY_ENV_VAR}: ` +
+      `${semanticScholarKeyFromEnvironment(env) === undefined ? "no" : "yes"}. ` +
+      `Nothing was sent.\n`
+    : "";
+  return (
+    `\nRelatedness scenarios of ${plan.source} (P5-T04), fixtures in ` +
+    `test/fixtures/${plan.source}/related/: ${String(selected.length)} live ` +
+    `request(s), ${String(synthetic.length)} synthetic; paced at >= ` +
+    `${String(spacingMsFor(plan.host))} ms on ${plan.host}.\n` +
+    how +
+    present +
+    "\n" +
+    lines +
+    written.join("")
+  );
+}
+
+/**
+ * `npm run fixtures:record -- --source <id> --related`, and every
+ * `FIXTURE_MODE=record` for Semantic Scholar.
+ *
+ * - **dry run**: prints the plan and sends nothing. `--keyed` adds whether a key
+ *   is present.
+ * - **synthetic**: writes the hand-written fixtures. No key, no network.
+ * - **record**: for Semantic Scholar, refused without `--keyed` (exit 2, printing
+ *   the owner's command) and without the key (exit 2); there is no anonymous
+ *   attempt. Then each selected scenario once, never retried, sequentially; see
+ *   this section's header for what stops a run. Exit 0 when every selected
+ *   scenario was recorded, 1 otherwise.
+ *
+ * @param cli - the parsed options; `source` has a relatedness plan
+ * @param mode - dry run, synthetic or record
+ * @param run - the environment, streams, directory, transport and clock
+ * @returns the exit code
+ */
+export async function runRelatedRecorder(
+  cli: CliOptions & { readonly source: RelatedRecordableSourceId },
+  mode: Mode,
+  run: RelatedRunEnvironment,
+): Promise<number> {
+  const plan = relatedPlanFor(cli.source);
+  const keyed = cli.keyed === true;
+
+  let selected: readonly PlannedRequest[];
+  try {
+    selected = selectScenarios(plan.independent(), cli.only);
+  } catch (error) {
+    if (error instanceof UsageError) {
+      run.stderr(`fixtures:record: ${error.message}\n`);
+      return EXIT_REFUSED;
+    }
+    throw error;
+  }
+
+  if (mode === "dry-run") {
+    run.stdout(
+      `fixtures:record — dry run. Nothing was requested and nothing written.\n` +
+        relatedPlanText(plan, run.env, keyed, cli.only),
+    );
+    return 0;
+  }
+
+  const baseDeny = literalDenyList(run.env);
+  const synthetic = plan.synthetic();
+
+  /** The hand-written fixtures, staged. No key has been read when this runs. */
+  const stageSynthetic = (
+    deny: readonly string[],
+  ): readonly (StagedFixture & { readonly scenario: string })[] =>
+    synthetic.map((s) => ({
+      scenario: s.planned.scenario,
+      ...stageFixture({
+        scenario: s.planned.scenario,
+        method: s.planned.method,
+        url: s.planned.url,
+        ...(s.planned.body !== undefined && { body: s.planned.body }),
+        endpoint: s.planned.endpoint,
+        exchange: s.exchange,
+        redactions: ["synthetic: nothing was received, nothing to redact"],
+        synthetic: true,
+        syntheticReason: s.reason,
+        version: run.toolVersion,
+        deny,
+      }),
+    }));
+
+  if (mode === "synthetic") {
+    const staged = stageSynthetic(baseDeny);
+    await mkdir(run.fixtureDir, { recursive: true });
+    for (const file of staged) await writeStagedFixture(run.fixtureDir, file);
+    run.stdout(
+      staged.map((f) => `  ${f.key}  ${f.scenario} (synthetic)\n`).join("") +
+        `Wrote ${String(staged.length)} synthetic fixtures to ` +
+        `test/fixtures/${plan.source}/related/. Zero requests, no key read.\n`,
+    );
+    return 0;
+  }
+
+  // --- record: the gates, before anything is sent ----------------------------
+  let key: string | undefined;
+  if (plan.keyRequired) {
+    if (!keyed) {
+      run.stderr(
+        `fixtures:record: nothing was sent. Semantic Scholar's recording is the ` +
+          `owner's and needs the explicit --keyed flag with the key in the ` +
+          `process environment; there is no anonymous attempt (plan/00 §6 items ` +
+          `320(a), 323(c)). The owner's steps are docs/13 §3.5. The command, with ` +
+          `${SEMANTICSCHOLAR_KEY_ENV_VAR} set in that shell for that session only:\n` +
+          `  ${SEMANTICSCHOLAR_KEYED_COMMAND}\n`,
+      );
+      return EXIT_REFUSED;
+    }
+    key = semanticScholarKeyFromEnvironment(run.env);
+    if (key === undefined) {
+      run.stderr(
+        `fixtures:record: nothing was sent. ${SEMANTICSCHOLAR_KEY_ENV_VAR} is not ` +
+          `set in this shell, and no other place is read. docs/13 §3.5 says how to ` +
+          `set it without echoing it.\n`,
+      );
+      return EXIT_REFUSED;
+    }
+  }
+  const deny =
+    key === undefined
+      ? baseDeny
+      : [...new Set([key, ...baseDeny])].sort((a, b) => b.length - a.length);
+  const printable = (text: string): string => scrubForPrinting(text, deny);
+
+  const captured = new Map<string, RawExchange>();
+  const base = run.transport();
+  const transport: HttpTransport = {
+    UnexpectedStatusException: base.UnexpectedStatusException,
+    TimeoutException: base.TimeoutException,
+    BrowserOfflineException: base.BrowserOfflineException,
+    SecurityException: base.SecurityException,
+    CancelledException: base.CancelledException,
+    async request(method, url, options): Promise<HttpTransportXhr> {
+      const xhr = await base.request(method, url, options);
+      captured.set(`${method} ${url} ${options.body ?? ""}`, {
+        status: xhr.status,
+        headers: parseHeaderBlock(xhr.getAllResponseHeaders()),
+        body: xhr.responseText ?? "",
+      });
+      return xhr;
+    },
+  };
+  const client = createHttpClient({
+    transport,
+    userAgent: buildUserAgent(run.toolVersion),
+    clock: run.clock,
+  });
+  const token = createCancellationTokenSource().token;
+
+  run.stderr(
+    `Recording ${plan.source} relatedness: ${String(selected.length)} ` +
+      `request(s), one at a time, >= ${String(spacingMsFor(plan.host))} ms apart. ` +
+      `Key present: ${key === undefined ? "no" : "yes"}.\n`,
+  );
+
+  const failures: string[] = [];
+  const answered: PlannedRequest[] = [];
+  const unsent: string[] = [];
+  let sent = 0;
+  for (const [index, p] of selected.entries()) {
+    sent += 1;
+    const headers: Record<string, string> = {
+      ...(key !== undefined && { [SEMANTICSCHOLAR_API_KEY_HEADER]: key }),
+      ...(p.body !== undefined && {
+        "Content-Type": p.contentType ?? "application/x-www-form-urlencoded",
+      }),
+    };
+    try {
+      await client.request(p.method as "GET" | "POST", p.url, {
+        responseType: "text",
+        token,
+        headers,
+        ...(p.body !== undefined && { body: p.body }),
+      });
+    } catch (error) {
+      // A 4xx or 5xx is classified into a thrown error by the shipped client and
+      // was captured all the same. Nothing captured is a real failure.
+      if (take(captured, p) === undefined) {
+        failures.push(`${p.scenario}: ${printable(describe(error))}`);
+        unsent.push(p.scenario);
+        continue;
+      }
+    }
+    const status = take(captured, p)?.status;
+    if (status === 401 || status === 403) {
+      run.stderr(
+        `fixtures:record: the service refused this request with HTTP ` +
+          `${String(status)} on "${p.scenario}". Nothing was written and nothing ` +
+          `more was sent. Check that the key is the new, rotated one (docs/13 §3.5).\n`,
+      );
+      return 1;
+    }
+    if (status === 429) {
+      failures.push(
+        `${p.scenario}: HTTP 429, so the rest were not sent; a rate limit is not ` +
+          `pushed against`,
+      );
+      unsent.push(
+        p.scenario,
+        ...selected.slice(index + 1).map((rest) => rest.scenario),
+      );
+      break;
+    }
+    if (status !== undefined && status >= 500) {
+      failures.push(`${p.scenario}: HTTP ${String(status)}, not written`);
+      unsent.push(p.scenario);
+      continue;
+    }
+    answered.push(p);
+  }
+
+  // --- stage everything, then write ------------------------------------------
+  let staged: (StagedFixture & { readonly note: string })[];
+  try {
+    staged = answered.map((p) => {
+      const raw = take(captured, p) as RawExchange;
+      const stripped =
+        key === undefined
+          ? { exchange: raw, notes: [] as readonly string[] }
+          : stripKeyedExchange(raw, key);
+      const allow = plan.opaqueTokens?.(stripped.exchange.body) ?? [];
+      const { exchange, notes } = redactExchange(
+        stripped.exchange,
+        deny,
+        allow,
+      );
+      const file = stageFixture({
+        scenario: p.scenario,
+        method: p.method,
+        url: p.url,
+        ...(p.body !== undefined && { body: p.body }),
+        endpoint: p.endpoint,
+        exchange,
+        redactions: [...stripped.notes, ...notes],
+        synthetic: false,
+        version: run.toolVersion,
+        deny,
+        allow,
+      });
+      if (key !== undefined) {
+        assertNoKeyHeaderName(p.scenario, file.fixtureText);
+        assertNoKeyHeaderName(`${p.scenario} (metadata)`, file.metaText);
+      }
+      return {
+        ...file,
+        note:
+          `${p.scenario}  status=${String(exchange.status)} ` +
+          `${String(exchange.body.length)}B`,
+      };
+    });
+    // A rerun of named scenarios leaves the hand-written ones as they are.
+    if (cli.only === undefined) {
+      for (const file of stageSynthetic(deny)) {
+        if (key !== undefined) {
+          assertNoKeyHeaderName(file.scenario, file.fixtureText);
+          assertNoKeyHeaderName(file.scenario, file.metaText);
+        }
+        staged.push({ ...file, note: `${file.scenario} (synthetic)` });
+      }
+    }
+  } catch (error) {
+    run.stderr(
+      `fixtures:record: ${printable(describe(error))}\nNothing was written.\n`,
+    );
+    return 1;
+  }
+
+  await mkdir(run.fixtureDir, { recursive: true });
+  for (const file of staged) await writeStagedFixture(run.fixtureDir, file);
+  run.stdout(
+    staged.map((f) => `  ${f.key}  ${f.note}\n`).join("") +
+      `\n${String(sent)} live request(s); ${String(staged.length)} fixtures written ` +
+      `to test/fixtures/${plan.source}/related/.\n`,
+  );
+  if (failures.length > 0) {
+    const flag = key === undefined ? "--related" : "--keyed";
+    run.stdout(
+      `${String(failures.length)} scenario(s) were not recorded:\n  ` +
+        `${failures.join("\n  ")}\n` +
+        (unsent.length > 0
+          ? `The rest, once the service answers again:\n  FIXTURE_MODE=record npm ` +
+            `run fixtures:record -- --source ${plan.source} ${flag} --only ` +
+            `${unsent.join(",")}\n`
+          : ""),
+    );
+    return 1;
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // 9. main
 // ---------------------------------------------------------------------------
 
@@ -5054,6 +5936,27 @@ async function main(argv: readonly string[]): Promise<number> {
       toolVersion: await toolVersion(),
     });
   }
+  if (
+    isRelatedRecordableSource(source) &&
+    cli.rescrub !== true &&
+    (cli.related === true ||
+      (source === "semanticscholar" && mode === "record"))
+  ) {
+    // `P5-T04`: the relatedness scenarios, and Semantic Scholar's only record path.
+    return runRelatedRecorder({ ...cli, source }, mode, {
+      env: process.env,
+      stdout: (text) => process.stdout.write(text),
+      stderr: (text) => process.stderr.write(text),
+      fixtureDir: relatedFixtureDirFor(source),
+      transport: () =>
+        createFetchTransport(
+          spacingMsFor(relatedPlanFor(source).host),
+          () => undefined,
+        ),
+      clock: createSystemClock(),
+      toolVersion: await toolVersion(),
+    });
+  }
   const plan = planFor(source);
   const deny = literalDenyList();
   const version = await toolVersion();
@@ -5078,12 +5981,15 @@ async function main(argv: readonly string[]): Promise<number> {
   }
   if (cli.rescrub === true && !cli.dryRun) {
     const result = await rescrubFixtures(
-      plan,
+      cli.related === true && isRelatedRecordableSource(source)
+        ? relatedPlanFor(source)
+        : plan,
       deny,
       new Date().toISOString().slice(0, 10),
     );
     process.stdout.write(
-      `fixtures:record — re-scrub of test/fixtures/${plan.source}/. Zero ` +
+      `fixtures:record — re-scrub of test/fixtures/${plan.source}/` +
+        `${cli.related === true ? "related/" : ""}. Zero ` +
         `live requests. ${String(result.read)} fixtures read, ` +
         `${String(result.changed.length)} rewritten, ` +
         `${String(result.addresses)} email address(es) replaced.\n` +
@@ -5106,8 +6012,10 @@ async function main(argv: readonly string[]): Promise<number> {
         `test/fixtures/${plan.source}/ where recorded), ` +
         `${String(synthetic.length)} synthetic; paced at >= ` +
         `${String(spacingMs)} ms on ${plan.host}.\n` +
-        `Run it for real with: FIXTURE_MODE=record npm run fixtures:record ` +
-        `-- --source ${plan.source}\n` +
+        (plan.source === "semanticscholar"
+          ? `Recording this source is the owner's and keyed: see below.\n`
+          : `Run it for real with: FIXTURE_MODE=record npm run fixtures:record ` +
+            `-- --source ${plan.source}\n`) +
         `Rewrite only the hand-written fixtures with: ` +
         `FIXTURE_MODE=synthetic npm run fixtures:record -- --source ` +
         `${plan.source}\n\n`,
@@ -5117,6 +6025,11 @@ async function main(argv: readonly string[]): Promise<number> {
       process.stdout.write(planLine(p, " (dependent)"));
     for (const p of synthetic)
       process.stdout.write(planLine(p, " (synthetic)"));
+    if (isRelatedRecordableSource(source)) {
+      process.stdout.write(
+        relatedPlanText(relatedPlanFor(source), process.env, false, undefined),
+      );
+    }
     return 0;
   }
 

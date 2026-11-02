@@ -15,6 +15,11 @@
  * and the hash does not include headers. Change a query here and its fixture
  * must be re-recorded; a drift shows up as "Missing fixture" in the unit test,
  * never as a network call.
+ * *Updated 2026-11-02 (`P5-T04`): "never sends" holds for the fixtures directly
+ * under `test/fixtures/semanticscholar/`. The relatedness scenarios at the end of
+ * this file are recorded by the owner with the key (`docs/13` §3.5, `P5-T31`)
+ * into `related/`; the key is still a header, so it is still outside the hash,
+ * and those fixtures replay for a keyed and an unkeyed adapter alike.*
  *
  * **Every live scenario costs one 1.1-second slot** (`docs/07` §7.3's 0.9/s)
  * and draws on the shared anonymous pool `docs/02` §6.4 measured answering 429
@@ -24,6 +29,11 @@
  * No platform import, so an integration spec inside Zotero can read it too.
  */
 
+import {
+  buildCitationsRequest,
+  buildReferencesRequest,
+  buildTitleMatchRequest,
+} from "../../src/sources/semanticscholar/graph";
 import {
   clampPageSize,
   readOffsetCursor,
@@ -40,6 +50,11 @@ import {
   type SemanticScholarRelevanceRequest,
   type SemanticScholarRequest,
 } from "../../src/sources/semanticscholar/query";
+import {
+  buildForPaperRequest,
+  buildRecommendRequest,
+  type SemanticScholarRecommendRequest,
+} from "../../src/sources/semanticscholar/recommendations";
 import type {
   QueryField,
   QueryNode,
@@ -296,5 +311,120 @@ export function recordedSemanticScholarHealthRequest(): SemanticScholarRequest {
   return buildPaperRequest(
     SEMANTICSCHOLAR_HEALTH_PAPER_ID,
     SEMANTICSCHOLAR_HEALTH_FIELDS,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The relatedness scenarios (`P5-T04`), recorded by the owner in `P5-T31` into
+// `test/fixtures/semanticscholar/related/`
+// ---------------------------------------------------------------------------
+
+/**
+ * The seed of every relatedness scenario: `docs/05`'s own probe paper
+ * (Geneformer, Nature 2023), which §2.1 and §3.1 record real answers for.
+ */
+export const SEMANTICSCHOLAR_RELATED_SEED = "DOI:10.1038/s41586-023-06139-9";
+/** The second paper of the batch scenarios: `docs/05` §3.1's negative example. */
+export const SEMANTICSCHOLAR_RELATED_SECOND_ID = "ARXIV:1706.03762";
+/** Enough rows to show the shape, few enough to commit. */
+export const SEMANTICSCHOLAR_RELATED_LIMIT = 20;
+/** An id that resolves to nothing, the one `batch-lookup` already uses. */
+export const SEMANTICSCHOLAR_RELATED_UNKNOWN_ID =
+  "DOI:10.1234/research-helper-unknown-id";
+/** `docs/05` §3.1's two positives (one paper, by two ids) and one negative. */
+export const SEMANTICSCHOLAR_RECOMMEND_POSITIVES: readonly string[] = [
+  SEMANTICSCHOLAR_RELATED_SEED,
+  "PMID:37258680",
+];
+export const SEMANTICSCHOLAR_RECOMMEND_NEGATIVES: readonly string[] = [
+  SEMANTICSCHOLAR_RELATED_SECOND_ID,
+];
+/** A title chosen to match nothing, for `match-title-absent`. */
+export const SEMANTICSCHOLAR_TITLE_ABSENT = "zqxjkwvqpzmbt no such paper title";
+/** A field the service does not have, for `citations-unknown-field`. */
+export const SEMANTICSCHOLAR_UNKNOWN_FIELD = "researchHelperNoSuchField";
+
+/** `references` and `seed-not-found` (the unknown id). */
+export function recordedSemanticScholarReferencesRequest(
+  paperId: string = SEMANTICSCHOLAR_RELATED_SEED,
+): SemanticScholarRequest {
+  return buildReferencesRequest({
+    paperId,
+    limit: SEMANTICSCHOLAR_RELATED_LIMIT,
+  });
+}
+
+/** `citations`. */
+export function recordedSemanticScholarCitationsRequest(): SemanticScholarRequest {
+  return buildCitationsRequest({
+    paperId: SEMANTICSCHOLAR_RELATED_SEED,
+    limit: SEMANTICSCHOLAR_RELATED_LIMIT,
+  });
+}
+
+/** `citations-unknown-field`: one row is enough to draw the 400. */
+export function recordedSemanticScholarUnknownFieldRequest(): SemanticScholarRequest {
+  return buildCitationsRequest({
+    paperId: SEMANTICSCHOLAR_RELATED_SEED,
+    limit: 1,
+    fields: [SEMANTICSCHOLAR_UNKNOWN_FIELD],
+  });
+}
+
+/** `match-title` and `match-title-absent`. */
+export function recordedSemanticScholarMatchRequest(
+  title: string,
+): SemanticScholarRequest {
+  return buildTitleMatchRequest(title);
+}
+
+/** `forpaper`. */
+export function recordedSemanticScholarForPaperRequest(): SemanticScholarRequest {
+  return buildForPaperRequest({
+    paperId: SEMANTICSCHOLAR_RELATED_SEED,
+    limit: SEMANTICSCHOLAR_RELATED_LIMIT,
+  });
+}
+
+/**
+ * `recommend-post` at {@link SEMANTICSCHOLAR_RELATED_LIMIT}, and the hand-written
+ * `recommend-size-cap` at twice that: halving the refused limit, as `P5-T06`
+ * step 3 retries, lands on the recorded answer.
+ */
+export function recordedSemanticScholarRecommendRequest(
+  limit: number = SEMANTICSCHOLAR_RELATED_LIMIT,
+): SemanticScholarRecommendRequest {
+  return buildRecommendRequest({
+    positivePaperIds: SEMANTICSCHOLAR_RECOMMEND_POSITIVES,
+    negativePaperIds: SEMANTICSCHOLAR_RECOMMEND_NEGATIVES,
+    limit,
+  });
+}
+
+/** `batch-embedding`: `P5-T20`'s `fields=embedding.specter_v2`, two papers. */
+export function recordedSemanticScholarEmbeddingBatchRequest(): SemanticScholarBatchRequest {
+  return buildBatchRequest(
+    [SEMANTICSCHOLAR_RELATED_SEED, SEMANTICSCHOLAR_RELATED_SECOND_ID],
+    ["embedding.specter_v2"],
+  );
+}
+
+/** `batch-references`: the reference ids of two papers. */
+export function recordedSemanticScholarReferencesBatchRequest(): SemanticScholarBatchRequest {
+  return buildBatchRequest(
+    [SEMANTICSCHOLAR_RELATED_SEED, SEMANTICSCHOLAR_RELATED_SECOND_ID],
+    ["references.externalIds"],
+  );
+}
+
+/** `batch-unresolvable`: `docs/05` §3.3 pitfall 2's check, one bad id in the middle. */
+export function recordedSemanticScholarUnresolvableBatchRequest(): SemanticScholarBatchRequest {
+  return buildBatchRequest(
+    [
+      SEMANTICSCHOLAR_RELATED_SEED,
+      SEMANTICSCHOLAR_RELATED_UNKNOWN_ID,
+      SEMANTICSCHOLAR_RELATED_SECOND_ID,
+    ],
+    ["paperId", "externalIds"],
   );
 }

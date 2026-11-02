@@ -1,0 +1,13 @@
+{
+  "scenario": "references-503",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-02T01:45:30.604Z",
+  "endpoint": "https://www.ebi.ac.uk/europepmc/webservices/rest/{source}/{id}/references",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written, not recorded. Status, content type and body are docs/02 §4.7's measured outage of 2026-09-08 and 2026-09-09; a 5xx cannot be provoked on demand. Keyed under a seed whose /citations is recorded live, so the two endpoints can be seen failing apart.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

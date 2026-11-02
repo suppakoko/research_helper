@@ -670,13 +670,45 @@ See §8. Manual QA is where UI, accessibility, real network behaviour, real cost
 
 **Gemini TTS** — a short English response and a short Korean response, captured as base64/binary plus headers, sufficient to test the audio-assembly path (`src/tts/audio.ts`) without network access; plus a quota-exceeded error and a model-not-found error to exercise FR-43.
 
+**Relatedness (Phase 5)** — what the related-papers and recommendation adapters send, in `test/fixtures/<source>/related/`, one directory below each source's search fixtures. *As built 2026-11-02 (`P5-T04`).* The scenario lists are `relatedPlanFor` in `scripts/record-fixtures.ts`; the requests are `test/support/*RecordedRequests.ts`'s, built by the shipped builders in `src/sources/semanticscholar/graph.ts`, `recommendations.ts`, `src/sources/europepmc/citations.ts`, `src/sources/pubmed/elink.ts` and `src/sources/crossref/references.ts`.
+
+| Source | Fixture | Purpose | Recorded |
+| --- | --- | --- | --- |
+| Europe PMC | `citations` | `/MED/37258680/citations`, page 1 of 25 | live 2026-11-02, HTTP 200: `hitCount` 927, 25 rows, sources `MED` and `PPR` |
+| Europe PMC | `references` | `/MED/37258680/references`, page 1 of 25 | live 2026-11-02, HTTP 200: `hitCount` 144, 25 rows. The endpoint `docs/02` §4.7 measured down on 2026-09-08 and 2026-09-09 was up |
+| Europe PMC | `citations-outage-seed` | `/MED/39220605/citations`: answers for the seed whose `/references` is the hand-written 503 | live 2026-11-02, HTTP 200: `hitCount` 1 |
+| Europe PMC | `references-503` | `/MED/39220605/references`: `docs/02` §4.7's measured outage | **hand-written** (`"synthetic": true`): status, `text/plain` and body from §4.7 |
+| NCBI | `elink-two-seeds` | `elink` `neighbor_score`, `id=37258680&id=39220605` | live 2026-11-02, HTTP 200: two linksets, 100 links each, neither seed in its own list |
+| Crossref | `work-with-references` | `/works/10.1038/s41586-023-06139-9` | live 2026-11-02, HTTP 200: `reference[]` of 160 entries, 155 with a `DOI` |
+| Crossref | `work-without-references` | `/works/10.1007/3-540-29835-5_2408` | live 2026-11-02, HTTP 200: `references-count` 0, no `reference` member |
+| Crossref | `title-search` | `query.bibliographic` for the first paper's title, `rows` 5, no cursor | live 2026-11-02, HTTP 200: 5 items, that paper first, no `next-cursor` |
+| Semantic Scholar | `references`, `citations`, `forpaper`, `recommend-post`, `match-title`, `match-title-absent`, `batch-embedding`, `batch-references`, `batch-unresolvable`, `seed-not-found`, `citations-unknown-field` | see `semanticscholarRelatedPlan` | **not recorded yet**: the owner's, with the key (§3.5, `P5-T31`) |
+| Semantic Scholar | `recommend-size-cap` | the Recommendations 400 for a response over 10 MB | **hand-written, and not evidence** (`"synthetic": true`): no recording has drawn it; `docs/05` §3.3 gives the status and the opening of the message only. Written by the owner's run (or `FIXTURE_MODE=synthetic … --keyed`, no key, no request). Match on the opening of the message, never the whole |
+
+> **Why a directory of their own (DECIDED 2026-11-02, coordinator, under `plan/00` §6 item 313).** The search
+> directories are pinned file by file: `crossref.test.ts` and the other adapter tests count their fixtures, and
+> `semanticscholar.test.ts` and `replayHarness.test.ts` assert the keys on disk are exactly the search plan. All of
+> them filter on `.json`, so `related/` moves none. An adapter card replays with
+> `createReplayHttpClient({ dir: relatedFixtureDirFor(source), … })`, or lists both directories in a
+> `ReplayRoute` when a test needs a search fixture too.
+>
+> **Measured while recording (2026-11-02).** (a) `elink` with two `id=` parameters returned exactly 100 links for
+> each seed, where `docs/05` §4.3 reads "often 100–300+"; one run, two seeds, so 100 may or may not be a cap. (b)
+> Neither seed appeared in its own list, where §4.3 says the seed "may appear"; the filter stays. (c) Europe PMC's
+> `request.offSet` read 0 on `/citations` and 1 on `/references` for the same `page=1`; `hitCount` and the rows
+> are what to read. (d) `/citations` rows can carry `source` `PPR` as well as `MED`. (e) `work-with-references`
+> holds one `[redacted:42]`: `redact()`'s 40-character net took a dataset address's last path segment inside an
+> `unstructured` reference with no DOI, entry `6139_CR13`, and the sidecar says the body was scrubbed. Nothing
+> reads that text; a reference's `DOI` would be read, and none was touched.
+
 ### 3.2 Recording and redaction
 
 `scripts/record-fixtures.ts` drives recording:
 
 - Reads **no credential from any file**. Decision D5 and `docs/09` §1.7 allow no plaintext credential
   tier, `.env.example` says in capitals that no key may be put there, and the recorder follows D5: the
-  scenarios run **unauthenticated** (NCBI unkeyed, which is also why a keyed replay would hash to a
+  scenarios run **unauthenticated** (*except the LLM providers and Semantic Scholar, each with the key in the
+  process environment: the two notes at the end of this section; the second added 2026-11-02, `P5-T04`*) (NCBI unkeyed, which is also why a keyed replay would hash to a
   different fixture name — see `test/support/fixtureReplay.ts`), and the process environment is read
   only to build the redaction deny-list of key-shaped values described below. *(Corrected 2026-10-15,
   owner review row 139: this line said "reads real keys from `.env`" since Phase 1 and contradicted D5
@@ -715,6 +747,25 @@ Fixtures are committed to the repo. They are small (JSON/text), and having them 
 > model: a hashed name would orphan every fixture at each prompt edit, while the bullet above wants a
 > prompt change to show as a reviewable snapshot diff. The request bodies are snapshotted from the
 > adapters themselves in `test/contract/llm/__snapshots__/`. The owner's steps are §3.4.
+
+> **The Semantic Scholar exception (as built 2026-11-02, `P5-T04`, `plan/00` §6 item 323(c)).** The second
+> narrow exception to the first bullet above, and to its "reads no credential": the anonymous pool refused 12 of 12
+> calls on 2026-09-09 and 12 in a row on 2026-10-16, so `FIXTURE_MODE=record --source semanticscholar` is **refused
+> and sends nothing** unless `--keyed` is given and `SEMANTIC_SCHOLAR_API_KEY` is set in the process environment;
+> the refusal prints the owner's command, and there is no anonymous attempt. The agent records the other sources;
+> **the owner records this one and no agent runs it** (§3.5). `--keyed` records the relatedness scenarios only: the
+> search fixtures directly under `test/fixtures/semanticscholar/` stay as `P2-T05` recorded them, and re-recording
+> them under the key is not built. The key is read from the environment and from nothing else, at run time, in
+> record mode; it is sent as the `x-api-key` header and nowhere else, so `fixtureKey`, which hashes the method, the
+> URL and the body, names a keyed recording exactly as an unkeyed one and it replays with no key. What reaches a file
+> (`runRelatedRecorder`, `stripKeyedExchange`, `assertNoKeyHeaderName`): only the response headers
+> `KEYED_RESPONSE_HEADER_ALLOW` names (`content-type`, `retry-after`, `x-amzn-errortype`, `x-ratelimit-*`); the
+> key's value replaced wherever a response echoed it, then on the deny-list whatever its length; the header's name
+> replaced in a body and refused in any fixture or sidecar. Everything is staged and checked before any file is
+> written. What is printed: whether a key is present, never the value or its length. A 401 or 403 stops the run and
+> writes nothing; a 429 stops the requests, keeps what was answered and prints the `--only` command for the rest; a
+> 5xx is reported and not written; a 400 or 404 is an answer and is recorded. `test/unit/sources/relatedRequests.test.ts`
+> proves all of it with a fake key and a fake service that echoes the key back in headers and body.
 
 ### 3.3 Keeping fixtures fresh
 
@@ -786,6 +837,59 @@ a redaction check refused (each message says which, and whether anything was wri
 command (no `--live`, no key, an amount below the stated spend, an unpriced `--model`); 3 stopped at
 the spend gate with nothing sent. One scenario again: add `--only <scenario>` to steps 1, 3 and 4 and
 use the amount its own dry run states.
+
+### 3.5 Recording the Semantic Scholar fixtures — the owner's runbook
+
+> **Added 2026-11-02 (`P5-T04`, for the owner's card `P5-T31`; `plan/00` §6 items 323(c), 326(d)).** It costs
+> nothing and takes about two minutes once the new key is in hand. **No agent runs these steps or sees the key.
+> The key never goes into a chat message, a file or a command line.** The tool was tested with a fake key and a
+> fake service only, so this run is its first against the real one.
+
+**What it sends:** 11 requests to `api.semanticscholar.org`, one at a time, at least 1.112 seconds apart
+(`HOST_POLICIES`' row, a little under the keyed limit of 1 per second), about 15 seconds in all. It writes 24 files to
+`test/fixtures/semanticscholar/related/`: 12 fixtures, one of them the hand-written `recommend-size-cap`, each with its
+sidecar.
+
+**Steps, in PowerShell** (Git Bash spellings are in §3.4 step 2):
+
+1. **Rotate the key first.** The copy pasted into a chat on 2026-10-14 counts as exposed (`plan/06` `G-03`). Get a new
+   key from Semantic Scholar and have the old one withdrawn. The request form is
+   <https://www.semanticscholar.org/product/api#api-key-form>; the documents here record no self-service rotation, so
+   if the page offers none, ask Semantic Scholar through it. Keep the new key in your password manager. Do not paste
+   it anywhere else.
+2. **Read the plan.** In the repository folder: `npm run fixtures:record -- --source semanticscholar --dry-run`. It
+   reads no key and sends nothing, and lists the search scenarios and, after them, the eleven scenarios above.
+3. **Open a new terminal for this one session,** go to the repository folder, and put the key in that terminal's
+   environment without showing it:
+   `$env:SEMANTIC_SCHOLAR_API_KEY = [System.Net.NetworkCredential]::new("", (Read-Host "Semantic Scholar key" -AsSecureString)).Password`
+   — it asks for the key and shows stars. Paste the new key at that prompt only. Then, for this network:
+   `$env:NODE_USE_SYSTEM_CA = "1"`. Never turn certificate checks off.
+4. **Check the key is seen, with nothing sent.** `npm run fixtures:record -- --source semanticscholar --keyed --dry-run`.
+   It should print `Key present in SEMANTIC_SCHOLAR_API_KEY: yes` and `Nothing was sent.` It never prints the key.
+5. **Record.** `$env:FIXTURE_MODE = "record"`, then `npm run fixtures:record -- --source semanticscholar --keyed`.
+   Each request prints a line with its path and status. It ends with `11 live request(s); 12 fixtures written`.
+6. **Remove the key and close the terminal.**
+   `Remove-Item Env:SEMANTIC_SCHOLAR_API_KEY; Remove-Item Env:FIXTURE_MODE; Remove-Item Env:NODE_USE_SYSTEM_CA`,
+   then close the window.
+7. **Tell the coordinator it has finished, and how it ended** (the last lines and the exit code; nothing about the key).
+   An agent then does `P5-T31`'s checks: every scenario has a fixture, no file names the key header, the status and
+   body of the no-match title for `P5-T05`, and the inventory row in §3.1.
+8. **Enter the new key in the plugin** through the preferences pane's key dialog when you next use it (`G-26`). That is
+   a separate step; this recording does not store the key anywhere.
+
+**If it does not end as in step 5:**
+
+| What it prints | What happened | What to do |
+| --- | --- | --- |
+| `nothing was sent … needs the explicit --keyed flag` (exit code 2) | The flag was left off | Add `--keyed` |
+| `SEMANTIC_SCHOLAR_API_KEY is not set` (exit code 2) | The key is not in this terminal | Repeat step 3 in this terminal |
+| `the service refused this request with HTTP 401` or `403` (exit code 1) | The key was refused. Nothing was written and nothing more sent | Check it is the new key; repeat from step 3 |
+| `HTTP 429, so the rest were not sent`, then a command ending `--only …` (exit code 1) | Rate limited. What was answered is written | Wait a few minutes and run the printed command |
+| `HTTP 5xx, not written`, then a command ending `--only …` (exit code 1) | The service failed on those scenarios. The rest are written | Run the printed command later |
+| `Refusing to write fixture …` then `Nothing was written` (exit code 1) | A safety check found something key-shaped in an answer | Stop and report that line. Do not retry or edit a file |
+
+A scenario answering 400 or 404 is not a failure: `seed-not-found` and `citations-unknown-field` exist to record those
+two answers. Running the steps twice overwrites the same files, harmlessly.
 
 ---
 

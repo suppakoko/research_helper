@@ -25,6 +25,10 @@
  * request the window makes come from one definition and cannot drift.
  */
 
+import {
+  buildElinkNeighborScoreRequest,
+  type PubmedElinkRequest,
+} from "../../src/sources/pubmed/elink";
 import { buildEsearchRequest } from "../../src/sources/pubmed/query";
 import { parseUserQuery } from "../../src/sources/shared/queryParse";
 import type { SourceQuery } from "../../src/sources/types";
@@ -153,4 +157,22 @@ export function recordedEsearchRequest(
     method: "GET",
     url: buildEsearchRequest({ query, retmax, retstart, retmode: "json" }).url,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The relatedness scenario (`P5-T04`), in `test/fixtures/pubmed/related/`
+// ---------------------------------------------------------------------------
+
+/**
+ * `elink-two-seeds`: `docs/05` §4.2's probe paper and `record-jats-abstract`'s,
+ * as two `id=` parameters, so the answer shows one linkset per seed.
+ */
+export const PUBMED_ELINK_SEED_PMIDS: readonly string[] = [
+  "37258680",
+  "39220605",
+];
+
+/** `elink-two-seeds`, by the shipped builder. */
+export function recordedPubmedElinkRequest(): PubmedElinkRequest {
+  return buildElinkNeighborScoreRequest(PUBMED_ELINK_SEED_PMIDS);
 }

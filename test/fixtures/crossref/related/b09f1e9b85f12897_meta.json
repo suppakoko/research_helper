@@ -1,0 +1,12 @@
+{
+  "scenario": "title-search",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-02T01:45:36.942Z",
+  "endpoint": "https://api.crossref.org/works",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

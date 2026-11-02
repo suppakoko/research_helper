@@ -2678,6 +2678,17 @@ the caller of what the card builds; if it does not, the caller is added with a d
       highest-weighted term, in code, with no change to its estimate.
     - (c) `P5-T10` and `P5-T19` run next as non-build agents. `P5-T02` follows `P4-T20`'s commit.
 
+329. **`P5-T04` built, 2026-11-02** (`plan/reports/P5-T04.md`). **DECIDED 2026-11-02 (coordinator, under item 313):**
+    - (a) The agent's nine readings stand, as written in `docs/13` §3.1, §3.2 and §3.5 and in the recorder. In
+      particular, `FIXTURE_MODE=record --source semanticscholar` is refused without `--keyed`, which closes the
+      unkeyed route of `P2-T05`.
+    - (b) Finding 5 (`P2-T13` Part B's deferred Semantic Scholar searches can no longer go through the recorder) blocks
+      no finishing condition and is recorded only (rule 9). A later extension of the keyed path covers it if wanted.
+    - (c) Finding 1 (`elink` returned exactly 100 per seed, against "hundreds" in `docs/02` §3.6 and `docs/05` §4.3) gets
+      its dated notes from `P5-T08`; finding 2 (`docs/02` §4.7) from `P5-T07`.
+    - (d) `P5-T07`, `P5-T08` and `P5-T09` run next as non-build agents. The owner's recording steps (`P5-T31`) are
+      relayed in chat; the owner runs them when the key is rotated (item 326(d)).
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4
