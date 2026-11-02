@@ -190,8 +190,9 @@ research_helper/
 │   │   ├── sourceRecord.ts           # SourceRecord, provenance
 │   │   ├── summary.ts                # StoredSummary (record); PaperSummary payload is 06-… §6.3
 │   │   ├── trend.ts                  # TrendReport and the trend stage outputs (§5.2; was ThemeCluster, TrendReport until 2026-10-26)
-│   │   ├── profile.ts                # CollectionProfile
-│   │   ├── recommendation.ts         # Recommendation
+│   │   ├── profile.ts                # CollectionProfile, ProfileSeed, ProfileUserEdits (§5.2)
+│   │   ├── recommendation.ts         # Recommendation, RecommendationSignals (§5.2)
+│   │   ├── related.ts                # RelationKind, RelationEdge (§4.2; added 2026-11-02, P5-T01)
 │   │   ├── job.ts                    # JobRecord (re-export from core for convenience)
 │   │   ├── ids.ts                    # DOI/PMID/arXiv normalization + branded ID types,
 │   │   │                             #   plus ExternalIds and the SourceId / ProviderId unions
@@ -921,8 +922,8 @@ export interface CacheStats {
 // "the service has citation endpoints". Europe PMC's declaration became `false` on that day.
 // Extended 2026-11-02 (`plan/08` §0.4 lines 18 and 30, decided 2026-11-01 by the coordinator under
 // `plan/00` §6 item 313): `citationGraph` reads "relation edges", `findRelated` returns a `RelatedPage`,
-// and `RelatedQuery.strategy` names `"recommendations"` and `"similar"`. `src/sources/types.ts` follows
-// in `plan/08` `P5-T01`; until then the code still returns a plain `SourcePage`.
+// and `RelatedQuery.strategy` names `"recommendations"` and `"similar"`. As built 2026-11-02 (`plan/08`
+// `P5-T01`): `src/sources/types.ts` declares all of it; no adapter implements `findRelated` yet.
 import type { CanonicalWork } from "../model/canonicalWork";
 import type { ExternalIds, SourceId } from "../model/ids";
 import type { RelationEdge } from "../model/related";
@@ -1130,6 +1131,14 @@ and FR-15's reason chips need. The edge is a model type, because pipelines read 
 
 ```ts
 // src/model/related.ts
+
+/**
+ * How a record relates to the seed, read from the seed's side:
+ *   - "reference": the seed cites this record (FR-15's "cited by seed").
+ *   - "citation": this record cites the seed (FR-15's "cites seed").
+ *   - "recommendation": a source's recommender returned it (FR-15's "recommended").
+ *   - "similar": a source's similar-articles list returned it (PubMed).
+ */
 export type RelationKind = "reference" | "citation" | "recommendation" | "similar";
 
 export interface RelationEdge {
@@ -1143,10 +1152,23 @@ export interface RelationEdge {
 }
 ```
 
-Calls that are specific to one adapter — the title match, the many-paper recommendation, the vector fetch —
-stay off `LiteratureSource`: a pipeline reaches them through the typed adapter instance `installServices`
-passes in, as it does for `SemanticScholarSource.hasApiKey`. `"cocitation"` and `"embedding"` stay declared
-and unimplemented in v1 (`plan/00` §6 items 320(b) and 321(c)).
+Calls that are specific to one adapter — the title match, the many-paper recommendation, the vector fetch, PubMed's
+similar-articles call over several seeds — stay off `LiteratureSource`: a pipeline reaches them through the typed
+adapter instance `installServices` passes in, as it does for `SemanticScholarSource.hasApiKey`. `"cocitation"` and
+`"embedding"` stay declared and unimplemented in v1 (`plan/00` §6 items 320(b) and 321(c)).
+
+**As built 2026-11-02 (`plan/08` `P5-T01`; checked against `05-related-work-discovery.md` §6.2 and FR-15).**
+`RelatedPage`'s shape stands: `recScore` reads `rank` and the caller's `RelatedQuery.limit`, `pmraScore` reads `score`,
+`citeScore` reads `kind` and `contexts.length`, and every chip FR-15 keeps in v1 follows from `kind` ("co-cited" is
+backlog, item 321(c)). An edge carries no source name because its record does (`SourceRecord.sourceId`), and it
+survives the merge because `MergedWork.records` keeps every record: a pipeline carries edges by `SourceRecord.id`, as a
+list, since two calls to one source can return the same record. Two things the 2026-11-02 declaration left unsaid are
+added above, each **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):** which way `"reference"` and
+`"citation"` point, and that `findRelated` takes one seed per call (`RelatedQuery`'s "the seed"), so PubMed's
+one-linkset-per-seed `elink` over up to 10 seeds (`plan/08` `P5-T08`, `P5-T23`; `05-…` §4.3) is an adapter-specific
+call that returns one `RelatedPage` per seed, not a `findRelated` over several. `P5-T08` names it; a loop over
+`findRelated` there would break `plan/08` §0.2 item 23. First consumers of the types: `P5-T05`–`P5-T09` construct edges;
+`P5-T12` and `P5-T13` read them.
 
 ### 4.3 `LLMProvider`
 
@@ -2967,6 +2989,46 @@ export interface TrendReport {
 > `bibliography`, `retracted`, `excluded`, `summaryIds`, `qualityProxies`, `critique`, `clustering`,
 > `citedItemKeys` and `warnings` (`ScaffoldedReport`); the run (`P4-T18`) adds the rest.
 
+> **Reconciled 2026-11-02 (`plan/08` `P5-T01`; decisions `plan/08` §0.4 lines 21, 23 and 27, owner items 320(c) and
+> 323(b)): the two blocks below are what Phase 5's cards build, and nothing constructs them yet.** The first constructor
+> of `CollectionProfile` is `buildProfileStats` (`P5-T18`), filled in by `P5-T21` (`centroids`, `seeds`), `P5-T22`
+> (`narrative`, `suggestedQueries`, `origin`, `profileCallOutputTokens`) and `P5-T25` (`userEdits`), and stored by
+> `P5-T03`'s store. The first constructor of `Recommendation` is `P5-T24`'s scoring, read by `P5-T27`'s rows and stored
+> by `P5-T03`'s store.
+>
+> - **`CollectionProfile` gains** `userEdits` (line 21) and four members later cards write but could not declare, because
+>   `docs/07` and `src/model/` are outside their `Files`: `seeds` (`P5-T21`'s "a profile carries … seeds", grouped for
+>   `P5-T23`'s per-topic request), `origin` (`P5-T22`'s and `P5-T26`'s "heuristic"), `profileCallOutputTokens` (`P5-T22`
+>   step 3, for `P5-T30`) and `redaction` (`P5-T03` step 4, the `TrendReport.redaction` precedent). `topVenues` gains
+>   `issn`, which `05-related-work-discovery.md` §7.4's `venueAffinity` reads.
+> - **`RecommendationSignals` is `05-…` §7.4's eight terms** (line 23), each a required number in [0, 1], 0 when a run
+>   cannot compute it. It was seven optional members: `embeddingSimilarity` and `termSimilarity` became `similarity`
+>   because a run has one space (`plan/08` §0.2 item 22, named by `Recommendation.similaritySpace`); `subjectOverlap` left
+>   because §7.4 does not score it; `citationLink` became `coupling`.
+> - **`discoveredVia` is a list** (line 23), and `strategy` is a closed union of `05-…` §7.1's five generators instead of
+>   a `string`.
+> - **`rationale` is gone and `reasons` replaces it:** model-written rationales are not built in v1 (item 320(c)); the
+>   reason line is code's, as ids the window renders (`P5-T24`, FR-47). **`userAction` is `"rejected"` only;** nothing
+>   records what the user imports (item 323(b)).
+> - **`score` is no longer "normalized across the batch".** That sentence contradicted `05-…` §7.4, whose weights sum to
+>   1.00 exactly so that a score means the same thing at every slider position; a per-batch normalisation would undo it.
+>
+> **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):**
+> 1. `generatorAgreement` counts distinct `strategy` values, not list entries, so one keyword query answered by three
+>    sources is one generator.
+> 2. `inLibrary` is not on `Recommendation`. It changes whenever the library does and this record is stored, so it is
+>    worked out on each run through `LibraryIndex` and belongs on the row type `P5-T24` and `P5-T25` declare in
+>    `src/pipeline/recommend/`, as `P5-T14` does for related rows.
+> 3. The same reasoning keeps library-wide identifier sets off `CollectionProfile`: `knownWorkKeys` is the source
+>    collection only (FR-46's exclusion), and each run rebuilds `CollectionProfileDraft.owned`.
+> 4. `topicIndex` points into `centroids` rather than copying a label, so a stored row cannot disagree with its profile.
+>    `centroidLabels` stays optional, and a window that has none falls back to a numbered group.
+> 5. `ProfileSeed` holds identifiers, not `05-…` §7.2's single prefixed string (`DOI:…`), because generator (b) needs a
+>    PMID from a seed that §7.2's preference order would have prefixed with its DOI. The Semantic Scholar prefix is added
+>    where the request is built.
+> 6. Negatives are not on the profile, though `P5-T21`'s goal reads that way: a rejection changes no `membershipHash`, so
+>    a reused profile would send stale ones. They are read from the store on each run.
+
 ```ts
 // src/model/profile.ts
 
@@ -3005,7 +3067,7 @@ export interface CollectionProfile {
   /** Controlled-vocabulary concentration: MeSH/arXiv categories with counts. */
   readonly subjectCounts: Readonly<Record<string, number>>;
   readonly topAuthors: readonly { name: string; count: number; orcid?: string }[];
-  readonly topVenues: readonly { name: string; count: number }[];
+  readonly topVenues: readonly { name: string; count: number; issn?: readonly string[] }[];
   readonly yearHistogram: Readonly<Record<number, number>>;
   readonly medianYear: number | undefined;
 
@@ -3028,13 +3090,48 @@ export interface CollectionProfile {
   readonly centroidLabels?: readonly string[];
   readonly embeddingModel?: string;
   readonly embeddingDim?: number;
+  /** The papers generators (a), (b) and (c) ask from (`05-…` §7.2 "Seed selection"), best first. */
+  readonly seeds: readonly ProfileSeed[];
 
-  /** LLM-authored description of what this collection is about. */
+  /** LLM-authored description of what this collection is about. Absent when `origin` is "heuristic". */
   readonly narrative?: string;
-  /** Machine-generated search queries derived from the profile. */
+  /** Machine-generated search queries derived from the profile. Empty when `origin` is "heuristic". */
   readonly suggestedQueries: readonly string[];
-  /** Works already present — the exclusion set for recommendations. */
+  /**
+   * "llm" when a COLLECTION_PROFILE answer validated; "heuristic" when no provider is
+   * configured or the answer stayed invalid after its repair (FR-45's second scenario).
+   */
+  readonly origin: "llm" | "heuristic";
+  /** Output tokens of the answer behind `narrative`; read against the 2 500 limit by the acceptance run. */
+  readonly profileCallOutputTokens?: number;
+  /**
+   * Works in the source collection — FR-46's exclusion set for recommendations. Library items
+   * elsewhere are marked, not excluded, and are worked out on each run through `LibraryIndex`.
+   */
   readonly knownWorkKeys: readonly string[];
+  /**
+   * What the user changed in the profile panel. Kept beside the computed members, which are never
+   * overwritten with them: a run reads `termWeights` minus `removedTerms` plus `addedTerms`, and a
+   * rebuild computes the members afresh and keeps this one (FR-44; `plan/08` §0.4 line 21).
+   */
+  readonly userEdits?: ProfileUserEdits;
+  /**
+   * What the redaction gate changed when the record was stored (`09-security-privacy-and-api-keys.md`
+   * §2.1); absent until the store has gated it.
+   */
+  readonly redaction?: StoredRedactionMark;
+}
+
+export interface ProfileSeed {
+  /** The paper's identifiers; each generator takes one it can send. */
+  readonly ids: Partial<ExternalIds>;
+  /** Index into `CollectionProfile.centroids`; absent when the profile has no centroids. */
+  readonly topicIndex?: number;
+}
+
+export interface ProfileUserEdits {
+  readonly removedTerms: readonly string[];
+  readonly addedTerms: readonly string[];
 }
 ```
 
@@ -3045,39 +3142,92 @@ export interface Recommendation {
   readonly id: string;                 // `${profileId}:${workKey}`
   readonly profileId: string;
   readonly work: CanonicalWork;
-  /** 0..1 normalized across the recommendation batch. */
+  /**
+   * The eight signals' weighted sum, in 0..1. Not rescaled across the batch: the weights sum
+   * to 1.00 so that a score means the same thing at every slider position (`05-…` §7.4).
+   */
   readonly score: number;
   /** Component scores, exposed in the UI so the ranking is explainable. */
   readonly signals: RecommendationSignals;
-  /** One-sentence, model-authored justification shown next to the item. */
-  readonly rationale?: string;
-  /** Which source surfaced it. */
-  readonly discoveredVia: { readonly sourceId: SourceId; readonly strategy: string };
+  /** Which space `signals.similarity` and `signals.novelty` were computed in; a run has one. */
+  readonly similaritySpace: SimilaritySpace;
+  /** Why this row is shown (FR-47): ids the window renders, computed in code, never by a model. */
+  readonly reasons: readonly RecommendationReason[];
+  /** Every generator that found it, so never empty. */
+  readonly discoveredVia: readonly RecommendationDiscovery[];
+  /** Index into `CollectionProfile.centroids` of its nearest topic; absent when the profile has k ≤ 1. */
+  readonly topicIndex?: number;
   readonly generatedAtEpochMs: number;
-  /** User feedback, persisted so the same rejected paper is not re-suggested. */
-  readonly userAction?: "accepted" | "rejected" | "deferred";
+  /**
+   * Set by "Not interested", so the same paper stays hidden for this collection and can be sent as
+   * a negative example. The only value: nothing records what the user imports (`plan/00` §6 item 323(b)).
+   */
+  readonly userAction?: "rejected";
   readonly userActionAtEpochMs?: number;
+  /**
+   * What the redaction gate changed when the record was stored (`09-security-privacy-and-api-keys.md`
+   * §2.1); absent until the store has gated it.
+   */
+  readonly redaction?: StoredRedactionMark;
 }
 
+/**
+ * `05-related-work-discovery.md` §7.4's eight terms, each in 0..1 and 0 when a run cannot compute
+ * it (no `NaN`, no absent member). §7.4 owns the formulas and the weights.
+ */
 export interface RecommendationSignals {
   /**
-   * Cosine similarity to the profile's centroids, when embeddings are on:
-   * the **maximum** over `CollectionProfile.centroids`, not the mean — `05-…` §7.4's
-   * scoring table explains why a mean punishes a paper that fits one sub-topic perfectly.
+   * Similarity to the profile: the **maximum** over `CollectionProfile.centroids`, not the
+   * mean — `05-…` §7.4's scoring table explains why a mean punishes a paper that fits one
+   * sub-topic perfectly. Rescaled from cosine's [-1, 1]. On the lexical space there are no
+   * centroids and `P5-T24` reads the local word-overlap floor (`05-…` §5.5).
    */
-  readonly embeddingSimilarity?: number;
-  /** Overlap of controlled-vocabulary subjects. */
-  readonly subjectOverlap?: number;
-  /** TF-IDF cosine over title+abstract. */
-  readonly termSimilarity?: number;
-  /** Shared authors with the collection. */
-  readonly authorOverlap?: number;
-  /** Cites or is cited by works in the collection. */
-  readonly citationLink?: number;
-  /** Recency boost, 0..1, from the publication date. */
-  readonly recency?: number;
-  /** Venue affinity with the collection's top venues. */
-  readonly venueAffinity?: number;
+  readonly similarity: number;
+  /** Decays with age from the publication date. */
+  readonly recency: number;
+  /** Citations per year. */
+  readonly velocity: number;
+  /** Distance from the nearest paper in the collection, on the same rescaled scale as `similarity`. */
+  readonly novelty: number;
+  /** Authors shared with the profile. */
+  readonly authorAffinity: number;
+  /** The venue against the profile's top venues, then its ISSN family. */
+  readonly venueAffinity: number;
+  /** How many distinct generators found it: distinct `RecommendationDiscovery.strategy`, not list entries. */
+  readonly generatorAgreement: number;
+  /** References shared with the collection (`05-…` §2.3). */
+  readonly coupling: number;
+}
+
+/**
+ * `05-…` §7.1's five generators: (a) Semantic Scholar's recommender, (b) PubMed's similar articles,
+ * (c) forward citations of the seeds, (d) keyword search, (e) the frequent-author watch.
+ */
+export type RecommendationStrategy =
+  | "recommendations" | "similar" | "forward-citations" | "keyword-search" | "author-watch";
+
+export interface RecommendationDiscovery {
+  readonly sourceId: SourceId;
+  readonly strategy: RecommendationStrategy;
+}
+
+/** `specter_v2` is the model name a stored vector carries; `lexical` is `05-…` §5.5's floor. */
+export type SimilaritySpace = "specter_v2" | "lexical";
+
+/**
+ * One of the two strongest signals, named after its member, or one of `05-…` §7.6's three
+ * reason phrases. `P5-T24` picks them and `P5-T27` renders them.
+ */
+export type RecommendationReasonId =
+  | keyof RecommendationSignals
+  | "recommended-by-semantic-scholar" | "cites-collection" | "author-in-collection";
+
+export interface RecommendationReason {
+  readonly id: RecommendationReasonId;
+  /** "cites N papers in your collection": N. */
+  readonly count?: number;
+  /** "author in your collection": the names, from the work's own author list. */
+  readonly names?: readonly string[];
 }
 ```
 
@@ -3796,7 +3946,7 @@ Cancellation semantics per pipeline are declared, not implicit:
 
 - **searchImport**: items already written to Zotero are **kept**; the collection is kept with a note in its description that the import was partial. No rollback — deleting user-visible items on cancel is surprising and destructive.
 - **summarize**: summaries already written are kept. Nothing is rolled back.
-- **trendReport**: the report is *not* written unless it completed; a partial report is discarded (it would be misleading).
+- **trendReport**: the report is *not* written unless it completed; a partial report is discarded (it would be misleading). *Decided 2026-11-01 (owner, `plan/00` §6 item 324(b)): a cancel keeps this run's paid-for synthesis cache entries (`tc`, `cr`, `rp`), as a stop does; the report, note, row and file are not saved. A shutdown is not a cancel: the record is left for `recover()` (§12.4's note of 2026-11-02).*
 - **audioReport**: partial audio segments are discarded.
 
 ### 7.5 Pause / resume
@@ -4593,7 +4743,6 @@ The allowed-value enumerations for `screening.retractionPolicy` and `screening.n
 | `report.saveNote` | boolean | `true` | — | `06-summarization-and-trend-report.md` §14.2 | Report dialog |
 | `report.perPaperNotes` | boolean | `false` | — | `06-summarization-and-trend-report.md` §14.2 | Report dialog (opt-in) |
 | `report.addRelatedLinks` | boolean | `false` | — | `06-summarization-and-trend-report.md` §10.4 | Report dialog (opt-in — it writes to N items) |
-| `report.enabled` | boolean | `false` | — | `11-implementation-roadmap.md` §0 principle 5 | **Not user-visible; not in the pane, and no `pref()` line** (`01-zotero-plugin-platform.md` §7.2). **Decided 2026-10-29 (owner, `plan/00` §6 item 307(d)):** the trend report stays hidden until `P4-T18` and `P4-T20` can generate a report — principle 5: "Feature flags in prefs hide incomplete work rather than leaving broken menu items". While `false`, the collection menu's "Generate Research Trends Report…" entry is not created (read when the menu is registered, at startup or enable) and the report window's opener opens no window (read on every call). Integration specs that exercise the entry turn it on for their duration and restore it. The key is the executing agent's proposal: no earlier hidden or feature preference existed to follow, so it takes the `report.*` family and the `.enabled` suffix of `cache.enabled` and `background.enabled`. **Decided 2026-10-29 (owner, `plan/00` §6 item 309(d)): the key `report.enabled` is confirmed.** It is removed, or its default turns `true`, once a report can be generated (`plan/07` `P4-T20`'s Done when). |
 | `tts.voice` | string | `"Charon"` | one of the 30 Gemini prebuilt voice names | `04-audio-report-tts.md` §2.7 | Prefs pane → Report & audio (menulist populated from the live voice list). `Charon` ("Informative") is `04-audio-report-tts.md` §2.7's recommended default narrator; an earlier draft shipped `Kore`, which appears in doc 04 only inside Google's own API examples. |
 | ⚠ `tts.language` | string | `"auto"` | `auto` (follow `reportLanguage`) \| `en` \| `ko` | `04-audio-report-tts.md` §9.4 | **Not in the pane.** Declared in this document's own §8.3 placement table and required by doc 04 §7.5 ("Present the choice in prefs as … **Language**"); the default is inferred from doc 04 §9.4's "defaulting from Zotero's UI locale (`Zotero.locale`) on first run". |
 | ⚠ `tts.provider` | string | `"gemini"` | `gemini` \| `openai` \| `system` | `04-audio-report-tts.md` §7.5 | **Not in the pane.** Doc 04 §7.5 says the TTS provider must be a prefs choice and ranks the three options, but no document names a key. |
@@ -4601,6 +4750,8 @@ The allowed-value enumerations for `screening.retractionPolicy` and `screening.n
 | `tts.targetMinutes` | integer | `0` (= auto) | `0`, or 1–60 | `04-audio-report-tts.md` §11 (cost lever 1); the auto derivation is `06-summarization-and-trend-report.md` §9.2 | Report dialog (audio length control). `0` means "derive the target duration from the report length using the §9.2 table" — the same auto convention as `report.targetWords`. Duration is ~99% of the TTS bill (doc 04 §11), so this is the one lever that matters. |
 | `tts.outputFormat` | string | `"wav"` | `wav` \| `mp3` | `04-audio-report-tts.md` §10.2 (delivery), with the size trade-off in doc 04 §6.4 | Prefs pane → Report & audio (doc 08 §7.3). Doc 04 owns the trade-off, and this pref does not decide import-vs-link directly: §10.2's 10 MB size threshold does. Format is what puts a file on one side of it — ~28.8 MB per 10 minutes of WAV lands above (linked, never syncs), ~3.6–9.6 MB of MP3 below (imported, counts against the Zotero storage quota). |
 | ⚠ `tts.linkedFileDir` | string | `""` (empty = ask on first use) | an absolute directory path, or empty | `04-audio-report-tts.md` §10.2 | **Not in the pane.** Doc 04 §10.2 requires that the folder for linked WAVs be chosen once and "persist[ed] … in prefs", and doc 04 §12 item 1 lists it, but no document names a key. Confirm the name and the first-use flow before it is written into `prefs.js`. |
+
+> *Removed 2026-11-02 (`P4-T20`; owner, `plan/00` §6 item 307(d)): the hidden preference `report.enabled` (default `false`), which held back the collection menu's "Generate Research Trends Report…" entry and the report window's opener until a report could be generated. The window now generates one, so the row, its `PREFS` entry and its key are gone. A value left in a profile is ignored; nothing reads it.*
 
 **Do not hardcode the 30 Gemini voice names as a fixed UI list** (`04-audio-report-tts.md` §2.7): ship them as a default list and validate the stored `tts.voice` against a real test call.
 
@@ -5453,37 +5604,59 @@ Notes: `PartialFetch` is a first-class state, not an error. If PubMed is down bu
 
 ### 12.2 Find related (Feature 2)
 
+> **Rewritten 2026-11-02 (`plan/08` `P5-T01`; `plan/08` §0.4 line 17, decided 2026-11-01 by the coordinator under
+> `plan/00` §6 item 313).** The machine this replaces kept the job alive through `AwaitingSelection` and `Importing`,
+> with a 30-minute timeout, and resumed after a quit. The search window already splits a run into a fetch-only job and an
+> import of the previewed set (§12.1; `SearchImportInput.records` + `works`), so **the job ends when its results are
+> shown, import is the search pipeline's preview import, and the job does not resume**: `Pipeline.resumable` is `false`,
+> `recover()` marks an interrupted one `failed` with `not-resumable` (§7.6), and a re-run is cheap through `P5-T10`'s
+> cache. Built by `createRelatedPipeline` (`P5-T14`). Nothing has been built against this diagram yet.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Queued
-    Queued --> ResolvingSeed : read selected Zotero item(s)
-    ResolvingSeed --> Failed : no usable identifier and no title
-    ResolvingSeed --> ExpandingIds : have DOI / PMID / arXiv / title
-    ExpandingIds --> Querying : identifiers resolved across sources
+    Queued --> ResolvingSeed : read the one selected Zotero item
+    Queued --> ExpandingIds : input carries chosenSeed
+    ResolvingSeed --> Failed : no identifier and no title, or no title match passes
+    ResolvingSeed --> Succeeded : several title matches pass, result is choose with the list
+    ResolvingSeed --> ExpandingIds : an identifier, or one title match
 
-    Querying --> Querying : per-source related query
-    Querying --> Scoring : all sources done
-    Querying --> PartialResults : some sources failed
-    PartialResults --> Scoring
+    ExpandingIds --> Generating : identifiers resolved across sources
+    Generating --> Generating : next generator, concurrent across hosts, serial within one
+    Generating --> Hydrating : every generator answered
+    Generating --> PartialResults : some failed, were refused or have no key
+    Generating --> Failed : every generator that ran failed and none yielded a record
+    PartialResults --> Hydrating : continue with what we have
 
-    Scoring --> Filtering : rank by combined signals
-    Filtering --> AwaitingSelection : exclude items already in library, apply date window
-    AwaitingSelection --> Importing : user picks items
-    AwaitingSelection --> Cancelled : user closes without selecting
-    Importing --> Succeeded
+    Hydrating --> FetchingVectors : run has a key, survivors only
+    Hydrating --> Scoring : no key, lexical similarity
+    FetchingVectors --> Scoring
+    Scoring --> Filtering : score and reason chips from the edges
+    Filtering --> MarkingRows : drop the seed itself and excluded types
+    MarkingRows --> Succeeded : in library and outside window marked, results shown
 
-    Querying --> Cancelling
-    Importing --> Cancelling
-    Cancelling --> Cancelled
+    Generating --> Cancelling : token cancelled
+    Hydrating --> Cancelling
+    FetchingVectors --> Cancelling
+    Cancelling --> Cancelled : nothing was written
 
-    Querying --> Interrupted : app quit
-    Interrupted --> Querying : resume (cheap; may restart from scratch)
+    Generating --> Interrupted : app quit
+    Hydrating --> Interrupted
+    FetchingVectors --> Interrupted
+    Interrupted --> Failed : not resumable, the user runs it again
     Succeeded --> [*]
     Failed --> [*]
     Cancelled --> [*]
 ```
 
-Notes: `AwaitingSelection` is a human-in-the-loop state. The job is *not* considered running while awaiting selection — it releases its worker slot and its `exclusivityKey`, and times out into `Cancelled` after a configurable window (default 30 minutes) so an abandoned dialog does not hold state forever.
+Notes:
+
+- **Two endings mean success.** A title-only seed that several candidates match ends with the list (`P5-T11`'s `"choose"`); the window asks the user to pick (FR-14), and the pick starts a **new** job whose input carries `chosenSeed` and which begins at `ExpandingIds`. Otherwise the job ends with the rows.
+- **`Generating` holds what `P5-T12` builds:** Semantic Scholar's recommendations, references and citations, PubMed's similar articles, Europe PMC's citations and references, Crossref's references. A generator's failure is a per-source status row, not a failed run, and `Failed` is taken only as in §12.1: every generator that ran failed and none yielded a record. **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):** that one edge, read together with `plan/08` `P5-T12`'s "never a failed run" (one generator's failure) and `05-related-work-discovery.md` §7.5's `AllGeneratorsFailedError`.
+- **Without a Semantic Scholar key** those generators, the vector fetch and the abstract fill-in's Semantic Scholar step send nothing (`plan/00` §6 item 320(a)), and the result carries the notice saying what a key adds. `Generating` then has `PartialResults` as its normal exit. A generator skipped for want of a key has not failed.
+- **Merging is inside `Hydrating`'s entry:** the generators' union goes through `dedupeAndMergeAsync` first, every edge is kept on the merged work (§4.2), and only the merged survivors are hydrated (`05-…` §9.1).
+- **No date filter drops a row** (FR-18): a row outside `recencyWindow(searchYears)` is kept, marked and unticked. A library item is kept, marked "in library" and unticked (FR-16).
+- **No state writes to the library or the plugin database.** `Paused` is reachable as §12's conventions say, and this job makes no paid call.
 
 ### 12.3 Summarize collection (Feature 3a)
 
@@ -5719,39 +5892,92 @@ Notes: the trend report is the one pipeline that **discards** partial output on 
 > 7. **Stops and failures end the job before Saving**, with nothing written: a stop moves the record to `failed` with `code` `REPORT_STOPPED` and the stop's short name in `detail` (the full message ids are 42–48 characters, and the record's gate redacts any run of 40 or more, `KEY_PATTERNS`); the output carries the stop's `messageId` and `args` for the window. A cancel, or "stop" answered at a pause, moves it to `cancelled`. Cached stage results and every summary stay. Once Saving has begun, a cancel no longer interrupts it: the row and file, then the note, are written to the end, so nothing half-saved is left.
 > 8. **Pauses keep the stage pending.** The summaries stage pauses through `runPooledItems` (budget, wall clock, key) as the summarize run does; a synthesis stage checks the wall-clock budget before it starts, and a budget refusal (`BudgetExceededError` with a ceiling) or a rejected key inside it pauses the job and asks; "continue" runs the stage again, its finished parts served by the cache where they have entries.
 > 9. **Saving** writes the report (`ReportStore.put`: row and file, through `redactRecord`), then, when `report.saveNote` is on, the note (`writeReportNote`, with the input's `groupConfirmation`), then the row again with `zoteroNoteKey`. A `group-confirmation-required`, `export-only` or `no-collection` outcome is returned to the caller; the report is saved either way. The record ends `succeeded` with `resultRef` `{ kind: "report", key: <report id> }`. Report ids are random UUIDs. The note title is `datedReportTitle` over the title label without its date, and the Markdown's first line carries the same title, so the note shows one heading (`P4-T14` finding 1). The bibliography uses the user's style, else APA (bundled with every Zotero 10), with the `en-US` CSL locale (item 294(a)).
-> 10. **Resume after a restart.** `resumable: true`. The checkpoint (`TrendReportCheckpoint`) holds the last completed stage, the user's confirmed choice and the confirmed estimate per stage (`stageSpendOf`); `remainingFromCheckpoint` prices the stages after the checkpoint for `ResumeGuards.confirm` and `.ceilings` (a record of another pipeline, or one with no readable checkpoint, is one call of unknown cost, so the confirm guard asks). `installServices` passes it to `createSpendResumeGuards`, so every guard now exists, and runs each job `recover()` re-queued once the resume notice was shown, through `Pipeline.run` with no window: a pause during such a run is answered "stop" (the headless surface) until `P4-T20` registers a surface. A guard that asks leaves the job `paused`, and nothing runs it.
+> 10. **Resume after a restart.** `resumable: true`. The checkpoint (`TrendReportCheckpoint`) holds the last completed stage, the user's confirmed choice and the confirmed estimate per stage (`stageSpendOf`); `remainingFromCheckpoint` prices the stages after the checkpoint for `ResumeGuards.confirm` and `.ceilings` (a record of another pipeline, or one with no readable checkpoint, is one call of unknown cost, so the confirm guard asks). `installServices` passes it to `createSpendResumeGuards`, so every guard now exists, and runs each job `recover()` re-queued once the resume notice was shown, through `Pipeline.run` with no window: ~~a pause during such a run is answered "stop" (the headless surface) until `P4-T20` registers a surface. A guard that asks leaves the job `paused`, and nothing runs it.~~ *Decided 2026-11-01 (owner, `plan/00` §6 item 324(a)); built 2026-11-02 (`P4-T20`, the note below): such a job does not answer a pause with "stop". It stays `paused`, and the report window asks when the user opens it; nothing already paid for is discarded. A job a guard left `paused` asks there too.*
 > 11. **"Don't ask again"** is the report run's own `reportRoutineConfirmation` (§4.5's note of 2026-11-01): `prepare` passes it to `mustAskConfirmation`, hands the decision to the surface (`TrendReportConfirmRequest.confirmation`), and stores `routineConfirmationFor` the disclosure there when the answer carries `dontAskAgain`.
 > 12. **One report language per run.** `report.language`'s `auto` and `both` are resolved by the window (`P4-T20`, `P4-T21`); a `ko` run takes `TREND_REPORT_KO`, the Korean invalid-citation text and the Korean retracted-list heading.
+>
+> **As built 2026-11-02 (`P4-T20`; `createDeferredTrendReportSurface` in `src/pipeline/trendReport/trendReportPipeline.ts`, `createResumedJobRunner` in `src/bootstrap/container.ts`, `createReportWindowSession` in `src/bootstrap/registerUI.ts`). Owner, `plan/00` §6 items 324(a), (b); coordinator, item 322(e); the readings marked DECIDED 2026-11-02 are the coordinator's, under item 313.**
+> 13. **A theme is kept as it finishes** (item 322(e), `P4-T18` finding 3). `ThemeAnalysisDeps.onThemeAnalysed` hands each validated theme back the moment it is analysed; the Analysing stage keeps it for the run and stores its `cr` entry (through `redactRecord`), so "continue" after a budget pause re-sends only the themes not yet analysed, with `cache.enabled` off too.
+> 14. **A job resumed after a restart waits for a window** (item 324(a)). `createResumedJobRunner` runs each job `recover()` re-queues on a `DeferredTrendReportSurface`: with no window open a pause is not answered, so the record stays `paused` with its checkpoint and every paid-for result, and the question waits. The report window finds the run (`ServiceGraph.resumedReports`) when it opens, attaches, asks the waiting question and from then on shows the run. A window that closes without answering does not answer for the run; the question waits for the next window.
+> 15. **A job left `paused` with no run in memory** (a spend guard at restart, or a shutdown while a question waited) asks when its collection's window opens. DECIDED 2026-11-02: "continue" runs `prepare` again with the run's confirmation (the estimate prices the synthesis stages although the cache will serve what was paid for, so it over-states and never under-states, and a first-job or budget question is asked properly), then `execute` in the job's own record; declining leaves it paused and asks again. "Stop" cancels the record; the cache entries stay (item 324(b)).
+> 16. **Teardown** (item 322(e), `P4-T18` finding 5). A run's token cancelled with `{ kind: "shutdown" }` moves no job state: `execute` returns the outcome `interrupted` and leaves the record `running` (which `recover()` turns into `interrupted` at the next start) or `paused` (reading 15). `stopAll` is registered after the plugin database, so it runs first, and waits for every resumed run; `publishReportWindowCommands`' teardown does the same for a run a window started, then closes the windows. DECIDED 2026-11-02: closing a window by hand is still a user cancel of a run it started, as the summarize window's is.
+> 17. **The host** (`plan/07` `P4-T20`). `prepare` in a job context with no record; only on `run`, the record is enqueued (`withEgressLog`, `trendReportExclusivityKey`, `TREND_REPORT_INPUT_VERSION`) and `execute` runs in its context; checkpoints are flushed, the job disposed. `TrendReportOutput.noteHtml` (memory only, never stored) is what the window hands `writeReportNote` again after the named-group question. A window's language selector resolves to one language (`resolveReportLanguage`): `auto` follows Zotero's locale; DECIDED 2026-11-02: `both` is read as `auto` until `P4-T21` builds the two-report run.
 
 > **Measured 2026-11-02 (`P4-T22`, mock provider, 400 stored summaries; `test/unit/pipeline/trendScale.test.ts`): no synthesis stage reads the report model's context window.** Only the output limit and the fixed `SYNTHESIS_INPUT_BUDGETS` shape a request, and `execute` passes no `inputBudget` to `clusterThemes`, `composeReport` or `critiqueReport`; `analyseThemes` takes none. On a 128 000-token window the run succeeds (largest request 54 174 tokens). On a 32 000-token window it fails with `CONTEXT_LENGTH`: `CLUSTER_REDUCE` requests of 38 385–40 440 tokens and a `TREND_REPORT_EN` request of 53 280 are refused, and with an output limit that does not force two stages the first `THEME_CLUSTER` request, 52 427 tokens, is. A refused theme is left unanalysed with the code as its reason and the run goes on. `plan/07` `P4-T22` holds the skipped tests; the fix is not built.
 
 ### 12.5 Recommend (Feature 6)
 
+> **Rewritten 2026-11-02 (`plan/08` `P5-T01`; `plan/08` §0.4 lines 17 and 20, decided 2026-11-01 by the coordinator under
+> `plan/00` §6 item 313; owner items 320(c) and 323(b)).** The machine this replaces was query-centric
+> (`GeneratingQueries → Searching`), wrote optional LLM rationales, held the job open through `Presenting` and
+> `Importing`, recorded the user's reaction and resumed after a quit. Now: **one `recommend` pipeline with two input
+> modes, each its own job**, following `05-related-work-discovery.md` §7.1's five generators; **no job outlives its
+> result**; import is the search pipeline's preview import (§12.1); the model is called once per profile and for nothing
+> else. `Pipeline.resumable` is `false`, so `recover()` marks an interrupted job `failed` with `not-resumable` (§7.6).
+> Built by `createRecommendPipeline` (`P5-T25`). Nothing has been built against this diagram yet.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Queued
-    Queued --> ProfileCheck
-    ProfileCheck --> BuildingProfile : no profile or membership_hash changed
-    ProfileCheck --> GeneratingQueries : profile fresh
-    BuildingProfile --> GeneratingQueries
-    GeneratingQueries --> Searching : queries derived from profile
-    Searching --> Searching : per-source, per-query
-    Searching --> Deduplicating : all queries done
-    Deduplicating --> Scoring : exclude knownWorkKeys and prior rejections
-    Scoring --> Explaining : rank by RecommendationSignals
-    Explaining --> Presenting : optional LLM rationales
-    Presenting --> Importing : user accepts some
-    Presenting --> Recorded : user rejects/defers all
-    Importing --> Recorded : feedback persisted
-    Recorded --> Succeeded
+    Queued --> ProfileCheck : either input mode
 
-    Searching --> Cancelling
-    Cancelling --> Cancelled
-    Searching --> Interrupted : app quit
-    Interrupted --> GeneratingQueries : resume
+    ProfileCheck --> BuildingStats : no stored profile, or it is stale
+    ProfileCheck --> ApplyingStoredEdits : profile-only, stored profile fresh
+    ProfileCheck --> StoringEdits : edited profile in, stored profile fresh
+
+    BuildingStats --> Failed : fewer than 5 items
+    BuildingStats --> Centroids : terms, authors, venues, years, membership hash
+    Centroids --> ProfileCall : provider configured, priced and confirmed first
+    Centroids --> ApplyingStoredEdits : no provider, profile marked heuristic
+    ProfileCall --> ApplyingStoredEdits : one call, cached until the collection changes
+    ProfileCall --> Cancelled : user declines the cost question
+
+    ApplyingStoredEdits --> Succeeded : profile-only, result is the profile
+    ApplyingStoredEdits --> Generating : edited profile in, result says the profile was rebuilt
+    StoringEdits --> Generating : edits stored as userEdits
+
+    Generating --> Generating : next generator, concurrent across hosts, serial within one
+    Generating --> Merging : every generator answered
+    Generating --> PartialResults : some failed, were refused or have no key
+    Generating --> Failed : every generator that ran failed and none yielded a record
+    PartialResults --> Merging : continue with what we have
+    Merging --> IdentifierFilters : every generator kept on the merged work
+    IdentifierFilters --> FillingMetadata : survivors only
+    FillingMetadata --> FetchingVectors : run has a key
+    FillingMetadata --> ContentFilters : no key, lexical similarity
+    FetchingVectors --> ContentFilters
+    ContentFilters --> Scoring : no abstract and no tldr dropped
+    Scoring --> Diversifying : eight signals, nearest topic, reasons
+    Diversifying --> Succeeded : top K shown
+
+    BuildingStats --> Cancelling : token cancelled
+    ProfileCall --> Cancelling
+    Generating --> Cancelling
+    FillingMetadata --> Cancelling
+    FetchingVectors --> Cancelling
+    Cancelling --> Cancelled : nothing was written to the library
+
+    BuildingStats --> Interrupted : app quit
+    ProfileCall --> Interrupted
+    Generating --> Interrupted
+    FillingMetadata --> Interrupted
+    FetchingVectors --> Interrupted
+    Interrupted --> Failed : not resumable, the user runs it again
     Succeeded --> [*]
+    Failed --> [*]
     Cancelled --> [*]
 ```
+
+Notes:
+
+- **The two input modes (FR-44's order).** "Profile only" builds or reuses the profile and ends with it; no candidate request is made. The window shows it, and the user's edits come back in the second mode, "edited profile in", which starts a new job carrying the profile the user saw and the removed and added terms. Each job asks the cost question only when a paid call is due, so the second makes none unless the stored profile went stale between the two jobs; it then rebuilds, re-applies the edits and says so in its result, because the user did not see that profile.
+- **Fresh** means an equal `membershipHash` and the same `embeddingModel` as the run's similarity space (`undefined` on the lexical space). **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):** the second half, so a key added or removed since the build cannot mix two spaces (`plan/08` §0.2 item 22). The rebuild pays nothing, because `P5-T22` caches the model's answer on membership, prompt and model.
+- **`Centroids`** holds `P5-T20`'s vectors (keyed only) and `P5-T21`'s centroids and seeds. Without a key there are no centroids (§5.2). The negatives are not on the profile: `P5-T21` reads the 10 most recent rejections for this collection from the store when the edited-profile job generates.
+- **`Generating` is `05-…` §7.1's five,** the `RecommendationStrategy` members: (a) Semantic Scholar's recommender, one request per topic group; (b) PubMed's similar articles; (c) forward citations of the seeds; (d) keyword search through `fanOut` with the recency window; (e) the frequent-author watch. Without a key, (a), Semantic Scholar's half of (c) and (d)'s Semantic Scholar entry send nothing, and that is not a failure.
+- **The filters split** as `05-…` §7.5's note of 2026-11-02 says, because only one kind can run before metadata is filled in. `IdentifierFilters` drops what is in the source collection (`knownWorkKeys` and the run's identifier sets), what the user rejected for this collection, what is outside the date window, and preprints whose published version the user owns. A library item outside the collection stays and is marked (FR-46).
+- **`Scoring` is where `topicIndex` is set,** because only then does every survivor's vector exist. **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):** generator (a) knows the topic group it asked from, but the other four cannot know a candidate's nearest topic before `FetchingVectors`.
+- **A dismissal is not a state.** "Not interested" writes `userAction: "rejected"` through the store from the window, after the job has ended. Nothing records an import (item 323(b)).
+- `Paused` is reachable as §12's conventions say; a pause from a budget refusal keeps `ProfileCall` pending (`plan/07` §0.2 item 18).
 
 ---
 

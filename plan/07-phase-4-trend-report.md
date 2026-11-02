@@ -2300,6 +2300,12 @@ collection })` → `execute`, flushing `job.checkpoints` at the end; the output'
 (`group-confirmation-required` → ask, then `writeReportNote` again and `ReportStore.put` with the key) and
 `report`; optionally `TrendReportConstructionDeps.surfaces` so a resumed job finds the window.
 
+*Changed 2026-11-02 (`P4-T20`; owner, `plan/00` §6 item 324(a); item 322(e)):* a job resumed with no window no longer
+answers a pause with "stop": `createResumedJobRunner` (`src/bootstrap/container.ts`) runs it on a
+`createDeferredTrendReportSurface`, the record stays `paused`, and the report window asks when it opens. A shutdown cancel
+moves no job state (`TrendReportOutcome` gains `interrupted`). `analyseThemes` hands each theme back as it finishes
+(`onThemeAnalysed`). `report.enabled` is gone. `docs/07` §12.4's note of 2026-11-02.
+
 ---
 
 ### P4-T19 — Report window surface, menu entry, `reportWindow` bundle
@@ -2407,6 +2413,9 @@ opens no window. `menus.spec.ts` and `lifecycle.spec.ts` turn it on for their du
 *(Item 307(e):* `publishSummarizeCommands` now closes the summarize window at shutdown, as
 `publishReportWindowCommands` does for this one.)
 
+*Removed 2026-11-02 (`P4-T20`):* `report.enabled`, its row in `src/prefs/schema.ts` and `src/prefs/keys.ts`, the gate in
+`registerUI.ts` and the specs' switching. `menus.spec.ts` now finds the entry first in the live submenu.
+
 ---
 
 ### P4-T20 — Report window: progress, streaming preview, delivery
@@ -2505,6 +2514,19 @@ npm run typecheck && npm run test:unit -- reportViewModel keys && npm run test:i
 string. `src/bootstrap/registerUI.ts` is a shared file under the wave rules. *Re-estimated by the
 review, 2026-10-25, 1.0 → 1.25 d,* for the host in `registerUI.ts` the card's `Files` lacked.
 
+*As built 2026-11-02 (`plan/00` §6 items 313, 322(e), 324, 325; fake provider only, no live call; State stays `TODO`).*
+`src/ui/viewModels/reportViewModel.ts` declares `reduceReportRun`, `buildReportRunModel`, `windowRunModel`, `windowLine`,
+`confirmReportRun`, `settleReportNote`, `resolveReportLanguage`, `reportPauseQuestion`, `groupSaveQuestion`,
+`pausedJobQuestion`, `isMainWindowLine` and `REPORT_RUN_L10N`. **Rule 10:** its caller and constructing file is
+`createReportWindowSession` in `src/bootstrap/registerUI.ts` (the host; opened by `openReportWindowCommand`, stopped by
+`publishReportWindowCommands`' teardown); `src/ui/panes/reportWindow.ts` declares `ReportWindowSession` and `ReportWindowSink`,
+which `addon/content/reportWindow.js` calls and implements. The readings are `docs/07` §12.4's and `docs/08` §6.1–§6.4's
+notes of 2026-11-02. **Outside `Files`**, each forced: step 0's `src/pipeline/trendReport/themeAnalysis.ts`,
+`trendReportPipeline.ts`, `reportLabels.ts`, `src/bootstrap/container.ts`, `test/unit/bootstrap/container.test.ts`,
+`test/unit/pipeline/trendReportPipeline.test.ts`, `trendScaffold.test.ts`, `addon/locale/ko-KR/research-helper-mainWindow.ftl`;
+this card's Done-when `src/prefs/schema.ts`, `src/prefs/keys.ts`, `test/unit/prefs/schema.test.ts`,
+`test/integration/menus.spec.ts`, `lifecycle.spec.ts`, `docs/07`; and `typings/i10n.d.ts` (regenerated).
+
 ---
 
 ### P4-T21 — Korean report path end to end
@@ -2573,6 +2595,10 @@ npm run typecheck && npm run test:unit -- trendKorean
 
 **Notes.** Needs from Phase 3: nothing beyond `P4-T08`'s inputs.
 
+*Noted 2026-11-02 (`P4-T20`):* the window resolves the selector with `resolveReportLanguage` (`reportViewModel.ts`): `auto`
+follows Zotero's locale, and `both` is read as `auto` until this card builds the two-report run, when `both` has to
+reach the pipeline instead. The host already passes the report-language retracted heading to the export.
+
 ---
 
 ### P4-T22 — 400-item scale test on the mock provider
@@ -2628,6 +2654,15 @@ npm run typecheck && npm run test:unit -- trendScale
 **Notes.** Needs from Phase 3: `P3-T06` (built); **`P3-T25` (NOT BUILT)** for the stored-summary type
 the generator fills. This is the definition-of-done line's offline proof — **the** proof, decided
 2026-10-26 on `P4-T25` (a live 400-item run only if the owner asks for one).
+
+*As built 2026-11-02 (`P4-T22`; mock provider only, no live call; `plan/reports/P4-T22.md`).* `test/helpers/syntheticSummaries.ts`
+declares `syntheticPapers`, `seededRandom`, `syntheticKey`, `SYNTHETIC_TOPICS` and `SyntheticPaper` (callers: this
+card's test; `P4-T24`'s script tests when they are built). `test/unit/pipeline/trendScale.test.ts` declares
+`windowedStep`, `scaleRun`, `passesFromLog` and `reservedByKind`. **Done when is met on the 128 000 window only:**
+5 passes, equal to the call log, no refusal. **The 32 000 run fails with a context-length error** (`docs/07` §12.4's
+note of this date), so its two Done-when lines are three `it.skip` tests named FINDING P4-T22-1; the fix is in
+`src/`, outside this card's `Files`, and the coordinator schedules it. With the fix on a scratch copy the three pass
+(12 passes). This card stays open until they run unskipped.
 
 ---
 

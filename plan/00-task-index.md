@@ -2662,6 +2662,22 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (i) First wave: `P5-T01` and `P5-T04` run now as non-build agents beside `P4-T20` and `P4-T22`. `P5-T02`
       follows `P4-T20`'s commit, because both edit `src/prefs` neighbours and `addon/`.
 
+327. **`P4-T22`'s finding, 2026-11-02** (`plan/reports/P4-T22.md`, FINDING P4-T22-1: no synthesis stage reads the
+    report model's context window, so a 400-item report fails with a context-length error on a 32 000-token window
+    and succeeds on 128 000). **DECIDED 2026-11-02 (owner), each as recommended:**
+    - (a) It is fixed, so both windows work. The finishing condition is not narrowed and no minimum window is named.
+      The fix (about 0.5–0.75 d, on top of `P4-T22`'s card) runs after `P4-T20`, and the card stays open until the
+      three skipped tests run unskipped.
+    - (b) A theme refused for context length stays one theme's failure: the run continues without it, and it stops
+      only when no theme was analysed. A refusal does not end the run.
+
+328. **`P5-T01` built, 2026-11-02** (`plan/reports/P5-T01.md`). **DECIDED 2026-11-02 (coordinator, under item 313):**
+    - (a) The agent's twelve readings stand, as written into `docs/07` §4.2, §5.2, §12.2 and §12.5.
+    - (b) Its findings 1 to 5 are corrected in `plan/08`'s cards with dated notes, and its other notes for later cards
+      (findings 6 to 8) are placed in those cards. `P5-T21` gains a step that names each centroid by its members'
+      highest-weighted term, in code, with no change to its estimate.
+    - (c) `P5-T10` and `P5-T19` run next as non-build agents. `P5-T02` follows `P4-T20`'s commit.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

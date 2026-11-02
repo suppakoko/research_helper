@@ -516,6 +516,8 @@ each, opened by `installPluginDatabase`, and the stored vectors stay under a siz
 - create `test/integration/zotero/recommendStores.spec.ts`
 - create `test/unit/zotero/embeddingStore.test.ts` (the cap and eviction order, on the store's injected database double — verify the `userPriceStore.test.ts` pattern first)
 
+> *Added 2026-11-02 (`plan/reports/P5-T01.md`, finding 7): set `redaction` on both records, and name identifier fields to the redaction gate, or `KEY_PATTERNS` replaces them; likely `membershipHash`, `knownWorkKeys`, `profileId` and `work.workKey` — measure this, it was not measured.*
+
 **Do.**
 1. Append the three statements and both indexes exactly as `docs/07` §8.3 prints them (one migration
    per table).
@@ -876,7 +878,7 @@ npm run typecheck && npm run test:unit -- europepmc container
 - Do **not** compare raw scores across linksets.
 
 **Done when.**
-- [ ] A two-seed fixture yields two linksets with scores in (0, 1] and no seed in its own list.
+- [ ] A two-seed fixture yields two linksets with scores in (0, 1] and no seed in its own list. *(Corrected 2026-11-02, `P5-T01` decision 3: `findRelated` takes one seed per call; the several-seed call is an adapter-specific method returning one `RelatedPage` per seed. Name it in `docs/07` §4.2 first.)*
 - [ ] `createHttpClient`'s NCBI identity check accepts the request (test).
 - [ ] Both flags true; `container.test.ts`'s invariant holds.
 - [ ] Mutation sweep; `npm run typecheck` and `npm run test:unit -- pubmed container` pass.
@@ -1084,6 +1086,8 @@ their results are unioned and merged, and only survivors are hydrated.
 - create `src/pipeline/related/generators.ts` (caller: `relatedPipeline.ts`, `P5-T14`)
 - create `test/unit/pipeline/relatedGenerators.test.ts`
 
+> *Added 2026-11-02 (`plan/reports/P5-T01.md`): map `SourceRecord.id` to a list of edges, because two calls to one source can return one record. Check whether `dedupeAndMergeAsync` tolerates a duplicate `SourceRecord.id`; it was not checked.*
+
 **Do.**
 1. Generators A–E of `docs/05` §6.1: S2 forpaper, references, citations (keyed only, §0.2 item 19);
    pmra (PMID) — the window's "similar" source in v1 (decided below); Europe PMC citations/references;
@@ -1213,6 +1217,8 @@ npm run typecheck && npm run test:unit -- relatedScore
 - modify `src/bootstrap/container.ts` (`installServices` passes the sources, cache and key probe in)
 - create `test/unit/pipeline/relatedPipeline.test.ts`
 
+> *Added 2026-11-02 (`plan/reports/P5-T01.md`, finding 8): `resumable: false`; declare the row type with `inLibrary` (decision 5). Decide the restart corners of `docs/07` §7.6: a `paused` or `queued` job of this pipeline has no window open for its result after a restart.*
+
 **Do.**
 1. Stages: resolve seed → expand ids → generators (partial results allowed) → candidate vectors →
    score → filter (self, type) → mark in-library through `LibraryIndex.findExisting` and
@@ -1284,6 +1290,8 @@ item, and opens the search window in `related` mode with the seed's header.
 - modify `src/i18n/keys.ts` (ids; `KO_PENDING_REVIEW`)
 - modify `docs/10-requirements-and-user-stories.md` (FR-13's tooltip sentence — only if step 1 measures no tooltip; dated note)
 - modify `test/integration/menus.spec.ts`, `test/integration/lifecycle.spec.ts`, `test/integration/l10n.spec.ts`, `test/unit/i18n/keys.test.ts`
+
+> *Added 2026-11-02 (`plan/reports/P5-T01.md`, finding 6): `docs/07` §3.4 still says "Find related" accepts 1..N items, against `plan/00` §6 item 321(b). This card corrects it with FR-13.*
 
 **Do.**
 1. `rh-menu-item` with `research-helper-menu-item-find-related`, enabled when exactly one regular item
@@ -1495,7 +1503,7 @@ and stores it.
 2. Term weight `(countInCollection / size) · ln(1 + librarySize / (1 + countInLibrary))`; drop the
    check tags; prefer major-topic MeSH; authors ≥ 2 plus every last author; top venues; year histogram.
 3. `membershipHash` over sorted item keys and `dateModified`; `ownedInCollection` and
-   `ownedInLibrary` identifier sets; persist through `P5-T03`'s store.
+   `ownedInLibrary` identifier sets, computed on each run and **not** stored on the profile *(corrected 2026-11-02, `P5-T01` decision 6: `knownWorkKeys` is the source collection only)*; persist the profile through `P5-T03`'s store.
 
 **Do NOT.**
 - Do **not** count `Humans`, `Animals`, `Male`, `Female` … as topics.
@@ -1640,7 +1648,7 @@ npm run typecheck && npm run test:unit -- embeddings semanticscholar
 | **Human gate** | none |
 
 **Goal.** A profile carries k = 1–4 centroids when vectors exist, and 10–20 diversified positive seeds
-plus up to 10 negatives from the collection's dismissals.
+plus up to 10 negatives from the collection's dismissals, read from the store on each run and not held on the profile *(corrected 2026-11-02, `P5-T01` decision 9)*.
 
 **Read first.**
 - `docs/05-related-work-discovery.md` §7.2 "Seed selection" (weights, `addedAt` from `dateAdded`, the 0.92 diversification cut), "Multi-topic collections" (`kMax: 4, minClusterSize: 5, minGain: 0.08`), "Negative examples"
@@ -1655,7 +1663,8 @@ plus up to 10 negatives from the collection's dismissals.
    initialisation (deterministic); no centroids on the lexical path (`docs/07` §5.2: empty array).
 2. `selectSeeds` as `docs/05` §7.2 writes it, `addedAt` passed in, diversification on the run's
    similarity space; cap at `RECOMMEND_MAX_POSITIVES`.
-3. Negatives: the 10 most recent rejections for this profile (`P5-T03`'s store).
+3. Negatives: the 10 most recent rejections for this collection (`P5-T03`'s store; *corrected 2026-11-02 from "this profile": "Not interested" is per collection, review line 22*).
+4. *Added 2026-11-02 (`P5-T01` finding 2; coordinator, under `plan/00` §6 item 313):* name each centroid in code, by its members' highest-weighted term, into `centroidLabels`, which `P5-T27` groups by. No model call. The lexical path has no centroids, so it has no labels, and the window falls back to a numbered group.
 
 **Do NOT.**
 - Do **not** read `addedAt` off the record (`docs/05` §7.2: it is not on `CanonicalRecord`).
@@ -1689,7 +1698,7 @@ npm run typecheck && npm run test:unit -- recommendSeeds
 | **Human gate** | none |
 
 **Goal.** When a provider is configured, one `COLLECTION_PROFILE` call per profile build supplies the
-focus statement, core topics, exclusion signals and suggested query terms, priced, disclosed and
+focus statement and suggested query terms *(corrected 2026-11-02, `P5-T01` finding 3: core topics and exclusion signals had no field and no reader)*, priced, disclosed and
 confirmed like every other LLM job, and cached on membership, prompt and model.
 
 **Read first.**
@@ -1797,7 +1806,7 @@ and their union is merged; keyword queries go through Phase 2's `fanOut` with th
    OR-ing the top 5 authors over the last 90 days.
 2. Per topic group (decided below): when the profile has k > 1 centroids, generator (a) runs once per
    topic group with that group's seeds — at most 4 POSTs, taken from the budget first — and the other
-   generators run once; every candidate is labelled with its nearest topic, which `P5-T27` groups by.
+   generators run once; each candidate records which topic group's request found it. *Corrected 2026-11-02 (`P5-T01` finding 1 and decision 12): its nearest topic needs its vector, which `P5-T25` fetches after generation, so `topicIndex` is set at `Scoring` (`P5-T24`), and `P5-T27` groups by that.*
 3. Keyless: generator (a) and the S2 half of (c) are skipped before any request, and (d)'s source list
    drops `semanticscholar` (§0.2 item 19).
 4. `RequestBudget` of 40 by default, taken in `docs/05` §9.3's order; `Promise.allSettled`; per-generator
@@ -1840,7 +1849,7 @@ made steps 2 and 3 on 2026-11-01 (decisions):*
 **Done when.**
 - [ ] A budget of 12 runs (a) and (b) fully and (c) for the seeds the budget allows.
 - [ ] With every S2 call refused, (b), (d) and (e) still return candidates.
-- [ ] A two-topic profile makes two (a) POSTs, and every candidate carries a topic label.
+- [ ] A two-topic profile makes two (a) POSTs, and every candidate from them records its topic group *(corrected 2026-11-02, `P5-T01` finding 1)*.
 - [ ] A keyless run on a transport that fails on `api.semanticscholar.org` makes no request there, (d) included.
 - [ ] Mutation sweep; `npm run typecheck` and `npm run test:unit -- recommendGenerators` pass.
 
@@ -1877,6 +1886,8 @@ and each carries a one-line reason built from its strongest terms.
 - create `src/pipeline/recommend/score.ts` (caller: `recommendPipeline.ts`, `P5-T25`)
 - create `test/unit/pipeline/recommendScore.test.ts`
 - modify `docs/05-related-work-discovery.md` (§7.4's hard filter: the collection, not the library — FR-46; dated note)
+
+> *Added 2026-11-02 (`plan/reports/P5-T01.md`, finding 1 and decisions 4 and 12): this card sets `topicIndex` at `Scoring`, from the candidate's vector against the profile's centroids; `generatorAgreement` counts distinct `strategy` values.*
 
 **Do.**
 1. Hard filters, in two functions because only one kind can run before the survivors' metadata is
@@ -1955,6 +1966,8 @@ profile, applies the user's edits, records dismissals, and is registered under `
   Semantic Scholar key probe — *corrected 2026-11-01 (review): generators (a) and (c) and `P5-T20`'s vectors
   depend on the key, and `P5-T14`'s row passes the probe while this one did not*)
 - create `test/unit/pipeline/recommendPipeline.test.ts`
+
+> *Added 2026-11-02 (`plan/reports/P5-T01.md`, finding 8 and decisions 5 and 11): `resumable: false`; a stored profile is fresh only with an equal `membershipHash` and the same `embeddingModel` as the run's space; apply `userEdits` at read time; declare the row type with `inLibrary`; decide the restart corners of `docs/07` §7.6.*
 
 **Do.**
 1. Two input modes of one pipeline (decided below). **Profile only:** profile check (stored profile with

@@ -41,6 +41,10 @@
  * **`citationGraph` (`P2-T34`, review row 131)** means "this adapter exposes
  * `findRelated`"; Europe PMC's declaration became `false` on that day.
  *
+ * **`findRelated` returns a {@link RelatedPage} (`P5-T01`, 2026-11-02;
+ * `plan/08` §0.4 line 30).** No adapter implements it yet: `P5-T05`–`P5-T09` do,
+ * each setting its own `relatedByWork` and `citationGraph`.
+ *
  * ## Two transcription notes
  *
  * 1. **`ExternalIds` is imported from `model/ids`, not from
@@ -72,6 +76,7 @@ import type { CancellationToken } from "../core/jobQueue/cancellation";
 import type { ProgressReporter } from "../core/jobQueue/progress";
 import type { CanonicalWork } from "../model/canonicalWork";
 import type { ExternalIds, SourceId } from "../model/ids";
+import type { RelationEdge } from "../model/related";
 import type { SourceRecord } from "../model/sourceRecord";
 
 /**
@@ -123,9 +128,10 @@ export interface SourceCapabilities {
   /** Returns abstracts in search results (vs. requiring a second call). */
   readonly abstractsInSearch: boolean;
   /**
-   * This adapter exposes `findRelated` and returns references / citations edges
-   * through it. Describes the adapter, not the service: a database whose API has
-   * citation endpoints that this adapter does not call declares `false`.
+   * This adapter exposes `findRelated` and returns relation edges (references,
+   * citations, recommendations or similar articles) through it. Describes the
+   * adapter, not the service: a database whose API has such endpoints and whose
+   * adapter calls none of them declares `false`.
    */
   readonly citationGraph: boolean;
   /** Server-side date filtering (otherwise we filter client-side). */
@@ -198,6 +204,14 @@ export interface SourcePage {
   readonly warnings: readonly string[];
 }
 
+/**
+ * What `findRelated` returns: a page plus one edge per record. `edges[i]` describes
+ * `records[i]`, so the two arrays have the same length.
+ */
+export interface RelatedPage extends SourcePage {
+  readonly edges: readonly RelationEdge[];
+}
+
 export interface RelatedQuery {
   /** The seed. At least one of `ids` or `work` is required. */
   readonly ids?: Partial<ExternalIds>;
@@ -206,7 +220,13 @@ export interface RelatedQuery {
   readonly fromDate?: string;
   /** How the caller wants relatedness computed, if the source offers a choice. */
   readonly strategy?:
-    "citations" | "references" | "cocitation" | "embedding" | "auto";
+    | "citations"
+    | "references"
+    | "recommendations"
+    | "similar"
+    | "cocitation"
+    | "embedding"
+    | "auto";
 }
 
 export interface SourceCallContext {
@@ -248,7 +268,7 @@ export interface LiteratureSource {
   findRelated?(
     query: RelatedQuery,
     ctx: SourceCallContext,
-  ): Promise<SourcePage>;
+  ): Promise<RelatedPage>;
 
   /** Batch lookup by external identifier. Order of results is not guaranteed. */
   lookup?(

@@ -648,7 +648,7 @@ collection.
 ```
 selected Zotero item
    │
-   ├─ resolve IDs (DOI / PMID / arXiv) ─────────── 0–1 requests (doc 02 §3.7)
+   ├─ resolve IDs (DOI / PMID / arXiv) ─────────── 0–1 requests (doc 02 §6.3)
    │
    ├─ generators (parallel, budget-aware)
    │    A. S2 Recommendations forpaper   from=recent, limit=200      1 req
@@ -663,6 +663,8 @@ selected Zotero item
    ├─ filter: already in library, date window, type
    └─ present ranked list with per-item provenance
 ```
+
+*Corrected 2026-11-02 (`plan/08` `P5-T01`): the resolve line cited doc 02 §3.7, which is the PMC ID converter. The cross-ID resolver is Semantic Scholar's `/paper/batch`, whose `{paper_id}` forms are doc 02 §6.3. The converter still resolves a PMCID, and it is the only resolver a run without a key has (`plan/08` `P5-T11`).*
 
 **Total: 5–8 requests, ~6–9 seconds** at S2's keyed 1 req/s. Acceptable for an explicit user action
 with a progress indicator. Run generators concurrently across *different hosts* (NCBI and S2 have
