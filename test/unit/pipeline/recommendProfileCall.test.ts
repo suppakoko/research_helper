@@ -1761,16 +1761,16 @@ describe("the strings", () => {
       "utf8",
     );
 
-  it("have an en-US message, a ko-KR stub, and are pending review on the main window", () => {
+  it("have a message in both bundles and are reviewed, on the main window (G-41, plan/00 §6 item 335(l))", () => {
     for (const id of ids) {
       const declared = (text: string): boolean =>
         text.split(/\r?\n/u).some((line) => line.startsWith(`${id} =`));
       expect(surfaceOfMessage(id)).toBe("mainWindow");
       expect(declared(bundle("en-US")), id).toBe(true);
-      expect(declared(bundle("ko-KR")), id).toBe(false);
-      expect(bundle("ko-KR")).toContain(`# NEEDS REVIEW ${id} `);
-      expect(KO_PENDING_REVIEW as readonly string[]).toContain(id);
-      expect(KO_PRESENT as readonly string[]).not.toContain(id);
+      expect(declared(bundle("ko-KR")), id).toBe(true);
+      expect(bundle("ko-KR")).not.toContain(`# NEEDS REVIEW ${id} `);
+      expect(KO_PRESENT as readonly string[]).toContain(id);
+      expect(KO_PENDING_REVIEW as readonly string[]).not.toContain(id);
     }
   });
 

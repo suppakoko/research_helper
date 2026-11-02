@@ -963,7 +963,7 @@ research-helper-report-stopped-no-papers = The report was stopped before it was 
 
 ## Why a both run wrote no Korean report (P4-T21; owner, plan/00 §6 item 334(d);
 ## docs/08 §6.3). `no-room` is a stop with no report; the others are shown beside
-## "Report ready". `$reason` is a token, never displayed. Korean pending review (G-41).
+## "Report ready". `$reason` is a token, never displayed.
 
 research-helper-report-stopped-korean =
     { $reason ->
@@ -975,8 +975,7 @@ research-helper-report-stopped-korean =
 
 ## Shown once when Zotero starts, for report jobs left paused (P4-T21; owner,
 ## plan/00 §6 item 332(b)). $count is how many collections, $collections their
-## names joined by commas. Nothing is sent or spent by showing it. Korean pending
-## review (G-41).
+## names joined by commas. Nothing is sent or spent by showing it.
 
 research-helper-report-paused-notice =
     { $count ->
@@ -986,7 +985,6 @@ research-helper-report-paused-notice =
 
 ## A recommend run's notice on the cost dialog (P5-T22; docs/09 §3 row 6). $papers
 ## is how many papers have a line in the request, $model the model it goes to.
-## Korean pending review (G-41).
 
 research-helper-egress-profile-notice =
     { $papers ->
@@ -996,6 +994,6 @@ research-helper-egress-profile-notice =
 
 ## Shown when the model's answer could not be used, or not one line fits the
 ## model, and the profile stays statistical (P5-T22; docs/12 §15's note, items 4
-## and 6). No argument. Korean pending review (G-41).
+## and 6). No argument.
 
 research-helper-recommend-profile-unusable = The model could not describe this collection, so its profile comes from the collection's own terms, and the search may find less.

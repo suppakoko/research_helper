@@ -1228,15 +1228,15 @@ describe("src/i18n/keys.ts — P4-T18's two report stops (plan/00 §6 item 324(c
 describe("src/i18n/keys.ts — P4-T21's reason a both run wrote no Korean report (plan/00 §6 item 334(d))", () => {
   const id = "research-helper-report-stopped-korean";
 
-  it("declares it on the main window with an argument, pending review, and equal to the pipeline's constant", () => {
+  it("declares it on the main window with an argument, reviewed, and equal to the pipeline's constant", () => {
     expect(KOREAN_NOT_WRITTEN_L10N).toBe(id);
     expect(keys.surfaceOfMessage(id)).toBe("mainWindow");
     expect(notIn([id], read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
-    expect(notIn([id], read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy([id], read("KO_PRESENT"))).toEqual([]);
+    expect(notIn([id], read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy([id], read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 
-  it("gives it one en-US message with each reason, and only a NEEDS REVIEW stub in ko-KR", () => {
+  it("gives it one message with each reason in both bundles, and no stub", () => {
     const bundle = (locale: string): string =>
       readFileSync(
         resolve(
@@ -1257,8 +1257,16 @@ describe("src/i18n/keys.ts — P4-T21's reason a both run wrote no Korean report
     ]) {
       expect(english, reason).toContain(reason);
     }
-    expect(declaredIn(bundle("ko-KR"))).toBe(false);
-    expect(bundle("ko-KR")).toContain(`# NEEDS REVIEW ${id} `);
+    expect(declaredIn(bundle("ko-KR"))).toBe(true);
+    for (const reason of [
+      "[no-room]",
+      "[structure]",
+      "[finishing]",
+      "*[request]",
+    ]) {
+      expect(bundle("ko-KR"), reason).toContain(reason);
+    }
+    expect(bundle("ko-KR")).not.toContain(`# NEEDS REVIEW ${id} `);
   });
 });
 

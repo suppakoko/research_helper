@@ -1214,14 +1214,8 @@ export const KO_PENDING_REVIEW = [
   // --- P4-T21's "Report shown" (reportWindow) and paused-job notice (mainWindow) ---
   // Both left this list on 2026-11-02 (`G-41`, plan/00 §6 item 334).
   // --- P4-T21's reason a both run wrote no Korean report (mainWindow; item 334(d)) ---
-  // `G-41` owns the translation; the `ko-KR` bundle carries it as a commented
-  // stub with its English source, and nothing was machine-translated.
-  "research-helper-report-stopped-korean",
   // --- P5-T22's egress notice and fallback warning (mainWindow) ---
-  // `G-41` owns the translation; the `ko-KR` bundle carries each as a commented
-  // stub with its English source, and nothing was machine-translated.
-  "research-helper-egress-profile-notice",
-  "research-helper-recommend-profile-unusable",
+  // All three left this list on 2026-11-02 (`G-41`, plan/00 §6 item 335(l)).
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -1655,6 +1649,11 @@ export const KO_PRESENT = [
   // `P5-T15`'s related mode and `P4-T21`'s two: Korean drafted by the coordinator
   // and reviewed by the owner on 2026-11-02 (`G-41`, plan/00 §6 item 334),
   // inserted byte for byte from plan/reports/ko-review-334.ftl.
+  // P4-T21's stop reason and P5-T22's two: item 335(l), byte for byte from
+  // plan/reports/ko-review-335.ftl.
+  "research-helper-report-stopped-korean",
+  "research-helper-egress-profile-notice",
+  "research-helper-recommend-profile-unusable",
   "research-helper-menu-item-find-related",
   "research-helper-search-window-title-related",
   "research-helper-search-mode-related",

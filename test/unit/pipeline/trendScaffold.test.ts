@@ -1229,12 +1229,16 @@ describe("the report says what the composition changed to fit (FINDING P4-T22-2'
     expect(report.warnings).toContain(ANALYSES_SHORTENED_WARNING);
   });
 
-  it("shows a Korean report the English until the owner approves the Korean", () => {
+  it("shows a Korean report the owner's Korean (G-41, plan/00 §6 item 335(l))", () => {
     const ko = reportLabels("ko");
-    expect(ko.fitOutputLowered).toBe(EN_REPORT_LABELS.fitOutputLowered);
-    expect(ko.fitAnalysesShortened).toBe(EN_REPORT_LABELS.fitAnalysesShortened);
-    expect(isKoLabelPending("fitOutputLowered")).toBe(true);
-    expect(isKoLabelPending("fitAnalysesShortened")).toBe(true);
+    expect(ko.fitOutputLowered).toBe(
+      "보고서 모델의 한도로 이 보고서에 출력 토큰을 {output}개만 쓸 수 있어, {words}단어 분량으로 요청했습니다.",
+    );
+    expect(ko.fitAnalysesShortened).toBe(
+      "보고서 모델의 컨텍스트 창에 맞추기 위해 주제 분석을 {sections}절의 세부 내용 없이 보냈습니다. 따라서 해당 절의 내용이 분석 결과보다 적을 수 있습니다.",
+    );
+    expect(isKoLabelPending("fitOutputLowered")).toBe(false);
+    expect(isKoLabelPending("fitAnalysesShortened")).toBe(false);
   });
 });
 
@@ -1545,17 +1549,14 @@ describe("reportLabels.ts", () => {
       expect(EN_REPORT_LABELS[key as ReportLabelKey], key).toBe(en);
       expect(KO_REPORT_LABELS[key as ReportLabelKey], key).toBe(ko);
     }
-    expect(Object.keys(KO_REPORT_LABELS)).toHaveLength(138);
+    expect(Object.keys(KO_REPORT_LABELS)).toHaveLength(140);
     // The line added after that review (item 317(c)), approved by the owner
     // as item 324(c) on 2026-11-01 (G-41), byte for byte.
     expect(KO_REPORT_LABELS.critiqueTextUnchecked).toBe(
       "일부 문단은 자동 검토를 거치지 않았습니다. 그 문단이 인용한 요약이 너무 길어 한 번의 검토 요청으로 보낼 수 없었기 때문입니다.",
     );
-    // Added 2026-11-02 for FINDING P4-T22-2's fix, awaiting the owner.
-    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual([
-      "fitOutputLowered",
-      "fitAnalysesShortened",
-    ]);
+    // FINDING P4-T22-2's two labels were approved as item 335(l).
+    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual([]);
   });
 
   it("gives a ko report its approved Korean and English for every pending label", () => {

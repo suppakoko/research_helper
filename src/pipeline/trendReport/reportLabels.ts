@@ -431,6 +431,13 @@ export const KO_REPORT_LABELS: Readonly<
   // (G-41, plan/00 §6 item 324(c)), inserted byte for byte.
   critiqueTextUnchecked:
     "일부 문단은 자동 검토를 거치지 않았습니다. 그 문단이 인용한 요약이 너무 길어 한 번의 검토 요청으로 보낼 수 없었기 때문입니다.",
+  // Korean drafted by the coordinator and reviewed by the owner on 2026-11-02
+  // (G-41, plan/00 §6 item 335(l)), byte for byte from
+  // plan/reports/ko-review-335.ftl.
+  fitOutputLowered:
+    "보고서 모델의 한도로 이 보고서에 출력 토큰을 {output}개만 쓸 수 있어, {words}단어 분량으로 요청했습니다.",
+  fitAnalysesShortened:
+    "보고서 모델의 컨텍스트 창에 맞추기 위해 주제 분석을 {sections}절의 세부 내용 없이 보냈습니다. 따라서 해당 절의 내용이 분석 결과보다 적을 수 있습니다.",
 });
 
 /**
@@ -441,14 +448,7 @@ export const KO_REPORT_LABELS: Readonly<
  * {@link KO_REPORT_LABELS}.
  */
 export const KO_REPORT_LABELS_PENDING_REVIEW: readonly ReportLabelKey[] =
-  Object.freeze(
-    // Added 2026-11-02 for FINDING P4-T22-2's fix; the Korean drafts are in
-    // plan/reports/P4-T22-fix2.md, awaiting the owner.
-    [
-      "fitOutputLowered",
-      "fitAnalysesShortened",
-    ] as const satisfies readonly ReportLabelKey[],
-  );
+  Object.freeze([] as const satisfies readonly ReportLabelKey[]);
 
 // ---------------------------------------------------------------------------
 // 3. Study-design labels

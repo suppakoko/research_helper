@@ -715,14 +715,13 @@ research-helper-report-paused-notice =
        *[other] 보고서 실행 { $count }건이 일시 중지되어 답을 기다리고 있습니다. 컬렉션: { $collections }. 컬렉션의 보고서 창을 열어 계속하거나 중지하세요. 그때까지 비용은 들지 않습니다.
     }
 
-# P4-T21: a commented stub, on KO_PENDING_REVIEW in src/i18n/keys.ts until its
-# Korean is reviewed (G-41); nothing here was machine-translated.
-# NEEDS REVIEW research-helper-report-stopped-korean — en-US, by $reason: no-room: No report was written, and nothing was spent on either report: the Korean report does not fit this model's limits. Every summary already made is kept. To get the English report, choose English under Language and generate again.
-#   structure: The English report is saved. The Korean report was not written: asked twice, the model did not return it with its eleven required sections in order. To try again, choose the Korean report under Language and generate.
-#   finishing: The English report is saved. The Korean report was written but could not be finished and saved. To try again, choose the Korean report under Language and generate.
-#   request: The English report is saved. The Korean report was not written, because a request to the model failed. To try again, choose the Korean report under Language and generate.
-
-# P5-T22: commented stubs, on KO_PENDING_REVIEW in src/i18n/keys.ts until their
-# Korean is reviewed (G-41); nothing here was machine-translated.
-# NEEDS REVIEW research-helper-egress-profile-notice — en-US: To build this collection's profile, metadata only is sent to { $model }: one line for each of { $papers } papers, with its item key, title, year, venue and top subject terms. No abstract, summary, full text, note or collection name is sent.
-# NEEDS REVIEW research-helper-recommend-profile-unusable — en-US: The model could not describe this collection, so its profile comes from the collection's own terms, and the search may find less.
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-02 (G-41, plan/00 §6 item 335(l)).
+research-helper-report-stopped-korean =
+    { $reason ->
+        [no-room] 보고서를 쓰지 않았고, 두 보고서 모두 비용이 들지 않았습니다. 한국어 보고서가 이 모델의 한도에 맞지 않습니다. 이미 만든 요약은 모두 남아 있습니다. 영어 보고서가 필요하면 언어에서 English를 고르고 다시 생성하세요.
+        [structure] 영어 보고서는 저장했습니다. 한국어 보고서는 쓰지 못했습니다. 두 번 요청했지만 모델이 필요한 11개 장을 순서대로 갖춘 보고서를 돌려주지 않았습니다. 다시 시도하려면 언어에서 한국어 보고서를 고르고 생성하세요.
+        [finishing] 영어 보고서는 저장했습니다. 한국어 보고서는 작성했지만 마무리해 저장하지 못했습니다. 다시 시도하려면 언어에서 한국어 보고서를 고르고 생성하세요.
+       *[request] 영어 보고서는 저장했습니다. 모델에 보낸 요청이 실패해 한국어 보고서는 쓰지 못했습니다. 다시 시도하려면 언어에서 한국어 보고서를 고르고 생성하세요.
+    }
+research-helper-egress-profile-notice = 이 컬렉션의 프로필을 만들기 위해 메타데이터만 { $model }에 보냅니다. 논문 { $papers }편마다 한 줄씩, 항목 키, 제목, 연도, 게재처, 주요 주제어가 들어갑니다. 초록, 요약, 전문, 노트, 컬렉션 이름은 보내지 않습니다.
+research-helper-recommend-profile-unusable = 모델이 이 컬렉션을 설명하지 못해 프로필은 컬렉션 자체의 용어로 만들었습니다. 검색 결과가 줄어들 수 있습니다.

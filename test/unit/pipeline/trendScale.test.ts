@@ -1778,7 +1778,11 @@ describe("P4-T22 — analyses up to CLUSTER_REDUCE's ceiling over 11 themes (FIN
       expect(delivered.map((r) => r.language)).toEqual(["en", "ko"]);
       for (const report of delivered) {
         expect(report.warnings).toContain(ANALYSES_SHORTENED_WARNING);
-        expect(report.markdown).toContain("sent without the details");
+        expect(report.markdown).toContain(
+          report.language === "ko"
+            ? "세부 내용 없이 보냈습니다"
+            : "sent without the details",
+        );
       }
     },
     SCALE_TIMEOUT_MS,
@@ -1801,7 +1805,7 @@ describe("P4-T22 — analyses up to CLUSTER_REDUCE's ceiling over 11 themes (FIN
       const report = run.output.report;
       expect(report?.warnings).toContain(OUTPUT_LOWERED_WARNING);
       expect(report?.warnings).toContain(ANALYSES_SHORTENED_WARNING);
-      expect(report?.markdown).toContain("8192 output tokens");
+      expect(report?.markdown).toContain("출력 토큰을 8192개");
     },
     SCALE_TIMEOUT_MS,
   );
