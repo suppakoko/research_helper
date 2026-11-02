@@ -80,6 +80,10 @@ The two first-order relations. Both are directly available from multiple APIs.
 outbound `reference` lists only when the publisher chose to make them public. It is a poor citation
 source — use it for the count only.
 
+*As built 2026-11-02 (`plan/08` `P5-T09`):* the adapter reads those outbound lists as `findRelated` `"references"`, because
+they are the only reference source a seed without a key has outside biomedicine. An entry gives a DOI and no title
+(doc 02 §5.3), so its record needs filling in from another source, and an entry with no DOI is counted and dropped.
+
 **PubMed's citation links are PMC-derived and materially incomplete.** Europe PMC reported
 **hitCount 857** citations for PMID 37258680 while Semantic Scholar reported
 **citationCount 1220** for the same paper. Use PubMed `elink` for *related articles* (§4), not for
@@ -460,6 +464,10 @@ GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi
 | Other linknames | `pubmed_pubmed_reviews` (related reviews only), `pubmed_pubmed_combined`, `pubmed_pubmed_five` (top 5). `pubmed_pubmed_reviews` is a nice shortcut for "give me a review to orient myself." |
 | Cost | 1 request per seed (or per batch), at 3–10 req/s. **The cheapest related-work signal available.** |
 
+*Measured 2026-11-02 (`plan/08` `P5-T04`, fixture `elink-two-seeds`):* one run with two seeds returned exactly 100 links for each seed, against "often 100–300+" above, so whether 100 is a cap is unknown. Neither seed appeared in its own list, against "may appear" above; one run does not show it never does, so the filter stays.
+
+*As built 2026-11-02 (`plan/08` `P5-T08`):* the seed is dropped first, then `norm = score / max` over what remains, then the list is sliced, so the top neighbour scores 1 even when the seed had been listed. One `elink` request carries up to 10 seeds (`PUBMED_ELINK_MAX_SEEDS`), where §4.4, §7.3's row b and §9.3's rank 3 count one request per seed. The adapter then spends one `efetch` per 200 distinct neighbours, which those rows do not count. A request carries `api_key` when the key store holds one, because `HOST_POLICIES` paces NCBI by the key's presence.
+
 ### 4.4 Where it fits
 
 - **Feature 2**, when the selected item has a PMID → always call it. It is fast, free, and its
@@ -635,6 +643,52 @@ When the user has no S2 key and no embedding provider, do not disable the featur
 - Weight MeSH descriptors 2× and title terms 1.5× over abstract terms.
 - Quality is clearly worse than SPECTER2, but it is instant, free, private, and always available.
   Label it in the UI as "basic similarity."
+
+> **As built 2026-11-02 (`plan/08` `P5-T19`; `lexicalSpace` in `src/pipeline/shared/lexical.ts`).** Since
+> `plan/00` §6 item 320(b) there is no embedding provider in v1: this floor is what a run without a Semantic
+> Scholar key uses. The vector of a work holds, per word,
+> `Σ over its fields of fieldWeight × (1 + ln countInField)`, times `ln(1 + (1 + N) / (1 + df))`, scaled to unit
+> length; the score is the two vectors' dot product. Field weights are the three above: abstract 1, title 1.5,
+> MeSH 2. `N` and `df` come from the corpus the caller supplies, where `df` counts documents, once per word across
+> all three fields, and is 0 for a word the corpus lacks.
+>
+> **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):**
+> 1. **The IDF is §7.2's `Math.log(1 + size / (1 + count))` with one added to the numerator,** so it is above 0
+>    for every corpus. A plain `log(N / df)` is 0 for a word in every document, and a work in a one-document corpus
+>    would then have no vector and could not score 1 against itself. An empty corpus is legal and weighs all words
+>    alike.
+> 2. **Repeats within a field count as `1 + ln count`, not as a plain count, and there is no stop-word list.**
+>    Measured 2026-11-02 on 142 recorded PubMed abstracts from the six fixture files holding at least 15, taking
+>    "same file" as a rough stand-in for "same topic", with a 29-document corpus: the chance that a same-file pair
+>    outscores a different-file pair was 0.827 with plain counts, 0.899 with `1 + ln count`, 0.913 with plain counts
+>    and a 40-word English stop list, 0.921 with both. A list would add a little for English only; this rule is
+>    the same for every script.
+> 3. **Words of all fields share one vocabulary, MeSH descriptors split into words,** so a title's `CRISPR` meets
+>    the descriptor `CRISPR-Cas Systems`. A descriptor repeated on a work counts once, because a merged work can
+>    carry it from two sources.
+> 4. **Only `Subject.scheme` `"mesh"` is read.** Other schemes and `keywords` are not, as this section names MeSH
+>    only. `isMajor` and §7.2's check-tag list are not applied here: the IDF already discounts `Humans` once a corpus
+>    has it often, and §7.2 is about choosing profile terms.
+> 5. **A work with no usable text has an empty vector and scores 0 with everything, itself included.** There is
+>    no evidence that it resembles anything, and no `NaN`.
+> 6. **The score is already in [0, 1], so it does not pass through §7.4's `(cosine + 1) / 2`.** Rescaled, a pair
+>    with no word in common would read 0.5 and `novelty` could never pass 0.5. `P5-T24` reads it as it is.
+> 7. **The label id is `basic-similarity`** (`LEXICAL_SIMILARITY_LABEL_ID`). `lexicalSpace` adds no user-visible
+>    string.
+>
+> **On the same 142 abstracts:** same-file pairs averaged 0.137 (highest 0.391), different-file pairs 0.048
+> (highest 0.241), and no pair reached §7.2's diversification cut of 0.92. So scores here are not on SPECTER2's
+> scale and a threshold set for one means nothing on the other.
+>
+> **Text outside the Latin script does not crash it, and overlap is weaker.** Words are `normalizeTitle`'s:
+> letters and digits of every script are kept, and everything else separates words. Korean splits at spaces only,
+> so `유전자` and `유전자의` are different words. Chinese has no spaces, so a whole run is one word and only an exact
+> repeat of the run matches. A combining mark splits a word, because `normalizeTitle` keeps only letters and digits:
+> Japanese `がん` becomes `か ん`, and Thai and Devanagari words break at their vowel signs. The fragments are the same
+> each time, so two equal texts still score 1. `test/unit/pipeline/lexical.test.ts` pins the Korean and Chinese cases.
+>
+> **Limits of what was measured:** the 0.827–0.921 figures are one small sample and "same file" is a proxy; no
+> human judged a pair, and no Korean abstract was in it.
 
 ---
 

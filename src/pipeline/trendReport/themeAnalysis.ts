@@ -179,6 +179,16 @@ export interface ThemeAnalysisDeps {
   readonly logger?: Logger;
   /** Prefix of each request's `traceId`. */
   readonly traceId?: string;
+  /**
+   * Each theme's analysis the moment it is validated, before the stage
+   * settles — so a theme already paid for survives a stage-ending error (a
+   * budget refusal pauses the job and "continue" runs the stage again).
+   * Called once per analysed theme; awaited; an error it throws is ignored.
+   * Caller: `trendReportPipeline.ts`'s Analysing stage, which keeps the
+   * result for the run and stores its `cr` entry (`plan/00` §6 item 322(e),
+   * `P4-T18` finding 3; added 2026-11-01 by `P4-T20`).
+   */
+  readonly onThemeAnalysed?: (theme: AnalysedTheme) => void | Promise<void>;
 }
 
 /** What the analyse stage is given. */
@@ -863,6 +873,15 @@ export async function analyseThemes(
       totals.requests += counters.requests;
       totals.calls += counters.calls;
     };
+    /** Hand a validated theme back at once (item 322(e)); never throws. */
+    const handBack = async (done: AnalysedTheme): Promise<AnalysedTheme> => {
+      try {
+        await deps.onThemeAnalysed?.(done);
+      } catch {
+        // The caller's keeping failed; the stage's result is unchanged.
+      }
+      return done;
+    };
 
     try {
       const payloads = summariesForReduce(theme.itemKeys, byKey);
@@ -910,7 +929,9 @@ export async function analyseThemes(
           new Set(theme.itemKeys),
           `${theme.themeId}:all`,
         );
-        return analysed(theme, counters, subBatches, done, [done]);
+        return await handBack(
+          analysed(theme, counters, subBatches, done, [done]),
+        );
       }
 
       // Sub-batches in parallel; a theme with a failed sub-batch is not merged.
@@ -976,10 +997,9 @@ export async function analyseThemes(
         carried,
         `${theme.themeId}:merge`,
       );
-      return analysed(theme, counters, subBatches, merged, [
-        ...partials,
-        merged,
-      ]);
+      return await handBack(
+        analysed(theme, counters, subBatches, merged, [...partials, merged]),
+      );
     } catch (error) {
       if (endsStage(error, deps.token)) throw error;
       deps.logger?.warn("theme analysis: the theme is not analysed", {

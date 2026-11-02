@@ -13,11 +13,13 @@
   (docs/08 §10.1: a window owns its bundle), every script from a chrome://
   path, no inline script, no width/height attributes.
 
-  What P4-T19 builds is the shell: the collection line, the per-run language
-  selector, the resolved report model as text and Close. P4-T20 adds the run:
-  the start button, the stage rows, the streamed preview, Cancel and the
-  delivery buttons, driven through the privileged side
-  (src/bootstrap/registerUI.ts), never inside this document.
+  P4-T19 built the shell: the collection line, the per-run language selector,
+  the resolved report model as text and Close. P4-T20 added the run: Generate,
+  the stage rows, the streamed preview, Cancel and the delivery buttons, driven
+  through the privileged side (src/bootstrap/registerUI.ts), never inside this
+  document. Lines of the main-window bundle (a stop's reason, the wall-clock
+  pause) reach this window as text the host formatted, because it links only
+  its own bundle (docs/08 §10.1).
 
   No literal human-readable string: every visible string is a data-l10n-id
   resolved from research-helper-reportWindow.ftl. The window title and the
@@ -83,5 +85,71 @@ href="chrome://zotero-platform/content/zotero.css"?>
     <!-- The resolved report model as text, no dropdown and no Depth control
          (owner, 2026-10-26, plan/00 §6 item 286). -->
     <html:p id="rh-report-model" />
+
+    <!-- P4-T20: the run (docs/08 §6.1-§6.4's notes of 2026-11-02). -->
+    <html:style>
+      #rh-report-rows p[data-status="pending"] { opacity: 0.6; } #rh-report-rows
+      p[data-status="active"] { font-weight: bold; } #rh-report-rows
+      p[data-status="active"]::before { content: "\27F3\00A0"; } #rh-report-rows
+      p[data-status="done"]::before { content: "\2713\00A0"; }
+    </html:style>
+    <hbox align="center">
+      <button
+        id="rh-report-generate"
+        data-l10n-id="research-helper-report-generate"
+        disabled="true"
+      />
+      <button
+        id="rh-report-cancel"
+        data-l10n-id="research-helper-report-cancel"
+        disabled="true"
+      />
+    </hbox>
+    <html:p id="rh-report-stage" role="status" hidden="hidden" />
+    <html:div id="rh-report-rows" />
+    <html:p id="rh-report-spend" hidden="hidden" />
+    <html:p id="rh-report-notice" hidden="hidden" />
+    <html:div id="rh-report-question" role="alert" hidden="hidden">
+      <html:p id="rh-report-question-text" />
+      <hbox>
+        <button id="rh-report-yes" />
+        <button id="rh-report-no" />
+      </hbox>
+    </html:div>
+    <html:p id="rh-report-outcome" role="status" hidden="hidden" />
+    <html:p id="rh-report-stop-reason" role="alert" hidden="hidden" />
+    <html:p id="rh-report-preview-label" hidden="hidden" />
+    <!-- Raw text: Markdown is never parsed here. aria-live is set by the
+         script only once streaming is over (docs/08 §9). -->
+    <html:pre
+      id="rh-report-preview"
+      hidden="hidden"
+      style="
+        max-height: 24em;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        margin: 0.5em 0;
+      "
+    />
+    <html:p id="rh-report-note" role="status" hidden="hidden" />
+    <html:p id="rh-report-delivery" role="status" hidden="hidden" />
+    <hbox align="center">
+      <button
+        id="rh-report-save-note"
+        data-l10n-id="research-helper-report-save-note"
+        disabled="true"
+      />
+      <button
+        id="rh-report-export"
+        data-l10n-id="research-helper-report-export"
+        disabled="true"
+      />
+      <button
+        id="rh-report-copy"
+        data-l10n-id="research-helper-report-copy"
+        disabled="true"
+      />
+    </hbox>
   </dialog>
 </window>

@@ -94,6 +94,7 @@ import {
   type TrendReportOutput,
   type TrendReportPipeline,
   type TrendReportSurface,
+  createDeferredTrendReportSurface,
 } from "../../../src/pipeline/trendReport/trendReportPipeline";
 import {
   stageSlices,
@@ -1099,6 +1100,40 @@ describe("P4-T18 — a budget refusal pauses with the stage pending (Done when 6
     expect(h.asks).toHaveLength(1);
     expect(h.reportRows()).toBe(1);
   });
+
+  // plan/00 §6 item 322(e), P4-T18 finding 3 (P4-T20 step 0b): a theme
+  // analysed before the refusal is not paid for again on "continue".
+  for (const cacheEnabled of [true, false]) {
+    it(`'continue' re-sends only the themes not yet analysed (cache.enabled ${String(cacheEnabled)})`, async () => {
+      let refused = 0;
+      const h = await harness({
+        config: { cacheEnabled },
+        override: (call, level) => {
+          if (
+            level === "L2" &&
+            refused < 1 &&
+            /"themeId": "T2"|THEME_ID[^\n]*T2|\bT2\b/.test(userOf(call.request))
+          ) {
+            refused += 1;
+            return refusal();
+          }
+          return undefined;
+        },
+        answer: () => "resume",
+      });
+      const output = await h.run();
+      expect(output.outcome).toBe("succeeded");
+      expect(refused).toBe(1);
+      expect(h.asks.map((q) => q.reason)).toEqual(["budget-stop"]);
+      const themeCalls = h.provider.calls
+        .filter((call) => levelOf(call.request) === "L2")
+        .map((call) => (/\bT1\b/.test(userOf(call.request)) ? "T1" : "T2"));
+      // T1 once; T2 refused, then sent again. Without the fix T1 is sent twice.
+      expect(themeCalls.filter((t) => t === "T1")).toHaveLength(1);
+      expect(themeCalls.filter((t) => t === "T2")).toHaveLength(2);
+      expect(output.view.themes).toEqual({ done: 2, total: 2 });
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -1330,6 +1365,137 @@ describe("P4-T18 — resume after a checkpoint at Analysing (Done when 3 and 5)"
 // ---------------------------------------------------------------------------
 // 5. The report run's own "don't ask again" (step 7, item 292(f))
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// P4-T20 step 0c — a resumed job with no window waits; a shutdown keeps it
+// (owner, plan/00 §6 item 324(a); item 322(e), P4-T18 finding 5)
+// ---------------------------------------------------------------------------
+
+describe("P4-T20 step 0c — the deferred surface of a resumed job", () => {
+  const refusal = (): BudgetExceededError =>
+    new BudgetExceededError("synthetic refusal", {
+      ceiling: "run",
+      limitUsd: 1,
+      spentUsd: 0.9,
+      projectedUsd: 1.2,
+      runSpentUsd: 0.9,
+    });
+
+  async function until(condition: () => boolean): Promise<void> {
+    for (let attempt = 0; attempt < 1000; attempt += 1) {
+      if (condition()) return;
+      await new Promise((done) => setTimeout(done, 2));
+    }
+    throw new Error("condition never held");
+  }
+
+  /** A run on a deferred surface whose `level` call is refused once. */
+  async function pausedRun(level: "L0" | "L2") {
+    let refused = 0;
+    const h = await harness({
+      override: (_call, seen) => {
+        if (seen === level && refused < 1) {
+          refused += 1;
+          return refusal();
+        }
+        return undefined;
+      },
+    });
+    const source = createCancellationTokenSource();
+    const deferred = createDeferredTrendReportSurface(source.token);
+    const running = h.run({
+      source,
+      surface: {
+        update: (view) => deferred.update(view),
+        ask: (question) => deferred.ask(question),
+      },
+    });
+    await until(() => deferred.pending !== undefined);
+    return { h, source, deferred, running };
+  }
+
+  it("a pause with no window is not answered: the job stays paused, and a window that attaches later is asked and continues it", async () => {
+    const { h, deferred, running } = await pausedRun("L2");
+    const paused = await h.jobs.list({ status: ["paused"] });
+    expect(paused).toHaveLength(1);
+    expect(paused[0]?.pauseReason).toBe("budget-stop");
+    expect(deferred.pending?.reason).toBe("budget-stop");
+    expect(h.reportRows()).toBe(0);
+    const asked: string[] = [];
+    const views: string[] = [];
+    deferred.attach({
+      update: (view) => views.push(view.stage),
+      ask: (question) => (
+        asked.push(question.reason),
+        Promise.resolve("resume")
+      ),
+    });
+    const output = await running;
+    expect(asked).toEqual(["budget-stop"]);
+    // The window saw where the run was the moment it attached.
+    expect(views[0]).toBe("waiting");
+    expect(output.outcome).toBe("succeeded");
+    expect(h.reportRows()).toBe(1);
+  });
+
+  it("a shutdown while the question waits leaves the job paused with its checkpoint; nothing is cancelled or saved", async () => {
+    const { h, source, running } = await pausedRun("L2");
+    source.cancel({ kind: "shutdown" });
+    const output = await running;
+    expect(output.outcome).toBe("interrupted");
+    const record = (await h.jobs.list())[0];
+    expect(record?.status).toBe("paused");
+    expect(isTrendReportCheckpoint(record?.checkpoint)).toBe(true);
+    expect(
+      (record?.checkpoint as { readonly stage: string } | undefined)?.stage,
+    ).toBe("Clustering");
+    expect(h.reportRows()).toBe(0);
+    expect(h.summaryRows()).toBe(30);
+  });
+
+  it("a shutdown during a summaries-stage pause moves no job state either", async () => {
+    const { h, source, running } = await pausedRun("L0");
+    source.cancel({ kind: "shutdown" });
+    const output = await running;
+    expect(output.outcome).toBe("interrupted");
+    const record = (await h.jobs.list())[0];
+    expect(record?.status).toBe("paused");
+    expect(h.reportRows()).toBe(0);
+  });
+
+  it("a window that detaches before answering does not answer for the run; the question waits for the next", async () => {
+    const source = createCancellationTokenSource();
+    const deferred = createDeferredTrendReportSurface(source.token);
+    const question: SummarizeQuestion = {
+      reason: "credential-required",
+      providerId: "openrouter",
+    };
+    const answer = deferred.ask(question);
+    let closeFirst: ((choice: "resume" | "cancel") => void) | undefined;
+    const detach = deferred.attach({
+      update: () => undefined,
+      ask: () =>
+        new Promise((resolve) => {
+          closeFirst = resolve;
+        }),
+    });
+    detach();
+    closeFirst?.("cancel"); // the closing window's "cancel" arrives late
+    await Promise.resolve();
+    expect(deferred.pending).toBe(question);
+    const detachSecond = deferred.attach({
+      update: () => undefined,
+      ask: () => Promise.resolve("resume"),
+    });
+    expect(await answer).toBe("resume");
+    expect(deferred.pending).toBeUndefined();
+    detachSecond();
+    // A user cancel of the run answers a waiting question "stop".
+    const second = deferred.ask(question);
+    source.cancel({ kind: "user" });
+    expect(await second).toBe("cancel");
+  });
+});
 
 describe("P4-T18 step 7 — don't ask again is the report run's own record (Done when 7)", () => {
   it("a summarize run's record never skips the report's question; the report's own does, and leaves the summarize record unchanged", async () => {

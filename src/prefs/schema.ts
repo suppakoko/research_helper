@@ -21,7 +21,8 @@
  * `report.targetWords`, `report.maxCritiqueRounds`, `report.critiqueModel`,
  * `report.saveNote`; 2026-10-26), and is the only Phase 4 card that adds a row.
  * *(Updated 2026-10-29: the owner added one more, the hidden `report.enabled`
- * switch — `plan/00` §6 item 307(d) — written into §8.5 first.)*
+ * switch — `plan/00` §6 item 307(d) — written into §8.5 first; removed
+ * 2026-11-02 by `P4-T20`, once a report could be generated.)*
  * `report.addRelatedLinks` is deliberately absent: the owner kept backlinks out
  * of Phase 4 (`plan/00` §6 items 286, 287(a)). Rows for later phases (`tts.*`,
  * `background.enabled`, …) are not here. Every card
@@ -559,20 +560,6 @@ export const PREFS = {
   /** Write one child note per paper (`docs/06` §14.2). Opt-in. */
   reportPerPaperNotes: {
     key: PREF_KEYS.reportPerPaperNotes,
-    type: "boolean",
-    default: false,
-  },
-
-  /**
-   * The hidden switch for the trend report (owner, `plan/00` §6 item 307(d);
-   * `docs/11` §0 principle 5). While `false` — the default — the collection
-   * menu's "Generate Research Trends Report…" entry is not created and the
-   * report window's opener opens nothing (`src/bootstrap/registerUI.ts`). Not
-   * in the pane and no `pref()` line. `P4-T20` removes it, or turns it on,
-   * once a report can be generated.
-   */
-  reportEnabled: {
-    key: PREF_KEYS.reportEnabled,
     type: "boolean",
     default: false,
   },

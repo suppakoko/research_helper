@@ -6,6 +6,7 @@ import { FakeZotero } from "../../setup/zotero-global";
 import {
   adoptPrefObserverHandle,
   createRetryFor,
+  createResumedJobRunner,
   createScope,
   createSpendResumeGuards,
   createZoteroLogSink,
@@ -765,14 +766,16 @@ describe("criterion 3: the disable/enable cycle leaves nothing standing", () => 
 
     const live = h.scope.liveHandles();
     // `liveHandles()` reports most-recently-registered first, which is also
-    // teardown order: the plugin database (`P3-T33`, step 6c — registered
-    // last, so its connection closes first, after its own recovery and
-    // stores), then surfaces, then client, then observer, then registry,
-    // then the PrefStore last.
-    expect(live[0]).toBe(
+    // teardown order: the resumed report runs (`P4-T20` step 0c: stopped
+    // before the database closes under them), the plugin database (`P3-T33`,
+    // step 6c — its connection closes after its own recovery and stores),
+    // then surfaces, then client, then observer, then registry, then the
+    // PrefStore last.
+    expect(live[0]).toBe("resumed trend-report runs (P4-T20)");
+    expect(live[1]).toBe(
       "the plugin database (research-helper.sqlite), its cache and its job store",
     );
-    expect(live[1]).toBe("job progress reporters and their surfaces");
+    expect(live[2]).toBe("job progress reporters and their surfaces");
     expect(live[live.length - 1]).toBe("PrefStore (src/prefs)");
 
     await h.scope.unregisterAll();
@@ -3024,5 +3027,75 @@ describe("P3-T35 — every job's PipelineContext carries a real cache, budget, l
       vi.doUnmock(PROVIDERS);
       vi.resetModules();
     }
+  });
+});
+
+// P4-T20 step 0c (plan/00 §6 items 322(e), 324(a); P4-T18 finding 5): the
+// runner of the jobs recover() re-queues stops every run at plugin teardown.
+describe("P4-T20 step 0c — createResumedJobRunner", () => {
+  it("runs a re-queued report job on a deferred surface the window can find, and stopAll cancels it as a shutdown and waits for it", async () => {
+    const clock = createManualClock();
+    const record = {
+      ...createJobRecord({
+        id: "trendReport-1",
+        pipelineId: "trendReport",
+        input: { libraryID: 1, collectionKey: "COLLKEY1", language: "en" },
+        createdAtEpochMs: 0,
+        createdByPluginVersion: "0.0.0-test",
+      }),
+    };
+    let ended: string | undefined;
+    let started: (() => void) | undefined;
+    const startedRun = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const pipeline = {
+      id: "trendReport",
+      resumable: true,
+      run: (
+        _input: unknown,
+        ctx: {
+          readonly token: {
+            onCancelled(cb: (r: { kind: string }) => void): () => void;
+          };
+        },
+      ) =>
+        new Promise((resolve) => {
+          started?.();
+          ctx.token.onCancelled((reason) => {
+            ended = reason.kind;
+            resolve({ outcome: "interrupted" });
+          });
+        }),
+    };
+    const disposed: string[] = [];
+    const runner = createResumedJobRunner({
+      jobs: () => ({ get: () => Promise.resolve(record) }),
+      pipelines: () => ({ list: () => [pipeline] }) as never,
+      openJob: (options) =>
+        Promise.resolve({
+          jobId: record.id,
+          context: { token: options.token },
+          checkpoints: {
+            flush: () => (disposed.push("flush"), Promise.resolve()),
+          },
+          dispose: () => disposed.push("dispose"),
+        } as never),
+      logger: createLogger({ sink: createCapturingSink(), clock }),
+    });
+    runner.run(record.id);
+    await startedRun;
+    const found = runner.find(1, "COLLKEY1");
+    expect(found?.jobId).toBe(record.id);
+    expect(runner.surfaceOf(record.id)).toBe(found?.surface);
+    await runner.stopAll();
+    expect(ended).toBe("shutdown");
+    expect(disposed).toEqual(["flush", "dispose"]);
+    expect(runner.find(1, "COLLKEY1")).toBeUndefined();
+    expect(found?.surface.output).toEqual({ outcome: "interrupted" });
+    // After teardown began nothing new is run.
+    runner.run(record.id);
+    await Promise.resolve();
+    expect(runner.find(1, "COLLKEY1")).toBeUndefined();
   });
 });

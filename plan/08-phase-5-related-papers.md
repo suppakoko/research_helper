@@ -1219,6 +1219,8 @@ npm run typecheck && npm run test:unit -- relatedScore
 
 > *Added 2026-11-02 (`plan/reports/P5-T01.md`, finding 8): `resumable: false`; declare the row type with `inLibrary` (decision 5). Decide the restart corners of `docs/07` §7.6: a `paused` or `queued` job of this pipeline has no window open for its result after a restart.*
 
+> *Added 2026-11-02 (`plan/reports/P5-T19.md`, findings 3 and 6; DECIDED, coordinator, under `plan/00` §6 item 313): the similarity space is chosen once per run, from the key. A candidate with no vector scores similarity 0; there is no per-candidate fallback to the lexical space. On the lexical path, the corpus is the seed plus the merged candidates, which needs no Zotero read. Call `lexicalSpace(corpus)` once per run.*
+
 **Do.**
 1. Stages: resolve seed → expand ids → generators (partial results allowed) → candidate vectors →
    score → filter (self, type) → mark in-library through `LibraryIndex.findExisting` and
@@ -1356,6 +1358,8 @@ a keyless user what a key adds.
 - modify the two `research-helper-searchDialog.ftl` bundles, `src/i18n/keys.ts`
 - modify `docs/08-ui-ux-spec.md` (§5.1 step 2 "similar"; §5.2 note on years; §5.3 picker and the preprint line; §7.4 key text; dated notes)
 - create `test/unit/ui/relatedViewModel.test.ts`; modify `test/integration/searchDialog-flow.spec.ts`
+
+> *Added 2026-11-02 (`plan/reports/P5-T19.md`, finding 2): this card renders the "basic similarity" label (`LEXICAL_SIMILARITY_LABEL_ID`) that `docs/05` §5.5 requires, on a keyless run. The string goes through `G-41`.*
 
 **Do.**
 1. Documents first (decided below and on `P5-T12`, `P5-T28`): `docs/08` §5.2's year note cites FR-18's
@@ -1602,6 +1606,8 @@ L2-normalised once, stored with their model name, and compared only within that 
 - create `src/pipeline/shared/embeddings.ts` (`ensureEmbeddings`, `cosine`; callers: `relatedPipeline.ts`, `recommendPipeline.ts`, `centroids.ts`)
 - create `test/unit/pipeline/embeddings.test.ts`
 
+> *Added 2026-11-02 (`plan/reports/P5-T19.md`, finding 8): `docs/03` §13.2 and §16 still say "TF-IDF / BM25"; this card corrects both to TF-IDF, following `docs/05`.*
+
 **Do.**
 1. Documents first: answer `docs/07` §13 item 5 and align `docs/03` §16 with the decision below.
 2. `fetchEmbeddings`: `fields=embedding.specter_v2`, ≤ 200 ids per call, papers without a vector
@@ -1657,6 +1663,8 @@ plus up to 10 negatives from the collection's dismissals, read from the store on
 - create `src/pipeline/recommend/centroids.ts` (`kmeansAuto`; caller: `recommendPipeline.ts`)
 - create `src/pipeline/recommend/seeds.ts` (`selectSeeds`; caller: `recommendPipeline.ts`)
 - create `test/unit/pipeline/recommendSeeds.test.ts`
+
+> *Added 2026-11-02 (`plan/reports/P5-T19.md`, findings 1 and 5): `seeds.ts` is the lexical caller, not `centroids.ts`. §7.2's 0.92 diversification cut never triggered on 142 recorded abstracts on the lexical space, so measure it there rather than reuse the number, and record what is chosen.*
 
 **Do.**
 1. `kmeansAuto` on SPECTER2 vectors, k chosen by silhouette with `docs/05`'s guards and a seeded
@@ -1888,6 +1896,8 @@ and each carries a one-line reason built from its strongest terms.
 - modify `docs/05-related-work-discovery.md` (§7.4's hard filter: the collection, not the library — FR-46; dated note)
 
 > *Added 2026-11-02 (`plan/reports/P5-T01.md`, finding 1 and decisions 4 and 12): this card sets `topicIndex` at `Scoring`, from the candidate's vector against the profile's centroids; `generatorAgreement` counts distinct `strategy` values.*
+
+> *Added 2026-11-02 (`plan/reports/P5-T19.md`, findings 3 and 4): same one-space-per-run rule as `P5-T14`. No `(cosine + 1) / 2` on the lexical space. **Decide before building:** with no centroids, the highest cosine over the collection makes novelty exactly `1 − similarity`, so the two weights collapse and the Familiar–Exploratory slider would do little. Yield to the event loop on large runs (about 9 s extrapolated for 5,000 papers against 500 candidates).*
 
 **Do.**
 1. Hard filters, in two functions because only one kind can run before the survivors' metadata is
@@ -2140,6 +2150,8 @@ import into `<Collection> — recommended <date>` by default.
 - modify `addon/content/searchDialog.xhtml`, `addon/content/searchDialog.js`
 - modify the two `research-helper-searchDialog.ftl` bundles, `src/i18n/keys.ts`
 - create `test/integration/pipeline/recommendFlow.spec.ts`
+
+> *Added 2026-11-02 (`plan/reports/P5-T19.md`, finding 2): this card renders the "basic similarity" label on a keyless recommendation run. The string goes through `G-41`.*
 
 **Do.**
 1. Rows grouped by centroid label when k > 1; reason line from `P5-T24`'s reason ids; "in library"

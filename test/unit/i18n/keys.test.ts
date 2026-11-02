@@ -36,6 +36,7 @@ import {
   REPORT_LANGUAGE_L10N,
   REPORT_WINDOW_L10N,
 } from "../../../src/ui/panes/reportWindow";
+import { REPORT_RUN_L10N } from "../../../src/ui/viewModels/reportViewModel";
 import { PREFS } from "../../../src/prefs/schema";
 import { mockSettings } from "../../helpers/mockLLM";
 
@@ -1146,11 +1147,21 @@ describe("src/i18n/keys.ts — the two stops of plan/00 §6 item 309(e), (g)", (
 });
 
 describe("src/i18n/keys.ts — P4-T19's report window and its menu entry (docs/08 §2.5, §6.4; plan/00 §6 item 306(b))", () => {
-  const ten = Object.values(REPORT_WINDOW_L10N);
+  // P4-T19's ten; REPORT_WINDOW_L10N also carries P4-T20's run (below).
+  const run: readonly string[] = Object.values(REPORT_RUN_L10N);
+  const ten = Object.values(REPORT_WINDOW_L10N).filter(
+    (id) => !run.includes(id),
+  );
 
-  it("names ten distinct ids, exactly the report window's surface list", () => {
+  it("names ten distinct ids, and with P4-T20's twenty-five exactly the report window's surface list", () => {
     expect(new Set(ten).size).toBe(10);
-    expect(sorted(ten)).toEqual(sorted(read("REPORT_WINDOW_MESSAGE_IDS")));
+    expect(new Set(run).size).toBe(25);
+    expect(sorted([...ten, ...run])).toEqual(
+      sorted(read("REPORT_WINDOW_MESSAGE_IDS")),
+    );
+    expect(sorted(Object.values(REPORT_WINDOW_L10N))).toEqual(
+      sorted(read("REPORT_WINDOW_MESSAGE_IDS")),
+    );
   });
 
   it("declares them on the reportWindow surface only, outside the error ids; two take arguments", () => {
@@ -1185,5 +1196,55 @@ describe("src/i18n/keys.ts — P4-T19's report window and its menu entry (docs/0
     for (const id of Object.values(REPORT_LANGUAGE_L10N)) {
       expect(ten).toContain(id);
     }
+  });
+});
+
+describe("src/i18n/keys.ts — P4-T18's two report stops (plan/00 §6 item 324(c))", () => {
+  const two = [
+    "research-helper-report-stopped-papers-failed",
+    "research-helper-report-stopped-no-papers",
+  ];
+
+  // Moved 2026-11-02: the owner approved the Korean (G-41, plan/00 §6 item 324(c)).
+  it("puts both on KO_PRESENT now the owner reviewed the Korean, not still pending", () => {
+    expect(notIn(two, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(two, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — P4-T20's run (docs/08 §6.1–§6.4's notes of 2026-11-02)", () => {
+  const run = Object.values(REPORT_RUN_L10N);
+
+  it("declares all twenty-five on the reportWindow surface only, outside the error ids", () => {
+    for (const id of run) {
+      expect(keys.surfaceOfMessage(id)).toBe("reportWindow");
+    }
+    expect(sharedBy(run, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(run, read("SEARCH_DIALOG_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(run, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+  });
+
+  it("twelve take arguments", () => {
+    expect(sorted(sharedBy(run, read("ARGUMENT_MESSAGE_IDS")))).toEqual(
+      sorted([
+        REPORT_RUN_L10N.stage,
+        REPORT_RUN_L10N.rowSummaries,
+        REPORT_RUN_L10N.rowThemes,
+        REPORT_RUN_L10N.rowReview,
+        REPORT_RUN_L10N.spend,
+        REPORT_RUN_L10N.previewLabel,
+        REPORT_RUN_L10N.outcome,
+        REPORT_RUN_L10N.note,
+        REPORT_RUN_L10N.groupQuestion,
+        REPORT_RUN_L10N.exportOutcome,
+        REPORT_RUN_L10N.keyNeeded,
+        REPORT_RUN_L10N.pausedJob,
+      ]),
+    );
+  });
+
+  it("puts all twenty-five on KO_PENDING_REVIEW until the owner reviews the Korean (G-41)", () => {
+    expect(notIn(run, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(run, read("KO_PRESENT"))).toEqual([]);
   });
 });

@@ -256,7 +256,8 @@ research_helper/
 │   │   ├── audioReport/              # Feature 5
 │   │   └── shared/
 │   │       ├── checkpoint.ts         # per-stage checkpointing for resume
-│   │       └── budget.ts             # token/cost budget enforcement
+│   │       ├── budget.ts             # token/cost budget enforcement
+│   │       └── lexical.ts            # local TF-IDF similarity floor, 05-… §5.5 (added 2026-11-02, P5-T19)
 │   │
 │   ├── zotero/                       # the ONLY directory allowed to import Zotero globals
 │   │   ├── zoteroApi.ts              # narrow facade; everything below uses this
@@ -923,7 +924,9 @@ export interface CacheStats {
 // Extended 2026-11-02 (`plan/08` §0.4 lines 18 and 30, decided 2026-11-01 by the coordinator under
 // `plan/00` §6 item 313): `citationGraph` reads "relation edges", `findRelated` returns a `RelatedPage`,
 // and `RelatedQuery.strategy` names `"recommendations"` and `"similar"`. As built 2026-11-02 (`plan/08`
-// `P5-T01`): `src/sources/types.ts` declares all of it; no adapter implements `findRelated` yet.
+// `P5-T01`): `src/sources/types.ts` declares all of it; no adapter implemented `findRelated` then.
+// As built 2026-11-02 (`plan/08` `P5-T07`): Europe PMC's does, and sets both flags true. What each
+// strategy does there, and how it reports a seed it does not hold, is `02-literature-database-apis.md` §4.7.
 import type { CanonicalWork } from "../model/canonicalWork";
 import type { ExternalIds, SourceId } from "../model/ids";
 import type { RelationEdge } from "../model/related";
@@ -1169,6 +1172,57 @@ one-linkset-per-seed `elink` over up to 10 seeds (`plan/08` `P5-T08`, `P5-T23`; 
 call that returns one `RelatedPage` per seed, not a `findRelated` over several. `P5-T08` names it; a loop over
 `findRelated` there would break `plan/08` §0.2 item 23. First consumers of the types: `P5-T05`–`P5-T09` construct edges;
 `P5-T12` and `P5-T13` read them.
+
+**As built 2026-11-02 (`plan/08` `P5-T09`).** Crossref's adapter-specific call is declared on `CrossrefSource` in
+`src/sources/crossref/crossrefSource.ts`: `matchTitle(title: string, ctx: SourceCallContext): Promise<readonly SourceRecord[]>`
+returns one `query.bibliographic` search's mapped candidates, at most 5 and unthresholded; its caller is `resolveSeed`
+(`plan/08` `P5-T11`). `findRelated`'s caller is `src/pipeline/related/generators.ts` (`P5-T12`). **DECIDED 2026-11-02
+(coordinator, under `plan/00` §6 item 313):** `"references"`, `"auto"` and no strategy read the seed's deposited
+`reference[]`; any other strategy, or a seed with no DOI, is an empty page with a warning and no request. `rank` is the
+entry's position in `reference[]`, counting the entries dropped for having no DOI. A record holds the DOI and nothing
+else from its entry (`type` `"other"`, `title` `""`, no authors, the rest in `missingFields`): `unstructured` is a
+citation string, not a title, and `author` is one spelling such as `CV Theodoris`, not a family name.
+`RelatedQuery.fromDate` is not applied, because such a record has no date, and a warning says so. **Measured the same
+day against the shipped `dedupeAndMerge`:** 155 such records stay 155 works, and one merged with a fuller record of the
+same DOI takes that record's title and authors but keeps `type` `"other"`, because `merge` reads `type` by
+`DEFAULT_PRECEDENCE` and Crossref leads it. `P5-T12` has to deal with that before these records reach an import.
+
+**As built 2026-11-02 (`plan/08` `P5-T08`).** PubMed's several-seed call is `findSimilarForSeeds`, on the `PubmedSource`
+interface and not on `LiteratureSource`. `PubmedSource.findRelated` is the same call with one seed. Caller of
+`findSimilarForSeeds`: `P5-T23`'s generator (b). Caller of `findRelated`: `P5-T12`'s pmra generator. Both are built by
+`createPubmedSource`, which `src/bootstrap/container.ts` constructs; reaching the typed instance from a pipeline is
+`P5-T14`'s and `P5-T25`'s wiring.
+
+```ts
+// src/sources/pubmed/pubmedSource.ts
+export interface PubmedSimilarOptions {
+  /** How many neighbours to keep per seed, after the seed itself is dropped. */
+  readonly limit: number;
+  /** As `RelatedQuery.fromDate`. `elink` has no date parameter, so it filters after hydration. */
+  readonly fromDate?: string;
+}
+
+/** One seed's answer. `edges[i]` describes `records[i]`, as on `RelatedPage`. */
+export interface PubmedSimilarPage extends RelatedPage {
+  readonly seedPmid: string;
+}
+
+// a member of `PubmedSource`: one `elink` request, at most `PUBMED_ELINK_MAX_SEEDS` seeds, one page
+// per distinct seed in the order given
+findSimilarForSeeds(
+  seedPmids: readonly string[],
+  options: PubmedSimilarOptions,
+  ctx: SourceCallContext,
+): Promise<readonly PubmedSimilarPage[]>;
+```
+
+Every edge is `kind: "similar"`. `rank` is the 1-based position in the seed's list once the seed itself is dropped, and
+`score` is the raw score over the maximum of that same list. A neighbour `efetch` returned no record for is dropped with
+its edge, so ranks can have gaps. Each neighbour is fetched once however many seeds listed it, so one `SourceRecord` can
+appear in two pages. **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):** `"similar"`, `"auto"` and no
+strategy read the list; any other strategy, or a seed with no PMID, is an empty page with a warning and no request, as for
+Crossref above. `fromDate` filters after hydration through `applyClientRecencyFilter`, so a page can hold fewer than
+`limit` records.
 
 ### 4.3 `LLMProvider`
 
@@ -5104,6 +5158,37 @@ Two rules that matter:
 | **Global** | — | **the `cache.maxSizeMB` preference** | User-configurable. Its default and its allowed range are §8.5's row, not restated here. Shown in preferences (doc 08 §7.3 → Advanced) with a "Clear cache" button and a per-namespace breakdown. |
 
 Values over **256 KB** are written to `<data dir>/research-helper/cache/blobs/<sha256>` and the row stores `blob_path` instead of `value`; this keeps the SQLite file from bloating with rare huge payloads. Orphaned blobs are swept during `prune()`.
+
+> **As built 2026-11-02 (`plan/08` `P5-T10`): the relatedness entries of `source-response`.** The two `source-response` rows above are the namespace's defaults. `05-related-work-discovery.md` §9.2 owns the finer per-signal lifetimes and they ship, each stored per entry through `CacheSetOptions.ttlMs`; the table stays there and is not restated here. `RELATED_TTL_MS` transcribes it, and a test holds the two equal. Callers: `src/pipeline/related/generators.ts` (`P5-T12`), `src/pipeline/recommend/generators.ts` (`P5-T23`).
+>
+> ```ts
+> // src/pipeline/shared/relatedFetch.ts
+> export type RelatedSignalKind = "metadata" | "id-crosswalk" | "references" | "citations"
+>   | "citation-count" | "pmra" | "s2-recommendations" | "keyword-search";
+> export interface RelatedCacheKey {
+>   readonly sourceId: SourceId;
+>   readonly ids: readonly string[];          // copied as they are: a Semantic Scholar id is 40 hexadecimal characters
+>   readonly negativeIds?: readonly string[]; // the same, for a request that sends negative examples
+>   readonly params?: Readonly<Record<string, string | number | boolean | null>>; // everything else that changes the answer
+> }
+> export type RelatedOutcome<T> =
+>   | { readonly outcome: "value"; readonly value: T; readonly fromCache: boolean; readonly redaction: RedactionMark }
+>   | { readonly outcome: "missing"; readonly fromCache: boolean };
+> export function cachedRelated<T>(deps: RelatedCacheDeps, kind: RelatedSignalKind, key: RelatedCacheKey, fetch: () => Promise<T>): Promise<RelatedOutcome<T>>;
+> // src/pipeline/shared/requestBudget.ts: RequestBudget (tryTake, takeUpTo, remaining) and GENERATOR_VALUE_ORDER
+> ```
+>
+> The key is `cacheKey("source", sourceId, kind, ids, negativeIds, params)`: §9.1's `sourceResponseKey`, with the signal as its `endpoint`. Every entry carries the `source:<id>` tag.
+>
+> **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):**
+> - **"Permanent" in this namespace is `RELATED_PERMANENT_TTL_MS`, 100 years.** `Cache` cannot say "never" here: an omitted `ttlMs` takes the namespace's 24 h. The ID cross-walk row uses it, and size eviction (§9.4) still applies.
+> - **The SPECTER2 row of `05-…` §9.2 does not pass through this wrapper.** That section puts the vectors in the `embedding` table (§5.4), so its "permanent" is `plan/08` `P5-T03`'s and `P5-T20`'s. The other nine rows do. `P5-T10`'s "`docs/05`'s ten ship, each through `ttlMs`" is true of those nine.
+> - **A negative entry belongs to one signal of one key, not to a paper,** and shares that key's slot. The recommendations endpoints have their own base path, apart from the graph endpoints (`05-…` §3), and nothing recorded says a 404 from one means the other lacks the paper. A seed that no source knows therefore costs one request per signal, once per 7 days. Only a `BadRequestError` with `httpStatus` 404 writes one from `cachedRelated`; `writeRelatedMissing` writes one for an unresolvable id that arrives inside a successful answer, such as `/paper/batch`'s `null`.
+> - **The value passes `redactRecord` with `RELATED_VERBATIM_KEYS`, and the mark is stored with it.** Measured 2026-11-02 over the recorded fixtures through the shipped mappers: with no verbatim names the gate rewrote `id`, `nativeId` and `work.url` on 202 of 202 Semantic Scholar records, because each holds the paper's 40-hexadecimal id; with the list it changed nothing on those 202, on 317 Europe PMC records or on 80 Crossref records. `url` is on the list because it comes from the source's answer, not from a request this plugin built. `pdfUrl`, `landingPageUrl` and every text field stay gated. A fresh answer is returned as gated, so a call answers the same whether or not it was served from the cache.
+> - **In a key, `params` pass the same gate.** A field the gate would remove (`apiKey`, `token`) is refused with `RangeError` before anything is sent, and a credential-shaped run in a query is hashed in its redacted form. `ids` and `negativeIds` are not gated, or two papers would collapse into one key.
+> - **`cache.enabled` off means no read and no write,** negative entries included: `relatedCacheDeps` hands back `NO_CACHE`. A cache that cannot read or write only warns, and the request goes ahead.
+>
+> `RequestBudget` here counts requests per run (`05-…` §9.3). It is not the interface of the same name in `src/core/http/retry.ts`, which is one request's time budget. A cached answer costs nothing: `planRelatedSeeds` reads the cache first and takes budget only for the misses, before any request starts, so a generator does fewer seeds rather than stopping part way. The run's budget size is `plan/08` `P5-T23`'s 40 (`05-…` §9.3's sketch); §8.5 has no row for it.
 
 ### 9.3 Invalidation
 

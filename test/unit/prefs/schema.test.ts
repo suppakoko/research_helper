@@ -340,9 +340,6 @@ const SECTION_8_5: readonly Section85Row[] = [
   row("reportCritiqueModel", "report.critiqueModel", "string", ""),
   row("reportSaveNote", "report.saveNote", "boolean", true),
   row("reportPerPaperNotes", "report.perPaperNotes", "boolean", false),
-  // The hidden switch for the trend report (owner, 2026-10-29, plan/00 §6
-  // item 307(d)): default off until a report can be generated.
-  row("reportEnabled", "report.enabled", "boolean", false),
   // Runtime & concurrency
   row("concurrency", "concurrency", "integer", 3, { min: 1, max: 8 }),
   row("runMaxSpendCents", "run.maxSpendCents", "integer", 0, { min: 0 }),
@@ -440,8 +437,6 @@ const NO_PREF_LINE: readonly string[] = [
   "report.maxCritiqueRounds",
   "report.critiqueModel",
   "report.saveNote",
-  // Owner, 2026-10-29 (item 307(d)): §8.5's row says it has no `pref()` line.
-  "report.enabled",
   "openrouter.lastValidatedAt",
   "openai.lastValidatedAt",
   "gemini.lastValidatedAt",
@@ -522,7 +517,7 @@ function parseDefaultCell(cell: string): unknown {
 }
 
 describe("PREFS transcribes docs/07 §8.5", () => {
-  it("declares exactly the seventy §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty, the owner's gemini.paidTier, P4-T02's five and the owner's report.enabled — and no others", () => {
+  it("declares exactly the sixty-nine §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty, the owner's gemini.paidTier and P4-T02's five — and no others", () => {
     // The card's Do NOT: "do not add a preference that docs/07 §8.5 does not
     // declare". An extra entry fails here, not in review. Phase 1 pinned this
     // at twelve; `P2-T05` grew it by the one row `docs/07` §8.5 and §11.1
@@ -530,9 +525,10 @@ describe("PREFS transcribes docs/07 §8.5", () => {
     // the fifty rows Phase 3 reads (2026-10-20); the owner added
     // `gemini.paidTier` (2026-10-22, `plan/00` §6 item 269(b)); `P4-T02` added
     // the five "Report & audio" rows Phase 4 reads (2026-10-26).
-    // The owner added the hidden `report.enabled` (2026-10-29, item 307(d)).
-    expect(SECTION_8_5).toHaveLength(70);
-    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(70);
+    // The owner added the hidden `report.enabled` (2026-10-29, item 307(d));
+    // `P4-T20` removed it (2026-11-02), as that decision said it would.
+    expect(SECTION_8_5).toHaveLength(69);
+    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(69);
     expect([...PREF_NAMES].sort()).toEqual(
       SECTION_8_5.map((row) => row.name).sort(),
     );
@@ -966,21 +962,9 @@ describe("getPref coerces and falls back", () => {
     expect(getPref("reportSaveNote")).toBe(true);
   });
 
-  it("reads report.enabled as off on a clean profile and on only when stored true (owner, item 307(d))", () => {
-    // docs/11 §0 principle 5: the trend report stays hidden by default.
-    setPrefStore(createMemoryPrefStore({}));
-    expect(getPref("reportEnabled")).toBe(false);
-    expect(PREFS.reportEnabled.key).toBe("report.enabled");
-    for (const [stored, read] of [
-      [true, true],
-      ["true", true],
-      [false, false],
-      ["yes", false],
-      [1, false],
-    ] as const) {
-      setPrefStore(createMemoryPrefStore({ "report.enabled": stored }));
-      expect(getPref("reportEnabled"), JSON.stringify(stored)).toBe(read);
-    }
+  it("has no report.enabled: the trend report's hidden switch was removed once a report could be generated (P4-T20; owner, item 307(d))", () => {
+    expect(Object.keys(PREFS)).not.toContain("reportEnabled");
+    expect(Object.values(PREF_KEYS)).not.toContain("report.enabled");
   });
 
   it("never throws: no store installed", () => {
@@ -1324,9 +1308,10 @@ describe("addon/prefs.js agrees with PREFS", () => {
   it("lists only real schema keys as having no pref() line", () => {
     const keys = new Set(SECTION_8_5.map((r) => r.key));
     // 26 since 2026-10-22: `gemini.paidTier` (plan/00 §6 item 269(b)); 30
-    // since 2026-10-26: P4-T02's four `report.*` rows; 31 since 2026-10-29:
-    // the hidden `report.enabled` (item 307(d)).
-    expect(NO_PREF_LINE).toHaveLength(31);
+    // since 2026-10-26: P4-T02's four `report.*` rows; 31 on 2026-10-29: the
+    // hidden `report.enabled` (item 307(d)); 30 again since 2026-11-02, when
+    // `P4-T20` removed it.
+    expect(NO_PREF_LINE).toHaveLength(30);
     for (const key of NO_PREF_LINE) expect(keys.has(key), key).toBe(true);
   });
 

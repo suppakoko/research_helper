@@ -80,6 +80,8 @@ import {
   type ScopedRegistration,
   type Scope,
   type ServiceGraph,
+  type PipelineJob,
+  type ResumedReportRun,
 } from "./container";
 import type { Logger } from "../core/logger";
 import { formatValue } from "../i18n/ftl";
@@ -251,7 +253,45 @@ import {
   type ReportWindowHandle,
   type ReportWindowHost,
   type ReportWindowSession,
+  type ReportWindowSink,
 } from "../ui/panes/reportWindow";
+// `P4-T20`: the report window's run, its host below.
+import {
+  IDLE_REPORT_RUN,
+  buildReportRunModel,
+  confirmReportRun,
+  isMainWindowLine,
+  pausedJobQuestion,
+  reduceReportRun,
+  reportPauseQuestion,
+  resolveReportLanguage,
+  settleReportNote,
+  windowRunModel,
+  type MainWindowLine,
+  type ReportConfirmDeps,
+  type ReportNoteDeps,
+  type ReportQuestion,
+  type ReportRunEvent,
+  type ReportRunState,
+} from "../ui/viewModels/reportViewModel";
+import type { JobRecord } from "../core/jobQueue/jobRecord";
+import type { TrendReport } from "../model/trend";
+import {
+  exportReportMarkdown,
+  renderReportMarkdown,
+  reportExportFileName,
+} from "../pipeline/trendReport/exportMarkdown";
+import { reportLabel } from "../pipeline/trendReport/reportLabels";
+import {
+  TREND_REPORT_INPUT_VERSION,
+  trendReportExclusivityKey,
+  type TrendReportInput,
+  type TrendReportListener,
+  type TrendReportOutput,
+  type TrendReportPipeline,
+  type TrendReportSurface,
+} from "../pipeline/trendReport/trendReportPipeline";
+import { writeReportNote } from "../zotero/notes";
 import {
   createSpikeArticle,
   createZoteroHttpTransport,
@@ -307,23 +347,6 @@ const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
   openReportWindow: (host, collectionID) =>
     openReportWindowCommand(host, collectionID),
 };
-
-/**
- * {@link SEARCH_MENU_COMMANDS} as the collection menu is built from it: without
- * the report entry while the hidden `report.enabled` preference is off (owner,
- * `plan/00` §6 item 307(d); `docs/11` §0 principle 5). `collectionMenuOptions`
- * creates no entry for an absent command, so the entry does not exist, rather
- * than existing hidden. Read once, when the menu is registered — at startup or
- * enable; the opener reads the preference again on every call
- * ({@link openReportWindowCommand}).
- *
- * @param reportEnabled - `getPref("reportEnabled")`
- */
-function collectionMenuCommands(reportEnabled: boolean): SearchMenuCommands {
-  if (reportEnabled) return SEARCH_MENU_COMMANDS;
-  const { openReportWindow: _hidden, ...commands } = SEARCH_MENU_COMMANDS;
-  return commands;
-}
 
 // ---------------------------------------------------------------------------
 // FR-12's provenance store (`P2-T17`)
@@ -462,9 +485,7 @@ async function publishProvenanceStore(
  * `collectionMenuOptions()` all run at module-evaluation time and none touches
  * the platform: the first returns a closure, the rest plain objects. Nothing
  * reaches `Zotero.MenuManager` until `registerUI()` feeds this array to a live
- * `Scope`. *(Since 2026-10-29 the collection menu's two calls run when its
- * entry is registered instead, to read `report.enabled`; owner, `plan/00` §6
- * item 307(d).)*
+ * `Scope`.
  *
  * Two registrations, one per target (`P1-T19`), because `docs/08` §2.3 allows
  * exactly one top-level item per context and
@@ -485,15 +506,12 @@ const APP_REGISTRATIONS: readonly ScopedRegistration[] = [
       SEARCH_MENU_COMMANDS,
     ),
   ),
-  // Built when `registerUI()` registers it — after `installServices` installed
-  // the preference store — rather than at module evaluation, because whether
-  // it holds the report entry is the hidden `report.enabled` preference's
-  // (owner, `plan/00` §6 item 307(d); see {@link collectionMenuCommands}).
-  (scope) =>
-    menuRegistration(
-      COLLECTION_MENU_DESCRIPTION,
-      collectionMenuOptions(collectionMenuCommands(getPref("reportEnabled"))),
-    )(scope),
+  // The hidden `report.enabled` that held the report entry back (item 307(d))
+  // was removed on 2026-11-02: the window can generate a report (`P4-T20`).
+  menuRegistration(
+    COLLECTION_MENU_DESCRIPTION,
+    collectionMenuOptions(SEARCH_MENU_COMMANDS),
+  ),
   // The preference pane (`P1-T44`). Application-scoped: `docs/01` §2.4 lists
   // `Zotero.PreferencePanes.register` with the once-per-startup registrations,
   // and Zotero propagates it to every open `zotero:pref` window itself. Through
@@ -2061,74 +2079,460 @@ export interface ReportWindowCommands {
   openCount(): number;
 }
 
+/** One open report window: its handle and its session. */
+interface OpenReportWindow {
+  readonly win: ReportWindowHandle;
+  readonly session: ReportSession;
+}
+
 /**
- * The graph the report window reads, and every window this instance opened:
- * set by {@link publishReportWindowCommands}, which closes the windows and
- * clears the graph in its teardown, so a disable leaves no report window
- * behind (`P4-T19` Done when). Module state, as {@link summarizeState} is,
- * because `SEARCH_MENU_COMMANDS` is built before any graph exists.
+ * The graph the report window reads, and every window this instance opened, by
+ * collection id: set by {@link publishReportWindowCommands}, which stops every
+ * run, closes the windows and clears the graph in its teardown, so a disable
+ * leaves no report window or run behind (`P4-T19` Done when). Module state, as
+ * {@link summarizeState} is, because `SEARCH_MENU_COMMANDS` is built before
+ * any graph exists.
  */
 const reportWindowState: {
   graph: ServiceGraph | undefined;
-  readonly windows: Set<ReportWindowHandle>;
-} = { graph: undefined, windows: new Set() };
+  readonly windows: Map<number, OpenReportWindow>;
+} = { graph: undefined, windows: new Map() };
 
 /**
  * The menu's "Generate Research Trends Report…": open, or raise, the
  * collection's report window. A window the user closed is forgotten here.
+ *
+ * *Changed 2026-11-02 (`P4-T20`):* a window still open for the collection is
+ * only raised, with no second `openDialog`, because `openDialog` on a named
+ * window that exists loads the document again, which would unload the window
+ * and cancel its run.
  */
 function openReportWindowCommand(
   host: ReportWindowHost,
   collectionID: number,
 ): ReportWindowHandle {
-  // Owner, plan/00 §6 item 307(d): hidden until a report can be generated.
-  // Read on every call, so a spec can turn it on for its duration.
-  if (!getPref("reportEnabled")) {
-    throw new Error(
-      "[research-helper] the trend report is hidden: report.enabled is off",
-    );
-  }
   const graph = reportWindowState.graph;
   if (graph === undefined) {
     throw new Error("[research-helper] the report window has no services");
   }
-  for (const win of reportWindowState.windows) {
-    if (win.closed === true) reportWindowState.windows.delete(win);
+  for (const [id, open] of reportWindowState.windows) {
+    if (open.win.closed === true) reportWindowState.windows.delete(id);
   }
-  const win = openReportWindow(
-    host,
-    collectionID,
-    createReportWindowSession(graph, collectionID),
-  );
-  reportWindowState.windows.add(win);
+  const already = reportWindowState.windows.get(collectionID);
+  if (already !== undefined) {
+    already.win.focus();
+    return already.win;
+  }
+  const session = createReportWindowSession(graph, collectionID);
+  const win = openReportWindow(host, collectionID, session);
+  reportWindowState.windows.set(collectionID, { win, session });
   return win;
 }
 
+/** `P4-T16`'s dialog over the graph, for the report run's confirmation. */
+function reportConfirmDeps(graph: ServiceGraph): ReportConfirmDeps {
+  return {
+    openDialog: confirmRunCost,
+    settle: (disclosure, outcome) => {
+      settleDisclosure(disclosure, outcome);
+    },
+    confirmAboveCents: () => getPref("summaryConfirmAboveCents"),
+    fullTextAutoMaxPapers: () => getPref("summaryFullTextAutoMaxPapers"),
+    providerName: (disclosure) =>
+      providerDisplayName(graph, disclosure.providerId),
+    locale: appLocale,
+  };
+}
+
+/** A window's session, with what only the host calls. */
+interface ReportSession extends ReportWindowSession {
+  /**
+   * Plugin teardown: cancel a run this window started as a shutdown (the
+   * pipeline leaves its record for `recover()`) and wait for it to end.
+   */
+  shutdown(): Promise<void>;
+}
+
 /**
- * The report window's privileged side (`P4-T19`): what it draws on open.
+ * The report window's host (`P4-T19`, `P4-T20`): the privileged side of one
+ * window, the file `plan/07` `P4-T20` names, as `publishSearchWindowHost` is
+ * for the search window. `ui/` may not import `zotero/` or `llm/`, so every
+ * Zotero and job action reaches the window through here.
  *
- * **Unbound until later cards, on purpose.** The run — start, cancel, stage
- * rows, the streamed draft and its replacement, the cost confirmation and the
- * delivery buttons — is `P4-T20`'s, which adds those members to
- * {@link ReportWindowSession} and builds them here over the queue and
- * `P4-T18`'s trend-report pipeline (`PipelineSet.trendReport`, constructed by
- * `buildPipelineSet` in `./registerPipelines.ts`). Neither exists yet, so
- * nothing here can start a job; the window is the shell `docs/08` §6.4's note
- * of 2026-10-29 describes.
+ * - **`start`** runs the pipeline's two halves (`docs/07` §12.4's note of
+ *   2026-11-01, reading 1): `prepare` in a job context with no record; then,
+ *   only when it says "run", the record is enqueued with the confirmed
+ *   disclosure's egress log and `execute` runs in its context, and the
+ *   checkpoints are flushed. The window's Cancel, or the window closing,
+ *   cancels the run's token.
+ * - **`attach`** (owner, `plan/00` §6 item 324(a)): a job resumed after a
+ *   restart is found on {@link ServiceGraph.resumedReports} and the window
+ *   attaches to its surface, so its pending question is asked now; closing the
+ *   window leaves it waiting. A job left `paused` with no run in memory (a
+ *   spend guard at restart, or a shutdown while it waited) asks here too:
+ *   "continue" prepares it again, with the run's confirmation, and executes it
+ *   in its own record, the cache serving what was paid for; "stop" cancels the
+ *   record, and the paid-for cache entries stay (item 324(b)).
+ * - **Delivery:** the note outcomes (`settleReportNote`), the Markdown export
+ *   (`exportReportMarkdown` over `reportFileWriter`; the path is used once and
+ *   never kept or logged, `docs/09` §2.2) and the text for Copy, which the
+ *   window script puts on the clipboard (`src/` outside `zotero/` may not name
+ *   `Zotero`).
  *
- * The model is the `strong` chain's answer (`reportModel`, then
+ * The model line is the `strong` chain's answer (`reportModel`, then
  * `<provider>.model`; `docs/07` §8.5) — the owner's "resolved report model as
  * text" (`plan/00` §6 item 286). A chain with every setting empty is a
- * `ConfigurationError` from the router, drawn as "no report model is set";
- * any other failure rejects `describe()`, which the window logs by name.
+ * `ConfigurationError` from the router, drawn as "no report model is set"; any
+ * other failure rejects `describe()`, which the window logs by name.
  */
 function createReportWindowSession(
   graph: ServiceGraph,
   collectionID: number,
-): ReportWindowSession {
+): ReportSession {
+  const logger = graph.logger.child({ surface: "reportWindow" });
+  let state: ReportRunState = IDLE_REPORT_RUN;
+  let sink: ReportWindowSink | undefined;
+  let closed = false;
+  let header = describeCollectionForSummary(collectionID);
+  let modelSet = false;
+  let source: CancellationTokenSource | undefined;
+  let ended: Promise<void> | undefined;
+  let currentJob: PipelineJob | undefined;
+  let report: TrendReport | undefined;
+  let noteHtml: string | undefined;
+  let resumed: ResumedReportRun | undefined;
+  let detach: (() => void) | undefined;
+
+  // Main-bundle lines, formatted once each: the window links its own bundle
+  // only (docs/08 §10.1), so a stop's reason reaches it as text.
+  const texts = new Map<string, string>();
+  const formatLine = async (line: MainWindowLine): Promise<string> => {
+    const key = JSON.stringify([line.id, line.args]);
+    const known = texts.get(key);
+    if (known !== undefined) return known;
+    const text =
+      (await (
+        formatValue as (
+          l10n: Localization,
+          id: string,
+          args?: unknown,
+        ) => Promise<string | undefined>
+      )(new Localization([MAIN_WINDOW_FTL]), line.id, line.args)) ?? line.id;
+    texts.set(key, text);
+    return text;
+  };
+
+  const draw = (): void => {
+    if (sink === undefined) return;
+    const model = buildReportRunModel(state, {
+      canStart: header !== undefined && modelSet,
+      saveNoteSetting: getPref("reportSaveNote"),
+      libraryEditable: header?.editable === true,
+      locale: appLocale(),
+    });
+    try {
+      sink.render(
+        windowRunModel(model, (line) => {
+          const known = texts.get(JSON.stringify([line.id, line.args]));
+          if (known === undefined) {
+            void formatLine(line).then(draw, () => undefined);
+          }
+          return known;
+        }),
+      );
+    } catch {
+      // A window that throws loses the view, not the run.
+    }
+  };
+
+  const dispatch = (event: ReportRunEvent): void => {
+    state = reduceReportRun(state, event);
+    draw();
+  };
+
+  /**
+   * What is waiting on a person: a cancel, the window closing or a shutdown
+   * answers it, so no run (and no teardown) waits on a dialog left open.
+   */
+  const waits = new Set<() => void>();
+  const releaseWaits = (): void => {
+    for (const release of [...waits]) release();
+  };
+  const orReleased = <T>(work: Promise<T>, fallback: T): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const release = (): void => {
+        waits.delete(release);
+        resolve(fallback);
+      };
+      waits.add(release);
+      work.then(
+        (value) => {
+          waits.delete(release);
+          resolve(value);
+        },
+        (error: unknown) => {
+          waits.delete(release);
+          reject(error instanceof Error ? error : new Error(String(error)));
+        },
+      );
+    });
+
+  /** Ask in the window; with no window there is nobody to say yes. */
+  const askWindow = async (
+    question: ReportQuestion,
+  ): Promise<"resume" | "cancel"> => {
+    const open = sink;
+    if (open === undefined) return "cancel";
+    const line = isMainWindowLine(question.line)
+      ? { text: await formatLine(question.line) }
+      : question.line;
+    return orReleased(open.ask({ ...question, line }), "cancel");
+  };
+
+  /** A paused run's question: money in the cost dialog, the rest in place. */
+  const askPaused: TrendReportSurface["ask"] = async (question) => {
+    if (question.reason === "budget-stop") {
+      const outcome = await orReleased(
+        confirmRunCost({
+          mode: "ceiling",
+          stop: question.stop,
+          remainingUsd: question.remainingUsd,
+          raiseToUsd: question.raiseToUsd,
+          usage: question.usage,
+        }),
+        { kind: "stop" } as const,
+      );
+      return outcome.kind === "continue" ? "resume" : "cancel";
+    }
+    return askWindow(
+      reportPauseQuestion(
+        question,
+        question.reason === "credential-required"
+          ? await providerDisplayName(graph, question.providerId)
+          : "",
+      ),
+    );
+  };
+
+  /** The run's events, for a run this window started or attached to. */
+  const listener: Omit<TrendReportListener, "finished"> = {
+    update: (view) => {
+      if (currentJob !== undefined) {
+        state = reduceReportRun(state, {
+          kind: "spend",
+          usd: currentJob.budget.spentUsd,
+        });
+      }
+      dispatch({ kind: "view", view });
+    },
+    ask: askPaused,
+    onDraft: (delta) => {
+      dispatch({ kind: "draft", delta });
+    },
+    onRevision: (signal) => {
+      dispatch({ kind: "revision", signal });
+    },
+  };
+
+  const labelsOf = (stored: TrendReport): { retractedHeading: string } => ({
+    retractedHeading: reportLabel(stored.language, "retractedHeading"),
+  });
+
+  /** The text the preview ends on and Copy takes: what the export writes. */
+  const finalText = (stored: TrendReport): string => {
+    try {
+      return renderReportMarkdown(stored, labelsOf(stored));
+    } catch {
+      return stored.markdown;
+    }
+  };
+
+  const noteDeps = (): ReportNoteDeps => ({
+    ask: askWindow,
+    write: (answer) => {
+      if (report === undefined || noteHtml === undefined) {
+        return Promise.reject(new Error("no report to write"));
+      }
+      return writeReportNote({
+        report,
+        html: noteHtml,
+        groupConfirmation: answer,
+      });
+    },
+    store: async (noteKey) => {
+      const reports = await graph.database.reports();
+      if (report !== undefined && reports !== undefined) {
+        report = await reports.put({ ...report, zoteroNoteKey: noteKey });
+      }
+    },
+  });
+
+  /** Draw the run's end and follow its note. */
+  const finishRun = async (output: TrendReportOutput): Promise<void> => {
+    report = output.report;
+    noteHtml = output.noteHtml;
+    dispatch({
+      kind: "finished",
+      outcome: output.outcome,
+      stop: output.stop,
+      markdown: report === undefined ? undefined : finalText(report),
+      note:
+        output.outcome === "succeeded" && output.note === undefined
+          ? "off"
+          : undefined,
+    });
+    if (output.note !== undefined) {
+      dispatch({
+        kind: "note",
+        note: await settleReportNote(output.note, noteDeps()),
+      });
+    }
+  };
+
+  /** The run: `existing` is a paused job's own record, otherwise a new one. */
+  const runJob = async (
+    input: TrendReportInput,
+    existing: JobRecord | undefined,
+  ): Promise<void> => {
+    const pipeline = graph.pipelines.get("trendReport") as
+      TrendReportPipeline | undefined;
+    const running = createCancellationTokenSource();
+    source = running;
+    dispatch({ kind: "started" });
+    const surface: TrendReportSurface = {
+      ...listener,
+      confirm: async (request) => {
+        const result = await orReleased(
+          confirmReportRun(reportConfirmDeps(graph), request),
+          { answer: { kind: "cancelled" }, notice: undefined } as const,
+        );
+        dispatch({ kind: "notice", line: result.notice });
+        return result.answer;
+      },
+    };
+    try {
+      if (pipeline === undefined) {
+        throw new ConfigurationError("the report pipeline is not available");
+      }
+      const collection = {
+        libraryID: input.libraryID,
+        collectionKey: input.collectionKey,
+      };
+      const before = await graph.pipelineContext.openJob({
+        pipelineId: "trendReport",
+        token: running.token,
+        collection,
+        openOn: "completion",
+      });
+      let prepared;
+      try {
+        prepared = await pipeline.prepare(input, before.context, surface);
+      } finally {
+        before.dispose();
+      }
+      if (prepared.status === "declined") {
+        dispatch({ kind: "finished", outcome: "declined" });
+        return;
+      }
+      const record =
+        existing ??
+        (await graph.jobs.enqueue(
+          "trendReport",
+          prepared.disclosure === undefined
+            ? input
+            : withEgressLog(
+                input,
+                egressLogEntry(prepared.disclosure, graph.clock.now()),
+              ),
+          {
+            priority: "normal",
+            exclusivityKey: trendReportExclusivityKey(input),
+            libraryID: input.libraryID,
+            inputVersion: TREND_REPORT_INPUT_VERSION,
+          },
+        ));
+      const job = await graph.pipelineContext.openJob({
+        pipelineId: "trendReport",
+        token: running.token,
+        record,
+        collection,
+        openOn: "completion",
+      });
+      currentJob = job;
+      try {
+        const output = await pipeline.execute(prepared, job.context, surface);
+        job.progress.reporter.done(
+          output.outcome === "succeeded"
+            ? "succeeded"
+            : output.outcome === "failed"
+              ? "failed"
+              : "cancelled",
+        );
+        await finishRun(output);
+      } finally {
+        currentJob = undefined;
+        await job.checkpoints?.flush().catch(() => undefined);
+        job.dispose();
+      }
+    } catch (error) {
+      logger.warn("the report run stopped", {
+        reason: error instanceof Error ? error.name : typeof error,
+      });
+      dispatch({
+        kind: "finished",
+        outcome:
+          running.token.reason?.kind === "shutdown"
+            ? "interrupted"
+            : running.token.isCancellationRequested
+              ? "cancelled"
+              : error instanceof ConfigurationError
+                ? "unavailable"
+                : "failed",
+      });
+    } finally {
+      if (source === running) source = undefined;
+      running.dispose();
+    }
+  };
+
+  /** Owner, plan/00 §6 item 324(a): a paused job of this collection asks. */
+  const askPausedJob = async (): Promise<void> => {
+    if (header === undefined) return;
+    const { libraryID, collectionKey } = header;
+    let records: readonly JobRecord[];
+    try {
+      records = await graph.jobs.list({ status: ["paused"] });
+    } catch {
+      return; // No job store: nothing was left paused.
+    }
+    const paused = records
+      .filter((record) => {
+        const input = record.input as Partial<TrendReportInput>;
+        return (
+          record.pipelineId === "trendReport" &&
+          input.libraryID === libraryID &&
+          input.collectionKey === collectionKey
+        );
+      })
+      .sort((a, b) => b.createdAtEpochMs - a.createdAtEpochMs)[0];
+    if (paused === undefined || closed) return;
+    dispatch({ kind: "paused-job", reason: paused.pauseReason ?? "other" });
+    const answer = await askWindow(pausedJobQuestion(paused.pauseReason));
+    if (closed) return; // The window went away: the job keeps waiting.
+    if (answer === "resume") {
+      ended = runJob(paused.input as TrendReportInput, paused);
+      await ended;
+      // Declined at the confirmation: the record is still paused.
+      if (state.outcome === "declined") await askPausedJob();
+      return;
+    }
+    await graph.jobs.cancel(paused.id);
+    dispatch({ kind: "paused-job", reason: undefined });
+  };
+
   return {
     async describe() {
-      const header = describeCollectionForSummary(collectionID);
+      header = describeCollectionForSummary(collectionID);
       let model: { modelId: string; providerName: string } | undefined;
       try {
         const resolved = graph.llm.router.resolveModel("strong");
@@ -2140,6 +2544,7 @@ function createReportWindowSession(
         if (!(error instanceof ConfigurationError)) throw error;
         model = undefined;
       }
+      modelSet = model !== undefined;
       return buildReportWindowModel({
         collection:
           header === undefined
@@ -2150,17 +2555,114 @@ function createReportWindowSession(
       });
     },
 
+    async attach(windowSink) {
+      sink = windowSink;
+      draw();
+      if (header === undefined) return;
+      await graph.database.ready;
+      if (closed || source !== undefined) return;
+      const run = graph.resumedReports.find(
+        header.libraryID,
+        header.collectionKey,
+      );
+      if (run === undefined) {
+        await askPausedJob();
+        return;
+      }
+      resumed = run;
+      dispatch({ kind: "started" });
+      detach = run.surface.attach({
+        ...listener,
+        finished: (output) => {
+          resumed = undefined;
+          void finishRun(output);
+        },
+      });
+    },
+
+    async start(options, windowSink) {
+      if (source !== undefined || resumed !== undefined) return;
+      sink = windowSink;
+      header = describeCollectionForSummary(collectionID);
+      if (header === undefined) {
+        dispatch({ kind: "finished", outcome: "unavailable" });
+        return;
+      }
+      ended = runJob(
+        {
+          libraryID: header.libraryID,
+          collectionKey: header.collectionKey,
+          language: resolveReportLanguage(options.language, appLocale()),
+        },
+        undefined,
+      );
+      await ended;
+    },
+
+    cancel() {
+      if (resumed !== undefined) resumed.cancel();
+      else source?.cancel({ kind: "user" });
+      releaseWaits();
+    },
+
+    async saveNote() {
+      if (report === undefined || noteHtml === undefined) return;
+      dispatch({
+        kind: "note",
+        note: await settleReportNote(undefined, noteDeps()),
+      });
+    },
+
+    exportFileName() {
+      return report === undefined
+        ? undefined
+        : reportExportFileName(
+            report.collectionName,
+            report.generatedAtEpochMs,
+          );
+    },
+
+    async exportMarkdown(path) {
+      if (report === undefined || path === "") return;
+      const outcome = await exportReportMarkdown(path, report, {
+        files: reportFileWriter(),
+        logger,
+        labels: labelsOf(report),
+      });
+      if (outcome !== "no-path") dispatch({ kind: "exported", outcome });
+    },
+
+    copyText() {
+      return report === undefined ? undefined : finalText(report);
+    },
+
+    copied() {
+      dispatch({ kind: "copied" });
+    },
+
     closed() {
-      // Nothing runs yet. `P4-T20`: a running job is cancelled here, as the
-      // summarize window's session does.
+      closed = true;
+      sink = undefined;
+      // A resumed run or a paused job waits for the next window (item 324(a)).
+      detach?.();
+      detach = undefined;
+      source?.cancel({ kind: "user" });
+      releaseWaits();
+    },
+
+    async shutdown() {
+      source?.cancel({ kind: "shutdown" });
+      releaseWaits();
+      await ended?.catch(() => undefined);
     },
   };
 }
 
 /**
  * Hold the graph for the report window (`P4-T19`) and publish its opener on
- * `addon.api.reportWindow`; on teardown, close every report window still open
- * and withdraw both.
+ * `addon.api.reportWindow`; on teardown, stop every run a window started (as a
+ * shutdown, waiting for each to end while the database is still open), close
+ * every report window still open and withdraw both.
  */
 async function publishReportWindowCommands(
   scope: Scope,
@@ -2169,22 +2671,25 @@ async function publishReportWindowCommands(
   // Captured once, for the reason {@link publishServiceGraph} gives.
   const api = addon.api;
   await scope.use({
-    description: "the report window's services and open windows",
+    description: "the report window's services, runs and open windows",
     register: () => {
       reportWindowState.graph = graph;
       api.reportWindow = {
         open: (host, collectionID) =>
           openReportWindowCommand(host, collectionID),
         openCount: () =>
-          [...reportWindowState.windows].filter((win) => win.closed !== true)
-            .length,
+          [...reportWindowState.windows.values()].filter(
+            (open) => open.win.closed !== true,
+          ).length,
       };
       return "reportWindowState";
     },
-    unregister: () => {
+    unregister: async () => {
       delete api.reportWindow;
-      for (const win of reportWindowState.windows) {
-        if (win.closed !== true) win.close?.();
+      const open = [...reportWindowState.windows.values()];
+      await Promise.allSettled(open.map((one) => one.session.shutdown()));
+      for (const one of open) {
+        if (one.win.closed !== true) one.win.close?.();
       }
       reportWindowState.windows.clear();
       reportWindowState.graph = undefined;

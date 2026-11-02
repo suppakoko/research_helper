@@ -18,12 +18,13 @@
  *   — only when it returns `run` — the record is enqueued with its egress log
  *   (`withEgressLog`, `egressLogEntry(prepared.disclosure, …)`) and
  *   {@link TrendReportPipeline.execute} runs in that record's context, with a
- *   {@link TrendReportSurface} the window implements. Nothing in this card
- *   opens a window: `report.enabled` stays off (`plan/00` §6 item 307(d)).
- * - **Driven** after a restart by `installServices`' resumed-job runner
- *   (`container.ts`): a job `recover()` re-queued once every spend guard
- *   passed and the resume notice was shown is run through `Pipeline.run`,
- *   which reads `ctx.resumeState` and asks no second confirmation.
+ *   {@link TrendReportSurface} the window implements.
+ * - **Driven** after a restart by `createResumedJobRunner` (`container.ts`):
+ *   a job `recover()` re-queued once every spend guard passed and the resume
+ *   notice was shown is run through `Pipeline.run`, which reads
+ *   `ctx.resumeState` and asks no second confirmation, on a
+ *   {@link DeferredTrendReportSurface} a window can attach to (owner, `plan/00`
+ *   §6 item 324(a)).
  *   {@link TrendReportPipeline.remaining} is the spend guards' estimate of
  *   what such a job still has to do.
  *
@@ -258,8 +259,9 @@ const STAGE_WEIGHTS: Readonly<Record<TrendReportStageKey, number>> = {
 };
 
 /**
- * `docs/07` §12.4's stages. The label key is the menu entry's until `P4-T20`
- * gives the window its stage rows; the weights divide the progress bar.
+ * `docs/07` §12.4's stages. The label key is the menu entry's: the window's
+ * stage rows are its own (`REPORT_ROW_STAGES`, `P4-T20`). The weights divide
+ * the progress bar.
  */
 export const TREND_REPORT_STAGES: readonly StageDescriptor[] = Object.freeze(
   TREND_REPORT_STAGE_KEYS.map((key) => ({
@@ -347,9 +349,13 @@ export interface TrendReportInput {
   readonly groupConfirmation?: GroupWriteConfirmation | undefined;
 }
 
-/** How a run ended. */
+/**
+ * How a run ended. `interrupted`: the plugin shut down under it (its token
+ * was cancelled with `{ kind: "shutdown" }`); the record was left as it was,
+ * for `recover()` at the next start (`P4-T20` step 0c).
+ */
 export type TrendReportOutcome =
-  "succeeded" | "stopped" | "cancelled" | "declined" | "failed";
+  "succeeded" | "stopped" | "cancelled" | "declined" | "failed" | "interrupted";
 
 /** A stop's message (`docs/12` §8–§10's stops and this module's two). */
 export interface TrendReportStop {
@@ -384,6 +390,13 @@ export interface TrendReportOutput {
   readonly report?: TrendReport;
   /** The note write's outcome, on `succeeded` with `report.saveNote` on. */
   readonly note?: ReportNoteOutcome;
+  /**
+   * The rendered note HTML, on `succeeded`: what the report window hands
+   * `writeReportNote` again after the named-group question, or on "Save as
+   * note" when `report.saveNote` was off (`P4-T20` step 4). Kept in memory
+   * only, never stored.
+   */
+  readonly noteHtml?: string;
   /** The stop's message, on `stopped`. */
   readonly stop?: TrendReportStop;
   /** FR-27's reduction passes. */
@@ -442,12 +455,172 @@ export interface TrendReportSurface {
   onRevision?(signal: RevisionSignal): void;
 }
 
-/** A surface for a run nobody watches: it confirms nothing and stops at a pause. */
+/**
+ * A surface for a run nobody watches and nobody can watch: it confirms
+ * nothing and stops at a pause. `Pipeline.estimate` uses it; a job resumed
+ * after a restart gets a {@link DeferredTrendReportSurface} instead (owner,
+ * `plan/00` §6 item 324(a)).
+ */
 export const HEADLESS_TREND_REPORT_SURFACE: TrendReportSurface = Object.freeze({
   update: () => undefined,
   confirm: () => Promise.resolve({ kind: "cancelled" } as const),
   ask: () => Promise.resolve("cancel" as const),
 });
+
+/** A window watching a {@link DeferredTrendReportSurface}'s run. */
+export interface TrendReportListener {
+  update(view: TrendReportRunView): void;
+  /** The pending question; a rejection counts as no answer yet. */
+  ask(question: SummarizeQuestion): Promise<"resume" | "cancel">;
+  onDraft?(delta: DraftDelta): void;
+  onRevision?(signal: RevisionSignal): void;
+  /** The run ended. */
+  finished?(output: TrendReportOutput): void;
+}
+
+/**
+ * The surface of a job resumed after a restart (owner, `plan/00` §6 item
+ * 324(a); `P4-T20` step 0c). Until a report window attaches, a pause is
+ * **not** answered: the job stays `paused` with its checkpoint and every
+ * paid-for result, and the question waits; the window asks it when it opens
+ * ({@link attach}). A question a window was asked and had not answered when
+ * it detached waits again. A cancel of the run's token answers "stop" (a
+ * shutdown leaves the record for `recover()`; see `execute`). It confirms
+ * nothing: a resumed run is not asked again (`prepare`'s `resume`).
+ *
+ * Constructed by `installServices`' resumed-job runner (`container.ts`),
+ * which hands it to the pipeline through `TrendReportPipelineDeps.surfaces`;
+ * attached by the report window's session (`registerUI.ts`).
+ */
+export interface DeferredTrendReportSurface extends TrendReportSurface {
+  /** Attach a window; returns its detach. Replaces any earlier window. */
+  attach(listener: TrendReportListener): () => void;
+  /** The run's last view, or `undefined` before the first. */
+  readonly view: TrendReportRunView | undefined;
+  /** The question waiting for an answer, if any. */
+  readonly pending: SummarizeQuestion | undefined;
+  /** Called by the runner when the run ends; tells the window, if any. */
+  finish(output: TrendReportOutput): void;
+  /** The run's output once it ended. */
+  readonly output: TrendReportOutput | undefined;
+}
+
+/**
+ * Build a {@link DeferredTrendReportSurface} over the run's token.
+ *
+ * @param token - the run's token: its cancel answers a waiting question "stop"
+ */
+export function createDeferredTrendReportSurface(
+  token: CancellationToken,
+): DeferredTrendReportSurface {
+  let listener: TrendReportListener | undefined;
+  let view: TrendReportRunView | undefined;
+  let output: TrendReportOutput | undefined;
+  let waiting:
+    | {
+        readonly question: SummarizeQuestion;
+        readonly resolve: (answer: "resume" | "cancel") => void;
+      }
+    | undefined;
+
+  /** Put the waiting question to the attached window. */
+  const forward = (): void => {
+    const current = waiting;
+    const asked = listener;
+    if (current === undefined || asked === undefined) return;
+    let answer: Promise<"resume" | "cancel">;
+    try {
+      answer = asked.ask(current.question);
+    } catch {
+      return; // no answer yet: the question waits
+    }
+    answer.then(
+      (choice) => {
+        // A window that detached first did not answer for the run.
+        if (listener !== asked || waiting !== current) return;
+        waiting = undefined;
+        current.resolve(choice);
+      },
+      () => undefined,
+    );
+  };
+
+  token.onCancelled(() => {
+    const current = waiting;
+    waiting = undefined;
+    current?.resolve("cancel");
+  });
+
+  const safely = (call: () => void): void => {
+    try {
+      call();
+    } catch {
+      // A window that throws loses the view, not the run.
+    }
+  };
+
+  return {
+    update(next) {
+      view = next;
+      const current = listener;
+      if (current !== undefined) safely(() => current.update(next));
+    },
+    confirm: () => Promise.resolve({ kind: "cancelled" } as const),
+    ask(question) {
+      if (token.isCancellationRequested) return Promise.resolve("cancel");
+      // One question at a time: an unanswered earlier one is stopped.
+      waiting?.resolve("cancel");
+      return new Promise((resolve) => {
+        waiting = { question, resolve };
+        forward();
+      });
+    },
+    onDraft(delta) {
+      const current = listener;
+      if (current?.onDraft !== undefined) {
+        safely(() => current.onDraft?.(delta));
+      }
+    },
+    onRevision(signal) {
+      const current = listener;
+      if (current?.onRevision !== undefined) {
+        safely(() => current.onRevision?.(signal));
+      }
+    },
+    attach(next) {
+      listener = next;
+      if (view !== undefined) {
+        const seen = view;
+        safely(() => next.update(seen));
+      }
+      if (output !== undefined) {
+        const ended = output;
+        safely(() => next.finished?.(ended));
+      } else {
+        forward();
+      }
+      return () => {
+        if (listener === next) listener = undefined;
+      };
+    },
+    get view() {
+      return view;
+    },
+    get pending() {
+      return waiting?.question;
+    },
+    finish(ended) {
+      output = ended;
+      const current = listener;
+      if (current?.finished !== undefined) {
+        safely(() => current.finished?.(ended));
+      }
+    },
+    get output() {
+      return output;
+    },
+  };
+}
 
 /** The report run's own "don't ask again" record (`reportRoutineConfirmation`). */
 export interface ReportRoutineStore {
@@ -1548,7 +1721,9 @@ export function createTrendReportPipeline(
               stage = "EnsuringSummaries";
               show();
               await run.resume();
-            } else {
+            } else if (ctx.token.reason?.kind !== "shutdown") {
+              // A shutdown stops the run through its token and moves no job
+              // state: the record is `recover()`'s (step 0c).
               await run.cancel({ kind: "user" });
             }
           })();
@@ -1648,8 +1823,9 @@ export function createTrendReportPipeline(
         });
         pooledRef.current = run;
         unsubscribe.push(
-          ctx.token.onCancelled(() => {
-            void run.cancel({ kind: "user" });
+          ctx.token.onCancelled((reason) => {
+            // A shutdown moves no job state (the run's own token stops it).
+            if (reason.kind !== "shutdown") void run.cancel({ kind: "user" });
           }),
         );
         const outcome = await run.result;
@@ -1846,9 +2022,16 @@ export function createTrendReportPipeline(
           }),
         ]),
       );
+      // Each theme is kept the moment it is analysed (`onThemeAnalysed`), for
+      // this run and in its `cr` entry, so "continue" after a budget pause
+      // re-sends only the themes not yet analysed — with the cache off too
+      // (`plan/00` §6 item 322(e), P4-T18 finding 3; DECIDED 2026-11-01,
+      // coordinator, under item 313).
+      const keptThemes = new Map<string, AnalysedTheme>();
       const analysis = await synthesisStage("Analysing", async () => {
-        const fromCache = new Map<string, AnalysedTheme>();
+        const fromCache = new Map<string, AnalysedTheme>(keptThemes);
         for (const theme of clustered.clustering.themes) {
+          if (fromCache.has(theme.themeId)) continue;
           const hit = await cached<AnalysedTheme>(
             crKeys.get(theme.themeId) as SynthesisKey,
           );
@@ -1880,20 +2063,21 @@ export function createTrendReportPipeline(
               includeBodies,
               logger: ctx.logger,
               traceId: `${jobId}:theme`,
+              onThemeAnalysed: async (theme) => {
+                keptThemes.set(theme.themeId, theme);
+                themesDone += 1;
+                show();
+                await remember(
+                  crKeys.get(theme.themeId) as SynthesisKey,
+                  theme,
+                );
+              },
             },
           );
           usages.push(outcome.usage);
           fresh = outcome.themes;
           freshPasses = outcome.passes;
           freshPrompts = outcome.prompts;
-          for (const result of fresh) {
-            if (result.status === "analysed") {
-              await remember(
-                crKeys.get(result.themeId) as SynthesisKey,
-                result,
-              );
-            }
-          }
         }
         const freshById = new Map(fresh.map((r) => [r.themeId, r]));
         const themes = clustered.clustering.themes.map(
@@ -2204,9 +2388,20 @@ export function createTrendReportPipeline(
       await deps.queue.succeed(jobId, { kind: "report", key: trendReport.id });
       return finish("succeeded", {
         report: trendReport,
+        noteHtml: html,
         ...(note !== undefined && { note }),
       });
     } catch (error) {
+      if (ctx.token.reason?.kind === "shutdown") {
+        // The plugin is shutting down (`P4-T20` step 0c): the record is left
+        // `running` or `paused`, with its checkpoint and every paid-for
+        // result, for `recover()` at the next start; nothing is written to a
+        // closing database.
+        ctx.logger.info("the report run was interrupted by shutdown", {
+          stage,
+        });
+        return finish("interrupted");
+      }
       if (error instanceof StageStop) {
         ctx.logger.warn("the report run stopped before anything was written", {
           messageId: error.stop.messageId,

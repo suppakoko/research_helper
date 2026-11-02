@@ -2,12 +2,12 @@
  * The trend report's "Export as Markdown" (`P4-T15`; `docs/06` §14.3,
  * `docs/08` §6.3).
  *
- * **Callers.** Nothing calls this module yet. The Export action of the report
- * window's view model (`src/ui/viewModels/reportViewModel.ts`, `P4-T20`)
- * calls {@link exportReportMarkdown} with the path its window document chose
- * and the {@link ReportFileWriter} that `src/bootstrap/registerUI.ts` binds
- * from `src/zotero/notes.ts`'s `reportFileWriter()` (`P4-T20`); the window
- * suggests {@link reportExportFileName} in its save dialog. A `ko` report's
+ * **Callers.** The report window's host (`createReportWindowSession` in
+ * `src/bootstrap/registerUI.ts`, `P4-T20`) calls {@link exportReportMarkdown}
+ * with the path its window document chose and `src/zotero/notes.ts`'s
+ * `reportFileWriter()`, {@link renderReportMarkdown} for the preview's final
+ * text and for Copy, and {@link reportExportFileName} for the save dialog's
+ * suggested name. A `ko` report's
  * caller passes `P4-T12`'s `reportLabels.ts` label as
  * {@link ReportExportLabels.retractedHeading} (`P4-T21`). Pure functions and
  * one port, so nothing constructs this module.

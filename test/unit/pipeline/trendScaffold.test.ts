@@ -1462,8 +1462,13 @@ describe("reportLabels.ts", () => {
       expect(EN_REPORT_LABELS[key as ReportLabelKey], key).toBe(en);
       expect(KO_REPORT_LABELS[key as ReportLabelKey], key).toBe(ko);
     }
-    expect(Object.keys(KO_REPORT_LABELS)).toHaveLength(137);
-    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual(["critiqueTextUnchecked"]);
+    expect(Object.keys(KO_REPORT_LABELS)).toHaveLength(138);
+    // The line added after that review (item 317(c)), approved by the owner
+    // as item 324(c) on 2026-11-01 (G-41), byte for byte.
+    expect(KO_REPORT_LABELS.critiqueTextUnchecked).toBe(
+      "일부 문단은 자동 검토를 거치지 않았습니다. 그 문단이 인용한 요약이 너무 길어 한 번의 검토 요청으로 보낼 수 없었기 때문입니다.",
+    );
+    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual([]);
   });
 
   it("gives a ko report its approved Korean and English for every pending label", () => {

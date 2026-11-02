@@ -38,7 +38,6 @@ import {
 } from "../../src/ui/menus/toolsMenu";
 import { SUMMARIZE_WINDOW_NAME_PREFIX } from "../../src/ui/dialogs/summarizeDialog";
 import { REPORT_WINDOW_NAME_PREFIX } from "../../src/ui/panes/reportWindow";
-import { qualifiedPrefName } from "../../src/zotero/prefStore";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -269,13 +268,6 @@ function openSummarizeWindowCount(): number {
   return openWindowCount(SUMMARIZE_WINDOW_NAME_PREFIX);
 }
 
-/**
- * The hidden `report.enabled` preference (owner, `plan/00` §6 item 307(d)):
- * the report window opens only while it is on, so this spec turns it on to
- * open one and restores it straight after.
- */
-const REPORT_ENABLED_PREF = qualifiedPrefName("report.enabled");
-
 async function assertEveryWindow(
   expected: ToolsMenuCount & { readonly fluentLinks: number },
   when: string,
@@ -328,19 +320,7 @@ describe("lifecycle (FR-56)", function () {
     if (!reportWindows) {
       assert.fail("registerUI() published no api.reportWindow");
     }
-    // Item 307(d): the opener refuses while report.enabled is off, so turn it
-    // on for the open and put it back straight after.
-    const savedEnabled: unknown = Zotero.Prefs.get(REPORT_ENABLED_PREF, true);
-    try {
-      Zotero.Prefs.set(REPORT_ENABLED_PREF, true, true);
-      reportWindows.open(Zotero.getMainWindow(), 2_000_000_001);
-    } finally {
-      if (typeof savedEnabled === "boolean") {
-        Zotero.Prefs.set(REPORT_ENABLED_PREF, savedEnabled, true);
-      } else {
-        Zotero.Prefs.clear(REPORT_ENABLED_PREF, true);
-      }
-    }
+    reportWindows.open(Zotero.getMainWindow(), 2_000_000_001);
     await waitUntil(
       () => openReportWindowCount() === 1,
       "the report window to open",

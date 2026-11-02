@@ -552,7 +552,8 @@ Two concrete hazards make that more than a style preference:
 > preference `report.enabled` (`07-architecture-and-data-model.md` §8.5), default `false`: while it is
 > off the entry is not created and the window's opener opens nothing, so the submenu starts with
 > "Summarize All Papers in Collection". `P4-T20` removes the preference, or turns it on, once a report
-> can be generated.
+> can be generated. *Removed 2026-11-02 (`P4-T20`): the entry is created again, first in the submenu, and
+> the opener always opens the window.*
 >
 > **Decided 2026-10-29 (owner, `plan/00` §6 item 307(e)):** the summarize window, like the report
 > window, is closed at plugin shutdown (`publishSummarizeCommands` in `src/bootstrap/registerUI.ts`);
@@ -1412,6 +1413,16 @@ Stage 4  Deliver      → Save as note | Save as Markdown | Generate audio
 
 Stages 1–3 are one cancellable job. Stage 4 is a set of independent user actions on the finished report.
 
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286); written here 2026-11-02 by `P4-T20`.** Stage 3 above
+> is not one call: under `06-summarization-and-trend-report.md` §8 the synthesis is hierarchical (clustering,
+> per-theme analysis, one report call, the self-critique), and a critique rewrite can replace what was
+> streamed. **The first draft streams into the preview labelled "draft" and is replaced by the final text when
+> the critique stage ends.** The window drives the job through its host (`createReportWindowSession` in
+> `src/bootstrap/registerUI.ts`, over the job queue); it calls no adapter (`07-architecture-and-data-model.md`
+> §2.3). The window's six stage rows are: read the collection and estimate the cost; summaries (new, from the
+> cache, to make, failed); themes (done of K); write the report; review the draft (with the revision round);
+> add tables and references and save.
+
 ### 6.2 Streaming preview
 
 Streaming uses `fetch` + `ReadableStream` from the plugin sandbox, with the chunks pushed into the dialog's DOM (see `01-zotero-plugin-platform.md` §8.4 for the generator and its caveats).
@@ -1440,6 +1451,19 @@ try {
 ```
 
 Two performance notes: re-parsing Markdown on every token will pin the UI thread, so paint raw text during the stream and render formatted output once on completion (or throttle re-render to `requestIdleCallback`). And keep the preview scrolled to the bottom only while the user has not scrolled up themselves — a jumping viewport is the most common complaint about streaming UIs.
+
+> **Decided 2026-10-26 (owner, `plan/00` §6 item 286); as built 2026-11-02 (`P4-T20`; `reduceReportRun` in
+> `src/ui/viewModels/reportViewModel.ts`, `renderPreview` in `addon/content/reportWindow.js`).** The code above
+> is the shape of the paint only: the window never calls `RH.llm.streamReport`, which `07-…` §2.3 forbids, and
+> `AbortController` is absent in the sandbox; Cancel fires the job's cancellation token through the host. Each
+> `DraftDelta` is appended as raw text to one text node. A second generation, or a critique rewrite
+> (`rewrite-started`), starts the text again; a rewrite that could not be applied puts the kept draft back
+> (`rewrite-not-applied`, item 314(c)). When the critique stage ends the text is the final text and its label
+> changes; when the report is saved the text is replaced, once, by what the export writes (numeric markers, no raw
+> `[[KEY]]`). DECIDED 2026-11-02 (coordinator, under item 313): **the final text stays plain text**, because the
+> note is the formatted rendering and no Markdown parser is added to the window. `aria-live` is set only when
+> no more deltas follow (§9). A stop, a cancel or a failure clears the preview and says "The draft was discarded;
+> nothing was saved." A report served whole from its cache entry streams nothing and shows only the final text.
 
 **If streaming is unavailable** (see the unverified caveat in `01-zotero-plugin-platform.md` §8.4), the same window shows a determinate-less progress bar with "Writing report…" and paints the whole document on arrival. The delivery options in Stage 4 are identical either way.
 
@@ -1470,6 +1494,8 @@ const base = `${safeBaseName(collection.name)} — trends ${new Date().toISOStri
 > **Decided 2026-10-26 (owner, `plan/00` §6 item 286; written here 2026-10-27 by `P4-T15`).** In v1, **"Save as Markdown" writes a file the user places** through a native save dialog. It is **not** an attachment on the report note: the `importFromFile` variant above waits in the backlog with the `.html` export (`plan/00` §6 item 287(c); `06-summarization-and-trend-report.md` §14.3 D-06-10), so "All three 'save' paths attach to a single report note" holds for the note and audio only. The file holds numeric `[n]` markers and DOI links, never `zotero://` links (`06-…` §14.3).
 
 > **Decided 2026-10-27 (`P4-T15`; `safeBaseName` and `reportExportFileName` in `src/pipeline/trendReport/exportMarkdown.ts`).** The save dialog's suggested name is `safeBaseName(collectionName)` + ` — trends ` + the date + `.md`. Three readings of the sketch above: (1) **the date is the report's generation date** (`TrendReport.generatedAtEpochMs`, UTC, as `toISOString` gives it), not the moment of export, so a report exported twice suggests one name; (2) **the 80-character cap counts code points**, not UTF-16 units, so a name is never cut inside a surrogate pair; (3) **the name is trimmed again after the cap**, so a cut never leaves a trailing space. The character class, the whitespace collapse and the `"report"` fallback are the sketch's, unchanged. The dialog itself is opened by the report window document and the chosen path handed inward (`P4-T20`), as `P1-T36` measured for FR-8's JSON export.
+
+> **As built 2026-11-02 (`P4-T20`; `settleReportNote` and `buildReportRunModel` in `src/ui/viewModels/reportViewModel.ts`).** Readings DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313): (1) **The run writes the note itself** when `report.saveNote` is on (`07-…` §12.4 reading 9), so the window's "Save as note" is enabled only when `report.saveNote` is on, the library is editable and that write did not happen: the named-group question was answered "no", or the write failed. With the setting off the button stays disabled, as `plan/07` `P4-T20` step 4 says; Export and Copy remain. (2) **A group library** is asked by name after the report is stored and before any note is written; "no" writes nothing (`G-25` holds the real-group check). (3) **The window says what became of the note**: saved, not writable, collection gone, not saved in the group, or setting off. (4) **Copy** takes the text the export writes, and the window script puts it on the clipboard with `Zotero.Utilities.Internal.copyTextToClipboard` (`src/` outside `zotero/` may not name `Zotero`). (5) The wireframe's Regenerate, Audio and checkboxes are not built: Generate can simply be pressed again, and audio is Phase 6's.
 
 ### 6.4 Wireframes
 
@@ -1524,6 +1550,16 @@ const base = `${safeBaseName(collection.name)} — trends ${new Date().toISOStri
 > line, the language selector, the model line and Close. Generate, the stage rows, the streamed
 > preview, Cancel and the delivery buttons are `P4-T20`'s, which drives the job through the window's
 > host (`plan/07` `P4-T20`).
+
+> **As built 2026-11-02 (`P4-T20`).** The shell above gained Generate and Cancel, the stage line and six rows,
+> the spend so far, a question box asked in place (continue or stop; the group's name; a paused job's reason),
+> the preview with its label, the outcome and the three delivery buttons. **Lines the main-window bundle owns**
+> (a stop's reason with its arguments, the wall-clock pause, the skipped-dialog cost line) reach the window as
+> text the host formatted, because a window's `<linkset>` names its own bundle only (§10.1). DECIDED 2026-11-02
+> (coordinator, under `plan/00` §6 item 313). **One window per collection** is now the host's rule too: a
+> window still open is raised with no second `openDialog`, which on a named window would load the document
+> again, unload it and cancel its run. When the window opens, a run of its collection resumed after a restart
+> attaches to it and a job left paused asks there (owner, item 324(a); `07-…` §12.4's note of 2026-11-02).
 
 **Stage 3, streaming**
 

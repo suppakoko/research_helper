@@ -22,7 +22,8 @@
  *   invalid-citation text "[인용 삭제: 잘못된 참조]" (owner, 2026-10-27,
  *   `plan/00` §6 item 292(b)), and since 2026-11-01 the 136 labels of
  *   `plan/reports/ko-draft-report-labels.tsv`, byte for byte (owner, `G-41`,
- *   item 319). A Korean label may place its placeholders in another order.
+ *   item 319), and `critiqueTextUnchecked` (owner, `G-41`, item 324(c),
+ *   2026-11-01). A Korean label may place its placeholders in another order.
  * - Every other key is on {@link KO_REPORT_LABELS_PENDING_REVIEW}: a `ko`
  *   report shows its English until the coordinator drafts the Korean and the
  *   owner approves it in chat (`G-41`'s rule, applied to report text by
@@ -421,6 +422,10 @@ export const KO_REPORT_LABELS: Readonly<
   problemMissingContradiction: "빠뜨린 상충",
   problemAbstractOverreach: "초록이 뒷받침하는 것보다 많이 주장함",
   problemBrokenCitation: "잘못된 인용",
+  // Korean drafted by the coordinator and reviewed by the owner on 2026-11-01
+  // (G-41, plan/00 §6 item 324(c)), inserted byte for byte.
+  critiqueTextUnchecked:
+    "일부 문단은 자동 검토를 거치지 않았습니다. 그 문단이 인용한 요약이 너무 길어 한 번의 검토 요청으로 보낼 수 없었기 때문입니다.",
 });
 
 /**
@@ -431,11 +436,11 @@ export const KO_REPORT_LABELS: Readonly<
  * {@link KO_REPORT_LABELS}.
  */
 export const KO_REPORT_LABELS_PENDING_REVIEW: readonly ReportLabelKey[] =
-  Object.freeze([
-    // Added after the owner's review of item 319 (2026-11-01): Appendix B's
-    // line for critique_text_unchecked (coordinator, item 317(c)).
-    "critiqueTextUnchecked",
-  ] as const satisfies readonly ReportLabelKey[]);
+  Object.freeze(
+    // Empty since 2026-11-01: `critiqueTextUnchecked`, added after item 319's
+    // review, was approved by the owner (G-41, plan/00 §6 item 324(c)).
+    [] as const satisfies readonly ReportLabelKey[],
+  );
 
 // ---------------------------------------------------------------------------
 // 3. Study-design labels

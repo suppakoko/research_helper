@@ -876,6 +876,34 @@ export const REPORT_WINDOW_MESSAGE_IDS = [
   "research-helper-report-model",
   "research-helper-report-model-none",
   "research-helper-report-close",
+  // P4-T20: the run — its buttons, stage line and rows, spend, preview label,
+  // outcome, note and delivery results, the group question, the key pause and
+  // a paused job's question (docs/08 §6.1–§6.4's notes of 2026-11-01).
+  "research-helper-report-generate",
+  "research-helper-report-cancel",
+  "research-helper-report-save-note",
+  "research-helper-report-export",
+  "research-helper-report-copy",
+  "research-helper-report-continue",
+  "research-helper-report-stop",
+  "research-helper-report-group-save",
+  "research-helper-report-group-skip",
+  "research-helper-report-stage",
+  "research-helper-report-row-reading",
+  "research-helper-report-row-summaries",
+  "research-helper-report-row-themes",
+  "research-helper-report-row-writing",
+  "research-helper-report-row-review",
+  "research-helper-report-row-finishing",
+  "research-helper-report-spend",
+  "research-helper-report-preview-label",
+  "research-helper-report-outcome",
+  "research-helper-report-note",
+  "research-helper-report-group-question",
+  "research-helper-report-export-outcome",
+  "research-helper-report-copied",
+  "research-helper-report-key-needed",
+  "research-helper-report-paused-job",
 ] as const satisfies readonly FluentMessageId[];
 
 export type ReportWindowMessageId = (typeof REPORT_WINDOW_MESSAGE_IDS)[number];
@@ -1086,11 +1114,9 @@ export const KO_PENDING_REVIEW = [
   // owner approved the coordinator's Korean (`G-41`, plan/00 §6 item 312(a)),
   // so it is on KO_PRESENT.
   // `P4-T18`'s two report stops (more than 30 % of the papers failed; no
-  // paper to analyse). `G-41` owns the translation; the `ko-KR` bundle
-  // carries each as a commented stub with its English source, and nothing was
-  // machine-translated.
-  "research-helper-report-stopped-papers-failed",
-  "research-helper-report-stopped-no-papers",
+  // paper to analyse) left this list on 2026-11-01: the owner approved the
+  // coordinator's Korean (`G-41`, plan/00 §6 item 324(c)), so both are on
+  // KO_PRESENT.
   // --- searchDialog (62) ---
   // `P1-T45`. On this list and not on `KO_PRESENT`: the `ko-KR` bundle carries
   // all three as commented stubs with their English source, which the
@@ -1110,10 +1136,38 @@ export const KO_PENDING_REVIEW = [
   // `P3-T28`'s fifteen item-pane section strings (plan/00 §6 item 302) left
   // this list on 2026-10-29: the owner approved the coordinator's Korean
   // (`G-41`, plan/00 §6 item 304), so all fifteen are on KO_PRESENT.
-  // --- reportWindow (10) ---
+  // --- reportWindow (10, then P4-T20's 25) ---
   // `P4-T19`'s report window (plan/00 §6 item 306(b)) left this list on
   // 2026-10-29: the owner approved the coordinator's Korean (`G-41`,
   // plan/00 §6 item 307(f)), so all ten are on KO_PRESENT.
+  // `P4-T20`'s run (2026-11-01). `G-41` owns the translation; the `ko-KR`
+  // bundle carries each as a commented stub with its English source, and
+  // nothing was machine-translated.
+  "research-helper-report-generate",
+  "research-helper-report-cancel",
+  "research-helper-report-save-note",
+  "research-helper-report-export",
+  "research-helper-report-copy",
+  "research-helper-report-continue",
+  "research-helper-report-stop",
+  "research-helper-report-group-save",
+  "research-helper-report-group-skip",
+  "research-helper-report-stage",
+  "research-helper-report-row-reading",
+  "research-helper-report-row-summaries",
+  "research-helper-report-row-themes",
+  "research-helper-report-row-writing",
+  "research-helper-report-row-review",
+  "research-helper-report-row-finishing",
+  "research-helper-report-spend",
+  "research-helper-report-preview-label",
+  "research-helper-report-outcome",
+  "research-helper-report-note",
+  "research-helper-report-group-question",
+  "research-helper-report-export-outcome",
+  "research-helper-report-copied",
+  "research-helper-report-key-needed",
+  "research-helper-report-paused-job",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -1510,6 +1564,12 @@ export const KO_PRESENT = [
   // (`G-41`, plan/00 §6 item 312(a)), inserted byte for byte from
   // plan/reports/ko-review-312.ftl.
   "research-helper-report-stopped-structure-invalid",
+  // `P4-T18`'s two report stops: Korean drafted by the coordinator and
+  // reviewed by the owner on 2026-11-01 (`G-41`, plan/00 §6 item 324(c)),
+  // inserted byte for byte as the item records it; one word of papers-failed
+  // amended by the owner on 2026-11-02 (item 326(c)).
+  "research-helper-report-stopped-papers-failed",
+  "research-helper-report-stopped-no-papers",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -1796,6 +1856,25 @@ export interface FluentMessageArgsMap {
   // name, neither translated (docs/08 §10.3).
   "research-helper-report-collection": { name: string; count: number };
   "research-helper-report-model": { model: string; provider: string };
+  // P4-T20. Every `$stage`, `$state`, `$outcome` and `$reason` is a
+  // token, selected on and never displayed.
+  "research-helper-report-stage": { stage: string };
+  "research-helper-report-row-summaries": {
+    made: number;
+    cached: number;
+    toMake: number;
+    failed: number;
+  };
+  "research-helper-report-row-themes": { done: number; total: number };
+  "research-helper-report-row-review": { round: number };
+  "research-helper-report-spend": { cost: string };
+  "research-helper-report-preview-label": { state: string };
+  "research-helper-report-outcome": { outcome: string };
+  "research-helper-report-note": { state: string };
+  "research-helper-report-group-question": { group: string };
+  "research-helper-report-export-outcome": { outcome: string };
+  "research-helper-report-key-needed": { provider: string };
+  "research-helper-report-paused-job": { reason: string };
 }
 
 /**
@@ -1941,9 +2020,21 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-search-screening-cost",
   "research-helper-search-screening-cost-unpriced",
 
-  // reportWindow (2, P4-T19)
+  // reportWindow (2, P4-T19; then P4-T20's 12)
   "research-helper-report-collection",
   "research-helper-report-model",
+  "research-helper-report-stage",
+  "research-helper-report-row-summaries",
+  "research-helper-report-row-themes",
+  "research-helper-report-row-review",
+  "research-helper-report-spend",
+  "research-helper-report-preview-label",
+  "research-helper-report-outcome",
+  "research-helper-report-note",
+  "research-helper-report-group-question",
+  "research-helper-report-export-outcome",
+  "research-helper-report-key-needed",
+  "research-helper-report-paused-job",
 ] as const satisfies readonly (keyof FluentMessageArgsMap)[];
 
 /**

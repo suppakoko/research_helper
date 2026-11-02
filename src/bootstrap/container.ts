@@ -190,6 +190,7 @@ import { buildUserAgent } from "../core/http/userAgent";
 import {
   createCancellationTokenSource,
   type CancellationToken,
+  type CancellationTokenSource,
 } from "../core/jobQueue/cancellation";
 import type { JobRecord } from "../core/jobQueue/jobRecord";
 import {
@@ -263,7 +264,12 @@ import {
   createJobNoticeRouter,
   type JobNoticeRouter,
 } from "../pipeline/summarize/summarizePipeline";
-import { remainingFromCheckpoint } from "../pipeline/trendReport/trendReportPipeline";
+import {
+  createDeferredTrendReportSurface,
+  remainingFromCheckpoint,
+  type DeferredTrendReportSurface,
+  type TrendReportOutput,
+} from "../pipeline/trendReport/trendReportPipeline";
 import type {
   ConfigReader,
   LLMRouter,
@@ -1001,6 +1007,158 @@ export interface ServiceGraph {
    * visible "jobs resumed" notice through `setResumedNotice`.
    */
   readonly jobNotices: JobNoticeRouter;
+  /**
+   * The trend-report jobs `recover()` re-queued and `installServices` is
+   * running with no window (`P4-T20` step 0c; owner, `plan/00` §6 item
+   * 324(a)): the report window's session finds its collection's run here and
+   * attaches to it, so a pause waiting since the restart is asked when the
+   * window opens.
+   */
+  readonly resumedReports: ResumedReportRuns;
+}
+
+/** One trend-report job resumed after a restart and running with no window. */
+export interface ResumedReportRun {
+  readonly jobId: string;
+  readonly libraryID: number;
+  readonly collectionKey: string;
+  /** The run's surface: `attach` a window to it. */
+  readonly surface: DeferredTrendReportSurface;
+  /** The window's Cancel: a user cancel of this run. */
+  cancel(): void;
+}
+
+/** {@link ServiceGraph.resumedReports}. */
+export interface ResumedReportRuns {
+  /** The collection's resumed run still going, if any. */
+  find(libraryID: number, collectionKey: string): ResumedReportRun | undefined;
+}
+
+/** What {@link createResumedJobRunner} needs; each is read when a job runs. */
+export interface ResumedJobRunnerDeps {
+  readonly jobs: () => Pick<JobQueue, "get">;
+  readonly pipelines: () => Pick<PipelineRegistry, "list">;
+  readonly openJob: (options: QueuedPipelineJobOptions) => Promise<PipelineJob>;
+  readonly logger: Logger;
+}
+
+/** {@link createResumedJobRunner}'s handle. */
+export interface ResumedJobRunner extends ResumedReportRuns {
+  /** Run a job `recover()` re-queued; not awaited (`installServices`' note). */
+  run(jobId: string): void;
+  /** A running job's deferred surface: `TrendReportPipelineDeps.surfaces`. */
+  surfaceOf(jobId: string): DeferredTrendReportSurface | undefined;
+  /** Cancel every run as a shutdown and wait for each to end. */
+  stopAll(): Promise<void>;
+}
+
+/**
+ * The runner of the jobs `recover()` re-queues (`P4-T18` step 6; changed
+ * 2026-11-01 by `P4-T20` step 0c — owner, `plan/00` §6 item 324(a); item
+ * 322(e)). Each job runs through `Pipeline.run` in its record's context, on
+ * its own cancellation source, with a {@link DeferredTrendReportSurface}: a
+ * pause with no window open is not answered "stop" — the job stays
+ * `paused`, keeps its checkpoint and every paid-for result, and the question
+ * waits for the report window, which finds the run with
+ * {@link ResumedReportRuns.find} and attaches to it.
+ * {@link ResumedJobRunner.stopAll} (plugin teardown) cancels each run's token
+ * with `{ kind: "shutdown" }` — the pipeline then leaves the record for
+ * `recover()` — and waits for every run to end, so none goes on against a
+ * closing database.
+ *
+ * Constructed by `installServices`, which calls `run` from the queue's
+ * `resumed` notice, hands `surfaceOf` to `buildPipelineSet` as the
+ * trend-report pipeline's `surfaces`, publishes the runner as
+ * {@link ServiceGraph.resumedReports}, and calls `stopAll` in its teardown.
+ */
+export function createResumedJobRunner(
+  deps: ResumedJobRunnerDeps,
+): ResumedJobRunner {
+  const runs = new Map<string, ResumedReportRun>();
+  const live = new Map<CancellationTokenSource, Promise<void>>();
+  let stopping = false;
+
+  return {
+    run(jobId) {
+      if (stopping) return;
+      const source = createCancellationTokenSource();
+      const running = (async () => {
+        const record = await deps.jobs().get(jobId);
+        if (record?.status !== "queued") return;
+        const pipeline = deps
+          .pipelines()
+          .list()
+          .find((candidate) => candidate.id === record.pipelineId);
+        if (pipeline === undefined || !pipeline.resumable) return;
+        const input = record.input as {
+          readonly libraryID?: unknown;
+          readonly collectionKey?: unknown;
+        };
+        const collection =
+          typeof input.libraryID === "number" &&
+          typeof input.collectionKey === "string"
+            ? { libraryID: input.libraryID, collectionKey: input.collectionKey }
+            : undefined;
+        if (source.token.isCancellationRequested) return;
+        const surface = createDeferredTrendReportSurface(source.token);
+        runs.set(record.id, {
+          jobId: record.id,
+          libraryID: collection?.libraryID ?? 0,
+          collectionKey: collection?.collectionKey ?? "",
+          surface,
+          cancel: () => {
+            source.cancel({ kind: "user" });
+          },
+        });
+        try {
+          const job = await deps.openJob({
+            pipelineId: pipeline.id,
+            token: source.token,
+            record,
+            ...(collection !== undefined && { collection }),
+            openOn: "completion",
+          });
+          try {
+            const output = await (pipeline as Pipeline<unknown, unknown>).run(
+              record.input,
+              job.context,
+            );
+            if (record.pipelineId === "trendReport") {
+              surface.finish(output as TrendReportOutput);
+            }
+          } finally {
+            await job.checkpoints?.flush().catch(() => undefined);
+            job.dispose();
+          }
+        } finally {
+          runs.delete(record.id);
+        }
+      })()
+        .catch((error: unknown) => {
+          deps.logger.warn("a resumed job could not be run", {
+            jobId,
+            reason: error instanceof Error ? error.name : typeof error,
+          });
+        })
+        .finally(() => {
+          live.delete(source);
+          source.dispose();
+        });
+      live.set(source, running);
+    },
+    surfaceOf: (jobId) => runs.get(jobId)?.surface,
+    find: (libraryID, collectionKey) =>
+      [...runs.values()].find(
+        (run) =>
+          run.libraryID === libraryID && run.collectionKey === collectionKey,
+      ),
+    async stopAll() {
+      stopping = true;
+      const going = [...live];
+      for (const [source] of going) source.cancel({ kind: "shutdown" });
+      await Promise.allSettled(going.map(([, running]) => running));
+    },
+  };
 }
 
 /** What {@link PipelineContextFactory.forJob} is asked for. */
@@ -2052,6 +2210,14 @@ export async function installServices(
   // `P3-T29`: the queue's `JobNotifier`, before the pipelines that register
   // for their jobs' pauses and the queue (step 8) that notifies through it.
   const jobNotices = createJobNoticeRouter();
+  // `P4-T20` step 0c: the runner of the jobs `recover()` re-queues; the
+  // queue and the context factory are built below and read when a job runs.
+  const resumedRunner = createResumedJobRunner({
+    jobs: () => jobs,
+    pipelines: () => pipelines,
+    openJob: (options) => pipelineContext.openJob(options),
+    logger,
+  });
   const pipelines = registerPipelines({
     // `http`: Strategy B's PMCID route (the NCBI ID Converter, owner
     // 2026-10-19, `plan/00` §6 item 214) goes through the one client, so
@@ -2111,6 +2277,10 @@ export async function installServices(
       },
       pluginVersion: options.version,
       utcOffsetMinutes: (atEpochMs) => -new Date(atEpochMs).getTimezoneOffset(),
+      // `P4-T20` step 0c (owner, item 324(a)): a job resumed after a restart
+      // runs on a deferred surface a report window can attach to; a pause
+      // waits for that window instead of being answered "stop".
+      surfaces: (jobId) => resumedRunner.surfaceOf(jobId),
     },
   });
   // The per-job context factory is built after step 8, because a queued
@@ -2171,56 +2341,19 @@ export async function installServices(
     },
   });
 
-  /**
-   * `P4-T18` step 6 (`plan/07` §0.2 item 18; `docs/07` §12.4): a job
-   * `recover()` re-queued — every spend guard passed and the resume notice
-   * shown — is run from its checkpoint with no second confirmation. Scheduled
-   * from the notice and not awaited: the queue saves the record as `queued`
-   * after the notice resolves, and `jobs.get` waits behind that save. With
-   * no window watching, a pause during the resumed run is answered "stop"
-   * (the headless surface; `P4-T20` may register one), which discards the
-   * synthesis and keeps the summaries.
-   */
+  // `P4-T18` step 6 (`plan/07` §0.2 item 18; `docs/07` §12.4): a job
+  // `recover()` re-queued is run from its checkpoint with no second
+  // confirmation, by {@link createResumedJobRunner} (changed 2026-11-01 by
+  // `P4-T20` step 0c: a deferred surface a window can attach to, and a
+  // shutdown cancel). Its teardown is registered after the database, so it
+  // runs first (last in, first out) and no resumed run goes on against a
+  // closing database (`plan/00` §6 item 322(e), `P4-T18` finding 5).
   const runResumedJob = (jobId: string): void => {
-    void (async () => {
-      const record = await jobs.get(jobId);
-      if (record?.status !== "queued") return;
-      const pipeline = pipelines
-        .list()
-        .find((candidate) => candidate.id === record.pipelineId);
-      if (pipeline === undefined || !pipeline.resumable) return;
-      const input = record.input as {
-        readonly libraryID?: unknown;
-        readonly collectionKey?: unknown;
-      };
-      const collection =
-        typeof input.libraryID === "number" &&
-        typeof input.collectionKey === "string"
-          ? { libraryID: input.libraryID, collectionKey: input.collectionKey }
-          : undefined;
-      const job = await pipelineContext.openJob({
-        pipelineId: pipeline.id,
-        token: createCancellationTokenSource().token,
-        record,
-        ...(collection !== undefined && { collection }),
-        openOn: "completion",
-      });
-      try {
-        await (pipeline as Pipeline<unknown, unknown>).run(
-          record.input,
-          job.context,
-        );
-      } finally {
-        await job.checkpoints?.flush().catch(() => undefined);
-        job.dispose();
-      }
-    })().catch((error: unknown) => {
-      logger.warn("a resumed job could not be run", {
-        jobId,
-        reason: error instanceof Error ? error.name : typeof error,
-      });
-    });
+    resumedRunner.run(jobId);
   };
+  scope.defer("resumed trend-report runs (P4-T20)", () =>
+    resumedRunner.stopAll(),
+  );
   // The `job` store on the one connection, then §7.6's startup recovery —
   // both once the migrations are done, neither awaited by startup.
   database.attachJobs(jobs);
@@ -2304,6 +2437,7 @@ export async function installServices(
     collectionSettings,
     modelPrices,
     jobNotices,
+    resumedReports: resumedRunner,
   };
 }
 

@@ -15,15 +15,13 @@
  * - `addon/content/reportWindow.js` (the window) calls the session through
  *   `window.arguments[0]`.
  *
- * ## What is not here yet, and who adds it
+ * ## The run (`P4-T20`, 2026-11-02)
  *
- * The window is the **shell**: the collection line, the per-run language
- * selector (starting on `reportLanguage`), the resolved report model as text
- * and Close. Starting the job, the stage rows, the streamed preview, Cancel
- * and the delivery buttons are `P4-T20`'s, which adds them to
- * {@link ReportWindowSession} through `registerUI.ts`'s report window host;
- * the job itself is `P4-T18`'s trend-report pipeline. Nothing here runs a
- * job, and no window is modal (`P4-T19` Do NOT).
+ * The window draws `../viewModels/reportViewModel.ts`'s model and calls
+ * {@link ReportWindowSession}: start, cancel, the delivery actions. The job is
+ * `P4-T18`'s trend-report pipeline, driven on the privileged side by
+ * `createReportWindowSession` in `registerUI.ts`, through the job queue;
+ * nothing here runs a job, and no window is modal (`P4-T19` Do NOT).
  *
  * Like `../dialogs/summarizeDialog.ts`, this takes the host window as a
  * parameter: `src/ui/**` may not name the `Zotero` global nor import
@@ -32,6 +30,13 @@
 
 import { config } from "../../../package.json";
 import type { ReportWindowMessageId } from "../../i18n/keys";
+import type {
+  ReportLanguageChoice,
+  ReportQuestion,
+  ReportWindowLineOut,
+  ReportWindowRunModel,
+} from "../viewModels/reportViewModel";
+import { REPORT_RUN_L10N } from "../viewModels/reportViewModel";
 
 // ===========================================================================
 // 1. Strings and window constants
@@ -53,6 +58,8 @@ export const REPORT_WINDOW_L10N = {
   model: "research-helper-report-model",
   modelNone: "research-helper-report-model-none",
   close: "research-helper-report-close",
+  // `P4-T20`: the run's ids (`reportViewModel.ts`).
+  ...REPORT_RUN_L10N,
 } as const satisfies Record<string, ReportWindowMessageId>;
 
 /** The document the window loads (`addon/content/reportWindow.xhtml`). */
@@ -172,14 +179,50 @@ export function buildReportWindowModel(
 // 3. The window and its session
 // ===========================================================================
 
+/** The window side, which the session calls. */
+export interface ReportWindowSink {
+  /** Draw this model. Must not throw. */
+  render(model: ReportWindowRunModel): void;
+  /** Ask in place: the first button answers "resume", the second "cancel". */
+  ask(
+    question: ReportQuestion<ReportWindowLineOut>,
+  ): Promise<"resume" | "cancel">;
+}
+
 /**
  * The privileged side, which the window calls (`window.arguments[0].session`).
- * `P4-T20` adds the run's members (start, cancel, delivery).
+ * Built by `createReportWindowSession` in `src/bootstrap/registerUI.ts`.
  */
 export interface ReportWindowSession {
   /** What the window draws on open. */
   describe(): Promise<ReportWindowModel>;
-  /** The window is closing. */
+  /**
+   * The window is ready. A run of this collection resumed after a restart
+   * attaches here, and a job left paused asks its question here (owner,
+   * `plan/00` §6 item 324(a)).
+   */
+  attach(sink: ReportWindowSink): Promise<void>;
+  /** Run once, in the language chosen; resolves when the run has ended. */
+  start(
+    options: { readonly language: ReportLanguageChoice },
+    sink: ReportWindowSink,
+  ): Promise<void>;
+  /** Cancel the run: the report is discarded, every summary made is kept. */
+  cancel(): void;
+  /** "Save as note": the named-group question first, in a group library. */
+  saveNote(): Promise<void>;
+  /** The save dialog's suggested name, once a report is stored. */
+  exportFileName(): string | undefined;
+  /** "Export Markdown", to a path the user chose; never kept or logged. */
+  exportMarkdown(path: string): Promise<void>;
+  /** The text "Copy" puts on the clipboard, once a report is stored. */
+  copyText(): string | undefined;
+  /** The window put {@link copyText}'s text on the clipboard. */
+  copied(): void;
+  /**
+   * The window is closing: a run it started is cancelled; a resumed run or a
+   * paused job goes on waiting for the next window.
+   */
   closed(): void;
 }
 

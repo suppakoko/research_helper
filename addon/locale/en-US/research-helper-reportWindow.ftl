@@ -68,3 +68,117 @@ research-helper-report-model-none = No report model is set. Choose an AI provide
 
 research-helper-report-close =
     .label = Close
+
+## P4-T20: the run (docs/08 §6.1–§6.4 and their notes of 2026-11-01). The
+## stage rows, the streamed preview's label, the outcome, the delivery buttons
+## and their results. Lines the main window already owns (a stop's reason, the
+## wall-clock pause, the skipped-dialog cost line) are formatted from that
+## bundle by the window's host and placed as text, so this window links only
+## its own file (docs/08 §10.1).
+
+research-helper-report-generate =
+    .label = Generate report
+research-helper-report-cancel =
+    .label = Cancel
+research-helper-report-save-note =
+    .label = Save as note
+research-helper-report-export =
+    .label = Export Markdown…
+research-helper-report-copy =
+    .label = Copy
+research-helper-report-continue =
+    .label = Continue
+research-helper-report-stop =
+    .label = Stop
+research-helper-report-group-save =
+    .label = Save in the group
+research-helper-report-group-skip =
+    .label = Don't save
+
+# `$stage` is a token, never displayed.
+research-helper-report-stage =
+    { $stage ->
+        [reading] Reading the collection…
+        [confirming] Waiting for your confirmation…
+        [summaries] Summarizing papers…
+        [themes] Finding and analysing themes…
+        [writing] Writing the report…
+        [reviewing] Reviewing the draft…
+        [finishing] Adding tables and references, and saving…
+        [waiting] Paused — waiting for your answer.
+       *[done] Done.
+    }
+
+## The stage rows. Each row is one stage of the run; the window marks it as
+## waiting, running or done.
+
+research-helper-report-row-reading = Read the collection and estimate the cost
+research-helper-report-row-summaries = Summaries: { $made } new and { $cached } from the cache, of { $toMake } to make; { $failed } failed
+research-helper-report-row-themes = Themes: { $done } of { $total } analysed
+research-helper-report-row-writing = Write the report
+# `$round` is 0 until the review asks for a revision.
+research-helper-report-row-review =
+    { $round ->
+        [0] Review the draft
+       *[other] Review the draft — revision { $round }
+    }
+research-helper-report-row-finishing = Add tables and references, and save
+
+# `$cost` is already formatted as US dollars.
+research-helper-report-spend = Spent so far in this run: { $cost }
+
+# `$state` is a token, never displayed.
+research-helper-report-preview-label =
+    { $state ->
+        [draft] Draft — the text may still change
+        [final] The report
+       *[discarded] The draft was discarded; nothing was saved.
+    }
+
+# `$outcome` is a token, never displayed.
+research-helper-report-outcome =
+    { $outcome ->
+        [succeeded] Report ready.
+        [cancelled] Cancelled. The report was discarded; every summary already made is kept.
+        [declined] Nothing was sent.
+        [interrupted] Zotero is closing. The run will continue from where it stopped the next time Zotero starts.
+        [unavailable] The collection or the report run is not available.
+       *[failed] The report could not be generated. Every summary already made is kept.
+    }
+
+# `$state` is a token, never displayed.
+research-helper-report-note =
+    { $state ->
+        [written] Saved as a note in this collection.
+        [export-only] This library cannot be written to, so no note was saved. Use Export Markdown or Copy.
+        [no-collection] The collection is gone, so no note was saved. Use Export Markdown or Copy.
+        [declined] Not saved in the group library.
+        [off] Not saved as a note.
+       *[failed] The note could not be saved.
+    }
+
+# `$group` is the group library's name, the user's own text.
+research-helper-report-group-question = Save this report as a note in the group library “{ $group }”? Everyone in the group will be able to read it.
+
+# `$outcome` is a token, never displayed.
+research-helper-report-export-outcome =
+    { $outcome ->
+        [written] Exported.
+        [invalid-report] The report could not be exported: its citations and references do not agree.
+       *[failed] The file could not be written.
+    }
+research-helper-report-copied = Copied to the clipboard.
+
+# `$provider` is a provider's name, not translated (docs/08 §10.3).
+research-helper-report-key-needed = No API key for { $provider } is available. Add it in Research Helper's preferences, then press Continue. Everything done so far is kept.
+
+# `$reason` is a pause reason token, never displayed.
+research-helper-report-paused-job =
+    { $reason ->
+        [budget-stop] A report run for this collection was paused at a spending limit.
+        [awaiting-confirmation] A report run for this collection was paused until you confirm what the rest will cost.
+        [egress-unacknowledged] A report run for this collection was paused until you confirm where its data is sent.
+        [credential-required] A report run for this collection was paused because no API key was available.
+        [wall-clock-budget] A report run for this collection was paused at its time limit.
+       *[other] A report run for this collection was paused.
+    } Everything it had done is kept. Continue it, or stop it?

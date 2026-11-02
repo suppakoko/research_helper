@@ -2689,6 +2689,23 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (d) `P5-T07`, `P5-T08` and `P5-T09` run next as non-build agents. The owner's recording steps (`P5-T31`) are
       relayed in chat; the owner runs them when the key is rotated (item 326(d)).
 
+330. **`P5-T19` and `P4-T20` built, 2026-11-02** (`plan/reports/P5-T19.md`, `plan/reports/P4-T20.md`). **DECIDED 2026-11-02
+    (coordinator, under item 313):**
+    - (a) Both agents' coordinator-level readings stand, as written in `docs/05` §5.5, `docs/07` §12.4 and `docs/08` §6.
+    - (b) `P5-T19`'s findings are placed in `plan/08`'s cards with dated notes. The similarity space is chosen once per
+      run from the key, and a candidate with no vector scores 0. `P5-T24` must decide how similarity and novelty differ
+      on the lexical space before it builds.
+    - (c) `P4-T20`'s finding 2 (whether a same-name `openDialog` reloads a running window) is unmeasured, and
+      `docs/08` §6.4 states it as fact. `P4-T25`'s acceptance run measures it; until then the note is read as unverified.
+    - (d) `P4-T22`'s window fix (item 327(a)) runs next, then `P4-T21`; both edit the trend-report pipeline, so in
+      sequence. `P5-T03` is the next build/Zotero owner; `P5-T02` runs beside it as a non-build agent.
+
+331. **A Semantic Scholar key was pasted into a chat answer, 2026-11-02.** It was not accepted or used, and it was passed
+    to no agent, file or preference. A count of key-shaped values found none in the working tree, the git history or the
+    memory files. The chat transcript on this machine does hold it, so the key counts as exposed: the owner is asked to
+    withdraw it and to use a new key only through the runbook in `docs/13` §3.5 or the preferences pane. `P5-T31` still
+    waits on that.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4
