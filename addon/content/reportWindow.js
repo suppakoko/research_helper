@@ -59,6 +59,8 @@ var RHReportWindow = {
     stop: "rh-report-stop-reason",
     note: "rh-report-note",
     delivery: "rh-report-delivery",
+    shownRow: "rh-report-shown-row",
+    shown: "rh-report-shown",
     saveNote: "rh-report-save-note",
     exportButton: "rh-report-export",
     copy: "rh-report-copy",
@@ -104,6 +106,7 @@ var RHReportWindow = {
     this.on(this.spec.saveNote, () => this.settle(this.callAsync("saveNote")));
     this.on(this.spec.exportButton, () => this.settle(this.exportMarkdown()));
     this.on(this.spec.copy, () => this.copy());
+    this.on(this.spec.shown, () => this.showReport());
     window.addEventListener(
       "unload",
       () => {
@@ -174,6 +177,33 @@ var RHReportWindow = {
     this.setDisabled(this.spec.exportButton, buttons.export !== true);
     this.setDisabled(this.spec.copy, buttons.copy !== true);
     this.setDisabled(this.spec.language, running);
+    this.renderReportChoice(model.reportChoice);
+  },
+
+  /** "Report shown": only when a run gave two reports (docs/08 §6.3). */
+  renderReportChoice(choice) {
+    const row = this.el(this.spec.shownRow);
+    if (row) {
+      row.hidden = !choice;
+    }
+    const list = this.el(this.spec.shown);
+    if (choice && list && list.value !== choice.shown) {
+      list.value = choice.shown;
+    }
+  },
+
+  /** The selector moved: the session redraws the preview and the buttons. */
+  showReport() {
+    const session = this.io.session;
+    const list = this.el(this.spec.shown);
+    if (!list || !session || typeof session.showReport !== "function") {
+      return;
+    }
+    try {
+      session.showReport(list.value);
+    } catch (error) {
+      this.debug("session.showReport threw", error);
+    }
   },
 
   renderRows(rows) {

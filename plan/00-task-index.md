@@ -26,9 +26,21 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 2 — Multi-source + dedup | 37 | 33.25 d | 33.25–47 d | 12–16 d (+108%) |
 | 3 — LLM + summaries | 39 | 29.50 d | 29.5–41 d | 12–15 d (+97%) |
 | **Phases 0–3** | **157** | **109.75 d** | **109.75–154 d** | 39–52 d (+111% over the top of the band) |
-| 4 — Trend report | 25 | 23.75 d | 23.75–33 d | 8–11 d (+116%) |
+| 4 — Trend report | 25 | 25.25 d | 25.25–35 d | 8–11 d (+130%) |
 | 5 — Related + recommendations | 31 | 35.75 d | 35.75–50 d | 10–14 d (+155%) |
 | 6–7 | not decomposed | — | 36–50 d ⚠ **scaled, not measured** | 17–24 d |
+
+**2026-11-02, later: `P4-T22` re-priced 0.75 → 2.25 d** (§6 item 335(g)). 0.75 d is the card as drafted, about
+0.75 d the first fix (item 327(a), which priced it at "about 0.5–0.75 d, on top of `P4-T22`'s card" and never moved the
+card), about 0.75 d the second (item 334(a), priced "0.5–1 d more on `P4-T22`, re-priced when built"). Both 0.75 figures
+are the coordinator's judgement after the fact, unmeasured. `P4-T21`'s scope also grew and its estimate is left unchanged.
+Phase 4 is **25 cards and 25.25 d**, re-read from the cards' `Estimate` rows by script; 25.25 × 1.4 = 35.35 → 35, so the
+band is 25.25–35 d (was 23.75–33). The last column is 25.25 ÷ 11 = 2.30 → +130% (it read +116%); against the scaled 16.5
+the low end is +53% (25.25 ÷ 16.5 = 1.53; it read +44%). The project total is 109.75 + 25.25 + 35.75 + 36 = **206.75 d**
+low and 154 + 35 + 50 + 50 = **289 d** high (was 205.25–287), still ≈ 10–14 months at 21 working days (206.75 ÷ 21 ≈ 9.8;
+289 ÷ 21 ≈ 13.8). The critical path P0 → P1 → P2 → P4 → P6 → P7 is 17.75 + 29.25 + 33.25 + 25.25 + 15 + 21 = **141.50**
+low and 25 + 41 + 47 + 35 + 21 + 29 = **198** high (was 140.00–196). The route P0 → P1 → P2 → P5 → P7 stays 137.00–192
+because Phase 4 is not on it, so **Phase 5's float grows from 3–4 d to 4.5–6 d**. `docs/11` §1–§2 carry the rest.
 
 **2026-11-02: Phase 5 decomposed, decided and propagated** (§6 items 318(c), 320, 321, 323 and 325;
 `plan/08`). Its **31 cards sum to 35.75 d**, re-read from the cards' `Estimate` rows by script — the
@@ -388,7 +400,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P4-T19` | Report window surface, menu entry, `reportWindow` bundle | `P4-T02` | 1.0 d |  |
 | `P4-T20` | Report window: progress, streaming preview, delivery | `P4-T15`, `P4-T18`, `P4-T19` | 1.25 d |  |
 | `P4-T21` | Korean report path end to end | `P4-T08`, `P4-T12`, `P4-T18` | 0.75 d |  |
-| `P4-T22` | 400-item scale test on the mock provider | `P4-T18` | 0.75 d |  |
+| `P4-T22` | 400-item scale test on the mock provider | `P4-T18` | 2.25 d |  |
 | `P4-T23` | Evaluation set and regression harness | `P4-T20`, `P4-T21` | 1.25 d | 🔒 |
 | `P4-T24` | Determinism check across three runs | `P4-T23` | 0.75 d | 🔒 |
 | `P4-T25` | Phase-4 acceptance run against the definition of done | `P4-T21`, `P4-T22`, `P4-T24` | 0.75 d | 🔒 |
@@ -2757,6 +2769,83 @@ the caller of what the card builds; if it does not, the caller is added with a d
       zero-context patch applied at its new line number. The next commit restores it, with nothing reworded.
     - (f) Notes for later cards are placed in `plan/08`: `P5-T14`, `P5-T16`, `P5-T18`, `P5-T20`, `P5-T21`, `P5-T24`,
       `P5-T25`, `P5-T26`.
+
+334. **`P5-T18` and `P4-T21` written; `P5-T15` proved in Zotero; 2026-11-02** (`plan/reports/P5-T18.md`, `P4-T21.md`,
+    `P5-T15-second.md`, `check-tags-nlm.md`).
+    **DECIDED 2026-11-02 (owner), each as recommended:**
+    - (a) FINDING P4-T22-2: make room at composition. Lower the report's `max_tokens` when the input needs the space, then
+      shorten analyses by dropping secondary fields, with a warning in the report. This changes report content on small
+      windows, and is estimated at 0.5–1 d more on `P4-T22`, re-priced when built.
+    - (b) NFR-8's "least recently used" is read, for the `embedding` table, as oldest by creation time, vectors of papers
+      not in the library first.
+    - (c) "Restrict to last 3 years" is not built; the year lists do the same.
+    - (d) In a `both` run where English succeeds and Korean fails, the English report is saved and the window says why
+      Korean was not written. A run the user cancels saves nothing, as before. This needs one new string.
+    - (e) Tags the user typed stay out of the profile, and automatic tags and tags spelled `MeSH:` or `arXiv:` are used.
+      `docs/09` §3 row 6 is corrected to say so.
+    - (f) G-41: `P5-T15`'s 12 strings, with the window title "Research Helper — 관련 논문" rather than the draft's
+      "리서치 헬퍼", the menu entry's tooltip "항목을 하나만 선택하면 관련 논문을 찾을 수 있습니다.", and `P4-T21`'s two strings,
+      are approved and inserted byte for byte from `plan/reports/ko-review-334.ftl`.
+
+    **DECIDED 2026-11-02 (coordinator, under item 313):**
+    - (g) `P5-T18`'s and `P4-T21`'s other readings stand, as written in `docs/05` §7.2, `docs/06`, `docs/07` §5.2, §6.6, §8.5
+      and §12.4, and `docs/08` §6.2 and §6.3.
+    - (h) `CHECK_TAGS` gains the nine period tags, after the comparison with NLM's sources (`docs/05` §7.2's note).
+    - (i) A selection with no regular item leaves Zotero's own menu separator above the hidden submenu. The plugin does not
+      own it, and it stays.
+    - (j) A job `recover()` leaves `interrupted` while waiting for the user's decision gets the same one-time notice as a
+      paused one, in `P4-T21`'s second pass, because item 332(b)'s purpose is that the user learns of it.
+    - (k) `menus.spec.ts`'s "one selector" of item 286 is about model choice: the check excludes `rh-report-shown`, which
+      appears only for two reports.
+    - (l) The next integration round runs `P5-T15`, `P5-T18`'s parked spec, `P4-T21`, `P5-T22` and the composition fix
+      together, once they have all landed; those cards commit from that round.
+
+335. **`P5-T22`, `P4-T21`'s second pass, `P4-T22`'s second fix and `P4-T23`'s steps 0–2 written; 2026-11-02**
+    (`plan/reports/P5-T22.md`, `P4-T21-second.md`, `P4-T22-fix2.md`, `P4-T23.md`).
+    **DECIDED 2026-11-02 (owner):**
+    - (a) `P5-T05` and `P5-T06` are built first from the documents, before `P5-T31`'s recordings. This is not the
+      recommended option, which was to wait. They use stand-in fixtures built from documented response shapes, each marked
+      `"synthetic": true` with a reason, and are re-checked and replaced when the owner runs `P5-T31`. The rework is
+      accepted. No agent records, by key or by the anonymous pool (item 320(a)).
+    - (b) `G-23` uses collections the owner already has, written through a page, as recommended:
+      https://claude.ai/artifact/Lz2JAxGnCVUFuRJV8yiYcp (database collection `expected-themes`, document id = set id). The
+      page's bookkeeping members `pageNextId` and `pageDrafts` are stripped when a document is saved as
+      `test/fixtures/trend-eval/<set>/expected-themes.json`, because the parser refuses an unknown member.
+
+    **DECIDED 2026-11-02 (coordinator, under item 313):**
+    - (c) The readings of those four reports stand, as written in `docs/12` §15 and §16, `docs/07` §4.5 and §5.2, and
+      `docs/06` §12.3. In particular `P4-T23` reads the plugin's own database file, read-only with Zotero closed.
+    - (d) A job left `interrupted` while waiting for the user uses the approved "paused" wording rather than a string of
+      its own.
+    - (e) `docs/09` §3 row 6 gains a dated note that the profile call also sends counts (`N_PAPERS`, the year range, the
+      histogram), which `P5-T22`'s finding 1 raised. They are counts over the collection, and with a sampled collection
+      they count papers whose lines were not sent.
+    - (f) The rubric's eight dimensions stay a manual score (`docs/06` §12.3): a baseline does not require them, and the
+      owner may add them. `docs/12` §17.6 and `docs/13` §2.2 are corrected to match.
+    - (g) `P4-T22` is re-priced from 0.75 d to 2.25 d, for the two fixes of items 327(a) and 334(a), about 0.75 d each by
+      judgement after the fact and unmeasured. `P4-T21`'s scope also grew and its estimate is left unchanged. Phase 4
+      becomes 25.25–35 d and the plan 206.75–289 d, through the five places `plan/README.md` §7 names.
+    - (h) The notes those reports leave for later cards are placed in `plan/07` and `plan/08`. `P5-T25` must not read a
+      stored heuristic profile as fresh when a provider now exists.
+
+    **DECIDED 2026-11-02 (owner), each as recommended:**
+    - (i) The stated minimum stands: a report model needs a window of 38 500 tokens for analyses of 2 950 tokens each, and
+      a 32 000-token window holds 2 200 each and stops at 2 300. The 40% narrative share behind those figures is an
+      assumption, and `P4-T25` measures real analysis sizes.
+    - (j) The word cap on a known output limit also applies to large windows. A model limited to 8 192 output tokens is
+      asked for at most 1 390 English words. No model in `docs/12` §10's table is affected.
+    - (k) Each call's token counts and each real analysis's size are captured before the first paid run: numbers only, no
+      content, no prompt and no answer. It is `P4-T23` step 4's data source, about 0.25–0.5 d by judgement, re-priced on
+      `P4-T23` when built.
+    - (l) `G-41`: the Korean of `research-helper-report-stopped-korean`, `research-helper-egress-profile-notice`,
+      `research-helper-recommend-profile-unusable` and the report labels `fitOutputLowered` and `fitAnalysesShortened` is
+      approved and inserted byte for byte from `plan/reports/ko-review-335.ftl`, after the integration round of item
+      334(l), so that round is not disturbed.
+
+    **Recorded 2026-11-02 (coordinator; `plan/reports/integration-round-334.md`):**
+    - (m) Item 334(l)'s round is clean: three consecutive runs of 254 passed on the final tree. Of six runs, one failed
+      `phase1-dod.spec.ts`'s limit of 100 ms on the main thread at 177 ms; the other five measured 51 to 75 ms, so it is
+      treated as an occasional timing failure and the assertion is unchanged. The two fixes were both in specs.
 
 ## 7. Regenerating this file
 

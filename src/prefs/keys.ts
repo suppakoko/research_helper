@@ -123,6 +123,8 @@ export const PREF_KEYS = {
   reportCritiqueModel: "report.critiqueModel",
   reportSaveNote: "report.saveNote",
   reportPerPaperNotes: "report.perPaperNotes",
+  // P4-T21 (owner, plan/00 §6 item 332(b)): not user-visible.
+  reportPausedNoticeShown: "report.pausedNoticeShown",
 
   // Related papers & recommendations (docs/07 §8.5; P5-T02).
   relatedLinkToSeed: "related.linkToSeed",

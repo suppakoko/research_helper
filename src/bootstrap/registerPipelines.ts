@@ -72,6 +72,10 @@ import {
 } from "../zotero/importer";
 import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
 import {
+  readCollectionWorks,
+  readLibraryTermSources,
+} from "../zotero/itemMapper";
+import {
   TRANSLATOR_FALLBACK_REASONS,
   TRANSLATOR_LOOKUP_TIMEOUT_MS,
   type PmcidResolver,
@@ -131,6 +135,7 @@ import {
   type TrendReportSurface,
 } from "../pipeline/trendReport/trendReportPipeline";
 import type { SearchRunSummary } from "../pipeline/trendReport/compose";
+import type { RecommendLibrary } from "../pipeline/recommend/profile";
 import { zoteroBibliographyPort } from "../zotero/bibliography";
 import { estTokens } from "../llm/shared/tokenEstimate";
 import type { JobQueue } from "../core/jobQueue/queue";
@@ -564,6 +569,26 @@ export function createZoteroSummarizeLibrary(
         sourceName,
       });
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 1c. The recommend pipeline's Zotero reads (`P5-T18`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The recommend profile's {@link RecommendLibrary} over Zotero. Built here for
+ * the reason {@link createZoteroSearchImportWriter} is; the reads themselves are
+ * in `src/zotero/`, because this file may not name the `Zotero` global.
+ * {@link buildPipelineSet} constructs it for `recommendPipeline.ts` (`P5-T25`);
+ * until that card, nothing calls this.
+ */
+export function createZoteroRecommendLibrary(): RecommendLibrary {
+  return {
+    readCollection: (libraryID, collectionKey) =>
+      readCollectionWorks(libraryID, collectionKey),
+    libraryTermSources: (libraryID) => readLibraryTermSources(libraryID),
+    libraryIndex: (libraryID) => buildLibraryIndex(libraryID),
   };
 }
 

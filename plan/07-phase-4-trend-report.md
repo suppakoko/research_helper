@@ -17,7 +17,8 @@
 > cards were re-estimated because a decision put work in them that no card's `Files` had priced:
 > `P4-T03` 0.75 → 1.0 d (`CLUSTER_REDUCE_MERGE` moves there from `P4-T07` and ships beside
 > `THEME_MERGE`) and `P4-T16` 1.0 → 1.25 d (the report's own egress notice). The card sum is
-> **23.75 d**, re-read from the cards by script.
+> **25.25 d**, re-read from the cards by script. *Re-priced 2026-11-02 (`plan/00` §6 item 335(g)): it was
+> **23.75 d** on this paragraph's date; `P4-T22` went 0.75 → 2.25 d (§3).*
 >
 > **What this file is.** The task-card decomposition of `docs/11-implementation-roadmap.md` §1
 > "Phase 4 — Trend report". The card schema, the field rules and the execution protocol are
@@ -83,11 +84,12 @@ that does not exist yet (§0.3). Their status on 2026-10-25, by grep of the docu
 **Risks retired.** R-7; R-6 completes here (`docs/11` §1 Phase 4 says "R-7, part of R-6"; `plan/05`
 §1 says "R-6 completes here").
 
-**Effort.** **23.75 developer-days over 25 cards** (§1), so the band these cards imply is
-**23.75–33 d** (23.75 × 1.4 = 33.25 → 33). Against `docs/11`'s former scaled 16.5–23 d the low end
-is **+44 %** (23.75 ÷ 16.5 = 1.44), above the ~30 % that `plan/README.md` §7 calls a signal to
-re-estimate the phase in `docs/11` — which was done: **propagated 2026-10-26** (§3). *(Review
-2026-10-25: was 22.5 d, 22.5–32 d, +36 %; `P4-T18` and `P4-T20` gained the composition-root wiring
+**Effort.** **25.25 developer-days over 25 cards** (§1), so the band these cards imply is
+**25.25–35 d** (25.25 × 1.4 = 35.35 → 35). Against `docs/11`'s former scaled 16.5–23 d the low end
+is **+53 %** (25.25 ÷ 16.5 = 1.53), above the ~30 % that `plan/README.md` §7 calls a signal to
+re-estimate the phase in `docs/11` — which was done: **propagated 2026-10-26** (§3). *(Re-priced
+2026-11-02, `plan/00` §6 item 335(g): was 23.75 d, 23.75–33 d, +44 %; `P4-T22` 0.75 → 2.25 d for its two
+fixes, §3. Review 2026-10-25: was 22.5 d, 22.5–32 d, +36 %; `P4-T18` and `P4-T20` gained the composition-root wiring
 their `Files` lacked. Decided 2026-10-26: was 23.25 d, 23.25–33 d, +41 %; `P4-T03` and `P4-T16`
 gained work item 286 put in them, 0.25 d each.)*
 
@@ -238,11 +240,13 @@ BUILT** marks a card with no `plan/reports/<card>.md` on 2026-10-25.
 | `P4-T19` | Report window surface, menu entry, `reportWindow` bundle | 1.0 | none |
 | `P4-T20` | Report window: progress, streaming preview, delivery | 1.25 | none |
 | `P4-T21` | Korean report path end to end | 0.75 | none |
-| `P4-T22` | 400-item scale test on the mock provider | 0.75 | none |
+| `P4-T22` | 400-item scale test on the mock provider | 2.25 | none |
 | `P4-T23` | Evaluation set and regression harness | 1.25 | **Yes** |
 | `P4-T24` | Determinism check across three runs | 0.75 | **Yes** |
 | `P4-T25` | Phase-4 acceptance run against the definition of done | 0.75 | **Yes** |
-| | **Total** | **23.75** | 3 gates |
+| | **Total** | **25.25** | 3 gates |
+
+*Re-priced 2026-11-02 (`plan/00` §6 item 335(g)): `P4-T22` read 0.75 and the total 23.75 (§3).*
 
 **Entry points** (no `Depends on`): `P4-T01`, `P4-T02`, `P4-T03`. All three are documents, rows and
 data files and can start before Phase 3 finishes; `P4-T10`, `P4-T11`, `P4-T13` and `P4-T17` follow
@@ -2599,6 +2603,18 @@ npm run typecheck && npm run test:unit -- trendKorean
 follows Zotero's locale, and `both` is read as `auto` until this card builds the two-report run, when `both` has to
 reach the pipeline instead. The host already passes the report-language retracted heading to the export.
 
+*As built 2026-11-02:* `both` reaches the pipeline as `TrendReportInput.language`; `docs/07` §12.4 readings 18 to 23
+and its Measured note of this date, and `docs/08` §6.3's notes of this date, hold what was decided. The scope grew by
+two items from the owner and coordinator: Export and Copy for two reports, and item 332(b)'s paused-job notice; both
+touched files beyond this card's list (`reportViewModel.ts`, the report window's three files, `exportMarkdown.ts`,
+`registerUI.ts`, `pluginDatabase.ts`, `src/zotero/notes.ts`, the bundles and keys, one preference and
+`src/pipeline/trendReport/pausedReportNotice.ts`). The Korean prompt text is unchanged. The estimate is not changed here.
+
+*Second pass 2026-11-02 (`plan/00` §6 item 334(d), (j), (k)):* a `both` run whose Korean report fails after planning now
+saves the English report and says why in the window (`docs/07` §12.4 readings 19 and 20); a report job left `interrupted`
+gets the notice and the window's question (reading 24); `menus.spec.ts`'s "one selector" leaves out `rh-report-shown`; and
+the notice spec now reads the label's `value`. One new string. The estimate is not changed here.
+
 ---
 
 ### P4-T22 — 400-item scale test on the mock provider
@@ -2611,7 +2627,7 @@ reach the pipeline instead. The host already passes the report-language retracte
 | **Blocks** | `P4-T25` |
 | **Retires** | none |
 | **Implements** | `FR-27` |
-| **Estimate** | 0.75 d |
+| **Estimate** | 2.25 d |
 | **Human gate** | none |
 
 **Goal.** A 400-summary collection produces a report with no context-length error and a stated pass
@@ -2672,6 +2688,19 @@ and `docs/07` §12.4's notes of this date hold the rule. **The Done-when lines p
 mock's size:** `docs/07` §12.4's FINDING P4-T22-2 gives where larger ones stop fitting a 32 000-token window, and the
 owner has that question before this card is called done.
 
+*As built 2026-11-02 (`P4-T22`, second fix; owner's option 1 on FINDING P4-T22-2).* `prepareComposition` makes room in the
+owner's order: `max_tokens` down to `REPORT_OUTPUT_FLOOR` (8 192) with `{{TARGET_WORDS}}` following (`targetWordsForOutput`),
+then `DROPPABLE_ANALYSIS_FIELDS`, then the clean `CONTEXT_LENGTH` stop before any report request. `CompositionPlan` gains
+`maxOutputTokens` and `fit`; `ComposeInput` gains `windowLimits` (set by `execute`); `SynthesisBudgets` gains `reportAtFloor`
+(read by `planSynthesis`); `OUTPUT_LOWERED_WARNING`, `ANALYSES_SHORTENED_WARNING` and the labels `fitOutputLowered` and
+`fitAnalysesShortened` are read by `scaffoldReport`. `docs/06` §8.4's and `docs/07` §12.4's notes of this date hold the rule and
+the measured minimum.
+
+*Re-priced 2026-11-02 (`plan/00` §6 item 335(g)): 0.75 → 2.25 d.* 0.75 d is the card as drafted; about 0.75 d the first
+fix (item 327(a), which priced it at "about 0.5–0.75 d, on top of `P4-T22`'s card" and never moved the card); about
+0.75 d the second fix (item 334(a), priced "0.5–1 d more on `P4-T22`, re-priced when built"). Both 0.75 figures are the
+coordinator's judgement after the fact, unmeasured. `P4-T21`'s scope also grew and its estimate is left unchanged.
+
 ---
 
 ### P4-T23 — Evaluation set and regression harness
@@ -2709,6 +2738,10 @@ a report run against them and records the score in the repository.
 - create `docs/spikes/trend-eval-baseline.md`
 - modify `docs/06-summarization-and-trend-report.md` (§12.3: expected themes, not gold reports;
   dated "Decided" note)
+
+> *Added 2026-11-02 (`plan/reports/P4-T21.md`; coordinator, under `plan/00` §6 item 313): read `TrendReportOutput.reports`, not `report`, for a `both` run, and do not add two records' `usage`, because the shared stages would count twice.*
+
+> *Added 2026-11-02 (owner, `plan/00` §6 item 335(k)): step 4's data source, which `plan/reports/P4-T23.md` finding 1 found missing, is built before `G-42`: each call's token counts, including the reasoning figure where the provider gives one, and each real theme analysis's size. Numbers only, with no content, prompt or answer, through `redactRecord` wherever it is persisted, and no API key near it. `P4-T25` reads the analysis sizes against `docs/07` §12.4's stated minimum (item 335(i)).*
 
 **Do.**
 0. **Documents first** (decided 2026-10-26, item 286): write into `docs/06` §12.3 that the
@@ -2760,6 +2793,17 @@ Then stop at `G-23`, and again at the spend.
 
 **Notes.** Needs from Phase 3: **`P3-T31` (NOT BUILT)** — a measured map phase before the first
 strong-model spend; `G-18` keys are the owner's.
+
+*As built 2026-11-02 (steps 0–2, stopped at `G-23`; `plan/reports/P4-T23.md`).* The Files row's open
+point is answered: **neither route it named.** `scripts/eval-trend-report.ts` reads the `report` table of
+the plugin's own `research-helper.sqlite` read-only, with Zotero closed, so there is no in-Zotero half and
+no new product surface; `docs/06` §12.3's notes of this date hold the reasons, the formats and the scoring.
+**Open before `G-42`, because the paid run cannot be repeated cheaply: step 4 has no source.** `Usage` holds
+no reasoning figure (`extractUsage` in `src/llm/openai/mapper.ts` takes `output_tokens` whole) and
+`TrendReport.usage` is a sum over the run, so neither each call's reasoning share nor `THEME_CLUSTER`'s
+answer tokens can be read from the record. **And the actual spend of a `both` run is in no one place:** each
+record holds the shared stages plus its own, and `JobQueue.addUsage` has no caller outside
+`src/core/jobQueue/`, so an English-only baseline run is what gives one exact figure per collection.
 
 ---
 
@@ -2856,6 +2900,8 @@ recorded.
 - create `docs/spikes/phase-4-acceptance-report.md`
 - create `test/integration/pipeline/phase4Acceptance.spec.ts` (live parts behind `RH_DOD_LIVE`)
 
+> *Added 2026-11-02 (`plan/reports/P4-T21.md`; coordinator, under `plan/00` §6 item 313): step 2's one English and one Korean report can come from one `both` run. Record the split: `trendKorean.test.ts` is the mechanical check for the Bibliography, the citation nodes and the Notable Papers key column, and `G-24` reads the prose and the other Notable Papers cells. Use `docs/07` §12.4's Measured note for the small-window limit.*
+
 **Do.**
 1. Record `P4-T22`'s offline 400-item result as the definition-of-done proof; run a live 400-item
    job only if the owner asks for one (decided below), behind `G-42`.
@@ -2900,9 +2946,10 @@ Then the manual steps above on a real Zotero 10 profile, stopping at each gate.
 ## 3. Estimate reconciliation
 
 `docs/11` §1 Phase 4 published **16.5–23 d, "⚠ scaled, not decomposed"** (11 d × 1.50, × 1.4) until
-2026-10-26. These cards sum to **23.75 d**, a band of **23.75–33 d** (23.75 × 1.4 = 33.25 → 33)
-*(review 2026-10-25: was 22.5 d, 22.5–32 d; decided 2026-10-26: was 23.25 d, 23.25–33 d)*. The low
-end is 44 % above 16.5 (23.75 ÷ 16.5 = 1.44) and 3 % above the scaled top of 23; `plan/README.md` §7
+2026-10-26. These cards sum to **25.25 d**, a band of **25.25–35 d** (25.25 × 1.4 = 35.35 → 35)
+*(review 2026-10-25: was 22.5 d, 22.5–32 d; decided 2026-10-26: was 23.25 d, 23.25–33 d; re-priced
+2026-11-02, `plan/00` §6 item 335(g): was 23.75 d, 23.75–33 d)*. The low end is 53 % above 16.5
+(25.25 ÷ 16.5 = 1.53) and 10 % above the scaled top of 23 (25.25 ÷ 23 = 1.10); at 23.75 it was 44 % and 3 %. `plan/README.md` §7
 says a divergence above ~30 % is "a signal to re-estimate the phase in `docs/11`, not to quietly
 adjust the tasks", and that is what was done: the owner decided the open lines on 2026-10-26 (item
 286, "the coordinator then propagates the estimate") and the card sum replaced the scaled figure in
@@ -2921,9 +2968,9 @@ all five places the same day. Where the days went, against the work areas of §5
 | W4-7 Self-critique | `P4-T09` | 1.0 |
 | W4-8 Korean path | `P4-T21` | 0.75 |
 | W4-9 Dialog, progress, cost | `P4-T16`, `P4-T19`, `P4-T20` | 3.5 |
-| W4-10 Evaluation and determinism | `P4-T22`, `P4-T23`, `P4-T24` | 2.75 |
+| W4-10 Evaluation and determinism | `P4-T22`, `P4-T23`, `P4-T24` | 4.25 |
 | Acceptance | `P4-T25` | 0.75 |
-| **Total** | 25 cards | **23.75** |
+| **Total** | 25 cards | **25.25** |
 
 The unpriced work the scaled figure hid is the same kind Phases 0–3 found: a localization surface
 that does not exist yet (`reportWindow`), a migration with its two pinned tests, a documents-first
@@ -2942,6 +2989,14 @@ retracted list (`P4-T12`), the group-library confirmation (`P4-T14`, `P4-T20`) �
 those cards already list and were not re-priced. The decisions that would have *added* work had they
 gone the other way (a second critique provider, a third-party Markdown library, `.html` export, a
 nightly evaluation job, a live 400-item run) were all declined.
+
+*Re-priced 2026-11-02 (`plan/00` §6 item 335(g)): `P4-T22` 0.75 → 2.25 d, so W4-10 read 2.75 and the total 23.75 in the table above.*
+23.75 + 1.5 = **25.25**, re-read from the cards by script. 0.75 d is the card as drafted, about 0.75 d the first fix (item
+327(a), which priced it at "about 0.5–0.75 d, on top of `P4-T22`'s card" and never moved the card) and about 0.75 d the
+second (item 334(a), priced "0.5–1 d more on `P4-T22`, re-priced when built"). Both 0.75 figures are the coordinator's
+judgement after the fact, unmeasured. `P4-T21`'s scope also grew and its estimate is left unchanged. Propagated the same
+day to the five places `plan/README.md` §7 names. The 2–3 d the next paragraph keeps is separate and still unmeasured;
+against 25.25 it would put the low end near +65 % to +71 %.
 
 **Where the sum is still likely low** *(review 2026-10-25; not re-estimated, because none of these
 has a measurement yet)*: `P4-T11` and `P4-T13` are in-Zotero platform measurements, the kind that

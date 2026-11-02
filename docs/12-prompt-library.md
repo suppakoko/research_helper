@@ -1123,6 +1123,8 @@ Strongest available model, `temperature: 0.3`, ~~`max_tokens: 6000`~~ `max_token
 >
 > **Decided 2026-10-30 (owner, `plan/00` §6 item 312(c)): a stored `report.targetWords` above 4 250 is sent as 4 250**, the "Words" row of the derivation above and so the longest target the two ceilings are sized for; 400 to 4 250 is sent as stored, and 0 and 1–399 stay automatic. `TARGET_WORDS_MAX` in `src/pipeline/trendReport/compose.ts` holds the figure, and a test reads it from this table's "Words" row, so the two cannot drift apart; if the derivation is redone for a longer target, the constant follows it. `resolveTargetWords` applies the cap, `CompositionPlan.targetWordsCapped` records it, and a composed report carries `TARGET_WORDS_CAPPED_WARNING` (`report_target_words_capped`) among its `warnings`, from which `P4-T12` builds the appendix line that says the target was capped (`06-…` §9.2's note of this date). The automatic setting never reaches the cap: its longest target, the 151–400 row's middle, is 4 250.
 
+> **As built 2026-11-02 (`P4-T22`, owner's option 1 on FINDING P4-T22-2; `targetWordsForOutput` and `prepareComposition` in `src/pipeline/trendReport/compose.ts`): `max_tokens` and `{{TARGET_WORDS}}` can now be below these figures.** On a small window the composition lowers `max_tokens` to as low as 8 192, and `{{TARGET_WORDS}}` is never above what the output the request has is sized for, by the derivation above run backwards. A model's known output limit caps the target the same way. When analysis fields are dropped, `{{REVISION_NOTES}}` also carries a note naming them, in English, whichever the report's language. The prompt text is unchanged, so this needs no version bump. `06-…` §8.4's note of this date has the rule.
+
 ---
 
 ## 11. `TREND_REPORT_KO`
@@ -1504,7 +1506,7 @@ Plain Korean text. Same **marker** validation as `AUDIO_SCRIPT_EN` — reject on
 ## 15. `COLLECTION_PROFILE`
 
 **Version:** `v1.0.0`
-**Purpose:** Characterize what a collection is *about*, as a reusable profile object that the recommendation engine (F6) matches candidates against. Computed once per collection and cached; `RECOMMEND_RANK` then runs cheaply many times against it.
+**Purpose:** Characterize what a collection is *about*, as a reusable profile object that the recommendation engine (F6) matches candidates against. Computed once per collection and cached; ~~`RECOMMEND_RANK` then runs cheaply many times against it~~ *(v1 has no `RECOMMEND_RANK`, §16; corrected 2026-11-02)*.
 **Not for:** summarizing the collection for a human (that is the trend report).
 
 > **Naming.** The output schema below is titled `CollectionProfile`, but it is *this prompt's
@@ -1518,11 +1520,23 @@ Plain Korean text. Same **marker** validation as `AUDIO_SCRIPT_EN` — reject on
 
 | Variable | Type | Source |
 | --- | --- | --- |
-| `{{COLLECTION_NAME}}` | string | |
-| `{{N_PAPERS}}`, `{{YEAR_MIN}}`, `{{YEAR_MAX}}` | number | Computed |
-| `{{DIGESTS}}` | string | Paper digests. **Untrusted.** |
-| `{{YEAR_HISTOGRAM}}` | string | Computed in code, e.g. `2023:12, 2024:31, 2025:44, 2026:9` |
-| `{{USER_NOTE}}` | string | Optional user description of what they want, or `none` |
+| `{{COLLECTION_NAME}}` | string | The fixed text `not supplied`, never the collection's name: `09` §3 row 6 lists the name among what is not sent. *Corrected 2026-11-02 (`plan/08` `P5-T22`): this cell was empty.* |
+| `{{N_PAPERS}}`, `{{YEAR_MIN}}`, `{{YEAR_MAX}}` | number | Computed from the collection; a year range with no year in it reads `unknown` |
+| `{{DIGESTS}}` | string | ~~Paper digests.~~ **One metadata line per paper:** its Zotero item key, year, venue, title and top subject terms, and nothing else (no abstract, no summary). **Untrusted.** *Corrected 2026-11-02 (owner, `plan/00` §6 item 320(d); `plan/08` `P5-T22`).* |
+| `{{YEAR_HISTOGRAM}}` | string | Computed in code, e.g. `2023:12, 2024:31, 2025:44, 2026:9`; `none` when no paper has a year |
+| `{{USER_NOTE}}` | string | ~~Optional user description of what they want, or `none`~~ `none` in v1: no surface collects such a note, and `09` §3 row 6 does not list one. *Corrected 2026-11-02 (`plan/08` `P5-T22`).* |
+
+> **As built 2026-11-02 (`plan/08` `P5-T22`; `src/pipeline/recommend/profileCall.ts`).** The prompt file is this section byte for byte; "digests" in its text now means the lines above, and no word of the prompt changed. Constructing function: `planProfileCall`; `runProfileCall` confirms and sends. Their caller is `recommendPipeline.ts` (`P5-T25`), which is not built, so nothing calls them yet. `focusStatement` becomes `CollectionProfile.narrative` and `suggestedQueryTerms` becomes `suggestedQueries` (trimmed, blanks dropped, repeats dropped through `normalizeTitle`). The other members of the answer have no reader in v1 and are not kept. The answer's `usage.outputTokens` is kept as `profileCallOutputTokens` for `P5-T30`. No `effort` is sent (§18.5).
+>
+> **A line** reads `KEY | year | venue | title | term; term`, with `unknown` for a missing year or venue and `none` for no term; runs of whitespace and control characters become one space, so a title cannot start a line of its own. Lines are ordered by year, then key, and a paper with no year comes last, so the text does not depend on reading order.
+>
+> **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):**
+> 1. **"Top subject terms" are at most 5 per line** (`PROFILE_LINE_MAX_TERMS`): MeSH terms without the check tags (`05` §7.2) and arXiv categories, major MeSH topics first, then those most frequent in this collection; then keywords, in code-unit order, to fill what is left. `P5-T18`'s reader gives an item's work no tag the user typed; a tag Zotero or a translator added automatically, and a tag spelled `MeSH:` or `arXiv:`, can reach a line (`topicTagNames`), which is what `09` §3 row 6 now says (owner, `plan/00` §6 item 334(e), read from `09` on 2026-11-02).
+> 2. **The collection's name is not sent in any mode.** `allowedInputScope` could allow it under `full` with the `collectionAndTagNames` opt-in, but `09` §3 row 6 lists it as not sent and no surface offers the opt-in, so the variable holds a fixed text. The prompt keeps the line, because it is not to be edited.
+> 3. **`{{N_PAPERS}}`, the year range and `{{YEAR_HISTOGRAM}}` are counts over the collection's years.** `09` §3 row 6 names the per-paper line and not these, and they carry nothing the lines do not, except when the next item leaves lines out; then they still say only how many papers have each year.
+> 4. **Input budget: the smaller of 60 000 tokens (the same figure as `06` §5.2's other `strong`-tier rows, `PROFILE_INPUT_BUDGET`) and what `windowRoom` leaves beside the output, less the prompt's own tokens and its serialized schema.** A collection over it sends an evenly spaced subset of its lines (`fitProfileLines`), so one call stays one call, and `{{N_PAPERS}}` still states the whole collection. The dialog's paper count and the egress log count the lines sent. When not one line fits, nothing is sent and the profile is heuristic with a warning.
+> 5. **The cache holds only `narrative`, `suggestedQueries` and the output token count,** through `redactRecord`, in the `report` namespace, which has no time limit, the `06` §11.2 synthesis entries' namespace: "cached until the collection changes" rules out `llm-completion`'s 7 days. **Its key is `membershipHash`, not this section's `(itemKey, contentHash)` list** (`plan/08` `P5-T22`'s note), with the library, this prompt's `cacheEpoch`, the provider, the model and the temperature; tags as `synthesisTags` writes them. A stored `membershipHash` moves on any member's `dateModified`, so it can only recompute more often than a content hash would. A heuristic outcome is never cached.
+> 6. **An answer that cannot be used falls back to "heuristic" with a warning, and is not cached:** `completeJSON`'s path as it stands (the call, one repair, one retry at temperature 0, so at most three requests), a truncated answer and a content-filter stop (neither repaired, by §18.3), or a blank `focusStatement`. A cost refusal, a cancellation, a refused model (`PolicyViolationError`, before the dialog and before any request) and a transport error propagate, as in every other pipeline.
 
 ### System prompt
 
@@ -1636,7 +1650,7 @@ Return JSON:
 
 ### Model / temperature
 
-Strong model, `temperature: 0.2`, `max_tokens: 2500`. Cache keyed on the sorted set of `(itemKey, contentHash)` plus prompt version plus model — so it recomputes when the collection changes, and only then.
+Strong model, `temperature: 0.2`, `max_tokens: 2500`. Cache keyed on ~~the sorted set of `(itemKey, contentHash)`~~ `membershipHash` *(corrected 2026-11-02, this section's item 5)* plus prompt version plus model — so it recomputes when the collection changes, and only then.
 
 ---
 
@@ -1645,6 +1659,8 @@ Strong model, `temperature: 0.2`, `max_tokens: 2500`. Cache keyed on the sorted 
 **Version:** `v1.0.0`
 **Purpose:** Rank candidate papers (from citation-graph expansion, Semantic Scholar recommendations, or a fresh search) against a `CollectionProfile`, so F6 can propose additions.
 **Different from `RELEVANCE_SCREEN`:** that one matches against a *topic string*; this one matches against a *collection's demonstrated interests*, and must actively prefer papers that add something the collection lacks.
+
+> **Not built in v1 (owner, 2026-11-01, `plan/00` §6 item 320(c); recorded 2026-11-02, `plan/08` `P5-T22`).** The model is called for `COLLECTION_PROFILE` only, once per profile; scores and reasons are code's (`05` §7.4, `FR-47`). This section stays as the design for the backlog item (`plan/08` §4). It is not in `PROMPT_IDS`, and it has no file.
 
 ### Input variables
 
@@ -1903,7 +1919,7 @@ A MINOR bump on `PAPER_SUMMARY_ABSTRACT` invalidates every summary in every coll
 
 - Warn on plugin update when a prompt version bump will invalidate more than a threshold number of cached entries, and say what it will cost to rebuild.
 - Offer **"keep using cached summaries from the previous prompt version"** as an explicit, clearly labelled opt-in. Mark any report built from mixed prompt versions in its provenance appendix.
-- Regression-test before releasing a prompt change: run the three fixture collections (10, 50, 200 papers) and re-score against the rubric in [`06` §12.3](06-summarization-and-trend-report.md). A prompt change that does not measurably improve a score should not ship.
+- Regression-test before releasing a prompt change: run the three fixture collections (10, 50, 200 papers) and re-score as [`06` §12.3](06-summarization-and-trend-report.md) describes. A prompt change that does not measurably improve a score should not ship. *Corrected 2026-11-02 (`plan/00` §6 item 335(f)): this read "re-score against the rubric". The regression score is `scripts/eval-trend-report.ts`'s recall against the owner's expected themes and its proxies; the rubric's eight dimensions stay a manual score.*
 
 ---
 

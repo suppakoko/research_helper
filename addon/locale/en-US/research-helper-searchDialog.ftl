@@ -56,14 +56,18 @@
 #
 # Phase 1 shipped the `keyword` mode only. `P2-T17` (2026-10-15) adds the
 # `rerun` mode chip and §4.6's **Re-run (pre-filled from provenance)** panel,
-# FR-12's; the `related` and `recommend-from-collection` chips are still later
-# cards'. The `⊕ ID lookup · preprint matching` status row arrived with
+# FR-12's; `P5-T15` (2026-11-02) adds the `related` chip and §5.2's Seed and
+# Include rows, FR-13's; the `recommend-from-collection` chip is still a later
+# card's. The `⊕ ID lookup · preprint matching` status row arrived with
 # `P2-T14`.
 
 
 ## Window
 
 research-helper-search-window-title = Research Helper — Search & Import
+
+# `docs/08` §5.2's wireframe title (P5-T15).
+research-helper-search-window-title-related = Research Helper — Related Papers
 
 
 ## Query row (docs/08 §4.2, §4.5)
@@ -88,6 +92,42 @@ research-helper-search-mode-keyword =
 # is the collection's own name — the user's data, not a translatable string.
 research-helper-search-mode-rerun =
     .value = Re-run: { $collection }
+
+# FR-13 (P5-T15): `docs/08` §4.2's `Related to: <title>`. `$title` is the seed's
+# own title, the user's data, cut by the window to fit the chip.
+research-helper-search-mode-related =
+    .value = Related to: { $title }
+
+
+## Related mode's Seed and Include rows — docs/08 §5.2 (P5-T15)
+##
+## The seed's title, authors, venue, year and DOI are data and are written
+## straight into the window. "PubMed" stays as it is (`docs/08` §10.3).
+
+research-helper-search-related-seed-label =
+    .value = Seed
+
+# The item was deleted, or could not be read, between the click and the window.
+research-helper-search-related-seed-missing = This item could not be read. Select it in your library and choose Find Related Papers… again.
+
+research-helper-search-related-include-label =
+    .value = Include
+
+# The seed cites these (FR-15's "cited by seed").
+research-helper-search-related-include-reference =
+    .label = References
+
+# These cite the seed (FR-15's "cites seed").
+research-helper-search-related-include-citation =
+    .label = Citations
+
+research-helper-search-related-include-recommendation =
+    .label = Recommended
+
+# `plan/08` §0.4 line 12: "similar" means PubMed's similar articles in v1, and
+# the checkbox says so.
+research-helper-search-related-include-similar =
+    .label = Similar articles (PubMed)
 
 
 ## Date range (docs/08 §4.2 "Date defaults", FR-3)
@@ -114,6 +154,10 @@ research-helper-search-years-to =
 
 research-helper-search-years-custom =
     .label = Custom…
+
+# The related mode's default for both year lists: no bound (`docs/08` §5.2).
+research-helper-search-years-any =
+    .label = Any
 
 
 ## Per-database result limit (docs/08 §4.2)
@@ -338,6 +382,9 @@ research-helper-search-export-failed = Could not export the provenance record. T
 ## 1. INITIAL — an instruction, not a spinner
 
 research-helper-search-state-initial = Enter a keyword and press Search to query the selected databases for papers from the last { $years } calendar years.
+
+# The same panel in the related mode (P5-T15), which has no keyword to enter.
+research-helper-search-state-initial-related = Papers related to this item will be listed here.
 
 
 ## 1a. Re-run (pre-filled from provenance) — FR-12, docs/08 §4.6 (P2-T17)

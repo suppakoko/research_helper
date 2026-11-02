@@ -38,13 +38,15 @@
  * 2026-10-26, owner, `plan/00` §6 item 290(a) and (b)). `TREND_REPORT_EN` and
  * `TREND_REPORT_KO` are the first prompts with a superseded version in the
  * bundle: 1.0.1 raised their output ceilings only (owner, `plan/00` §6 item
- * 311(c), 2026-10-30).
+ * 311(c), 2026-10-30). `COLLECTION_PROFILE` is read through
+ * {@link PROMPT_REGISTRY} by the recommend pipeline (`P5-T22`, `P5-T25`).
  */
 
 import chunkMapV100 from "./chunk-map.v1.0.0.md" with { type: "text" };
 import chunkReduceV100 from "./chunk-reduce.v1.0.0.md" with { type: "text" };
 import clusterReduceMergeV100 from "./cluster-reduce-merge.v1.0.0.md" with { type: "text" };
 import clusterReduceV100 from "./cluster-reduce.v1.0.0.md" with { type: "text" };
+import collectionProfileV100 from "./collection-profile.v1.0.0.md" with { type: "text" };
 import {
   createPromptRegistry,
   type PromptId,
@@ -84,6 +86,7 @@ export const PROMPT_SOURCE_FILES: readonly PromptSourceFile[] = Object.freeze([
   { fileName: "trend-report-en.v1.0.1.md", text: trendReportEnV101 },
   { fileName: "trend-report-ko.v1.0.1.md", text: trendReportKoV101 },
   { fileName: "self-critique.v1.0.0.md", text: selfCritiqueV100 },
+  { fileName: "collection-profile.v1.0.0.md", text: collectionProfileV100 },
   { fileName: "theme-merge.v1.0.0.md", text: themeMergeV100 },
   {
     fileName: "cluster-reduce-merge.v1.0.0.md",

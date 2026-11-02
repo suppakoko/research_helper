@@ -456,6 +456,17 @@ describe("doiUrl", () => {
 // ---------------------------------------------------------------------------
 
 describe("safeBaseName and reportExportFileName", () => {
+  it("names the language only when it is given, for a two-report run (docs/08 §6.3)", () => {
+    const at = Date.UTC(2026, 9, 27);
+    expect(reportExportFileName("A", at)).toBe("A — trends 2026-10-27.md");
+    expect(reportExportFileName("A", at, "ko")).toBe(
+      "A — trends 2026-10-27 (ko).md",
+    );
+    expect(reportExportFileName("A", at, "en")).toBe(
+      "A — trends 2026-10-27 (en).md",
+    );
+  });
+
   it("gives a safe filename for a collection name with / and :", () => {
     const name = reportExportFileName(
       "Cardio / Risk: 2024",

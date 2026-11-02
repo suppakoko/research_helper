@@ -42,6 +42,8 @@
  */
 
 import { config } from "../../../package.json";
+import type { CanonicalWork } from "../../model/canonicalWork";
+import type { RelationKind } from "../../model/related";
 
 /**
  * The `mode` values `openSearchWindow` accepts (`docs/08` §4.2's "Search mode
@@ -51,10 +53,11 @@ import { config } from "../../../package.json";
  * **`keyword` since Phase 1, `rerun` since `P2-T17`** (FR-12: the collection
  * context menu's "Re-run This Search…" opens the window with `mode: "rerun"`
  * and the collection's id, and the document seeds itself from the
- * collection's stored provenance row). `related` and
- * `recommend-from-collection` are later cards'; they are named here because
- * the union is the documented surface of this function, and this file
- * registers no menu entry for either.
+ * collection's stored provenance row). **`related` since `P5-T15`** (FR-13: the
+ * item context menu's "Find Related Papers…", `{ mode: "related", seedItemID }`,
+ * `docs/08` §5.2's note of 2026-11-02). `recommend-from-collection` is a later
+ * card's; it is named here because the union is the documented surface of this
+ * function, and this file registers no menu entry for it.
  */
 export type SearchWindowMode =
   "keyword" | "related" | "recommend-from-collection" | "rerun";
@@ -65,8 +68,7 @@ export type SearchWindowMode =
  *
  * `collectionID` is this card's: it is how the collection context-menu entry
  * pre-selects the right-clicked collection as the import target. `seedItemID`
- * belongs to the item-context "Find Related Papers…" entry, which is a later
- * phase's.
+ * belongs to the item-context "Find Related Papers…" entry (`P5-T15`).
  */
 export interface SearchWindowArgs {
   readonly mode: SearchWindowMode;
@@ -86,6 +88,13 @@ export interface SearchWindowArgs {
  */
 export interface SearchWindowHandle {
   focus(): void;
+  /**
+   * `P5-T15`: what `src/bootstrap/registerUI.ts`'s teardown closes the window
+   * with, and how it knows the user already did. Optional because a test
+   * double need not carry them; a real window has both.
+   */
+  close?(): void;
+  readonly closed?: boolean;
 }
 
 /**
@@ -265,6 +274,84 @@ export interface SearchWindowRecord {
 }
 
 /**
+ * The relation kinds `docs/08` §5.2's Include row offers, in its order
+ * (`P5-T15`). They are the `value` attributes of the four checkboxes under
+ * `#rh-related-include` in `addon/content/searchDialog.xhtml`, and
+ * `test/unit/ui/searchDialog.test.ts` asserts the markup carries exactly this
+ * set, because the markup is a plain asset nothing typechecks.
+ */
+export const SEARCH_WINDOW_RELATIONS = [
+  "reference",
+  "citation",
+  "recommendation",
+  "similar",
+] as const satisfies readonly RelationKind[];
+
+/**
+ * The seed as the window's header draws it (`docs/08` §5.2, `P5-T15`).
+ *
+ * Built by {@link relatedSeedHeader}, and read by
+ * `addon/content/searchDialog.js`'s `applyRelatedSeed`. All of it is data,
+ * written into `textContent`, so no word here needs a translation (`docs/08`
+ * §10.3).
+ */
+export interface RelatedSeedHeader {
+  readonly title: string;
+  readonly authors: readonly SearchWindowAuthor[];
+  readonly venue?: string;
+  readonly year?: number;
+  readonly doi?: string;
+}
+
+/**
+ * `docs/08` §5.2's seed lines from the item's work: title, authors, venue, year
+ * and DOI, and only those, because the rest of a work has no reason to reach a
+ * window document. The caller is `publishSearchWindowHost`'s `loadRelatedSeed`
+ * (`src/bootstrap/registerUI.ts`).
+ *
+ * @param work - the seed, from `canonicalWorkOfItemID`
+ */
+export function relatedSeedHeader(work: CanonicalWork): RelatedSeedHeader {
+  return {
+    title: work.title,
+    authors: work.authors.map((author) => ({
+      family: author.family,
+      ...(author.given === undefined ? {} : { given: author.given }),
+      ...(author.literal === undefined ? {} : { literal: author.literal }),
+    })),
+    ...(work.containerTitle === undefined
+      ? {}
+      : { venue: work.containerTitle }),
+    ...(work.publishedDate?.year === undefined
+      ? {}
+      : { year: work.publishedDate.year }),
+    ...(work.ids.doi === undefined ? {} : { doi: work.ids.doi }),
+  };
+}
+
+/**
+ * The host member the related mode reads (`P5-T15`), beside the keyword view
+ * model's `SearchWindowHostApi`: `publishSearchWindowHost` adds it to the
+ * object it publishes, and `applyRelatedSeed` reads it by name.
+ *
+ * Answers `undefined` for an id that names no regular item, which the window
+ * says in words rather than drawing an empty header.
+ */
+export interface RelatedSeedHost {
+  loadRelatedSeed(seedItemID: number): Promise<RelatedSeedHeader | undefined>;
+}
+
+/**
+ * What the related mode adds to a query (`P5-T15`): the seed and the Include
+ * row's ticked kinds. Constructed by the document's `collectQuery`; `P5-T16` is
+ * the reader.
+ */
+export interface SearchWindowRelatedQuery {
+  readonly seedItemID: number;
+  readonly relations: readonly RelationKind[];
+}
+
+/**
  * What the document's `collectQuery()` returns, i.e. what Search sends.
  *
  * Every member is read off a control, so every member is as untrusted as a
@@ -305,7 +392,8 @@ export interface SearchWindowQuery {
    * {@link fromYear} / {@link toYear} decide, as they always have.
    *
    * Structurally `src/core/provenance.ts`'s `RerunDateWindow`, written out so
-   * this file keeps importing nothing from `src/`.
+   * this file keeps importing nothing from `src/`. *(Since `P5-T15` it imports
+   * two model types, which leave no import at run time.)*
    */
   readonly dateWindow?:
     { readonly fromIso: string; readonly toIso: string } | "all-years";
@@ -322,6 +410,12 @@ export interface SearchWindowQuery {
     readonly enabled: boolean;
     readonly threshold: number;
   };
+  /**
+   * Present only in `mode: "related"` (`P5-T15`). In that mode a year list left
+   * on "Any" makes {@link fromYear} / {@link toYear} `NaN`, which means no bound
+   * (`docs/08` §5.2's note of 2026-11-02).
+   */
+  readonly related?: SearchWindowRelatedQuery;
 }
 
 /**

@@ -58,6 +58,9 @@
  * *(Updated 2026-10-29, `P4-T19`: `-report` is here too, first in the
  * submenu, and opens the report window — `docs/08` §2.5's note of that
  * date. `-recommend` is still a later card's.)*
+ * *(Updated 2026-11-02, `P5-T15`: the item-context menu is here now, as
+ * {@link itemMenuOptions}, with one entry; `docs/08` §2.5's note of that date.
+ * §2.4's `-item-summarize` is not built.)*
  *
  * ### Where the re-run entry sits, and why there is no separator above it
  *
@@ -90,6 +93,7 @@ import {
   L10N_MENU_COLLECTION_RERUN,
   L10N_MENU_COLLECTION_SEARCH_IMPORT,
   L10N_MENU_COLLECTION_SUMMARIZE_ALL,
+  L10N_MENU_ITEM_FIND_RELATED,
   L10N_MENU_ROOT,
   L10N_MENU_SEARCH_IMPORT,
 } from "../../i18n/keys";
@@ -124,6 +128,18 @@ const COLLECTION_MENU_ID = "rh-menu-collection";
  * a duplicate description.
  */
 export const COLLECTION_MENU_DESCRIPTION = "Collection context-menu item";
+
+/** `docs/08` §2.1's item context-menu target (`P5-T15`). */
+const ITEM_TARGET = "main/library/item";
+
+/** `docs/08` §2.4's name for the item registration. */
+const ITEM_MENU_ID = "rh-menu-item";
+
+/**
+ * What `Scope.liveHandles()` reports for the item registration, as
+ * {@link COLLECTION_MENU_DESCRIPTION} does for the collection's.
+ */
+export const ITEM_MENU_DESCRIPTION = "Item context-menu item";
 
 /**
  * What the menus are allowed to do, injected rather than imported — the same
@@ -630,6 +646,138 @@ export function collectionMenuOptions(
           },
           // FR-12 (`P2-T17`). No separator above it — see this file's header.
           rerunItem(commands),
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * What the item menu may do (`P5-T15`), bound by
+ * `src/bootstrap/registerUI.ts`'s `ITEM_MENU_COMMANDS`.
+ */
+export interface ItemMenuCommands {
+  /**
+   * The hidden `related.enabled` preference (`docs/07` §8.5), read each time
+   * the menu shows. `registerUI` also leaves the menu unregistered while it is
+   * off; this is what hides a menu already registered when it is turned off.
+   */
+  readonly relatedEnabled: () => boolean;
+  /**
+   * Opens the search window on the seed, `{ mode: "related", seedItemID }`:
+   * `openRelatedWindowCommand` in `src/bootstrap/registerUI.ts`.
+   */
+  readonly openRelatedWindow: (
+    host: MenuHostWindow,
+    seedItemID: number,
+  ) => unknown;
+  /** Where a failure goes. Must not throw. */
+  readonly onError: (message: string, error: unknown) => void;
+}
+
+/** The part of the item menu's context this file reads. */
+interface ItemMenuContext extends MenuElementContext {
+  /** Optional for the reason `typings/zotero-augment.d.ts` gives. */
+  readonly items?: readonly Pick<Zotero.Item, "id" | "isRegularItem">[];
+}
+
+/** The selection's regular items, without notes and attachments (`docs/08` §2.4). */
+function regularItems(
+  context: ItemMenuContext,
+): readonly Pick<Zotero.Item, "id" | "isRegularItem">[] {
+  return (context.items ?? []).filter((item) => item.isRegularItem());
+}
+
+/**
+ * Right-click an item ▸ Research Helper ▸ Find Related Papers… (`docs/08` §2.4,
+ * §2.5, §5; `P5-T15`, FR-13).
+ *
+ * The submenu is hidden while `related.enabled` is off and for a selection with
+ * no regular item. The entry is **disabled unless exactly one regular item is
+ * selected**, as §2.4's block does (owner, `plan/00` §6 item 321(b)): there is
+ * no multi-seed form, and an entry that stays in view says the command exists.
+ *
+ * Reads `context.items` and never `context.collectionTreeRow`, which throws when
+ * more than one row is selected (`docs/08` §2.2).
+ */
+export function itemMenuOptions(
+  commands: ItemMenuCommands,
+): _ZoteroTypes.MenuManager.MenuOptions<typeof ITEM_TARGET> {
+  return {
+    menuID: ITEM_MENU_ID,
+    pluginID: config.addonID,
+    target: ITEM_TARGET,
+    menus: [
+      {
+        menuType: "submenu",
+        // The same label as the other two roots: `docs/08` §2.4.
+        l10nID: L10N_MENU_ROOT,
+        onShowing: (_event, context) => {
+          try {
+            context.setVisible(
+              commands.relatedEnabled() && regularItems(context).length > 0,
+            );
+          } catch (error) {
+            commands.onError(
+              "Item context-menu visibility check failed",
+              error,
+            );
+          }
+        },
+        menus: [
+          {
+            menuType: "menuitem",
+            l10nID: L10N_MENU_ITEM_FIND_RELATED,
+            onShowing: (_event, context) => {
+              try {
+                const one = regularItems(context).length === 1;
+                context.setEnabled(one);
+                // The reason, shown on hover while disabled (`docs/08` §2.5's
+                // measurement of 2026-11-02). The message's `.tooltiptext` is
+                // empty for `yes`, and an empty one shows no tooltip.
+                // A string in spite of the typing: `menuManager.js` assigns it to
+                // `dataset.l10nArgs`, where an object would read "[object Object]".
+                context.setL10nArgs(
+                  JSON.stringify({
+                    oneItem: one ? "yes" : "no",
+                  }) as unknown as object,
+                );
+              } catch (error) {
+                commands.onError("Find Related entry check failed", error);
+              }
+            },
+            onCommand: (_event, context) => {
+              try {
+                const items = regularItems(context);
+                const [seed, ...extra] = items;
+                const host = hostWindow(context);
+                // The same refusal as the collection entries: the selection
+                // can change between `popupshowing` and the click.
+                if (seed === undefined || extra.length > 0 || !host) {
+                  commands.onError(
+                    "Find Related needs exactly one regular item and its " +
+                      `window; the selection holds ${String(items.length)}`,
+                    new Error(
+                      "[research-helper] the item menu's context held " +
+                        `${String(items.length)} regular item(s).`,
+                    ),
+                  );
+                  return;
+                }
+                const result: unknown = commands.openRelatedWindow(
+                  host,
+                  seed.id,
+                );
+                if (result instanceof Promise) {
+                  result.catch((error: unknown) => {
+                    commands.onError("Find Related failed", error);
+                  });
+                }
+              } catch (error) {
+                commands.onError("Find Related threw", error);
+              }
+            },
+          },
         ],
       },
     ],

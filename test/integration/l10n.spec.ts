@@ -129,6 +129,7 @@ import {
   KO_DELIBERATELY_ABSENT,
   KO_PENDING_REVIEW,
   KO_PRESENT,
+  L10N_MENU_ITEM_FIND_RELATED,
   MAIN_WINDOW_MESSAGE_IDS,
   MESSAGE_IDS_BY_SURFACE,
   MESSAGE_PREFIX,
@@ -878,6 +879,52 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
         unresolved,
         [],
         `every ${surface} id resolves along a ko-KR → en-US chain`,
+      );
+    }
+  });
+
+  it("P5-T15: resolves the item menu entry and the related mode in both locales, with the owner's Korean in the ko-KR file (G-41, plan/00 §6 item 334(f))", async function () {
+    const added: readonly (readonly [ShippedSurface, readonly string[]])[] = [
+      ["mainWindow", [L10N_MENU_ITEM_FIND_RELATED]],
+      [
+        "searchDialog",
+        [
+          "research-helper-search-window-title-related",
+          "research-helper-search-mode-related",
+          "research-helper-search-related-seed-label",
+          "research-helper-search-related-seed-missing",
+          "research-helper-search-related-include-label",
+          "research-helper-search-related-include-reference",
+          "research-helper-search-related-include-citation",
+          "research-helper-search-related-include-recommendation",
+          "research-helper-search-related-include-similar",
+          "research-helper-search-years-any",
+          "research-helper-search-state-initial-related",
+        ],
+      ],
+    ];
+    for (const [surface, ids] of added) {
+      const english = await resolvable(
+        pinnedLocalization(surface, ["en-US"]),
+        ids,
+      );
+      const chain = await resolvable(
+        pinnedLocalization(surface, ["ko-KR", "en-US"]),
+        ids,
+      );
+      const korean = await bundleFor(surface, "ko-KR");
+      const inKoreanFile = ids.filter((id) => korean?.hasMessage(id));
+      log(
+        `P5-T15 ${surface}: en-US ${english.resolved.length} of ${ids.length}, ` +
+          `ko-KR chain ${chain.resolved.length} of ${ids.length}, ` +
+          `in the ko-KR file ${JSON.stringify(inKoreanFile)}`,
+      );
+      assert.deepEqual(english.unresolved, [], `${surface} in en-US`);
+      assert.deepEqual(chain.unresolved, [], `${surface} along ko-KR, en-US`);
+      assert.deepEqual(
+        inKoreanFile,
+        [...ids],
+        "the owner's Korean is in the ko-KR file (G-41, item 334(f))",
       );
     }
   });

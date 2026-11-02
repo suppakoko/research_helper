@@ -697,6 +697,8 @@ keyed Semantic Scholar path (item 323(c)) and +0.5 d for the five builders (revi
 
 > *Added 2026-11-02 (`plan/reports/P5-T09.md`, `P5-T07.md`, `P5-T04.md`; coordinator, under `plan/00` §6 item 313): `matchTitle(title, ctx)` returns a list of zero or one record, the shape `P5-T09` built, so `P5-T11` treats both sources alike. `semanticscholar.test.ts` pins the old flags and changes with this card. Correct the stale "records unauthenticated" in `semanticscholarSource.ts`'s header. A seed the source was asked about and does not hold throws `BadRequestError` with status 404; a seed lacking the identifier the source needs is an empty page with a warning and no request (item 332(c)).*
 
+> *Added 2026-11-02 (`plan/00` §6 item 335(a); owner): built before `P5-T31` by the owner's choice, against stand-in fixtures built from `docs/02` §6's documented response shapes, each marked `"synthetic": true` with a reason. No key, no live call and no anonymous recording. The dependency on `P5-T31` stays, as the check: when the owner records, the stand-ins are replaced and this card is re-checked against what was recorded, and the card is not DONE before that.*
+
 **Do.**
 1. `findRelated` with `strategy: "references" | "citations"`: `limit` ≤ 1000, fields including
    `externalIds`, `year`, `title`, `citationCount`, and for citations `contexts,intents,isInfluential`;
@@ -753,6 +755,8 @@ with every seed ID validated before the POST.
 - modify `src/sources/semanticscholar/recommendations.ts` (parsers and `RECOMMEND_MAX_POSITIVES` beside `P5-T04`'s builders; caller: the source below)
 - modify `src/sources/semanticscholar/semanticscholarSource.ts` (`findRelated` `strategy: "recommendations"` → forpaper; `recommend(positives, negatives, limit)`)
 - create `test/unit/sources/semanticscholarRecommendations.test.ts`
+
+> *Added 2026-11-02 (`plan/00` §6 item 335(a); owner): built before `P5-T31` by the owner's choice, against stand-in fixtures built from `docs/02` §6's documented response shapes, each marked `"synthetic": true` with a reason. No key, no live call and no anonymous recording. The dependency on `P5-T31` stays, as the check: when the owner records, the stand-ins are replaced and this card is re-checked against what was recorded, and the card is not DONE before that.*
 
 **Do.**
 1. `forpaper` with `from=recent`, `limit` ≤ 100 when `abstract` is requested, else up to the caller's
@@ -1371,6 +1375,8 @@ a keyless user what a key adds.
 
 > *Added 2026-11-02 (`plan/reports/P5-T15.md`): give the related mode its own view model and `connectHost`, then remove `P5-T15`'s guards in `connectHost`, `search()` and `onYearChanged`. Read `query.related`; a year of `NaN` means no bound. Add the Include counts. Decide how a run starts, because the wireframe has no Search button and the button is hidden. Decide what a re-open does: opening a second seed reloads the one window, so a running job would keep running with no view (not measured).*
 
+> *Added 2026-11-02 (owner, `plan/00` §6 item 334(c)): "Restrict to last 3 years" is not built, and `docs/08` §5.2's wireframe no longer draws it. The year lists do the same. FR-18's rule, that older candidates are shown de-emphasized and unchecked, is a separate matter and is unaffected.*
+
 **Do.**
 1. Documents first (decided below and on `P5-T12`, `P5-T28`): `docs/08` §5.2's year note cites FR-18's
    de-emphasis; §5.3 gains the title-match picker and loses the preprint seed's "fetch for the
@@ -1682,6 +1688,8 @@ plus up to 10 negatives from the collection's dismissals, read from the store on
 
 > *Added 2026-11-02 (`plan/reports/P5-T03.md`): rejected papers come from `listRejected(profileId, 10)`.*
 
+> *Added 2026-11-02 (`plan/reports/P5-T18.md`; coordinator, under `plan/00` §6 item 313): `addedAtByWorkKey(items)` and the members from `readCollectionWorks` are the inputs. Use `rankedTerms` or `termWeights` for centroid labels. `seeds` and `centroids` start empty in the record.*
+
 **Do.**
 1. `kmeansAuto` on SPECTER2 vectors, k chosen by silhouette with `docs/05`'s guards and a seeded
    initialisation (deterministic); no centroids on the lexical path (`docs/07` §5.2: empty array).
@@ -1824,6 +1832,8 @@ and their union is merged; keyword queries go through Phase 2's `fanOut` with th
 
 > *Added 2026-11-02 (`plan/reports/P5-T08.md`, `P5-T10.md`): `findSimilarForSeeds` throws above 10 seeds; count one `elink` plus its `efetch` batches (up to 5 at limit 100 over 10 seeds) against `RequestBudget`, and re-read "a budget of 12 runs (a) and (b) fully" against that. `fanOut` has no cache hook, so step 1(d) wraps one source and one query at a time. For one request over several seeds: `readRelated` per seed, `tryTake(1)`, then `writeRelated` or `writeRelatedMissing` per seed. Build cache keys from identifiers, never from a URL, which can hold a key.*
 
+> *Added 2026-11-02 (`plan/reports/P5-T18.md`, `P5-T22.md`; coordinator, under `plan/00` §6 item 313): use `rankedTerms`, which fixes the order. `suggestedQueries` can be empty with `origin: "llm"` and has no cap, because the schema has no `maxItems`, so this card falls back to the top terms and sets its own cap.*
+
 **Do.**
 1. (a) S2 `recommend` with the seeds and negatives (keyed); (b) pmra over ≤ 10 PMID seeds; (c) forward
    citations of the top seeds (S2 keyed, else Europe PMC); (d) keyword queries — the profile's
@@ -1919,6 +1929,8 @@ and each carries a one-line reason built from its strongest terms.
 
 > *Added 2026-11-02 (`plan/reports/P5-T03.md`): rejected papers come from `listRejected(profileId)`.*
 
+> *Added 2026-11-02 (`plan/reports/P5-T18.md`; coordinator, under `plan/00` §6 item 313): `owned.titles` is not built. Fuzzy title matching is this card's call.*
+
 **Do.**
 1. Hard filters, in two functions because only one kind can run before the survivors' metadata is
    filled in: `identifierFilters` — in the source collection; dismissed for this collection (unless
@@ -2002,6 +2014,8 @@ profile, applies the user's edits, records dismissals, and is registered under `
 > *Added 2026-11-02 (`plan/reports/P5-T10.md`; DECIDED, coordinator, under `plan/00` §6 item 313): this card constructs the run's one `RequestBudget` and passes it to the generators (`P5-T23`) and to hydration, so hydration is not left without one. `findSimilarForSeeds` is on `PubmedSource`, so it needs the typed instance from `installServices`; check the `pubmed` slot of `ShippedSourceAdapters`.*
 
 > *Added 2026-11-02 (`plan/reports/P5-T03.md`): `reject(profileId, workKey)` is `reject(recommendationId(profileId, workKey), now)`, and a row must be `put` before it is rejected. The `container.ts` row passes `graph.database.collectionProfiles`, `.recommendations` and `.embeddings`. The store has no general read of non-rejected recommendations, because no card named one.*
+
+> *Added 2026-11-02 (`plan/reports/P5-T18.md`, `P5-T22.md`; coordinator, under `plan/00` §6 items 313 and 335(h)): the order is `readProfileCollection`, the hash compare, `libraryTermSources`, `buildProfileStats`, `P5-T21`, `runProfileCall`, then `persistProfile`. `readProfileCollection` comes first because `buildProfileStats` throws `RangeError` below 5 items. `kind: "too-few-items"` maps to `Failed` in `docs/07` §12.5, and its unbuilt wording is en-US "This collection has { $count } items. Recommendations need at least 5.", Korean draft for `G-41` "이 컬렉션에는 항목이 { $count }개 있습니다. 추천을 받으려면 항목이 5개 이상 필요합니다." `profileOwnedSets` and `libraryIndex` run each time and are not stored. Compare `removedTerms` through `normalizeTitle`. `membershipHash` covers the source collection only, so a library change does not alter it. Use `planProfileCall` for `Pipeline.estimate`, which sends nothing; pass `recommendRoutineStore(collectionSettings)`, credentials, prices, `modelInfo` and `baseUrls`; treat `declined` as `Cancelled`; put `egress` on the job input through `withEgressLog`, which is also present on a fallback after a request was sent. A stored heuristic profile has an unchanged `membershipHash`, and must not read as fresh when a provider now exists.*
 
 **Do.**
 1. Two input modes of one pipeline (decided below). **Profile only:** profile check (stored profile with
@@ -2108,6 +2122,8 @@ mode, which shows the derived profile before searching and lets the user remove 
 - create `test/unit/ui/recommendViewModel.test.ts`; modify `test/integration/menus.spec.ts`, `test/integration/l10n.spec.ts`
 
 > *Added 2026-11-02 (`plan/reports/P5-T15.md`): the recommend entry can follow `related.enabled`'s three readers for `recommend.enabled`. `openTrackedSearchWindow` already closes its mode at shutdown. It needs its own chip for `recommend-from-collection`.*
+
+> *Added 2026-11-02 (`plan/reports/P5-T22.md`; coordinator, under `plan/00` §6 item 313): the surface `ProfileCallSurface` applies `shouldOpenCostDialog`, `settleDisclosure` and `skippedNoticeLine`, and shows `warningId`. `confirmReportRun` can be reused only if its parameter is widened.*
 
 **Do.**
 1. Documents first: write `docs/08` §5.4 — the profile panel (focus statement, read-only; term chips
@@ -2538,7 +2554,7 @@ service, so the D6 default needs none), vector storage and its share of NFR-8 (`
 the per-run LLM confirmation (`P5-T22`, with `docs/10` §5 Q7 decided on 2026-10-26), preprint
 presentation (`P5-T24`, review line 24) and implicit feedback (item 323(b): not in v1). In §5.4, the
 float figure and the "re-sequence after Phase 6" lever are those of 2026-09-09: the key arrived on
-2026-09-30 (`plan/06` `G-03`), and `docs/11` §2 owns the float (3–4 d since 2026-11-02).
+2026-09-30 (`plan/06` `G-03`), and `docs/11` §2 owns the float (4.5–6 d since `plan/00` §6 item 335(g), 2026-11-02; 3–4 d before it).
 
 ### 5.1 Work areas
 

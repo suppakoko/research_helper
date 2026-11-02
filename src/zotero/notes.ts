@@ -1029,6 +1029,27 @@ export function describeCollectionForSummary(
 }
 
 /**
+ * A collection's name by its key, or `undefined` when it has gone or is in the
+ * trash. Reads only. Caller: the paused-job notice in
+ * `publishReportWindowCommands` (`src/bootstrap/registerUI.ts`, `P4-T21`).
+ *
+ * @param libraryID - the job's library
+ * @param collectionKey - the job's collection
+ */
+export function collectionNameOfKey(
+  libraryID: number,
+  collectionKey: string,
+): string | undefined {
+  const found: unknown = Zotero.Collections.getByLibraryAndKey(
+    libraryID,
+    collectionKey,
+  );
+  if (!isObject(found)) return undefined;
+  const collection = found as Zotero.Collection;
+  return collection.deleted ? undefined : collection.name;
+}
+
+/**
  * The collections one item belongs to, as `{ libraryID, collectionKey }`
  * (owner, `plan/00` §6 item 305(a)): the item pane's one-item run takes the
  * strictest privacy mode of these and the global setting (`docs/09` §3.5's

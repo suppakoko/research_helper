@@ -1,0 +1,19 @@
+{
+  "format": "trend-eval-expected-themes/1",
+  "setId": "synthetic-example",
+  "collectionName": "SYNTHETIC example collection, not a real collection",
+  "writtenBy": "nobody",
+  "writtenOn": "2026-11-02",
+  "itemKeys": ["SYNTH001", "SYNTH002", "SYNTH003"],
+  "themes": [
+    {
+      "id": "E1",
+      "name": "SYNTHETIC theme one, a format example and not a real theme",
+      "note": "SYNTHETIC: an optional one-line gloss in the owner's own words goes here."
+    },
+    {
+      "id": "E2",
+      "name": "SYNTHETIC theme two, a format example and not a real theme"
+    }
+  ]
+}

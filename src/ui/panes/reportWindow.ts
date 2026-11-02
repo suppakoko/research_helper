@@ -58,6 +58,9 @@ export const REPORT_WINDOW_L10N = {
   model: "research-helper-report-model",
   modelNone: "research-helper-report-model-none",
   close: "research-helper-report-close",
+  // `P4-T21`: "Report shown" (`docs/08` §6.3's note of 2026-11-02); its two
+  // items are `languageEn` and `languageKo`.
+  shownLabel: "research-helper-report-shown-label",
   // `P4-T20`: the run's ids (`reportViewModel.ts`).
   ...REPORT_RUN_L10N,
 } as const satisfies Record<string, ReportWindowMessageId>;
@@ -209,6 +212,12 @@ export interface ReportWindowSession {
   ): Promise<void>;
   /** Cancel the run: the report is discarded, every summary made is kept. */
   cancel(): void;
+  /**
+   * Which report of a two-report run the preview and the delivery buttons act
+   * on (`docs/08` §6.3's note of 2026-11-02). Called by the window's "Report
+   * shown" selector; built by `createReportWindowSession`.
+   */
+  showReport(language: "en" | "ko"): void;
   /** "Save as note": the named-group question first, in a group library. */
   saveNote(): Promise<void>;
   /** The save dialog's suggested name, once a report is stored. */

@@ -545,7 +545,7 @@ export function mockLLM(script: Array<LLMResult | Error>): LLMProvider & { calls
 
 This makes the interesting behaviours testable deterministically: retry-then-succeed, context-length-error-then-shrink-and-retry (FR-34), budget ceiling reached mid-job (FR-24), cancellation at item 87 of 200 (FR-23), malformed JSON output rejected by the schema validator (R-6), and a trend report containing an unresolvable citation being rejected (R-7).
 
-**Quality of generated text is not asserted here.** Prompt-quality regression is handled by the small curated evaluation set described in `06-summarization-and-trend-report.md`, run manually or in a nightly opt-in job — never as a blocking CI gate, because it costs money and is inherently fuzzy.
+**Quality of generated text is not asserted here.** Prompt-quality regression is handled by the small curated evaluation set described in `06-summarization-and-trend-report.md`, run manually — never as a blocking CI gate, because it costs money and is inherently fuzzy. *Corrected 2026-11-02 (`plan/00` §6 item 335(f)): this read "run manually or in a nightly opt-in job"; a nightly job would need a key in CI (item 287(d)).*
 
 ---
 

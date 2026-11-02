@@ -404,12 +404,19 @@ export interface CollectionPrivacySettings {
    * this record does.
    */
   readonly reportRoutineConfirmation?: RoutineConfirmation;
+  /**
+   * The recommend run's own "don't ask again" (`plan/08` §0.4 line 36;
+   * `docs/07` §4.5's note of 2026-11-02): only this record skips a recommend
+   * run's question, and a recommend run changes neither of the other two.
+   */
+  readonly recommendRoutineConfirmation?: RoutineConfirmation;
 }
 
-/** The two "don't ask again" members of a collection's settings. */
+/** The three "don't ask again" members of a collection's settings. */
 const ROUTINE_MEMBERS = [
   "routineConfirmation",
   "reportRoutineConfirmation",
+  "recommendRoutineConfirmation",
 ] as const;
 
 /** A stored record as a {@link RoutineConfirmation}, or `undefined` when malformed. */
@@ -458,6 +465,7 @@ export function readCollectionPrivacySettings(
     privacyMode?: PrivacyMode;
     routineConfirmation?: RoutineConfirmation;
     reportRoutineConfirmation?: RoutineConfirmation;
+    recommendRoutineConfirmation?: RoutineConfirmation;
   } = {};
   const mode = settings["privacyMode"];
   if (mode !== undefined && mode !== null) {
@@ -491,6 +499,7 @@ export async function writeCollectionPrivacySettings(
     readonly privacyMode?: PrivacyMode | undefined;
     readonly routineConfirmation?: RoutineConfirmation | undefined;
     readonly reportRoutineConfirmation?: RoutineConfirmation | undefined;
+    readonly recommendRoutineConfirmation?: RoutineConfirmation | undefined;
   },
 ): Promise<void> {
   const current =

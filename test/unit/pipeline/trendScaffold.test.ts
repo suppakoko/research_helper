@@ -41,9 +41,12 @@ import {
   UNMAPPED_THEME_REASON,
 } from "../../../src/pipeline/trendReport/cluster";
 import {
+  ANALYSES_SHORTENED_WARNING,
+  OUTPUT_LOWERED_WARNING,
   splitSections,
   TARGET_WORDS_CAPPED_WARNING,
   type ComposedReport,
+  type CompositionFit,
 } from "../../../src/pipeline/trendReport/compose";
 import {
   CRITIQUE_PER_SECTION_WARNING,
@@ -1155,6 +1158,86 @@ describe("the capped-target line reads the current plan (item 312(c))", () => {
   });
 });
 
+describe("the report says what the composition changed to fit (FINDING P4-T22-2's fix)", () => {
+  const withFit = (fit: CompositionFit) => ({
+    ...composed(modelMarkdown(), []),
+    plan: { fit } as ComposedReport["plan"],
+  });
+  const lowered: CompositionFit = {
+    outputTokens: 9_000,
+    outputLowered: true,
+    targetWords: 1_549,
+    targetWordsLowered: true,
+    droppedFields: [],
+    modelNote: "",
+  };
+
+  it("writes nothing when nothing changed, and when a cached report has no fit", () => {
+    const report = scaffoldReport(input());
+    expect(report.markdown).not.toContain("output tokens for this report");
+    expect(report.markdown).not.toContain("sent without the details");
+  });
+
+  it("says the output and the words, under the title and in Appendix B, and Appendix B's target is the one sent", () => {
+    const report = scaffoldReport(input({ composed: withFit(lowered) }));
+    const line = fillLabel(EN_REPORT_LABELS.fitOutputLowered, {
+      output: 9_000,
+      words: 1_549,
+    });
+    expect(report.markdown).toContain(`\n> ${line}\n`);
+    expect(report.markdown).toContain(`\n- ${line}\n`);
+    expect(report.markdown.indexOf(`> ${line}`)).toBeLessThan(
+      report.markdown.indexOf("## 1."),
+    );
+    expect(report.markdown).toContain(
+      fillLabel(EN_REPORT_LABELS.paramTargetWords, { words: 1_549 }),
+    );
+    expect(report.markdown).not.toContain("sent without the details");
+  });
+
+  it("names the sections the dropped fields feed, in section order", () => {
+    const report = scaffoldReport(
+      input({
+        composed: withFit({
+          ...lowered,
+          droppedFields: [
+            "representativePapers[].why",
+            "methodologicalPatterns",
+            "gaps",
+            "convergentFindings",
+          ],
+        }),
+      }),
+    );
+    const line = fillLabel(EN_REPORT_LABELS.fitAnalysesShortened, {
+      sections: "4, 5, 6, 8",
+    });
+    expect(report.markdown).toContain(`\n> ${line}\n`);
+    expect(report.markdown).toContain(`\n- ${line}\n`);
+  });
+
+  it("carries the composition's warnings on the report", () => {
+    const report = scaffoldReport(
+      input({
+        composed: composed(modelMarkdown(), [
+          OUTPUT_LOWERED_WARNING,
+          ANALYSES_SHORTENED_WARNING,
+        ]),
+      }),
+    );
+    expect(report.warnings).toContain(OUTPUT_LOWERED_WARNING);
+    expect(report.warnings).toContain(ANALYSES_SHORTENED_WARNING);
+  });
+
+  it("shows a Korean report the English until the owner approves the Korean", () => {
+    const ko = reportLabels("ko");
+    expect(ko.fitOutputLowered).toBe(EN_REPORT_LABELS.fitOutputLowered);
+    expect(ko.fitAnalysesShortened).toBe(EN_REPORT_LABELS.fitAnalysesShortened);
+    expect(isKoLabelPending("fitOutputLowered")).toBe(true);
+    expect(isKoLabelPending("fitAnalysesShortened")).toBe(true);
+  });
+});
+
 describe("the critique's warnings (coordinator, item 317(c))", () => {
   const line = EN_REPORT_LABELS.critiqueTextUnchecked;
 
@@ -1468,7 +1551,11 @@ describe("reportLabels.ts", () => {
     expect(KO_REPORT_LABELS.critiqueTextUnchecked).toBe(
       "일부 문단은 자동 검토를 거치지 않았습니다. 그 문단이 인용한 요약이 너무 길어 한 번의 검토 요청으로 보낼 수 없었기 때문입니다.",
     );
-    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual([]);
+    // Added 2026-11-02 for FINDING P4-T22-2's fix, awaiting the owner.
+    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual([
+      "fitOutputLowered",
+      "fitAnalysesShortened",
+    ]);
   });
 
   it("gives a ko report its approved Korean and English for every pending label", () => {

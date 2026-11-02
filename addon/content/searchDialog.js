@@ -145,6 +145,23 @@ var RHSearchWindow = {
     rerunHeading: "rh-rerun-heading",
     rerunRecorded: "rh-rerun-recorded",
     rerunDates: "rh-rerun-dates",
+    // FR-13's related mode (P5-T15, docs/08 §5.2): the Seed lines and the
+    // Include row, hidden in every other mode.
+    relatedHeader: "rh-related-header",
+    relatedSeedTitle: "rh-related-seed-title",
+    relatedSeedMeta: "rh-related-seed-meta",
+    relatedSeedAuthors: "rh-related-seed-authors",
+    relatedSeedDetails: "rh-related-seed-details",
+    relatedSeedMissing: "rh-related-seed-missing",
+    relatedIncludeReference: "rh-related-include-reference",
+    relatedIncludeCitation: "rh-related-include-citation",
+    relatedIncludeRecommendation: "rh-related-include-recommendation",
+    relatedIncludeSimilar: "rh-related-include-similar",
+    // What a year list's "Any" carries as its value; `Number()` of it is NaN,
+    // which a related query means as no bound (docs/08 §5.2's note of 2026-11-02).
+    yearAny: "any",
+    // The title in the mode chip, in code points; the Seed line has all of it.
+    relatedChipTitleMax: 60,
     initialProse: "rh-state-initial-prose",
     emptyHeadline: "rh-state-empty-headline",
 
@@ -357,6 +374,11 @@ var RHSearchWindow = {
     // FR-12 (P2-T17): the re-run chip, the banner's two argument-taking lines
     // and the span that replaces the years label for a recorded "All years".
     modeRerun: "research-helper-search-mode-rerun",
+    // FR-13 (P5-T15): the related mode's title, chip, panel and "Any".
+    windowTitleRelated: "research-helper-search-window-title-related",
+    modeRelated: "research-helper-search-mode-related",
+    stateInitialRelated: "research-helper-search-state-initial-related",
+    yearsAny: "research-helper-search-years-any",
     rerunHeading: "research-helper-search-rerun-heading",
     rerunRecorded: "research-helper-search-rerun-recorded",
     rerunAllYears: "research-helper-search-rerun-all-years",
@@ -1163,6 +1185,38 @@ var RHSearchWindow = {
     },
 
     /**
+     * The Seed line's venue, year and DOI (`docs/08` §5.2, P5-T15), each left
+     * out when the item has none. Data, so no Fluent message: `docs/08` §10.3,
+     * and a year stays free of `Intl.NumberFormat` as in {@link yearText}.
+     *
+     * @param {{venue?: string, year?: number, doi?: string}} seed
+     * @returns {string}
+     */
+    relatedSeedDetails(seed) {
+      const source = seed || {};
+      return [source.venue, this.yearText(source.year), source.doi]
+        .filter((part) => typeof part === "string" && part.trim() !== "")
+        .map((part) => part.trim())
+        .join(" · ");
+    },
+
+    /**
+     * The seed's title as the mode chip shows it: at most `limit` code points,
+     * so a cut never falls inside a surrogate pair (P5-T15).
+     *
+     * @param {unknown} title
+     * @param {number} limit
+     * @returns {string}
+     */
+    chipTitle(title, limit) {
+      const text = typeof title === "string" ? title.trim() : "";
+      const points = Array.from(text);
+      return points.length > limit
+        ? points.slice(0, limit).join("").trimEnd() + "…"
+        : text;
+    },
+
+    /**
      * The key a row's selection is held under.
      *
      * The host's own key when it has one — `docs/07` §5.1's `workKey` is what
@@ -1515,6 +1569,8 @@ var RHSearchWindow = {
     // FR-12 (P2-T17): seed the controls from the collection's stored record.
     // Asynchronous, and last, so the window is fully usable before it lands.
     this.settle(this.loadRerun());
+    // FR-13 (P5-T15): the related mode's Seed lines, for the same reason.
+    this.settle(this.loadRelatedSeed());
   },
 
   /**
@@ -1605,7 +1661,12 @@ var RHSearchWindow = {
     }
     return l10n
       .formatMessages([
-        { id: this.l10n.windowTitle },
+        {
+          id:
+            this.io.mode === "related"
+              ? this.l10n.windowTitleRelated
+              : this.l10n.windowTitle,
+        },
         { id: this.l10n.close },
         { id: this.l10n.import, args: { count: 0 } },
       ])
@@ -1665,6 +1726,11 @@ var RHSearchWindow = {
     const mode = this.el(this.spec.mode);
     if (mode && this.io.mode === "keyword") {
       mode.setAttribute("data-l10n-id", this.l10n.modeKeyword);
+    }
+
+    // Last, because seedScreening() above decides the screening row's `hidden`.
+    if (this.io.mode === "related") {
+      this.applyRelatedMode();
     }
   },
 
@@ -2126,11 +2192,18 @@ var RHSearchWindow = {
     }
   },
 
-  /** `docs/08` §4.2: the keyword field is focused on open. */
+  /**
+   * `docs/08` §4.2: the keyword field is focused on open. The related mode has
+   * none, so its first Include box takes the focus (P5-T15).
+   */
   focusKeyword() {
-    const keyword = this.el(this.spec.keyword);
-    if (keyword && typeof keyword.focus === "function") {
-      keyword.focus();
+    const target = this.el(
+      this.io.mode === "related"
+        ? this.spec.relatedIncludeReference
+        : this.spec.keyword,
+    );
+    if (target && typeof target.focus === "function") {
+      target.focus();
     }
   },
 
@@ -2316,6 +2389,12 @@ var RHSearchWindow = {
    * is wired: `search()` makes the same check about `runSearch`.
    */
   connectHost() {
+    // FR-13 (P5-T15): the keyword view model is application-scoped and would
+    // paint its previous run's rows under this seed (docs/08 §5.2's note of
+    // 2026-11-02). P5-T16 gives the related mode a view model of its own.
+    if (this.io.mode === "related") {
+      return;
+    }
     if (typeof this.host.connect !== "function") {
       return;
     }
@@ -3287,6 +3366,11 @@ var RHSearchWindow = {
    * (`docs/01` §2.3).
    */
   search() {
+    // FR-13 (P5-T15): nothing runs in the related mode until P5-T16 binds its
+    // pipeline; a keyword search with no keyword must not start in its place.
+    if (this.io.mode === "related") {
+      return;
+    }
     if (!this.refreshSearchGate().enabled) {
       return;
     }
@@ -3672,6 +3756,11 @@ var RHSearchWindow = {
     if (this.state.rerun) {
       this.state.rerun.dateTouched = true;
     }
+    // FR-13 (P5-T15): the related mode hides the span, and its panel's text is
+    // not the keyword panel's. `collectQuery` reads the two lists as they stand.
+    if (this.io.mode === "related") {
+      return;
+    }
     const from = Number(this.value(this.spec.yearsFrom));
     const to = Number(this.value(this.spec.yearsTo));
     if (!Number.isInteger(from) || !Number.isInteger(to)) {
@@ -3699,11 +3788,185 @@ var RHSearchWindow = {
       collectionID: this.value(this.spec.target),
       // FR-12 (P2-T17): the re-run's exact window, while the years are untouched.
       ...this.rerunDateWindow(),
+      // FR-13 (P5-T15): the seed and the Include row, in the related mode only.
+      ...this.relatedQuery(),
       // P3-T27: the run's own screening choice. The view model coerces the
       // number; nothing here or there writes it to a preference.
       screening: {
         enabled: this.screeningChosen(),
         threshold: Number(this.value(this.spec.screeningThreshold)),
+      },
+    };
+  },
+
+  // =========================================================================
+  // 4b. FR-13's related mode (P5-T15, docs/08 §5.2)
+  // =========================================================================
+
+  /**
+   * Turn the keyword window into `docs/08` §5.2's: show the Seed lines and the
+   * Include row, hide what has no meaning for a seed, and put both year lists on
+   * "Any". Every hidden control keeps its value, so nothing else in this file
+   * needs to know. The window title is {@link applyChromeStrings}'s.
+   */
+  applyRelatedMode() {
+    const header = this.el(this.spec.relatedHeader);
+    if (header) {
+      header.hidden = false;
+    }
+    for (const id of [
+      "rh-search-keyword-label",
+      this.spec.keyword,
+      this.spec.run,
+      this.spec.yearsSpan,
+      "rh-search-max-results-label",
+      this.spec.maxResults,
+      "rh-search-databases-group",
+      this.spec.screeningRow,
+    ]) {
+      const element = this.el(id);
+      if (element) {
+        element.hidden = true;
+      }
+    }
+    // The chip stays hidden until the seed's title is known, so it never says
+    // "Keyword" here: applyRelatedSeed() sets its id and argument together.
+    const chip = this.el(this.spec.mode);
+    if (chip) {
+      chip.hidden = true;
+    }
+    this.addAnyYear(this.spec.yearsFrom);
+    this.addAnyYear(this.spec.yearsTo);
+    this.localize(this.spec.initialProse, this.l10n.stateInitialRelated);
+  },
+
+  /**
+   * Put "Any" at the top of one year list and select it (`docs/08` §5.2).
+   *
+   * @param {string} id
+   */
+  addAnyYear(id) {
+    const list = this.el(id);
+    if (!list) {
+      return;
+    }
+    const popup = list.firstElementChild || list;
+    const item = this.createXUL("menuitem");
+    item.setAttribute("value", this.spec.yearAny);
+    item.setAttribute("data-l10n-id", this.l10n.yearsAny);
+    popup.insertBefore(item, popup.firstElementChild);
+    list.value = this.spec.yearAny;
+  },
+
+  /**
+   * Ask the host for the seed and draw it. A no-op outside `mode: "related"`.
+   * No host, no answer and a rejected read all end on the missing line; a
+   * rejection then also reaches {@link settle}'s log.
+   *
+   * @returns {Promise<object|null>} the seed drawn, or `null`
+   */
+  async loadRelatedSeed() {
+    if (this.io.mode !== "related") {
+      return null;
+    }
+    let seed = null;
+    try {
+      if (
+        typeof this.host.loadRelatedSeed === "function" &&
+        Number.isInteger(this.io.seedItemID)
+      ) {
+        seed = (await this.host.loadRelatedSeed(this.io.seedItemID)) || null;
+      }
+    } finally {
+      this.applyRelatedSeed(seed);
+    }
+    return seed;
+  },
+
+  /**
+   * Draw `docs/08` §5.2's Seed lines and §4.2's `Related to: <title>` chip.
+   *
+   * @param {object|null} seed - the host's `RelatedSeedHeader`, or `null`
+   */
+  applyRelatedSeed(seed) {
+    const missing = this.el(this.spec.relatedSeedMissing);
+    if (missing) {
+      missing.hidden = seed !== null;
+    }
+    const title = this.el(this.spec.relatedSeedTitle);
+    if (title) {
+      title.hidden = seed === null;
+      // A paper's title is data, not a translatable string.
+      title.textContent = seed === null ? "" : seed.title || "";
+    }
+    const meta = this.el(this.spec.relatedSeedMeta);
+    if (meta) {
+      meta.hidden = seed === null;
+    }
+    if (seed === null) {
+      return;
+    }
+
+    const summary = this.logic.authorSummary(
+      seed.authors,
+      this.spec.authorNamesShown,
+    );
+    const authors = this.el(this.spec.relatedSeedAuthors);
+    if (authors && summary.overflow > 0) {
+      // Id and arguments together, never separately — see applyYearRange.
+      authors.setAttribute(
+        "data-l10n-args",
+        JSON.stringify({ names: summary.names, count: summary.overflow }),
+      );
+      authors.setAttribute("data-l10n-id", this.l10n.authorsOverflow);
+    } else if (authors) {
+      authors.textContent = summary.names;
+    }
+    const details = this.el(this.spec.relatedSeedDetails);
+    if (details) {
+      const text = this.logic.relatedSeedDetails(seed);
+      details.textContent =
+        summary.names !== "" && text !== "" ? "· " + text : text;
+    }
+
+    const chipTitle = this.logic.chipTitle(
+      seed.title,
+      this.spec.relatedChipTitleMax,
+    );
+    const chip = this.el(this.spec.mode);
+    if (chip) {
+      chip.hidden = chipTitle === "";
+    }
+    if (chipTitle !== "") {
+      this.localize(
+        this.spec.mode,
+        this.l10n.modeRelated,
+        JSON.stringify({ title: chipTitle }),
+      );
+    }
+  },
+
+  /**
+   * What the related mode adds to a query (`SearchWindowRelatedQuery` in
+   * `src/ui/dialogs/searchDialog.ts`); nothing in any other mode.
+   *
+   * @returns {object}
+   */
+  relatedQuery() {
+    if (this.io.mode !== "related") {
+      return {};
+    }
+    return {
+      related: {
+        seedItemID: this.io.seedItemID,
+        relations: [
+          this.spec.relatedIncludeReference,
+          this.spec.relatedIncludeCitation,
+          this.spec.relatedIncludeRecommendation,
+          this.spec.relatedIncludeSimilar,
+        ]
+          .filter((id) => this.checked(id))
+          .map((id) => this.el(id).getAttribute("value")),
       },
     };
   },

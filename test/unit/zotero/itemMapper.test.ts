@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   isWorkType,
@@ -24,12 +24,15 @@ import {
   canonicalWorkFromSnapshot,
   NATIVE_ID_FIELDS_PRESENT,
   RESEARCH_HELPER_TAG,
+  snapshotZoteroItem,
   SOURCE_CATALOG_LABELS,
+  topicTagNames,
   toZoteroItemJSON,
   toZoteroMapping,
   workTypeFor,
   zoteroItemTypeFor,
   type ZoteroCreatorJSON,
+  type ZoteroItemSnapshot,
 } from "../../../src/zotero/itemMapper";
 
 /**
@@ -565,5 +568,66 @@ describe("item types — preprint is its own column, everything else journalArti
       );
       expect(json["itemType"]).toBe("journalArticle");
     }
+  });
+});
+
+describe("dateAdded on the snapshot (P5-T18; docs/05 §7.2: addedAt is not on the record)", () => {
+  const SNAPSHOT: ZoteroItemSnapshot = {
+    itemType: "journalArticle",
+    fields: { title: "A trial of something", DOI: "10.1056/nejmoa2300709" },
+    dateMultipart: "2024-03-00 March 2024",
+    creators: [{ creatorType: "author", firstName: "Minji", lastName: "Kim" }],
+    tags: ["MeSH*: Neoplasms", "a keyword"],
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("changes no field of the mapped CanonicalWork", () => {
+    const without = canonicalWorkFromSnapshot(SNAPSHOT, { nowEpochMs: AT });
+    const withIt = canonicalWorkFromSnapshot(
+      { ...SNAPSHOT, dateAdded: "2026-03-07 04:05:06" },
+      { nowEpochMs: AT },
+    );
+    expect(withIt).toEqual(without);
+    expect(JSON.stringify(withIt)).not.toContain("2026-03-07");
+    expect(withIt).not.toHaveProperty("dateAdded");
+  });
+
+  it("is filled by snapshotZoteroItem from item.dateAdded", () => {
+    vi.stubGlobal("Zotero", {
+      ItemTypes: { getName: () => "journalArticle" },
+    });
+    const snapshot = snapshotZoteroItem({
+      itemTypeID: 1,
+      dateAdded: "2026-03-07 04:05:06",
+      getField: () => "",
+      getCreatorsJSON: () => [],
+      getTags: () => [],
+    } as unknown as Zotero.Item);
+    expect(snapshot.dateAdded).toBe("2026-03-07 04:05:06");
+  });
+});
+
+describe("topicTagNames (P5-T18; docs/05 §7.2's note, item 8)", () => {
+  it("keeps automatic tags and subject-spelled manual tags, and drops what the user typed", () => {
+    expect(
+      topicTagNames([
+        { tag: "an automatic keyword", type: AUTOMATIC_TAG_TYPE },
+        { tag: "to read" },
+        { tag: "my project", type: 0 },
+        { tag: "MeSH: Neoplasms" },
+        { tag: " MeSH*: Aspirin ", type: 0 },
+        { tag: "arXiv: cs.LG" },
+        { tag: "Mesh: wrong case" },
+        { tag: "MeSH:no space" },
+      ]),
+    ).toEqual([
+      "an automatic keyword",
+      "MeSH: Neoplasms",
+      " MeSH*: Aspirin ",
+      "arXiv: cs.LG",
+    ]);
   });
 });

@@ -579,6 +579,35 @@ Two concrete hazards make that more than a style preference:
    └────────────────────────────────────────┘
 ```
 
+> **As built 2026-11-02 (`P5-T15`; FR-13; owner, `plan/00` §6 item 321(b)).** `itemMenuOptions` in
+> `src/ui/menus/registerMenus.ts` registers §2.4's `rh-menu-item` with one entry, "Find Related Papers…"; the
+> "Summarize with AI" row above is not built, and the item pane's section is that command's surface today. The
+> entry is enabled when `context.items` holds exactly one regular item, counted as §2.4's block counts them, so one
+> regular item plus a note is enabled and its seed is the regular item. Two regular items leave it disabled. A
+> selection with no regular item hides the submenu. Multi-seed is not built.
+>
+> **Measured 2026-11-02 in Zotero 10.0.3 on Windows (`P5-T15`), so the disabled entry carries FR-13's tooltip.** On the
+> real entry in the real open submenu, hovered with a synthesized mouse while the main window was active: with two
+> regular items selected Zotero's default tooltip reached state `open` with the entry's `tooltiptext` as its label; with
+> one regular item it stayed `closed`. A control on a toolbar button behaved the same. With the main window inactive,
+> neither the control nor the entry showed a tooltip, so that measurement says nothing about a disabled entry. The entry
+> keeps one message: `onShowing` calls `setL10nArgs` with `{ oneItem: "yes" | "no" }`, and
+> `research-helper-menu-item-find-related`'s `.tooltiptext` reads "Select a single item to find papers related to it."
+> for `no` and is empty for `yes`. `setL10nArgs` needs a JSON **string**: `menuManager.js` assigns the value to
+> `dataset.l10nArgs`, although `zotero-types` declares `object`.
+>
+> **Measured the same day: a hidden top-level submenu leaves the separator behind.** For a selection with no regular
+> item the popup still ends in `MenuManager`'s `zotero-custom-menu-group-separator` (§2.3), not hidden, followed by our
+> hidden `<menu>`. The plugin does not own that element, and the separator was read from the DOM, not looked at on screen.
+>
+> **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313): how `related.enabled` holds it back**, as item
+> 307(d) held the report entry back. Three readers of the hidden preference
+> (`07-architecture-and-data-model.md` §8.5): `registerUI` does not register the item menu at all while it is off,
+> read once at startup or enable, so no empty submenu and no separator from `docs/08` §2.3's grouping appear; the
+> submenu's `onShowing` reads it again, so turning it off hides a menu already registered; and the opener
+> (`openRelatedWindowCommand` in `src/bootstrap/registerUI.ts`) reads it on every call and opens nothing while it
+> is off. Turning it on takes effect at the next startup or enable. `P5-T30` changes the default.
+
 ---
 
 ## 3. Item-pane section: AI summary
@@ -1366,7 +1395,7 @@ Zotero relations are **bidirectional only if set on both sides** — this is exa
 │                                                                               │
 │  Include  ☑ References (37)  ☑ Citations (58)  ☑ Recommended (20)             │
 │           ☑ Semantically similar (25)                                         │
-│  Years    [ Any ▾ ] – [ Any ▾ ]   ☐ Restrict to last 3 years                  │
+│  Years    [ Any ▾ ] – [ Any ▾ ]                                               │
 │                                                                               │
 │  ┌───┬──────────────────────────────┬────────────┬─────┬──────────┬─────────┐ │
 │  │ ☑ │ Title                        │ Authors    │Year │ Relation │ Score   │ │
@@ -1384,6 +1413,39 @@ Zotero relations are **bidirectional only if set on both sides** — this is exa
 ```
 
 Note the **year filter is off by default here**. The 3-year restriction is a discovery heuristic for keyword search; for citation graphs it would silently discard the foundational papers that are the whole point of following references.
+
+> **As built 2026-11-02 (`P5-T15`).** The entry opens this window with `{ mode: "related", seedItemID }`. Drawn so far:
+> the window title, the mode chip (`Related to: <title>`, §4.2's row, the title cut at 60 characters), the Seed lines
+> (title; authors as in the table, venue, year, DOI, each left out when the item has none), the four Include boxes,
+> all ticked, and both year lists on "Any". The host's `loadRelatedSeed` reads the seed
+> (`canonicalWorkOfItemID` in `src/zotero/itemMapper.ts`); an item that can no longer be read shows
+> `research-helper-search-related-seed-missing` instead of the Seed lines.
+>
+> **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313), five readings of the wireframe above.**
+> (1) Hidden in this mode, because the wireframe draws none of them and none applies to a seed: Keyword and its
+> input, Search, the year span, Max per database, the Databases group and the screening row. The filter row, the
+> result table and the import target stay, as §4 draws them. (2) The window does not attach to the keyword search's
+> view model in this mode (`connectHost`), because that model is application-scoped and would paint the previous
+> keyword run's rows under this seed; `P5-T16` gives the mode its own. Until then nothing runs: the panel says what
+> will appear, and `search()` does nothing. (3) The fourth box reads "Similar articles (PubMed)" from the start, under
+> `plan/08` §0.4 line 12, so `P5-T16` has one label fewer to change. (4) **Not drawn here:** the counts in the Include
+> boxes (known only after a run, so `P5-T16`'s), "Restrict to last 3 years" (removed from the wireframe by the owner on 2026-11-02, `plan/00` §6
+> item 334(c): the year lists do the same) and "Link imported items…" (`P5-T17`'s). (5) A query from this window carries
+> `related: { seedItemID, relations }`, and a year list on "Any" reads as `NaN` in `fromYear` / `toYear`, which
+> `P5-T16` must read as no bound.
+>
+> **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313): the search window closes at shutdown, in every
+> mode**, as the report and summarize windows do (item 307(e)), because FR-56's "leaves no window" cannot hold for one
+> mode of a window with one name. `publishSearchWindowCommands` in `src/bootstrap/registerUI.ts` does it.
+>
+> **Measured 2026-11-02 in Zotero 10.0.3 (`P5-T15`).** (1) A `<menuitem>` added at run time with only `data-l10n-id`
+> and selected before Fluent has worded it does give its menulist the label, through the menulist's observer of its
+> selected item: both year lists read "Any". (2) A whole-window `document.l10n.translateRoots()` **removes** `label` from
+> a menulist that has its own `data-l10n-id`, as the year lists do, because Fluent clears a localizable attribute the
+> message does not give, and nothing puts it back until the selection changes. The window's code never calls it; a test
+> must not call it either. This was the cause of a blank list seen on the way to this note, and it was the test's doing.
+> (3) A second "Find Related Papers…" reloads the one named window: the mediator still counts one window and the Seed
+> line shows the new seed. (4) A seed that is a note draws the missing line.
 
 ### 5.3 Edge cases
 
@@ -1464,6 +1526,11 @@ Two performance notes: re-parsing Markdown on every token will pin the UI thread
 > note is the formatted rendering and no Markdown parser is added to the window. `aria-live` is set only when
 > no more deltas follow (§9). A stop, a cancel or a failure clears the preview and says "The draft was discarded;
 > nothing was saved." A report served whole from its cache entry streams nothing and shows only the final text.
+>
+> **As built 2026-11-02 (`P4-T21`).** DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313): in a run that writes
+> two reports the preview shows the language being written and restarts when the language changes
+> (`DraftDelta.language`, `reduceReportRun`), and the Composing and Critiquing rows go round once per language. No new
+> progress string is added. When the run ends the preview holds the report shown (§6.3's note of this date).
 
 **If streaming is unavailable** (see the unverified caveat in `01-zotero-plugin-platform.md` §8.4), the same window shows a determinate-less progress bar with "Writing report…" and paints the whole document on arrival. The delivery options in Stage 4 are identical either way.
 
@@ -1496,6 +1563,12 @@ const base = `${safeBaseName(collection.name)} — trends ${new Date().toISOStri
 > **Decided 2026-10-27 (`P4-T15`; `safeBaseName` and `reportExportFileName` in `src/pipeline/trendReport/exportMarkdown.ts`).** The save dialog's suggested name is `safeBaseName(collectionName)` + ` — trends ` + the date + `.md`. Three readings of the sketch above: (1) **the date is the report's generation date** (`TrendReport.generatedAtEpochMs`, UTC, as `toISOString` gives it), not the moment of export, so a report exported twice suggests one name; (2) **the 80-character cap counts code points**, not UTF-16 units, so a name is never cut inside a surrogate pair; (3) **the name is trimmed again after the cap**, so a cut never leaves a trailing space. The character class, the whitespace collapse and the `"report"` fallback are the sketch's, unchanged. The dialog itself is opened by the report window document and the chosen path handed inward (`P4-T20`), as `P1-T36` measured for FR-8's JSON export.
 
 > **As built 2026-11-02 (`P4-T20`; `settleReportNote` and `buildReportRunModel` in `src/ui/viewModels/reportViewModel.ts`).** Readings DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313): (1) **The run writes the note itself** when `report.saveNote` is on (`07-…` §12.4 reading 9), so the window's "Save as note" is enabled only when `report.saveNote` is on, the library is editable and that write did not happen: the named-group question was answered "no", or the write failed. With the setting off the button stays disabled, as `plan/07` `P4-T20` step 4 says; Export and Copy remain. (2) **A group library** is asked by name after the report is stored and before any note is written; "no" writes nothing (`G-25` holds the real-group check). (3) **The window says what became of the note**: saved, not writable, collection gone, not saved in the group, or setting off. (4) **Copy** takes the text the export writes, and the window script puts it on the clipboard with `Zotero.Utilities.Internal.copyTextToClipboard` (`src/` outside `zotero/` may not name `Zotero`). (5) The wireframe's Regenerate, Audio and checkboxes are not built: Generate can simply be pressed again, and audio is Phase 6's.
+
+> **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313; asked for by the owner through `P4-T21`; `reportChoice` in `ReportRunModel`, `ReportWindowSession.showReport`).** **Export and Copy act on one report at a time, the one shown, when a `reportLanguage` `both` run gives two reports.** (1) A "Report shown" selector with "English" and "한국어" appears next to the delivery buttons, only when the run gave two reports. (2) The preview, Export, Copy, "Save as note" and the note's line all follow it, so what is on screen is what each button acts on, and nothing is merged into one file. (3) The first report shown is the one in Zotero's interface language, otherwise the first. (4) Changing it clears "Exported" and "Copied". (5) In a two-report run the export dialog's suggested name ends in the language: `<name> — trends <date> (ko).md`, so two exports do not suggest one name; every other run's name is as it was. Rejected: one combined file (no reader asked for it, and the Bibliography and appendices would appear twice), a second pair of buttons (four buttons that differ by a word).
+
+> **Added 2026-11-02 (owner, `plan/00` §6 item 332(b); `07-…` §12.4 reading 23).** **A report job left paused gets a one-time notice when Zotero starts**, in Zotero's progress window, naming the collections and saying that opening a collection's report window is how to continue or stop it. Nothing is spent and no job is started by the notice; the question itself stays with the collection's window (`07-…` §12.4 reading 15). The notice closes on a timer, as the summarize run's resumed notice does. *Widened 2026-11-02 (coordinator, `plan/00` §6 item 334(j); `07-…` §12.4 reading 24): a report job left `interrupted` waiting for the user gets the same notice and the same question in its collection's window.* *Measured 2026-11-02 in Zotero 10.0.3 (`test/integration/reportWindow-flow.spec.ts`, English, one collection with a short name): `Zotero.ProgressWindow` holds the sentence on one line in a label that crops at its end, and the window grows to it: label 1192 of 1192 pixels, window 1240 pixels on a screen 3440 pixels wide, so the whole sentence shows. Unmeasured: a screen narrower than that window, several collections named in one notice, and the Korean sentence. The sentence is cropped at its end if the window cannot grow enough.*
+
+> **Added 2026-11-02 (owner, `plan/00` §6 item 334(d); `07-…` §12.4 readings 19 and 20).** **When a `both` run's English report is written and its Korean report is not, the English report is saved and the window says why Korean was not written.** The window shows "Report ready" and, below it in the stop line, one sentence from `research-helper-report-stopped-korean`, by reason: the model's draft left out required sections (`structure`), the request to the model failed (`request`), or the report could not be finished and saved (`finishing`). Each says the English report is saved and how to try Korean alone. No "Report shown" selector appears, and Export and Copy act on the English report. A run the user cancels saves nothing, as before. **When the Korean request cannot fit the model's limits at all**, which is known before any report request, DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313): the run stops there and the stop line (reason `no-room`) says that no report was written, that nothing was spent on either report, that every summary already made is kept, and to choose English under Language and generate again. The language list and Generate are available again at that point.
 
 ### 6.4 Wireframes
 

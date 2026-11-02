@@ -918,6 +918,13 @@ export interface ZoteroItemSnapshot {
   readonly creators: readonly ZoteroCreatorSnapshot[];
   /** Tag names only; the automatic/manual type is not needed to invert §6.2. */
   readonly tags: readonly string[];
+  /**
+   * `item.dateAdded`, as Zotero stores it (`YYYY-MM-DD HH:MM:SS`, UTC). Optional,
+   * so a literal snapshot stays valid, and read by {@link readCollectionWorks}
+   * only: {@link canonicalWorkFromSnapshot} ignores it, because `docs/05` §7.2
+   * keeps `addedAt` off the record (`P5-T18`).
+   */
+  readonly dateAdded?: string;
 }
 
 /**
@@ -1256,6 +1263,7 @@ export function snapshotZoteroItem(item: Zotero.Item): ZoteroItemSnapshot {
       ...(creator.name === undefined ? {} : { name: creator.name }),
     })),
     tags: item.getTags().map((tag) => tag.tag),
+    dateAdded: item.dateAdded,
   };
 }
 
@@ -1298,4 +1306,143 @@ export function workKeyOfItemID(itemID: number): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * One regular item as a {@link CanonicalWork}, by item id, with its data loaded
+ * first (`P5-T15`): the search window's related mode draws the seed's header
+ * from this, through `src/bootstrap/registerUI.ts`, which may not name the
+ * `Zotero` global (`eslint.config.js`'s `research-helper/zotero-global`).
+ *
+ * `undefined` when the id names no item, or a note, an attachment or an item in
+ * the trash: the seed was deleted between the click and the window. Reads only.
+ *
+ * @param itemID - a `Zotero.Item` id
+ * @returns the work, or `undefined`
+ */
+export async function canonicalWorkOfItemID(
+  itemID: number,
+): Promise<CanonicalWork | undefined> {
+  const found: unknown = await Zotero.Items.getAsync(itemID);
+  if (typeof found !== "object" || found === null) return undefined;
+  const item = found as Zotero.Item;
+  if (!item.isRegularItem() || item.deleted) return undefined;
+  await Zotero.Items.loadDataTypes([item]);
+  return fromZoteroItem(item);
+}
+
+// ---- 7.4 What the recommend profile reads (`P5-T18`) -----------------------
+
+/**
+ * The tag names a collection profile may read: automatic tags, which a
+ * translator or this plugin wrote, plus a manual tag spelled as a subject
+ * (`MeSH: …`, `arXiv: …`). A tag the user typed is left out, so it cannot become
+ * a keyword and then a search query (`docs/05` §7.2's note of 2026-11-02, item 8;
+ * `docs/09` §3 row 6 lists tags among what is not sent).
+ *
+ * @param tags - `Zotero.Item#getTags()`'s answer
+ * @returns the names, in the order given
+ */
+export function topicTagNames(
+  tags: readonly { readonly tag: string; readonly type?: number }[],
+): readonly string[] {
+  return tags
+    .filter(
+      (entry) =>
+        entry.type === AUTOMATIC_TAG_TYPE || SUBJECT_TAG.test(entry.tag.trim()),
+    )
+    .map((entry) => entry.tag);
+}
+
+/** One regular item of a collection, as `readCollectionWorks` reads it. */
+export interface CollectionWorkRead {
+  readonly itemKey: string;
+  /** `item.dateModified`: half of `membershipHash`. */
+  readonly dateModified: string;
+  /** {@link ZoteroItemSnapshot.dateAdded}. */
+  readonly dateAdded?: string;
+  /** The item's work, with only {@link topicTagNames}' tags read. */
+  readonly work: CanonicalWork;
+}
+
+/** What {@link readCollectionWorks} returns. */
+export interface CollectionWorksRead {
+  readonly name: string;
+  readonly items: readonly CollectionWorkRead[];
+}
+
+/**
+ * The collection's regular items, not in the trash, each as a
+ * {@link CanonicalWork} with its key and dates beside it. Reads only. Caller:
+ * `createZoteroRecommendLibrary` (`src/bootstrap/registerPipelines.ts`).
+ *
+ * @param libraryID - the collection's library
+ * @param collectionKey - the collection's key
+ * @throws Error when the key names no collection
+ */
+export async function readCollectionWorks(
+  libraryID: number,
+  collectionKey: string,
+): Promise<CollectionWorksRead> {
+  const found: unknown = Zotero.Collections.getByLibraryAndKey(
+    libraryID,
+    collectionKey,
+  );
+  if (typeof found !== "object" || found === null) {
+    throw new Error("[research-helper] the collection to profile is gone");
+  }
+  const collection = found as Zotero.Collection;
+  const items = collection
+    .getChildItems(false, false)
+    .filter((item) => item.isRegularItem() && !item.deleted);
+  await Zotero.Items.loadDataTypes(items);
+  return {
+    name: collection.name,
+    items: items.map((item) => {
+      const snapshot = snapshotZoteroItem(item);
+      return {
+        itemKey: item.key,
+        dateModified: item.dateModified,
+        ...(snapshot.dateAdded !== undefined && {
+          dateAdded: snapshot.dateAdded,
+        }),
+        work: canonicalWorkFromSnapshot({
+          ...snapshot,
+          tags: topicTagNames(item.getTags()),
+        }),
+      };
+    }),
+  };
+}
+
+/** The fields of one library item the profile's term counts read. */
+export type ItemTermSource = Pick<
+  CanonicalWork,
+  "title" | "subjects" | "keywords"
+>;
+
+/**
+ * Every regular item of the library, not in the trash, as the title and tags the
+ * profile's term counts read: `docs/05` §7.2's "frequency in the user's whole
+ * library". One search, as {@link buildLibraryIndex} makes, and one pass per run;
+ * `plan/08` `P5-T30` measures it on the owner's library. Reads only. Caller:
+ * `createZoteroRecommendLibrary`.
+ *
+ * @param libraryID - the library
+ */
+export async function readLibraryTermSources(
+  libraryID: number,
+): Promise<readonly ItemTermSource[]> {
+  const search = new Zotero.Search({ libraryID });
+  // The same two special conditions as `buildLibraryIndex`, for its reasons.
+  search.addCondition("deleted", "false", "");
+  search.addCondition("noChildren", "true", "");
+  const items = await Zotero.Items.getAsync(await search.search());
+  await Zotero.Items.loadDataTypes(items);
+  return items
+    .filter((item) => item.isRegularItem() && !item.deleted)
+    .map((item) => ({
+      title: item.getField("title"),
+      ...tagsToSubjects(topicTagNames(item.getTags())),
+    }));
 }

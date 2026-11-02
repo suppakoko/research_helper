@@ -15,8 +15,11 @@ import {
   SEARCH_WINDOW_FEATURES,
   SEARCH_WINDOW_KEYWORD_ID,
   SEARCH_WINDOW_MIN_SIZE,
+  SEARCH_WINDOW_RELATIONS,
   SEARCH_WINDOW_ROOT_ID,
+  relatedSeedHeader,
 } from "../../../src/ui/dialogs/searchDialog";
+import type { CanonicalWork } from "../../../src/model/canonicalWork";
 import { PREFERENCES_PANE_ID } from "../../../src/ui/prefs/preferencesPane";
 
 /**
@@ -1263,6 +1266,8 @@ describe("searchDialog.xhtml follows docs/08 §4.1.1", () => {
       .filter((id): id is string => id !== undefined);
     expect(rows).toStrictEqual([
       "rh-search-query-row",
+      // P5-T15: hidden outside the related mode (docs/08 §5.2).
+      "rh-related-header",
       "rh-search-scope-row",
       "rh-search-databases-group",
       "rh-search-filter-row",
@@ -1301,7 +1306,7 @@ describe("searchDialog.xhtml follows docs/08 §4.1.1", () => {
     const { controller } = harness();
     const ids = Object.entries(controller.spec)
       .filter(([, value]) => typeof value === "string")
-      .filter(([key]) => key !== "duplicatesDefault")
+      .filter(([key]) => key !== "duplicatesDefault" && key !== "yearAny")
       .map(([, value]) => value as string);
     expect(ids.length).toBeGreaterThan(20);
     for (const id of ids) {
@@ -3834,5 +3839,364 @@ describe("item 281(b) — the screening cost line", () => {
     });
     bare.controller.init();
     expect(bare.byId("rh-search-screening-cost")?.hidden).toBe(true);
+  });
+});
+
+// ===========================================================================
+// P5-T15 — the window opened with mode: "related" (docs/08 §5.2's notes of
+// 2026-11-02). The real window is test/integration/menus.spec.ts's.
+// ===========================================================================
+
+describe('P5-T15 — the window opened with mode: "related"', () => {
+  const SEED = {
+    title: "Lipid nanoparticles for CRISPR delivery",
+    authors: [
+      { family: "Lovelace", given: "Ada" },
+      { family: "Turing", given: "Alan" },
+    ],
+    venue: "Nature",
+    year: 2021,
+    doi: "10.1000/seed",
+  };
+
+  const flush = (): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, 0));
+
+  /** Open the window on a seed and let its asynchronous read land. */
+  async function openRelated(
+    seed: unknown = SEED,
+    extraHost: Record<string, unknown> = {},
+  ) {
+    const asked: unknown[] = [];
+    let connects = 0;
+    const h = harness({
+      args: { mode: "related", seedItemID: 77 },
+      host: {
+        listSources: () => [PUBMED, CROSSREF],
+        connect: () => {
+          connects += 1;
+        },
+        loadRelatedSeed: (id: unknown) => {
+          asked.push(id);
+          return seed instanceof Error
+            ? Promise.reject(seed)
+            : Promise.resolve(seed);
+        },
+        ...extraHost,
+      },
+    });
+    h.controller.init();
+    await flush();
+    return { h, asked, connects: () => connects };
+  }
+
+  it("asks the host for that seed, once, and draws its lines as data", async () => {
+    const { h, asked } = await openRelated();
+    expect(asked).toStrictEqual([77]);
+    expect(h.byId("rh-related-header")?.hidden).toBe(false);
+    expect(h.byId("rh-related-seed-title")?.textContent).toBe(SEED.title);
+    expect(h.byId("rh-related-seed-title")?.hidden).toBe(false);
+    expect(h.byId("rh-related-seed-authors")?.textContent).toContain("Turing");
+    expect(h.byId("rh-related-seed-details")?.textContent).toBe(
+      "· Nature · 2021 · 10.1000/seed",
+    );
+    expect(h.byId("rh-related-seed-missing")?.hidden).toBe(true);
+  });
+
+  it("leaves out what the seed does not have, and keeps a long author list to the overflow message", async () => {
+    const bare = await openRelated({ title: "T", authors: [] });
+    expect(bare.h.byId("rh-related-seed-authors")?.textContent).toBe("");
+    expect(bare.h.byId("rh-related-seed-details")?.textContent).toBe("");
+
+    const many = await openRelated({
+      title: "T",
+      authors: Array.from({ length: 12 }, (_, at) => ({ family: `N${at}` })),
+    });
+    const authors = many.h.byId("rh-related-seed-authors");
+    expect(authors?.getAttribute("data-l10n-id")).toBe(
+      many.h.controller.l10n["authorsOverflow"],
+    );
+    expect(argsOf(authors)).toMatchObject({
+      count: 12 - many.h.controller.spec.authorNamesShown,
+    });
+  });
+
+  it("hides what has no meaning for a seed and shows the Include row ticked", async () => {
+    const { h } = await openRelated();
+    for (const id of [
+      "rh-search-keyword-label",
+      h.controller.spec.keyword,
+      h.controller.spec["run"] as string,
+      h.controller.spec["yearsSpan"] as string,
+      "rh-search-max-results-label",
+      h.controller.spec["maxResults"] as string,
+      "rh-search-databases-group",
+      h.controller.spec["screeningRow"] as string,
+    ]) {
+      expect(h.byId(id), id).toBeDefined();
+      expect(h.byId(id)?.hidden, id).toBe(true);
+    }
+    for (const relation of SEARCH_WINDOW_RELATIONS) {
+      const box = h.byId(`rh-related-include-${relation}`);
+      expect(box?.checked, relation).toBe(true);
+      expect(box?.getAttribute("value"), relation).toBe(relation);
+    }
+  });
+
+  it("offers one box for each relation the code knows, in the wireframe's order", () => {
+    const boxes = (harness().byId("rh-related-include")?.children ?? []).filter(
+      (child) => child.name === "checkbox",
+    );
+    expect(boxes.map((box) => box.getAttribute("value"))).toStrictEqual([
+      ...SEARCH_WINDOW_RELATIONS,
+    ]);
+  });
+
+  it("names the seed in a chip cut at 60 code points, and never says Keyword first", async () => {
+    let answer: (seed: unknown) => void = () => undefined;
+    const h = harness({
+      args: { mode: "related", seedItemID: 77 },
+      host: {
+        loadRelatedSeed: () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      },
+    });
+    h.controller.init();
+    await flush();
+    const chip = h.byId(h.controller.spec["mode"] as string);
+    expect(chip?.hidden).toBe(true);
+
+    // A 61-code-point title made of surrogate pairs: a cut by UTF-16 unit would
+    // leave half a pair behind.
+    const title = "😀".repeat(61);
+    answer({ title, authors: [] });
+    await flush();
+    expect(chip?.hidden).toBe(false);
+    expect(chip?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-mode-related",
+    );
+    expect(argsOf(chip)).toStrictEqual({ title: `${"😀".repeat(60)}…` });
+    expect(h.byId("rh-related-seed-title")?.textContent).toBe(title);
+  });
+
+  it("does not cut a title of exactly 60 code points", async () => {
+    const title = "x".repeat(60);
+    const { h } = await openRelated({ title, authors: [] });
+    expect(argsOf(h.byId(h.controller.spec["mode"] as string))).toStrictEqual({
+      title,
+    });
+  });
+
+  it("shows the missing line when the host has no reader, no answer, or a failed read", async () => {
+    const noReader = await openRelated(SEED, { loadRelatedSeed: undefined });
+    const noAnswer = await openRelated(SEED, {
+      loadRelatedSeed: () => Promise.resolve(undefined),
+    });
+    const rejected = await openRelated(new Error("read failed"));
+    for (const { h } of [noReader, noAnswer, rejected]) {
+      expect(h.byId("rh-related-seed-missing")?.hidden).toBe(false);
+      expect(h.byId("rh-related-seed-title")?.hidden).toBe(true);
+      expect(h.byId("rh-related-seed-meta")?.hidden).toBe(true);
+      expect(h.byId(h.controller.spec["mode"] as string)?.hidden).toBe(true);
+    }
+    // The log carries the failure's name and never its message (settle()).
+    expect(rejected.h.debugLines.join("\n")).toContain("host call rejected");
+    expect(rejected.h.debugLines.join("\n")).not.toContain("read failed");
+  });
+
+  it("asks for no seed without a whole-number seed id", async () => {
+    const asked: unknown[] = [];
+    const h = harness({
+      args: { mode: "related" },
+      host: {
+        loadRelatedSeed: (id: unknown) => {
+          asked.push(id);
+          return Promise.resolve(SEED);
+        },
+      },
+    });
+    h.controller.init();
+    await flush();
+    expect(asked).toStrictEqual([]);
+    expect(h.byId("rh-related-seed-missing")?.hidden).toBe(false);
+  });
+
+  it("does not connect the keyword view model, and search() starts nothing", async () => {
+    const searches: unknown[] = [];
+    const { h, connects } = await openRelated(SEED, {
+      runSearch: (query: unknown) => {
+        searches.push(query);
+        return Promise.resolve();
+      },
+    });
+    expect(connects()).toBe(0);
+    // The keyword gate would open: only the mode stops this run.
+    const keyword = h.byId(h.controller.spec.keyword);
+    if (!keyword) throw new Error("no keyword field");
+    keyword.value = "a leftover keyword";
+    expect(h.controller.refreshSearchGate().enabled).toBe(true);
+    h.controller.search();
+    expect(searches).toStrictEqual([]);
+    expect(h.controller.state.running).toBe(false);
+  });
+
+  it("puts both year lists on Any, first, and reads Any as no bound", async () => {
+    const { h } = await openRelated();
+    for (const id of ["rh-search-years-from", "rh-search-years-to"]) {
+      const list = h.byId(id);
+      expect(list?.value, id).toBe("any");
+      const items = list?.firstElementChild?.children ?? [];
+      expect(items[0]?.getAttribute("value"), id).toBe("any");
+      expect(items[0]?.getAttribute("data-l10n-id"), id).toBe(
+        "research-helper-search-years-any",
+      );
+      expect(items.length, id).toBeGreaterThan(1);
+    }
+    const query = h.controller.collectQuery();
+    expect(query["fromYear"]).toBeNaN();
+    expect(query["toYear"]).toBeNaN();
+  });
+
+  it("does not repaint the keyword panel when a year list changes", async () => {
+    const { h } = await openRelated();
+    const list = h.byId("rh-search-years-from");
+    if (!list) throw new Error("no year list");
+    const span = h.byId(h.controller.spec["yearsSpan"] as string);
+    const before = span?.getAttribute("data-l10n-args");
+    const to = h.byId("rh-search-years-to");
+    if (!to) throw new Error("no year list");
+    // Both lists on a year, or the keyword path would return for its own reason.
+    list.value = "2001";
+    to.value = "2010";
+    list.dispatch("command");
+    expect(span?.getAttribute("data-l10n-args")).toBe(before);
+    expect(h.controller.collectQuery()["fromYear"]).toBe(2001);
+    expect(h.controller.collectQuery()["toYear"]).toBe(2010);
+  });
+
+  it("hides the screening row even when screening is on offer", async () => {
+    const getPrefs = () => ({
+      screeningThreshold: 45,
+      screeningAvailable: true,
+    });
+    const { h } = await openRelated(SEED, { getPrefs });
+    const row = h.controller.spec["screeningRow"] as string;
+    expect(h.byId(row)?.hidden).toBe(true);
+
+    const keyword = harness({
+      host: { listSources: () => [PUBMED], getPrefs },
+    });
+    keyword.controller.init();
+    expect(keyword.byId(row)?.hidden).toBe(false);
+  });
+
+  it("carries the seed and the ticked relations in the query, and only in this mode", async () => {
+    const { h } = await openRelated();
+    expect(h.controller.collectQuery()["related"]).toStrictEqual({
+      seedItemID: 77,
+      relations: [...SEARCH_WINDOW_RELATIONS],
+    });
+    const citation = h.byId("rh-related-include-citation");
+    if (!citation) throw new Error("no citation box");
+    citation.checked = false;
+    expect(h.controller.collectQuery()["related"]).toStrictEqual({
+      seedItemID: 77,
+      relations: ["reference", "recommendation", "similar"],
+    });
+
+    const keyword = harness({ host: { listSources: () => [PUBMED] } });
+    keyword.controller.init();
+    expect(keyword.controller.collectQuery()).not.toHaveProperty("related");
+  });
+
+  it("titles the window for the mode, focuses the first Include box, and words the panel", async () => {
+    const { h } = await openRelated();
+    expect(h.doc.title).toBe(
+      "value:research-helper-search-window-title-related",
+    );
+    expect(h.byId("rh-related-include-reference")?.focused).toBe(true);
+    expect(h.byId(h.controller.spec.keyword)?.focused).not.toBe(true);
+    expect(
+      h
+        .byId(h.controller.spec["initialProse"] as string)
+        ?.getAttribute("data-l10n-id"),
+    ).toBe("research-helper-search-state-initial-related");
+  });
+
+  it("leaves the keyword mode as it was", async () => {
+    const asked: unknown[] = [];
+    let connects = 0;
+    const h = harness({
+      // A seed id in another mode's arguments is not a reason to read a seed.
+      args: { mode: "keyword", seedItemID: 77 },
+      host: {
+        listSources: () => [PUBMED],
+        connect: () => {
+          connects += 1;
+        },
+        loadRelatedSeed: (id: unknown) => {
+          asked.push(id);
+          return Promise.resolve(SEED);
+        },
+      },
+    });
+    h.controller.init();
+    await flush();
+    expect(asked).toStrictEqual([]);
+    expect(connects).toBe(1);
+    expect(h.byId("rh-related-header")?.hidden).toBe(true);
+    expect(h.byId(h.controller.spec.keyword)?.hidden).not.toBe(true);
+    expect(h.byId(h.controller.spec.keyword)?.focused).toBe(true);
+    expect(
+      h.byId(h.controller.spec["mode"] as string)?.getAttribute("data-l10n-id"),
+    ).toBe(h.controller.l10n["modeKeyword"]);
+    expect(h.doc.title).toBe("value:research-helper-search-window-title");
+    for (const id of ["rh-search-years-from", "rh-search-years-to"]) {
+      const items = h.byId(id)?.firstElementChild?.children ?? [];
+      expect(items.map((item) => item.getAttribute("value"))).not.toContain(
+        "any",
+      );
+    }
+  });
+});
+
+describe("P5-T15 — relatedSeedHeader", () => {
+  const WORK = {
+    title: "A seed",
+    authors: [
+      { family: "Lovelace", given: "Ada", affiliation: "not for the window" },
+      { family: "", literal: "The CRISPR Consortium" },
+    ],
+    containerTitle: "Nature",
+    publishedDate: { year: 2021, month: 3 },
+    ids: { doi: "10.1000/seed", pmid: "123" },
+    abstract: "not for the window",
+  } as unknown as CanonicalWork;
+
+  it("carries the title, the authors' names, the venue, the year and the DOI, and only those", () => {
+    expect(relatedSeedHeader(WORK)).toStrictEqual({
+      title: "A seed",
+      authors: [
+        { family: "Lovelace", given: "Ada" },
+        { family: "", literal: "The CRISPR Consortium" },
+      ],
+      venue: "Nature",
+      year: 2021,
+      doi: "10.1000/seed",
+    });
+  });
+
+  it("leaves a missing venue, year and DOI out rather than undefined", () => {
+    const bare = {
+      title: "Bare",
+      authors: [],
+      ids: {},
+    } as unknown as CanonicalWork;
+    expect(Object.keys(relatedSeedHeader(bare))).toStrictEqual([
+      "title",
+      "authors",
+    ]);
   });
 });

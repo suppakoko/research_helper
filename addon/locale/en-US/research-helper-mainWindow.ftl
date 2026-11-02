@@ -108,6 +108,18 @@ research-helper-menu-collection-rerun =
 research-helper-menu-collection-report =
     .label = Generate Research Trends Report…
 
+# FR-13's entry (P5-T15), verbatim from `docs/08` §2.4 and §10.2. It sits on the
+# item context menu, and only while the hidden `related.enabled` preference is
+# on. It opens the search window, whose strings are in
+# research-helper-searchDialog.ftl.
+research-helper-menu-item-find-related =
+    .label = Find Related Papers…
+    .tooltiptext =
+        { $oneItem ->
+            [yes] { "" }
+           *[no] Select a single item to find papers related to it.
+        }
+
 # `P0-T10`'s spike command. Kept deliberately: `src/ui/menus/toolsMenu.ts`
 # names this id, and it is the key the ko-KR fallback assertion is built on
 # (see the header). Removing it breaks both.
@@ -948,3 +960,42 @@ research-helper-report-stopped-papers-failed = The report was stopped before it 
 ## or full text (P4-T18; docs/07 §12.4). No argument. Korean pending review (G-41).
 
 research-helper-report-stopped-no-papers = The report was stopped before it was written: no paper in this collection can be analysed, because each one was excluded or has no abstract or full text. Nothing was sent.
+
+## Why a both run wrote no Korean report (P4-T21; owner, plan/00 §6 item 334(d);
+## docs/08 §6.3). `no-room` is a stop with no report; the others are shown beside
+## "Report ready". `$reason` is a token, never displayed. Korean pending review (G-41).
+
+research-helper-report-stopped-korean =
+    { $reason ->
+        [no-room] No report was written, and nothing was spent on either report: the Korean report does not fit this model's limits. Every summary already made is kept. To get the English report, choose English under Language and generate again.
+        [structure] The English report is saved. The Korean report was not written: asked twice, the model did not return it with its eleven required sections in order. To try again, choose the Korean report under Language and generate.
+        [finishing] The English report is saved. The Korean report was written but could not be finished and saved. To try again, choose the Korean report under Language and generate.
+       *[request] The English report is saved. The Korean report was not written, because a request to the model failed. To try again, choose the Korean report under Language and generate.
+    }
+
+## Shown once when Zotero starts, for report jobs left paused (P4-T21; owner,
+## plan/00 §6 item 332(b)). $count is how many collections, $collections their
+## names joined by commas. Nothing is sent or spent by showing it. Korean pending
+## review (G-41).
+
+research-helper-report-paused-notice =
+    { $count ->
+        [one] A report run for the collection { $collections } is paused and waiting for your answer. Open that collection's report window to continue or stop it. Nothing is spent until you do.
+       *[other] { $count } report runs are paused and waiting for your answer, in the collections { $collections }. Open a collection's report window to continue or stop its run. Nothing is spent until you do.
+    }
+
+## A recommend run's notice on the cost dialog (P5-T22; docs/09 §3 row 6). $papers
+## is how many papers have a line in the request, $model the model it goes to.
+## Korean pending review (G-41).
+
+research-helper-egress-profile-notice =
+    { $papers ->
+        [one] To build this collection's profile, metadata only is sent to { $model }: one line for one paper, with its item key, title, year, venue and top subject terms. No abstract, summary, full text, note or collection name is sent.
+       *[other] To build this collection's profile, metadata only is sent to { $model }: one line for each of { $papers } papers, with its item key, title, year, venue and top subject terms. No abstract, summary, full text, note or collection name is sent.
+    }
+
+## Shown when the model's answer could not be used, or not one line fits the
+## model, and the profile stays statistical (P5-T22; docs/12 §15's note, items 4
+## and 6). No argument. Korean pending review (G-41).
+
+research-helper-recommend-profile-unusable = The model could not describe this collection, so its profile comes from the collection's own terms, and the search may find less.

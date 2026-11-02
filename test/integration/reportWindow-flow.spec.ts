@@ -215,15 +215,23 @@ function analysisAnswer(request: ChatRequest): string {
 
 /** The prompts' eleven headings, read once from the bundled registry. */
 let headings: readonly string[] = [];
+let koHeadings: readonly string[] = [];
+
+/** Korean reports come back without their sections (`P4-T21`; item 334(d)). */
+let breakKorean = false;
 
 function reportAnswer(request: ChatRequest): string {
+  // The request's own template says which report it is (`P4-T21`).
+  const korean = userOf(request).includes("보고서 파라미터");
+  if (korean && breakKorean) return "## 1. only one heading\n";
+  const wanted = korean ? koHeadings : headings;
   const keys = unique(
     Array.from(
       userOf(request).matchAll(/\[\[([A-Z0-9]{8})\]\]/g),
       (m) => m[1] as string,
     ),
   );
-  return headings
+  return wanted
     .map((heading, index) => {
       const n = index + 1;
       const body =
@@ -283,7 +291,13 @@ interface ReportWindow extends Window {
   RHReportWindow?: {
     state: { initialized: boolean };
     ready?: Promise<void>;
-    io: { session: { exportMarkdown(path: string): Promise<void> } };
+    io: {
+      session: {
+        exportMarkdown(path: string): Promise<void>;
+        exportFileName(): string | undefined;
+        copyText(): string | undefined;
+      };
+    };
   };
 }
 
@@ -381,6 +395,28 @@ function chooseEnglish(win: Window): void {
   ).value = "en";
 }
 
+/**
+ * The open progress windows whose headline names `name`, with the headline's
+ * label. `changeHeadline` writes its text into that label's `value` attribute
+ * (`progressWindow.js` in Zotero 10.0.3), so it is not in `textContent`.
+ */
+function noticesNaming(name: string): { win: Window; label: Element }[] {
+  const found: { win: Window; label: Element }[] = [];
+  const open = Services.wm.getEnumerator("alert:alert") as unknown as {
+    hasMoreElements(): boolean;
+    getNext(): Window;
+  };
+  while (open.hasMoreElements()) {
+    const win = open.getNext();
+    if (win.closed) continue;
+    const label = [
+      ...win.document.querySelectorAll("#zotero-progress-text-headline label"),
+    ].find((one) => (one.getAttribute("value") ?? "").includes(name));
+    if (label !== undefined) found.push({ win, label });
+  }
+  return found;
+}
+
 async function waitForOutcome(win: Window, text: string): Promise<void> {
   await waitUntil(
     () => textOf(win, "rh-report-outcome").includes(text),
@@ -446,6 +482,9 @@ describe("P4-T20: the report window runs a mock job to a saved report", function
     locale = await pinUILocale(["en-US"], log);
     const bundled = await import("../../src/prompts/bundled");
     headings = expectedHeadings(bundled.PROMPT_REGISTRY.get("TREND_REPORT_EN"));
+    koHeadings = expectedHeadings(
+      bundled.PROMPT_REGISTRY.get("TREND_REPORT_KO"),
+    );
     const graph = instance.api.services;
     if (!graph) assert.fail("no api.services");
     await graph.database.ready;
@@ -668,6 +707,275 @@ describe("P4-T20: the report window runs a mock job to a saved report", function
       assert.include(written, collection.name);
       await IOUtils.remove(path);
     } finally {
+      win.close();
+    }
+  });
+
+  it("a both run saves two notes, and Export and Copy act on the report shown (P4-T21; docs/08 §6.3)", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const { collection } = await collectionFor("both");
+    const win = await openWindow(collection.id);
+    try {
+      const language = win.document.getElementById(
+        "rh-report-language",
+      ) as unknown as { value: string };
+      language.value = "both";
+      const row = win.document.getElementById(
+        "rh-report-shown-row",
+      ) as unknown as { hidden: boolean };
+      assert.isTrue(row.hidden, "no selector before a two-report run");
+      press(win, "rh-report-generate");
+      await acceptCostDialog();
+      await waitForOutcome(win, "Report ready");
+      await waitUntil(
+        () => notesIn(collection).length === 2,
+        "the two report notes",
+      );
+      assert.isFalse(row.hidden, "the selector after a two-report run");
+      const session = win.RHReportWindow?.io.session;
+      const shown = win.document.getElementById(
+        "rh-report-shown",
+      ) as unknown as { value: string; doCommand(): void };
+      // The interface language's report first: this spec pins en-US.
+      assert.strictEqual(shown.value, "en");
+      assert.include(session?.copyText() ?? "", headings[6] as string);
+      assert.include(session?.exportFileName() ?? "", " (en).md");
+      assert.include(textOf(win, "rh-report-preview"), headings[6] as string);
+
+      shown.value = "ko";
+      shown.doCommand();
+      await waitUntil(
+        () =>
+          textOf(win, "rh-report-preview").includes(koHeadings[6] as string),
+        "the Korean report in the preview",
+      );
+      assert.include(session?.copyText() ?? "", koHeadings[6] as string);
+      assert.include(session?.exportFileName() ?? "", " (ko).md");
+      press(win, "rh-report-copy");
+      await waitUntil(
+        () => textOf(win, "rh-report-delivery").includes("Copied"),
+        "the copy line",
+      );
+      const path = PathUtils.join(
+        Zotero.getTempDirectory().path,
+        `${TAG}-both-ko.md`,
+      );
+      await session?.exportMarkdown(path);
+      const written = await IOUtils.readUTF8(path);
+      assert.include(written, koHeadings[6] as string);
+      await IOUtils.remove(path);
+
+      // Moving the selector clears the last result, and the English report
+      // is what the buttons then act on.
+      shown.value = "en";
+      shown.doCommand();
+      await waitUntil(
+        () => textOf(win, "rh-report-delivery") === "",
+        "the delivery line to clear",
+      );
+      assert.include(session?.copyText() ?? "", headings[6] as string);
+    } finally {
+      win.close();
+    }
+  });
+
+  it("a report job left paused gets one notice at no cost, and none for the same pause (P4-T21; item 332(b))", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const { collection } = await collectionFor("notice");
+    const graph = instance.api.services!;
+    const shownPref = `${config.prefsPrefix}.report.pausedNoticeShown`;
+    const savedShown = Zotero.Prefs.get(shownPref, true) as unknown;
+    const record = await graph.jobs.enqueue(
+      "trendReport",
+      {
+        libraryID: collection.libraryID,
+        collectionKey: collection.key,
+        language: "en",
+      },
+      { priority: "normal", inputVersion: TREND_REPORT_INPUT_VERSION },
+    );
+    try {
+      await graph.jobs.pause(record.id, "awaiting-confirmation");
+      const before = JSON.stringify(await graph.jobs.get(record.id));
+      const calls = hold.calls;
+      await instance.api.reportWindow?.announcePaused();
+      await waitUntil(
+        () => noticesNaming(collection.name).length === 1,
+        "the notice naming the collection",
+      );
+      // The headline label crops at its end: the whole sentence must show.
+      const { win: popup, label } = noticesNaming(collection.name)[0]!;
+      log(
+        `notice: label ${String(label.scrollWidth)} of ${String(label.clientWidth)} px, ` +
+          `window ${String(popup.outerWidth)} of screen ${String(popup.screen.availWidth)} px`,
+      );
+      assert.isTrue(
+        label.scrollWidth <= label.clientWidth + 1,
+        "the notice's sentence is not cropped",
+      );
+      assert.strictEqual(hold.calls, calls, "no provider call");
+      assert.strictEqual(
+        JSON.stringify(await graph.jobs.get(record.id)),
+        before,
+        "the record is unchanged",
+      );
+      assert.strictEqual(
+        graph.resumedReports.find(collection.libraryID, collection.key),
+        undefined,
+        "no job started",
+      );
+      Zotero.ProgressWindowSet.closeAll();
+      await waitUntil(
+        () => noticesNaming(collection.name).length === 0,
+        "the notice to close",
+      );
+
+      // The same pause, as at the next start: no second notice.
+      const stored = Zotero.Prefs.get(shownPref, true) as unknown;
+      await instance.api.reportWindow?.announcePaused();
+      await delay(1_000);
+      assert.strictEqual(
+        noticesNaming(collection.name).length,
+        0,
+        "no second notice",
+      );
+      assert.strictEqual(Zotero.Prefs.get(shownPref, true), stored);
+      assert.strictEqual(hold.calls, calls, "still no provider call");
+    } finally {
+      Zotero.ProgressWindowSet.closeAll();
+      await graph.jobs.cancel(record.id);
+      restorePref(shownPref, savedShown);
+    }
+  });
+
+  it("a report job left interrupted gets the same one notice, and its window asks: stop cancels it, continue finishes it in its own record (P4-T21; item 334(j))", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const { collection } = await collectionFor("left-interrupted");
+    const graph = instance.api.services!;
+    const shownPref = `${config.prefsPrefix}.report.pausedNoticeShown`;
+    const savedShown = Zotero.Prefs.get(shownPref, true) as unknown;
+    // A job running with no checkpoint when recovery runs, as after a crash.
+    const leaveInterrupted = async (): Promise<string> => {
+      const record = await graph.jobs.enqueue(
+        "trendReport",
+        {
+          libraryID: collection.libraryID,
+          collectionKey: collection.key,
+          language: "en",
+        },
+        { priority: "normal", inputVersion: TREND_REPORT_INPUT_VERSION },
+      );
+      await graph.jobs.start(record.id);
+      const report = await graph.jobs.recover();
+      assert.isTrue(
+        report.awaitingUserDecision.includes(record.id),
+        "recovery leaves it waiting for the user",
+      );
+      return record.id;
+    };
+    const stopped = await leaveInterrupted();
+    let win: ReportWindow | undefined;
+    try {
+      const before = JSON.stringify(await graph.jobs.get(stopped));
+      const calls = hold.calls;
+      await instance.api.reportWindow?.announcePaused();
+      await waitUntil(
+        () => noticesNaming(collection.name).length === 1,
+        "the notice naming the collection",
+      );
+      assert.strictEqual(hold.calls, calls, "no provider call");
+      assert.strictEqual(
+        JSON.stringify(await graph.jobs.get(stopped)),
+        before,
+        "the record is unchanged",
+      );
+      Zotero.ProgressWindowSet.closeAll();
+      await waitUntil(
+        () => noticesNaming(collection.name).length === 0,
+        "the notice to close",
+      );
+      await instance.api.reportWindow?.announcePaused();
+      await delay(1_000);
+      assert.strictEqual(
+        noticesNaming(collection.name).length,
+        0,
+        "no second notice",
+      );
+
+      win = await openWindow(collection.id);
+      await waitUntil(
+        () => textOf(win!, "rh-report-question-text").includes("was paused"),
+        "the interrupted job's question",
+      );
+      assert.isTrue(isDisabled(win, "rh-report-generate"), "Generate holds");
+      press(win, "rh-report-no");
+      await waitUntil(
+        () => !isDisabled(win!, "rh-report-generate"),
+        "Generate after the job stopped",
+      );
+      assert.strictEqual((await graph.jobs.get(stopped))?.status, "cancelled");
+      win.close();
+      await waitUntil(() => win!.closed, "the window to close");
+
+      const continued = await leaveInterrupted();
+      win = await openWindow(collection.id);
+      await waitUntil(
+        () => textOf(win!, "rh-report-question-text").includes("was paused"),
+        "the interrupted job's question again",
+      );
+      press(win, "rh-report-yes");
+      await acceptCostDialog();
+      await waitForOutcome(win, "Report ready");
+      const after = await graph.jobs.get(continued);
+      assert.strictEqual(after?.status, "succeeded", "in its own record");
+      assert.strictEqual(after?.resultRef?.kind, "report");
+    } finally {
+      win?.close();
+      Zotero.ProgressWindowSet.closeAll();
+      restorePref(shownPref, savedShown);
+    }
+  });
+
+  it("a both run whose Korean report stops saves the English report and says why (P4-T21; item 334(d))", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const { collection } = await collectionFor("both-korean-stops");
+    const win = await openWindow(collection.id);
+    breakKorean = true;
+    try {
+      const language = win.document.getElementById(
+        "rh-report-language",
+      ) as unknown as { value: string };
+      language.value = "both";
+      press(win, "rh-report-generate");
+      await acceptCostDialog();
+      await waitForOutcome(win, "Report ready");
+      await waitUntil(
+        () =>
+          textOf(win, "rh-report-stop-reason").includes(
+            "The English report is saved",
+          ),
+        "the line saying why Korean was not written",
+      );
+      await waitUntil(
+        () => notesIn(collection).length === 1,
+        "the one report note",
+      );
+      const row = win.document.getElementById(
+        "rh-report-shown-row",
+      ) as unknown as { hidden: boolean };
+      assert.isTrue(row.hidden, "one report: no selector");
+      const session = win.RHReportWindow?.io.session;
+      assert.include(session?.copyText() ?? "", headings[6] as string);
+      assert.isFalse(
+        (session?.copyText() ?? "").includes(koHeadings[6] as string),
+        "no Korean text",
+      );
+      assert.isFalse(
+        (session?.exportFileName() ?? "").includes(" (en)"),
+        "one report: no language in the file name",
+      );
+    } finally {
+      breakKorean = false;
       win.close();
     }
   });

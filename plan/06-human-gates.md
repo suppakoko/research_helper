@@ -177,7 +177,7 @@ confirmed.
 >
 > **This blocks Phase 5 only**, and Phase 5 carries 10.5–15 days of float (`docs/11` §2), so nothing is
 > stalled today. `P2-T05` ships the adapter with unauthenticated degradation, so Phase 2 does not wait
-> either. *Updated 2026-11-02: that float is now ≈ 3–4 d (`docs/11` §2; it was ≈ 17.75–25 d from
+> either. *Updated 2026-11-02: that float is now ≈ 4.5–6 d (`docs/11` §2, re-priced by `plan/00` §6 item 335(g); ≈ 3–4 d before it; ≈ 17.75–25 d from
 > 2026-10-26), since Phase 5's card sum of 35.75–50 d replaced its scaled 21–29 d. The gate itself closed
 > on 2026-09-30; what still waits on the owner is the key's rotation, needed first by `P5-T31`, and its
 > entry (`G-26`).*
@@ -747,7 +747,7 @@ this approval.
 
 ### G-41 — Review the Phase 1 `ko-KR` UI bundle (`KO_PENDING_REVIEW.length`, 82 as of 2026-10-08)
 
-> *Re-counted 2026-11-02 (`plan/00` §6 item 333): `KO_PENDING_REVIEW` holds 12 ids, all `P5-T15`'s; `P4-T20`'s 25 report window strings left it that day.*
+> *Re-counted 2026-11-02 (`plan/00` §6 items 333, 334): `P4-T20`'s 25, `P5-T15`'s 12 and `P4-T21`'s 2 left `KO_PENDING_REVIEW` that day. What it still holds is what cards in progress add; `src/i18n/keys.ts` is the count.*
 
 > **DEFERRED 2026-10-08, by the owner, to before the v1.0 release.** English only until then. Measured
 > the same day, by counting the lists in `src/i18n/keys.ts` rather than reading the figure off this
@@ -1193,6 +1193,8 @@ policy, every later prompt change.
 **What the human must do.** Assemble three collections in their own domain and
 write down the themes a competent reviewer would expect a trend report over each
 to surface.
+
+> *Added 2026-11-02 (`plan/00` §6 item 335(b)): the owner writes these on https://claude.ai/artifact/Lz2JAxGnCVUFuRJV8yiYcp, from collections the owner already has. `plan/reports/P4-T23.md` says what each set holds.*
 
 **Why an agent cannot do it.** Domain judgement. The whole value of the set is
 that a human who knows the literature decided what "right" looks like.

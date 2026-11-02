@@ -340,6 +340,8 @@ const SECTION_8_5: readonly Section85Row[] = [
   row("reportCritiqueModel", "report.critiqueModel", "string", ""),
   row("reportSaveNote", "report.saveNote", "boolean", true),
   row("reportPerPaperNotes", "report.perPaperNotes", "boolean", false),
+  // The paused-job notice's record (P4-T21, 2026-11-02, owner's item 332(b)).
+  row("reportPausedNoticeShown", "report.pausedNoticeShown", "string", "[]"),
   // Related papers & recommendations (P5-T02, 2026-11-02, typed out from §8.5).
   row("relatedLinkToSeed", "related.linkToSeed", "boolean", true),
   row("relatedEnabled", "related.enabled", "boolean", false),
@@ -436,6 +438,8 @@ const NO_PREF_LINE: readonly string[] = [
   "cache.ignoreModel",
   "cache.lastSeenPromptVersions",
   "report.perPaperNotes",
+  // P4-T21 (2026-11-02): not user-visible; docs/01 §7.2 does not list it.
+  "report.pausedNoticeShown",
   // P4-T02 (2026-10-26): §7.2 lists reportLanguage and none of these four.
   "report.targetWords",
   "report.maxCritiqueRounds",
@@ -525,7 +529,7 @@ function parseDefaultCell(cell: string): unknown {
 }
 
 describe("PREFS transcribes docs/07 §8.5", () => {
-  it("declares exactly the seventy-two §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty, the owner's gemini.paidTier, P4-T02's five and P5-T02's three — and no others", () => {
+  it("declares exactly the seventy-three §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty, the owner's gemini.paidTier, P4-T02's five, P5-T02's three and P4-T21's one — and no others", () => {
     // The card's Do NOT: "do not add a preference that docs/07 §8.5 does not
     // declare". An extra entry fails here, not in review. Phase 1 pinned this
     // at twelve; `P2-T05` grew it by the one row `docs/07` §8.5 and §11.1
@@ -535,9 +539,10 @@ describe("PREFS transcribes docs/07 §8.5", () => {
     // the five "Report & audio" rows Phase 4 reads (2026-10-26).
     // The owner added the hidden `report.enabled` (2026-10-29, item 307(d));
     // `P4-T20` removed it (2026-11-02), as that decision said it would.
-    // `P5-T02` added the three rows Phase 5 reads (2026-11-02).
-    expect(SECTION_8_5).toHaveLength(72);
-    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(72);
+    // `P5-T02` added the three rows Phase 5 reads (2026-11-02), and `P4-T21`
+    // the paused-job notice's record the same day (item 332(b)).
+    expect(SECTION_8_5).toHaveLength(73);
+    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(73);
     expect([...PREF_NAMES].sort()).toEqual(
       SECTION_8_5.map((row) => row.name).sort(),
     );
@@ -1391,8 +1396,9 @@ describe("addon/prefs.js agrees with PREFS", () => {
     // 26 since 2026-10-22: `gemini.paidTier` (plan/00 §6 item 269(b)); 30
     // since 2026-10-26: P4-T02's four `report.*` rows; 31 on 2026-10-29: the
     // hidden `report.enabled` (item 307(d)); 30 again since 2026-11-02, when
-    // `P4-T20` removed it; 33 the same day: P5-T02's three.
-    expect(NO_PREF_LINE).toHaveLength(33);
+    // `P4-T20` removed it; 33 the same day: P5-T02's three; 34 the same day:
+    // P4-T21's report.pausedNoticeShown.
+    expect(NO_PREF_LINE).toHaveLength(34);
     for (const key of NO_PREF_LINE) expect(keys.has(key), key).toBe(true);
   });
 

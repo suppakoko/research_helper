@@ -57,6 +57,13 @@ research-helper-report-language-ko =
 research-helper-report-language-both =
     .label = English and Korean
 
+## P4-T21: which report of a two-report run the preview, Export, Copy and Save as
+## note act on (docs/08 §6.3's note of 2026-11-02). Its items are the two
+## language entries above. Korean pending review (G-41).
+
+research-helper-report-shown-label =
+    .value = Report shown
+
 ## The resolved report model, as text (owner, 2026-10-26, plan/00 §6 item
 ## 286): no per-run model choice and no Depth control. `$model` is a model id
 ## and `$provider` a provider's name; neither is translated (docs/08 §10.3).

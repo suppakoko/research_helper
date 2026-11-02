@@ -194,7 +194,9 @@ export const SUMMARY_WORK_INDEX_DDL =
  * `docs/07` §8.3's `report` table (`P4-T14`), byte for byte. One row per
  * `TrendReport` (`docs/07` §5.2): `json` is the gated record without its
  * Markdown, which is always in `<data dir>/research-helper/reports/<id>.md`.
- * `src/zotero/db.ts`'s `createReportStore` is its only reader and writer.
+ * `src/zotero/db.ts`'s `createReportStore` is its only writer and the plugin's
+ * only reader; `scripts/eval-trend-report.ts` reads it read-only, outside the
+ * plugin.
  */
 export const REPORT_DDL = `CREATE TABLE report (
   id             TEXT PRIMARY KEY,

@@ -58,6 +58,7 @@ import {
   clusterBatchSize,
   DIGEST_MAX_TOKENS,
   planSynthesis,
+  REPORT_OUTPUT_FLOOR,
   synthesisBudgets,
   type SynthesisCallKind,
 } from "../../../src/pipeline/shared/estimate";
@@ -79,13 +80,20 @@ import {
   OTHER_THEME_NAME,
   partitionDigests,
 } from "../../../src/pipeline/trendReport/cluster";
-import { expectedHeadings } from "../../../src/pipeline/trendReport/compose";
+import {
+  ANALYSES_SHORTENED_WARNING,
+  expectedHeadings,
+  OUTPUT_LOWERED_WARNING,
+} from "../../../src/pipeline/trendReport/compose";
 import {
   digestTokens,
   toDigest,
   digestText,
 } from "../../../src/pipeline/trendReport/digest";
-import { EN_REPORT_LABELS } from "../../../src/pipeline/trendReport/reportLabels";
+import {
+  EN_REPORT_LABELS,
+  reportLabel,
+} from "../../../src/pipeline/trendReport/reportLabels";
 import {
   maxPartialsPerMerge,
   packThemeSummaries,
@@ -93,6 +101,7 @@ import {
 import {
   createTrendReportPipeline,
   measureSynthesisOverhead,
+  stageInputsOf,
   type TrendReportConfirmRequest,
   type TrendReportInput,
   type TrendReportOutput,
@@ -107,6 +116,7 @@ import {
   createPromptRegistry,
   type PromptRegistry,
 } from "../../../src/prompts";
+import type { TrendReport } from "../../../src/model/trend";
 import {
   citationSpan,
   escapeHtml,
@@ -153,6 +163,7 @@ const PROMPTS: PromptRegistry = createPromptRegistry(
     })),
 );
 const HEADINGS = expectedHeadings(PROMPTS.get("TREND_REPORT_EN"));
+const KO_HEADINGS = expectedHeadings(PROMPTS.get("TREND_REPORT_KO"));
 
 const COLLECTION: CollectionRef = { libraryID: 1, collectionKey: "SCALE400" };
 
@@ -183,11 +194,27 @@ interface WindowProfile {
    */
   readonly critiqueContextWindowTokens?: number;
   /**
-   * Tokens added to each theme analysis's narrative. The answers are at most 84
-   * tokens without it, where a real analysis may reach 3 000 (FINDING P4-T22-2).
+   * The size of each theme analysis, over every schema field
+   * ({@link fullAnalysisAnswer}). Without it the answers are at most 84 tokens,
+   * where a real analysis may reach 3 000 (FINDING P4-T22-2).
    */
-  readonly analysisPadTokens?: number;
+  readonly analysisTokens?: number;
+  /** The report's language; `en` when absent. */
+  readonly language?: TrendReportInput["language"];
+  /**
+   * The report answer is as long as its `{{TARGET_WORDS}}` asks, by `docs/12`
+   * §10's visible tokens, so a target over the output is a refused answer.
+   */
+  readonly writeTargetLength?: boolean;
+  /** The first critique finds a high problem, so the report is rewritten once. */
+  readonly rewriteOnce?: boolean;
 }
+
+/**
+ * Sizes for {@link WindowProfile.analysisTokens}: this one's largest answer is
+ * just under `CLUSTER_REDUCE`'s 3 000 ceiling, which the mock enforces.
+ */
+const LARGEST_ANALYSIS_TOKENS = 2_950;
 
 const WINDOW_128K: WindowProfile = {
   name: "128k",
@@ -369,7 +396,75 @@ function mergeAnswer(request: ChatRequest): string {
   });
 }
 
-function analysisAnswer(request: ChatRequest, padTokens = 0): string {
+/** About `tokens` by `estTokens`. */
+function filler(tokens: number): string {
+  return " x".repeat(Math.ceil(tokens * 1.85)).trim();
+}
+
+/** As many entries of about `each` tokens as `tokens` holds, at least one. */
+function entries<T>(tokens: number, each: number, make: () => T): T[] {
+  return Array.from({ length: Math.max(1, Math.round(tokens / each)) }, make);
+}
+
+/**
+ * An analysis of `tokens` over every schema field, within its length limits.
+ * The split (about 40% narrative, the rest of the answer being 8% representative
+ * papers, 8% methods, 12% findings, 8% contradictions, 8% gaps, 5% trajectory and
+ * the JSON around them) is an assumption from `CLUSTER_REDUCE`'s prompt, since no
+ * live run has measured one.
+ */
+function fullAnalysisAnswer(request: ChatRequest, tokens: number): string {
+  const user = userOf(request);
+  const themeId = /"themeId": "(T[0-9]+)"/.exec(user)?.[1] ?? "T1";
+  const keys = unique(
+    Array.from(
+      user.matchAll(new RegExp(`"itemKey":"(${KEY})"`, "g")),
+      (m) => m[1] as string,
+    ),
+  );
+  const itemKeys = keys.slice(0, 2);
+  const analysis = {
+    themeId,
+    name: "echo",
+    narrative: `Work in this theme ${keys
+      .slice(0, 3)
+      .map((k) => `[[${k}]]`)
+      .join(" ")} reported a change in the outcome.`,
+    representativePapers: keys.slice(0, 6).map((itemKey) => ({
+      itemKey,
+      why: filler((tokens * 0.08) / 6),
+    })),
+    methodologicalPatterns: entries(tokens * 0.08, 60, () => ({
+      pattern: filler(60),
+      itemKeys,
+    })),
+    convergentFindings: entries(tokens * 0.12, 100, () => ({
+      statement: filler(100),
+      itemKeys,
+      strength: "moderate",
+    })),
+    contradictions: entries(tokens * 0.08, 100, () => ({
+      statement: filler(40),
+      sideA: { claim: filler(30), itemKeys },
+      sideB: { claim: filler(30), itemKeys },
+      possibleExplanation: null,
+    })),
+    gaps: entries(tokens * 0.08, 100, () => ({
+      gap: filler(50),
+      basis: filler(50),
+      itemKeys,
+    })),
+    trajectory: filler(tokens * 0.05),
+  };
+  // The narrative takes what is left, so the answer is the size asked for.
+  const left = tokens - estTokens(JSON.stringify(analysis));
+  return JSON.stringify({
+    ...analysis,
+    narrative: `${analysis.narrative} ${filler(Math.max(0, left - 2))}`,
+  });
+}
+
+function analysisAnswer(request: ChatRequest): string {
   const user = userOf(request);
   const themeId = /"themeId": "(T[0-9]+)"/.exec(user)?.[1] ?? "T1";
   const keys = unique(
@@ -384,9 +479,7 @@ function analysisAnswer(request: ChatRequest, padTokens = 0): string {
     narrative: `Work in this theme ${keys
       .slice(0, 3)
       .map((k) => `[[${k}]]`)
-      .join(
-        " ",
-      )} reported a change in the outcome.${" x".repeat(Math.ceil(padTokens * 1.85))}`,
+      .join(" ")} reported a change in the outcome.`,
     representativePapers: keys
       .slice(0, 2)
       .map((itemKey) => ({ itemKey, why: "Representative." })),
@@ -394,24 +487,42 @@ function analysisAnswer(request: ChatRequest, padTokens = 0): string {
   });
 }
 
-function reportAnswer(request: ChatRequest): string {
+/** `{{TARGET_WORDS}}` as the request's user text carries it, in either language. */
+function targetWordsOf(request: ChatRequest): number | undefined {
+  const match =
+    /Target length: ([0-9]+) words/.exec(userOf(request)) ??
+    /목표 분량: ([0-9]+)단어/.exec(userOf(request));
+  return match === null ? undefined : Number(match[1]);
+}
+
+function reportAnswer(request: ChatRequest, writeTargetLength = false): string {
+  const korean = userOf(request).includes(`## ${KO_HEADINGS[0] as string}`);
+  // docs/12 §10's visible tokens for the target, without the reasoning allowance.
+  const visible = (targetWordsOf(request) ?? 0) * (korean ? 2.48 : 2.2) + 500;
+  const length = writeTargetLength ? ` ${filler(visible)}` : "";
   const keys = unique(
     Array.from(
       userOf(request).matchAll(new RegExp(`\\[\\[(${KEY})\\]\\]`, "g")),
       (m) => m[1] as string,
     ),
   );
-  return HEADINGS.map((heading, index) => {
-    const n = index + 1;
-    const body =
-      n === 11
-        ? keys.map((k, i) => `${String(i + 1)}. [[${k}]]`).join("\n")
-        : `Finding ${String(n)} reported a 12% change [[${keys[(n - 1) % keys.length] as string}]].`;
-    return `## ${heading}\n\n${body}\n`;
-  }).join("\n");
+  return (korean ? KO_HEADINGS : HEADINGS)
+    .map((heading, index) => {
+      const n = index + 1;
+      const body =
+        n === 11
+          ? keys.map((k, i) => `${String(i + 1)}. [[${k}]]`).join("\n")
+          : `Finding ${String(n)} reported a 12% change [[${keys[(n - 1) % keys.length] as string}]].${n === 4 ? length : ""}`;
+      return `## ${heading}\n\n${body}\n`;
+    })
+    .join("\n");
 }
 
-function answerTo(request: ChatRequest, profile: WindowProfile): string {
+function answerTo(
+  request: ChatRequest,
+  profile: WindowProfile,
+  firstCritique = false,
+): string {
   switch (kindOf(request)) {
     case "THEME_CLUSTER":
       return clusteringAnswer(request);
@@ -419,11 +530,27 @@ function answerTo(request: ChatRequest, profile: WindowProfile): string {
       return mergeAnswer(request);
     case "CLUSTER_REDUCE":
     case "CLUSTER_REDUCE_MERGE":
-      return analysisAnswer(request, profile.analysisPadTokens);
+      return profile.analysisTokens === undefined
+        ? analysisAnswer(request)
+        : fullAnalysisAnswer(request, profile.analysisTokens);
     case "SELF_CRITIQUE":
-      return JSON.stringify({ verdict: "pass", problems: [] });
+      return JSON.stringify(
+        profile.rewriteOnce === true && firstCritique
+          ? {
+              verdict: "revise",
+              problems: [
+                {
+                  type: "unsupported",
+                  severity: "high",
+                  quote: "Finding 1 reported a 12% change.",
+                  explanation: "Synthetic.",
+                },
+              ],
+            }
+          : { verdict: "pass", problems: [] },
+      );
     case "TREND_REPORT":
-      return reportAnswer(request);
+      return reportAnswer(request, profile.writeTargetLength);
     default:
       throw new Error("P4-T22: no paper should be summarized in this run");
   }
@@ -436,6 +563,8 @@ interface CallRecord {
   readonly inputTokens: number;
   readonly maxOutputTokens: number | undefined;
   readonly answerTokens: number | undefined;
+  /** `{{TARGET_WORDS}}` as sent, on a report request. */
+  readonly targetWords: number | undefined;
   readonly refused: "context-length" | "output-truncated" | undefined;
   /** The `{{DIGESTS}}` keys of a clustering call, sorted and joined. */
   readonly clusterKeys: string | undefined;
@@ -472,6 +601,7 @@ function windowedStep(
       kind,
       inputTokens,
       maxOutputTokens: request.maxOutputTokens,
+      targetWords: kind === "TREND_REPORT" ? targetWordsOf(request) : undefined,
       clusterKeys,
     };
     if (inputTokens > profile.contextWindowTokens) {
@@ -482,9 +612,17 @@ function windowedStep(
         `P4-T22 mock: ${String(inputTokens)} tokens exceed the ${String(profile.contextWindowTokens)}-token window`,
       );
     }
-    const text = answerTo(request, profile);
+    const text = answerTo(
+      request,
+      profile,
+      kind === "SELF_CRITIQUE" && countOf(log, "SELF_CRITIQUE") === 0,
+    );
     const answerTokens = estTokens(text);
-    const ceiling = request.maxOutputTokens ?? profile.maxOutputTokens;
+    // As the provider clamps it (docs/03 §14.3).
+    const ceiling = Math.min(
+      request.maxOutputTokens ?? profile.maxOutputTokens,
+      profile.maxOutputTokens,
+    );
     if (answerTokens > ceiling) {
       log.push({ ...base, answerTokens, refused: "output-truncated" });
       return new OutputTruncatedError(
@@ -684,6 +822,7 @@ async function scaleRun(profile: WindowProfile): Promise<ScaleRun> {
   });
   jobs.attachStore(createJobStore(connection));
   const log: CallRecord[] = [];
+  let reportNumber = 0;
   const info = (id: string) =>
     mockModel(id, {
       contextWindowTokens:
@@ -753,7 +892,7 @@ async function scaleRun(profile: WindowProfile): Promise<ScaleRun> {
         }),
     },
     pluginVersion: "0.0.0-test",
-    newReportId: () => "report-scale-1",
+    newReportId: () => `report-${String((reportNumber += 1))}`,
   });
   const values: Partial<Record<PrefName, unknown>> = {
     reportMaxCritiqueRounds: 1,
@@ -801,7 +940,10 @@ async function scaleRun(profile: WindowProfile): Promise<ScaleRun> {
     },
     ask: () => Promise.resolve("cancel"),
   };
-  const input: TrendReportInput = { ...COLLECTION, language: "en" };
+  const input: TrendReportInput = {
+    ...COLLECTION,
+    language: profile.language ?? "en",
+  };
 
   const heapBefore = process.memoryUsage().heapUsed;
   const started = performance.now();
@@ -1232,9 +1374,11 @@ describe("P4-T22 — a 400-item report on a 32 000-token window (Done when 1, 2)
 
 /** The themes the report's §4 names as not analysed (`unanalysedLines`). */
 function themesGivenUp(run: ScaleRun): number {
-  const tail = EN_REPORT_LABELS.themeNotAnalysed.split("{papers}")[1] ?? "";
+  const report = run.output.report;
+  const label = reportLabel(report?.language ?? "en", "themeNotAnalysed");
+  const tail = label.split("{papers}")[1] ?? "";
   const marker = tail.split("{reason}")[0] ?? "";
-  return (run.output.report?.markdown ?? "").split(marker).length - 1;
+  return (report?.markdown ?? "").split(marker).length - 1;
 }
 
 /** Both 32 000-token shapes, and the ones each side of them. */
@@ -1477,14 +1621,252 @@ describe("P4-T22 — a window too small ends the run cleanly (no RangeError, no 
     SCALE_TIMEOUT_MS,
   );
 
-  // FINDING P4-T22-2 (2026-11-02): the budgets cover what the stages can
-  // split or trim, and the composition cannot trim the theme analyses. These
-  // tests pin what happens when they do not fit: no request, CONTEXT_LENGTH,
-  // no report. docs/07 §12.4's note of this date gives the measured limits.
+  // FINDING P4-T22-2's fix (owner's option 1, 2026-11-02): the two tests that
+  // pinned the old failure are replaced by the describe below.
+});
+
+// ---------------------------------------------------------------------------
+// 7. Making room at composition (docs/06 §8.4's note of 2026-11-02)
+// ---------------------------------------------------------------------------
+
+/** What a run's report calls asked for, and what the estimate priced for them. */
+function reportCalls(run: ScaleRun): readonly CallRecord[] {
+  return run.log.filter((c) => c.kind === "TREND_REPORT");
+}
+
+/** Everything that must hold of a run that made room and succeeded. */
+function expectFitted(run: ScaleRun, reports: number): void {
+  const profile = run.profile;
+  expect(run.output.outcome).toBe("succeeded");
+  expect(run.log.filter((c) => c.refused !== undefined)).toEqual([]);
+  expect(themesGivenUp(run)).toBe(0);
+  expect(run.reportRows).toBe(reports);
+  // The critique still fits, and ran for each report.
+  expect(countOf(run.log, "SELF_CRITIQUE")).toBeGreaterThanOrEqual(reports);
+  const planned = run.confirms[0]?.estimate.selected.synthesis.calls ?? [];
+  const reserved = reservedByKind(run);
+  for (const kind of [
+    "THEME_MERGE",
+    "CLUSTER_REDUCE",
+    "CLUSTER_REDUCE_MERGE",
+    "TREND_REPORT",
+  ] as const) {
+    expect(countOf(run.log, kind), kind).toBeLessThanOrEqual(
+      reserved[kind] ?? 0,
+    );
+  }
+  const largest = (kind: CallKind, field: "inputTokens" | "outputTokens") =>
+    Math.max(
+      0,
+      ...planned
+        .filter((c) =>
+          kind === "TREND_REPORT"
+            ? c.kind.startsWith("TREND_REPORT")
+            : c.kind === kind,
+        )
+        .map((c) => c[field]),
+    );
+  for (const call of run.log) {
+    expect(
+      call.inputTokens + clampedOutput(call, profile),
+      call.kind,
+    ).toBeLessThanOrEqual(profile.contextWindowTokens);
+    expect(call.inputTokens, call.kind).toBeLessThanOrEqual(
+      largest(call.kind, "inputTokens"),
+    );
+    if (call.kind === "TREND_REPORT") {
+      expect(call.maxOutputTokens ?? 0).toBeLessThanOrEqual(
+        largest(call.kind, "outputTokens"),
+      );
+    }
+  }
+}
+
+/** The stored reports of a run, in run order. */
+function deliveredOf(run: ScaleRun): readonly TrendReport[] {
+  return (run.output.reports ?? []).map((one) => one.report);
+}
+
+describe("P4-T22 — analyses up to CLUSTER_REDUCE's ceiling over 11 themes (FINDING P4-T22-2's fix)", () => {
+  it("rp's stage inputs change with a lowered max_tokens and dropped fields, and an unchanged plan's stay as they were", () => {
+    const variables = {
+      TARGET_WORDS: "1390",
+      THEME_ANALYSES_JSON: "[]",
+      DIGESTS: "",
+    };
+    const plain = stageInputsOf(
+      { variables, maxOutputTokens: 23_000 },
+      { citationReplacement: "x" },
+    );
+    expect(plain).toEqual({ TARGET_WORDS: "1390", CITATION_REPLACEMENT: "x" });
+    const fit = {
+      outputTokens: 9_000,
+      outputLowered: true,
+      targetWords: 1_390,
+      targetWordsLowered: false,
+      droppedFields: [],
+      modelNote: "",
+    };
+    expect(
+      stageInputsOf(
+        { variables, maxOutputTokens: 9_000, fit },
+        { citationReplacement: "x" },
+      ),
+    ).toEqual({ ...plain, MAX_OUTPUT_TOKENS: "9000" });
+    expect(
+      stageInputsOf(
+        {
+          variables,
+          maxOutputTokens: 23_000,
+          fit: {
+            ...fit,
+            outputLowered: false,
+            droppedFields: ["representativePapers[].why", "gaps"],
+          },
+        },
+        { citationReplacement: "x" },
+      ),
+    ).toEqual({
+      ...plain,
+      ANALYSES_DROPPED: "representativePapers[].why,gaps",
+    });
+  });
+
   it(
-    "32 000 / 8 192 with 2 500-token analyses: the composition does not fit, so CONTEXT_LENGTH before the report request, and no report (FINDING P4-T22-2)",
+    "the stated minimum at the ceiling: 38 500 succeeds and 38 000 stops, in both, at either output limit",
     async () => {
-      const run = await scaleRun({ ...WINDOW_32K, analysisPadTokens: 2_500 });
+      for (const [window, limit, outcome] of [
+        [38_500, 8_192, "succeeded"],
+        [38_000, 38_000, "failed"],
+      ] as const) {
+        const run = await scaleRun({
+          name: `minimum-${String(window)}`,
+          contextWindowTokens: window,
+          maxOutputTokens: limit,
+          analysisTokens: LARGEST_ANALYSIS_TOKENS,
+          language: "both",
+        });
+        expect(run.output.outcome).toBe(outcome);
+        expect(run.log.filter((c) => c.refused !== undefined)).toEqual([]);
+      }
+    },
+    SCALE_TIMEOUT_MS,
+  );
+
+  it(
+    "the mock's largest analysis is at CLUSTER_REDUCE's 3 000 ceiling, and every theme is analysed at it",
+    async () => {
+      const run = await scaleRun({
+        name: "48k-2900",
+        contextWindowTokens: 48_000,
+        maxOutputTokens: 8_192,
+        analysisTokens: LARGEST_ANALYSIS_TOKENS,
+        writeTargetLength: true,
+        language: "both",
+      });
+      expectFitted(run, 2);
+      const largest = Math.max(
+        ...run.log
+          .filter((c) => c.kind === "CLUSTER_REDUCE")
+          .map((c) => c.answerTokens ?? 0),
+      );
+      expect(largest).toBeGreaterThan(2_900);
+      expect(largest).toBeLessThanOrEqual(3_000);
+      expect(run.output.outcome).toBe("succeeded");
+      // Both languages planned on the same window, each with its own template.
+      const delivered = deliveredOf(run);
+      expect(delivered.map((r) => r.language)).toEqual(["en", "ko"]);
+      for (const report of delivered) {
+        expect(report.warnings).toContain(ANALYSES_SHORTENED_WARNING);
+        expect(report.markdown).toContain("sent without the details");
+      }
+    },
+    SCALE_TIMEOUT_MS,
+  );
+
+  it(
+    "32 000 / 8 192, 1 500 tokens each, Korean: the word target comes down to the limit, fields are dropped, and the report says so",
+    async () => {
+      const run = await scaleRun({
+        ...WINDOW_32K,
+        analysisTokens: 1_500,
+        writeTargetLength: true,
+        language: "ko",
+      });
+      expectFitted(run, 1);
+      const [call] = reportCalls(run);
+      // As sent before this fix: the provider clamps it.
+      expect(call?.maxOutputTokens).toBe(26_000);
+      expect(call?.targetWords).toBe(1_234);
+      const report = run.output.report;
+      expect(report?.warnings).toContain(OUTPUT_LOWERED_WARNING);
+      expect(report?.warnings).toContain(ANALYSES_SHORTENED_WARNING);
+      expect(report?.markdown).toContain("8192 output tokens");
+    },
+    SCALE_TIMEOUT_MS,
+  );
+
+  it(
+    "32 000 / 32 000, 1 500 tokens each, both: the case that failed at any analysis size writes both reports, with one critique rewrite that re-plans and still fits",
+    async () => {
+      const run = await scaleRun({
+        name: "32k-32k-both",
+        contextWindowTokens: 32_000,
+        maxOutputTokens: 32_000,
+        analysisTokens: 1_500,
+        writeTargetLength: true,
+        language: "both",
+        rewriteOnce: true,
+      });
+      expectFitted(run, 2);
+      const calls = reportCalls(run);
+      expect(calls).toHaveLength(3);
+      for (const call of calls) {
+        expect(call.maxOutputTokens).toBeGreaterThanOrEqual(
+          REPORT_OUTPUT_FLOOR,
+        );
+        expect(call.maxOutputTokens).toBeLessThan(23_000);
+        expect(call.inputTokens).toBeLessThanOrEqual(20_006);
+      }
+      // The rewrite stayed applied: the earlier draft was not kept for want of room.
+      expect(run.output.report?.markdown).not.toContain(
+        EN_REPORT_LABELS.bannerRevisionNotApplied,
+      );
+    },
+    SCALE_TIMEOUT_MS,
+  );
+
+  it(
+    "64 000 / 64 000, at the ceiling, Korean: max_tokens comes down and nothing is dropped",
+    async () => {
+      const run = await scaleRun({
+        name: "64k-64k",
+        contextWindowTokens: 64_000,
+        maxOutputTokens: 64_000,
+        analysisTokens: LARGEST_ANALYSIS_TOKENS,
+        writeTargetLength: true,
+        language: "ko",
+      });
+      expectFitted(run, 1);
+      const [call] = reportCalls(run);
+      expect(call?.maxOutputTokens).toBeLessThan(26_000);
+      expect(call?.maxOutputTokens).toBeGreaterThan(REPORT_OUTPUT_FLOOR);
+      expect(run.output.report?.warnings).toContain(OUTPUT_LOWERED_WARNING);
+      expect(run.output.report?.warnings).not.toContain(
+        ANALYSES_SHORTENED_WARNING,
+      );
+    },
+    SCALE_TIMEOUT_MS,
+  );
+
+  it(
+    "32 000 / 8 192 at the ceiling, both: under the stated minimum, so CONTEXT_LENGTH before any report request, and no report",
+    async () => {
+      const run = await scaleRun({
+        ...WINDOW_32K,
+        analysisTokens: LARGEST_ANALYSIS_TOKENS,
+        language: "both",
+      });
       expect(run.output.outcome).toBe("failed");
       expect(run.output.error?.code).toBe("CONTEXT_LENGTH");
       expect(countOf(run.log, "CLUSTER_REDUCE")).toBeGreaterThan(0);
@@ -1496,17 +1878,126 @@ describe("P4-T22 — a window too small ends the run cleanly (no RangeError, no 
   );
 
   it(
-    "the same analyses fit on 64 000 / 8 192 (FINDING P4-T22-2)",
+    "128 000 / 32 768 at the ceiling: nothing changes, no warning",
     async () => {
       const run = await scaleRun({
-        name: "64k-padded",
-        contextWindowTokens: 64_000,
-        maxOutputTokens: 8_192,
-        analysisPadTokens: 2_500,
+        ...WINDOW_128K,
+        analysisTokens: LARGEST_ANALYSIS_TOKENS,
+        writeTargetLength: true,
       });
-      expect(run.output.outcome).toBe("succeeded");
-      expect(countOf(run.log, "TREND_REPORT")).toBe(1);
+      expectFitted(run, 1);
+      const [call] = reportCalls(run);
+      expect(call?.maxOutputTokens).toBe(23_000);
+      expect(call?.targetWords).toBe(4_250);
+      expect(run.output.report?.warnings).not.toContain(OUTPUT_LOWERED_WARNING);
+      expect(run.output.report?.warnings).not.toContain(
+        ANALYSES_SHORTENED_WARNING,
+      );
     },
     SCALE_TIMEOUT_MS,
   );
 });
+
+/**
+ * The whole grid, on demand (`P4T22_FIT_MATRIX`, a file path; `P4T22_FIT_PAIRS`,
+ * `P4T22_FIT_SIZES` and `P4T22_FIT_LANGS` narrow it): too many runs for the card's
+ * 60 seconds, so the describe above keeps a few and this writes one JSON line per
+ * run for the card's report. The composition-level grid runs always, in
+ * `trendCompose.test.ts`.
+ */
+const FIT_MATRIX_FILE = process.env["P4T22_FIT_MATRIX"];
+describe.runIf(FIT_MATRIX_FILE !== undefined && FIT_MATRIX_FILE !== "")(
+  "P4-T22 — the whole grid, on demand",
+  () => {
+    const pairs: readonly (readonly [number, number])[] = (
+      process.env["P4T22_FIT_PAIRS"] ??
+      "32000/8192,32000/32000,48000/8192,48000/48000,64000/8192,64000/64000,128000/32768"
+    )
+      .split(",")
+      .map(
+        (pair) =>
+          pair.split("/").map(Number) as unknown as readonly [number, number],
+      );
+    const sizes = (process.env["P4T22_FIT_SIZES"] ?? "1000,1500,2000,2500,2950")
+      .split(",")
+      .map(Number);
+    for (const [contextWindowTokens, maxOutputTokens] of pairs) {
+      for (const analysisTokens of sizes) {
+        for (const language of (
+          process.env["P4T22_FIT_LANGS"] ?? "en,ko,both"
+        ).split(",") as ("en" | "ko" | "both")[]) {
+          const name = `${String(contextWindowTokens)}/${String(maxOutputTokens)} ${String(analysisTokens)} ${language}`;
+          it(
+            name,
+            async () => {
+              const run = await scaleRun({
+                name,
+                contextWindowTokens,
+                maxOutputTokens,
+                analysisTokens,
+                writeTargetLength: true,
+                language,
+              });
+              const reports = language === "both" ? 2 : 1;
+              const calls = reportCalls(run);
+              const first = calls[0];
+              const planned =
+                run.confirms[0]?.estimate.selected.synthesis.calls ?? [];
+              const pricedInput = Math.max(
+                ...planned
+                  .filter((c) => c.kind.startsWith("TREND_REPORT"))
+                  .map((c) => c.inputTokens),
+              );
+              appendFileSync(
+                FIT_MATRIX_FILE as string,
+                `${JSON.stringify({
+                  name,
+                  outcome: run.output.outcome,
+                  code: run.output.error?.code ?? run.output.stop?.messageId,
+                  givenUp:
+                    run.output.outcome === "succeeded"
+                      ? themesGivenUp(run)
+                      : undefined,
+                  largestAnalysis: Math.max(
+                    0,
+                    ...run.log
+                      .filter((c) => c.kind === "CLUSTER_REDUCE")
+                      .map((c) => c.answerTokens ?? 0),
+                  ),
+                  refused: run.log.filter((c) => c.refused !== undefined)
+                    .length,
+                  reportInput: first?.inputTokens,
+                  maxTokens: first?.maxOutputTokens,
+                  targetWords: first?.targetWords,
+                  pricedInput,
+                  dropped: /details behind sections ([0-9, ]+)/.exec(
+                    run.output.report?.markdown ?? "",
+                  )?.[1],
+                  warnings: (run.output.reports ?? []).map((one) =>
+                    one.report.warnings.filter((w) =>
+                      /output_lowered|analyses_shortened|digests_trimmed/.test(
+                        w,
+                      ),
+                    ),
+                  ),
+                  wallMs: Math.round(run.wallMs),
+                })}\n`,
+              );
+              if (run.output.outcome === "succeeded") {
+                expectFitted(run, reports);
+              } else {
+                expect(run.output.error?.code).toBe("CONTEXT_LENGTH");
+                expect(countOf(run.log, "TREND_REPORT")).toBe(0);
+                expect(run.log.filter((c) => c.refused !== undefined)).toEqual(
+                  [],
+                );
+                expect(run.reportRows).toBe(0);
+              }
+            },
+            SCALE_TIMEOUT_MS * 2,
+          );
+        }
+      }
+    }
+  },
+);

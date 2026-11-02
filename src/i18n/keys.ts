@@ -176,6 +176,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // FR-25's "Generate Research Trends Report…" (P4-T19), docs/08 §2.4 and
   // §10.2. The window it opens has its own bundle: REPORT_WINDOW_MESSAGE_IDS.
   "research-helper-menu-collection-report",
+  // FR-13's "Find Related Papers…" (P5-T15), docs/08 §2.4 and §10.2. The window
+  // it opens is SEARCH_DIALOG_MESSAGE_IDS's.
+  "research-helper-menu-item-find-related",
   "research-helper-menu-spike-create-item",
   // P3-T29: the collection submenu's two LLM-job entries (docs/08 §2.5's
   // note of 2026-10-29), the summarize window and the removal command.
@@ -373,6 +376,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // P4-T16: a trend-report run's own notice (docs/09 §3 row 3b; docs/07 §4.5's
   // note of 2026-10-27). See L10N_EGRESS_REPORT_NOTICE.
   "research-helper-egress-report-notice",
+  // P5-T22: a recommend run's own notice (docs/09 §3 row 6). See
+  // L10N_EGRESS_PROFILE_NOTICE.
+  "research-helper-egress-profile-notice",
   // P3-T16: the cost confirmation dialog (docs/06 §5.4, docs/10 FR-24,
   // docs/09 §3.6) and the preference pane's Usage section. See
   // COST_DIALOG_L10N and USAGE_L10N in src/ui/dialogs/costConfirmDialog.ts.
@@ -490,6 +496,14 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // src/pipeline/trendReport/trendReportPipeline.ts.
   "research-helper-report-stopped-papers-failed",
   "research-helper-report-stopped-no-papers",
+  // P4-T21 (owner, plan/00 §6 item 334(d)): why a both run wrote no Korean
+  // report. See KOREAN_NOT_WRITTEN_L10N in
+  // src/pipeline/trendReport/trendReportPipeline.ts.
+  "research-helper-report-stopped-korean",
+  // P4-T21 (owner, plan/00 §6 item 332(b)): see L10N_REPORT_PAUSED_NOTICE.
+  "research-helper-report-paused-notice",
+  // P5-T22: see L10N_RECOMMEND_PROFILE_UNUSABLE.
+  "research-helper-recommend-profile-unusable",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -557,6 +571,15 @@ export const L10N_MENU_COLLECTION_REMOVE_NOTES =
  */
 export const L10N_MENU_COLLECTION_REPORT =
   "research-helper-menu-collection-report";
+
+/**
+ * Item context menu ▸ Research Helper ▸ Find Related Papers… (`P5-T15`, FR-13).
+ * `docs/08` §2.4 registers it under this id and §10.2 ships an `en-US` label and
+ * a Korean one; this card's step 3 puts it on {@link KO_PENDING_REVIEW} until
+ * the owner confirms that Korean (`G-41`).
+ */
+export const L10N_MENU_ITEM_FIND_RELATED =
+  "research-helper-menu-item-find-related";
 
 /**
  * The headline of the `Zotero.ProgressWindow` every job raises (`docs/07`
@@ -635,6 +658,14 @@ export const L10N_PROGRESS_HEADLINE = "research-helper-progress-headline";
 export const L10N_JOB_RESUMED = "research-helper-job-resumed";
 
 /**
+ * The one-time notice at Zotero's start that a report job is left paused
+ * (`P4-T21`; owner, `plan/00` §6 item 332(b); `docs/07` §12.4 reading 23).
+ * `$count` is how many collections, `$collections` their names. Shown by
+ * `publishReportWindowCommands` in `src/bootstrap/registerUI.ts`.
+ */
+export const L10N_REPORT_PAUSED_NOTICE = "research-helper-report-paused-notice";
+
+/**
  * The question a job asks when it pauses at the batch wall-clock budget
  * (pause reason `wall-clock-budget`; owner, 2026-10-21, `plan/00` §6 item 265;
  * `docs/07` §7.5): "N of M done — continue the rest?". `$minutes` is the
@@ -681,6 +712,24 @@ export const L10N_EGRESS_GEMINI_DECLARED_PAID =
  */
 export const L10N_EGRESS_REPORT_NOTICE = "research-helper-egress-report-notice";
 
+/**
+ * A recommend run's own notice on the cost dialog (`P5-T22`; `docs/09` §3 row
+ * 6): one metadata line for each of `$papers` papers, sent to `$model`. Carried
+ * as data by `src/pipeline/shared/egressDisclosure.ts`; placed with its
+ * arguments by `src/ui/dialogs/costConfirmDialog.ts`.
+ */
+export const L10N_EGRESS_PROFILE_NOTICE =
+  "research-helper-egress-profile-notice";
+
+/**
+ * The warning when the model's answer could not be used, or not one line fits
+ * the model, and a profile stays heuristic (`P5-T22`; `docs/12` §15's note,
+ * items 4 and 6). Set as `warningId` by
+ * `runProfileCall` in `src/pipeline/recommend/profileCall.ts`; `P5-T26` shows it.
+ */
+export const L10N_RECOMMEND_PROFILE_UNUSABLE =
+  "research-helper-recommend-profile-unusable";
+
 /* ------------------------------------------------ searchDialog message ids */
 
 /**
@@ -704,12 +753,27 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   // FR-12's mode chip, `Re-run: <collection name>` (P2-T17).
   "research-helper-search-mode-rerun",
 
+  // FR-13's related mode (P5-T15; docs/08 §5.2): the window title, the chip,
+  // the Seed lines and the Include row.
+  "research-helper-search-window-title-related",
+  "research-helper-search-mode-related",
+  "research-helper-search-related-seed-label",
+  "research-helper-search-related-seed-missing",
+  "research-helper-search-related-include-label",
+  "research-helper-search-related-include-reference",
+  "research-helper-search-related-include-citation",
+  "research-helper-search-related-include-recommendation",
+  "research-helper-search-related-include-similar",
+  "research-helper-search-state-initial-related",
+
   // Date range (FR-3; the years themselves are computed at window open).
   "research-helper-search-years-label",
   "research-helper-search-years-span",
   "research-helper-search-years-from",
   "research-helper-search-years-to",
   "research-helper-search-years-custom",
+  // P5-T15: the related mode's "Any", docs/08 §5.2.
+  "research-helper-search-years-any",
 
   // Per-database limit (the number is docs/07 §8.5's `maxResults`).
   "research-helper-search-max-results-label",
@@ -904,6 +968,8 @@ export const REPORT_WINDOW_MESSAGE_IDS = [
   "research-helper-report-copied",
   "research-helper-report-key-needed",
   "research-helper-report-paused-job",
+  // P4-T21: the selector of a two-report run (docs/08 §6.3's note of 2026-11-02).
+  "research-helper-report-shown-label",
 ] as const satisfies readonly FluentMessageId[];
 
 export type ReportWindowMessageId = (typeof REPORT_WINDOW_MESSAGE_IDS)[number];
@@ -1136,38 +1202,26 @@ export const KO_PENDING_REVIEW = [
   // `P3-T28`'s fifteen item-pane section strings (plan/00 §6 item 302) left
   // this list on 2026-10-29: the owner approved the coordinator's Korean
   // (`G-41`, plan/00 §6 item 304), so all fifteen are on KO_PRESENT.
+  // --- P5-T15's item menu entry (mainWindow) and related mode (searchDialog) ---
+  // All twelve left this list on 2026-11-02 (`G-41`, plan/00 §6 item 334).
   // --- reportWindow (10, then P4-T20's 25) ---
   // `P4-T19`'s report window (plan/00 §6 item 306(b)) left this list on
   // 2026-10-29: the owner approved the coordinator's Korean (`G-41`,
   // plan/00 §6 item 307(f)), so all ten are on KO_PRESENT.
-  // `P4-T20`'s run (2026-11-01). `G-41` owns the translation; the `ko-KR`
-  // bundle carries each as a commented stub with its English source, and
-  // nothing was machine-translated.
-  "research-helper-report-generate",
-  "research-helper-report-cancel",
-  "research-helper-report-save-note",
-  "research-helper-report-export",
-  "research-helper-report-copy",
-  "research-helper-report-continue",
-  "research-helper-report-stop",
-  "research-helper-report-group-save",
-  "research-helper-report-group-skip",
-  "research-helper-report-stage",
-  "research-helper-report-row-reading",
-  "research-helper-report-row-summaries",
-  "research-helper-report-row-themes",
-  "research-helper-report-row-writing",
-  "research-helper-report-row-review",
-  "research-helper-report-row-finishing",
-  "research-helper-report-spend",
-  "research-helper-report-preview-label",
-  "research-helper-report-outcome",
-  "research-helper-report-note",
-  "research-helper-report-group-question",
-  "research-helper-report-export-outcome",
-  "research-helper-report-copied",
-  "research-helper-report-key-needed",
-  "research-helper-report-paused-job",
+  // `P4-T20`'s run (2026-11-01) left this list on 2026-11-02: the owner
+  // approved the coordinator's Korean (`G-41`, plan/00 §6 item 333), so all
+  // twenty-five are on KO_PRESENT.
+  // --- P4-T21's "Report shown" (reportWindow) and paused-job notice (mainWindow) ---
+  // Both left this list on 2026-11-02 (`G-41`, plan/00 §6 item 334).
+  // --- P4-T21's reason a both run wrote no Korean report (mainWindow; item 334(d)) ---
+  // `G-41` owns the translation; the `ko-KR` bundle carries it as a commented
+  // stub with its English source, and nothing was machine-translated.
+  "research-helper-report-stopped-korean",
+  // --- P5-T22's egress notice and fallback warning (mainWindow) ---
+  // `G-41` owns the translation; the `ko-KR` bundle carries each as a commented
+  // stub with its English source, and nothing was machine-translated.
+  "research-helper-egress-profile-notice",
+  "research-helper-recommend-profile-unusable",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -1570,6 +1624,51 @@ export const KO_PRESENT = [
   // amended by the owner on 2026-11-02 (item 326(c)).
   "research-helper-report-stopped-papers-failed",
   "research-helper-report-stopped-no-papers",
+  // `P4-T20`'s run: Korean drafted by the coordinator and reviewed by the owner
+  // on 2026-11-02 (`G-41`, plan/00 §6 item 333), inserted byte for byte from
+  // plan/reports/ko-review-333.ftl.
+  "research-helper-report-generate",
+  "research-helper-report-cancel",
+  "research-helper-report-save-note",
+  "research-helper-report-export",
+  "research-helper-report-copy",
+  "research-helper-report-continue",
+  "research-helper-report-stop",
+  "research-helper-report-group-save",
+  "research-helper-report-group-skip",
+  "research-helper-report-stage",
+  "research-helper-report-row-reading",
+  "research-helper-report-row-summaries",
+  "research-helper-report-row-themes",
+  "research-helper-report-row-writing",
+  "research-helper-report-row-review",
+  "research-helper-report-row-finishing",
+  "research-helper-report-spend",
+  "research-helper-report-preview-label",
+  "research-helper-report-outcome",
+  "research-helper-report-note",
+  "research-helper-report-group-question",
+  "research-helper-report-export-outcome",
+  "research-helper-report-copied",
+  "research-helper-report-key-needed",
+  "research-helper-report-paused-job",
+  // `P5-T15`'s related mode and `P4-T21`'s two: Korean drafted by the coordinator
+  // and reviewed by the owner on 2026-11-02 (`G-41`, plan/00 §6 item 334),
+  // inserted byte for byte from plan/reports/ko-review-334.ftl.
+  "research-helper-menu-item-find-related",
+  "research-helper-search-window-title-related",
+  "research-helper-search-mode-related",
+  "research-helper-search-related-seed-label",
+  "research-helper-search-related-seed-missing",
+  "research-helper-search-related-include-label",
+  "research-helper-search-related-include-reference",
+  "research-helper-search-related-include-citation",
+  "research-helper-search-related-include-recommendation",
+  "research-helper-search-related-include-similar",
+  "research-helper-search-years-any",
+  "research-helper-search-state-initial-related",
+  "research-helper-report-shown-label",
+  "research-helper-report-paused-notice",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -1592,6 +1691,8 @@ export const KO_PRESENT = [
  */
 export interface FluentMessageArgsMap {
   // mainWindow
+  // `P5-T15`: `no` words the reason the entry is disabled, `yes` words nothing.
+  "research-helper-menu-item-find-related": { oneItem: "yes" | "no" };
   "research-helper-provenance-note-title": { timestamp: string };
   "research-helper-import-summary": {
     imported: number;
@@ -1839,6 +1940,8 @@ export interface FluentMessageArgsMap {
   // formatted by the window. `$present` is `linkedExisting + skipped` — see
   // `rerunSummary` in src/ui/viewModels/searchImportViewModel.ts.
   "research-helper-search-mode-rerun": { collection: string };
+  // `P5-T15`: `$title` is the seed's own title (data), cut by the window.
+  "research-helper-search-mode-related": { title: string };
   "research-helper-search-rerun-heading": { collection: string };
   "research-helper-search-rerun-recorded": {
     date: string;
@@ -1875,6 +1978,12 @@ export interface FluentMessageArgsMap {
   "research-helper-report-export-outcome": { outcome: string };
   "research-helper-report-key-needed": { provider: string };
   "research-helper-report-paused-job": { reason: string };
+  "research-helper-report-stopped-korean": { reason: string };
+  "research-helper-report-paused-notice": {
+    count: number;
+    collections: string;
+  };
+  "research-helper-egress-profile-notice": { papers: number; model: string };
 }
 
 /**
@@ -1990,6 +2099,8 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-cost-report-summaries",
   "research-helper-cost-report-writing",
   "research-helper-cost-report-review",
+  // mainWindow — the item menu entry's disabled reason (P5-T15)
+  "research-helper-menu-item-find-related",
 
   // searchDialog (20)
   "research-helper-search-years-span",
@@ -2009,6 +2120,8 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-search-error-rate-limit",
   "research-helper-search-row-duplicate",
   "research-helper-search-mode-rerun",
+  // `P5-T15`.
+  "research-helper-search-mode-related",
   "research-helper-search-rerun-heading",
   "research-helper-search-rerun-recorded",
   "research-helper-search-import-summary-rerun",
@@ -2035,6 +2148,9 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-report-export-outcome",
   "research-helper-report-key-needed",
   "research-helper-report-paused-job",
+  "research-helper-report-stopped-korean",
+  "research-helper-report-paused-notice",
+  "research-helper-egress-profile-notice",
 ] as const satisfies readonly (keyof FluentMessageArgsMap)[];
 
 /**

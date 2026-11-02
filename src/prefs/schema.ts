@@ -567,6 +567,17 @@ export const PREFS = {
     default: false,
   },
 
+  /**
+   * The pauses the start notice already announced (`docs/07` §12.4 reading 23;
+   * owner, `plan/00` §6 item 332(b)). A JSON array of strings; the reader,
+   * `announcePausedReports`, parses it. Not user-visible, no `pref()` line.
+   */
+  reportPausedNoticeShown: {
+    key: PREF_KEYS.reportPausedNoticeShown,
+    type: "string",
+    default: "[]",
+  },
+
   // -------------------------------------------------------------------------
   // Related papers & recommendations — docs/07 §8.5 (P5-T02). No exploration,
   // peer-reviewed or embedding-provider row: those are per-run controls or not

@@ -134,6 +134,27 @@ href="chrome://zotero-platform/content/zotero.css"?>
     />
     <html:p id="rh-report-note" role="status" hidden="hidden" />
     <html:p id="rh-report-delivery" role="status" hidden="hidden" />
+    <!-- P4-T21: which report of a two-report run the preview and the three
+         buttons act on (docs/08 §6.3's note of 2026-11-02). Hidden otherwise. -->
+    <hbox id="rh-report-shown-row" align="center" hidden="true">
+      <label
+        id="rh-report-shown-label"
+        control="rh-report-shown"
+        data-l10n-id="research-helper-report-shown-label"
+      />
+      <menulist id="rh-report-shown">
+        <menupopup>
+          <menuitem
+            value="en"
+            data-l10n-id="research-helper-report-language-en"
+          />
+          <menuitem
+            value="ko"
+            data-l10n-id="research-helper-report-language-ko"
+          />
+        </menupopup>
+      </menulist>
+    </hbox>
     <hbox align="center">
       <button
         id="rh-report-save-note"

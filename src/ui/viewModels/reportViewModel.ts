@@ -51,6 +51,7 @@ import {
   TREND_REPORT_STAGE_KEYS,
   type TrendReportConfirmAnswer,
   type TrendReportConfirmRequest,
+  type TrendReportLanguage,
   type TrendReportOutcome,
   type TrendReportRunView,
   type TrendReportStageKey,
@@ -133,11 +134,21 @@ export const REPORT_RUN_L10N = {
 export type ReportLanguageChoice = "auto" | "en" | "ko" | "both";
 
 /**
- * The one language a run writes (`TrendReportInput.language`; `docs/07`
- * §12.4 reading 12). `auto` follows Zotero's interface language (`docs/07`
- * §8.5): Korean under a `ko` locale, English otherwise. **`both` is read as
- * `auto` until `P4-T21`** builds the two-report run (DECIDED 2026-11-01,
- * coordinator, under `plan/00` §6 item 313; `plan/07` `P4-T21` owns `both`).
+ * The report language of Zotero's interface: Korean under a `ko` locale,
+ * English otherwise (`docs/07` §8.5). Called by {@link resolveReportLanguage},
+ * and by `createReportWindowSession` for the report a two-report run shows first
+ * (`docs/08` §6.3's note of 2026-11-02).
+ *
+ * @param uiLocale - Zotero's interface locale, a BCP 47 tag
+ */
+export function interfaceReportLanguage(uiLocale: string): RunLanguage {
+  return /^ko(?:-|$)/iu.test(uiLocale) ? "ko" : "en";
+}
+
+/**
+ * What a run is asked to write (`TrendReportInput.language`; `docs/07` §12.4
+ * readings 12 and 18): `auto` follows Zotero's interface language, and `both`
+ * passes through, for one run that writes two reports (`P4-T21`).
  *
  * @param choice - the selector's value
  * @param uiLocale - Zotero's interface locale, a BCP 47 tag
@@ -145,9 +156,8 @@ export type ReportLanguageChoice = "auto" | "en" | "ko" | "both";
 export function resolveReportLanguage(
   choice: ReportLanguageChoice,
   uiLocale: string,
-): RunLanguage {
-  if (choice === "en" || choice === "ko") return choice;
-  return /^ko(?:-|$)/iu.test(uiLocale) ? "ko" : "en";
+): TrendReportLanguage {
+  return choice === "auto" ? interfaceReportLanguage(uiLocale) : choice;
 }
 
 // ===========================================================================
@@ -267,6 +277,20 @@ export interface ReportPreview {
   readonly text: string;
   /** The generation the text belongs to; 0 after a rewrite started. */
   readonly generation: number;
+  /** The report the text belongs to, on a two-report run's draft (`P4-T21`). */
+  readonly language?: RunLanguage;
+}
+
+/**
+ * One report of a two-report run, as the window can show it (`docs/08` §6.3's
+ * note of 2026-11-02). Built by `createReportWindowSession`; read by
+ * {@link reduceReportRun}.
+ */
+export interface ReportDelivered {
+  readonly language: RunLanguage;
+  /** What the preview shows and the export writes. */
+  readonly text: string;
+  readonly note: ReportNoteState | undefined;
 }
 
 /** Everything the window shows, accumulated from the run's events. */
@@ -291,6 +315,10 @@ export interface ReportRunState {
   readonly copied: boolean;
   /** A job of this collection left paused (`plan/00` §6 item 324(a)). */
   readonly pausedJob: { readonly reason: string } | undefined;
+  /** A two-report run's reports, in run order; empty on any other run. */
+  readonly reports: readonly ReportDelivered[];
+  /** Which of {@link reports} the preview and the buttons act on. */
+  readonly shown: RunLanguage | undefined;
 }
 
 /** The state before any run. */
@@ -309,6 +337,8 @@ export const IDLE_REPORT_RUN: ReportRunState = Object.freeze({
   exported: undefined,
   copied: false,
   pausedJob: undefined,
+  reports: Object.freeze([]),
+  shown: undefined,
 }) as ReportRunState;
 
 /** One thing that happened to the run. */
@@ -326,8 +356,17 @@ export type ReportRunEvent =
       /** The stored report's Markdown, on `succeeded`. */
       readonly markdown?: string | undefined;
       readonly note?: ReportNoteState | undefined;
+      /** A two-report run's reports; `markdown` and `note` are the shown one's. */
+      readonly reports?: readonly ReportDelivered[] | undefined;
+      readonly shown?: RunLanguage | undefined;
     }
-  | { readonly kind: "note"; readonly note: ReportNoteState }
+  | {
+      readonly kind: "note";
+      readonly note: ReportNoteState;
+      /** Which report of a two-report run; `undefined` on any other run. */
+      readonly language?: RunLanguage | undefined;
+    }
+  | { readonly kind: "show-report"; readonly language: RunLanguage }
   | {
       readonly kind: "exported";
       readonly outcome: Exclude<ReportExportOutcome, "no-path">;
@@ -366,7 +405,17 @@ export function reduceReportRun(
       ) {
         preview = { ...preview, state: "final" };
       }
-      return { ...state, view: event.view, lastStage: real, preview };
+      return {
+        ...state,
+        view: event.view,
+        lastStage: real,
+        preview,
+        // A two-report run's next language starts with no revision round.
+        critiqueRound:
+          real === "Composing" && state.lastStage === "Critiquing"
+            ? 0
+            : state.critiqueRound,
+      };
     }
     case "draft": {
       const { delta } = event;
@@ -375,13 +424,16 @@ export function reduceReportRun(
         return state;
       }
       const fresh =
-        preview.state !== "draft" || delta.generation !== preview.generation;
+        preview.state !== "draft" ||
+        delta.generation !== preview.generation ||
+        delta.language !== preview.language;
       return {
         ...state,
         preview: {
           state: "draft",
           text: fresh ? delta.deltaText : preview.text + delta.deltaText,
           generation: delta.generation,
+          ...(delta.language !== undefined && { language: delta.language }),
         },
       };
     }
@@ -417,6 +469,8 @@ export function reduceReportRun(
         reportStored: succeeded,
         note: event.note,
         pausedJob: undefined,
+        reports: event.reports ?? [],
+        shown: event.shown,
         preview: succeeded
           ? {
               state: "final",
@@ -429,7 +483,26 @@ export function reduceReportRun(
       };
     }
     case "note":
-      return { ...state, note: event.note };
+      if (event.language === undefined) return { ...state, note: event.note };
+      return {
+        ...state,
+        note: event.language === state.shown ? event.note : state.note,
+        reports: state.reports.map((one) =>
+          one.language === event.language ? { ...one, note: event.note } : one,
+        ),
+      };
+    case "show-report": {
+      const one = state.reports.find((r) => r.language === event.language);
+      if (one === undefined) return state;
+      return {
+        ...state,
+        shown: one.language,
+        note: one.note,
+        exported: undefined,
+        copied: false,
+        preview: { ...state.preview, text: one.text },
+      };
+    }
     case "exported":
       return { ...state, exported: event.outcome, copied: false };
     case "copied":
@@ -529,6 +602,14 @@ export interface ReportRunModel {
   /** The last export or copy's result. */
   readonly delivery: ReportModelLine | undefined;
   readonly buttons: ReportButtons;
+  /** The "Report shown" selector, only when a run gave two reports. */
+  readonly reportChoice: ReportChoice | undefined;
+}
+
+/** What the "Report shown" selector draws (`docs/08` §6.3's note of 2026-11-02). */
+export interface ReportChoice {
+  readonly languages: readonly RunLanguage[];
+  readonly shown: RunLanguage;
 }
 
 function rowLine(key: ReportRowKey, state: ReportRunState): ReportLine {
@@ -678,6 +759,13 @@ export function buildReportRunModel(
       export: stored,
       copy: stored,
     },
+    reportChoice:
+      stored && state.reports.length > 1 && state.shown !== undefined
+        ? {
+            languages: state.reports.map((one) => one.language),
+            shown: state.shown,
+          }
+        : undefined,
   };
 }
 
@@ -698,6 +786,7 @@ export interface ReportWindowRunModel {
   readonly note: ReportWindowLineOut | undefined;
   readonly delivery: ReportWindowLineOut | undefined;
   readonly buttons: ReportButtons;
+  readonly reportChoice: ReportChoice | undefined;
 }
 
 /**
@@ -747,6 +836,7 @@ export function windowRunModel(
     note: line(model.note),
     delivery: line(model.delivery),
     buttons: model.buttons,
+    reportChoice: model.reportChoice,
   };
 }
 
@@ -873,6 +963,18 @@ export interface ReportNoteDeps {
   write(answer: ReportGroupAnswer | undefined): Promise<ReportNoteAnswer>;
   /** `ReportStore.put` with the note's key. */
   store(noteKey: string): Promise<void>;
+}
+
+/**
+ * One group question for a run's notes: the first asks, and every later note of
+ * that run takes the same answer (`docs/07` §12.4 reading 22). Caller:
+ * `createReportWindowSession`'s `finishRun`.
+ *
+ * @param ask - {@link ReportNoteDeps.ask}
+ */
+export function askOnce(ask: ReportNoteDeps["ask"]): ReportNoteDeps["ask"] {
+  let asked: Promise<"resume" | "cancel"> | undefined;
+  return (question) => (asked ??= ask(question));
 }
 
 /**

@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { registerProviders } from "../../../src/bootstrap/registerProviders";
@@ -36,6 +40,7 @@ import {
   REPORT_LANGUAGE_L10N,
   REPORT_WINDOW_L10N,
 } from "../../../src/ui/panes/reportWindow";
+import { KOREAN_NOT_WRITTEN_L10N } from "../../../src/pipeline/trendReport/trendReportPipeline";
 import { REPORT_RUN_L10N } from "../../../src/ui/viewModels/reportViewModel";
 import { PREFS } from "../../../src/prefs/schema";
 import { mockSettings } from "../../helpers/mockLLM";
@@ -138,10 +143,13 @@ const ID_CONSTANTS = {
   L10N_MENU_COLLECTION_REMOVE_NOTES: keys.L10N_MENU_COLLECTION_REMOVE_NOTES,
   // `P4-T19`: FR-25's report entry.
   L10N_MENU_COLLECTION_REPORT: keys.L10N_MENU_COLLECTION_REPORT,
+  // `P5-T15`: the item context menu's one entry.
+  L10N_MENU_ITEM_FIND_RELATED: keys.L10N_MENU_ITEM_FIND_RELATED,
   L10N_MENU_SPIKE_CREATE_ITEM: keys.L10N_MENU_SPIKE_CREATE_ITEM,
   L10N_PROGRESS_HEADLINE: keys.L10N_PROGRESS_HEADLINE,
   // `P3-T34`: the notice that interrupted jobs resumed (`docs/07` §7.6).
   L10N_JOB_RESUMED: keys.L10N_JOB_RESUMED,
+  L10N_REPORT_PAUSED_NOTICE: keys.L10N_REPORT_PAUSED_NOTICE,
   // Item 265(a): the wall-clock budget's question (`docs/07` §7.5).
   L10N_JOB_WALL_CLOCK_BUDGET: keys.L10N_JOB_WALL_CLOCK_BUDGET,
   // `P3-T15`: the egress disclosure's two notices (`docs/09` §3.6).
@@ -151,6 +159,9 @@ const ID_CONSTANTS = {
   L10N_EGRESS_GEMINI_DECLARED_PAID: keys.L10N_EGRESS_GEMINI_DECLARED_PAID,
   // `P4-T16`: a trend-report run's own notice (`docs/09` §3 row 3b).
   L10N_EGRESS_REPORT_NOTICE: keys.L10N_EGRESS_REPORT_NOTICE,
+  // `P5-T22`: a recommend run's notice and its fallback warning.
+  L10N_EGRESS_PROFILE_NOTICE: keys.L10N_EGRESS_PROFILE_NOTICE,
+  L10N_RECOMMEND_PROFILE_UNUSABLE: keys.L10N_RECOMMEND_PROFILE_UNUSABLE,
 } satisfies Record<string, string>;
 
 /** The exported `L10N_*` string constants that are not message identifiers. */
@@ -1147,16 +1158,18 @@ describe("src/i18n/keys.ts — the two stops of plan/00 §6 item 309(e), (g)", (
 });
 
 describe("src/i18n/keys.ts — P4-T19's report window and its menu entry (docs/08 §2.5, §6.4; plan/00 §6 item 306(b))", () => {
-  // P4-T19's ten; REPORT_WINDOW_L10N also carries P4-T20's run (below).
+  // P4-T19's ten; REPORT_WINDOW_L10N also carries P4-T20's run (below) and
+  // P4-T21's "Report shown" (at the end of this file).
   const run: readonly string[] = Object.values(REPORT_RUN_L10N);
+  const shownLabel: string = REPORT_WINDOW_L10N.shownLabel;
   const ten = Object.values(REPORT_WINDOW_L10N).filter(
-    (id) => !run.includes(id),
+    (id) => !run.includes(id) && id !== shownLabel,
   );
 
-  it("names ten distinct ids, and with P4-T20's twenty-five exactly the report window's surface list", () => {
+  it("names ten distinct ids, and with P4-T20's twenty-five and P4-T21's label exactly the report window's surface list", () => {
     expect(new Set(ten).size).toBe(10);
     expect(new Set(run).size).toBe(25);
-    expect(sorted([...ten, ...run])).toEqual(
+    expect(sorted([...ten, ...run, shownLabel])).toEqual(
       sorted(read("REPORT_WINDOW_MESSAGE_IDS")),
     );
     expect(sorted(Object.values(REPORT_WINDOW_L10N))).toEqual(
@@ -1212,6 +1225,116 @@ describe("src/i18n/keys.ts — P4-T18's two report stops (plan/00 §6 item 324(c
   });
 });
 
+describe("src/i18n/keys.ts — P4-T21's reason a both run wrote no Korean report (plan/00 §6 item 334(d))", () => {
+  const id = "research-helper-report-stopped-korean";
+
+  it("declares it on the main window with an argument, pending review, and equal to the pipeline's constant", () => {
+    expect(KOREAN_NOT_WRITTEN_L10N).toBe(id);
+    expect(keys.surfaceOfMessage(id)).toBe("mainWindow");
+    expect(notIn([id], read("ARGUMENT_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn([id], read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy([id], read("KO_PRESENT"))).toEqual([]);
+  });
+
+  it("gives it one en-US message with each reason, and only a NEEDS REVIEW stub in ko-KR", () => {
+    const bundle = (locale: string): string =>
+      readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          `../../../addon/locale/${locale}/research-helper-mainWindow.ftl`,
+        ),
+        "utf8",
+      );
+    const declaredIn = (text: string): boolean =>
+      text.split(/\r?\n/).some((line) => line.startsWith(`${id} =`));
+    const english = bundle("en-US");
+    expect(declaredIn(english)).toBe(true);
+    for (const reason of [
+      "[no-room]",
+      "[structure]",
+      "[finishing]",
+      "*[request]",
+    ]) {
+      expect(english, reason).toContain(reason);
+    }
+    expect(declaredIn(bundle("ko-KR"))).toBe(false);
+    expect(bundle("ko-KR")).toContain(`# NEEDS REVIEW ${id} `);
+  });
+});
+
+describe("src/i18n/keys.ts — P5-T15's item menu entry and related mode", () => {
+  const label = "research-helper-menu-item-find-related";
+  const window = [
+    "research-helper-search-window-title-related",
+    "research-helper-search-mode-related",
+    "research-helper-search-related-seed-label",
+    "research-helper-search-related-seed-missing",
+    "research-helper-search-related-include-label",
+    "research-helper-search-related-include-reference",
+    "research-helper-search-related-include-citation",
+    "research-helper-search-related-include-recommendation",
+    "research-helper-search-related-include-similar",
+    "research-helper-search-years-any",
+    "research-helper-search-state-initial-related",
+  ];
+
+  it("puts the label on the main window and the other eleven on the search window, once each", () => {
+    expect(keys.L10N_MENU_ITEM_FIND_RELATED).toBe(label);
+    expect(keys.surfaceOfMessage(label)).toBe("mainWindow");
+    for (const id of window) {
+      expect(keys.surfaceOfMessage(id), id).toBe("searchDialog");
+    }
+    expect(sharedBy(window, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(sharedBy(window, read("ERROR_MESSAGE_IDS"))).toEqual([]);
+    expect(repeatedIn(declaredIds())).toEqual([]);
+  });
+
+  it("puts all twelve on KO_PRESENT: the owner reviewed the Korean (G-41, plan/00 §6 item 334)", () => {
+    const all = [label, ...window];
+    expect(notIn(all, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(all, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+
+  it("lists the two ids that take an argument: the entry's disabled reason and the chip's title", () => {
+    const withArguments = sharedBy(
+      [label, ...window],
+      keys.ARGUMENT_MESSAGE_IDS,
+    );
+    expect(withArguments).toEqual([
+      "research-helper-menu-item-find-related",
+      "research-helper-search-mode-related",
+    ]);
+  });
+
+  it("gives each a message in both bundles and no stub", () => {
+    // The bundles as text, because a single-locale omission is otherwise caught
+    // only inside a live Zotero (test/integration/l10n.spec.ts resolves them).
+    const bundle = (locale: string, surface: string): string =>
+      readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          `../../../addon/locale/${locale}/research-helper-${surface}.ftl`,
+        ),
+        "utf8",
+      );
+    const declaredIn = (text: string, id: string): boolean =>
+      text.split(/\r?\n/).some((line) => line.startsWith(`${id} =`));
+    const checks: readonly (readonly [string, readonly string[]])[] = [
+      ["mainWindow", [label]],
+      ["searchDialog", window],
+    ];
+    for (const [surface, ids] of checks) {
+      const english = bundle("en-US", surface);
+      const korean = bundle("ko-KR", surface);
+      for (const id of ids) {
+        expect(declaredIn(english, id), `${id} in en-US`).toBe(true);
+        expect(declaredIn(korean, id), `${id} in ko-KR`).toBe(true);
+        expect(korean, `${id}'s stub`).not.toContain(`# NEEDS REVIEW ${id} `);
+      }
+    }
+  });
+});
+
 describe("src/i18n/keys.ts — P4-T20's run (docs/08 §6.1–§6.4's notes of 2026-11-02)", () => {
   const run = Object.values(REPORT_RUN_L10N);
 
@@ -1243,8 +1366,49 @@ describe("src/i18n/keys.ts — P4-T20's run (docs/08 §6.1–§6.4's notes of 20
     );
   });
 
-  it("puts all twenty-five on KO_PENDING_REVIEW until the owner reviews the Korean (G-41)", () => {
-    expect(notIn(run, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(run, read("KO_PRESENT"))).toEqual([]);
+  it("puts all twenty-five on KO_PRESENT: the owner reviewed the Korean (G-41, plan/00 §6 item 333)", () => {
+    expect(notIn(run, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(run, read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+});
+
+describe("src/i18n/keys.ts — P4-T21's two strings (docs/08 §6.3's notes of 2026-11-02)", () => {
+  const shown = "research-helper-report-shown-label";
+  const notice = "research-helper-report-paused-notice";
+
+  it("declares each on its own surface, with both reviewed (G-41, plan/00 §6 item 334)", () => {
+    expect(keys.surfaceOfMessage(shown)).toBe("reportWindow");
+    expect(keys.surfaceOfMessage(notice)).toBe("mainWindow");
+    expect(keys.L10N_REPORT_PAUSED_NOTICE).toBe(notice);
+    expect(notIn([shown, notice], read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy([shown, notice], read("KO_PENDING_REVIEW"))).toEqual([]);
+  });
+
+  it("gives only the notice arguments", () => {
+    expect(sharedBy([shown, notice], keys.ARGUMENT_MESSAGE_IDS)).toEqual([
+      notice,
+    ]);
+  });
+
+  it("gives each a message in both bundles and no stub", () => {
+    const bundle = (locale: string, surface: string): string =>
+      readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          `../../../addon/locale/${locale}/research-helper-${surface}.ftl`,
+        ),
+        "utf8",
+      );
+    const declaredIn = (text: string, id: string): boolean =>
+      text.split(/\r?\n/).some((line) => line.startsWith(`${id} =`));
+    for (const [surface, id] of [
+      ["reportWindow", shown],
+      ["mainWindow", notice],
+    ] as const) {
+      const korean = bundle("ko-KR", surface);
+      expect(declaredIn(bundle("en-US", surface), id), id).toBe(true);
+      expect(declaredIn(korean, id), id).toBe(true);
+      expect(korean, id).not.toContain(`# NEEDS REVIEW ${id} `);
+    }
   });
 });

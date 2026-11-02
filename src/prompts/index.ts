@@ -77,6 +77,7 @@
  */
 
 import { ConfigurationError } from "../core/errors";
+import collectionProfileSchemaV1 from "./schemas/collection-profile.v1.json";
 import paperSummarySchemaV1 from "./schemas/paper-summary.v1.json";
 import relevanceScreenSchemaV1 from "./schemas/relevance-screen.v1.json";
 import selfCritiqueSchemaV1 from "./schemas/self-critique.v1.json";
@@ -109,6 +110,7 @@ export const PROMPT_IDS = [
   "TREND_REPORT_EN",
   "TREND_REPORT_KO",
   "SELF_CRITIQUE",
+  "COLLECTION_PROFILE",
   "THEME_MERGE",
   "CLUSTER_REDUCE_MERGE",
 ] as const;
@@ -138,6 +140,7 @@ export const PROMPT_FILE_NAMES: Readonly<Record<PromptId, string>> =
     TREND_REPORT_EN: "trend-report-en.v1.0.1.md",
     TREND_REPORT_KO: "trend-report-ko.v1.0.1.md",
     SELF_CRITIQUE: "self-critique.v1.0.0.md",
+    COLLECTION_PROFILE: "collection-profile.v1.0.0.md",
     THEME_MERGE: "theme-merge.v1.0.0.md",
     CLUSTER_REDUCE_MERGE: "cluster-reduce-merge.v1.0.0.md",
   });
@@ -182,6 +185,10 @@ export const PROMPT_SCHEMAS: Readonly<Record<string, JsonSchemaObject>> =
       selfCritiqueSchemaV1 as JsonSchemaObject,
     ),
     "theme-merge.v1.json": deepFreeze(themeMergeSchemaV1 as JsonSchemaObject),
+    // `docs/12` §15's "Expected output" block (`P5-T22`).
+    "collection-profile.v1.json": deepFreeze(
+      collectionProfileSchemaV1 as JsonSchemaObject,
+    ),
   });
 
 // ---------------------------------------------------------------------------

@@ -33,20 +33,27 @@ import type { Digest, ThemeAnalysis } from "../../../src/model/trend";
 import {
   parsePromptFile,
   PROMPT_FILE_NAMES,
+  resolveMaxTokens,
   type PromptTemplate,
 } from "../../../src/prompts";
-import { SYNTHESIS_INPUT_BUDGETS } from "../../../src/pipeline/shared/estimate";
 import {
+  REPORT_OUTPUT_FLOOR,
+  SYNTHESIS_INPUT_BUDGETS,
+} from "../../../src/pipeline/shared/estimate";
+import {
+  ANALYSES_SHORTENED_WARNING,
   checkHeadings,
   citationDensity,
   CITATIONS_REPLACED_WARNING,
   composeReport,
   DIGESTS_TRIMMED_WARNING,
+  DROPPABLE_ANALYSIS_FIELDS,
   exclusionReasons,
   expectedHeadings,
   isTargetWordsCapped,
   MANUALLY_CURATED,
   NO_EXCLUSIONS,
+  OUTPUT_LOWERED_WARNING,
   prepareComposition,
   REGENERATED_WARNING,
   REPORT_EFFORT,
@@ -64,6 +71,7 @@ import {
   TARGET_WORDS_CAPPED_WARNING,
   TARGET_WORDS_MAX,
   targetWordsFor,
+  targetWordsForOutput,
   type AnalysedPaper,
   type ComposeDeps,
   type ComposedReport,
@@ -1174,4 +1182,518 @@ describe("reportScopeOf — the scope record the title block reads", () => {
   it("equals reportVariables' scope", () => {
     expect(reportScopeOf(fixture())).toEqual(reportVariables(fixture()).scope);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Making room at composition (owner's option 1 on FINDING P4-T22-2;
+// docs/06 §8.4's note of 2026-11-02)
+// ---------------------------------------------------------------------------
+
+/** About `tokens` by `estTokens`. */
+function filler(tokens: number): string {
+  return " x".repeat(Math.ceil(tokens * 1.85)).trim();
+}
+
+/**
+ * An analysis of about `tokens` over every schema field. The split is an
+ * assumption from CLUSTER_REDUCE's prompt (3–6 paragraphs of narrative, one
+ * sentence per representative paper), since no live run has measured one.
+ */
+function fullAnalysis(
+  themeId: string,
+  cited: readonly string[],
+  tokens: number,
+): ThemeAnalysis {
+  const itemKeys = cited.slice(0, 2);
+  return {
+    themeId,
+    name: `Synthetic Theme ${themeId}`,
+    narrative: `${cited.map((k) => `[[${k}]]`).join(" ")} ${filler(tokens * 0.4)}`,
+    representativePapers: cited.slice(0, 6).map((itemKey) => ({
+      itemKey,
+      why: filler((tokens * 0.1) / 6),
+    })),
+    methodologicalPatterns: [{ pattern: filler(tokens * 0.1), itemKeys }],
+    convergentFindings: [
+      { statement: filler(tokens * 0.15), itemKeys, strength: "moderate" },
+    ],
+    contradictions: [
+      {
+        statement: filler(tokens * 0.04),
+        sideA: { claim: filler(tokens * 0.03), itemKeys },
+        sideB: { claim: filler(tokens * 0.03), itemKeys },
+        possibleExplanation: null,
+      },
+    ],
+    gaps: [
+      { gap: filler(tokens * 0.05), basis: filler(tokens * 0.05), itemKeys },
+    ],
+    trajectory: filler(tokens * 0.05),
+  };
+}
+
+/** 400 analysed papers in 11 themes of six representative papers each. */
+function scaleInput(
+  tokens: number,
+  over: Partial<ComposeInput> = {},
+): ComposeInput {
+  const papers = keys(1, 400);
+  return {
+    language: "en",
+    collectionName: "Synthetic collection",
+    userTopic: "synthetic topic",
+    totalCount: 400,
+    analysed: papers.map((_, i) => paper(i + 1)),
+    excluded: [],
+    searchRuns: [],
+    themes: Array.from({ length: 11 }, (_, t) => ({
+      analysis: fullAnalysis(
+        `T${String(t + 1)}`,
+        keys(t * 36 + 1, t * 36 + 6),
+        tokens,
+      ),
+      memberCount: 36,
+    })),
+    digests: papers.map((_, i) => digest(i + 1, 140)),
+    targetWords: 0,
+    duplicateOf: new Map(),
+    ...over,
+  };
+}
+
+describe("targetWordsForOutput — docs/12 §10's derivation, backwards", () => {
+  it("gives the derivation's 4 250 words at its uncapped figures", () => {
+    // The derivation rounds each product, so within a word of 4 250.
+    expect(
+      Math.abs(targetWordsForOutput("en", 22_680) - 4_250),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(targetWordsForOutput("ko", 25_392) - 4_250),
+    ).toBeLessThanOrEqual(1);
+  });
+
+  it("leaves a large window's target alone: above TARGET_WORDS_MAX at both ceilings", () => {
+    expect(
+      targetWordsForOutput("en", resolveMaxTokens(EN)),
+    ).toBeGreaterThanOrEqual(TARGET_WORDS_MAX);
+    expect(
+      targetWordsForOutput("ko", resolveMaxTokens(KO)),
+    ).toBeGreaterThanOrEqual(TARGET_WORDS_MAX);
+  });
+
+  it("the floor holds about 1 390 English and 1 234 Korean words, inside §9.2's shortest band, which a lower floor would leave in Korean", () => {
+    const band = TARGET_WORD_BANDS[0];
+    expect(targetWordsForOutput("en", REPORT_OUTPUT_FLOOR)).toBe(1_390);
+    expect(targetWordsForOutput("ko", REPORT_OUTPUT_FLOOR)).toBe(1_234);
+    expect(
+      targetWordsForOutput("ko", REPORT_OUTPUT_FLOOR),
+    ).toBeGreaterThanOrEqual(band?.minWords ?? Infinity);
+    expect(targetWordsForOutput("ko", 7_900)).toBeLessThan(band?.minWords ?? 0);
+  });
+
+  it("never returns a negative number", () => {
+    expect(targetWordsForOutput("en", 100)).toBe(0);
+  });
+});
+
+describe("prepareComposition makes room in the owner's order", () => {
+  it("changes nothing for a request that fits: same plan as with no limits, max_tokens at the ceiling, no fit", () => {
+    const input = scaleInput(300);
+    const plain = prepareComposition(input, EN);
+    const windowed = prepareComposition(
+      {
+        ...input,
+        windowLimits: { contextWindowTokens: 200_000, maxOutputTokens: 64_000 },
+      },
+      EN,
+    );
+    expect(windowed).toEqual(plain);
+    expect(windowed.maxOutputTokens).toBe(resolveMaxTokens(EN));
+    expect(windowed.fit).toBeUndefined();
+  });
+
+  it("keeps the digest steps ahead of lowering: 'cited' at the full ceiling where that fits", () => {
+    const plan = prepareComposition(
+      scaleInput(1_000, {
+        windowLimits: {
+          contextWindowTokens: 128_000,
+          maxOutputTokens: 128_000,
+        },
+      }),
+      EN,
+    );
+    expect(plan.digestSelection).toBe("cited");
+    expect(plan.fit).toBeUndefined();
+  });
+
+  it("(1) lowers max_tokens only as far as the input needs, and the word target follows", () => {
+    const plan = prepareComposition(
+      scaleInput(2_900, {
+        windowLimits: { contextWindowTokens: 64_000, maxOutputTokens: 64_000 },
+      }),
+      EN,
+    );
+    expect(plan.digestSelection).toBe("representative");
+    expect(plan.fit?.droppedFields).toEqual([]);
+    expect(plan.fit?.outputLowered).toBe(true);
+    expect(plan.maxOutputTokens).toBeLessThan(resolveMaxTokens(EN));
+    expect(plan.maxOutputTokens).toBeGreaterThan(REPORT_OUTPUT_FLOOR);
+    expect(plan.targetWords).toBe(
+      targetWordsForOutput("en", plan.maxOutputTokens),
+    );
+    expect(plan.fit?.targetWordsLowered).toBe(true);
+    // It fits, and one token more of output would not.
+    const used =
+      Math.ceil(plan.requestTokens * 1.15) + plan.maxOutputTokens + 800;
+    expect(used).toBeLessThanOrEqual(64_000);
+    expect(used).toBeGreaterThan(64_000 - 3);
+  });
+
+  it("(2) only at the floor drops fields, in the stated order, across every theme, never the required ones", () => {
+    const seen: string[][] = [];
+    for (let tokens = 1_000; tokens <= 2_900; tokens += 25) {
+      let plan;
+      try {
+        plan = prepareComposition(
+          scaleInput(tokens, {
+            windowLimits: {
+              contextWindowTokens: 40_000,
+              maxOutputTokens: 40_000,
+            },
+          }),
+          EN,
+        );
+      } catch {
+        break;
+      }
+      const dropped = plan.fit?.droppedFields ?? [];
+      const last = seen[seen.length - 1];
+      if (last === undefined || last.length !== dropped.length) {
+        seen.push([...dropped]);
+      }
+      if (dropped.length > 0) {
+        expect(plan.maxOutputTokens).toBeLessThan(resolveMaxTokens(EN));
+      }
+      const sent = JSON.parse(
+        plan.variables["THEME_ANALYSES_JSON"] ?? "[]",
+      ) as ThemeAnalysis[];
+      expect(sent).toHaveLength(11);
+      for (const one of sent) {
+        expect(one.narrative.length).toBeGreaterThan(0);
+        expect(one.trajectory.length).toBeGreaterThan(0);
+        expect(one.representativePapers).toHaveLength(6);
+        expect(one.representativePapers[0]?.itemKey).toBeDefined();
+        expect("contradictions" in one).toBe(
+          !dropped.includes("contradictions"),
+        );
+        expect("gaps" in one).toBe(!dropped.includes("gaps"));
+        expect("why" in (one.representativePapers[0] ?? {})).toBe(
+          !dropped.includes("representativePapers[].why"),
+        );
+      }
+    }
+    const order = DROPPABLE_ANALYSIS_FIELDS.map((entry) => entry.field);
+    // Each step a prefix of the order, and more than one step was reached.
+    for (const dropped of seen) {
+      expect(dropped).toEqual(order.slice(0, dropped.length));
+    }
+    expect(seen.length).toBeGreaterThan(2);
+    expect(order[order.length - 1]).toBe("contradictions");
+  });
+
+  it("gives room a dropped field frees back to max_tokens, up to the model's limit", () => {
+    // 32 000 / 8 192: the limit is the floor, so max_tokens stays as sent and is clamped.
+    const clamped = prepareComposition(
+      scaleInput(1_500, {
+        windowLimits: { contextWindowTokens: 32_000, maxOutputTokens: 8_192 },
+      }),
+      EN,
+    );
+    expect(clamped.maxOutputTokens).toBe(resolveMaxTokens(EN));
+    expect(clamped.fit?.outputLowered).toBe(false);
+    expect(clamped.fit?.outputTokens).toBe(8_192);
+    expect(clamped.fit?.droppedFields.length).toBeGreaterThan(0);
+    // 32 000 / 32 000: the same input, the same floor, the same fields dropped.
+    const lowered = prepareComposition(
+      scaleInput(1_500, {
+        windowLimits: { contextWindowTokens: 32_000, maxOutputTokens: 32_000 },
+      }),
+      EN,
+    );
+    expect(lowered.fit?.droppedFields).toEqual(clamped.fit?.droppedFields);
+    expect(lowered.fit?.outputLowered).toBe(true);
+    expect(lowered.maxOutputTokens).toBeGreaterThanOrEqual(REPORT_OUTPUT_FLOOR);
+    expect(
+      Math.ceil(lowered.requestTokens * 1.15) + lowered.maxOutputTokens + 800,
+    ).toBeLessThanOrEqual(32_000);
+  });
+
+  it("(3) ContextLengthExceededError when nothing is left to drop, and composeReport sends nothing", async () => {
+    const input = scaleInput(2_900, {
+      windowLimits: { contextWindowTokens: 32_000, maxOutputTokens: 8_192 },
+    });
+    expect(() => prepareComposition(input, EN)).toThrow(
+      ContextLengthExceededError,
+    );
+    const { provider, deps } = setup();
+    await expect(composeReport(input, deps)).rejects.toBeInstanceOf(
+      ContextLengthExceededError,
+    );
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it("with no window known, lowers nothing but still drops fields to meet the budget", () => {
+    const input = scaleInput(2_000, { inputBudget: 24_000 });
+    const plan = prepareComposition(input, EN);
+    expect(plan.maxOutputTokens).toBe(resolveMaxTokens(EN));
+    expect(plan.targetWords).toBe(TARGET_WORDS_MAX);
+    expect(plan.fit?.outputLowered).toBe(false);
+    expect(plan.fit?.droppedFields.length).toBeGreaterThan(0);
+    expect(plan.requestTokens).toBeLessThanOrEqual(24_000);
+  });
+
+  it("caps the word target to a model's known output limit on any window, with max_tokens as before (DECIDED 2026-11-02)", () => {
+    const plan = prepareComposition(
+      scaleInput(300, {
+        windowLimits: { contextWindowTokens: 200_000, maxOutputTokens: 8_192 },
+      }),
+      EN,
+    );
+    expect(plan.targetWords).toBe(1_390);
+    expect(plan.variables["TARGET_WORDS"]).toBe("1390");
+    expect(plan.maxOutputTokens).toBe(resolveMaxTokens(EN));
+    expect(plan.fit).toMatchObject({
+      outputTokens: 8_192,
+      outputLowered: false,
+      targetWordsLowered: true,
+      droppedFields: [],
+    });
+  });
+
+  it("keeps a target that already fits, and never asks below TARGET_WORDS_MIN", () => {
+    const small = prepareComposition(
+      fixture({
+        targetWords: 500,
+        windowLimits: { contextWindowTokens: 200_000, maxOutputTokens: 8_192 },
+      }),
+      EN,
+    );
+    expect(small.targetWords).toBe(500);
+    expect(small.fit).toBeUndefined();
+    const tiny = prepareComposition(
+      fixture({
+        targetWords: 3_000,
+        windowLimits: { contextWindowTokens: 200_000, maxOutputTokens: 1_000 },
+      }),
+      EN,
+    );
+    expect(tiny.targetWords).toBe(400);
+  });
+
+  it("serves Korean by its own ceiling and ratio", () => {
+    const plan = prepareComposition(
+      scaleInput(1_500, {
+        language: "ko",
+        windowLimits: { contextWindowTokens: 32_000, maxOutputTokens: 32_000 },
+      }),
+      KO,
+    );
+    expect(plan.fit?.outputLowered).toBe(true);
+    expect(plan.targetWords).toBe(
+      targetWordsForOutput("ko", plan.maxOutputTokens),
+    );
+    expect(
+      Math.ceil(plan.requestTokens * 1.15) + plan.maxOutputTokens + 800,
+    ).toBeLessThanOrEqual(32_000);
+  });
+
+  it("counts a rewrite's notes: they can push the same input further, and the plan still fits", () => {
+    const windowLimits = {
+      contextWindowTokens: 40_000,
+      maxOutputTokens: 40_000,
+    };
+    const plain = prepareComposition(scaleInput(1_700, { windowLimits }), EN);
+    const rewrite = prepareComposition(
+      scaleInput(1_700, {
+        windowLimits,
+        revisionNotes: filler(3_000),
+      }),
+      EN,
+    );
+    expect(rewrite.requestTokens).toBeLessThanOrEqual(rewrite.inputBudget);
+    expect(rewrite.fit?.droppedFields.length ?? 0).toBeGreaterThanOrEqual(
+      plain.fit?.droppedFields.length ?? 0,
+    );
+    expect(
+      Math.ceil(rewrite.requestTokens * 1.15) + rewrite.maxOutputTokens + 800,
+    ).toBeLessThanOrEqual(40_000);
+  });
+});
+
+describe("the stated minimum whatever the analyses' shape", () => {
+  // 11 analyses of 3 000 tokens, all narrative, so nothing can be dropped, and
+  // the representative papers' 66 digests at the 140-token cap (docs/07 §12.4).
+  const worst = (language: "en" | "ko", window: number) => {
+    const papers = keys(1, 400);
+    const input = scaleInput(0, {
+      language,
+      windowLimits: { contextWindowTokens: window, maxOutputTokens: window },
+      themes: Array.from({ length: 11 }, (_, t) => {
+        const cited = keys(t * 36 + 1, t * 36 + 6);
+        return {
+          memberCount: 36,
+          analysis: {
+            themeId: `T${String(t + 1)}`,
+            name: "Theme",
+            narrative: filler(3_000),
+            representativePapers: cited.map((itemKey) => ({
+              itemKey,
+              why: "",
+            })),
+            trajectory: "",
+          },
+        };
+      }),
+      digests: papers.map((_, i) => digest(i + 1, 140)),
+    });
+    return prepareComposition(input, language === "ko" ? KO : EN);
+  };
+
+  for (const language of ["en", "ko"] as const) {
+    it(`${language}: fits 60 000, and stops at 58 000`, () => {
+      expect(worst(language, 60_000).fit?.outputLowered).toBe(true);
+      expect(() => worst(language, 58_000)).toThrow(ContextLengthExceededError);
+    });
+  }
+});
+
+describe("composeReport sends what the plan made room for", () => {
+  it("sends the lowered max_tokens and word target, and warns", async () => {
+    const input = scaleInput(2_900, {
+      windowLimits: { contextWindowTokens: 64_000, maxOutputTokens: 64_000 },
+    });
+    const { provider, deps } = setup(() =>
+      reply(reportText(HEADINGS, keys(1, 3))),
+    );
+    const outcome = composed(await composeReport(input, deps));
+    const request = provider.calls[0]?.request;
+    expect(request?.maxOutputTokens).toBe(outcome.plan.maxOutputTokens);
+    expect(outcome.plan.maxOutputTokens).toBeLessThan(resolveMaxTokens(EN));
+    expect(userText(provider.calls[0])).toContain(
+      `Target length: ${String(outcome.plan.targetWords)} words`,
+    );
+    expect(outcome.warnings).toContain(OUTPUT_LOWERED_WARNING);
+    expect(outcome.warnings).not.toContain(ANALYSES_SHORTENED_WARNING);
+    expect(requestTokens(provider.calls[0])).toBe(outcome.plan.requestTokens);
+  });
+
+  it("tells the model which fields are gone and that absence is not evidence, beside the caller's notes", async () => {
+    const input = scaleInput(1_500, {
+      windowLimits: { contextWindowTokens: 32_000, maxOutputTokens: 32_000 },
+      revisionNotes: "CALLER NOTE",
+    });
+    const { provider, deps } = setup(() =>
+      reply(reportText(HEADINGS, keys(1, 3))),
+    );
+    const outcome = composed(await composeReport(input, deps));
+    const user = userText(provider.calls[0]);
+    expect(outcome.warnings).toContain(ANALYSES_SHORTENED_WARNING);
+    expect(outcome.plan.fit?.modelNote).toContain("Their absence says nothing");
+    expect(user).toContain(outcome.plan.fit?.modelNote ?? "missing");
+    expect(user).toContain("CALLER NOTE");
+    for (const field of outcome.plan.fit?.droppedFields ?? []) {
+      expect(outcome.plan.fit?.modelNote).toContain(field);
+    }
+    expect(requestTokens(provider.calls[0])).toBe(outcome.plan.requestTokens);
+    expect(requestTokens(provider.calls[0])).toBeLessThanOrEqual(
+      outcome.plan.inputBudget,
+    );
+  });
+
+  it("warns of a lowered max_tokens even when the word target already fitted it", async () => {
+    const input = scaleInput(2_900, {
+      targetWords: 1_000,
+      windowLimits: { contextWindowTokens: 64_000, maxOutputTokens: 64_000 },
+    });
+    const { deps } = setup(() => reply(reportText(HEADINGS, keys(1, 3))));
+    const outcome = composed(await composeReport(input, deps));
+    expect(outcome.plan.targetWords).toBe(1_000);
+    expect(outcome.plan.fit?.targetWordsLowered).toBe(false);
+    expect(outcome.plan.fit?.outputLowered).toBe(true);
+    expect(outcome.warnings).toContain(OUTPUT_LOWERED_WARNING);
+  });
+
+  it("sends no note, and the same request as before, when nothing was dropped", async () => {
+    const { provider, deps } = setup(() =>
+      reply(reportText(HEADINGS, keys(1, 3))),
+    );
+    const outcome = composed(await composeReport(fixture(), deps));
+    expect(outcome.plan.fit).toBeUndefined();
+    expect(provider.calls[0]?.request.maxOutputTokens).toBe(
+      resolveMaxTokens(EN),
+    );
+    expect(outcome.warnings).not.toContain(OUTPUT_LOWERED_WARNING);
+    expect(outcome.warnings).not.toContain(ANALYSES_SHORTENED_WARNING);
+  });
+});
+
+describe("the composition matrix: 11 themes, 400 papers, English and Korean", () => {
+  const profiles: readonly (readonly [number, number])[] = [
+    [32_000, 8_192],
+    [32_000, 32_000],
+    [48_000, 8_192],
+    [48_000, 48_000],
+    [64_000, 8_192],
+    [64_000, 64_000],
+    [128_000, 32_768],
+    [128_000, 128_000],
+  ];
+  for (const [window, limit] of profiles) {
+    for (const tokens of [235, 1_000, 1_500, 2_000, 2_900]) {
+      for (const [language, prompt] of [
+        ["en", EN],
+        ["ko", KO],
+      ] as const) {
+        it(`${String(window)} / ${String(limit)}, ${String(tokens)} tokens each, ${language}`, () => {
+          const input = scaleInput(tokens, {
+            language,
+            windowLimits: {
+              contextWindowTokens: window,
+              maxOutputTokens: limit,
+            },
+          });
+          let plan;
+          try {
+            plan = prepareComposition(input, prompt);
+          } catch (error) {
+            // A stated stop: large analyses on a window under the stated minimum.
+            expect(error).toBeInstanceOf(ContextLengthExceededError);
+            expect(tokens).toBeGreaterThanOrEqual(2_000);
+            expect(window).toBe(32_000);
+            return;
+          }
+          const output = Math.min(plan.maxOutputTokens, limit);
+          expect(
+            Math.ceil(plan.requestTokens * 1.15) + output + 800,
+          ).toBeLessThanOrEqual(window);
+          expect(plan.requestTokens).toBeLessThanOrEqual(
+            SYNTHESIS_INPUT_BUDGETS[
+              language === "ko" ? "TREND_REPORT_KO" : "TREND_REPORT_EN"
+            ],
+          );
+          expect(output).toBeGreaterThanOrEqual(REPORT_OUTPUT_FLOOR);
+          expect(plan.targetWords).toBeLessThanOrEqual(
+            targetWordsForOutput(language, output),
+          );
+          // What each window needs, in the owner's order.
+          if (window >= 128_000 && limit >= 32_768) {
+            expect(plan.fit).toBeUndefined();
+          }
+          if (window >= 64_000) {
+            expect(plan.fit?.droppedFields ?? []).toEqual([]);
+          }
+        });
+      }
+    }
+  }
 });

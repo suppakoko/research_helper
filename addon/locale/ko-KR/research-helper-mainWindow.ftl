@@ -78,6 +78,15 @@ research-helper-menu-collection-summarize-all =
 research-helper-menu-collection-report =
     .label = 최신 연구 동향 보고서 생성…
 
+# P5-T15: FR-13's entry. Korean drafted by the coordinator and reviewed by the owner on 2026-11-02 (G-41, plan/00 §6 item 334).
+research-helper-menu-item-find-related =
+    .label = 관련 논문 찾기…
+    .tooltiptext =
+        { $oneItem ->
+            [yes] { "" }
+           *[no] 항목을 하나만 선택하면 관련 논문을 찾을 수 있습니다.
+        }
+
 
 ## Literature source display names — never translated (docs/08 §10.3)
 
@@ -698,3 +707,22 @@ research-helper-report-stopped-structure-invalid = 보고서를 쓰기 전에 �
 
 research-helper-report-stopped-papers-failed = 보고서를 쓰기 전에 멈췄습니다. 논문 { $total }편 가운데 30%가 넘는 { $failed }편을 요약하지 못했습니다. 보통 API 키, 계정 잔액, 제공자에 문제가 있을 때 생깁니다. 이미 만든 요약은 모두 남아 있습니다.
 research-helper-report-stopped-no-papers = 보고서를 쓰기 전에 멈췄습니다. 이 컬렉션에는 분석할 수 있는 논문이 없습니다. 모든 논문이 제외되었거나 초록이나 본문이 없습니다. 아무것도 보내지 않았습니다.
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-02 (G-41, plan/00 §6 item 334).
+research-helper-report-paused-notice =
+    { $count ->
+        [one] 컬렉션 { $collections }의 보고서 실행이 일시 중지되어 답을 기다리고 있습니다. 해당 컬렉션의 보고서 창을 열어 계속하거나 중지하세요. 그때까지 비용은 들지 않습니다.
+       *[other] 보고서 실행 { $count }건이 일시 중지되어 답을 기다리고 있습니다. 컬렉션: { $collections }. 컬렉션의 보고서 창을 열어 계속하거나 중지하세요. 그때까지 비용은 들지 않습니다.
+    }
+
+# P4-T21: a commented stub, on KO_PENDING_REVIEW in src/i18n/keys.ts until its
+# Korean is reviewed (G-41); nothing here was machine-translated.
+# NEEDS REVIEW research-helper-report-stopped-korean — en-US, by $reason: no-room: No report was written, and nothing was spent on either report: the Korean report does not fit this model's limits. Every summary already made is kept. To get the English report, choose English under Language and generate again.
+#   structure: The English report is saved. The Korean report was not written: asked twice, the model did not return it with its eleven required sections in order. To try again, choose the Korean report under Language and generate.
+#   finishing: The English report is saved. The Korean report was written but could not be finished and saved. To try again, choose the Korean report under Language and generate.
+#   request: The English report is saved. The Korean report was not written, because a request to the model failed. To try again, choose the Korean report under Language and generate.
+
+# P5-T22: commented stubs, on KO_PENDING_REVIEW in src/i18n/keys.ts until their
+# Korean is reviewed (G-41); nothing here was machine-translated.
+# NEEDS REVIEW research-helper-egress-profile-notice — en-US: To build this collection's profile, metadata only is sent to { $model }: one line for each of { $papers } papers, with its item key, title, year, venue and top subject terms. No abstract, summary, full text, note or collection name is sent.
+# NEEDS REVIEW research-helper-recommend-profile-unusable — en-US: The model could not describe this collection, so its profile comes from the collection's own terms, and the search may find less.

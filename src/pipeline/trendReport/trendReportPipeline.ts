@@ -65,6 +65,7 @@ import {
 import {
   AuthenticationError,
   ConfigurationError,
+  ContextLengthExceededError,
   OperationCancelledError,
   type SerializedError,
 } from "../../core/errors";
@@ -298,6 +299,29 @@ export const NO_PAPERS_L10N =
   "research-helper-report-stopped-no-papers" as const satisfies MainWindowMessageId;
 
 /**
+ * Why a `both` run wrote no Korean report (owner, `plan/00` §6 item 334(d);
+ * `docs/07` §12.4 readings 19 and 20): `$reason` is a
+ * {@link KoreanNotWrittenReason}. Read by `execute` here, drawn by the window's
+ * stop line. On `KO_PENDING_REVIEW`.
+ */
+export const KOREAN_NOT_WRITTEN_L10N =
+  "research-helper-report-stopped-korean" as const satisfies MainWindowMessageId;
+
+/**
+ * `no-room`: Korean cannot fit, known before any report request, so no report
+ * is written. The others leave the English report saved: `structure`, the
+ * composition's own stop; `request`, any other failure writing it; `finishing`,
+ * a failure after it was written.
+ */
+export type KoreanNotWrittenReason =
+  "no-room" | "structure" | "request" | "finishing";
+
+/** The stop line of a `both` run's Korean report; built by `execute` here. */
+function koreanNotWritten(reason: KoreanNotWrittenReason): TrendReportStop {
+  return { messageId: KOREAN_NOT_WRITTEN_L10N, args: { reason } };
+}
+
+/**
  * The citation style when the user has none (`userCitationStyle` returns
  * `undefined`): APA, one of the fifteen styles every Zotero 10 bundles
  * (`docs/01` §5.11). DECIDED 2026-11-01 (coordinator, under item 313).
@@ -329,15 +353,33 @@ const SUMMARY_FAILED_REASON = "llm_failed_after_retries";
 // 2. Input, output, view
 // ===========================================================================
 
+/**
+ * What a run is asked to write. Read by {@link reportLanguagesOf}; set by
+ * `resolveReportLanguage` in `src/ui/viewModels/reportViewModel.ts`.
+ */
+export type TrendReportLanguage = ReportLanguage | "both";
+
+/**
+ * The reports a run writes, in run order: English first when both are asked
+ * for. Callers: `prepare` (the estimate) and `execute` in this file.
+ */
+export function reportLanguagesOf(
+  language: TrendReportLanguage,
+): readonly ReportLanguage[] {
+  return language === "both" ? ["en", "ko"] : [language];
+}
+
 /** What a report job is asked to do. Plain data: it is stored in the record. */
 export interface TrendReportInput {
   readonly libraryID: number;
   readonly collectionKey: string;
   /**
-   * One report language. `report.language`'s `both` and `auto` are the
-   * window's to resolve (`P4-T20`, `P4-T21`); this run writes one report.
+   * The report's language, or `both` for one run that writes two reports from
+   * one set of theme analyses (`P4-T21`; `docs/07` §12.4 reading 18).
+   * `reportLanguage`'s `auto` is the window's to resolve
+   * (`resolveReportLanguage`).
    */
-  readonly language: ReportLanguage;
+  readonly language: TrendReportLanguage;
   /**
    * `P4-T24`'s determinism runs: skip the `tc`, `cr` and `rp` probes (the
    * results are still stored). Never set by the UI; the `ps` summary cache is
@@ -362,7 +404,7 @@ export type TrendReportOutcome =
 /** A stop's message (`docs/12` §8–§10's stops and this module's two). */
 export interface TrendReportStop {
   readonly messageId: MainWindowMessageId;
-  readonly args?: Readonly<Record<string, number>>;
+  readonly args?: Readonly<Record<string, number | string>>;
 }
 
 /** Where the run is, for the window (`P4-T20` draws it). */
@@ -384,12 +426,28 @@ export interface TrendReportRunView {
   readonly passes: number;
 }
 
+/**
+ * One saved report and what became of its note. Built by `execute` in this
+ * file; read by `createReportWindowSession` in `src/bootstrap/registerUI.ts`.
+ */
+export interface TrendReportDelivery {
+  readonly report: TrendReport;
+  /** The rendered note HTML; see {@link TrendReportOutput.noteHtml}. */
+  readonly noteHtml: string;
+  readonly note?: ReportNoteOutcome;
+}
+
 /** What a run returns. */
 export interface TrendReportOutput {
   readonly outcome: TrendReportOutcome;
   readonly view: TrendReportRunView;
-  /** The stored report, on `succeeded`. */
+  /** The stored report, on `succeeded`: the first of {@link reports}. */
   readonly report?: TrendReport;
+  /**
+   * Every saved report in run order, on `succeeded`: one, or two on a `both`
+   * run (`P4-T21`). `report`, `note` and `noteHtml` repeat the first's.
+   */
+  readonly reports?: readonly TrendReportDelivery[];
   /** The note write's outcome, on `succeeded` with `report.saveNote` on. */
   readonly note?: ReportNoteOutcome;
   /**
@@ -399,7 +457,11 @@ export interface TrendReportOutput {
    * only, never stored.
    */
   readonly noteHtml?: string;
-  /** The stop's message, on `stopped`. */
+  /**
+   * The stop's message, on `stopped`. Also on a `both` run's `succeeded` when
+   * only the English report was saved: why Korean was not written
+   * (`plan/00` §6 item 334(d)).
+   */
   readonly stop?: TrendReportStop;
   /** FR-27's reduction passes. */
   readonly passes: number;
@@ -1300,7 +1362,7 @@ export function createTrendReportPipeline(
       synthesisOverhead: measureSynthesisOverhead(prompts, (text) =>
         estTokens(text, reportModel.modelId),
       ),
-      languages: [input.language],
+      languages: reportLanguagesOf(input.language),
       critiqueRounds: rounds,
     });
     const disclosure = buildEgressDisclosure(
@@ -2147,77 +2209,107 @@ export function createTrendReportPipeline(
       await checkpoint("Analysing");
 
       // ------------------------------------------------ Composing + Critiquing
-      const language = input.language;
-      const reportPrompt = prompts.get(reportPromptId(language));
+      // `docs/07` §12.4 readings 18–22 (`P4-T21`): one round per language, each
+      // from these same theme analyses and never from the other's report.
       const memberCount = new Map(
         clustered.clustering.themes.map((t) => [t.themeId, t.itemKeys.length]),
       );
       const analysedThemes = analysis.themes.filter(
         (t): t is AnalysedTheme => t.status === "analysed",
       );
-      const composeInput: ComposeInput = {
-        language,
-        collectionName: state.collectionName,
-        userTopic,
-        totalCount: state.total,
-        analysed: analysed.map(({ paper, summary }): AnalysedPaper => ({
-          itemKey: paper.item.itemKey,
-          year: yearNumber(paper.item.metadata.year),
-          sourceTier: summary.content.sourceTier,
-          libraryCatalog: undefined,
-        })),
-        excluded,
-        searchRuns,
-        themes: analysedThemes.map((t) => ({
-          analysis: t.analysis,
-          memberCount: memberCount.get(t.themeId) ?? 0,
-        })),
-        digests,
-        targetWords: ctx.config.get("reportTargetWords"),
-        duplicateOf: state.duplicateOf,
-        citationReplacement: reportLabel(language, "invalidCitation"),
-        inputBudget: budgets.report[language],
-      };
-      // The current run's plan (never a cached report's, item 312(c)).
-      const plan: CompositionPlan = prepareComposition(
-        composeInput,
-        reportPrompt,
-        reportModel,
-      );
       const rounds = critiqueRoundsOf(ctx.config);
       const critiquePrompt = prompts.get("SELF_CRITIQUE");
-      const rpKey = reportKey({
-        language,
-        themeAnalyses: analysedThemes.map((t) => ({
-          id: t.themeId,
-          hash: sha256Hex(JSON.stringify(t.analysis)),
-        })),
-        digests: plan.digestKeys.map((key) => ({
-          id: key,
-          hash: digestHash.get(key) as string,
-        })),
-        summaries: summaries.map((s) => ({
-          id: s.content.itemKey,
-          hash: sha256Hex(JSON.stringify(s.content)),
-        })),
-        targetWords: plan.targetWords,
-        critique: {
-          rounds,
-          call: {
-            modelId: critiqueModel.modelId,
-            temperature: critiquePrompt.defaultTemperature,
-            effort: CRITIQUE_EFFORT,
-          },
+      // Owner, plan/00 §6 item 334(d): why a `both` run saved English alone.
+      let unwritten: TrendReportStop | undefined;
+      /** Whether this failure ends only Korean, leaving English to be saved. */
+      const keepsFirstReport = (index: number, error: unknown): boolean => {
+        if (
+          index === 0 ||
+          ctx.token.isCancellationRequested ||
+          error instanceof OperationCancelledError
+        ) {
+          return false;
+        }
+        ctx.logger.warn("a both run's Korean report was not written", {
+          reason: error instanceof Error ? error.name : typeof error,
+        });
+        return true;
+      };
+      // Every language is planned before any report request (reading 19), so
+      // a Korean request that cannot fit ends the run before the English
+      // report is paid for. The current run's plan, never a cached report's
+      // (item 312(c)).
+      const planned = reportLanguagesOf(input.language).map(
+        (language, index) => {
+          const reportPrompt = prompts.get(reportPromptId(language));
+          const composeInput: ComposeInput = {
+            language,
+            collectionName: state.collectionName,
+            userTopic,
+            totalCount: state.total,
+            analysed: analysed.map(({ paper, summary }): AnalysedPaper => ({
+              itemKey: paper.item.itemKey,
+              year: yearNumber(paper.item.metadata.year),
+              sourceTier: summary.content.sourceTier,
+              libraryCatalog: undefined,
+            })),
+            excluded,
+            searchRuns,
+            themes: analysedThemes.map((t) => ({
+              analysis: t.analysis,
+              memberCount: memberCount.get(t.themeId) ?? 0,
+            })),
+            digests,
+            targetWords: ctx.config.get("reportTargetWords"),
+            duplicateOf: state.duplicateOf,
+            citationReplacement: reportLabel(language, "invalidCitation"),
+            inputBudget: budgets.report[language],
+            windowLimits: reportLimits,
+          };
+          let plan: CompositionPlan;
+          try {
+            plan = prepareComposition(composeInput, reportPrompt, reportModel);
+          } catch (error) {
+            if (index > 0 && error instanceof ContextLengthExceededError) {
+              throw new StageStop(koreanNotWritten("no-room"));
+            }
+            throw error;
+          }
+          const rpKey = reportKey({
+            language,
+            themeAnalyses: analysedThemes.map((t) => ({
+              id: t.themeId,
+              hash: sha256Hex(JSON.stringify(t.analysis)),
+            })),
+            digests: plan.digestKeys.map((key) => ({
+              id: key,
+              hash: digestHash.get(key) as string,
+            })),
+            summaries: summaries.map((s) => ({
+              id: s.content.itemKey,
+              hash: sha256Hex(JSON.stringify(s.content)),
+            })),
+            targetWords: plan.targetWords,
+            critique: {
+              rounds,
+              call: {
+                modelId: critiqueModel.modelId,
+                temperature: critiquePrompt.defaultTemperature,
+                effort: CRITIQUE_EFFORT,
+              },
+            },
+            promptCacheEpochs: prompts.cacheEpochs,
+            providerId,
+            call: {
+              modelId: reportModel.modelId,
+              temperature: reportPrompt.defaultTemperature,
+              effort: REPORT_EFFORT,
+            },
+            stageInputs: stageInputsOf(plan, composeInput),
+          });
+          return { language, reportPrompt, composeInput, plan, rpKey };
         },
-        promptCacheEpochs: prompts.cacheEpochs,
-        providerId,
-        call: {
-          modelId: reportModel.modelId,
-          temperature: reportPrompt.defaultTemperature,
-          effort: REPORT_EFFORT,
-        },
-        stageInputs: stageInputsOf(plan, composeInput),
-      });
+      );
       interface CachedReport {
         readonly draft: ComposedReport;
         readonly outcome: TrendReport["critique"];
@@ -2225,82 +2317,125 @@ export function createTrendReportPipeline(
         readonly prompts: readonly TrendPromptUse[];
         readonly passes: number;
       }
-      let shipped = probe ? await cached<CachedReport>(rpKey) : undefined;
-      if (shipped === undefined) {
-        const draft = await synthesisStage("Composing", async () => {
-          const outcome = await composeReport(composeInput, {
-            llm: ctx.llm,
-            budget: ctx.budget,
-            token: ctx.token,
-            pool: deps.pool,
-            reportPrompt,
-            progress: ctx.progress,
-            routing,
-            logger: ctx.logger,
-            traceId: `${jobId}:report`,
-            ...(surface.onDraft !== undefined && {
-              onDraft: (delta: DraftDelta) => surface.onDraft?.(delta),
-            }),
-          });
-          usages.push(outcome.usage);
-          if (outcome.status === "stopped-structure-invalid") {
-            // Owner, plan/00 §6 item 311(a): the composition's own stop.
-            throw new StageStop({ messageId: STRUCTURE_INVALID_L10N });
-          }
-          return outcome;
-        });
-        await checkpoint("Composing");
-        const critique = await synthesisStage("Critiquing", async () => {
-          const result = await critiqueReport(
-            {
-              draft,
-              compose: composeInput,
-              summaries,
-              inputBudget: budgets.critique,
-            },
-            {
+      // What the stages so far did, which each report's record repeats
+      // (reading 22); the counter on the view counts each pass once.
+      const sharedPasses = passes;
+      const written: {
+        readonly language: ReportLanguage;
+        readonly plan: CompositionPlan;
+        readonly shipped: CachedReport;
+        readonly passes: number;
+        readonly prompts: readonly TrendPromptUse[];
+        readonly usages: readonly (Usage | undefined)[];
+      }[] = [];
+      const writeReport = async (
+        index: number,
+        one: (typeof planned)[number],
+      ): Promise<void> => {
+        const { language, reportPrompt, composeInput, plan, rpKey } = one;
+        const ownUsages: (Usage | undefined)[] = [];
+        // Only a two-report run names the language on a delta: a preview has
+        // one report to follow otherwise.
+        const forward = (delta: DraftDelta): void => {
+          surface.onDraft?.(
+            planned.length > 1 ? { ...delta, language } : delta,
+          );
+        };
+        let shipped = probe ? await cached<CachedReport>(rpKey) : undefined;
+        if (shipped === undefined) {
+          const draft = await synthesisStage("Composing", async () => {
+            const outcome = await composeReport(composeInput, {
               llm: ctx.llm,
               budget: ctx.budget,
               token: ctx.token,
               pool: deps.pool,
               reportPrompt,
-              critiquePrompt,
-              privacy: ctx.privacy,
-              config: ctx.config,
-              ...(deps.modelInfo !== undefined && {
-                modelInfo: deps.modelInfo,
-              }),
-              modelConfirmed: true,
               progress: ctx.progress,
               routing,
               logger: ctx.logger,
               traceId: `${jobId}:report`,
-              ...(surface.onDraft !== undefined && {
-                onDraft: (delta: DraftDelta) => surface.onDraft?.(delta),
-              }),
-              ...(surface.onRevision !== undefined && {
-                onRevision: (signal: RevisionSignal) =>
-                  surface.onRevision?.(signal),
-              }),
-            },
-          );
-          usages.push(result.usage);
-          return result;
+              ...(surface.onDraft !== undefined && { onDraft: forward }),
+            });
+            ownUsages.push(outcome.usage);
+            if (outcome.status === "stopped-structure-invalid") {
+              // Owner, plan/00 §6 item 311(a): the composition's own stop.
+              throw new StageStop({ messageId: STRUCTURE_INVALID_L10N });
+            }
+            return outcome;
+          });
+          // Only after the last language: `remainingFromCheckpoint` prices
+          // the stages after this one, so an earlier checkpoint would leave
+          // the next language's composition unpriced on a resume (reading 21).
+          if (index === planned.length - 1) await checkpoint("Composing");
+          const critique = await synthesisStage("Critiquing", async () => {
+            const result = await critiqueReport(
+              {
+                draft,
+                compose: composeInput,
+                summaries,
+                inputBudget: budgets.critique,
+              },
+              {
+                llm: ctx.llm,
+                budget: ctx.budget,
+                token: ctx.token,
+                pool: deps.pool,
+                reportPrompt,
+                critiquePrompt,
+                privacy: ctx.privacy,
+                config: ctx.config,
+                ...(deps.modelInfo !== undefined && {
+                  modelInfo: deps.modelInfo,
+                }),
+                modelConfirmed: true,
+                progress: ctx.progress,
+                routing,
+                logger: ctx.logger,
+                traceId: `${jobId}:report`,
+                ...(surface.onDraft !== undefined && { onDraft: forward }),
+                ...(surface.onRevision !== undefined && {
+                  onRevision: (signal: RevisionSignal) =>
+                    surface.onRevision?.(signal),
+                }),
+              },
+            );
+            ownUsages.push(result.usage);
+            return result;
+          });
+          shipped = {
+            draft: critique.draft,
+            outcome: critique.outcome,
+            warnings: critique.warnings,
+            prompts: [draft.prompt, ...critique.prompts],
+            // L3: the composition; L4: one pass per critique round run.
+            passes: 1 + critique.outcome.rounds,
+          };
+          await remember(rpKey, shipped);
+        }
+        passes += shipped.passes;
+        written.push({
+          language,
+          plan,
+          shipped,
+          passes: sharedPasses + shipped.passes,
+          prompts: [
+            ...promptUses,
+            ...(rounds > 0 ? shipped.prompts : shipped.prompts.slice(0, 1)),
+          ],
+          usages: [...usages, ...ownUsages],
         });
-        shipped = {
-          draft: critique.draft,
-          outcome: critique.outcome,
-          warnings: critique.warnings,
-          prompts: [draft.prompt, ...critique.prompts],
-          // L3: the composition; L4: one pass per critique round run.
-          passes: 1 + critique.outcome.rounds,
-        };
-        await remember(rpKey, shipped);
+      };
+      for (const [index, one] of planned.entries()) {
+        try {
+          await writeReport(index, one);
+        } catch (error) {
+          if (!keepsFirstReport(index, error)) throw error;
+          unwritten = koreanNotWritten(
+            error instanceof StageStop ? "structure" : "request",
+          );
+          break;
+        }
       }
-      passes += shipped.passes;
-      promptUses.push(
-        ...(rounds > 0 ? shipped.prompts : shipped.prompts.slice(0, 1)),
-      );
       await checkpoint("Critiquing");
 
       // ------------------------------------------------ Scaffolding
@@ -2313,11 +2448,26 @@ export function createTrendReportPipeline(
         styleId: style?.styleId ?? REPORT_FALLBACK_STYLE_ID,
         locale: REPORT_CSL_LOCALE,
       };
-      const citedKeys = bibliographyKeys(shipped.draft.sections);
-      const bibliography = await deps.library.bibliography.formatBibliography(
-        citedKeys,
-        request,
-      );
+      const bibliographies: Awaited<
+        ReturnType<typeof deps.library.bibliography.formatBibliography>
+      >["entries"][] = [];
+      /** A failure in Korean's own step from here on: English goes on alone. */
+      const koreanEnds = (index: number, error: unknown): void => {
+        if (!keepsFirstReport(index, error)) throw error;
+        unwritten = koreanNotWritten("finishing");
+      };
+      for (const [index, one] of written.entries()) {
+        try {
+          const formatted = await deps.library.bibliography.formatBibliography(
+            bibliographyKeys(one.shipped.draft.sections),
+            request,
+          );
+          bibliographies.push(formatted.entries);
+        } catch (error) {
+          koreanEnds(index, error);
+          break;
+        }
+      }
       const retractionPolicy = ctx.config.get(
         "screeningRetractionPolicy",
       ) as RetractionPolicy;
@@ -2329,75 +2479,107 @@ export function createTrendReportPipeline(
               state.retractedKeys,
               request,
             );
+      // One date for the pair: the two reports are one run's.
       const generatedAtEpochMs = ctx.clock.now();
-      const scaffolded = scaffoldReport({
-        language,
-        collectionName: state.collectionName,
-        pluginVersion: deps.pluginVersion,
-        generatedAtEpochMs,
-        utcOffsetMinutes: deps.utcOffsetMinutes?.(generatedAtEpochMs) ?? 0,
-        providerId,
-        prompts: promptUses,
-        usage: sumUsage(usages),
-        totalCount: state.total,
-        analysed: analysed.map(({ paper }, i) => ({
-          itemKey: paper.item.itemKey,
-          year: yearNumber(paper.item.metadata.year),
-          summary: summaries[i] as StoredSummary,
-        })),
-        excluded,
-        titles: state.titles,
-        retractionReasons: state.retractionReasons,
-        clustering: clustered.clustering,
-        otherThemeId: clustered.otherThemeId,
-        themes: analysis.themes,
-        reductionPasses: passes,
-        composed: shipped.draft,
-        plan,
-        critique: shipped.outcome,
-        critiqueWarnings: shipped.warnings,
-        bibliography: bibliography.entries,
-        retracted,
-        retractionPolicy,
-      });
-      const dated = withDatedTitle(
-        scaffolded.markdown,
-        language,
-        state.collectionName,
-        generatedAtEpochMs,
-      );
-      const reportId = (deps.newReportId ?? randomUuid)();
-      const { notablePapers: _notable, ...parts } = scaffolded;
-      let trendReport: TrendReport = {
-        ...parts,
-        id: reportId,
-        libraryID: input.libraryID,
-        collectionKey: input.collectionKey,
-        collectionName: state.collectionName,
-        title: dated.title,
-        markdown: dated.markdown,
-        language,
-        generatedAtEpochMs,
-        pluginVersion: deps.pluginVersion,
-        audioScripts: {},
-        providerId,
-        prompts: promptUses,
-        usage: sumUsage(usages),
+      const draftOf = (
+        one: (typeof written)[number],
+        index: number,
+      ): TrendReport => {
+        const scaffolded = scaffoldReport({
+          language: one.language,
+          collectionName: state.collectionName,
+          pluginVersion: deps.pluginVersion,
+          generatedAtEpochMs,
+          utcOffsetMinutes: deps.utcOffsetMinutes?.(generatedAtEpochMs) ?? 0,
+          providerId,
+          prompts: one.prompts,
+          usage: sumUsage(one.usages),
+          totalCount: state.total,
+          analysed: analysed.map(({ paper }, i) => ({
+            itemKey: paper.item.itemKey,
+            year: yearNumber(paper.item.metadata.year),
+            summary: summaries[i] as StoredSummary,
+          })),
+          excluded,
+          titles: state.titles,
+          retractionReasons: state.retractionReasons,
+          clustering: clustered.clustering,
+          otherThemeId: clustered.otherThemeId,
+          themes: analysis.themes,
+          reductionPasses: one.passes,
+          composed: one.shipped.draft,
+          plan: one.plan,
+          critique: one.shipped.outcome,
+          critiqueWarnings: one.shipped.warnings,
+          bibliography: bibliographies[index] ?? [],
+          retracted,
+          retractionPolicy,
+        });
+        const dated = withDatedTitle(
+          scaffolded.markdown,
+          one.language,
+          state.collectionName,
+          generatedAtEpochMs,
+        );
+        const { notablePapers: _notable, ...parts } = scaffolded;
+        return {
+          ...parts,
+          id: (deps.newReportId ?? randomUuid)(),
+          libraryID: input.libraryID,
+          collectionKey: input.collectionKey,
+          collectionName: state.collectionName,
+          title: dated.title,
+          markdown: dated.markdown,
+          language: one.language,
+          generatedAtEpochMs,
+          pluginVersion: deps.pluginVersion,
+          audioScripts: {},
+          providerId,
+          prompts: one.prompts,
+          usage: sumUsage(one.usages),
+        };
       };
+      const drafted: TrendReport[] = [];
+      for (const [index, one] of written
+        .slice(0, bibliographies.length)
+        .entries()) {
+        try {
+          drafted.push(draftOf(one, index));
+        } catch (error) {
+          koreanEnds(index, error);
+          break;
+        }
+      }
       await checkpoint("Scaffolding");
 
       // ------------------------------------------------ Rendering
       stage = "Rendering";
       show();
-      const html = await renderReportNote(trendReport, {
-        port: deps.library.bibliography,
-        request,
-        labels: { retractedHeading: reportLabel(language, "retractedHeading") },
-      });
+      const htmls: string[] = [];
+      for (const [index, trendReport] of drafted.entries()) {
+        try {
+          htmls.push(
+            await renderReportNote(trendReport, {
+              port: deps.library.bibliography,
+              request,
+              labels: {
+                retractedHeading: reportLabel(
+                  trendReport.language,
+                  "retractedHeading",
+                ),
+              },
+            }),
+          );
+        } catch (error) {
+          koreanEnds(index, error);
+          break;
+        }
+      }
 
       // ------------------------------------------------ Saving
       // The last point a cancel discards everything; past it the write runs
-      // to its end (row and file, then the note), so nothing half-saved is left.
+      // to its end (row and file, then the note), so nothing half-saved is
+      // left (reading 20).
       ctx.token.throwIfCancelled();
       stage = "Saving";
       show();
@@ -2407,26 +2589,48 @@ export function createTrendReportPipeline(
           "the plugin database is not available, so the report cannot be saved",
         );
       }
-      trendReport = await reports.put(trendReport);
-      let note: ReportNoteOutcome | undefined;
-      if (ctx.config.get("reportSaveNote")) {
-        note = await deps.library.writeReportNote({
-          report: trendReport,
-          html,
-          groupConfirmation: input.groupConfirmation,
-        });
-        if (note.kind === "written") {
-          trendReport = await reports.put({
-            ...trendReport,
-            zoteroNoteKey: note.noteKey,
+      const saved: TrendReportDelivery[] = [];
+      for (const [index, html] of htmls.entries()) {
+        const unsaved = drafted[index] as TrendReport;
+        let stored: TrendReport | undefined;
+        try {
+          let trendReport = await reports.put(unsaved);
+          stored = trendReport;
+          let note: ReportNoteOutcome | undefined;
+          if (ctx.config.get("reportSaveNote")) {
+            note = await deps.library.writeReportNote({
+              report: trendReport,
+              html,
+              groupConfirmation: input.groupConfirmation,
+            });
+            if (note.kind === "written") {
+              trendReport = await reports.put({
+                ...trendReport,
+                zoteroNoteKey: note.noteKey,
+              });
+            }
+          }
+          saved.push({
+            report: trendReport,
+            noteHtml: html,
+            ...(note !== undefined && { note }),
           });
+        } catch (error) {
+          if (!keepsFirstReport(index, error)) throw error;
+          // Written, with only its note lost: it is delivered, and "Save as
+          // note" is the window's. No row: Korean was not saved at all.
+          if (stored === undefined) unwritten = koreanNotWritten("finishing");
+          else saved.push({ report: stored, noteHtml: html });
+          break;
         }
       }
-      await deps.queue.succeed(jobId, { kind: "report", key: trendReport.id });
+      const first = saved[0] as TrendReportDelivery;
+      // The record holds one key: the first report's (reading 22).
+      await deps.queue.succeed(jobId, { kind: "report", key: first.report.id });
       return finish("succeeded", {
-        report: trendReport,
-        noteHtml: html,
-        ...(note !== undefined && { note }),
+        ...first,
+        reports: saved,
+        ...(unwritten !== undefined && { stop: unwritten }),
       });
     } catch (error) {
       if (ctx.token.reason?.kind === "shutdown") {
@@ -2513,7 +2717,11 @@ export function createTrendReportPipeline(
         messageKey: "rh-error-configuration",
       });
     }
-    if (input.language !== "en" && input.language !== "ko") {
+    if (
+      input.language !== "en" &&
+      input.language !== "ko" &&
+      input.language !== "both"
+    ) {
       errors.push({ field: "language", messageKey: "rh-error-configuration" });
     }
     return { ok: errors.length === 0, errors };
@@ -2617,10 +2825,12 @@ function windowLimitsOf(info: ModelInfo | undefined): ModelWindowLimits {
 /**
  * `rp`'s `stageInputs`: every report variable but the two the key carries as
  * hashed inputs (`THEME_ANALYSES_JSON`, `DIGESTS`), and the replacement text.
+ * A lowered `max_tokens` and dropped analysis fields only when there are any,
+ * so a key made without them stays as it was (`docs/06` §8.4, 2026-11-02).
  */
-function stageInputsOf(
-  plan: CompositionPlan,
-  input: ComposeInput,
+export function stageInputsOf(
+  plan: Pick<CompositionPlan, "variables" | "maxOutputTokens" | "fit">,
+  input: Pick<ComposeInput, "citationReplacement">,
 ): Readonly<Record<string, string>> {
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(plan.variables)) {
@@ -2628,5 +2838,11 @@ function stageInputsOf(
     out[name] = value;
   }
   out["CITATION_REPLACEMENT"] = input.citationReplacement ?? "";
+  if (plan.fit?.outputLowered === true) {
+    out["MAX_OUTPUT_TOKENS"] = String(plan.maxOutputTokens);
+  }
+  if (plan.fit !== undefined && plan.fit.droppedFields.length > 0) {
+    out["ANALYSES_DROPPED"] = plan.fit.droppedFields.join(",");
+  }
   return out;
 }

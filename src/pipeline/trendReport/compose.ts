@@ -15,8 +15,9 @@
  * {@link prepareComposition} first when it needs what will be sent (the `rp`
  * cache key's `targetWords` and digests, `P4-T17`). `critique.ts` (`P4-T09`)
  * calls {@link composeReport} again for a rewrite, with its notes in
- * `revisionNotes`; `P4-T21` passes a Korean report's language, template and
- * replacement text. The constructing file is `src/bootstrap/registerPipelines.ts`
+ * `revisionNotes`; `execute` passes a Korean report's language, template and
+ * replacement text (`P4-T21`), and once per language on a `both` run. The
+ * constructing file is `src/bootstrap/registerPipelines.ts`
  * (`P4-T18`); nothing is constructed here: every export is a function, a type
  * or a constant.
  *
@@ -29,7 +30,9 @@
  *    a stored value above {@link TARGET_WORDS_MAX} is sent as it, with
  *    {@link TARGET_WORDS_CAPPED_WARNING}, owner, item 312(c)).
  * 2. {@link prepareComposition}: `{{DIGESTS}}` trimmed when the full set
- *    would put the rendered request over the budget (`docs/06` §8.3).
+ *    would put the rendered request over the budget (`docs/06` §8.3); then,
+ *    in the owner's order, `max_tokens` lowered and analyses shortened
+ *    (`docs/06` §8.4's note of 2026-11-02).
  * 3. One `chatStream` call on `resolveModel("strong")`, the template's
  *    temperature (0.3) and ceiling, effort `medium` (`plan/07` §0.2),
  *    budgeted, under one `llm` pool permit; every delta goes to `onDraft`.
@@ -64,6 +67,7 @@ import type { LlmPool } from "../../core/jobQueue/queue";
 import type { Logger } from "../../core/logger";
 import type { SearchProvenance, SourceProvenance } from "../../core/provenance";
 import type { MainWindowMessageId } from "../../i18n/keys";
+import { RESERVE_TOKENS } from "../../llm/shared/chunking";
 import { estTokens } from "../../llm/shared/tokenEstimate";
 import type {
   BudgetGuard,
@@ -92,7 +96,13 @@ import {
   type PromptTemplate,
 } from "../../prompts";
 import { SOURCE_CATALOG_LABELS } from "../../zotero/itemMapper";
-import { SYNTHESIS_INPUT_BUDGETS } from "../shared/estimate";
+import {
+  REPORT_OUTPUT_FLOOR,
+  SYNTHESIS_INPUT_BUDGETS,
+  windowInputBudget,
+  withHeadroom,
+  type ModelWindowLimits,
+} from "../shared/estimate";
 import {
   citedKeysOf,
   fencedRanges,
@@ -196,6 +206,66 @@ export const TARGET_WORDS_MIN = 400;
  */
 export const TARGET_WORDS_MAX = 4_250;
 
+/**
+ * `docs/12` §10's ceiling derivation, in tokens per word of the target: prose
+ * (Korean × 1.141) plus one citation marker of 3.51 tokens per 15 words.
+ */
+const REPORT_TOKENS_PER_WORD: Readonly<Record<ReportLanguage, number>> =
+  Object.freeze({
+    en: 1.968 + 3.51 / 15,
+    ko: 1.968 * 1.141 + 3.51 / 15,
+  });
+
+/** The same derivation's Markdown allowance. */
+const REPORT_MARKDOWN_TOKENS = 500;
+
+/** The same derivation's reasoning allowance, 1.0 × visible, and its 1.15 headroom. */
+const REPORT_OUTPUT_PER_VISIBLE_TOKEN = 2 * 1.15;
+
+/**
+ * The longest `{{TARGET_WORDS}}` an output of this size is sized for, by
+ * `docs/12` §10's derivation run backwards. Above {@link TARGET_WORDS_MAX} at
+ * either report ceiling, so a large window's target is unchanged. Read by
+ * {@link prepareComposition}: a lower `max_tokens` with the same target would
+ * invite `OutputTruncatedError`, which is not retried.
+ *
+ * @param language - the report's language
+ * @param outputTokens - the output the request has
+ * @returns a whole number of words, possibly below {@link TARGET_WORDS_MIN}
+ */
+export function targetWordsForOutput(
+  language: ReportLanguage,
+  outputTokens: number,
+): number {
+  const visible = outputTokens / REPORT_OUTPUT_PER_VISIBLE_TOKEN;
+  return Math.max(
+    0,
+    Math.floor(
+      (visible - REPORT_MARKDOWN_TOKENS) / REPORT_TOKENS_PER_WORD[language],
+    ),
+  );
+}
+
+/**
+ * The analysis fields the composition may drop, in the order it drops them
+ * (owner's option 1 on FINDING P4-T22-2; order DECIDED 2026-11-02, coordinator,
+ * under `plan/00` §6 item 313): the most recoverable from what is still sent
+ * first, `contradictions` last because no digest can show one. Each names the
+ * section it feeds, for the report's line. Read by {@link prepareComposition} and
+ * `fitLines` in `scaffold.ts`.
+ */
+export const DROPPABLE_ANALYSIS_FIELDS = Object.freeze([
+  { field: "representativePapers[].why", section: 4 },
+  { field: "methodologicalPatterns", section: 5 },
+  { field: "gaps", section: 8 },
+  { field: "convergentFindings", section: 6 },
+  { field: "contradictions", section: 7 },
+] as const);
+
+/** One entry's field name of {@link DROPPABLE_ANALYSIS_FIELDS}. */
+export type DroppableAnalysisField =
+  (typeof DROPPABLE_ANALYSIS_FIELDS)[number]["field"];
+
 /** On a composed report whose first answer failed check 1 and was generated afresh. */
 export const REGENERATED_WARNING = "report_regenerated_structure";
 
@@ -211,6 +281,16 @@ export const CITATIONS_REPLACED_WARNING = "report_citations_replaced";
  * 312(c)); `P4-T12` builds the appendix line that says the target was capped.
  */
 export const TARGET_WORDS_CAPPED_WARNING = "report_target_words_capped";
+
+/**
+ * On a composed report whose `max_tokens` was lowered to fit its input, or whose
+ * word target was lowered to fit its output (`CompositionFit`). `P4-T12`'s
+ * `scaffoldReport` writes the line.
+ */
+export const OUTPUT_LOWERED_WARNING = "report_output_lowered";
+
+/** On a composed report whose theme analyses lost fields (`CompositionFit`). */
+export const ANALYSES_SHORTENED_WARNING = "report_analyses_shortened";
 
 /** Every run of whitespace or control characters. */
 const BREAKING_RE = /[\s\p{Cc}]+/gu;
@@ -368,9 +448,16 @@ export interface ComposeInput {
   readonly citationReplacement?: string;
   /**
    * The input budget: `docs/06` §5.2's 60 000 when absent. A smaller whole
-   * number forces trimming for one run (tests); it is never raised.
+   * number forces trimming for one run (tests); it is never raised. With
+   * `windowLimits`, the budget at the prompt's ceiling.
    */
   readonly inputBudget?: number;
+  /**
+   * The report model's window and output limit, each when known. Set by
+   * `execute` in `trendReportPipeline.ts`. Lets {@link prepareComposition}
+   * lower `max_tokens` and cap the word target; without it neither happens.
+   */
+  readonly windowLimits?: ModelWindowLimits;
 }
 
 /** One streamed piece of a generation's text. */
@@ -378,6 +465,12 @@ export interface DraftDelta {
   /** 1 for the first answer, 2 for the regeneration. */
   readonly generation: number;
   readonly deltaText: string;
+  /**
+   * The report this delta belongs to. Set by `execute` in
+   * `trendReportPipeline.ts`, not here, on a `both` run's deltas (`P4-T21`);
+   * read by `reduceReportRun`, which restarts the preview when it changes.
+   */
+  readonly language?: ReportLanguage;
 }
 
 /** What {@link composeReport} needs from the job — its context, in pieces. */
@@ -409,6 +502,26 @@ export interface ComposeDeps {
 /** Which digests a request carries (`docs/06` §8.3). */
 export type DigestSelection = "all" | "cited" | "representative";
 
+/**
+ * What {@link prepareComposition} changed to fit, present only when it changed
+ * something. Read by `scaffoldReport` and `stageInputsOf`. Optional on
+ * {@link CompositionPlan} because a report cached before 2026-11-02 has none.
+ */
+export interface CompositionFit {
+  /** The output the request has: `max_tokens`, clamped to the model's limit. */
+  readonly outputTokens: number;
+  /** `max_tokens` was lowered for the input's sake. */
+  readonly outputLowered: boolean;
+  /** `{{TARGET_WORDS}}` as sent. */
+  readonly targetWords: number;
+  /** `{{TARGET_WORDS}}` is below what the settings ask for. */
+  readonly targetWordsLowered: boolean;
+  /** The fields dropped from every analysis, in {@link DROPPABLE_ANALYSIS_FIELDS}' order. */
+  readonly droppedFields: readonly DroppableAnalysisField[];
+  /** What `{{REVISION_NOTES}}` tells the model about them; empty when none. */
+  readonly modelNote: string;
+}
+
 /** What will be sent, before any request: step 1 and step 2. */
 export interface CompositionPlan {
   /** Every variable but `REVISION_NOTES`. */
@@ -426,6 +539,10 @@ export interface CompositionPlan {
   /** The rendered request's raw `estTokens`, with the caller's revision notes. */
   readonly requestTokens: number;
   readonly inputBudget: number;
+  /** `max_tokens` as sent: the prompt's ceiling unless lowered. */
+  readonly maxOutputTokens: number;
+  /** See {@link CompositionFit}. */
+  readonly fit?: CompositionFit;
 }
 
 /** What {@link checkHeadings} found. */
@@ -483,7 +600,8 @@ export interface ComposedReport extends ComposeOutcomeBase {
   readonly quality: ComposeQuality;
   /**
    * {@link REGENERATED_WARNING}, {@link DIGESTS_TRIMMED_WARNING},
-   * {@link CITATIONS_REPLACED_WARNING}, {@link TARGET_WORDS_CAPPED_WARNING}.
+   * {@link CITATIONS_REPLACED_WARNING}, {@link TARGET_WORDS_CAPPED_WARNING},
+   * {@link OUTPUT_LOWERED_WARNING}, {@link ANALYSES_SHORTENED_WARNING}.
    */
   readonly warnings: readonly string[];
 }
@@ -810,6 +928,29 @@ function orderedThemes(
     .map(({ theme }) => theme.analysis);
 }
 
+/** One analysis without the first `steps` of {@link DROPPABLE_ANALYSIS_FIELDS}. */
+function shortenedAnalysis(
+  analysis: ThemeAnalysis,
+  steps: number,
+): Readonly<Record<string, unknown>> {
+  const out: Record<string, unknown> = { ...analysis };
+  for (const { field } of DROPPABLE_ANALYSIS_FIELDS.slice(0, steps)) {
+    if (field === "representativePapers[].why") {
+      out["representativePapers"] = analysis.representativePapers.map(
+        ({ itemKey }) => ({ itemKey }),
+      );
+    } else {
+      out[field] = undefined;
+    }
+  }
+  return out;
+}
+
+/** What {@link CompositionFit.modelNote} says: the fields, and that absence is not evidence. */
+function droppedFieldsNote(fields: readonly string[]): string {
+  return `To fit the model's limits, these fields were removed from every theme analysis: ${fields.join(", ")}. Their absence says nothing about the corpus. Where a section draws on them, write only what the narratives, trajectories and digests support, and do not state that the corpus has none of them.`;
+}
+
 /** Every variable, rendered, measured: system and user text by raw `estTokens`. */
 function renderedTokens(
   prompt: PromptTemplate,
@@ -823,14 +964,18 @@ function renderedTokens(
  * Steps 1 and 2, before any request: the variables, and `{{DIGESTS}}` trimmed
  * until the rendered request is inside the budget (`docs/12` §10's note of
  * 2026-10-29, reading (7)): every digest; else those of items an analysis
- * names or cites; else those of its representative papers.
+ * names or cites; else those of its representative papers. When even those do
+ * not fit, in the owner's order (`docs/06` §8.4's note of 2026-11-02):
+ * `max_tokens` lowered as far as the input needs, down to
+ * {@link REPORT_OUTPUT_FLOOR}, with `{{TARGET_WORDS}}` following; then
+ * {@link DROPPABLE_ANALYSIS_FIELDS}, one step at a time.
  *
  * @param input - see {@link ComposeInput}
  * @param prompt - the language's template
  * @param model - the report model, named by the error when nothing fits
  * @throws ConfigurationError for the wrong template; RangeError for an
- *   inconsistent input; ContextLengthExceededError when even the
- *   representative papers' digests do not fit
+ *   inconsistent input; ContextLengthExceededError when the request does not
+ *   fit at the floor with every droppable field dropped
  */
 export function prepareComposition(
   input: ComposeInput,
@@ -843,12 +988,46 @@ export function prepareComposition(
     reportVariables(input);
   const analyses = orderedThemes(input.themes);
   const themeIds = analyses.map((analysis) => analysis.themeId);
+  const kind = promptIdFor(input.language);
+  const limits = input.windowLimits ?? {};
+  const ceiling = resolveMaxTokens(prompt);
   const budget =
-    input.inputBudget ?? SYNTHESIS_INPUT_BUDGETS[promptIdFor(input.language)];
+    input.inputBudget ?? windowInputBudget(kind, limits, ceiling, 0);
+  // The output the request can have at all, and the lowest it may be lowered to.
+  const roomiest = Math.min(ceiling, limits.maxOutputTokens ?? ceiling);
+  const floor = Math.min(roomiest, REPORT_OUTPUT_FLOOR);
+  const budgetAt = (output: number): number =>
+    output >= roomiest || limits.contextWindowTokens === undefined
+      ? budget
+      : windowInputBudget(kind, limits, output, 0);
+  const wordsAt = (output: number): number =>
+    Math.min(
+      targetWords,
+      Math.max(TARGET_WORDS_MIN, targetWordsForOutput(input.language, output)),
+    );
+  const fitOf = (
+    output: number,
+    words: number,
+    droppedFields: readonly DroppableAnalysisField[],
+  ): CompositionFit | undefined =>
+    output >= roomiest && words >= targetWords && droppedFields.length === 0
+      ? undefined
+      : {
+          outputTokens: output,
+          outputLowered: output < roomiest,
+          targetWords: words,
+          targetWordsLowered: words < targetWords,
+          droppedFields,
+          modelNote:
+            droppedFields.length === 0 ? "" : droppedFieldsNote(droppedFields),
+        };
+  const callerNotes = input.revisionNotes ?? "";
+  const roomiestWords = wordsAt(roomiest);
   const base = {
     ...variables,
+    TARGET_WORDS: String(roomiestWords),
     THEME_ANALYSES_JSON: JSON.stringify(analyses),
-    REVISION_NOTES: input.revisionNotes ?? "",
+    REVISION_NOTES: callerNotes,
   };
 
   const named = new Set(
@@ -860,13 +1039,11 @@ export function prepareComposition(
     ...named,
     ...analyses.flatMap((analysis) => citedKeysOfAnalysis(analysis)),
   ]);
+  const fewest = input.digests.filter((digest) => named.has(digest.itemKey));
   const choices: readonly (readonly [DigestSelection, readonly Digest[]])[] = [
     ["all", input.digests],
     ["cited", input.digests.filter((digest) => cited.has(digest.itemKey))],
-    [
-      "representative",
-      input.digests.filter((digest) => named.has(digest.itemKey)),
-    ],
+    ["representative", fewest],
   ];
   for (const [selection, digests] of choices) {
     const tokens = renderedTokens(prompt, {
@@ -878,24 +1055,81 @@ export function prepareComposition(
         ...base,
         DIGESTS: digests.map(digestText).join("\n"),
       };
+      const fit = fitOf(roomiest, roomiestWords, []);
       return {
         variables: sent,
         scope,
-        targetWords,
+        targetWords: roomiestWords,
         targetWordsCapped,
         digestSelection: selection,
         digestKeys: digests.map((digest) => digest.itemKey),
         themeIds,
         requestTokens: tokens,
         inputBudget: budget,
+        maxOutputTokens: ceiling,
+        ...(fit !== undefined && { fit }),
       };
     }
+  }
+
+  // Making room, with the fewest digests: output first, then the analyses.
+  for (let steps = 0; steps <= DROPPABLE_ANALYSIS_FIELDS.length; steps += 1) {
+    const droppedFields = DROPPABLE_ANALYSIS_FIELDS.slice(0, steps).map(
+      (entry) => entry.field,
+    );
+    const note =
+      droppedFields.length === 0 ? "" : droppedFieldsNote(droppedFields);
+    const sent = {
+      ...variables,
+      THEME_ANALYSES_JSON: JSON.stringify(
+        analyses.map((analysis) => shortenedAnalysis(analysis, steps)),
+      ),
+      DIGESTS: fewest.map(digestText).join("\n"),
+    };
+    const measure = (words: number): number =>
+      renderedTokens(prompt, {
+        ...sent,
+        TARGET_WORDS: String(words),
+        REVISION_NOTES:
+          note === "" ? callerNotes : joinNotes(callerNotes, note),
+      });
+    const atFloor = measure(wordsAt(floor));
+    if (atFloor > budgetAt(floor)) continue;
+    // As high as this input leaves room for: a window not known has no such
+    // limit, and a budget only the §5.2 row sets does not depend on the output.
+    const window = limits.contextWindowTokens;
+    const spare =
+      window === undefined
+        ? roomiest
+        : window - RESERVE_TOKENS - withHeadroom(atFloor);
+    let output = Math.max(floor, Math.min(roomiest, spare));
+    let words = wordsAt(output);
+    let tokens = measure(words);
+    if (tokens > budgetAt(output)) {
+      output = floor;
+      words = wordsAt(floor);
+      tokens = atFloor;
+    }
+    const fit = fitOf(output, words, droppedFields);
+    return {
+      variables: { ...sent, TARGET_WORDS: String(words) },
+      scope,
+      targetWords: words,
+      targetWordsCapped,
+      digestSelection: "representative",
+      digestKeys: fewest.map((digest) => digest.itemKey),
+      themeIds,
+      requestTokens: tokens,
+      inputBudget: budgetAt(output),
+      maxOutputTokens: output >= roomiest ? ceiling : output,
+      ...(fit !== undefined && { fit }),
+    };
   }
   throw new ContextLengthExceededError(
     model?.providerId ?? "",
     model?.modelId ?? "",
-    "the report request does not fit its input budget even with the representative papers' digests only",
-    { budget, themes: analyses.length },
+    "the report request does not fit its input budget even with the representative papers' digests, the lowest output and every secondary analysis field dropped",
+    { budget: budgetAt(floor), themes: analyses.length },
   );
 }
 
@@ -1185,7 +1419,11 @@ export async function composeReport(
   const model = deps.llm.resolveModel("strong");
   const plan = prepareComposition(input, prompt, model);
   const expected = expectedHeadings(prompt);
-  const callerNotes = input.revisionNotes ?? "";
+  const modelNote = plan.fit?.modelNote ?? "";
+  const callerNotes =
+    modelNote === ""
+      ? (input.revisionNotes ?? "")
+      : joinNotes(input.revisionNotes ?? "", modelNote);
   const usages: Usage[] = [];
   let requests = 0;
 
@@ -1205,7 +1443,7 @@ export async function composeReport(
         { role: "user", content: rendered.user },
       ],
       temperature: prompt.defaultTemperature,
-      maxOutputTokens: resolveMaxTokens(prompt),
+      maxOutputTokens: plan.maxOutputTokens,
       effort: REPORT_EFFORT,
       responseFormat: { kind: "text" },
       ...(deps.routing !== undefined && { routing: deps.routing }),
@@ -1341,6 +1579,13 @@ export async function composeReport(
     ...(plan.digestSelection !== "all" ? [DIGESTS_TRIMMED_WARNING] : []),
     ...(citations.removed.length > 0 ? [CITATIONS_REPLACED_WARNING] : []),
     ...(plan.targetWordsCapped ? [TARGET_WORDS_CAPPED_WARNING] : []),
+    ...(plan.fit?.outputLowered === true ||
+    plan.fit?.targetWordsLowered === true
+      ? [OUTPUT_LOWERED_WARNING]
+      : []),
+    ...(plan.fit !== undefined && plan.fit.droppedFields.length > 0
+      ? [ANALYSES_SHORTENED_WARNING]
+      : []),
   ];
   return {
     ...base(),

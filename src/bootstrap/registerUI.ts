@@ -88,6 +88,7 @@ import { formatValue } from "../i18n/ftl";
 import {
   L10N_JOB_RESUMED,
   L10N_PROGRESS_HEADLINE,
+  L10N_REPORT_PAUSED_NOTICE,
   type FluentMessageId,
 } from "../i18n/keys";
 import { merge } from "../model/merge";
@@ -105,6 +106,11 @@ import { SEMANTICSCHOLAR_KEY_REQUEST_URL } from "../sources/semanticscholar/sema
 import {
   SEARCH_WINDOW_API_PROPERTY,
   openSearchWindow,
+  relatedSeedHeader,
+  type RelatedSeedHost,
+  type SearchWindowArgs,
+  type SearchWindowHandle,
+  type SearchWindowHost,
   type SearchWindowQuery,
 } from "../ui/dialogs/searchDialog";
 import {
@@ -218,9 +224,12 @@ import {
 } from "../zotero/db";
 import {
   COLLECTION_MENU_DESCRIPTION,
+  ITEM_MENU_DESCRIPTION,
   collectionMenuOptions,
+  itemMenuOptions,
   withSearchImportEntry,
   type CollectionRunLookup,
+  type ItemMenuCommands,
   type SearchMenuCommands,
 } from "../ui/menus/registerMenus";
 import {
@@ -245,7 +254,11 @@ import {
   summarySectionOptions,
   type SummarySectionHost,
 } from "../ui/panes/summarySection";
-import { fromZoteroItem, workKeyOfItemID } from "../zotero/itemMapper";
+import {
+  canonicalWorkOfItemID,
+  fromZoteroItem,
+  workKeyOfItemID,
+} from "../zotero/itemMapper";
 // `P4-T19`: the report window's opener and the model it draws.
 import {
   buildReportWindowModel,
@@ -264,6 +277,8 @@ import {
   pausedJobQuestion,
   reduceReportRun,
   reportPauseQuestion,
+  askOnce,
+  interfaceReportLanguage,
   resolveReportLanguage,
   settleReportNote,
   windowRunModel,
@@ -281,17 +296,24 @@ import {
   renderReportMarkdown,
   reportExportFileName,
 } from "../pipeline/trendReport/exportMarkdown";
+import {
+  announcePausedReports,
+  pausedForAnswer,
+  waitingReportJobs,
+  pausedReportNoticeArgs,
+} from "../pipeline/trendReport/pausedReportNotice";
 import { reportLabel } from "../pipeline/trendReport/reportLabels";
 import {
   TREND_REPORT_INPUT_VERSION,
   trendReportExclusivityKey,
+  type TrendReportDelivery,
   type TrendReportInput,
   type TrendReportListener,
   type TrendReportOutput,
   type TrendReportPipeline,
   type TrendReportSurface,
 } from "../pipeline/trendReport/trendReportPipeline";
-import { writeReportNote } from "../zotero/notes";
+import { collectionNameOfKey, writeReportNote } from "../zotero/notes";
 import {
   createSpikeArticle,
   createZoteroHttpTransport,
@@ -328,7 +350,9 @@ export type WindowRegistration = (
  * the one `P1-T32` owns.
  */
 const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
-  openSearchWindow,
+  // Through {@link openTrackedSearchWindow} since `P5-T15`, so the window is
+  // closed at shutdown.
+  openSearchWindow: openTrackedSearchWindow,
   onError: reportError,
   // FR-12's "Re-run This Search…" (`P2-T17`), answered from the plugin
   // database once {@link publishProvenanceStore} has published it.
@@ -347,6 +371,69 @@ const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
   openReportWindow: (host, collectionID) =>
     openReportWindowCommand(host, collectionID),
 };
+
+/**
+ * The search window this instance last opened, closed at shutdown by
+ * {@link publishSearchWindowCommands} (`P5-T15`; `docs/08` §5.2's note of
+ * 2026-11-02). One handle is enough: the window's name makes it a singleton.
+ */
+const searchWindowState: { win: SearchWindowHandle | undefined } = {
+  win: undefined,
+};
+
+/** `openSearchWindow`, remembering the window for {@link searchWindowState}. */
+function openTrackedSearchWindow(
+  host: SearchWindowHost,
+  args: SearchWindowArgs,
+): SearchWindowHandle {
+  const win = openSearchWindow(host, args);
+  searchWindowState.win = win;
+  return win;
+}
+
+/**
+ * FR-13's "Find Related Papers…" (`P5-T15`): open the search window on the seed.
+ * Opens nothing while the hidden `related.enabled` is off (`docs/07` §8.5),
+ * read on every call.
+ */
+function openRelatedWindowCommand(
+  host: SearchWindowHost,
+  seedItemID: number,
+): SearchWindowHandle | undefined {
+  if (!getPref("relatedEnabled")) return undefined;
+  return openTrackedSearchWindow(host, { mode: "related", seedItemID });
+}
+
+/**
+ * What `itemMenuOptions` may do. Separate from {@link SEARCH_MENU_COMMANDS}
+ * because the item menu has its own selection and one command.
+ */
+const ITEM_MENU_COMMANDS: ItemMenuCommands = {
+  relatedEnabled: () => getPref("relatedEnabled"),
+  openRelatedWindow: openRelatedWindowCommand,
+  onError: reportError,
+};
+
+declare module "../addon" {
+  interface PluginApi {
+    /**
+     * FR-13's opener (`P5-T15`), the command the item menu's "Find Related
+     * Papers…" runs. Published, as `reportWindow` is, so an integration spec —
+     * bundled separately — can open the real window through the plugin's own
+     * state and see it closed at shutdown.
+     */
+    relatedWindow?: RelatedWindowCommands;
+  }
+}
+
+/** {@link PluginApi.relatedWindow}. */
+export interface RelatedWindowCommands {
+  /** The window, or `undefined` while `related.enabled` is off. */
+  open(
+    host: SearchWindowHost,
+    seedItemID: number,
+  ): SearchWindowHandle | undefined;
+}
 
 // ---------------------------------------------------------------------------
 // FR-12's provenance store (`P2-T17`)
@@ -512,6 +599,18 @@ const APP_REGISTRATIONS: readonly ScopedRegistration[] = [
     COLLECTION_MENU_DESCRIPTION,
     collectionMenuOptions(SEARCH_MENU_COMMANDS),
   ),
+  // FR-13 (`P5-T15`), the first `main/library/item` registration. Not registered
+  // at all while the hidden `related.enabled` is off (`docs/11` §0 principle 5),
+  // so the item menu holds no empty submenu and no separator of ours. Read here,
+  // after `installServices` installed the preference store, as item 307(d) read
+  // `report.enabled`.
+  async (scope) => {
+    if (!getPref("relatedEnabled")) return;
+    await menuRegistration(
+      ITEM_MENU_DESCRIPTION,
+      itemMenuOptions(ITEM_MENU_COMMANDS),
+    )(scope);
+  },
   // The preference pane (`P1-T44`). Application-scoped: `docs/01` §2.4 lists
   // `Zotero.PreferencePanes.register` with the once-per-startup registrations,
   // and Zotero propagates it to every open `zotero:pref` window itself. Through
@@ -1019,11 +1118,16 @@ async function publishSearchWindowHost(
 
   const model = createSearchImportViewModel(deps);
   const published = model.host;
-  const host: SearchWindowHostApi = {
+  const host: SearchWindowHostApi & RelatedSeedHost = {
     ...published,
     runSearch: async (query: SearchWindowQuery): Promise<void> => {
       await refreshLibraryIndex(logger);
       await published.runSearch(query);
+    },
+    // FR-13 (`P5-T15`): the related mode's Seed lines. `P5-T16` adds its run.
+    loadRelatedSeed: async (seedItemID) => {
+      const work = await canonicalWorkOfItemID(seedItemID);
+      return work === undefined ? undefined : relatedSeedHeader(work);
     },
   };
 
@@ -1055,6 +1159,34 @@ async function publishSearchWindowHost(
       delete api[SEARCH_WINDOW_API_PROPERTY];
       delete api.searchWindowDeps;
       libraryIndex = undefined;
+    },
+  });
+}
+
+/**
+ * Publish FR-13's opener on `addon.api.relatedWindow` (`P5-T15`); on teardown,
+ * withdraw it and close the search window still open, in whatever mode it was
+ * opened (`docs/08` §5.2's note of 2026-11-02).
+ *
+ * Registered after {@link publishSearchWindowHost}, so teardown, last in first
+ * out, closes the window before its host is withdrawn. A separate registration
+ * because that function returns early when the search pipeline is missing, and
+ * an inert window must close too.
+ */
+async function publishSearchWindowCommands(scope: Scope): Promise<void> {
+  // Captured once, for the reason {@link publishServiceGraph} gives.
+  const api = addon.api;
+  await scope.use({
+    description: "the search window's related opener and its open window",
+    register: () => {
+      api.relatedWindow = { open: openRelatedWindowCommand };
+      return "searchWindowState";
+    },
+    unregister: () => {
+      delete api.relatedWindow;
+      const win = searchWindowState.win;
+      searchWindowState.win = undefined;
+      if (win !== undefined && win.closed !== true) win.close?.();
     },
   });
 }
@@ -2077,6 +2209,11 @@ export interface ReportWindowCommands {
   open(host: ReportWindowHost, collectionID: number): ReportWindowHandle;
   /** How many report windows this instance opened that are still open. */
   openCount(): number;
+  /**
+   * What the start runs for jobs left paused (`P4-T21`; owner, `plan/00` §6 item
+   * 332(b)). Published so an integration spec can run it over a job it paused.
+   */
+  announcePaused(): Promise<void>;
 }
 
 /** One open report window: its handle and its session. */
@@ -2198,8 +2335,10 @@ function createReportWindowSession(
   let source: CancellationTokenSource | undefined;
   let ended: Promise<void> | undefined;
   let currentJob: PipelineJob | undefined;
-  let report: TrendReport | undefined;
-  let noteHtml: string | undefined;
+  // The run's saved reports (two on a `both` run) and the one the preview and
+  // the delivery buttons act on (`docs/08` §6.3's note of 2026-11-02).
+  let delivered: TrendReportDelivery[] = [];
+  let shown = 0;
   let resumed: ResumedReportRun | undefined;
   let detach: (() => void) | undefined;
 
@@ -2347,44 +2486,73 @@ function createReportWindowSession(
     }
   };
 
-  const noteDeps = (): ReportNoteDeps => ({
-    ask: askWindow,
+  const noteDeps = (
+    index: number,
+    ask: ReportNoteDeps["ask"],
+  ): ReportNoteDeps => ({
+    ask,
     write: (answer) => {
-      if (report === undefined || noteHtml === undefined) {
+      const one = delivered[index];
+      if (one === undefined) {
         return Promise.reject(new Error("no report to write"));
       }
       return writeReportNote({
-        report,
-        html: noteHtml,
+        report: one.report,
+        html: one.noteHtml,
         groupConfirmation: answer,
       });
     },
     store: async (noteKey) => {
       const reports = await graph.database.reports();
-      if (report !== undefined && reports !== undefined) {
-        report = await reports.put({ ...report, zoteroNoteKey: noteKey });
+      const one = delivered[index];
+      if (one !== undefined && reports !== undefined) {
+        delivered[index] = {
+          ...one,
+          report: await reports.put({ ...one.report, zoteroNoteKey: noteKey }),
+        };
       }
     },
   });
 
+  /** The language to name on a `note` event: a two-report run's only. */
+  const noteLanguage = (index: number): TrendReport["language"] | undefined =>
+    delivered.length > 1 ? delivered[index]?.report.language : undefined;
+
   /** Draw the run's end and follow its note. */
   const finishRun = async (output: TrendReportOutput): Promise<void> => {
-    report = output.report;
-    noteHtml = output.noteHtml;
+    delivered = [...(output.reports ?? [])];
+    const first = interfaceReportLanguage(appLocale());
+    shown = Math.max(
+      delivered.findIndex((one) => one.report.language === first),
+      0,
+    );
+    const noteOf = (one: TrendReportDelivery): "off" | undefined =>
+      one.note === undefined ? "off" : undefined;
+    const showing = delivered[shown];
     dispatch({
       kind: "finished",
       outcome: output.outcome,
       stop: output.stop,
-      markdown: report === undefined ? undefined : finalText(report),
-      note:
-        output.outcome === "succeeded" && output.note === undefined
-          ? "off"
-          : undefined,
+      markdown: showing === undefined ? undefined : finalText(showing.report),
+      note: showing === undefined ? undefined : noteOf(showing),
+      ...(delivered.length > 1 && {
+        reports: delivered.map((one) => ({
+          language: one.report.language,
+          text: finalText(one.report),
+          note: noteOf(one),
+        })),
+        shown: showing?.report.language,
+      }),
     });
-    if (output.note !== undefined) {
+    // One group question for the run: its answer holds for both notes
+    // (`docs/07` §12.4 reading 22).
+    const ask = askOnce(askWindow);
+    for (const [index, one] of delivered.entries()) {
+      if (one.note === undefined) continue;
       dispatch({
         kind: "note",
-        note: await settleReportNote(output.note, noteDeps()),
+        language: noteLanguage(index),
+        note: await settleReportNote(one.note, noteDeps(index, ask)),
       });
     }
   };
@@ -2495,13 +2663,16 @@ function createReportWindowSession(
     }
   };
 
-  /** Owner, plan/00 §6 item 324(a): a paused job of this collection asks. */
+  /**
+   * Owner, plan/00 §6 item 324(a): a paused job of this collection asks; so does
+   * one `recover()` left `interrupted` (item 334(j)).
+   */
   const askPausedJob = async (): Promise<void> => {
     if (header === undefined) return;
     const { libraryID, collectionKey } = header;
     let records: readonly JobRecord[];
     try {
-      records = await graph.jobs.list({ status: ["paused"] });
+      records = await waitingReportJobs(graph.jobs);
     } catch {
       return; // No job store: nothing was left paused.
     }
@@ -2509,9 +2680,7 @@ function createReportWindowSession(
       .filter((record) => {
         const input = record.input as Partial<TrendReportInput>;
         return (
-          record.pipelineId === "trendReport" &&
-          input.libraryID === libraryID &&
-          input.collectionKey === collectionKey
+          input.libraryID === libraryID && input.collectionKey === collectionKey
         );
       })
       .sort((a, b) => b.createdAtEpochMs - a.createdAtEpochMs)[0];
@@ -2520,7 +2689,8 @@ function createReportWindowSession(
     const answer = await askWindow(pausedJobQuestion(paused.pauseReason));
     if (closed) return; // The window went away: the job keeps waiting.
     if (answer === "resume") {
-      ended = runJob(paused.input as TrendReportInput, paused);
+      const record = await pausedForAnswer(graph.jobs, paused);
+      ended = runJob(record.input as TrendReportInput, record);
       await ended;
       // Declined at the confirmation: the record is still paused.
       if (state.outcome === "declined") await askPausedJob();
@@ -2605,24 +2775,38 @@ function createReportWindowSession(
       releaseWaits();
     },
 
+    showReport(language) {
+      const index = delivered.findIndex(
+        (one) => one.report.language === language,
+      );
+      if (index < 0 || index === shown) return;
+      shown = index;
+      dispatch({ kind: "show-report", language });
+    },
+
     async saveNote() {
-      if (report === undefined || noteHtml === undefined) return;
+      const index = shown;
+      if (delivered[index] === undefined) return;
       dispatch({
         kind: "note",
-        note: await settleReportNote(undefined, noteDeps()),
+        language: noteLanguage(index),
+        note: await settleReportNote(undefined, noteDeps(index, askWindow)),
       });
     },
 
     exportFileName() {
+      const report = delivered[shown]?.report;
       return report === undefined
         ? undefined
         : reportExportFileName(
             report.collectionName,
             report.generatedAtEpochMs,
+            delivered.length > 1 ? report.language : undefined,
           );
     },
 
     async exportMarkdown(path) {
+      const report = delivered[shown]?.report;
       if (report === undefined || path === "") return;
       const outcome = await exportReportMarkdown(path, report, {
         files: reportFileWriter(),
@@ -2633,6 +2817,7 @@ function createReportWindowSession(
     },
 
     copyText() {
+      const report = delivered[shown]?.report;
       return report === undefined ? undefined : finalText(report);
     },
 
@@ -2659,6 +2844,31 @@ function createReportWindowSession(
 }
 
 /**
+ * The paused-job notice in Zotero's progress window (`P4-T21`; owner, `plan/00`
+ * §6 item 332(b)), as the resumed-jobs notice is shown. A job whose collection
+ * has gone is left out; with none left nothing is shown. The caller's
+ * {@link announcePausedReports} tries again next start if this throws.
+ */
+async function showPausedReportNotice(
+  records: readonly JobRecord[],
+): Promise<void> {
+  const args = pausedReportNoticeArgs(records, collectionNameOfKey);
+  if (args === undefined) return;
+  const text = await formatValue(
+    new Localization([MAIN_WINDOW_FTL]),
+    L10N_REPORT_PAUSED_NOTICE,
+    args,
+  );
+  if (text === undefined) {
+    throw new Error("[research-helper] the paused-report notice has no text");
+  }
+  const popup = openZoteroProgressWindow();
+  popup.changeHeadline(text);
+  popup.show();
+  popup.startCloseTimer(8000);
+}
+
+/**
  * Hold the graph for the report window (`P4-T19`) and publish its opener on
  * `addon.api.reportWindow`; on teardown, stop every run a window started (as a
  * shutdown, waiting for each to end while the database is still open), close
@@ -2670,10 +2880,32 @@ async function publishReportWindowCommands(
 ): Promise<void> {
   // Captured once, for the reason {@link publishServiceGraph} gives.
   const api = addon.api;
+  let pausedNotice: Promise<void> | undefined;
+  const announcePaused = async (): Promise<void> => {
+    await announcePausedReports({
+      jobs: graph.jobs,
+      readShown: () => getPref("reportPausedNoticeShown"),
+      writeShown: (json) => {
+        setPref("reportPausedNoticeShown", json);
+      },
+      show: showPausedReportNotice,
+    });
+  };
   await scope.use({
     description: "the report window's services, runs and open windows",
     register: () => {
       reportWindowState.graph = graph;
+      // Owner, `plan/00` §6 item 332(b): not awaited, so no notice holds up the
+      // start; teardown waits for it (`docs/07` §12.4 reading 23).
+      pausedNotice = graph.database
+        .recovery()
+        .then(announcePaused)
+        .catch((error: unknown) => {
+          // With no job store nothing was left paused; the name only.
+          graph.logger.debug("no paused-report notice was shown", {
+            reason: error instanceof Error ? error.name : typeof error,
+          });
+        });
       api.reportWindow = {
         open: (host, collectionID) =>
           openReportWindowCommand(host, collectionID),
@@ -2681,11 +2913,13 @@ async function publishReportWindowCommands(
           [...reportWindowState.windows.values()].filter(
             (open) => open.win.closed !== true,
           ).length,
+        announcePaused,
       };
       return "reportWindowState";
     },
     unregister: async () => {
       delete api.reportWindow;
+      await pausedNotice;
       const open = [...reportWindowState.windows.values()];
       await Promise.allSettled(open.map((one) => one.session.shutdown()));
       for (const one of open) {
@@ -2775,6 +3009,7 @@ export async function registerUI(scope: Scope): Promise<void> {
   // runs in the background; see {@link provenanceState}.
   await publishProvenanceStore(scope, graph);
   await publishSearchWindowHost(scope, graph);
+  await publishSearchWindowCommands(scope);
   // Before `APP_REGISTRATIONS`, for the same reason the services are: the
   // pane registration below can make a `zotero:pref` window reload and load
   // our fragment at once, and its script resolves the host on load.

@@ -668,6 +668,15 @@ export function maxPartialsPerMerge(
 }
 
 /**
+ * The lowest `max_tokens` `prepareComposition` lowers a report to when the
+ * input needs the room (owner's option 1 on FINDING P4-T22-2, `docs/06` §8.4's
+ * note of 2026-11-02): the common real output limit, and by `docs/12` §10's
+ * derivation about 1 390 English or 1 234 Korean words, inside `docs/06`
+ * §9.2's shortest band. Read by `prepareComposition` and {@link synthesisBudgets}.
+ */
+export const REPORT_OUTPUT_FLOOR = 8_192;
+
+/**
  * What a model's catalogue entry says about its window, each only when known
  * (`ModelInfo.contextWindowTokens` and `maxOutputTokens`, positive). Built by
  * `limitsOf` in `trendReportPipeline.ts`, read by {@link windowInputBudget}.
@@ -731,6 +740,12 @@ export interface SynthesisBudgets {
   readonly reduceMerge: number;
   /** `TREND_REPORT_EN` or `_KO`, by the report's language. */
   readonly report: Readonly<Record<ReportLanguage, number>>;
+  /**
+   * The same at {@link REPORT_OUTPUT_FLOOR} or the model's limit if lower: the
+   * largest request `prepareComposition` can send once it lowers `max_tokens`,
+   * which is what {@link planSynthesis} prices.
+   */
+  readonly reportAtFloor: Readonly<Record<ReportLanguage, number>>;
   readonly critique: number;
 }
 
@@ -813,6 +828,10 @@ export function synthesisBudgets(
         resolveMaxTokens(prompts.get("TREND_REPORT_KO")),
         0,
       ),
+    },
+    reportAtFloor: {
+      en: windowInputBudget("TREND_REPORT_EN", report, REPORT_OUTPUT_FLOOR, 0),
+      ko: windowInputBudget("TREND_REPORT_KO", report, REPORT_OUTPUT_FLOOR, 0),
     },
     critique: windowInputBudget(
       "SELF_CRITIQUE",
@@ -1207,7 +1226,10 @@ export function planSynthesis(input: SynthesisPlanInput): SynthesisPlan {
   // L3 and L4 — per language: the report, then critique and rewrite rounds.
   for (const language of input.languages) {
     const kind = language === "ko" ? "TREND_REPORT_KO" : "TREND_REPORT_EN";
-    const reportBudget = budgets.report[language];
+    // The largest input the run can send and, in synthesisCall, the largest
+    // output: never both at once, so this over-states on a small window and
+    // never under-states (docs/06 §8.4's note of 2026-11-02).
+    const reportBudget = budgets.reportAtFloor[language];
     calls.push(synthesisCall(kind, report, input, reportBudget, { language }));
     for (let round = 1; round <= rounds; round += 1) {
       calls.push(
@@ -1426,4 +1448,78 @@ export function isReportRunEstimate(
   estimate: RunEstimate,
 ): estimate is ReportRunEstimate {
   return "models" in estimate && "synthesis" in estimate.selected;
+}
+
+// ===========================================================================
+// 6. The collection profile: one priced call (P5-T22; docs/12 §15)
+// ===========================================================================
+
+/** What {@link estimateProfileCall} is given. */
+export interface EstimateProfileCallInput {
+  /** The work key of each paper whose line the call carries. */
+  readonly workKeys: readonly string[];
+  /** The request as rendered, with its schema, before headroom. */
+  readonly rawInputTokens: number;
+  /** The prompt's `max_tokens` (`resolveMaxTokens`): 2 500. */
+  readonly outputTokens: number;
+  /** The `strong` tier's model. */
+  readonly modelId: string;
+  readonly prices: ModelPrices | undefined;
+  readonly atEpochMs: number;
+}
+
+/**
+ * One `COLLECTION_PROFILE` call, as a {@link RunEstimate}, so the cost dialog's
+ * threshold, ceilings, second acknowledgement and "don't ask again" rules apply
+ * to it unchanged. Every paper is `metadata-only` and no plan item holds the
+ * call, because one call serves them all. There is nothing to downgrade, so
+ * both plans are one object. A model with no known price costs `undefined`,
+ * never 0. Caller: `planProfileCall` (`src/pipeline/recommend/profileCall.ts`).
+ *
+ * @param input - see {@link EstimateProfileCallInput}
+ * @returns the estimate
+ */
+export function estimateProfileCall(
+  input: EstimateProfileCallInput,
+): RunEstimate {
+  const inputTokens = withHeadroom(input.rawInputTokens);
+  const papers = input.workKeys.length;
+  const selected: RunPlan = {
+    fullTextMode: "never",
+    items: input.workKeys.map((workKey) => ({
+      workKey,
+      cached: false,
+      scope: "metadata-only",
+      chunked: false,
+      calls: [],
+    })),
+    counts: {
+      items: papers,
+      cached: 0,
+      fullText: 0,
+      abstractOnly: 0,
+      metadataOnly: papers,
+      chunked: 0,
+    },
+    calls: 1,
+    rawInputTokens: input.rawInputTokens,
+    inputTokens,
+    outputTokens: input.outputTokens,
+    costUsd:
+      input.prices === undefined
+        ? undefined
+        : costOf(
+            input.prices,
+            { inputTokens, outputTokens: input.outputTokens },
+            input.atEpochMs,
+          ).costUsd,
+  };
+  return {
+    modelId: input.modelId,
+    selected,
+    abstractOnly: selected,
+    preselectDowngrade: false,
+    pricesAsOfEpochMs: input.prices?.asOfEpochMs,
+    isEstimate: true,
+  };
 }

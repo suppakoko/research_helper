@@ -36,13 +36,20 @@ import {
   L10N_MENU_ROOT,
   L10N_MENU_SPIKE_CREATE_ITEM,
 } from "../../src/ui/menus/toolsMenu";
+import { L10N_MENU_SEARCH_IMPORT } from "../../src/i18n/keys";
+import { PREF_KEYS } from "../../src/prefs/keys";
+import { SEARCH_WINDOW_NAME } from "../../src/ui/dialogs/searchDialog";
 import { SUMMARIZE_WINDOW_NAME_PREFIX } from "../../src/ui/dialogs/summarizeDialog";
 import { REPORT_WINDOW_NAME_PREFIX } from "../../src/ui/panes/reportWindow";
+import { qualifiedPrefName } from "../../src/zotero/prefStore";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
 declare function describe(title: string, body: () => void): void;
-declare function it(title: string, body: () => Promise<void>): void;
+declare function it(
+  title: string,
+  body: (this: { timeout(ms: number): void }) => Promise<void>,
+): void;
 declare function after(body: () => Promise<void>): void;
 declare const assert: {
   strictEqual<T>(actual: T, expected: T, message?: string): void;
@@ -268,6 +275,31 @@ function openSummarizeWindowCount(): number {
   return openWindowCount(SUMMARIZE_WINDOW_NAME_PREFIX);
 }
 
+/**
+ * This plugin's top-level items on the item context menu (`P5-T15`), in one main
+ * window. `getContext` is left out: the count is of the build, and the guard
+ * that reads `context.items` runs later, on `popupshowing`, which is not fired.
+ */
+async function itemMenuRoots(win: _ZoteroTypes.MainWindow): Promise<number> {
+  const popup = win.document.getElementById(
+    "zotero-itemmenu",
+  ) as XULPopupElement | null;
+  if (!popup) {
+    assert.fail("#zotero-itemmenu not found in a main window");
+  }
+  Zotero.MenuManager.updateMenuPopup(popup, "main/library/item", {
+    tabType: "library",
+  });
+  const roots = Array.from(popup.children).filter(
+    (el) =>
+      el.classList.contains("zotero-custom-menu-item") &&
+      el.getAttribute("data-l10n-id") === L10N_MENU_ROOT,
+  ).length;
+  popup.dispatchEvent(new win.Event("popuphidden"));
+  await idle(win);
+  return roots;
+}
+
 async function assertEveryWindow(
   expected: ToolsMenuCount & { readonly fluentLinks: number },
   when: string,
@@ -411,5 +443,134 @@ describe("lifecycle (FR-56)", function () {
       0,
       "enable opens no summarize window (item 307(e))",
     );
+  });
+
+  it("closes a search window opened in keyword mode from the Tools menu at disable (P5-T15)", async function () {
+    this.timeout(60_000);
+    const wrapper = await researchHelperAddon();
+    await initializedInstance();
+    const win = Zotero.getMainWindow();
+    const popup = win.document.getElementById(
+      TOOLS_POPUP_ID,
+    ) as XULPopupElement | null;
+    if (!popup) {
+      assert.fail(`#${TOOLS_POPUP_ID} not found in a main window`);
+    }
+    Zotero.MenuManager.updateMenuPopup(popup, TOOLS_TARGET, {
+      tabType: "library",
+    });
+    const submenu = Array.from(popup.children)
+      .find((el) => el.getAttribute("data-l10n-id") === L10N_MENU_ROOT)
+      ?.querySelector(":scope > menupopup");
+    submenu?.dispatchEvent(new win.Event("popupshowing"));
+    const entry = Array.from(submenu?.children ?? []).find(
+      (el) => el.getAttribute("data-l10n-id") === L10N_MENU_SEARCH_IMPORT,
+    ) as unknown as { doCommand(): void } | undefined;
+    if (!entry) {
+      assert.fail("the Tools submenu has no Search & Import entry");
+    }
+    // The real entry, so the window goes through the plugin's own opener.
+    entry.doCommand();
+    submenu?.dispatchEvent(new win.Event("popuphidden"));
+    popup.dispatchEvent(new win.Event("popuphidden"));
+    await idle(win);
+    await waitUntil(
+      () => openWindowCount(SEARCH_WINDOW_NAME) === 1,
+      "the search window to open",
+    );
+
+    await afterBootstrapCall("shutdown", () => wrapper.disable());
+    await waitUntil(
+      () => openWindowCount(SEARCH_WINDOW_NAME) === 0,
+      "no search window after disable, in keyword mode too",
+    );
+    await afterBootstrapCall("startup", () => wrapper.enable());
+    await initializedInstance();
+    assert.strictEqual(
+      openWindowCount(SEARCH_WINDOW_NAME),
+      0,
+      "enable opens no search window",
+    );
+  });
+
+  it("leaves no item menu and no search window after a disable/enable cycle (P5-T15)", async function () {
+    this.timeout(120_000);
+    const wrapper = await researchHelperAddon();
+    const pref = qualifiedPrefName(PREF_KEYS.relatedEnabled);
+    const cycle = async (): Promise<Addon> => {
+      await afterBootstrapCall("shutdown", () => wrapper.disable());
+      await waitUntil(
+        () => pluginInstance() === undefined,
+        `Zotero.${config.addonInstance} to be removed by onShutdown`,
+      );
+      await afterBootstrapCall("startup", () => wrapper.enable());
+      return initializedInstance();
+    };
+    const everyWindowHas = async (roots: number, when: string) => {
+      for (const win of Zotero.getMainWindows()) {
+        assert.strictEqual(await itemMenuRoots(win), roots, when);
+      }
+    };
+    const searchWindows = (): number => openWindowCount(SEARCH_WINDOW_NAME);
+
+    try {
+      // The menu is built at registration, so the preference needs a cycle.
+      Zotero.Prefs.set(pref, true, true);
+      const before = await cycle();
+      await everyWindowHas(1, "one item menu with related.enabled on");
+      const opener = before.api.relatedWindow;
+      if (!opener) {
+        assert.fail("registerUI() published no api.relatedWindow");
+      }
+      // A seed id no library holds: the window draws its missing line.
+      opener.open(Zotero.getMainWindow(), 2_000_000_003);
+      await waitUntil(() => searchWindows() === 1, "the search window to open");
+
+      await afterBootstrapCall("shutdown", () => wrapper.disable());
+      await waitUntil(
+        () => pluginInstance() === undefined,
+        `Zotero.${config.addonInstance} to be removed by onShutdown`,
+      );
+      await everyWindowHas(0, "no item menu after disable");
+      await waitUntil(
+        () => searchWindows() === 0,
+        "no search window after disable",
+      );
+      assert.strictEqual(
+        before.api.relatedWindow,
+        undefined,
+        "the opener is withdrawn with the instance",
+      );
+      assert.deepEqual(before.scope.liveHandles(), []);
+
+      await afterBootstrapCall("startup", () => wrapper.enable());
+      const fresh = await initializedInstance();
+      await everyWindowHas(1, "exactly one item menu after enable");
+      assert.strictEqual(searchWindows(), 0, "enable opens no search window");
+
+      // Off again: no menu after the next start, and the opener opens nothing.
+      Zotero.Prefs.clear(pref, true);
+      const freshOpener = fresh.api.relatedWindow;
+      if (!freshOpener) {
+        assert.fail("the fresh instance published no api.relatedWindow");
+      }
+      assert.strictEqual(
+        freshOpener.open(Zotero.getMainWindow(), 2_000_000_004),
+        undefined,
+        "the opener reads the preference on every call",
+      );
+      assert.strictEqual(searchWindows(), 0, "and so opens no window");
+      await cycle();
+      await everyWindowHas(0, "no item menu with related.enabled off");
+    } finally {
+      // The registration follows the preference, so restoring it takes a cycle.
+      Zotero.Prefs.clear(pref, true);
+      if (
+        pluginInstance() !== undefined &&
+        (await itemMenuRoots(Zotero.getMainWindow())) > 0
+      ) {
+        await cycle();
+      }
+    }
   });
 });

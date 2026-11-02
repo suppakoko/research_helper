@@ -80,6 +80,7 @@ import {
 } from "./citations";
 import { SMALL_THEME_REASON, UNMAPPED_THEME_REASON } from "./cluster";
 import {
+  DROPPABLE_ANALYSIS_FIELDS,
   TARGET_WORDS_CAPPED_WARNING,
   TARGET_WORDS_MAX,
   type ComposedReport,
@@ -240,11 +241,16 @@ export interface ScaffoldInput {
   readonly themes: readonly ThemeResult[];
   /** FR-27: the analyse stage's `passes`. */
   readonly reductionPasses: number;
-  /** The shipped draft: the last `composed` report the run kept. */
+  /**
+   * The shipped draft: the last `composed` report the run kept. Its `plan` is
+   * read only for what it changed to fit (`fitLines`), which is about this text,
+   * unlike the "target was capped" line below.
+   */
   readonly composed: Pick<
     ComposedReport,
     "sections" | "preamble" | "quality" | "citations" | "warnings"
-  >;
+  > &
+    Partial<Pick<ComposedReport, "plan">>;
   /**
    * The **current** run's plan (`prepareComposition`), never the composed
    * report's own: a cached report's plan may predate the stored target
@@ -776,6 +782,41 @@ export function qualityBanner(
   return lines.join("\n");
 }
 
+/**
+ * What the composition changed to fit (`CompositionFit`), as sentences, from the
+ * plan of the draft that shipped: a rewrite may have gone lower than the run's
+ * first plan. Written under the title and in Appendix B.
+ */
+function fitLines(
+  composed: ScaffoldInput["composed"],
+  labels: Labels,
+): readonly string[] {
+  const fit = composed.plan?.fit;
+  if (fit === undefined) return [];
+  const lines: string[] = [];
+  if (fit.outputLowered || fit.targetWordsLowered) {
+    lines.push(
+      fillLabel(labels.fitOutputLowered, {
+        output: fit.outputTokens,
+        words: fit.targetWords,
+      }),
+    );
+  }
+  if (fit.droppedFields.length > 0) {
+    const sections = DROPPABLE_ANALYSIS_FIELDS.filter((entry) =>
+      fit.droppedFields.includes(entry.field),
+    )
+      .map((entry) => entry.section)
+      .sort((a, b) => a - b);
+    lines.push(
+      fillLabel(labels.fitAnalysesShortened, {
+        sections: sections.join(", "),
+      }),
+    );
+  }
+  return lines;
+}
+
 /** §11's body: the numbered entries, then the unnumbered retracted list. */
 function bibliographyBody(
   entries: readonly BibliographyEntry[],
@@ -913,11 +954,14 @@ export function appendixB(
   const params = [
     fillLabel(labels.paramReductionPasses, { passes: input.reductionPasses }),
     fillLabel(labels.paramReviewRounds, { rounds: input.critique.rounds }),
-    fillLabel(labels.paramTargetWords, { words: input.plan.targetWords }),
+    fillLabel(labels.paramTargetWords, {
+      words: input.composed.plan?.fit?.targetWords ?? input.plan.targetWords,
+    }),
   ];
   if (input.plan.targetWordsCapped) {
     params.push(fillLabel(labels.targetWordsCapped, { max: TARGET_WORDS_MAX }));
   }
+  params.push(...fitLines(input.composed, labels));
   params.push(
     fillLabel(labels.paramTokens, {
       input: count(input.usage?.inputTokens, labels),
@@ -1190,6 +1234,9 @@ export function scaffoldReport(input: ScaffoldInput): ScaffoldedReport {
   const proxies = qualityProxiesOf(input);
   const head = titleBlock(input, labels);
   const banner = qualityBanner(input.critique, labels);
+  const fitBanner = fitLines(input.composed, labels)
+    .map((line) => `> ${line}`)
+    .join("\n");
 
   // The sections, with the client's parts placed in them.
   const yearTable = table(
@@ -1256,6 +1303,7 @@ export function scaffoldReport(input: ScaffoldInput): ScaffoldedReport {
   const markdown = `${join(
     head.markdown,
     banner,
+    fitBanner,
     ...finalSections.map((section) =>
       join(`## ${section.heading}`, section.markdown),
     ),

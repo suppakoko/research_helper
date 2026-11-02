@@ -47,6 +47,15 @@
  * {@link mustAskConfirmation} is unchanged. Without a `report` input — every
  * other job — the disclosure is exactly what it was.
  *
+ * ## A collection profile's own notice (`P5-T22`)
+ *
+ * A recommend run's one model call sends one metadata line per paper (`docs/09`
+ * §3 row 6), to one model. With `profileNotice` on,
+ * {@link buildEgressDisclosure} puts {@link L10N_EGRESS_PROFILE_NOTICE} first
+ * among the notices; the cost dialog fills its arguments from the disclosure's
+ * `itemCount` and `modelId`, so it needs no member of its own. Like the report's,
+ * it forces nothing.
+ *
  * ## The egress log
  *
  * §3.6 item 4: the plugin's own job records say which provider received how
@@ -64,6 +73,7 @@ import {
   L10N_EGRESS_FIRST_JOB_NOTICE,
   L10N_EGRESS_GEMINI_DECLARED_PAID,
   L10N_EGRESS_GEMINI_FREE_TIER,
+  L10N_EGRESS_PROFILE_NOTICE,
   L10N_EGRESS_REPORT_NOTICE,
 } from "../../i18n/keys";
 import type { GeminiTier } from "../../llm/gemini/tierDetect";
@@ -87,6 +97,7 @@ export type EgressContentScope = { readonly [K in InputScopeKind]: number };
 /** One notice the dialog shows, as its Fluent id. */
 export type EgressNoticeId =
   | typeof L10N_EGRESS_REPORT_NOTICE
+  | typeof L10N_EGRESS_PROFILE_NOTICE
   | typeof L10N_EGRESS_FIRST_JOB_NOTICE
   | typeof L10N_EGRESS_GEMINI_FREE_TIER
   | typeof L10N_EGRESS_GEMINI_DECLARED_PAID;
@@ -131,6 +142,11 @@ export interface EgressDisclosureInput {
    * summaries it still makes. Absent for every other job.
    */
   readonly report?: ReportEgressInput;
+  /**
+   * A collection profile's call (`P5-T22`): show its notice. `items` holds one
+   * `metadata-only` per line sent. Caller: `planProfileCall`.
+   */
+  readonly profileNotice?: boolean;
 }
 
 /** The disclosure, as data (`docs/09` §3.6 item 1). */
@@ -225,6 +241,7 @@ export function buildEgressDisclosure(
   const noticeIds: EgressNoticeId[] = [];
   // Before the first-job notice, whose "the content listed above" includes it.
   if (input.report !== undefined) noticeIds.push(L10N_EGRESS_REPORT_NOTICE);
+  if (input.profileNotice === true) noticeIds.push(L10N_EGRESS_PROFILE_NOTICE);
   if (firstJobNotice) noticeIds.push(L10N_EGRESS_FIRST_JOB_NOTICE);
   if (geminiFreeTierWarning) noticeIds.push(L10N_EGRESS_GEMINI_FREE_TIER);
   if (geminiDeclaredPaidReminder) {

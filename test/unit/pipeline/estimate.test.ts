@@ -56,6 +56,7 @@ import {
   PROMPT_FILE_NAMES,
   PROMPT_IDS,
   createPromptRegistry,
+  resolveMaxTokens,
 } from "../../../src/prompts";
 
 import {
@@ -1230,8 +1231,51 @@ describe("P4-T22 under plan/00 §6 item 327(a): input budgets follow the context
       synthesisOverhead: SYNTH_OVERHEAD,
     };
 
+    it("reportAtFloor is the budget at REPORT_OUTPUT_FLOOR: at least report, and the row on a large window (docs/06 §8.4, 2026-11-02)", () => {
+      const at = (contextWindowTokens: number, maxOutputTokens: number) =>
+        synthesisBudgets({
+          ...base,
+          reportLimits: { contextWindowTokens, maxOutputTokens },
+        });
+      expect(at(32_000, 32_000).report).toEqual({ en: 7_130, ko: 4_521 });
+      expect(at(32_000, 32_000).reportAtFloor).toEqual({
+        en: 20_006,
+        ko: 20_006,
+      });
+      expect(at(32_000, 8_192).reportAtFloor).toEqual(at(32_000, 8_192).report);
+      expect(at(128_000, 128_000).reportAtFloor).toEqual({
+        en: 60_000,
+        ko: 60_000,
+      });
+      expect(at(128_000, 128_000).report).toEqual({ en: 60_000, ko: 60_000 });
+      // A limit under the floor is what the request has: no more room than that.
+      expect(at(32_000, 4_096).reportAtFloor).toEqual(at(32_000, 4_096).report);
+    });
+
+    it("planSynthesis prices each report call at the floor's input and the ceiling's output", () => {
+      const plan = planSynthesis(
+        synthesisInput({
+          reportModel: {
+            ...synthesisInput().reportModel,
+            maxOutputTokens: 32_000,
+            limits: { contextWindowTokens: 32_000, maxOutputTokens: 32_000 },
+          },
+        }),
+      );
+      const reports = plan.calls.filter((call) =>
+        call.kind.startsWith("TREND_REPORT"),
+      );
+      expect(reports.length).toBeGreaterThan(0);
+      for (const call of reports) {
+        expect(call.rawInputTokens).toBeGreaterThan(20_006);
+        expect(call.outputTokens).toBe(
+          resolveMaxTokens(PROMPTS.get("TREND_REPORT_EN")),
+        );
+      }
+    });
+
     it("is every §5.2 row with no limits", () => {
-      expect(synthesisBudgets(base)).toEqual({
+      expect(synthesisBudgets(base)).toMatchObject({
         clusterSingle: 60_000,
         clusterBatch: 60_000,
         clusterMerge: 60_000,

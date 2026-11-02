@@ -25,7 +25,9 @@ import {
   REPORT_RUN_L10N,
   buildReportRunModel,
   confirmReportRun,
+  askOnce,
   groupSaveQuestion,
+  interfaceReportLanguage,
   isMainWindowLine,
   pausedJobQuestion,
   reduceReportRun,
@@ -379,6 +381,34 @@ describe("P4-T20 — cancel, stops and failures say discarded honestly (step 3)"
     expect(out.rows).toBe(model.rows);
   });
 
+  it("a both run that saved English alone shows the outcome and why Korean was not written (P4-T21; item 334(d))", () => {
+    const model = buildReportRunModel(
+      run(started, {
+        kind: "finished",
+        outcome: "succeeded",
+        markdown: "# English",
+        stop: {
+          messageId: "research-helper-report-stopped-korean",
+          args: { reason: "structure" },
+        },
+      }),
+      EXTRAS,
+    );
+    expect(model.outcome).toEqual({
+      id: REPORT_RUN_L10N.outcome,
+      args: { outcome: "succeeded" },
+    });
+    expect(model.stop).toEqual({
+      bundle: "main",
+      id: "research-helper-report-stopped-korean",
+      args: { reason: "structure" },
+    });
+    expect(model.preview.text).toBe("# English");
+    expect(model.buttons.export).toBe(true);
+    expect(model.buttons.copy).toBe(true);
+    expect(model.reportChoice).toBeUndefined();
+  });
+
   it("the cancelled outcome names the token the bundle selects on", () => {
     const model = buildReportRunModel(
       run(started, { kind: "finished", outcome: "cancelled" }),
@@ -700,16 +730,181 @@ describe("P4-T20 — the run's confirmation (P4-T16's dialog)", () => {
   });
 });
 
-describe("P4-T20 — the language a run is written in", () => {
-  it("resolves the selector to one language; auto follows the UI; both waits for P4-T21", () => {
+describe("P4-T20, P4-T21 — the language a run is written in", () => {
+  it("resolves the selector: auto follows the UI; both passes through for the two-report run", () => {
     expect(resolveReportLanguage("en", "ko-KR")).toBe("en");
     expect(resolveReportLanguage("ko", "en-US")).toBe("ko");
     expect(resolveReportLanguage("auto", "ko-KR")).toBe("ko");
     expect(resolveReportLanguage("auto", "ko")).toBe("ko");
     expect(resolveReportLanguage("auto", "en-US")).toBe("en");
     expect(resolveReportLanguage("auto", "kok-IN")).toBe("en");
-    expect(resolveReportLanguage("both", "ko-KR")).toBe("ko");
-    expect(resolveReportLanguage("both", "en-US")).toBe("en");
+    expect(resolveReportLanguage("both", "ko-KR")).toBe("both");
+    expect(resolveReportLanguage("both", "en-US")).toBe("both");
+    expect(interfaceReportLanguage("ko-KR")).toBe("ko");
+    expect(interfaceReportLanguage("en-US")).toBe("en");
+  });
+});
+
+describe("P4-T21 — a two-report run in the window (docs/08 §6.2, §6.3's notes of 2026-11-02)", () => {
+  const koDelta = (deltaText: string, generation = 1): ReportRunEvent => ({
+    kind: "draft",
+    delta: { generation, deltaText, language: "ko" },
+  });
+  const enDelta = (deltaText: string, generation = 1): ReportRunEvent => ({
+    kind: "draft",
+    delta: { generation, deltaText, language: "en" },
+  });
+  const finished = (note: "written" | "off" = "off"): ReportRunEvent => ({
+    kind: "finished",
+    outcome: "succeeded",
+    markdown: "English report",
+    note,
+    reports: [
+      { language: "en", text: "English report", note },
+      { language: "ko", text: "한국어 보고서", note },
+    ],
+    shown: "en",
+  });
+  const model = (state: ReportRunState) => buildReportRunModel(state, EXTRAS);
+
+  it("the preview restarts when the language changes, at the same generation", () => {
+    const state = run(started, enDelta("Hello "), enDelta("world"));
+    expect(state.preview.text).toBe("Hello world");
+    const next = reduceReportRun(state, koDelta("안녕"));
+    expect(next.preview.text).toBe("안녕");
+    expect(next.preview.language).toBe("ko");
+    expect(reduceReportRun(next, koDelta("하세요")).preview.text).toBe(
+      "안녕하세요",
+    );
+  });
+
+  it("a one-report run's preview carries no language", () => {
+    expect(run(started, delta("x")).preview).toEqual({
+      state: "draft",
+      text: "x",
+      generation: 1,
+    });
+  });
+
+  it("going back to Composing for the next language clears the revision round and keeps the draft a draft", () => {
+    const rewriting = run(started, at("Critiquing"), enDelta("x"), {
+      kind: "revision",
+      signal: { kind: "rewrite-started", round: 1 },
+    });
+    expect(rewriting.critiqueRound).toBe(1);
+    const next = reduceReportRun(rewriting, at("Composing"));
+    expect(next.critiqueRound).toBe(0);
+    expect(next.preview.state).toBe("draft");
+  });
+
+  it("offers the selector only when the run gave two reports, and only after it ended", () => {
+    expect(model(run(started, enDelta("x"))).reportChoice).toBeUndefined();
+    const one = run(started, {
+      kind: "finished",
+      outcome: "succeeded",
+      markdown: "Only one",
+    });
+    expect(model(one).reportChoice).toBeUndefined();
+    expect(one.reports).toEqual([]);
+    const single = run(started, {
+      kind: "finished",
+      outcome: "succeeded",
+      reports: [{ language: "ko", text: "한국어", note: "off" }],
+      shown: "ko",
+    });
+    expect(model(single).reportChoice).toBeUndefined();
+    const two = run(started, finished());
+    expect(model(two).reportChoice).toEqual({
+      languages: ["en", "ko"],
+      shown: "en",
+    });
+    // The window receives it as it is.
+    expect(windowRunModel(model(two), () => undefined).reportChoice).toEqual(
+      model(two).reportChoice,
+    );
+    // A new run clears it.
+    expect(model(reduceReportRun(two, started)).reportChoice).toBeUndefined();
+  });
+
+  it("show-report moves the preview and the note, and clears the last export and copy", () => {
+    const exported = run(
+      started,
+      finished(),
+      { kind: "note", note: "written", language: "en" },
+      { kind: "note", note: "declined", language: "ko" },
+      { kind: "exported", outcome: "written" },
+    );
+    expect(exported.note).toBe("written");
+    const korean = reduceReportRun(exported, {
+      kind: "show-report",
+      language: "ko",
+    });
+    expect(korean.shown).toBe("ko");
+    expect(korean.preview.text).toBe("한국어 보고서");
+    expect(korean.preview.state).toBe("final");
+    expect(korean.note).toBe("declined");
+    expect(korean.exported).toBeUndefined();
+    expect(model(korean).delivery).toBeUndefined();
+    // "Save as note" follows the report shown.
+    expect(model(exported).buttons.saveNote).toBe(false);
+    expect(model(korean).buttons.saveNote).toBe(true);
+    const copied = reduceReportRun(korean, { kind: "copied" });
+    const back = reduceReportRun(copied, {
+      kind: "show-report",
+      language: "en",
+    });
+    expect(back.copied).toBe(false);
+    expect(back.preview.text).toBe("English report");
+    expect(back.note).toBe("written");
+  });
+
+  it("a note event updates its own report and leaves the shown line alone for the other", () => {
+    const state = run(started, finished());
+    const after = reduceReportRun(state, {
+      kind: "note",
+      note: "failed",
+      language: "ko",
+    });
+    expect(after.note).toBe("off");
+    expect(after.reports.map((r) => r.note)).toEqual(["off", "failed"]);
+  });
+
+  it("asks the group question once for a run's two notes, and its answer holds for both", async () => {
+    const group = {
+      kind: "group-confirmation-required",
+      libraryID: 5,
+      groupName: "Lab",
+    } as const;
+    for (const [answer, state, writes] of [
+      ["resume", "written", 2],
+      ["cancel", "declined", 0],
+    ] as const) {
+      const ask = vi.fn(() => Promise.resolve(answer));
+      const write = vi.fn(() =>
+        Promise.resolve({ kind: "written", noteKey: "N" } as const),
+      );
+      const once = askOnce(ask);
+      const deps = {
+        ask: once,
+        write,
+        store: () => Promise.resolve(),
+      };
+      expect(await settleReportNote(group, deps)).toBe(state);
+      expect(await settleReportNote(group, deps)).toBe(state);
+      expect(ask).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledTimes(writes);
+    }
+  });
+
+  it("a language the run did not give changes nothing", () => {
+    const state = run(started, {
+      kind: "finished",
+      outcome: "succeeded",
+      markdown: "Only one",
+    });
+    expect(
+      reduceReportRun(state, { kind: "show-report", language: "ko" }),
+    ).toBe(state);
   });
 });
 

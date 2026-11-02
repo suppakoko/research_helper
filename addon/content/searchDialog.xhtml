@@ -82,6 +82,69 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
       />
     </hbox>
 
+    <!-- 1a. The related mode's Seed lines and Include row — docs/08 §5.2
+         (P5-T15). Hidden in every other mode. The title, authors and details
+         are the item's own data, written by applyRelatedSeed(); the missing
+         line shows instead of them when the item cannot be read. -->
+    <vbox id="rh-related-header" hidden="true">
+      <hbox id="rh-related-seed" align="start">
+        <label
+          id="rh-related-seed-label"
+          data-l10n-id="research-helper-search-related-seed-label"
+        />
+        <vbox id="rh-related-seed-lines" flex="1">
+          <description id="rh-related-seed-title" />
+          <hbox id="rh-related-seed-meta" class="rh-wrap">
+            <description id="rh-related-seed-authors" class="rh-hint" />
+            <description id="rh-related-seed-details" class="rh-hint" />
+          </hbox>
+          <description
+            id="rh-related-seed-missing"
+            class="rh-inline-warning"
+            role="alert"
+            hidden="true"
+            data-l10n-id="research-helper-search-related-seed-missing"
+          />
+        </vbox>
+      </hbox>
+      <hbox
+        id="rh-related-include"
+        align="center"
+        class="rh-wrap"
+        role="group"
+        aria-labelledby="rh-related-include-label"
+      >
+        <label
+          id="rh-related-include-label"
+          data-l10n-id="research-helper-search-related-include-label"
+        />
+        <checkbox
+          id="rh-related-include-reference"
+          value="reference"
+          checked="true"
+          data-l10n-id="research-helper-search-related-include-reference"
+        />
+        <checkbox
+          id="rh-related-include-citation"
+          value="citation"
+          checked="true"
+          data-l10n-id="research-helper-search-related-include-citation"
+        />
+        <checkbox
+          id="rh-related-include-recommendation"
+          value="recommendation"
+          checked="true"
+          data-l10n-id="research-helper-search-related-include-recommendation"
+        />
+        <checkbox
+          id="rh-related-include-similar"
+          value="similar"
+          checked="true"
+          data-l10n-id="research-helper-search-related-include-similar"
+        />
+      </hbox>
+    </vbox>
+
     <!-- 2. Year range and per-database cap — docs/08 §4.2 "Date defaults" and
          §4.5. Both menulists and the number input are populated and seeded in
          init(); nothing here states a year or a count. -->

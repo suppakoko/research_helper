@@ -71,6 +71,7 @@ const VERSIONS = {
   SELF_CRITIQUE: "1.0.0",
   THEME_MERGE: "1.0.0",
   CLUSTER_REDUCE_MERGE: "1.0.0",
+  COLLECTION_PROFILE: "1.0.0",
 } as const satisfies Record<PromptId, string>;
 
 /** A partial override of {@link VERSIONS}. */
@@ -90,6 +91,7 @@ const EPOCHS = {
   SELF_CRITIQUE: 1,
   THEME_MERGE: 1,
   CLUSTER_REDUCE_MERGE: 1,
+  COLLECTION_PROFILE: 1,
 } as const satisfies Record<PromptId, number>;
 
 /** A partial override of {@link EPOCHS}. */

@@ -189,6 +189,12 @@ export interface PluginDatabase {
    * `installServices` calls this once, after it has built the queue.
    */
   attachJobs(jobs: JobQueue): void;
+  /**
+   * Settles when {@link attachJobs}' recovery has ended, whatever its outcome;
+   * at once before it is called. `publishReportWindowCommands` waits for it, so
+   * the paused-job notice reads the records as recovery left them (`P4-T21`).
+   */
+  recovery(): Promise<void>;
 }
 
 /** What {@link installPluginDatabase} needs. */
@@ -473,6 +479,9 @@ export function installPluginDatabase(
           logger.warn("job recovery failed", { reason: reasonOf(error) });
         }
       });
+    },
+    recovery(): Promise<void> {
+      return recovering ?? Promise.resolve();
     },
   };
 }

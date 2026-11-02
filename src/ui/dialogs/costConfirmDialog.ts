@@ -49,6 +49,7 @@
 
 import { config } from "../../../package.json";
 import {
+  L10N_EGRESS_PROFILE_NOTICE,
   L10N_EGRESS_REPORT_NOTICE,
   type MainWindowMessageId,
 } from "../../i18n/keys";
@@ -538,17 +539,24 @@ export function buildCostDialogModel(
       },
     },
   ];
-  const notices: FluentLine[] = disclosure.noticeIds.map((id) =>
-    id === L10N_EGRESS_REPORT_NOTICE && disclosure.report !== undefined
+  const notices: FluentLine[] = disclosure.noticeIds.map((id) => {
+    if (id === L10N_EGRESS_REPORT_NOTICE && disclosure.report !== undefined) {
+      return {
+        id,
+        args: {
+          papers: disclosure.report.papers,
+          models: formatList(disclosure.report.modelIds, locale),
+        },
+      };
+    }
+    // `P5-T22`: names the model and the scope (`docs/09` §3 row 6).
+    return id === L10N_EGRESS_PROFILE_NOTICE
       ? {
           id,
-          args: {
-            papers: disclosure.report.papers,
-            models: formatList(disclosure.report.modelIds, locale),
-          },
+          args: { papers: disclosure.itemCount, model: disclosure.modelId },
         }
-      : { id },
-  );
+      : { id };
+  });
   // A report run's plans name each unpriced model and carry the report's own
   // lines (P4-T16); a summarize run's lines are exactly what they were.
   const report = isReportRunEstimate(estimate) ? estimate : undefined;

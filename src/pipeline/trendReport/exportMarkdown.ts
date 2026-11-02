@@ -45,6 +45,7 @@ import type {
   TrendReport,
 } from "../../model/trend";
 import { normalizeDoi } from "../../model/ids";
+import type { ReportLanguage } from "../../model/trend";
 import type { ReportFileWriter } from "../../zotero/notes";
 import {
   assertAllMarkersResolve,
@@ -100,13 +101,17 @@ export function safeBaseName(name: string | undefined): string {
 /**
  * The save dialog's suggested name: `<safe collection name> — trends
  * <YYYY-MM-DD>.md`, dated by the report's generation (UTC), not the export.
+ * `language` is given only for a two-report run, whose two reports share a
+ * date: `… — trends <YYYY-MM-DD> (ko).md` (`docs/08` §6.3's note of 2026-11-02).
  */
 export function reportExportFileName(
   collectionName: string,
   generatedAtEpochMs: number,
+  language?: ReportLanguage,
 ): string {
   const date = new Date(generatedAtEpochMs).toISOString().slice(0, 10);
-  return `${safeBaseName(collectionName)} — trends ${date}.md`;
+  const suffix = language === undefined ? "" : ` (${language})`;
+  return `${safeBaseName(collectionName)} — trends ${date}${suffix}.md`;
 }
 
 // ---------------------------------------------------------------------------

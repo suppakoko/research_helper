@@ -87,6 +87,8 @@ const RELEASED_FILE_SHA256: Readonly<Record<string, string>> = {
     "dac9f1618602ed4561d8faa2a43463ccd606c5dbb7d781a811db355774745578",
   "cluster-reduce-merge.v1.0.0.md":
     "154a2754ebb4780aa0446a26b4b7cf058f0e29ec2bad02ef01cfd3901b0920b4",
+  "collection-profile.v1.0.0.md":
+    "46c5f3ca9c0d3dde285acd9278fc0cb9d0393eb8685571385dea21fe3748b8a7",
 };
 
 /** Each prompt's schema file, or `null` (`docs/12` §3–§21). */
@@ -103,6 +105,7 @@ const SCHEMA_FILES: Readonly<Record<PromptId, string | null>> = {
   SELF_CRITIQUE: "self-critique.v1.json",
   THEME_MERGE: "theme-merge.v1.json",
   CLUSTER_REDUCE_MERGE: "theme-analysis.v1.json",
+  COLLECTION_PROFILE: "collection-profile.v1.json",
 };
 
 /** Each prompt's temperature (`docs/06` §11.1; `docs/12` §8, §20, §21). */
@@ -119,6 +122,7 @@ const TEMPERATURES: Readonly<Record<PromptId, number>> = {
   SELF_CRITIQUE: 0,
   THEME_MERGE: 0.2,
   CLUSTER_REDUCE_MERGE: 0.3,
+  COLLECTION_PROFILE: 0.2,
 };
 
 const SCHEMA_FILE = "paper-summary.v1.json";
@@ -140,7 +144,7 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
       PROMPT_SOURCE_FILES.length,
       PROMPT_IDS.length + patched.length,
     );
-    assert.strictEqual(PROMPT_IDS.length, 12);
+    assert.strictEqual(PROMPT_IDS.length, 13);
     const expected: Record<string, string> = {};
     // The summary cache keys on these (2026-10-23, plan/00 §6 item 273(a)).
     for (const id of PROMPT_IDS) {
@@ -315,6 +319,11 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
     assert.strictEqual(
       resolveMaxTokens(PROMPT_REGISTRY.get("THEME_MERGE")),
       4000,
+    );
+    // P5-T22: docs/12 §15's one profile call.
+    assert.strictEqual(
+      resolveMaxTokens(PROMPT_REGISTRY.get("COLLECTION_PROFILE")),
+      2500,
     );
     // THEME_CLUSTER grows with the papers: 2000 + 40 × N (docs/12 §8).
     assert.strictEqual(

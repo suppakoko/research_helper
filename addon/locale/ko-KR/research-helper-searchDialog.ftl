@@ -353,3 +353,28 @@ research-helper-search-row-relevance =
     .title = AI 모델이 매긴 관련도 점수(0~100)입니다. 기준보다 낮은 줄은 ‘걸러낸 결과도 보기’를 켜야 보입니다.
 research-helper-search-screening-cost = 걸러내기 예상 비용: 결과 최대 { $count }건에 최대 약 { $cost }
 research-helper-search-screening-cost-unpriced = 모델 { $model }의 가격을 알 수 없어 걸러내기 비용을 어림할 수 없습니다.
+
+
+## P5-T15: the related mode
+##
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-02 (G-41, plan/00 §6 item 334).
+
+research-helper-search-window-title-related = Research Helper — 관련 논문
+research-helper-search-mode-related =
+    .value = 관련 대상: { $title }
+research-helper-search-related-seed-label =
+    .value = 기준 논문
+research-helper-search-related-seed-missing = 이 항목을 읽을 수 없습니다. 라이브러리에서 항목을 선택한 뒤 관련 논문 찾기…를 다시 선택하세요.
+research-helper-search-related-include-label =
+    .value = 포함
+research-helper-search-related-include-reference =
+    .label = 참고문헌
+research-helper-search-related-include-citation =
+    .label = 인용 논문
+research-helper-search-related-include-recommendation =
+    .label = 추천 논문
+research-helper-search-related-include-similar =
+    .label = 유사 논문 (PubMed)
+research-helper-search-years-any =
+    .label = 전체
+research-helper-search-state-initial-related = 이 항목과 관련된 논문이 여기에 표시됩니다.

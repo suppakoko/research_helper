@@ -44,10 +44,13 @@ import {
   L10N_MENU_COLLECTION_RERUN,
   L10N_MENU_COLLECTION_SEARCH_IMPORT,
   L10N_MENU_COLLECTION_SUMMARIZE_ALL,
+  L10N_MENU_ITEM_FIND_RELATED,
   L10N_MENU_ROOT,
   L10N_MENU_SEARCH_IMPORT,
   L10N_MENU_SPIKE_CREATE_ITEM,
 } from "../../src/i18n/keys";
+import { PREF_KEYS } from "../../src/prefs/keys";
+import { PREFS } from "../../src/prefs/schema";
 import {
   SEARCH_WINDOW_FEATURES,
   SEARCH_WINDOW_NAME,
@@ -493,6 +496,149 @@ async function chromeBytes(url: string): Promise<number | undefined> {
   }
 }
 
+/* ------------------------------------------------- the item menu (P5-T15) */
+
+const ITEM_POPUP_ID = "zotero-itemmenu";
+const ITEM_TARGET = "main/library/item";
+
+/** What the item menu shows for one selection. */
+interface ItemMenuShape {
+  readonly roots: number;
+  readonly hidden: boolean | undefined;
+  readonly entries: readonly string[];
+  /** Per entry, `setEnabled`'s result: it sets the `disabled` property. */
+  readonly disabled: readonly boolean[];
+}
+
+/** The two `main/library/item` halves `zoteroPane.js` runs when the menu opens. */
+function buildItemMenu(
+  win: _ZoteroTypes.MainWindow,
+  items: readonly Zotero.Item[],
+): {
+  popup: XULPopupElement;
+  root: Element | undefined;
+  submenu: Element | undefined;
+} {
+  const popup = popupOf(win, ITEM_POPUP_ID);
+  if (!popup) {
+    assert.fail(`#${ITEM_POPUP_ID} not found in a main window`);
+  }
+  // No `event`, as `zoteroPane.js` passes none for this target: see readMenu().
+  Zotero.MenuManager.updateMenuPopup(popup, ITEM_TARGET, {
+    getContext: () => ({
+      items: [...items],
+      collectionTreeRows: [],
+      tabType: "library",
+      tabSubType: undefined,
+      tabID: "zotero-pane",
+    }),
+  } as unknown as Parameters<typeof Zotero.MenuManager.updateMenuPopup>[2]);
+  const root = Array.from(popup.children).find(
+    (el) =>
+      el.classList.contains("zotero-custom-menu-item") &&
+      el.getAttribute("data-l10n-id") === L10N_MENU_ROOT,
+  );
+  return {
+    popup,
+    root,
+    submenu: root?.querySelector(":scope > menupopup") ?? undefined,
+  };
+}
+
+async function readItemMenu(
+  win: _ZoteroTypes.MainWindow,
+  items: readonly Zotero.Item[],
+): Promise<ItemMenuShape> {
+  const { popup, root, submenu } = buildItemMenu(win, items);
+  // Reaches MenuManager's listeners and nothing else: the popup's own build is
+  // `onItemsContextMenuOpen`, which runs before Zotero opens the popup.
+  popup.dispatchEvent(new win.Event("popupshowing"));
+  submenu?.dispatchEvent(new win.Event("popupshowing"));
+  const children = submenu ? Array.from(submenu.children) : [];
+  const shape: ItemMenuShape = {
+    roots: root ? 1 : 0,
+    hidden: root ? isHidden(root) : undefined,
+    entries: children.map((el) => el.getAttribute("data-l10n-id") ?? ""),
+    disabled: children.map(
+      (el) => (el as unknown as { disabled?: boolean }).disabled === true,
+    ),
+  };
+  submenu?.dispatchEvent(new win.Event("popuphidden"));
+  popup.dispatchEvent(new win.Event("popuphidden"));
+  await idle(win);
+  return shape;
+}
+
+/** The open windows carrying the search window's name, from the mediator. */
+function searchWindows(): Window[] {
+  const found: Window[] = [];
+  const windows = Services.wm.getEnumerator(null as unknown as string);
+  while (windows.hasMoreElements()) {
+    const win = windows.getNext() as unknown as Window;
+    if (!win.closed && win.name === SEARCH_WINDOW_NAME) {
+      found.push(win);
+    }
+  }
+  return found;
+}
+
+async function closeSearchWindows(): Promise<void> {
+  for (const win of searchWindows()) {
+    win.close();
+  }
+  await waitUntil(() => searchWindows().length === 0, "the window to close");
+}
+
+const RELATED_PREF = qualifiedPrefName(PREF_KEYS.relatedEnabled);
+
+/** A disable/enable cycle: the item menu is built at registration. */
+async function cyclePlugin(): Promise<Addon> {
+  const wrapper = await researchHelperAddon();
+  await afterBootstrapCall("shutdown", () => wrapper.disable());
+  await waitUntil(
+    () => pluginInstance() === undefined,
+    `Zotero.${config.addonInstance} to be removed by onShutdown`,
+  );
+  await afterBootstrapCall("startup", () => wrapper.enable());
+  return initializedInstance();
+}
+
+/** Run `body` with `related.enabled` on, and leave it as it was found. */
+async function withRelatedEnabled(
+  body: (instance: Addon) => Promise<void>,
+): Promise<void> {
+  try {
+    Zotero.Prefs.set(RELATED_PREF, true, true);
+    await body(await cyclePlugin());
+  } finally {
+    await closeSearchWindows();
+    Zotero.Prefs.clear(RELATED_PREF, true);
+    await cyclePlugin();
+  }
+}
+
+/** A saved journal article in the user library. */
+async function savedArticle(title: string): Promise<Zotero.Item> {
+  const item = new Zotero.Item("journalArticle");
+  item.libraryID = Zotero.Libraries.userLibraryID;
+  item.setField("title", title);
+  item.setField("publicationTitle", "P5-T15 Journal");
+  item.setField("date", "2021");
+  item.setField("DOI", "10.1000/p5t15");
+  item.setCreators([
+    { firstName: "Ada", lastName: "Lovelace", creatorType: "author" },
+  ]);
+  await item.saveTx();
+  return item;
+}
+
+async function savedNote(): Promise<Zotero.Item> {
+  const item = new Zotero.Item("note");
+  item.libraryID = Zotero.Libraries.userLibraryID;
+  await item.saveTx();
+  return item;
+}
+
 /* -------------------------------------------------------------------- tests */
 
 describe("menu entry points and the window opener (P1-T19)", function () {
@@ -924,7 +1070,10 @@ describe("menu entry points and the window opener (P1-T19)", function () {
           doc
             .getElementById("rh-report-dialog")
             ?.getAttribute("buttonlabelcancel") ?? "",
-        menulists: doc.querySelectorAll("menulist").length,
+        // Item 334(k): "Report shown" appears only for two reports and chooses
+        // no model, so it is left out by name; any other menulist still counts.
+        menulists: doc.querySelectorAll("menulist:not(#rh-report-shown)")
+          .length,
         languageItems: [
           ...doc.querySelectorAll("#rh-report-language menuitem"),
         ].map((el) => el.getAttribute("value")),
@@ -1233,6 +1382,318 @@ describe("menu entry points and the window opener (P1-T19)", function () {
         );
       }
       log(`cycle ${cycle} of ${TEARDOWN_CYCLES} clean`);
+    }
+  });
+});
+
+describe("Find Related Papers… on the item context menu (P5-T15)", function () {
+  it("is absent while related.enabled is false, and its opener opens nothing", async function () {
+    const instance = await initializedInstance();
+    // Read as src/prefs/index.ts's getPref reads it: addon/prefs.js keeps no
+    // line for this row (plan/00 §6 item 333(c)), so the stored value is
+    // undefined and the schema's default answers.
+    assert.strictEqual(
+      Zotero.Prefs.get(RELATED_PREF, true) ?? PREFS.relatedEnabled.default,
+      false,
+      "the schema's default holds the entry back (docs/07 §8.5)",
+    );
+    const article = await savedArticle("P5-T15 off");
+    try {
+      const shape = await readItemMenu(Zotero.getMainWindow(), [article]);
+      log(`[P5-T15] related.enabled off ${JSON.stringify(shape)}`);
+      assert.strictEqual(shape.roots, 0, "no item menu at all");
+      assert.isUndefined(
+        instance.api.relatedWindow?.open(Zotero.getMainWindow(), article.id),
+        "the opener reads the preference on every call",
+      );
+      assert.strictEqual(searchWindows().length, 0, "no window opened");
+    } finally {
+      await article.eraseTx();
+    }
+  });
+
+  it("appears for one regular item, is disabled for two, and hides for none", async function () {
+    this.timeout(120_000);
+    await withRelatedEnabled(async () => {
+      const win = Zotero.getMainWindow();
+      const first = await savedArticle("P5-T15 first");
+      const second = await savedArticle("P5-T15 second");
+      const note = await savedNote();
+      try {
+        const one = await readItemMenu(win, [first]);
+        log(`[P5-T15] one regular item ${JSON.stringify(one)}`);
+        assert.deepEqual(one, {
+          roots: 1,
+          hidden: false,
+          entries: [L10N_MENU_ITEM_FIND_RELATED],
+          disabled: [false],
+        });
+
+        const two = await readItemMenu(win, [first, second]);
+        log(`[P5-T15] two regular items ${JSON.stringify(two)}`);
+        assert.deepEqual(two, { ...one, disabled: [true] }, "disabled for two");
+
+        const withNote = await readItemMenu(win, [first, note]);
+        log(`[P5-T15] an item and a note ${JSON.stringify(withNote)}`);
+        assert.deepEqual(withNote, one, "a note does not count as a seed");
+
+        const noteOnly = await readItemMenu(win, [note]);
+        log(`[P5-T15] a note alone ${JSON.stringify(noteOnly)}`);
+        assert.strictEqual(
+          noteOnly.hidden,
+          true,
+          "no regular item, no submenu",
+        );
+
+        const none = await readItemMenu(win, []);
+        assert.strictEqual(none.hidden, true, "an empty selection likewise");
+
+        // A measurement for docs/08 §5.2: what a hidden submenu leaves behind.
+        const popup = popupOf(win, ITEM_POPUP_ID);
+        log(
+          `[P5-T15] measured, after a hidden build: last children ` +
+            JSON.stringify(
+              Array.from(popup?.children ?? [])
+                .slice(-3)
+                .map((el) => [
+                  el.localName,
+                  el.getAttribute("class"),
+                  isHidden(el),
+                ]),
+            ),
+        );
+
+        // The reason on the disabled entry, through Fluent: docs/08 §2.5.
+        const reasonFor = async (
+          items: readonly Zotero.Item[],
+          settled: (text: string) => boolean,
+        ): Promise<string> => {
+          const built = buildItemMenu(win, items);
+          built.popup.dispatchEvent(new win.Event("popupshowing"));
+          built.submenu?.dispatchEvent(new win.Event("popupshowing"));
+          const entry = built.submenu?.firstElementChild;
+          let text = "";
+          try {
+            await waitUntil(() => {
+              text = entry?.getAttribute("tooltiptext") ?? "";
+              return settled(text);
+            }, "Fluent to word the entry's tooltip");
+          } finally {
+            built.submenu?.dispatchEvent(new win.Event("popuphidden"));
+            built.popup.dispatchEvent(new win.Event("popuphidden"));
+            await idle(win);
+          }
+          return text;
+        };
+        const reason = await reasonFor([first, second], (t) => t !== "");
+        log(`[P5-T15] two items, tooltip ${JSON.stringify(reason)}`);
+        assert.isAbove(reason.length, 0, "a disabled entry says why");
+        const noReason = await reasonFor([first], (t) => t === "");
+        assert.strictEqual(noReason, "", "an enabled entry has no tooltip");
+
+        // Turned off while registered: hidden at once, without a restart.
+        Zotero.Prefs.set(RELATED_PREF, false, true);
+        const off = await readItemMenu(win, [first]);
+        Zotero.Prefs.set(RELATED_PREF, true, true);
+        log(`[P5-T15] turned off while registered ${JSON.stringify(off)}`);
+        assert.strictEqual(
+          off.hidden,
+          true,
+          "the submenu re-reads the preference",
+        );
+      } finally {
+        await first.eraseTx();
+        await second.eraseTx();
+        await note.eraseTx();
+      }
+    });
+  });
+
+  it("opens the real window in related mode from the real entry, with the seed's header", async function () {
+    this.timeout(120_000);
+    const locale: UILocaleSnapshot = await pinUILocale(["en-US"], log);
+    try {
+      await withRelatedEnabled(async (instance) => {
+        const main = Zotero.getMainWindow();
+        const longTitle = "P5-T15 seed ".repeat(10).trim();
+        const seed = await savedArticle(longTitle);
+        const other = await savedArticle("P5-T15 the other seed");
+        const note = await savedNote();
+        interface RelatedDocument {
+          document: Document;
+          RHSearchWindow?: {
+            state: { initialized: boolean };
+            io: { mode?: string; seedItemID?: number };
+            collectQuery(): {
+              fromYear: number;
+              toYear: number;
+              related?: { seedItemID: number; relations: string[] };
+            };
+          };
+        }
+        const openWindow = (): RelatedDocument =>
+          searchWindows()[0] as unknown as RelatedDocument;
+        const text = (id: string): string =>
+          (openWindow().document.getElementById(id)?.textContent ?? "").trim();
+        const shownSeed = (title: string): Promise<void> =>
+          waitUntil(
+            () =>
+              searchWindows().length === 1 &&
+              openWindow().RHSearchWindow?.state.initialized === true &&
+              text("rh-related-seed-title") === title,
+            `the Seed line to read "${title}"`,
+          );
+        try {
+          // The real entry's real listener: the click goes through MenuManager.
+          const { popup, submenu } = buildItemMenu(main, [seed]);
+          popup.dispatchEvent(new main.Event("popupshowing"));
+          submenu?.dispatchEvent(new main.Event("popupshowing"));
+          const entry = submenu?.firstElementChild as unknown as
+            { doCommand(): void } | null | undefined;
+          if (!entry) {
+            assert.fail("the item submenu has no entry");
+          }
+          entry.doCommand();
+          submenu?.dispatchEvent(new main.Event("popuphidden"));
+          popup.dispatchEvent(new main.Event("popuphidden"));
+          await idle(main);
+
+          await shownSeed(longTitle);
+          const io = openWindow().RHSearchWindow?.io;
+          assert.deepEqual(
+            { mode: io?.mode, seedItemID: io?.seedItemID },
+            { mode: "related", seedItemID: seed.id },
+            "window.arguments[0] carries the seed",
+          );
+
+          const doc = openWindow().document;
+          const hiddenById = (id: string): boolean => {
+            const el = doc.getElementById(id);
+            if (!el) {
+              assert.fail(`#${id} is not in the document`);
+            }
+            return isHidden(el);
+          };
+          const yearFrom = doc.getElementById(
+            "rh-search-years-from",
+          ) as unknown as {
+            value: string;
+            label: string;
+          };
+          const yearTo = doc.getElementById(
+            "rh-search-years-to",
+          ) as unknown as {
+            value: string;
+            label: string;
+          };
+          // Whether a menulist picks up Fluent's label for an item added at run
+          // time is measured here: the label arrives after the selection.
+          const chip = doc.getElementById("rh-search-mode");
+          await waitUntil(
+            () =>
+              yearFrom.label !== "" &&
+              yearTo.label !== "" &&
+              (chip?.getAttribute("value") ?? "").startsWith("Related to: "),
+            "the year lists' Any label and the chip from Fluent",
+          );
+          const shown = {
+            title: doc.title,
+            chip: chip?.getAttribute("value") ?? "",
+            chipHidden: chip ? isHidden(chip) : undefined,
+            authors: text("rh-related-seed-authors"),
+            details: text("rh-related-seed-details"),
+            yearFrom: [yearFrom.value, yearFrom.label],
+            yearTo: [yearTo.value, yearTo.label],
+            prose: text("rh-state-initial-prose"),
+            includeBoxes: Array.from(
+              doc.querySelectorAll("#rh-related-include checkbox"),
+            ).map((box) => (box as Element).getAttribute("label")),
+          };
+          log(`[P5-T15] related window ${JSON.stringify(shown)}`);
+          assert.strictEqual(shown.title, "Research Helper — Related Papers");
+          assert.strictEqual(shown.chipHidden, false);
+          assert.include(shown.chip, "Related to: ");
+          assert.include(
+            shown.chip,
+            "…",
+            "the chip's copy of a long title is cut",
+          );
+          assert.include(shown.authors, "Lovelace");
+          assert.include(shown.details, "P5-T15 Journal");
+          assert.include(shown.details, "2021");
+          assert.include(shown.details, "10.1000/p5t15");
+          assert.deepEqual(shown.yearFrom, ["any", "Any"]);
+          assert.deepEqual(shown.yearTo, ["any", "Any"]);
+          assert.deepEqual(shown.includeBoxes, [
+            "References",
+            "Citations",
+            "Recommended",
+            "Similar articles (PubMed)",
+          ]);
+          assert.strictEqual(
+            shown.prose,
+            "Papers related to this item will be listed here.",
+          );
+          for (const id of [
+            "rh-search-keyword",
+            "rh-search-run",
+            "rh-search-max-results",
+            "rh-search-databases-group",
+            "rh-search-screening-row",
+          ]) {
+            assert.isTrue(hiddenById(id), `#${id} has no meaning for a seed`);
+          }
+          assert.isFalse(
+            hiddenById("rh-related-header"),
+            "the header is shown",
+          );
+          assert.isFalse(hiddenById("rh-related-seed-title"));
+          assert.isTrue(hiddenById("rh-related-seed-missing"));
+
+          const query = openWindow().RHSearchWindow?.collectQuery();
+          assert.deepEqual(query?.related, {
+            seedItemID: seed.id,
+            relations: ["reference", "citation", "recommendation", "similar"],
+          });
+          assert.isTrue(Number.isNaN(query?.fromYear), "Any reads as no bound");
+
+          // A second seed lands in the one window: Gecko reloads it by name.
+          const opener = instance.api.relatedWindow;
+          if (!opener) {
+            assert.fail("registerUI() published no api.relatedWindow");
+          }
+          opener.open(main, other.id);
+          await shownSeed("P5-T15 the other seed");
+          assert.strictEqual(searchWindows().length, 1, "still one window");
+          log("[P5-T15] measured: a second seed reloads the one window");
+
+          // A seed that is not a readable regular item: the missing line.
+          opener.open(main, note.id);
+          await waitUntil(
+            () =>
+              searchWindows().length === 1 &&
+              openWindow().RHSearchWindow?.io.seedItemID === note.id &&
+              text("rh-related-seed-missing").length > 0 &&
+              !isHidden(
+                openWindow().document.getElementById(
+                  "rh-related-seed-missing",
+                ) as Element,
+              ),
+            "the missing line for a seed that cannot be read",
+          );
+          assert.include(
+            text("rh-related-seed-missing"),
+            "This item could not be read.",
+          );
+        } finally {
+          await closeSearchWindows();
+          await seed.eraseTx();
+          await other.eraseTx();
+          await note.eraseTx();
+        }
+      });
+    } finally {
+      await restoreUILocale(locale, log);
     }
   });
 });

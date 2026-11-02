@@ -99,6 +99,7 @@ const DOCS12_SCHEMAS = [
   { file: "theme-analysis.v1.json", id: "CLUSTER_REDUCE" },
   { file: "self-critique.v1.json", id: "SELF_CRITIQUE" },
   { file: "theme-merge.v1.json", id: "THEME_MERGE" },
+  { file: "collection-profile.v1.json", id: "COLLECTION_PROFILE" },
 ] as const;
 
 /** The fenced `text` block following `heading` inside a docs/12 section. */
@@ -205,6 +206,7 @@ describe("the shipped prompt files", () => {
       SELF_CRITIQUE: "1.0.0",
       THEME_MERGE: "1.0.0",
       CLUSTER_REDUCE_MERGE: "1.0.0",
+      COLLECTION_PROFILE: "1.0.0",
     });
     for (const id of PROMPT_IDS) {
       expect(registry.get(id).id).toBe(id);
@@ -276,6 +278,7 @@ describe("the shipped prompt files", () => {
       SELF_CRITIQUE: [0, 2500, "json", null],
       THEME_MERGE: [0.2, 4000, "json", null],
       CLUSTER_REDUCE_MERGE: [0.3, 3000, "json", null],
+      COLLECTION_PROFILE: [0.2, 2500, "json", null],
     };
     for (const id of PROMPT_IDS) {
       const t = registry.get(id);
@@ -359,6 +362,7 @@ describe("the shipped prompt files", () => {
       THEME_MERGE: "theme-merge.v1.json",
       // docs/12 §21: no schema of its own.
       CLUSTER_REDUCE_MERGE: "theme-analysis.v1.json",
+      COLLECTION_PROFILE: "collection-profile.v1.json",
     };
     for (const id of PROMPT_IDS) {
       const file = expected[id];

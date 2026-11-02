@@ -199,6 +199,11 @@ const EN = {
   // Coordinator, plan/00 §6 item 317(c): critique.ts's critique_text_unchecked.
   critiqueTextUnchecked:
     "Some paragraphs were not checked by the automated review, because the summaries they cite were too long to send in one review request.",
+  // Owner's option 1 on FINDING P4-T22-2, docs/06 §8.4's note of 2026-11-02.
+  fitOutputLowered:
+    "The report model's limits left {output} output tokens for this report, so it was asked for {words} words.",
+  fitAnalysesShortened:
+    "To fit the report model's context window, the theme analyses were sent without the details behind sections {sections}, so those sections may say less than the analyses found.",
   mixedModels: "The summaries were made by more than one model: {models}.",
   mixedModelCache:
     "Some summaries were reused from a cache entry another model made.",
@@ -437,9 +442,12 @@ export const KO_REPORT_LABELS: Readonly<
  */
 export const KO_REPORT_LABELS_PENDING_REVIEW: readonly ReportLabelKey[] =
   Object.freeze(
-    // Empty since 2026-11-01: `critiqueTextUnchecked`, added after item 319's
-    // review, was approved by the owner (G-41, plan/00 §6 item 324(c)).
-    [] as const satisfies readonly ReportLabelKey[],
+    // Added 2026-11-02 for FINDING P4-T22-2's fix; the Korean drafts are in
+    // plan/reports/P4-T22-fix2.md, awaiting the owner.
+    [
+      "fitOutputLowered",
+      "fitAnalysesShortened",
+    ] as const satisfies readonly ReportLabelKey[],
   );
 
 // ---------------------------------------------------------------------------

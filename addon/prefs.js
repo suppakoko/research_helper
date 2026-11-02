@@ -34,7 +34,8 @@
 // gives no line (report.targetWords, report.maxCritiqueRounds,
 // report.critiqueModel, report.saveNote), nor the three Phase 5 rows §7.2 gives
 // no line (related.linkToSeed, related.enabled, recommend.enabled; P5-T02,
-// 2026-11-02). The four Phase 1 rows below that
+// 2026-11-02), nor report.pausedNoticeShown (P4-T21, 2026-11-02, never shown to
+// the user). The four Phase 1 rows below that
 // §7.2 does not list (logRequestBodies, prefsSchemaVersion, secretBackend,
 // ncbi.keyPresent) are listed anyway because a setting the user cannot find in
 // about:config is a setting they cannot audit.
