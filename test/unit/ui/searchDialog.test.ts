@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { config } from "../../../package.json";
 import { createMemoryPrefStore } from "../../../src/core/config";
@@ -406,6 +406,7 @@ interface ControllerLogic {
   // P1-T21's half.
   columns: { id: string; messageId: string; captioned: boolean }[];
   authorName: (author: unknown) => string;
+  fluentText: (text: unknown) => string;
   authorSummary: (
     authors: unknown[],
     shown: number,
@@ -441,6 +442,10 @@ interface ControllerLogic {
   // P1-T45's half.
   exportAvailable: (state: unknown) => boolean;
   exportFileName: (nowEpochMs: number) => string;
+
+  // P5-T16's half.
+  matchesRelatedFilter: (row: unknown, view: unknown) => boolean;
+  dotsText: (dots?: number) => string;
 }
 
 interface Controller {
@@ -460,6 +465,8 @@ interface Controller {
     // P1-T45. Neither ever holds the chosen path; see the card's security note.
     exportAvailable: boolean;
     exportMessage: string | null;
+    // P5-T16: the title-match list's choice.
+    relatedPick: string | null;
   };
   host: Record<string, unknown>;
   io: Record<string, unknown>;
@@ -494,6 +501,11 @@ interface Controller {
   // P1-T44: the Open Preferences action now has a target.
   preferencesPaneId: string;
   openPreferences: () => void;
+  // P5-T16.
+  runRelated: () => Promise<void> | undefined;
+  cancel: () => void;
+  disconnectHost: () => void;
+  import: () => void;
   [key: string]: unknown;
 }
 
@@ -1275,9 +1287,19 @@ describe("searchDialog.xhtml follows docs/08 §4.1.1", () => {
       "rh-search-screening-row",
       "rh-results-area",
       "rh-search-target-row",
+      // P5-T17: hidden outside the related mode (docs/08 §5.2).
+      "rh-related-link-seed",
       "rh-search-duplicates-group",
       "rh-search-status-bar",
     ]);
+  });
+
+  it("words the link box from the bundle, and starts it hidden (P5-T17)", () => {
+    const box = byId("rh-related-link-seed");
+    expect(box?.attrs.get("data-l10n-id")).toBe(
+      "research-helper-search-related-link-to-seed",
+    );
+    expect(box?.attrs.get("hidden")).toBe("true");
   });
 
   it("labels every input and every groupbox (docs/08 §9)", () => {
@@ -1542,6 +1564,38 @@ function fortyResults(existingAt: readonly number[] = []): TableRecord[] {
     existingAt.includes(n) ? record(n, { existing: true }) : record(n),
   );
 }
+
+describe("fluentText: a source's text in a Fluent argument (plan/00 item 347(d))", () => {
+  const logic = harness().controller.logic;
+  it("escapes what makes DOMLocalization parse, and nothing else", () => {
+    expect(logic.fluentText("<img src=x onerror=y>")).toBe(
+      "&lt;img src=x onerror=y>",
+    );
+    expect(logic.fluentText('<a href="https://example.invalid">x</a>')).toBe(
+      '&lt;a href="https://example.invalid">x&lt;/a>',
+    );
+    expect(logic.fluentText("<em>x</em>")).toBe("&lt;em>x&lt;/em>");
+    expect(logic.fluentText("A &amp; B")).toBe("A &amp;amp; B");
+    expect(logic.fluentText("p < 0.05 & q > 1")).toBe(
+      "p &lt; 0.05 &amp; q > 1",
+    );
+    expect(logic.fluentText('A plain title: 50% ("quoted")')).toBe(
+      'A plain title: 50% ("quoted")',
+    );
+  });
+
+  it("is safe on what a row can hold", () => {
+    expect(logic.fluentText(undefined)).toBe("");
+    expect(logic.fluentText(null)).toBe("");
+    expect(logic.fluentText("")).toBe("");
+  });
+
+  it("goes round every argument the window draws as text from a source", () => {
+    expect(SCRIPT).toContain("title: this.logic.fluentText(row.title)");
+    expect(SCRIPT).toContain("names: this.logic.fluentText(row.authorNames)");
+    expect(SCRIPT).toContain("names: this.logic.fluentText(summary.names)");
+  });
+});
 
 describe("P1-T21 — the result table's pure model", () => {
   const { controller } = harness();
@@ -4159,6 +4213,1088 @@ describe('P5-T15 — the window opened with mode: "related"', () => {
         "any",
       );
     }
+  });
+});
+
+// ===========================================================================
+// P5-T16 — related results (docs/08 §5.2's note of 2026-11-05)
+//
+// A fake `host.related` publishes hand-written states, so this block says what the
+// document does with a state. `test/unit/ui/relatedViewModel.test.ts` is the other
+// half.
+// ===========================================================================
+
+describe("P5-T16 — related results in the window", () => {
+  const flush = (): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, 0));
+
+  const ref = (id: string, args?: Record<string, unknown>) => ({ id, args });
+  const CHIP_CITED = ref("research-helper-search-related-chip-cited-by-seed");
+
+  /** A related row as the view model publishes it. */
+  const record = (n: number, extra: Record<string, unknown> = {}) => ({
+    key: `key-${String(n)}`,
+    title: `Paper ${String(n)}`,
+    authors: [{ family: `Author${String(n)}` }],
+    year: 2020 + n,
+    sourceLabels: [],
+    typeLabel: "",
+    doi: "",
+    existing: false,
+    startsTicked: true,
+    related: {
+      kinds: ["reference"],
+      chips: [{ ref: CHIP_CITED }],
+      dots: 3,
+      scoreRef: ref("research-helper-search-related-score", { dots: 3 }),
+      outsideWindow: false,
+    },
+    ...extra,
+  });
+
+  const LABELS = {
+    reference: ref("research-helper-search-related-include-reference-count", {
+      count: 37,
+    }),
+    citation: ref("research-helper-search-related-include-citation-count", {
+      count: 58,
+    }),
+    recommendation: ref(
+      "research-helper-search-related-include-recommendation-count",
+      { count: 20 },
+    ),
+    similar: ref("research-helper-search-related-include-similar-count", {
+      count: 25,
+    }),
+  };
+
+  /** A whole state, with what the case under test overrides. */
+  const stateOf = (extra: Record<string, unknown> = {}) => ({
+    panel: "results",
+    running: false,
+    sources: [],
+    records: [],
+    recordsRevision: 1,
+    emptyHeadline: undefined,
+    error: undefined,
+    warnings: [],
+    notices: [],
+    status: undefined,
+    databaseProgress: undefined,
+    progressPercent: undefined,
+    cancelVisible: false,
+    screening: undefined,
+    ...extra,
+    related: {
+      candidates: [],
+      keyRequestUrl: undefined,
+      includeLabels: LABELS,
+      ...(extra.related as object | undefined),
+    },
+  });
+
+  /** Open the window in the related mode on a fake related host. */
+  function open(related: Record<string, unknown> = {}) {
+    const views: { render: (state: unknown) => void }[] = [];
+    const calls = {
+      run: [] as unknown[],
+      pick: [] as unknown[],
+      retry: 0,
+      cancel: 0,
+      detach: 0,
+      keywordConnects: 0,
+    };
+    const h = harness({
+      args: { mode: "related", seedItemID: 77 },
+      prefs: { hideExisting: true },
+      host: {
+        listSources: () => [PUBMED, CROSSREF],
+        connect: () => {
+          calls.keywordConnects += 1;
+        },
+        loadRelatedSeed: () => Promise.resolve(undefined),
+        related: {
+          connect: (view: { render: (state: unknown) => void }) => {
+            views.push(view);
+            return () => {
+              calls.detach += 1;
+            };
+          },
+          run: (id: unknown) => {
+            calls.run.push(id);
+            return Promise.resolve();
+          },
+          pick: (key: unknown) => {
+            calls.pick.push(key);
+            return Promise.resolve();
+          },
+          retry: () => {
+            calls.retry += 1;
+            return Promise.resolve();
+          },
+          cancel: () => {
+            calls.cancel += 1;
+          },
+          ...related,
+        },
+      },
+    });
+    h.controller.init();
+    return {
+      h,
+      calls,
+      publish: (state: unknown) => views[0]?.render(state),
+      views,
+    };
+  }
+
+  /** Open the window and draw these rows. */
+  function drawn(records: unknown[], extra: Record<string, unknown> = {}) {
+    const opened = open();
+    opened.publish(stateOf({ records, ...extra }));
+    const body = opened.h.byId("rh-results-body");
+    const rows = body?.children ?? [];
+    return { ...opened, rows };
+  }
+
+  /** The ticks on the drawn rows. */
+  const ticks = (rows: readonly FakeElement[]) =>
+    rows.map((row) => row.children[0]?.children[0]?.checked);
+
+  it("connects the related model, never the keyword one, and starts the run by itself", async () => {
+    const { calls, views } = open();
+    await flush();
+    expect(calls.keywordConnects).toBe(0);
+    expect(views).toHaveLength(1);
+    expect(calls.run).toStrictEqual([77]);
+  });
+
+  it("does nothing with no related host, and stays on the first panel", async () => {
+    const h = harness({
+      args: { mode: "related", seedItemID: 77 },
+      host: {
+        listSources: () => [PUBMED],
+        loadRelatedSeed: () => Promise.resolve(undefined),
+      },
+    });
+    h.controller.init();
+    await flush();
+    expect(h.controller.state.panel).toBe("initial");
+    expect(h.controller.runRelated()).toBeUndefined();
+    h.controller.search();
+    h.controller.cancel();
+    expect(h.controller.state.panel).toBe("initial");
+  });
+
+  it("does not run a related run in another mode", async () => {
+    let runs = 0;
+    const h = harness({
+      args: { mode: "keyword" },
+      host: {
+        listSources: () => [PUBMED],
+        connect: () => undefined,
+        related: {
+          connect: () => {
+            throw new Error("not this one");
+          },
+          run: () => {
+            runs += 1;
+            return Promise.resolve();
+          },
+        },
+      },
+    });
+    h.controller.init();
+    await flush();
+    expect(runs).toBe(0);
+  });
+
+  it("releases the related model when the window closes", () => {
+    const { h, calls } = open();
+    h.controller.disconnectHost();
+    expect(calls.detach).toBe(1);
+  });
+
+  it("swaps Source, Type and DOI for Relation and Score, in the header", async () => {
+    const { h } = open();
+    for (const id of [
+      "rh-results-col-source",
+      "rh-results-col-type",
+      "rh-results-col-doi",
+    ]) {
+      expect(h.byId(id)?.hidden, id).toBe(true);
+    }
+    const relation = h.byId("rh-results-col-relation");
+    const score = h.byId("rh-results-col-score");
+    expect(relation?.name).toBe("th");
+    expect(relation?.getAttribute("scope")).toBe("col");
+    expect(relation?.className).toBe("rh-col-relation");
+    expect(score?.className).toBe("rh-col-score");
+    await h.controller.applyColumnLabels();
+    expect(relation?.textContent).toBe(
+      "label:research-helper-search-related-col-relation",
+    );
+    expect(score?.textContent).toBe(
+      "label:research-helper-search-related-col-score",
+    );
+  });
+
+  it("leaves every other mode's header as the markup's seven", async () => {
+    const h = harness({ args: { mode: "keyword" } });
+    h.controller.init();
+    await h.controller.applyColumnLabels();
+    expect(h.byId("rh-results-col-relation")).toBeUndefined();
+    expect(h.byId("rh-results-col-source")?.hidden).toBe(false);
+  });
+
+  it("draws chips in the Relation cell and dots in the Score cell, in place of the last three", () => {
+    const { rows } = drawn([
+      record(1, {
+        related: {
+          kinds: ["reference", "citation"],
+          chips: [
+            { ref: ref("research-helper-search-related-chip-cites-seed") },
+            {
+              ref: ref("research-helper-search-related-chip-similar", {
+                value: "0.81",
+              }),
+            },
+          ],
+          dots: 4,
+          scoreRef: ref("research-helper-search-related-score", { dots: 4 }),
+          outsideWindow: false,
+        },
+      }),
+    ]);
+    const cells = rows[0]?.children ?? [];
+    expect(cells.map((cell) => cell.className)).toStrictEqual([
+      "rh-col-select",
+      "rh-col-title",
+      "rh-col-authors",
+      "rh-col-year",
+      "rh-col-relation",
+      "rh-col-score",
+    ]);
+    const chips = cells[4]?.children ?? [];
+    expect(
+      chips.map((chip) => chip.getAttribute("data-l10n-id")),
+    ).toStrictEqual([
+      "research-helper-search-related-chip-cites-seed",
+      "research-helper-search-related-chip-similar",
+    ]);
+    expect(chips[0]?.className).toBe("rh-source-line");
+    expect(chips[0]?.getAttribute("data-l10n-args")).toBeNull();
+    expect(chips[1]?.getAttribute("data-l10n-args")).toBe('{"value":"0.81"}');
+
+    const dots = cells[5]?.children[0];
+    expect(dots?.textContent).toBe("\u25cf\u25cf\u25cf\u25cf\u25cb");
+    expect(dots?.getAttribute("role")).toBe("img");
+    expect(dots?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-related-score",
+    );
+    expect(dots?.getAttribute("data-l10n-args")).toBe('{"dots":4}');
+  });
+
+  it("draws no dots for a row with no reason to show", () => {
+    const { rows } = drawn([
+      record(1, {
+        related: {
+          kinds: ["reference"],
+          chips: [],
+          dots: 0,
+          scoreRef: undefined,
+          outsideWindow: false,
+        },
+      }),
+    ]);
+    expect(rows[0]?.children[5]?.children).toHaveLength(0);
+    expect(rows[0]?.children[5]?.textContent).toBe("");
+  });
+
+  it("writes a citation context as plain text, never as a message argument or as markup", () => {
+    const context = 'as shown <img src="x" onerror="alert(1)"> &amp; here';
+    const { rows } = drawn([
+      record(1, {
+        related: {
+          kinds: ["citation"],
+          chips: [
+            {
+              ref: ref("research-helper-search-related-chip-context-label"),
+              text: context,
+            },
+          ],
+          dots: 1,
+          scoreRef: ref("research-helper-search-related-score", { dots: 1 }),
+          outsideWindow: false,
+        },
+      }),
+    ]);
+    const line = rows[0]?.children[4]?.children[0];
+    expect(line?.className).toBe("rh-related-context");
+    const [label, text] = line?.children ?? [];
+    // The label is a message with no argument at all.
+    expect(label?.className).toBe("rh-related-context-label");
+    expect(label?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-related-chip-context-label",
+    );
+    expect(label?.getAttribute("data-l10n-args")).toBeNull();
+    // The words are plain text: no message, no argument, no child element.
+    expect(text?.textContent).toBe(context);
+    expect(text?.children).toHaveLength(0);
+    expect(text?.getAttribute("data-l10n-id")).toBeNull();
+    expect(text?.getAttribute("data-l10n-args")).toBeNull();
+    // And the whole of it in the tooltip, as an attribute's value.
+    expect(line?.getAttribute("title")).toBe(context);
+    expect(line?.getAttribute("data-l10n-args")).toBeNull();
+  });
+
+  it("starts each row's tick from startsTicked", () => {
+    const { rows, h } = drawn([
+      record(1),
+      record(2, { startsTicked: false, existing: true }),
+      record(3, { startsTicked: false }),
+    ]);
+    expect(ticks(rows)).toStrictEqual([true, false, false]);
+    expect(h.controller.state.selection).toStrictEqual(["key-1"]);
+  });
+
+  it("marks a library row with the same words as a keyword search's", () => {
+    const { rows } = drawn([
+      record(1, { startsTicked: false, existing: true }),
+    ]);
+    expect(rows[0]?.className).toContain("rh-row-existing");
+    const title = rows[0]?.children[1];
+    expect(title?.children[1]?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-row-existing",
+    );
+  });
+
+  it("greys an out-of-window row and leaves every other row alone", () => {
+    const { rows } = drawn([
+      record(1),
+      record(2, {
+        startsTicked: false,
+        related: {
+          kinds: ["reference"],
+          chips: [
+            { ref: CHIP_CITED },
+            { ref: ref("research-helper-search-related-chip-outside-window") },
+          ],
+          dots: 1,
+          scoreRef: ref("research-helper-search-related-score", { dots: 1 }),
+          outsideWindow: true,
+        },
+      }),
+    ]);
+    expect(rows[0]?.className).not.toContain("rh-row-outside-window");
+    expect(rows[1]?.className).toContain("rh-row-outside-window");
+    // In words as well as in grey (NFR-13).
+    expect(
+      rows[1]?.children[4]?.children[1]?.getAttribute("data-l10n-id"),
+    ).toBe("research-helper-search-related-chip-outside-window");
+  });
+
+  it("starts the hide-existing box off, whatever the preference says, and writes nothing", () => {
+    const { rows, h } = drawn([record(1, { existing: true })]);
+    expect(h.byId("rh-search-hide-existing")?.checked).toBe(false);
+    expect(rows).toHaveLength(1);
+    const hide = h.byId("rh-search-hide-existing");
+    if (hide) hide.checked = true;
+    expect(h.controller.applyFilter().total).toBe(0);
+  });
+
+  describe("P5-T17 — importing from the window", () => {
+    /** The window with rows drawn and a recording import. */
+    function importing(records: unknown[] = [record(1), record(2)]) {
+      const asked: unknown[] = [];
+      const keyword: unknown[] = [];
+      const opened = open({
+        importRows: (request: unknown) => {
+          asked.push(request);
+          return Promise.resolve();
+        },
+      });
+      (opened.h.controller.host as Record<string, unknown>).runImport = (
+        request: unknown,
+      ) => keyword.push(request);
+      opened.publish(stateOf({ records }));
+      return { ...opened, asked, keyword };
+    }
+    const target = (h: Harness, value: string) => {
+      const list = h.byId("rh-search-target");
+      if (list) list.value = value;
+    };
+
+    it("turns the button on once a row is ticked, and off with none", () => {
+      const { h } = importing();
+      expect(h.controller.state.selectedCount).toBe(2);
+      expect(h.controller.refreshImportGate()).toBe(true);
+      expect(
+        h.byId("rh-search-dialog")?.getAttribute("buttondisabledaccept"),
+      ).toBe("false");
+      const none = importing([record(1, { startsTicked: false })]);
+      expect(none.h.controller.refreshImportGate()).toBe(false);
+      none.h.controller.import();
+      expect(none.asked).toStrictEqual([]);
+    });
+
+    it("hands the model the ticked rows by key, the picker and the box, never the keyword road", () => {
+      const { h, asked, keyword } = importing([
+        record(1),
+        record(2, { startsTicked: false }),
+        record(3),
+      ]);
+      target(h, "new:Target");
+      const box = h.byId("rh-related-link-seed");
+      if (box) box.checked = true;
+      h.controller.import();
+      expect(asked).toStrictEqual([
+        {
+          keys: ["key-1", "key-3"],
+          collectionID: "new:Target",
+          linkToSeed: true,
+        },
+      ]);
+      expect(keyword).toStrictEqual([]);
+    });
+
+    it("reads the box as it is now", () => {
+      const { h, asked } = importing();
+      target(h, "12");
+      const box = h.byId("rh-related-link-seed");
+      if (box) box.checked = false;
+      h.controller.import();
+      expect(asked).toStrictEqual([
+        { keys: ["key-1", "key-2"], collectionID: "12", linkToSeed: false },
+      ]);
+    });
+
+    it("takes only the visible rows", () => {
+      const { h, asked } = importing([
+        record(1, {
+          related: { ...record(1).related, kinds: ["reference"] },
+        }),
+        record(2, {
+          related: { ...record(2).related, kinds: ["citation"] },
+        }),
+      ]);
+      const include = h.byId("rh-related-include-citation");
+      if (include) include.checked = false;
+      h.controller.applyFilter();
+      target(h, "12");
+      h.controller.import();
+      expect((asked[0] as { keys: string[] }).keys).toStrictEqual(["key-1"]);
+    });
+
+    it("imports on Enter, as the button does", () => {
+      const { h, asked } = importing();
+      target(h, "12");
+      h.doc.dispatch("dialogaccept", { preventDefault: () => undefined });
+      expect(asked).toHaveLength(1);
+    });
+
+    it("reaches no import with no related host", () => {
+      const { h, publish } = open({});
+      publish(stateOf({ records: [record(1)] }));
+      delete (h.controller.host as Record<string, unknown>).related;
+      expect(() => {
+        h.controller.import();
+      }).not.toThrow();
+    });
+
+    it("offers no Export after a related import, whose summary is in the notices", () => {
+      const { h, publish } = importing();
+      publish(
+        stateOf({
+          records: [record(1)],
+          notices: [ref("research-helper-import-summary")],
+        }),
+      );
+      expect(h.byId("rh-search-export")?.hidden).toBe(true);
+      expect(h.controller.state.exportAvailable).toBe(false);
+    });
+
+    it("hides the radios and keeps the sentence about a preprint", () => {
+      const { h } = importing();
+      expect(h.byId("rh-search-duplicates")?.hidden).toBe(true);
+      expect(h.byId("rh-search-duplicates-label")?.hidden).toBe(true);
+      expect(h.byId("rh-search-preprint-policy")?.hidden).not.toBe(true);
+    });
+
+    it("starts the box from the preference and writes nothing back", () => {
+      const seen = (value: boolean) => {
+        let reads = 0;
+        const { h } = (() => {
+          const made = open({
+            linkToSeedDefault: () => {
+              reads += 1;
+              return value;
+            },
+          });
+          return made;
+        })();
+        return { h, reads };
+      };
+      const on = seen(true);
+      expect(on.h.byId("rh-related-link-seed")?.hidden).toBe(false);
+      expect(on.h.byId("rh-related-link-seed")?.checked).toBe(true);
+      expect(on.reads).toBe(1);
+      const off = seen(false);
+      expect(off.h.byId("rh-related-link-seed")?.checked).toBe(false);
+      expect(off.h.byId("rh-related-link-seed")?.hidden).toBe(false);
+    });
+
+    it("leaves the box unticked with no related host to ask", () => {
+      const h = harness({
+        args: { mode: "related", seedItemID: 77 },
+        host: { listSources: () => [PUBMED] },
+      });
+      h.controller.init();
+      expect(h.byId("rh-related-link-seed")?.checked).toBe(false);
+    });
+
+    it("keeps the box hidden and the radios on in the keyword window", () => {
+      const h = harness({ host: { listSources: () => [PUBMED] } });
+      h.controller.init();
+      expect(h.byId("rh-related-link-seed")?.hidden).toBe(true);
+      expect(h.byId("rh-search-duplicates")?.hidden).not.toBe(true);
+    });
+
+    describe("the default target", () => {
+      const SEED = { title: "A seed", authors: [] };
+      async function opened(
+        seed: unknown,
+        options: Parameters<typeof harness>[0] = {},
+      ) {
+        const asked: unknown[] = [];
+        const h = harness({
+          args: { mode: "related", seedItemID: 77 },
+          formatMessages: (requests) => {
+            asked.push(...requests);
+            return Promise.resolve(
+              requests.map((request) => ({
+                value:
+                  request.id === "research-helper-search-related-target-default"
+                    ? "Related to “\u2068A seed\u2069”"
+                    : `value:${request.id}`,
+                attributes: [],
+              })),
+            );
+          },
+          ...options,
+          host: {
+            listSources: () => [PUBMED],
+            loadRelatedSeed: () => Promise.resolve(seed),
+          },
+        });
+        h.controller.init();
+        await flush();
+        await flush();
+        return { h, asked };
+      }
+
+      it("names a new collection after the seed, without Fluent's isolation marks", async () => {
+        const { h, asked } = await opened(SEED);
+        expect(h.byId("rh-search-target")?.value).toBe(
+          "new:Related to “A seed”",
+        );
+        expect(asked).toContainEqual({
+          id: "research-helper-search-related-target-default",
+          args: { title: "A seed" },
+        });
+      });
+
+      it("cuts a long title as the chip cuts it", async () => {
+        const long = "t".repeat(90);
+        const { asked } = await opened({ ...SEED, title: long });
+        const request = (
+          asked as { id: string; args?: { title: string } }[]
+        ).find(
+          (one) => one.id === "research-helper-search-related-target-default",
+        );
+        expect(request?.args?.title).toBe(`${"t".repeat(60)}…`);
+      });
+
+      it("stays on bare New collection with no seed to name it after", async () => {
+        const { h } = await opened(undefined);
+        expect(h.byId("rh-search-target")?.value).toBe("new");
+      });
+
+      it("stays on bare New collection for a seed with no title", async () => {
+        const { h, asked } = await opened({ ...SEED, title: "" });
+        expect(h.byId("rh-search-target")?.value).toBe("new");
+        expect(asked).not.toContainEqual(
+          expect.objectContaining({
+            id: "research-helper-search-related-target-default",
+          }),
+        );
+      });
+
+      it("leaves a collection already chosen alone", async () => {
+        let answer: (value: unknown) => void = () => undefined;
+        const h = harness({
+          args: { mode: "related", seedItemID: 77 },
+          host: {
+            listSources: () => [PUBMED],
+            loadRelatedSeed: () =>
+              new Promise((resolve) => {
+                answer = resolve;
+              }),
+          },
+        });
+        h.controller.init();
+        const list = h.byId("rh-search-target");
+        if (list) list.value = "12";
+        answer(SEED);
+        await flush();
+        await flush();
+        expect(list?.value).toBe("12");
+      });
+
+      it("leaves a name the user gave while the bundle was answering alone", async () => {
+        let word: (value: FakeL10nMessage[]) => void = () => undefined;
+        const h = harness({
+          args: { mode: "related", seedItemID: 77 },
+          formatMessages: (requests) =>
+            requests.some(
+              (one) =>
+                one.id === "research-helper-search-related-target-default",
+            )
+              ? new Promise<readonly FakeL10nMessage[]>((resolve) => {
+                  word = resolve;
+                })
+              : Promise.resolve(
+                  requests.map(() => ({ value: "x", attributes: [] })),
+                ),
+          host: {
+            listSources: () => [PUBMED],
+            loadRelatedSeed: () => Promise.resolve(SEED),
+          },
+        });
+        h.controller.init();
+        await flush();
+        await flush();
+        const list = h.byId("rh-search-target");
+        if (list) list.value = "new:Mine";
+        word([{ value: "Related to “A seed”", attributes: [] }]);
+        await flush();
+        expect(list?.value).toBe("new:Mine");
+      });
+    });
+  });
+
+  describe("the Include boxes and the year lists filter the rows already fetched", () => {
+    const FOUR = () => [
+      record(1, {
+        year: 2010,
+        related: { ...record(1).related, kinds: ["reference"] },
+      }),
+      record(2, {
+        year: 2020,
+        related: { ...record(2).related, kinds: ["citation", "similar"] },
+      }),
+      record(3, {
+        year: 2024,
+        related: { ...record(3).related, kinds: ["recommendation"] },
+      }),
+      (() => {
+        const { year: _year, ...undated } = record(4, {
+          related: { ...record(4).related, kinds: ["similar"] },
+        });
+        return undated;
+      })(),
+    ];
+    const shown = (h: Harness) =>
+      h.controller.state.visible.map((row: { key: string }) => row.key);
+
+    it("shows every row with all boxes ticked and both lists on Any", () => {
+      const { h } = drawn(FOUR());
+      expect(shown(h)).toHaveLength(4);
+    });
+
+    it("hides a row only when none of its kinds is ticked, and runs nothing", async () => {
+      const { h, calls } = drawn(FOUR());
+      await flush();
+      const box = h.byId("rh-related-include-citation");
+      if (!box) throw new Error("no box");
+      box.checked = false;
+      box.dispatch("command");
+      expect(shown(h)).toStrictEqual(["key-1", "key-2", "key-3", "key-4"]);
+      const similar = h.byId("rh-related-include-similar");
+      if (!similar) throw new Error("no box");
+      similar.checked = false;
+      similar.dispatch("command");
+      expect(shown(h)).toStrictEqual(["key-1", "key-3"]);
+      expect(calls.run).toHaveLength(1);
+      expect(calls.retry).toBe(0);
+    });
+
+    it("binds all four boxes", () => {
+      const { h } = drawn(FOUR());
+      for (const [id, key] of [
+        ["rh-related-include-reference", "key-1"],
+        ["rh-related-include-recommendation", "key-3"],
+      ] as const) {
+        const box = h.byId(id);
+        if (!box) throw new Error(id);
+        box.checked = false;
+        box.dispatch("command");
+        expect(shown(h)).not.toContain(key);
+      }
+    });
+
+    it("keeps a filtered row's tick", () => {
+      const { h } = drawn(FOUR());
+      const box = h.byId("rh-related-include-reference");
+      if (!box) throw new Error("no box");
+      box.checked = false;
+      box.dispatch("command");
+      expect(h.controller.state.selection).toContain("key-1");
+      box.checked = true;
+      box.dispatch("command");
+      expect(shown(h)).toContain("key-1");
+    });
+
+    it("applies a year bound to a row with a year, and keeps an undated row", () => {
+      const { h } = drawn(FOUR());
+      const from = h.byId("rh-search-years-from");
+      const to = h.byId("rh-search-years-to");
+      if (!from || !to) throw new Error("no lists");
+      from.value = "2015";
+      from.dispatch("command");
+      expect(shown(h)).toStrictEqual(["key-2", "key-3", "key-4"]);
+      to.value = "2020";
+      to.dispatch("command");
+      expect(shown(h)).toStrictEqual(["key-2", "key-4"]);
+      from.value = "any";
+      from.dispatch("command");
+      expect(shown(h)).toStrictEqual(["key-1", "key-2", "key-4"]);
+      to.value = "any";
+      to.dispatch("command");
+      expect(shown(h)).toHaveLength(4);
+    });
+
+    it("includes a row exactly on either bound", () => {
+      const { h } = drawn(FOUR());
+      const from = h.byId("rh-search-years-from");
+      const to = h.byId("rh-search-years-to");
+      if (!from || !to) throw new Error("no lists");
+      from.value = "2020";
+      to.value = "2020";
+      from.dispatch("command");
+      expect(shown(h)).toContain("key-2");
+    });
+
+    it("leaves a row of another mode alone", () => {
+      const { controller } = harness();
+      const logic = controller.logic;
+      expect(
+        logic.matchesRelatedFilter(
+          { year: "2020" },
+          { relations: [], fromYear: 2030, toYear: 2031 },
+        ),
+      ).toBe(true);
+      expect(
+        logic.matchesRelatedFilter(
+          { year: "2020", related: { kinds: [] } },
+          {},
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("labels the Include boxes from the state, id and count together", () => {
+    const { h, publish } = open();
+    publish(stateOf({ records: [] }));
+    const expected = {
+      "rh-related-include-reference": LABELS.reference,
+      "rh-related-include-citation": LABELS.citation,
+      "rh-related-include-recommendation": LABELS.recommendation,
+      "rh-related-include-similar": LABELS.similar,
+    };
+    for (const [id, label] of Object.entries(expected)) {
+      const box = h.byId(id);
+      expect(box?.getAttribute("data-l10n-id"), id).toBe(label.id);
+      expect(box?.getAttribute("data-l10n-args"), id).toBe(
+        JSON.stringify(label.args),
+      );
+    }
+  });
+
+  it("goes back to the bare labels with no stale count", () => {
+    const { h, publish } = open();
+    publish(stateOf());
+    publish(
+      stateOf({
+        related: {
+          includeLabels: {
+            ...LABELS,
+            reference: ref("research-helper-search-related-include-reference"),
+          },
+        },
+      }),
+    );
+    const box = h.byId("rh-related-include-reference");
+    expect(box?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-related-include-reference",
+    );
+    expect(box?.getAttribute("data-l10n-args")).toBeNull();
+  });
+
+  it("does not touch the Include boxes in a state with no related part", () => {
+    const { h, publish } = open();
+    const box = h.byId("rh-related-include-reference");
+    const before = box?.getAttribute("data-l10n-id");
+    publish({ panel: "initial", sources: [], warnings: [], notices: [] });
+    expect(box?.getAttribute("data-l10n-id")).toBe(before);
+  });
+
+  describe("the run's key notice", () => {
+    it("is hidden until the run says so, with no address in it", () => {
+      const { h, publish } = open();
+      publish(stateOf());
+      expect(h.byId("rh-related-key-notice")?.hidden).toBe(true);
+      expect(h.byId("rh-related-key-request")?.getAttribute("href")).toBeNull();
+    });
+
+    it("shows the link the run gave, and opens it outside the window", () => {
+      const { h, publish } = open();
+      publish(stateOf({ related: { keyRequestUrl: "https://example.org/k" } }));
+      expect(h.byId("rh-related-key-notice")?.hidden).toBe(false);
+      const link = h.byId("rh-related-key-request");
+      expect(link?.getAttribute("href")).toBe("https://example.org/k");
+      const prevented = vi.fn();
+      link?.dispatch("click", { preventDefault: prevented });
+      expect(prevented).toHaveBeenCalledOnce();
+      expect(h.launched).toStrictEqual(["https://example.org/k"]);
+    });
+
+    it("hides again when a later run had a key", () => {
+      const { h, publish } = open();
+      publish(stateOf({ related: { keyRequestUrl: "https://example.org/k" } }));
+      publish(stateOf());
+      expect(h.byId("rh-related-key-notice")?.hidden).toBe(true);
+      expect(h.byId("rh-related-key-request")?.getAttribute("href")).toBeNull();
+    });
+  });
+
+  describe("per-list status rows", () => {
+    const LINES = [
+      {
+        sourceId: "s2-citations",
+        nameId: "research-helper-search-related-generator-s2-citations",
+        outcome: "succeeded",
+        detail: ref("research-helper-search-related-source-no-key"),
+      },
+      {
+        sourceId: "pmra",
+        nameId: "research-helper-search-related-generator-pmra",
+        outcome: "failed",
+        detail: ref("research-helper-search-related-source-failed", {
+          code: "PARSE",
+        }),
+      },
+    ];
+
+    it("draws one row per list in the header, not in the hidden panel", () => {
+      const { h, publish } = open();
+      expect(h.byId("rh-related-status")?.hidden).toBe(true);
+      publish(stateOf({ sources: LINES }));
+      const host = h.byId("rh-related-status");
+      expect(host?.hidden).toBe(false);
+      expect(host?.children.map((row) => row.id)).toStrictEqual([
+        "rh-related-status-s2-citations",
+        "rh-related-status-pmra",
+      ]);
+      expect(host?.children[0]?.children[0]?.getAttribute("data-l10n-id")).toBe(
+        LINES[0]?.nameId,
+      );
+      expect(host?.children[1]?.children[1]?.className).toBe(
+        "rh-inline-warning",
+      );
+      expect(h.byId("rh-search-source-status")?.children).toHaveLength(0);
+    });
+
+    it("clears them for a new run", () => {
+      const { h, publish } = open();
+      publish(stateOf({ sources: LINES }));
+      publish(stateOf({ sources: [] }));
+      expect(h.byId("rh-related-status")?.hidden).toBe(true);
+      expect(h.byId("rh-related-status")?.children).toHaveLength(0);
+    });
+  });
+
+  it("hides the keyword panel's advice, and shows its own empty line", () => {
+    const { h, publish } = open();
+    expect(h.byId("rh-state-empty-suggestions")?.hidden).toBe(true);
+    publish(
+      stateOf({
+        panel: "empty",
+        emptyHeadline: ref("research-helper-search-related-state-empty"),
+      }),
+    );
+    expect(h.controller.state.panel).toBe("empty");
+    expect(
+      h.byId("rh-state-empty-headline")?.getAttribute("data-l10n-id"),
+    ).toBe("research-helper-search-related-state-empty");
+  });
+
+  it("keeps the keyword panel's advice in every other mode", () => {
+    const h = harness({ args: { mode: "keyword" } });
+    h.controller.init();
+    expect(h.byId("rh-state-empty-suggestions")?.hidden).toBe(false);
+  });
+
+  it("shows no export control for a related run", () => {
+    const { h, publish } = open();
+    publish(stateOf({ records: [record(1)] }));
+    expect(h.byId("rh-search-export")?.hidden).toBe(true);
+  });
+
+  describe("Retry and Cancel", () => {
+    it("Retry repeats the related run and never a keyword search", () => {
+      const searches: unknown[] = [];
+      const { h, calls, publish } = open();
+      (h.controller.host as Record<string, unknown>).runSearch = (
+        q: unknown,
+      ) => {
+        searches.push(q);
+        return Promise.resolve();
+      };
+      publish(
+        stateOf({
+          panel: "error",
+          error: {
+            headline: ref("research-helper-search-state-error"),
+            lines: [],
+            details: [],
+            retry: true,
+            openPreferences: false,
+          },
+        }),
+      );
+      h.byId("rh-state-error-retry")?.dispatch("command");
+      expect(calls.retry).toBe(1);
+      expect(searches).toStrictEqual([]);
+    });
+
+    it("Cancel and the first Escape reach the related model", () => {
+      const { h, calls, publish } = open();
+      publish(stateOf({ running: true, cancelVisible: true }));
+      h.byId("rh-search-cancel")?.dispatch("command");
+      expect(calls.cancel).toBe(1);
+      publish(stateOf({ running: true, cancelVisible: true }));
+      const preventDefault = vi.fn();
+      h.doc.dispatch("dialogcancel", { preventDefault });
+      expect(preventDefault).toHaveBeenCalledOnce();
+      expect(calls.cancel).toBe(2);
+    });
+  });
+
+  describe("FR-14's title-match list", () => {
+    const CANDIDATES = [
+      {
+        key: "key-a",
+        title: "A <b>bold</b> title",
+        authors: [{ family: "Ito" }],
+        venue: "Nature",
+        year: 2021,
+        doi: "10.1/a",
+      },
+      { key: "key-b", title: "Another", authors: [] },
+    ];
+    const asking = () =>
+      stateOf({ panel: "choose", related: { candidates: CANDIDATES } });
+
+    it("shows the panel with nothing chosen and the button off", () => {
+      const { h, publish } = open();
+      publish(asking());
+      expect(h.controller.state.panel).toBe("choose");
+      expect(h.byId("rh-state-related-choose")?.hidden).toBe(false);
+      expect(h.byId("rh-results-container")?.hidden).toBe(true);
+      const list = h.byId("rh-related-picker-list");
+      expect(list?.children).toHaveLength(2);
+      const radio = list?.children[0]?.children[0];
+      expect(radio?.getAttribute("type")).toBe("radio");
+      expect(radio?.getAttribute("value")).toBe("key-a");
+      expect(radio?.checked).toBeFalsy();
+      // One name across the list is what makes the browser keep one choice.
+      expect(radio?.getAttribute("name")).toBe("rh-related-picker-list");
+      expect(list?.children[1]?.children[0]?.getAttribute("name")).toBe(
+        "rh-related-picker-list",
+      );
+      expect(h.byId("rh-related-picker-use")?.disabled).toBe(true);
+    });
+
+    it("draws a candidate's words as data", () => {
+      const { h, publish } = open();
+      publish(asking());
+      const [first, second] = h.byId("rh-related-picker-list")?.children ?? [];
+      const title = first?.children[1];
+      expect(title?.textContent).toBe("A <b>bold</b> title");
+      expect(title?.children).toHaveLength(0);
+      expect(title?.getAttribute("data-l10n-id")).toBeNull();
+      expect(first?.children[2]?.textContent).toBe(
+        "Ito · Nature · 2021 · 10.1/a",
+      );
+      expect(second?.children[2]?.textContent).toBe("");
+    });
+
+    it("sends nothing until one is chosen, then sends that one", () => {
+      const { h, calls, publish } = open();
+      publish(asking());
+      const use = h.byId("rh-related-picker-use");
+      use?.dispatch("command");
+      expect(calls.pick).toStrictEqual([]);
+
+      h.byId("rh-related-picker-list")?.children[1]?.children[0]?.dispatch(
+        "change",
+      );
+      expect(use?.disabled).toBe(false);
+      use?.dispatch("command");
+      expect(calls.pick).toStrictEqual(["key-b"]);
+    });
+
+    it("keeps the choice through a redraw of the same list", () => {
+      const { h, publish } = open();
+      const state = asking();
+      publish(state);
+      const list = h.byId("rh-related-picker-list");
+      const radio = list?.children[0]?.children[0];
+      radio?.dispatch("change");
+      publish(state);
+      expect(list?.children[0]?.children[0]).toBe(radio);
+      expect(h.byId("rh-related-picker-use")?.disabled).toBe(false);
+    });
+
+    it("empties the list and turns the button off when the run moves on", () => {
+      const { h, publish } = open();
+      publish(asking());
+      h.byId("rh-related-picker-list")?.children[0]?.children[0]?.dispatch(
+        "change",
+      );
+      publish(stateOf());
+      expect(h.byId("rh-related-picker-list")?.children).toHaveLength(0);
+      expect(h.byId("rh-related-picker-use")?.disabled).toBe(true);
+      expect(h.controller.state.relatedPick).toBeNull();
+    });
+  });
+
+  it("draws the dots with bounds, for any count the document is given", () => {
+    const { logic } = harness().controller;
+    expect(logic.dotsText(0)).toBe("\u25cb\u25cb\u25cb\u25cb\u25cb");
+    expect(logic.dotsText(5)).toBe("\u25cf\u25cf\u25cf\u25cf\u25cf");
+    expect(logic.dotsText(9)).toBe("\u25cf\u25cf\u25cf\u25cf\u25cf");
+    expect(logic.dotsText(-1)).toBe("\u25cb\u25cb\u25cb\u25cb\u25cb");
+    expect(logic.dotsText(undefined)).toBe("\u25cb\u25cb\u25cb\u25cb\u25cb");
+  });
+
+  it("keeps a keyword row's shape and ticks", () => {
+    const { logic } = harness().controller;
+    const rows = logic.rowsFromRecords([{ key: "k", title: "T" }], 3);
+    expect(rows[0]).not.toHaveProperty("related");
+    expect(rows[0]).not.toHaveProperty("startsTicked");
+    expect(logic.selectionAfterResults(rows)).toStrictEqual(["k"]);
   });
 });
 

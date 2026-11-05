@@ -1420,3 +1420,80 @@ describe("src/i18n/keys.ts — P4-T21's two strings (docs/08 §6.3's notes of 20
     }
   });
 });
+
+/**
+ * `P5-T16`'s related results (`docs/08` §5.2, §5.3). Pending the owner's Korean
+ * (`G-41`), so each is a commented stub in `ko-KR`, on the pending list, and declared
+ * in `en-US`. The list is read back from the bundle's own section, so a string added
+ * there without its keys fails here.
+ */
+describe("P5-T16: the related results' strings", () => {
+  const bundle = (locale: string): string =>
+    readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        `../../../addon/locale/${locale}/research-helper-searchDialog.ftl`,
+      ),
+      "utf8",
+    );
+  const P5_T15_IDS = new Set(
+    [
+      "seed-label",
+      "seed-missing",
+      "include-label",
+      "include-reference",
+      "include-citation",
+      "include-recommendation",
+      "include-similar",
+    ].map((part) => `research-helper-search-related-${part}`),
+  );
+  const ids = bundle("en-US")
+    .split(/\r?\n/)
+    .map(
+      (line) =>
+        /^(research-helper-search-related-[a-z0-9-]+) =/.exec(line)?.[1],
+    )
+    .filter((id): id is string => id !== undefined && !P5_T15_IDS.has(id));
+
+  it("finds them all", () => {
+    // 39 of `P5-T16`'s and 4 of `P5-T17`'s, on the same terms.
+    expect(ids).toHaveLength(43);
+  });
+
+  it("puts each on the window's surface and on the pending list", () => {
+    for (const id of ids) {
+      expect(keys.SEARCH_DIALOG_MESSAGE_IDS, id).toContain(id);
+      expect(keys.KO_PENDING_REVIEW, id).toContain(id);
+      expect(keys.KO_PRESENT, id).not.toContain(id);
+    }
+  });
+
+  it("gives each a commented stub in ko-KR and no live message", () => {
+    const korean = bundle("ko-KR");
+    const lines = korean.split(/\r?\n/);
+    for (const id of ids) {
+      expect(korean, id).toContain(`# NEEDS REVIEW ${id} `);
+      expect(
+        lines.some((line) => line.startsWith(`${id} =`)),
+        id,
+      ).toBe(false);
+    }
+  });
+
+  it("gives arguments to exactly the messages with placeables", () => {
+    const withArguments = sharedBy(ids, keys.ARGUMENT_MESSAGE_IDS).sort();
+    expect(withArguments).toStrictEqual(
+      [
+        "chip-basic-similarity",
+        "chip-similar",
+        "include-citation-count",
+        "include-recommendation-count",
+        "include-reference-count",
+        "include-similar-count",
+        "score",
+        "source-failed",
+        "target-default",
+      ].map((part) => `research-helper-search-related-${part}`),
+    );
+  });
+});

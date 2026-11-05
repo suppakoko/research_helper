@@ -347,6 +347,7 @@ import {
 } from "../../src/sources/registry";
 import type {
   LiteratureSource,
+  RelatedPage,
   SourceCallContext,
   SourcePage,
   SourceQuery,
@@ -372,6 +373,7 @@ import {
   type SearchViewState,
   type SearchWindowHostApi,
 } from "../../src/ui/viewModels/searchImportViewModel";
+import { SEMANTICSCHOLAR_KEY_REQUEST_URL } from "../../src/sources/semanticscholar/semanticscholarSource";
 import { DEFAULT_CHUNK_SIZE } from "../../src/zotero/importer";
 import {
   buildLibraryIndex,
@@ -4554,6 +4556,795 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       yearsFrom.value = saved.from;
       yearsTo.value = saved.to;
       maxResults.value = saved.max;
+    }
+  });
+});
+
+// ===========================================================================
+// `P5-T16`: a related run, on stub sources, to a populated table.
+//
+// **Real:** the window document, the host the plugin published, the related view
+// model, `createRelatedPipeline` with every stage, the library reads over two saved
+// items, and Fluent. **Doubled:** the three sources a keyless run asks. Each sits in
+// the real adapter's slot (`replaceForTest`) and is put back in `after()`.
+//
+// **No HTTP request leaves this machine in this block.** A DOI seed makes no title
+// match, so `deps.crossref` is not called; it has no PMCID, so the converter is not
+// called; and `before()` fails, skipping the block, if a Semantic Scholar key is
+// present, because a keyed run would ask the real service. The DOI carries the run's
+// time, so an earlier run's cached answer cannot stand in for this one.
+// ===========================================================================
+
+describe("P5-T16: a related run on stub sources reaches a populated table", () => {
+  /** The relevant slice of the window's row, as the document built it. */
+  interface RelatedFlowRow {
+    readonly key: string;
+    readonly title: string;
+    readonly related: { readonly kinds: readonly string[] };
+  }
+  interface RelatedFlow {
+    readonly state: {
+      readonly rows: RelatedFlowRow[];
+      readonly selection: string[];
+    };
+  }
+
+  const STUBBED: readonly SourceId[] = [PUBMED, "europepmc", CROSSREF];
+  const THIS_YEAR = new Date().getFullYear();
+  const SEED_DOI = `10.5555/p5t16.seed.${String(Date.now())}`;
+  const OWNED_DOI = `10.5555/p5t16.owned.${String(Date.now())}`;
+  const CONTEXT =
+    'as shown earlier <img src="x" onerror="alert(1)"> &amp; here';
+  const TITLES = {
+    cited: "P5-T16 a paper that cites the seed",
+    owned: "P5-T16 a paper the library already holds",
+    old: "P5-T16 an older paper",
+    reference: "P5-T16 a paper the seed cites",
+  };
+
+  const displaced: LiteratureSource[] = [];
+  let registry: SourceRegistry | undefined;
+  let localeBefore: UILocaleSnapshot | undefined;
+  let seed: Zotero.Item | undefined;
+  let owned: Zotero.Item | undefined;
+
+  function record(
+    sourceId: SourceId,
+    n: number,
+    title: string,
+    doi: string,
+    year: number,
+  ): SourceRecord {
+    return {
+      id: `${sourceId}:p5t16-${String(n)}`,
+      sourceId,
+      nativeId: `p5t16-${String(n)}`,
+      work: {
+        ids: { doi } as CanonicalWork["ids"],
+        type: "journal-article",
+        title,
+        abstract: `The abstract of ${title}.`,
+        authors: [{ family: `Author${String(n)}` }],
+        publishedDate: { year, iso: String(year) },
+      },
+      retrievedAtEpochMs: Date.now(),
+      missingFields: [],
+    };
+  }
+
+  /** What each stub answers. Only Europe PMC's lists and Crossref's have rows. */
+  function pageFor(sourceId: SourceId, strategy: unknown): RelatedPage {
+    const empty: RelatedPage = {
+      records: [],
+      edges: [],
+      totalAvailable: 0,
+      nextCursor: undefined,
+      warnings: [],
+    };
+    if (sourceId === "europepmc" && strategy === "citations") {
+      const records = [
+        record(sourceId, 1, TITLES.cited, "10.5555/p5t16.1", THIS_YEAR),
+        record(sourceId, 2, TITLES.owned, OWNED_DOI, THIS_YEAR),
+        record(sourceId, 3, TITLES.old, "10.5555/p5t16.3", 2001),
+      ];
+      return {
+        ...empty,
+        records,
+        totalAvailable: records.length,
+        edges: records.map((_, index) => ({
+          kind: "citation" as const,
+          rank: index + 1,
+          ...(index === 0 ? { contexts: [CONTEXT] } : {}),
+        })),
+      };
+    }
+    if (sourceId === CROSSREF && strategy === "references") {
+      const records = [
+        record(sourceId, 4, TITLES.reference, "10.5555/p5t16.4", THIS_YEAR - 1),
+      ];
+      return {
+        ...empty,
+        records,
+        totalAvailable: 1,
+        edges: [{ kind: "reference" as const, rank: 1 }],
+      };
+    }
+    return empty;
+  }
+
+  async function savedArticle(
+    title: string,
+    doi: string,
+  ): Promise<Zotero.Item> {
+    const item = new Zotero.Item("journalArticle");
+    item.libraryID = Zotero.Libraries.userLibraryID;
+    item.setField("title", title);
+    item.setField("date", String(THIS_YEAR));
+    item.setField("DOI", doi);
+    await item.saveTx();
+    return item;
+  }
+
+  const relatedFlow = (): RelatedFlow => controller as unknown as RelatedFlow;
+  const rowOf = (title: string): RelatedFlowRow => {
+    const found = relatedFlow().state.rows.find((row) => row.title === title);
+    if (!found) {
+      assert.fail(`no row is titled "${title}"`);
+    }
+    return found;
+  };
+  const elementOf = (key: string): Element => {
+    const found = Array.from(el("rh-results-body").children).find(
+      (tr) => tr.getAttribute("data-rh-row-key") === key,
+    );
+    if (!found) {
+      assert.fail(`row ${key} is not drawn`);
+    }
+    return found;
+  };
+
+  before(async function () {
+    this.timeout(90_000);
+    localeBefore = await pinUILocale(["en-US"], log);
+    const services = publishedApi().services;
+    if (!services) {
+      assert.fail("registerUI() published no ServiceGraph at api.services");
+    }
+    const scholar = services.sources.get("semanticscholar") as unknown as
+      { hasUsableApiKey(): Promise<boolean> } | undefined;
+    assert.isFalse(
+      await scholar?.hasUsableApiKey(),
+      "a Semantic Scholar key is present, so this run would ask the real service",
+    );
+    registry = services.sources;
+    for (const id of STUBBED) {
+      const slot = services.sources.get(id);
+      const stub: LiteratureSource = {
+        ...stubSource(id, slot?.displayNameKey ?? "", () => IDLE),
+        findRelated: (query) => Promise.resolve(pageFor(id, query.strategy)),
+        // Europe PMC answers the seed's DOI with a PMID, which is what opens the
+        // PMID-keyed lists.
+        lookup: () =>
+          Promise.resolve([
+            {
+              ...record(id, 0, "P5-T16 the seed", SEED_DOI, THIS_YEAR),
+              work: {
+                ...record(id, 0, "P5-T16 the seed", SEED_DOI, THIS_YEAR).work,
+                ids: {
+                  doi: SEED_DOI,
+                  pmid: "39000016",
+                } as CanonicalWork["ids"],
+              },
+            },
+          ]),
+      };
+      displaced.push(services.sources.replaceForTest(stub));
+      assert.strictEqual(
+        services.sources.get(id),
+        stub,
+        `the stub is not in the slot of ${id}, so this run would go live`,
+      );
+    }
+    seed = await savedArticle("P5-T16 the seed", SEED_DOI);
+    owned = await savedArticle(TITLES.owned, OWNED_DOI);
+
+    const opened = openSearchWindow(Zotero.getMainWindow(), {
+      mode: "related",
+      seedItemID: seed.id,
+    }) as FlowWindow;
+    win = opened;
+    await waitUntil(
+      () => opened.RHSearchWindow?.state.initialized === true,
+      "RHSearchWindow.init() to have run",
+      30_000,
+    );
+    doc = opened.document;
+    const found = opened.RHSearchWindow;
+    if (!found) {
+      assert.fail("the window loaded without RHSearchWindow");
+    }
+    controller = found;
+    await waitUntil(
+      () => !found.state.running && found.state.panel !== "initial",
+      "the related run to finish, which it starts by itself",
+      60_000,
+    );
+    log(
+      `[P5-T16] run ended on panel ${found.state.panel}, with ` +
+        `${String(found.state.rows.length)} rows`,
+    );
+  });
+
+  after(async function () {
+    this.timeout(60_000);
+    win?.close();
+    win = undefined;
+    await Zotero.Promise.delay(250);
+    if (registry) {
+      for (const adapter of displaced.splice(0)) {
+        registry.replaceForTest(adapter);
+      }
+      registry = undefined;
+    }
+    await seed?.eraseTx();
+    await owned?.eraseTx();
+    seed = undefined;
+    owned = undefined;
+    if (localeBefore) {
+      await restoreUILocale(localeBefore, log);
+      localeBefore = undefined;
+    }
+  });
+
+  it("draws one row per paper, with Relation and Score in place of the last three columns", async () => {
+    await Promise.resolve();
+    assert.strictEqual(controller.state.panel, "results");
+    assert.deepEqual(
+      relatedFlow()
+        .state.rows.map((row) => row.title)
+        .sort(),
+      Object.values(TITLES).sort(),
+    );
+    for (const id of [
+      "rh-results-col-source",
+      "rh-results-col-type",
+      "rh-results-col-doi",
+    ]) {
+      assert.isTrue((el(id) as HTMLElement).hidden, `#${id} is hidden`);
+    }
+    const row = elementOf(rowOf(TITLES.cited).key);
+    assert.strictEqual(row.children.length, 6);
+    const dots = row.children[5]?.textContent ?? "";
+    assert.isTrue(/^[\u25cf\u25cb]{5}$/u.test(dots), "five dots, some filled");
+  });
+
+  it("names the score for a screen reader, and Fluent leaves the dots in place (P5-T16 line 4)", async () => {
+    const cell = elementOf(rowOf(TITLES.cited).key).children[5];
+    const dots = cell?.querySelector("span");
+    if (!dots) {
+      assert.fail("the Score cell has no span");
+    }
+    await waitUntil(
+      () => (dots.getAttribute("aria-label") ?? "") !== "",
+      "the score's accessible name",
+    );
+    log(
+      `[P5-T16] score: text "${dots.textContent ?? ""}", aria-label ` +
+        `"${dots.getAttribute("aria-label") ?? ""}", title ` +
+        `"${dots.getAttribute("title") ?? ""}", role ` +
+        `${dots.getAttribute("role") ?? ""}`,
+    );
+    assert.strictEqual(dots.getAttribute("role"), "img");
+    assert.isTrue(
+      /^[●○]{5}$/u.test(dots.textContent ?? ""),
+      "an attribute-only message does not touch the text",
+    );
+    assert.isFalse(
+      (dots.getAttribute("aria-label") ?? "").includes("{"),
+      "the message resolved",
+    );
+  });
+
+  it("lines the visible headings up with their cells over the hidden ones (P5-T16 line 6)", async () => {
+    await Promise.resolve();
+    const headings = Array.from(
+      (el("rh-results-col-relation").parentElement as Element).children,
+    ) as HTMLElement[];
+    const shown = headings.filter((th) => !th.hidden);
+    const cells = Array.from(
+      elementOf(rowOf(TITLES.cited).key).children,
+    ) as HTMLElement[];
+    assert.strictEqual(shown.length, cells.length, "one heading per cell");
+    const lefts = shown.map((th, at) => [
+      Math.round(th.getBoundingClientRect().left),
+      Math.round(cells[at]?.getBoundingClientRect().left ?? -1),
+    ]);
+    log(`[P5-T16] heading and cell left edges ${JSON.stringify(lefts)}`);
+    for (const [head, cell] of lefts) {
+      assert.isAtMost(Math.abs((head ?? 0) - (cell ?? 0)), 1, "the edges meet");
+    }
+  });
+
+  it("clamps a citation context to two lines (P5-T16 line 5)", async () => {
+    const row = elementOf(rowOf(TITLES.cited).key);
+    const line = row.querySelector(".rh-related-context");
+    if (!line) {
+      assert.fail("the row has no context line");
+    }
+    const style = doc.defaultView?.getComputedStyle(line);
+    log(
+      `[P5-T16] context clamp ${String(style?.getPropertyValue("-webkit-line-clamp"))}, ` +
+        `display ${String(style?.display)}`,
+    );
+    await Promise.resolve();
+    assert.strictEqual(style?.getPropertyValue("-webkit-line-clamp"), "2");
+    assert.deepEqual(
+      (Array.from(line.querySelectorAll("*")) as Element[]).map(
+        (node) => node.localName,
+      ),
+      ["span", "span"],
+      "the label and the words, which the window built, and nothing made of the words",
+    );
+  });
+
+  it("treats the year list's Any as no bound (P5-T16 line 7)", async () => {
+    await Promise.resolve();
+    const oldKey = rowOf(TITLES.old).key;
+    const visibleKeys = (): string[] =>
+      (controller.state.visible as readonly { key: string }[]).map(
+        (row) => row.key,
+      );
+    const from = el("rh-search-years-from") as unknown as { value: string };
+    const anyValue = from.value;
+    assert.isTrue(
+      visibleKeys().includes(oldKey),
+      "the older row shows while the list says Any",
+    );
+    from.value = String(THIS_YEAR);
+    controller.applyFilter();
+    assert.isFalse(visibleKeys().includes(oldKey), "a real bound drops it");
+    from.value = anyValue;
+    controller.applyFilter();
+    assert.isTrue(visibleKeys().includes(oldKey), "Any lets it back");
+    assert.isFalse(controller.state.running, "the filter started no run");
+  });
+
+  it("starts Hide existing off and leaves its preference alone (P5-T16 line 8)", async () => {
+    await Promise.resolve();
+    const hide = el("rh-search-hide-existing") as unknown as {
+      checked: boolean;
+    };
+    assert.isFalse(hide.checked, "the box starts off in this mode");
+    assert.isFalse(
+      Services.prefs.prefHasUserValue(qualifiedPrefName("hideExisting")),
+      "nothing wrote the preference",
+    );
+    assert.strictEqual(
+      getPref("hideExisting"),
+      true,
+      "the preference still says what it shipped with",
+    );
+  });
+
+  it("opens the key page through Zotero (P5-T16 line 9)", async () => {
+    const link = el("rh-related-key-request") as HTMLElement;
+    const launched: string[] = [];
+    const platform = Zotero as unknown as { launchURL(url: string): void };
+    const real = platform.launchURL;
+    platform.launchURL = (url: string) => {
+      launched.push(url);
+    };
+    try {
+      link.click();
+      await waitUntil(() => launched.length === 1, "the launch");
+    } finally {
+      platform.launchURL = real;
+    }
+    assert.deepEqual(launched, [SEMANTICSCHOLAR_KEY_REQUEST_URL]);
+  });
+
+  it("lays the status rows out with the table still in view (P5-T16 line 10)", async () => {
+    await Promise.resolve();
+    const status = el("rh-related-status") as HTMLElement;
+    const rowsDrawn = status.children.length;
+    const list = status.getBoundingClientRect();
+    const results = el("rh-results-container").getBoundingClientRect();
+    const body = (doc.documentElement as Element).getBoundingClientRect();
+    const overflows = Array.from(status.children).filter(
+      (row) => row.getBoundingClientRect().right > body.right + 1,
+    ).length;
+    log(
+      `[P5-T16] status: ${String(rowsDrawn)} rows, ${String(Math.round(list.height))} px ` +
+        `tall; table ${String(Math.round(results.height))} px tall; window ` +
+        `${String(Math.round(body.width))} x ${String(Math.round(body.height))}; ` +
+        `rows past the right edge ${String(overflows)}`,
+    );
+    assert.strictEqual(overflows, 0, "no status row runs off the window");
+    assert.isAbove(results.height, 100, "the table keeps room");
+  });
+
+  it("keeps a greyed row at 4.5:1 or better in the light and the dark theme (P5-T16 line 14, NFR-13)", async () => {
+    await Promise.resolve();
+    const row = elementOf(rowOf(TITLES.old).key);
+    const cell = row.children[2] as HTMLElement;
+    /** An `rgb()` or `rgba()` as four numbers. */
+    const channels = (text: string): number[] =>
+      (text.match(/[\d.]+/gu) ?? []).map(Number);
+    /** WCAG's relative luminance of an opaque colour. */
+    const luminance = (rgb: readonly number[]): number => {
+      const [r, g, b] = rgb.slice(0, 3).map((channel) => {
+        const s = channel / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      }) as [number, number, number];
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrast = (): { readonly words: string; readonly ratio: number } => {
+      const view = doc.defaultView as unknown as {
+        getComputedStyle(element: Element): {
+          color: string;
+          backgroundColor: string;
+        };
+      };
+      const color = view.getComputedStyle(cell).color;
+      let backing = "";
+      for (
+        let at: Element | null = cell;
+        at !== null && (backing === "" || backing === "rgba(0, 0, 0, 0)");
+        at = at.parentElement
+      ) {
+        backing = view.getComputedStyle(at).backgroundColor;
+      }
+      const under = channels(backing);
+      const over = channels(color);
+      const alpha = over[3] ?? 1;
+      // A translucent colour over its backing, which is what the eye gets.
+      const seen = over
+        .slice(0, 3)
+        .map((channel, at) => channel * alpha + (under[at] ?? 0) * (1 - alpha));
+      const [hi, lo] = [luminance(seen), luminance(under)].sort(
+        (a, b) => b - a,
+      ) as [number, number];
+      return {
+        words: `${color} on ${backing}`,
+        ratio: (hi + 0.05) / (lo + 0.05),
+      };
+    };
+    const dark = "ui.systemUsesDarkTheme";
+    const measured: Record<string, string> = {};
+    try {
+      for (const [theme, value] of [
+        ["light", 0],
+        ["dark", 1],
+      ] as const) {
+        Services.prefs.setIntPref(dark, value);
+        await Zotero.Promise.delay(250);
+        const { words, ratio } = contrast();
+        measured[theme] = words;
+        log(`[P5-T16] greyed row, ${theme}: ${words}, ${ratio.toFixed(2)}:1`);
+        assert.isAbove(ratio, 4.5, `NFR-13 in the ${theme} theme`);
+      }
+    } finally {
+      Services.prefs.clearUserPref(dark);
+      await Zotero.Promise.delay(100);
+    }
+    assert.isTrue(
+      measured["light"] !== measured["dark"],
+      "the preference did change the theme, so the two figures are two themes",
+    );
+  });
+
+  it("captions the two new columns from the bundle", async () => {
+    await waitUntil(
+      () =>
+        textOf("rh-results-col-relation") === "Relation" &&
+        textOf("rh-results-col-score") === "Score",
+      "the two captions",
+    );
+  });
+
+  it("words the chips through Fluent", async () => {
+    const row = elementOf(rowOf(TITLES.reference).key);
+    const cell = row.children[4];
+    await waitUntil(
+      () => (cell?.textContent ?? "").includes("Cited by your paper"),
+      "the reference row's chip",
+    );
+  });
+
+  it("writes a citation context as plain text, with no element made of it", async () => {
+    const row = elementOf(rowOf(TITLES.cited).key);
+    const cell = row.children[4];
+    if (!cell) {
+      assert.fail("the row has no Relation cell");
+    }
+    await waitUntil(
+      () => (cell.textContent ?? "").includes("Cited as:"),
+      "the context's label",
+    );
+    assert.include(cell.textContent ?? "", CONTEXT, "the words, as written");
+    assert.strictEqual(
+      cell.querySelector("img"),
+      null,
+      "no element was made of them",
+    );
+    const line = cell.querySelector(".rh-related-context");
+    assert.strictEqual(line?.getAttribute("title"), CONTEXT);
+  });
+
+  it("starts a library row and an older row unticked, and marks each", async () => {
+    const selection = relatedFlow().state.selection;
+    assert.isTrue(selection.includes(rowOf(TITLES.cited).key));
+    assert.isTrue(selection.includes(rowOf(TITLES.reference).key));
+    assert.isFalse(selection.includes(rowOf(TITLES.owned).key));
+    assert.isFalse(selection.includes(rowOf(TITLES.old).key));
+
+    const ownedRow = elementOf(rowOf(TITLES.owned).key);
+    assert.include(ownedRow.className, "rh-row-existing");
+    await waitUntil(
+      () => (ownedRow.textContent ?? "").includes("Already in library"),
+      "the library row's words",
+    );
+
+    const oldRow = elementOf(rowOf(TITLES.old).key);
+    assert.include(oldRow.className, "rh-row-outside-window");
+    await waitUntil(
+      () => (oldRow.textContent ?? "").includes("Outside the recency window"),
+      "the older row's words",
+    );
+  });
+
+  it("draws one status row per list, a keyless list among them, and the key notice", async () => {
+    const lists = Array.from(el("rh-related-status").children).map(
+      (row) => row.id,
+    );
+    log(`[P5-T16] status rows ${JSON.stringify(lists)}`);
+    for (const id of [
+      "rh-related-status-europepmc-citations",
+      "rh-related-status-crossref-references",
+      "rh-related-status-s2-citations",
+    ]) {
+      assert.isTrue(lists.includes(id), id);
+    }
+    await waitUntil(
+      () => textOf("rh-related-status-s2-citations").includes("no key"),
+      "the keyless list's words",
+    );
+    assert.isFalse((el("rh-related-key-notice") as HTMLElement).hidden);
+    assert.isTrue(
+      (el("rh-related-key-request").getAttribute("href") ?? "").startsWith(
+        "https:",
+      ),
+    );
+  });
+
+  it("counts the Include boxes from the run, and filters without running anything", async () => {
+    const box = el("rh-related-include-citation") as unknown as Element & {
+      checked: boolean;
+      doCommand?: () => void;
+    };
+    await waitUntil(
+      () => box.getAttribute("label") === "Citations (3)",
+      "the citations box's count",
+    );
+    const before = controller.state.visible.length;
+    assert.strictEqual(before, 4);
+    box.checked = false;
+    controller.applyFilter();
+    assert.strictEqual(controller.state.visible.length, 1);
+    box.checked = true;
+    controller.applyFilter();
+    assert.strictEqual(controller.state.visible.length, 4);
+    assert.isFalse(controller.state.running, "the filter started no run");
+  });
+
+  // P5-T17. Written 2026-11-05 and first run in the next integration round.
+  it("draws the link box from the preference, names the target after the seed, and hides the radios", async () => {
+    await Promise.resolve();
+    assert.isAbove(controller.state.selectedCount, 0);
+    assert.strictEqual(
+      el("rh-search-dialog").getAttribute("buttondisabledaccept"),
+      "false",
+    );
+    const box = el("rh-related-link-seed") as unknown as Element & {
+      checked: boolean;
+      hidden: boolean;
+    };
+    assert.isFalse(box.hidden);
+    assert.isTrue(box.checked, "related.linkToSeed ships on");
+    await waitUntil(
+      () => box.getAttribute("label") !== null,
+      "the box's words",
+    );
+    assert.include(box.getAttribute("label") ?? "", "Related");
+    assert.isTrue((el("rh-search-duplicates") as HTMLElement).hidden);
+    assert.isFalse((el("rh-search-preprint-policy") as HTMLElement).hidden);
+    await waitUntil(
+      () =>
+        (el("rh-search-target") as unknown as { value: string }).value !==
+        "new",
+      "the target named after the seed",
+    );
+    assert.strictEqual(
+      (el("rh-search-target") as unknown as { value: string }).value,
+      "new:Related to “P5-T16 the seed”",
+    );
+  });
+
+  it("imports the ticked rows into that collection, related to the seed, with the table left up", async function () {
+    this.timeout(60_000);
+    const flow = relatedFlow();
+    // The row the library holds is ticked by hand, so one is linked and two created.
+    flow.state.selection.push(rowOf(TITLES.owned).key);
+    const ownedModifiedBefore = owned?.dateModified;
+    const rowsBefore = flow.state.rows.length;
+    (controller as unknown as { import(): void }).import();
+    await waitUntil(
+      () => !controller.state.running && textOf("rh-search-notices") !== "",
+      "the import to be drawn",
+      45_000,
+    );
+    const collection = Zotero.Collections.getByLibrary(
+      Zotero.Libraries.userLibraryID,
+    ).find((one) => one.name === "Related to “P5-T16 the seed”");
+    if (!collection || !seed || !owned) {
+      assert.fail("the seed's collection was not made");
+    }
+    const written = (await Zotero.Items.getAsync(
+      collection.getChildItems(true),
+    )) as Zotero.Item[];
+    const created = written.filter((item) => item.id !== owned?.id);
+    try {
+      log(`[P5-T17] wrote ${String(written.length)}`);
+      assert.strictEqual(written.length, 3, "two created and one linked");
+      assert.isTrue(written.some((item) => item.id === owned?.id));
+      for (const item of written) {
+        assert.isTrue(
+          item.relatedItems.includes(seed.key),
+          `${item.getField("title") as string} names the seed`,
+        );
+        assert.isTrue(seed.relatedItems.includes(item.key), "and the seed it");
+      }
+      assert.strictEqual(
+        owned.dateModified,
+        ownedModifiedBefore,
+        "the link is not an edit of the paper",
+      );
+      assert.strictEqual(flow.state.rows.length, rowsBefore, "the table stays");
+      assert.strictEqual(controller.state.panel, "results");
+      assert.isTrue(
+        (el("rh-search-export") as HTMLElement).hidden,
+        "no record to export",
+      );
+      assert.include(
+        textOf("rh-search-notices"),
+        "2",
+        "the summary says what was written",
+      );
+    } finally {
+      for (const item of created) {
+        await item.eraseTx();
+      }
+      await collection.eraseTx();
+    }
+  });
+});
+
+// A title-only seed reaches the real Crossref through `deps.crossref`, so the list
+// of candidates cannot be reached on stub sources. This draws the shipped document's
+// picker from a state instead: it says the markup works in Gecko, and nothing about
+// a run. `test/unit/ui/relatedViewModel.test.ts` has the run's half.
+describe("P5-T16: FR-14's picker in the real document", () => {
+  it("draws radios with nothing chosen, and sends the one chosen", async function () {
+    this.timeout(60_000);
+    const localeWas = await pinUILocale(["en-US"], log);
+    const host = publishedApi()[SEARCH_WINDOW_API_PROPERTY] as unknown as {
+      related?: unknown;
+    };
+    const realRelated = host.related;
+    const picks: string[] = [];
+    let drawn: { render(state: unknown): void } | undefined;
+    host.related = {
+      connect(view: { render(state: unknown): void }) {
+        drawn = view;
+        return () => undefined;
+      },
+      // As the real view model does: the state comes from the run. `init()` shows
+      // the initial panel between `connect` and `run`, so a state drawn in `connect`
+      // would be covered over.
+      run: () => {
+        drawn?.render({
+          panel: "choose",
+          running: false,
+          sources: [],
+          records: [],
+          recordsRevision: 1,
+          warnings: [],
+          notices: [],
+          cancelVisible: false,
+          related: {
+            keyRequestUrl: undefined,
+            includeLabels: {},
+            candidates: [
+              {
+                key: "a",
+                title: "A <b>bold</b> title",
+                authors: [{ family: "Ito" }],
+                venue: "Nature",
+                year: 2021,
+              },
+              { key: "b", title: "Another", authors: [] },
+            ],
+          },
+        });
+        return Promise.resolve();
+      },
+      pick: (key: string) => {
+        picks.push(key);
+        return Promise.resolve();
+      },
+      retry: () => Promise.resolve(),
+      cancel: () => undefined,
+    };
+    const opened = openSearchWindow(Zotero.getMainWindow(), {
+      mode: "related",
+      seedItemID: 2_000_000_016,
+    }) as FlowWindow;
+    try {
+      await waitUntil(
+        () => opened.RHSearchWindow?.state.initialized === true,
+        "RHSearchWindow.init() to have run",
+        30_000,
+      );
+      doc = opened.document;
+      await waitUntil(
+        () =>
+          doc.querySelectorAll("#rh-related-picker-list input[type=radio]")
+            .length === 2,
+        "the run to draw the candidates",
+      );
+      assert.isFalse(
+        (el("rh-state-related-choose") as HTMLElement).hidden,
+        "the picker's panel is shown",
+      );
+      assert.isTrue(
+        (el("rh-results-container") as HTMLElement).hidden,
+        "the table is not",
+      );
+      const radios = Array.from(
+        doc.querySelectorAll("#rh-related-picker-list input[type=radio]"),
+      ) as HTMLInputElement[];
+      assert.strictEqual(radios.length, 2);
+      assert.isFalse(
+        radios.some((radio) => radio.checked),
+        "nothing is chosen for the user",
+      );
+      assert.strictEqual(
+        doc.querySelector("#rh-related-picker-list b"),
+        null,
+        "a title is data",
+      );
+      const use = el("rh-related-picker-use") as unknown as {
+        disabled: boolean;
+        doCommand(): void;
+      };
+      assert.isTrue(use.disabled);
+      radios[0]?.click();
+      assert.isFalse(use.disabled, "choosing turns the button on");
+      radios[1]?.click();
+      assert.deepEqual(
+        radios.map((radio) => radio.checked),
+        [false, true],
+        "the radios keep one choice",
+      );
+      assert.isFalse(use.disabled);
+      use.doCommand();
+      await waitUntil(() => picks.length === 1, "the pick to reach the host");
+      assert.deepEqual(picks, ["b"]);
+    } finally {
+      opened.close();
+      await Zotero.Promise.delay(250);
+      host.related = realRelated;
+      await restoreUILocale(localeWas, log);
     }
   });
 });

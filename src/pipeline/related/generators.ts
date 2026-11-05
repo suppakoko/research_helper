@@ -14,7 +14,7 @@
  * {@link RELATED_GENERATORS}' order (cache, then budget), so a short budget goes to
  * the best generators however fast each host answers; run them concurrently across
  * hosts and serially within one (`docs/05` §9.4); merge the union; hydrate only what
- * the merged works lack; fill in abstracts. Everything goes cache → budget → limiter,
+ * the merged works lack, Crossref last and for titles only (`P5-T32`); fill in abstracts. Everything goes cache → budget → limiter,
  * and the limiter is the adapters' `HttpClient` (`plan/08` §0.2 items 20 and 21).
  *
  * **One call per named strategy, never `"auto"`.** `"auto"` hides a failed route in
@@ -41,6 +41,7 @@ import {
 import type { RelationEdge } from "../../model/related";
 import type { SourceRecord } from "../../model/sourceRecord";
 import { ARXIV_DOI_PREFIX } from "../../sources/arxiv/mapper";
+import { CROSSREF_DOI_LOOKUP_BATCH } from "../../sources/crossref/references";
 import { EUROPEPMC_DOI_LOOKUP_BATCH } from "../../sources/europepmc/query";
 import { identifierKeys } from "../../sources/semanticscholar/recommendations";
 import { SEMANTICSCHOLAR_BATCH_IDS_WITH_ABSTRACT } from "../../sources/semanticscholar/query";
@@ -89,12 +90,15 @@ export const RELATED_REQUEST_BUDGET = 8;
 /**
  * Of {@link RELATED_REQUEST_BUDGET}, what the first wave leaves for hydration and
  * the abstract fill-in: 200 works at about 100 identifiers a request. A starting
- * value too.
+ * value too. Kept at 2 when Crossref joined hydration (`P5-T32`; `docs/05` §6.1):
+ * the worst keyless case spends both on titles, one Europe PMC lookup and one
+ * Crossref lookup, and the fill-in's share is counted, not sent.
  */
 export const RELATED_HYDRATION_RESERVE = 2;
 
 const SEMANTIC_SCHOLAR: SourceId = "semanticscholar";
 const EUROPE_PMC: SourceId = "europepmc";
+const CROSSREF: SourceId = "crossref";
 
 /** One generator of `docs/05` §6.1, as its dated note lists them. */
 export type RelatedGeneratorId =
@@ -370,6 +374,7 @@ export interface RelatedGeneratorOptions {
 const LOOKUP_BATCH: Readonly<Partial<Record<SourceId, number>>> = {
   [EUROPE_PMC]: EUROPEPMC_DOI_LOOKUP_BATCH,
   [SEMANTIC_SCHOLAR]: SEMANTICSCHOLAR_BATCH_IDS_WITH_ABSTRACT,
+  [CROSSREF]: CROSSREF_DOI_LOOKUP_BATCH,
 };
 
 interface Run {
@@ -405,10 +410,18 @@ function pageWithoutRaw(page: RelatedPage): RelatedPage {
 // One per-identifier metadata cache, for hydration and the abstract fill-in
 // ---------------------------------------------------------------------------
 
-/** The identifiers to send: Europe PMC reads a DOI only (`lookupById: ["doi"]`). */
+/**
+ * The identifiers to send: Europe PMC and Crossref read a DOI only
+ * (`lookupById: ["doi"]`). An arXiv DOI is DataCite's, so Crossref holds none (6 of 6
+ * unanswered, `docs/02` §5.2) and it is not worth a place in a request.
+ */
 function lookupEntry(sourceId: SourceId, ids: SeedIds): SeedIds | undefined {
   if (sourceId === SEMANTIC_SCHOLAR) return askSemanticScholar(ids);
-  return present(ids.doi) ? { doi: ids.doi } : undefined;
+  if (!present(ids.doi)) return undefined;
+  if (sourceId === CROSSREF && ARXIV_DATACITE_DOI.test(ids.doi)) {
+    return undefined;
+  }
+  return { doi: ids.doi };
 }
 
 function cacheIdOf(sourceId: SourceId, asked: SeedIds): readonly string[] {
@@ -892,8 +905,8 @@ export async function runRelatedGenerators(
 
   const failed: RelatedHydrationFailure[] = [];
   for (const sourceId of hasKey
-    ? [SEMANTIC_SCHOLAR, EUROPE_PMC]
-    : [EUROPE_PMC]) {
+    ? [SEMANTIC_SCHOLAR, EUROPE_PMC, CROSSREF]
+    : [EUROPE_PMC, CROSSREF]) {
     const source = ctx.sources.get(sourceId);
     if (source === undefined) continue;
     const wanted = merged.merged

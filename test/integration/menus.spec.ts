@@ -1514,6 +1514,12 @@ describe("Find Related Papers… on the item context menu (P5-T15)", function ()
     const locale: UILocaleSnapshot = await pinUILocale(["en-US"], log);
     try {
       await withRelatedEnabled(async (instance) => {
+        // Added 2026-11-05 (`P5-T16`): the window now starts a related run by
+        // itself, and this test's seed has a DOI, so the real host would send real
+        // requests. Without the member the window stays on its first panel, which
+        // is what this test reads. The plugin's next cycle publishes a new host.
+        delete (instance.api.searchWindow as unknown as { related?: unknown })
+          .related;
         const main = Zotero.getMainWindow();
         const longTitle = "P5-T15 seed ".repeat(10).trim();
         const seed = await savedArticle(longTitle);

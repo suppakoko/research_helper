@@ -1,0 +1,12 @@
+{
+  "scenario": "lookup-non-biomedical-references",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-05T10:59:04.576Z",
+  "endpoint": "https://api.crossref.org/works",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": false,
+  "redactions": [
+    "request URL withheld: it carries the contact and key parameters"
+  ]
+}

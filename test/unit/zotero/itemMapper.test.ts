@@ -637,7 +637,82 @@ describe("snapshotZoteroItem's title (integration round, 2026-11-05)", () => {
     );
   });
 
-  it("base-maps the title and no other field", () => {
+  /** An item that answers only for these names, and only when base-mapped. */
+  function typedItem(
+    itemType: string,
+    mappedOnly: Readonly<Record<string, string>>,
+    plain: Readonly<Record<string, string>> = {},
+  ): Zotero.Item {
+    vi.stubGlobal("Zotero", { ItemTypes: { getName: () => itemType } });
+    return {
+      itemTypeID: 1,
+      dateAdded: "",
+      getField: (name: string, _unformatted?: boolean, mapped?: boolean) =>
+        (mapped === true ? mappedOnly[name] : undefined) ?? plain[name] ?? "",
+      getCreatorsJSON: () => [],
+      getTags: () => [],
+    } as unknown as Zotero.Item;
+  }
+
+  it.each([
+    ["conferencePaper", "A proceedings"],
+    ["bookSection", "A book"],
+    ["webpage", "A site"],
+  ])(
+    "reads a %s's container through publicationTitle (P5-T32)",
+    (type, name) => {
+      const snapshot = snapshotZoteroItem(
+        typedItem(type, { title: "A title", publicationTitle: name }),
+      );
+      expect(
+        canonicalWorkFromSnapshot(snapshot, { nowEpochMs: 1 }).containerTitle,
+      ).toBe(name);
+    },
+  );
+
+  it.each(["patent", "case", "statute"])(
+    "reads a %s's year through date (P5-T32)",
+    (type) => {
+      const snapshot = snapshotZoteroItem(
+        typedItem(type, { title: "A title", date: "2020-03-07 March 2020" }),
+      );
+      expect(
+        canonicalWorkFromSnapshot(snapshot, { nowEpochMs: 1 }).publishedDate
+          ?.year,
+      ).toBe(2020);
+    },
+  );
+
+  it("changes a hash key by the year only, not by the container (P5-T32)", () => {
+    const keyOf = (fields: Readonly<Record<string, string>>) =>
+      canonicalWorkFromSnapshot(
+        snapshotZoteroItem(
+          typedItem("patent", { title: "A title", ...fields }),
+        ),
+        { nowEpochMs: 1 },
+      ).workKey;
+    expect(keyOf({})).toMatch(/^hash:/u);
+    expect(keyOf({ date: "2020-00-00 2020" })).not.toBe(keyOf({}));
+    expect(keyOf({ publicationTitle: "A venue" })).toBe(keyOf({}));
+  });
+
+  it("keeps a preprint's repository as its container, and its publisher unmapped (P5-T32)", () => {
+    // A `preprint`'s `repository` is base-mapped onto `publisher`.
+    const snapshot = snapshotZoteroItem(
+      typedItem(
+        "preprint",
+        { title: "A title", publisher: "bioRxiv" },
+        { repository: "bioRxiv" },
+      ),
+    );
+    expect(snapshot.fields.publisher).toBe("");
+    expect(snapshot.fields.repository).toBe("bioRxiv");
+    const work = canonicalWorkFromSnapshot(snapshot, { nowEpochMs: 1 });
+    expect(work.containerTitle).toBe("bioRxiv");
+    expect(work.publisher).toBeUndefined();
+  });
+
+  it("base-maps the title, publicationTitle and date, and no other field", () => {
     const mapped: string[] = [];
     vi.stubGlobal("Zotero", {
       ItemTypes: { getName: () => "preprint" },
@@ -645,14 +720,19 @@ describe("snapshotZoteroItem's title (integration round, 2026-11-05)", () => {
     snapshotZoteroItem({
       itemTypeID: 1,
       dateAdded: "",
-      getField: (name: string, _unformatted?: boolean, base?: boolean) => {
-        if (base === true) mapped.push(name);
+      getField: (name: string, unformatted?: boolean, base?: boolean) => {
+        if (base === true) mapped.push(`${name} ${String(unformatted)}`);
         return "";
       },
       getCreatorsJSON: () => [],
       getTags: () => [],
     } as unknown as Zotero.Item);
-    expect(mapped).toEqual(["title"]);
+    // The date alone is read unformatted: its multipart form.
+    expect(mapped.sort()).toEqual([
+      "date true",
+      "publicationTitle false",
+      "title false",
+    ]);
   });
 });
 

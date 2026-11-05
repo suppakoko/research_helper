@@ -213,6 +213,11 @@ export default defineConfig({
     // and `server.startArgs`, but NOT `server.debugOutputFile`: an integration
     // run writes no `.scaffold/logs/` file.
     entries: ["test/integration"],
+    // Measured 2026-11-05: saving an item with a DOI makes Zotero itself ask
+    // api.zotero.org/retractions/search. A test run sends nothing to a real host.
+    prefs: {
+      "extensions.zotero.retractions.enabled": false,
+    },
     mocha: {
       timeout: 30000,
     },

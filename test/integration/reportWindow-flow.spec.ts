@@ -4,9 +4,11 @@
  * end, inside a live Zotero: the collection, the job queue, the plugin
  * database, the cost dialog, citeproc and the note are all real. **Only the
  * provider is fake** (as `zotero/summarySection.spec.ts` does it): the active
- * adapter answers from this spec, so no request leaves Zotero, and the key
- * check sees a key that exists nowhere — `secrets.has` answers for the active
- * provider and nothing is written to any keystore.
+ * adapter answers from this spec, and the key check sees a key that exists
+ * nowhere — `secrets.has` answers for the active provider and nothing is written
+ * to any keystore. *Corrected 2026-11-05: Europe PMC is doubled too. The summary
+ * stage's full-text ladder asked the real service for these fixtures' DOIs until
+ * the suite's live request guard caught it; "no request leaves Zotero" was untrue.*
  *
  * It asserts, against the card's `Done when`:
  *
@@ -41,6 +43,7 @@ import { expectedHeadings } from "../../src/pipeline/trendReport/compose";
 import { TREND_REPORT_INPUT_VERSION } from "../../src/pipeline/trendReport/trendReportPipeline";
 import { COST_DIALOG_URL } from "../../src/ui/dialogs/costConfirmDialog";
 import { chatResponse, mockModel } from "../helpers/mockLLM";
+import { answerEuropePmcWithNothing } from "./support/liveRequestGuard";
 import {
   pinUILocale,
   restoreUILocale,
@@ -479,6 +482,7 @@ describe("P4-T20: the report window runs a mock job to a saved report", function
       "the plugin to initialize",
     );
     instance = pluginInstance() as Addon;
+    restores.push(answerEuropePmcWithNothing());
     locale = await pinUILocale(["en-US"], log);
     const bundled = await import("../../src/prompts/bundled");
     headings = expectedHeadings(bundled.PROMPT_REGISTRY.get("TREND_REPORT_EN"));

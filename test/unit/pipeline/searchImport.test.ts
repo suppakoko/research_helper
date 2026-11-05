@@ -19,6 +19,7 @@ import { createDeferred, Semaphore } from "../../../src/core/concurrency";
 import {
   OperationCancelledError,
   UpstreamServerError,
+  type SerializedError,
 } from "../../../src/core/errors";
 import {
   createHttpClient,
@@ -72,6 +73,7 @@ import type {
   SearchImportInput,
   SearchImportOutput,
   SearchImportPathCounts,
+  SearchImportSeedLink,
   SearchImportSourceReport,
   SearchImportTarget,
   SearchImportWriteSession,
@@ -415,6 +417,8 @@ interface StubWriterOptions {
    * batch, the result carries no `importPaths` — the shipped default.
    */
   readonly importPaths?: (index: number) => SearchImportPathCounts | undefined;
+  /** `P5-T17`: what each batch reports of its link to the seed. */
+  readonly seedLink?: (index: number) => SearchImportSeedLink | undefined;
 }
 
 function stubWriter(options: StubWriterOptions = {}): {
@@ -445,8 +449,10 @@ function stubWriter(options: StubWriterOptions = {}): {
           }
           (log.batches as CanonicalWork[][]).push([...works]);
           const paths = options.importPaths?.(batchIndex);
+          const link = options.seedLink?.(batchIndex);
           const result: SearchImportBatchResult = {
             ...(paths !== undefined && { importPaths: paths }),
+            ...(link !== undefined && { seedLink: link }),
             created: works.length,
             linkedExisting: 0,
             skipped: 0,
@@ -1381,6 +1387,69 @@ function sourceFilesContaining(needle: string): string[] {
     .map((file) => relative(SRC_DIR, file).replaceAll("\\", "/"))
     .sort((a, b) => a.localeCompare(b));
 }
+
+describe("the link to the seed, over a run's batches (P5-T17)", () => {
+  const threeBatches = (): readonly SourceRecord[][] => [
+    [record("pubmed", "1"), record("pubmed", "2")],
+    [record("pubmed", "3"), record("pubmed", "4")],
+    [record("pubmed", "5")],
+  ];
+  const failure = (detail: string): SerializedError =>
+    ({
+      code: "ZOTERO_API",
+      messageKey: "rh-error-zotero-api",
+      detail,
+      retryable: false,
+    }) as unknown as SerializedError;
+
+  async function runWith(
+    seedLink: (index: number) => SearchImportSeedLink | undefined,
+  ) {
+    const writer = stubWriter({ seedLink });
+    const h = harness({
+      sources: [stubSource({ id: "pubmed", pages: threeBatches() })],
+      writer: writer.writer,
+      writeBatchSize: 2,
+    });
+    return h.pipeline.run(
+      { ...BASE_INPUT, target: { collectionName: "Linked" } },
+      h.ctx,
+    );
+  }
+
+  it("sums what the batches linked", async () => {
+    const output = await runWith(() => ({ linked: 2, error: undefined }));
+    expect(output.write?.seedLink).toStrictEqual({
+      linked: 6,
+      error: undefined,
+    });
+  });
+
+  it("keeps the first failure, and still counts the batches that held", async () => {
+    const errors = [undefined, failure("first"), failure("second")];
+    const output = await runWith((index) => ({
+      linked: errors[index] === undefined ? 2 : 0,
+      error: errors[index],
+    }));
+    expect(output.write?.seedLink?.linked).toBe(2);
+    expect(output.write?.seedLink?.error).toMatchObject({ detail: "first" });
+  });
+
+  it("does not fail the run over a failed link", async () => {
+    const output = await runWith(() => ({
+      linked: 0,
+      error: failure("no link"),
+    }));
+    expect(output.outcome).toBe("succeeded");
+    expect(output.write?.created).toBe(5);
+  });
+
+  it("adds no field to a run whose writer reported none", async () => {
+    const output = await runWith(() => undefined);
+    expect(output.write).toBeDefined();
+    expect(Object.keys(output.write ?? {})).not.toContain("seedLink");
+  });
+});
 
 describe("the fan-out wiring (P2-T27)", () => {
   /**

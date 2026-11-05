@@ -36,8 +36,10 @@ import {
   L10N_MENU_ROOT,
   L10N_MENU_SPIKE_CREATE_ITEM,
 } from "../../src/ui/menus/toolsMenu";
+import type { CancellationToken } from "../../src/core/jobQueue/cancellation";
 import { L10N_MENU_SEARCH_IMPORT } from "../../src/i18n/keys";
 import { PREF_KEYS } from "../../src/prefs/keys";
+import type { LiteratureSource } from "../../src/sources/types";
 import { SEARCH_WINDOW_NAME } from "../../src/ui/dialogs/searchDialog";
 import { SUMMARIZE_WINDOW_NAME_PREFIX } from "../../src/ui/dialogs/summarizeDialog";
 import { REPORT_WINDOW_NAME_PREFIX } from "../../src/ui/panes/reportWindow";
@@ -51,6 +53,8 @@ declare function it(
   body: (this: { timeout(ms: number): void }) => Promise<void>,
 ): void;
 declare function after(body: () => Promise<void>): void;
+/** The scaffold runner's `window.debug`: POSTs one line to the terminal. */
+declare function debug(line: string): void;
 declare const assert: {
   strictEqual<T>(actual: T, expected: T, message?: string): void;
   notStrictEqual<T>(actual: T, expected: T, message?: string): void;
@@ -491,6 +495,103 @@ describe("lifecycle (FR-56)", function () {
       0,
       "enable opens no search window",
     );
+  });
+
+  // `P5-T16` line 12: the integration round of 2026-11-05.
+  it("shutdown during a related run cancels it and leaves nothing behind (P5-T16)", async function () {
+    this.timeout(120_000);
+    const wrapper = await researchHelperAddon();
+    const pref = qualifiedPrefName(PREF_KEYS.relatedEnabled);
+    const before = await initializedInstance();
+    const services = before.api.services;
+    if (!services) {
+      assert.fail("registerUI() published no ServiceGraph");
+    }
+    const lists = { started: 0, cancelled: 0 };
+    const hanging = async (
+      _query: unknown,
+      ctx: { readonly token: CancellationToken },
+    ): Promise<never> => {
+      lists.started += 1;
+      for (;;) {
+        if (ctx.token.isCancellationRequested) {
+          lists.cancelled += 1;
+          ctx.token.throwIfCancelled();
+        }
+        await Zotero.Promise.delay(25);
+      }
+    };
+    // Each of the three keyless sources holds its list open; nothing else is asked.
+    for (const id of ["pubmed", "europepmc", "crossref"] as const) {
+      const real = services.sources.get(id);
+      services.sources.replaceForTest(
+        Object.assign(Object.create(real ?? null) as LiteratureSource, {
+          findRelated: hanging,
+          lookup: () => Promise.resolve([]),
+        }),
+      );
+    }
+    const seed = new Zotero.Item("journalArticle");
+    seed.setField("title", "Lifecycle: a seed whose related run hangs");
+    seed.setField("DOI", `10.5555/p350.lifecycle.${String(Date.now())}`);
+    await seed.saveTx();
+
+    const platform = Zotero as unknown as {
+      ProgressWindow: new (...args: unknown[]) => unknown;
+    };
+    const RealProgressWindow = platform.ProgressWindow;
+    let toasts = 0;
+    platform.ProgressWindow = new Proxy(RealProgressWindow, {
+      construct(target, args, newTarget) {
+        toasts += 1;
+        return Reflect.construct(target, args, newTarget) as object;
+      },
+    });
+    let disabled = false;
+    try {
+      Zotero.Prefs.set(pref, true, true);
+      const opener = before.api.relatedWindow;
+      if (!opener) {
+        assert.fail("registerUI() published no api.relatedWindow");
+      }
+      opener.open(Zotero.getMainWindow(), seed.id);
+      await waitUntil(
+        () => openWindowCount(SEARCH_WINDOW_NAME) === 1,
+        "the search window to open",
+      );
+      await waitUntil(() => lists.started > 0, "the run's lists to start");
+
+      disabled = true;
+      await afterBootstrapCall("shutdown", () => wrapper.disable());
+      await waitUntil(
+        () => pluginInstance() === undefined,
+        `Zotero.${config.addonInstance} to be removed by onShutdown`,
+      );
+      await waitUntil(
+        () => openWindowCount(SEARCH_WINDOW_NAME) === 0,
+        "no search window after disable",
+      );
+      await waitUntil(
+        () => lists.cancelled >= lists.started,
+        "every list to see the cancel",
+      );
+      await Zotero.Promise.delay(250);
+      debug(
+        `[P5-T16] shutdown during a related run: ${String(lists.cancelled)} of ` +
+          `${String(lists.started)} lists cancelled, ${String(toasts)} toasts, ` +
+          `${String(before.scope.liveHandles().length)} live handles`,
+      );
+      assert.strictEqual(toasts, 0, "shutting down raises no toast");
+      assert.deepEqual(before.scope.liveHandles(), []);
+    } finally {
+      platform.ProgressWindow = RealProgressWindow;
+      Zotero.Prefs.clear(pref, true);
+      if (disabled) {
+        await afterBootstrapCall("startup", () => wrapper.enable());
+        await initializedInstance();
+      }
+      await seed.eraseTx();
+    }
   });
 
   it("leaves no item menu and no search window after a disable/enable cycle (P5-T15)", async function () {

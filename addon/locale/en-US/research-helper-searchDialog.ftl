@@ -129,6 +129,95 @@ research-helper-search-related-include-recommendation =
 research-helper-search-related-include-similar =
     .label = Similar articles (PubMed)
 
+# The same four boxes once a run has finished: docs/08 §5.2's "References (37)".
+# A work can be of several kinds, so the four can add up to more than the table.
+research-helper-search-related-include-reference-count =
+    .label = References ({ $count })
+research-helper-search-related-include-citation-count =
+    .label = Citations ({ $count })
+research-helper-search-related-include-recommendation-count =
+    .label = Recommended ({ $count })
+research-helper-search-related-include-similar-count =
+    .label = Similar articles (PubMed) ({ $count })
+
+
+## Related results — docs/08 §5.2, §5.3 (P5-T16)
+##
+## The titles, authors and the source's own citation text are data and are
+## written straight into the window, never through these messages.
+
+# The two columns the related mode draws instead of Source, Type and DOI.
+research-helper-search-related-col-relation =
+    .label = Relation
+research-helper-search-related-col-score =
+    .label = Score
+
+# One reason a paper is on the list (FR-15; docs/05 §6.3). "Your paper" is the
+# seed item.
+research-helper-search-related-chip-cites-seed = Cites your paper
+research-helper-search-related-chip-cited-by-seed = Cited by your paper
+research-helper-search-related-chip-recommended = Recommended by Semantic Scholar
+research-helper-search-related-chip-similar-pubmed = Similar article in PubMed
+# `{ $value }` is a similarity written with two decimals, already formatted.
+research-helper-search-related-chip-similar = similarity { $value }
+# The same on a run without a key, whose similarity is a word count over titles
+# and abstracts (docs/05 §5.5 names it "basic similarity").
+research-helper-search-related-chip-basic-similarity = basic similarity { $value }
+# Printed above the sentence in which another paper cites this one.
+research-helper-search-related-chip-context-label = Cited as:
+# A row the recency window would have left out: greyed and unticked, never moved.
+research-helper-search-related-chip-outside-window = Outside the recency window
+
+# The dots themselves are drawn by the window. `{ $dots }` is 0 to 5.
+research-helper-search-related-score =
+    .title = { $dots } of 5 dots, relative to the highest score in this list
+    .aria-label = Score: { $dots } of 5 dots, relative to the highest score in this list
+
+# One status row per list a run asked, beside what that list answered.
+research-helper-search-related-generator-s2-recommendations = Recommended (Semantic Scholar)
+research-helper-search-related-generator-pmra = Similar articles (PubMed)
+research-helper-search-related-generator-s2-citations = Citations (Semantic Scholar)
+research-helper-search-related-generator-s2-references = References (Semantic Scholar)
+research-helper-search-related-generator-europepmc-citations = Citations (Europe PMC)
+research-helper-search-related-generator-europepmc-references = References (Europe PMC)
+research-helper-search-related-generator-crossref-references = References (Crossref)
+
+# "answered" uses `research-helper-search-source-results`.
+research-helper-search-related-source-no-key = not asked: no key
+research-helper-search-related-source-not-indexed = not indexed
+research-helper-search-related-source-could-not-ask = not asked: this paper has no identifier this list can use
+research-helper-search-related-source-rate-limited = too many requests · try again in a moment
+research-helper-search-related-source-over-budget = not asked: over this run's request limit
+# `{ $code }` is a machine code such as UPSTREAM_SERVER, not translated.
+research-helper-search-related-source-failed = failed ({ $code })
+
+# Shown when the run itself found no Semantic Scholar key (plan/00 §6 item 320(a)).
+research-helper-search-related-key-notice = Related papers work better with a Semantic Scholar key. Without one, Semantic Scholar's lists are not asked and similarity is the basic kind.
+
+# docs/08 §5.3's banner.
+research-helper-search-related-matched-by-title = No identifier found — matched by title, results may be less accurate.
+research-helper-search-related-seed-failures = Some services could not be asked about this item, and the run went on without them.
+research-helper-search-related-similarity-no-store = Similarity is the basic kind on this run, because the place that keeps paper vectors could not be opened.
+research-helper-search-related-similarity-fetch-failed = Semantic Scholar's paper vectors could not all be fetched, so some papers show no similarity on this run.
+
+research-helper-search-related-state-empty = No related papers were found for this item.
+research-helper-search-related-state-failed = Related papers could not be looked up.
+research-helper-search-related-status-running = Looking for related papers…
+research-helper-search-related-status-cancelled = Cancelled.
+
+# FR-14: no identifier, and more than one paper matched the item's title.
+research-helper-search-related-picker-prompt = This item has no identifier, and several papers match its title. Which one is it?
+research-helper-search-related-picker-use =
+    .label = Use this paper
+
+# FR-17: importing from a related run.
+research-helper-search-related-link-to-seed =
+    .label = Link imported items as “Related” to the seed item
+# The name of the new collection a related import starts with. Stored in the library.
+research-helper-search-related-target-default = Related to “{ $title }”
+research-helper-search-related-link-failed = The papers were imported, but not all of them could be linked to the seed item as “Related”.
+research-helper-search-related-seed-gone = The item these papers were found for is no longer in your library, so nothing was imported.
+
 
 ## Date range (docs/08 §4.2 "Date defaults", FR-3)
 ##

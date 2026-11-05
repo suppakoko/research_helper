@@ -99,6 +99,34 @@ export interface SearchImportTarget {
    * is omitted.
    */
   readonly duplicatePolicy?: DuplicatePolicy;
+  /**
+   * Relate each item written to this one (`P5-T17`, FR-17): the seed's
+   * `Zotero.Item.id`. Set by `src/ui/viewModels/relatedViewModel.ts` when the
+   * link box is ticked, and read by the writer in
+   * `src/bootstrap/registerPipelines.ts`, which passes it to `importWorks`.
+   * Created items and linked existing items alike (`plan/08` §0.4 line 15).
+   */
+  readonly relateTo?: number;
+  /**
+   * `workKey` → the item the related pipeline matched that work to, by identifier
+   * or by title (`P5-T17`, FR-16; `RelatedRow.existingItemID`). Same setter and
+   * reader as {@link relateTo}. It is how a row matched by title links to its item
+   * rather than creating a second one, since the importer finds identifier
+   * matches only.
+   */
+  readonly existingItemIDs?: ReadonlyMap<string, number>;
+}
+
+/**
+ * What {@link SearchImportTarget.relateTo} did. A failed link does not fail the
+ * run: the items stay as imported (`plan/08` `P5-T17` step 2). The writer builds
+ * it per batch, and the pipeline sums it into {@link SearchImportWriteReport}.
+ */
+export interface SearchImportSeedLink {
+  /** Items now related to the seed on both sides. */
+  readonly linked: number;
+  /** The first failure, when any batch failed. Redacted and storable. */
+  readonly error: SerializedError | undefined;
 }
 
 /**
@@ -426,6 +454,11 @@ export interface SearchImportWriteReport {
    * Strategy B ran — see {@link SearchImportPathCounts}.
    */
   readonly importPaths?: SearchImportPathCounts;
+  /**
+   * Summed over the run's batches. Absent unless the target carried
+   * {@link SearchImportTarget.relateTo}.
+   */
+  readonly seedLink?: SearchImportSeedLink;
 }
 
 /** One `searchImport` run's result. */
@@ -536,6 +569,8 @@ export interface SearchImportBatchResult {
    * Strategy B — see {@link SearchImportPathCounts}.
    */
   readonly importPaths?: SearchImportPathCounts;
+  /** This batch's link to the seed. Absent unless the target asked for one. */
+  readonly seedLink?: SearchImportSeedLink;
 }
 
 /**

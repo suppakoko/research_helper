@@ -307,9 +307,11 @@ import {
   CROSSREF_QUERY_SYNTHETIC_MALFORMED,
   CROSSREF_QUERY_TYPICAL,
   CROSSREF_QUERY_UNICODE,
+  CROSSREF_DOI_NON_BIOMEDICAL_SEED,
   CROSSREF_DOI_WITH_REFERENCES,
   CROSSREF_DOI_WITHOUT_REFERENCES,
   recordedCrossrefRequest,
+  recordedCrossrefDoiLookupRequest,
   recordedCrossrefTitleSearchRequest,
   recordedCrossrefWorkRequest,
 } from "../test/support/crossrefRecordedRequests";
@@ -3541,6 +3543,16 @@ export function crossrefRelatedPlan(): RelatedPlan {
         "title-search",
         "P5-T09 step 2: query.bibliographic with rows 5",
         recordedCrossrefTitleSearchRequest(),
+      ),
+      relatedPlanned(
+        "work-non-biomedical-seed",
+        "P5-T32: /works/{doi} for a computer-vision seed with a deposited reference[]",
+        recordedCrossrefWorkRequest(CROSSREF_DOI_NON_BIOMEDICAL_SEED),
+      ),
+      relatedPlanned(
+        "lookup-non-biomedical-references",
+        "P5-T32: filter=doi: over that seed's 60 reference DOIs",
+        recordedCrossrefDoiLookupRequest(),
       ),
     ],
     synthetic: () => [],

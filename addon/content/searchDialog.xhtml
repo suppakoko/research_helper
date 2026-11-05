@@ -143,6 +143,33 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
           data-l10n-id="research-helper-search-related-include-similar"
         />
       </hbox>
+      <!-- P5-T16: the run's own notice that it found no Semantic Scholar key.
+           The link's href is set by script from the view state, because this
+           markup may name no remote resource (docs/01 §8.3). -->
+      <hbox
+        id="rh-related-key-notice"
+        align="center"
+        class="rh-wrap"
+        hidden="true"
+      >
+        <description
+          id="rh-related-key-text"
+          class="rh-hint"
+          data-l10n-id="research-helper-search-related-key-notice"
+        />
+        <html:a
+          id="rh-related-key-request"
+          data-l10n-id="research-helper-search-s2-no-key-request"
+        />
+      </hbox>
+      <!-- P5-T16: one status row per list a run asked (docs/08 §5.2's note,
+           decision 10). Filled by renderSourceStatus(). -->
+      <hbox
+        id="rh-related-status"
+        class="rh-wrap"
+        role="status"
+        hidden="true"
+      />
     </vbox>
 
     <!-- 2. Year range and per-database cap — docs/08 §4.2 "Date defaults" and
@@ -366,8 +393,32 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
              id arrives with the arguments. -->
         <description id="rh-state-empty-headline" />
         <description
+          id="rh-state-empty-suggestions"
           data-l10n-id="research-helper-search-state-empty-suggestions"
         />
+      </vbox>
+
+      <!-- FR-14 (P5-T16): the seed matched several papers by title, so the
+           window asks which one it is. The radios are built by script, nothing
+           is pre-selected, and the button stays off until one is chosen. -->
+      <vbox id="rh-state-related-choose" class="rh-state" hidden="true">
+        <description
+          id="rh-related-picker-prompt"
+          data-l10n-id="research-helper-search-related-picker-prompt"
+        />
+        <html:div
+          id="rh-related-picker-list"
+          class="rh-table-scroll"
+          role="radiogroup"
+          aria-labelledby="rh-related-picker-prompt"
+        />
+        <hbox align="center">
+          <button
+            id="rh-related-picker-use"
+            disabled="true"
+            data-l10n-id="research-helper-search-related-picker-use"
+          />
+        </hbox>
       </vbox>
 
       <vbox id="rh-state-error" class="rh-state" hidden="true">
@@ -543,6 +594,13 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
         data-l10n-id="research-helper-search-target-new"
       />
     </hbox>
+    <!-- FR-17 (P5-T17): the related mode's link to the seed. applyRelatedMode()
+         shows it and sets its state from related.linkToSeed. -->
+    <checkbox
+      id="rh-related-link-seed"
+      data-l10n-id="research-helper-search-related-link-to-seed"
+      hidden="true"
+    />
 
     <!-- 7. Duplicate policy — docs/08 §4.4's dedup pass, drawn in §4.5 with
          "Add existing item to collection" pre-selected. docs/07 §8.5 declares

@@ -385,7 +385,13 @@ const SCENARIOS: Readonly<
   pubmed: { host: NCBI_HOST, live: ["elink-two-seeds"], synthetic: [] },
   crossref: {
     host: CROSSREF_HOST,
-    live: ["work-with-references", "work-without-references", "title-search"],
+    live: [
+      "work-with-references",
+      "work-without-references",
+      "title-search",
+      "work-non-biomedical-seed",
+      "lookup-non-biomedical-references",
+    ],
     synthetic: [],
   },
   semanticscholar: {

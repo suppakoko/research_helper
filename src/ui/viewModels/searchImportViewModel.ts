@@ -1630,6 +1630,33 @@ export function importSummary(
 }
 
 /**
+ * The target picker's value as an import target: a listed collection's name, or
+ * the name in `${NEW_COLLECTION_VALUE}:<name>`. `undefined` means it names no
+ * collection, as bare "New collection…" does not.
+ *
+ * Callers: this file's `resolveTarget`, whose comment says why a name is never
+ * derived from the query, and `relatedViewModel.ts`'s import (`P5-T17`), so both
+ * windows read the one picker alike.
+ *
+ * @param raw - the picker's value
+ * @param collections - what the picker lists
+ */
+export function targetFromPicker(
+  raw: unknown,
+  collections: readonly CollectionDescriptor[],
+): SearchImportTarget | undefined {
+  if (typeof raw !== "string" || raw === "") return undefined;
+  if (raw === NEW_COLLECTION_VALUE) return undefined;
+  if (raw.startsWith(`${NEW_COLLECTION_VALUE}:`)) {
+    const name = raw.slice(NEW_COLLECTION_VALUE.length + 1).trim();
+    return name === "" ? undefined : { collectionName: name };
+  }
+  const id = Number(raw);
+  const found = collections.find((collection) => collection.id === id);
+  return found === undefined ? undefined : { collectionName: found.name };
+}
+
+/**
  * Strategy B's lines for the import summary (`P2-T18` step 10; `plan/00` §6
  * item 212): `research-helper-import-paths` with the two path counts, then one
  * `research-helper-import-fallback-reason` per reason class that sent at least
@@ -2364,18 +2391,7 @@ export function createSearchImportViewModel(
   function resolveTarget(
     query: SearchWindowQuery,
   ): SearchImportTarget | undefined {
-    const raw = query.collectionID;
-    if (typeof raw !== "string" || raw === "") return undefined;
-    if (raw === NEW_COLLECTION_VALUE) return undefined;
-    if (raw.startsWith(`${NEW_COLLECTION_VALUE}:`)) {
-      const name = raw.slice(NEW_COLLECTION_VALUE.length + 1).trim();
-      return name === "" ? undefined : { collectionName: name };
-    }
-    const id = Number(raw);
-    const found = (deps.listCollections?.() ?? []).find(
-      (collection) => collection.id === id,
-    );
-    return found === undefined ? undefined : { collectionName: found.name };
+    return targetFromPicker(query.collectionID, deps.listCollections?.() ?? []);
   }
 
   /**

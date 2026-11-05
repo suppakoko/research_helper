@@ -80,7 +80,10 @@ import type {
   RelatedPage,
   RelatedQuery,
 } from "../../../src/sources/types";
-import { CROSSREF_DOI_WITH_REFERENCES } from "../../support/crossrefRecordedRequests";
+import {
+  CROSSREF_DOI_NON_BIOMEDICAL_SEED,
+  CROSSREF_DOI_WITH_REFERENCES,
+} from "../../support/crossrefRecordedRequests";
 import { EUROPEPMC_RELATED_SEED_PMID } from "../../support/europepmcRecordedRequests";
 
 const NOW = 1_700_000_000_000;
@@ -2425,6 +2428,13 @@ describe("on the shipped adapters, without a key", () => {
           return Promise.reject(new Error(`asked Semantic Scholar: ${url}`));
         }
         if (host === CROSSREF_HOST) {
+          // Crossref's `lookup` holds nothing on this seed; the block "Crossref's
+          // lookup in hydration" replays a real answer.
+          if (url.includes("filter=doi")) {
+            return Promise.resolve(
+              ok(url, JSON.stringify({ status: "ok", message: { items: [] } })),
+            );
+          }
           return Promise.resolve(
             ok(url, recordedBody("crossref/related", "work-with-references")),
           );
@@ -2664,5 +2674,602 @@ describe("on the shipped adapters, without a key", () => {
     expect(
       result.statuses.filter((row) => row.state === "over-budget"),
     ).toEqual([]);
+  });
+});
+
+describe("Crossref's lookup in hydration (P5-T32)", () => {
+  /** A Crossref stand-in that has a `lookup`, which the default one has not. */
+  function crossrefWithLookup(
+    rows: readonly SourceRecord[],
+    lookup?: (ids: readonly Partial<ExternalIds>[]) => readonly SourceRecord[],
+  ): StandIn {
+    const base = standIn(
+      "crossref",
+      { references: pageOf(rows, () => ({ kind: "reference", rank: 1 })) },
+      lookup,
+    );
+    return {
+      ...base,
+      source: { ...base.source, lookup: base.lookup } as LiteratureSource,
+    };
+  }
+
+  /** The record `lookup` answers for a bare row: one id, so the row's edges stay. */
+  function filled(n: number): SourceRecord {
+    const doi = `10.1000/p${String(n)}`;
+    return rec("crossref", doi, {
+      ids: { doi } as ExternalIds,
+      title: titleOf(n),
+    });
+  }
+
+  function askedDois(mock: StandIn["lookup"], call = 0): readonly string[] {
+    const ids = mock.mock.calls[call]?.[0] as
+      readonly Partial<ExternalIds>[] | undefined;
+    return (ids ?? []).map((entry) => entry.doi ?? "");
+  }
+
+  const bare = (...ns: number[]) => ns.map(bareDoi);
+
+  it("Done when: asks Europe PMC first, then Crossref only what it left untitled", async () => {
+    const calls: string[] = [];
+    const crossref = crossrefWithLookup(bare(1, 2), () => {
+      calls.push("crossref");
+      return [filled(2)];
+    });
+    const epmc = standIn("europepmc", {}, () => {
+      calls.push("europepmc");
+      return [paper("europepmc", 1)];
+    });
+    const result = await runRelatedGenerators(
+      SEED,
+      contextOf([crossref, epmc]),
+      keyless,
+    );
+    expect(calls).toEqual(["europepmc", "crossref"]);
+    expect(askedDois(epmc.lookup)).toEqual(["10.1000/p1", "10.1000/p2"]);
+    expect(askedDois(crossref.lookup)).toEqual(["10.1000/p2"]);
+    expect(result.candidates).toHaveLength(2);
+    expect(result.hydration.untitled).toBe(0);
+    // One DOI asked of two sources counts under each (docs/05 §6.1's note).
+    expect(result.hydration.sent).toBe(3);
+  });
+
+  it("fills the bare row under its own id, so the row keeps its edge and takes the type", async () => {
+    const crossref = crossrefWithLookup(bare(7), () => [filled(7)]);
+    const result = await runRelatedGenerators(
+      SEED,
+      contextOf([crossref]),
+      keyless,
+    );
+    const candidate = candidateWithDoi(result, "10.1000/p7");
+    expect(candidate.work.title).toBe(titleOf(7));
+    expect(candidate.work.type).toBe("journal-article");
+    expect(candidate.records.map((record) => record.id)).toEqual([
+      "crossref:10.1000/p7",
+    ]);
+    expect(candidate.edges.map((edge) => edge.generator)).toEqual([
+      "crossref-references",
+    ]);
+  });
+
+  it("sends Crossref nothing when Europe PMC titled every row, keyless", async () => {
+    const crossref = crossrefWithLookup(bare(1));
+    const epmc = standIn("europepmc", {}, () => [paper("europepmc", 1)]);
+    await runRelatedGenerators(SEED, contextOf([crossref, epmc]), keyless);
+    expect(crossref.lookup).not.toHaveBeenCalled();
+  });
+
+  it("keyed: a run whose titles are complete sends Crossref nothing, abstracts or not", async () => {
+    const titledNoAbstract = rec("semanticscholar", "s1", {
+      ids: { doi: "10.1000/p1" } as ExternalIds,
+      title: titleOf(1),
+    });
+    const s2 = standIn(
+      "semanticscholar",
+      {
+        references: pageOf([titledNoAbstract], () => ({
+          kind: "reference",
+          rank: 1,
+        })),
+      },
+      () => [],
+    );
+    const crossref = crossrefWithLookup([]);
+    const epmc = standIn("europepmc", {});
+    await runRelatedGenerators(SEED, contextOf([s2, crossref, epmc]), {
+      ...keyed,
+      budget: plenty(),
+    });
+    expect(s2.lookup).toHaveBeenCalled();
+    expect(crossref.lookup).not.toHaveBeenCalled();
+  });
+
+  it("keyed: asks Crossref last, for what Semantic Scholar and Europe PMC left", async () => {
+    const calls: string[] = [];
+    const crossref = crossrefWithLookup(bare(1, 2, 3), () => {
+      calls.push("crossref");
+      return [filled(3)];
+    });
+    const s2 = standIn("semanticscholar", {}, () => {
+      calls.push("semanticscholar");
+      return [paper("semanticscholar", 1)];
+    });
+    const epmc = standIn("europepmc", {}, () => {
+      calls.push("europepmc");
+      return [paper("europepmc", 2)];
+    });
+    const result = await runRelatedGenerators(
+      SEED,
+      contextOf([s2, crossref, epmc]),
+      { ...keyed, budget: plenty() },
+    );
+    expect(calls).toEqual(["semanticscholar", "europepmc", "crossref"]);
+    expect(askedDois(crossref.lookup)).toEqual(["10.1000/p3"]);
+    expect(result.hydration.untitled).toBe(0);
+  });
+
+  it("asks neither source about an empty DOI", async () => {
+    const row = rec(
+      "crossref",
+      "blank",
+      {
+        ids: { doi: "" } as ExternalIds,
+        type: "other",
+        title: "",
+        authors: [],
+      },
+      { missingFields: ["title"] },
+    );
+    const crossref = crossrefWithLookup([row]);
+    const epmc = standIn("europepmc", {});
+    await runRelatedGenerators(SEED, contextOf([crossref, epmc]), keyless);
+    expect(crossref.lookup).not.toHaveBeenCalled();
+    expect(epmc.lookup).not.toHaveBeenCalled();
+  });
+
+  it("still asks Europe PMC about an arXiv DOI, as before", async () => {
+    const arxivDoi = "10.48550/arxiv.2301.00001";
+    const row = rec(
+      "crossref",
+      arxivDoi,
+      {
+        ids: { doi: arxivDoi } as ExternalIds,
+        type: "other",
+        title: "",
+        authors: [],
+      },
+      { missingFields: ["title"] },
+    );
+    const crossref = crossrefWithLookup([row]);
+    const epmc = standIn("europepmc", {});
+    await runRelatedGenerators(SEED, contextOf([crossref, epmc]), keyless);
+    expect(askedDois(epmc.lookup)).toEqual([arxivDoi]);
+    expect(crossref.lookup).not.toHaveBeenCalled();
+  });
+
+  it("does not send an arXiv DOI to Crossref, and spends nothing on it", async () => {
+    const arxivDoi = "10.48550/arxiv.2301.00001";
+    const row = rec(
+      "crossref",
+      arxivDoi,
+      {
+        ids: { doi: arxivDoi } as ExternalIds,
+        type: "other",
+        title: "",
+        authors: [],
+      },
+      { missingFields: ["title"] },
+    );
+    const crossref = crossrefWithLookup([row]);
+    const budget = plenty();
+    const before = budget.remaining;
+    const result = await runRelatedGenerators(SEED, contextOf([crossref]), {
+      ...keyless,
+      budget,
+    });
+    expect(crossref.lookup).not.toHaveBeenCalled();
+    expect(result.hydration.untitled).toBe(1);
+    expect(result.hydration.unsent).toBe(0);
+    // Crossref's own list is the one request.
+    expect(before - budget.remaining).toBe(1);
+  });
+
+  it("still sends the other DOIs of a list that holds an arXiv DOI", async () => {
+    const arxivDoi = "10.48550/ARXIV.2301.00001";
+    const row = rec(
+      "crossref",
+      arxivDoi,
+      {
+        ids: { doi: arxivDoi } as ExternalIds,
+        type: "other",
+        title: "",
+        authors: [],
+      },
+      { missingFields: ["title"] },
+    );
+    const crossref = crossrefWithLookup([row, bareDoi(1)], () => [filled(1)]);
+    const result = await runRelatedGenerators(
+      SEED,
+      contextOf([crossref]),
+      keyless,
+    );
+    expect(askedDois(crossref.lookup)).toEqual(["10.1000/p1"]);
+    expect(result.candidates).toHaveLength(1);
+    expect(result.hydration.untitled).toBe(1);
+  });
+
+  describe("the budget", () => {
+    const many = (count: number) =>
+      Array.from({ length: count }, (_, index) => bareDoi(index + 1));
+    const filledAll = (ids: readonly Partial<ExternalIds>[]) =>
+      ids.map((entry) =>
+        filled(Number((entry.doi ?? "").replace("10.1000/p", ""))),
+      );
+
+    /**
+     * Crossref's list in the cache, its lookup not yet asked anything, so the budget
+     * a test gives is hydration's alone. (A list with no `lookup`, or the cache would
+     * hold the answers too.)
+     */
+    async function withListCached(
+      rows: readonly SourceRecord[],
+    ): Promise<MemoryCache> {
+      const memory = memoryCache();
+      await runRelatedGenerators(
+        SEED,
+        contextOf(
+          [
+            standIn("crossref", {
+              references: pageOf(rows, () => ({ kind: "reference", rank: 1 })),
+            }),
+          ],
+          { cache: memory.cache },
+        ),
+        {
+          ...keyless,
+          budget: new RequestBudget(RELATED_HYDRATION_RESERVE + 1),
+        },
+      );
+      return memory;
+    }
+
+    it("sends Crossref 100 DOIs a request: 150 is two of the budget", async () => {
+      const rows = many(150);
+      const memory = await withListCached(rows);
+      const crossref = crossrefWithLookup(rows, filledAll);
+      const budget = new RequestBudget(2);
+      const result = await runRelatedGenerators(
+        SEED,
+        contextOf([crossref], { cache: memory.cache }),
+        { ...keyless, budget },
+      );
+      expect(budget.remaining).toBe(0);
+      expect(askedDois(crossref.lookup)).toHaveLength(150);
+      expect(result.hydration.unsent).toBe(0);
+      expect(result.candidates).toHaveLength(150);
+    });
+
+    it("sends the first 100 and counts 50 when one request is left", async () => {
+      const rows = many(150);
+      const memory = await withListCached(rows);
+      const crossref = crossrefWithLookup(rows, filledAll);
+      const budget = new RequestBudget(1);
+      const result = await runRelatedGenerators(
+        SEED,
+        contextOf([crossref], { cache: memory.cache }),
+        { ...keyless, budget },
+      );
+      expect(budget.remaining).toBe(0);
+      expect(askedDois(crossref.lookup)).toHaveLength(100);
+      expect(result.hydration.unsent).toBe(50);
+      expect(result.hydration.untitled).toBe(50);
+    });
+
+    it("gives Europe PMC the last request, and counts what Crossref could not be asked", async () => {
+      const rows = bare(1, 2);
+      const memory = await withListCached(rows);
+      const crossref = crossrefWithLookup(rows, () => [filled(2)]);
+      const epmc = standIn("europepmc", {}, () => [paper("europepmc", 1)]);
+      const budget = new RequestBudget(1);
+      const result = await runRelatedGenerators(
+        SEED,
+        contextOf([crossref, epmc], { cache: memory.cache }),
+        { ...keyless, budget },
+      );
+      expect(budget.remaining).toBe(0);
+      expect(epmc.lookup).toHaveBeenCalledTimes(1);
+      expect(crossref.lookup).not.toHaveBeenCalled();
+      expect(result.hydration.unsent).toBe(1);
+      expect(result.hydration.untitled).toBe(1);
+    });
+
+    it("sends Crossref nothing and spends nothing when the budget is gone", async () => {
+      const rows = bare(1);
+      const memory = await withListCached(rows);
+      const crossref = crossrefWithLookup(rows, () => [filled(1)]);
+      const result = await runRelatedGenerators(
+        SEED,
+        contextOf([crossref], { cache: memory.cache }),
+        { ...keyless, budget: new RequestBudget(0) },
+      );
+      expect(crossref.lookup).not.toHaveBeenCalled();
+      expect(result.hydration.unsent).toBe(1);
+      expect(result.hydration.sent).toBe(0);
+    });
+
+    it("the worst keyless case fits: a DOI-only seed's 6, then one lookup each, and the fill-in is counted", async () => {
+      const seedRecord = rec("europepmc", "seed", {
+        ids: { doi: DOI, pmid: PMID } as ExternalIds,
+      });
+      const untitledNs = Array.from({ length: 100 }, (_, index) => index + 1);
+      const crossref = crossrefWithLookup(bare(...untitledNs), filledAll);
+      const epmc = standIn(
+        "europepmc",
+        {
+          citations: pageOf([], () => ({ kind: "citation", rank: 1 })),
+          references: pageOf([], () => ({ kind: "reference", rank: 1 })),
+        },
+        (ids) =>
+          ids.some((entry) => entry.doi === DOI)
+            ? [seedRecord]
+            : [paper("europepmc", 1)],
+      );
+      // A neighbour with a DOI and no abstract: only the fill-in would ask for it.
+      const neighbour = rec("pubmed", "n900", {
+        ids: { doi: "10.1000/p900", pmid: "900" } as ExternalIds,
+        title: titleOf(900),
+      });
+      const pubmed = standIn("pubmed", {
+        similar: pageOf([neighbour], () => ({ kind: "similar", rank: 1 })),
+        auto: pageOf([neighbour], () => ({ kind: "similar", rank: 1 })),
+      });
+      const budget = new RequestBudget(RELATED_REQUEST_BUDGET);
+      const result = await runRelatedGenerators(
+        { ids: { doi: DOI } as ExternalIds },
+        contextOf([crossref, epmc, pubmed]),
+        { ...keyless, budget },
+      );
+      expect(budget.remaining).toBe(0);
+      expect(epmc.lookup).toHaveBeenCalledTimes(2);
+      expect(crossref.lookup).toHaveBeenCalledTimes(1);
+      expect(askedDois(crossref.lookup)).toHaveLength(99);
+      expect(result.hydration.untitled).toBe(0);
+      expect(result.candidates).toHaveLength(101);
+      expect(result.hydration.unsent).toBe(1);
+      expect(
+        result.statuses.filter((row) => row.state === "over-budget"),
+      ).toEqual([]);
+    });
+  });
+
+  it("turns a failed Crossref lookup into a row, and keeps what Europe PMC gave", async () => {
+    const crossref = crossrefWithLookup(bare(1, 2));
+    crossref.lookup.mockImplementation(() =>
+      Promise.reject(new UpstreamServerError(503, "down")),
+    );
+    const epmc = standIn("europepmc", {}, () => [paper("europepmc", 1)]);
+    const result = await runRelatedGenerators(
+      SEED,
+      contextOf([crossref, epmc]),
+      keyless,
+    );
+    expect(result.hydration.failed).toEqual([
+      { sourceId: "crossref", code: new UpstreamServerError(503, "x").code },
+    ]);
+    expect(candidateWithDoi(result, "10.1000/p1").work.title).toBe(titleOf(1));
+    expect(result.hydration.untitled).toBe(1);
+  });
+
+  it("is a rejection when cancelled in Crossref's lookup", async () => {
+    const crossref = crossrefWithLookup(bare(1));
+    crossref.lookup.mockImplementation(() =>
+      Promise.reject(new OperationCancelledError({ kind: "user" })),
+    );
+    await expect(
+      runRelatedGenerators(SEED, contextOf([crossref]), keyless),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+  });
+
+  it("answers a second run from the per-identifier cache, the record or missing", async () => {
+    const cache = memoryCache();
+    const crossref = crossrefWithLookup(bare(1, 2), () => [filled(1)]);
+    const first = await runRelatedGenerators(
+      SEED,
+      contextOf([crossref], { cache: cache.cache }),
+      keyless,
+    );
+    expect(first.candidates).toHaveLength(1);
+    expect(crossref.lookup).toHaveBeenCalledTimes(1);
+
+    const budget = plenty();
+    const before = budget.remaining;
+    const second = await runRelatedGenerators(
+      SEED,
+      contextOf([crossref], { cache: cache.cache }),
+      { ...keyless, budget },
+    );
+    expect(crossref.lookup).toHaveBeenCalledTimes(1);
+    expect(second.candidates).toHaveLength(1);
+    expect(second.candidates[0]?.work.title).toBe(titleOf(1));
+    expect(before - budget.remaining).toBe(0);
+  });
+
+  it("is not asked by the abstract fill-in, even for a titled row with no abstract", async () => {
+    const titled = rec("crossref", "10.1000/p5", {
+      ids: { doi: "10.1000/p5" } as ExternalIds,
+      title: titleOf(5),
+    });
+    const crossref = crossrefWithLookup([titled]);
+    const epmc = standIn("europepmc", {});
+    await runRelatedGenerators(SEED, contextOf([crossref, epmc]), keyless);
+    expect(crossref.lookup).not.toHaveBeenCalled();
+    // The fill-in's ladder asked Europe PMC instead.
+    expect(epmc.lookup).toHaveBeenCalledTimes(1);
+  });
+
+  describe("on the recorded non-biomedical seed, through the shipped adapters", () => {
+    /** The nine this seed's DOIs Europe PMC answered on 2026-11-05 (docs/05 §6.1). */
+    const EUROPE_PMC_ANSWERED = [
+      "10.1109/tpami.2006.244",
+      "10.1109/tpami.2012.28",
+      "10.1109/tpami.2010.161",
+      "10.1109/tpami.2009.167",
+      "10.1109/tpami.2011.131",
+      "10.1109/cvpr.2014.264",
+      "10.1038/381520a0",
+      "10.1109/tpami.2008.128",
+      "10.1109/tpami.2009.154",
+    ];
+
+    function run() {
+      const clock = createManualClock(NOW);
+      const lookups: string[] = [];
+      const ebi: string[] = [];
+      const recorded = JSON.parse(
+        recordedBody("crossref/related", "lookup-non-biomedical-references"),
+      ) as { message: { items: readonly { DOI: string }[] } };
+      const http: HttpClient = {
+        request(_method, url, options?: HttpOptions) {
+          const host = new URL(url).hostname;
+          if (host === CROSSREF_HOST) {
+            const filter = new URL(url).searchParams.get("filter");
+            if (filter === null) {
+              return Promise.resolve(
+                ok(
+                  url,
+                  recordedBody("crossref/related", "work-non-biomedical-seed"),
+                ),
+              );
+            }
+            lookups.push(url);
+            const asked = filter.split(",").map((pair) => pair.slice(4));
+            // The real items, cut to what was asked: the recorded list asked all 60.
+            const items = recorded.message.items.filter((item) =>
+              asked.includes(item.DOI.toLowerCase()),
+            );
+            return Promise.resolve(
+              ok(
+                url,
+                JSON.stringify({
+                  status: "ok",
+                  message: { "total-results": items.length, items },
+                }),
+              ),
+            );
+          }
+          if (host === EBI_HOST) {
+            ebi.push(url);
+            const params = new URLSearchParams(
+              options?.body ?? url.slice(url.indexOf("?") + 1),
+            );
+            // Hand-written, on `lookup`'s `core` shape: its answer was not recorded.
+            const results = [
+              ...(params.get("query") ?? "").matchAll(/DOI:"([^"]+)"/gu),
+            ]
+              .map((match) => match[1] ?? "")
+              .filter((doi) => EUROPE_PMC_ANSWERED.includes(doi))
+              .map((doi, index) => ({
+                id: `9${String(index)}`,
+                source: "MED",
+                pmid: `9${String(index)}`,
+                doi,
+                title: `Held by Europe PMC ${doi}`,
+                authorString: "Author A.",
+                pubYear: "2010",
+                abstractText: "An abstract only Europe PMC gave.",
+              }));
+            return Promise.resolve(
+              ok(
+                url,
+                JSON.stringify({
+                  hitCount: results.length,
+                  resultList: { result: results },
+                }),
+              ),
+            );
+          }
+          return Promise.reject(new Error(`no service at ${url}`));
+        },
+      };
+      const sources: LiteratureSource[] = [
+        createEuropePmcSource({
+          http,
+          clock,
+          mapRecords: createEuropePmcRecordMapper({ clock }),
+        }),
+        createCrossrefSource({
+          http,
+          clock,
+          mapRecords: createCrossrefRecordMapper({
+            clock,
+            parseXml: () => ({ documentElement: null }),
+          }),
+        }),
+      ];
+      return { sources, lookups, ebi };
+    }
+
+    const SEED_DOI = {
+      ids: { doi: CROSSREF_DOI_NON_BIOMEDICAL_SEED } as ExternalIds,
+    };
+
+    it("Done when: a keyless run returns titled candidates for what Europe PMC did not answer", async () => {
+      const { sources, lookups, ebi } = run();
+      const budget = new RequestBudget(RELATED_REQUEST_BUDGET);
+      const result = await runRelatedGenerators(SEED_DOI, contextOf(sources), {
+        ...keyless,
+        budget,
+      });
+
+      // Expansion, Crossref's list, Europe PMC's lookup, Crossref's lookup.
+      expect(budget.remaining).toBe(RELATED_REQUEST_BUDGET - 4);
+      expect(ebi).toHaveLength(2);
+      expect(lookups).toHaveLength(1);
+      expect(new URL(lookups[0] ?? "").searchParams.get("rows")).toBe("51");
+
+      expect(result.hydration.untitled).toBe(0);
+      expect(result.hydration.failed).toEqual([]);
+      expect(result.candidates).toHaveLength(60);
+      for (const candidate of result.candidates) {
+        expect(candidate.work.title.trim()).not.toBe("");
+      }
+      // A title Europe PMC never saw, off the real body.
+      expect(
+        candidateWithDoi(result, "10.1023/a:1011139631724").work.title,
+      ).toMatch(/\S/u);
+      expect(
+        candidateWithDoi(result, "10.1023/a:1011139631724").work.title,
+      ).not.toMatch(/^Held by/u);
+    });
+
+    it("keeps what asking Europe PMC first buys: its abstract and PMID", async () => {
+      const { sources } = run();
+      const result = await runRelatedGenerators(
+        SEED_DOI,
+        contextOf(sources),
+        keyless,
+      );
+      const candidate = candidateWithDoi(result, "10.1038/381520a0");
+      expect(candidate.work.abstract).toBe("An abstract only Europe PMC gave.");
+      expect(candidate.work.ids.pmid).toBeDefined();
+      expect(candidate.edges.map((edge) => edge.generator)).toEqual([
+        "crossref-references",
+      ]);
+    });
+
+    it("reads a real Crossref row's type once the lookup fills it", async () => {
+      const { sources } = run();
+      const result = await runRelatedGenerators(
+        SEED_DOI,
+        contextOf(sources),
+        keyless,
+      );
+      // The nine Europe PMC rows are hand-written, with no `pubTypeList`.
+      const others = result.candidates
+        .filter((candidate) => candidate.work.type === "other")
+        .map((candidate) => candidate.work.ids.doi);
+      expect(new Set(others)).toEqual(new Set(EUROPE_PMC_ANSWERED));
+    });
   });
 });

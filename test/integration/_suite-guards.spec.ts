@@ -14,11 +14,25 @@
  * Mocha's rule for a failed root `afterEach` hook is to stop the run, so one
  * incident fails loudly and the remaining tests are not run. That is the
  * intent: an incident means some code path would have sent real lookups.
+ *
+ * **Added 2026-11-05 (`plan/00` §6 item 347(c)):** the same hooks carry the live
+ * request guard of `./support/liveRequestGuard.ts`, which cancels a live request
+ * before it connects. It covers what the first guard cannot: a real related window
+ * that starts its own run through `Zotero.HTTP`.
  */
 
 import { createCancellationTokenSource } from "../../src/core/jobQueue/cancellation";
 import type { CanonicalWork } from "../../src/model/canonicalWork";
 import { lookupThroughTranslators } from "../../src/zotero/translatorImport";
+import {
+  installLiveRequestGuard,
+  isLiveRequestGuardInstalled,
+  liveGuardSummary,
+  liveRequestViolation,
+  setLiveGuardTest,
+  takeLiveRequestIncidents,
+  uninstallLiveRequestGuard,
+} from "./support/liveRequestGuard";
 import {
   installTranslateSearchGuard,
   isTranslateSearchGuardInstalled,
@@ -38,6 +52,8 @@ declare function before(body: () => void): void;
 declare function beforeEach(body: (this: MochaHookContext) => void): void;
 declare function afterEach(body: () => void): void;
 declare function after(body: () => void): void;
+/** The scaffold runner's `window.debug`: POSTs one line to the terminal. */
+declare function debug(line: string): void;
 declare const assert: {
   strictEqual<T>(actual: T, expected: T, message?: string): void;
   deepEqual<T>(actual: T, expected: T, message?: string): void;
@@ -51,24 +67,39 @@ declare const assert: {
 
 // At load: before any later spec file's script runs.
 installTranslateSearchGuard();
+installLiveRequestGuard();
 
 before(function () {
   installTranslateSearchGuard();
+  installLiveRequestGuard();
 });
 
 beforeEach(function (this: MochaHookContext) {
-  setGuardedTest(this.currentTest?.fullTitle() ?? "(unnamed test)");
+  const title = this.currentTest?.fullTitle() ?? "(unnamed test)";
+  setGuardedTest(title);
+  setLiveGuardTest(title);
 });
 
-afterEach(function () {
-  const violation = translateSearchGuardViolation();
+afterEach(function (this: MochaHookContext) {
+  const violation = translateSearchGuardViolation() ?? liveRequestViolation();
   setGuardedTest("(between tests)");
+  // A `before` hook is outside any test, so the last test's name says where it was.
+  setLiveGuardTest(
+    `(between tests, after ${this.currentTest?.fullTitle() ?? "an unnamed test"})`,
+  );
   if (violation !== undefined) throw violation;
 });
 
 after(function () {
-  const violation = translateSearchGuardViolation();
+  const violation = translateSearchGuardViolation() ?? liveRequestViolation();
+  const { channels, passedHosts, passedAway } = liveGuardSummary();
+  debug(
+    `[live-request guard] ${String(channels)} channels read, none cancelled ` +
+      `unless a failure says so; hosts let through: ${JSON.stringify(passedHosts)}; ` +
+      `away from loopback: ${JSON.stringify(passedAway)}`,
+  );
   uninstallTranslateSearchGuard();
+  uninstallLiveRequestGuard();
   if (violation !== undefined) throw violation;
 });
 
@@ -87,6 +118,40 @@ function guardWork(): CanonicalWork {
     normalizedAtEpochMs: Date.now(),
   };
 }
+
+describe("Suite-wide live request guard (plan/00 item 347(c))", function () {
+  it("is installed for the whole run, and cancels a request with the plugin's User-Agent before it connects", async function () {
+    assert.isTrue(isLiveRequestGuardInstalled(), "the observer is registered");
+    assert.deepEqual(takeLiveRequestIncidents(), []);
+    // A reserved name: it resolves nowhere, so even a guard that failed sends nothing.
+    // `successCodes: false` resolves whatever happened, so the channel's own status
+    // says why it ended: a reserved name alone would fail with a DNS error instead.
+    const ended = (await Zotero.HTTP.request(
+      "GET",
+      "https://rh-live-guard.invalid/probe",
+      {
+        headers: { "User-Agent": "research_helper/0.0.0 (guard check)" },
+        timeout: 10_000,
+        successCodes: false,
+      },
+    )) as unknown as {
+      readonly status: number;
+      readonly channel?: { readonly status?: number };
+    };
+    const incidents = takeLiveRequestIncidents();
+    assert.strictEqual(incidents.length, 1, "one incident recorded");
+    assert.isTrue(
+      incidents[0]?.includes("rh-live-guard.invalid/probe") === true,
+      "the incident names the address",
+    );
+    assert.strictEqual(ended.status, 0, "no answer came back");
+    assert.strictEqual(
+      ended.channel?.status,
+      Components.results.NS_BINDING_ABORTED,
+      "the guard cancelled the channel, and no DNS failure ended it",
+    );
+  });
+});
 
 describe("Suite-wide Zotero.Translate.Search guard (plan/00 items 208, 229)", function () {
   it("is installed for the whole run: the constructor refuses, and the refusal is recorded", function () {

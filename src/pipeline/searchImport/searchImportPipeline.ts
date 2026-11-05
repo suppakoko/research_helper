@@ -114,6 +114,7 @@ import type {
   SearchImportOutput,
   SearchImportPathCounts,
   SearchImportScreeningReport,
+  SearchImportSeedLink,
   SearchImportSourceReport,
   SearchImportWriteReport,
   SearchImportWriteSession,
@@ -255,6 +256,8 @@ interface RunState {
    * `undefined` while no batch did (item 212).
    */
   importPaths: SearchImportPathCounts | undefined;
+  /** The batches' links to the seed (`P5-T17`); `undefined` while none carried one. */
+  seedLink: SearchImportSeedLink | undefined;
   partialNoteRecorded: boolean;
   /** Set by `Screening` when the run screened (`P3-T27`). */
   screening: SearchImportScreeningReport | undefined;
@@ -278,6 +281,7 @@ function freshState(): RunState {
     failed: 0,
     createdWithAbstract: 0,
     importPaths: undefined,
+    seedLink: undefined,
     partialNoteRecorded: false,
     screening: undefined,
   };
@@ -584,6 +588,13 @@ export function createSearchImportPipeline(
     if (result.importPaths !== undefined) {
       state.importPaths = addPathCounts(state.importPaths, result.importPaths);
     }
+    if (result.seedLink !== undefined) {
+      state.seedLink = {
+        linked: (state.seedLink?.linked ?? 0) + result.seedLink.linked,
+        // The first failure: a later batch's says nothing new to the user.
+        error: state.seedLink?.error ?? result.seedLink.error,
+      };
+    }
   }
 
   /** `CreatingCollection` then `WritingItems`. */
@@ -691,6 +702,7 @@ export function createSearchImportPipeline(
             ...(state.importPaths !== undefined && {
               importPaths: state.importPaths,
             }),
+            ...(state.seedLink !== undefined && { seedLink: state.seedLink }),
           };
 
     return {

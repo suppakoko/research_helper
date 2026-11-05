@@ -5,7 +5,7 @@
  * §12.5's `Generating` note says what {@link RecommendGenerationResult.state} means.
  *
  * **Caller.** {@link runRecommendGenerators} is called by `recommendPipeline.ts`
- * (`P5-T25`, not built), which constructs the run's `RequestBudget`, passes the typed
+ * (`P5-T25`), which constructs the run's `RequestBudget`, passes the typed
  * adapters and the key probe from `installServices`, the negatives from
  * `recentNegatives`, and hands the survivors to `P5-T24`. This file constructs a
  * `RequestBudget` only when none is passed, and every type it exports.

@@ -2,7 +2,7 @@
  * The one model call of a recommend run: `COLLECTION_PROFILE` (`P5-T22`;
  * `docs/12` §15, whose note of 2026-11-02 holds the rules this file builds).
  *
- * **Callers.** Nothing calls this yet. `recommendPipeline.ts` (`P5-T25`) runs
+ * **Callers.** `recommendPipeline.ts` (`P5-T25`) runs
  * {@link runProfileCall} at `docs/07` §12.5's `ProfileCall` state, after
  * `buildProfileStats` and `P5-T21`, and before `persistProfile`. Its
  * `Pipeline.estimate` can call {@link planProfileCall}, which sends nothing.
@@ -325,6 +325,12 @@ export interface ProfileCallDeps {
   readonly egressAcknowledged?: () => boolean;
   /** Absent: always asked, and "don't ask again" stores nothing. */
   readonly routine?: ProfileRoutineStore;
+  /**
+   * The egress log (`docs/09` §3.6 item 4), awaited **before** the first request
+   * of a call goes, and not at all when nothing is sent. A rejection stops the
+   * request, so a caller that wants the run to go on catches its own failure.
+   */
+  readonly logEgress?: (entry: EgressLogEntry) => Promise<void>;
 }
 
 /** What one call is made for. */
@@ -744,7 +750,8 @@ function isUnusableAnswer(error: unknown): boolean {
 /**
  * `docs/07` §12.5's `ProfileCall`: plan, ask, send, read the answer. Writes only
  * the answer's cache entry and, when the box was ticked, the "don't ask again"
- * record. The caller stores the profile (`persistProfile`).
+ * record, and hands the egress entry to `deps.logEgress` before the first request.
+ * The caller stores the profile (`persistProfile`).
  *
  * @param input - see {@link ProfileCallInput}
  * @param ctx - the job's context; its router is the `withBudget` one
@@ -836,12 +843,20 @@ export async function runProfileCall(
 
   const prompt = deps.prompts.get(PROMPT_ID);
   const egress = egressLogEntry(plan.disclosure, ctx.clock.now());
+  // Through the router, not ahead of this call: a ceiling can still refuse it. A
+  // repair or a retry goes to the same model with the same scope, so one entry.
+  let logged = false;
+  const beforeSend = async (): Promise<void> => {
+    if (logged) return;
+    logged = true;
+    await deps.logEgress?.(egress);
+  };
   let completed;
   try {
     completed = await completeJSON<ProfilePromptAnswer>(
       ctx.llm,
       plan.request,
-      { token: ctx.token, budget: ctx.budget },
+      { token: ctx.token, budget: ctx.budget, beforeSend },
       { includeBodies: ctx.config.get("logRequestBodies") },
     );
   } catch (error) {

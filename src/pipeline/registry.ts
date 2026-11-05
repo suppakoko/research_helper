@@ -168,4 +168,11 @@ export interface PipelineSet {
    * when given the adapters, which `installServices` always passes.
    */
   readonly related?: ErasedPipeline;
+  /**
+   * "Recommend Papers…" (`P5-T25`): `createRecommendPipeline` in
+   * `./recommend/recommendPipeline.ts`, erased like every member; the window's host
+   * (`P5-T26`) narrows it to `RecommendPipeline`. `buildPipelineSet` supplies it when
+   * given the adapters and the stores, which `installServices` always passes.
+   */
+  readonly recommend?: ErasedPipeline;
 }

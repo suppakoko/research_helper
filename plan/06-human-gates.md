@@ -177,8 +177,8 @@ confirmed.
 >
 > **This blocks Phase 5 only**, and Phase 5 carries 10.5–15 days of float (`docs/11` §2), so nothing is
 > stalled today. `P2-T05` ships the adapter with unauthenticated degradation, so Phase 2 does not wait
-> either. *Updated 2026-11-02: that float is now ≈ 5–7 d (`docs/11` §2, re-priced by `plan/00` §6 items 335(g) and 336(d); ≈ 4.5–6 d before the second, ≈ 3–4 d before the first; ≈ 17.75–25 d from
-> 2026-10-26), since Phase 5's card sum of 35.75–50 d replaced its scaled 21–29 d. The gate itself closed
+> either. *Updated 2026-11-05: that float is now ≈ 4.5–6 d (`docs/11` §2, re-priced by `plan/00` §6 item 344(b); ≈ 5–7 d before it, from items 335(g) and 336(d) of 2026-11-02; ≈ 4.5–6 d before the second of those, ≈ 3–4 d before the first; ≈ 17.75–25 d from
+> 2026-10-26), since Phase 5's card sum, now 36.25–51 d, replaced its scaled 21–29 d. The gate itself closed
 > on 2026-09-30; what still waits on the owner is the key's rotation, needed first by `P5-T31`, and its
 > entry (`G-26`).*
 
@@ -751,6 +751,8 @@ this approval.
 >
 > *Measured 2026-11-02 in Zotero 10.0.3, in five runs, after `plan/00` §6 item 335(l): `[P1-T18] ko-KR totals: 353 present, 1 absent; expected 353 / 1`. It read 350 / 4 before that item moved its three strings. So `KO_PENDING_REVIEW` is empty, and the 1 absent is `P0-T24`'s deliberate fallback fixture. The two report labels of that item are not Fluent ids and are not in this count; `KO_REPORT_LABELS_PENDING_REVIEW` is empty too. The figures of 2026-10-08 in this section's heading and in the summary table's row are that date's snapshot.*
 
+> *Measured 2026-11-05 in Zotero 10.0.3 (integration round on `P5-T16`, `P5-T17`, `P5-T24`, `P5-T25`, `P5-T32`): `[P1-T18] ko-KR totals: 353 present, 48 absent; expected 353 / 48`. The round added no string; the 44 added absent ids are those cards' commented stubs on `KO_PENDING_REVIEW`.*
+>
 > *Measured 2026-11-05 in Zotero 10.0.3 (integration round on `P5-T11`, `P5-T14`): `[P1-T18] ko-KR totals: 353 present, 4 absent; expected 353 / 4`. The 3 added absent ids are `rh-error-seed-gone`, `rh-error-seed-no-identifier` and `rh-error-seed-no-match`, on `KO_PENDING_REVIEW` and resolving from English along the `ko-KR`, `en-US` chain; the fourth is the same deliberate fallback fixture.*
 
 > **DEFERRED 2026-10-08, by the owner, to before the v1.0 release.** English only until then. Measured

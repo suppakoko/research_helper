@@ -157,6 +157,17 @@ var RHSearchWindow = {
     relatedIncludeCitation: "rh-related-include-citation",
     relatedIncludeRecommendation: "rh-related-include-recommendation",
     relatedIncludeSimilar: "rh-related-include-similar",
+    // FR-14 to FR-18's results (P5-T16, docs/08 §5.2): the run's key notice, its
+    // status rows, and the title-match picker's panel.
+    relatedKeyNotice: "rh-related-key-notice",
+    relatedKeyRequest: "rh-related-key-request",
+    relatedStatus: "rh-related-status",
+    stateRelatedChoose: "rh-state-related-choose",
+    relatedPickerList: "rh-related-picker-list",
+    relatedPickerUse: "rh-related-picker-use",
+    // P5-T17: "Link imported items as “Related” to the seed item".
+    relatedLinkSeed: "rh-related-link-seed",
+    emptySuggestions: "rh-state-empty-suggestions",
     // What a year list's "Any" carries as its value; `Number()` of it is NaN,
     // which a related query means as no bound (docs/08 §5.2's note of 2026-11-02).
     yearAny: "any",
@@ -258,6 +269,15 @@ var RHSearchWindow = {
       duplicateRow: "rh-row-duplicate",
       // P3-T27: the model's relevance score on a screened row.
       relevanceBadge: "rh-relevance-badge",
+      // P5-T16: the related mode's rows (docs/08 §5.2's note of 2026-11-05).
+      outsideWindowRow: "rh-row-outside-window",
+      relationCell: "rh-col-relation",
+      scoreCell: "rh-col-score",
+      context: "rh-related-context",
+      contextLabel: "rh-related-context-label",
+      candidate: "rh-related-candidate",
+      candidateTitle: "rh-related-candidate-title",
+      candidateDetails: "rh-related-candidate-details",
     },
 
     /**
@@ -378,6 +398,8 @@ var RHSearchWindow = {
     windowTitleRelated: "research-helper-search-window-title-related",
     modeRelated: "research-helper-search-mode-related",
     stateInitialRelated: "research-helper-search-state-initial-related",
+    // P5-T17: the name a related import's new collection starts with.
+    relatedTargetDefault: "research-helper-search-related-target-default",
     yearsAny: "research-helper-search-years-any",
     rerunHeading: "research-helper-search-rerun-heading",
     rerunRecorded: "research-helper-search-rerun-recorded",
@@ -563,6 +585,10 @@ var RHSearchWindow = {
      */
     exportAvailable: false,
     exportMessage: null,
+
+    /** P5-T16: the list drawn by `renderRelatedCandidates`, and the choice in it. */
+    relatedCandidates: null,
+    relatedPick: null,
   },
 
   // =========================================================================
@@ -766,6 +792,8 @@ var RHSearchWindow = {
       // FR-12's panel (P2-T17). The view model publishes "initial" for it;
       // render() draws this one instead while a re-run seed is loaded.
       rerun: "rh-state-rerun",
+      // FR-14's picker (P5-T16): the related view model publishes "choose".
+      choose: "rh-state-related-choose",
     },
 
     /**
@@ -1117,6 +1145,31 @@ var RHSearchWindow = {
     ],
 
     /**
+     * The two columns the related mode draws instead of Source, Type and DOI
+     * (P5-T16, docs/08 §5.2). Built by {@link RHSearchWindow.applyRelatedMode},
+     * so the markup's header stays the seven above in every other mode.
+     */
+    relatedColumns: [
+      {
+        id: "rh-results-col-relation",
+        messageId: "research-helper-search-related-col-relation",
+        className: "rh-col-relation",
+      },
+      {
+        id: "rh-results-col-score",
+        messageId: "research-helper-search-related-col-score",
+        className: "rh-col-score",
+      },
+    ],
+
+    /** The columns `relatedColumns` replaces, hidden in the related mode. */
+    columnsNotInRelatedMode: [
+      "rh-results-col-source",
+      "rh-results-col-type",
+      "rh-results-col-doi",
+    ],
+
+    /**
      * One author's display name. `docs/08` §4.5 draws family names.
      *
      * Accepts `docs/07` §4's `Author` or a bare string, because the host
@@ -1208,6 +1261,25 @@ var RHSearchWindow = {
      * @param {number} limit
      * @returns {string}
      */
+    /**
+     * A source's text, ready to be a Fluent argument of a message drawn as text.
+     *
+     * `DOMLocalization` parses a message's value when it holds `<` or an entity, so
+     * an argument can make a safe-listed element, lose the words of any other, and
+     * have its entities read (measured in Zotero 10.0.3 on 2026-11-05: `docs/08`
+     * §5.2's note). Escaped, the parse hands back exactly these characters. Not for
+     * a message's `.value` or other attribute: those are never parsed, and the
+     * escapes would show.
+     *
+     * @param {unknown} text
+     * @returns {string}
+     */
+    fluentText(text) {
+      return String(text ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;");
+    },
+
     chipTitle(title, limit) {
       const text = typeof title === "string" ? title.trim() : "";
       const points = Array.from(text);
@@ -1298,6 +1370,14 @@ var RHSearchWindow = {
           // P3-T27: the model's score, or null for a row it did not score —
           // which no threshold hides.
           relevance: this.relevanceOf(source.relevance),
+          // P5-T16: only a related record has these, so no other mode's row
+          // changes shape.
+          ...(source.related
+            ? {
+                related: source.related,
+                startsTicked: source.startsTicked !== false,
+              }
+            : {}),
         };
         row.filterText = this.filterText(row);
         return row;
@@ -1371,12 +1451,52 @@ var RHSearchWindow = {
       return (rows || []).filter(
         (row) =>
           (!hideExisting || !row.existing) &&
+          this.matchesRelatedFilter(row, view) &&
           (threshold === null ||
             showExcluded ||
             !row.relevance ||
             !this.belowThreshold(row.relevance.score, threshold)) &&
           this.matchesFilter(row, filter),
       );
+    },
+
+    /**
+     * The related mode's two filters over the rows already fetched (docs/08
+     * §5.2's note of 2026-11-05, decision 7): a row shows while one of its kinds
+     * is ticked, and a year bound applies only to a row with a year. A bound that
+     * is not a number is "Any". Nothing here runs anything, and a row of any other
+     * mode, which has no `related`, always passes.
+     *
+     * @param {object} row
+     * @param {{relations?: string[], fromYear?: number, toYear?: number}} view
+     * @returns {boolean}
+     */
+    matchesRelatedFilter(row, view) {
+      if (!row.related || !view || !Array.isArray(view.relations)) {
+        return true;
+      }
+      if (!row.related.kinds.some((kind) => view.relations.includes(kind))) {
+        return false;
+      }
+      if (row.year === "") {
+        return true;
+      }
+      const year = Number(row.year);
+      return !(year < view.fromYear) && !(year > view.toYear);
+    },
+
+    /**
+     * The dots a related row draws: `●` for each filled, `○` for the rest.
+     * The glyphs are the wireframe's and carry no words, so they are not a Fluent
+     * string; the message on the same element gives them their accessible name.
+     *
+     * @param {number} dots
+     * @param {number} [total]
+     * @returns {string}
+     */
+    dotsText(dots, total = 5) {
+      const filled = Math.max(0, Math.min(total, Number(dots) || 0));
+      return "\u25cf".repeat(filled) + "\u25cb".repeat(total - filled);
     },
 
     // --- The selection model -----------------------------------------------
@@ -1413,11 +1533,17 @@ var RHSearchWindow = {
      * happens to an already-present record, so unticking the checkbox reveals
      * those rows already checked rather than silently deselected.
      *
+     * FR-16 and FR-18 (P5-T16): a related row can start unticked. Its
+     * `startsTicked` is the pipeline's `isCheckedByDefault`, and only a related
+     * row has one.
+     *
      * @param {object[]} rows
      * @returns {string[]}
      */
     selectionAfterResults(rows) {
-      return (rows || []).map((row) => row.key);
+      return (rows || [])
+        .filter((row) => row.startsTicked !== false)
+        .map((row) => row.key);
     },
 
     /**
@@ -1571,6 +1697,9 @@ var RHSearchWindow = {
     this.settle(this.loadRerun());
     // FR-13 (P5-T15): the related mode's Seed lines, for the same reason.
     this.settle(this.loadRelatedSeed());
+    // P5-T16: a related window starts its run by itself (docs/08 §5.2's note of
+    // 2026-11-05, decision 1), because it has no Search button and nothing to type.
+    this.settle(this.runRelated());
   },
 
   /**
@@ -2157,8 +2286,22 @@ var RHSearchWindow = {
 
     // FR-2's third scenario: the notice's link (P2-T14).
     this.on(this.spec.keyRequest, "click", (event) =>
-      this.openKeyRequest(event),
+      this.openKeyRequest(event, this.spec.keyRequest),
     );
+
+    // FR-13's related mode (P5-T16): the Include boxes filter the rows already
+    // fetched; the run's own key notice opens the same page; the picker goes on.
+    if (this.io.mode === "related") {
+      for (const id of this.relatedIncludeIds()) {
+        this.on(id, "command", () => this.applyFilter());
+      }
+      this.on(this.spec.relatedKeyRequest, "click", (event) =>
+        this.openKeyRequest(event, this.spec.relatedKeyRequest),
+      );
+      this.on(this.spec.relatedPickerUse, "command", () =>
+        this.pickRelatedCandidate(),
+      );
+    }
 
     // docs/08 §4.6's two actions on the all-failed panel.
     this.on(this.spec.errorRetry, "command", () => this.search());
@@ -2291,12 +2434,13 @@ var RHSearchWindow = {
    * link followed inside a chrome window would navigate the window itself.
    *
    * @param {object} [event]
+   * @param {string} [linkId] - which of the two notices' links was clicked
    */
-  openKeyRequest(event) {
+  openKeyRequest(event, linkId = this.spec.keyRequest) {
     if (event && typeof event.preventDefault === "function") {
       event.preventDefault();
     }
-    const link = this.el(this.spec.keyRequest);
+    const link = this.el(linkId);
     const href = link ? link.getAttribute("href") : null;
     try {
       if (href && typeof Zotero !== "undefined" && Zotero.launchURL) {
@@ -2389,16 +2533,14 @@ var RHSearchWindow = {
    * is wired: `search()` makes the same check about `runSearch`.
    */
   connectHost() {
-    // FR-13 (P5-T15): the keyword view model is application-scoped and would
-    // paint its previous run's rows under this seed (docs/08 §5.2's note of
-    // 2026-11-02). P5-T16 gives the related mode a view model of its own.
-    if (this.io.mode === "related") {
+    // FR-13: the keyword view model is application-scoped and would paint its
+    // previous run's rows under this seed, so the related mode attaches to its
+    // own (P5-T16; docs/08 §5.2's note of 2026-11-05).
+    const target = this.inRelatedMode() ? this.host.related : this.host;
+    if (!target || typeof target.connect !== "function") {
       return;
     }
-    if (typeof this.host.connect !== "function") {
-      return;
-    }
-    const detach = this.host.connect({
+    const detach = target.connect({
       render: (state) => this.render(state),
       formatter: document.l10n || undefined,
     });
@@ -2456,6 +2598,7 @@ var RHSearchWindow = {
     this.renderEmptyPanel(state.emptyHeadline);
     this.renderErrorPanel(state.error);
     this.renderStatusBar(state);
+    this.renderRelated(state.related);
 
     // Last: `setResults()` shows the results panel when it has rows, and the
     // view model — not this document — decides which of docs/08 §8.4's five
@@ -2479,13 +2622,20 @@ var RHSearchWindow = {
    * @param {object[]} lines - the view model's `SourceStatusLine[]`
    */
   renderSourceStatus(lines) {
-    const host = this.el(this.spec.sourceStatus);
+    // P5-T16: a related run's rows stay on screen beside its table, so they are in
+    // the header rather than the panel a finished run leaves.
+    const related = this.inRelatedMode();
+    const id = related ? this.spec.relatedStatus : this.spec.sourceStatus;
+    const host = this.el(id);
     if (!host) {
       return;
     }
     this.clear(host);
+    if (related) {
+      host.hidden = lines.length === 0;
+    }
     for (const line of lines) {
-      host.appendChild(this.buildStatusRow(line, this.spec.sourceStatus));
+      host.appendChild(this.buildStatusRow(line, id));
     }
   },
 
@@ -2711,7 +2861,10 @@ var RHSearchWindow = {
    * @param {object} state - the view model's `SearchViewState`
    */
   renderExportControl(state) {
-    const available = this.logic.exportAvailable(state);
+    // P5-T17: a related import draws its summary in `notices` and has no record
+    // to export (docs/08 §5.2's note, decision 9), so the proxy does not hold there.
+    const available =
+      !this.inRelatedMode() && this.logic.exportAvailable(state);
     if (!available && this.state.exportAvailable) {
       // A new run replaced what can be exported, so the previous run's outcome
       // sentence stops being true.
@@ -2907,7 +3060,10 @@ var RHSearchWindow = {
     if (!l10n || typeof l10n.formatMessages !== "function") {
       return undefined;
     }
-    const captioned = this.logic.columns.filter((column) => column.captioned);
+    const captioned = [
+      ...this.logic.columns.filter((column) => column.captioned),
+      ...(this.inRelatedMode() ? this.logic.relatedColumns : []),
+    ];
     return l10n
       .formatMessages(captioned.map((column) => ({ id: column.messageId })))
       .then((messages) => {
@@ -2974,6 +3130,7 @@ var RHSearchWindow = {
             threshold,
             showExcluded: this.checked(this.spec.screeningShowExcluded),
           }),
+      ...this.relatedView(),
     };
     this.state.visible = this.logic.visibleRows(
       this.state.rows,
@@ -3042,7 +3199,10 @@ var RHSearchWindow = {
     tr.className =
       classes.row +
       (row.existing ? " " + classes.existingRow : "") +
-      (row.duplicate ? " " + classes.duplicateRow : "");
+      (row.duplicate ? " " + classes.duplicateRow : "") +
+      (row.related && row.related.outsideWindow
+        ? " " + classes.outsideWindowRow
+        : "");
     tr.setAttribute(this.spec.row.keyAttribute, row.key);
     tr.setAttribute("aria-labelledby", titleId);
 
@@ -3096,7 +3256,10 @@ var RHSearchWindow = {
       // class name with no rule behind it is dead weight the spec rejects.
       const text = this.createHTML("span");
       // Id and arguments together, never separately — see applyYearRange.
-      text.setAttribute("data-l10n-args", JSON.stringify({ title: row.title }));
+      text.setAttribute(
+        "data-l10n-args",
+        JSON.stringify({ title: this.logic.fluentText(row.title) }),
+      );
       text.setAttribute("data-l10n-id", this.l10n.rowExisting);
       titleCell.appendChild(text);
     } else if (row.duplicate || row.linked || row.relevance) {
@@ -3118,7 +3281,10 @@ var RHSearchWindow = {
     if (row.authorOverflow > 0) {
       authorsCell.setAttribute(
         "data-l10n-args",
-        JSON.stringify({ names: row.authorNames, count: row.authorOverflow }),
+        JSON.stringify({
+          names: this.logic.fluentText(row.authorNames),
+          count: row.authorOverflow,
+        }),
       );
       authorsCell.setAttribute("data-l10n-id", this.l10n.authorsOverflow);
     } else {
@@ -3131,6 +3297,14 @@ var RHSearchWindow = {
     yearCell.className = "rh-col-year";
     yearCell.textContent = row.year;
     tr.appendChild(yearCell);
+
+    // The related mode's last two columns (P5-T16, docs/08 §5.2) stand in for
+    // Source, Type and DOI, which its header hides.
+    if (row.related) {
+      tr.appendChild(this.buildRelationCell(row.related));
+      tr.appendChild(this.buildScoreCell(row.related));
+      return tr;
+    }
 
     // 5. Source — one line per contributing source, as §4.5 stacks "PubMed"
     // over "Crossref". Already-localized display names from the host.
@@ -3163,6 +3337,66 @@ var RHSearchWindow = {
     tr.appendChild(doiCell);
 
     return tr;
+  },
+
+  /**
+   * One related row's Relation cell: one line per reason, stacked as the Source
+   * column stacks databases (docs/08 §5.2's note of 2026-11-05, decision 4).
+   *
+   * **A citation context is the source's own text.** It goes in with
+   * `textContent` and never as a Fluent argument, because Fluent's overlay parses
+   * an argument containing `<` as markup and would draw any element it allows.
+   * Only its fixed label is a message.
+   *
+   * @param {object} related - the view model's `RelatedRowView`
+   * @returns {object}
+   */
+  buildRelationCell(related) {
+    const classes = this.spec.rowClass;
+    const cell = this.createHTML("td");
+    cell.className = classes.relationCell;
+    for (const chip of related.chips) {
+      if (typeof chip.text === "string") {
+        const line = this.createHTML("div");
+        line.className = classes.context;
+        line.setAttribute("title", chip.text);
+        const label = this.createHTML("span");
+        label.className = classes.contextLabel;
+        this.applyRef(label, chip.ref);
+        line.appendChild(label);
+        const text = this.createHTML("span");
+        text.textContent = chip.text;
+        line.appendChild(text);
+        cell.appendChild(line);
+      } else {
+        const line = this.createHTML("div");
+        line.className = classes.sourceLine;
+        this.applyRef(line, chip.ref);
+        cell.appendChild(line);
+      }
+    }
+    return cell;
+  },
+
+  /**
+   * One related row's Score cell: the dots, whose message is attributes only, so
+   * Fluent leaves the glyphs alone and gives them their accessible name. A row
+   * with no reason to show has no dots (P5-T16's Do NOT).
+   *
+   * @param {object} related - the view model's `RelatedRowView`
+   * @returns {object}
+   */
+  buildScoreCell(related) {
+    const cell = this.createHTML("td");
+    cell.className = this.spec.rowClass.scoreCell;
+    if (related.scoreRef) {
+      const dots = this.createHTML("span");
+      dots.setAttribute("role", "img");
+      this.applyRef(dots, related.scoreRef);
+      dots.textContent = this.logic.dotsText(related.dots);
+      cell.appendChild(dots);
+    }
+    return cell;
   },
 
   /**
@@ -3366,9 +3600,13 @@ var RHSearchWindow = {
    * (`docs/01` §2.3).
    */
   search() {
-    // FR-13 (P5-T15): nothing runs in the related mode until P5-T16 binds its
-    // pipeline; a keyword search with no keyword must not start in its place.
+    // FR-13 (P5-T16): the only way here in the related mode is Retry on the error
+    // panel, and it repeats the run's own input. A keyword search with no keyword
+    // must not start in its place.
     if (this.io.mode === "related") {
+      if (this.host.related) {
+        this.settle(this.host.related.retry());
+      }
       return;
     }
     if (!this.refreshSearchGate().enabled) {
@@ -3393,7 +3631,15 @@ var RHSearchWindow = {
    * Skipped 12" accounting come back as a view state.
    */
   import() {
+    // Enter must not reach what the button refuses.
     if (!this.logic.importEnabled(this.state.selectedCount)) {
+      return;
+    }
+    // P5-T17: a related row is not a record, so this mode has its own road.
+    if (this.inRelatedMode()) {
+      if (this.host.related) {
+        this.settle(this.host.related.importRows(this.relatedImportRequest()));
+      }
       return;
     }
     if (typeof this.host.runImport === "function") {
@@ -3619,6 +3865,21 @@ var RHSearchWindow = {
   },
 
   /**
+   * What the related mode's Import hands over (`P5-T17`): the ticked visible rows
+   * by key, the picker and the link box. Nothing from the hidden keyword controls,
+   * whose values mean nothing for a seed. The model holds the rows themselves.
+   *
+   * @returns {{keys: string[], collectionID: string, linkToSeed: boolean}}
+   */
+  relatedImportRequest() {
+    return {
+      keys: this.logic.pickedKeys(this.state.visible, this.state.selection),
+      collectionID: this.value(this.spec.target),
+      linkToSeed: this.checked(this.spec.relatedLinkSeed),
+    };
+  },
+
+  /**
    * Cancel a running job. FR-5: Cancel performs zero database writes.
    *
    * `state.running` is cleared here rather than waiting for the host's next
@@ -3627,8 +3888,9 @@ var RHSearchWindow = {
    */
   cancel() {
     this.state.running = false;
-    if (typeof this.host.cancel === "function") {
-      this.host.cancel();
+    const target = this.inRelatedMode() ? this.host.related : this.host;
+    if (target && typeof target.cancel === "function") {
+      target.cancel();
     }
   },
 
@@ -3756,9 +4018,10 @@ var RHSearchWindow = {
     if (this.state.rerun) {
       this.state.rerun.dateTouched = true;
     }
-    // FR-13 (P5-T15): the related mode hides the span, and its panel's text is
-    // not the keyword panel's. `collectQuery` reads the two lists as they stand.
+    // FR-13: the related mode hides the span, and its two lists filter the rows
+    // already fetched (P5-T16).
     if (this.io.mode === "related") {
+      this.applyFilter();
       return;
     }
     const from = Number(this.value(this.spec.yearsFrom));
@@ -3823,12 +4086,26 @@ var RHSearchWindow = {
       this.spec.maxResults,
       "rh-search-databases-group",
       this.spec.screeningRow,
+      // The keyword panel's advice has no meaning for a seed (P5-T16).
+      this.spec.emptySuggestions,
+      // P5-T17: the policy here is always "add the existing item" (FR-16; docs/08
+      // §5.2's note, decision 3). The sentence about a preprint stays.
+      "rh-search-duplicates-label",
+      this.spec.duplicates,
     ]) {
       const element = this.el(id);
       if (element) {
         element.hidden = true;
       }
     }
+    // FR-16: rows already in the library are shown marked and unticked, so this
+    // starts off whatever the preference says, and nothing writes the preference
+    // (docs/08 §5.2's note of 2026-11-05, decision 8).
+    const hide = this.el(this.spec.hideExisting);
+    if (hide) {
+      hide.checked = false;
+    }
+    this.buildRelatedColumns();
     // The chip stays hidden until the seed's title is known, so it never says
     // "Keyword" here: applyRelatedSeed() sets its id and argument together.
     const chip = this.el(this.spec.mode);
@@ -3838,6 +4115,77 @@ var RHSearchWindow = {
     this.addAnyYear(this.spec.yearsFrom);
     this.addAnyYear(this.spec.yearsTo);
     this.localize(this.spec.initialProse, this.l10n.stateInitialRelated);
+    // FR-17 (P5-T17): the box starts from the preference once, stays as the user
+    // leaves it, and writes nothing back (docs/08 §5.2's note, decision 5).
+    const link = this.el(this.spec.relatedLinkSeed);
+    if (link) {
+      const related = this.host && this.host.related;
+      link.hidden = false;
+      link.checked =
+        Boolean(related) &&
+        typeof related.linkToSeedDefault === "function" &&
+        related.linkToSeedDefault() === true;
+    }
+  },
+
+  /**
+   * Name the picker's new collection after the seed (`P5-T17`; `docs/08` §5.2's
+   * note, decision 1), while it is still on bare "New collection…". A collection
+   * the opener chose, or a name the user gave while the bundle was answering, is
+   * left alone.
+   *
+   * @param {object} seed - the host's `RelatedSeedHeader`
+   */
+  async adoptRelatedTarget(seed) {
+    const title = this.logic.chipTitle(
+      seed.title,
+      this.spec.relatedChipTitleMax,
+    );
+    const l10n = document.l10n;
+    if (
+      title === "" ||
+      this.value(this.spec.target) !== "new" ||
+      !l10n ||
+      typeof l10n.formatMessages !== "function"
+    ) {
+      return;
+    }
+    const [formatted] = await l10n.formatMessages([
+      { id: this.l10n.relatedTargetDefault, args: { title } },
+    ]);
+    // Fluent wraps a placeable in isolation marks, and this string is stored as
+    // the collection's name.
+    const name = String((formatted && formatted.value) || "").replace(
+      /[\u2068\u2069]/g,
+      "",
+    );
+    if (this.value(this.spec.target) === "new") {
+      this.adoptNewCollection(name);
+    }
+  },
+
+  /**
+   * Swap the header's Source, Type and DOI for Relation and Score. Built here so
+   * the markup's seven stay what every other mode draws.
+   */
+  buildRelatedColumns() {
+    for (const id of this.logic.columnsNotInRelatedMode) {
+      const column = this.el(id);
+      if (column) {
+        column.hidden = true;
+      }
+    }
+    const head = this.el(this.spec.resultsHeadRow);
+    if (!head) {
+      return;
+    }
+    for (const column of this.logic.relatedColumns) {
+      const cell = this.createHTML("th");
+      cell.id = column.id;
+      cell.className = column.className;
+      cell.setAttribute("scope", "col");
+      head.appendChild(cell);
+    }
   },
 
   /**
@@ -3880,6 +4228,9 @@ var RHSearchWindow = {
     } finally {
       this.applyRelatedSeed(seed);
     }
+    if (seed !== null) {
+      await this.adoptRelatedTarget(seed);
+    }
     return seed;
   },
 
@@ -3916,7 +4267,10 @@ var RHSearchWindow = {
       // Id and arguments together, never separately — see applyYearRange.
       authors.setAttribute(
         "data-l10n-args",
-        JSON.stringify({ names: summary.names, count: summary.overflow }),
+        JSON.stringify({
+          names: this.logic.fluentText(summary.names),
+          count: summary.overflow,
+        }),
       );
       authors.setAttribute("data-l10n-id", this.l10n.authorsOverflow);
     } else if (authors) {
@@ -3947,6 +4301,158 @@ var RHSearchWindow = {
   },
 
   /**
+   * Whether this window is in the related mode. Safe before `init()`, because a
+   * view state can be drawn on a window whose `io` is not read yet.
+   *
+   * @returns {boolean}
+   */
+  inRelatedMode() {
+    return Boolean(this.io && this.io.mode === "related");
+  },
+
+  /** The four Include boxes, in the row's order. */
+  relatedIncludeIds() {
+    return [
+      this.spec.relatedIncludeReference,
+      this.spec.relatedIncludeCitation,
+      this.spec.relatedIncludeRecommendation,
+      this.spec.relatedIncludeSimilar,
+    ];
+  },
+
+  /**
+   * Ask the related host to run on this window's seed (P5-T16). A no-op outside
+   * `mode: "related"`, and with no related host the window stays on its first
+   * panel. The host validates the id.
+   *
+   * @returns {Promise<void>|undefined}
+   */
+  runRelated() {
+    if (this.io.mode !== "related" || !this.host.related) {
+      return undefined;
+    }
+    return this.host.related.run(this.io.seedItemID);
+  },
+
+  /**
+   * What the related mode adds to the table's filter: the Include row and the two
+   * year lists as they stand. "Any" reads as `NaN`, which is no bound.
+   *
+   * @returns {object}
+   */
+  relatedView() {
+    if (!this.inRelatedMode()) {
+      return {};
+    }
+    const { related } = this.relatedQuery();
+    return {
+      relations: related.relations,
+      fromYear: Number(this.value(this.spec.yearsFrom)),
+      toYear: Number(this.value(this.spec.yearsTo)),
+    };
+  },
+
+  /**
+   * Draw what only a related run has: the Include counts, the run's own key notice
+   * and the title-match list. Every other mode's state has no `related`.
+   *
+   * @param {object} [related] - the view model's `RelatedRunView`
+   */
+  renderRelated(related) {
+    if (!related) {
+      return;
+    }
+    const labels = related.includeLabels || {};
+    for (const id of this.relatedIncludeIds()) {
+      const box = this.el(id);
+      const ref = box && labels[box.getAttribute("value")];
+      if (ref) {
+        this.applyRef(box, ref);
+      }
+    }
+
+    const url = related.keyRequestUrl;
+    const notice = this.el(this.spec.relatedKeyNotice);
+    if (notice) {
+      notice.hidden = typeof url !== "string";
+    }
+    const link = this.el(this.spec.relatedKeyRequest);
+    if (link) {
+      if (typeof url === "string") {
+        link.setAttribute("href", url);
+      } else {
+        link.removeAttribute("href");
+      }
+    }
+
+    this.renderRelatedCandidates(related.candidates || []);
+  },
+
+  /**
+   * FR-14's list: one radio per candidate, with nothing pre-selected, because a
+   * guess is what the requirement forbids. A candidate's words are data, so they
+   * are `textContent`. Rebuilt only when the list changes, so a redraw of the same
+   * state cannot take away the user's choice.
+   *
+   * @param {object[]} candidates - the view model's `RelatedCandidateView[]`
+   */
+  renderRelatedCandidates(candidates) {
+    if (candidates === this.state.relatedCandidates) {
+      return;
+    }
+    this.state.relatedCandidates = candidates;
+    this.state.relatedPick = null;
+    const use = this.el(this.spec.relatedPickerUse);
+    if (use) {
+      use.disabled = true;
+    }
+    const list = this.el(this.spec.relatedPickerList);
+    if (!list) {
+      return;
+    }
+    this.clear(list);
+    const classes = this.spec.rowClass;
+    for (const candidate of candidates) {
+      const line = this.createHTML("label");
+      line.className = classes.candidate;
+      const radio = this.createHTML("input");
+      radio.setAttribute("type", "radio");
+      radio.setAttribute("name", this.spec.relatedPickerList);
+      radio.setAttribute("value", candidate.key);
+      radio.addEventListener("change", () => {
+        this.state.relatedPick = candidate.key;
+        if (use) {
+          use.disabled = false;
+        }
+      });
+      line.appendChild(radio);
+      const title = this.createHTML("span");
+      title.className = classes.candidateTitle;
+      title.textContent = candidate.title || "";
+      line.appendChild(title);
+      const details = this.createHTML("span");
+      details.className = classes.candidateDetails;
+      const { names } = this.logic.authorSummary(
+        candidate.authors,
+        this.spec.authorNamesShown,
+      );
+      details.textContent = [names, this.logic.relatedSeedDetails(candidate)]
+        .filter((part) => part !== "")
+        .join(" · ");
+      line.appendChild(details);
+      list.appendChild(line);
+    }
+  },
+
+  /** "Use this paper": the run goes on with the one chosen. */
+  pickRelatedCandidate() {
+    const key = this.state.relatedPick;
+    if (typeof key === "string" && this.host.related) {
+      this.settle(this.host.related.pick(key));
+    }
+  },
+
+  /**
    * What the related mode adds to a query (`SearchWindowRelatedQuery` in
    * `src/ui/dialogs/searchDialog.ts`); nothing in any other mode.
    *
@@ -3959,12 +4465,7 @@ var RHSearchWindow = {
     return {
       related: {
         seedItemID: this.io.seedItemID,
-        relations: [
-          this.spec.relatedIncludeReference,
-          this.spec.relatedIncludeCitation,
-          this.spec.relatedIncludeRecommendation,
-          this.spec.relatedIncludeSimilar,
-        ]
+        relations: this.relatedIncludeIds()
           .filter((id) => this.checked(id))
           .map((id) => this.el(id).getAttribute("value")),
       },

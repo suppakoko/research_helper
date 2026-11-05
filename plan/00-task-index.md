@@ -3,7 +3,7 @@
 > **Generated from the task cards in `01`–`04`, `07` and `08`** (Phase 4's file, read since 2026-10-26, and
 > Phase 5's, read since 2026-11-01). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-02 · **213 tasks: 112 `DONE`, 101 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**, Phase 5 **0 of 31**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 213, so 60 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-05 · **214 tasks: 112 `DONE`, 102 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**, Phase 5 **0 of 32**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 214, so 61 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -27,8 +27,18 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 3 — LLM + summaries | 39 | 29.50 d | 29.5–41 d | 12–15 d (+97%) |
 | **Phases 0–3** | **157** | **109.75 d** | **109.75–154 d** | 39–52 d (+111% over the top of the band) |
 | 4 — Trend report | 25 | 25.75 d | 25.75–36 d | 8–11 d (+134%) |
-| 5 — Related + recommendations | 31 | 35.75 d | 35.75–50 d | 10–14 d (+155%) |
+| 5 — Related + recommendations | 32 | 36.25 d | 36.25–51 d | 10–14 d (+159%) |
 | 6–7 | not decomposed | — | 36–50 d ⚠ **scaled, not measured** | 17–24 d |
+
+**2026-11-05: `P5-T32` added, 0.5 d** (§6 item 344(b)). A Crossref lookup by DOI for what Europe PMC does not answer, and
+the base-mapped venue and year (item 344(c)), by the coordinator's estimate and unmeasured. Phase 5 is **32 cards and
+36.25 d**, re-read from the cards' `Estimate` rows by script; 36.25 × 1.4 = 50.75 → 51, so the band is 36.25–51 d (was
+35.75–50). The last column is 36.25 ÷ 14 = 2.59 → +159% (it read +155%); against the scaled 21 the low end is +73% (36.25 ÷
+21 = 1.73; it read +70%). The project total is 109.75 + 25.75 + 36.25 + 36 = **207.75 d** low and 154 + 36 + 51 + 50 =
+**291 d** high (was 207.25–290), still ≈ 10–14 months at 21 working days (207.75 ÷ 21 ≈ 9.9; 291 ÷ 21 ≈ 13.9). The critical
+path P0 → P1 → P2 → P4 → P6 → P7 stays 142.00–199 because Phase 5 is not on it. The route P0 → P1 → P2 → P5 → P7 is 17.75 +
+29.25 + 33.25 + 36.25 + 21 = **137.50** low and 25 + 41 + 47 + 51 + 29 = **193** high (was 137.00–192), so **Phase 5's float
+shrinks from 5–7 d to 4.5–6 d**. `docs/11` §1–§2 carry the rest.
 
 **2026-11-02, later still: `P4-T23` re-priced 1.25 → 1.75 d** (§6 item 336(d)). The extra 0.5 d is the per-call usage
 capture of item 335(k), by the coordinator's judgement after the fact and unmeasured. Phase 4 is **25 cards and 25.75 d**,
@@ -448,8 +458,9 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P5-T27` | Recommendation results: dismiss, clusters, import | `P5-T26` | 1.5 d |  |
 | `P5-T28` | Prove the no-key path end to end | `P5-T17`, `P5-T27` | 0.75 d |  |
 | `P5-T29` | Probe the positive-seed cap with the real key | `P5-T06` | 0.5 d | 🔒 |
-| `P5-T30` | Phase-5 acceptance run against the definition of done | `P5-T28`, `P5-T29` | 1.0 d | 🔒 |
+| `P5-T30` | Phase-5 acceptance run against the definition of done | `P5-T28`, `P5-T29`, `P5-T32` | 1.0 d | 🔒 |
 | `P5-T31` | Owner-recorded Semantic Scholar fixtures | `P5-T04` | 0.25 d | 🔒 |
+| `P5-T32` | Crossref lookup by DOI for keyless hydration, and the… | `P5-T09`, `P5-T12` | 0.5 d |  |
 
 ---
 
@@ -2995,6 +3006,84 @@ the caller of what the card builds; if it does not, the caller is added with a d
       `repository` maps onto it.
     - (d) Finding 3: `item.version` moves only on a sync, so the spec checks the row and the notifier, which move on a save. Finding 4 stays with
       item 342(d).
+
+345. **`P5-T32` written, 2026-11-05** (`plan/reports/P5-T32.md`). One real computer science seed, `10.1007/s11263-015-0816-y`, has 60 reference DOIs: Europe PMC
+    answered 9 and Crossref 60, all titled, so hydration now titles 60 of 60 where it titled 9. One seed is one reading. Europe PMC's answer in the test is
+    hand-written from the measured DOIs, because that request was not recorded. The base-mapped reads have not run in Zotero.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agent's readings stand, as written in `docs/02` §5.1 and §5.2, `docs/05` §6.1, `docs/07` §4.2 and §6.6 and `docs/13` §3.1: Crossref goes after Europe PMC, for blank titles only;
+      the budget of 8 and the reserve of 2 stay; 100 DOIs a request; a DOI with a comma is left out, because it fails the whole list with HTTP 400; `10.48550/arXiv.*` DOIs are not sent to Crossref.
+      Crossref stays off the abstract ladder (item 193), at 3 abstracts in 60.
+    - (b) The estimate stands at Phase 5 36.25–51 d, plan 207.75–291 d, critical path unchanged at 142.00–199, Phase 5's float 4.5–6 d. The agent says the 0.5 d may have run over and has no measured
+      time, so it is not re-priced.
+    - (c) Finding 1: `10.48550` DOIs have no keyless title route, 0 of 6 at Europe PMC and 0 of 6 at Crossref, so a keyless recent machine-learning seed loses those rows. The arXiv adapter has no
+      `lookup`, though `id_list` exists. Six of 155 on the recorded *Nature* seed and none on the computer science seed block no finishing condition (rule 9). `P5-T30` reads one recent seed, and a
+      large share there would add an arXiv `lookup`.
+    - (d) Finding 2: `fieldOf(item, "publicationTitle")` in `src/zotero/notes.ts`, the summarize library's venue, has the same gap for a conference paper. It is a Phase 3 reader and blocks no finishing
+      condition (rule 9), so it is recorded here as a gap with no card. Findings 3 to 7 are recorded only.
+
+346. **`P5-T24` written, 2026-11-05** (`plan/reports/P5-T24.md`). It passes at unit level, on recorded Europe PMC answers and hand-made vectors. No person has judged a list, and the
+    weights and caps stay unmeasured starting values (item 340(d)'s backlog).
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agent's fifteen readings stand, as written in `docs/05` §7.4 and §8.3 and `docs/07` §12.5. On the word space, similarity reads the collection's mean word vector and
+      novelty the nearest member, because the agent measured that one reading for both leaves the slider two positions on 184 recorded abstracts.
+    - (b) Coupling needs candidates' references, and generator (c) fetches citations, so little is cached. `P5-T25` builds `references` from the cache and sends no extra request for it.
+      If that leaves the term at 0 on real runs, 0.08 of the score does nothing, and `P5-T30` records how many rows it reached. Nothing is re-weighted before then.
+    - (c) `P5-T25` adds the `libraryItems` read to `RecommendLibrary`, because `recommendOwnership` needs the title pass, and exports `authorName` from `profile.ts` in place of `score.ts`'s copy.
+    - (d) The `novelty` reason shows on every row above the default slider position on the word space, 30 of 30 on the fixture run. `P5-T27` words it and decides whether to show it there.
+      `lexicalSpace`'s corpus build cannot yield, 437 ms at 5,000 members under Node. That blocks no finishing condition (rule 9), and `P5-T25`'s run records it in Zotero if it can.
+    - (e) The ten reason ids get their words in `P5-T27`, with the drafts in the report going through `G-41` there.
+
+347. **`P5-T16` written, 2026-11-05** (`plan/reports/P5-T16.md`). The window code passes at unit level, and its second and fourth Done-when lines wait on the next integration round:
+    nothing has been drawn in Zotero yet.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agent's twelve readings stand, as written in `docs/08` §5.2. Decision 12 overrides the card's note of this date: `rh-error-source` is not drawn in this mode, because a related run's
+      failure is not one database's. Dots are relative to the run, so they say nothing across two runs. "Hide items already in library" starts off in this mode without writing the preference.
+    - (b) **The owner's Korean batch waits until `P5-T27`.** This card's 39 ids (40 lines), the three `rh-error-seed-*` strings, and what `P5-T25`, `P5-T26` and `P5-T27` add go as one
+      batch, because every string is on `KO_PENDING_REVIEW` meanwhile and a question held open stops the agents' results being read. This card's drafts are in its report.
+    - (c) Finding 1: the window now starts a run by itself, so a test opening a real related window on a seed with an identifier sends real requests. `menus.spec.ts` is guarded, and the next
+      integration round confirms it, `lifecycle.spec.ts`, and the suite make no live request.
+    - (d) Finding 2: the in-library row passes a source's title through a Fluent argument, which the overlay parses for safe-listed markup. The path predates this card, and related rows now reach it. The
+      next integration round feeds it a title holding markup and reports what is drawn. Whether that needs a change waits on the result.
+    - (e) Findings 3 to 7 block no finishing condition (rule 9) and are recorded only. Finding 7: the picker's full run on real title-match data is unproved until `P5-T30`.
+
+348. **`P5-T17` written, 2026-11-05** (`plan/reports/P5-T17.md`). Both Done-when lines wait on the next integration round. Seven of the mutation sweep's ten survivors are in `importWorks` and the composition
+    root, where only that round can reach them, so the round reads them against its specs.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agent's nine readings stand, as written in `docs/08` §5.2 and `docs/07` §6.2. Items go into the seed's library, because Zotero throws on a relation across libraries. A related import leaves no
+      provenance note, `search_provenance` row or Export control.
+    - (b) Finding 1: decision line 16's "the job record keeps the seed" does not hold, because `P5-T14` gives a related run no `JobRecord`. With the box unticked nothing keeps the seed. No finishing condition asks
+      for it (rule 9), and the line is corrected on the card.
+    - (c) Findings 2 and 3 are stated limits: a seed in a group library resolves a picked collection's name in that library, and a cancel between a batch's created and linked items leaves that batch unlinked.
+    - (d) Finding 4: a failed relation pass rolls back the database while cached objects keep the relations, so `relateToSeed` reloads them. Only the integration spec can show it works, and a failure there
+      is a defect in this card.
+    - (e) Finding 7 predates this card and blocks no finishing condition: the Import gate reads only the ticked count, so bare "New collection…" with the prompt dismissed does nothing visible. It is recorded
+      as a gap with no card.
+    - (f) `research-helper-search-related-target-default` is stored in the library as a collection name, so its Korean wording persists in user data. The owner's batch says so.
+
+349. **`P5-T25` written, 2026-11-05** (`plan/reports/P5-T25.md`). It passes at unit level on stand-ins, and its Done-when line on the integration suite waits on the next round. `P5-T21`'s finding 3 is closed: a profile from
+    incomplete vectors is not stored.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agent's fourteen readings stand, as written in `docs/07` §12.5.
+    - (b) **Finding 2 is fixed, not recorded only.** A transport failure or a cancel while the model call is in flight leaves no egress entry, because `runProfileCall` returns `egress` only on an answer or a fallback.
+      `summarizePipeline.ts` enqueues its record with the egress log before the call, and `docs/09` §3.6 item 4 is the rule. Paper text can have left the machine by then, so the entry is written before the request
+      goes. The next integration round makes the change, with a test.
+    - (c) Findings 5 and 7 go to `P5-T30` and `P5-T31`: a collection with no vector rebuilds on each keyed run at no cost, and a lookup answer with a matching DOI and another year can move a candidate out of the window.
+    - (d) Findings 1, 3, 4 and 6 are recorded only (rule 9). `P5-T26` adds the menu string.
+
+350. **Integration round on `P5-T16`, `T17`, `T24`, `T25`, `T32`, 2026-11-05** (`plan/reports/integration-round-350.md`). Three consecutive runs on the final tree: 316 passed, 0 failed, 2 pending. ko-KR 353 present, 48 absent.
+    Item 349(b)'s egress fix is in: the entry is written before the request goes, through `LLMCallContext.beforeSend`.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) **The suite was not free of live requests, and earlier reports overstated that.** Until this round a full integration run asked the real Europe PMC for fixture DOIs from the two report specs, and Zotero itself asked
+      `api.zotero.org/retractions/search` on saving an item with a DOI. No request held a key or library text beyond fixture DOIs. Earlier test results stand, and their "no live request" claim does not. The first exploratory run
+      of this round did the same before the guard existed, against its brief, and its count was not recorded. `liveRequestGuard.ts` now cancels and fails any such channel: 1107 channels read in each of the last three runs, none cancelled.
+    - (b) The two product defects' fixes stand: leaving a related run raises no toast, and `logic.fluentText` escapes source text in a Fluent argument. Before the fix, `<img src=x onerror=y>` drew nothing and lost its words, and `<em>x</em>`
+      drew an `em` element. No active element was drawn.
+    - (c) **Finding 1 is fixed in `P5-T26`:** the recommend run's egress log fails open and summarize's fails closed. A request whose entry could not be written does not go, on either path, because the log exists to say what left the machine.
+      A dated correction goes in `docs/07` §12.5 item 8.
+    - (d) Finding 2: `research-helper-search-rerun-heading`'s `$collection` can now carry a seed's title, because a new collection takes it, so `P5-T26` passes it and `$query` through `logic.fluentText`. Finding 3: `P5-T26`'s integration
+      round measures whether the keyword window raises the same left-run toast. Findings 4 and 5 are recorded only.
+    - (e) Status rows take about half the window at seven rows, at 1019 × 600. That is a judgement for the owner when the window is first used, and blocks nothing.
 
 ## 7. Regenerating this file
 

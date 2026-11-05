@@ -51,6 +51,14 @@ import { CROSSREF_SELECT_FIELDS, CROSSREF_WORKS_URL } from "./query";
 /** `P5-T09` step 2: a title search wants a few candidates, not a page. */
 export const CROSSREF_TITLE_SEARCH_ROWS_MAX = 5;
 
+/**
+ * DOIs one `filter=doi:` request carries (`P5-T32`). Crossref documents no cap, and
+ * 215 DOIs in a 7819-character address were answered on 2026-11-05 (`docs/02` §5.2).
+ * 100 is the longest list a related generator hands over, so this is a choice, not a
+ * limit Crossref set.
+ */
+export const CROSSREF_DOI_LOOKUP_BATCH = 100;
+
 /** A DOI as `docs/02` §5 uses it: the `10.` prefix, a registrant, a slash, a suffix. */
 const DOI_SHAPE = /^10\.\d{4,9}\/\S+$/u;
 
@@ -146,6 +154,55 @@ export function buildCrossrefTitleSearchRequest(
       `query.bibliographic=${encodeURIComponent(title)}`,
       `select=${encodeURIComponent(CROSSREF_SELECT_FIELDS.join(","))}`,
       `rows=${String(rows)}`,
+      `mailto=${encodeURIComponent(mailto)}`,
+    ].join("&");
+  return {
+    method: "GET",
+    url,
+    transmittedUrl: redactUrl(url),
+    endpointBaseUrl: CROSSREF_WORKS_URL,
+  };
+}
+
+/**
+ * `GET /works?filter=doi:a,doi:b` (`docs/02` §5.2). Its caller is
+ * `createCrossrefSource`'s `lookup`. Parameter order: `filter`, `select`, `rows`,
+ * `mailto`. `rows` equals the number of DOIs, because the default of 20 would cut a
+ * longer list with no sign in the answer.
+ *
+ * @param dois - 1 … {@link CROSSREF_DOI_LOOKUP_BATCH} distinct DOIs, none with a comma
+ * @param userContactEmail - the `contactEmail` preference's value, if any
+ * @returns the request
+ * @throws RangeError for an empty or an over-long list, anything not DOI-shaped, or a
+ *   DOI with a comma: the list is comma-separated, and one such DOI drew a 400 for the
+ *   whole request (measured 2026-11-05, `docs/02` §5.2)
+ */
+export function buildCrossrefDoiLookupRequest(
+  dois: readonly string[],
+  userContactEmail?: string,
+): CrossrefRelatedRequest {
+  if (dois.length < 1 || dois.length > CROSSREF_DOI_LOOKUP_BATCH) {
+    throw new RangeError(
+      `[research-helper] a Crossref DOI lookup takes 1 … ` +
+        `${String(CROSSREF_DOI_LOOKUP_BATCH)} DOIs; got ${String(dois.length)}.`,
+    );
+  }
+  for (const doi of dois) {
+    if (!DOI_SHAPE.test(doi) || doi.includes(",")) {
+      throw new RangeError(
+        `[research-helper] ${JSON.stringify(doi)} cannot go in a filter=doi: ` +
+          `list (docs/02 §5.2).`,
+      );
+    }
+  }
+  const { mailto } = crossrefContactParams(userContactEmail);
+  const filter = dois.map((doi) => `doi:${doi}`).join(",");
+  const url =
+    `${CROSSREF_WORKS_URL}?` +
+    [
+      `filter=${encodeURIComponent(filter)}`,
+      `select=${encodeURIComponent(CROSSREF_SELECT_FIELDS.join(","))}`,
+      `rows=${String(dois.length)}`,
       `mailto=${encodeURIComponent(mailto)}`,
     ].join("&");
   return {

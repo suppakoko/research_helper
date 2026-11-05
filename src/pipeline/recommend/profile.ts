@@ -6,7 +6,7 @@
  * 2026-11-02 holds the term rules and `docs/07` §5.2's note of that date the
  * shape of the steps; this header does not repeat them.
  *
- * **Callers.** Nothing calls this yet. `recommendPipeline.ts` (`P5-T25`) runs
+ * **Callers.** `recommendPipeline.ts` (`P5-T25`) runs
  * {@link readProfileCollection}, compares {@link membershipHash} with the stored
  * profile, then {@link buildProfileStats}, and after `P5-T21` and `P5-T22` have
  * filled in the rest, {@link persistProfile}. On every run it also takes
@@ -21,7 +21,11 @@
 import { sha256Hex } from "../../core/cache/keys";
 import type { Author } from "../../model/canonicalWork";
 import type { CollectionProfile } from "../../model/profile";
-import { normalizeTitle, titleTokens } from "../../sources/shared/dedupe";
+import {
+  normalizeTitle,
+  titleTokens,
+  type LibraryItemFields,
+} from "../../sources/shared/dedupe";
 import {
   collectionProfileId,
   type CollectionProfileStore,
@@ -132,6 +136,8 @@ export interface RecommendLibrary {
   libraryTermSources(libraryID: number): Promise<readonly ItemTermSource[]>;
   /** `docs/02` §11.6's index, once per run. */
   libraryIndex(libraryID: number): Promise<LibraryIndex>;
+  /** For `recommendOwnership`'s title pass (`P5-T24`), once per run. */
+  libraryItems(libraryID: number): Promise<Iterable<LibraryItemFields>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -409,8 +415,12 @@ function initialsOf(given: string): string {
     .join("");
 }
 
-/** `Family Initials`, as `docs/05` §7.3's `AUTH:"Doudna J"`; a single-field name whole. */
-function authorName(author: Author): string {
+/**
+ * `Family Initials`, as `docs/05` §7.3's `AUTH:"Doudna J"`; a single-field name whole.
+ * `CollectionProfile.topAuthors` holds this form, so `score.ts` (`P5-T24`) reads a
+ * candidate's authors through it too.
+ */
+export function authorName(author: Author): string {
   const literal = (author.literal ?? "").trim();
   if (literal !== "") return literal;
   const initials = initialsOf(author.given ?? "");

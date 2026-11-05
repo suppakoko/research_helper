@@ -316,11 +316,16 @@ describe("related pipeline reads (P5-T14)", () => {
     }
   });
 
-  it("records what a type's own field names do to a work's container and date", async function () {
+  it("reads a type's own field names as a work's container and date", async function () {
     this.timeout(TEST_TIMEOUT_MS);
-    // Not a rule, a measurement: `READ_FIELDS` asks for base names, and only `title`
-    // is base-mapped. `docs/07` §6.6's note of 2026-11-05 holds what this prints.
-    const rows: Record<string, unknown> = {};
+    // `P5-T32`: `title`, `publicationTitle` and `date` are read base-mapped; every other
+    // field by its own name, so a thesis's `university` is still no container.
+    // `docs/07` §6.6's notes of 2026-11-05. Written without a Zotero run: the next
+    // integration run is the first proof of this block.
+    const rows: Record<
+      string,
+      { container: string | undefined; year: number | undefined }
+    > = {};
     for (const [type, fields] of [
       ["conferencePaper", { proceedingsTitle: "P5-T14 proceedings" }],
       ["bookSection", { bookTitle: "P5-T14 book" }],
@@ -341,7 +346,15 @@ describe("related pipeline reads (P5-T14)", () => {
       };
     }
     logged(`base-named reads: ${JSON.stringify(rows)}`);
-    assert.strictEqual(Object.keys(rows).length, 7);
+    assert.deepEqual(rows, {
+      conferencePaper: { container: "P5-T14 proceedings", year: undefined },
+      bookSection: { container: "P5-T14 book", year: undefined },
+      webpage: { container: "P5-T14 site", year: undefined },
+      patent: { container: undefined, year: 2020 },
+      case: { container: undefined, year: 2020 },
+      statute: { container: undefined, year: 2020 },
+      thesis: { container: undefined, year: 2020 },
+    });
   });
 
   it("the port marks one item by identifier and one with no identifier by title, and logs its read time", async function () {

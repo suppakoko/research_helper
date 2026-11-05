@@ -19,6 +19,7 @@
 
 import { clampRows } from "../../src/sources/crossref/crossrefSource";
 import {
+  buildCrossrefDoiLookupRequest,
   buildCrossrefTitleSearchRequest,
   buildCrossrefWorkRequest,
   CROSSREF_TITLE_SEARCH_ROWS_MAX,
@@ -203,6 +204,85 @@ export const CROSSREF_DOI_WITHOUT_REFERENCES = "10.1007/3-540-29835-5_2408";
 /** `title-search`: the probe paper by its title, as `P5-T09` step 2 asks. */
 export const CROSSREF_RELATED_TITLE =
   "Transfer learning enables predictions in network biology";
+
+/**
+ * `work-non-biomedical-seed` (`P5-T32`): a computer-vision paper, the first seed
+ * tried on 2026-11-05. It deposits 102 references, 60 of them distinct DOIs.
+ */
+export const CROSSREF_DOI_NON_BIOMEDICAL_SEED = "10.1007/s11263-015-0816-y";
+
+/**
+ * `lookup-non-biomedical-references`: those 60 DOIs, in `findRelated`'s order, as
+ * read from the live answer on 2026-11-05. Literal, because the fixture is keyed on
+ * the exact address and a recording must not depend on another recording.
+ */
+export const CROSSREF_NON_BIOMEDICAL_REFERENCE_DOIS: readonly string[] = [
+  "10.1109/tpami.2006.244",
+  "10.1109/tpami.2012.28",
+  "10.1109/cvpr.2012.6248018",
+  "10.1109/cvpr.2014.49",
+  "10.1109/tpami.2010.161",
+  "10.1145/2461912.2462002",
+  "10.5244/c.28.6",
+  "10.1109/cvpr.2013.237",
+  "10.1109/cvpr.2009.5206848",
+  "10.1145/2556288.2557011",
+  "10.1007/978-3-642-33712-3_22",
+  "10.1007/s11263-009-0275-4",
+  "10.1007/s11263-014-0733-5",
+  "10.1109/cvpr.2005.16",
+  "10.1109/cvpr.2004.383",
+  "10.1109/tpami.2009.167",
+  "10.1177/0278364913491297",
+  "10.1109/cvpr.2014.81",
+  "10.1109/iccv.2009.5459211",
+  "10.7551/mitpress/7503.003.0073",
+  "10.1007/978-3-319-10578-9_23",
+  "10.1007/978-3-642-33712-3_25",
+  "10.1109/iccv.2003.1238311",
+  "10.1109/icra.2014.6907300",
+  "10.1007/978-3-642-33786-4_34",
+  "10.1109/cvpr.2006.68",
+  "10.1109/cvpr.2011.5995477",
+  "10.1007/978-3-319-10602-1_48",
+  "10.1109/tpami.2011.131",
+  "10.1023/b:visi.0000029664.99615.94",
+  "10.1109/cvpr.2009.5206693",
+  "10.1109/iccv.2013.315",
+  "10.1007/978-3-642-33709-3_35",
+  "10.1145/219717.219748",
+  "10.1023/a:1011139631724",
+  "10.1109/iccv.2013.344",
+  "10.1109/iccv.2013.257",
+  "10.1109/cvpr.2014.264",
+  "10.1109/cvpr.2007.383266",
+  "10.1109/cvpr.2012.6248090",
+  "10.1007/978-3-642-15561-1_11",
+  "10.1109/iccv.2013.258",
+  "10.1016/j.patrec.2012.07.019",
+  "10.1109/cvpr.2012.6248021",
+  "10.1145/1401890.1401965",
+  "10.1109/cvprw.2008.4562953",
+  "10.1038/381520a0",
+  "10.1109/cvpr.2011.5995347",
+  "10.1109/tpami.2008.128",
+  "10.1007/s11263-013-0620-5",
+  "10.1109/cvpr.2014.304",
+  "10.1109/iccv.2011.6126456",
+  "10.1109/tpami.2009.154",
+  "10.1109/tmm.2010.2091400",
+  "10.5244/c.25.109",
+  "10.1109/cvpr.2010.5540018",
+  "10.1109/iccv.2013.10",
+  "10.1109/cvpr.2010.5539970",
+  "10.1109/iccv.2011.6126474",
+  "10.1007/978-3-642-15555-0_11",
+];
+
+/** `lookup-non-biomedical-references`, with no `contactEmail`. */
+export function recordedCrossrefDoiLookupRequest(): CrossrefRelatedRequest {
+  return buildCrossrefDoiLookupRequest(CROSSREF_NON_BIOMEDICAL_REFERENCE_DOIS);
+}
 
 /** `work-with-references` and `work-without-references`, with no `contactEmail`. */
 export function recordedCrossrefWorkRequest(

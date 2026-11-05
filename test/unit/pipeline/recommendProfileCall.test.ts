@@ -11,6 +11,7 @@ import {
   ConfigurationError,
   ContentFilterError,
   MissingCredentialError,
+  NetworkError,
   OperationCancelledError,
   PolicyViolationError,
 } from "../../../src/core/errors";
@@ -1709,6 +1710,86 @@ describe("the mutation sweep's closing cases", () => {
       reason: "no-provider",
     });
     expect(h.cache.entries.size).toBe(0);
+  });
+});
+
+describe("logEgress (plan/00 §6 item 349(b))", () => {
+  /** The harness, its log, and how many requests had gone at each write. */
+  function logging(options: Parameters<typeof harness>[0]) {
+    const h = harness(options);
+    const requestsAtWrite: number[] = [];
+    const entries: unknown[] = [];
+    const deps: ProfileCallDeps = {
+      ...h.deps,
+      logEgress: (entry) => {
+        requestsAtWrite.push(h.provider.calls.length);
+        entries.push(entry);
+        return Promise.resolve();
+      },
+    };
+    const run = async () => {
+      const items = itemsOf(6);
+      return runProfileCall(
+        { profile: statsOf(items), items },
+        h.ctx,
+        deps,
+        h.surface,
+      );
+    };
+    return { h, requestsAtWrite, entries, run };
+  }
+
+  it("is called before the request, and hands over the outcome's entry", async () => {
+    const { requestsAtWrite, entries, run } = logging({});
+    const outcome = await run();
+    expect(requestsAtWrite).toEqual([0]);
+    if (outcome.status !== "llm") throw new Error("expected the answer");
+    expect(entries).toEqual([outcome.egress]);
+  });
+
+  it("has the entry when the transport fails", async () => {
+    const { h, requestsAtWrite, run } = logging({
+      script: [new NetworkError("reset")],
+    });
+    await expect(run()).rejects.toBeInstanceOf(NetworkError);
+    expect(h.provider.calls).toHaveLength(1);
+    expect(requestsAtWrite).toEqual([0]);
+  });
+
+  it("is called once over a repair and a retry", async () => {
+    const { h, requestsAtWrite, run } = logging({
+      script: [chatResponse(INVALID_ANSWER)],
+    });
+    const outcome = await run();
+    expect(outcome.status).toBe("heuristic");
+    expect(h.provider.calls).toHaveLength(3);
+    expect(requestsAtWrite).toEqual([0]);
+  });
+
+  it("is not called for a cached answer or a user who declines", async () => {
+    const cached = logging({});
+    await cached.run();
+    await cached.run();
+    expect(cached.h.provider.calls).toHaveLength(1);
+    expect(cached.entries).toHaveLength(1);
+
+    const declined = logging({ answer: { kind: "cancelled" } });
+    expect((await declined.run()).status).toBe("declined");
+    expect(declined.entries).toEqual([]);
+  });
+
+  it("a failed write stops the request", async () => {
+    const h = harness({});
+    const items = itemsOf(6);
+    await expect(
+      runProfileCall(
+        { profile: statsOf(items), items },
+        h.ctx,
+        { ...h.deps, logEgress: () => Promise.reject(new Error("no queue")) },
+        h.surface,
+      ),
+    ).rejects.toThrow("no queue");
+    expect(h.provider.calls).toHaveLength(0);
   });
 });
 

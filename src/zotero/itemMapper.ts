@@ -1251,6 +1251,23 @@ function itemTitle(item: Zotero.Item): string {
 }
 
 /**
+ * The fields read base-mapped, because a type stores them under its own name and
+ * `getField(name)` without the third argument answers `""` (measured 2026-11-05 on
+ * Zotero 10.0.3, `test/integration/zotero/relatedLibrary.spec.ts`). `title` is
+ * {@link itemTitle}'s. `publicationTitle` (`P5-T32`) follows nine types' fields in
+ * the 10.0.3 schema: `proceedingsTitle`, `bookTitle`, `websiteTitle`, `blogTitle`,
+ * `dictionaryTitle`, `encyclopediaTitle`, `forumTitle` and two types' `programTitle`.
+ *
+ * **Every other field stays unmapped.** `publisher` above all: a `preprint`'s
+ * `repository` is base-mapped onto it, and {@link READ_FIELDS} reads `repository`
+ * by its own name.
+ */
+const BASE_MAPPED_READ_FIELDS: ReadonlySet<ReadField> = new Set<ReadField>([
+  "title",
+  "publicationTitle",
+]);
+
+/**
  * Read a {@link ZoteroItemSnapshot} off a live item.
  *
  * Requires the item's data to be loaded: `getField()` throws
@@ -1262,13 +1279,17 @@ function itemTitle(item: Zotero.Item): string {
 export function snapshotZoteroItem(item: Zotero.Item): ZoteroItemSnapshot {
   const fields: Partial<Record<ReadField, string>> = {};
   for (const name of READ_FIELDS) {
-    fields[name] = name === "title" ? itemTitle(item) : item.getField(name);
+    fields[name] = BASE_MAPPED_READ_FIELDS.has(name)
+      ? item.getField(name, false, true)
+      : item.getField(name);
   }
   return {
     itemType: Zotero.ItemTypes.getName(item.itemTypeID),
     fields,
     // `true` = unformatted: the multipart form, not the user's original text.
-    dateMultipart: item.getField("date", true),
+    // The second `true` is base-mapped (`P5-T32`): a `patent`'s `issueDate`, a
+    // `case`'s `dateDecided` and a `statute`'s `dateEnacted` otherwise read no year.
+    dateMultipart: item.getField("date", true, true),
     creators: item.getCreatorsJSON().map((creator) => ({
       creatorType: creator.creatorType,
       ...(creator.firstName === undefined

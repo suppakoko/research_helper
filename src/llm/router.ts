@@ -183,6 +183,7 @@ export function createLLMRouter(deps: LLMRouterDeps): LLMRouter {
       ctx: LLMCallContext,
     ): Promise<ChatResponse> {
       const provider = configuredProvider(ctx);
+      await ctx.beforeSend?.();
       return provider.chat(request, ctx);
     },
 
@@ -191,6 +192,7 @@ export function createLLMRouter(deps: LLMRouterDeps): LLMRouter {
       ctx: LLMCallContext,
     ): AsyncIterable<ChatStreamChunk> {
       const provider = configuredProvider(ctx);
+      await ctx.beforeSend?.();
       // `P3-T11` step 4: an adapter without `chatStream`, or a model its
       // catalogue says cannot stream, gets `chat`. An unknown model streams.
       if (

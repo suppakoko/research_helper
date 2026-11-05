@@ -79,6 +79,12 @@
  *   `src/pipeline/related/seed.ts` (`P5-T11`), does. The composition root's
  *   `createCrossrefSource` call in `src/bootstrap/container.ts` already builds the
  *   instance; `P5-T14` hands it to the pipeline.
+ * - **`lookup` is `filter=doi:`, for titles** (`P5-T32`; `docs/05` §6.1). Its caller
+ *   is `lookupThroughCache` in `src/pipeline/related/generators.ts`, last in
+ *   hydration, for what still has no title; the abstract fill-in does not ask it
+ *   (`plan/00` §6 item 193). Distinct DOIs go {@link CROSSREF_DOI_LOOKUP_BATCH} to a
+ *   request. A DOI with a comma is left out with a log line, because one fails the
+ *   whole list (`docs/02` §5.2). A DOI Crossref does not hold has no record.
  *
  * ## Errors
  *
@@ -118,7 +124,7 @@ import {
   CROSSREF_HOST,
   type AdvertisedLimitTarget,
 } from "../../core/rateLimit/hostLimiter";
-import { normalizeDoi } from "../../model/ids";
+import { normalizeDoi, type ExternalIds } from "../../model/ids";
 import type { SourceRecord } from "../../model/sourceRecord";
 import { normalizeForSource } from "../shared/queryParse";
 import type {
@@ -145,8 +151,10 @@ import {
   type CrossrefExcludedTerm,
 } from "./query";
 import {
+  buildCrossrefDoiLookupRequest,
   buildCrossrefTitleSearchRequest,
   buildCrossrefWorkRequest,
+  CROSSREF_DOI_LOOKUP_BATCH,
   CROSSREF_TITLE_SEARCH_ROWS_MAX,
   parseCrossrefEnvelope,
   parseCrossrefReferences,
@@ -202,7 +210,8 @@ export const CROSSREF_CAPABILITIES: SourceCapabilities = {
   },
   // `findRelated` exists since `P5-T09` (`plan/00` §6 item 184's rule).
   relatedByWork: true,
-  lookupById: [],
+  // `lookup` exists since `P5-T32`; `filter=doi:` is the only identifier it reads.
+  lookupById: ["doi"],
   abstractsInSearch: true,
   citationGraph: true,
   dateFilter: true,
@@ -252,6 +261,10 @@ export interface CrossrefSource extends LiteratureSource {
     query: RelatedQuery,
     ctx: SourceCallContext,
   ): Promise<RelatedPage>;
+  lookup(
+    ids: readonly Partial<ExternalIds>[],
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]>;
   /**
    * One `query.bibliographic` search for a title: the mapped candidates, at most
    * {@link CROSSREF_TITLE_SEARCH_ROWS_MAX}, in Crossref's order, unthresholded.
@@ -723,6 +736,44 @@ export function createCrossrefSource(deps: CrossrefSourceDeps): CrossrefSource {
     };
   }
 
+  /**
+   * `docs/07` §4.2's batch lookup, by DOI only. Records come back in Crossref's
+   * order. Cancellation is checked before every request (`send`); a failed request
+   * throws, as `search` does.
+   */
+  async function lookup(
+    ids: readonly Partial<ExternalIds>[],
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]> {
+    const dois = new Set<string>();
+    for (const entry of ids) {
+      const doi = normalizeDoi(entry.doi);
+      if (doi === null) continue;
+      if (doi.includes(",")) {
+        deps.logger?.debug("crossref: a DOI with a comma is not asked", {
+          sourceId: CROSSREF_SOURCE_ID,
+        });
+        continue;
+      }
+      dois.add(doi);
+    }
+    const asked = [...dois];
+    const out: SourceRecord[] = [];
+    for (
+      let start = 0;
+      start < asked.length;
+      start += CROSSREF_DOI_LOOKUP_BATCH
+    ) {
+      const request = buildCrossrefDoiLookupRequest(
+        asked.slice(start, start + CROSSREF_DOI_LOOKUP_BATCH),
+        deps.userContactEmail?.(),
+      );
+      const { result } = await fetchPage(request, ctx);
+      out.push(...mapRecords(result.items));
+    }
+    return out;
+  }
+
   /** {@link CrossrefSource.matchTitle}. */
   async function matchTitle(
     title: string,
@@ -870,6 +921,7 @@ export function createCrossrefSource(deps: CrossrefSourceDeps): CrossrefSource {
     search,
     searchAll,
     findRelated,
+    lookup,
     matchTitle,
     explainQuery: (query) => explainCrossrefQuery(query),
   };

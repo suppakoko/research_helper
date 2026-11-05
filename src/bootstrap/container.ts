@@ -287,6 +287,7 @@ import { createCrossrefRecordMapper } from "../sources/crossref/mapper";
 import { createEuropePmcSource } from "../sources/europepmc/europepmcSource";
 import { createEuropePmcRecordMapper } from "../sources/europepmc/mapper";
 import { createPubmedRecordMapper } from "../sources/pubmed/mapper";
+import { recommendRoutineStore } from "../pipeline/recommend/profileCall";
 import { createPubmedSource } from "../sources/pubmed/pubmedSource";
 import { createSourceRegistry, type SourceRegistry } from "../sources/registry";
 import { createSemanticScholarRecordMapper } from "../sources/semanticscholar/mapper";
@@ -2044,18 +2045,20 @@ export async function installServices(
     ...(secrets !== undefined && { secrets }),
     logger,
   });
+  // `P5-T25`: the recommend pipeline calls `findSimilarForSeeds` on the typed instance.
+  const pubmed = createPubmedSource({
+    http,
+    clock,
+    mapRecords,
+    // Conditional spread, not `secrets`: `tsconfig.json`'s
+    // `exactOptionalPropertyTypes` rejects an explicit `undefined`, and
+    // omitting the member is what `PubmedSourceDeps` documents as "every
+    // request goes out without `api_key`".
+    ...(secrets !== undefined && { secrets }),
+    logger,
+  });
   registerSources(sources, {
-    pubmed: createPubmedSource({
-      http,
-      clock,
-      mapRecords,
-      // Conditional spread, not `secrets`: `tsconfig.json`'s
-      // `exactOptionalPropertyTypes` rejects an explicit `undefined`, and
-      // omitting the member is what `PubmedSourceDeps` documents as "every
-      // request goes out without `api_key`".
-      ...(secrets !== undefined && { secrets }),
-      logger,
-    }),
+    pubmed,
     // Europe PMC has no key (`docs/02` §4.1), so no `secrets`. The mapper takes
     // the same resolved `keepRaw` as PubMed's for the same §5.1 reason: the
     // composition root is the only place the preference may be read.
@@ -2236,6 +2239,35 @@ export async function installServices(
       http,
       logger,
       embeddings: () => database.embeddings(),
+    },
+    // `P5-T25`: the typed adapters, the three stores on the one connection, the queue
+    // and `collection_settings` (both built below, so read through closures), and what
+    // the profile call reads, the same sources as the summarize pipeline's.
+    recommend: {
+      semanticscholar,
+      pubmed,
+      profiles: () => database.collectionProfiles(),
+      recommendations: () => database.recommendations(),
+      embeddings: () => database.embeddings(),
+      clock,
+      jobs: () => jobs,
+      profileCall: {
+        prices: (providerId, modelId) =>
+          modelPrices.pricesFor(providerId, modelId),
+        baseUrls: providers.baseUrls,
+        modelInfo: (providerId, modelId) =>
+          providers.registry.get(providerId)?.getModel(modelId),
+        credentials: {
+          hasKey: async (providerId) =>
+            (await secrets?.has(`llm.${providerId}`)) === true,
+        },
+        routine: {
+          read: (collection) =>
+            recommendRoutineStore(collectionSettings).read(collection),
+          write: (collection, record) =>
+            recommendRoutineStore(collectionSettings).write(collection, record),
+        },
+      },
     },
     // `P3-T27`: the relevance screen's privacy check judges the model the
     // active adapter describes (`docs/12` §3's note of 2026-10-24).

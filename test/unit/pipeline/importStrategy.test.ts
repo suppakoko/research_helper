@@ -1129,3 +1129,63 @@ describe("the preference's strings (P2-T18 step 11; docs/01 §6.3 item 3)", () =
     }
   });
 });
+
+describe("P5-T17: the writer carries the related window's two members", () => {
+  afterEach(() => {
+    importWorksMock.mockReset();
+  });
+
+  /** One batch through the writer; the batch's request and result back. */
+  async function oneBatch(
+    target: Parameters<
+      ReturnType<typeof createZoteroSearchImportWriter>["openTarget"]
+    >[0],
+    extra: object = {},
+  ) {
+    importWorksMock.mockImplementation((request: { works: CanonicalWork[] }) =>
+      Promise.resolve({ ...fakeReport(request.works, 0), ...extra }),
+    );
+    const token = createCancellationTokenSource().token;
+    const writer = createZoteroSearchImportWriter({
+      readUseTranslators: () => false,
+    });
+    const session = await writer.openTarget(target, token);
+    const result = await session.writeBatch(
+      [work("w1", { doi: "10.1/w1" })],
+      token,
+    );
+    return {
+      opening: importWorksMock.mock.calls[0]?.[0] as object,
+      batch: importWorksMock.mock.calls[1]?.[0] as Record<string, unknown>,
+      result,
+    };
+  }
+
+  it("passes both on to each batch, and not to the empty call that opens the target", async () => {
+    const existing = new Map([["w1", 9]]);
+    const { opening, batch } = await oneBatch({
+      collectionName: "C",
+      relateTo: 7,
+      existingItemIDs: existing,
+    });
+    expect(batch.relateTo).toBe(7);
+    expect(batch.existingItemIDs).toBe(existing);
+    expect(Object.keys(opening)).not.toContain("relateTo");
+  });
+
+  it("passes neither on a keyword run", async () => {
+    const { batch, result } = await oneBatch({ collectionName: "C" });
+    expect(Object.keys(batch)).not.toContain("relateTo");
+    expect(Object.keys(batch)).not.toContain("existingItemIDs");
+    expect(Object.keys(result)).not.toContain("seedLink");
+  });
+
+  it("hands the importer's report back", async () => {
+    const seedLink = { linked: 1, error: undefined };
+    const { result } = await oneBatch(
+      { collectionName: "C", relateTo: 7 },
+      { seedLink },
+    );
+    expect(result.seedLink).toBe(seedLink);
+  });
+});

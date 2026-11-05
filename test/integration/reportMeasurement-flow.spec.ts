@@ -53,6 +53,7 @@ import {
 } from "../../src/pipeline/trendReport/trendReportPipeline";
 import { COST_DIALOG_URL } from "../../src/ui/dialogs/costConfirmDialog";
 import { chatResponse, mockModel } from "../helpers/mockLLM";
+import { answerEuropePmcWithNothing } from "./support/liveRequestGuard";
 import {
   pinUILocale,
   restoreUILocale,
@@ -678,6 +679,9 @@ describe("P4-T23 step 4: a run's measurement in real Zotero, on a mock provider"
       () => "the plugin to initialize",
     );
     instance = pluginInstance() as Addon;
+    // Corrected 2026-11-05: the summary stage's full-text ladder asked the real
+    // Europe PMC for these fixtures' DOIs until the live request guard caught it.
+    restores.push(answerEuropePmcWithNothing());
     locale = await pinUILocale(["en-US"], log);
     const bundled = await import("../../src/prompts/bundled");
     headings = expectedHeadings(bundled.PROMPT_REGISTRY.get("TREND_REPORT_EN"));

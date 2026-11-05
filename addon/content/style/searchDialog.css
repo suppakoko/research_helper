@@ -328,6 +328,73 @@
   color: var(--fill-secondary, inherit);
 }
 
+/* P5-T16: the related mode's two columns (docs/08 §5.2). Reasons stack, as the
+   Source column's databases do; the column may wrap, because a citation context
+   is a sentence. */
+.rh-col-relation {
+  min-width: 12em;
+  max-width: 24em;
+}
+
+.rh-col-score {
+  white-space: nowrap;
+}
+
+/* A citation context is the source's own words, cut to two lines here, with the
+   whole of it in the element's `title`. `em` so it scales (§9). */
+.rh-related-context {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin-block: 0.1em;
+  overflow-wrap: anywhere;
+}
+
+.rh-related-context-label {
+  margin-inline-end: 0.3em;
+  font-weight: 600;
+}
+
+/* FR-18: a row outside the recency window. Greyed as the wireframe asks, and
+   carried in words by its "Outside the recency window" chip as well (NFR-13), so
+   the grey is not the only carrier of the meaning. `--fill-secondary` is the same
+   secondary-text token as .rh-hint, and the checkbox beside it stays at full
+   contrast because the rule is on the data cells. */
+.rh-row-outside-window > td:not(:first-child) {
+  color: var(--fill-secondary, inherit);
+}
+
+/* The status rows beside each other, since seven stacked would take the table's
+   room. */
+#rh-related-status > hbox {
+  margin-inline-end: 1em;
+}
+
+#rh-related-status description {
+  margin-inline-end: 0.3em;
+}
+
+#rh-related-picker-list {
+  margin-block: 0.5em;
+}
+
+.rh-related-candidate {
+  display: block;
+  padding: 0.25em 0.5em;
+  border-block-end: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.1));
+}
+
+.rh-related-candidate-title {
+  font-weight: 600;
+}
+
+.rh-related-candidate-details {
+  display: block;
+  margin-inline-start: 1.8em;
+  color: var(--fill-secondary, inherit);
+}
+
 /* docs/08 §4.2's reserved role row for a source with no keyword search
    (bioRxiv, medRxiv). The circled plus is drawn here and nowhere else, so it
    cannot turn up on an error or an empty search (P2-T14). */

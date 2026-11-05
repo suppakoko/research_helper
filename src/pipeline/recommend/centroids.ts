@@ -5,7 +5,7 @@
  * starting values; this header does not repeat them.
  *
  * **Callers.** `withTopicsAndSeeds` in `seeds.ts` calls {@link kmeansAuto} and
- * {@link labelCentroids}; `recommendPipeline.ts` (`P5-T25`, not built) calls that.
+ * {@link labelCentroids}; `recommendPipeline.ts` (`P5-T25`) calls that.
  * Nothing is constructed at run time but the values these functions return. There are
  * no centroids on the lexical space (`docs/07` §5.2), so nothing here reads it.
  *

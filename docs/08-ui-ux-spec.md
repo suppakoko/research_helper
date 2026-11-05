@@ -1371,7 +1371,7 @@ Launched from **item context menu ▸ Research Helper ▸ Find Related Papers…
    * **References** — Crossref `/works/{doi}` `reference[]`, Semantic Scholar `/paper/{id}/references`
    * **Citations** — Semantic Scholar `/paper/{id}/citations`, Europe PMC `citedBy`
    * **Recommendations** — Semantic Scholar recommendations endpoint
-   * **Semantic similarity** — embedding/keyword similarity against the seed abstract (fallback when the seed has no DOI)
+   * **Similar articles** — PubMed's own similar-articles list, asked by PMID. *Changed 2026-11-05 (`plan/08` `P5-T16`, under §0.4 line 12): this line used to read "Semantic similarity — embedding/keyword similarity against the seed abstract", and the checkbox in §5.2 says what it now is. The similarity value a row shows is a separate thing, computed over the candidates and shown as a reason on the row (`05-related-work-discovery.md` §5.5).*
 3. Merge, dedup, and score. Each result carries a **relation kind** badge.
 4. Present in the same window as §4, with the mode chip showing the seed title and an extra **Relation** column.
 5. On import, additionally set a Zotero item relation between seed and imported item:
@@ -1385,6 +1385,8 @@ await newItem.saveTx();
 
 Zotero relations are **bidirectional only if set on both sides** — this is exactly how the [Zotero JavaScript API docs](https://www.zotero.org/support/dev/client_coding/javascript_api) show it. Do both, inside the batch transaction.
 
+*Corrected 2026-11-05 (`plan/08` `P5-T17`): the sample above is the API documentation's, for a call outside a transaction. Inside one the call is `save()`, never `saveTx()` (`01-zotero-plugin-platform.md` §5.8), and the sample's two `saveTx()` lines are not what the plugin runs. `importWorks` in `src/zotero/importer.ts` does this; `07-architecture-and-data-model.md` §6.2's note says how. Read 2026-11-05 from 10.0.3's `omni.ja`, `chrome/content/zotero/xpcom/data/item.js`: `addRelatedItem` throws on an item in another library, and `addRelation` returns `false` for a relation already there.*
+
 ### 5.2 Wireframe (differences from §4 only)
 
 ```
@@ -1394,7 +1396,7 @@ Zotero relations are **bidirectional only if set on both sides** — this is exa
 │         Kim, Park, Novak et al. · Nature Biotechnology · 2026 · 10.1038/…     │
 │                                                                               │
 │  Include  ☑ References (37)  ☑ Citations (58)  ☑ Recommended (20)             │
-│           ☑ Semantically similar (25)                                         │
+│           ☑ Similar articles (PubMed) (25)                                    │
 │  Years    [ Any ▾ ] – [ Any ▾ ]                                               │
 │                                                                               │
 │  ┌───┬──────────────────────────────┬────────────┬─────┬──────────┬─────────┐ │
@@ -1412,7 +1414,7 @@ Zotero relations are **bidirectional only if set on both sides** — this is exa
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Note the **year filter is off by default here**. The 3-year restriction is a discovery heuristic for keyword search; for citation graphs it would silently discard the foundational papers that are the whole point of following references.
+Note the **year filter is off by default here** (FR-18). The 3-year restriction is a discovery heuristic for keyword search; for citation graphs it would silently discard the foundational papers that are the whole point of following references.
 
 > **As built 2026-11-02 (`P5-T15`).** The entry opens this window with `{ mode: "related", seedItemID }`. Drawn so far:
 > the window title, the mode chip (`Related to: <title>`, §4.2's row, the title cut at 60 characters), the Seed lines
@@ -1446,6 +1448,110 @@ Note the **year filter is off by default here**. The 3-year restriction is a dis
 > must not call it either. This was the cause of a blank list seen on the way to this note, and it was the test's doing.
 > (3) A second "Find Related Papers…" reloads the one named window: the mediator still counts one window and the Seed
 > line shows the new seed. (4) A seed that is a note draws the missing line.
+>
+> **As built 2026-11-05 (`P5-T16`).** The window now shows a finished run. Its view model is
+> `createRelatedViewModel` in `src/ui/viewModels/relatedViewModel.ts`, constructed once by `publishSearchWindowHost`
+> and reached by the document as `host.related`. Item 2 of the 2026-11-02 list above is replaced: the window still
+> never attaches to the keyword search's view model in this mode, and now attaches to this one. Item 4's Include counts
+> are drawn. The Import button stays off in this mode until `P5-T17`, which owns the import and the link to the seed.
+> *Updated 2026-11-05 (`P5-T17`): it is on now; see the note below.*
+> Not yet proved in Zotero: `test/integration/searchDialog-flow.spec.ts`'s new part is written and has not been run.
+>
+> **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313), how this window reads a run.**
+> (1) **The run starts by itself when the window opens.** There is no Search button in the wireframe and nothing to
+> type. Retry on the error panel runs the same input again, including a paper picked from the title-match list.
+> (2) **Closing or re-opening cancels.** A second "Find Related Papers…" reloads the one window, so the old document's
+> unload cancels a run still going, and the new document runs again. A late answer from a cancelled run is dropped and
+> raises no toast. Results are kept nowhere: they live for the life of the document.
+> *Corrected 2026-11-05 (integration round, `plan/00` §6 item 347): a left run did raise one, measured in Zotero 10.0.3.
+> `CompositeProgressReporter` answers its token's cancel with `done("cancelled")`, and `ZoteroProgressWindowSink` paints
+> any terminal snapshot, below the model's check. `createRelatedViewModel`'s `leaveRun` now closes the job's surfaces
+> before it cancels, and leaves the token alone while `openJob` is out, since a reporter built on a cancelled token raises
+> the toast at once. The Cancel button is a different case and keeps its toast.*
+> (3) **The score dots are relative to the run.** A row draws `●` for each of five steps, `ceil(5 × score ÷ the
+> highest score in this list)`: at least one when its score is above zero, none at zero. The scale is the same
+> with a key and without one, because the two runs' scores sit on different ranges, and an absolute scale would make
+> every keyless row look poor. The dots have an accessible name and a tooltip that say this is relative to the list; the
+> number itself is not shown, and the dots never appear without the row's chips.
+> (4) **A row with several kinds stacks one chip per reason** in the Relation column, as the Source column stacks
+> databases: the pipeline's chip order, one line each. "similarity 0.81" carries its value, and on a keyless run reads
+> "basic similarity 0.14" (`05-related-work-discovery.md` §5.5). A citation context is its own line beginning "Cited as:".
+> (5) **A citation context is the source's own text, so it is written with `textContent`, never through a Fluent
+> argument.** Fluent's overlay parses a value containing `<` as markup and would draw any safe-listed element in it.
+> The stylesheet cuts the context to two lines, with the whole of it in the line's `title`.
+> (6) **Rows outside the recency window** are ticked off and greyed, and carry the words "Outside the recency window"
+> as a chip, so the state is never colour alone (NFR-13). They are never moved down the list; the pipeline's order stands.
+> A row with no date stays ticked and is not greyed.
+> (7) **The Include boxes and the two year lists filter the rows already fetched** and never run anything. A row shows
+> while at least one of its kinds is ticked. A year bound applies only to a row with a year, so an undated row stays.
+> "Any" is no bound. A filtered row keeps its tick, as in §4.5. The count in each box is how many rows of the run have
+> that kind, so the four can add up to more than the table.
+> (8) **"Hide items already in library" starts off here** whatever the preference says, without writing the preference,
+> because FR-16 asks for those rows to be shown marked and unticked. It stays a working checkbox.
+> (9) **The key notice comes from the run, not from the preference.** It shows when the run's own `keyNotice` is true.
+> `hasApiKey` on the related port stays without a caller in `src/`, because a notice read from the run cannot disagree
+> with what the run did.
+> (10) **One status row per list asked**, drawn in the header for as long as the window is open: the list's name beside
+> "12 results", "not indexed", "no key" and so on. A row is named by the list and not only the database, because
+> Semantic Scholar answers for three of them.
+> (11) **Three things on a run's output are not drawn in this version:** `hydration`, `links` and `flags`. No finishing
+> condition asks for them on this screen.
+> (12) **How a run's ends read.** While a run goes, the first panel stays, with the status line and Cancel, because no
+> list has answered. Cancel returns to that panel with "Cancelled."; the way to run again is to open the window again.
+> A title-match list raises no toast and closes its job, because the run has not ended for the user; picking a paper is
+> a new run. A failed run's headline names no database, because a run is not one database's: the status rows name them.
+> So `rh-error-source`, which takes a database's name, is never drawn in this mode; `SOURCE` reads as the search
+> window's own error headline with Retry, and a code with no sentence of its own reads "Related papers could not be
+> looked up." with its machine code in the disclosure.
+>
+> **As built 2026-11-05 (`P5-T17`).** Import now works from this window. The button goes to `host.related.importRows`, which
+> runs the search pipeline's preview import over the rows the user ticked. "Link imported items as “Related” to the seed item" is
+> drawn under the target row. Not yet proved in Zotero: `test/integration/zotero/relatedLinkage.spec.ts` and the new part of
+> `test/integration/searchDialog-flow.spec.ts` are written and have not been run.
+> *Corrected 2026-11-05: both have now run, in the integration round of the same day.*
+>
+> **Measured 2026-11-05, Zotero 10.0.3 (`plan/00` §6 item 347(d)): source text in a Fluent argument.** `DOMLocalization`
+> parses a message's value that holds `<` or an entity, so a title in `research-helper-search-row-existing`, or a name in
+> `research-helper-search-authors-overflow`, was parsed. Before the fix, in a real window: `<img src=x onerror=y>` drew
+> nothing, and its words were lost; `<a href="https://example.invalid">x</a>` drew the plain text `x`; `<em>x</em>` drew an
+> `em` element with no attribute; `A &amp; B` drew `A & B`. No `img` or `a` element and no event attribute was ever made,
+> so this was a fault in the words and not a way in. **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313):** the
+> three arguments go through `logic.fluentText`, which escapes `&` and `<`, so the row draws what any other row draws. A
+> `.value` attribute, such as the mode chip's `Related to:`, is never parsed and is left as it is. A citation context never
+> took this path: it is `textContent`, and it draws no element.
+>
+> **Measured 2026-11-05, Zotero 10.0.3, the window at its opening size of 1019 x 600.** Seven status rows wrap to three lines,
+> 74 px tall, and the table keeps 325 px, which shows four rows; the header above it takes about half the window. A greyed
+> outside-window row reads 4.76:1 in the light theme (`rgba(0, 0, 0, 0.55)` on `rgb(255, 255, 255)`) and 5.91:1 in the dark
+> one (`rgba(255, 255, 255, 0.55)` on `rgb(30, 30, 30)`), so it meets NFR-13's 4.5:1 in both, on an unselected row.
+>
+> **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313), how this window imports.**
+> (1) **The default target is a new collection named after the seed**: `research-helper-search-related-target-default`,
+> `Related to “<title>”`, with the title cut as the mode chip cuts it (60 characters). It goes into the picker as any other named
+> new collection, and importing twice reuses it, as FR-6 says. The user can pick another. With no readable seed the picker
+> stays on bare "New collection…".
+> (2) **The items go into the seed's library**, whatever the picker lists, because Zotero refuses a relation across
+> libraries and the "in library" marks were read from that library. The picker lists the user library's collections, so a
+> seed in a group library resolves a picked collection's name in that group library, creating it there if absent. Nothing
+> else in this window names a group library, so this one case reads oddly, and it is recorded rather than built around.
+> (3) **The three duplicate radios are hidden here**, and the policy is always "add the existing item to the collection":
+> FR-16 says that is what importing an in-library row does, and §5.2's wireframe draws no such row. The sentence about a preprint and
+> its published version stays, because it holds here too.
+> (4) **A row matched to a library item by title links to that item**, as a row matched by identifier does, so ticking it by hand
+> does not make a second item. The match is the run's, so it is checked again on import: an item since trashed, deleted or moved to
+> another library no longer counts, and the row is created.
+> (5) **The box starts from `related.linkToSeed`** when the window opens, stays as the user leaves it while the window is open, and
+> writes nothing back (`07-architecture-and-data-model.md` §8.5).
+> (6) **The link goes on new and already-owned items alike** (`plan/08` §0.4 line 15), with Date Modified left alone on the items and the seed, because a
+> link is not an edit of the paper. A link that fails is a warning line above the status bar: the items stay imported.
+> (7) **An import that writes nothing leaves the table up.** A failure before the first write shows the error's headline as a
+> warning line beside the rows, with Import still on, rather than the error panel, because Retry on that panel means "run the lookup again" in
+> this mode. A seed no longer in the library refuses the import with its own line, `research-helper-search-related-seed-gone`.
+> (8) **Rows are not re-marked after an import.** A second Import over the same rows links what the first created, because the
+> importer reads the library again, and the next run marks them.
+> (9) **No provenance note, no `search_provenance` row and no Export button** come from this route (`plan/08` §0.4 line 16). Both writes
+> belong to the keyword view model's `renderImportOutcome`, and this route does not pass through it. The document's `renderExportControl`
+> reads a non-empty `notices` as "a record exists", which holds only in the keyword window, so the control stays hidden here by mode.
 
 ### 5.3 Edge cases
 
@@ -1453,10 +1559,12 @@ Note the **year filter is off by default here**. The 3-year restriction is a dis
 |---|---|
 | Seed has no DOI/PMID/arXiv ID | Fall back to title-based lookup on Crossref/S2; show a banner "No identifier found — matched by title, results may be less accurate" |
 | Seed identifier not found upstream | Per-source row shows "not indexed"; other sources still run |
-| Seed is a preprint with a published version | Offer to also fetch relations for the published DOI |
-| Result already in library | Same treatment as §4 (marked, optionally hidden) |
+| Seed matched only by title, with several close candidates | The run stops and shows the candidates (title, authors, venue, year, DOI). Nothing is pre-selected; "Use this paper" runs on with the one picked (FR-14) |
+| Result already in library | Same treatment as §4 (marked, optionally hidden), and unticked (FR-16) |
 
 *Added 2026-11-02 (`plan/08` `P5-T11`).* A seed that cannot be looked up ends the job with one of two errors (`07-architecture-and-data-model.md` §10.1, `SeedUnresolvedError`): `rh-error-seed-no-identifier` when the item has no DOI, PMID, PMCID, arXiv ID or usable title, and `rh-error-seed-no-match` when it has a title and nothing matched closely enough (`05-related-work-discovery.md` §6.1). The window shows the message; it has no action button, because the remedy is an edit to the item.
+
+*Changed 2026-11-05 (`plan/08` `P5-T16`).* The row "Seed is a preprint with a published version: offer to also fetch relations for the published DOI" is removed, because the owner moved it to the backlog (`plan/08` §0.4). The title-match list took its place in the table above: under FR-14 a list is shown rather than a guess made.
 
 ---
 
@@ -2207,9 +2315,9 @@ Fluent goes in a XUL `<linkset>`, and each `<groupbox>` should carry `aria-label
 │ │               │ │ └───────────────────────────────────────────────────┘ │   │
 │ │               │ │                                                       │   │
 │ │               │ │ ┌ Semantic Scholar ─────────────────────────────────┐ │   │
-│ │               │ │ │ Related papers and recommendations need a key —   │ │   │
-│ │               │ │ │ the anonymous pool is rate-limited to the point   │ │   │
-│ │               │ │ │ of being unusable. Free, but approval takes time. │ │   │
+│ │               │ │ │ Related papers and recommendations work better    │ │   │
+│ │               │ │ │ with a key: without one Semantic Scholar is not   │ │   │
+│ │               │ │ │ asked for them. Free, but approval takes time.    │ │   │
 │ │               │ │ │ API key   [••••••••••] [👁] [Test] [Clear]        │ │   │
 │ │               │ │ │ 🔒 Keychain                                       │ │   │
 │ │               │ │ │ ? Could not verify — rate-limited. Try again.     │ │   │

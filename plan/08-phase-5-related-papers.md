@@ -22,7 +22,8 @@
 > `Files` and `Done when` say so, and five cards were re-estimated — `P5-T03` 1.0 → 1.5, `P5-T04`
 > 1.0 → 1.75, `P5-T05` 1.0 → 0.75, `P5-T14` 1.5 → 1.75, `P5-T18` 1.25 → 1.5 — and one card was added,
 > `P5-T31` (0.25 d, the owner's keyed Semantic Scholar recording, item 323(c)). The card sum is
-> **35.75 d over 31 cards**, re-read from the cards by script.
+> **35.75 d over 31 cards**, re-read from the cards by script. *Updated 2026-11-05 (`plan/00` §6 item 344(b)): `P5-T32`
+> (0.5 d, a Crossref lookup by DOI and the base-mapped venue and year) makes it **36.25 d over 32 cards**.*
 >
 > **What this file is.** The task-card decomposition of `docs/11-implementation-roadmap.md` §1
 > "Phase 5 — Related papers + recommendations". The card schema, the field rules and the execution
@@ -77,7 +78,7 @@ Their status on **2026-11-01**, by grep of the documents and the tree:
 | `docs/11` deliverable | Cards |
 |---|---|
 | Seed resolution (DOI/PMID/arXiv → canonical; title-match fallback with a confidence threshold and disambiguation UI). FR-13, FR-14 | `P5-T05`, `P5-T09`, `P5-T11`, `P5-T15`, `P5-T16` |
-| Relatedness gathering: references, citations, source-provided recommendation endpoints; scoring and reason chips. FR-15, FR-47 | `P5-T04`–`P5-T10`, `P5-T31`, `P5-T12`, `P5-T13`, `P5-T14` |
+| Relatedness gathering: references, citations, source-provided recommendation endpoints; scoring and reason chips. FR-15, FR-47 | `P5-T04`–`P5-T10`, `P5-T31`, `P5-T12`, `P5-T32`, `P5-T13`, `P5-T14` |
 | Related-results review UI with "in library" marking and recency de-emphasis. FR-16, FR-18 | `P5-T15`, `P5-T16` |
 | Optional Zotero *Related* linkage. FR-17 | `P5-T02`, `P5-T17` |
 | Collection profiler: term/MeSH extraction, optional embedding centroids, editable profile UI. FR-44 | `P5-T18`, `P5-T19`, `P5-T20`, `P5-T21`, `P5-T22`, `P5-T26` |
@@ -93,11 +94,12 @@ deliverable touches; this file claims only R-3. *Updated 2026-11-02: `docs/11` �
 entries and §3.1's table were corrected that day under dated notes — R-19 is not Phase 5's, and
 Phase 2 proved no relatedness fallback, so R-3 is retired here, by `P5-T28` offline and `P5-T30` live.*
 
-**Effort.** **35.75 developer-days over 31 cards** (§1), so the band these cards imply is
-**35.75–50 d** (35.75 × 1.4 = 50.05 → 50). Against the scaled 21–29 d `docs/11` published before this
-file was accepted, the low end is **+70 %** (35.75 ÷ 21 = 1.70) and 23 % above the scaled top
-(35.75 ÷ 29 = 1.23) — above the ~30 % `plan/README.md` §7 calls a signal to re-estimate the phase in
-`docs/11`, which was done. *Corrected 2026-11-01 (review): was 33.25 d, 33.25–47 d, +58 %, before `P5-T23` (+0.25 d) and
+**Effort.** **36.25 developer-days over 32 cards** (§1), so the band these cards imply is
+**36.25–51 d** (36.25 × 1.4 = 50.75 → 51). Against the scaled 21–29 d `docs/11` published before this
+file was accepted, the low end is **+73 %** (36.25 ÷ 21 = 1.73) and 25 % above the scaled top
+(36.25 ÷ 29 = 1.25) — above the ~30 % `plan/README.md` §7 calls a signal to re-estimate the phase in
+`docs/11`, which was done. *Updated 2026-11-05 (`plan/00` §6 item 344(b)): was 35.75 d over 31 cards, 35.75–50 d, +70 %,
+23 %, before `P5-T32` (0.5 d).* *Corrected 2026-11-01 (review): was 33.25 d, 33.25–47 d, +58 %, before `P5-T23` (+0.25 d) and
 `P5-T25` (+0.5 d) were re-estimated for work their neighbours assume (notes on both cards).* *Updated
 2026-11-01 (decisions): was 34.0 d over 30 cards, 34–48 d, +62 %; the decisions added 1.75 d — `P5-T03`
 +0.5, `P5-T04` +0.75, `P5-T05` −0.25, `P5-T14` +0.25, `P5-T18` +0.25 and the new `P5-T31` +0.25 (§3).*
@@ -119,7 +121,8 @@ And two that the phase needs as hard as the above:
 
 - [ ] Every Phase 5 test passes with **zero** live network calls and **zero** spend (`docs/13` §4);
       live calls happen only in `P5-T04` (Europe PMC, NCBI and Crossref fixture recording, unkeyed),
-      `P5-T31` (the owner's keyed Semantic Scholar recording, item 323(c)), `P5-T29` and `P5-T30`.
+      `P5-T31` (the owner's keyed Semantic Scholar recording, item 323(c)), `P5-T32` (its free, unkeyed
+      measurement and two Crossref recordings, item 344(b)), `P5-T29` and `P5-T30`.
 - [ ] `docs/13` §8.3's eight QA lines each map to a recorded result (`P5-T30`).
 
 ### 0.1 Already landed — cite these by name, do not rebuild them
@@ -303,7 +306,8 @@ abstract fill-in (`P5-T12` step 4, `P5-T25` step 3).
 | `P5-T29` | Probe the positive-seed cap with the real key | 0.5 | **Yes** |
 | `P5-T30` | Phase-5 acceptance run against the definition of done | 1.0 | **Yes** |
 | `P5-T31` | Owner-recorded Semantic Scholar fixtures | 0.25 | **Yes** |
-| | **Total** | **35.75** | 3 gates |
+| `P5-T32` | Crossref lookup by DOI for keyless hydration, and the base-mapped venue and year | 0.5 | none |
+| | **Total** | **36.25** | 3 gates |
 
 **Entry points** (no `Depends on`): `P5-T01`, `P5-T02`, `P5-T04`. All three are documents, rows,
 request builders and fixtures. `P5-T01` edits `docs/07` and `P5-T02` edits `docs/07` §8.5 and the
@@ -909,7 +913,7 @@ npm run typecheck && npm run test:unit -- pubmed container
 | **ID** | `P5-T09` |
 | **State** | `TODO` |
 | **Depends on** | `P5-T01`, `P5-T04` |
-| **Blocks** | `P5-T11`, `P5-T12` |
+| **Blocks** | `P5-T11`, `P5-T12`, `P5-T32` |
 | **Retires** | part of `R-3` |
 | **Implements** | part of `FR-14`, part of `FR-15` |
 | **Estimate** | 0.75 d |
@@ -1085,7 +1089,7 @@ npm run typecheck && npm run test:unit -- relatedSeed
 | **ID** | `P5-T12` |
 | **State** | `TODO` |
 | **Depends on** | `P5-T05`, `P5-T06`, `P5-T07`, `P5-T08`, `P5-T09`, `P5-T10` |
-| **Blocks** | `P5-T13`, `P5-T14` |
+| **Blocks** | `P5-T13`, `P5-T14`, `P5-T32` |
 | **Retires** | part of `R-3` |
 | **Implements** | part of `FR-15` |
 | **Estimate** | 1.25 d |
@@ -1107,6 +1111,8 @@ their results are unioned and merged, and only survivors are hydrated.
 > *Added 2026-11-02 (`plan/reports/P5-T07.md`, `P5-T08.md`, `P5-T09.md`, `P5-T10.md`; coordinator, under `plan/00` §6 item 313). (1) `src/model/merge.ts` joins this card's Files: read `"other"` as absent when choosing `type`, because a Crossref reference record otherwise makes the merged work "other" even after it is filled in (measured by `P5-T09`). (2) Measure how many of `work-with-references`' 155 DOIs Europe PMC resolves; a keyless, non-biomedical seed's references otherwise have no route to a title. If the share is poor against the definition of done's "still returns useful candidates", add a Crossref `lookup` over `filter=doi:` with one free, unkeyed recording, and re-price this card. (3) Call `findRelated` once per named strategy inside `cachedRelated`, never `"auto"`, which hides a failed route in a warning and would cache the partial page. (4) Drop `raw` before caching. (5) Status rows: a rejected call with `BadRequestError` 404 is "not indexed"; an empty page with a warning is "could not ask" (item 332(c)). (6) PubMed's records arrive hydrated, and `lookupById` is empty there, so step 3 skips them. `PPR` rows have no identifiers: keep them as they are. A DOI-only Europe PMC seed costs one `lookup` per call, so pass a PMID when known. One record can appear under two seeds. (7) Choose a budget within `docs/05` §6.1's 5–8; `GENERATOR_VALUE_ORDER` has no Crossref row. `docs/05` §6.1's generator list gains Crossref here.*
 
 > *Added 2026-11-02 (`plan/reports/P5-T05-T06.md`; coordinator, under `plan/00` §6 items 313 and 337(c)): call `findRelated` once per named strategy, and check `hasApiKey` first for the "no key" row. A 404 means "not indexed"; an empty page with a warning means "could not ask". A forpaper limit of 200 returns no abstracts, so hydrate. Edges align with records by index and have the same length. `toSemanticScholarId` prefers `DOI:`, and `P2-T05` measured that `/paper/batch` does not resolve an arXiv seed's `10.48550/arXiv.*` DOI, so this card sends `ARXIV:` for those, with a test, and does not cache "not indexed" from a `DOI:` request on such a seed.*
+
+> *Added 2026-11-05 (`P5-T32`; `plan/00` §6 item 344(b)): hydration now asks Crossref's `lookup` last, for what still has no title. Step 3's "else Europe PMC / efetch" reads as built in `docs/05` §6.1.*
 
 **Do.**
 1. Generators A–E of `docs/05` §6.1: S2 forpaper, references, citations (keyed only, §0.2 item 19);
@@ -1437,6 +1443,8 @@ npm run typecheck && npm run test:unit -- relatedViewModel && npm run test:integ
 **Notes.** Needs: `P1-T20`, `P1-T21` (built). `docs/08`, `registerUI.ts` and `searchDialog.*` are
 `P4-T20`'s while it runs (item 325); wait for its commit.
 
+> *Added 2026-11-05 (`P5-T16`): the split held, so `relatedViewModel.ts` is its own file and `searchImportViewModel.ts` is unchanged. Three files beyond this card's list changed: `addon/content/style/searchDialog.css` and `typings/i10n.d.ts`, which the new columns and strings need, and `test/integration/menus.spec.ts`, whose "opens the real window in related mode" test removes `host.related` first, because the window now starts a run by itself and that test's seed has a DOI. `test/integration/lifecycle.spec.ts` opens an item that does not exist, so it sends nothing and is unchanged. How the window reads a run is `docs/08` §5.2's note "DECIDED 2026-11-05". `rh-error-source` is not drawn in this mode, against this card's note of 2026-11-05: decision 12 there says why.*
+
 ---
 
 ### P5-T17 — Import from related results, optional *Related* link
@@ -1455,6 +1463,8 @@ npm run typecheck && npm run test:unit -- relatedViewModel && npm run test:integ
 **Goal.** Importing the ticked related rows creates exactly those items (or adds existing ones to the
 target), with abstracts, and links each to the seed both ways when the box is ticked.
 
+> *Added 2026-11-05 (`P5-T16`; coordinator, under `plan/00` §6 item 313): the window's Import button is off in the related mode, in two places: `refreshImportGate` and the first line of `import` in `addon/content/searchDialog.js`. Remove both. A related row's `key` is its work's `workKey`, and `RelatedResultRow` carries no record, no DOI and no type, so `createRelatedViewModel` must keep the last run's `RelatedRow[]` and map the checked keys back to them; `pickedRows` returns the window's own rows. The seed item is `lastInput.seedItemID`, a pick included. `RelatedRow.inLibrary` and `existingItemID` are the pipeline's, so no new row state is needed for the duplicate policy. "Link imported items as Related" is still not in the markup. `collectImportRequest` reads the hidden keyword controls too, so read what the related route needs by name.*
+
 **Read first.**
 - `docs/10` FR-16, FR-17; `docs/08` §5.1 step 5 (both sides, inside the batch transaction)
 - `src/zotero/importer.ts` — the `versionPairs` relation pass, "an existing item is added to a collection and nothing more"
@@ -1471,6 +1481,8 @@ target), with abstracts, and links each to the seed both ways when the box is ti
 - create `test/integration/zotero/relatedLinkage.spec.ts`
 
 > *Added 2026-11-05 (`P5-T14`; coordinator, under `plan/00` §6 item 313): `RelatedRow.existingItemID` is the item a row was matched to, by identifier or by title. The importer finds only identifier matches, so an `inLibrary` row matched by title and ticked by hand would create a second item unless this card passes that id on. Each row keeps its `records`, which `SearchImportInput.records` needs.*
+
+> *Added 2026-11-05 (`P5-T17`): files beyond this list, each needed by this card's own notes: `addon/content/searchDialog.js`, `addon/content/searchDialog.xhtml`, the two `research-helper-searchDialog.ftl` bundles, `src/i18n/keys.ts`, `typings/i10n.d.ts`, `src/ui/viewModels/searchImportViewModel.ts` (`resolveTarget`'s parse moved out as `targetFromPicker`, so both windows share it), and the tests `test/unit/ui/relatedViewModel.test.ts`, `test/unit/ui/searchDialog.test.ts`, `test/unit/pipeline/importStrategy.test.ts`, `test/unit/pipeline/searchImport.test.ts`, `test/unit/i18n/keys.test.ts`, the new `test/unit/zotero/seedLink.test.ts`, and `test/integration/searchDialog-flow.spec.ts`, whose "keeps Import off until P5-T17" test this card replaces. Step 3's answer: a preview import through the pipeline writes no provenance, because both writes (`writeProvenanceNote`, `putProvenance`) are in `searchImportViewModel.ts`'s `renderImportOutcome`, and the related route does not pass through that function. Nothing needed suppressing. Decision line 16's "the job record keeps the seed" does not hold for related runs: `P5-T14`'s decision 1 gives them no `JobRecord`, so with the box unticked nothing keeps the seed. No finishing condition asks for it. How the window imports is `docs/08` §5.2's note "DECIDED 2026-11-05 … how this window imports"; the importer's half is `docs/07` §6.2's note.*
 
 **Do.**
 1. Import through the search pipeline's preview import, default target named after the seed
@@ -2023,6 +2035,8 @@ and each carries a one-line reason built from its strongest terms.
 npm run typecheck && npm run test:unit -- recommendScore
 ```
 
+> *As built 2026-11-05 (`plan/reports/P5-T24.md`; `docs/05` §7.4's note holds the decisions and measurements): `src/pipeline/recommend/score.ts`, called by `recommendPipeline.ts` (`P5-T25`, not built). The novelty collapse is decided by item 1. Fuzzy title matching is `matchAgainstLibrary`'s `"match"` verdict, item 4. A keyed run with no vectors scores in words, item 2.*
+
 **Notes.** Needs: `P2-T10`, `P2-T11` (version links, built).
 
 ---
@@ -2073,6 +2087,8 @@ profile, applies the user's edits, records dismissals, and is registered under `
 
 > *Added 2026-11-05 (`plan/reports/P5-T23.md`; coordinator, under `plan/00` §6 item 313): pass `SemanticScholarSource.hasUsableApiKey` as `hasSemanticScholarKey`, because `hasApiKey` is not enough (item 339(b)). Pass the typed `semanticScholar` and `pubmed` adapters from `installServices`, the `network-metadata` pool and a child progress reporter. Construct the `RequestBudget` here and hand the same one to hydration, so the reserve of 2 is what hydration finds. A limit of 200 brings no abstracts, so hydration is needed. Pass `negatives` from `recentNegatives`, and `sourceIds` and `dateFilter` resolved from preferences. Map `state` to the `Generating` edges. `OperationCancelledError` is the only rejection, and a failed generator is a row. The integration spec must prove a real keyless run sends nothing to `api.semanticscholar.org`, and that cancel stops within one request.*
 
+> *Added 2026-11-05 (`plan/reports/P5-T24.md`; coordinator, under `plan/00` §6 items 313 and 346(b), 346(c)): build `score.ts`'s `references` from the cache only and send no extra request for it. `RecommendLibrary` gains the `libraryItems` read `RelatedLibrary` has, with its Zotero proof in `recommendLibrary.spec.ts`. Export `authorName` from `profile.ts` and delete `score.ts`'s copy and the test pinning the two together. `peerReviewedOnly` and `showDismissed` are per-run inputs, and `exploration` is the slider divided by 100.*
+
 **Do.**
 1. Two input modes of one pipeline (decided below). **Profile only:** profile check (stored profile with
    equal `membershipHash` → reuse) → build stats (`P5-T18`) → vectors and centroids (`P5-T20`,
@@ -2088,7 +2104,7 @@ profile, applies the user's edits, records dismissals, and is registered under `
    (`P5-T24`) → fill in the survivors' metadata (`lookup` through `/paper/batch` when keyed, else Europe
    PMC / efetch, and `backfillAbstracts` with `selected` lacking `semanticscholar` when keyless, §0.2
    item 19) → fetch the survivors' vectors (`ensureEmbeddings`, keyed only) → `contentFilters`
-   (`P5-T24`) → score. Never fill in the raw union (`docs/05` §9.1 item 2).
+   (`P5-T24`) → score. Never fill in the raw union (`docs/05` §9.1 item 2). *Added 2026-11-05 (`plan/reports/P5-T24.md`; coordinator, under `plan/00` §6 item 313): the calls, in order, are `readDismissed` and `recommendOwnership` once, `identifierFilters`, the fill-in, the vectors, `contentFilters`, `scoreRecommendations`, `diversify`. `recommendOwnership` needs the title pass, so `RecommendLibrary` needs the `libraryItems` read `RelatedLibrary` has. `references` is optional and `coupling` reads 0 without it, so this card decides whether to build it from the cache.*
 4. `reject(profileId, workKey)` through the recommendation store — rejections only (§0.2 item 27); the
    10 most recent rejections for this collection are `P5-T21`'s negatives.
 5. Cancel at stage boundaries; a pause from a budget refusal keeps the stage pending (`plan/07` §0.2
@@ -2143,6 +2159,8 @@ and no step built:*
 npm run typecheck && npm run test:unit -- recommendPipeline container && npm run test:integration -- --exit-on-finish --abort-on-fail
 ```
 
+> *Added 2026-11-05 (`P5-T25`; coordinator, under `plan/00` §6 item 313): built to `docs/07` §12.5's note "As built 2026-11-05", which holds the 14 decisions. Stand-ins and a mock provider only, no live call, not yet run in Zotero. `P5-T21`'s finding 3 is fixed here: a profile from incomplete vectors is not stored. `authorName` is now one function, exported from `profile.ts`, and `score.ts`'s copy and its pinning test are gone. `RecommendLibrary` gained `libraryItems`, proved in `test/integration/zotero/recommendLibrary.spec.ts`, uncompiled in Zotero and unrun. The fill-in holds its own copy of `related/generators.ts`' per-identifier cache lookup, because that file is outside this card's Files; a test holds both to one set of cache entries.*
+
 **Notes.** Needs: `P3-T17`, `P3-T34` (built). Shares `registerPipelines.ts` and `container.ts` with
 `P5-T14` and `P4-T18`.
 
@@ -2164,6 +2182,8 @@ npm run typecheck && npm run test:unit -- recommendPipeline container && npm run
 **Goal.** "Recommend New Papers from This Collection…" opens the window in `recommend-from-collection`
 mode, which shows the derived profile before searching and lets the user remove and add terms.
 
+> *Added 2026-11-05 (`P5-T16`; coordinator, under `plan/00` §6 item 313): the split holds, so one document can host a second view model: `connectHost`, `cancel` and `search` pick `host.related` by mode through `inRelatedMode`, and `recommendViewModel.ts` can follow with its own member. `render` draws any state with `SearchViewState`'s members, and `RelatedViewState` is the pattern for adding a panel and a row part. `relatedColumns` and `buildRelatedColumns` show how to add columns while `logic.columns` stays pinned to the markup's seven. A connect that cancels a running run, with a detach that cannot take a newer window's view, is `createRelatedViewModel`'s `connect`. `test/unit/ui/searchDialog.test.ts` reads the first `*[other]` in the English bundle for the year span, so a plural variant must not be placed before `research-helper-search-years-span`. A new mode's window that starts work by itself must also keep `test/integration/menus.spec.ts` and `lifecycle.spec.ts` off the real network, as `P5-T16` did for the related mode.*
+
 **Read first.**
 - `docs/08-ui-ux-spec.md` §2.4–§2.5 (the collection block, `research-helper-menu-collection-recommend`), §1 ("Three windows total")
 - `docs/10` FR-44
@@ -2182,6 +2202,10 @@ mode, which shows the derived profile before searching and lets the user remove 
 > *Added 2026-11-02 (`plan/reports/P5-T22.md`; coordinator, under `plan/00` §6 item 313): the surface `ProfileCallSurface` applies `shouldOpenCostDialog`, `settleDisclosure` and `skippedNoticeLine`, and shows `warningId`. `confirmReportRun` can be reused only if its parameter is widened.*
 
 > *Added 2026-11-05 (`plan/reports/P5-T23.md`; coordinator, under `plan/00` §6 items 313 and 343(c)): `recommendKeywordQueries` gives the queries for a notice of what is sent, and `statuses` gives the rows. `sources` governs only the keyword search, so deselecting PubMed or Europe PMC does not stop the citation and neighbour requests that reach them. Say so where this card describes what is contacted.*
+
+> *Added 2026-11-05 (`P5-T25`; coordinator, under `plan/00` §6 item 313): the host calls `RecommendPipeline.execute(input, ctx, surface)`, narrowing `graph.pipelines.get("recommend")` as the search window's host narrows `related`. `run` declines every question, so a window must not use it. `RecommendSurface` is `ProfileCallSurface` plus `ask(RecommendBudgetQuestion)`, which is `SummarizeQuestion`'s budget stop. Each half is its own job: `mode: "profile-only"` ends with `RecommendProfileResult`, and `mode: "edited-profile"` takes that `profile` back, with `edits`, `showDismissed`, `peerReviewedOnly` and the slider divided by 100 as `exploration`. Words the window owes: `RECOMMEND_DISPLAY_NAME_KEY`, `research-helper-menu-collection-recommend`, is named by the pipeline and has no string yet, so this card adds it with the menu entry; `RecommendFailed.tooFewItems.itemCount` fills `rh-error-recommend-too-few-items`'s `$count`; and `profileRebuilt`, `vectorsIncomplete`, `heuristicReason`, `warningId` and `keyNotice` are values with no wording. `egress` is on every ending, and the log record is already written.*
+
+> *Added 2026-11-05 (`plan/reports/integration-round-350.md`; coordinator, under `plan/00` §6 items 313, 350(c) and 350(d)): this card also (1) makes the recommend run's egress log fail closed: if `noteEgress` cannot write the entry, the request does not go, with a test and a dated correction to `docs/07` §12.5 item 8; (2) passes `$query` and `$collection` through `logic.fluentText` in `research-helper-search-state-empty` and `research-helper-search-rerun-heading`, with tests. A real window starting a run needs the suite's `liveRequestGuard` satisfied, so a spec fakes the transport first.*
 
 **Do.**
 1. Documents first: write `docs/08` §5.4 — the profile panel (focus statement, read-only; term chips
@@ -2255,6 +2279,12 @@ import into `<Collection> — recommended <date>` by default.
 
 > *Added 2026-11-05 (`plan/reports/P5-T21.md`; coordinator, under `plan/00` §6 items 313 and 341(f)): `centroidLabels` are built from `termWeights` before `userEdits` apply, so a term the user removes stays on a label until the next rebuild. This card decides whether that matters.*
 
+> *Added 2026-11-05 (`plan/reports/P5-T24.md`; coordinator, under `plan/00` §6 item 313): rows are `RecommendationRow`. `topicIndex` can be absent at k > 1, so this card needs a group for rows with no topic. Every reason id needs words: `recommended-by-semantic-scholar`, `cites-collection` (`count`), `author-in-collection` (`names`), and the seven term ids other than `authorAffinity`. The `novelty` reason is on nearly every line once the slider is above its default (`docs/05` §7.4's note, items 9 and 15).*
+
+> *Added 2026-11-05 (`plan/00` §6 items 313, 346(d) and 346(e)): word the ten reason ids from `plan/reports/P5-T24.md`'s table, with the Korean through `G-41`. A group for rows with no `topicIndex` at k > 1. On the word space the `novelty` reason shows on every row above the default slider position, so decide how it reads there.*
+
+> *Added 2026-11-05 (`P5-T25`; coordinator, under `plan/00` §6 item 313): read `RecommendRows` from `plan/08` `P5-T26`'s `execute`. `rows` are in the order `diversify` picked and already stored, so `RecommendPipeline.reject(rows[n].recommendation.profileId, rows[n].recommendation.work.workKey)` has a row to mark; it answers `false` with no store or when the rows could not be stored, which the window must not read as done. `similarity` gives the label's space and its notice, one of `no-store`, `no-vectors` or `fetch-failed`.*
+
 **Do.**
 1. Rows grouped by centroid label when k > 1; reason line from `P5-T24`'s reason ids; "in library"
    rows unchecked; the preprint badge; the per-run "Peer-reviewed only" box.
@@ -2300,6 +2330,8 @@ npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fai
 
 **Goal.** With no Semantic Scholar key, both features return candidates from the other sources and the
 lexical floor, make **zero** requests to `api.semanticscholar.org`, and say what a key would add.
+
+> *Added 2026-11-05 (`P5-T17`): the related half's import is `host.related.importRows({ keys, collectionID, linkToSeed })`, after a run has drawn rows, and it sends nothing itself: it hands the search pipeline `works` with `records`, so `BackfillingAbstracts` does not run. The window starts a run by itself, so a spec opening the real window on a seed with an identifier sends real requests unless the transport is faked first.*
 
 **Read first.**
 - `docs/11` R-3; `docs/13` §8.3 ("Without a Semantic Scholar key …"); `docs/10` §5 Q8
@@ -2398,7 +2430,7 @@ Then the live spec with `RH_DOD_LIVE=1` on the owner's profile, after `G-26`.
 |---|---|
 | **ID** | `P5-T30` |
 | **State** | `TODO` |
-| **Depends on** | `P5-T28`, `P5-T29` |
+| **Depends on** | `P5-T28`, `P5-T29`, `P5-T32` |
 | **Blocks** | none |
 | **Retires** | closes `R-3` |
 | **Implements** | `FR-13`–`FR-18`, `FR-44`–`FR-49` |
@@ -2422,6 +2454,12 @@ Zotero profile and recorded, and the two features are switched on.
 > *Added 2026-11-05 (`plan/reports/P5-T14.md`; `plan/00` §6 item 342(d)): record whether the keyed run's seed had a vector, because without one every candidate's similarity is 0 and the run gives no notice, and record the logged time of the run's two whole-library reads.*
 
 > *Added 2026-11-05 (`plan/reports/P5-T23.md`; `plan/00` §6 item 343(e)): read the budget of 40 and the reserve of 2 against the requests the recommend run really spent, whether `fanOut` spent a request its charge did not count, and whether the heuristic query held a word and a phrase containing it.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T32.md`; `plan/00` §6 item 345(c)): on a keyless run, read the budget arithmetic on a DOI-only seed (6 generator requests, then one lookup each, is the worst case by arithmetic), and read `hydration.untitled` on one recent machine-learning seed. A large share of `10.48550` rows there adds an arXiv `lookup`. `hydration.sent` and `unsent` count a source and an identifier together, so do not read them as works.*
+
+> *Added 2026-11-05 (`plan/00` §6 item 346(b)): record how many recommend rows had a non-zero `coupling`, because generator (c) fetches citations and not references, and 0.08 of the score does nothing if none did.*
+
+> *Added 2026-11-05 (`P5-T25`; `plan/00` §6 items 346(b) and 346(d)): both numbers are on the `info` log line "recommend: scored", as `couplingRows` and `scoreMs`, beside the drop counts and the space; `scoreMs` holds `lexicalSpace`'s build on the word space. Raise the log level to `info` for the run to read it.*
 
 **Do.**
 1. Related: a DOI seed → count of candidates with reasons (≥ 20); import 10 → 10 items created or
@@ -2520,15 +2558,105 @@ npm run test:contract && ! grep -rli "x-api-key" test/fixtures/semanticscholar
 inside `P5-T04` would have gated `P5-T07`–`P5-T09`, which need no Semantic Scholar fixture. The 0.25 d
 is the agent's checking and inventory work; the owner's time is the gate, not developer-days.
 
+### P5-T32 — Crossref lookup by DOI for keyless hydration, and the base-mapped venue and year
+
+| Field | Value |
+|---|---|
+| **ID** | `P5-T32` |
+| **State** | `TODO` |
+| **Depends on** | `P5-T09`, `P5-T12` |
+| **Blocks** | `P5-T30` |
+| **Retires** | part of `R-3` |
+| **Implements** | part of `FR-15` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** A keyless, non-biomedical seed gets titled candidates: reference DOIs Europe PMC does not answer
+are asked of Crossref's `lookup`, inside the request budget. And a collection of conference papers has
+venues, and a patent, a case or a statute has a year, because `containerTitle` and the date are read
+base-mapped, as `itemTitle` reads the title.
+
+**Read first.**
+- `plan/00` §6 items 339(d) and 344 — why this card exists and what it may touch
+- `plan/reports/integration-round-344.md` finding 2 — what `getField` does to a type's own field names
+- `docs/05` §6.1, "As built" note, item 4 and the "Measured 2026-11-05" paragraph — hydration and the two readings
+- `docs/02` §5.2 — `filter=doi:`, `rows`, `select`
+- `docs/07` §4.2 (`LiteratureSource`) and §6.6 (reading from Zotero)
+- `runRelatedGenerators`, `lookupThroughCache` and `worthAsking` in `src/pipeline/related/generators.ts`
+- `createEuropePmcSource`'s `lookup` — the dedupe and batch shape to follow
+- `P5-T04`'s recorder route and `crossrefRelatedPlan` — how the Crossref fixtures are recorded
+
+**Files.**
+- modify `src/sources/crossref/references.ts` (`CROSSREF_DOI_LOOKUP_BATCH`, `buildCrossrefDoiLookupRequest`; caller: `createCrossrefSource`'s `lookup`)
+- modify `src/sources/crossref/crossrefSource.ts` (`lookup`; `CROSSREF_CAPABILITIES.lookupById` becomes `["doi"]`; caller: `lookupThroughCache` in `generators.ts`; constructed by `createCrossrefSource`, whose caller is `src/bootstrap/container.ts`)
+- modify `src/pipeline/related/generators.ts` (the hydration order, `LOOKUP_BATCH`, the arXiv DOI skip)
+- modify `src/zotero/itemMapper.ts` (`snapshotZoteroItem`'s reads of `publicationTitle` and `date`)
+- modify `scripts/record-fixtures.ts` and `test/support/crossrefRecordedRequests.ts` (two scenarios)
+- create fixtures `test/fixtures/crossref/related/`: `work-non-biomedical-seed`, `lookup-non-biomedical-references`
+- modify `test/unit/sources/crossrefReferences.test.ts`, `test/unit/sources/crossref.test.ts`, `test/unit/sources/relatedRequests.test.ts`, `test/unit/pipeline/relatedGenerators.test.ts`, `test/unit/zotero/itemMapper.test.ts`
+- modify `test/integration/zotero/relatedLibrary.spec.ts` (the proof pins the new reading; not run by this card)
+- modify `docs/02` §5.1 and §5.2, `docs/05` §6.1, `docs/07` §4.2 and §6.6, `docs/13` §3.1 (dated notes)
+
+**Do.**
+1. Measure first, free and unkeyed, through the shipped adapters: one real non-biomedical seed with a deposited
+   `reference` list; Europe PMC's `lookup` and then Crossref's over its DOIs; what `filter=doi:` really allows, from
+   Crossref's documentation and one real request. Record the numbers in `docs/02` §5.2 and `docs/05` §6.1.
+2. `buildCrossrefDoiLookupRequest(dois, userContactEmail)`: `GET /works?filter=doi:a,doi:b&select=…&rows=N&mailto=…`,
+   `rows` equal to the number of DOIs, because the default of 20 cuts a longer list silently.
+3. `lookup`: `normalizeDoi` each entry, dedupe, skip what is not a DOI, and leave a DOI holding a comma out of the batch,
+   because one comma fails the whole request (step 1). Send `CROSSREF_DOI_LOOKUP_BATCH` to a request, because
+   `lookupThroughCache` can hand over more than one request's worth. A transport failure propagates; the generator's status
+   row reads it.
+4. In `runRelatedGenerators`, Crossref is asked last, for what has no title, and only through `lookupThroughCache`, so
+   the budget, the per-identifier cache and the counts all apply. A `10.48550/arXiv.*` DOI is not sent to it.
+5. `snapshotZoteroItem` reads `publicationTitle` and `date` base-mapped; every other field read stays as it is, `publisher`
+   above all, because a preprint's `repository` is base-mapped onto it (`plan/00` §6 item 344(c)).
+6. Update `relatedLibrary.spec.ts`'s proof; say it needs the next integration run.
+
+**Do NOT.**
+- Do **not** add Crossref to `ABSTRACT_BACKFILL_LADDER`: the owner dropped it (`plan/00` §6 item 193), and this card
+  fills titles.
+- Do **not** raise `RELATED_REQUEST_BUDGET` or `RELATED_HYDRATION_RESERVE` (see the decisions below).
+- Do **not** base-map `publisher`, `repository` or any other field; and do not touch `src/pipeline/recommend/score.ts`.
+- Do **not** make a live call from a test or a build step; the live part is step 1 and the recorder.
+
+> **Decided 2026-11-05 (coordinator, under `plan/00` §6 item 313), on the numbers in `docs/05` §6.1:**
+> (1) **Crossref goes after Europe PMC.** Asking Europe PMC first keeps its abstracts and PMIDs, which Crossref-first would
+> lose, because a titled row is no longer worth asking and the fill-in merges only abstracts; the request count is the
+> same when both fit. Crossref is then asked only what is left. (2) **Budget 8 and reserve 2 stay.** The worst keyless
+> case, a DOI-only biomedical seed, leaves 2 after 6 generator requests: one Europe PMC lookup, one Crossref lookup. The
+> abstract fill-in then has none, and its share is counted in `hydration.unsent`; a title is worth more than an abstract,
+> because an untitled row is dropped. A DOI-only non-biomedical seed spends 4 of 8. (3) **`CROSSREF_DOI_LOOKUP_BATCH` is 100**,
+> the largest list a generator hands over, under the 215 measured to work. (4) **A `10.48550/arXiv.*` DOI is not asked of
+> Crossref**: 6 of 6 unanswered, because DataCite holds them. Such a row stays untitled and counted.
+
+**Done when.**
+- [ ] `createCrossrefSource`'s `lookup` answers a recorded `filter=doi:` body, `rows` equal to the count, and declares `lookupById: ["doi"]`.
+- [ ] A keyless run on the recorded non-biomedical seed returns titled candidates for reference DOIs Europe PMC did not answer, on the real body.
+- [ ] Hydration never spends past the budget; Crossref is asked only for blank titles, after Europe PMC, and a keyed run whose titles are complete sends it nothing.
+- [ ] A `conferencePaper`, a `bookSection` and a `webpage` read a `containerTitle`; a `patent`, a `case` and a `statute` read a year; a `preprint`'s `publisher` and `repository` read as before.
+- [ ] `relatedLibrary.spec.ts` asserts the new reading (the next integration run proves it).
+- [ ] `npm run typecheck`, `npx eslint .`, `npm run lint:check` and `npm run test` pass, with no live call.
+
+**Verify with.**
+```bash
+npm run typecheck && npx eslint . && npm run lint:check && npm run test
+```
+
+**Notes.** Added 2026-11-05 (`plan/00` §6 item 344(b), (c)). A year change alters a `hash:` work key for a `patent`, a
+`case` or a `statute` with no identifier and no stored `rh-work-key`; `docs/07` §6.6 says how far that reaches.
+
 ---
 
 ## 3. Estimate reconciliation
 
 `docs/11` §1 Phase 5 published **21–29 d, "⚠ scaled, not decomposed"** (14 d × 1.50, × 1.4) until
-2026-11-02. These cards sum to **35.75 d over 31 cards**, a band of **35.75–50 d** (35.75 × 1.4 = 50.05
-→ 50). The low end is 70 % above 21 (35.75 ÷ 21 = 1.70) and 23 % above the scaled top of 29 (35.75 ÷
-29 = 1.23); against the superseded pre-2026-09-09 top of 14 d it is 2.55×, beside Phase 4's measured
-2.16× (item 288(b)). *Corrected 2026-11-01 (review): was 33.25 d, 33.25–47 d, 58 %, 15 % and 2.38×, before
+2026-11-02. These cards sum to **36.25 d over 32 cards**, a band of **36.25–51 d** (36.25 × 1.4 = 50.75
+→ 51). The low end is 73 % above 21 (36.25 ÷ 21 = 1.73) and 25 % above the scaled top of 29 (36.25 ÷
+29 = 1.25); against the superseded pre-2026-09-09 top of 14 d it is 2.59×, beside Phase 4's measured
+2.16× (item 288(b)). *Updated 2026-11-05 (`plan/00` §6 item 344(b)): was 35.75 d over 31 cards, 35.75–50 d, 70 %, 23 % and
+2.55×, before `P5-T32` (0.5 d), which is outside the table below because it was not a review line: it came from the
+measurement of item 339(d) and finding 2 of `plan/reports/integration-round-344.md`.* *Corrected 2026-11-01 (review): was 33.25 d, 33.25–47 d, 58 %, 15 % and 2.38×, before
 `P5-T23` and `P5-T25` were re-estimated.* *Updated 2026-11-01 (decisions): was 34.0 d, 34–48 d, 62 %, 17 %
 and 2.43× before the re-estimates in the table below and `P5-T31`.* `plan/README.md` §7 calls a
 divergence above ~30 % a signal to re-estimate the phase in `docs/11`; **propagated 2026-11-02** to
@@ -2553,7 +2681,7 @@ out to the 2026-11-02 pass — lowering a card whose scope shrank is the owner's
 |---|---|---|
 | — types, preferences, tables, builders, fixtures (no work area) | `P5-T01`, `P5-T02`, `P5-T03`, `P5-T04`, `P5-T31` | 5.0 |
 | W5-1 Seed resolution | `P5-T11` (+ title match in `P5-T05`, `P5-T09`) | 1.25 |
-| W5-2 Citation-graph gathering | `P5-T05`, `P5-T07`, `P5-T08`, `P5-T09`, `P5-T12` | 4.5 |
+| W5-2 Citation-graph gathering | `P5-T05`, `P5-T07`, `P5-T08`, `P5-T09`, `P5-T12`, `P5-T32` | 5.0 |
 | W5-3 S2 Recommendations adapter | `P5-T06` | 1.25 |
 | W5-4 Embedding layer | `P5-T19`, `P5-T20` | 2.0 |
 | W5-5 Vector storage | in `P5-T03` | — |
@@ -2563,7 +2691,7 @@ out to the 2026-11-02 pass — lowering a card whose scope shrank is the owner's
 | W5-9 Review, exclusion, import | `P5-T14`, `P5-T15`, `P5-T16`, `P5-T17`, `P5-T25`, `P5-T27` | 8.75 |
 | W5-10 Rate limits, caching, evaluation | `P5-T10`, `P5-T28`, `P5-T29` | 2.25 |
 | Acceptance | `P5-T30` | 1.0 |
-| **Total** | 31 cards | **35.75** |
+| **Total** | 32 cards | **36.25** |
 
 The unpriced work the scaled figure hid is the kind Phases 0–4 found, plus one kind of its own:
 **four adapter extensions** behind a contract (`findRelated`) that no adapter implements (`plan/00`
@@ -2630,7 +2758,7 @@ service, so the D6 default needs none), vector storage and its share of NFR-8 (`
 the per-run LLM confirmation (`P5-T22`, with `docs/10` §5 Q7 decided on 2026-10-26), preprint
 presentation (`P5-T24`, review line 24) and implicit feedback (item 323(b): not in v1). In §5.4, the
 float figure and the "re-sequence after Phase 6" lever are those of 2026-09-09: the key arrived on
-2026-09-30 (`plan/06` `G-03`), and `docs/11` §2 owns the float (5–7 d since `plan/00` §6 item 336(d), 2026-11-02; 4.5–6 d since item 335(g), the same day; 3–4 d before it).
+2026-09-30 (`plan/06` `G-03`), and `docs/11` §2 owns the float (4.5–6 d since `plan/00` §6 item 344(b), 2026-11-05; 5–7 d since item 336(d), 2026-11-02; 4.5–6 d since item 335(g), the same day; 3–4 d before it).
 
 ### 5.1 Work areas
 

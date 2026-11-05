@@ -938,7 +938,8 @@ describe("CROSSREF_CAPABILITIES", () => {
       },
       // `true` since `P5-T09` added `findRelated` (`crossrefReferences.test.ts`).
       relatedByWork: true,
-      lookupById: [],
+      // `["doi"]` since `P5-T32` added `lookup` (`crossrefReferences.test.ts`).
+      lookupById: ["doi"],
       abstractsInSearch: true,
       citationGraph: true,
       dateFilter: true,

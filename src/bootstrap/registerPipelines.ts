@@ -139,6 +139,10 @@ import {
 import type { SearchRunSummary } from "../pipeline/trendReport/compose";
 import type { RecommendLibrary } from "../pipeline/recommend/profile";
 import {
+  createRecommendPipeline,
+  type RecommendPipelineDeps,
+} from "../pipeline/recommend/recommendPipeline";
+import {
   createRelatedPipeline,
   type RelatedPipelineDeps,
 } from "../pipeline/related/relatedPipeline";
@@ -351,6 +355,11 @@ export function createZoteroSearchImportWriter(
             ...(target.duplicatePolicy !== undefined && {
               duplicatePolicy: target.duplicatePolicy,
             }),
+            // `P5-T17`: the related window's two; absent on every keyword run.
+            ...(target.relateTo !== undefined && { relateTo: target.relateTo }),
+            ...(target.existingItemIDs !== undefined && {
+              existingItemIDs: target.existingItemIDs,
+            }),
             index,
             chunkSize: Math.max(1, works.length),
             token: batchToken,
@@ -397,6 +406,7 @@ export function createZoteroSearchImportWriter(
                 fallbackReasons: { ...report.importPaths.fallbackReasons },
               },
             }),
+            ...(report.seedLink !== undefined && { seedLink: report.seedLink }),
           };
         },
 
@@ -588,8 +598,7 @@ export function createZoteroSummarizeLibrary(
  * The recommend profile's {@link RecommendLibrary} over Zotero. Built here for
  * the reason {@link createZoteroSearchImportWriter} is; the reads themselves are
  * in `src/zotero/`, because this file may not name the `Zotero` global.
- * {@link buildPipelineSet} constructs it for `recommendPipeline.ts` (`P5-T25`);
- * until that card, nothing calls this.
+ * {@link buildPipelineSet} constructs it for `recommendPipeline.ts` (`P5-T25`).
  */
 export function createZoteroRecommendLibrary(): RecommendLibrary {
   return {
@@ -597,6 +606,8 @@ export function createZoteroRecommendLibrary(): RecommendLibrary {
       readCollectionWorks(libraryID, collectionKey),
     libraryTermSources: (libraryID) => readLibraryTermSources(libraryID),
     libraryIndex: (libraryID) => buildLibraryIndex(libraryID),
+    libraryItems: async (libraryID) =>
+      (await readLibraryWorks(libraryID)).map(libraryItemFieldsOf),
   };
 }
 
@@ -702,6 +713,35 @@ export interface PipelineConstructionDeps {
    * graph, and then no `related` pipeline is registered.
    */
   readonly related?: RelatedConstructionDeps;
+  /**
+   * The recommend pipeline's dependencies (`P5-T25`): the typed adapters, the three
+   * stores, the profile call's and the queue that holds the egress log. Absent in a
+   * unit test of the graph, and then no `recommend` pipeline is registered.
+   */
+  readonly recommend?: RecommendConstructionDeps;
+}
+
+/** {@link PipelineConstructionDeps.recommend}. */
+export interface RecommendConstructionDeps extends Pick<
+  RecommendPipelineDeps,
+  | "semanticscholar"
+  | "pubmed"
+  | "profiles"
+  | "recommendations"
+  | "embeddings"
+  | "clock"
+> {
+  /** `PROMPT_REGISTRY`, imported lazily by default. */
+  readonly profileCall: Omit<
+    RecommendPipelineDeps["profileCall"],
+    "prompts"
+  > & {
+    readonly prompts?: RecommendPipelineDeps["profileCall"]["prompts"];
+  };
+  /** The queue, built after the graph, so read through a getter. */
+  readonly jobs: () => Pick<JobQueue, "enqueue" | "start" | "succeed">;
+  /** Defaults to {@link createZoteroRecommendLibrary}; injectable for a test. */
+  readonly library?: RecommendLibrary;
 }
 
 /** {@link PipelineConstructionDeps.related}. */
@@ -806,6 +846,41 @@ export function buildPipelineSet(deps: PipelineConstructionDeps): PipelineSet {
     ...(deps.related !== undefined && {
       related: createRelatedPipeline(relatedDepsFrom(deps.related)),
     }),
+    ...(deps.recommend !== undefined && {
+      recommend: createRecommendPipeline(
+        recommendDepsFrom(deps.recommend, pools),
+      ),
+    }),
+  };
+}
+
+/**
+ * The recommend pipeline's deps from the composition root's. The egress log is one
+ * finished job record, because a run here has no record of its own to carry it
+ * (`docs/07` §12.5's note, item 8).
+ */
+function recommendDepsFrom(
+  given: RecommendConstructionDeps,
+  pools: WorkerPools,
+): RecommendPipelineDeps {
+  const { jobs, library, profileCall, ...rest } = given;
+  return {
+    ...rest,
+    library: library ?? createZoteroRecommendLibrary(),
+    pool: pools.networkMetadata,
+    profileCall: {
+      ...profileCall,
+      // `../prompts/bundled` imports the `.md` prompt files.
+      prompts:
+        profileCall.prompts ??
+        (async () => (await import("../prompts/bundled")).PROMPT_REGISTRY),
+    },
+    recordEgress: async (record) => {
+      const queue = jobs();
+      const { id } = await queue.enqueue("recommend", record);
+      await queue.start(id);
+      await queue.succeed(id);
+    },
   };
 }
 

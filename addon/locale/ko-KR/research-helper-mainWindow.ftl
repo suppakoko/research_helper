@@ -198,6 +198,7 @@ rh-error-budget = 지출 한도({ $limit })에 도달해 멈췄습니다. 지금
 # NEEDS REVIEW rh-error-seed-gone = This item is no longer in your library, so related papers cannot be looked up.
 # NEEDS REVIEW rh-error-seed-no-identifier = This item has no DOI, PMID, arXiv ID or title, so related papers cannot be looked up. Add one of them to the item and try again.
 # NEEDS REVIEW rh-error-seed-no-match = No paper matched this item's title closely enough, and the item has no DOI, PMID or arXiv ID. Add one of them to the item, or correct its title, and try again.
+# NEEDS REVIEW rh-error-recommend-too-few-items = This collection has { $count } items. Recommendations need at least 5.
 
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)

@@ -58,7 +58,8 @@
  * `skipDateModifiedUpdate` on the one `save()`
  * ({@link addExistingItemsToCollection}). The abstract backfill of `docs/01`
  * §6.3 step 4 therefore applies to **created** items only — see
- * {@link AbstractCoverage}.
+ * {@link AbstractCoverage}. The one exception is a caller's own request:
+ * {@link ImportRequest.relateTo} adds a *Related* link to the seed (`P5-T17`).
  *
  * Sandbox caveats (`docs/01` §2.3, measured `P0-T08`): no `performance`, no
  * `console`, no `AbortController`. The clock is the injected {@link Clock} and
@@ -213,6 +214,23 @@ export interface ImportRequest {
    * counted in {@link ImportReport.importPaths}.
    */
   readonly translatorLookup?: TranslatorImportOptions;
+  /**
+   * Relate every item this call creates or links to this item, on both sides
+   * (`P5-T17`, FR-17; `docs/07` §6.2's note of 2026-11-05). Its one caller is
+   * the writer in `src/bootstrap/registerPipelines.ts`, for the related
+   * window's import. Absent, no such write happens, which is every keyword run.
+   */
+  readonly relateTo?: number;
+  /**
+   * `workKey` → the item a caller has already matched that work to (`P5-T17`,
+   * FR-16). The library index finds identifier matches and exact work keys only,
+   * so the related pipeline's **title** match reaches this call only by this
+   * route: without it a row matched by title and ticked by hand would create a
+   * second item. An identifier match in the index still wins. An entry whose
+   * item is trashed, gone or in another library is ignored, because the match was
+   * made earlier in the session. Same caller as {@link relateTo}.
+   */
+  readonly existingItemIDs?: ReadonlyMap<string, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +351,28 @@ export interface ImportPathReport {
   readonly searches: number;
 }
 
+/**
+ * What {@link ImportRequest.relateTo} did (`P5-T17`). `planImport` also builds
+ * the `"caller"` arm of {@link LinkedMatch} for the same request.
+ */
+export interface SeedLinkReport {
+  /** Items now related to the seed on both sides, new links and old alike. */
+  readonly linked: number;
+  /**
+   * Set when the write failed or the seed could not be read. The items stay as
+   * imported, without the link; redacted and storable like
+   * {@link ImportFailure.error}.
+   */
+  readonly error: SerializedError | undefined;
+}
+
+/**
+ * How a linked record matched: the index's own answer, or
+ * {@link ImportRequest.existingItemIDs}'s.
+ */
+export type LinkedMatch =
+  ExistingItemMatch | { readonly itemID: number; readonly matchedOn: "caller" };
+
 /** `P1-T14` step 7's report. */
 export interface ImportReport {
   readonly collection: Zotero.Collection;
@@ -376,8 +416,8 @@ export interface ImportReport {
   readonly importPaths: ImportPathReport;
   /** Linked existing item IDs, in input order. */
   readonly linkedItemIDs: readonly number[];
-  /** How each linked record matched (`"doi"` or `"pmid"`), in input order. */
-  readonly linkedMatches: readonly ExistingItemMatch[];
+  /** How each linked record matched, in input order. */
+  readonly linkedMatches: readonly LinkedMatch[];
   /**
    * Pairs of created items related to each other through Zotero *Related*
    * because one is the other's preprint or published version (`P2-T11`, gate
@@ -390,6 +430,8 @@ export interface ImportReport {
    * {@link ImportFailure.error}.
    */
   readonly versionLinkError: SerializedError | undefined;
+  /** Present exactly when {@link ImportRequest.relateTo} was given. */
+  readonly seedLink: SeedLinkReport | undefined;
   readonly stats: ImportStats;
 }
 
@@ -451,7 +493,11 @@ export async function importWorks(
     policy,
     clock,
   );
-  const plan = planImport(request.works, index, policy);
+  const known =
+    request.existingItemIDs === undefined
+      ? undefined
+      : await usableExistingItems(request.existingItemIDs, libraryID);
+  const plan = planImport(request.works, index, policy, known);
   // `P2-T11`: which other versions of each work this call creates — decided
   // before any mapping, because it chooses between the `extra` line and the
   // *Related* relation (`docs/07` §6.2's `relatedVersionIds.doi` rows).
@@ -778,6 +824,19 @@ export async function importWorks(
     writeMs += chunkEndedAt - tMapped;
   }
 
+  // ---- relate what this call wrote to the seed (`P5-T17`, FR-17) ----
+  let seedLink: SeedLinkReport | undefined;
+  const seedID = request.relateTo;
+  const toRelate = [...createdItemIDs, ...linkedItemIDs];
+  if (seedID !== undefined) {
+    const relateStartedAt = clock.now();
+    seedLink = await relateToSeed(seedID, toRelate);
+    if (toRelate.length > 0) {
+      transactions += 1;
+      writeMs += clock.now() - relateStartedAt;
+    }
+  }
+
   // ---- the collection must exist even when nothing was written ----
   // `FR-6`: "a collection with that exact name exists under the chosen parent"
   // is a post-condition of the import, not of the write. An empty result set,
@@ -822,6 +881,7 @@ export async function importWorks(
     linkedMatches: plan.toLink.map((entry) => entry.match),
     versionLinks,
     versionLinkError,
+    seedLink,
     stats: {
       chunkSize,
       chunks: chunkMs.length,
@@ -860,10 +920,11 @@ interface ChunkWriteResult {
 interface LinkTarget {
   readonly work: CanonicalWork;
   readonly itemID: number;
-  readonly match: ExistingItemMatch;
+  readonly match: LinkedMatch;
 }
 
-interface ImportPlan {
+/** {@link planImport}'s answer. Exported with it, for the unit test. */
+export interface ImportPlan {
   readonly toCreate: readonly CanonicalWork[];
   readonly toLink: readonly LinkTarget[];
   readonly skipped: number;
@@ -926,11 +987,21 @@ async function resolveIndex(
  * PMCID-only Europe PMC record — was created again on every re-run
  * (`P2-T16` Part A, defect D1). The key is still the last arm tried, so an
  * identifier that names another item wins over it.
+ *
+ * **`known` comes after the index** (`P5-T17`): the item a caller matched by
+ * title, when the library has no identifier or key match for the work. The
+ * policy then applies as to any other match. Exported for the unit test.
+ *
+ * @param works - the records, in input order
+ * @param index - the library index, when the policy needs one
+ * @param policy - what to do with a match
+ * @param known - {@link usableExistingItems}'s answer, when the caller gave any
  */
-function planImport(
+export function planImport(
   works: readonly CanonicalWork[],
   index: LibraryIndex | undefined,
   policy: DuplicatePolicy,
+  known?: ReadonlyMap<string, number>,
 ): ImportPlan {
   const toCreate: CanonicalWork[] = [];
   const toLink: LinkTarget[] = [];
@@ -944,7 +1015,12 @@ function planImport(
     }
     seenWorkKeys.add(work.workKey);
 
-    const match = index?.findExisting(work.ids, work.workKey);
+    const knownItemID = known?.get(work.workKey);
+    const match: LinkedMatch | undefined =
+      index?.findExisting(work.ids, work.workKey) ??
+      (knownItemID === undefined
+        ? undefined
+        : { itemID: knownItemID, matchedOn: "caller" });
     if (match === undefined || policy === "import-anyway") {
       toCreate.push(work);
       continue;
@@ -957,6 +1033,118 @@ function planImport(
   }
 
   return { toCreate, toLink, skipped };
+}
+
+/**
+ * The entries of {@link ImportRequest.existingItemIDs} that still name a regular
+ * item, out of the trash, in this library. Read before any transaction, as every
+ * lookup here is. Exported for the unit test.
+ *
+ * @param existing - `workKey` → item id, as the caller matched them
+ * @param libraryID - the library this import writes to
+ * @returns the entries an import may link to
+ */
+export async function usableExistingItems(
+  existing: ReadonlyMap<string, number>,
+  libraryID: number,
+): Promise<ReadonlyMap<string, number>> {
+  const usable = new Map<string, number>();
+  if (existing.size === 0) return usable;
+  const items = await Zotero.Items.getAsync([...existing.values()]);
+  const live = new Set(
+    items
+      .filter(
+        (item) =>
+          !item.deleted && item.isRegularItem() && item.libraryID === libraryID,
+      )
+      .map((item) => item.id),
+  );
+  for (const [workKey, itemID] of existing) {
+    if (live.has(itemID)) usable.set(workKey, itemID);
+  }
+  return usable;
+}
+
+/** An unexpected value as this module's error type, for a report. */
+function seedLinkError(
+  error: unknown,
+  relatedItems: number,
+): SeedLinkReport["error"] {
+  return (
+    error instanceof ResearchHelperError
+      ? error
+      : new ZoteroApiError(
+          error instanceof Error ? error.message : String(error),
+          { phase: "relate-to-seed", items: relatedItems },
+          { cause: error },
+        )
+  ).toSerialized();
+}
+
+/**
+ * `P5-T17`'s relation pass: each item related to the seed and the seed to each
+ * item, `save()` on each side inside one transaction (`docs/08` §5.1 step 5,
+ * `docs/01` §5.8).
+ *
+ * Reported, never thrown: the items are the import, and the link is what the
+ * user asked for on top of it. A side already holding the relation is not saved
+ * (`addRelation` answers `false`, read from 10.0.3's `omni.ja`). Date Modified
+ * is left alone, because a link is not an edit of the paper, as
+ * `addExistingItemsToCollection` leaves it for a collection add.
+ *
+ * Called by {@link importWorks}. Exported for the unit test.
+ *
+ * @param seedID - {@link ImportRequest.relateTo}
+ * @param itemIDs - what the call created and linked
+ * @returns how many items are now related, or why none is
+ */
+export async function relateToSeed(
+  seedID: number,
+  itemIDs: readonly number[],
+): Promise<SeedLinkReport> {
+  // An item is never its own relation, and Zotero would only log the attempt.
+  // Two works can match one item, which is one relation.
+  const ids = [...new Set(itemIDs)].filter((id) => id !== seedID);
+  if (ids.length === 0) return { linked: 0, error: undefined };
+  const seed = await Zotero.Items.getAsync(seedID);
+  if (seed === false || seed.deleted) {
+    return {
+      linked: 0,
+      error: new ZoteroApiError("the seed item is no longer in the library", {
+        phase: "relate-to-seed",
+        items: ids.length,
+      }).toSerialized(),
+    };
+  }
+  const items = await Zotero.Items.getAsync(ids);
+  // `addRelation` needs the `relations` data type, which an item already in
+  // Zotero's object cache may have arrived without. Outside the transaction.
+  await Zotero.Items.loadDataTypes([seed, ...items]);
+  try {
+    await Zotero.DB.executeTransaction(async (): Promise<void> => {
+      let seedChanged = false;
+      for (const item of items) {
+        if (seed.addRelatedItem(item)) seedChanged = true;
+        if (item.addRelatedItem(seed)) {
+          // save(), not saveTx(): `docs/01` §5.8 / §12 gotcha 12.
+          await item.save({ skipDateModifiedUpdate: true });
+        }
+      }
+      if (seedChanged) await seed.save({ skipDateModifiedUpdate: true });
+    });
+  } catch (error) {
+    // The transaction rolled back, and the objects in Zotero's cache still hold
+    // the relations. A later save of either would write what this says failed.
+    for (const item of [seed, ...items]) {
+      try {
+        await item.reload(["relations"], true);
+      } catch {
+        // The failure below is already what gets reported.
+      }
+    }
+    return { linked: 0, error: seedLinkError(error, items.length) };
+  }
+  return { linked: items.length, error: undefined };
 }
 
 /**

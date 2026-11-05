@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   chatResponse,
@@ -405,6 +405,50 @@ describe("the router dispatches to the active provider only", () => {
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ConfigurationError);
     expect(error).not.toBeInstanceOf(MissingCredentialError);
+  });
+
+  it("awaits beforeSend before the adapter, on chat and chatStream", async () => {
+    const mock = mockLLM([chatResponse("one"), chatResponse("two")]);
+    const router = routerOverPrefs({ "openrouter.keyPresent": true }, [mock]);
+    const seen: number[] = [];
+    const beforeSend = async (): Promise<void> => {
+      await Promise.resolve();
+      seen.push(mock.calls.length);
+    };
+    const ctx = { ...callContext(), beforeSend };
+    await router.chat(request(), ctx);
+    await collect(router.chatStream(request(), ctx));
+    expect(seen).toEqual([0, 1]);
+    expect(mock.calls).toHaveLength(2);
+  });
+
+  it("does not call beforeSend when the key check refuses, and a rejection sends nothing", async () => {
+    const mock = mockLLM([chatResponse("never")]);
+    const beforeSend = vi.fn(() => Promise.resolve());
+    await expect(
+      routerOverPrefs({}, [mock]).chat(request(), {
+        ...callContext(),
+        beforeSend,
+      }),
+    ).rejects.toBeInstanceOf(MissingCredentialError);
+    await expect(
+      collect(
+        routerOverPrefs({}, [mock]).chatStream(request(), {
+          ...callContext(),
+          beforeSend,
+        }),
+      ),
+    ).rejects.toBeInstanceOf(MissingCredentialError);
+    expect(beforeSend).not.toHaveBeenCalled();
+
+    const router = routerOverPrefs({ "openrouter.keyPresent": true }, [mock]);
+    await expect(
+      router.chat(request(), {
+        ...callContext(),
+        beforeSend: () => Promise.reject(new Error("no log")),
+      }),
+    ).rejects.toThrow("no log");
+    expect(mock.calls).toHaveLength(0);
   });
 
   it("throws OperationCancelledError, zero requests, for a cancelled token", async () => {

@@ -829,7 +829,8 @@ independent budgets); serialise within a host.
 >    holds with neither id (a preprint), reads "not indexed" there with no further request.
 > 4. **Hydration is of merged works only (§9.1 item 2), and only of what they lack.** A blank title on any run; on a keyed
 >    run also a missing abstract, because `forpaper` above 100 requests no abstract. Semantic Scholar's `lookup` first when
->    keyed, then Europe PMC's; Europe PMC's alone without a key. PubMed's records arrive hydrated and a `PPR` row has no
+>    keyed, then Europe PMC's; Europe PMC's alone without a key. *(Since 2026-11-05, `P5-T32`: Crossref's `lookup` follows
+>    on both, for blank titles; the "Measured 2026-11-05" note below.)* PubMed's records arrive hydrated and a `PPR` row has no
 >    identifier, so neither is asked. Answers join the union and it is merged again, so `merge` chooses each field. Then
 >    `backfillAbstracts`, whose `selected` omits Semantic Scholar without a key (§0.2 item 19 of `plan/08`). Both go
 >    through one per-identifier `metadata` cache, a run does not ask again what a source already answered even with the
@@ -869,6 +870,42 @@ independent budgets); serialise within a host.
 > abstract, both IEEE; without the 21 book parts, 2 of 30. **The line of fewer than about 20 of 100 is crossed on this stand-in
 > (scaled, about 10 of 51).** The starting value above has not been changed: whether to add a Crossref `lookup` is the
 > coordinator's, and one seed's real reference list would be the stronger reading.
+>
+> **Measured 2026-11-05 (`plan/08` `P5-T32`, `plan/00` §6 item 344(b)): one real non-biomedical seed's references.** One
+> reading, one seed, picked by hand: *ImageNet Large Scale Visual Recognition Challenge* (`10.1007/s11263-015-0816-y`,
+> computer science, 2015), the first tried, so finding it took one request. It deposits 102 references, 42 with no DOI, and
+> 60 distinct DOIs, 37 of them under `10.1109`. None is under `10.48550`, so a newer paper would read worse. Free and unkeyed,
+> through the shipped adapters:
+>
+> | `lookup` | Asked | Answered | With a title | With an abstract |
+> |---|---|---|---|---|
+> | Europe PMC, one request | 60 | 9 | 9 | 9 |
+> | Crossref, one request | 60 | 60 | 60 | 3 (read from the raw body: this count's mapper had no XML parser, so it mapped none) |
+> | Crossref over the 51 Europe PMC left | 51 | 51 | 51 | not counted |
+>
+> **The line of fewer than about 20 of 100 is crossed on a real reference list too (9 of 60), and the starting value above
+> is superseded.** Crossref's `lookup` is built, and Crossref answers what its own `reference[]` deposited.
+>
+> **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313), hydration as of `P5-T32`:**
+>
+> 1. **The order is Semantic Scholar when keyed, then Europe PMC, then Crossref, and Crossref is asked for blank titles only.**
+>    Crossref-first would cost the same requests when both fit, but it would make a titled row not worth asking of Europe
+>    PMC, whose abstracts and PMIDs would then be lost, since the fill-in merges abstracts only. On the *Nature* seed Crossref
+>    is then asked about 5 of 100, and on this seed 51 of 60.
+> 2. **`RELATED_REQUEST_BUDGET` stays 8 and `RELATED_HYDRATION_RESERVE` stays 2.** The worst keyless case is a DOI-only biomedical
+>    seed: expansion 1, similar articles 2, Europe PMC's two lists 1 + 1, Crossref's references 1, which is 6, and leaves 2 for
+>    one Europe PMC lookup and one Crossref lookup. The fill-in then has no request; its share is counted in
+>    `hydration.unsent`. A title is worth more than an abstract, because an untitled row is dropped. That costs little, since
+>    the recorded Europe PMC relation rows hold no DOI (0 of 25, 25 and 1), so the fill-in could ask only rows with one. A
+>    DOI-only non-biomedical seed spends expansion 1, references 1, Europe PMC's lookup 1 and Crossref's 1, so 4 of 8. These
+>    are arithmetic on the planned order; `P5-T30`'s live run is what tests them.
+> 3. **A `10.48550/arXiv.*` DOI is not sent to Crossref**, because DataCite holds it (6 of 6 unanswered). Such a row stays untitled
+>    without a key, is dropped and is counted in `hydration.untitled`. So a keyless, recent machine-learning seed loses those
+>    rows. Europe PMC is still asked about them (0 of 6 on the *Nature* seed), which spends no extra request.
+> 4. **`hydration.sent` and `unsent` count a source and an identifier together**, so one DOI asked of both Europe PMC and
+>    Crossref counts twice.
+> 5. **Crossref stays out of `ABSTRACT_BACKFILL_LADDER`** (`plan/00` §6 item 193): its 3 abstracts of 60 reach the work only as
+>    part of the record `lookup` returns, and no request is made for one.
 
 > **As built 2026-11-05 (`plan/08` `P5-T14`; `createRelatedPipeline`, `docs/07` §12.2's note).** **DECIDED 2026-11-05
 > (coordinator, under `plan/00` §6 item 313):**
@@ -1157,7 +1194,7 @@ Then run generation **per cluster** and interleave results, labelling each group
 a better UI ("Related to your *base editing* papers" / "Related to your *delivery vectors* papers")
 than one undifferentiated list.
 
-> **As built 2026-11-05 (`plan/08` `P5-T21`; `kmeansAuto` and `labelCentroids` in `src/pipeline/recommend/centroids.ts`, `selectSeeds`, `recentNegatives` and `withTopicsAndSeeds` in `src/pipeline/recommend/seeds.ts`; caller of each: `recommendPipeline.ts`, `P5-T25`, not built).** Nothing here has seen a real SPECTER2 vector: the tests use synthetic ones. Local only: nothing is sent.
+> **As built 2026-11-05 (`plan/08` `P5-T21`; `kmeansAuto` and `labelCentroids` in `src/pipeline/recommend/centroids.ts`, `selectSeeds`, `recentNegatives` and `withTopicsAndSeeds` in `src/pipeline/recommend/seeds.ts`; caller of each: `recommendPipeline.ts`, `P5-T25`, built 2026-11-05).** Nothing here has seen a real SPECTER2 vector: the tests use synthetic ones. Local only: nothing is sent.
 >
 > **Starting values with no measurement behind them on real vectors:** `kMax: 4`, `minClusterSize: 5` and `minGain: 0.08` above, the cut of 0.92 in `selectSeeds`, and the four seed weights. `P5-T30` measures them, because it is the first run with real vectors for a whole collection: `withTopicsAndSeeds` logs each k tried with its silhouette and smallest cluster, counts only. `P5-T31` records two papers, which cannot show them.
 >
@@ -1206,7 +1243,7 @@ ML stack. Combine authors with OR into one Europe PMC query:
 (AUTH:"Doudna J" OR AUTH:"Liu DR" OR AUTH:"Zhang F") AND (FIRST_PDATE:[2026-06-08 TO 2026-09-08])
 ```
 
-> **As built 2026-11-05 (`plan/08` `P5-T23`; `runRecommendGenerators` and `recommendKeywordQueries` in `src/pipeline/recommend/generators.ts`; caller of both: `recommendPipeline.ts`, `P5-T25`, not built).** Every figure below is a starting value or arithmetic on one; nothing here has met a live service, and Semantic Scholar's part rests on hand-written stand-ins (`plan/00` §6 item 335(a)). **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313):**
+> **As built 2026-11-05 (`plan/08` `P5-T23`; `runRecommendGenerators` and `recommendKeywordQueries` in `src/pipeline/recommend/generators.ts`; caller of both: `recommendPipeline.ts`, `P5-T25`, built 2026-11-05).** Every figure below is a starting value or arithmetic on one; nothing here has met a live service, and Semantic Scholar's part rests on hand-written stand-ins (`plan/00` §6 item 335(a)). **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313):**
 >
 > 1. **Budget.** `RECOMMEND_REQUEST_BUDGET` is 40 (§9.3's sketch), spent in `GENERATOR_VALUE_ORDER`. All planning finishes before the first request, so the order decides who gets the budget, not which host answers first. A cached answer costs nothing. Keyword search, forward citations and arXiv must leave `RECOMMEND_HYDRATION_RESERVE`, 2 requests, because `P5-T25` hands the same budget to the metadata fill-in and §6.1's `limit=200` brings no abstracts: §9.1 item 2's "~200" survivors at 100 identifiers a request is 2.
 > 2. **What each generator is charged, before it starts.** (a) 3 per topic group: one `/paper/batch`, one POST, and the one retry a too-large answer can cost. (b) 1 `elink` plus one `efetch` per 200 neighbours it could list (`EFETCH_MAX_IDS_PER_CALL`), so 6 for 10 seeds at limit 100; a short budget takes fewer seeds. (c) 1 per seed on Semantic Scholar; on Europe PMC 1 with a PMID or PMCID and 2 with a DOI alone. (d) 2 per query on PubMed (`esearch`, `efetch`), 1 elsewhere. (e) 1.
@@ -1299,6 +1336,29 @@ not a useful recommendation.
 Also drop **preprints whose published version the user already owns** — the `linkedVersion`
 resolution from doc 02 §11.4 makes this a lookup, not a guess. This is a common and irritating
 false positive.
+
+*Corrected 2026-11-05 (`plan/08` `P5-T24`; FR-46, settled by the review of 2026-11-01): the sketch above drops too much. `profile.owned` there means the whole library, and FR-46 excludes only the source collection: a library item outside it stays, marked "in library" and unticked (`docs/07` §5.2's note of 2026-11-02, items 2 and 3). `profile.owned.titles` was never built, `settings.includePreprints` is not a setting (a preprint stays and is labelled, unless the run's "Peer-reviewed only" box is ticked, `plan/08` §0.4 line 24), and `c.tldr` does not exist: `CanonicalWork` has no such member, and the Semantic Scholar mapper puts a tldr in `abstract` when the abstract is missing, so reading `abstract` reads both. The filters run in two passes, as §7.5's note says.*
+
+> **As built 2026-11-05 (`plan/08` `P5-T24`; `recommendationWeights`, `recommendOwnership`, `readDismissed`, `identifierFilters`, `contentFilters`, `scoreRecommendations` and `diversify` in `src/pipeline/recommend/score.ts`; caller of each: `recommendPipeline.ts`, `P5-T25`, built 2026-11-05).** Nothing here has seen a real SPECTER2 vector or a live service: the SPECTER2 tests use hand-made vectors, and the fixture run in `test/unit/pipeline/recommendScore.test.ts` is on the word space.
+>
+> **Starting values with no measurement behind them:** the eight weights and the slider's 0.40, τ = 1.5, the velocity figures 20 and 0.25, the steps 0.5 and 0.3, the agreement span of 3, the caps 2 and 4, λ = 0.75 and the top K of 30. **What would measure them is §8.1–§8.2's held-out precision@k and ablation, which are backlog (`plan/00` §6 item 323(d)), so nothing in Phase 5 measures them.** `G-27` is the expert judgement, `P5-T30` the first run with real vectors.
+>
+> **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313):**
+> 1. **On the word space, similarity reads the whole collection and novelty the nearest member,** so the two stay two terms. Similarity is the dot product with the collection's mean word vector at unit length, novelty is `1 − highest cosine over the members`, and neither takes `(x + 1) / 2`, because §5.5's scores are in [0, 1] already. The alternative, the highest cosine for both, makes novelty exactly `1 − similarity`. **Measured 2026-11-05** on the recorded PubMed abstracts in `test/fixtures/pubmed/`, the 184 abstracts, using the seven files holding at least 14: 8 runs whose collection was the first half of one file or of two, with every other abstract as a candidate, scoring `w_sim · similarity + w_nov · novelty` alone and counting how many of the top 30 stayed against `t` = 0.25. **With the highest cosine for both:** `t` = 0 kept 30 of 30 on all 8, `t` = 0.5 kept 14, 12, 7, 8, 9, 2, 10 and 14, and `t` = 0.75 and 1 kept none, so the slider had two positions. **As built:** `t` = 0 kept 29, 29, 26, 26, 25, 28, 23 and 29, `t` = 0.5 kept 23, 20, 21, 19, 17, 28, 21 and 15, `t` = 0.75 kept 0, 0, 2, 0, 0, 0, 4 and 0, and `t` = 1 kept none. Similarity's 10th, 50th and 90th percentiles ran about 0.08–0.11, 0.11–0.15 and 0.17–0.25, novelty's about 0.81–0.87, 0.90–0.91 and 0.93–0.94, and the correlation of the built similarity with the highest cosine was 0.62 to 0.97. One small sample, "another file" stands in for "another topic", and no person judged a list. Item 15 holds the same slider on whole scores.
+> 2. **The profile decides the space:** centroids mean SPECTER2, none means the word space, as §7.2's note, item 1, builds it. A keyed run whose vectors all failed scores in words and says so in `similaritySpace`, and vectors on hand are then unread.
+> 3. **A candidate with no vector on SPECTER2, or no text on the word space, reads 0 on similarity and on novelty,** because it gives no evidence either way (`docs/07` §5.2: 0 when a run cannot compute it). Reading 1 on novelty would reward a missing vector. A member with no vector is left out of novelty, and with no such member at all novelty is 0. `cosine`'s throw on two models or two lengths goes through as a defect.
+> 4. **`fuzzyOwned` is a `"match"` from `matchAgainstLibrary`,** doc 02 §11.3.3's cascade with its own constants, over a title index of the collection for the exclusion and of the library for the mark, both built by `recommendOwnership`. A `"link"` or a `"flag"` is not ownership: a preprint of a collection member stays, labelled.
+> 5. **`contentFilters` runs `identifierFilters`' rules again,** because a fill-in can bring the identifier that shows a work is a member, a date older than the window, or the type that makes it a preprint. A candidate counted once, under the first reason that holds.
+> 6. **`maxPerAuthor` counts a row's first and last authors only,** the people a lab is named after. With every author counted, a collision on a middle author such as `Kim J` or `Wang Y` would strip rows that have no lab in common. How often that happens is not measured. A row with no venue or no author is not capped by that rule. The caps are hard, so a narrow pool gives a short list and never a row beyond them.
+> 7. **The date window:** older than `window.fromYear` is dropped, a work dated after `window.toYear` stays as in §6.2's note, item 8, and an undated work stays as in `applyClientRecencyFilter`. `publishedDate` only. A partial date's age runs from the earliest day it can name, a date ahead of today reads age 0, and an undated work reads 0 on recency and velocity.
+> 8. **A preprint is `isPreprintWork`:** type `preprint`, or type `other` with a preprint server's DOI prefix. `10.1101/` is also Cold Spring Harbor's journals, so a prefix never overrules a source that named a type. "Published version owned" is `relatedVersionIds` against the library's sets, only for a preprint. A published paper whose preprint the user owns stays.
+> 9. **Reasons:** §7.6's three phrases first, then the two strongest terms by weight × value. `cites-collection` carries the count of `forward-citations` entries and `author-in-collection` the work's own names in `Family Initials` form. `authorAffinity` is never offered, because the phrase says it and names the people. **`novelty` is offered only when `t` is above its default,** because on the word space it reads about 0.9 on every row and would otherwise be on every line. Above the default it is still on every line of the fixture run (item 15), so the wording `P5-T27` gives it has to carry that. A row with nothing else says `similarity`, so every row has a reason.
+> 10. **The row is a composition,** `RecommendationRow { recommendation, inLibrary, dismissed, preprint, checkedByDefault }`, so `recommendation` is exactly what `RecommendationStore.put` takes. `checkedByDefault` is neither in the library nor dismissed.
+> 11. **`topicIndex`** is absent at k ≤ 1. With k > 1 a vector sets the nearest centroid, ties to the lowest index, and it overrules the group that asked. With no vector it is the lowest `topicGroup` among the findings, and with no group it is absent, so `P5-T27` needs a group for rows without a topic.
+> 12. **MMR reads `cosine` as the run's space returns it:** in [-1, 1] on SPECTER2, as the formula above writes it, and in [0, 1] on the word space. The first pick pays nothing. After it, a row with no vector pays the whole 1, because no vector is no evidence that it differs. A picked row with no vector adds no penalty to the others, and a row with nothing picked to compare against pays 0. The score and the penalty are on different scales between the two spaces, and nothing has measured what that does.
+> 13. **Smaller rules.** A score tie goes to the smaller work key, so two runs agree. `discoveredVia` keeps every entry and drops `topicGroup`. An ORCID decides when both sides have one, so `Kim J` and another `Kim J` stay two people, and one found under another spelling still counts. A venue compares by `normalizeTitle` of the container title or its abbreviation, an ISSN without its hyphen and in capitals. A slider outside [0, 1] and a top K that is not a positive integer throw `RangeError`. A store that cannot give the dismissals warns and hides none. `coupling` reads an optional `references` input and is 0 without it.
+> 14. **The yield is every 5 000 comparisons (`SCORE_YIELD_EVERY_COMPARISONS`).** A starting value. **Measured 2026-11-05 under Node, not on Zotero's main thread, one run each, in the longest stretch between two yields:** on SPECTER2 at 768 values with four centroids, 5 000 members against 500 candidates took 1 812 ms in all with 500 yields and a longest stretch of 4.9 ms, and `diversify` 13 ms with a longest of 6.3 ms. On the word space, over recorded Europe PMC abstracts repeated to size, 1 000 members against 200 candidates took 897 ms with a longest of 151 ms, and 5 000 against 500 took 9 731 ms with a longest of 496 ms. **That longest stretch is `lexicalSpace`'s corpus build,** 93 ms and 437 ms alone at those sizes, and `src/pipeline/shared/lexical.ts` has no yield inside it. Past it, a word-space read at 5 000 members is about 19 ms. A main-thread stall of that size on a 5 000-paper collection is not measured inside Zotero.
+> 15. **What the fixture run holds, on the word space, 2026-11-05.** 240 merged candidates from eleven recorded Europe PMC answers, 15 of them the collection, strategies assigned by the test, no key. `identifierFilters` dropped 15 as members and 75 outside the window, `contentFilters` 38 with no abstract, so 112 were scored and 30 listed, by 30 first authors. Scores ran 0.169 to 0.317, median 0.259, with similarity's median at 0.122 and novelty's at 0.913. Against `t` = 0.25, the listed 30 kept 27 at `t` = 0, 27 at 0.5, 23 at 0.75 and 20 at 1, so with all eight terms in the score no position empties the list. `novelty` was a reason on 30 of 30 at every `t` above the default. Coupling and venue affinity read 0 on every row, author affinity on all but one. A reversed union gave the same 30 in the same order. One run of one collection: it shows the mechanism, and nothing about whether these are good papers.
 
 ### 7.5 Pseudocode
 
@@ -1471,6 +1531,8 @@ Cheap, automatic, and they catch the bugs that actually happen:
 | Score distribution is not degenerate (all ~equal) | a weight is zero, or a term always returns a constant |
 | Two runs on an unchanged collection agree ≥ 90 % | non-determinism from partial API failures |
 | Every result has an abstract or tldr | abstract filter bypassed |
+
+*Corrected 2026-11-05 (`plan/08` `P5-T24`; FR-46): for recommendations, "already in the library" in the third row reads "already in the source collection". A library item outside it stays, marked (§7.4's note). As built, every row of this table is a test on a recorded fixture run in `test/unit/pipeline/recommendScore.test.ts`, and that says the filters run: the sixth row's "partial API failures" are not simulated there, and `P5-T30` is the first real run.*
 
 ### 8.4 Implicit user feedback
 

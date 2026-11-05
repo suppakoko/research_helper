@@ -175,6 +175,13 @@ export interface LLMCallContext {
    * directly, such as the key Test, needs none.
    */
   readonly budget?: BudgetGuard;
+  /**
+   * Awaited by the router once nothing can refuse the call, before the adapter
+   * is called, on each request of a repair or a retry. A rejection sends nothing.
+   * It runs inside `withBudget`'s reservation, so a ceiling's refusal skips it.
+   * The recommend run's egress log (`docs/07` §12.5's note, item 8).
+   */
+  readonly beforeSend?: () => Promise<void>;
 }
 
 export interface LLMProvider {

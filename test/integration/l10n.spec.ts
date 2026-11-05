@@ -1052,7 +1052,10 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       "docs/07 §10.1 gives every class its own messageKey",
     );
     assert.deepEqual(
-      sorted(keys),
+      // Added 2026-11-05: FR-44's refusal is a plain `SerializedError` from
+      // `createRecommendPipeline` (`P5-T25`), so no class carries its key. It is
+      // the one id on the shipped list with no class to make it from.
+      sorted([...keys, "rh-error-recommend-too-few-items"]),
       sorted([...ERROR_MESSAGE_IDS, ...DEFERRED_ERROR_MESSAGE_IDS]),
       "every messageKey is either shipped by Phase 1 or on the deferred list",
     );

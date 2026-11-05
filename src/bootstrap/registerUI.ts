@@ -136,9 +136,14 @@ import {
   buildEgressDisclosure,
   settleDisclosure,
 } from "../pipeline/shared/egressDisclosure";
+import type { RelatedPipeline } from "../pipeline/related/types";
 import type { RunEstimate } from "../pipeline/shared/estimate";
 import { isPrivacyMode } from "../pipeline/shared/privacyPolicy";
 import { estimateRelevanceScreen } from "../pipeline/shared/relevanceScreen";
+import {
+  createRelatedViewModel,
+  type RelatedWindowHost,
+} from "../ui/viewModels/relatedViewModel";
 import type { ScreeningEstimateRequest } from "../ui/viewModels/searchImportViewModel";
 import {
   LLM_CREDENTIALS,
@@ -257,6 +262,7 @@ import {
 import {
   canonicalWorkOfItemID,
   fromZoteroItem,
+  relatedSeedOfItemID,
   workKeyOfItemID,
 } from "../zotero/itemMapper";
 // `P4-T19`: the report window's opener and the model it draws.
@@ -1118,17 +1124,47 @@ async function publishSearchWindowHost(
 
   const model = createSearchImportViewModel(deps);
   const published = model.host;
-  const host: SearchWindowHostApi & RelatedSeedHost = {
+  // FR-13 to FR-18 (`P5-T16`): the related mode's own model. A build with no related
+  // pipeline leaves the member absent, and the window stays on its first panel.
+  const relatedPipeline = graph.pipelines.get("related") as
+    RelatedPipeline | undefined;
+  if (relatedPipeline === undefined) {
+    logger.error(
+      "the related pipeline is not registered, so Find Related Papers… will " +
+        "open a window that shows no run",
+      { pipelines: graph.pipelines.list().length },
+    );
+  }
+  const related =
+    relatedPipeline === undefined
+      ? undefined
+      : createRelatedViewModel({
+          pipeline: relatedPipeline,
+          jobs: graph.pipelineContext,
+          logger,
+          keyRequestUrl: SEMANTICSCHOLAR_KEY_REQUEST_URL,
+          // `P5-T17`: the window's import, through this function's own pipeline.
+          imports: {
+            pipeline,
+            listCollections: () => addon.platform.listCollections(),
+            linkToSeed: () => getPref("relatedLinkToSeed"),
+            seedLibraryId: async (itemID) =>
+              (await relatedSeedOfItemID(itemID))?.libraryID,
+          },
+        }).host;
+  const host: SearchWindowHostApi &
+    RelatedSeedHost & { readonly related?: RelatedWindowHost } = {
     ...published,
     runSearch: async (query: SearchWindowQuery): Promise<void> => {
       await refreshLibraryIndex(logger);
       await published.runSearch(query);
     },
-    // FR-13 (`P5-T15`): the related mode's Seed lines. `P5-T16` adds its run.
+    // FR-13 (`P5-T15`): the related mode's Seed lines.
     loadRelatedSeed: async (seedItemID) => {
       const work = await canonicalWorkOfItemID(seedItemID);
       return work === undefined ? undefined : relatedSeedHeader(work);
     },
+    ...(related === undefined ? {} : { related }),
   };
 
   // Captured once, for the reason {@link publishServiceGraph} gives: the

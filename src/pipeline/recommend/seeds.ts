@@ -4,7 +4,7 @@
  * the end of that section holds the decisions and says which values are starting
  * values; this header does not repeat them.
  *
- * **Callers.** `recommendPipeline.ts` (`P5-T25`, not built) calls
+ * **Callers.** `recommendPipeline.ts` (`P5-T25`) calls
  * {@link withTopicsAndSeeds} after `buildProfileStats`, and {@link recentNegatives}
  * when the edited-profile job generates (`docs/07` §12.5). The two `SeedSpace`
  * builders and {@link selectSeeds} are called by {@link withTopicsAndSeeds}. `P5-T23`

@@ -378,6 +378,10 @@ rh-error-budget = Paused at the { $limit } spending limit. { $spent } is spent s
 rh-error-seed-gone = This item is no longer in your library, so related papers cannot be looked up.
 rh-error-seed-no-identifier = This item has no DOI, PMID, arXiv ID or title, so related papers cannot be looked up. Add one of them to the item and try again.
 rh-error-seed-no-match = No paper matched this item's title closely enough, and the item has no DOI, PMID or arXiv ID. Add one of them to the item, or correct its title, and try again.
+rh-error-recommend-too-few-items = { $count ->
+    [one] This collection has { $count } item. Recommendations need at least 5.
+   *[other] This collection has { $count } items. Recommendations need at least 5.
+}
 
 
 ## The preference pane — literature-source credentials (docs/08 §7.3–7.5,

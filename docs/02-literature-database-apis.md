@@ -1091,6 +1091,11 @@ Belt and braces costs nothing, and a request that reaches Crossref through a pro
 Always read `x-rate-limit-limit` / `x-rate-limit-interval` from the response and reconfigure the
 governor — Crossref changes these and advertises the current values on every call.
 
+*Measured 2026-11-05 (`plan/08` `P5-T32`): the header `x-api-pool` read `polite-single`, not `polite-array`, on `/works/{doi}`, with
+`x-rate-limit-limit` 10, interval 1s and concurrency 3; a `filter=doi:` list read `polite-array`, 3 per second. Crossref's access
+page gives one polite figure of 10 per second and does not separate the two. The adapter adopts the headers of each response
+(`adoptHeaderDrivenLimits`), so the host's one limiter follows whichever call answered last.*
+
 ### 5.2 `/works` query parameters
 
 | Param | Notes |
@@ -1121,6 +1126,20 @@ Relevant `filter` names:
 | `has-abstract` | `true`/`false` |
 | `has-full-text`, `has-references`, `has-orcid`, `has-license` | booleans |
 | `issn`, `container-title`, `publisher-name`, `funder` | scoping |
+| `doi` | **a DOI lookup**, repeatable: `filter=doi:a,doi:b` reads as OR (the note below) |
+
+> **`filter=doi:` as a batch lookup, measured 2026-11-05 (`plan/08` `P5-T32`), free and unkeyed, through the shipped
+> `createHttpClient` and the project's User-Agent.** **Crossref documents no cap on the number of DOIs or filters.** Its tips
+> page gives `rows` a default of 20 and a maximum of 1000, and says a filter is "almost always more efficient" than asking
+> for each DOI; its deprecated API document says repeating a filter gives OR. One real request of **215 distinct DOIs, a
+> 7819-character address and `rows=215`** answered HTTP 200 with 209 items, `total-results` 209, `items-per-page` 215 and no
+> `next-cursor`. The 6 unanswered were all `10.48550/arxiv.*`, which DataCite registers and Crossref does not hold. So 215 is
+> a floor and not a cap, and nothing longer was tried. Two DOIs with a colon were answered. **`rows` must equal the number of
+> DOIs**, because the default of 20 would cut a longer list with no sign in the answer. **A DOI with a comma fails the whole
+> list:** `doi:10.1023/a:1011139631724,doi:10.5555/rh,comma` answered HTTP 400 `validation-failure`, types
+> `pair-list-form-invalid` and `filter-not-available`, so `lookup` leaves such a DOI out. `CROSSREF_DOI_LOOKUP_BATCH` is 100 by
+> choice: the longest list a related generator hands over. The batch is served from the list pool (`x-api-pool: polite-array`,
+> 3 per second, §5.1), where `/works/{doi}` read `polite-single`, 10 per second, on the same day.
 
 #### Date-range filtering — "last 3 years"
 

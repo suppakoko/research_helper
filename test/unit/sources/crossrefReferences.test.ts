@@ -32,7 +32,9 @@ import {
 } from "../../../src/sources/crossref/crossrefSource";
 import { createCrossrefRecordMapper } from "../../../src/sources/crossref/mapper";
 import {
+  buildCrossrefDoiLookupRequest,
   buildCrossrefTitleSearchRequest,
+  CROSSREF_DOI_LOOKUP_BATCH,
   CROSSREF_TITLE_SEARCH_ROWS_MAX,
   parseCrossrefReferences,
 } from "../../../src/sources/crossref/references";
@@ -43,8 +45,10 @@ import type {
 import { relatedFixtureDirFor } from "../../../scripts/record-fixtures";
 import { createReplayHttpClient } from "../../contract/_transport";
 import {
+  CROSSREF_DOI_NON_BIOMEDICAL_SEED as NON_BIOMEDICAL_SEED,
   CROSSREF_DOI_WITH_REFERENCES as WITH_REFERENCES,
   CROSSREF_DOI_WITHOUT_REFERENCES as WITHOUT_REFERENCES,
+  CROSSREF_NON_BIOMEDICAL_REFERENCE_DOIS as NON_BIOMEDICAL_DOIS,
   CROSSREF_RELATED_TITLE as TITLE,
 } from "../../support/crossrefRecordedRequests";
 
@@ -539,12 +543,260 @@ describe("matchTitle", () => {
 });
 
 describe("the capability flags", () => {
-  it("declare the citation graph and related papers, and no identifier lookup", () => {
+  it("declare the citation graph, related papers and a lookup by DOI", () => {
     const { source: crossref } = replayed();
     expect(CROSSREF_CAPABILITIES.relatedByWork).toBe(true);
     expect(CROSSREF_CAPABILITIES.citationGraph).toBe(true);
-    expect(CROSSREF_CAPABILITIES.lookupById).toEqual([]);
+    expect(CROSSREF_CAPABILITIES.lookupById).toEqual(["doi"]);
     expect(typeof crossref.findRelated).toBe("function");
+    expect(typeof crossref.lookup).toBe("function");
     expect(crossref.capabilities).toBe(CROSSREF_CAPABILITIES);
+  });
+});
+
+describe("buildCrossrefDoiLookupRequest (P5-T32)", () => {
+  it("asks filter=doi: with rows equal to the count, in the documented order", () => {
+    const built = buildCrossrefDoiLookupRequest(["10.1000/a", "10.1000/b:c"]);
+    expect(built.method).toBe("GET");
+    expect(built.url).toMatch(
+      /^https:\/\/api\.crossref\.org\/works\?filter=doi%3A10\.1000%2Fa%2Cdoi%3A10\.1000%2Fb%3Ac&select=DOI%2C[^&]+&rows=2&mailto=[^&]+$/u,
+    );
+    expect(built.endpointBaseUrl).toBe("https://api.crossref.org/works");
+    expect(new URL(built.url).searchParams.get("filter")).toBe(
+      "doi:10.1000/a,doi:10.1000/b:c",
+    );
+  });
+
+  it("carries the contact address it is given", () => {
+    const built = buildCrossrefDoiLookupRequest(
+      ["10.1000/a"],
+      "me@example.org",
+    );
+    expect(new URL(built.url).searchParams.get("mailto")).toBe(
+      "me@example.org",
+    );
+  });
+
+  it("takes exactly CROSSREF_DOI_LOOKUP_BATCH, and refuses one more or none", () => {
+    const dois = Array.from(
+      { length: CROSSREF_DOI_LOOKUP_BATCH + 1 },
+      (_, index) => `10.1000/${String(index)}`,
+    );
+    expect(CROSSREF_DOI_LOOKUP_BATCH).toBe(100);
+    expect(
+      new URL(
+        buildCrossrefDoiLookupRequest(dois.slice(1)).url,
+      ).searchParams.get("rows"),
+    ).toBe("100");
+    expect(() => buildCrossrefDoiLookupRequest(dois)).toThrow(RangeError);
+    expect(() => buildCrossrefDoiLookupRequest([])).toThrow(RangeError);
+  });
+
+  it("refuses what would fail or change the whole list", () => {
+    expect(() => buildCrossrefDoiLookupRequest(["10.5555/rh,comma"])).toThrow(
+      RangeError,
+    );
+    expect(() => buildCrossrefDoiLookupRequest(["not a doi"])).toThrow(
+      RangeError,
+    );
+  });
+});
+
+describe("lookup (P5-T32)", () => {
+  const items = (...dois: string[]) =>
+    JSON.stringify({
+      status: "ok",
+      message: {
+        "total-results": dois.length,
+        items: dois.map((DOI) => ({
+          DOI,
+          title: [`Title of ${DOI}`],
+          type: "journal-article",
+        })),
+      },
+    });
+
+  it("Done when: maps the recorded answer for the 60 reference DOIs", async () => {
+    const { source: crossref, transport } = replayed();
+    const records = await crossref.lookup(
+      NON_BIOMEDICAL_DOIS.map((doi) => ({ doi: doi as never })),
+      ctx(),
+    );
+    expect(transport.calls).toHaveLength(1);
+    expect(records).toHaveLength(60);
+    const dois = records.map((record) => record.work.ids.doi);
+    expect(new Set(dois)).toEqual(new Set(NON_BIOMEDICAL_DOIS));
+    for (const record of records) {
+      expect(isSourceRecord(record)).toBe(true);
+      expect(record.work.title.trim()).not.toBe("");
+      expect(record.work.type).not.toBe("other");
+      expect(record.id).toBe(`crossref:${record.work.ids.doi ?? ""}`);
+    }
+  });
+
+  it("gives a filled record the id of the reference row it fills, on the recorded bodies", async () => {
+    const { source: crossref } = replayed();
+    const rows = await crossref.findRelated(
+      {
+        ids: { doi: NON_BIOMEDICAL_SEED as never },
+        limit: 100,
+        strategy: "references",
+      },
+      ctx(),
+    );
+    const filled = await crossref.lookup(
+      NON_BIOMEDICAL_DOIS.map((doi) => ({ doi: doi as never })),
+      ctx(),
+    );
+    expect(rows.records.map((record) => record.work.ids.doi)).toEqual(
+      NON_BIOMEDICAL_DOIS,
+    );
+    expect(new Set(filled.map((record) => record.id))).toEqual(
+      new Set(rows.records.map((record) => record.id)),
+    );
+    const before = new Map(
+      rows.records.map((record) => [record.id, record.missingFields.length]),
+    );
+    for (const record of filled) {
+      expect(record.missingFields.length).toBeLessThan(
+        before.get(record.id) ?? 0,
+      );
+    }
+  });
+
+  it("normalizes, dedupes and skips what is no DOI, with one request", async () => {
+    const { client, urls } = canned(items("10.1000/a", "10.1000/b"));
+    const records = await source(client).lookup(
+      [
+        { doi: "https://doi.org/10.1000/A" as never },
+        { doi: "10.1000/a" as never },
+        { doi: "10.1000/b" as never },
+        { doi: "nonsense" as never },
+        { pmid: "123" as never },
+        {},
+      ],
+      ctx(),
+    );
+    expect(urls).toHaveLength(1);
+    expect(new URL(urls[0] ?? "").searchParams.get("filter")).toBe(
+      "doi:10.1000/a,doi:10.1000/b",
+    );
+    expect(new URL(urls[0] ?? "").searchParams.get("rows")).toBe("2");
+    expect(records).toHaveLength(2);
+  });
+
+  it("sends nothing when nothing can be asked", async () => {
+    const { client, urls } = canned(items());
+    await expect(
+      source(client).lookup([{ pmid: "123" as never }], ctx()),
+    ).resolves.toEqual([]);
+    await expect(source(client).lookup([], ctx())).resolves.toEqual([]);
+    expect(urls).toEqual([]);
+  });
+
+  it("leaves a DOI with a comma out, and asks the rest", async () => {
+    const debug: string[] = [];
+    const { client, urls } = canned(items("10.1000/a"));
+    const logger = {
+      debug: (message: string) => debug.push(message),
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+    } as unknown as NonNullable<
+      Parameters<typeof createCrossrefSource>[0]["logger"]
+    >;
+    await source(client, { logger }).lookup(
+      [{ doi: "10.5555/rh,comma" as never }, { doi: "10.1000/a" as never }],
+      ctx(),
+    );
+    expect(new URL(urls[0] ?? "").searchParams.get("filter")).toBe(
+      "doi:10.1000/a",
+    );
+    expect(debug).toContain("crossref: a DOI with a comma is not asked");
+  });
+
+  it("sends nothing for a list of only such DOIs", async () => {
+    const { client, urls } = canned(items());
+    await source(client).lookup([{ doi: "10.5555/rh,comma" as never }], ctx());
+    expect(urls).toEqual([]);
+  });
+
+  it("sends CROSSREF_DOI_LOOKUP_BATCH to a request, rows matching each", async () => {
+    const { client, urls } = canned(items("10.1000/1"));
+    const ids = Array.from({ length: 250 }, (_, index) => ({
+      doi: `10.1000/${String(index)}` as never,
+    }));
+    const records = await source(client).lookup(ids, ctx());
+    expect(urls.map((url) => new URL(url).searchParams.get("rows"))).toEqual([
+      "100",
+      "100",
+      "50",
+    ]);
+    const asked = urls.flatMap((url) =>
+      (new URL(url).searchParams.get("filter") ?? "").split(","),
+    );
+    expect(new Set(asked).size).toBe(250);
+    expect(records).toHaveLength(3);
+  });
+
+  it("carries the contactEmail preference's value", async () => {
+    const { client, urls } = canned(items());
+    await source(client, { userContactEmail: () => "me@example.org" }).lookup(
+      [{ doi: "10.1000/a" as never }],
+      ctx(),
+    );
+    expect(new URL(urls[0] ?? "").searchParams.get("mailto")).toBe(
+      "me@example.org",
+    );
+  });
+
+  it("adopts the limits the recorded answer advertises", async () => {
+    const applied: RateLimiterConfig[] = [];
+    const limiter: AdvertisedLimitTarget = {
+      currentConfig: { ratePerSecond: 2, burst: 2, maxConcurrent: 3 },
+      reconfigure: (config) => {
+        applied.push(config);
+      },
+    };
+    const { source: crossref } = replayed({ limiter });
+    await crossref.lookup(
+      NON_BIOMEDICAL_DOIS.map((doi) => ({ doi: doi as never })),
+      ctx(),
+    );
+    expect(applied).toHaveLength(1);
+  });
+
+  it("reports a malformed body and a status other than ok as the search does", async () => {
+    await expect(
+      source(canned("<html>").client).lookup(
+        [{ doi: "10.1000/a" as never }],
+        ctx(),
+      ),
+    ).rejects.toThrow(ParseError);
+    await expect(
+      source(
+        canned(JSON.stringify({ status: "failed", message: "no" })).client,
+      ).lookup([{ doi: "10.1000/a" as never }], ctx()),
+    ).rejects.toThrow(SourceError);
+  });
+
+  it("lets a failed request throw", async () => {
+    const failure = new Error("transport");
+    const client: HttpClient = { request: () => Promise.reject(failure) };
+    await expect(
+      source(client).lookup([{ doi: "10.1000/a" as never }], ctx()),
+    ).rejects.toBe(failure);
+  });
+
+  it("is cancelled before a request", async () => {
+    const { client, urls } = canned(items());
+    const tokens = createCancellationTokenSource();
+    tokens.cancel({ kind: "user" });
+    await expect(
+      source(client).lookup([{ doi: "10.1000/a" as never }], {
+        token: tokens.token,
+      }),
+    ).rejects.toThrow(OperationCancelledError);
+    expect(urls).toEqual([]);
   });
 });

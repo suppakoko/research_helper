@@ -290,6 +290,8 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "rh-error-seed-gone",
   "rh-error-seed-no-identifier",
   "rh-error-seed-no-match",
+  // FR-44's refusal, a plain `SerializedError` from `createRecommendPipeline` (P5-T25).
+  "rh-error-recommend-too-few-items",
 
   // The preference pane's literature-source credential blocks (docs/08 §7.3,
   // docs/09 §1.8–1.9; P1-T44). On *this* surface rather than a fourth
@@ -771,6 +773,51 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   "research-helper-search-related-include-similar",
   "research-helper-search-state-initial-related",
 
+  // FR-14 to FR-16's related results (P5-T16; docs/08 §5.2, §5.3).
+  "research-helper-search-related-include-reference-count",
+  "research-helper-search-related-include-citation-count",
+  "research-helper-search-related-include-recommendation-count",
+  "research-helper-search-related-include-similar-count",
+  "research-helper-search-related-col-relation",
+  "research-helper-search-related-col-score",
+  "research-helper-search-related-chip-cites-seed",
+  "research-helper-search-related-chip-cited-by-seed",
+  "research-helper-search-related-chip-recommended",
+  "research-helper-search-related-chip-similar-pubmed",
+  "research-helper-search-related-chip-similar",
+  "research-helper-search-related-chip-basic-similarity",
+  "research-helper-search-related-chip-context-label",
+  "research-helper-search-related-chip-outside-window",
+  "research-helper-search-related-score",
+  "research-helper-search-related-generator-s2-recommendations",
+  "research-helper-search-related-generator-pmra",
+  "research-helper-search-related-generator-s2-citations",
+  "research-helper-search-related-generator-s2-references",
+  "research-helper-search-related-generator-europepmc-citations",
+  "research-helper-search-related-generator-europepmc-references",
+  "research-helper-search-related-generator-crossref-references",
+  "research-helper-search-related-source-no-key",
+  "research-helper-search-related-source-not-indexed",
+  "research-helper-search-related-source-could-not-ask",
+  "research-helper-search-related-source-rate-limited",
+  "research-helper-search-related-source-over-budget",
+  "research-helper-search-related-source-failed",
+  "research-helper-search-related-key-notice",
+  "research-helper-search-related-matched-by-title",
+  "research-helper-search-related-seed-failures",
+  "research-helper-search-related-similarity-no-store",
+  "research-helper-search-related-similarity-fetch-failed",
+  "research-helper-search-related-state-empty",
+  "research-helper-search-related-state-failed",
+  "research-helper-search-related-status-running",
+  "research-helper-search-related-status-cancelled",
+  "research-helper-search-related-picker-prompt",
+  "research-helper-search-related-picker-use",
+  "research-helper-search-related-link-to-seed",
+  "research-helper-search-related-target-default",
+  "research-helper-search-related-link-failed",
+  "research-helper-search-related-seed-gone",
+
   // Date range (FR-3; the years themselves are computed at window open).
   "research-helper-search-years-label",
   "research-helper-search-years-span",
@@ -1096,6 +1143,8 @@ export const ERROR_MESSAGE_IDS = [
   "rh-error-seed-gone",
   "rh-error-seed-no-identifier",
   "rh-error-seed-no-match",
+  // P5-T25: FR-44's refusal, from `createRecommendPipeline`, with no error class.
+  "rh-error-recommend-too-few-items",
 ] as const satisfies readonly MainWindowMessageId[];
 
 /**
@@ -1230,6 +1279,52 @@ export const KO_PENDING_REVIEW = [
   "rh-error-seed-gone",
   "rh-error-seed-no-identifier",
   "rh-error-seed-no-match",
+  // --- P5-T25's refusal below 5 items (mainWindow), a commented stub in ko-KR ---
+  "rh-error-recommend-too-few-items",
+  // --- P5-T16's related results (searchDialog), commented stubs in ko-KR ---
+  "research-helper-search-related-include-reference-count",
+  "research-helper-search-related-include-citation-count",
+  "research-helper-search-related-include-recommendation-count",
+  "research-helper-search-related-include-similar-count",
+  "research-helper-search-related-col-relation",
+  "research-helper-search-related-col-score",
+  "research-helper-search-related-chip-cites-seed",
+  "research-helper-search-related-chip-cited-by-seed",
+  "research-helper-search-related-chip-recommended",
+  "research-helper-search-related-chip-similar-pubmed",
+  "research-helper-search-related-chip-similar",
+  "research-helper-search-related-chip-basic-similarity",
+  "research-helper-search-related-chip-context-label",
+  "research-helper-search-related-chip-outside-window",
+  "research-helper-search-related-score",
+  "research-helper-search-related-generator-s2-recommendations",
+  "research-helper-search-related-generator-pmra",
+  "research-helper-search-related-generator-s2-citations",
+  "research-helper-search-related-generator-s2-references",
+  "research-helper-search-related-generator-europepmc-citations",
+  "research-helper-search-related-generator-europepmc-references",
+  "research-helper-search-related-generator-crossref-references",
+  "research-helper-search-related-source-no-key",
+  "research-helper-search-related-source-not-indexed",
+  "research-helper-search-related-source-could-not-ask",
+  "research-helper-search-related-source-rate-limited",
+  "research-helper-search-related-source-over-budget",
+  "research-helper-search-related-source-failed",
+  "research-helper-search-related-key-notice",
+  "research-helper-search-related-matched-by-title",
+  "research-helper-search-related-seed-failures",
+  "research-helper-search-related-similarity-no-store",
+  "research-helper-search-related-similarity-fetch-failed",
+  "research-helper-search-related-state-empty",
+  "research-helper-search-related-state-failed",
+  "research-helper-search-related-status-running",
+  "research-helper-search-related-status-cancelled",
+  "research-helper-search-related-picker-prompt",
+  "research-helper-search-related-picker-use",
+  "research-helper-search-related-link-to-seed",
+  "research-helper-search-related-target-default",
+  "research-helper-search-related-link-failed",
+  "research-helper-search-related-seed-gone",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -1745,6 +1840,8 @@ export interface FluentMessageArgsMap {
   // counts are numbers (plural selectors); `$ceiling` (`run` | `session`) and
   // `$mode` (`strict` | `balanced` | `full`) are selectors only.
   "rh-error-budget": { limit: string; spent: string };
+  // P5-T25. `RecommendFailed.tooFewItems.itemCount`.
+  "rh-error-recommend-too-few-items": { count: number };
   "research-helper-cost-items": {
     items: number;
     fullText: number;
@@ -1955,6 +2052,20 @@ export interface FluentMessageArgsMap {
   "research-helper-search-mode-rerun": { collection: string };
   // `P5-T15`: `$title` is the seed's own title (data), cut by the window.
   "research-helper-search-mode-related": { title: string };
+  // `P5-T16`. `$count` is how many rows of the run have that kind; `$value` a
+  // similarity already written with two decimals; `$dots` 0 to 5; `$code` a
+  // machine code, not translated.
+  "research-helper-search-related-include-reference-count": { count: number };
+  "research-helper-search-related-include-citation-count": { count: number };
+  "research-helper-search-related-include-recommendation-count": {
+    count: number;
+  };
+  "research-helper-search-related-include-similar-count": { count: number };
+  "research-helper-search-related-chip-similar": { value: string };
+  "research-helper-search-related-chip-basic-similarity": { value: string };
+  "research-helper-search-related-score": { dots: number };
+  "research-helper-search-related-source-failed": { code: string };
+  "research-helper-search-related-target-default": { title: string };
   "research-helper-search-rerun-heading": { collection: string };
   "research-helper-search-rerun-recorded": {
     date: string;
@@ -2135,6 +2246,16 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-search-mode-rerun",
   // `P5-T15`.
   "research-helper-search-mode-related",
+  // `P5-T16`.
+  "research-helper-search-related-include-reference-count",
+  "research-helper-search-related-include-citation-count",
+  "research-helper-search-related-include-recommendation-count",
+  "research-helper-search-related-include-similar-count",
+  "research-helper-search-related-chip-similar",
+  "research-helper-search-related-chip-basic-similarity",
+  "research-helper-search-related-score",
+  "research-helper-search-related-source-failed",
+  "research-helper-search-related-target-default",
   "research-helper-search-rerun-heading",
   "research-helper-search-rerun-recorded",
   "research-helper-search-import-summary-rerun",
@@ -2164,6 +2285,8 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-report-stopped-korean",
   "research-helper-report-paused-notice",
   "research-helper-egress-profile-notice",
+  // mainWindow — the recommend run's refusal below 5 items (1, P5-T25)
+  "rh-error-recommend-too-few-items",
 ] as const satisfies readonly (keyof FluentMessageArgsMap)[];
 
 /**
