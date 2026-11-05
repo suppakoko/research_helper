@@ -1391,6 +1391,17 @@ describe("searchDialog.css sizes the window the only way that works", () => {
     expect(CSS_CODE).not.toMatch(/(^|[\s;{])height\s*:/);
   });
 
+  it("hides every element asked to hide, whatever display a rule gives it (docs/08 §5.4, 2026-11-06)", () => {
+    // `.rh-wrap`'s `display: flex` beat the platform's rule for `hidden`, so both key
+    // notices read hidden and were drawn. One rule, and no other `display` declaration
+    // that could outrank it: only an `!important` one could.
+    expect(CSS_CODE).toMatch(
+      /(^|\n)\[hidden\] \{\s*display: none !important;\s*\}/,
+    );
+    const important = CSS_CODE.match(/display\s*:[^;}]*!important/g) ?? [];
+    expect(important).toStrictEqual(["display: none !important"]);
+  });
+
   it("sets no pixel font size, so Zotero's scaling still applies (§9)", () => {
     expect(CSS_CODE).not.toMatch(/font-size\s*:\s*\d+px/);
   });

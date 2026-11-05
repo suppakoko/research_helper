@@ -44,6 +44,21 @@
   min-height: 0;
 }
 
+/*
+ * An element asked to hide takes no room and is not drawn, whatever display a
+ * rule below gives it. The platform hides a `hidden` element with a rule of its
+ * own, and any rule here that sets `display` beats that one: measured
+ * 2026-11-06 in Zotero 10.0.3, `.rh-wrap`'s `flex` kept
+ * #rh-recommend-key-notice drawn, 22 px with its words and link, while it read
+ * hidden, and #rh-related-key-notice likewise. Every other element of the
+ * window already took `display: none` when hidden; only this file's
+ * class rules that set `display` did not (docs/08 §5.4's note of 2026-11-06).
+ * One rule for all of them, so a rule added later cannot bring the defect back.
+ */
+[hidden] {
+  display: none !important;
+}
+
 /* ------------------------------------------------------------------ rows */
 
 #rh-search-dialog > hbox,

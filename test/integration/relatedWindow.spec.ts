@@ -32,8 +32,10 @@ import type {
   SourceCallContext,
 } from "../../src/sources/types";
 import type { SourceRegistry } from "../../src/sources/registry";
+import { SEMANTICSCHOLAR_KEY_REQUEST_URL } from "../../src/sources/semanticscholar/semanticscholarSource";
 import { openSearchWindow } from "../../src/ui/dialogs/searchDialog";
 import { qualifiedPrefName } from "../../src/zotero/prefStore";
+import { drawnBox, hiddenButDrawn } from "./support/drawnGeometry";
 import {
   pinUILocale,
   restoreUILocale,
@@ -279,6 +281,54 @@ function elementsUnder(root: Element): string[] {
       .map((attribute) => `${attribute.name}=${attribute.value}`);
     return [node.localName, ...attributes].join(" ");
   });
+}
+
+/**
+ * The related mode's Semantic Scholar key notice as it is drawn, read from layout and
+ * computed style rather than the `hidden` property (docs/08 §5.4, 2026-11-06). Asked to
+ * hide, it takes no room and has no box; asked to show, it takes room and its link is
+ * drawn and leads to the key request form.
+ */
+async function assertKeyNotice(
+  win: RelatedWindow,
+  shown: boolean,
+  when: string,
+): Promise<void> {
+  const notice = win.document.getElementById("rh-related-key-notice");
+  const link = win.document.getElementById("rh-related-key-request");
+  if (!notice || !link) {
+    assert.fail("the related key notice or its link is missing");
+  }
+  if (shown) {
+    await waitUntil(
+      () => (link.textContent ?? "") === "Request a free API key",
+      "the key link's words",
+    );
+  }
+  const seen = drawnBox(win, notice);
+  debug(`${LOG_PREFIX} key notice ${when}: ${JSON.stringify(seen)}`);
+  assert.strictEqual(seen.hidden, !shown, `${when}: what the notice is asked`);
+  if (shown) {
+    assert.isTrue(seen.display !== "none", `${when}: the notice has a display`);
+    assert.isAbove(seen.height, 0, `${when}: the notice takes room`);
+    assert.isAbove(seen.linkHeight, 0, `${when}: its link is drawn`);
+    assert.isAbove(seen.linkWidth, 0, `${when}: its link is drawn`);
+    assert.strictEqual(
+      link.getAttribute("href"),
+      SEMANTICSCHOLAR_KEY_REQUEST_URL,
+      `${when}: the link leads to the key request form`,
+    );
+  } else {
+    assert.strictEqual(seen.display, "none", `${when}: the notice's display`);
+    assert.strictEqual(seen.height, 0, `${when}: the notice takes no room`);
+    assert.strictEqual(seen.boxes, 0, `${when}: the notice is not drawn`);
+    assert.strictEqual(seen.linkBoxes, 0, `${when}: its link is not drawn`);
+  }
+  assert.deepEqual(
+    hiddenButDrawn(win),
+    [],
+    `${when}: nothing asked to hide is drawn`,
+  );
 }
 
 /** Text without Fluent's isolation marks, which are not the source's. */
@@ -554,6 +604,10 @@ describe("Related window: markup in a source's text is drawn as text (plan/00 it
     assert.include(plain(header.textContent), EM);
     assert.include(plain(chip.getAttribute("value")), EM);
   });
+
+  it("draws the key notice with its link once a run without a Semantic Scholar key asks for it", async () => {
+    await assertKeyNotice(win as RelatedWindow, true, "after a keyless run");
+  });
 });
 
 describe("Related window: a run's end (P5-T16 line 12)", () => {
@@ -706,6 +760,33 @@ describe("Related window: a run's end (P5-T16 line 12)", () => {
         (job) => job.pipelineId === "related" && job.status === "running",
       );
       assert.strictEqual(left.length, 0, "no related job is left running");
+    }
+  });
+
+  it("asks the key notice to hide while the run goes, so it takes no room and is not drawn before any list answers", async function () {
+    this.timeout(90_000);
+    const [first] = made;
+    if (!first) {
+      assert.fail("the seed was not made");
+    }
+    const startedBefore = lists.started;
+    const opened = openRelated(first.id);
+    try {
+      const controller = await initialized(opened);
+      await waitUntil(
+        () => lists.started > startedBefore,
+        "the run's lists to start",
+      );
+      assert.isTrue(controller.state.running, "the run is going");
+      await assertKeyNotice(opened, false, "while the run goes");
+    } finally {
+      const startedByThis = lists.started;
+      opened.close();
+      await waitUntil(
+        () => lists.cancelled >= startedByThis,
+        "closing the window to cancel the run",
+      );
+      await Zotero.Promise.delay(250);
     }
   });
 });

@@ -631,6 +631,26 @@ describe("P5-T16: the keyless notice and the banner", () => {
     expect(state.related.keyRequestUrl).toBeUndefined();
   });
 
+  // plan/00 §6 item 355(c): with a usable key the notice is asked to hide before the
+  // run and while it goes, not only once it ends.
+  it("with a key, asks the notice to hide before the run, while it goes and after it", async () => {
+    const gate = deferred<RelatedOutput>();
+    const w = world(() => gate.promise);
+    w.host.connect(w.view);
+    expect(w.last().related.keyRequestUrl).toBeUndefined();
+    const running = w.host.run(7);
+    await flush();
+    expect(w.last().running).toBe(true);
+    expect(w.last().related.keyRequestUrl).toBeUndefined();
+    gate.resolve(rowsOutput([row(1)], { keyNotice: false }));
+    await running;
+    expect(w.last().running).toBe(false);
+    expect(w.states.length).toBeGreaterThan(1);
+    expect(w.states.map((state) => state.related.keyRequestUrl)).toStrictEqual(
+      w.states.map(() => undefined),
+    );
+  });
+
   it("publishes no export control's notices, only warnings", async () => {
     const state = await drawn(
       rowsOutput([row(1)], {

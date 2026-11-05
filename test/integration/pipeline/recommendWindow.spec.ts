@@ -22,10 +22,12 @@ import { config } from "../../../package.json";
 import type Addon from "../../../src/addon";
 import type { LLMProvider } from "../../../src/llm/types";
 import { PREF_KEYS } from "../../../src/prefs/keys";
+import { SEMANTICSCHOLAR_KEY_REQUEST_URL } from "../../../src/sources/semanticscholar/semanticscholarSource";
 import { COST_DIALOG_URL } from "../../../src/ui/dialogs/costConfirmDialog";
 import { createJobStore } from "../../../src/zotero/db";
 import { qualifiedPrefName } from "../../../src/zotero/prefStore";
 import { chatResponse, mockModel } from "../../helpers/mockLLM";
+import { drawnBox, hiddenButDrawn } from "../support/drawnGeometry";
 import {
   doubleTheTransport,
   pageTitle,
@@ -407,6 +409,59 @@ describe("P5-T26, P5-T27: a real recommend window's controls, layout and import"
     return controller;
   }
 
+  /**
+   * The Semantic Scholar key notice asked to hide: no room, no box, and its link not
+   * drawn either, read from layout and not from the property (docs/08 §5.4, 2026-11-06).
+   */
+  function assertKeyNoticeUndrawn(when: string): void {
+    const seen = drawnBox(opened(), control("rh-recommend-key-notice"));
+    debug(`${LOG_PREFIX} key notice ${when}: ${JSON.stringify(seen)}`);
+    assert.strictEqual(
+      seen.hidden,
+      true,
+      `${when}: the notice is asked to hide`,
+    );
+    assert.strictEqual(seen.display, "none", `${when}: the notice's display`);
+    assert.strictEqual(seen.height, 0, `${when}: the notice takes no room`);
+    assert.strictEqual(seen.boxes, 0, `${when}: the notice is not drawn`);
+    assert.strictEqual(seen.linkBoxes, 0, `${when}: its link is not drawn`);
+    assert.deepEqual(
+      hiddenButDrawn(opened()),
+      [],
+      `${when}: nothing asked to hide is drawn`,
+    );
+  }
+
+  /** The notice asked to show: it takes room, and its link is drawn and leads to the form. */
+  async function assertKeyNoticeDrawn(when: string): Promise<void> {
+    const link = control("rh-recommend-key-request");
+    await waitUntil(
+      () => (link.textContent ?? "") === "Request a free API key",
+      "the key link's words",
+    );
+    const seen = drawnBox(opened(), control("rh-recommend-key-notice"));
+    debug(`${LOG_PREFIX} key notice ${when}: ${JSON.stringify(seen)}`);
+    assert.strictEqual(
+      seen.hidden,
+      false,
+      `${when}: the notice is asked to show`,
+    );
+    assert.isTrue(seen.display !== "none", `${when}: the notice has a display`);
+    assert.isAbove(seen.height, 0, `${when}: the notice takes room`);
+    assert.isAbove(seen.linkHeight, 0, `${when}: its link is drawn`);
+    assert.isAbove(seen.linkWidth, 0, `${when}: its link is drawn`);
+    assert.strictEqual(
+      link.getAttribute("href"),
+      SEMANTICSCHOLAR_KEY_REQUEST_URL,
+      `${when}: the link leads to the key request form`,
+    );
+    assert.deepEqual(
+      hiddenButDrawn(opened()),
+      [],
+      `${when}: nothing asked to hide is drawn`,
+    );
+  }
+
   function rowElement(key: string): Element {
     const attribute = controllerOf().spec.row.keyAttribute;
     const found = [...control("rh-results-body").children].find(
@@ -474,6 +529,12 @@ describe("P5-T26, P5-T27: a real recommend window's controls, layout and import"
         `${String(Math.round(box.height))}; window ` +
         `${String(opened().innerWidth)} x ${String(opened().innerHeight)}`,
     );
+  });
+
+  it("asks the Semantic Scholar key notice to hide before any run, and then it takes no room and is not drawn", async function () {
+    this.timeout(30_000);
+    await Zotero.Promise.delay(0);
+    assertKeyNoticeUndrawn("before any run");
   });
 
   it("builds a profile whose chips wrap, with Fluent's attributes on their buttons", async function () {
@@ -631,6 +692,9 @@ describe("P5-T26, P5-T27: a real recommend window's controls, layout and import"
       );
     }
 
+    // Before any "Find papers", the key notice is asked to hide, and it is not drawn.
+    assertKeyNoticeUndrawn("with a profile, before Find papers");
+
     // For the next test, which reads them once a table has brought the rows back.
     pickerWhileHidden = String(control("rh-search-target").value ?? "");
     assert.isAbove(pickerWhileHidden.length, 0, "the picker holds its default");
@@ -676,6 +740,8 @@ describe("P5-T26, P5-T27: a real recommend window's controls, layout and import"
     assert.strictEqual(control("rh-search-filter").value, "hepatocyte");
     assert.strictEqual(control("rh-search-target").value, pickerWhileHidden);
     assert.strictEqual(controller.state.visible.length, ROWS_ON_THE_PAGE);
+    // The run had no Semantic Scholar key, so it asks for the notice, which is drawn.
+    await assertKeyNoticeDrawn("after a keyless run");
     control("rh-search-filter").value = "";
     controller.applyFilter();
 

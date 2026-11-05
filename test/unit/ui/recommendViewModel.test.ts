@@ -919,6 +919,44 @@ describe("what a run's ending draws", () => {
     expect(w.last().recommend.keyRequestUrl).toBeUndefined();
   });
 
+  // plan/00 §6 item 355(c): with a usable key the notice is asked to hide before any
+  // run, while a run goes and after it, and not only once a run ends.
+  it("with a key, every state the window is given asks the key notice to hide, from the opening on", async () => {
+    const w = await found(rowsEnding([rowOf(1)], { keyNotice: false }));
+    expect(w.states.length).toBeGreaterThan(3);
+    expect(
+      w.states.map((state) => state.recommend.keyRequestUrl),
+    ).toStrictEqual(w.states.map(() => undefined));
+  });
+
+  it("a run after a keyless list asks the notice to hide as it starts, not at its end", async () => {
+    let gate: ((output: RecommendOutput) => void) | undefined;
+    let next: () => Promise<RecommendOutput> | RecommendOutput = () =>
+      rowsEnding([rowOf(1)], { keyNotice: true });
+    const w = world((input) =>
+      input.mode === "profile-only" ? profileEnding() : next(),
+    );
+    w.opened();
+    expect(w.last().recommend.keyRequestUrl).toBeUndefined();
+    await w.host.build();
+    expect(w.last().recommend.keyRequestUrl).toBeUndefined();
+    await w.host.find();
+    expect(w.last().recommend.keyRequestUrl).toBe("https://example.org/key");
+
+    next = () =>
+      new Promise<RecommendOutput>((resolve) => {
+        gate = resolve;
+      });
+    const going = w.host.find();
+    await flush();
+    expect(w.last().running).toBe(true);
+    expect(w.last().recommend.keyRequestUrl).toBeUndefined();
+    gate?.(rowsEnding([rowOf(1)], { keyNotice: false }));
+    await going;
+    expect(w.last().running).toBe(false);
+    expect(w.last().recommend.keyRequestUrl).toBeUndefined();
+  });
+
   it("the notes about the profile are warning lines", async () => {
     const w = await found(
       rowsEnding([rowOf(1)], {

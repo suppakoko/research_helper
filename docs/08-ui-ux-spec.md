@@ -1726,6 +1726,29 @@ Note the **year filter is off by default here** (FR-18). The 3-year restriction 
 > "Find papers", and that is the "key notice" line in the figures above. `#rh-related-key-notice` does the same when asked to hide, 22 px.
 > So a reader with a Semantic Scholar key would see "Without one, its lists are not asked" until a run ends. Unit tests read the
 > property, so they pass. It blocks nothing here, and the plain fix would change the related mode, so it was not made in this change.
+>
+> **Corrected and fixed 2026-11-06 (`plan/00` §6 item 355(c)).** The paragraph above is wrong in three ways. (1) **Not only the two
+> notices.** Measured in Zotero 10.0.3 by asking every element of the keyword, related and recommend windows to hide in turn: all
+> seven `.rh-wrap` elements (`#rh-related-seed-meta`, `#rh-related-include`, `#rh-related-key-notice`, `#rh-related-status`,
+> `#rh-recommend-key-notice`, `#rh-recommend-status`, `#rh-search-databases`) kept `display: flex`, and so did `.rh-recommend-chips`,
+> each `.rh-recommend-chip` and each `.rh-source-line`; every other element took `display: none`. Of these the window itself asks to
+> hide only the two notices, the two status hosts and the seed's meta line; the status hosts are emptied before they are hidden, so
+> they drew 0 px. (2) **Not "until a run ends".** `renderRecommend` and `renderRelated` ask the notice to hide whenever the view
+> state's `keyRequestUrl` is absent, which it is at the opening, at a run's start and after a run that had a key
+> (`initialRecommendViewState`, `initialRelatedViewState`, and each view model's run start and ending). Since every notice asked to
+> hide was drawn, a reader with a key saw the sentence in every state, after a keyed run as well; that keyed run was not seen, because
+> no key is used in tests. (3) **The related mode too, from the opening.** Its window starts a run at once, and while that run went the
+> notice read hidden and drew 22 px. **The fix** is one rule at the head of `searchDialog.css`, `[hidden] { display: none !important; }`,
+> rather than `.rh-wrap[hidden]`: four class rules of that file beat the platform's rule for `hidden`, three more set `display` on
+> elements the measurement did not build (`.rh-related-context`, `.rh-related-candidate`, `.rh-related-candidate-details`), and one rule
+> covers them and any added later. After it, the same sweep found no element asked to hide with a display. **What a reader sees now:**
+> before any run neither notice is drawn, with a key or without one; a run without a key asks for it, and it is drawn with its link
+> (decision 9). A reader without a key no longer sees the recommend notice before "Find papers"; that came only from the defect. **The
+> boxes:** at 1019 x 600 the recommend opening header went from 93 to 71 px; the fullest profile (focus line, 21 terms, a Removed line,
+> 3 queries) now holds 507 px in 498, with every line of text in view and the last query ending at 534 against an edge at 541, where
+> before only the key notice was cut, by 19 px; the recommend and related tables, where the notice shows, and the keyword window read
+> the same as before. `recommendWindow.spec.ts` and `relatedWindow.spec.ts` check this by box and computed style, through
+> `drawnBox` and `hiddenButDrawn` in `test/integration/support/drawnGeometry.ts`.
 
 ## 6. Collection Report flow
 
