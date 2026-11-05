@@ -92,6 +92,7 @@ interface WindowController {
   readonly spec: { readonly row: { readonly keyAttribute: string } };
   import(): void;
   recommendControls(): { readonly slider: number };
+  applyFilter(): unknown;
   render(state: unknown): void;
 }
 type RecommendWindow = Window & {
@@ -330,6 +331,8 @@ describe("P5-T26, P5-T27: a real recommend window's controls, layout and import"
   let localeBefore: UILocaleSnapshot | undefined;
   /** Every `dialogaccept` the window raised. The listener stops it reaching an import. */
   let accepted = 0;
+  /** The picker's value while its row is hidden, which must survive that. */
+  let pickerWhileHidden = "";
 
   before(async function () {
     this.timeout(120_000);
@@ -558,6 +561,85 @@ describe("P5-T26, P5-T27: a real recommend window's controls, layout and import"
     await waitUntil(() => slider.value === "25", "the slider to move back");
   });
 
+  it("gives the profile the room while no table shows: at 1019 x 600 the notice, its queries and the buttons are in view", async function () {
+    this.timeout(30_000);
+    const view = opened();
+    const { outerWidth: widthBefore, outerHeight: heightBefore } = view;
+    // The content's 1019 by 600: `resizeTo` sizes the window with its frame.
+    view.resizeTo(
+      1019 + view.outerWidth - view.innerWidth,
+      600 + view.outerHeight - view.innerHeight,
+    );
+    await Zotero.Promise.delay(250);
+    assert.strictEqual(view.innerWidth, 1019);
+    assert.strictEqual(view.innerHeight, 600);
+
+    const notice = [...control("rh-recommend-egress").children];
+    const queries = [...control("rh-recommend-queries").children];
+    await waitUntil(
+      () => notice.every((line) => (line.textContent ?? "") !== ""),
+      "the notice's words",
+    );
+    assert.strictEqual(notice.length, 2, "the notice's two paragraphs");
+    assert.isAbove(queries.length, 0, "a search query to read");
+    assert.include(notice[0]?.textContent ?? "", "the search queries below");
+
+    // No scrolling: the header has not moved, and everything ends above its edge.
+    const header = control("rh-recommend-header");
+    assert.strictEqual(header.scrollTop, 0);
+    const edge = header.getBoundingClientRect().top + header.clientHeight;
+    const dialog = control("rh-search-dialog") as unknown as {
+      getButton(name: string): Element;
+    };
+    const ok = dialog.getButton("accept").getBoundingClientRect();
+    const cancel = dialog.getButton("cancel").getBoundingClientRect();
+    const inView = (element: Element, what: string): void => {
+      const box = element.getBoundingClientRect();
+      assert.isAbove(box.height, 0, `${what} is drawn`);
+      assert.isAtMost(box.bottom, edge + 0.5, `${what} is above the edge`);
+      assert.isAtMost(box.bottom, ok.top, `${what} is above OK`);
+    };
+    inView(control("rh-recommend-find"), "Find papers");
+    notice.forEach((line, at) => {
+      inView(line, `the notice's paragraph ${String(at + 1)}`);
+    });
+    queries.forEach((line, at) => {
+      inView(line, `search query ${String(at + 1)}`);
+    });
+    assert.isAtMost(ok.bottom, view.innerHeight, "OK is in the window");
+    assert.isAtMost(cancel.bottom, view.innerHeight, "Cancel is in the window");
+    debug(
+      `${LOG_PREFIX} the profile's room at 1019 x 600: ` +
+        `${String(control("rh-recommend-terms").children.length)} terms, header ` +
+        `${String(header.clientHeight)} px holding ${String(header.scrollHeight)}, edge ` +
+        `${String(Math.round(edge))}, last query ends ` +
+        `${String(Math.round(queries.at(-1)?.getBoundingClientRect().bottom ?? 0))}, ` +
+        `OK ${String(Math.round(ok.top))} to ${String(Math.round(ok.bottom))}`,
+    );
+
+    // What gave the room takes none, by its box rather than by a flag.
+    for (const id of [
+      "rh-search-filter-row",
+      "rh-results-area",
+      "rh-search-target-row",
+      "rh-search-preprint-policy",
+    ]) {
+      assert.strictEqual(
+        control(id).getBoundingClientRect().height,
+        0,
+        `#${id} takes no room`,
+      );
+    }
+
+    // For the next test, which reads them once a table has brought the rows back.
+    pickerWhileHidden = String(control("rh-search-target").value ?? "");
+    assert.isAbove(pickerWhileHidden.length, 0, "the picker holds its default");
+    control("rh-search-filter").value = "hepatocyte";
+
+    view.resizeTo(widthBefore, heightBefore);
+    await Zotero.Promise.delay(250);
+  });
+
   it("keeps the table usable below the taller header at the window's size", async function () {
     this.timeout(60_000);
     const controller = controllerOf();
@@ -576,6 +658,26 @@ describe("P5-T26, P5-T27: a real recommend window's controls, layout and import"
     );
     await Zotero.Promise.delay(250);
     assert.strictEqual(controller.state.rows.length, ROWS_ON_THE_PAGE);
+
+    // A table brings back what gave the profile the room, with its values. Every row
+    // here has the word in its title, so the filter typed above hides none of them.
+    for (const id of [
+      "rh-search-filter-row",
+      "rh-results-area",
+      "rh-search-target-row",
+      "rh-search-preprint-policy",
+    ]) {
+      assert.isAbove(
+        control(id).getBoundingClientRect().height,
+        0,
+        `#${id} is back`,
+      );
+    }
+    assert.strictEqual(control("rh-search-filter").value, "hepatocyte");
+    assert.strictEqual(control("rh-search-target").value, pickerWhileHidden);
+    assert.strictEqual(controller.state.visible.length, ROWS_ON_THE_PAGE);
+    control("rh-search-filter").value = "";
+    controller.applyFilter();
 
     const measure = (): {
       readonly window: string;

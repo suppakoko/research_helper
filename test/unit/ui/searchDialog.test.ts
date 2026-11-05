@@ -5537,6 +5537,144 @@ describe('P5-T26: the window opened with mode: "recommend-from-collection"', () 
     );
   });
 
+  describe("the room while a profile shows and no table does (docs/08 §5.4, 2026-11-06)", () => {
+    const ROWS = [
+      "rh-search-filter-row",
+      "rh-search-target-row",
+      "rh-search-duplicates-group",
+    ];
+    const AREA = "rh-results-area";
+    const RECORD = {
+      key: "key-1",
+      title: "Paper 1",
+      authors: [{ family: "Author1" }],
+      year: 2024,
+      sourceLabels: [],
+      typeLabel: "",
+      doi: "",
+      existing: false,
+      startsTicked: true,
+      recommended: true,
+    };
+    const withProfileOn = (extra: Record<string, unknown>) => ({
+      ...withProfile(),
+      ...extra,
+    });
+    const hiddenOf = (h: Harness, ids: readonly string[]) =>
+      ids.map((id) => Boolean(h.byId(id)?.hidden));
+
+    it("keeps everything in the opening state, with no profile yet", () => {
+      const { h, publish } = open();
+      publish(stateOf());
+      expect(hiddenOf(h, [...ROWS, AREA])).toStrictEqual([
+        false,
+        false,
+        false,
+        false,
+      ]);
+      expect(h.byId("rh-state-initial")?.hidden).toBe(false);
+    });
+
+    it("hides the rows and the placeholder once a profile shows, and keeps each value", () => {
+      const { h, publish } = open();
+      const filter = h.byId("rh-search-filter");
+      const hide = h.byId("rh-search-hide-existing");
+      const target = h.byId("rh-search-target");
+      if (!filter || !hide || !target) throw new Error("no controls");
+      filter.value = "lipid";
+      hide.checked = true;
+      target.value = "chosen";
+      publish(withProfile());
+      expect(hiddenOf(h, [...ROWS, AREA])).toStrictEqual([
+        true,
+        true,
+        true,
+        true,
+      ]);
+      expect(filter.value).toBe("lipid");
+      expect(hide.checked).toBe(true);
+      expect(target.value).toBe("chosen");
+      // Build profile again, and Find papers until a list answers: still no table.
+      publish(withProfileOn({ running: true }));
+      expect(hiddenOf(h, [...ROWS, AREA])).toStrictEqual([
+        true,
+        true,
+        true,
+        true,
+      ]);
+    });
+
+    it("brings them back as soon as a table shows, and gives the room again when it goes", () => {
+      const { h, publish } = open();
+      publish(withProfile());
+      publish(
+        withProfileOn({
+          panel: "results",
+          records: [RECORD],
+          recordsRevision: 1,
+        }),
+      );
+      expect(hiddenOf(h, [...ROWS, AREA])).toStrictEqual([
+        false,
+        false,
+        false,
+        false,
+      ]);
+      expect(h.byId("rh-results-container")?.hidden).toBe(false);
+      publish(withProfileOn({ records: [], recordsRevision: 2 }));
+      expect(hiddenOf(h, [...ROWS, AREA])).toStrictEqual([
+        true,
+        true,
+        true,
+        true,
+      ]);
+    });
+
+    it("brings them back when the profile goes", () => {
+      const { h, publish } = open();
+      publish(withProfile());
+      publish(stateOf());
+      expect(hiddenOf(h, [...ROWS, AREA])).toStrictEqual([
+        false,
+        false,
+        false,
+        false,
+      ]);
+    });
+
+    it.each(["empty", "error"])(
+      "keeps the area for the %s panel, which has something to say",
+      (panel) => {
+        const { h, publish } = open();
+        publish(withProfile());
+        publish(withProfileOn({ panel }));
+        expect(hiddenOf(h, ROWS)).toStrictEqual([true, true, true]);
+        expect(h.byId(AREA)?.hidden).toBe(false);
+        expect(h.byId(`rh-state-${panel}`)?.hidden).toBe(false);
+      },
+    );
+
+    it("does nothing in the other modes", () => {
+      for (const args of [{}, { mode: "related", seedItemID: 77 }]) {
+        const h = harness({ args, host: { listSources: () => [PUBMED] } });
+        h.controller.init();
+        h.controller.render(withProfile());
+        expect(hiddenOf(h, [...ROWS, AREA])).toStrictEqual([
+          false,
+          false,
+          false,
+          false,
+        ]);
+      }
+    });
+
+    it("takes the rule above each row away with the row, only when it is hidden", () => {
+      expect(CSS_CODE).toMatch(
+        /separator:has\(\+ #rh-search-filter-row\[hidden\]\),\s*separator:has\(\+ #rh-search-target-row\[hidden\]\) \{\s*display: none/,
+      );
+    });
+  });
+
   it("starts the already-in-library box off, whatever the preference says", () => {
     const h = harness({
       args: { mode: "recommend-from-collection", collectionID: 77 },

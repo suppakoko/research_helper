@@ -1688,6 +1688,45 @@ Note the **year filter is off by default here** (FR-18). The 3-year restriction 
 > at `45vh` its last row fell under OK. This is a judgement the owner may wish to look at: the alternative is a larger opening
 > size, which was not tried.
 
+> **Measured and changed 2026-11-06 (`plan/00` §6 item 354(f), under item 313): the profile has the room until a table shows.**
+> Measured at a content size of 1019 x 600 in Zotero 10.0.3 on `recommendWindow.spec.ts`'s collection with 20 terms, before the
+> change: `#rh-recommend-header` had 298 px and held 454, its edge at 341. Under that edge lay all four lines of the two notice
+> paragraphs (`research-helper-search-recommend-egress-notice`, 343 to 377, and `-egress-sources`, 382 to 417), the "Search
+> queries" label (422 to 439), the one query (442 to 459) and the key notice (463 to 486). With the chips of the same collection
+> falling on four lines, because each run's token gives them other widths, the notice's second line was cut by 2 px and everything
+> after it lay under. On the 30 recorded papers of `noKeyRelatedness.spec.ts`, which ask for less room, the last notice line was cut by 9 px
+> and the label and the query lay under. So "Find papers" sat in view and enabled with what it sends out of view. Meanwhile the Filter
+> row took 32 px, the placeholder's area 52, the Import row 36 and its note 22.
+>
+> **The change.** `refreshRecommendRoom`, which `showPanel` calls, hides `rh-search-filter-row`, `rh-search-target-row` and
+> `rh-search-duplicates-group` (which holds the note) while a profile is showing and the panel is not "results", and hides
+> `rh-results-area` too while the panel is "initial". The rule above the Filter row and the rule above the Import row go with their
+> rows, by a stylesheet rule on those rows' `hidden`. They come back as soon as a table shows or the profile goes. A hidden control
+> keeps its value, so a filter typed earlier still filters the next list and shows in its box when the list arrives. The opening state
+> has no profile and keeps its placeholder. A run going over a profile counts as no table. The "empty" and "error" panels keep the
+> area, because they have something to say; the rows stay hidden, because there is still no list to act on. The `45vh` floor and the
+> state with a table are untouched, and so are the related and keyword modes: their boxes at 1019 x 600 read the same before and
+> after, to the pixel, on one scratch measurement.
+>
+> **After, at 1019 x 600.** The same collection: the header holds 421 to 455 px, as the chips fall on four or five lines, in the room it
+> needs, and the last query ends at 426 to 459; OK and Cancel stand at 559 to 586. While "Find papers" runs over this profile the status
+> bar takes 31 px, with its Cancel button at 502 to 530, and nothing in the header moves. The header can take up to 498 px before it
+> scrolls. The fullest profile measured, the fake model's focus line, 21 terms, a Removed line and three queries, wants 529: there every
+> notice line and every query is in view, the last query ending at 534, and only the key notice's line is cut, by 19 px. At this
+> collection's true opening width, 944, the header reads the same (455 px holding 455). The "empty" panel keeps 52 px and the header
+> 433, so the last of what it holds (the status rows, and on five lines of chips part of the key notice) takes a scroll; the notice and
+> the query stay in view. The "error" panel keeps 52 to 64 px, so its Retry button is cut by 7 to 19 px and the panel scrolls; it was
+> cut by 19 before. Korean was not measured, because the layout specs pin en-US.
+>
+> **This narrows decision 10's "The filter stays"** to while a table shows or no profile does, and replaces the sentence above that
+> the profile takes 298 px before any table shows.
+>
+> **Measured and left alone:** a `hidden` key notice is still drawn. `.rh-wrap`'s `display: flex` wins over the hidden attribute on an
+> `hbox`, so `#rh-recommend-key-notice` read `hidden` true, computed `display: flex` and 22 px, with its words and its link, before any
+> "Find papers", and that is the "key notice" line in the figures above. `#rh-related-key-notice` does the same when asked to hide, 22 px.
+> So a reader with a Semantic Scholar key would see "Without one, its lists are not asked" until a run ends. Unit tests read the
+> property, so they pass. It blocks nothing here, and the plain fix would change the related mode, so it was not made in this change.
+
 ## 6. Collection Report flow
 
 Launched from **collection context menu ▸ Research Helper ▸ Generate Research Trends Report…**

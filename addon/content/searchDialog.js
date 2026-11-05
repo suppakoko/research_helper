@@ -107,6 +107,7 @@ var RHSearchWindow = {
     keyNotice: "rh-search-s2-notice",
     keyRequest: "rh-search-s2-request",
     filter: "rh-search-filter",
+    filterRow: "rh-search-filter-row",
     hideExisting: "rh-search-hide-existing",
     resultCount: "rh-search-result-count",
     // P3-T27: relevance screening, docs/08 §4.2's threshold row. The row is
@@ -124,10 +125,12 @@ var RHSearchWindow = {
     resultsContainer: "rh-results-container",
     sourceStatus: "rh-search-source-status",
     target: "rh-search-target",
+    targetRow: "rh-search-target-row",
     targetPopup: "rh-search-target-popup",
     targetNew: "rh-search-target-new",
     targetNewItem: "rh-search-target-new-item",
     duplicates: "rh-search-duplicates",
+    duplicatesGroup: "rh-search-duplicates-group",
     status: "rh-search-status",
     progress: "rh-search-progress",
     cancel: "rh-search-cancel",
@@ -2710,6 +2713,7 @@ var RHSearchWindow = {
       }
     }
     this.state.panel = name;
+    this.refreshRecommendRoom();
   },
 
   // =========================================================================
@@ -4799,6 +4803,38 @@ var RHSearchWindow = {
     }
     this.buildHeadCells(this.logic.recommendColumns);
     this.localize(this.spec.initialProse, this.l10n.stateInitialRecommend);
+  },
+
+  /**
+   * While a profile is on screen and no table is, the room goes to the profile, so that
+   * the notice of what "Find papers" sends is readable where the button is (docs/08
+   * §5.4's note of 2026-11-06). The Filter row, the Import row and its note have nothing
+   * to act on until a list exists. The placeholder goes too, but a list that came back
+   * empty and a failure each still have something to say, so those keep the area. The
+   * opening state has no profile and keeps everything. Every hidden control keeps its
+   * value. Called from {@link showPanel}, the one place the panel changes, which
+   * `render` reaches after {@link renderRecommendProfile}. No-op in every other mode.
+   */
+  refreshRecommendRoom() {
+    if (!this.inRecommendMode()) {
+      return;
+    }
+    const panel = this.state.panel;
+    const room = Boolean(this.state.recommendProfile) && panel !== "results";
+    for (const id of [
+      this.spec.filterRow,
+      this.spec.targetRow,
+      this.spec.duplicatesGroup,
+    ]) {
+      const element = this.el(id);
+      if (element) {
+        element.hidden = room;
+      }
+    }
+    const area = this.el(this.spec.resultsArea);
+    if (area) {
+      area.hidden = room && panel === "initial";
+    }
   },
 
   /** Say which collection this window is on. No-op in every other mode. */

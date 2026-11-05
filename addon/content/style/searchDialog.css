@@ -155,6 +155,13 @@
   overflow-y: auto;
 }
 
+/* The rule above a row goes when the row does, which only the recommend mode's
+   refreshRecommendRoom() asks for (docs/08 §5.4, 2026-11-06). */
+separator:has(+ #rh-search-filter-row[hidden]),
+separator:has(+ #rh-search-target-row[hidden]) {
+  display: none;
+}
+
 .rh-state {
   padding: 1em;
 }
