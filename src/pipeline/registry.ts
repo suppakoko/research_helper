@@ -161,4 +161,11 @@ export interface PipelineSet {
    * `buildPipelineSet` always supplies it.
    */
   readonly trendReport?: ErasedPipeline;
+  /**
+   * "Find Related Papers…" (`P5-T14`): `createRelatedPipeline` in
+   * `./related/relatedPipeline.ts`, erased like every member; the search window's
+   * host (`P5-T16`) narrows it to `RelatedPipeline`. `buildPipelineSet` supplies it
+   * when given the adapters, which `installServices` always passes.
+   */
+  readonly related?: ErasedPipeline;
 }

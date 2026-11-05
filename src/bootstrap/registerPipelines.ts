@@ -74,6 +74,8 @@ import { buildLibraryIndex, type LibraryIndex } from "../zotero/libraryIndex";
 import {
   readCollectionWorks,
   readLibraryTermSources,
+  readLibraryWorks,
+  relatedSeedOfItemID,
 } from "../zotero/itemMapper";
 import {
   TRANSLATOR_FALLBACK_REASONS,
@@ -136,6 +138,12 @@ import {
 } from "../pipeline/trendReport/trendReportPipeline";
 import type { SearchRunSummary } from "../pipeline/trendReport/compose";
 import type { RecommendLibrary } from "../pipeline/recommend/profile";
+import {
+  createRelatedPipeline,
+  type RelatedPipelineDeps,
+} from "../pipeline/related/relatedPipeline";
+import type { RelatedLibrary } from "../pipeline/related/types";
+import type { LibraryItemFields } from "../sources/shared/dedupe";
 import { zoteroBibliographyPort } from "../zotero/bibliography";
 import { estTokens } from "../llm/shared/tokenEstimate";
 import type { JobQueue } from "../core/jobQueue/queue";
@@ -593,6 +601,50 @@ export function createZoteroRecommendLibrary(): RecommendLibrary {
 }
 
 // ---------------------------------------------------------------------------
+// 1d. The related pipeline's Zotero reads (`P5-T14`)
+// ---------------------------------------------------------------------------
+
+/**
+ * One read work as `dedupe.ts`'s library index reads it. `deleted` is `false` because
+ * `readLibraryWorks` leaves the trash out.
+ *
+ * @param entry - the item's id and work
+ * @returns the fields of `matchAgainstLibrary`'s index
+ */
+export function libraryItemFieldsOf(entry: {
+  readonly itemID: number;
+  readonly work: CanonicalWork;
+}): LibraryItemFields {
+  const { itemID, work } = entry;
+  return {
+    itemID,
+    deleted: false,
+    doi: work.ids.doi,
+    pmid: work.ids.pmid,
+    pmcid: work.ids.pmcid,
+    arxivId: work.ids.arxivId,
+    title: work.title,
+    year: work.publishedDate?.year ?? work.onlineDate?.year,
+    firstAuthorFamily: work.authors[0]?.family,
+    containerTitle: work.containerTitle,
+    isPreprint: work.type === "preprint",
+  };
+}
+
+/**
+ * The related pipeline's {@link RelatedLibrary} over Zotero. Built here for the reason
+ * {@link createZoteroRecommendLibrary} is. Caller: {@link buildPipelineSet}.
+ */
+export function createZoteroRelatedLibrary(): RelatedLibrary {
+  return {
+    readSeed: (itemID) => relatedSeedOfItemID(itemID),
+    libraryIndex: (libraryID) => buildLibraryIndex(libraryID),
+    libraryItems: async (libraryID) =>
+      (await readLibraryWorks(libraryID)).map(libraryItemFieldsOf),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 2. The pipelines
 // ---------------------------------------------------------------------------
 
@@ -644,6 +696,23 @@ export interface PipelineConstructionDeps {
    * read or sent.
    */
   readonly trendReport?: TrendReportConstructionDeps;
+  /**
+   * The related pipeline's dependencies (`P5-T14`): the typed adapters, the one
+   * client for the PMC converter and the vector store. Absent in a unit test of the
+   * graph, and then no `related` pipeline is registered.
+   */
+  readonly related?: RelatedConstructionDeps;
+}
+
+/** {@link PipelineConstructionDeps.related}. */
+export interface RelatedConstructionDeps extends Pick<
+  RelatedPipelineDeps,
+  "semanticscholar" | "crossref" | "embeddings"
+> {
+  readonly http: HttpClient;
+  readonly logger?: Logger;
+  /** Defaults to {@link createZoteroRelatedLibrary}; injectable for a test. */
+  readonly library?: RelatedLibrary;
 }
 
 /** {@link PipelineConstructionDeps.trendReport}. */
@@ -734,6 +803,24 @@ export function buildPipelineSet(deps: PipelineConstructionDeps): PipelineSet {
     trendReport: createTrendReportPipeline(
       trendReportDepsFrom(deps.trendReport, deps.summarize, pools),
     ),
+    ...(deps.related !== undefined && {
+      related: createRelatedPipeline(relatedDepsFrom(deps.related)),
+    }),
+  };
+}
+
+/** The related pipeline's deps from the composition root's. */
+function relatedDepsFrom(given: RelatedConstructionDeps): RelatedPipelineDeps {
+  const { http, logger } = given;
+  return {
+    library: given.library ?? createZoteroRelatedLibrary(),
+    semanticscholar: given.semanticscholar,
+    crossref: given.crossref,
+    embeddings: given.embeddings,
+    convertPmcids: createPmcidConverter({
+      http,
+      ...(logger !== undefined && { logger }),
+    }),
   };
 }
 

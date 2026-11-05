@@ -1,0 +1,13 @@
+{
+  "scenario": "batch-embedding",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-02T00:00:00.000Z",
+  "endpoint": "https://api.semanticscholar.org/graph/v1/paper/batch",
+  "method": "POST",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written, not recorded: stand-in until P5-T31 (plan/00 §6 item 335(a)), from docs/02 §6.8's positional array and docs/02 §6.9's one-paper GET, which gives the row's shape and its measured 768 values. No document records /paper/batch answering this field, so that the batch answers this shape, at this length, is assumed. Only the first four values of the first paper are the document's; every other value is filler from a fixed sequence and is not a real vector, and the second paperId is a placeholder of zeros.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ]
+}

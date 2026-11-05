@@ -4,10 +4,11 @@
  *
  * **Callers.** `src/pipeline/related/generators.ts` (`P5-T12`) and
  * `src/pipeline/recommend/generators.ts` (`P5-T23`) each construct one
- * {@link RequestBudget} per run. Both spend it through `planRelatedSeeds` in
- * `relatedFetch.ts`, or through {@link RequestBudget.tryTake} for a request that
- * covers several seeds. The size is the caller's: `P5-T23` starts from 40
- * (`docs/05` §9.3's sketch), and `docs/07` §8.5 has no row for it.
+ * {@link RequestBudget} per run. Both spend it through
+ * {@link RequestBudget.tryTake}. `planRelatedSeeds` in `relatedFetch.ts` also
+ * spends it, but has no shipped caller at present (`plan/00` §6 item 343(d)). The
+ * size is the caller's: `P5-T23` starts from 40 (`docs/05` §9.3's sketch), and
+ * `docs/07` §8.5 has no row for it.
  *
  * **Not `RequestBudget` in `src/core/http/retry.ts`.** That interface is one
  * request's time budget; this class counts the requests of one run.

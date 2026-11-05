@@ -1044,6 +1044,8 @@ a stated threshold, a list for the user to pick from, or an actionable error nam
 
 > *Added 2026-11-02 (`plan/reports/P5-T05-T06.md`; coordinator, under `plan/00` §6 item 313): `matchTitle(title, ctx)` returns zero or one record, with no threshold and no cache, returns `[]` without a key, and throws `RangeError` on a blank title.*
 
+> *Added 2026-11-02 (executing `P5-T11`): this card's threshold is a stated starting value, not measured. `docs/05` §6.1 records what exists (one real Crossref search, no real Semantic Scholar answer) and that `P5-T30`'s note is what measures it. `SeedUnresolvedError`'s two strings took `docs/07`, `docs/08`, `src/i18n/keys.ts`, both `research-helper-mainWindow.ftl` bundles and `typings/i10n.d.ts` beyond this card's Files, on the brief's rule for a new user-visible string.*
+
 **Do.**
 1. Documents first: write the threshold decided below into `docs/05` §6.1 (FR-14 says "per
    `05-related-work-discovery.md`", which states none).
@@ -1180,6 +1182,8 @@ and a flag when it falls outside the recency window.
 - create `src/pipeline/related/score.ts` (caller: `relatedPipeline.ts`, `P5-T14`)
 - create `test/unit/pipeline/relatedScore.test.ts`
 
+> *Added 2026-11-05 (`plan/reports/P5-T12.md`; coordinator, under `plan/00` §6 item 313): `candidates[].edges[]` holds `generator`, `sourceId`, `limit` (the divisor for `recScore`) and `edge` (`kind`, `rank`, `score`, `contexts`). Agreement is the count of distinct `generator` values. Two generators of one kind can agree, for example citations from both Semantic Scholar and Europe PMC, so this card decides whether that counts. Edges have no promised order.*
+
 **Do.**
 1. `docs/05` §6.2's blend with its starting weights; the similarity term takes a value from a
    `SimilarityFn` the pipeline injects (SPECTER2 or lexical, `P5-T14`); agreement bonus
@@ -1240,6 +1244,14 @@ npm run typecheck && npm run test:unit -- relatedScore
 > *Added 2026-11-02 (`plan/reports/P5-T19.md`, findings 3 and 6; DECIDED, coordinator, under `plan/00` §6 item 313): the similarity space is chosen once per run, from the key. A candidate with no vector scores similarity 0; there is no per-candidate fallback to the lexical space. On the lexical path, the corpus is the seed plus the merged candidates, which needs no Zotero read. Call `lexicalSpace(corpus)` once per run.*
 
 > *Added 2026-11-02 (`plan/reports/P5-T15.md`): `createZoteroRelatedLibrary` can reuse `canonicalWorkOfItemID` in `src/zotero/itemMapper.ts`.*
+
+> *Added 2026-11-02 (`plan/reports/P5-T20.md`; coordinator, under `plan/00` §6 item 313): on a keyed run, call `ensureEmbeddings(deps, [seed, ...survivors], "specter_v2", ctx)` once. The deps are `store` from `graph.database.embeddings()`, the typed adapter as `source`, `clock`, and a synchronous `isInLibrary` over library work keys. `embeddings()` can answer `undefined` and the deps require a store, so this card decides what happens then; the lexical space is the suggestion. Choose the space from the key first, and do not call it on a keyless run. `failure` means degrade with a notice, not abort. A work with no vector scores 0. The criterion of ⌈n / 200⌉ calls holds for uncached works with distinct identifiers.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T11.md`, `P5-T12.md`; coordinator, under `plan/00` §6 items 313 and 339(b), 339(e)): build `SeedResolverDeps` from the typed adapters and `createPmcidConverter`, call `resolveSeed` and then `expandSeedIds`, and pass `work.ids` as `RelatedGeneratorSeed.ids`. `chosenSeed` is a `CanonicalWork` from `candidates` and goes straight to `expandSeedIds`; this card sets the "matched by title" banner for a pick. `SeedUnresolvedError`, or a service's own rethrown error, means `Failed`, and `failures` map to per-source rows. A title-matched `work` is the merged record and may lack the seed's abstract, so the lexical path keeps the original item's text. Seed resolution's 0–3 requests are outside `RequestBudget`: this card decides whether to count them. Call `runRelatedGenerators({ ids }, ctx, { hasSemanticScholarKey, progress })`. Drive `Failed` from `statuses`, where `no-key`, `over-budget` and `could-not-ask` are not failures. Use `seedIds` to drop the seed from the candidates, because the generators do not, and `hadKey` for the key notice. Europe PMC relation rows often have `type` "other", so a type filter must keep them. The include boxes filter after the run. **This card also closes `P5-T11`'s finding 2:** a keyed-only lookup in `semanticscholarSource.ts` returning `[]` when `resolveApiKey` gives nothing, with a test holding a store whose `has` says true and whose value is unreadable or blank, and a check of every Phase 5 caller pairing `hasApiKey` with `lookup`. Move `seed.ts`'s private arXiv DOI rule onto `ARXIV_DATACITE_DOI`.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T13.md`; coordinator, under `plan/00` §6 item 313): call `scoreRelatedCandidates(result.candidates, { similarity, window })` after the vectors and before the self and type filter. `window` is `recencyWindow(ctx.config.get("searchYears"), ctx.clock)`, once per run, from the preference and not from the window's year lists. Choose one `similarity` space per run from the key: keyed `(cosine(seedVector, vector) + 1) / 2` by `work.workKey`, 0 when either vector is missing; keyless `space.cosine(...)` as it is, with no rescale. Let a thrown error through. Extend `ScoredRelatedCandidate` in `types.ts` rather than redeclaring it, and add `inLibrary` afterwards with no change to the score. Filtering keeps rank order and does not drop `outsideWindow` rows.*
+
+> *Added 2026-11-05 (executing this card; coordinator, under `plan/00` §6 item 313): this card's decisions are in `docs/07` §12.2's note "As built 2026-11-05" and `docs/05` §6.1's. Three touches beyond the Files above, each for a stated reason. `src/zotero/itemMapper.ts` gains `relatedSeedOfItemID` and `readLibraryWorks`, because the port's reads must name `Zotero` and `registerPipelines.ts` may not. A third seed error, `rh-error-seed-gone`, touches both main-window bundles, `src/i18n/keys.ts` and `typings/i10n.d.ts`. The key gate touches `semanticscholarSource.ts`, `seed.ts` and `generators.ts`, and the brief names all three.*
 
 **Do.**
 1. Stages: resolve seed → expand ids → generators (partial results allowed) → candidate vectors →
@@ -1379,11 +1391,15 @@ a keyless user what a key adds.
 - modify `docs/08-ui-ux-spec.md` (§5.1 step 2 "similar"; §5.2 note on years; §5.3 picker and the preprint line; §7.4 key text; dated notes)
 - create `test/unit/ui/relatedViewModel.test.ts`; modify `test/integration/searchDialog-flow.spec.ts`
 
+> *Added 2026-11-05 (`P5-T14`; coordinator, under `plan/00` §6 item 313): run the pipeline through `openJob` with no `JobRecord`, as the window's fetch does, and do not `enqueue` it (`docs/07` §12.2's note, decision 1). Call `validateRelatedInput` first. The input is `{ seedItemID, chosenSeed? }`: a pick still sends `seedItemID`. Read `RelatedOutput`: `ending: "choose"` opens the picker with `candidates`; `ending: "rows"` carries `rows`, `statuses`, `keyNotice`, `similarity.notice` and `seedFailures`. `error.messageKey` `rh-error-source` takes `$database`, as the search pipeline's does, and `SerializedError.detail` names the generators. `isCheckedByDefault` takes a `RelatedRow` as it is.*
+
 > *Added 2026-11-02 (`plan/reports/P5-T19.md`, finding 2): this card renders the "basic similarity" label (`LEXICAL_SIMILARITY_LABEL_ID`) that `docs/05` §5.5 requires, on a keyless run. The string goes through `G-41`.*
 
 > *Added 2026-11-02 (`plan/reports/P5-T15.md`): give the related mode its own view model and `connectHost`, then remove `P5-T15`'s guards in `connectHost`, `search()` and `onYearChanged`. Read `query.related`; a year of `NaN` means no bound. Add the Include counts. Decide how a run starts, because the wireframe has no Search button and the button is hidden. Decide what a re-open does: opening a second seed reloads the one window, so a running job would keep running with no view (not measured).*
 
 > *Added 2026-11-02 (owner, `plan/00` §6 item 334(c)): "Restrict to last 3 years" is not built, and `docs/08` §5.2's wireframe no longer draws it. The year lists do the same. FR-18's rule, that older candidates are shown de-emphasized and unchecked, is a separate matter and is unaffected.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T13.md`; coordinator, under `plan/00` §6 items 313 and 340(c), 340(e)): start each row's tick from `isCheckedByDefault({ inLibrary, outsideWindow })` and grey the row on `outsideWindow`: this card delivers FR-18 to the user. Word every chip id, each through `G-41`. `similar` carries `similarity`, shown with `LEXICAL_SIMILARITY_LABEL_ID` on a keyless run. `citation-context` carries the source's own text, so it is shown as plain text and never as markup. A row can hold several kinds while the wireframe's Relation column draws one, so decide how to show that. Include counts and filtering read `row.edges[].edge.kind`. Scores are not comparable between a keyed and a keyless run, so decide the dot scale: an absolute one would read low without a key. Do not re-sort older rows downward without a decision. A row with no date stays ticked.*
 
 **Do.**
 1. Documents first (decided below and on `P5-T12`, `P5-T28`): `docs/08` §5.2's year note cites FR-18's
@@ -1453,6 +1469,8 @@ target), with abstracts, and links each to the seed both ways when the box is ti
 - modify `src/ui/viewModels/relatedViewModel.ts` (import request; the checkbox from `related.linkToSeed`)
 - modify `src/bootstrap/registerUI.ts` (the window host's import route)
 - create `test/integration/zotero/relatedLinkage.spec.ts`
+
+> *Added 2026-11-05 (`P5-T14`; coordinator, under `plan/00` §6 item 313): `RelatedRow.existingItemID` is the item a row was matched to, by identifier or by title. The importer finds only identifier matches, so an `inLibrary` row matched by title and ticked by hand would create a second item unless this card passes that id on. Each row keeps its `records`, which `SearchImportInput.records` needs.*
 
 **Do.**
 1. Import through the search pipeline's preview import, default target named after the seed
@@ -1666,6 +1684,8 @@ L2-normalised once, stored with their model name, and compared only within that 
 npm run typecheck && npm run test:unit -- embeddings semanticscholar
 ```
 
+> *Added 2026-11-02 (as built; the assumptions below are unverified, `plan/00` §6 item 335(a)): built before `P5-T31` against a stand-in, `test/fixtures/semanticscholar/related/`, scenario `batch-embedding`, under the plan's fixture key, so the card is not DONE before that check. `docs/07` §9.2's note of this date holds the decisions. Only the one-paper `GET` is on record (`docs/02` §6.9), so `P5-T31` checks each of these: (a) `/paper/batch` with `fields=embedding.specter_v2` answers rows of that `GET`'s shape, `{"paperId":…,"embedding":{"model":"specter_v2","vector":[…]}}`, with `null` at an unknown id; (b) each vector holds 768 values, as that `GET` measured; `EMBEDDING_DIMENSIONS` refuses any other length; (c) a paper the service holds with no vector is a row whose `embedding` is `null` or absent, which no document records and which this scenario may not draw, since both its papers may have vectors; (d) the vectors arrive not unit length (`docs/05` §5.2), which is harmless if false; (e) `ARXIV:1706.03762` is answered, while what one `DOI:10.48550/arXiv.…` id does inside a batch of good ids stays unmeasured: alone it draws the 400 `No valid paper ids given`; (f) 200 ids stay under the 10 MB cap, which is `docs/05` §5.2's arithmetic from ~16 KB a paper and which two papers cannot show.*
+
 **Notes.** Needs: `P2-T05` (built). Background prefetch (`docs/05` §9.6) is not here (§4).
 
 ---
@@ -1700,6 +1720,8 @@ plus up to 10 negatives from the collection's dismissals, read from the store on
 
 > *Added 2026-11-02 (`plan/reports/P5-T18.md`; coordinator, under `plan/00` §6 item 313): `addedAtByWorkKey(items)` and the members from `readCollectionWorks` are the inputs. Use `rankedTerms` or `termWeights` for centroid labels. `seeds` and `centroids` start empty in the record.*
 
+> *Added 2026-11-02 (`plan/reports/P5-T20.md`; coordinator, under `plan/00` §6 item 313): read `result.vectors`, a map of work key to `{ model, values }` with unit `Float32Array` values, and do not normalise those again. A centroid does need normalising: `normalizeEmbedding` takes `readonly number[]`, so convert first. Compare with `cosine`. Use `EMBEDDING_DIMENSIONS.specter_v2` for `embeddingDim` and `"specter_v2"` for `embeddingModel`. `withoutVector`, `withoutIdentifier` and `notAsked` hold work keys with no vector.*
+
 **Do.**
 1. `kmeansAuto` on SPECTER2 vectors, k chosen by silhouette with `docs/05`'s guards and a seeded
    initialisation (deterministic); no centroids on the lexical path (`docs/07` §5.2: empty array).
@@ -1721,6 +1743,8 @@ plus up to 10 negatives from the collection's dismissals, read from the store on
 ```bash
 npm run typecheck && npm run test:unit -- recommendSeeds
 ```
+
+> *Added 2026-11-05 (as built; `plan/reports/P5-T21.md` once saved): `docs/05` §7.2's note of this date holds the decisions. `withTopicsAndSeeds` is the one call `P5-T25` makes, after `buildProfileStats`, and `recentNegatives` the one it makes when the edited-profile job generates. Every test vector is synthetic: `kMax`, `minClusterSize`, `minGain` and the 0.92 cut are unmeasured on real vectors, and `P5-T30` measures them. The lexical cut, 0.45, was measured on recorded abstracts, and on that space seeds do not spread across topics.*
 
 **Notes.** Needs: nothing unbuilt.
 
@@ -1842,9 +1866,13 @@ and their union is merged; keyword queries go through Phase 2's `fanOut` with th
 
 > *Added 2026-11-02 (`plan/reports/P5-T08.md`, `P5-T10.md`): `findSimilarForSeeds` throws above 10 seeds; count one `elink` plus its `efetch` batches (up to 5 at limit 100 over 10 seeds) against `RequestBudget`, and re-read "a budget of 12 runs (a) and (b) fully" against that. `fanOut` has no cache hook, so step 1(d) wraps one source and one query at a time. For one request over several seeds: `readRelated` per seed, `tryTake(1)`, then `writeRelated` or `writeRelatedMissing` per seed. Build cache keys from identifiers, never from a URL, which can hold a key.*
 
+> *Added 2026-11-05 (`P5-T14`; `plan/00` §6 item 339(b)): a Semantic Scholar key probe here uses `hasUsableApiKey`, not `hasApiKey`, and a record read uses `lookupKeyed`, not `lookup`. `hasApiKey` can say yes while the stored value is blank or unreadable, and `lookup` then sends a request with no key. `src/pipeline/related/generators.ts` shows the shape: its `lookupSemanticScholar` option is required, so a caller cannot forget it.*
+
 > *Added 2026-11-02 (`plan/reports/P5-T18.md`, `P5-T22.md`; coordinator, under `plan/00` §6 item 313): use `rankedTerms`, which fixes the order. `suggestedQueries` can be empty with `origin: "llm"` and has no cap, because the schema has no `maxItems`, so this card falls back to the top terms and sets its own cap.*
 
 > *Added 2026-11-02 (`plan/reports/P5-T05-T06.md`; coordinator, under `plan/00` §6 item 313): `recommend(positives, negatives, limit, ctx)` costs one batch plus one POST, or two POSTs with the retry, and these count against the budget. It throws 404 when no positive resolves and `RangeError` above 500 ids in all. `RECOMMEND_MAX_POSITIVES` is 15 until `P5-T29` measures it.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T21.md`; coordinator, under `plan/00` §6 item 313): read `profile.seeds` in stored order: within each topic the best come first, and the first 10 cross topics, which suits generator (b). Group by `topicIndex` for one request per topic. A seed with no `topicIndex` belongs to no group. A k = 1 profile has `topicIndex: 0`, and a lexical profile has none. Negatives come from `await recentNegatives(store, profileId, logger)`, which `P5-T25` passes in. Seeds hold `work.ids` whole, so `P5-T20`'s finding on arXiv's `10.48550/arXiv.…` DOI still applies when `recommend` builds its ids.*
 
 **Do.**
 1. (a) S2 `recommend` with the seeds and negatives (keyed); (b) pmra over ≤ 10 PMID seeds; (c) forward
@@ -1906,6 +1934,8 @@ made steps 2 and 3 on 2026-11-01 (decisions):*
 npm run typecheck && npm run test:unit -- recommendGenerators
 ```
 
+> *Added 2026-11-05 (as built; `plan/reports/P5-T23.md` once saved): `docs/05` §7.3's note of this date holds the decisions and the arithmetic behind "a budget of 12": (a) and (b) run in full for up to two topic groups, and (e) and (d) rank above (c), so (c) gets a seed only when those two ask for little. `planRelatedSeeds` was not used: a Europe PMC seed can cost 2 and the reserve must hold.*
+
 **Notes.** Needs: `P2-T02`, `P2-T10` (built).
 
 ---
@@ -1942,6 +1972,12 @@ and each carries a one-line reason built from its strongest terms.
 > *Added 2026-11-02 (`plan/reports/P5-T03.md`): rejected papers come from `listRejected(profileId)`.*
 
 > *Added 2026-11-02 (`plan/reports/P5-T18.md`; coordinator, under `plan/00` §6 item 313): `owned.titles` is not built. Fuzzy title matching is this card's call.*
+
+> *Added 2026-11-02 (`plan/reports/P5-T20.md`; coordinator, under `plan/00` §6 item 313): `cosine` returns [-1, 1], clamped, so apply `(cosine + 1) / 2` on this space only. It throws on two models and on two lengths. It is a tight loop with no yielding, and 5,000 papers against 500 candidates at 768 values is about 1.9 billion multiply-adds, so yielding to the event loop is this card's job.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T21.md`; coordinator, under `plan/00` §6 item 313): `profile.centroids` holds plain `number[]` rows, so wrap each as `{ model, values: Float32Array.from(row) }` before calling `cosine`. A keyed run with no vectors has empty `centroids` and no `embeddingModel`, and this card decides what that run scores. The topic numbers in `centroidLabels` and `topicIndex` follow `centroids`. Rejections for the filter are read separately through `listRejected(profileId)`.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T23.md`; coordinator, under `plan/00` §6 item 313): read `candidates[i].discoveredVia`. For storage, map each entry to `{ sourceId, strategy }` and drop `topicGroup`. `generatorAgreement` counts distinct strategies. The number of `forward-citations` entries is the "cites N" figure, because one record found through two seeds appears twice. `topicIndex` is set at Scoring, and the `recommendations` strategy gives the reason text. Generators (b) and (c) send no date filter, so `identifierFilters` must apply the window.*
 
 **Do.**
 1. Hard filters, in two functions because only one kind can run before the survivors' metadata is
@@ -2016,6 +2052,8 @@ profile, applies the user's edits, records dismissals, and is registered under `
 - create `src/pipeline/recommend/types.ts`
 - modify `src/pipeline/registry.ts` (`PipelineSet.recommend`)
 - modify `src/bootstrap/registerPipelines.ts` (constructs it with `createZoteroRecommendLibrary` and the stores)
+
+> *Added 2026-11-05 (`P5-T14`; `plan/00` §6 item 339(b)): the Semantic Scholar key gate applies here as it does in `P5-T23`. Probe with `hasUsableApiKey`, not `hasApiKey`, and read records with `lookupKeyed`, not `lookup`.*
 - modify `src/bootstrap/container.ts` (`installServices` passes the router, budget, cache, stores, and the
   Semantic Scholar key probe — *corrected 2026-11-01 (review): generators (a) and (c) and `P5-T20`'s vectors
   depend on the key, and `P5-T14`'s row passes the probe while this one did not*)
@@ -2028,6 +2066,12 @@ profile, applies the user's edits, records dismissals, and is registered under `
 > *Added 2026-11-02 (`plan/reports/P5-T03.md`): `reject(profileId, workKey)` is `reject(recommendationId(profileId, workKey), now)`, and a row must be `put` before it is rejected. The `container.ts` row passes `graph.database.collectionProfiles`, `.recommendations` and `.embeddings`. The store has no general read of non-rejected recommendations, because no card named one.*
 
 > *Added 2026-11-02 (`plan/reports/P5-T18.md`, `P5-T22.md`; coordinator, under `plan/00` §6 items 313 and 335(h)): the order is `readProfileCollection`, the hash compare, `libraryTermSources`, `buildProfileStats`, `P5-T21`, `runProfileCall`, then `persistProfile`. `readProfileCollection` comes first because `buildProfileStats` throws `RangeError` below 5 items. `kind: "too-few-items"` maps to `Failed` in `docs/07` §12.5, and its unbuilt wording is en-US "This collection has { $count } items. Recommendations need at least 5.", Korean draft for `G-41` "이 컬렉션에는 항목이 { $count }개 있습니다. 추천을 받으려면 항목이 5개 이상 필요합니다." `profileOwnedSets` and `libraryIndex` run each time and are not stored. Compare `removedTerms` through `normalizeTitle`. `membershipHash` covers the source collection only, so a library change does not alter it. Use `planProfileCall` for `Pipeline.estimate`, which sends nothing; pass `recommendRoutineStore(collectionSettings)`, credentials, prices, `modelInfo` and `baseUrls`; treat `declined` as `Cancelled`; put `egress` on the job input through `withEgressLog`, which is also present on a fallback after a request was sent. A stored heuristic profile has an unchanged `membershipHash`, and must not read as fresh when a provider now exists.*
+
+> *Added 2026-11-02 (`plan/reports/P5-T20.md`; coordinator, under `plan/00` §6 item 313): the same `ensureEmbeddings` call as `P5-T14`, after the survivors' metadata is filled in. These batches do not count against the `RequestBudget`.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T21.md`; coordinator, under `plan/00` §6 items 313 and 341(e)): call `withTopicsAndSeeds(stats, { works: collection.items.map(i => i.work), addedAt: addedAtByWorkKey(items), vectors, nowEpochMs, logger })` after `buildProfileStats` and before `runProfileCall` and `persistProfile`. Leave `vectors` out on a keyless run. Only vectors of `works` are read, so a larger map is safe. It is synchronous and throws `RangeError` on two models or two lengths. Call `recentNegatives` on each edited-profile job, because negatives are not on the profile. Raise the log level for `P5-T30`'s run, because the topics line is at info level. **This card also closes `P5-T21`'s finding 3:** when `ensureEmbeddings` returns `failure` or a non-empty `notAsked`, centroids come from only some members while `membershipHash` and `embeddingModel` still match on later runs. Do not store such a profile as fresh, so that the next keyed run tries the vectors again, with a test.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T23.md`; coordinator, under `plan/00` §6 item 313): pass `SemanticScholarSource.hasUsableApiKey` as `hasSemanticScholarKey`, because `hasApiKey` is not enough (item 339(b)). Pass the typed `semanticScholar` and `pubmed` adapters from `installServices`, the `network-metadata` pool and a child progress reporter. Construct the `RequestBudget` here and hand the same one to hydration, so the reserve of 2 is what hydration finds. A limit of 200 brings no abstracts, so hydration is needed. Pass `negatives` from `recentNegatives`, and `sourceIds` and `dateFilter` resolved from preferences. Map `state` to the `Generating` edges. `OperationCancelledError` is the only rejection, and a failed generator is a row. The integration spec must prove a real keyless run sends nothing to `api.semanticscholar.org`, and that cancel stops within one request.*
 
 **Do.**
 1. Two input modes of one pipeline (decided below). **Profile only:** profile check (stored profile with
@@ -2137,6 +2181,8 @@ mode, which shows the derived profile before searching and lets the user remove 
 
 > *Added 2026-11-02 (`plan/reports/P5-T22.md`; coordinator, under `plan/00` §6 item 313): the surface `ProfileCallSurface` applies `shouldOpenCostDialog`, `settleDisclosure` and `skippedNoticeLine`, and shows `warningId`. `confirmReportRun` can be reused only if its parameter is widened.*
 
+> *Added 2026-11-05 (`plan/reports/P5-T23.md`; coordinator, under `plan/00` §6 items 313 and 343(c)): `recommendKeywordQueries` gives the queries for a notice of what is sent, and `statuses` gives the rows. `sources` governs only the keyword search, so deselecting PubMed or Europe PMC does not stop the citation and neighbour requests that reach them. Say so where this card describes what is contacted.*
+
 **Do.**
 1. Documents first: write `docs/08` §5.4 — the profile panel (focus statement, read-only; term chips
    with remove and add; authors; venues; "heuristic profile" notice when no LLM ran) above the shared
@@ -2206,6 +2252,8 @@ import into `<Collection> — recommended <date>` by default.
 - create `test/integration/pipeline/recommendFlow.spec.ts`
 
 > *Added 2026-11-02 (`plan/reports/P5-T19.md`, finding 2): this card renders the "basic similarity" label on a keyless recommendation run. The string goes through `G-41`.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T21.md`; coordinator, under `plan/00` §6 items 313 and 341(f)): `centroidLabels` are built from `termWeights` before `userEdits` apply, so a term the user removes stays on a label until the next rebuild. This card decides whether that matters.*
 
 **Do.**
 1. Rows grouped by centroid label when k > 1; reason line from `P5-T24`'s reason ids; "in library"
@@ -2369,6 +2417,12 @@ Zotero profile and recorded, and the two features are switched on.
 - modify `docs/07-architecture-and-data-model.md` (§8.5: `related.enabled`, `recommend.enabled` default `true`; dated note)
 - modify `src/prefs/schema.ts`, `test/unit/prefs/schema.test.ts` (the two defaults)
 
+> *Added 2026-11-05 (`plan/00` §6 item 341(f)): also record how many of the collection's members have a citation count, because the seed score's 0.15 quality weight does nothing for a member without one, and what a keyless run on this collection found compared with the keyed run (item 341(c)).*
+
+> *Added 2026-11-05 (`plan/reports/P5-T14.md`; `plan/00` §6 item 342(d)): record whether the keyed run's seed had a vector, because without one every candidate's similarity is 0 and the run gives no notice, and record the logged time of the run's two whole-library reads.*
+
+> *Added 2026-11-05 (`plan/reports/P5-T23.md`; `plan/00` §6 item 343(e)): read the budget of 40 and the reserve of 2 against the requests the recommend run really spent, whether `fanOut` spent a request its charge did not count, and whether the heuristic query held a word and a phrase containing it.*
+
 **Do.**
 1. Related: a DOI seed → count of candidates with reasons (≥ 20); import 10 → 10 items created or
    linked; the same seed with the key cleared → candidates and the key notice.
@@ -2384,6 +2438,12 @@ Zotero profile and recorded, and the two features are switched on.
 > (summaries) and `G-42` (reports) and none for recommendation runs. **A new gate `G-43`, modelled on
 > `G-42`: the first real recommendation run's spend is approved by the owner before it runs** (added to
 > `plan/06` §7 on 2026-11-02). (Review line 6.)
+
+> *Added 2026-11-05 (`P5-T21`; `docs/05` §7.2's note of this date names this as what measures them): on the 30-item collection, read the log line "recommend: topics and seeds" and record each k tried with its silhouette and smallest cluster, the k taken, and how many seeds came from each topic. `minGain: 0.08`, `minClusterSize: 5` and the 0.92 cut have no measurement on real SPECTER2 vectors, and synthetic runs show `minGain` decides k once silhouettes come near it. The line is written at info level, and `logLevel` defaults to `"warn"`, so raise it for this run. One collection is one reading, so if the owner's verdict disagrees with k, change the value with a dated note rather than treat it as settled.*
+
+> *Added 2026-11-05 (`P5-T13`; `docs/05` §6.2's note of this date): step 1's related run is the first look at `docs/05` §6.2's unmeasured weights on a real seed. Record the top 20 rows with score and chips in the acceptance report, with and without the key. This is one reading with no ground truth and it measures nothing; the measurement is `docs/05` §8.1–§8.2, backlog under item 323(d). `G-27` does not judge this list.*
+
+> *Added 2026-11-02 (`P5-T11`; `docs/05` §6.1 names this as what measures the title-match threshold): resolve at least 20 library items of known DOI through `resolveSeed` with the DOI, PMID, PMCID and arXiv ID withheld, once without a key and once with one, sending the title only. Each outcome is right DOI, wrong DOI, asked (`"choose"`) or none; the known DOI is the answer, so no labelling is needed. Record the counts and each candidate's similarity in the acceptance report, then write the result into `docs/05` §6.1. A wrong DOI is what would reopen the threshold.*
 
 **Do NOT.**
 - Do **not** count `G-27` as passed because the sanity checks passed (`plan/06` `G-27`, "If it is not done").
@@ -2443,6 +2503,8 @@ key, checked by the agent, so `P5-T05` and `P5-T06` test against real bodies.
 - Do **not** re-record a scenario the owner's run refused by trying the anonymous pool (item 320(a)).
 
 > *Added 2026-11-02 (`plan/00` §6 item 335(a)): `P5-T05` and `P5-T06` left ten stand-ins in `test/fixtures/semanticscholar/related/`, under the same fixture keys, so a scenario the run failed to record still has a file. After the run, the only `"synthetic": true` sidecar left should be `recommend-size-cap`; read the sidecars, because "has a fixture" alone passes on a stand-in. Then re-check both cards against the assumptions in their dated notes (`P5-T05` (a)–(e), `P5-T06` (a)–(c)) and run `npm run test:unit -- semanticscholar`.*
+
+> *Added 2026-11-02 (`P5-T20`; `plan/00` §6 item 335(a)): `batch-embedding` is an eleventh stand-in in `related/`, so `recommend-size-cap` stays the only sidecar that should be left `"synthetic": true`. Re-check `P5-T20` against its note (a)–(f) as well, and run `npm run test:unit -- embeddings`, whose fixture tests fail if the recorded vectors are not `EMBEDDING_DIMENSIONS` long. The list of fixtures this card checks does not change.*
 
 **Done when.**
 - [ ] Every Semantic Scholar scenario of `P5-T04` step 2 has a committed fixture or a synthetic stand-in with its reason.

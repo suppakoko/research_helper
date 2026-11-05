@@ -2027,6 +2027,23 @@ export async function installServices(
   // `satisfies ShippedSourceAdapters`: every slot the registry knows must be
   // constructed here, so a dropped adapter is a compile error at this literal
   // rather than a database row missing from the search dialog (`P2-T32`).
+  // `P5-T14`: the related pipeline calls what is specific to these two adapters
+  // (`docs/07` §4.2), so both are built here, once, and handed to both consumers.
+  const crossref = createCrossrefSource({
+    http,
+    clock,
+    mapRecords: createCrossrefRecordMapper({ clock, keepRaw, logger }),
+    userContactEmail: () => getPref("contactEmail"),
+    ...(crossrefLimiter !== undefined && { limiter: crossrefLimiter }),
+    logger,
+  });
+  const semanticscholar = createSemanticScholarSource({
+    http,
+    clock,
+    mapRecords: createSemanticScholarRecordMapper({ clock, keepRaw, logger }),
+    ...(secrets !== undefined && { secrets }),
+    logger,
+  });
   registerSources(sources, {
     pubmed: createPubmedSource({
       http,
@@ -2056,14 +2073,7 @@ export async function installServices(
     // maintainer's otherwise) — and the host's own limiter, so the adapter can
     // adopt the limits every Crossref response advertises in both directions
     // (`docs/07` §7.3's header-driven row; the client alone only tightens).
-    crossref: createCrossrefSource({
-      http,
-      clock,
-      mapRecords: createCrossrefRecordMapper({ clock, keepRaw, logger }),
-      userContactEmail: () => getPref("contactEmail"),
-      ...(crossrefLimiter !== undefined && { limiter: crossrefLimiter }),
-      logger,
-    }),
+    crossref,
     // arXiv (`P2-T06`). No key and no contact parameter exist (`docs/02`
     // §7.1, §2.2). The three-second rule is the client's: `limiterFor` above
     // resolves §7.3's `export.arxiv.org` bucket for every request to that
@@ -2085,13 +2095,7 @@ export async function installServices(
     // `exactOptionalPropertyTypes` reason. The budget is the client's:
     // `limiterFor` above resolves §7.3's `api.semanticscholar.org` bucket,
     // 0.9/s in both modes. Same resolved `keepRaw`, same §5.1 reason.
-    semanticscholar: createSemanticScholarSource({
-      http,
-      clock,
-      mapRecords: createSemanticScholarRecordMapper({ clock, keepRaw, logger }),
-      ...(secrets !== undefined && { secrets }),
-      logger,
-    }),
+    semanticscholar,
     // bioRxiv and medRxiv (`P2-T07`): two `SourceId`s, one implementation
     // (`docs/07` §2.2), built once per server. No key and no contact
     // parameter (`docs/02` §8.1). Both have `rateLimitKey` `api.biorxiv.org`,
@@ -2225,6 +2229,14 @@ export async function installServices(
     // `useTranslators` is on, which it ships off.
     writer: createZoteroSearchImportWriter({ logger, http }),
     runningWork,
+    // `P5-T14`: the typed adapters, and the vector store on the one connection.
+    related: {
+      semanticscholar,
+      crossref,
+      http,
+      logger,
+      embeddings: () => database.embeddings(),
+    },
     // `P3-T27`: the relevance screen's privacy check judges the model the
     // active adapter describes (`docs/12` §3's note of 2026-10-24).
     screening: {

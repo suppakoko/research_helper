@@ -39,7 +39,10 @@ import {
   SEMANTICSCHOLAR_RELATION_LIMIT_MAX,
 } from "../../../src/sources/semanticscholar/graph";
 import { createSemanticScholarRecordMapper } from "../../../src/sources/semanticscholar/mapper";
-import { encodePaperId } from "../../../src/sources/semanticscholar/query";
+import {
+  encodePaperId,
+  SEMANTICSCHOLAR_BATCH_IDS_WITH_ABSTRACT,
+} from "../../../src/sources/semanticscholar/query";
 import {
   clampRelationLimit,
   createSemanticScholarSource,
@@ -676,6 +679,129 @@ describe("P5-T05: no key, no request (plan/08 §0.2 item 19)", () => {
       expect(urls).toEqual([]);
     },
   );
+});
+
+describe("P5-T14: lookupKeyed and hasUsableApiKey (plan/00 §6 item 339(b))", () => {
+  const IDS = [{ doi: "10.1000/one" } as Partial<ExternalIds>];
+  const PAPER = {
+    paperId: "abc",
+    title: "A paper",
+    externalIds: { DOI: "10.1000/one", CorpusId: 42 },
+  };
+
+  /** Each store says it holds a key, or holds none; none gives a usable one. */
+  const unusable: readonly [string, Overrides][] = [
+    ["no store", { secrets: null }],
+    ["a store holding no key", { secrets: secretsHolding(undefined) }],
+    [
+      "a store whose has says yes over a blank value",
+      { secrets: secretsHolding("   ") },
+    ],
+    [
+      "a store whose has says yes over an empty value",
+      { secrets: secretsHolding("") },
+    ],
+    [
+      "a store whose has says yes over an unreadable value",
+      { secrets: secretsHolding(FAKE_KEY, { throwOnGet: true }) },
+    ],
+  ];
+
+  it.each(unusable)("%s: lookupKeyed sends nothing", async (_, deps) => {
+    const { client, urls } = canned(JSON.stringify([PAPER]));
+    expect(await sourceOver(client, deps).lookupKeyed(IDS, ctx())).toEqual([]);
+    expect(urls).toEqual([]);
+  });
+
+  it.each(unusable)("%s: hasUsableApiKey is false", async (_, deps) => {
+    const { client } = canned("[]");
+    expect(await sourceOver(client, deps).hasUsableApiKey()).toBe(false);
+  });
+
+  it("the gap this closes: hasApiKey says yes over a blank value, and lookup sends", async () => {
+    const { client, urls } = canned(JSON.stringify([PAPER]));
+    const source = sourceOver(client, { secrets: secretsHolding("   ") });
+    expect(await source.hasApiKey()).toBe(true);
+    await source.lookup(IDS, ctx());
+    expect(urls).toHaveLength(1);
+  });
+
+  it("a usable key: hasUsableApiKey is true, and each lookupKeyed batch carries the key", async () => {
+    const requests: { url: string; headers: unknown }[] = [];
+    const client: HttpClient = {
+      request(_method, url, options): Promise<HttpResponse> {
+        requests.push({ url, headers: options?.headers });
+        return Promise.resolve({
+          status: 200,
+          url,
+          body: JSON.stringify([PAPER]),
+          rawHeaders: "",
+          header: () => undefined,
+        });
+      },
+    };
+    const source = sourceOver(client);
+    expect(await source.hasUsableApiKey()).toBe(true);
+    const many = Array.from(
+      { length: SEMANTICSCHOLAR_BATCH_IDS_WITH_ABSTRACT + 1 },
+      (_, n) => ({ doi: `10.1000/${String(n)}` }) as Partial<ExternalIds>,
+    );
+    const records = await source.lookupKeyed(many, ctx());
+    expect(requests).toHaveLength(2);
+    for (const { url, headers } of requests) {
+      expect(headers).toMatchObject({
+        [SEMANTICSCHOLAR_API_KEY_HEADER]: FAKE_KEY,
+      });
+      expect(url).not.toContain(FAKE_KEY);
+    }
+    expect(records.map(({ work }) => work.ids.doi)).toContain("10.1000/one");
+  });
+
+  it("reads the key once, however many batches go out", async () => {
+    const { client, urls } = canned("[]");
+    let reads = 0;
+    const secrets: SecretStore = {
+      ...secretsHolding(FAKE_KEY),
+      get() {
+        reads += 1;
+        return Promise.resolve(FAKE_KEY);
+      },
+    };
+    const many = Array.from(
+      { length: SEMANTICSCHOLAR_BATCH_IDS_WITH_ABSTRACT + 1 },
+      (_, n) => ({ doi: `10.1000/${String(n)}` }) as Partial<ExternalIds>,
+    );
+    await sourceOver(client, { secrets }).lookupKeyed(many, ctx());
+    expect(urls).toHaveLength(2);
+    expect(reads).toBe(1);
+  });
+
+  it("a token already cancelled does not even read the key", async () => {
+    const tokens = createCancellationTokenSource();
+    tokens.cancel({ kind: "user" });
+    const reads: string[] = [];
+    const secrets: SecretStore = {
+      ...secretsHolding(FAKE_KEY),
+      get(id) {
+        reads.push(id);
+        return Promise.resolve(FAKE_KEY);
+      },
+    };
+    const { client } = canned("[]");
+    await expect(
+      sourceOver(client, { secrets }).lookupKeyed(IDS, { token: tokens.token }),
+    ).rejects.toBeInstanceOf(OperationCancelledError);
+    expect(reads).toEqual([]);
+  });
+
+  it("a failed batch rejects rather than reading as no record", async () => {
+    const client: HttpClient = {
+      request: () => Promise.reject(new UpstreamServerError(500, "x")),
+    };
+    await expect(
+      sourceOver(client).lookupKeyed(IDS, ctx()),
+    ).rejects.toBeInstanceOf(UpstreamServerError);
+  });
 });
 
 describe("P5-T05: matchTitle", () => {

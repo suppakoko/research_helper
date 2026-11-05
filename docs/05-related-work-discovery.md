@@ -569,6 +569,14 @@ function cosine(a: Float32Array, b: Float32Array): number {
 }
 ```
 
+> **As built 2026-11-02 (`plan/08` `P5-T20`; `ensureEmbeddings` and `cosine` in `src/pipeline/shared/embeddings.ts`).** Since
+> `plan/00` §6 item 320(b), §5.1's item 2 and §5.3 are not built: the routes are this section with a key and §5.5 without.
+> §5.1's table says "batched 100/call" and this section says 200; 200 is built. The worked example above is the only
+> recorded vector. **Nobody has seen `/paper/batch` answer `embedding.specter_v2`**, so the batch's row shape, its 768
+> values and what a paper with no vector looks like are assumptions until `P5-T31`; `test/fixtures/semanticscholar/related/`
+> holds a stand-in, `"synthetic": true`. `07-architecture-and-data-model.md` §9.2's note of this date holds the decisions,
+> and this section's two functions differ in one way: `cosine` also carries each vector's model, and refuses two.
+
 ### 5.3 Third-party embedding providers (fallback path)
 
 Verified from vendor documentation and pricing pages, 2026:
@@ -742,9 +750,140 @@ selected Zotero item
 
 *Corrected 2026-11-02 (`plan/08` `P5-T01`): the resolve line cited doc 02 §3.7, which is the PMC ID converter. The cross-ID resolver is Semantic Scholar's `/paper/batch`, whose `{paper_id}` forms are doc 02 §6.3. The converter still resolves a PMCID, and it is the only resolver a run without a key has (`plan/08` `P5-T11`).*
 
+**Seed resolution and its title-match threshold (FR-13, FR-14).** Written 2026-11-02 (`plan/08` `P5-T11`). Built by
+`resolveSeed` and `expandSeedIds` in `src/pipeline/related/seed.ts`.
+
+A seed holding a DOI, PMID, PMCID or arXiv ID is resolved at once, with no request; so is one holding a Semantic Scholar
+corpus id when the run has a key, because no other service reads that id. Expansion then fills in the identifiers it
+lacks: one Semantic Scholar `lookup` when the run has a key, and the PMC converter for a PMCID when it has none or `lookup`
+found nothing or failed. A seed holding no identifier asks for its **title only**: Crossref `matchTitle` always, Semantic
+Scholar `matchTitle` only with a key. Nothing else about the item leaves the machine (`docs/09` §3 row 2). So the diagram's
+"0–1 requests" holds for a seed with an identifier; a title-only seed costs 1 request without a key and 3 with one (two
+title asks and the `lookup`), plus one converter request in the corners above.
+
+**The threshold. DECIDED 2026-11-01 (coordinator, under `plan/00` §6 item 313; `plan/08` §0.4 line 9).** A candidate
+passes when, on `normalizeTitle`'s form of both titles:
+
+- `levSim` ≥ `LEVSIM_DUPLICATE_THRESHOLD` (0.95), or
+- `levSim` ≥ `LEVSIM_CORROBORATED_THRESHOLD` (0.88) with |year delta| ≤ `MAX_YEAR_DELTA` (1) and the first author's
+  family name matching.
+
+No constant is respelled: `src/sources/shared/dedupe.ts` declares them, so tuning them for deduplication moves this
+threshold too. This is not the cascade's table of `docs/02` §11.3.3: the 0.95 row asks for no year, because a title-only
+item often has none, and the 0.88 row asks for no Jaccard score. Exactly one passing work resolves, flagged "matched by
+title". Two or more means the user picks (FR-14 scenario 2). None is an error naming DOI, PMID, arXiv ID and title.
+
+**DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313), additions to the threshold:**
+
+1. `docs/02` §11.3.3's false-positive guards apply, because they name a wrong paper here as they name a wrong merge there.
+   Titles whose series marker or any number differs never pass. A title under `MIN_FUZZY_TITLE_TOKENS` (5) words passes
+   only through the corroborated row, so "Editorial" alone resolves nothing, while "Deep learning" with its year and first
+   author still does.
+2. **A non-paper is rejected before the text is compared:** `type` `"other"` with no year. Text cannot do this: the
+   recorded `10.1021/jacs.5c03749.s001`, a Crossref `component` with `[[null]]` dates, has what reads as a whole article's
+   title, so a seed with that title compares at 1.000. S2's mapper also gives an unclassified paper `"other"`, which is why
+   a year keeps a record in. Two recorded components are all this rests on. A `component` that does carry a date is not
+   caught and reaches the user's list, where it is visible rather than silently chosen.
+3. A candidate with no identifier is rejected, because it could not seed anything.
+4. The same paper from both services counts once. Passing records go through `dedupeRecords` and each group is one
+   candidate, so a Crossref record and an S2 record with one DOI resolve instead of asking.
+5. A service that fails does not end the run while another found a match. If none passes and a service failed, its error
+   is rethrown rather than the "no match" error, because that service might have held the paper.
+
+**Starting values, not measured.** Nobody has measured this threshold on title matches. What exists:
+
+- **Crossref, one real search** (`title-search`, recorded 2026-11-02, `synthetic` false), for one paper's exact title:
+  similarity 1.000 for that paper, then 0.750, 0.677, 0.352 and 0.266, so one of five passes. No candidate falls in the
+  0.88–0.95 band, so the corroborated row has met no real title, and one query says nothing about how often the
+  threshold is right.
+- **Semantic Scholar, none.** `/paper/search/match`'s fixtures are hand-written stand-ins (`plan/00` §6 item 335(a)). A test
+  passing over them shows the code reads that assumed shape and is not evidence about the service.
+- `P2-T13`'s labelled corpus tunes the same constants, on pairs of records for deduplication, not on a seed against a
+  service's answer.
+
+**What will measure it:** `plan/08` `P5-T30`'s run, under its note of 2026-11-02: items of known DOI, resolved with the DOI
+withheld, counted as right, wrong, asked or none. `P5-T31` supplies only Semantic Scholar's real answer shape, for one hit
+and one miss.
+
 **Total: 5–8 requests, ~6–9 seconds** at S2's keyed 1 req/s. Acceptable for an explicit user action
 with a progress indicator. Run generators concurrently across *different hosts* (NCBI and S2 have
 independent budgets); serialise within a host.
+
+> **As built 2026-11-02 (`plan/08` `P5-T12`; `runRelatedGenerators` in `src/pipeline/related/generators.ts`).** The list
+> above gains **Crossref's deposited references** (`/works/{doi}`, §2.1), one request, after Europe PMC. Co-citation stays
+> out (`plan/00` §6 item 321(c)). **DECIDED 2026-11-02 (coordinator, under `plan/00` §6 item 313):**
+>
+> 1. **Budget.** `RELATED_REQUEST_BUDGET` is 8, the top of the 5–8 above, and `RELATED_HYDRATION_RESERVE` is 2 of them.
+>    **Both are starting values, not measurements;** `P5-T30`'s live run is the first thing that can test them. The
+>    spending order is `RELATED_GENERATORS`: recommendations, PubMed's similar articles, Semantic Scholar's citations and
+>    references, Europe PMC's citations and references, Crossref's references. It keeps §9.3's relative order. Similar
+>    articles count 2 (`elink` and one `efetch`, because the adapter hydrates), and a Europe PMC call counts 2 when it
+>    holds neither a PMID nor a PMCID (`plan/08` `P5-T07`). A cached answer costs nothing.
+> 2. **What that buys.** With a key and a healthy Semantic Scholar, its three calls and the similar articles take 5, one
+>    Europe PMC call may fit, and the rest read "over budget": E is the fallback this diagram draws. **If Semantic
+>    Scholar's citations or references do not answer, or answer nothing,** a second wave runs the Europe PMC and Crossref
+>    generators that were over budget, and it may spend the reserve, except that Crossref leaves 1 request, since its
+>    records have no title until hydrated. Without a key: 2 + 2 + 1 = 5, plus the reserve.
+> 3. **A DOI-only seed is expanded once.** One Europe PMC `lookup` (`metadata`, cached) reads its PMID and PMCID, so
+>    similar articles can run on a keyless DOI seed and Europe PMC's two calls cost one each. A seed it does not hold, or
+>    holds with neither id (a preprint), reads "not indexed" there with no further request.
+> 4. **Hydration is of merged works only (§9.1 item 2), and only of what they lack.** A blank title on any run; on a keyed
+>    run also a missing abstract, because `forpaper` above 100 requests no abstract. Semantic Scholar's `lookup` first when
+>    keyed, then Europe PMC's; Europe PMC's alone without a key. PubMed's records arrive hydrated and a `PPR` row has no
+>    identifier, so neither is asked. Answers join the union and it is merged again, so `merge` chooses each field. Then
+>    `backfillAbstracts`, whose `selected` omits Semantic Scholar without a key (§0.2 item 19 of `plan/08`). Both go
+>    through one per-identifier `metadata` cache, a run does not ask again what a source already answered even with the
+>    cache off or failing, and a share the budget cannot cover is counted once, not sent. A lookup that failed is
+>    remembered nowhere, so the fill-in may ask its identifiers once more.
+> 5. **A work that still has no title is left out of the candidates and counted** (`hydration.untitled`): nothing can be
+>    shown or imported for it.
+> 6. **Status rows** are `RelatedGeneratorState`: `answered`; `no-key`; `not-indexed` (a 404, live or from the negative
+>    cache); `could-not-ask` (the seed lacks the identifier, or an empty page with a warning, which is never cached:
+>    `plan/00` §6 item 332(c)); `rate-limited`; `over-budget`; `failed`, with the error's code. No sentence is built here.
+> 7. **`ARXIV:` for an arXiv DOI (`plan/00` §6 item 337(c)).** Every Semantic Scholar call of this run sends a seed or work
+>    holding a `10.48550/arXiv.*` DOI by its arXiv id alone, so no "not indexed" is cached from a `DOI:` request `P2-T05`
+>    measured `/paper/batch` not to resolve. Whether `/references` and `/citations` read `ARXIV:` is unmeasured; `P5-T31`
+>    may settle it. `semanticScholarIdsOf` is the `ExternalIds` form of `toEmbeddingPaperId` (`P5-T20`), since `findRelated`
+>    reads `ExternalIds`; the two share `ARXIV_DATACITE_DOI` and a test holds them to one answer.
+> 8. **The union holds one record per `SourceRecord.id`, with a list of edges per id.** Measured 2026-11-05 in a scratch
+>    test: `dedupeAndMergeAsync` does not throw on one record given twice, but returns **two** merged works for it, each
+>    with its one record. The union therefore never hands it a duplicate id.
+>
+> **Not measured, by instruction (no live call that round): how many of `work-with-references`' 155 DOIs Europe PMC
+> resolves.** The measurement is `createEuropePmcSource`'s `lookup` over those DOIs (2 requests, free, unkeyed), counting
+> records with a title, and then the same on a non-biomedical seed, because the recorded seed is a *Nature* paper and the
+> question is about seeds with nothing else: a keyless, non-biomedical seed reaches titles only this way. **Starting value:
+> Europe PMC is treated as enough, and Crossref has no `lookup`.** Counted offline the same day: 155 DOIs, 46 under
+> `10.1038`, 38 under `10.1016`, 6 under `10.48550`. If fewer than about 20 of the 100 asked come back with a title on such
+> a seed, the definition of done's "still returns useful candidates" is at risk, and the next step is a Crossref `lookup`
+> over `filter=doi:` (`docs/02` §5.2) with one free recording.
+>
+> **Measured 2026-11-05 (`plan/00` §6 item 339(d)), one reading each, three free unkeyed `searchPOST` requests through the
+> shipped `createEuropePmcSource` `lookup` and the project's User-Agent, 200 JSON each.** The biomedical set is
+> `work-with-references`, the recorded Crossref body of a *Nature* paper: 155 asked, 146 answered, 146 with a title, 145 with an
+> abstract (first batch of 100: 95 answered and titled; two requests). The 9 unanswered are all 6 under `10.48550`, both under
+> `10.1109`, and one `10.1016`. **The fixtures hold no non-biomedical seed's reference list**: `work-with-references` is the
+> only one with a `reference` member. DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313): the second reading uses a
+> stand-in set, 51 DOIs filtered from six recorded Crossref result lists (computer vision, language models, graph networks,
+> physics, humanities book parts), one request. It is a set of works, not one seed's references. Answer: 51 asked, 2 answered, 2 with a title, 2 with an
+> abstract, both IEEE; without the 21 book parts, 2 of 30. **The line of fewer than about 20 of 100 is crossed on this stand-in
+> (scaled, about 10 of 51).** The starting value above has not been changed: whether to add a Crossref `lookup` is the
+> coordinator's, and one seed's real reference list would be the stronger reading.
+
+> **As built 2026-11-05 (`plan/08` `P5-T14`; `createRelatedPipeline`, `docs/07` §12.2's note).** **DECIDED 2026-11-05
+> (coordinator, under `plan/00` §6 item 313):**
+>
+> 1. **Seed requests and vector batches stay outside `RelatedGeneratorOptions.budget`.** The budget of 8 is about how many
+>    relations a seed is asked for. The seed's two stages send 0–4 requests and `ensureEmbeddings` sends ⌈n / 200⌉ batches,
+>    and neither grows with the number of generators. Both are counted in `estimate`'s `externalRequests`. (`plan/08`'s note
+>    says 0–3. Read from `seed.ts`, the most is two title matches, then a lookup that finds nothing, then the PMC converter.)
+> 2. **A run without a usable key reads as keyless everywhere.** A key store whose `has` says yes while its value is blank
+>    or unreadable gives "no key" rows, the key notice and the lexical space. The probe is `hasUsableApiKey`; a true probe
+>    followed by an empty `lookupKeyed` would otherwise store a week of "missing" rows for works Semantic Scholar holds.
+> 3. **The filter is one step.** A candidate is dropped as the seed when its work key is the seed's, or any identifier is
+>    one of `seedIds`; it is dropped for its type only when that type is `dataset`.
+> 4. **Nothing is measured here.** Whether rows are enough on a real seed is `P5-T30`'s, and Semantic Scholar's behaviour
+>    through `lookupKeyed` is `P5-T31`'s, because its fixtures are stand-ins.
 
 ### 6.2 Scoring
 
@@ -786,6 +925,54 @@ explicit bonus rather than relying on the sum:
 agreement = (number of generators that returned c) − 1
 score += 0.08 × min(agreement, 3)
 ```
+
+> **As built 2026-11-05 (`plan/08` `P5-T13`; `scoreRelatedCandidates` in `src/pipeline/related/score.ts`).**
+>
+> **The numbers are unmeasured starting values.** The six weights above (they sum to 1.00), τ = 2.0, the 0.08 and the cap
+> of 3 ship exactly as this section suggests them, and no run has tested any of them. **What will measure them is §8.1–§8.2's
+> held-out precision@k and ablation, which are backlog (`plan/00` §6 item 323(d)), so nothing in Phase 5 measures them.**
+> `G-27` judges recommendations, not this list. `plan/08` `P5-T30`'s related run is the first look at the order on a real
+> seed: one reading, with no ground truth.
+>
+> **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313):**
+>
+> 1. **`w_dup` and `alreadyOwned` are not applied.** "Exclude outright" contradicts FR-16 and `docs/07` §12.2, where a library
+>    item is kept, marked and unticked, and scoring runs before `MarkingRows` knows the library. The score has no such
+>    input. §6.1's "filter: already in library, date window" is read the same way: both are marks, and only the seed and
+>    excluded types are dropped (`docs/07` §12.2).
+> 2. **`citeScore` is 1 for any reference or citation edge, and the +0.2 is not built.** As the table writes it, 1.0 + 0.2
+>    capped at 1 is 1.0 with or without contexts, so the bonus cannot change a score. Making it count would mean a base
+>    below 1, a number nothing here supports.
+> 3. **Agreement counts distinct relation kinds, not generators:** distinct `RelationEdge.kind` values, minus 1. So similar
+>    articles and the recommender agree, and Semantic Scholar's and Europe PMC's citation lists do not. Two lists of one kind
+>    report one fact from two indexes, not two judgements, and which of them ran depends on the budget and the cache
+>    (§6.1's note, item 2), so counting them would let a paper's score move with what the run could afford. There are four
+>    kinds, so agreement never passes 3 and the cap never bites; it stays as this section writes it.
+> 4. **`pmraScore` is `RelationEdge.score` as it arrives.** `rankElinkLinkset` has already divided by the list's maximum. A
+>    score that is absent or not a number is 0.
+> 5. **`recScore` uses the edge's own asked `limit`,** takes the work's best edge, and is 0 for a rank past the limit, never
+>    negative.
+> 6. **The `cosine` term is what the injected `SimilarityFn` returns, read as a value already in [0, 1].** `P5-T14` applies
+>    `(cosine + 1) / 2` to SPECTER2 only; §5.5 item 6 forbids it on the lexical space. A value outside [0, 1] is clipped and
+>    one that is not a number is 0. **So a score is not comparable across the two spaces:** a cosine of 0 reads 0.5 once
+>    rescaled and 0 on the lexical space, and a run without a key has no recommendation term at all.
+> 7. **`ageYears` counts calendar years,** `window.toYear − publishedDate.year`, floored at 0, because a `PartialDate` may hold a
+>    year alone and the window is calendar years (`docs/08` §4.2). `onlineDate` is not a fallback, as in `applyClientRecencyFilter`.
+> 8. **`outsideWindow` means older than `window.fromYear` (FR-18's "older candidates").** A work dated after `window.toYear`,
+>    such as next year's issue seen in November, is not flagged: it is new, not old, and greying it would serve nothing
+>    FR-18 asks for. A work with no date has `recency` 0, is not flagged and stays ticked, as `applyClientRecencyFilter`
+>    keeps one and counts it: nothing shows that it is old.
+> 9. **Rows come back ranked, highest score first; a tie keeps the generators' union order,** so the best generator's records
+>    lead.
+> 10. **Chips are ids, in a fixed order whatever the edges' order:** `cites-seed` (`citation`), `cited-by-seed` (`reference`),
+>     `recommended`, `similar-pubmed` (`similar`), then `similar`, carrying the value, then `citation-context`, carrying the
+>     text. `similar` is the similarity term, on any row where it is above 0. **It has no threshold,** because §5.5 records that a
+>     threshold set on one space means nothing on the other; the window shows the number, as §6.3's "similarity 0.81" does.
+>     `citation-context` is the first non-blank context of the lowest-ranked edge holding one, ties going to the generator id.
+>
+> **FR-18 is split.** This card computes the flag and states the rule (`isCheckedByDefault`: not in the library and not
+> outside the window). `plan/08` `P5-T14` passes `recencyWindow(searchYears, clock)` in, from the preference, not from the
+> window's year lists. `P5-T16` draws the row greyed and unticked.
 
 ### 6.3 Presentation
 
@@ -970,6 +1157,24 @@ Then run generation **per cluster** and interleave results, labelling each group
 a better UI ("Related to your *base editing* papers" / "Related to your *delivery vectors* papers")
 than one undifferentiated list.
 
+> **As built 2026-11-05 (`plan/08` `P5-T21`; `kmeansAuto` and `labelCentroids` in `src/pipeline/recommend/centroids.ts`, `selectSeeds`, `recentNegatives` and `withTopicsAndSeeds` in `src/pipeline/recommend/seeds.ts`; caller of each: `recommendPipeline.ts`, `P5-T25`, not built).** Nothing here has seen a real SPECTER2 vector: the tests use synthetic ones. Local only: nothing is sent.
+>
+> **Starting values with no measurement behind them on real vectors:** `kMax: 4`, `minClusterSize: 5` and `minGain: 0.08` above, the cut of 0.92 in `selectSeeds`, and the four seed weights. `P5-T30` measures them, because it is the first run with real vectors for a whole collection: `withTopicsAndSeeds` logs each k tried with its silhouette and smallest cluster, counts only. `P5-T31` records two papers, which cannot show them.
+>
+> **What the synthetic vectors show, and only about the mechanism.** 768 values, unit topic centres at random, each member a centre plus Gaussian noise, 10 data seeds per row, default options. "Noise" is the noise vector's length against the centre's length of 1. At noise 0.83 and 1.2, one topic of 40 or 100 stayed k = 1 on all 10 (highest silhouette of any k tried 0.012), two topics of 20 and 20, and of 30 and 10, gave k = 2 on all 10, and 3 × 15 gave k = 3 on all 10. Four topics of 15, 12, 10 and 8 gave k = 4 on all 10 at noise 0.83 and on 5 of 10 at noise 1.2, with k = 3 on the rest. At noise 3.0, where their highest silhouette is about 0.09, the same four topics gave k = 4 on 3 of 10 and k = 1 on 7, so **`minGain` decides the answer once silhouettes come near it**, and how high real SPECTER2 silhouettes run is the unknown. Time under Node, not inside Zotero, one run each on two topics: `kmeansAuto` took 10 ms at 100 members, 48 ms at 300, 149 ms at 600, 162 ms at 1 000 and 184 ms at 5 000, and the whole of `withTopicsAndSeeds`, with no term weights to label from, took 11, 48, 152, 158 and 192 ms on those sizes. On the lexical space `lexicalSeedSpace` and `selectSeeds` together took 33 ms on 156 abstracts.
+>
+> **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313):**
+> 1. **A run with at least one vector for a member is on SPECTER2; a run with none is on the lexical space** and has no centroids, no labels and no `embeddingModel`. So a keyed run whose fetch failed outright does not store a profile that later reads as fresh for a keyed run (`docs/07` §12.5). One space per run holds (`plan/08` §0.2 item 22): a member with no vector on SPECTER2 is never compared in words.
+> 2. **"Gain" is measured against the k before it.** A k = 1 has no silhouette, so it counts as 0. Going through k = 2 to `kMax`, a k is taken when every cluster has `minClusterSize` members and its silhouette beats the k held so far by at least `minGain`. When the silhouettes of two k are close, the smaller wins, because each topic costs one request (`P5-T23`).
+> 3. **The k-means is spherical, because the vectors are unit length:** a member goes to the centroid of highest cosine, a centroid is the normalised mean, and the silhouette uses `1 − cosine`. Initialisation is k-means++ from a seeded generator (`KMEANS_SEED`), 3 restarts, keeping the highest total cosine, at most 50 passes. Members are sorted by work key first, so input order changes nothing. Topics are numbered largest first, then by first work key, and `topicIndex` points at that order.
+> 4. **The fit and the silhouette read at most 600 members, a seeded sample of larger collections,** and every member is then assigned, so `minClusterSize` is checked on all of them. 600 keeps the pairwise table small; it is a starting value chosen for time on the main thread (timings below), not for quality.
+> 5. **The sketch's three undefined scores.** `recencyScore` is §7.4's decay at τ = 1.5 over whole years from the publication year, 0 with no year. `qualityScore` is `min(1, ln(1 + citations) / ln(1 + 1000))`, 0 with no count; the 1000 is a starting value, and §7.4's velocity is not reused because a seed's worth is not its age. `centralityScore` is the cosine with the member's own centroid, or on the lexical space with the mean of the collection's word vectors, which is held for this pass and never stored, then stretched so the collection's lowest reads 0 and its highest 1. Raw cosines sit in a narrow band, and without the stretch the 0.25 weight would not act. A member with no vector scores 0.
+> 6. **Seeds are taken in turn from each topic, best first,** not in one score order. The sketch's comment wants 3 topics not to send 15 seeds from one, and a cut alone cannot do that: two papers of one topic rarely reach 0.92. `P5-T23` sends one request per topic, so a topic with no seed would go unasked. `seeds` holds the order they were taken in, so its first 10 (generator (b)) still cross the topics. A member with no vector, and so no topic, is taken only after the topics run out.
+> 7. **The cut on the lexical space is 0.45 (`LEXICAL_DIVERSITY_CUT`),** because §5.5's scores are on another scale. Measured 2026-11-05 on the recorded PubMed abstracts in `test/fixtures/pubmed/`, the 142 of the six files holding at least 15, with the collection as the corpus: over all 10 011 pairs of different papers the median is 0.037, the 99th percentile 0.242 and the highest 0.361; within one file at most 0.317. One paper against a copy of itself reads at least 0.494 with half its abstract's words replaced (0.876 with a tenth replaced), and at least 0.515 with no abstract on one side. So 0.45 sits between the two, and it stops two versions of one paper and nothing else. **It does not spread topics:** ranked by year alone, the 15 seeds of those 142 abstracts all came from one file at every cut from 0.15 to 0.92, and the built `selectSeeds` over `lexicalSeedSpace` did the same on the 156 abstracts of the seven files holding at least 14, 15 of 15 from one file. A cut cannot do it on this space, and a run with no key has no centroids to take turns between. Synthetic copies are not real preprint and published pairs, and `P5-T30` sees real ones.
+> 8. **Below 10 seeds, skipped papers come back** in score order until there are 10 or none is left, because 10 is `plan/08` `P5-T21`'s floor and the 0.92 is unmeasured on real vectors. The ceiling is `RECOMMEND_MAX_POSITIVES`, read and not copied, so `P5-T29`'s figure reaches this code. A member with no identifier Semantic Scholar's request could carry (`toSemanticScholarId`) is never a seed.
+> 9. **A centroid's label is its members' highest-weighted term that tells it from the other topics:** `rankedTerms` weight × (share of its members holding the term − share of the other members holding it), the best not already used by a larger topic. A member holds a term when it is one of its MeSH subjects or keywords, or runs in its title, each through `normalizeTitle`. No model is called. If any topic has no such term, `centroidLabels` is left out and the window numbers the groups (`docs/07` §5.2). The labels are worked out from the terms as built, so a term the user removes later stays on a label until the next rebuild.
+> 10. **Negatives** are `recentNegatives`: `listRejected(profileId, 10)`, read on each run and never on the profile, identifiers only, leaving out a row with no identifier. A store that cannot be read warns and answers none: `P5-T24`'s filter reads the store for itself, and a run without negatives is still a good run.
+
 ### 7.3 Step 2 — candidate generation
 
 | Generator | Call | Requests | Yields |
@@ -1000,6 +1205,21 @@ ML stack. Combine authors with OR into one Europe PMC query:
 ```
 (AUTH:"Doudna J" OR AUTH:"Liu DR" OR AUTH:"Zhang F") AND (FIRST_PDATE:[2026-06-08 TO 2026-09-08])
 ```
+
+> **As built 2026-11-05 (`plan/08` `P5-T23`; `runRecommendGenerators` and `recommendKeywordQueries` in `src/pipeline/recommend/generators.ts`; caller of both: `recommendPipeline.ts`, `P5-T25`, not built).** Every figure below is a starting value or arithmetic on one; nothing here has met a live service, and Semantic Scholar's part rests on hand-written stand-ins (`plan/00` §6 item 335(a)). **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313):**
+>
+> 1. **Budget.** `RECOMMEND_REQUEST_BUDGET` is 40 (§9.3's sketch), spent in `GENERATOR_VALUE_ORDER`. All planning finishes before the first request, so the order decides who gets the budget, not which host answers first. A cached answer costs nothing. Keyword search, forward citations and arXiv must leave `RECOMMEND_HYDRATION_RESERVE`, 2 requests, because `P5-T25` hands the same budget to the metadata fill-in and §6.1's `limit=200` brings no abstracts: §9.1 item 2's "~200" survivors at 100 identifiers a request is 2.
+> 2. **What each generator is charged, before it starts.** (a) 3 per topic group: one `/paper/batch`, one POST, and the one retry a too-large answer can cost. (b) 1 `elink` plus one `efetch` per 200 neighbours it could list (`EFETCH_MAX_IDS_PER_CALL`), so 6 for 10 seeds at limit 100; a short budget takes fewer seeds. (c) 1 per seed on Semantic Scholar; on Europe PMC 1 with a PMID or PMCID and 2 with a DOI alone. (d) 2 per query on PubMed (`esearch`, `efetch`), 1 elsewhere. (e) 1.
+> 3. **What that buys.** Worked out from item 2, for a keyed run with the default `sources` and three queries: one topic spends 3 + 6 + 1 + 15 + 10 + 3 = 38 of 40, which leaves exactly the reserve. Four topics spend 12 + 6 + 1 + 15 = 34, then 4 seeds of (c), and arXiv gets nothing. **A budget of 12** runs (a) and (b) in full for up to two topics (one topic 3 + 6, two topics 6 + 6) and not for more; (e) and (d) rank above (c) in §9.3, so (c) gets a seed only when those two ask for little.
+> 4. **Topic groups.** With more than one centroid, (a) sends one request per `topicIndex`, lowest first, at most `RECOMMEND_MAX_TOPIC_REQUESTS` (4), each with that group's seeds and the same negatives. A seed with no `topicIndex` is left out of (a) on such a profile and still serves (b) and (c). With k ≤ 1 there is one request over every seed and no group is recorded, matching `docs/07` §5.2's `topicIndex`, "absent when the profile has k ≤ 1". Each request asks for 200.
+> 5. **Identifiers.** `semanticScholarIdsOf` is applied to positives, negatives and (c)'s seeds, so an arXiv `10.48550/arXiv.…` DOI goes out as the arXiv id (`plan/00` §6 item 337(c)). At most 10 negatives go out (`MAX_NEGATIVES`).
+> 6. **Limits and shared cache.** (b) and (c) ask 100 per seed, with `docs/07` §9.2's keys spelt as `P5-T12` spells them, so a related run and a recommend run share those entries; (c) takes the first 10 seeds it can ask. (c) sends no `fromDate`, and neither does (b): `P5-T24`'s `identifierFilters` applies the window.
+> 7. **Queries (`recommendKeywordQueries`).** `suggestedQueries` when `origin` is `"llm"`, at most `RECOMMEND_MAX_KEYWORD_QUERIES` (3), one query each, because each is a term or phrase (`docs/12` §15). Otherwise one query, the top 5 of `rankedTerms` as quoted phrases joined by `OR`, because §7.3's row counts 2–4 requests and five terms joined by `AND` would rarely match. `userEdits` apply at this point: a suggested query holding a removed term as whole words is dropped, a removed term leaves the list, and added terms come first (on the LLM path as one `OR` query of their own). An LLM profile left with no query falls back to the terms. Each source gets 50 records per query.
+> 8. **`fanOut` is called once per source and query,** because it has no cache hook, serial per host. A source with `keywordSearch: false` is not asked, and neither is `openalex`. A keyword answer is cached for §9.2's 1 day, unless it failed or was empty with a warning. The caller resolves `sources` and `searchYears` and passes them in, as `SearchImportInput` does. The key probe it passes is `SemanticScholarSource.hasUsableApiKey` (`plan/00` §6 item 339(b)), because Semantic Scholar's search path sends without a key and this run must not.
+> 9. **(e)** goes through the Europe PMC adapter's `search` with a built query tree, not through `parseUserQuery`, so a name cannot change the query's shape. The 90 days are counted in UTC from the clock. Only (d) reads `sources`; (a), (b), (c) and (e) go to their own hosts whatever it holds, as `P5-T12`'s generators do.
+> 10. **A host that answers `RateLimitError` is left alone for the rest of the run:** the client's retries are already spent, and §9.5 warns against firing the queued requests behind it. Its remaining requests read `rate-limited` and are not sent. The budget they took is not returned.
+> 11. **(c) has no second wave.** A keyed run whose Semantic Scholar fails does not then ask Europe PMC for citations, though §9.5's ladder reads that way: (b), (d) and (e) still run, and `P5-T30` can show whether it matters.
+> 12. **What comes out.** `candidates`, each a `MergedWork` with `discoveredVia`, one entry per list that found it, with `topicGroup` on (a)'s; five `statuses`, ids and codes only; `state`, §12.5's `Generating` edge in `docs/07`; `links` and `flags`. Nothing is filled in or filtered here (`docs/05` §9.1 item 2).
 
 ### 7.4 Step 4 — scoring
 

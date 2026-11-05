@@ -194,6 +194,11 @@ rh-error-privacy-routing = OpenRouter에는 개인정보 모드 조건에 맞게
 # plan/00 §6 item 274).
 rh-error-budget = 지출 한도({ $limit })에 도달해 멈췄습니다. 지금까지 쓴 금액: { $spent }. 이미 만든 요약은 그대로 있습니다.
 
+# `SeedUnresolvedError` (docs/07 §10.1; P5-T11). Pending G-41; on KO_PENDING_REVIEW. Nothing machine-translated.
+# NEEDS REVIEW rh-error-seed-gone = This item is no longer in your library, so related papers cannot be looked up.
+# NEEDS REVIEW rh-error-seed-no-identifier = This item has no DOI, PMID, arXiv ID or title, so related papers cannot be looked up. Add one of them to the item and try again.
+# NEEDS REVIEW rh-error-seed-no-match = No paper matched this item's title closely enough, and the item has no DOI, PMID or arXiv ID. Add one of them to the item, or correct its title, and try again.
+
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)
 ##

@@ -6,11 +6,14 @@
  * **Callers.** `src/pipeline/related/generators.ts` (`P5-T12`) and
  * `src/pipeline/recommend/generators.ts` (`P5-T23`), which build
  * {@link RelatedCacheDeps} with {@link relatedCacheDeps} from their job's
- * `PipelineContext`. A generator with one request per seed uses
- * {@link planRelatedSeeds} and then {@link cachedRelated}, so each call goes
- * cache → budget → limiter. One request over several seeds (`elink`,
- * `/paper/batch`) uses {@link readRelated}, `RequestBudget.tryTake`, and then
- * {@link writeRelated} or {@link writeRelatedMissing} per seed.
+ * `PipelineContext`. Both read with {@link readRelated}, take their requests with
+ * `RequestBudget.tryTake`, and send through {@link cachedRelated}, so each call
+ * goes cache → budget → limiter. One request over several seeds (`elink`,
+ * `/paper/batch`) then stores each seed's answer with {@link writeRelated} or
+ * {@link writeRelatedMissing}.
+ *
+ * {@link planRelatedSeeds} has no shipped caller at present, only its unit tests
+ * (`plan/00` §6 item 343(d)). `P5-T25` shows whether it has a use.
  *
  * Transient failures are never remembered: only a permanent 404 or an
  * unresolvable id writes a negative entry.
@@ -323,8 +326,9 @@ export interface RelatedSeedPlan<S, T> {
 
 /**
  * Read the cache for every seed, then take one request of budget per miss, in
- * seed order. Nothing is sent. `P5-T23` calls this per generator in
- * `GENERATOR_VALUE_ORDER`, then starts them all.
+ * seed order. Nothing is sent. No shipped caller at present: `P5-T23` does not use
+ * it, because a Europe PMC seed can cost 2 and its reserve must hold (`plan/00` §6
+ * item 343(d)).
  *
  * @param seeds - best first
  * @param keyOf - each seed's key

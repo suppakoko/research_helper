@@ -50,7 +50,10 @@
  *   {@link SemanticScholarSource.matchTitle} and {@link SemanticScholarSource.recommend}
  *   read the key first and, without one, return an empty answer and no request. That
  *   is the opposite of the search path above, on purpose: the rule is Phase 5's
- *   only, and no search calls these three.
+ *   only, and no search calls these three. {@link SemanticScholarSource.fetchEmbeddings}
+ *   (`P5-T20`) follows the same rule, and so does {@link SemanticScholarSource.lookupKeyed}
+ *   (`P5-T14`), which is `lookup` for a Phase 5 run. `lookup` itself stays unkeyed-allowed
+ *   for the keyword window's abstract fill-in.
  * - **The budget is the same with or without a key.** `docs/07` §7.3's
  *   `api.semanticscholar.org` row — 0.9/s in both modes, burst 1, max
  *   concurrent 1 — is enforced by the one bucket the HTTP client paces every
@@ -306,6 +309,35 @@ function emptyRelatedPage(warning?: string): RelatedPage {
  */
 const NO_VALID_IDS_OPENING = "No valid paper ids";
 
+/** Whether `error` is the batch's own answer that it can read none of the ids. */
+function isNoValidIdsAnswer(error: unknown): boolean {
+  return (
+    error instanceof BadRequestError &&
+    error.httpStatus === 400 &&
+    error.body?.includes(NO_VALID_IDS_OPENING) === true
+  );
+}
+
+/**
+ * `docs/05` §5.2: the one field that asks for SPECTER2. Plain `embedding` answers
+ * SPECTER v1, which is a different space.
+ */
+export const SEMANTICSCHOLAR_EMBEDDING_FIELDS: readonly string[] = [
+  "embedding.specter_v2",
+];
+
+/** The `model` a SPECTER2 row carries (`docs/02` §6.9), and what is stored with it. */
+export const SEMANTICSCHOLAR_EMBEDDING_MODEL = "specter_v2";
+
+/**
+ * `docs/05` §5.2's batch size: under §6.8's 500 ids and, at ~16 KB a paper, well
+ * under its 10 MB. Read by `ensureEmbeddings` (`src/pipeline/shared/embeddings.ts`).
+ */
+export const SEMANTICSCHOLAR_EMBEDDING_BATCH_IDS = 200;
+
+/** arXiv's constructed DOI, as `src/sources/arxiv/mapper.ts` writes it, in any case. */
+export const ARXIV_DATACITE_DOI = /^10\.48550\/arxiv\./iu;
+
 /** The first sentence of every Semantic Scholar lossiness notice. */
 export const SEMANTICSCHOLAR_APPROXIMATE_PREFIX =
   "Semantic Scholar results are approximate";
@@ -551,6 +583,52 @@ export function toSemanticScholarId(
 }
 
 /**
+ * The id a vector is asked for by: {@link toSemanticScholarId}, except that an
+ * arXiv paper's constructed `10.48550/arXiv.…` DOI goes as `ARXIV:`, because
+ * `/paper/batch` was measured refusing that DOI on 2026-10-15 and `ids.doi` holds
+ * it on every arXiv record. Without this, no arXiv paper would ever get a vector.
+ * Caller: `ensureEmbeddings` (`src/pipeline/shared/embeddings.ts`).
+ *
+ * @param ids - a work's identifiers
+ * @returns the prefixed id, or `undefined`
+ */
+export function toEmbeddingPaperId(
+  ids: Partial<ExternalIds>,
+): string | undefined {
+  if (
+    ids.arxivId !== undefined &&
+    ids.arxivId !== "" &&
+    ids.doi !== undefined &&
+    ARXIV_DATACITE_DOI.test(ids.doi)
+  ) {
+    return `ARXIV:${ids.arxivId}`;
+  }
+  return toSemanticScholarId(ids);
+}
+
+/**
+ * The vector in one `/paper/batch` row, or `undefined`: a `null` row, a missing or
+ * `null` `embedding`, another `model`, or a `vector` that is empty or holds anything
+ * but finite numbers. Only the row's shape is on record, from `docs/02` §6.9's one
+ * `GET`; `P5-T31` checks it against `/paper/batch`.
+ */
+function readEmbeddingVector(row: unknown): readonly number[] | undefined {
+  const embedding = asRecord(asRecord(row)?.embedding);
+  const vector: unknown = embedding?.vector;
+  if (
+    embedding?.model !== SEMANTICSCHOLAR_EMBEDDING_MODEL ||
+    !Array.isArray(vector) ||
+    vector.length === 0 ||
+    !(vector as readonly unknown[]).every(
+      (value) => typeof value === "number" && Number.isFinite(value),
+    )
+  ) {
+    return undefined;
+  }
+  return vector as readonly number[];
+}
+
+/**
  * Decide whether another bulk page exists (§6.6's `token`). **The server's
  * token is the signal**: no token ends the loop, and so do the two guards
  * that keep a misbehaving server from looping it — a repeated token and an
@@ -707,6 +785,19 @@ export interface SemanticScholarSearchPage extends SourcePage {
   readonly sourceExtras: SemanticScholarSourceExtras;
 }
 
+/**
+ * What {@link SemanticScholarSource.fetchEmbeddings} answers. Constructed there; read
+ * by `ensureEmbeddings` (`src/pipeline/shared/embeddings.ts`).
+ */
+export interface SemanticScholarEmbeddingBatch {
+  /** `false`: no key, so nothing was sent and both lists are empty. */
+  readonly keyed: boolean;
+  /** By the id sent: the raw values, not yet normalised (`docs/05` §5.2). */
+  readonly vectors: ReadonlyMap<string, readonly number[]>;
+  /** The ids sent that came back with no usable vector. Never asked about alone. */
+  readonly withoutVector: readonly string[];
+}
+
 /** The adapter, with the two search paths and the key-presence probe named. */
 export interface SemanticScholarSource extends LiteratureSource {
   /** `/paper/search/bulk` — the default path (§6.6). */
@@ -726,15 +817,35 @@ export interface SemanticScholarSource extends LiteratureSource {
     ids: readonly Partial<ExternalIds>[],
     ctx: SourceCallContext,
   ): Promise<readonly SourceRecord[]>;
+  /**
+   * {@link lookup} for a Phase 5 run: reads the key first and, with none it can read,
+   * returns `[]` and sends nothing, as `matchTitle` does (`plan/00` §6 item 339(b)).
+   * Callers: `src/pipeline/related/seed.ts` (`P5-T11`) and, through their
+   * `lookupSemanticScholar` option, `src/pipeline/related/generators.ts` (`P5-T12`).
+   * `relatedPipeline.ts` (`P5-T14`) hands it to both.
+   */
+  lookupKeyed(
+    ids: readonly Partial<ExternalIds>[],
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]>;
   fetchAbstract(
     ids: Partial<ExternalIds>,
     ctx: SourceCallContext,
   ): Promise<string | undefined>;
   /**
    * Whether the keystore holds a key for `source.semanticscholar` — the cheap
-   * `has()` that never decrypts (`docs/09` §1.7). `false` without a store.
+   * `has()` that never decrypts (`docs/09` §1.7). `false` without a store. A `true`
+   * says nothing about the value, which can be blank or unreadable: a Phase 5 run
+   * asks {@link hasUsableApiKey}.
    */
   hasApiKey(): Promise<boolean>;
+  /**
+   * Whether a key can be read and is not blank: the same read a keyed call makes, so
+   * its answer is the gate those calls apply. It decrypts, so no window repaint should
+   * call it; `false` on no store and on a store that throws. Callers:
+   * `src/pipeline/related/seed.ts` (`P5-T11`), `relatedPipeline.ts` (`P5-T14`).
+   */
+  hasUsableApiKey(): Promise<boolean>;
   /**
    * `docs/07` §4.2: `"references"` and `"citations"` are `docs/05` §2.1's lists,
    * `"recommendations"`, `"auto"` and no strategy are §3.1's `forpaper`. Sends
@@ -781,6 +892,22 @@ export interface SemanticScholarSource extends LiteratureSource {
     limit: number,
     ctx: SourceCallContext,
   ): Promise<RelatedPage>;
+  /**
+   * One `/paper/batch` with `fields=embedding.specter_v2` (`docs/05` §5.2), index-
+   * matched (`docs/02` §6.8). Sends nothing without a key or without ids. Caller:
+   * `ensureEmbeddings` (`src/pipeline/shared/embeddings.ts`), which makes the batches.
+   *
+   * @param ids - `docs/02` §6.3-prefixed ids, at most {@link SEMANTICSCHOLAR_EMBEDDING_BATCH_IDS}
+   * @param ctx - the cancellation token
+   * @returns the vectors and the ids with none
+   * @throws RangeError for more ids than that
+   * @throws ParseError when the answer is not an array as long as `ids`: a shifted
+   *   vector would be stored against the wrong paper for good
+   */
+  fetchEmbeddings(
+    ids: readonly string[],
+    ctx: SourceCallContext,
+  ): Promise<SemanticScholarEmbeddingBatch>;
 }
 
 /**
@@ -1000,9 +1127,11 @@ export function createSemanticScholarSource(
    * §6.3 form are skipped; duplicates are sent once; `null` answers are
    * counted and skipped without shifting their neighbours.
    */
-  async function lookup(
+  async function batchLookup(
     ids: readonly Partial<ExternalIds>[],
-    ctx: SourceCallContext,
+    sendChunk: (
+      request: SemanticScholarRequest,
+    ) => Promise<{ readonly response: HttpResponse }>,
   ): Promise<readonly SourceRecord[]> {
     const wanted: string[] = [];
     for (const entry of ids) {
@@ -1021,7 +1150,7 @@ export function createSemanticScholarSource(
         start + SEMANTICSCHOLAR_BATCH_IDS_WITH_ABSTRACT,
       );
       const request = buildBatchRequest(chunk);
-      const { response } = await issue(request, ctx);
+      const { response } = await sendChunk(request);
       const answers = parseBatchBody(response.body, request.transmittedUrl);
       if (answers.length !== chunk.length) {
         deps.logger?.warn(
@@ -1044,6 +1173,25 @@ export function createSemanticScholarSource(
       });
     }
     return out;
+  }
+
+  /** {@link batchLookup} with the key read per request, the search path's way. */
+  function lookup(
+    ids: readonly Partial<ExternalIds>[],
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]> {
+    return batchLookup(ids, (request) => issue(request, ctx));
+  }
+
+  /** {@link SemanticScholarSource.lookupKeyed}. */
+  async function lookupKeyed(
+    ids: readonly Partial<ExternalIds>[],
+    ctx: SourceCallContext,
+  ): Promise<readonly SourceRecord[]> {
+    ctx.token.throwIfCancelled();
+    const apiKey = await resolveApiKey();
+    if (apiKey === undefined) return [];
+    return batchLookup(ids, (request) => send(request, apiKey, ctx));
   }
 
   /** `docs/02` §10.4's backfill step 2, for one record. */
@@ -1276,11 +1424,7 @@ export function createSemanticScholarSource(
       const { response } = await send(request, apiKey, ctx);
       answers = parseBatchBody(response.body, request.transmittedUrl);
     } catch (error) {
-      if (
-        error instanceof BadRequestError &&
-        error.httpStatus === 400 &&
-        error.body?.includes(NO_VALID_IDS_OPENING) === true
-      ) {
+      if (isNoValidIdsAnswer(error)) {
         return { resolved: new Set(), seedKeys: [] };
       }
       throw error;
@@ -1378,6 +1522,57 @@ export function createSemanticScholarSource(
     );
   }
 
+  /** {@link SemanticScholarSource.fetchEmbeddings}. */
+  async function fetchEmbeddings(
+    ids: readonly string[],
+    ctx: SourceCallContext,
+  ): Promise<SemanticScholarEmbeddingBatch> {
+    if (ids.length > SEMANTICSCHOLAR_EMBEDDING_BATCH_IDS) {
+      throw new RangeError(
+        `[research-helper] fetchEmbeddings takes at most ` +
+          `${String(SEMANTICSCHOLAR_EMBEDDING_BATCH_IDS)} ids (docs/05 §5.2); got ` +
+          `${String(ids.length)}.`,
+      );
+    }
+    ctx.token.throwIfCancelled();
+    const apiKey = await resolveApiKey();
+    if (apiKey === undefined || ids.length === 0) {
+      return {
+        keyed: apiKey !== undefined,
+        vectors: new Map(),
+        withoutVector: [],
+      };
+    }
+    const request = buildBatchRequest(ids, SEMANTICSCHOLAR_EMBEDDING_FIELDS);
+    let answers: readonly unknown[];
+    try {
+      const { response } = await send(request, apiKey, ctx);
+      answers = parseBatchBody(response.body, request.transmittedUrl);
+    } catch (error) {
+      if (isNoValidIdsAnswer(error)) {
+        return { keyed: true, vectors: new Map(), withoutVector: [...ids] };
+      }
+      throw error;
+    }
+    if (answers.length !== ids.length) {
+      throw new ParseError(
+        SEMANTICSCHOLAR_SOURCE_ID,
+        `[research-helper] Semantic Scholar /paper/batch answered ` +
+          `${String(answers.length)} rows for ${String(ids.length)} ids; docs/02 ` +
+          `§6.8 aligns the answer by position, so no vector here can be trusted.`,
+        { url: request.transmittedUrl, sent: ids.length },
+      );
+    }
+    const vectors = new Map<string, readonly number[]>();
+    const withoutVector: string[] = [];
+    ids.forEach((id, index) => {
+      const vector = readEmbeddingVector(answers[index]);
+      if (vector === undefined) withoutVector.push(id);
+      else vectors.set(id, vector);
+    });
+    return { keyed: true, vectors, withoutVector };
+  }
+
   /** `docs/09` §2.3's test call. Never throws except on cancellation. */
   async function healthCheck(ctx: SourceCallContext): Promise<SourceHealth> {
     const startedAtMs = clock.now();
@@ -1419,6 +1614,10 @@ export function createSemanticScholarSource(
     }
   }
 
+  async function hasUsableApiKey(): Promise<boolean> {
+    return (await resolveApiKey()) !== undefined;
+  }
+
   return {
     id: SEMANTICSCHOLAR_SOURCE_ID,
     displayNameKey: SEMANTICSCHOLAR_DISPLAY_NAME_KEY,
@@ -1434,11 +1633,14 @@ export function createSemanticScholarSource(
     searchByRelevance,
     searchAll,
     lookup,
+    lookupKeyed,
     fetchAbstract,
     hasApiKey,
+    hasUsableApiKey,
     findRelated,
     matchTitle,
     recommend,
+    fetchEmbeddings,
     explainQuery: (query) => explainSemanticScholarQuery(query),
   };
 }

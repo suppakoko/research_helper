@@ -285,6 +285,11 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // `BudgetExceededError`, a spend ceiling reached: the job pauses (P3-T16;
   // owner, 2026-10-20, plan/00 §6 item 234; docs/07 §10.1).
   "rh-error-budget",
+  // `SeedUnresolvedError`, a seed nothing can be looked up from (P5-T11;
+  // docs/07 §10.1). `gone` is P5-T14's.
+  "rh-error-seed-gone",
+  "rh-error-seed-no-identifier",
+  "rh-error-seed-no-match",
 
   // The preference pane's literature-source credential blocks (docs/08 §7.3,
   // docs/09 §1.8–1.9; P1-T44). On *this* surface rather than a fourth
@@ -1086,6 +1091,11 @@ export const ERROR_MESSAGE_IDS = [
   // P3-T16 (2026-10-23): `BudgetExceededError`, thrown by the budget guard's
   // reservation (`createBudgetGuard` in src/pipeline/shared/budget.ts).
   "rh-error-budget",
+  // P5-T11: `SeedUnresolvedError`, thrown by `resolveSeed` in
+  // src/pipeline/related/seed.ts and, as `gone`, by `createRelatedPipeline` (P5-T14).
+  "rh-error-seed-gone",
+  "rh-error-seed-no-identifier",
+  "rh-error-seed-no-match",
 ] as const satisfies readonly MainWindowMessageId[];
 
 /**
@@ -1216,6 +1226,10 @@ export const KO_PENDING_REVIEW = [
   // --- P4-T21's reason a both run wrote no Korean report (mainWindow; item 334(d)) ---
   // --- P5-T22's egress notice and fallback warning (mainWindow) ---
   // All three left this list on 2026-11-02 (`G-41`, plan/00 §6 item 335(l)).
+  // --- P5-T11's two seed errors and P5-T14's third (mainWindow), commented stubs in ko-KR ---
+  "rh-error-seed-gone",
+  "rh-error-seed-no-identifier",
+  "rh-error-seed-no-match",
 ] as const satisfies readonly FluentMessageId[];
 
 /**

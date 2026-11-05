@@ -373,6 +373,12 @@ rh-error-privacy-routing = OpenRouter has no provider for { $model } that meets 
 # follows ("Continue" / "Stop") is the cost dialog's ceiling moment.
 rh-error-budget = Paused at the { $limit } spending limit. { $spent } is spent so far, and summaries already made are kept.
 
+# `SeedUnresolvedError` (docs/07 §10.1; P5-T11; FR-13 scenario 3, FR-14). The
+# remedy is an edit to the item, so the message names what to add.
+rh-error-seed-gone = This item is no longer in your library, so related papers cannot be looked up.
+rh-error-seed-no-identifier = This item has no DOI, PMID, arXiv ID or title, so related papers cannot be looked up. Add one of them to the item and try again.
+rh-error-seed-no-match = No paper matched this item's title closely enough, and the item has no DOI, PMID or arXiv ID. Add one of them to the item, or correct its title, and try again.
+
 
 ## The preference pane — literature-source credentials (docs/08 §7.3–7.5,
 ## docs/09 §1.8–1.9; P1-T44)

@@ -751,6 +751,8 @@ this approval.
 >
 > *Measured 2026-11-02 in Zotero 10.0.3, in five runs, after `plan/00` §6 item 335(l): `[P1-T18] ko-KR totals: 353 present, 1 absent; expected 353 / 1`. It read 350 / 4 before that item moved its three strings. So `KO_PENDING_REVIEW` is empty, and the 1 absent is `P0-T24`'s deliberate fallback fixture. The two report labels of that item are not Fluent ids and are not in this count; `KO_REPORT_LABELS_PENDING_REVIEW` is empty too. The figures of 2026-10-08 in this section's heading and in the summary table's row are that date's snapshot.*
 
+> *Measured 2026-11-05 in Zotero 10.0.3 (integration round on `P5-T11`, `P5-T14`): `[P1-T18] ko-KR totals: 353 present, 4 absent; expected 353 / 4`. The 3 added absent ids are `rh-error-seed-gone`, `rh-error-seed-no-identifier` and `rh-error-seed-no-match`, on `KO_PENDING_REVIEW` and resolving from English along the `ko-KR`, `en-US` chain; the fourth is the same deliberate fallback fixture.*
+
 > **DEFERRED 2026-10-08, by the owner, to before the v1.0 release.** English only until then. Measured
 > the same day, by counting the lists in `src/i18n/keys.ts` rather than reading the figure off this
 > document: `KO_PENDING_REVIEW` is **82**, `KO_PRESENT` 4, `KO_DELIBERATELY_ABSENT` 1, over **87**

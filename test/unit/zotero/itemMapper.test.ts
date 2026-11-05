@@ -610,6 +610,52 @@ describe("dateAdded on the snapshot (P5-T18; docs/05 §7.2: addedAt is not on th
   });
 });
 
+describe("snapshotZoteroItem's title (integration round, 2026-11-05)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // A `case`, as Zotero 10.0.3 answers for one: its title is stored as `caseName`,
+  // so only the base-mapped read finds it.
+  function caseItem(): Zotero.Item {
+    vi.stubGlobal("Zotero", { ItemTypes: { getName: () => "case" } });
+    return {
+      itemTypeID: 1,
+      dateAdded: "2026-03-07 04:05:06",
+      getField: (name: string, _unformatted?: boolean, mapped?: boolean) =>
+        name === "title" && mapped === true ? "A v. B" : "",
+      getCreatorsJSON: () => [],
+      getTags: () => [],
+    } as unknown as Zotero.Item;
+  }
+
+  it("reads the title of a type that stores it under another field's name", () => {
+    const snapshot = snapshotZoteroItem(caseItem());
+    expect(snapshot.fields.title).toBe("A v. B");
+    expect(canonicalWorkFromSnapshot(snapshot, { nowEpochMs: 1 }).title).toBe(
+      "A v. B",
+    );
+  });
+
+  it("base-maps the title and no other field", () => {
+    const mapped: string[] = [];
+    vi.stubGlobal("Zotero", {
+      ItemTypes: { getName: () => "preprint" },
+    });
+    snapshotZoteroItem({
+      itemTypeID: 1,
+      dateAdded: "",
+      getField: (name: string, _unformatted?: boolean, base?: boolean) => {
+        if (base === true) mapped.push(name);
+        return "";
+      },
+      getCreatorsJSON: () => [],
+      getTags: () => [],
+    } as unknown as Zotero.Item);
+    expect(mapped).toEqual(["title"]);
+  });
+});
+
 describe("topicTagNames (P5-T18; docs/05 §7.2's note, item 8)", () => {
   it("keeps automatic tags and subject-spelled manual tags, and drops what the user typed", () => {
     expect(

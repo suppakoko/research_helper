@@ -1238,6 +1238,19 @@ function leadingInt(value: string): number | undefined {
 // ---- 7.3 The one Zotero-touching part --------------------------------------
 
 /**
+ * An item's title, whatever its type calls the field. `case`, `email` and `statute`
+ * store it as `caseName`, `subject` and `nameOfAct`, and `getField("title")` without
+ * its third argument answers `""` for those three (measured 2026-11-05 on Zotero
+ * 10.0.3, `test/integration/zotero/relatedLibrary.spec.ts`).
+ *
+ * @param item - an item with its data loaded
+ * @returns the title, or `""`
+ */
+function itemTitle(item: Zotero.Item): string {
+  return item.getField("title", false, true);
+}
+
+/**
  * Read a {@link ZoteroItemSnapshot} off a live item.
  *
  * Requires the item's data to be loaded: `getField()` throws
@@ -1248,7 +1261,9 @@ function leadingInt(value: string): number | undefined {
  */
 export function snapshotZoteroItem(item: Zotero.Item): ZoteroItemSnapshot {
   const fields: Partial<Record<ReadField, string>> = {};
-  for (const name of READ_FIELDS) fields[name] = item.getField(name);
+  for (const name of READ_FIELDS) {
+    fields[name] = name === "title" ? itemTitle(item) : item.getField(name);
+  }
   return {
     itemType: Zotero.ItemTypes.getName(item.itemTypeID),
     fields,
@@ -1329,6 +1344,48 @@ export async function canonicalWorkOfItemID(
   if (!item.isRegularItem() || item.deleted) return undefined;
   await Zotero.Items.loadDataTypes([item]);
   return fromZoteroItem(item);
+}
+
+/**
+ * {@link canonicalWorkOfItemID} with the library the item is in. Reads only. Caller:
+ * `createZoteroRelatedLibrary` (`src/bootstrap/registerPipelines.ts`, `P5-T14`).
+ *
+ * @param itemID - a `Zotero.Item` id
+ * @returns the work and its library, or `undefined`
+ */
+export async function relatedSeedOfItemID(
+  itemID: number,
+): Promise<
+  { readonly work: CanonicalWork; readonly libraryID: number } | undefined
+> {
+  const work = await canonicalWorkOfItemID(itemID);
+  if (work === undefined) return undefined;
+  const item = (await Zotero.Items.getAsync(itemID)) as Zotero.Item;
+  return { work, libraryID: item.libraryID };
+}
+
+/**
+ * Every regular item of a library, not in the trash, with its work. Reads only. The
+ * same search as `buildLibraryIndex`, for its reasons. Caller:
+ * `createZoteroRelatedLibrary` (`P5-T14`), which reduces each to the fields
+ * `dedupe.ts`'s index reads, because this module may not import `sources/`.
+ *
+ * @param libraryID - the library to read
+ * @returns one entry per item
+ */
+export async function readLibraryWorks(
+  libraryID: number,
+): Promise<
+  readonly { readonly itemID: number; readonly work: CanonicalWork }[]
+> {
+  const search = new Zotero.Search({ libraryID });
+  search.addCondition("deleted", "false", "");
+  search.addCondition("noChildren", "true", "");
+  const items = await Zotero.Items.getAsync(await search.search());
+  await Zotero.Items.loadDataTypes(items);
+  return items
+    .filter((item) => item.isRegularItem() && !item.deleted)
+    .map((item) => ({ itemID: item.id, work: fromZoteroItem(item) }));
 }
 
 // ---- 7.4 What the recommend profile reads (`P5-T18`) -----------------------
@@ -1442,7 +1499,7 @@ export async function readLibraryTermSources(
   return items
     .filter((item) => item.isRegularItem() && !item.deleted)
     .map((item) => ({
-      title: item.getField("title"),
+      title: itemTitle(item),
       ...tagsToSubjects(topicTagNames(item.getTags())),
     }));
 }

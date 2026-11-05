@@ -2902,6 +2902,100 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (d) The proofs outside the suite (the comparison with the old build, `measure` on a copied file) live in the scratchpad
       and are not kept; `docs/13` §2.3 says what they were.
 
+339. **`P5-T11`, `P5-T12` and `P5-T20` written, 2026-11-05** (`plan/reports/P5-T11.md`, `P5-T12.md`, `P5-T20.md`). All three pass at unit
+    level, their Semantic Scholar paths on stand-in fixtures, and none is DONE before `P5-T31` re-checks it.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agents' readings stand, as written in `docs/02` §10.4, `docs/03` §13.2 and §16, `docs/05` §5.2 and §6.1, `docs/07` §4.2, §9.2,
+      §10.1, §12.2 and §13, `docs/08` §5.3 and `docs/13` §3.1 and §3.5. The title-match threshold is an unmeasured starting value, and
+      `P5-T30`'s run measures it.
+    - (b) `P5-T11`'s finding 2 is fixed, not recorded only. A key store that says it holds a key which is then unreadable or blank
+      lets `lookup` send one request with no key, against `plan/08` §0.2 item 19. The request carries a seed's identifier. `P5-T14`
+      closes it in `semanticscholarSource.ts` with a keyed-only lookup that returns `[]` when `resolveApiKey` gives nothing, as
+      `matchTitle` does, and checks every Phase 5 caller that pairs `hasApiKey` with `lookup`. Plain `lookup` stays for its keyless
+      backfill use.
+    - (c) `P5-T12`'s finding 1: the default budget of 8 cannot run all seven generators on a healthy keyed run, and the rest read
+      "over budget". That matches `docs/05` §6.1's fallback reading, and the card's first Done-when line is proved with a larger
+      injected budget. Both figures are starting values for `P5-T30`.
+    - (d) `P5-T12`'s unmade measurement, how many of a recorded paper's 155 reference DOIs Europe PMC resolves, runs in the next
+      integration round: two free unkeyed requests, plus the same on a non-biomedical seed. Fewer than about 20 of the 100 asked
+      coming back titled adds a Crossref `lookup` (about 0.25–0.5 d by judgement, unmeasured).
+    - (e) The arXiv DOI rule exists in three places; `P5-T14` moves `seed.ts`'s private copy onto `ARXIV_DATACITE_DOI`. Findings 3, 4 and 5 of
+      `P5-T12` and findings 3, 6 and 7 of `P5-T11` block no finishing condition (rule 9) and are recorded only.
+
+340. **`P5-T13` written, 2026-11-05** (`plan/reports/P5-T13.md`).
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agent's ten readings stand, as written in `docs/05` §6.2 and `docs/07` §4.2 and §12.2. In particular `outsideWindow` means older
+      than the window's first year, which is what FR-18 asks for and narrower than the card's "outside". `alreadyOwned` is not applied,
+      because FR-16 keeps owned rows and scoring runs before the library is known.
+    - (b) Agreement is distinct `RelationEdge.kind` values minus 1, following `docs/05` §6.2. The coordinator's note of this date on the card
+      said "the count of distinct `generator` values", which was wrong, and the doc wins.
+    - (c) FR-18 is split: `P5-T13` sets the flag and the one rule for a row's starting tick, `P5-T14` resolves the window from the `searchYears`
+      preference, and `P5-T16` draws the row greyed and unticked.
+    - (d) The six weights, τ, the 0.08 and the cap of 3 are unmeasured starting values, and **nothing in Phase 5 measures them**: `docs/05`
+      §8.1–§8.2's precision and ablation are backlog under item 323(d). `P5-T30` records one list as a reading, which measures nothing.
+    - (e) Findings 3, 4 and 5 go to `P5-T16`: scores are not comparable between a keyed and a keyless run, so an absolute dot scale would
+      read low without a key; an older row may rank high, flagged but not moved; a row with no date stays ticked.
+
+341. **`P5-T21` written, 2026-11-05** (`plan/reports/P5-T21.md`). It passes on synthetic vectors only, and no shipped path calls it until `P5-T25`.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agent's eleven readings stand, as written in `docs/05` §7.2 and `docs/07` §5.2.
+    - (b) `kMax` 4, `minClusterSize` 5, `minGain` 0.08 and the 0.92 cut are unmeasured on real vectors, and `P5-T30` reads them on one collection.
+      The four seed weights, the restarts, the passes, the sample cap and the citation scale have nothing that measures them in Phase 5
+      and join item 340(d)'s backlog.
+    - (c) Finding 1: without a key, seeds do not spread across topics. Fifteen of 15 came from one file of recorded abstracts at every cut
+      tried. This narrows what a keyless run on a multi-topic collection finds. No finishing condition asks for spread on that path, so it
+      stays as a stated limit, and `P5-T28` and `P5-T30` report what it costs.
+    - (d) Finding 2: `minGain` decides k once silhouettes come near it, and real silhouettes are unknown, so 0.08 could collapse a real
+      multi-topic collection to one topic. `P5-T30`'s note records what to read, and the owner's verdict decides.
+    - (e) Finding 3 is fixed in `P5-T25`, not recorded only: a partly failed vector fetch must not be stored as fresh, because later runs
+      would keep centroids built from some members with nothing to prompt a repair.
+    - (f) Findings 4 and 5 block no finishing condition (rule 9). `P5-T30` records how many members have a citation count, and `P5-T27`
+      decides whether a stale label matters.
+
+342. **`P5-T14` written, 2026-11-05** (`plan/reports/P5-T14.md`). It passes at unit level, its Semantic Scholar paths on stand-in fixtures. Its
+    new Zotero reads have never run on real Zotero, and the integration round runs the agent's parked spec.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agent's twelve readings stand, as written in `docs/05` §6.1 and `docs/07` §4.2, §10.1 and §12.2. The stage weights, the budget
+      and the thresholds are starting values, not measurements.
+    - (b) Item 339(b) is closed: `lookupKeyed` reads the key first and sends nothing without one, and `hasUsableApiKey` uses the same read.
+      The agent found the gap in three places, `seed.ts`'s `expandSeedIds` and two paths in `generators.ts`, and all three now use
+      `lookupKeyed`. Item 339(e) is closed: `arxivIdFromDoi` uses `ARXIV_DATACITE_DOI`.
+    - (c) Findings 1, 2 and 5 block no finishing condition (rule 9) and are recorded only. Clearing a key during a run can store "missing" rows
+      for one batch for 7 days, which costs metadata and no secret. `hasApiKey` stays for `P5-T16` to use or not.
+    - (d) Findings 3 and 4 go to `P5-T30`: how often a keyed run has a seed with no vector, which scores every candidate's similarity as 0
+      with no notice, and how long a run's two whole-library reads take. Item 106 stays open.
+
+343. **`P5-T23` written, 2026-11-05** (`plan/reports/P5-T23.md`). It passes at unit level on stand-ins and recorded bodies, and no Zotero run reaches it until `P5-T25`.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agent's twelve readings stand, as written in `docs/05` §7.3 and `docs/07` §12.5. The budget of 40 and the reserve of 2 are starting values.
+    - (b) Finding 2: the card's "budget of 12" line holds up to two topic groups, and (c) "as the budget allows" can mean no seed. Twelve is a test
+      figure and the default is 40, so this stands as written.
+    - (c) Finding 6: `sources` is read only by generator (d). A person who deselects PubMed or Europe PMC still has (b), (c) and (e) reach those hosts,
+      as `P5-T12`'s generators do. That is `docs/05` §7.3's note of this date, and `P5-T26` says it where it describes what is contacted.
+    - (d) Finding 1: `planRelatedSeeds` has no shipped caller and two file headers still say `P5-T23` uses it. The next integration round corrects those
+      comments. The function stays until `P5-T25` shows whether it has a use.
+    - (e) Findings 3 and 5 go to `P5-T30`: an uncounted request from `fanOut`, and a heuristic query holding a word and a phrase containing it. Findings 4
+      and 7 are recorded only (rule 9).
+
+344. **Integration round on `P5-T11`, `T12`, `T13`, `T14`, `T20`, `T21`, `T23`, 2026-11-05** (`plan/reports/integration-round-344.md`). Three consecutive
+    runs on the final tree: 267 passed, 0 failed, 2 pending. ko-KR 353 present, 4 absent: the three new error strings and the deliberate fixture.
+    The related pipeline's real run stopped at its first read, so no generator, scoring or marking stage has run in Zotero, and `P5-T23` has no
+    registered path until `P5-T25`.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The title fix stands: `case`, `email` and `statute` read no title without a base-mapped read, and a seed of those types reported that it had
+      none. A work of those types with no identifier and no stored key now derives a different `hash:` key, so one cache entry is missed once.
+    - (b) **Europe PMC does not cover non-biomedical works.** It answered 95 of 100 on the recorded *Nature* seed, and 2 of 51 on a stand-in set of
+      non-biomedical works, past item 339(d)'s line. Within the *Nature* seed's list, 0 of 6 `10.48550` and 0 of 2 `10.1109` DOIs were answered. The stand-in
+      is a filtered set of works, not one seed's references, so it is one weak reading, but the two point the same way. Item 339(d) named this
+      outcome's next step, so a Crossref `lookup` is added as `P5-T32` (0.5 d by judgement, unmeasured). It blocks a finishing condition under rule 9:
+      a keyless run on a non-biomedical seed gets reference DOIs with almost no title, and the no-key path must still return useful candidates.
+      `P5-T32` also takes the stronger reading: one real non-biomedical seed's references.
+    - (c) Finding 2: `proceedingsTitle`, `bookTitle` and `websiteTitle` read no `containerTitle`, and `issueDate`, `dateDecided` and `dateEnacted` read no year. `P5-T32`
+      fixes these two fields with the same base-mapped read if it finds a Phase 5 reader of them, and leaves `publisher` alone, because a preprint's
+      `repository` maps onto it.
+    - (d) Finding 3: `item.version` moves only on a sync, so the spec checks the row and the notifier, which move on a save. Finding 4 stays with
+      item 342(d).
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

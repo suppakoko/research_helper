@@ -582,6 +582,7 @@ This makes the interesting behaviours testable deterministically: retry-then-suc
 | Performance | importing 100 records completes within NFR-1's budget (asserted with a generous multiplier in CI, tightened locally) |
 | L10n | `ko-KR` bundle resolves a known key; a missing key falls back to English (FR-55) |
 | Report measurement | `reportMeasurement-flow.spec.ts`, added 2026-11-02 (`P4-T23` step 4). Two of its proofs are outside the suite, because a spec cannot run once Zotero has closed: `measure` against the run's `[P4-T23-expect]` lines, on a copy of `.scaffold/test/data/research-helper.sqlite`; and its `[P4-T23-screen]` and `[P4-T23-report]` lines against the same spec's on a build from before the capture, where its six tests fail, as they must |
+| Related reads | `zotero/relatedLibrary.spec.ts`, added 2026-11-05 (`P5-T14`). Reads every item type the running Zotero declares (37 on 10.0.3) and a real group library. Its no-write check uses the row's `clientDateModified` and the notifier, each with a real save as its control, because `item.version` moves only on a sync. It also opens `graph.pipelines`' `related` on a real start and ends a run on `rh-error-seed-gone`, which stops before any request |
 
 Integration tests must never call an external API or an LLM. The `httpRequest` choke point is stubbed inside the test plugin with the same fixture replay used in contract tests, and `MockLLMProvider` is injected.
 
@@ -684,7 +685,8 @@ See §8. Manual QA is where UI, accessibility, real network behaviour, real cost
 | Crossref | `work-without-references` | `/works/10.1007/3-540-29835-5_2408` | live 2026-11-02, HTTP 200: `references-count` 0, no `reference` member |
 | Crossref | `title-search` | `query.bibliographic` for the first paper's title, `rows` 5, no cursor | live 2026-11-02, HTTP 200: 5 items, that paper first, no `next-cursor` |
 | Semantic Scholar | `references`, `citations`, `forpaper`, `recommend-post`, `match-title`, `match-title-absent`, `batch-unresolvable`, `seed-not-found`, `citations-unknown-field` | see `semanticscholarRelatedPlan` | **stand-ins, not evidence** (`"synthetic": true`), hand-written 2026-11-02 from `docs/02` §6 and `docs/05` §2–§3 for `P5-T05` and `P5-T06` (`plan/00` §6 item 335(a)); not recorded yet: the owner's, with the key (§3.5, `P5-T31`), whose run overwrites each one |
-| Semantic Scholar | `batch-embedding`, `batch-references` | see `semanticscholarRelatedPlan` | **not recorded yet**: the owner's, with the key (§3.5, `P5-T31`). No stand-in: neither card reads them |
+| Semantic Scholar | `batch-embedding` | see `semanticscholarRelatedPlan` | **stand-in, not evidence** (`"synthetic": true`), hand-written 2026-11-02 for `P5-T20` from `docs/02` §6.8 and §6.9 (`plan/00` §6 item 335(a)); not recorded yet: the owner's, with the key (§3.5, `P5-T31`), whose run overwrites it |
+| Semantic Scholar | `batch-references` | see `semanticscholarRelatedPlan` | **not recorded yet**: the owner's, with the key (§3.5, `P5-T31`). No stand-in: no card reads it |
 | Semantic Scholar | `recommend-size-cap` | the Recommendations 400 for a response over 10 MB | **hand-written, and not evidence** (`"synthetic": true`): no recording has drawn it; `docs/05` §3.3 gives the status and the opening of the message only. Written by the owner's run (or `FIXTURE_MODE=synthetic … --keyed`, no key, no request). Match on the opening of the message, never the whole |
 
 > **Why a directory of their own (DECIDED 2026-11-02, coordinator, under `plan/00` §6 item 313).** The search
@@ -893,7 +895,7 @@ sidecar.
 A scenario answering 400 or 404 is not a failure: `seed-not-found` and `citations-unknown-field` exist to record those
 two answers. Running the steps twice overwrites the same files, harmlessly.
 
-> *Added 2026-11-02 (`plan/00` §6 item 335(a)):* `related/` already holds ten stand-ins, under the keys this run writes, so
+> *Added 2026-11-02 (`plan/00` §6 item 335(a)):* `related/` already holds eleven stand-ins (*read ten until `P5-T20` added `batch-embedding`, the same day*), under the keys this run writes, so
 > it overwrites them and the 24 files above stay 24. A scenario that was not recorded keeps its stand-in, with its sidecar
 > still `"synthetic": true`, which is how step 7's check tells the two apart.
 

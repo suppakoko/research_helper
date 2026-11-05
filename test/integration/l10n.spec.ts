@@ -146,6 +146,7 @@ import {
   labelPlaceholders,
   reportLabel,
 } from "../../src/pipeline/trendReport/reportLabels";
+import { SeedUnresolvedError } from "../../src/pipeline/related/seed";
 import {
   L10N_MENU_ROOT,
   L10N_MENU_SPIKE_CREATE_ITEM,
@@ -468,6 +469,9 @@ async function readUnderCurrentLocale(): Promise<{
  * The constructor arguments are the ones each class declares; nothing here is
  * thrown, logged or serialized, so the messages are placeholders. `docs/09`
  * §2.1's redaction rules are `P1-T02`'s unit-test territory, not this file's.
+ *
+ * `SeedUnresolvedError` lives in `src/pipeline/related/seed.ts`, not `errors.ts`, and
+ * is the one class with several keys, one per reason (`P5-T11`, `P5-T14`).
  */
 function everyErrorInstance(): ResearchHelperError[] {
   return [
@@ -496,6 +500,9 @@ function everyErrorInstance(): ResearchHelperError[] {
     new OperationCancelledError({ kind: "user" }),
     new BudgetExceededError("x"),
     new PolicyViolationError("x"),
+    new SeedUnresolvedError("gone"),
+    new SeedUnresolvedError("no-identifier"),
+    new SeedUnresolvedError("no-match"),
   ];
 }
 

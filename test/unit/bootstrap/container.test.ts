@@ -561,6 +561,15 @@ describe("installServices wires the graph Phase 1 built", () => {
     await h.scope.unregisterAll();
   });
 
+  it("registers the related pipeline (P5-T14)", async () => {
+    const h = harness();
+    const graph = await installServices(h.scope, h.options);
+    const related = graph.pipelines.get("related");
+    expect(related?.id).toBe("related");
+    expect(related?.resumable).toBe(false);
+    await h.scope.unregisterAll();
+  });
+
   it("refuses a second graph rather than pacing a host twice as fast", async () => {
     const first = harness();
     await installServices(first.scope, first.options);

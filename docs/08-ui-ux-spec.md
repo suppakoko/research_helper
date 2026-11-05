@@ -1456,6 +1456,8 @@ Note the **year filter is off by default here**. The 3-year restriction is a dis
 | Seed is a preprint with a published version | Offer to also fetch relations for the published DOI |
 | Result already in library | Same treatment as §4 (marked, optionally hidden) |
 
+*Added 2026-11-02 (`plan/08` `P5-T11`).* A seed that cannot be looked up ends the job with one of two errors (`07-architecture-and-data-model.md` §10.1, `SeedUnresolvedError`): `rh-error-seed-no-identifier` when the item has no DOI, PMID, PMCID, arXiv ID or usable title, and `rh-error-seed-no-match` when it has a title and nothing matched closely enough (`05-related-work-discovery.md` §6.1). The window shows the message; it has no action button, because the remedy is an edit to the item.
+
 ---
 
 ## 6. Collection Report flow

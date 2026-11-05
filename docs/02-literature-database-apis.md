@@ -2379,7 +2379,10 @@ explicit precedence rather than "first source wins":
 > says "keep the one from the higher-precedence source" without naming the order), **the `title` row's
 > order is the default precedence**, followed by the remaining `SourceId`s in declaration order. That is
 > `DEFAULT_PRECEDENCE` in `src/model/merge.ts`, which `P2-T10` shipped as an undocumented choice; this
-> paragraph is now its owner.
+> paragraph is now its owner. **`type`'s `"other"` counts as absent (DECIDED 2026-11-02, coordinator, under `plan/00` §6
+> item 313; `plan/08` `P5-T12`):** `other` is the undetermined type (`docs/07` §6.2), so it supplies nothing, and a work
+> is `other` only when no record classified it. Without this, a Crossref reference record, which holds a DOI and nothing
+> else, made the merged work `other` even beside a `journal-article` from another source (measured by `P5-T09`).
 
 **Backfill pass.** After dedup, any record still missing an abstract gets one targeted lookup, in
 this order, stopping at the first hit:

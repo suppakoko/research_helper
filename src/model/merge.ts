@@ -48,6 +48,7 @@ import type {
   PartialDate,
   Subject,
   WorkProvenance,
+  WorkType,
 } from "./canonicalWork";
 import {
   buildWorkKey,
@@ -448,6 +449,15 @@ function pickFirst<T>(
   return best(suppliers(ordered, read), order, () => []);
 }
 
+/**
+ * `type` is supplied only when a record classified its work: `"other"` is the
+ * undetermined type (`docs/07` §6.2), and {@link merge} falls back to it when no
+ * record supplied one. `docs/02` §10.4's dated note (`plan/08` `P5-T12`).
+ */
+function classifiedType(work: SourceRecord["work"]): WorkType | undefined {
+  return work.type === "other" ? undefined : work.type;
+}
+
 /** A string field is supplied only when non-empty. */
 function nonEmpty(value: string | undefined): string | undefined {
   return value === undefined || value.trim() === "" ? undefined : value;
@@ -609,7 +619,7 @@ export function merge(
     }
   }
 
-  const type = pickFirst(ordered, DEFAULT_PRECEDENCE, (w) => w.type);
+  const type = pickFirst(ordered, DEFAULT_PRECEDENCE, classifiedType);
   const title = pickTitle(ordered);
   const abstract = pickAbstract(ordered);
   const authors = pickAuthors(ordered);
@@ -654,11 +664,7 @@ export function merge(
   const url = pickFirst(ordered, DEFAULT_PRECEDENCE, (w) => nonEmpty(w.url));
   const relatedVersionIds = unionRelatedVersionIds(ordered, ids);
 
-  won(
-    "type",
-    type,
-    count((w) => w.type),
-  );
+  won("type", type, count(classifiedType));
   won(
     "title",
     title,

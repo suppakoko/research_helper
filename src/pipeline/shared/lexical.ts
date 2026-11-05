@@ -8,7 +8,7 @@
  * readings it settles and the measurement behind them; this header does not
  * repeat them.
  *
- * **Callers.** Nothing calls it yet. `relatedPipeline.ts` (`P5-T14`) builds the
+ * **Callers.** `relatedPipeline.ts` (`P5-T14`) builds the
  * `SimilarityFn` of a keyless related run from it, `src/pipeline/recommend/score.ts`
  * (`P5-T24`) reads similarity and novelty from it, and `seeds.ts` (`P5-T21`)
  * diversifies seeds on it. `P5-T28` proves the keyless path end to end. Each
